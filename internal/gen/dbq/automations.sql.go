@@ -1320,7 +1320,7 @@ func (q *Queries) RecordAutomationValidation(ctx context.Context, arg RecordAuto
 const reserveAutomationBudget = `-- name: ReserveAutomationBudget :one
 INSERT INTO pc.automation_budget_usage AS b (org_id, automation_id, day, currency, reserved)
 SELECT $1, $2, (now() AT TIME ZONE 'UTC')::date, $3::text, $4::numeric
-WHERE $4::numeric <= $5::numeric
+WHERE $4::numeric > 0 AND $4::numeric <= $5::numeric
 ON CONFLICT (org_id, automation_id, day, currency) DO UPDATE SET reserved = b.reserved + EXCLUDED.reserved
 WHERE b.reserved + EXCLUDED.reserved <= $5::numeric
 RETURNING b.reserved
@@ -1334,8 +1334,8 @@ type ReserveAutomationBudgetParams struct {
 	MaxAmount    money.Decimal
 }
 
-// Adds amount to today's reserved budget in one currency, only while it
-// stays within max; no row: the cap is reached.
+// Adds a positive amount to today's reserved budget in one currency (the
+// database's UTC day), only while it stays within max; no row: refused.
 func (q *Queries) ReserveAutomationBudget(ctx context.Context, arg ReserveAutomationBudgetParams) (money.Decimal, error) {
 	row := q.db.QueryRow(ctx, reserveAutomationBudget,
 		arg.OrgID,
@@ -1457,6 +1457,20 @@ func (q *Queries) ServiceAccountState(ctx context.Context, orgID ids.OrgID, iD i
 	var state string
 	err := row.Scan(&state)
 	return state, err
+}
+
+const setAutomationOwner = `-- name: SetAutomationOwner :execrows
+UPDATE pc.automations SET owner_user_id = $1
+WHERE org_id = $2 AND id = $3 AND state <> 'RETIRED' AND owner_user_id <> $1
+`
+
+// A new owner (D68); a retired automation keeps its last one.
+func (q *Queries) SetAutomationOwner(ctx context.Context, ownerUserID ids.UUID, orgID ids.OrgID, iD ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, setAutomationOwner, ownerUserID, orgID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const supersedeAutomationVersions = `-- name: SupersedeAutomationVersions :execrows

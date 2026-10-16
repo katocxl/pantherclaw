@@ -55,9 +55,7 @@ var (
 	ErrState        = pcerr.New(pcerr.FailedPrecondition, "AUTOMATION_STATE", "the automation is not in a state that allows this")
 	ErrVersionState = pcerr.New(pcerr.FailedPrecondition, "VERSION_STATE",
 		"the version is not in a state that allows this")
-	ErrDefinition     = pcerr.New(pcerr.InvalidArgument, "DEFINITION_INVALID", "the definition cannot be read")
-	ErrDefinitionName = pcerr.New(pcerr.InvalidArgument, "DEFINITION_NAME",
-		"the definition's name must be the automation's name")
+	ErrDefinition      = pcerr.New(pcerr.InvalidArgument, "DEFINITION_INVALID", "the definition cannot be read")
 	ErrRevisionChanged = pcerr.New(pcerr.Aborted, "REVISION_CHANGED", "the version changed; read it again")
 	ErrUntested        = pcerr.New(pcerr.FailedPrecondition, "VERSION_UNTESTED",
 		"a cohort or full rollout needs a version whose scenario tests passed for its current content (HR-287)")

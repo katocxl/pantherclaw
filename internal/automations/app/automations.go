@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
+	"github.com/katocxl/pantherclaw/internal/changes"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -128,5 +129,56 @@ func (s *Service) ListAutomations(ctx context.Context, states []autodomain.State
 		}
 		return nil
 	}, db.ReadOnly())
+	return out, err
+}
+
+// SetOwner makes another active person the automation's owner (D68). The
+// automation's pending ENABLE and ROLLOUT requests are voided: they were
+// asked for under the previous owner.
+func (s *Service) SetOwner(ctx context.Context, automation, owner ids.UUID) (Automation, error) {
+	c, err := manager(ctx)
+	if err != nil {
+		return Automation{}, err
+	}
+	var out Automation
+	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		a, err := loadAutomation(ctx, q, c.Org, automation, true)
+		if err != nil {
+			return err
+		}
+		if a.State == string(autodomain.StateRetired) {
+			return ErrState
+		}
+		if ok, err := q.SubjectUserActive(ctx, c.Org, owner); err != nil && !db.IsNoRows(err) {
+			return err
+		} else if !ok {
+			return ErrOwner
+		}
+		if a.OwnerUserID != owner {
+			if err := oneRow(q.SetAutomationOwner(ctx, owner, c.Org, a.ID)); err != nil {
+				return err
+			}
+			voided := 0
+			if s.Changes != nil {
+				voidedIDs, err := s.Changes.Void(ctx, tx, c, changes.DomainAutomation, a.ID, VoidOwnerChanged)
+				if err != nil {
+					return err
+				}
+				voided = len(voidedIDs)
+			}
+			if err := record(ctx, tx, c.Actor(), "automation.owner_changed", a.ID, map[string]string{
+				"from": a.OwnerUserID.String(), "to": owner.String(), "voided_requests": itoa(voided),
+			}); err != nil {
+				return err
+			}
+		}
+		r, err := q.GetAutomation(ctx, c.Org, a.ID)
+		if err != nil {
+			return err
+		}
+		out = automationView(r)
+		return nil
+	})
 	return out, err
 }

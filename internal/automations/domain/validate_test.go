@@ -19,9 +19,18 @@ type fakeEnv struct {
 	budget       map[string]bool
 	approvers    int
 	edition      autodomain.Edition
+	noOwner      bool
 }
 
 func (fakeEnv) Now() time.Time { return time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC) }
+func (e fakeEnv) Owner() ids.UUID {
+	if e.noOwner {
+		return ids.UUID{}
+	}
+	u, _ := ids.ParseUUID("0192f000-0000-7000-8000-000000000001")
+	return u
+}
+
 func (fakeEnv) OwnerActivePerson(context.Context, ids.UUID) (bool, error) {
 	return true, nil
 }
@@ -147,7 +156,104 @@ func TestRequiredConfirmerPermissions(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := d.RequiredConfirmerPermissions()
-	if !slices.Equal(got.AgentPaths, []string{"grant.issue", "run.start"}) || len(got.Org) != 0 {
+	agent, _ := ids.ParseUUID("0192f000-0000-7000-8000-000000000003")
+	if len(got.Agents) != 1 || !slices.Equal(got.Agents[agent], []string{"grant.issue", "run.start"}) || len(got.Org) != 0 {
 		t.Errorf("confirmer permissions %+v", got)
+	}
+}
+
+// revoking is the sample plus a revoke_grant step of the trigger's grant.
+func revoking(revocable string) string {
+	doc := strings.Replace(sample, "    timeout: 2h\n", `    timeout: 2h
+  - id: revoke
+    step: revoke_grant
+    with:
+      scope: TRIGGER_GRANT
+`, 1)
+	doc = strings.Replace(doc, "do:\n", revocable+"  platform:\n    - step: revoke_grant\n      scopes: [TRIGGER_GRANT]\ndo:\n", 1)
+	return doc
+}
+
+// TestRevocableScope (D65): revoking beyond the execution needs
+// authority.revocable, and confirmers then need grant.revoke at the listed
+// agents' paths, or at the org for all.
+func TestRevocableScope(t *testing.T) {
+	if got := codes(validate(t, revoking(""), fakeEnv{approvers: 1})); !slices.Contains(got, autodomain.CodeLimitRange) {
+		t.Errorf("revoke_grant TRIGGER_GRANT without revocable: %v", got)
+	}
+	listed := revoking("  revocable:\n    agents: [0192f000-0000-7000-8000-000000000005]\n")
+	if fs := validate(t, listed, fakeEnv{approvers: 1}); autodomain.HasErrors(fs) {
+		t.Fatalf("findings: %+v", fs)
+	}
+	d, _ := autodomain.Parse([]byte(listed))
+	other, _ := ids.ParseUUID("0192f000-0000-7000-8000-000000000005")
+	if got := d.RequiredConfirmerPermissions(); !slices.Equal(got.Agents[other], []string{"grant.revoke"}) {
+		t.Errorf("revocable agent permissions %+v", got)
+	}
+	d, _ = autodomain.Parse([]byte(revoking("  revocable:\n    all: true\n")))
+	if got := d.RequiredConfirmerPermissions(); !slices.Equal(got.Org, []string{"grant.revoke"}) {
+		t.Errorf("revocable all permissions %+v", got)
+	}
+	both := revoking("  revocable:\n    all: true\n    agents: [0192f000-0000-7000-8000-000000000005]\n")
+	if got := codes(validate(t, both, fakeEnv{approvers: 1})); !slices.Contains(got, autodomain.CodeLimitRange) {
+		t.Errorf("agents and all together: %v", got)
+	}
+}
+
+// TestBuildDigestEvidenceScope (D85): confirmers hold evidence.read and
+// evidence.export at the declared agents' paths, or at the org for all.
+func TestBuildDigestEvidenceScope(t *testing.T) {
+	d := &autodomain.Definition{Do: []autodomain.StepSpec{{
+		ID: "digest", Step: autodomain.KindBuildDigest,
+		With: []byte(`{"scope":"TIME_RANGE","days":7,"evidence":{"agents":["0192f000-0000-7000-8000-000000000005"]},"sections":["decisions"]}`),
+	}}}
+	a, _ := ids.ParseUUID("0192f000-0000-7000-8000-000000000005")
+	if got := d.RequiredConfirmerPermissions(); !slices.Equal(got.Agents[a], []string{"evidence.export", "evidence.read"}) || len(got.Org) != 0 {
+		t.Errorf("evidence agents %+v", got)
+	}
+	d.Do[0].With = []byte(`{"scope":"TIME_RANGE","days":7,"evidence":{"all":true},"sections":["decisions"]}`)
+	if got := d.RequiredConfirmerPermissions(); !slices.Equal(got.Org, []string{"evidence.export", "evidence.read"}) {
+		t.Errorf("evidence all %+v", got)
+	}
+	d.Do[0].Step = autodomain.KindPauseLaunches
+	d.Do[0].With = []byte(`{"selector":"AFFECTED"}`)
+	if got := d.RequiredConfirmerPermissions(); !slices.Equal(got.Org, []string{"automation.publish"}) {
+		t.Errorf("pause_launches confirms with automation.publish (D67): %+v", got)
+	}
+}
+
+// TestLaunchLimitsOnlyNarrow (D84 E6, E7): a launch may only lower the
+// per-grant limits, every spending operation needs a per-grant budget, and
+// wait_effect names an exact operation.
+func TestLaunchLimitsOnlyNarrow(t *testing.T) {
+	ceiling := "    per_grant:\n      ttl: 1h\n      limits:\n        budgets:\n          - id: spend\n            grouping: task\n            operations: [payments.refund]\n            currency: USD\n            limit: \"50.00\"\n            period: grant\n"
+	doc := strings.Replace(sample, "    per_grant:\n      ttl: 1h\n", ceiling, 1)
+	spend := fakeEnv{budget: map[string]bool{"payments.refund": true}, approvers: 1}
+	if fs := validate(t, doc, spend); autodomain.HasErrors(fs) {
+		t.Fatalf("findings: %+v", fs)
+	}
+	launch := func(limit string) string {
+		return strings.Replace(doc, "      task_ref: \"ticket {{params.ticket}}\"\n", "      task_ref: \"ticket {{params.ticket}}\"\n      grant:\n        limits:\n          budgets:\n            - id: spend\n              grouping: task\n              operations: [payments.refund]\n              currency: USD\n              limit: \""+limit+"\"\n              period: grant\n", 1)
+	}
+	if fs := validate(t, launch("20.00"), spend); autodomain.HasErrors(fs) {
+		t.Errorf("a lower limit is refused: %+v", fs)
+	}
+	if got := codes(validate(t, launch("80.00"), spend)); !slices.Contains(got, autodomain.CodeLimitRange) {
+		t.Errorf("a higher limit is accepted: %v", got)
+	}
+	effect := strings.Replace(sample, "  - id: wait\n    step: wait_run\n    with:\n      step: launch\n", "  - id: wait\n    step: wait_effect\n    with:\n      step: launch\n      operation: payments.*\n", 1)
+	if got := codes(validate(t, effect, fakeEnv{approvers: 1})); !slices.Contains(got, autodomain.CodeLimitRange) {
+		t.Errorf("a wait_effect pattern is accepted: %v", got)
+	}
+}
+
+func TestOwnerComesFromTheRow(t *testing.T) {
+	if got := codes(validate(t, sample, fakeEnv{approvers: 1, noOwner: true})); !slices.Contains(got, autodomain.CodeOwnerMissing) {
+		t.Errorf("no owner: %v", got)
+	}
+	for name, ok := range map[string]bool{"refund-tickets": true, "a": true, "x-": false, "-x": false, strings.Repeat("a", 52): true, strings.Repeat("a", 53): false} {
+		if autodomain.NamePattern.MatchString(name) != ok {
+			t.Errorf("name %q: want %v", name, ok)
+		}
 	}
 }

@@ -183,6 +183,11 @@ var automationVerbs = map[string]automationVerb{
 			return c.automations.RetireAutomation(ctx, &pantherclawv1.RetireAutomationRequest{AutomationId: a[0], Reason: *reason})
 		}
 	}},
+	"set-owner": {"set-owner AUTOMATION_ID USER_ID", 2, func(*flag.FlagSet) automationCall {
+		return func(ctx context.Context, c automationClients, a []string) (proto.Message, error) {
+			return c.automations.SetAutomationOwner(ctx, &pantherclawv1.SetAutomationOwnerRequest{AutomationId: a[0], OwnerUserId: a[1]})
+		}
+	}},
 	"revoke-authority": {"revoke-authority AUTOMATION_ID --reason TEXT", 1, func(fs *flag.FlagSet) automationCall {
 		reason := fs.String("reason", "", "why (required)")
 		return func(ctx context.Context, c automationClients, a []string) (proto.Message, error) {

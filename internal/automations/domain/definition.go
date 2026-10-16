@@ -10,6 +10,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -41,14 +42,13 @@ func invalid(format string, args ...any) error {
 
 // Definition is one automation version's document (D2). Every field is
 // part of the reviewed digest. The work kind is `work_kind` because `kind`
-// names the document type.
+// names the document type. The automation's name and owner live on its
+// row, not here (D68), so changing the owner never changes a digest.
 type Definition struct {
 	APIVersion string   `json:"apiVersion"`
 	Kind       string   `json:"kind"`
-	Name       string   `json:"name"`
 	Purpose    string   `json:"purpose"`
 	WorkKind   WorkKind `json:"work_kind"`
-	Owner      RefID    `json:"owner"`
 	// ReviewBy is a date (YYYY-MM-DD, UTC); required when the version has a
 	// ceiling or an effectful platform scope.
 	ReviewBy  Date           `json:"review_by,omitzero"`
@@ -226,7 +226,23 @@ type Authority struct {
 	Ceiling      *Ceiling        `json:"ceiling,omitzero"`
 	Platform     []PlatformScope `json:"platform,omitzero"`
 	Destinations []RefID         `json:"destinations,omitzero"`
+	// Revocable is whose grants revoke_grant (TRIGGER_GRANT,
+	// CEILING_AGENTS) and contain (REVOKE_GRANT) may revoke (D65).
+	Revocable *AgentScope `json:"revocable,omitzero"`
 }
+
+// AgentScope names agents by id, or every agent of the org: exactly one
+// of the two (D65 authority.revocable, D85 build_digest evidence).
+type AgentScope struct {
+	Agents []RefID `json:"agents,omitzero"`
+	All    bool    `json:"all,omitzero"`
+}
+
+// Valid reports whether exactly one of Agents and All is set.
+func (s AgentScope) Valid() bool { return (len(s.Agents) > 0) != s.All }
+
+// Covers reports whether the scope includes the agent.
+func (s AgentScope) Covers(agent RefID) bool { return s.All || slices.Contains(s.Agents, agent) }
 
 // PrincipalSelf is the automation's own execution identity.
 const PrincipalSelf = "self"

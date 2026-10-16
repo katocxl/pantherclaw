@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/automations/automationctx"
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/grants/domain"
@@ -99,8 +100,10 @@ type Ceilings interface {
 	// IssueCeiling checks, in tx and by the database clock, that the
 	// ceiling is ACTIVE and before its review date, that the version is
 	// the automation's enabled version with a COHORT or FULL rollout, and
-	// that every approver still qualifies (CeilingChecker). It returns
-	// ErrCeilingInactive or ErrCeilingVoid otherwise, and writes nothing.
+	// that every approver still qualifies (CeilingChecker); a preview of a
+	// SHADOW or TEST execution skips the enabled-version and rollout rules
+	// (D84). It returns ErrCeilingInactive or ErrCeilingVoid otherwise, and
+	// writes nothing.
 	IssueCeiling(ctx context.Context, tx db.TenantTx, in AutomationIssue) (AutomationCeiling, error)
 	// Reserve counts one grant and its per-currency budget against today's
 	// caps (ErrUsageExceeded); dryRun only checks.
@@ -124,7 +127,10 @@ type AutomationIssue struct {
 	Bounds         domain.Bounds
 	Requirements   []domain.Requirement
 	Limits         domain.Limits
-	// Live is false for SHADOW and TEST executions, which never issue.
+	// Live is false for SHADOW and TEST executions, which never issue;
+	// their DryRun previews still run every check (D84), against the
+	// automation's ACTIVE authority row (SHADOW) or, with a zero Ceiling,
+	// the version's declared ceiling (TEST of a version never enabled).
 	Live bool
 	// DryRun runs every check without writing (shadow, previews).
 	DryRun bool
@@ -175,7 +181,12 @@ func (s *Service) IssueForAutomationTx(ctx context.Context, tx db.TenantTx, in A
 		return domain.Grant{}, ErrPrincipalUnknown
 	}
 	// (5) build: lifetime ≤ min(TTL, per-grant TTL, 24h); the ceiling's
-	// requirements and per-grant limits always apply.
+	// requirements and per-grant limits always apply; the launch's limits
+	// may only narrow the per-grant ones (D84 E7).
+	limits, err := domain.NarrowLimits(c.Limits, in.Limits)
+	if err != nil {
+		return domain.Grant{}, pcerr.Wrap(err, pcerr.FailedPrecondition, "OUTSIDE_CEILING", detail(err, domain.ErrOutside))
+	}
 	now := s.Clock.Now()
 	ttl := min(c.TTL, domain.MaxAutomationLifetime)
 	if in.TTL > 0 {
@@ -186,7 +197,7 @@ func (s *Service) IssueForAutomationTx(ctx context.Context, tx db.TenantTx, in A
 		AgentID: agent.ID, Principal: in.Principal, EnvironmentID: agent.EnvironmentID, TaskRef: in.TaskRef,
 		NotBefore: now.Add(-domain.IssueSkew), ExpiresAt: now.Add(ttl), Bounds: in.Bounds,
 		Requirements: append(slices.Clone(c.Requirements), in.Requirements...),
-		Limits:       domain.Limits{Budgets: append(slices.Clone(c.Limits.Budgets), in.Limits.Budgets...), Counters: append(slices.Clone(c.Limits.Counters), in.Limits.Counters...)},
+		Limits:       limits,
 		Delegation:   c.Delegation, MinAttestation: c.MinAttestation,
 		Grantor: domain.Principal{Kind: domain.PrincipalServiceAccount, ID: in.ServiceAccount},
 		Basis:   fmt.Sprintf("automation %s ceiling %s", c.AutomationName, c.ID),
@@ -211,7 +222,31 @@ func (s *Service) IssueForAutomationTx(ctx context.Context, tx db.TenantTx, in A
 	if err != nil {
 		return domain.Grant{}, err
 	}
-	if err := g.ValidateIssue(domain.IssueContext{Now: now, Envelopes: envs, Lookup: lookup, Ceiling: c.ID}); err != nil {
+	// Every budget-consuming operation needs a per-grant budget covering
+	// it (D84 E7); a prefix may cover one, so it needs a budget too.
+	if g.Bounds.Operations != nil {
+		for _, op := range *g.Bounds.Operations {
+			spends := strings.HasSuffix(op, "*")
+			if !spends {
+				d, err := s.Defs.Active(ctx, in.Org, op)
+				if err != nil {
+					return domain.Grant{}, err
+				}
+				spends = d != nil && consumesBudget(d)
+			}
+			if spends && !g.Limits.CoversBudget(op) {
+				return domain.Grant{}, pcerr.Wrap(ErrOutsideCeiling, pcerr.FailedPrecondition, "OUTSIDE_CEILING",
+					"operation "+op+" spends money: the grant needs a per-grant budget covering it")
+			}
+		}
+	}
+	// A TEST preview of a version never enabled has no authority row; its
+	// version stands for the ceiling in a check that writes nothing.
+	under := c.ID
+	if under.IsZero() && in.DryRun && !in.Live {
+		under = in.Version
+	}
+	if err := g.ValidateIssue(domain.IssueContext{Now: now, Envelopes: envs, Lookup: lookup, Ceiling: under}); err != nil {
 		if errors.Is(err, domain.ErrOutside) {
 			return domain.Grant{}, pcerr.Wrap(err, pcerr.FailedPrecondition, "OUTSIDE_CEILING", detail(err, domain.ErrOutside))
 		}
@@ -263,6 +298,16 @@ func (s *Service) IssueForAutomationTx(ctx context.Context, tx db.TenantTx, in A
 	return g, nil
 }
 
+// consumesBudget reports whether an operation takes a money parameter.
+func consumesBudget(d *defs.Definition) bool {
+	for _, p := range d.Params {
+		if p.Type == defs.TypeMoney {
+			return true
+		}
+	}
+	return false
+}
+
 // taskBudgets sums the grant's task budget limits per currency: the most
 // the grant can spend, reserved against the per-day budget.
 func taskBudgets(l domain.Limits) (map[string]money.Decimal, error) {
@@ -282,6 +327,10 @@ func taskBudgets(l domain.Limits) (map[string]money.Decimal, error) {
 	return out, nil
 }
 
+// errNotRevocable refuses a revocation outside authority.revocable (D65).
+var errNotRevocable = pcerr.Wrap(ErrOutsideCeiling, pcerr.FailedPrecondition, "OUTSIDE_CEILING",
+	"the grant's agent is not one the version may revoke (authority.revocable)")
+
 // AutomationRevoke revokes grants for an automation's execution.
 type AutomationRevoke struct {
 	Org            ids.OrgID
@@ -290,8 +339,14 @@ type AutomationRevoke struct {
 	Trigger        ids.UUID
 	Ceiling        ids.UUID
 	ServiceAccount ids.UUID
-	// Agents are the ceiling's agents (TRIGGER_GRANT, CEILING_AGENTS).
+	// Agents are the ceiling's agents (CEILING_AGENTS).
 	Agents []ids.UUID
+	// Revocable is the version's authority.revocable (D65, D84 E10): the
+	// agents whose grants TRIGGER_GRANT and CEILING_AGENTS may revoke, or
+	// every agent of the org with RevocableAll. Neither set refuses both
+	// scopes.
+	Revocable    []ids.UUID
+	RevocableAll bool
 	// Grant is the trigger's grant (TRIGGER_GRANT).
 	Grant  ids.UUID
 	Scope  string
@@ -300,9 +355,9 @@ type AutomationRevoke struct {
 
 // RevokeForAutomationTx revokes, in the caller's transaction, the grants
 // of the scope and every grant delegated from them (D9): the execution's
-// own grants (EXECUTION), the trigger's grant when it is one of a ceiling
-// agent's (TRIGGER_GRANT), the ceiling agents' root grants
-// (CEILING_AGENTS), or every grant under the ceiling (CEILING, for
+// own grants (EXECUTION), the trigger's grant when it is one of a
+// revocable agent's (TRIGGER_GRANT), the root grants of the ceiling agents
+// that are revocable (CEILING_AGENTS), or every grant under the ceiling (CEILING, for
 // RevokeAuthority). It returns the revoked ids.
 func (s *Service) RevokeForAutomationTx(ctx context.Context, tx db.TenantTx, in AutomationRevoke) ([]domain.GrantID, error) {
 	if s.Store == nil {
@@ -328,7 +383,14 @@ func (s *Service) RevokeForAutomationTx(ctx context.Context, tx db.TenantTx, in 
 		}
 		targets, err = s.Store.AutomationGrantsInTx(ctx, tx, in.Org, in.Scope, ids.UUID{}, in.Ceiling, nil)
 	case RevokeScopeCeilingAgents:
-		targets, err = s.Store.AutomationGrantsInTx(ctx, tx, in.Org, in.Scope, ids.UUID{}, ids.UUID{}, in.Agents)
+		agents := in.Agents
+		if !in.RevocableAll {
+			agents = slices.DeleteFunc(slices.Clone(in.Agents), func(a ids.UUID) bool { return !slices.Contains(in.Revocable, a) })
+		}
+		if len(agents) == 0 {
+			return nil, errNotRevocable
+		}
+		targets, err = s.Store.AutomationGrantsInTx(ctx, tx, in.Org, in.Scope, ids.UUID{}, ids.UUID{}, agents)
 	case RevokeScopeTriggerGrant:
 		gid, perr := domain.ParseGrantID(in.Grant.String())
 		if perr != nil {
@@ -340,8 +402,8 @@ func (s *Service) RevokeForAutomationTx(ctx context.Context, tx db.TenantTx, in 
 			return nil, gerr
 		case !found:
 			return nil, ErrGrantNotFound
-		case !slices.Contains(in.Agents, g.AgentID):
-			return nil, pcerr.Wrap(ErrOutsideCeiling, pcerr.FailedPrecondition, "OUTSIDE_CEILING", "the grant is not one of the ceiling agents'")
+		case !in.RevocableAll && !slices.Contains(in.Revocable, g.AgentID):
+			return nil, errNotRevocable
 		case g.State != domain.StateActive:
 			return nil, nil
 		}

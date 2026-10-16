@@ -39,23 +39,13 @@ var (
 	_ runsapp.AutomationRuns   = (*Service)(nil)
 )
 
-// confirmerScopes is what a confirmer of a version (or an approver of its
-// ceiling) must hold, from the kinds it uses (D7, HR-272).
-func confirmerScopes(kinds []string) autodomain.ConfirmerScopes {
-	d := autodomain.Definition{}
-	for _, k := range kinds {
-		d.Do = append(d.Do, autodomain.StepSpec{Step: k})
-	}
-	return d.RequiredConfirmerPermissions()
-}
-
 // qualifies checks one person against a version's confirmer requirements
 // now (D7, HR-272, HR-273): an active person holding automation.publish at
-// the org, every agent-path permission on every ceiling agent's path, every
-// org permission at the org, and not marked compromised. It returns the
+// the org, every per-agent permission on that agent's path, every org
+// permission at the org, and not marked compromised. It returns the
 // stable reason when the person does not qualify.
 func (s *Service) qualifies(ctx context.Context, ptx pgx.Tx, q *dbq.Queries, org ids.OrgID, user ids.UUID,
-	scopes autodomain.ConfirmerScopes, agents []ids.UUID,
+	scopes autodomain.ConfirmerScopes,
 ) (bool, string, error) {
 	active, err := q.SubjectUserActive(ctx, org, user)
 	if err != nil && !db.IsNoRows(err) {
@@ -78,7 +68,7 @@ func (s *Service) qualifies(ctx context.Context, ptx pgx.Tx, q *dbq.Queries, org
 			return false, ReasonApproverPermission, nil
 		}
 	}
-	for _, a := range agents {
+	for _, a := range scopes.AgentIDs() {
 		row, err := q.GetAgent(ctx, org, a)
 		if db.IsNoRows(err) {
 			return false, ReasonApproverPermission, nil
@@ -89,7 +79,7 @@ func (s *Service) qualifies(ctx context.Context, ptx pgx.Tx, q *dbq.Queries, org
 		if err != nil {
 			return false, "", err
 		}
-		for _, perm := range scopes.AgentPaths {
+		for _, perm := range scopes.Agents[a] {
 			if !subj.Can(td.Permission(perm), path) {
 				return false, ReasonApproverPermission, nil
 			}
@@ -108,12 +98,25 @@ func (s *Service) qualifies(ctx context.Context, ptx pgx.Tx, q *dbq.Queries, org
 }
 
 // Check implements autoports.CeilingChecker: every approver of the ceiling
-// still qualifies for the kinds its version uses.
+// still qualifies for what its version does (kinds, ceiling agents,
+// revocable and evidence scopes), read from the ceiling's version.
 func (s *Service) Check(ctx context.Context, tx pgx.Tx, c autodomain.CeilingCheck) (bool, string, error) {
 	q := dbq.New(tx)
-	scopes := confirmerScopes(c.Kinds)
-	for _, u := range c.Approvers {
-		ok, reason, err := s.qualifies(ctx, tx, q, c.Org, u, scopes, c.Agents)
+	row, err := q.GetAutomationCeiling(ctx, c.Org, c.Ceiling)
+	if err != nil {
+		return false, "", err
+	}
+	v, err := loadVersion(ctx, q, c.Org, row.VersionID, false)
+	if err != nil {
+		return false, "", err
+	}
+	d, err := definitionOf(v)
+	if err != nil {
+		return false, "", err
+	}
+	scopes := d.RequiredConfirmerPermissions()
+	for _, u := range row.ApprovedBy {
+		ok, reason, err := s.qualifies(ctx, tx, q, c.Org, u, scopes)
 		if err != nil || !ok {
 			return ok, reason, err
 		}
@@ -123,13 +126,13 @@ func (s *Service) Check(ctx context.Context, tx pgx.Tx, c autodomain.CeilingChec
 
 // ceilingOf builds the issuance ceiling of a definition for the grants
 // service.
-func ceilingOf(d *autodomain.Definition) (grantsapp.AutomationCeiling, error) {
+func ceilingOf(a dbq.PcAutomation, d *autodomain.Definition) (grantsapp.AutomationCeiling, error) {
 	c := d.Authority.Ceiling
 	if c == nil {
 		return grantsapp.AutomationCeiling{}, grantsapp.ErrCeilingInactive
 	}
 	out := grantsapp.AutomationCeiling{
-		AutomationName: d.Name, Agents: d.CeilingAgents(), Bounds: c.Bounds, Requirements: c.Requirements,
+		AutomationName: a.Name, Agents: d.CeilingAgents(), Bounds: c.Bounds, Requirements: c.Requirements,
 		TTL: c.PerGrant.TTL.D(), Limits: c.PerGrant.Limits, MinAttestation: c.PerGrant.MinAttestation,
 		Delegation: gdomain.Delegation{Depth: c.Delegation.Depth, MaxChildren: c.Delegation.MaxChildren},
 	}
@@ -187,6 +190,9 @@ func (s *Service) liveCeiling(ctx context.Context, tx db.TenantTx, org ids.OrgID
 // ceiling an approver no longer qualifies for returns ErrCeilingVoid and
 // the engine voids it in its own transaction (VoidCeiling, D57).
 func (s *Service) IssueCeiling(ctx context.Context, tx db.TenantTx, in grantsapp.AutomationIssue) (grantsapp.AutomationCeiling, error) {
+	if !in.Live {
+		return s.previewCeiling(ctx, tx, in)
+	}
 	a, d, c, err := s.liveCeiling(ctx, tx, in.Org, in.Automation, in.Version, in.Ceiling, in.AgentID)
 	if err != nil {
 		return grantsapp.AutomationCeiling{}, err
@@ -200,11 +206,64 @@ func (s *Service) IssueCeiling(ctx context.Context, tx db.TenantTx, in grantsapp
 	if !ok {
 		return grantsapp.AutomationCeiling{}, grantsapp.ErrCeilingVoid
 	}
-	out, err := ceilingOf(d)
+	out, err := ceilingOf(a, d)
 	if err != nil {
 		return out, err
 	}
 	out.ID, out.ServiceAccount, out.Approvers = c.ID, a.ServiceAccountID, c.ApprovedBy
+	out.Principal = principalOf(d, a.ServiceAccountID)
+	return out, nil
+}
+
+// previewCeiling is the ceiling a SHADOW or TEST execution's dry run is
+// checked against (D84): D54's rule that only a LIVE COHORT or FULL
+// execution issues applies to real issuance, never to a preview, which
+// writes nothing. A SHADOW execution's authority row must be the
+// automation's ACTIVE one for this version, and its approvers must still
+// qualify; a TEST execution of a version never enabled has no row and is
+// checked against the version's declared ceiling.
+func (s *Service) previewCeiling(ctx context.Context, tx db.TenantTx, in grantsapp.AutomationIssue) (grantsapp.AutomationCeiling, error) {
+	if !in.DryRun {
+		return grantsapp.AutomationCeiling{}, grantsapp.ErrCeilingInactive
+	}
+	q := dbq.New(tx)
+	a, err := loadAutomation(ctx, q, in.Org, in.Automation, false)
+	if err != nil || a.State == string(autodomain.StateRetired) {
+		return grantsapp.AutomationCeiling{}, grantsapp.ErrCeilingInactive
+	}
+	v, err := loadVersion(ctx, q, in.Org, in.Version, false)
+	if err != nil || v.AutomationID != a.ID {
+		return grantsapp.AutomationCeiling{}, grantsapp.ErrCeilingInactive
+	}
+	d, err := definitionOf(v)
+	if err != nil {
+		return grantsapp.AutomationCeiling{}, err
+	}
+	var approvers []ids.UUID
+	if !in.Ceiling.IsZero() {
+		c, err := q.GetActiveAutomationCeiling(ctx, in.Org, a.ID)
+		switch {
+		case db.IsNoRows(err):
+			return grantsapp.AutomationCeiling{}, grantsapp.ErrCeilingInactive
+		case err != nil:
+			return grantsapp.AutomationCeiling{}, err
+		case c.ID != in.Ceiling, c.VersionID != v.ID, !c.InReview:
+			return grantsapp.AutomationCeiling{}, grantsapp.ErrCeilingInactive
+		}
+		ok, _, err := s.Check(ctx, tx.Pgx(), autodomain.CeilingCheck{Org: in.Org, Automation: a.ID, Ceiling: c.ID})
+		if err != nil {
+			return grantsapp.AutomationCeiling{}, err
+		}
+		if !ok {
+			return grantsapp.AutomationCeiling{}, grantsapp.ErrCeilingVoid
+		}
+		approvers = c.ApprovedBy
+	}
+	out, err := ceilingOf(a, d)
+	if err != nil {
+		return out, err
+	}
+	out.ID, out.ServiceAccount, out.Approvers = in.Ceiling, a.ServiceAccountID, approvers
 	out.Principal = principalOf(d, a.ServiceAccountID)
 	return out, nil
 }

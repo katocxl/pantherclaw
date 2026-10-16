@@ -229,11 +229,11 @@ WHERE u.runs < sqlc.arg(max_runs)::int
 RETURNING u.runs;
 
 -- name: ReserveAutomationBudget :one
--- Adds amount to today's reserved budget in one currency, only while it
--- stays within max; no row: the cap is reached.
+-- Adds a positive amount to today's reserved budget in one currency (the
+-- database's UTC day), only while it stays within max; no row: refused.
 INSERT INTO pc.automation_budget_usage AS b (org_id, automation_id, day, currency, reserved)
 SELECT sqlc.arg(org_id), sqlc.arg(automation_id), (now() AT TIME ZONE 'UTC')::date, sqlc.arg(currency)::text, sqlc.arg(amount)::numeric
-WHERE sqlc.arg(amount)::numeric <= sqlc.arg(max_amount)::numeric
+WHERE sqlc.arg(amount)::numeric > 0 AND sqlc.arg(amount)::numeric <= sqlc.arg(max_amount)::numeric
 ON CONFLICT (org_id, automation_id, day, currency) DO UPDATE SET reserved = b.reserved + EXCLUDED.reserved
 WHERE b.reserved + EXCLUDED.reserved <= sqlc.arg(max_amount)::numeric
 RETURNING b.reserved;
@@ -325,3 +325,8 @@ SELECT EXISTS (
       AND scope_id = 'service_account:' || sqlc.arg(service_account_id)::uuid::text
       AND (expires_at IS NULL OR expires_at > now())
 )::bool AS contained;
+
+-- name: SetAutomationOwner :execrows
+-- A new owner (D68); a retired automation keeps its last one.
+UPDATE pc.automations SET owner_user_id = sqlc.arg(owner_user_id)
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state <> 'RETIRED' AND owner_user_id <> sqlc.arg(owner_user_id);

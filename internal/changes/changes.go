@@ -9,8 +9,8 @@
 // ceremony over its binding, on the /changes/{id} page. The confirmation
 // that reaches the required count runs the kind's Apply in the same
 // transaction. New content or a new state of the subject voids pending
-// requests (Void); a request expires 24 hours after it was made, by the
-// database clock.
+// requests (Void); a request expires 24 hours after it was made (a kind
+// may allow up to 72, D74), by the database clock.
 //
 // Domains register their kinds: automations (ENABLE, ROLLOUT), protected
 // changes (one kind per category) and compromised publishers (CLEAR).
@@ -18,6 +18,7 @@ package changes
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -71,6 +72,9 @@ const (
 	MaxSummaryBytes  = 16 << 10
 	MaxDeclineReason = 500
 	TTL              = 24 * time.Hour
+	// MaxTTL is the longest a kind may keep a request open (a protected
+	// EMERGENCY_REVIEW, D74; the database allows it only there).
+	MaxTTL = 72 * time.Hour
 )
 
 var kindPattern = regexp.MustCompile(`^[A-Z][A-Z_]{1,40}$`)
@@ -93,9 +97,11 @@ var (
 		"only a person signed in on the change page confirms a change")
 	ErrAssertion     = pcerr.New(pcerr.InvalidArgument, "CHANGE_CEREMONY", "the security key did not sign this change request")
 	ErrDeclineReason = pcerr.New(pcerr.InvalidArgument, "REASON_REQUIRED", "a reason of 1 to 500 characters is required")
-	ErrHumanOnly     = pcerr.New(pcerr.PermissionDenied, "HUMAN_ONLY", "only a person can do this")
-	ErrUnknownKind   = pcerr.New(pcerr.FailedPrecondition, "CHANGE_KIND_UNAVAILABLE", "this kind of change cannot be requested here")
-	ErrTooLarge      = pcerr.New(pcerr.InvalidArgument, "CHANGE_TOO_LARGE", "the change is too large to show for confirmation")
+	ErrDeclineDenied = pcerr.New(pcerr.PermissionDenied, "DECLINE_DENIED",
+		"declining needs the request's permission, or being its requester")
+	ErrHumanOnly   = pcerr.New(pcerr.PermissionDenied, "HUMAN_ONLY", "only a person can do this")
+	ErrUnknownKind = pcerr.New(pcerr.FailedPrecondition, "CHANGE_KIND_UNAVAILABLE", "this kind of change cannot be requested here")
+	ErrTooLarge    = pcerr.New(pcerr.InvalidArgument, "CHANGE_TOO_LARGE", "the change is too large to show for confirmation")
 )
 
 // VoidError, returned by Apply, voids the request with Reason instead of
@@ -142,16 +148,24 @@ func (r Request) Confirmers() []ids.UUID {
 }
 
 // Handler is one kind's rules (D6). Permission is what a person needs to
-// see the domain's requests. Required says how many people must confirm
-// (1 or 2, fixed at request time). Eligible says whether a person may
-// confirm now (checked at confirmation and again for every earlier
-// confirmer when the last one applies it). Apply runs in the confirming
-// transaction with every confirmer; a *VoidError voids the request.
+// see the kind's requests (the requester always sees theirs, D66).
+// DeclinePermissions are the permissions (any one, at the org) that let a
+// person decline a request; the requester always may. Required says how
+// many people must confirm (1 or 2, fixed at request time). Eligible says
+// whether a person may confirm now (checked at confirmation and again for
+// every earlier confirmer when the last one applies it). Apply runs in the
+// confirming transaction with every confirmer; a *VoidError voids the
+// request. Closed, when set, runs in the same transaction when a request
+// becomes DECLINED, EXPIRED or VOIDED (D74). TTL is how long a request
+// stays open (0: 24 hours; at most MaxTTL).
 type Handler struct {
-	Permission td.Permission
-	Required   func(ctx context.Context, tx db.TenantTx, r Request) (int, error)
-	Eligible   func(ctx context.Context, tx db.TenantTx, r Request, user ids.UUID) (ok bool, reason string, err error)
-	Apply      func(ctx context.Context, tx db.TenantTx, r Request, confirmers []ids.UUID) error
+	Permission         td.Permission
+	DeclinePermissions []td.Permission
+	Required           func(ctx context.Context, tx db.TenantTx, r Request) (int, error)
+	Eligible           func(ctx context.Context, tx db.TenantTx, r Request, user ids.UUID) (ok bool, reason string, err error)
+	Apply              func(ctx context.Context, tx db.TenantTx, r Request, confirmers []ids.UUID) error
+	Closed             func(ctx context.Context, tx db.TenantTx, r Request, state string) error
+	TTL                time.Duration
 }
 
 // Assertion is a verified BINDING ceremony a confirmation consumes.
@@ -180,7 +194,7 @@ func key(domain, kind string) string { return domain + "/" + kind }
 
 // Register sets a kind's handler. A kind without one is never requested.
 func (s *Service) Register(domain, kind string, h Handler) {
-	if !kindPattern.MatchString(kind) || h.Required == nil || h.Eligible == nil || h.Apply == nil {
+	if !kindPattern.MatchString(kind) || h.Required == nil || h.Eligible == nil || h.Apply == nil || h.TTL < 0 || h.TTL > MaxTTL {
 		panic("changes: invalid handler for " + key(domain, kind))
 	}
 	s.mu.Lock()
@@ -330,7 +344,7 @@ func (s *Service) RequestTx(ctx context.Context, tx db.TenantTx, caller tapp.Cal
 	if err := q.InsertChangeRequest(ctx, dbq.InsertChangeRequestParams{
 		OrgID: caller.Org, ID: req.ID, Domain: req.Domain, Kind: req.Kind, SubjectID: req.Subject,
 		ContentDigest: req.ContentDigest[:], Binding: binding[:], Summary: raw, Required: int16(req.Required), //nolint:gosec // 1..2
-		RequestedBy: req.RequestedBy, TtlSeconds: int32(TTL / time.Second),
+		RequestedBy: req.RequestedBy, TtlSeconds: int32(cmp.Or(h.TTL, TTL) / time.Second), //nolint:gosec // ≤ 72h
 	}); err != nil {
 		return Request{}, err
 	}
@@ -353,15 +367,33 @@ func (s *Service) expire(ctx context.Context, tx db.TenantTx, q *dbq.Queries, ca
 		if err := record(ctx, tx, caller, "change.expired", Request{ID: r.ID, Domain: r.Domain, Kind: r.Kind}, nil); err != nil {
 			return err
 		}
+		if err := s.closed(ctx, tx, q, r.ID, r.Domain, r.Kind, StateExpired); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// closed tells the kind's handler that a request ended without being
+// applied (D74), in the same transaction.
+func (s *Service) closed(ctx context.Context, tx db.TenantTx, q *dbq.Queries, id ids.UUID, domain, kind, state string) error {
+	h, ok := s.handler(domain, kind)
+	if !ok || h.Closed == nil {
+		return nil
+	}
+	r, err := s.load(ctx, q, tx.OrgID(), id)
+	if err != nil {
+		return err
+	}
+	return h.Closed(ctx, tx, r, state)
 }
 
 // Void voids every pending request of domain about subject (new content or
 // a new state of the subject), in the caller's transaction. It returns the
 // voided ids.
 func (s *Service) Void(ctx context.Context, tx db.TenantTx, actor tapp.Caller, domain string, subject ids.UUID, reason string) ([]ids.UUID, error) {
-	rows, err := dbq.New(tx).VoidChangeRequests(ctx, dbq.VoidChangeRequestsParams{
+	q := dbq.New(tx)
+	rows, err := q.VoidChangeRequests(ctx, dbq.VoidChangeRequestsParams{
 		Reason: &reason, OrgID: tx.OrgID(), Domain: domain, SubjectID: subject,
 	})
 	if err != nil {
@@ -373,6 +405,9 @@ func (s *Service) Void(ctx context.Context, tx db.TenantTx, actor tapp.Caller, d
 			map[string]string{"reason": reason}); err != nil {
 			return nil, err
 		}
+		if err := s.closed(ctx, tx, q, r.ID, domain, r.Kind, StateVoided); err != nil {
+			return nil, err
+		}
 		out = append(out, r.ID)
 	}
 	return out, nil
@@ -381,7 +416,8 @@ func (s *Service) Void(ctx context.Context, tx db.TenantTx, actor tapp.Caller, d
 // VoidByPerson voids every pending request a person asked for or
 // confirmed (a compromised publisher, D43), in the caller's transaction.
 func (s *Service) VoidByPerson(ctx context.Context, tx db.TenantTx, actor tapp.Caller, user ids.UUID, reason string) ([]ids.UUID, error) {
-	rows, err := dbq.New(tx).VoidChangeRequestsConfirmedBy(ctx, dbq.VoidChangeRequestsConfirmedByParams{
+	q := dbq.New(tx)
+	rows, err := q.VoidChangeRequestsConfirmedBy(ctx, dbq.VoidChangeRequestsConfirmedByParams{
 		Reason: &reason, OrgID: tx.OrgID(), RequestedBy: td.PrincipalRef{Kind: td.KindUser, ID: user}.String(), UserID: user,
 	})
 	if err != nil {
@@ -391,6 +427,9 @@ func (s *Service) VoidByPerson(ctx context.Context, tx db.TenantTx, actor tapp.C
 	for _, r := range rows {
 		if err := record(ctx, tx, actor, "change.voided", Request{ID: r.ID, Domain: r.Domain, Kind: r.Kind},
 			map[string]string{"reason": reason}); err != nil {
+			return nil, err
+		}
+		if err := s.closed(ctx, tx, q, r.ID, r.Domain, r.Kind, StateVoided); err != nil {
 			return nil, err
 		}
 		out = append(out, r.ID)
@@ -754,7 +793,13 @@ func (s *Service) decide(ctx context.Context, tx db.TenantTx, q *dbq.Queries, ca
 	case StateApproved:
 		details["confirmations"] = strconv.Itoa(len(r.Confirmations))
 	}
-	return record(ctx, tx, caller, name, r, details)
+	if err := record(ctx, tx, caller, name, r, details); err != nil {
+		return err
+	}
+	if state == StateApproved {
+		return nil
+	}
+	return s.closed(ctx, tx, q, r.ID, r.Domain, r.Kind, state)
 }
 
 // consume consumes the caller's open BINDING ceremony for the request in
@@ -786,8 +831,9 @@ func consume(ctx context.Context, q *dbq.Queries, caller tapp.Caller, req Reques
 	return nil
 }
 
-// Decline ends a pending request (DECLINED) with a reason, by its
-// requester or a person eligible to confirm it.
+// Decline ends a pending request (DECLINED) with a reason, by a person: its
+// requester, or one holding one of the kind's decline permissions at the
+// org (D66).
 func (s *Service) Decline(ctx context.Context, id ids.UUID, reason string) (Request, error) {
 	caller, err := tapp.CallerFrom(ctx)
 	if err != nil {
@@ -824,8 +870,8 @@ func (s *Service) Decline(ctx context.Context, id ids.UUID, reason string) (Requ
 			if !ok {
 				return ErrUnknownKind
 			}
-			if err := s.eligible(ctx, tx, h, req, caller.Principal.ID); err != nil {
-				return err
+			if !slices.ContainsFunc(h.DeclinePermissions, func(p td.Permission) bool { return caller.Can(p, td.OrgPath(caller.Org)) }) {
+				return ErrDeclineDenied
 			}
 		}
 		return s.decide(ctx, tx, q, caller, req, StateDeclined, reason)

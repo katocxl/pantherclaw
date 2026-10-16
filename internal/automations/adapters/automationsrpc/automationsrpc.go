@@ -404,6 +404,23 @@ func (h *Handler) RetireAutomation(ctx context.Context, r *pantherclawv1.RetireA
 	return &pantherclawv1.RetireAutomationResponse{Automation: AutomationPB(a), Effect: effectPB(e)}, nil
 }
 
+// SetAutomationOwner implements AutomationServiceHandler.
+func (h *Handler) SetAutomationOwner(ctx context.Context, r *pantherclawv1.SetAutomationOwnerRequest) (*pantherclawv1.SetAutomationOwnerResponse, error) {
+	id, err := parse(r.GetAutomationId())
+	if err != nil {
+		return nil, err
+	}
+	owner, err := parse(r.GetOwnerUserId())
+	if err != nil {
+		return nil, err
+	}
+	a, err := h.svc.SetOwner(ctx, id, owner)
+	if err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.SetAutomationOwnerResponse{Automation: AutomationPB(a)}, nil
+}
+
 // RevokeAuthority implements AutomationServiceHandler.
 func (h *Handler) RevokeAuthority(ctx context.Context, r *pantherclawv1.RevokeAuthorityRequest) (*pantherclawv1.RevokeAuthorityResponse, error) {
 	id, err := parse(r.GetAutomationId())

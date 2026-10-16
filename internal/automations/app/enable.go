@@ -35,6 +35,7 @@ const (
 	VoidReviewDate        = "REVIEW_DATE"
 	VoidPrincipal         = "PRINCIPAL_NOT_CONFIRMED"
 	VoidState             = "STATE_CHANGED"
+	VoidOwnerChanged      = "OWNER_CHANGED"
 )
 
 // enableContent is exactly what an enabling applies; its SHA-256 is the
@@ -47,6 +48,7 @@ type enableContent struct {
 	Rollout      string   `json:"rollout"`
 	CohortAgents []string `json:"cohort_agents"`
 	ReviewBy     string   `json:"review_by"`
+	Owner        string   `json:"owner"`
 }
 
 func (c enableContent) digest() ([32]byte, error) {
@@ -83,7 +85,7 @@ func strs(xs []ids.UUID) []string {
 func contentOf(a dbq.PcAutomation, v dbq.PcAutomationVersion, d *autodomain.Definition, rollout autodomain.Rollout, cohort []ids.UUID) enableContent {
 	return enableContent{
 		Automation: a.ID.String(), Version: v.ID.String(), Digest: hex.EncodeToString(v.Digest), Rollout: string(rollout),
-		CohortAgents: strs(cohort), ReviewBy: reviewText(d),
+		CohortAgents: strs(cohort), ReviewBy: reviewText(d), Owner: a.OwnerUserID.String(),
 	}
 }
 
@@ -96,7 +98,8 @@ func reviewText(d *autodomain.Definition) string {
 // change-request service (called by server wiring).
 func (s *Service) RegisterChanges() {
 	h := changes.Handler{
-		Permission: td.PermAutomationRead, Required: s.required, Eligible: s.eligible, Apply: s.apply,
+		Permission: td.PermAutomationRead, DeclinePermissions: []td.Permission{td.PermAutomationPublish},
+		Required: s.required, Eligible: s.eligible, Apply: s.apply,
 	}
 	s.Changes.Register(changes.DomainAutomation, KindEnable, h)
 	s.Changes.Register(changes.DomainAutomation, KindRollout, h)
@@ -144,7 +147,7 @@ func (s *Service) required(ctx context.Context, tx db.TenantTx, r changes.Reques
 	scopes := d.RequiredConfirmerPermissions()
 	n := 0
 	for _, p := range people {
-		ok, _, err := s.qualifies(ctx, tx.Pgx(), q, r.Org, p, scopes, d.CeilingAgents())
+		ok, _, err := s.qualifies(ctx, tx.Pgx(), q, r.Org, p, scopes)
 		if err != nil {
 			return 0, err
 		}
@@ -167,7 +170,7 @@ func (s *Service) eligible(ctx context.Context, tx db.TenantTx, r changes.Reques
 	if err != nil {
 		return false, "", err
 	}
-	return s.qualifies(ctx, tx.Pgx(), q, r.Org, user, d.RequiredConfirmerPermissions(), d.CeilingAgents())
+	return s.qualifies(ctx, tx.Pgx(), q, r.Org, user, d.RequiredConfirmerPermissions())
 }
 
 // apply enables the version or widens its rollout, in the confirming
@@ -251,14 +254,15 @@ func (s *Service) apply(ctx context.Context, tx db.TenantTx, r changes.Request, 
 		return err
 	}
 	if r.Kind == KindEnable {
+		// The previous version steps down first: one PUBLISHED at a time.
+		if _, err := q.SupersedeAutomationVersions(ctx, r.Org, a.ID, v.ID); err != nil {
+			return err
+		}
 		rid := r.ID
 		if err := oneRow(q.PublishAutomationVersion(ctx, dbq.PublishAutomationVersionParams{
 			ChangeRequestID: &rid, OrgID: r.Org, ID: v.ID, Digest: v.Digest,
 		})); err != nil {
 			return &changes.VoidError{Reason: VoidState}
-		}
-		if _, err := q.SupersedeAutomationVersions(ctx, r.Org, a.ID, v.ID); err != nil {
-			return err
 		}
 	}
 	vid, ro := v.ID, string(rollout)
@@ -395,10 +399,10 @@ func (s *Service) RequestEnable(ctx context.Context, version ids.UUID, rollout a
 		summary := enableSummary{
 			enableContent: content, Name: a.Name, Number: v.Number, Kind: kind, Summary: v.Summary,
 			CeilingAgents: strs(agents), Operations: ops, Principal: d.Authority.Principal,
-			ConfirmerPermissions: map[string][]string{
-				"org":                 append([]string{string(td.PermAutomationPublish)}, scopes.Org...),
-				"every_ceiling_agent": scopes.AgentPaths,
-			},
+			ConfirmerPermissions: map[string][]string{"org": append([]string{string(td.PermAutomationPublish)}, scopes.Org...)},
+		}
+		for _, agent := range scopes.AgentIDs() {
+			summary.ConfirmerPermissions["agent:"+agent.String()] = scopes.Agents[agent]
 		}
 		req, err := s.Changes.RequestTx(ctx, tx, c, changes.Requested{
 			Domain: changes.DomainAutomation, Kind: kind, Subject: a.ID, Content: digest, Summary: summary,

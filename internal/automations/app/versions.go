@@ -26,17 +26,19 @@ import (
 // version content changed.
 const VoidContentChanged = "CONTENT_CHANGED"
 
-func parseDefinition(raw []byte) (*autodomain.Definition, []byte, []byte, error) {
+// parseDefinition parses a definition strictly and returns its canonical
+// JSON and digest.
+func parseDefinition(raw []byte) ([]byte, []byte, error) {
 	d, err := autodomain.Parse(raw)
 	if err != nil {
-		return nil, nil, nil, pcerr.Wrap(err, pcerr.InvalidArgument, "DEFINITION_INVALID", strings.TrimPrefix(err.Error(), "automation: invalid definition: "))
+		return nil, nil, pcerr.Wrap(err, pcerr.InvalidArgument, "DEFINITION_INVALID", strings.TrimPrefix(err.Error(), "automation: invalid definition: "))
 	}
 	c, err := d.Canonical()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	digest, err := d.Digest()
-	return d, c, digest, err
+	return c, digest, err
 }
 
 // CreateDraftVersion stores a definition as the automation's next DRAFT
@@ -46,7 +48,7 @@ func (s *Service) CreateDraftVersion(ctx context.Context, automation ids.UUID, r
 	if err != nil {
 		return Version{}, err
 	}
-	d, canonical, digest, err := parseDefinition(raw)
+	canonical, digest, err := parseDefinition(raw)
 	if err != nil {
 		return Version{}, err
 	}
@@ -59,9 +61,6 @@ func (s *Service) CreateDraftVersion(ctx context.Context, automation ids.UUID, r
 		}
 		if a.State == string(autodomain.StateRetired) {
 			return ErrState
-		}
-		if d.Name != a.Name {
-			return ErrDefinitionName
 		}
 		n, err := q.NextAutomationVersionNumber(ctx, c.Org, automation)
 		if err != nil {
@@ -93,7 +92,7 @@ func (s *Service) UpdateDraftVersion(ctx context.Context, version ids.UUID, raw,
 	if err != nil {
 		return Version{}, err
 	}
-	d, canonical, digest, err := parseDefinition(raw)
+	canonical, digest, err := parseDefinition(raw)
 	if err != nil {
 		return Version{}, err
 	}
@@ -103,13 +102,6 @@ func (s *Service) UpdateDraftVersion(ctx context.Context, version ids.UUID, raw,
 		v, err := loadVersion(ctx, q, c.Org, version, true)
 		if err != nil {
 			return err
-		}
-		a, err := loadAutomation(ctx, q, c.Org, v.AutomationID, false)
-		if err != nil {
-			return err
-		}
-		if d.Name != a.Name {
-			return ErrDefinitionName
 		}
 		if !slices.Contains([]string{"DRAFT", "VALIDATED", "TESTED"}, v.State) {
 			return ErrVersionState
@@ -161,7 +153,11 @@ func (s *Service) ValidateVersion(ctx context.Context, version ids.UUID) (Versio
 		if err != nil {
 			return err
 		}
-		env := &validationEnv{s: s, tx: tx, q: q, org: c.Org, now: s.now(), ctx: ctx}
+		a, err := loadAutomation(ctx, q, c.Org, v.AutomationID, false)
+		if err != nil {
+			return err
+		}
+		env := &validationEnv{s: s, tx: tx, q: q, org: c.Org, owner: a.OwnerUserID, now: s.now(), ctx: ctx}
 		findings := autodomain.Validate(ctx, d, env)
 		valid = !autodomain.HasErrors(findings)
 		raw, err := json.Marshal(findingsOrEmpty(findings))
@@ -278,15 +274,19 @@ func (s *Service) GetVersionGraph(ctx context.Context, version ids.UUID) ([]auto
 
 // validationEnv answers Validate's lookups in the caller's transaction.
 type validationEnv struct {
-	s   *Service
-	tx  db.TenantTx
-	q   *dbq.Queries
-	org ids.OrgID
-	now time.Time
-	ctx context.Context //nolint:containedctx // per-validation helper
+	s     *Service
+	tx    db.TenantTx
+	q     *dbq.Queries
+	org   ids.OrgID
+	owner ids.UUID
+	now   time.Time
+	ctx   context.Context //nolint:containedctx // per-validation helper
 }
 
 func (e *validationEnv) Now() time.Time { return e.now }
+
+// Owner is the automation row's owner (D68).
+func (e *validationEnv) Owner() ids.UUID { return e.owner }
 
 func (e *validationEnv) OwnerActivePerson(ctx context.Context, user ids.UUID) (bool, error) {
 	ok, err := e.q.SubjectUserActive(ctx, e.org, user)

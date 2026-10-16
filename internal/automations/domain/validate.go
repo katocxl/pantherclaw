@@ -30,14 +30,23 @@ var Events = []string{
 // Probes is the closed condition-probe vocabulary (D19).
 var Probes = []string{"grant.expiring", "approval.waiting", "coverage.below", "run.long_running", "agent.unclaimed"}
 
-// produces are the events a step kind can cause (LOOP_POSSIBLE).
+// EventAutomationFinished is produced by every execution.
+const EventAutomationFinished = "automation.finished"
+
+// produces maps step kinds to the D18 events their effects can put on the
+// feed (D78). contain causes nothing beyond its own audit record.
 var produces = map[string][]string{
-	KindLaunchRun:   {"action.decided", "action.held", "action.denied", "effect.recorded", "run.ended", "grant.issued"},
-	KindRevokeGrant: {"grant.revoked", "run.ended"},
-	KindContain:     {"grant.revoked", "run.ended", "alert.raised"},
-	KindOpenCase:    {},
-	KindBuildDigest: {},
+	KindLaunchRun: {
+		"run.ended", "grant.issued", "grant.revoked", "action.decided", "action.held", "action.denied",
+		"effect.recorded", "approval.expired",
+	},
+	KindRevokeGrant: {"grant.revoked"},
 }
+
+// Produces lists the platform events (D18) a step of kind can cause (D78);
+// every execution also produces EventAutomationFinished. LOOP_POSSIBLE and
+// assurance's triggered-workflows preview both read it.
+func Produces(kind string) []string { return slices.Clone(produces[kind]) }
 
 // Limits of D2.
 const (
@@ -56,9 +65,10 @@ const (
 )
 
 var (
-	// NamePattern is an automation's name (D2, D63: ≤ 52 so that
-	// "automation-<name>" fits a service-account name).
-	NamePattern  = regexp.MustCompile(`^[a-z][a-z0-9-]{0,51}$`)
+	// NamePattern is an automation's name (D2, D63, D69 C4): at most 52
+	// characters so that "automation-<name>" fits a service-account name,
+	// never ending in a hyphen.
+	NamePattern  = regexp.MustCompile(`^[a-z]([a-z0-9-]{0,50}[a-z0-9])?$`)
 	stepIDFormat = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,62}$`)
 	paramName    = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 	templateRef  = regexp.MustCompile(`\{\{\s*([^{}]*?)\s*\}\}`)
@@ -98,6 +108,7 @@ func Validate(ctx context.Context, d *Definition, env ValidationEnv) []Finding {
 	v := &validator{ctx: ctx, env: env, d: d, infos: map[string]OperationInfo{}}
 	v.identity()
 	v.authority()
+	v.revocable()
 	v.trigger()
 	v.conditions()
 	v.steps()
@@ -111,9 +122,6 @@ func Validate(ctx context.Context, d *Definition, env ValidationEnv) []Finding {
 
 func (v *validator) identity() {
 	d := v.d
-	if !NamePattern.MatchString(d.Name) {
-		v.err(CodeLimitRange, "/name", "a name is a lowercase slug of at most 52 characters starting with a letter")
-	}
 	if n := utf8.RuneCountInString(strings.TrimSpace(d.Purpose)); n < 1 || n > 2000 {
 		v.err(CodeLimitRange, "/purpose", "a purpose of 1 to 2000 characters is required")
 	}
@@ -121,15 +129,15 @@ func (v *validator) identity() {
 		v.err(CodeLimitRange, "/work_kind", "work_kind is AGENT_WORK or SECURITY_WORK")
 	}
 	switch {
-	case d.Owner.IsZero():
-		v.err(CodeOwnerMissing, "/owner", "name the person accountable for this automation")
+	case v.env.Owner().IsZero():
+		v.err(CodeOwnerMissing, "", "the automation needs an owner: the person accountable for it")
 	default:
-		ok, err := v.env.OwnerActivePerson(v.ctx, d.Owner.UUID())
+		ok, err := v.env.OwnerActivePerson(v.ctx, v.env.Owner())
 		switch {
 		case err != nil:
-			v.lookupErr("/owner", err)
+			v.lookupErr("", err)
 		case !ok:
-			v.err(CodeOwnerNotActivePerson, "/owner", "the owner must be an active person of the organization")
+			v.err(CodeOwnerNotActivePerson, "", "the automation's owner must be an active person of the organization")
 		}
 	}
 	now := v.env.Now()
@@ -192,6 +200,51 @@ func (v *validator) authority() {
 	}
 }
 
+// revocable checks authority.revocable against the steps that revoke
+// beyond their execution (D65).
+func (v *validator) revocable() {
+	steps := slices.Clone(v.d.Do)
+	if v.d.IfFails != nil {
+		steps = append(steps, v.d.IfFails.Compensate...)
+	}
+	revokes := false
+	for _, s := range steps {
+		if k, ok := Catalog[s.Step]; ok && k.ConfirmRevocable {
+			if w, err := s.DecodeWith(); err == nil && RevokesBeyondExecution(w) {
+				revokes = true
+			}
+		}
+	}
+	r := v.d.Authority.Revocable
+	switch {
+	case revokes && r == nil:
+		v.err(CodeLimitRange, "/authority/revocable",
+			"revoke_grant TRIGGER_GRANT or CEILING_AGENTS and contain REVOKE_GRANT need authority.revocable: the agents whose grants this version may revoke, or all: true")
+	case !revokes && r != nil:
+		v.err(CodeLimitRange, "/authority/revocable", "revocable is declared only with a step that revokes grants beyond its execution")
+	case r != nil:
+		v.agentScope("/authority/revocable", *r)
+	}
+}
+
+// agentScope checks an {agents: [ids]} or {all: true} scope.
+func (v *validator) agentScope(at string, s AgentScope) {
+	if !s.Valid() {
+		v.err(CodeLimitRange, at, "list agents by id or set all: true (exactly one)")
+		return
+	}
+	if len(s.Agents) > 50 {
+		v.err(CodeLimitRange, at+"/agents", "list at most 50 agents")
+	}
+	seen := map[RefID]bool{}
+	for i, a := range s.Agents {
+		if seen[a] {
+			v.err(CodeLimitRange, at+"/agents/"+strconv.Itoa(i), "agent %s is listed twice", a)
+		}
+		seen[a] = true
+	}
+}
+
 func (v *validator) destination(s string) (RefID, bool) {
 	var r RefID
 	return r, r.UnmarshalText([]byte(s)) == nil
@@ -240,8 +293,11 @@ func (v *validator) ceiling(c *Ceiling) {
 		budgeted = budgeted || info.ConsumesBudget
 	}
 	if budgeted {
-		if len(c.PerGrant.Limits.Budgets) == 0 {
-			v.err(CodeCeilingUnbounded, at+"/per_grant/limits/budgets", "a ceiling operation spends money: set a per-grant budget")
+		for i, op := range v.ops {
+			if v.infos[op].ConsumesBudget && !c.PerGrant.Limits.CoversBudget(op) {
+				v.err(CodeCeilingUnbounded, at+"/bounds/operations/"+strconv.Itoa(i),
+					"operation %q spends money: a per-grant budget with an amount must cover it", op)
+			}
 		}
 		if len(c.PerDay.Budget) == 0 {
 			v.err(CodeCeilingUnbounded, at+"/per_day/budget", "a ceiling operation spends money: set a per-day budget")
@@ -573,6 +629,11 @@ func (v *validator) withChecks(at string, s StepSpec, w any, seen map[string]int
 				v.err(CodeLimitRange, at+"/grant/operations", "operation %q is outside the ceiling", op)
 			}
 		}
+		if x.Grant.Limits != nil {
+			if _, err := gdomain.NarrowLimits(c.PerGrant.Limits, *x.Grant.Limits); err != nil {
+				v.err(CodeLimitRange, at+"/grant/limits", "a launch may only lower the ceiling's per-grant limits: %v", err)
+			}
+		}
 		if len(x.RunParams) > 16 {
 			v.err(CodeLimitRange, at+"/run_params", "at most 16 run parameters")
 		}
@@ -619,6 +680,9 @@ func (v *validator) withChecks(at string, s StepSpec, w any, seen map[string]int
 		refLaunch("/step", x.Step)
 	case *WaitEffectWith:
 		refLaunch("/step", x.Step)
+		if strings.Contains(x.Operation, "*") {
+			v.err(CodeLimitRange, at+"/operation", "wait_effect names one exact operation, not a pattern")
+		}
 		if c != nil && c.Bounds.Operations != nil && !c.Bounds.Operations.Matches(x.Operation) {
 			v.err(CodeLimitRange, at+"/operation", "the operation must be inside the ceiling")
 		}
@@ -640,7 +704,7 @@ func (v *validator) withChecks(at string, s StepSpec, w any, seen map[string]int
 		if utf8.RuneCountInString(x.Summary) > 1000 {
 			v.err(CodeLimitRange, at+"/summary", "a summary is at most 1000 characters")
 		}
-		n, err := v.env.EligibleApprovers(v.ctx, *x, v.d.Owner.UUID())
+		n, err := v.env.EligibleApprovers(v.ctx, *x, v.env.Owner())
 		switch {
 		case err != nil:
 			v.lookupErr(at+"/approvers", err)
@@ -738,6 +802,7 @@ func (v *validator) withChecks(at string, s StepSpec, w any, seen map[string]int
 		if x.Scope == ScopeTimeRange && (x.Days < 1 || x.Days > 31) {
 			v.err(CodeLimitRange, at+"/days", "a time range is 1 to 31 days")
 		}
+		v.agentScope(at+"/evidence", x.Evidence)
 		for i, sec := range x.Sections {
 			if !slices.Contains([]string{"decisions", "effects", "holds", "alerts", "open_items"}, sec) {
 				v.err(CodeLimitRange, at+"/sections/"+strconv.Itoa(i), "sections are decisions, effects, holds, alerts or open_items")
@@ -944,37 +1009,93 @@ func (v *validator) loops() {
 	default:
 		return
 	}
-	if on == "automation.finished" {
+	if on == EventAutomationFinished {
 		v.add(SeverityWarning, CodeLoopPossible, "/when", "every execution produces automation.finished; it may trigger this automation again")
 		return
 	}
 	for i, s := range v.d.Do {
-		if slices.Contains(produces[s.Step], on) {
+		if slices.Contains(Produces(s.Step), on) {
 			v.add(SeverityWarning, CodeLoopPossible, "/do/"+strconv.Itoa(i),
 				"%s can produce %s, the event this automation listens to; a loop is refused at run time", s.Step, on)
 		}
 	}
 }
 
-// ConfirmerScopes lists, per confirmer permission, whether it is needed on
-// every ceiling agent's path (agents) or at the org, for the kinds the
-// definition uses (D7, HR-272). Every enabling confirmer must hold them all
-// plus automation.publish.
+// ConfirmerScopes is what every enabling confirmer (and every approver of
+// the ceiling) must hold beyond automation.publish, for the kinds and
+// scopes the definition uses (D7, D65, D85, HR-272): permissions at the
+// org, and permissions at each listed agent's path.
 type ConfirmerScopes struct {
-	AgentPaths []string
-	Org        []string
+	Org    []string
+	Agents map[ids.UUID][]string
 }
 
-// RequiredConfirmerPermissions returns what each confirmer must hold.
-func (d *Definition) RequiredConfirmerPermissions() ConfirmerScopes {
-	var out ConfirmerScopes
-	add := func(xs *[]string, ps []string) {
+func (c *ConfirmerScopes) org(ps ...string) {
+	for _, p := range ps {
+		if !slices.Contains(c.Org, p) {
+			c.Org = append(c.Org, p)
+		}
+	}
+}
+
+func (c *ConfirmerScopes) agents(as []ids.UUID, ps ...string) {
+	if c.Agents == nil {
+		c.Agents = map[ids.UUID][]string{}
+	}
+	for _, a := range as {
 		for _, p := range ps {
-			if !slices.Contains(*xs, p) {
-				*xs = append(*xs, p)
+			if !slices.Contains(c.Agents[a], p) {
+				c.Agents[a] = append(c.Agents[a], p)
 			}
 		}
 	}
+}
+
+func (c *ConfirmerScopes) scope(s *AgentScope, ps ...string) {
+	switch {
+	case s == nil:
+	case s.All:
+		c.org(ps...)
+	default:
+		c.agents(refUUIDs(s.Agents), ps...)
+	}
+}
+
+// AgentIDs lists the agents with per-path permissions, sorted.
+func (c ConfirmerScopes) AgentIDs() []ids.UUID {
+	out := make([]ids.UUID, 0, len(c.Agents))
+	for a := range c.Agents {
+		out = append(out, a)
+	}
+	slices.SortFunc(out, func(a, b ids.UUID) int { return strings.Compare(a.String(), b.String()) })
+	return out
+}
+
+func refUUIDs(rs []RefID) []ids.UUID {
+	out := make([]ids.UUID, 0, len(rs))
+	for _, r := range rs {
+		out = append(out, r.UUID())
+	}
+	return out
+}
+
+// RevokesBeyondExecution reports whether a step's `with` revokes grants
+// other than its execution's own (D65): revoke_grant TRIGGER_GRANT or
+// CEILING_AGENTS, and contain REVOKE_GRANT.
+func RevokesBeyondExecution(w any) bool {
+	switch x := w.(type) {
+	case *RevokeGrantWith:
+		return x.Scope != RevokeExecution
+	case *ContainWith:
+		return x.Action == ContainRevokeGrant
+	}
+	return false
+}
+
+// RequiredConfirmerPermissions returns what each confirmer must hold. A
+// step whose `with` does not decode adds nothing; Validate refuses it.
+func (d *Definition) RequiredConfirmerPermissions() ConfirmerScopes {
+	var out ConfirmerScopes
 	all := slices.Clone(d.Do)
 	if d.IfFails != nil {
 		all = append(all, d.IfFails.Compensate...)
@@ -984,16 +1105,33 @@ func (d *Definition) RequiredConfirmerPermissions() ConfirmerScopes {
 		if !ok {
 			continue
 		}
-		switch k.ConfirmAt {
+		w, err := s.DecodeWith()
+		if err != nil {
+			continue
+		}
+		at := k.ConfirmAt
+		if k.ConfirmRevocable && RevokesBeyondExecution(w) {
+			out.scope(d.Authority.Revocable, permGrantRevoke)
+			if at == ConfirmCeilingAgents {
+				continue // the revocable scope replaces the ceiling's
+			}
+		}
+		switch at {
 		case ConfirmCeilingAgents:
-			add(&out.AgentPaths, k.ConfirmerPermissions)
+			out.agents(d.CeilingAgents(), k.ConfirmerPermissions...)
 		case ConfirmOrg:
-			add(&out.Org, k.ConfirmerPermissions)
+			out.org(k.ConfirmerPermissions...)
+		case ConfirmEvidence:
+			if b, ok := w.(*BuildDigestWith); ok {
+				out.scope(&b.Evidence, k.ConfirmerPermissions...)
+			}
 		case ConfirmNone:
 		}
 	}
-	slices.Sort(out.AgentPaths)
 	slices.Sort(out.Org)
+	for a := range out.Agents {
+		slices.Sort(out.Agents[a])
+	}
 	return out
 }
 

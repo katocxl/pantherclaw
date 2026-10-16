@@ -33,7 +33,7 @@
 CREATE TABLE pc.automations (
     org_id             uuid        NOT NULL REFERENCES pc.orgs (id),
     id                 uuid        NOT NULL,
-    name               text        NOT NULL CHECK (name ~ '^[a-z][a-z0-9-]{0,51}$'),
+    name               text        NOT NULL CHECK (name ~ '^[a-z]([a-z0-9-]{0,50}[a-z0-9])?$'),
     purpose            text        NOT NULL CHECK (char_length(btrim(purpose)) BETWEEN 1 AND 2000),
     kind               text        NOT NULL CHECK (kind IN ('AGENT_WORK', 'SECURITY_WORK')),
     owner_user_id      uuid        NOT NULL,
@@ -175,10 +175,19 @@ BEGIN
     IF NOT allowed THEN
         RAISE EXCEPTION 'a version cannot move from % to %', OLD.state, NEW.state USING ERRCODE = 'check_violation';
     END IF;
-    IF OLD.state IN ('PUBLISHED', 'SUPERSEDED', 'RETIRED')
-            AND (NEW.summary IS DISTINCT FROM OLD.summary OR NEW.findings IS DISTINCT FROM OLD.findings
-                 OR NEW.published_at IS DISTINCT FROM OLD.published_at) THEN
-        RAISE EXCEPTION 'a published version never changes' USING ERRCODE = 'check_violation';
+    -- Once a version leaves authoring every column is frozen; only its state
+    -- moves on (PUBLISHED to SUPERSEDED or RETIRED, SUPERSEDED to RETIRED).
+    IF OLD.state IN ('PUBLISHED', 'SUPERSEDED', 'RETIRED') THEN
+        IF (NEW.org_id, NEW.definition, NEW.digest, NEW.summary, NEW.findings, NEW.tested_run_id, NEW.validated_at,
+                NEW.tested_at, NEW.published_at, NEW.change_request_id)
+                IS DISTINCT FROM (OLD.org_id, OLD.definition, OLD.digest, OLD.summary, OLD.findings, OLD.tested_run_id,
+                OLD.validated_at, OLD.tested_at, OLD.published_at, OLD.change_request_id) THEN
+            RAISE EXCEPTION 'a version never changes once it leaves authoring' USING ERRCODE = 'check_violation';
+        END IF;
+        IF NEW.state = OLD.state THEN
+            NEW.updated_at := OLD.updated_at;
+            RETURN NEW;
+        END IF;
     END IF;
     IF NEW.state = 'PUBLISHED' AND OLD.state IS DISTINCT FROM 'PUBLISHED' THEN
         NEW.published_at := now();
@@ -194,7 +203,8 @@ CREATE TRIGGER automation_versions_guard BEFORE INSERT OR UPDATE ON pc.automatio
 -- The generic M11 BINDING ceremony (D6): a request to apply content of a
 -- domain's kind to a subject, confirmed by `required` distinct people with
 -- distinct security keys; one PENDING per (domain, kind, subject). It
--- expires 24 hours after creation at the latest.
+-- expires 24 hours after creation at the latest (72 for a protected
+-- EMERGENCY_REVIEW, D74).
 CREATE TABLE pc.change_requests (
     org_id         uuid        NOT NULL REFERENCES pc.orgs (id),
     id             uuid        NOT NULL,
@@ -214,7 +224,9 @@ CREATE TABLE pc.change_requests (
     decided_reason text        CHECK (char_length(decided_reason) BETWEEN 1 AND 500),
     PRIMARY KEY (org_id, id),
     UNIQUE (org_id, binding),
-    CHECK (expires_at > created_at AND expires_at <= created_at + interval '24 hours'),
+    -- 24 hours at most; a protected emergency review may wait 72 (D74).
+    CHECK (expires_at > created_at AND expires_at <= created_at + CASE
+        WHEN domain = 'protected' AND kind = 'EMERGENCY_REVIEW' THEN interval '72 hours' ELSE interval '24 hours' END),
     CHECK ((state = 'PENDING') = (decided_at IS NULL))
 );
 CREATE UNIQUE INDEX change_requests_one_pending ON pc.change_requests (org_id, domain, kind, subject_id)

@@ -53,8 +53,17 @@ func (editions) Current(context.Context) (billing.Entitlements, error) {
 
 type operations struct{}
 
+// spending names operations that take a money parameter (a test sets it
+// after enabling, so issuance meets a spending operation validation never
+// saw).
+var spending = map[string]bool{}
+
 func (operations) Active(_ context.Context, _ ids.OrgID, op string) (*defs.Definition, error) {
-	return &defs.Definition{Operation: op, Reversibility: defs.Reversible}, nil
+	d := &defs.Definition{Operation: op, Reversibility: defs.Reversible}
+	if spending[op] {
+		d.Params = map[string]defs.ParamSpec{"amount": {Type: defs.TypeMoney}}
+	}
+	return d, nil
 }
 
 type testGate struct{ ok bool }
@@ -144,6 +153,7 @@ func newEnv(t *testing.T) *env {
 	d := dbtest.New(t)
 	e := &env{t: t, pool: d.AppPool(t), org: ids.New[ids.Org](), team: ids.NewV7(), envID: ids.NewV7(), gate: &testGate{ok: true}}
 	e.exec("INSERT INTO pc.orgs (id, name) VALUES ($1, 'acme')", e.org)
+	e.exec("INSERT INTO pc.org_containment (org_id) VALUES ($1)", e.org)
 	e.exec("INSERT INTO pc.teams (org_id, id, slug, name) VALUES ($1, $2, 'ops', 'Ops')", e.org, e.team)
 	e.exec("INSERT INTO pc.environments (org_id, id, team_id, slug, name, kind) VALUES ($1, $2, $3, 'dev', 'Dev', 'DEVELOPMENT')",
 		e.org, e.envID, e.team)
@@ -168,15 +178,13 @@ func newEnv(t *testing.T) *env {
 	return e
 }
 
-func (e *env) definition(name string, perDayGrants int) string {
+func (e *env) definition(perDayGrants int) string {
 	review := time.Now().UTC().AddDate(0, 0, 30).Format(time.DateOnly)
 	return fmt.Sprintf(`
 apiVersion: automations.pantherclaw.dev/v1
 kind: Automation
-name: %s
 purpose: Refund small tickets.
 work_kind: AGENT_WORK
-owner: %s
 review_by: "%s"
 when:
   manual:
@@ -209,7 +217,7 @@ do:
 finish_when:
   - step: wait
     condition: RUN_ENDED
-`, name, e.alice.id, review, e.agent, perDayGrants, e.agent)
+`, review, e.agent, perDayGrants, e.agent)
 }
 
 // enabled creates an automation and enables a validated, tested version
@@ -220,7 +228,7 @@ func (e *env) enabled(name string, rollout autodomain.Rollout, perDay int) (auto
 	if err != nil {
 		e.t.Fatal(err)
 	}
-	v, err := e.svc.CreateDraftVersion(e.alice.cli, a.ID, []byte(e.definition(name, perDay)))
+	v, err := e.svc.CreateDraftVersion(e.alice.cli, a.ID, []byte(e.definition(perDay)))
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -258,10 +266,13 @@ func (e *env) sign(p person, r changes.Request) changes.Assertion {
 
 func (e *env) issue(a autoapp.Automation, v autoapp.Version, mod func(*grantsapp.AutomationIssue)) (gdomain.Grant, error) {
 	in := grantsapp.AutomationIssue{
-		Org: e.org, Automation: a.ID, Version: v.ID, Execution: ids.NewV7(), Trigger: ids.NewV7(), Ceiling: a.Ceiling.ID,
+		Org: e.org, Automation: a.ID, Version: v.ID, Execution: ids.NewV7(), Trigger: ids.NewV7(),
 		ServiceAccount: a.ServiceAccount, AgentID: e.agent, Live: true, TaskRef: "ticket T-1",
 		Principal: gdomain.Principal{Kind: gdomain.PrincipalServiceAccount, ID: a.ServiceAccount},
 		Bounds:    gdomain.Bounds{Operations: &gdomain.Ops{"payments.refund.create"}},
+	}
+	if a.Ceiling != nil {
+		in.Ceiling = a.Ceiling.ID
 	}
 	if mod != nil {
 		mod(&in)
@@ -347,7 +358,7 @@ func TestHR272_EnablingNeedsDistinctEligibleConfirmers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	v, err := e.svc.CreateDraftVersion(e.alice.cli, a.ID, []byte(e.definition("refunds", 5)))
+	v, err := e.svc.CreateDraftVersion(e.alice.cli, a.ID, []byte(e.definition(5)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -422,7 +433,7 @@ func TestHR271_IssuanceStaysInsideTheCeiling(t *testing.T) {
 		t.Fatal(err)
 	}
 	if g.Grantor != (gdomain.Principal{Kind: gdomain.PrincipalServiceAccount, ID: a.ServiceAccount}) || g.Ceiling != a.Ceiling.ID ||
-		g.ExpiresAt.Sub(time.Now()) > time.Hour+time.Minute {
+		time.Until(g.ExpiresAt) > time.Hour+time.Minute {
 		t.Fatalf("issued %+v", g)
 	}
 	if n := e.count("SELECT count(*) FROM pc.grants WHERE org_id = $1 AND ceiling_id = $2 AND grantor_kind = 'service_account'", e.org, a.Ceiling.ID); n != 1 {
@@ -571,10 +582,10 @@ func TestT120_NoSelfWidening(t *testing.T) {
 		t.Fatalf("the execution's run: %+v %v", run, err)
 	}
 	// Changing the definition means a new version and a new ceremony.
-	if _, err := e.svc.UpdateDraftVersion(e.alice.cli, v.ID, []byte(e.definition("refunds", 50)), v.Digest); reason(err) != "VERSION_STATE" {
+	if _, err := e.svc.UpdateDraftVersion(e.alice.cli, v.ID, []byte(e.definition(50)), v.Digest); reason(err) != "VERSION_STATE" {
 		t.Errorf("edited a published version: %v", err)
 	}
-	v2, err := e.svc.CreateDraftVersion(e.alice.cli, a.ID, []byte(e.definition("refunds", 50)))
+	v2, err := e.svc.CreateDraftVersion(e.alice.cli, a.ID, []byte(e.definition(50)))
 	if err != nil {
 		t.Fatal(err)
 	}
