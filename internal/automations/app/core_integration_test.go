@@ -284,9 +284,32 @@ func (e *env) sign(p person, r changes.Request) changes.Assertion {
 	return changes.Assertion{Ceremony: cer, Credential: p.key}
 }
 
+// execution records a manual trigger of a and its execution, as the
+// triggers stream and the engine do: a grant names a real execution
+// (00142). The execution is LIVE when a has a ceiling (a LIVE execution
+// names one), else SHADOW; issuance reads only the request's Live.
+func (e *env) execution(a autoapp.Automation, v autoapp.Version) (exec, trig ids.UUID) {
+	e.t.Helper()
+	exec, trig = ids.NewV7(), ids.NewV7()
+	var ceiling *ids.UUID
+	mode := "SHADOW" // a LIVE execution names its ceiling
+	if a.Ceiling != nil {
+		ceiling, mode = &a.Ceiling.ID, "LIVE"
+	}
+	e.exec(`INSERT INTO pc.automation_triggers (org_id, id, automation_id, version_id, kind, mode, source_ref, authenticity,
+		params, root_trigger_id, state, occurred_at) VALUES ($1, $2, $3, $4, 'MANUAL', 'LIVE', 'manual:test', 'USER_SESSION',
+		'{}', $2, 'ACCEPTED', now())`, e.org, trig, a.ID, v.ID)
+	e.exec(`INSERT INTO pc.automation_executions (org_id, id, automation_id, version_id, trigger_id, mode, ceiling_id,
+		service_account_id, principal_sa_id, trigger_kind, occurred_at, root_trigger_id, deadline_at)
+		VALUES ($1, $2, $3, $4, $5, $8, $6, $7, $7, 'MANUAL', now(), $5, now() + interval '1 hour')`,
+		e.org, exec, a.ID, v.ID, trig, ceiling, a.ServiceAccount, mode)
+	return exec, trig
+}
+
 func (e *env) issue(a autoapp.Automation, v autoapp.Version, mod func(*grantsapp.AutomationIssue)) (gdomain.Grant, error) {
+	exec, trig := e.execution(a, v)
 	in := grantsapp.AutomationIssue{
-		Org: e.org, Automation: a.ID, Version: v.ID, Execution: ids.NewV7(), Trigger: ids.NewV7(),
+		Org: e.org, Automation: a.ID, Version: v.ID, Execution: exec, Trigger: trig,
 		ServiceAccount: a.ServiceAccount, AgentID: e.agent, Live: true, TaskRef: "ticket T-1",
 		Principal: gdomain.Principal{Kind: gdomain.PrincipalServiceAccount, ID: a.ServiceAccount},
 		Bounds:    gdomain.Bounds{Operations: &gdomain.Ops{"payments.refund.create"}},

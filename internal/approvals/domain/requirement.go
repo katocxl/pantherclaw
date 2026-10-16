@@ -292,3 +292,32 @@ func ConsumeBy(approvedAt, deadline time.Time, window time.Duration) time.Time {
 	}
 	return deadline
 }
+
+// requirementV1 is a requirement as it was before gates (G0 M11 part 2
+// D25): a non-gate requirement prints as one, so recordings made before
+// the rollout replay byte-identical (HR-234).
+type requirementV1 struct {
+	Kind          string
+	Role          string
+	Count         int
+	Independent   bool
+	Subject       string
+	Method        string
+	Sources       []Source
+	IndependentOf string
+	Window        bool
+}
+
+// Format implements fmt.Formatter: a gate's deciders appear only on a
+// requirement that has them (HR-234).
+func (r Requirement) Format(f fmt.State, verb rune) {
+	if len(r.Roles) > 0 || len(r.Users) > 0 || len(r.Exclude) > 0 {
+		type plain Requirement // without methods: formats field by field
+		_, _ = fmt.Fprintf(f, fmt.FormatString(f, verb), plain(r))
+		return
+	}
+	_, _ = fmt.Fprintf(f, fmt.FormatString(f, verb), requirementV1{
+		Kind: r.Kind, Role: r.Role, Count: r.Count, Independent: r.Independent, Subject: r.Subject, Method: r.Method,
+		Sources: r.Sources, IndependentOf: r.IndependentOf, Window: r.Window,
+	})
+}

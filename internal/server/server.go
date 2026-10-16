@@ -382,7 +382,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if err := authority.RegisterSweeper(jreg, pool, svc, cfg.Authority.StaleDispatch.D()); err != nil {
 			return err
 		}
-		evidenceJobs, err := registerEvidenceWorkers(jreg, cfg, pool, reg, m5.notifications, autos, log)
+		evidenceJobs, err := registerEvidenceWorkers(jreg, cfg, pool, reg, m5.notifications, autos, bill, log)
 		if err != nil {
 			return err
 		}
