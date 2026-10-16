@@ -435,6 +435,9 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if err := registerSimulationJobs(jreg, pool, kp, bill, log); err != nil {
 			return err
 		}
+		if evidenceJobs, err = registerAutomationAssuranceJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
+			return err
+		}
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {
 			return err
 		}
@@ -650,6 +653,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerReflexCore(rs, d)
 	registerM11Govern(rs, d)
 	autos = registerAutomationsCore(rs, d, grants, runs)
+	if err := registerAutomationAssurance(rs, d); err != nil {
+		return nil, err
+	}
 	registerAutomationsEngine(rs, d)
 	automationTriggers, err := registerAutomationTriggers(rs, d)
 	if err != nil {

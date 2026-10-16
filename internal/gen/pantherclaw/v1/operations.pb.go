@@ -96,7 +96,7 @@ func (x *WorkAction) GetTarget() string {
 type WorkItem struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// "INCIDENT", "UNCONFIRMED_CONTAINMENT", "ALERT", "PROTECTION_FAILURE",
-	// "WAITING_DECISION", "POSTURE_FINDING" or
+	// "AUTOMATION_EXCEPTION", "WAITING_DECISION", "POSTURE_FINDING" or
 	// "AUTHORITY_EXPANSION".
 	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	Id   string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
@@ -379,7 +379,7 @@ type GetSummaryResponse struct {
 	Scope string `protobuf:"bytes,3,opt,name=scope,proto3" json:"scope,omitempty"`
 	// Counts by key: active_incidents, open_alerts, critical,
 	// protection_failures, expiring_decisions, authority_expansion_24h,
-	// unconfirmed_containment, posture_findings,
+	// unconfirmed_containment, posture_findings, automation_exceptions,
 	// telemetry_gaps.
 	Counts    map[string]int32 `protobuf:"bytes,4,rep,name=counts,proto3" json:"counts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 	Truncated bool             `protobuf:"varint,5,opt,name=truncated,proto3" json:"truncated,omitempty"`

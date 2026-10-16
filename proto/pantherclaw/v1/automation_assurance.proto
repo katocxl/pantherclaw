@@ -1,0 +1,474 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+// AssuranceService proves an automation before and while it runs (G0 M11
+// part 2 D34–D38, D59; F283, F710, F738–F754, F221–F222, F623, F752,
+// F753; HR-287..289, T-127; Team unless noted).
+//
+// Scenario tests run a version's steps in memory against stubbed step
+// results; a version is TESTED only when its tests cover the required
+// kinds and all pass for its current digest (HR-287). Historical
+// simulation replays up to 30 days of triggers against today's state.
+// Tests, simulation and shadow executions never issue grants, start runs,
+// deliver, contain, open cases or notify anyone but the owner; what could
+// not be evaluated is reported UNEVALUABLE (HR-288). Exposure previews
+// apply the caller's permissions (HR-289).
+service AssuranceService {
+  // SetTestCases replaces a DRAFT or VALIDATED version's scenario tests.
+  // permission: automation.manage
+  rpc SetTestCases(SetTestCasesRequest) returns (SetTestCasesResponse);
+  // ListTestCases lists a version's scenario tests.
+  // permission: automation.read
+  rpc ListTestCases(ListTestCasesRequest) returns (ListTestCasesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // RunTests runs a version's tests; a passing run makes a VALIDATED
+  // version TESTED.
+  // permission: automation.manage
+  rpc RunTests(RunTestsRequest) returns (RunTestsResponse);
+  // GetTestRun returns a test run with each case's result.
+  // permission: automation.read
+  rpc GetTestRun(GetTestRunRequest) returns (GetTestRunResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // StartAutomationSimulation queues a historical simulation of a version over at
+  // most 30 days.
+  // permission: automation.manage
+  rpc StartAutomationSimulation(StartAutomationSimulationRequest) returns (StartAutomationSimulationResponse);
+  // GetAutomationSimulation returns a simulation's state and results.
+  // permission: automation.read
+  rpc GetAutomationSimulation(GetAutomationSimulationRequest) returns (GetAutomationSimulationResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetRolloutReport reports an automation's rollout stage and its shadow
+  // and cohort outcomes, and whether FULL rollout is verified.
+  // permission: automation.read
+  rpc GetRolloutReport(GetRolloutReportRequest) returns (GetRolloutReportResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetAutomationStatus returns an automation's next run, latest verified
+  // outcome, ceiling budgets and backlog (F283).
+  // permission: automation.read
+  rpc GetAutomationStatus(GetAutomationStatusRequest) returns (GetAutomationStatusResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // InspectVersion lists, per consequential step, its operations, their
+  // effects, reversibility and consequences, coverage per ceiling agent,
+  // the approvals it requires and how its effects are verified (F710).
+  // permission: automation.read
+  rpc InspectVersion(InspectVersionRequest) returns (InspectVersionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // PreviewBlastRadius previews what a version's authority could reach
+  // (Business; the caller's exposure.read applies).
+  // permission: automation.read
+  rpc PreviewBlastRadius(PreviewBlastRadiusRequest) returns (PreviewBlastRadiusResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // CompareRestriction compares a version's ceiling with a narrower one
+  // (Business; the caller's exposure.read applies).
+  // permission: automation.read
+  rpc CompareRestriction(CompareRestrictionRequest) returns (CompareRestrictionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetAutomationMetrics returns hourly automation outcomes.
+  // permission: automation.read
+  rpc GetAutomationMetrics(GetAutomationMetricsRequest) returns (GetAutomationMetricsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// AutomationStubResult is what one attempt of a stubbed step returns.
+message AutomationStubResult {
+  // RUNNING, WAITING, DONE, FAILED, SKIPPED or UNKNOWN.
+  string state = 1 [(buf.validate.field).string = {
+    in: ["RUNNING", "WAITING", "DONE", "FAILED", "SKIPPED", "UNKNOWN"]
+  }];
+  // CHANGED, UNCHANGED, UNKNOWN or NONE (default NONE).
+  string effect = 2 [(buf.validate.field).string = {
+    in: ["", "CHANGED", "UNCHANGED", "UNKNOWN", "NONE"]
+  }];
+  string reason = 3 [(buf.validate.field).string.pattern = "^([A-Z][A-Z0-9_]{0,63})?$"];
+  map<string, string> output = 4 [(buf.validate.field).map = {
+    max_pairs: 16
+    keys: {
+      string: {
+        min_len: 1
+        max_len: 64
+      }
+    }
+    values: {
+      string: {max_len: 512}
+    }
+  }];
+  // evidence: the result carries completion evidence (a finish condition
+  // on this step can be met).
+  bool evidence = 5;
+  // wait: a WAITING result wakes after this long (default 15 s).
+  google.protobuf.Duration wait = 6;
+}
+
+message AutomationStepStub {
+  string step_id = 1 [(buf.validate.field).string.pattern = "^[a-z][a-z0-9_-]{0,62}$"];
+  repeated AutomationStubResult results = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 10
+  }];
+}
+
+message AutomationTestExpectation {
+  // The final execution state.
+  string state = 1 [(buf.validate.field).string = {
+    in: ["SUCCEEDED", "PARTIALLY_COMPLETED", "FAILED", "CANCELLED", "NEEDS_RECONCILIATION"]
+  }];
+  string reason = 2 [(buf.validate.field).string.pattern = "^([A-Z][A-Z0-9_]{0,63})?$"];
+  // Expected final state of named steps (step id -> state).
+  map<string, string> steps = 3 [(buf.validate.field).map.max_pairs = 20];
+}
+
+// AutomationTestCase is one scenario test (D34).
+message AutomationTestCase {
+  string name = 1 [(buf.validate.field).string.pattern = "^[a-z][a-z0-9_-]{0,62}$"];
+  // NORMAL, DENIED, TIMEOUT, DUPLICATE, PARTIAL, UNKNOWN or CUSTOM.
+  string kind = 2 [(buf.validate.field).string = {
+    in: ["NORMAL", "DENIED", "TIMEOUT", "DUPLICATE", "PARTIAL", "UNKNOWN", "CUSTOM"]
+  }];
+  // The trigger's parameters, as text, converted by their declarations.
+  map<string, string> params = 3 [(buf.validate.field).map = {
+    max_pairs: 16
+    values: {
+      string: {max_len: 256}
+    }
+  }];
+  repeated AutomationStepStub stubs = 4 [(buf.validate.field).repeated.max_items = 20];
+  AutomationTestExpectation expect = 5 [(buf.validate.field).required = true];
+}
+
+message SetTestCasesRequest {
+  string version_id = 1 [(buf.validate.field).string.uuid = true];
+  repeated AutomationTestCase cases = 2 [(buf.validate.field).repeated.max_items = 50];
+}
+
+message SetTestCasesResponse {
+  // missing_kinds are the required kinds no case covers yet.
+  repeated string missing_kinds = 1;
+}
+
+message ListTestCasesRequest {
+  string version_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message ListTestCasesResponse {
+  repeated AutomationTestCase cases = 1;
+  repeated string missing_kinds = 2;
+}
+
+message RunTestsRequest {
+  string version_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// AutomationCaseResult is one case's outcome.
+message AutomationCaseResult {
+  string name = 1;
+  string kind = 2;
+  bool passed = 3;
+  // The simulated execution's final state and reason.
+  string state = 4;
+  string reason = 5;
+  // Final state per step, and what differed from the expectation.
+  map<string, string> steps = 6;
+  repeated string differences = 7;
+  // DUPLICATE: the second submission was refused as a duplicate.
+  bool duplicate_refused = 8;
+  google.protobuf.Duration elapsed = 9;
+}
+
+message AutomationTestRun {
+  string id = 1;
+  string version_id = 2;
+  bytes definition_digest = 3;
+  bytes tests_digest = 4;
+  bool passed = 5;
+  repeated AutomationCaseResult cases = 6;
+  repeated string missing_kinds = 7;
+  string run_by = 8;
+  google.protobuf.Timestamp create_time = 9;
+}
+
+message RunTestsResponse {
+  AutomationTestRun run = 1;
+  // version_state is the version's state after the run (TESTED when it
+  // passed).
+  string version_state = 2;
+}
+
+message GetTestRunRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetTestRunResponse {
+  AutomationTestRun run = 1;
+}
+
+message StartAutomationSimulationRequest {
+  string version_id = 1 [(buf.validate.field).string.uuid = true];
+  google.protobuf.Timestamp start_time = 2 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp end_time = 3 [(buf.validate.field).required = true];
+}
+
+message StartAutomationSimulationResponse {
+  string simulation_id = 1;
+}
+
+message GetAutomationSimulationRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// SimulationDay is one day's would-be triggers.
+message SimulationDay {
+  // YYYY-MM-DD (UTC).
+  string day = 1;
+  int32 would_fire = 2;
+  int32 unevaluable = 3;
+}
+
+// SimulationSample is one would-be execution with its prospective steps.
+message SimulationSample {
+  google.protobuf.Timestamp occur_time = 1;
+  string trigger_kind = 2;
+  string source_ref = 3;
+  // Per step: id, kind and the would-be decision (ALLOWED, REFUSED with a
+  // reason, SKIPPED, UNEVALUABLE).
+  repeated SimulationStep steps = 4;
+}
+
+message SimulationStep {
+  string step_id = 1;
+  string kind = 2;
+  string decision = 3;
+  string reason = 4;
+}
+
+// SimulationForecast is per-day expectations from the history.
+message SimulationForecast {
+  double executions_per_day = 1;
+  double gates_per_day = 2;
+  int32 eligible_approvers = 3;
+  double grants_per_day = 4;
+  // Budget per currency: the ceiling's maximum and the expected spend.
+  repeated SimulationBudget budget = 5;
+}
+
+message SimulationBudget {
+  string currency = 1;
+  string max_per_day = 2;
+  string expected_per_day = 3;
+}
+
+message AutomationSimulation {
+  string id = 1;
+  string version_id = 2;
+  google.protobuf.Timestamp start_time = 3;
+  google.protobuf.Timestamp end_time = 4;
+  // QUEUED, RUNNING, DONE or FAILED.
+  string state = 5;
+  repeated SimulationDay days = 6;
+  repeated SimulationSample samples = 7;
+  // missing_context names what could not be evaluated, with counts
+  // ("CONDITION_PROBE:coverage.below=12").
+  repeated string missing_context = 8;
+  SimulationForecast forecast = 9;
+  string error = 10;
+  google.protobuf.Timestamp create_time = 11;
+  google.protobuf.Timestamp finish_time = 12;
+}
+
+message GetAutomationSimulationResponse {
+  AutomationSimulation simulation = 1;
+}
+
+message GetRolloutReportRequest {
+  string automation_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetRolloutReportResponse {
+  // stage: SHADOW, COHORT, FULL, or empty when not enabled.
+  string stage = 1;
+  string version_id = 2;
+  // Executions of the enabled version by mode and state ("LIVE:SUCCEEDED").
+  map<string, int32> executions = 3;
+  // shadowed_effects counts effectful steps recorded SHADOWED.
+  int32 shadowed_effects = 4;
+  // would_be_refusals counts shadowed steps whose would-be decision was a
+  // refusal, by reason.
+  map<string, int32> would_be_refusals = 5;
+  // full_verified: COHORT may widen to FULL; else the reasons it may not.
+  bool full_verified = 6;
+  repeated string unverified_reasons = 7;
+}
+
+message GetAutomationStatusRequest {
+  string automation_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// AutomationBudget is one ceiling budget for today (UTC).
+message AutomationBudget {
+  // grants, runs or a currency code.
+  string name = 1;
+  string limit = 2;
+  string used = 3;
+}
+
+message GetAutomationStatusResponse {
+  string state = 1;
+  string rollout = 2;
+  // next_run_time is the next schedule occurrence, when scheduled.
+  google.protobuf.Timestamp next_run_time = 3;
+  // The latest execution to end, and whether its completion evidence
+  // exists (a SUCCEEDED execution without it is not a verified outcome).
+  string latest_execution_id = 4;
+  string latest_state = 5;
+  bool latest_evidenced = 6;
+  google.protobuf.Timestamp latest_end_time = 7;
+  repeated AutomationBudget budgets = 8;
+  int32 queued_triggers = 9;
+  int32 waiting_executions = 10;
+  int32 pending_gates = 11;
+  google.protobuf.Timestamp review_by = 12;
+}
+
+message InspectVersionRequest {
+  string version_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// InspectedOperation is one operation a consequential step may perform.
+message InspectedOperation {
+  string operation = 1;
+  repeated string effect_kinds = 2;
+  // REVERSIBLE, COMPENSABLE, IRREVERSIBLE or UNKNOWN.
+  string reversibility = 3;
+  // Downstream consequences the definition declares.
+  repeated string consequences = 4;
+  // Coverage per ceiling agent ("<agent>=ENFORCED").
+  map<string, string> coverage = 5;
+  // Approvals the ceiling's requirements and the policy hold for it.
+  repeated string approvals = 6;
+  // How the effect is verified: VERIFIER, RECONCILIATION or NONE.
+  string verification = 7;
+}
+
+message InspectedStep {
+  string step_id = 1;
+  string kind = 2;
+  bool effectful = 3;
+  repeated InspectedOperation operations = 4;
+  // Platform scopes the step may touch.
+  repeated string scopes = 5;
+}
+
+message InspectVersionResponse {
+  repeated InspectedStep steps = 1;
+  // notes: what could not be read (a connection without a package).
+  repeated string notes = 2;
+}
+
+message PreviewBlastRadiusRequest {
+  string version_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message BlastRadiusReach {
+  string resource_group = 1;
+  string verb = 2;
+  string operation = 3;
+  string connection_id = 4;
+  string agent_id = 5;
+  bool irreversible = 6;
+  string coverage = 7;
+}
+
+message SharedCredential {
+  string connection_id = 1;
+  repeated string operations = 2;
+  // Other agents whose reach goes through the same connection.
+  repeated string other_agent_ids = 3;
+}
+
+message PreviewBlastRadiusResponse {
+  repeated BlastRadiusReach reach = 1;
+  // Consequential operations (writes, deletes, transfers, irreversible).
+  repeated string consequential_operations = 2;
+  repeated SimulationBudget max_spend_per_day = 3;
+  int32 max_grants_per_day = 4;
+  int32 max_runs_per_day = 5;
+  int32 max_concurrency = 6;
+  int32 delegation_depth = 7;
+  int32 delegation_max_children = 8;
+  repeated SharedCredential shared_credentials = 9;
+  // Approvals every issued grant carries (the ceiling's requirements).
+  repeated string approvals = 10;
+  // Restrictions the ceiling cannot override (published policy rules).
+  repeated string restrictions = 11;
+  // Routes without an enforced decision (coverage UNKNOWN).
+  repeated string uncovered_routes = 12;
+  // Operations whose side effects are not verified.
+  repeated string uncertain_side_effects = 13;
+  // Other automations whose triggers match events this version produces.
+  repeated string triggered_automation_ids = 14;
+  // restricted: agents outside the caller's exposure.read were left out.
+  bool restricted = 15;
+  repeated string notes = 16;
+}
+
+message CompareRestrictionRequest {
+  string version_id = 1 [(buf.validate.field).string.uuid = true];
+  // The narrowed ceiling: the version's `authority.ceiling` document as
+  // JSON.
+  bytes narrowed_ceiling = 2 [(buf.validate.field).bytes = {
+    min_len: 2
+    max_len: 65536
+  }];
+}
+
+message CompareRestrictionResponse {
+  int32 before_rights = 1;
+  int32 after_rights = 2;
+  repeated BlastRadiusReach removed = 3;
+  // Executions in the last 30 days whose grants the narrowed ceiling would
+  // not have allowed.
+  repeated string failing_execution_ids = 4;
+  bool truncated = 5;
+  bool restricted = 6;
+}
+
+message GetAutomationMetricsRequest {
+  // automation_id: one automation, or empty for all the caller may read.
+  string automation_id = 1 [(buf.validate.field).string = {
+    max_len: 36
+    pattern: "^([0-9a-f-]{36})?$"
+  }];
+  google.protobuf.Timestamp start_time = 2 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp end_time = 3 [(buf.validate.field).required = true];
+}
+
+// AutomationOutcomes is one hour's outcomes.
+message AutomationOutcomes {
+  google.protobuf.Timestamp bucket_time = 1;
+  int32 completed_with_evidence = 2;
+  int32 partial = 3;
+  int32 failed = 4;
+  int32 needs_reconciliation = 5;
+  int32 interventions = 6;
+  int32 triggers_refused = 7;
+}
+
+message GetAutomationMetricsResponse {
+  repeated AutomationOutcomes hours = 1;
+}

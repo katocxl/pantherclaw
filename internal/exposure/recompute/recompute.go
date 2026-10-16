@@ -49,6 +49,8 @@ const (
 var moving = []string{
 	"audit.grant", "audit.envelope", "audit.policy.published", "audit.policy.rollback", "audit.policy.exception",
 	"audit.connection", "audit.credential", "audit.coverage", "audit.agent", "coverage.snapshot", "coverage.invalidation",
+	// An automation enabled, paused or retired moves its ceiling (D37).
+	"audit.automation",
 }
 
 // Moves reports whether an event of kind may change reach.

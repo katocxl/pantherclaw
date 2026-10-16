@@ -15,6 +15,7 @@ import (
 	"slices"
 	"time"
 
+	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/exposure/domain"
@@ -38,6 +39,8 @@ type Loaded struct {
 	Descendants  map[ids.UUID][]ids.UUID
 	Overreach    []dbq.ExposureOverreachRow
 	Credentials  []dbq.PostureCredentialsRow
+	// CeilingGaps name the ceilings whose definition could not be read.
+	CeilingGaps []string
 }
 
 // GrantFacts is what posture reads of a grant.
@@ -59,6 +62,9 @@ func Load(ctx context.Context, tx db.TenantTx) (Loaded, error) {
 		Irreversible: map[string]bool{}, Unverified: map[string]bool{}, Descendants: map[ids.UUID][]ids.UUID{},
 	}
 	if err := l.grants(ctx, q, org); err != nil {
+		return Loaded{}, err
+	}
+	if err := l.ceilings(ctx, q, org); err != nil {
 		return Loaded{}, err
 	}
 	if err := l.connections(ctx, q, org); err != nil {
@@ -134,7 +140,7 @@ func (l *Loaded) grants(ctx context.Context, q *dbq.Queries, org ids.OrgID) erro
 		}
 		l.Inputs.Grants = append(l.Inputs.Grants, domain.Grant{
 			ID: g.ID, Agent: g.AgentID, Bounds: b, NotBefore: g.NotBefore, ExpiresAt: g.ExpiresAt,
-			DelegationDepth: int(g.DelegationDepth), CreatedAt: g.CreatedAt, Revoked: g.Revoked,
+			DelegationDepth: int(g.DelegationDepth), CreatedAt: g.CreatedAt, Revoked: g.Revoked, Automation: g.AutomationID,
 		})
 		f := GrantFacts{ID: g.ID, CreatedAt: g.CreatedAt}
 		if b.Operations == nil {
@@ -166,14 +172,21 @@ func operations(raw []byte) ([]domain.Operation, []defs.Definition, bool) {
 		return nil, nil, false
 	}
 	var p struct {
-		Definitions []defs.Definition `json:"definitions"`
+		Definitions  []defs.Definition      `json:"definitions"`
+		Consequences []defs.ConsequenceRule `json:"consequences"`
 	}
 	if err := json.Unmarshal(doc, &p); err != nil || len(p.Definitions) == 0 {
 		return nil, nil, false
 	}
 	out := make([]domain.Operation, 0, len(p.Definitions))
 	for _, d := range p.Definitions {
-		out = append(out, domain.OperationOf(d))
+		o := domain.OperationOf(d)
+		for _, c := range p.Consequences {
+			if c.Operation == d.Operation {
+				o.Consequences = append(o.Consequences, c.Consequence.Operation+" "+c.Consequence.Effect)
+			}
+		}
+		out = append(out, o)
 	}
 	return out, p.Definitions, true
 }
@@ -292,3 +305,30 @@ func policyOf(raw []byte) domain.Policy {
 
 // ErrNoSnapshot reports an org with no snapshot yet.
 var ErrNoSnapshot = errors.New("exposure: no snapshot computed yet")
+
+// ceilings reads the ACTIVE issuance ceilings (D37a): the bounds, agents
+// and delegation of the version each one approved. A definition that
+// cannot be read is recorded as a gap on the snapshot, so the ceiling view
+// is never complete without saying so.
+func (l *Loaded) ceilings(ctx context.Context, q *dbq.Queries, org ids.OrgID) error {
+	rows, err := q.ExposureCeilings(ctx, org)
+	if err != nil {
+		return err
+	}
+	for _, c := range rows {
+		def, err := autodomain.Parse(c.Definition)
+		if err != nil {
+			l.CeilingGaps = append(l.CeilingGaps, "CEILING_UNKNOWN:"+c.ID.String())
+			continue
+		}
+		ce := domain.Ceiling{ID: c.ID, Automation: c.AutomationID, ReviewBy: c.ReviewBy, Active: true}
+		if x := def.Authority.Ceiling; x != nil {
+			for _, a := range x.Agents {
+				ce.Agents = append(ce.Agents, a.UUID())
+			}
+			ce.Bounds, ce.DelegationDepth = x.Bounds, x.Delegation.Depth
+		}
+		l.Inputs.Ceilings = append(l.Inputs.Ceilings, ce)
+	}
+	return nil
+}

@@ -521,6 +521,21 @@ type PcAutomationSchedule struct {
 	UpdatedAt    time.Time
 }
 
+type PcAutomationSimulation struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	VersionID   ids.UUID
+	FromAt      time.Time
+	ToAt        time.Time
+	State       string
+	Results     []byte
+	Error       *string
+	RequestedBy ids.UUID
+	CreatedAt   time.Time
+	StartedAt   *time.Time
+	FinishedAt  *time.Time
+}
+
 type PcAutomationStepAttempt struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID
@@ -539,6 +554,32 @@ type PcAutomationStepAttempt struct {
 	StartedAt    time.Time
 	EndedAt      *time.Time
 	WakeAt       *time.Time
+}
+
+type PcAutomationTestCase struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	VersionID ids.UUID
+	Name      string
+	CaseKind  string
+	Trigger   []byte
+	Stubs     []byte
+	Expect    []byte
+	Seq       int32
+	CreatedBy ids.UUID
+	CreatedAt time.Time
+}
+
+type PcAutomationTestRun struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	VersionID        ids.UUID
+	DefinitionDigest []byte
+	TestsDigest      []byte
+	Passed           bool
+	Results          []byte
+	RunBy            ids.UUID
+	CreatedAt        time.Time
 }
 
 type PcAutomationThresholdCount struct {
@@ -1549,6 +1590,7 @@ type PcExposureRight struct {
 	Observations  int32
 	Basis         string
 	Irreversible  bool
+	AutomationIds []ids.UUID
 }
 
 type PcExposureSnapshot struct {

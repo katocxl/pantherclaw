@@ -40,8 +40,9 @@ const (
 	Credential View = "CREDENTIAL"
 )
 
-// Views lists the views in display order.
-var Views = []View{Observed, Effective, Credential}
+// Views lists the views in display order. IssuanceCeiling (D37) holds an
+// automation's potential reach and is never counted as an agent's.
+var Views = []View{Observed, Effective, Credential, IssuanceCeiling}
 
 // Label says how usable a right is now.
 type Label string
@@ -148,12 +149,27 @@ type Right struct {
 	Basis string
 	// Irreversible flags an operation whose definition is irreversible.
 	Irreversible bool
+	// Automations are the automations the right belongs to (D37a, D73):
+	// on an EFFECTIVE right, every automation that issued one of the grants
+	// behind the path (the path stays one right, sorted ids); on an
+	// ISSUANCE_CEILING right, the ceiling's one holder.
+	Automations []ids.UUID
 }
 
-// Key identifies a right within a view.
+// Key identifies a right within a view. A ceiling right also names its
+// automation: each automation's ceiling stays its own (D37a).
 func (r Right) Key() string {
-	return string(r.View) + "|" + r.PathKey()
+	k := string(r.View) + "|" + r.PathKey()
+	if r.View == IssuanceCeiling {
+		for _, a := range r.Automations {
+			k += "|automation:" + a.String()
+		}
+	}
+	return k
 }
+
+// HasAutomation reports whether the right belongs to automation a.
+func (r Right) HasAutomation(a ids.UUID) bool { return slices.Contains(r.Automations, a) }
 
 // PathKey identifies the path a right travels, whatever the view: the agent
 // (or "*"), the connection, the operation or resource group and the verb.
@@ -184,13 +200,19 @@ type Operation struct {
 	Reversibility defs.Reversibility
 	// Verified reports a verifier the definition declares.
 	Verified bool
+	// Reconciled reports an unknown outcome the definition sends to
+	// reconciliation (D59 InspectVersion).
+	Reconciled bool
+	// Consequences are the package's consequence rules for the operation,
+	// as "<operation> <effect>" (F405).
+	Consequences []string
 }
 
 // OperationOf reduces a definition to what exposure reads.
 func OperationOf(d defs.Definition) Operation {
 	o := Operation{
 		Name: d.Operation, Access: d.Access, TargetType: d.Target.Type, Reversibility: d.Reversibility,
-		Verified: d.Verifier != nil,
+		Verified: d.Verifier != nil, Reconciled: d.Retry.OnUnknown == defs.OnUnknownReconcile,
 	}
 	for _, e := range slices.Concat(d.Effects, d.SideEffects) {
 		o.Effects = append(o.Effects, e.Kind)
@@ -246,6 +268,9 @@ type Grant struct {
 	// Revoked grants (in the last 30 days) are kept as history: their
 	// reach is EXPIRED and shows as HISTORICAL edges (D31).
 	Revoked bool
+	// Automation is set on a grant an automation issued under its ceiling
+	// (D37): its rights are that automation's current execution reach.
+	Automation *ids.UUID
 }
 
 // PolicyRule is what exposure reads of a published policy rule.
@@ -329,6 +354,8 @@ type Inputs struct {
 	// effective view (D23, D27). The credential view never changes with
 	// them: a control stops decisions, not what a credential can do.
 	Restrictions []Restriction
+	// Ceilings are the automations' issuance ceilings (D37).
+	Ceilings []Ceiling
 }
 
 // Result is a computation's rights, sorted, with what it could not read.
@@ -358,6 +385,7 @@ func Compute(in Inputs) Result {
 	effective(&b, in, conns)
 	credential(&b, in, conns)
 	observed(&b, in, conns)
+	ceilings(&b, in, conns)
 	slices.SortFunc(b.out, compareRights)
 	slices.Sort(b.gaps)
 	return Result{Rights: b.out, Gaps: slices.Compact(b.gaps)}
@@ -427,7 +455,7 @@ func effective(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 				}
 				for _, v := range []Verb{VerbRead, VerbUpdate} {
 					addEff(Right{
-						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID),
+						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID), Automations: automations(g.Automation),
 						ResourceGroup: "connection:" + c.Name, Verb: v, Coverage: CoverageUnknown,
 						Reasons: append(slices.Clone(baseReasons), ReasonPackageUnknown), ExpiresAt: expires,
 					})
@@ -452,14 +480,14 @@ func effective(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 				for _, cl := range Classify(op, *c) {
 					v := cl.Verb
 					addEff(Right{
-						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID),
+						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID), Automations: automations(g.Automation),
 						Operation: op.Name, ResourceGroup: Group(op, *c), Verb: v, Basis: cl.Explain(), Irreversible: op.Reversibility == defs.Irreversible, Coverage: cov, Reasons: rs,
 						ExpiresAt: expires,
 					})
 				}
 				if g.DelegationDepth > 0 {
 					addEff(Right{
-						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID),
+						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID), Automations: automations(g.Automation),
 						ResourceGroup: Group(op, *c), Verb: VerbDelegate, Basis: BasisDelegation, Coverage: cov,
 						Reasons: append(slices.Clone(rs), ReasonDelegable), Depth: g.DelegationDepth, ExpiresAt: expires,
 					})
@@ -721,11 +749,30 @@ func (b *builder) add(r Right) {
 	}
 	cur.Depth = max(cur.Depth, r.Depth)
 	cur.Irreversible = cur.Irreversible || r.Irreversible
+	cur.Automations = mergeIDs(cur.Automations, r.Automations)
 	cur.Observations += r.Observations
 	if r.ObservedAt != nil && (cur.ObservedAt == nil || r.ObservedAt.After(*cur.ObservedAt)) {
 		cur.ObservedAt = r.ObservedAt
 	}
 	cur.Reasons = sortedUnique(append(cur.Reasons, r.Reasons...))
+}
+
+// automations is a grant's automation as a set.
+func automations(a *ids.UUID) []ids.UUID {
+	if a == nil {
+		return nil
+	}
+	return []ids.UUID{*a}
+}
+
+// mergeIDs is the sorted union of two id sets.
+func mergeIDs(a, b []ids.UUID) []ids.UUID {
+	if len(b) == 0 {
+		return a
+	}
+	out := append(slices.Clone(a), b...)
+	slices.SortFunc(out, func(x, y ids.UUID) int { return cmp.Compare(x.String(), y.String()) })
+	return slices.Compact(out)
 }
 
 func sortedUnique(s []string) []string {
@@ -738,6 +785,7 @@ func compareRights(a, b Right) int {
 	return cmp.Or(
 		cmp.Compare(slices.Index(Views, a.View), slices.Index(Views, b.View)),
 		cmp.Compare(a.PathKey(), b.PathKey()),
+		cmp.Compare(a.Key(), b.Key()),
 	)
 }
 
