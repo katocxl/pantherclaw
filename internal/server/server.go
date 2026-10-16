@@ -666,12 +666,12 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		return nil, err
 	}
 	registerAutomationsEngine(rs, d, workload, autos)
+	registerAutomationTemplates(rs, d, autos)
 	automationTriggers, err := registerAutomationTriggers(rs, d, autos)
 	if err != nil {
 		return nil, err
 	}
 	registerM11Protect(rs, d, autos)
-	registerAutomationTemplates(rs, d, autos)
 	mux := http.NewServeMux()
 	edges.mount(mux)
 	automationTriggers.mount(mux)

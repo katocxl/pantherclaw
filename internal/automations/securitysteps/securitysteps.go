@@ -21,7 +21,6 @@ import (
 	"time"
 
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
-	"github.com/katocxl/pantherclaw/internal/automations/engine"
 	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/automations/steps"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -34,6 +33,7 @@ import (
 const (
 	ReasonOutsideScope   = steps.ReasonOutsideScope
 	ReasonBadWith        = steps.ReasonBadWith
+	ReasonDependency     = "DEPENDENCY_UNAVAILABLE"
 	ReasonNoSubject      = "TRIGGER_SUBJECT_MISSING"
 	ReasonContainPartial = "CONTAINMENT_PARTIAL"
 	ReasonContainFailed  = "CONTAINMENT_FAILED"
@@ -118,7 +118,9 @@ func failed(reason string) (autodomain.StepResult, error) {
 	return autodomain.StepResult{State: autodomain.StepFailed, Reason: reason, Effect: autodomain.EffectNone}, nil
 }
 
-func unwired() (autodomain.StepResult, error) { return failed(engine.ReasonUnsupported) }
+// unwired fails a step whose dependency this server lacks (D108): it never
+// acts in part.
+func unwired() (autodomain.StepResult, error) { return failed(ReasonDependency) }
 
 // previewRefused is a preview that would be refused: FAILED with the
 // would-be decision (HR-288).

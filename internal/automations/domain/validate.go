@@ -779,6 +779,11 @@ func (v *validator) withChecks(at string, s StepSpec, w any, seen map[string]int
 		if !dur(x.Timeout, time.Minute, MaxCoverageWait) {
 			v.err(CodeDeadlineMissing, at+"/timeout", "wait_coverage needs a timeout of at most 7d")
 		}
+		// The route is the trigger's agent, connection and operation; the
+		// operation is a declared trigger parameter (D103 T6).
+		if _, ok := v.d.When.Params()["operation"]; !ok {
+			v.err(CodeParamUndeclared, at, "wait_coverage needs the trigger parameter operation")
+		}
 	case *AssignOwnerWith:
 		scope("/to", x.To, ScopeAgentOwner, ScopeConnectionOwner, ScopeOwner)
 		if x.Deadline.D() > 7*24*time.Hour || x.Deadline < 0 {

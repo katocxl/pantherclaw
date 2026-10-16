@@ -182,6 +182,7 @@ definition:
       with:
         step: launch
         operation: "${confirm_operation}"
+        min: 1
       timeout: 1h
   finish_when:
     - step: wait

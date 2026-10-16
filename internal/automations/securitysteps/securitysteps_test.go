@@ -379,3 +379,32 @@ func TestRefusalsBecomeReasons(t *testing.T) {
 		t.Fatalf("result = %+v", r)
 	}
 }
+
+// TestHR284_ContainWithoutItsEscalationDoesNotAct: escalation (an owned
+// failure and a case) is part of contain, so without either tie, or without
+// the containment itself, the step fails DEPENDENCY_UNAVAILABLE before it
+// contains anything (D108).
+func TestHR284_ContainWithoutItsEscalationDoesNotAct(t *testing.T) {
+	for name, strip := range map[string]func(*Deps){
+		"no failures":  func(d *Deps) { d.Failures = nil },
+		"no cases":     func(d *Deps) { d.Cases = nil },
+		"no container": func(d *Deps) { d.Container = nil },
+		"no grants":    func(d *Deps) { d.Grants = nil },
+	} {
+		for _, w := range []autodomain.ContainWith{
+			{Action: autodomain.ContainSuspendRun, Subject: autodomain.SubjectTriggerRun},
+			{Action: autodomain.ContainRevokeGrant, Subject: autodomain.SubjectTriggerGrant},
+		} {
+			if (name == "no container" && w.Action != autodomain.ContainSuspendRun) || (name == "no grants" && w.Action != autodomain.ContainRevokeGrant) {
+				continue
+			}
+			f := &fakes{status: actionConfirmed, revoked: []ids.UUID{trigGrant}}
+			d := f.deps()
+			strip(&d)
+			r := run(t, &contain{d: d}, sc(autodomain.KindContain, &w, autodomain.ScopeTriggerRun, autodomain.ScopeTriggerGrant))
+			if r.State != autodomain.StepFailed || r.Reason != ReasonDependency || f.effects() != 0 {
+				t.Errorf("%s, %s: %+v, %d effects", name, w.Action, r, f.effects())
+			}
+		}
+	}
+}

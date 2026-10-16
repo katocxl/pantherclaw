@@ -108,6 +108,11 @@ func (s *contain) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext)
 	if reason != "" {
 		return failed(reason)
 	}
+	// Escalation (an owned failure and a case) is part of the step: without
+	// its ties the step does not act at all (HR-284).
+	if s.d.Failures == nil || s.d.Cases == nil {
+		return unwired()
+	}
 	if w.Action == autodomain.ContainRevokeGrant {
 		return s.revoke(ctx, tx, sc, w, target)
 	}
@@ -219,23 +224,21 @@ func (s *contain) escalate(ctx context.Context, tx pgx.Tx, sc autodomain.StepCon
 		evidence = append(evidence, ref(RefResponseAction, *action))
 	}
 	summary := "Automation " + sc.Execution.AutomationName + " could not confirm containment (" + reason + ")."
-	if s.d.Failures != nil {
-		owner := reflexdomain.Subject{Type: reflexdomain.SubjectUser, ID: sc.Execution.Owner.String()}
-		f, err := s.d.Failures.Report(ctx, tx, reflexdomain.Failure{
-			Org: sc.Org, Kind: FailureContainment, Summary: summary,
-			NextStep: "Review the response action's unresolved paths and in-flight actions, and contain them by hand.",
-			Scope:    clip(scope), Owner: &owner, Deadline: sc.Now.Add(escalateWithin), DedupeKey: idempotency(sc),
-		})
-		if err != nil {
-			return autodomain.StepResult{}, err
-		}
-		out[OutFailure] = f.String()
-		refs = append(refs, ref(RefFailure, f))
+	owner := reflexdomain.Subject{Type: reflexdomain.SubjectUser, ID: sc.Execution.Owner.String()}
+	f, err := s.d.Failures.Report(ctx, tx, reflexdomain.Failure{
+		Org: sc.Org, Kind: FailureContainment, Summary: summary,
+		NextStep: "Review the response action's unresolved paths and in-flight actions, and contain them by hand.",
+		Scope:    clip(scope), Owner: &owner, Deadline: sc.Now.Add(escalateWithin), DedupeKey: idempotency(sc),
+	})
+	if err != nil {
+		return autodomain.StepResult{}, err
 	}
+	out[OutFailure] = f.String()
+	refs = append(refs, ref(RefFailure, f))
 	// One case per execution and step: a retry of the step finds the same
 	// response action and escalates through the same failure, so only its
 	// first attempt opens the case.
-	if s.d.Cases != nil && sc.Attempt <= 1 {
+	if sc.Attempt <= 1 {
 		c, err := s.d.Cases.Open(ctx, tx, reflexdomain.CaseSeed{
 			Org: sc.Org, Title: clipText("Containment did not hold: "+sc.Execution.AutomationName, MaxCaseTitle),
 			Source: caseSource, Subjects: clip(scope), Evidence: clipEvidence(evidence),

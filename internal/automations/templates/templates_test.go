@@ -12,13 +12,14 @@ import (
 	"testing"
 	"time"
 
+	"go.yaml.in/yaml/v3"
+
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/engine"
 	"github.com/katocxl/pantherclaw/internal/automations/templates"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
-	"go.yaml.in/yaml/v3"
 )
 
 // d32 are the templates of D32.
@@ -47,6 +48,7 @@ var variants = map[string][]map[string]string{
 		{"trigger": "case.closed"},
 		{"hours_left": "24"},
 		{"agents": "0192f000-0000-7000-8000-0000000000a1,0192f000-0000-7000-8000-0000000000a2"},
+		{"revocable": "ALL", "agents": ""},
 	},
 	"approval_routing":       {{}, {"remind_after": "24h", "resolution_timeout": "1h"}},
 	"new_agent_intake":       {{}, {"baseline_from": "TEMPLATE", "claim_timeout": "6d"}},
@@ -56,6 +58,7 @@ var variants = map[string][]map[string]string{
 		{},
 		{"event": "incident.opened", "contain": "REVOKE_GRANT", "contain_at": "HIGH"},
 		{"contain": "REVOKE_GRANT", "agents": "0192f000-0000-7000-8000-0000000000a1"},
+		{"contain": "REVOKE_GRANT", "revocable": "ALL", "agents": ""},
 	},
 	"audit_digest": {
 		{},
@@ -516,5 +519,41 @@ func TestKindAndSource(t *testing.T) {
 	}
 	if _, ok := templates.Source("nope"); ok {
 		t.Error("Source(nope) found a template")
+	}
+}
+
+// TestT126_RevocableHasNoDefault: a template that revokes beyond its own
+// grants names the agents or says ALL; it never defaults to every agent
+// (D103 T3).
+func TestT126_RevocableHasNoDefault(t *testing.T) {
+	for _, c := range []struct {
+		id     string
+		params map[string]string
+	}{
+		{"grant_lifecycle", map[string]string{"revocable": ""}},
+		{"grant_lifecycle", map[string]string{"revocable": "AGENTS", "agents": ""}},
+		{"scoped_incident_containment", map[string]string{"contain": "REVOKE_GRANT", "revocable": ""}},
+		{"scoped_incident_containment", map[string]string{"contain": "REVOKE_GRANT", "revocable": "AGENTS", "agents": ""}},
+	} {
+		tm, _ := templates.Get(c.id)
+		params := tm.Example()
+		for k, v := range c.params {
+			if v == "" {
+				delete(params, k)
+			} else {
+				params[k] = v
+			}
+		}
+		if _, _, err := templates.Render(c.id, params); !errors.Is(err, templates.ErrParams) {
+			t.Errorf("%s %v: %v", c.id, c.params, err)
+		}
+	}
+	for _, id := range []string{"grant_lifecycle", "scoped_incident_containment"} {
+		tm, _ := templates.Get(id)
+		for _, p := range tm.Params {
+			if p.Name == "revocable" && p.Default != "" {
+				t.Errorf("%s: revocable defaults to %s", id, p.Default)
+			}
+		}
 	}
 }

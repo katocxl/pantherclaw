@@ -10,6 +10,7 @@ import (
 	"time"
 
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
+	"github.com/katocxl/pantherclaw/internal/automations/templates"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -40,7 +41,7 @@ func (env) Operation(_ context.Context, op string) (autodomain.OperationInfo, er
 
 func (env) DestinationActive(context.Context, ids.UUID, string) (bool, error) { return true, nil }
 
-func (env) EligibleApprovers(context.Context, autodomain.GateWith, ids.UUID) (int, error) {
+func (env) EligibleApprovers(context.Context, autodomain.GateWith, ids.UUID, ids.UUID) (int, error) {
 	return 2, nil
 }
 
@@ -83,5 +84,51 @@ func TestIrreversibleWithoutConfirmationIsRefused(t *testing.T) {
 	fs := autodomain.Validate(context.Background(), r.def, business)
 	if !slices.ContainsFunc(fs, func(f autodomain.Finding) bool { return f.Code == autodomain.CodeIrreversibleUnreconciled }) {
 		t.Errorf("no IRREVERSIBLE_UNRECONCILED: %v", fs)
+	}
+}
+
+// TestD103_EveryTemplateValidatesWithItsExample: each of the nine
+// templates, rendered with its defaults and example values, passes core's
+// Validate with no ERROR finding (D103 T2).
+func TestD103_EveryTemplateValidatesWithItsExample(t *testing.T) {
+	list := templates.List()
+	if len(list) != 9 {
+		t.Fatalf("%d templates", len(list))
+	}
+	for _, tm := range list {
+		doc, _, err := templates.Render(tm.ID, tm.Example())
+		if err != nil {
+			t.Fatalf("%s: %v", tm.ID, err)
+		}
+		def, err := autodomain.Parse(doc)
+		if err != nil {
+			t.Fatalf("%s: %v", tm.ID, err)
+		}
+		for _, f := range autodomain.Validate(context.Background(), def, business) {
+			if f.Severity == autodomain.SeverityError {
+				t.Errorf("%s: %s %s: %s", tm.ID, f.Code, f.Path, f.Message)
+			}
+		}
+	}
+}
+
+// TestD103_WaitCoverageNeedsTheOperationParameter: wait_coverage reads the
+// trigger's operation parameter, so a definition that does not declare it
+// does not validate (D103 T6).
+func TestD103_WaitCoverageNeedsTheOperationParameter(t *testing.T) {
+	r := renderAll(t)["coverage_recovery"][0]
+	def, err := autodomain.Parse(r.doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	params := def.When.Params()
+	if _, ok := params["operation"]; !ok {
+		t.Fatal("coverage_recovery does not declare operation")
+	}
+	delete(params, "operation")
+	if !slices.ContainsFunc(autodomain.Validate(context.Background(), def, business), func(f autodomain.Finding) bool {
+		return f.Code == autodomain.CodeParamUndeclared && f.Severity == autodomain.SeverityError
+	}) {
+		t.Fatal("wait_coverage without the operation parameter validates")
 	}
 }
