@@ -27,7 +27,7 @@ SELECT * FROM pc.automation_executions WHERE org_id = sqlc.arg(org_id) AND id = 
 -- name: SaveAutomationExecution :execrows
 UPDATE pc.automation_executions
 SET state = sqlc.arg(state), reason = sqlc.narg(reason), current_step = sqlc.arg(current_step),
-    compensating = sqlc.arg(compensating), result = sqlc.narg(result), transitions = sqlc.arg(transitions),
+    compensating = sqlc.arg(compensating), result = sqlc.narg(result), transitions = sqlc.arg(transitions), engine_errors = 0,
     started_at = sqlc.narg(started_at), wake_at = sqlc.narg(wake_at)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 
@@ -220,3 +220,17 @@ SELECT e.automation_id, e.version_id, e.state, e.trigger_id,
                    AND a.output ->> 'irreversible' = 'true')::bool AS unknown_irreversible
 FROM pc.automation_executions e
 WHERE e.org_id = sqlc.arg(org_id) AND e.id = sqlc.arg(id);
+
+-- name: CountAutomationExecutionError :one
+-- One more consecutive driver error of an active execution (D84).
+UPDATE pc.automation_executions e SET engine_errors = least(e.engine_errors + 1, 100)
+FROM pc.automations a
+WHERE e.org_id = sqlc.arg(org_id) AND e.id = sqlc.arg(id) AND e.state IN ('PENDING', 'RUNNING', 'WAITING')
+    AND a.org_id = e.org_id AND a.id = e.automation_id
+RETURNING e.engine_errors, e.automation_id, e.version_id, e.trigger_id, e.service_account_id, e.mode, a.name,
+    a.owner_user_id;
+
+-- name: FailAutomationExecution :execrows
+-- Ends an active execution the driver cannot work (ENGINE_ERROR).
+UPDATE pc.automation_executions SET state = 'FAILED', reason = sqlc.arg(reason), result = sqlc.arg(result), wake_at = NULL
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('PENDING', 'RUNNING', 'WAITING');

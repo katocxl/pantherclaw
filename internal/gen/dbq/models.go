@@ -444,6 +444,7 @@ type PcAutomationExecution struct {
 	Depth             int16
 	Result            []byte
 	Transitions       int32
+	EngineErrors      int16
 	CreatedAt         time.Time
 	StartedAt         *time.Time
 	DeadlineAt        time.Time

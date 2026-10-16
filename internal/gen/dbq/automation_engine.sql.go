@@ -200,6 +200,43 @@ func (q *Queries) CountActiveAutomationExecutions(ctx context.Context, orgID ids
 	return column_1, err
 }
 
+const countAutomationExecutionError = `-- name: CountAutomationExecutionError :one
+UPDATE pc.automation_executions e SET engine_errors = least(e.engine_errors + 1, 100)
+FROM pc.automations a
+WHERE e.org_id = $1 AND e.id = $2 AND e.state IN ('PENDING', 'RUNNING', 'WAITING')
+    AND a.org_id = e.org_id AND a.id = e.automation_id
+RETURNING e.engine_errors, e.automation_id, e.version_id, e.trigger_id, e.service_account_id, e.mode, a.name,
+    a.owner_user_id
+`
+
+type CountAutomationExecutionErrorRow struct {
+	EngineErrors     int16
+	AutomationID     ids.UUID
+	VersionID        ids.UUID
+	TriggerID        ids.UUID
+	ServiceAccountID ids.UUID
+	Mode             string
+	Name             string
+	OwnerUserID      ids.UUID
+}
+
+// One more consecutive driver error of an active execution (D84).
+func (q *Queries) CountAutomationExecutionError(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (CountAutomationExecutionErrorRow, error) {
+	row := q.db.QueryRow(ctx, countAutomationExecutionError, orgID, iD)
+	var i CountAutomationExecutionErrorRow
+	err := row.Scan(
+		&i.EngineErrors,
+		&i.AutomationID,
+		&i.VersionID,
+		&i.TriggerID,
+		&i.ServiceAccountID,
+		&i.Mode,
+		&i.Name,
+		&i.OwnerUserID,
+	)
+	return i, err
+}
+
 const dueAutomationExecutions = `-- name: DueAutomationExecutions :many
 SELECT id FROM pc.automation_executions
 WHERE org_id = $1 AND state IN ('PENDING', 'RUNNING', 'WAITING', 'NEEDS_RECONCILIATION')
@@ -244,8 +281,34 @@ func (q *Queries) EndAutomationLaunch(ctx context.Context, state string, orgID i
 	return result.RowsAffected(), nil
 }
 
+const failAutomationExecution = `-- name: FailAutomationExecution :execrows
+UPDATE pc.automation_executions SET state = 'FAILED', reason = $1, result = $2, wake_at = NULL
+WHERE org_id = $3 AND id = $4 AND state IN ('PENDING', 'RUNNING', 'WAITING')
+`
+
+type FailAutomationExecutionParams struct {
+	Reason *string
+	Result []byte
+	OrgID  ids.OrgID
+	ID     ids.UUID
+}
+
+// Ends an active execution the driver cannot work (ENGINE_ERROR).
+func (q *Queries) FailAutomationExecution(ctx context.Context, arg FailAutomationExecutionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, failAutomationExecution,
+		arg.Reason,
+		arg.Result,
+		arg.OrgID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getAutomationExecution = `-- name: GetAutomationExecution :one
-SELECT org_id, id, automation_id, version_id, trigger_id, mode, state, reason, current_step, compensating, ceiling_id, service_account_id, principal_user_id, principal_sa_id, trigger_kind, params, subjects, evidence, occurred_at, root_trigger_id, ancestry, depth, result, transitions, created_at, started_at, deadline_at, updated_at, ended_at, wake_at, cancel_requested_by, cancel_reason, cancel_requested_at FROM pc.automation_executions WHERE org_id = $1 AND id = $2
+SELECT org_id, id, automation_id, version_id, trigger_id, mode, state, reason, current_step, compensating, ceiling_id, service_account_id, principal_user_id, principal_sa_id, trigger_kind, params, subjects, evidence, occurred_at, root_trigger_id, ancestry, depth, result, transitions, engine_errors, created_at, started_at, deadline_at, updated_at, ended_at, wake_at, cancel_requested_by, cancel_reason, cancel_requested_at FROM pc.automation_executions WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetAutomationExecution(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcAutomationExecution, error) {
@@ -276,6 +339,7 @@ func (q *Queries) GetAutomationExecution(ctx context.Context, orgID ids.OrgID, i
 		&i.Depth,
 		&i.Result,
 		&i.Transitions,
+		&i.EngineErrors,
 		&i.CreatedAt,
 		&i.StartedAt,
 		&i.DeadlineAt,
@@ -521,7 +585,7 @@ func (q *Queries) InsertAutomationStepAttempt(ctx context.Context, arg InsertAut
 }
 
 const listAutomationExecutions = `-- name: ListAutomationExecutions :many
-SELECT org_id, id, automation_id, version_id, trigger_id, mode, state, reason, current_step, compensating, ceiling_id, service_account_id, principal_user_id, principal_sa_id, trigger_kind, params, subjects, evidence, occurred_at, root_trigger_id, ancestry, depth, result, transitions, created_at, started_at, deadline_at, updated_at, ended_at, wake_at, cancel_requested_by, cancel_reason, cancel_requested_at FROM pc.automation_executions
+SELECT org_id, id, automation_id, version_id, trigger_id, mode, state, reason, current_step, compensating, ceiling_id, service_account_id, principal_user_id, principal_sa_id, trigger_kind, params, subjects, evidence, occurred_at, root_trigger_id, ancestry, depth, result, transitions, engine_errors, created_at, started_at, deadline_at, updated_at, ended_at, wake_at, cancel_requested_by, cancel_reason, cancel_requested_at FROM pc.automation_executions
 WHERE org_id = $1
     AND ($2::uuid IS NULL OR automation_id = $2)
     AND (cardinality($3::text[]) = 0 OR state = ANY($3::text[]))
@@ -588,6 +652,7 @@ func (q *Queries) ListAutomationExecutions(ctx context.Context, arg ListAutomati
 			&i.Depth,
 			&i.Result,
 			&i.Transitions,
+			&i.EngineErrors,
 			&i.CreatedAt,
 			&i.StartedAt,
 			&i.DeadlineAt,
@@ -653,7 +718,7 @@ func (q *Queries) ListAutomationStepAttempts(ctx context.Context, orgID ids.OrgI
 }
 
 const lockAutomationExecution = `-- name: LockAutomationExecution :one
-SELECT org_id, id, automation_id, version_id, trigger_id, mode, state, reason, current_step, compensating, ceiling_id, service_account_id, principal_user_id, principal_sa_id, trigger_kind, params, subjects, evidence, occurred_at, root_trigger_id, ancestry, depth, result, transitions, created_at, started_at, deadline_at, updated_at, ended_at, wake_at, cancel_requested_by, cancel_reason, cancel_requested_at FROM pc.automation_executions WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, automation_id, version_id, trigger_id, mode, state, reason, current_step, compensating, ceiling_id, service_account_id, principal_user_id, principal_sa_id, trigger_kind, params, subjects, evidence, occurred_at, root_trigger_id, ancestry, depth, result, transitions, engine_errors, created_at, started_at, deadline_at, updated_at, ended_at, wake_at, cancel_requested_by, cancel_reason, cancel_requested_at FROM pc.automation_executions WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockAutomationExecution(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcAutomationExecution, error) {
@@ -684,6 +749,7 @@ func (q *Queries) LockAutomationExecution(ctx context.Context, orgID ids.OrgID, 
 		&i.Depth,
 		&i.Result,
 		&i.Transitions,
+		&i.EngineErrors,
 		&i.CreatedAt,
 		&i.StartedAt,
 		&i.DeadlineAt,
@@ -932,7 +998,7 @@ func (q *Queries) RunUnknownIrreversible(ctx context.Context, orgID ids.OrgID, r
 const saveAutomationExecution = `-- name: SaveAutomationExecution :execrows
 UPDATE pc.automation_executions
 SET state = $1, reason = $2, current_step = $3,
-    compensating = $4, result = $5, transitions = $6,
+    compensating = $4, result = $5, transitions = $6, engine_errors = 0,
     started_at = $7, wake_at = $8
 WHERE org_id = $9 AND id = $10
 `

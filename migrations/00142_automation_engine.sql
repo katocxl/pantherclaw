@@ -63,6 +63,8 @@ CREATE TABLE pc.automation_executions (
     -- work and cleanup refs; set at the terminal state.
     result              jsonb       CHECK (jsonb_typeof(result) = 'object' AND octet_length(result::text) <= 65536),
     transitions         integer     NOT NULL DEFAULT 0 CHECK (transitions >= 0),
+    -- Consecutive driver errors; at 5 the execution fails ENGINE_ERROR.
+    engine_errors       smallint    NOT NULL DEFAULT 0 CHECK (engine_errors BETWEEN 0 AND 100),
     created_at          timestamptz NOT NULL DEFAULT now(),
     started_at          timestamptz,
     deadline_at         timestamptz NOT NULL,
@@ -335,7 +337,8 @@ $$;
 -- +goose StatementEnd
 
 GRANT SELECT, INSERT ON pc.automation_executions, pc.automation_step_attempts, pc.automation_launches TO pc_app;
-GRANT UPDATE (state, reason, current_step, compensating, result, transitions, started_at, updated_at, ended_at, wake_at,
+GRANT UPDATE (state, reason, current_step, compensating, result, transitions, engine_errors, started_at, updated_at,
+              ended_at, wake_at,
               cancel_requested_by, cancel_reason, cancel_requested_at) ON pc.automation_executions TO pc_app;
 GRANT UPDATE (state, decision, reason, output, refs, effect, ended_at, wake_at) ON pc.automation_step_attempts TO pc_app;
 GRANT UPDATE (state, claimed_instance_id, claimed_at, completed_at, outcome, report, delivery_id, ended_at)
