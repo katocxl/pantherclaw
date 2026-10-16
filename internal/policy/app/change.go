@@ -17,6 +17,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
@@ -86,6 +88,9 @@ var (
 		"the change request was voided: what it would change is no longer what was confirmed")
 	ErrSamePerson = pcerr.New(pcerr.PermissionDenied, "SAME_PERSON", "each confirmation must come from a different person")
 	ErrSameKey    = pcerr.New(pcerr.PermissionDenied, "SAME_KEY", "each confirmation needs a different security key")
+	// ErrCompromised: the person is marked compromised (G0 M11 D43, HR-293);
+	// a valid signature never exempts.
+	ErrCompromised = pcerr.New(pcerr.PermissionDenied, "PUBLISHER_COMPROMISED", "you are marked compromised and cannot confirm changes")
 	// ErrBrowserSession: only a person signed in on the page confirms.
 	ErrBrowserSession = pcerr.New(pcerr.PermissionDenied, "BROWSER_SESSION_REQUIRED",
 		"only a person signed in on the policy changes page confirms a change")
@@ -158,6 +163,10 @@ type Changes struct {
 	digestsTx CurrentDigestsInTx
 	mu        sync.RWMutex
 	apply     map[ChangeKind]ApplyFunc
+	// compromise blocks people marked compromised from confirming and
+	// drops their earlier confirmations from the count (G0 M11 D43); nil
+	// blocks nobody.
+	compromise CompromiseChecker
 }
 
 // NewChanges returns the change requests. n may be nil (no notifications);
@@ -524,6 +533,21 @@ func (c *Changes) BeginConfirm(ctx context.Context, id ids.UUID) (ChangeRequest,
 	case slices.ContainsFunc(r.Confirmations, func(x Confirmation) bool { return x.Principal == caller.Principal.ID }):
 		return r, ErrSamePerson
 	}
+	if c.compromise == nil {
+		return r, nil
+	}
+	var bad bool
+	err = c.pool.InTenantTx(ctx, caller.Org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		bad, err = c.compromised(ctx, tx, caller.Principal.ID)
+		return err
+	}, db.ReadOnly())
+	if err != nil {
+		return r, err
+	}
+	if bad {
+		return r, ErrCompromised
+	}
 	return r, nil
 }
 
@@ -563,6 +587,11 @@ func (c *Changes) Confirm(ctx context.Context, id ids.UUID, a Assertion) (Change
 		if row.State != ChangePending {
 			return ErrChangeNotPending
 		}
+		if bad, err := c.compromised(ctx, tx, caller.Principal.ID); err != nil {
+			return err
+		} else if bad {
+			return ErrCompromised
+		}
 		req := c.of(caller.Org, dbq.ListPolicyChangeRequestsRow(row))
 		if err := c.confirmations(ctx, q, caller.Org, &req); err != nil {
 			return err
@@ -587,7 +616,13 @@ func (c *Changes) Confirm(ctx context.Context, id ids.UUID, a Assertion) (Change
 		if n >= req.Required {
 			// Only confirmations by people who still hold policy.publish at the
 			// org and are active count (D29); the caller qualified above.
-			if n, err = qualified(ctx, q, caller.Org, req.Confirmations); err != nil {
+			// People marked compromised since they confirmed do not count
+			// either (G0 M11 D43).
+			counted, err := c.uncompromised(ctx, tx, req.Confirmations)
+			if err != nil {
+				return err
+			}
+			if n, err = qualified(ctx, q, caller.Org, counted); err != nil {
 				return err
 			}
 			n++
@@ -792,4 +827,41 @@ func qualified(ctx context.Context, q *dbq.Queries, org ids.OrgID, cs []Confirma
 	}
 	still, err := q.PolicyActiveHoldersAmong(ctx, org, publisherRoles(), users)
 	return len(still), err
+}
+
+// CompromiseChecker reports whether a person is marked compromised (G0 M11
+// part 2 D43, HR-293; protect.Publishers).
+type CompromiseChecker interface {
+	Compromised(ctx context.Context, tx pgx.Tx, org ids.OrgID, user ids.UUID) (bool, error)
+}
+
+// WithCompromise makes confirming refuse a person marked compromised and
+// stop counting their earlier confirmations (D72 P1).
+func (c *Changes) WithCompromise(cc CompromiseChecker) *Changes {
+	c.compromise = cc
+	return c
+}
+
+// compromised reports whether user is marked compromised.
+func (c *Changes) compromised(ctx context.Context, tx db.TenantTx, user ids.UUID) (bool, error) {
+	if c.compromise == nil {
+		return false, nil
+	}
+	return c.compromise.Compromised(ctx, tx.Pgx(), tx.OrgID(), user)
+}
+
+// uncompromised returns the confirmations by people not marked
+// compromised.
+func (c *Changes) uncompromised(ctx context.Context, tx db.TenantTx, cs []Confirmation) ([]Confirmation, error) {
+	out := make([]Confirmation, 0, len(cs))
+	for _, x := range cs {
+		bad, err := c.compromised(ctx, tx, x.Principal)
+		if err != nil {
+			return nil, err
+		}
+		if !bad {
+			out = append(out, x)
+		}
+	}
+	return out, nil
 }

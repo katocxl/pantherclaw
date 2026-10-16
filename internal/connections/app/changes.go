@@ -5,6 +5,8 @@ package app
 
 import (
 	"context"
+	"encoding/json/v2"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -14,6 +16,8 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/protect"
+	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
@@ -178,14 +182,49 @@ func lock(ctx context.Context, q *dbq.Queries, org ids.OrgID, id ids.UUID) (dbq.
 // Update changes a connection's settings. Changing the gateway, base URL,
 // allowed hosts, access mode or destination class weakens enforcement, as
 // does a default mode of monitor; a default mode of enforce strengthens it.
-// The response cap and timeout are neither.
+// The response cap and timeout are neither. With CUSTODY protected, a
+// weakening update waits for a distinct publisher instead (G0 M11 D42,
+// HR-292) and returns protect.ErrPending.
 func (s *Service) Update(ctx context.Context, in UpdateInput) (Connection, error) {
 	c, err := s.caller(ctx, td.PermConnectionManage)
 	if err != nil {
 		return Connection{}, err
 	}
 	var out Connection
+	var held *protect.PendingError
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		out, held, err = s.update(ctx, tx, c, in)
+		return err
+	})
+	if err == nil && held != nil {
+		return Connection{}, held
+	}
+	return out, err
+}
+
+// ApplyProtectedUpdate re-runs a confirmed protected update as its author
+// (a protect.Applier).
+func (s *Service) ApplyProtectedUpdate(ctx context.Context, tx db.TenantTx, author tenancy.Caller, payload []byte) error {
+	var in UpdateInput
+	if err := json.Unmarshal(payload, &in); err != nil {
+		return ErrShape
+	}
+	c, err := s.caller(tenancy.WithCaller(ctx, author), td.PermConnectionManage)
+	if err != nil {
+		return err
+	}
+	_, held, err := s.update(ctx, tx, c, in)
+	if err == nil && held != nil {
+		return held
+	}
+	return err
+}
+
+func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in UpdateInput) (Connection, *protect.PendingError, error) {
+	var out Connection
+	var held *protect.PendingError
+	err := func() error {
 		q := dbq.New(tx)
 		conn, err := lock(ctx, q, c.Org, in.ID)
 		if err != nil {
@@ -291,19 +330,46 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (Connection, error
 			}
 			set("connector", connectorSummary(&cur), specView(spec), true)
 		}
-		after, err := s.apply(ctx, tx, c, conn, p, changes, "connection.updated", limits)
-		if err != nil {
-			return err
-		}
-		if in.Connector != nil {
-			if _, err := putConnector(ctx, q, c, after, spec); err != nil {
+		write := func(ctx context.Context) error {
+			after, err := s.apply(ctx, tx, c, conn, p, changes, "connection.updated", limits)
+			if err != nil {
 				return err
 			}
+			if in.Connector != nil {
+				if _, err := putConnector(ctx, q, c, after, spec); err != nil {
+					return err
+				}
+			}
+			out, err = load(ctx, q, after)
+			return err
 		}
-		out, err = load(ctx, q, after)
+		if !slices.ContainsFunc(changes, func(ch change) bool { return ch.weakens }) {
+			return write(ctx)
+		}
+		held, err = s.protect.Hold(ctx, tx, c.Caller, custodyChange(protect.SurfaceConnectionUpdate, conn.ID, changes, in), write)
 		return err
-	})
-	return out, err
+	}()
+	return out, held, err
+}
+
+// custodyChange is a weakening connection change as a protected change:
+// the summary lists the fields with their old and new values (no secrets:
+// connection settings and connector specs hold none).
+func custodyChange(surface protect.Surface, conn ids.UUID, changes []change, payload any) protect.Change {
+	summary := map[string]string{"connection": conn.String()}
+	var widening []string
+	for _, ch := range changes {
+		if len(summary) < 15 {
+			summary[ch.field+"_old"], summary[ch.field+"_new"] = clip(ch.from), clip(ch.to)
+		}
+		if ch.weakens {
+			widening = append(widening, ch.field)
+		}
+	}
+	return protect.Change{
+		Category: protect.Custody, Surface: surface, Subject: conn.String(), SubjectID: conn,
+		Summary: summary, Widening: widening, Payload: payload,
+	}
 }
 
 // SetRouteMode sets one route's mode: monitor weakens enforcement, enforce
@@ -318,7 +384,48 @@ func (s *Service) SetRouteMode(ctx context.Context, id ids.UUID, route, mode str
 		return Connection{}, ErrShape
 	}
 	var out Connection
+	var held *protect.PendingError
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		out, held, err = s.setRouteMode(ctx, tx, c, RouteModeInput{Connection: id, Route: route, Mode: mode})
+		return err
+	})
+	if err == nil && held != nil {
+		return Connection{}, held
+	}
+	return out, err
+}
+
+// RouteModeInput is a route mode change, as a protected change stores it.
+type RouteModeInput struct {
+	Connection ids.UUID
+	Route      string
+	Mode       string
+}
+
+// ApplyProtectedRouteMode re-runs a confirmed protected route mode change
+// as its author (a protect.Applier).
+func (s *Service) ApplyProtectedRouteMode(ctx context.Context, tx db.TenantTx, author tenancy.Caller, payload []byte) error {
+	var in RouteModeInput
+	if err := json.Unmarshal(payload, &in); err != nil || (in.Mode != ModeMonitor && in.Mode != ModeEnforce) {
+		return ErrShape
+	}
+	c, err := s.caller(tenancy.WithCaller(ctx, author), td.PermConnectionManage)
+	if err != nil {
+		return err
+	}
+	_, held, err := s.setRouteMode(ctx, tx, c, in)
+	if err == nil && held != nil {
+		return held
+	}
+	return err
+}
+
+func (s *Service) setRouteMode(ctx context.Context, tx db.TenantTx, c actor, in RouteModeInput) (Connection, *protect.PendingError, error) {
+	id, route, mode := in.Connection, in.Route, in.Mode
+	var out Connection
+	var held *protect.PendingError
+	err := func() error {
 		q := dbq.New(tx)
 		conn, err := lock(ctx, q, c.Org, id)
 		if err != nil {
@@ -334,7 +441,8 @@ func (s *Service) SetRouteMode(ctx context.Context, id ids.UUID, route, mode str
 				from = r.Mode
 			}
 		}
-		if from == "" {
+		insert := from == ""
+		if insert {
 			rs, err := routes(ctx, q, c.Org, conn.Package, conn.Kind)
 			if err != nil {
 				return err
@@ -343,35 +451,58 @@ func (s *Service) SetRouteMode(ctx context.Context, id ids.UUID, route, mode str
 				return ErrRoute
 			}
 			from = conn.DefaultMode
-			if err := q.InsertConnectionRoute(ctx, dbq.InsertConnectionRouteParams{
-				OrgID: c.Org, ConnectionID: id, Route: route, Mode: from, ChangedBy: c.By,
-			}); err != nil {
-				return err
-			}
 		}
-		if from != mode {
-			if _, err := q.SetConnectionRouteMode(ctx, dbq.SetConnectionRouteModeParams{
-				Mode: mode, ChangedBy: c.By, OrgID: c.Org, ConnectionID: id, Route: route,
-			}); err != nil {
-				return err
-			}
-			if err := q.TouchConnection(ctx, c.By, c.Org, id); err != nil {
-				return err
-			}
-			after, err := q.GetConnection(ctx, c.Org, id)
-			if err != nil {
-				return err
-			}
-			if err := s.after(ctx, tx, c, conn, after, []change{{field: "route_mode", from: from, to: mode, weakens: mode == ModeMonitor}},
-				"connection.route_mode_changed", map[string]string{"route": route}); err != nil {
-				return err
-			}
-			conn = after
+		write := func(ctx context.Context) error {
+			return s.writeRouteMode(ctx, tx, c, conn, route, from, mode, insert, &out)
 		}
-		out, err = load(ctx, q, conn)
+		if mode != ModeMonitor || from == mode {
+			return write(ctx)
+		}
+		ch := custodyChange(protect.SurfaceRouteMode, conn.ID, []change{{field: "route_mode", from: from, to: mode, weakens: true}}, in)
+		ch.Subject, ch.SubjectID = conn.ID.String()+"/"+route, ids.UUID{}
+		ch.Summary["route"] = route
+		held, err = s.protect.Hold(ctx, tx, c.Caller, ch, write)
 		return err
-	})
-	return out, err
+	}()
+	return out, held, err
+}
+
+// writeRouteMode stores a route's mode (inserting the route at the
+// connection's default first when it had none).
+func (s *Service) writeRouteMode(ctx context.Context, tx db.TenantTx, c actor, conn dbq.PcConnection, route, from, mode string,
+	insert bool, out *Connection,
+) error {
+	q := dbq.New(tx)
+	id := conn.ID
+	if insert {
+		if err := q.InsertConnectionRoute(ctx, dbq.InsertConnectionRouteParams{
+			OrgID: c.Org, ConnectionID: id, Route: route, Mode: from, ChangedBy: c.By,
+		}); err != nil {
+			return err
+		}
+	}
+	if from != mode {
+		if _, err := q.SetConnectionRouteMode(ctx, dbq.SetConnectionRouteModeParams{
+			Mode: mode, ChangedBy: c.By, OrgID: c.Org, ConnectionID: id, Route: route,
+		}); err != nil {
+			return err
+		}
+		if err := q.TouchConnection(ctx, c.By, c.Org, id); err != nil {
+			return err
+		}
+		after, err := q.GetConnection(ctx, c.Org, id)
+		if err != nil {
+			return err
+		}
+		if err := s.after(ctx, tx, c, conn, after, []change{{field: "route_mode", from: from, to: mode, weakens: mode == ModeMonitor}},
+			"connection.route_mode_changed", map[string]string{"route": route}); err != nil {
+			return err
+		}
+		conn = after
+	}
+	v, err := load(ctx, q, conn)
+	*out = v
+	return err
 }
 
 // Quarantine stops every action through a connection at once (strengthens).
@@ -450,4 +581,62 @@ func (s *Service) transition(ctx context.Context, id ids.UUID, from []string, to
 		return err
 	})
 	return out, err
+}
+
+// WithProtect holds weakening updates and route modes of monitor for a
+// distinct publisher when the org protects CUSTODY (G0 M11 D42) and
+// registers their re-runs with g.
+func (s *Service) WithProtect(g *protect.Gate) *Service {
+	s.protect = g
+	if g != nil {
+		g.Register(protect.SurfaceConnectionUpdate, s.ApplyProtectedUpdate, s.ProtectedUpdateState)
+		g.Register(protect.SurfaceRouteMode, s.ApplyProtectedRouteMode, s.ProtectedRouteModeState)
+	}
+	return s
+}
+
+// connectionState is a connection's revision and state, or "none".
+func connectionState(ctx context.Context, q *dbq.Queries, org ids.OrgID, id ids.UUID) ([]byte, error) {
+	conn, err := q.GetConnection(ctx, org, id)
+	if db.IsNoRows(err) {
+		return []byte("none"), nil
+	} else if err != nil {
+		return nil, err
+	}
+	return fmt.Appendf(nil, "%s/%d/%s", conn.ID, conn.Revision, conn.State), nil
+}
+
+// ProtectedUpdateState is the state a protected update's re-run must
+// still find (a protect.State): the connection's revision and state.
+func (s *Service) ProtectedUpdateState(ctx context.Context, tx db.TenantTx, payload []byte) ([]byte, error) {
+	var in UpdateInput
+	if err := json.Unmarshal(payload, &in); err != nil {
+		return nil, ErrShape
+	}
+	return connectionState(ctx, dbq.New(tx), tx.OrgID(), in.ID)
+}
+
+// ProtectedRouteModeState is the state a protected route mode's re-run
+// must still find: the connection's revision and the route's mode.
+func (s *Service) ProtectedRouteModeState(ctx context.Context, tx db.TenantTx, payload []byte) ([]byte, error) {
+	var in RouteModeInput
+	if err := json.Unmarshal(payload, &in); err != nil {
+		return nil, ErrShape
+	}
+	q := dbq.New(tx)
+	st, err := connectionState(ctx, q, tx.OrgID(), in.Connection)
+	if err != nil {
+		return nil, err
+	}
+	routes, err := q.ListConnectionRoutes(ctx, tx.OrgID(), in.Connection)
+	if err != nil {
+		return nil, err
+	}
+	mode := "default"
+	for _, r := range routes {
+		if r.Route == in.Route {
+			mode = r.Mode
+		}
+	}
+	return append(st, "/"+mode...), nil
 }

@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"encoding/json/v2"
 	"regexp"
 	"slices"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
+	"github.com/katocxl/pantherclaw/internal/protect"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -66,7 +68,9 @@ func excluder(ctx context.Context) (tenancy.Caller, error) {
 // CreateExclusion records an exclusion (HR-212): a weakening change, so
 // only a person makes one, with a written reason and an expiry. It never
 // raises a state; it is audited, and the scopes it affects are reassessed
-// so it is shown with the coverage it changes.
+// so it is shown with the coverage it changes. With COVERAGE_EXCLUSION
+// protected, it waits for a distinct publisher instead (G0 M11 D42,
+// HR-292) and returns protect.ErrPending.
 func (s *Service) CreateExclusion(ctx context.Context, r ExclusionRequest) (dbq.PcCoverageExclusion, error) {
 	var out dbq.PcCoverageExclusion
 	if !r.valid() {
@@ -76,25 +80,57 @@ func (s *Service) CreateExclusion(ctx context.Context, r ExclusionRequest) (dbq.
 	if err != nil {
 		return out, err
 	}
+	var held *protect.PendingError
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
-		if b, err := q.CoverageBinding(ctx, c.Org, r.Connection); db.IsNoRows(err) || (err == nil && b.State == "RETIRED") {
-			return ErrNotFound
+		var err error
+		out, held, err = s.createExclusion(ctx, tx, c, r)
+		return err
+	})
+	if err == nil && held != nil {
+		return dbq.PcCoverageExclusion{}, held
+	}
+	return out, err
+}
+
+// ApplyProtectedExclusion re-runs a confirmed protected exclusion as its
+// author (a protect.Applier).
+func (s *Service) ApplyProtectedExclusion(ctx context.Context, tx db.TenantTx, author tenancy.Caller, payload []byte) error {
+	var r ExclusionRequest
+	if err := json.Unmarshal(payload, &r); err != nil || !r.valid() {
+		return ErrExclusion
+	}
+	c, err := excluder(tenancy.WithCaller(ctx, author))
+	if err != nil {
+		return err
+	}
+	_, held, err := s.createExclusion(ctx, tx, c, r)
+	if err == nil && held != nil {
+		return held
+	}
+	return err
+}
+
+func (s *Service) createExclusion(ctx context.Context, tx db.TenantTx, c tenancy.Caller, r ExclusionRequest) (dbq.PcCoverageExclusion, *protect.PendingError, error) {
+	var out dbq.PcCoverageExclusion
+	q := dbq.New(tx)
+	if b, err := q.CoverageBinding(ctx, c.Org, r.Connection); db.IsNoRows(err) || (err == nil && b.State == "RETIRED") {
+		return out, nil, ErrNotFound
+	} else if err != nil {
+		return out, nil, err
+	}
+	if r.Agent != nil {
+		if _, err := q.GetAgent(ctx, c.Org, *r.Agent); db.IsNoRows(err) {
+			return out, nil, ErrNotFound
 		} else if err != nil {
-			return err
+			return out, nil, err
 		}
-		if r.Agent != nil {
-			if _, err := q.GetAgent(ctx, c.Org, *r.Agent); db.IsNoRows(err) {
-				return ErrNotFound
-			} else if err != nil {
-				return err
-			}
-		}
-		var kind *string
-		if r.Kind != "" {
-			k := string(r.Kind)
-			kind = &k
-		}
+	}
+	var kind *string
+	if r.Kind != "" {
+		k := string(r.Kind)
+		kind = &k
+	}
+	held, err := s.Protect.Hold(ctx, tx, c, exclusionChange(r), func(ctx context.Context) error {
 		var err error
 		out, err = q.InsertCoverageExclusion(ctx, dbq.InsertCoverageExclusionParams{
 			OrgID: c.Org, ID: ids.NewV7(), AgentID: r.Agent, ConnectionID: r.Connection, Operation: r.Operation,
@@ -108,7 +144,28 @@ func (s *Service) CreateExclusion(ctx context.Context, r ExclusionRequest) (dbq.
 		}
 		return s.notifyExcluded(ctx, tx, c, out, r.ExpiresInDays)
 	})
-	return out, err
+	return out, held, err
+}
+
+// exclusionChange is an exclusion as a protected change: its scope is the
+// subject, so a newer request for the same scope replaces an older one.
+func exclusionChange(r ExclusionRequest) protect.Change {
+	agent, op := "*", "*"
+	if r.Agent != nil {
+		agent = r.Agent.String()
+	}
+	if r.Operation != nil {
+		op = *r.Operation
+	}
+	scope := r.Connection.String() + "/" + agent + "/" + op + "/" + string(r.Kind)
+	return protect.Change{
+		Category: protect.CoverageExclusion, Surface: protect.SurfaceExclusionCreate, Subject: scope,
+		Summary: map[string]string{
+			"connection": r.Connection.String(), "agent": agent, "operation": op, "route_kind": string(r.Kind),
+			"expires_in_days": strconv.Itoa(r.ExpiresInDays), "reason": strings.TrimSpace(r.Reason),
+		},
+		Widening: []string{"coverage_exclusion"}, Payload: r,
+	}
 }
 
 // excluded audits an exclusion change and asks for the reassessment of
@@ -231,4 +288,29 @@ func (s *Service) ListExclusions(ctx context.Context, connection *ids.UUID, size
 		return nil
 	})
 	return out, next, err
+}
+
+// ProtectedExclusionState is the state a protected exclusion's re-run must
+// still find (a protect.State): the connection's coverage binding and the
+// agent.
+func (s *Service) ProtectedExclusionState(ctx context.Context, tx db.TenantTx, payload []byte) ([]byte, error) {
+	var r ExclusionRequest
+	if err := json.Unmarshal(payload, &r); err != nil {
+		return nil, ErrExclusion
+	}
+	q := dbq.New(tx)
+	state := "none"
+	if b, err := q.CoverageBinding(ctx, tx.OrgID(), r.Connection); err == nil {
+		state = b.State
+	} else if !db.IsNoRows(err) {
+		return nil, err
+	}
+	if r.Agent != nil {
+		if _, err := q.GetAgent(ctx, tx.OrgID(), *r.Agent); db.IsNoRows(err) {
+			state += "/no-agent"
+		} else if err != nil {
+			return nil, err
+		}
+	}
+	return []byte(state), nil
 }

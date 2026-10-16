@@ -13,7 +13,8 @@ import (
 )
 
 // registerReleases serves ChangeWindowService on the public API (G0 M8,
-// HR-207), as pc_app.
-func registerReleases(rs *connect.Server, pool *db.Pool) {
-	pantherclawv1connect.RegisterChangeWindowServiceHandler(rs, releasesrpc.New(&rapp.Service{Pool: pool}))
+// HR-207), as pc_app; freeze-dropping changes go through the protected-change
+// Gate (G0 M11 D42).
+func registerReleases(rs *connect.Server, pool *db.Pool, p m11Protect) {
+	pantherclawv1connect.RegisterChangeWindowServiceHandler(rs, releasesrpc.New((&rapp.Service{Pool: pool}).WithProtect(p.gate)))
 }

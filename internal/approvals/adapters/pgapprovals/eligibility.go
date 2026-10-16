@@ -173,6 +173,17 @@ func LoadEligibility(ctx context.Context, q *dbq.Queries, org ids.OrgID, request
 	for _, u := range us {
 		out.People[u.ID] = apdomain.Person{UserID: u.ID, Enabled: u.State == "ACTIVE", JoinedAt: u.CreatedAt}
 	}
+	// People marked compromised approve nothing (G0 M11 D43, HR-293).
+	bad, err := q.CompromisedAmong(ctx, org, users)
+	if err != nil {
+		return Eligibility{}, err
+	}
+	for _, u := range bad {
+		if p, ok := out.People[u]; ok {
+			p.Compromised = true
+			out.People[u] = p
+		}
+	}
 	bs, err := q.EligibilityBindings(ctx, dbq.EligibilityBindingsParams{
 		OrgID: org, Ids: users, Roles: deciderRoles(row.SubjectKind, out.Requirements), BusinessUnitID: row.BusinessUnitID, TeamID: row.TeamID,
 		EnvironmentID: row.EnvironmentID,

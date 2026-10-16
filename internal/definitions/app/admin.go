@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/definitions/trust"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/statemachine"
@@ -85,6 +87,9 @@ type Admin struct {
 	// Ents decides whether the org may use its own package-signing keys
 	// (HR-162); without it, org-signed packages are refused.
 	Ents Entitlements
+	// Protect holds activations for a distinct publisher (G0 M11 D42); nil
+	// holds none.
+	Protect ActivationGate
 }
 
 // apiError maps import and lifecycle errors to API errors. The messages
@@ -164,6 +169,17 @@ func (a *Admin) Transition(ctx context.Context, name, version string, to domain.
 	if !c.Human() {
 		return VersionInfo{}, ErrHumanOnly
 	}
+	if to == domain.StateActive && a.Protect != nil {
+		// G0 M11 D42: activating a version changes what tools mean and what
+		// their consequences are, so with TOOL_MEANING or CONSEQUENCE_RULES
+		// protected it waits for a distinct publisher.
+		if err := a.Protect.Activate(ctx, c, name, version, func(ctx context.Context, tx db.TenantTx) error {
+			return a.activateTx(ctx, tx, c, name, version)
+		}); err != nil {
+			return VersionInfo{}, apiError(notFound(err))
+		}
+		return a.version(ctx, c.Org, name, version)
+	}
 	from, err := a.Importer.Repo.State(ctx, c.Org, name, version)
 	if err != nil {
 		return VersionInfo{}, notFound(err)
@@ -178,6 +194,76 @@ func (a *Admin) Transition(ctx context.Context, name, version string, to domain.
 	}
 	return a.version(ctx, c.Org, name, version)
 }
+
+// ActivationGate holds package activations for a distinct publisher (G0
+// M11 D42; the server's protect.Gate): activate runs in its transaction
+// unless the org protects TOOL_MEANING or CONSEQUENCE_RULES, when the
+// activation is stored and protect.ErrPending returned instead.
+type ActivationGate interface {
+	Activate(ctx context.Context, author tapp.Caller, name, version string, activate func(context.Context, db.TenantTx) error) error
+}
+
+// TxRepository is the part of the Repository a protected activation uses
+// in the confirming transaction.
+type TxRepository interface {
+	StateTx(ctx context.Context, tx db.TenantTx, pkg, version string) (domain.State, error)
+	TransitionTx(ctx context.Context, tx db.TenantTx, pkg, version string, from, to domain.State, ev *audit.Event) error
+}
+
+// ActivationInput is an activation, as a protected change stores it.
+type ActivationInput struct{ Name, Version string }
+
+// ApplyProtectedActivation re-runs a confirmed protected activation as its
+// author (a protect.Applier): they must still hold package.activate.
+func (a *Admin) ApplyProtectedActivation(ctx context.Context, tx db.TenantTx, author tapp.Caller, payload []byte) error {
+	var in ActivationInput
+	if err := json.Unmarshal(payload, &in); err != nil || in.Name == "" || in.Version == "" {
+		return ErrNotFound
+	}
+	if err := a.Authz.Require(author, PermPackageActivate, tdomain.OrgPath(author.Org)); err != nil {
+		return err
+	}
+	if !author.Human() {
+		return ErrHumanOnly
+	}
+	return apiError(notFound(a.activateTx(ctx, tx, author, in.Name, in.Version)))
+}
+
+// activateTx is Importer.Transition to ACTIVE in tx.
+func (a *Admin) activateTx(ctx context.Context, tx db.TenantTx, c tapp.Caller, name, version string) error {
+	repo, ok := a.Importer.Repo.(TxRepository)
+	if !ok {
+		return errNoTxRepository
+	}
+	from, err := repo.StateTx(ctx, tx, name, version)
+	if err != nil {
+		return err
+	}
+	if err := domain.Lifecycle.Check(from, domain.StateActive); err != nil {
+		return err
+	}
+	if a.Importer.Keys != nil {
+		k, err := a.Importer.Keys.VersionSigner(ctx, c.Org, name, version)
+		if err != nil {
+			return err
+		}
+		if k != nil && k.Reason == RevokeCompromised {
+			return ErrKeyCompromised
+		}
+	}
+	ev := &audit.Event{
+		Name: "package.transitioned", Actor: c.Actor(), Outcome: audit.Success,
+		Object:  &audit.Object{Type: "package_version", ID: trust.Key(name, version)},
+		Details: map[string]string{"from": string(from), "to": string(domain.StateActive)},
+	}
+	err = repo.TransitionTx(ctx, tx, name, version, from, domain.StateActive, ev)
+	if errors.Is(err, db.ErrLostRace) {
+		return ErrConflict
+	}
+	return err
+}
+
+var errNoTxRepository = pcerr.New(pcerr.Unavailable, "PROTECTED_CHANGES_UNAVAILABLE", "protected package activation is not available on this server")
 
 // List lists imported package versions (package.read at the org).
 func (a *Admin) List(ctx context.Context, name string) ([]VersionInfo, error) {
@@ -216,4 +302,24 @@ func notFound(err error) error {
 		return ErrNotFound
 	}
 	return err
+}
+
+// ProtectedActivationState is the state a protected activation's re-run
+// must still find (a protect.State): the version's lifecycle state.
+func (a *Admin) ProtectedActivationState(ctx context.Context, tx db.TenantTx, payload []byte) ([]byte, error) {
+	var in ActivationInput
+	if err := json.Unmarshal(payload, &in); err != nil {
+		return nil, ErrNotFound
+	}
+	repo, ok := a.Importer.Repo.(TxRepository)
+	if !ok {
+		return nil, errNoTxRepository
+	}
+	st, err := repo.StateTx(ctx, tx, in.Name, in.Version)
+	if errors.Is(err, ErrMissing) {
+		return []byte("none"), nil
+	} else if err != nil {
+		return nil, err
+	}
+	return []byte(st), nil
 }

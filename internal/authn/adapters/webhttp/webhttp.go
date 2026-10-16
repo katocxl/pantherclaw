@@ -112,6 +112,8 @@ type Handler struct {
 	// promotions is the production promotions page (G0 M11 part 2 D53); nil
 	// when not mounted.
 	promotions Promotions
+	// protect is the protected-change step-up pages (G0 M11 D42, D43); nil
+	protect Protect
 }
 
 // New returns the handler. publicURL is the server's public URL: its origin
@@ -150,6 +152,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	h.mountPlaybook(mux)
 	h.mountChanges(mux)
 	h.mountPromotions(mux)
+	h.mountProtect(mux)
 }
 
 // Routes lists the mounted routes.
@@ -468,6 +471,7 @@ func (h *Handler) static(w http.ResponseWriter, r *http.Request) {
 		"automation_endpoints.js": "text/javascript; charset=utf-8",
 		"promotions.js":           "text/javascript; charset=utf-8",
 		"pc.css":                  "text/css; charset=utf-8",
+		"protect.js":              "text/javascript; charset=utf-8",
 	}
 	ct, ok := types[name]
 	if !ok {

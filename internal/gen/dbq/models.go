@@ -827,6 +827,31 @@ type PcCliSession struct {
 	RevokedAt       *time.Time
 }
 
+type PcCompromiseReview struct {
+	OrgID        ids.OrgID
+	CompromiseID ids.UUID
+	ItemKind     string
+	ItemID       string
+	Decision     string
+	Reviewer     ids.UUID
+	Note         *string
+	ReviewedAt   time.Time
+}
+
+type PcCompromisedPublisher struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	UserID           ids.UUID
+	Since            time.Time
+	Reason           string
+	State            string
+	MarkedBy         ids.UUID
+	MarkedCredential ids.UUID
+	MarkedAt         time.Time
+	ClearRequestID   *ids.UUID
+	ClearedAt        *time.Time
+}
+
 type PcConnection struct {
 	OrgID            ids.OrgID
 	ID               ids.UUID
@@ -2403,6 +2428,40 @@ type PcProbeRun struct {
 	Report       string
 	ReportSha256 []byte
 	ReceivedAt   time.Time
+}
+
+type PcProtectedChange struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	Category         string
+	Surface          string
+	SubjectID        ids.UUID
+	Subject          string
+	Summary          []byte
+	Widening         []string
+	Digest           []byte
+	SubjectDigest    []byte
+	Payload          []byte
+	Author           ids.UUID
+	AuthorCredential string
+	State            string
+	ChangeRequestID  *ids.UUID
+	Publisher        *ids.UUID
+	CreatedAt        time.Time
+	DecidedAt        *time.Time
+	DecidedReason    *string
+	ReviewDueAt      *time.Time
+	ReviewRequestID  *ids.UUID
+	ReviewedBy       *ids.UUID
+	ReviewedAt       *time.Time
+}
+
+type PcProtectedChangeSetting struct {
+	OrgID     ids.OrgID
+	Category  string
+	Mode      string
+	UpdatedBy ids.UUID
+	UpdatedAt time.Time
 }
 
 type PcReconciliationTask struct {

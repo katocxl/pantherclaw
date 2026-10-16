@@ -15,7 +15,10 @@ import (
 // Why a person may not count toward a requirement (stable codes, shown to
 // the person themselves and to approval readers).
 const (
-	IneligibleDisabled          = "USER_DISABLED"
+	IneligibleDisabled = "USER_DISABLED"
+	// IneligibleCompromised: the person is marked compromised (G0 M11 D43,
+	// HR-293); a valid signature never exempts.
+	IneligibleCompromised       = "PUBLISHER_COMPROMISED"
 	IneligibleLauncher          = "LAUNCHER_EXCLUDED"
 	IneligiblePrincipal         = "PRINCIPAL_EXCLUDED"
 	IneligibleAncestor          = "ANCESTOR_RUN_EXCLUDED"
@@ -113,6 +116,9 @@ type Person struct {
 	// by signing in to GitHub (G0 M8 P2f): only then do they approve a
 	// requirement independent of a GitHub people fact.
 	GitHubVerified bool
+	// Compromised is set when the person is marked compromised (G0 M11
+	// D43): they approve nothing.
+	Compromised bool
 }
 
 // RunPeople are the people around a run: its launcher and represented
@@ -166,6 +172,9 @@ func StepUpUser(r Requirement, run RunPeople) (ids.UUID, error) {
 func Check(r Requirement, p Person, c Context, cred ids.UUID) (bool, string) {
 	if !p.Enabled {
 		return false, IneligibleDisabled
+	}
+	if p.Compromised {
+		return false, IneligibleCompromised
 	}
 	if r.Kind == KindStepUp {
 		u, err := StepUpUser(r, c.Run)

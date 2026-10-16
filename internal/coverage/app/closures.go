@@ -26,6 +26,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/protect"
 )
 
 // Errors of the coverage use cases.
@@ -59,6 +60,9 @@ type Service struct {
 	Log *slog.Logger
 	// Notify tells the org of exclusions; nil sends none.
 	Notify Notifier
+	// Protect holds exclusions for a distinct publisher when the org
+	// protects COVERAGE_EXCLUSION (G0 M11 D42); nil holds none.
+	Protect *protect.Gate
 }
 
 func (s *Service) log() *slog.Logger {

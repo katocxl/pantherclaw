@@ -560,11 +560,14 @@ type apiDeps struct {
 	freshness coverage.Freshness
 	// M10 ops: the live stream's bearer authentication.
 	m10ops m10OpsDeps
+	// M11 protect: the protected-change Gate and compromised publishers.
+	m11protect m11Protect
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
 func apiHandler(d apiDeps) (http.Handler, error) {
 	pool, reg, log := d.pool, d.reg, d.log
+	d.m11protect = newM11Protect(d)
 	rs, err := rpc.NewServer(rpc.Options{
 		Logger:       log,
 		Public:       publicProcedures(),
@@ -630,7 +633,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err := registerSimulation(rs, d); err != nil {
 		return nil, err
 	}
-	registerReleases(rs, pool)
+	registerReleases(rs, pool, d.m11protect)
 	registerPolicyExceptions(rs, d)
 	mountM10Ops, err := registerM10Ops(rs, d)
 	if err != nil {
@@ -652,6 +655,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	registerM11Protect(rs, d)
 	mux := http.NewServeMux()
 	edges.mount(mux)
 	automationTriggers.mount(mux)
@@ -882,10 +886,10 @@ func registerAuthorityAdmin(rs *connect.Server, d apiDeps, grants *grantsapp.Ser
 			return err
 		}
 	}
-	pantherclawv1connect.RegisterPackageServiceHandler(rs, packagesrpc.New(&defsapp.Admin{
+	pantherclawv1connect.RegisterPackageServiceHandler(rs, packagesrpc.New(protectPackages(&defsapp.Admin{
 		Importer: &defsapp.Importer{Roots: roots, Repo: defs, Keys: defs, Clock: clock.System{}}, Reads: defs, Authz: authz,
 		Ents: d.billing,
-	}))
+	}, d)))
 	registerPolicyGate(rs, d)
 	return nil
 }
