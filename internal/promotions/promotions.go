@@ -221,7 +221,7 @@ func (s *Service) PromoteAgent(ctx context.Context, in PromoteInput, su *stepup.
 		if err != nil {
 			return err
 		}
-		cat, err := loadCatalog(ctx, q, s.Packages, c.Org)
+		cat, err := loadCatalog(ctx, q, s.Packages, c.Org, row.ID)
 		if err != nil {
 			return err
 		}
@@ -387,7 +387,7 @@ func (s *Service) GetReadiness(ctx context.Context, agent, env ids.UUID, operati
 		if row.EnvironmentID == nil || *row.EnvironmentID != env {
 			return ErrEnvironment
 		}
-		cat, err := loadCatalog(ctx, q, s.Packages, c.Org)
+		cat, err := loadCatalog(ctx, q, s.Packages, c.Org, row.ID)
 		if err != nil {
 			return err
 		}
@@ -412,7 +412,7 @@ func (s *Service) GetReadiness(ctx context.Context, agent, env ids.UUID, operati
 			}
 		}
 		if ops == nil {
-			if ops, err = knownOperations(ctx, q, c.Org, agent, env, active, sub); err != nil {
+			if ops, err = knownOperations(ctx, q, c.Org, agent, env, active); err != nil {
 				return err
 			}
 		}
@@ -443,9 +443,7 @@ func (s *Service) GetReadiness(ctx context.Context, agent, env ids.UUID, operati
 // knownOperations are the operations an agent's promotions, active grants
 // and coverage records name in the environment, sorted, at most
 // maxOperations.
-func knownOperations(ctx context.Context, q *dbq.Queries, org ids.OrgID, agent, env ids.UUID, active []dbq.PcAgentPromotion,
-	sub *subject,
-) ([]string, error) {
+func knownOperations(ctx context.Context, q *dbq.Queries, org ids.OrgID, agent, env ids.UUID, active []dbq.PcAgentPromotion) ([]string, error) {
 	var ops []string
 	for _, a := range active {
 		ops = append(ops, a.Operation)
@@ -460,7 +458,15 @@ func knownOperations(ctx context.Context, q *dbq.Queries, org ids.OrgID, agent, 
 			ops = append(ops, *b.Operations...)
 		}
 	}
-	for _, s := range sub.snapshots {
+	// The operations coverage has seen, as a listing only: a cap here drops
+	// no check (COVERAGE reads every record of the operation it checks).
+	seen, err := q.ListCurrentCoverageSnapshotsPage(ctx, dbq.ListCurrentCoverageSnapshotsPageParams{
+		OrgID: org, AgentID: &agent, MaxRows: maxOperations,
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range seen {
 		ops = append(ops, s.Operation)
 	}
 	slices.Sort(ops)

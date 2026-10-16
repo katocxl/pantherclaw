@@ -134,7 +134,6 @@ func (s *Service) Sweep(ctx context.Context, org ids.OrgID) (confirmed, expired 
 		if err != nil {
 			return err
 		}
-		var cat *catalog
 		subjects := map[ids.UUID]*subject{}
 		for _, p := range rows {
 			if !now.Before(*p.ExpiresAt) {
@@ -146,18 +145,15 @@ func (s *Service) Sweep(ctx context.Context, org ids.OrgID) (confirmed, expired 
 			}
 			sub, ok := subjects[p.AgentID]
 			if !ok {
-				if cat == nil {
-					c, err := loadCatalog(ctx, q, s.Packages, org)
-					if err != nil {
-						return err
-					}
-					cat = &c
-				}
 				row, err := q.PromotionSubject(ctx, org, p.AgentID)
 				if err != nil {
 					return err
 				}
-				if sub, err = load(ctx, q, org, row, p.EnvironmentID, *cat); err != nil {
+				cat, err := loadCatalog(ctx, q, s.Packages, org, p.AgentID)
+				if err != nil {
+					return err
+				}
+				if sub, err = load(ctx, q, org, row, p.EnvironmentID, cat); err != nil {
 					return err
 				}
 				subjects[p.AgentID] = sub

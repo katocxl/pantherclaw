@@ -27,17 +27,12 @@ const ReasonNotPromoted = "NOT_PROMOTED"
 // Gate implements grants' PromotionGate: grants call it on every new or
 // widened grant, person- or automation-issued, in the issuing transaction
 // (HR-290). Its refusals wrap gapp.ErrNotPromoted. Packages names the
-// operations a grant prefix covers (nil: none, so a prefix is refused);
-// Pool serves ProvisionalExpiry.
+// operations a grant prefix covers (nil: none, so a prefix is refused).
 type Gate struct {
 	Packages Packages
-	Pool     *db.Pool
 }
 
-var (
-	_ gapp.PromotionGate   = Gate{}
-	_ gapp.PromotionExpiry = Gate{}
-)
+var _ gapp.PromotionGate = Gate{}
 
 // decision is what the gate decides from.
 type decision struct {
@@ -64,7 +59,7 @@ func (g Gate) read(ctx context.Context, q *dbq.Queries, org ids.OrgID, agent, en
 	}
 	d.exact = []string(ops)
 	if slices.ContainsFunc(d.exact, func(op string) bool { _, ok := prefixOf(op); return ok }) {
-		c, err := loadCatalog(ctx, q, g.Packages, org)
+		c, err := loadCatalog(ctx, q, g.Packages, org, agent)
 		if err != nil {
 			return d, err
 		}
@@ -79,55 +74,37 @@ func (g Gate) read(ctx context.Context, q *dbq.Queries, org ids.OrgID, agent, en
 // unexpired PROVISIONAL promotion of the agent in env (D80), and whose
 // every prefix such as payments.* has one for each operation currently
 // known under it, at least one (D70). nil ops (every operation) is never
-// promoted.
-func (g Gate) Check(ctx context.Context, tx pgx.Tx, org ids.OrgID, agent, env ids.UUID, ops gdomain.Ops) error {
+// promoted. It returns the earliest expiry of the PROVISIONAL promotions
+// the grant stands on (nil: none), from the rows it locked (D80, D93).
+func (g Gate) Check(ctx context.Context, tx pgx.Tx, org ids.OrgID, agent, env ids.UUID, ops gdomain.Ops) (*time.Time, error) {
 	d, err := g.read(ctx, dbq.New(tx), org, agent, env, ops)
 	switch {
 	case err != nil:
-		return err
+		return nil, err
 	case !d.prod:
-		return nil
+		return nil, nil
 	case ops == nil:
-		return notPromoted("a production grant must list its operations; promote the agent for each")
+		return nil, notPromoted("a production grant must list its operations; promote the agent for each")
 	}
 	missing := slices.Clone(d.empty)
+	var until *time.Time
 	for _, op := range d.exact {
-		if !slices.ContainsFunc(d.rows, func(r dbq.PromotedOperationsRow) bool { return r.Operation == op }) {
+		i := slices.IndexFunc(d.rows, func(r dbq.PromotedOperationsRow) bool { return r.Operation == op })
+		if i < 0 {
 			missing = append(missing, op)
+			continue
+		}
+		// Only a PROVISIONAL row ends the grant: a confirmed promotion's
+		// old expiry caps nothing (D93 V2).
+		if r := d.rows[i]; r.State == StateProvisional && r.ExpiresAt != nil && (until == nil || r.ExpiresAt.Before(*until)) {
+			t := *r.ExpiresAt
+			until = &t
 		}
 	}
 	if len(missing) > 0 {
-		return notPromoted("the agent is not promoted in this production environment for " + strings.Join(missing, ", "))
+		return nil, notPromoted("the agent is not promoted in this production environment for " + strings.Join(missing, ", "))
 	}
-	return nil
-}
-
-// ProvisionalExpiry returns the earliest expiry of the PROVISIONAL
-// promotions a grant of ops would stand on (nil: none), so grants cap the
-// grant's expiry at it: a grant under a provisional promotion ends with it
-// (D80).
-func (g Gate) ProvisionalExpiry(ctx context.Context, org ids.OrgID, agent, env ids.UUID, ops gdomain.Ops) (*time.Time, error) {
-	if g.Pool == nil {
-		return nil, nil
-	}
-	var out *time.Time
-	err := g.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		d, err := g.read(ctx, dbq.New(tx), org, agent, env, ops)
-		if err != nil {
-			return err
-		}
-		for _, r := range d.rows {
-			if r.ExpiresAt != nil && slices.Contains(d.exact, r.Operation) && (out == nil || r.ExpiresAt.Before(*out)) {
-				t := *r.ExpiresAt
-				out = &t
-			}
-		}
-		return nil
-	})
-	if pcerr.CodeOf(err) == pcerr.FailedPrecondition {
-		return nil, nil // Check refuses it in the issuing transaction
-	}
-	return out, err
+	return until, nil
 }
 
 func notPromoted(msg string) error {

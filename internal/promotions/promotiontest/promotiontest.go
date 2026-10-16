@@ -119,6 +119,7 @@ func RecordTests(t testing.TB, s Scope, ops ...string) {
 // the connection, as a reassessment that saw the scope's changes would.
 func recordCoverage(t testing.TB, s Scope, ops ...string) {
 	t.Helper()
+	Route(t, s)
 	ctx := context.Background()
 	var pending []string
 	if err := s.Pool.InTenantTx(ctx, s.Org, func(ctx context.Context, tx db.TenantTx) error {
@@ -183,6 +184,7 @@ func (p Promoter) StepUp() *stepup.StepUp {
 // unless every operation's checks passed and it was promoted.
 func Promote(t testing.TB, s Scope, ops ...string) []promotions.Promotion {
 	t.Helper()
+	Route(t, s)
 	pk := &defpg.Store{Pool: s.Pool}
 	var exact []string
 	for _, op := range ops {
@@ -191,7 +193,7 @@ func Promote(t testing.TB, s Scope, ops ...string) []promotions.Promotion {
 			continue
 		}
 		if err := s.Pool.InTenantTx(context.Background(), s.Org, func(ctx context.Context, tx db.TenantTx) error {
-			known, err := promotions.KnownUnder(ctx, tx, pk, op)
+			known, err := promotions.KnownUnder(ctx, tx, pk, s.Agent, op)
 			exact = append(exact, known...)
 			return err
 		}); err != nil {
@@ -231,4 +233,15 @@ func promote(t testing.TB, s Scope, state string, ops ...string) []promotions.Pr
 		}
 	}
 	return slices.Concat(res.Promoted, res.Already)
+}
+
+// Route records that the agent's traffic goes through the scope's
+// connection (an observed gateway channel route), which makes it one of
+// the agent's connections: it serves the operations its package declares,
+// and COVERAGE needs a passing record on it (D93 L2, V4).
+func Route(t testing.TB, s Scope) {
+	t.Helper()
+	s.exec(t, `INSERT INTO pc.coverage_routes (org_id, id, agent_id, connection_id, kind, channel, observation, source, mode)
+		VALUES ($1, $2, $3, $4, 'channel', 'http', 'observed', 'gateway', 'enforce') ON CONFLICT DO NOTHING`,
+		s.Org, ids.NewV7(), s.Agent, s.Connection)
 }

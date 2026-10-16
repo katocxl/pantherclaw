@@ -235,7 +235,8 @@ func (s *Store) ChildCounts(_ context.Context, org ids.OrgID, id domain.GrantID,
 }
 
 // Issue implements app.Repository.
-func (s *Store) Issue(_ context.Context, org ids.OrgID, g domain.Grant, ev audit.Event) error {
+func (s *Store) Issue(_ context.Context, org ids.OrgID, gp *domain.Grant, ev audit.Event) error {
+	g := *gp
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.checkOrg(org); err != nil {
@@ -252,7 +253,8 @@ func (s *Store) Issue(_ context.Context, org ids.OrgID, g domain.Grant, ev audit
 // Delegate implements app.Repository: the parent check, the fan-out count,
 // the insert and the run binding happen under one lock, like the database
 // transaction that locks the parent's row.
-func (s *Store) Delegate(_ context.Context, org ids.OrgID, child domain.Grant, parentRevision int, childRun ids.UUID, f app.Fanout, ev audit.Event) error {
+func (s *Store) Delegate(_ context.Context, org ids.OrgID, cp *domain.Grant, parentRevision int, childRun ids.UUID, f app.Fanout, ev audit.Event) error {
+	child := *cp
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.checkOrg(org); err != nil {
@@ -278,7 +280,8 @@ func (s *Store) Delegate(_ context.Context, org ids.OrgID, child domain.Grant, p
 }
 
 // Revise implements app.Repository.
-func (s *Store) Revise(_ context.Context, org ids.OrgID, next domain.Grant, _ bool, _ ids.UUID, ev audit.Event) error {
+func (s *Store) Revise(_ context.Context, org ids.OrgID, np *domain.Grant, _ bool, _ ids.UUID, ev audit.Event) error {
+	next := *np
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.checkOrg(org); err != nil {

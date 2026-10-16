@@ -57,7 +57,7 @@ func registerM11Govern(rs *connect.Server, d apiDeps) {
 // issue a grant or store a widening revision, and the automation issuer
 // when it issues one (D9, D39, D70, HR-290).
 func newPromotionGate(pool *db.Pool) grantsapp.PromotionGate {
-	return promotions.Gate{Packages: &defspg.Store{Pool: pool}, Pool: pool}
+	return promotions.Gate{Packages: &defspg.Store{Pool: pool}}
 }
 
 // newPromotions is the promotion service: its checks read the definitions
@@ -78,15 +78,17 @@ func registerM11GovernJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, po
 	return append(periodic, p...), nil
 }
 
-// newGrants is the API's grants store and service, both with the
-// production promotion gate: the store runs it in Issue's and a widening
-// Revise's transaction, and the service carries it for automation
-// issuance and the provisional expiry cap (D9, D80, D81).
+// newGrants is the grants store and service of the API and of a
+// worker-only process, both with the production promotion gate (D9, D80,
+// D81, D93): the store runs it in Issue's, a widening Revise's and
+// Delegate's transaction, and automation issuance in the engine's; each
+// caps the grant at a provisional promotion's expiry from the rows the
+// gate read.
 func newGrants(pool *db.Pool) (*grantspg.Store, *grantsapp.Service) {
 	gate := newPromotionGate(pool)
 	gstore := &grantspg.Store{Pool: pool, Promotions: gate}
 	return gstore, &grantsapp.Service{
 		Repo: gstore, Subjects: gstore, Defs: &defspg.Store{Pool: pool}, Authz: grantsapp.SubjectAuthorizer{},
-		Clock: clock.System{}, Listing: gstore, Refusals: gstore, Promotions: gate,
+		Clock: clock.System{}, Listing: gstore, Refusals: gstore, Store: gstore, Promotions: gate,
 	}
 }
