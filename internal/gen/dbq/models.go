@@ -332,6 +332,113 @@ type PcAutomationCeiling struct {
 	EndedAt         *time.Time
 }
 
+type PcAutomationConditionState struct {
+	OrgID        ids.OrgID
+	AutomationID ids.UUID
+	SubjectKey   string
+	Since        time.Time
+	FiredAt      *time.Time
+	SeenAt       time.Time
+}
+
+type PcAutomationDedupe struct {
+	OrgID        ids.OrgID
+	AutomationID ids.UUID
+	Key          string
+	TriggerID    ids.UUID
+	ExpiresAt    time.Time
+}
+
+type PcAutomationDelivery struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	DestinationID ids.UUID
+	ExecutionID   ids.UUID
+	Kind          string
+	MsgID         string
+	Body          []byte
+	BodySha256    []byte
+	State         string
+	Attempts      int32
+	NextAttemptAt time.Time
+	LastStatus    *int32
+	LastError     *string
+	CreatedAt     time.Time
+	DeliveredAt   *time.Time
+}
+
+type PcAutomationDestination struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Name                string
+	Url                 string
+	Internal            bool
+	Purposes            []string
+	Secret              []byte
+	PrevSecret          []byte
+	PrevUntil           *time.Time
+	State               string
+	CreatedBy           ids.UUID
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	DisabledBy          *ids.UUID
+	DisabledAt          *time.Time
+	UpdatedAt           time.Time
+}
+
+type PcAutomationEventReceipt struct {
+	OrgID      ids.OrgID
+	SourceID   ids.UUID
+	WebhookID  string
+	Type       string
+	BodySha256 []byte
+	ReceivedAt time.Time
+	ExpiresAt  time.Time
+}
+
+type PcAutomationEventSource struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Name                string
+	Description         string
+	Types               []string
+	Secret              []byte
+	PrevSecret          []byte
+	PrevUntil           *time.Time
+	RatePerMinute       int32
+	State               string
+	CreatedBy           ids.UUID
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	DisabledBy          *ids.UUID
+	DisabledAt          *time.Time
+	UpdatedAt           time.Time
+}
+
+type PcAutomationFeedCursor struct {
+	OrgID         ids.OrgID
+	Seq           int64
+	AgentChangeAt *time.Time
+	AgentChangeID *ids.UUID
+	UpdatedAt     time.Time
+}
+
+type PcAutomationSchedule struct {
+	OrgID        ids.OrgID
+	AutomationID ids.UUID
+	VersionID    ids.UUID
+	Cron         string
+	Timezone     string
+	NextFireAt   *time.Time
+	LastFireAt   *time.Time
+	State        string
+	UpdatedAt    time.Time
+}
+
 type PcAutomationSimulation struct {
 	OrgID       ids.OrgID
 	ID          ids.UUID
@@ -371,6 +478,43 @@ type PcAutomationTestRun struct {
 	Results          []byte
 	RunBy            ids.UUID
 	CreatedAt        time.Time
+}
+
+type PcAutomationThresholdCount struct {
+	OrgID         ids.OrgID
+	AutomationID  ids.UUID
+	GroupKey      string
+	Minute        time.Time
+	Count         int32
+	Ancestry      []ids.UUID
+	Depth         int32
+	RootTriggerID *ids.UUID
+}
+
+type PcAutomationTrigger struct {
+	OrgID              ids.OrgID
+	ID                 ids.UUID
+	AutomationID       ids.UUID
+	VersionID          ids.UUID
+	Kind               string
+	Mode               string
+	SourceRef          string
+	Authenticity       string
+	AuthenticityDetail []byte
+	Params             []byte
+	Subjects           []byte
+	Evidence           []byte
+	RootTriggerID      ids.UUID
+	Ancestry           []ids.UUID
+	Depth              int32
+	State              string
+	Reason             *string
+	ExecutionID        *ids.UUID
+	RetriedFrom        *ids.UUID
+	QueuedUntil        *time.Time
+	OccurredAt         time.Time
+	ReceivedAt         time.Time
+	DecidedAt          time.Time
 }
 
 type PcAutomationUsage struct {
