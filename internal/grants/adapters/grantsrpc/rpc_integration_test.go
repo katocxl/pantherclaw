@@ -30,6 +30,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/grants/adapters/grantsrpc"
 	"github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/grants/app"
+	"github.com/katocxl/pantherclaw/internal/grants/grantstest"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
@@ -79,7 +80,7 @@ func newStack(t *testing.T) *stack {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store := &pgstore.Store{Pool: pool}
+	store := &pgstore.Store{Pool: pool, Promotions: grantstest.OpenGate{}}
 	svc := &app.Service{
 		Repo: store, Subjects: store, Defs: &defspg.Store{Pool: pool}, Authz: app.SubjectAuthorizer{},
 		Clock: clock.System{}, Listing: store,

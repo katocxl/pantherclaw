@@ -355,3 +355,31 @@ func TestHR290_OnlyActiveServingConnectionsCount(t *testing.T) {
 		t.Fatalf("records on retired and non-serving connections promoted %+v, readiness %+v", res.Promoted, res.Readiness[0])
 	}
 }
+
+// TestHR290_PersonIssuanceFailsClosedWithoutAGate (D114 Q1): a store with
+// no promotion gate refuses a person's production grant and a widening
+// revision of one NOT_PROMOTED; a development grant is unaffected.
+func TestHR290_PersonIssuanceFailsClosedWithoutAGate(t *testing.T) {
+	w := newWorld(t)
+	gated := w.grants
+	gs := &gpg.Store{Pool: w.pool}
+	w.grants = &gapp.Service{Repo: gs, Subjects: gs, Defs: &defpg.Store{Pool: w.pool}, Authz: gapp.SubjectAuthorizer{}, Clock: clock.System{}}
+	_, err := w.issue(w.agent, `{"operations": ["payments.refund.create"]}`)
+	notPromoted(t, "a production grant with no gate", err)
+	if _, err := w.issue(w.devAgent, `{"operations": ["payments.refund.create"]}`); err != nil {
+		t.Fatalf("a development grant with no gate: %v", err)
+	}
+
+	promotiontest.Promote(t, w.scope, refund)
+	w.grants = gated
+	g, err := w.issue(w.agent, `{"operations": ["payments.refund.create"]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.grants = &gapp.Service{Repo: gs, Subjects: gs, Defs: &defpg.Store{Pool: w.pool}, Authz: gapp.SubjectAuthorizer{}, Clock: clock.System{}}
+	b, _ := gdomain.DecodeBounds([]byte(`{"operations": ["payments.refund.create"]}`))
+	_, _, err = w.grants.Revise(w.issuer, gapp.ReviseRequest{
+		ID: g.ID, Revision: 1, TaskRef: "refunds", Bounds: b, ExpiresAt: g.ExpiresAt.Add(time.Hour),
+	})
+	notPromoted(t, "a widening revision with no gate", err)
+}

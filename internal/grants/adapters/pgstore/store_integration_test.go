@@ -18,6 +18,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/grants/domain"
+	"github.com/katocxl/pantherclaw/internal/grants/grantstest"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
@@ -60,7 +61,7 @@ func exec(t *testing.T, p *db.Pool, org ids.OrgID, sql string, args ...any) {
 
 func newWorld(t *testing.T, p *db.Pool) *world {
 	t.Helper()
-	w := &world{t: t, pool: p, store: &pgstore.Store{Pool: p}, org: ids.New[ids.Org](), alice: ids.NewV7(), agent: ids.NewV7(), instance: ids.NewV7(), env: ids.NewV7()}
+	w := &world{t: t, pool: p, store: &pgstore.Store{Pool: p, Promotions: grantstest.OpenGate{}}, org: ids.New[ids.Org](), alice: ids.NewV7(), agent: ids.NewV7(), instance: ids.NewV7(), env: ids.NewV7()}
 	team := ids.NewV7()
 	exec(t, p, w.org, "INSERT INTO pc.orgs (id, name) VALUES ($1, 'acme')", w.org)
 	if err := p.InTenantTx(context.Background(), w.org, func(ctx context.Context, tx db.TenantTx) error {

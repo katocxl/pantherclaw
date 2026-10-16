@@ -158,3 +158,19 @@ SELECT a.* FROM pc.agents a
 JOIN pc.fleet_cohort_members m ON m.org_id = a.org_id AND m.agent_id = a.id
 WHERE m.org_id = sqlc.arg(org_id) AND m.cohort_id = sqlc.arg(cohort_id)
 ORDER BY a.id;
+
+-- The cohorts with a baseline an agent belongs to (static member or rule
+-- match), at most two: one is the agent's baseline, two make it ambiguous
+-- (D115 R2b). A rule's ids are stored base64 (ids.UUID's JSON).
+-- name: AgentBaselineCohorts :many
+SELECT c.* FROM pc.fleet_cohorts c
+JOIN pc.agents a ON a.org_id = c.org_id AND a.id = sqlc.arg(agent_id)
+WHERE c.org_id = sqlc.arg(org_id) AND c.baseline IS NOT NULL
+  AND (EXISTS (SELECT 1 FROM pc.fleet_cohort_members m
+               WHERE m.org_id = c.org_id AND m.cohort_id = c.id AND m.agent_id = a.id)
+       OR (c.rule IS NOT NULL
+           AND (c.rule->>'team_id' IS NULL OR a.team_id = encode(decode(c.rule->>'team_id', 'base64'), 'hex')::uuid)
+           AND (c.rule->>'environment_id' IS NULL OR a.environment_id = encode(decode(c.rule->>'environment_id', 'base64'), 'hex')::uuid)
+           AND (c.rule->>'task_type' IS NULL OR a.task_type = c.rule->>'task_type')))
+ORDER BY c.id
+LIMIT 2;

@@ -21,6 +21,7 @@ import (
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -218,5 +219,56 @@ func TestHR291_ABaselineOnlyReportsGrantsBeyondIt(t *testing.T) {
 	}
 	if n := w.count("SELECT count(*) FROM pc.agent_promotions"); n != 0 {
 		t.Fatalf("organizing promoted %d", n)
+	}
+}
+
+// TestHR291_AnAgentsBaselineIsItsOneCohorts (D115 R2b): BaselineForAgent
+// reads, in the caller's transaction, the baseline of the one cohort with
+// a baseline the agent is in, statically or by rule; none is NO_BASELINE,
+// several COHORT_AMBIGUOUS, and a cohort without a baseline counts for
+// nothing.
+func TestHR291_AnAgentsBaselineIsItsOneCohorts(t *testing.T) {
+	w := newWorld(t)
+	org := w.as(td.RoleFleetManager, nil)
+	baselineFor := func(agent ids.UUID) (cohorts.Baseline, ids.UUID, error) {
+		var b cohorts.Baseline
+		var id ids.UUID
+		err := w.pool.InTenantTx(context.Background(), w.org, func(ctx context.Context, tx db.TenantTx) error {
+			var err error
+			b, id, err = cohorts.BaselineForAgent(ctx, tx, w.org, agent)
+			return err
+		})
+		return b, id, err
+	}
+	if _, _, err := baselineFor(w.a1); pcerr.ReasonOf(err) != "NO_BASELINE" {
+		t.Fatalf("no cohort: %v, want NO_BASELINE", err)
+	}
+	if _, err := w.svc.Create(org, cohorts.Input{Name: "plain", Owner: w.owner, Rule: &cohorts.Rule{TeamID: &w.teamA}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := baselineFor(w.a1); pcerr.ReasonOf(err) != "NO_BASELINE" {
+		t.Fatalf("a cohort without a baseline: %v, want NO_BASELINE", err)
+	}
+	gets, _ := cohorts.DecodeBaseline([]byte(`{"bounds": {"operations": ["payments.refund.get"]}, "ttl_seconds": 3600}`))
+	static, err := w.svc.Create(org, cohorts.Input{Name: "refund-readers", Owner: w.owner, Baseline: gets})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.svc.ChangeMembers(org, static.ID, []ids.UUID{w.a1}, false); err != nil {
+		t.Fatal(err)
+	}
+	b, id, err := baselineFor(w.a1)
+	if err != nil || id != static.ID || b.TTLSeconds != 3600 || b.Bounds.Operations == nil || (*b.Bounds.Operations)[0] != "payments.refund.get" {
+		t.Fatalf("one cohort: %+v %s %v", b, id, err)
+	}
+	if _, _, err := baselineFor(w.b1); pcerr.ReasonOf(err) != "NO_BASELINE" {
+		t.Fatalf("another agent: %v, want NO_BASELINE", err)
+	}
+	creates, _ := cohorts.DecodeBaseline([]byte(`{"bounds": {"operations": ["payments.refund.create"]}}`))
+	if _, err := w.svc.Create(org, cohorts.Input{Name: "team-a-refunders", Owner: w.owner, Rule: &cohorts.Rule{TeamID: &w.teamA}, Baseline: creates}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := baselineFor(w.a1); pcerr.ReasonOf(err) != "COHORT_AMBIGUOUS" {
+		t.Fatalf("two cohorts with baselines: %v, want COHORT_AMBIGUOUS", err)
 	}
 }

@@ -504,8 +504,11 @@ func (s *Store) Issue(ctx context.Context, org ids.OrgID, g *domain.Grant, ev au
 // with it: its expiry, and the audit record's, is capped at the one the
 // gate read from the same rows (D80).
 func (s *Store) promoted(ctx context.Context, tx db.TenantTx, org ids.OrgID, g *domain.Grant, ev audit.Event) error {
-	if s.Promotions == nil {
-		return nil
+	if s.Promotions == nil { // without a gate a production grant is refused (D114)
+		if prod, err := s.ProductionInTx(ctx, tx, org, g.EnvironmentID); err != nil || !prod {
+			return err
+		}
+		return app.ErrNoGate
 	}
 	var ops domain.Ops
 	if g.Bounds.Operations != nil {
