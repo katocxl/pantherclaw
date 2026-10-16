@@ -46,6 +46,9 @@ type Service struct {
 	// Jobs is an insert-only River client; without it no simulation is
 	// queued.
 	Jobs *jobs.Client
+	// Issuer previews a simulation's launch decisions with grants' own
+	// DryRun issuance (D94 S5); without it they check the ceiling only.
+	Issuer Issuer
 }
 
 func (s *Service) now() clock.Clock {

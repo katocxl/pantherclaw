@@ -12,9 +12,15 @@ import (
 	"testing"
 	"time"
 
+	autoapp "github.com/katocxl/pantherclaw/internal/automations/app"
 	"github.com/katocxl/pantherclaw/internal/automations/assurance"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
+	"github.com/katocxl/pantherclaw/internal/changes"
+	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/exposure/exposuretest"
+	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
+	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
+	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
@@ -114,7 +120,7 @@ func TestT127_TestsAndSimulationAreInert(t *testing.T) {
 	a := o.Automation(t, "refunds", []ids.UUID{o.Other}, "payments.refund.*")
 	o.IssuedGrant(t, a, o.Other, "payments.refund.create")
 	v := draft(t, o, a)
-	svc := &assurance.Service{Pool: o.P, Ents: edition(billing.Team)}
+	svc := &assurance.Service{Pool: o.P, Ents: edition(billing.Team), Issuer: issuer(o)}
 	ctx := admin(o)
 	before := effects(t, o)
 
@@ -133,6 +139,16 @@ func TestT127_TestsAndSimulationAreInert(t *testing.T) {
 	if run.Passed || run.VersionState != "VALIDATED" {
 		t.Fatalf("a run missing a kind: passed %v, state %s, %+v", run.Passed, run.VersionState, run.Result)
 	}
+	// D94 S3: a passing run of these cases (as when the ceiling reached no
+	// irreversible operation) passes no gate while one is reachable.
+	o.Exec(t, `INSERT INTO pc.automation_test_runs (org_id, id, version_id, definition_digest, tests_digest, passed, results, run_by)
+		VALUES ($1, $2, $3, $4, $5, true, '{"cases": []}', $6)`, o.Org, ids.NewV7(), v, run.DefinitionDigest, run.TestsDigest, o.User)
+	o.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
+		if _, ok, err := (assurance.TestGate{}).Passed(ctx, tx.Pgx(), v, run.DefinitionDigest); err != nil || ok {
+			t.Errorf("TestGate passed a run missing PARTIAL|UNKNOWN: %v %v", ok, err)
+		}
+		return nil
+	})
 	if _, err := svc.SetTestCases(ctx, v, scenario()); err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +181,8 @@ func TestT127_TestsAndSimulationAreInert(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := svc.GetSimulation(ctx, sim)
-	if err != nil || got.State != "DONE" || got.Results == nil || got.Results.Missing[assurance.MissingManual] != 1 {
+	if err != nil || got.State != "DONE" || got.Results == nil || got.Results.Missing[assurance.MissingManual] != 1 ||
+		got.Results.LaunchPreview["launch"] == "" {
 		t.Fatalf("simulation %+v %v", got, err)
 	}
 
@@ -194,5 +211,47 @@ func TestT127_TestsAndSimulationAreInert(t *testing.T) {
 	// D38: no gate is stalled and no automation failed three times running.
 	if n, err := assurance.Sweep(context.Background(), o.P, &failures.Sink{}, o.Org); err != nil || n != 0 {
 		t.Fatalf("sweep: %d %v", n, err)
+	}
+}
+
+// issuer is grants' issuance with core's ceiling checks, as the
+// simulation worker has it (D94 S5).
+func issuer(o *exposuretest.Org) *grantsapp.Service {
+	gstore := &grantspg.Store{Pool: o.P}
+	grants := &grantsapp.Service{
+		Repo: gstore, Subjects: gstore, Defs: &defspg.Store{Pool: o.P}, Authz: grantsapp.SubjectAuthorizer{},
+		Clock: clock.System{}, Store: gstore,
+	}
+	grants.Ceilings = &autoapp.Service{
+		Pool: o.P, Clock: clock.System{}, Changes: changes.New(o.P, "https://pc.example.test"), Grants: grants,
+		Operations: &defspg.Store{Pool: o.P},
+	}
+	return grants
+}
+
+// D94 S1: a simulation an attempt left RUNNING is resumed by the next
+// attempt and finishes; the last attempt marks one FAILED.
+func TestSimulationResumesAfterAFailedAttempt(t *testing.T) {
+	o := exposuretest.New(t)
+	a := o.Automation(t, "refunds", []ids.UUID{o.Other}, "payments.refund.*")
+	v := draft(t, o, a)
+	svc := &assurance.Service{Pool: o.P, Ents: edition(billing.Team), Issuer: issuer(o)}
+	sims := [2]ids.UUID{ids.NewV7(), ids.NewV7()}
+	for _, sim := range sims {
+		// A first attempt claimed it and failed.
+		o.Exec(t, `INSERT INTO pc.automation_simulations (org_id, id, version_id, from_at, to_at, requested_by, state, started_at)
+			VALUES ($1, $2, $3, now() - interval '1 day', now(), $4, 'RUNNING', now())`, o.Org, sim, v, o.User)
+	}
+	if err := svc.RunSimulation(context.Background(), o.Org, sims[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.FailSimulation(context.Background(), o.Org, sims[1], "SIMULATION_FAILED"); err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []string{"DONE", "FAILED"} {
+		got, err := svc.GetSimulation(admin(o), sims[i])
+		if err != nil || got.State != want {
+			t.Errorf("simulation %d: %+v %v", i, got, err)
+		}
 	}
 }

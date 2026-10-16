@@ -75,6 +75,17 @@ func triggerOf(def *autodomain.Definition, org ids.OrgID, automation, version id
 	return t, nil
 }
 
+// testPerson is the fixed person a manual TEST delivery starts as: manual
+// keys are per person (D87 L7), so a second delivery of the same case is
+// the same person with a new idempotency key.
+var testPerson = func() ids.UUID {
+	u, err := ids.ParseUUID("00000000-0000-7000-8000-00000000a7e5")
+	if err != nil {
+		panic(err)
+	}
+	return u
+}()
+
 // baseKey is the key the trigger path gives one delivery of a trigger
 // (D23): a schedule occurrence's time; otherwise the delivery's own id (a
 // ledger entry, a webhook-id, an idempotency key).
@@ -85,7 +96,7 @@ func baseKey(t autodomain.TriggerRef, delivery ids.UUID) string {
 	case autodomain.TriggerInbound:
 		return triggers.InboundKey(t.Automation, delivery.String()) // one source stands for the version's
 	case autodomain.TriggerManual:
-		return triggers.ManualKey(delivery.String())
+		return triggers.ManualKey(testPerson, delivery.String())
 	case autodomain.TriggerEvent, autodomain.TriggerCondition, autodomain.TriggerThreshold:
 	}
 	return triggers.EventKey(delivery)

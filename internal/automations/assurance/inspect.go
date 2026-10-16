@@ -6,6 +6,7 @@ package assurance
 import (
 	"context"
 	"slices"
+	"strconv"
 
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
@@ -15,6 +16,7 @@ import (
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
@@ -75,7 +77,7 @@ func (s *Service) InspectVersion(ctx context.Context, versionID ids.UUID) (Inspe
 			return err
 		}
 		out = Inspect(def, l.Inputs)
-		return nil
+		return hideCoverage(ctx, c, dbq.New(tx), &out)
 	}, db.ReadOnly())
 	return out, err
 }
@@ -191,4 +193,37 @@ func verification(op exdomain.Operation) string {
 		return VerifyReconciliation
 	}
 	return VerifyNone
+}
+
+// hideCoverage leaves out the coverage of agents outside the caller's
+// exposure.read scope, as the previews do (D94 S9).
+func hideCoverage(ctx context.Context, c tenancy.Caller, q *dbq.Queries, in *Inspection) error {
+	seen, hidden := map[string]bool{}, map[string]bool{}
+	for _, st := range in.Steps {
+		for _, op := range st.Operations {
+			for a := range op.Coverage {
+				if !seen[a] {
+					seen[a] = true
+					ok, err := agentsVisible(ctx, c, q, []string{a})
+					if err != nil {
+						return err
+					}
+					hidden[a] = !ok
+				}
+				if hidden[a] {
+					delete(op.Coverage, a)
+				}
+			}
+		}
+	}
+	n := 0
+	for _, h := range hidden {
+		if h {
+			n++
+		}
+	}
+	if n > 0 {
+		in.Notes = append(in.Notes, "coverage of "+strconv.Itoa(n)+" ceiling agents outside your exposure.read scope is not shown")
+	}
+	return nil
 }

@@ -191,6 +191,14 @@ func operations(raw []byte) ([]domain.Operation, []defs.Definition, bool) {
 	return out, p.Definitions, true
 }
 
+// LoadConnections loads only the org's connections and their pinned
+// packages' operations (assurance's required test kinds, HR-287).
+func LoadConnections(ctx context.Context, q *dbq.Queries, org ids.OrgID) ([]domain.Connection, error) {
+	l := Loaded{Irreversible: map[string]bool{}, Unverified: map[string]bool{}}
+	err := l.connections(ctx, q, org)
+	return l.Inputs.Connections, err
+}
+
 func (l *Loaded) connections(ctx context.Context, q *dbq.Queries, org ids.OrgID) error {
 	rows, err := q.ExposureConnections(ctx, org)
 	if err != nil {

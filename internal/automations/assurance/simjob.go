@@ -148,6 +148,19 @@ func (s *Service) GetSimulation(ctx context.Context, id ids.UUID) (Simulation, e
 			if err := json.Unmarshal(r.Results, &res); err != nil {
 				return fmt.Errorf("assurance: stored simulation %s: %w", r.ID, err)
 			}
+			shown := res.Samples[:0]
+			for _, sm := range res.Samples {
+				ok, err := agentsVisible(ctx, c, dbq.New(tx), sm.Agents)
+				if err != nil {
+					return err
+				}
+				if ok {
+					shown = append(shown, sm)
+				} else {
+					res.SamplesHidden++
+				}
+			}
+			res.Samples = shown
 			out.Results = &res
 		}
 		return nil
@@ -250,31 +263,35 @@ func (s *Service) RunSimulation(ctx context.Context, org ids.OrgID, id ids.UUID)
 	}); err != nil || !started {
 		return err
 	}
-	var res SimResults
+	var (
+		sim dbq.GetAutomationSimulationRow
+		v   dbq.AssuranceVersionRow
+		def *autodomain.Definition
+		h   History
+	)
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		sim, err := q.GetAutomationSimulation(ctx, org, id)
-		if err != nil {
+		var err error
+		if sim, err = q.GetAutomationSimulation(ctx, org, id); err != nil {
 			return err
 		}
-		_, def, err := version(ctx, q, org, sim.VersionID)
-		if err != nil {
+		if v, def, err = version(ctx, q, org, sim.VersionID); err != nil {
 			return err
 		}
 		now, err := q.DBNow(ctx)
 		if err != nil {
 			return err
 		}
-		h, err := history(ctx, tx, def, sim.FromAt, sim.ToAt, now)
-		if err != nil {
-			return err
-		}
-		res = Replay(ctx, def, h, sim.FromAt, sim.ToAt)
-		return nil
+		h, err = history(ctx, tx, def, sim.FromAt, sim.ToAt, now)
+		return err
 	}, db.ReadOnly())
 	if err != nil {
 		return err
 	}
+	if h.Issuance, err = s.previewIssuance(ctx, org, v, def); err != nil {
+		return err
+	}
+	res := Replay(ctx, def, h, sim.FromAt, sim.ToAt)
 	body, err := json.Marshal(res, json.Deterministic(true))
 	if err != nil {
 		return err

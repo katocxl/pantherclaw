@@ -68,6 +68,9 @@ type History struct {
 	Grants       []GrantExpiry
 	// Approvers is how many people may decide the version's gates today.
 	Approvers int
+	// Issuance is each launch_run step's dry-run issuance (D94 S5); nil
+	// when not previewed (decisions then check the ceiling only).
+	Issuance map[string]IssueDecision
 }
 
 // SimDay is one day's would-be triggers.
@@ -91,6 +94,10 @@ type Sample struct {
 	Kind      string    `json:"kind"`
 	SourceRef string    `json:"source_ref"`
 	Steps     []SimStep `json:"steps"`
+	// Agents are the agents the sample involves (its trigger's and its
+	// launch_run steps'); a reader sees the sample only when every one is
+	// in their exposure.read scope (D94 S6).
+	Agents []string `json:"agents,omitzero"`
 }
 
 // Budget forecast of one currency.
@@ -117,13 +124,25 @@ type SimResults struct {
 	Forecast Forecast       `json:"forecast"`
 	// Refused counts would-be triggers the version's own limits refuse.
 	Refused map[string]int `json:"refused,omitzero"`
+	// SamplesHidden counts samples left out because they involve an agent
+	// outside the reader's exposure.read scope (set when read, D94 S6).
+	SamplesHidden int `json:"samples_hidden,omitzero"`
+	// LaunchPreview is each launch_run step's dry-run issuance, "ALLOWED"
+	// or "REFUSED:<reason>" (D94 S5); empty when not previewed.
+	LaunchPreview map[string]string `json:"launch_preview,omitzero"`
 }
 
 // fire is one would-be trigger.
 type fire struct {
 	at  time.Time
 	ref string
+	// agents are the agents the trigger names (an event's agent subject,
+	// a grant's agent), for filtering samples by the viewer (D94 S6).
+	agents []string
 }
+
+// maxGroupKey bounds a threshold group key, as the trigger path stores it.
+const maxGroupKey = 300
 
 // Replay simulates def over [from, to) on the history.
 func Replay(ctx context.Context, def *autodomain.Definition, h History, from, to time.Time) SimResults {
@@ -177,24 +196,35 @@ func Replay(ctx context.Context, def *autodomain.Definition, h History, from, to
 			launches++
 		}
 	}
+	launched := launchAgents(def)
 	every := max(1, len(fires)/maxSamples)
 	for i, f := range fires {
 		day := f.at.UTC().Format(time.DateOnly)
 		if d, ok := byDay[day]; ok {
 			d.WouldFire++
 		}
-		steps := prospective(def, grantsByDay, day)
+		steps := prospective(def, h.Issuance, grantsByDay, day)
 		if i%every == 0 && len(out.Samples) < maxSamples {
-			out.Samples = append(out.Samples, Sample{At: f.at, Kind: string(w.Kind()), SourceRef: f.ref, Steps: steps})
+			agents := slices.Compact(slices.Sorted(slices.Values(slices.Concat(f.agents, launched))))
+			out.Samples = append(out.Samples, Sample{At: f.at, Kind: string(w.Kind()), SourceRef: f.ref, Steps: steps, Agents: agents})
 		}
 	}
 	for i := range out.Days {
 		out.Days[i] = *byDay[out.Days[i].Day]
 	}
-	if launches > 0 && len(fires) > 0 {
+	if launches > 0 && len(fires) > 0 && h.Issuance == nil {
 		miss(MissingIssuancePreview, len(fires))
 	}
 	out.Forecast = forecast(def, len(fires), to.Sub(from), h.Approvers, grantsByDay)
+	for step, d := range h.Issuance {
+		if out.LaunchPreview == nil {
+			out.LaunchPreview = map[string]string{}
+		}
+		out.LaunchPreview[step] = "ALLOWED"
+		if d.Refused {
+			out.LaunchPreview[step] = "REFUSED:" + d.Reason
+		}
+	}
 	return out
 }
 
@@ -248,7 +278,7 @@ func eventFires(ctx context.Context, on, where string, events []feed.Event, from
 				continue
 			}
 		}
-		out = append(out, fire{at: e.OccurredAt, ref: "event:" + e.ID.String()})
+		out = append(out, fire{at: e.OccurredAt, ref: "event:" + e.ID.String(), agents: eventAgents(e)})
 	}
 	return out
 }
@@ -276,22 +306,73 @@ func thresholdFires(ctx context.Context, t *autodomain.ThresholdWhen, events []f
 		return nil
 	}
 	matched := eventFires(ctx, t.On, t.Where, events, from.Add(-over), to, miss)
+	slices.SortStableFunc(matched, func(a, b fire) int { return a.at.Compare(b.at) })
 	byEvent := map[string]feed.Event{}
 	for _, e := range events {
 		byEvent["event:"+e.ID.String()] = e
 	}
-	type bucket struct {
-		group string
-		start time.Time
+	// The trigger path's sliding window (triggers/feed.go, D94 S7): each
+	// event counts in its group's minute; the window is the minutes at or
+	// after the event's time less `over`; a new group is not counted while
+	// MaxThresholdGroups groups have counts in the window; the trigger fires
+	// when the window holds at_least, once per group and `over` bucket.
+	type minute struct {
+		at time.Time
+		n  int
 	}
-	counts, fired := map[bucket]int{}, map[bucket]bool{}
+	counts := map[string][]minute{}
+	window := func(group string, since time.Time) int {
+		ms := counts[group]
+		for len(ms) > 0 && ms[0].at.Before(since) {
+			ms = ms[1:]
+		}
+		counts[group] = ms
+		n := 0
+		for _, m := range ms {
+			n += m.n
+		}
+		return n
+	}
+	fired := map[string]bool{}
+	epoch := time.Unix(0, 0)
 	var out []fire
 	for _, f := range matched {
-		b := bucket{group: groupOf(t.GroupBy, byEvent[f.ref]), start: f.at.UTC().Truncate(over)}
-		counts[b]++
-		if counts[b] >= t.AtLeast && !fired[b] && !f.at.Before(from) {
-			fired[b] = true
-			out = append(out, fire{at: f.at, ref: "threshold:" + b.group + ":" + b.start.Format(time.RFC3339)})
+		since := f.at.Add(-over)
+		at := f.at.UTC().Truncate(time.Minute)
+		if at.Before(since) {
+			continue
+		}
+		group := groupOf(t.GroupBy, byEvent[f.ref])
+		if len(group) > maxGroupKey {
+			group = group[:maxGroupKey]
+		}
+		if window(group, since) == 0 {
+			active := 0
+			for g := range counts {
+				if g != group && window(g, since) > 0 {
+					active++
+				}
+			}
+			if active >= triggers.MaxThresholdGroups {
+				continue
+			}
+		}
+		if ms := counts[group]; len(ms) > 0 && ms[len(ms)-1].at.Equal(at) {
+			ms[len(ms)-1].n++
+		} else {
+			counts[group] = append(counts[group], minute{at: at, n: 1})
+		}
+		if window(group, since) < t.AtLeast {
+			continue
+		}
+		bucket := epoch.Add(f.at.Sub(epoch).Truncate(over)).UTC()
+		k := group + "\x00" + bucket.Format(time.RFC3339)
+		if fired[k] {
+			continue
+		}
+		fired[k] = true
+		if !f.at.Before(from) {
+			out = append(out, fire{at: f.at, ref: "threshold:" + group + ":" + bucket.Format(time.RFC3339), agents: f.agents})
 		}
 	}
 	return out
@@ -333,7 +414,7 @@ func conditionFires(ctx context.Context, c *autodomain.ConditionWhen, grants []G
 				since = &t
 			}
 			if at.Sub(*since) >= c.For.D() {
-				out = append(out, fire{at: at, ref: "condition:grant:" + g.Grant.String()})
+				out = append(out, fire{at: at, ref: "condition:grant:" + g.Grant.String(), agents: []string{g.Agent.String()}})
 				break
 			}
 		}
@@ -360,17 +441,17 @@ func limitHourly(def *autodomain.Definition, fires []fire, refused map[string]in
 }
 
 // prospective lists what a would-be execution's steps would do: a launch
-// is checked against the ceiling and its per-day grant cap (the issuance
-// preview, D9 DryRun, takes its place once wired); effectful steps would
-// run; gates wait for a person.
-func prospective(def *autodomain.Definition, grantsByDay map[string]int, day string) []SimStep {
+// is checked against the ceiling, its issuance preview (DryRun, D94 S5)
+// when there is one, and its per-day grant cap; effectful steps would run;
+// gates wait for a person.
+func prospective(def *autodomain.Definition, issuance map[string]IssueDecision, grantsByDay map[string]int, day string) []SimStep {
 	var out []SimStep
 	for _, s := range def.Do {
 		st := SimStep{ID: s.ID, Kind: s.Step, Decision: "WOULD_RUN"}
 		spec := autodomain.Catalog[s.Step]
 		switch {
 		case s.Step == autodomain.KindLaunchRun:
-			st.Decision, st.Reason = launchDecision(def, s, grantsByDay, day)
+			st.Decision, st.Reason = launchDecision(def, s, issuance, grantsByDay, day)
 		case s.Step == autodomain.KindGate:
 			st.Decision = "GATE"
 		case spec.Wait:
@@ -384,7 +465,9 @@ func prospective(def *autodomain.Definition, grantsByDay map[string]int, day str
 	return out
 }
 
-func launchDecision(def *autodomain.Definition, s autodomain.StepSpec, grantsByDay map[string]int, day string) (string, string) {
+func launchDecision(def *autodomain.Definition, s autodomain.StepSpec, issuance map[string]IssueDecision, grantsByDay map[string]int,
+	day string,
+) (string, string) {
 	ce := def.Authority.Ceiling
 	if ce == nil {
 		return "REFUSED", "CEILING_MISSING"
@@ -401,6 +484,9 @@ func launchDecision(def *autodomain.Definition, s autodomain.StepSpec, grantsByD
 		if _, ok := lw.Grant.Operations.Within(*ce.Bounds.Operations); !ok {
 			return "REFUSED", "OUTSIDE_CEILING"
 		}
+	}
+	if d := issuance[s.ID]; d.Refused {
+		return "REFUSED", d.Reason
 	}
 	if ce.PerDay.Grants > 0 && grantsByDay[day] >= ce.PerDay.Grants {
 		return "REFUSED", "USAGE_EXCEEDED"
@@ -478,4 +564,31 @@ func earlier(a, b time.Time) time.Time {
 		return a
 	}
 	return b
+}
+
+// eventAgents are an event's agent subjects.
+func eventAgents(e feed.Event) []string {
+	var out []string
+	for _, s := range e.Subjects {
+		if s.Type == reflexdomain.SubjectAgent {
+			out = append(out, s.ID)
+		}
+	}
+	return out
+}
+
+// launchAgents are the agents the version's launch_run steps name.
+func launchAgents(def *autodomain.Definition) []string {
+	var out []string
+	for _, s := range def.Do {
+		if s.Step != autodomain.KindLaunchRun {
+			continue
+		}
+		if w, err := s.DecodeWith(); err == nil {
+			if lw, ok := w.(*autodomain.LaunchRunWith); ok {
+				out = append(out, lw.Agent.String())
+			}
+		}
+	}
+	return out
 }

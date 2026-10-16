@@ -10,6 +10,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/automations/assurance"
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 )
 
 const sample = `
@@ -83,10 +84,23 @@ func cases(kinds ...assurance.CaseKind) []assurance.Case {
 // irreversible operation, and every case passes.
 func TestHR287_RequiredKindsAndPassing(t *testing.T) {
 	d := parse(t)
-	if assurance.Irreversible(d, map[string]bool{"payments.charge": true}) {
+	rev := map[string]defs.Reversibility{"payments.refund": defs.Reversible, "payments.charge": defs.Irreversible}
+	if assurance.Irreversible(d, rev, false) {
 		t.Error("a ceiling bounded to payments.refund reaches payments.charge")
 	}
-	irr := assurance.Irreversible(d, map[string]bool{"payments.refund": true})
+	if assurance.Irreversible(d, rev, true) {
+		t.Error("an unreadable package made an exact, declared reversible operation irreversible")
+	}
+	// D94 S2: unknown or undeclared reversibility counts as irreversible.
+	for name, ops := range map[string]map[string]defs.Reversibility{
+		"unknown":    {"payments.refund": ""},
+		"undeclared": {"payments.charge": defs.Reversible},
+	} {
+		if !assurance.Irreversible(d, ops, false) {
+			t.Errorf("%s reversibility counted as reversible", name)
+		}
+	}
+	irr := assurance.Irreversible(d, map[string]defs.Reversibility{"payments.refund": defs.Irreversible}, false)
 	if !irr {
 		t.Fatal("payments.refund is irreversible and in the ceiling")
 	}

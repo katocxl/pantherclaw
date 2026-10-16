@@ -90,3 +90,79 @@ func TestHR288_SimulationReportsWhatItCannotEvaluate(t *testing.T) {
 		t.Errorf("manual: %v", r.Missing)
 	}
 }
+
+// D94 S5, S6: a launch the dry-run issuance refuses is refused in every
+// sample, counts no grant, and the ceiling-only note is gone; each sample
+// names the agents it involves.
+func TestReplayUsesTheIssuancePreview(t *testing.T) {
+	doc := strings.Replace(sample, `  inbound:
+    source: 0192f000-0000-7000-8000-000000000002
+    type: ticket.created
+    params:
+      ticket:
+        from: /ticket/id
+        type: string
+        pattern: "T-[0-9]{1,10}"
+`, `  schedule:
+    cron: "0 * * * *"
+    timezone: UTC
+`, 1)
+	doc = strings.Replace(doc, `task_ref: "ticket {{params.ticket}}"`, `task_ref: "hourly"`, 1)
+	d, err := autodomain.Parse([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	from := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	h := assurance.History{Issuance: map[string]assurance.IssueDecision{"launch": {Refused: true, Reason: "AGENT_NOT_ELIGIBLE"}}}
+	r := assurance.Replay(context.Background(), d, h, from, from.Add(24*time.Hour))
+	if _, ok := r.Missing[assurance.MissingIssuancePreview]; ok {
+		t.Errorf("missing %v", r.Missing)
+	}
+	if r.Forecast.GrantsPerDay != 0 {
+		t.Errorf("a refused launch forecasts %v grants a day", r.Forecast.GrantsPerDay)
+	}
+	if len(r.Samples) == 0 {
+		t.Fatal("no samples")
+	}
+	for _, s := range r.Samples {
+		if s.Steps[0].Decision != "REFUSED" || s.Steps[0].Reason != "AGENT_NOT_ELIGIBLE" {
+			t.Fatalf("launch step %+v", s.Steps[0])
+		}
+		if len(s.Agents) != 1 {
+			t.Fatalf("sample agents %v", s.Agents)
+		}
+	}
+}
+
+// D94 S7: a threshold replays the trigger path's sliding window: three
+// runs ending within ten minutes fire whenever the window holds three,
+// once per ten-minute bucket, not only within one fixed bucket.
+func TestReplayThresholdSlidingWindow(t *testing.T) {
+	doc := strings.Replace(sample, `  inbound:
+    source: 0192f000-0000-7000-8000-000000000002
+    type: ticket.created
+    params:
+      ticket:
+        from: /ticket/id
+        type: string
+        pattern: "T-[0-9]{1,10}"
+`, `  threshold:
+    on: run.ended
+    over: 10m
+    at_least: 3
+`, 1)
+	doc = strings.Replace(doc, `task_ref: "ticket {{params.ticket}}"`, `task_ref: "burst"`, 1)
+	d, err := autodomain.Parse([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	from := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	var h assurance.History
+	for _, m := range []int{0, 4, 8, 12, 25} {
+		h.Events = append(h.Events, feed.Event{ID: ids.NewV7(), Kind: "audit.run.ended", OccurredAt: from.Add(time.Duration(m) * time.Minute)})
+	}
+	r := assurance.Replay(context.Background(), d, h, from, from.Add(time.Hour))
+	if len(r.Days) != 1 || r.Days[0].WouldFire != 2 {
+		t.Fatalf("days %+v, missing %v", r.Days, r.Missing)
+	}
+}

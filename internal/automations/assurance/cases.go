@@ -13,6 +13,7 @@ import (
 	"time"
 
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 )
 
@@ -128,16 +129,38 @@ func Check(def *autodomain.Definition, cases []Case) error {
 	return nil
 }
 
-// Irreversible reports whether the version's ceiling bounds any of the
-// irreversible operations: its operations match one, or it names none
-// (every operation).
-func Irreversible(def *autodomain.Definition, irreversible map[string]bool) bool {
+// Irreversible reports whether the version's ceiling may reach an
+// irreversible operation (HR-287's PARTIAL|UNKNOWN). ops are the
+// reversibilities the readable packages declare; as for an unknown outcome
+// (D84 E6), an operation counts as irreversible when it is declared so, its
+// reversibility is unknown, or no readable package declares it (an exact
+// ceiling operation that none declares), and every ceiling prefix, or a
+// ceiling naming no operations, counts as irreversible when some package
+// cannot be read (unreadable).
+func Irreversible(def *autodomain.Definition, ops map[string]defs.Reversibility, unreadable bool) bool {
 	c := def.Authority.Ceiling
 	if c == nil {
 		return false
 	}
-	for op := range irreversible {
-		if allows(c.Bounds, op) {
+	if c.Bounds.Operations == nil {
+		if unreadable {
+			return true
+		}
+	} else {
+		for _, p := range *c.Bounds.Operations {
+			if strings.HasSuffix(p, "*") {
+				if unreadable {
+					return true
+				}
+				continue
+			}
+			if _, ok := ops[p]; !ok {
+				return true // declared by no readable package
+			}
+		}
+	}
+	for op, r := range ops {
+		if allows(c.Bounds, op) && r != defs.Reversible && r != defs.Compensatable {
 			return true
 		}
 	}

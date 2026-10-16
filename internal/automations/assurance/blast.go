@@ -487,3 +487,28 @@ func guardrails(envs []dbq.ListEnvelopesRow, ops []string) []string {
 	}
 	return out
 }
+
+// agentsVisible reports whether the caller may see every agent (by
+// exposure.read through the agent scope, as the previews filter, D94 S6
+// and S9). A caller without exposure.read sees none; an id that is not an
+// agent's is never visible.
+func agentsVisible(ctx context.Context, c tenancy.Caller, q *dbq.Queries, agents []string) (bool, error) {
+	if len(agents) == 0 {
+		return true, nil
+	}
+	view, err := exposureViewer(c, q)
+	if err != nil {
+		return false, nil //nolint:nilerr // without exposure.read no agent is visible
+	}
+	for _, s := range agents {
+		a, err := ids.ParseUUID(s)
+		if err != nil {
+			return false, nil //nolint:nilerr // not an agent id: hidden
+		}
+		ok, err := view.Agent(ctx, a)
+		if err != nil || !ok {
+			return false, err
+		}
+	}
+	return true, nil
+}
