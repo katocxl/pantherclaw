@@ -586,7 +586,7 @@ func (q *Queries) ShareEnvironment(ctx context.Context, orgID ids.OrgID, iD ids.
 }
 
 const shareServiceAccount = `-- name: ShareServiceAccount :one
-SELECT org_id, id, name, description, state, created_by, created_at, updated_at FROM pc.service_accounts WHERE org_id = $1 AND id = $2 FOR SHARE
+SELECT org_id, id, name, description, state, created_by, created_at, updated_at, automation_id FROM pc.service_accounts WHERE org_id = $1 AND id = $2 FOR SHARE
 `
 
 func (q *Queries) ShareServiceAccount(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcServiceAccount, error) {
@@ -601,6 +601,7 @@ func (q *Queries) ShareServiceAccount(ctx context.Context, orgID ids.OrgID, iD i
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AutomationID,
 	)
 	return i, err
 }
