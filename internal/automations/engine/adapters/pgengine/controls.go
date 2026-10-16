@@ -211,7 +211,7 @@ type GateCloser interface {
 }
 
 // Cleanup is the engine's Cleaner (D24): at a terminal state of a LIVE
-// execution its open launches are cancelled, its open gates ended, its
+// execution its open launches are canceled, its open gates ended, its
 // still-active grants revoked and its runs ended, all in the driver's
 // transaction; the refs say what each did.
 type Cleanup struct {
