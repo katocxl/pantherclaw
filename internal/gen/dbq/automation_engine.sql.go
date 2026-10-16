@@ -188,6 +188,50 @@ func (q *Queries) AutomationExecutionInfo(ctx context.Context, orgID ids.OrgID, 
 	return i, err
 }
 
+const claimAutomationLaunch = `-- name: ClaimAutomationLaunch :one
+UPDATE pc.automation_launches l SET state = 'CLAIMED', claimed_instance_id = $1
+WHERE l.org_id = $2 AND l.id = (
+    SELECT c.id FROM pc.automation_launches c
+    JOIN pc.runs r ON r.org_id = c.org_id AND r.id = c.run_id
+    WHERE c.org_id = $2 AND c.agent_id = $3 AND c.state = 'PENDING'
+        AND (c.instance_id IS NULL OR c.instance_id = $1) AND now() < c.claim_deadline
+        AND r.state = 'ACTIVE' AND r.expires_at > now()
+        AND (r.instance_id IS NULL OR r.instance_id = $1)
+    ORDER BY c.created_at
+    LIMIT 1
+    FOR UPDATE OF c SKIP LOCKED)
+RETURNING l.id, l.execution_id, l.run_id, l.task_ref, l.calls, l.run_params,
+    (SELECT r.expires_at FROM pc.runs r WHERE r.org_id = l.org_id AND r.id = l.run_id) AS complete_by
+`
+
+type ClaimAutomationLaunchRow struct {
+	ID          ids.UUID
+	ExecutionID ids.UUID
+	RunID       ids.UUID
+	TaskRef     string
+	Calls       []byte
+	RunParams   []byte
+	CompleteBy  time.Time
+}
+
+// Claims the oldest PENDING launch of an agent for one instance (D26):
+// instance-pinned launches only for that instance, never past the claim
+// deadline, only while its run is active and unbound or bound to it.
+func (q *Queries) ClaimAutomationLaunch(ctx context.Context, instanceID *ids.UUID, orgID ids.OrgID, agentID ids.UUID) (ClaimAutomationLaunchRow, error) {
+	row := q.db.QueryRow(ctx, claimAutomationLaunch, instanceID, orgID, agentID)
+	var i ClaimAutomationLaunchRow
+	err := row.Scan(
+		&i.ID,
+		&i.ExecutionID,
+		&i.RunID,
+		&i.TaskRef,
+		&i.Calls,
+		&i.RunParams,
+		&i.CompleteBy,
+	)
+	return i, err
+}
+
 const claimBoundAutomationLaunch = `-- name: ClaimBoundAutomationLaunch :execrows
 UPDATE pc.automation_launches SET state = 'CLAIMED', claimed_instance_id = $1
 WHERE org_id = $2 AND id = $3 AND state = 'PENDING'
@@ -200,6 +244,39 @@ func (q *Queries) ClaimBoundAutomationLaunch(ctx context.Context, instanceID *id
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const completeAutomationLaunch = `-- name: CompleteAutomationLaunch :one
+UPDATE pc.automation_launches SET state = 'COMPLETED', outcome = $1, report = $2
+WHERE org_id = $3 AND id = $4 AND state = 'CLAIMED' AND claimed_instance_id = $5
+RETURNING execution_id, run_id
+`
+
+type CompleteAutomationLaunchParams struct {
+	Outcome    *string
+	Report     []byte
+	OrgID      ids.OrgID
+	ID         ids.UUID
+	InstanceID *ids.UUID
+}
+
+type CompleteAutomationLaunchRow struct {
+	ExecutionID ids.UUID
+	RunID       ids.UUID
+}
+
+// Only the claiming instance completes a launch, once (D26).
+func (q *Queries) CompleteAutomationLaunch(ctx context.Context, arg CompleteAutomationLaunchParams) (CompleteAutomationLaunchRow, error) {
+	row := q.db.QueryRow(ctx, completeAutomationLaunch,
+		arg.Outcome,
+		arg.Report,
+		arg.OrgID,
+		arg.ID,
+		arg.InstanceID,
+	)
+	var i CompleteAutomationLaunchRow
+	err := row.Scan(&i.ExecutionID, &i.RunID)
+	return i, err
 }
 
 const countActiveAutomationExecutions = `-- name: CountActiveAutomationExecutions :one
@@ -610,6 +687,23 @@ func (q *Queries) InsertAutomationStepAttempt(ctx context.Context, arg InsertAut
 		arg.WakeAt,
 	)
 	return err
+}
+
+const instanceAgent = `-- name: InstanceAgent :one
+SELECT agent_id, state FROM pc.agent_instances WHERE org_id = $1 AND id = $2
+`
+
+type InstanceAgentRow struct {
+	AgentID ids.UUID
+	State   string
+}
+
+// The agent of an enrolled instance and whether it may work.
+func (q *Queries) InstanceAgent(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (InstanceAgentRow, error) {
+	row := q.db.QueryRow(ctx, instanceAgent, orgID, iD)
+	var i InstanceAgentRow
+	err := row.Scan(&i.AgentID, &i.State)
+	return i, err
 }
 
 const listAutomationExecutions = `-- name: ListAutomationExecutions :many

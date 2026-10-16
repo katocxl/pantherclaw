@@ -245,3 +245,31 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('PENDING', '
 SELECT (d.state = 'ACTIVE' AND sqlc.arg(purpose)::text = ANY(d.purposes))::bool AS usable
 FROM pc.automation_destinations d
 WHERE d.org_id = sqlc.arg(org_id) AND d.id = sqlc.arg(id);
+
+-- name: InstanceAgent :one
+-- The agent of an enrolled instance and whether it may work.
+SELECT agent_id, state FROM pc.agent_instances WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- name: ClaimAutomationLaunch :one
+-- Claims the oldest PENDING launch of an agent for one instance (D26):
+-- instance-pinned launches only for that instance, never past the claim
+-- deadline, only while its run is active and unbound or bound to it.
+UPDATE pc.automation_launches l SET state = 'CLAIMED', claimed_instance_id = sqlc.arg(instance_id)
+WHERE l.org_id = sqlc.arg(org_id) AND l.id = (
+    SELECT c.id FROM pc.automation_launches c
+    JOIN pc.runs r ON r.org_id = c.org_id AND r.id = c.run_id
+    WHERE c.org_id = sqlc.arg(org_id) AND c.agent_id = sqlc.arg(agent_id) AND c.state = 'PENDING'
+        AND (c.instance_id IS NULL OR c.instance_id = sqlc.arg(instance_id)) AND now() < c.claim_deadline
+        AND r.state = 'ACTIVE' AND r.expires_at > now()
+        AND (r.instance_id IS NULL OR r.instance_id = sqlc.arg(instance_id))
+    ORDER BY c.created_at
+    LIMIT 1
+    FOR UPDATE OF c SKIP LOCKED)
+RETURNING l.id, l.execution_id, l.run_id, l.task_ref, l.calls, l.run_params,
+    (SELECT r.expires_at FROM pc.runs r WHERE r.org_id = l.org_id AND r.id = l.run_id) AS complete_by;
+
+-- name: CompleteAutomationLaunch :one
+-- Only the claiming instance completes a launch, once (D26).
+UPDATE pc.automation_launches SET state = 'COMPLETED', outcome = sqlc.arg(outcome), report = sqlc.arg(report)
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'CLAIMED' AND claimed_instance_id = sqlc.arg(instance_id)
+RETURNING execution_id, run_id;
