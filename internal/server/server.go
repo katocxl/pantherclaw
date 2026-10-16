@@ -646,8 +646,8 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		return nil, err
 	}
 	registerReflexCore(rs, d)
-	registerM11Protect(rs, d)
 	autos = registerAutomationsCore(rs, d, grants, runs)
+	registerM11Protect(rs, d, autos)
 	mux := http.NewServeMux()
 	edges.mount(mux)
 	rpc.Mount(mux, rs)

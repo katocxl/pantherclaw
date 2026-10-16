@@ -23,6 +23,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
+	"github.com/katocxl/pantherclaw/internal/protect"
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 	runsapp "github.com/katocxl/pantherclaw/internal/runs/app"
 )
@@ -106,6 +107,8 @@ func registerAutomationsCoreJobs(periodic []*river.PeriodicJob, reg *jobs.Regist
 		Clock: clock.System{}, Store: gstore,
 	}
 	core := newAutomationsCore(pool, bill, "", grants, runsapp.New(pool).WithGrants(gstore))
+	// The ceiling sweep counts no approver marked compromised (G0 M11 D43).
+	core.svc.Compromise = &protect.Publishers{Pool: pool}
 	if err := core.svc.RegisterJobs(reg, log); err != nil {
 		return nil, err
 	}

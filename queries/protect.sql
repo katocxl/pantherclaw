@@ -229,3 +229,17 @@ JOIN pc.policy_versions p ON p.org_id = v.org_id AND p.published_at < v.publishe
 WHERE v.org_id = sqlc.arg(org_id) AND v.id = sqlc.arg(id)
 ORDER BY p.published_at DESC
 LIMIT 1;
+
+-- name: ExposedAutomationConfirmations :many
+-- The automations whose enabling or rollout the person confirmed since a
+-- time (one item per automation, its latest confirmation).
+SELECT DISTINCT ON (r.subject_id) r.subject_id::text AS item_id,
+       ('automation ' || coalesce(a.name, r.subject_id::text) || ' ' || lower(r.kind) || ' ' || lower(r.state))::text AS label,
+       c.confirmed_at AS at
+FROM pc.change_confirmations c
+JOIN pc.change_requests r ON r.org_id = c.org_id AND r.id = c.request_id
+LEFT JOIN pc.automations a ON a.org_id = r.org_id AND a.id = r.subject_id
+WHERE c.org_id = sqlc.arg(org_id) AND c.user_id = sqlc.arg(user_id) AND r.domain = 'automation'
+  AND c.confirmed_at >= sqlc.arg(since)::timestamptz
+ORDER BY r.subject_id, c.confirmed_at DESC
+LIMIT 1000;

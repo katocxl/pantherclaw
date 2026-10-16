@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 
+	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	covapp "github.com/katocxl/pantherclaw/internal/coverage/app"
 	defsapp "github.com/katocxl/pantherclaw/internal/definitions/app"
 	defsdomain "github.com/katocxl/pantherclaw/internal/definitions/domain"
@@ -35,10 +36,9 @@ type m11Protect struct {
 	publishers *protect.Publishers
 }
 
-// newM11Protect builds the Gate and the publishers. The change ceremony
-// (internal/changes) is wired as the Gate's Requests in phase 2; until
-// then a category that is turned on refuses its changes
-// (PROTECTED_CHANGES_UNAVAILABLE) and nothing protected applies.
+// newM11Protect builds the Gate and the publishers. registerM11Protect
+// connects them to the core's change ceremony (the Gate's Requests); without
+// it a category cannot be turned on (PROTECTED_CHANGES_UNAVAILABLE).
 func newM11Protect(d apiDeps) m11Protect {
 	gate := &protect.Gate{}
 	pub := &protect.Publishers{Pool: d.pool, Gate: gate, Undo: map[string]protect.Rollback{
@@ -54,21 +54,92 @@ func newM11Protect(d apiDeps) m11Protect {
 	return m11Protect{gate: gate, publishers: pub}
 }
 
-// registerM11Protect serves ProtectedChangeService and PublisherService and
+// registerM11Protect serves ProtectedChangeService and PublisherService,
 // holds the M6 surfaces' custody changes (connection settings, route
-// modes, sealed credentials) behind the Gate. The procedure permissions
-// are in procedures_m11_protect.go.
-func registerM11Protect(rs *connect.Server, d apiDeps) {
+// modes, sealed credentials) behind the Gate and connects protect to the
+// core's change ceremony and automations. The procedure permissions are
+// in procedures_m11_protect.go.
+func registerM11Protect(rs *connect.Server, d apiDeps, core *automationsCore) {
 	p := d.m11protect
 	if d.m6 != nil {
 		d.m6.connections.WithProtect(p.gate)
 		d.m6.credentials.WithProtect(p.gate)
+	}
+	if core != nil {
+		protectCore(p, core)
 	}
 	svc := &protect.Service{Pool: d.pool, Gate: p.gate, Failures: &failures.Sink{}}
 	pantherclawv1connect.RegisterProtectedChangeServiceHandler(rs, protectrpc.NewChanges(svc))
 	pantherclawv1connect.RegisterPublisherServiceHandler(rs, protectrpc.NewPublishers(p.publishers))
 	if d.web != nil {
 		d.web.WithProtect(protectPages{Service: svc, Publishers: p.publishers})
+	}
+}
+
+// protectCore makes the core's change ceremony carry protected changes and
+// clearings (D6, D42, D43), blocks compromised people from confirming any
+// change request and from counting toward a ceiling (D11's
+// CompromiseChecker), and on marking voids their change requests, pauses
+// the automations whose ceiling they approved (D54) and exposes the
+// automations they confirmed.
+func protectCore(p m11Protect, core *automationsCore) {
+	core.changes.Compromise = p.publishers
+	core.svc.Compromise = p.publishers
+	p.gate.Requests = protect.Ceremony{Changes: core.changes}
+	protect.Register(core.changes, p.gate, p.publishers)
+	pub := p.publishers
+	pub.On = append(pub.On,
+		func(ctx context.Context, tx db.TenantTx, user ids.UUID, _ time.Time, by tapp.Caller) (map[string]string, error) {
+			voided, err := core.changes.VoidByPerson(ctx, tx, by, user, rollout.VoidCompromised)
+			return map[string]string{"change_requests_voided": strconv.Itoa(len(voided))}, err
+		},
+		func(ctx context.Context, tx db.TenantTx, user ids.UUID, _ time.Time, _ tapp.Caller) (map[string]string, error) {
+			ceilings, err := dbq.New(tx).CeilingsApprovedBy(ctx, tx.OrgID(), user)
+			if err != nil {
+				return nil, err
+			}
+			autos := make([]ids.UUID, 0, len(ceilings))
+			for _, c := range ceilings {
+				autos = append(autos, c.AutomationID)
+			}
+			var paused []ids.UUID
+			if len(autos) > 0 {
+				if paused, err = core.svc.Pause(ctx, tx.Pgx(), tx.OrgID(), autodomain.PauseSelector{Automations: autos},
+					autodomain.PauseCompromisedPublisher); err != nil {
+					return nil, err
+				}
+			}
+			return map[string]string{"automations_paused": strconv.Itoa(len(paused))}, nil
+		})
+	if pub.Sources == nil {
+		pub.Sources = map[string]protect.ExposureSource{}
+	}
+	pub.Sources[protect.ItemAutomationVersion] = func(ctx context.Context, tx db.TenantTx, user ids.UUID, since time.Time) ([]protect.Item, error) {
+		rows, err := dbq.New(tx).ExposedAutomationConfirmations(ctx, tx.OrgID(), user, since)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]protect.Item, 0, len(rows))
+		for _, r := range rows {
+			out = append(out, protect.Item{Kind: protect.ItemAutomationVersion, ID: r.ItemID, Label: r.Label, At: r.At})
+		}
+		return out, nil
+	}
+	// ROLLBACK of an automation a compromised person confirmed pauses it.
+	pub.Undo[protect.ItemAutomationVersion] = func(ctx context.Context, item string) error {
+		id, err := ids.ParseUUID(item)
+		if err != nil {
+			return protect.ErrNotExposed
+		}
+		c, err := tapp.CallerFrom(ctx)
+		if err != nil {
+			return err
+		}
+		return core.svc.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+			_, err := core.svc.Pause(ctx, tx.Pgx(), c.Org, autodomain.PauseSelector{Automations: []ids.UUID{id}},
+				autodomain.PauseCompromisedPublisher)
+			return err
+		})
 	}
 }
 
