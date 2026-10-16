@@ -8,6 +8,7 @@ package app_test
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"testing"
 
 	autoapp "github.com/katocxl/pantherclaw/internal/automations/app"
@@ -369,5 +370,44 @@ func TestD69_PublishedVersionFrozen(t *testing.T) {
 	}
 	if _, err := e.svc.CreateAutomation(e.alice.cli, "ends-", "x", autodomain.WorkAgent, e.alice.id); reason(err) == "" {
 		t.Error("a name ending in a hyphen was accepted")
+	}
+}
+
+// subjectChangedError is a domain's own void error (protect's SUBJECT_CHANGED).
+type subjectChangedError struct{}
+
+func (subjectChangedError) Error() string      { return "subject changed" }
+func (subjectChangedError) VoidReason() string { return "SUBJECT_CHANGED" }
+
+// TestD88_ApplyVoidVoidsInTheConfirmingTransaction: an Apply error with a
+// void reason voids the request in the confirming transaction; what Apply
+// wrote is rolled back and the confirmation stays recorded.
+func TestD88_ApplyVoidVoidsInTheConfirmingTransaction(t *testing.T) {
+	e := newEnv(t)
+	log := &closedLog{}
+	h := log.handler(td.PermProtectedChangeManage)
+	h.Apply = func(ctx context.Context, tx db.TenantTx, r changes.Request, _ []ids.UUID) error {
+		if _, err := tx.Exec(ctx, "UPDATE pc.orgs SET name = 'changed' WHERE id = $1", e.org); err != nil {
+			return err
+		}
+		return subjectChangedError{}
+	}
+	e.svc.Changes.Register(changes.DomainProtected, "TEST_CHANGE", h)
+	eve := e.person("eve", td.RoleSecurityAdmin)
+	r := e.request(eve, changes.DomainProtected, "TEST_CHANGE")
+	if _, err := e.svc.Changes.Confirm(eve.page, r.ID, e.sign(eve, r)); !errors.Is(err, changes.ErrVoided) {
+		t.Fatalf("confirm: %v, want ErrVoided", err)
+	}
+	if s, why := e.requestState(r.ID), e.decidedReason(r.ID); s != changes.StateVoided || why != "SUBJECT_CHANGED" {
+		t.Errorf("request %s (%s)", s, why)
+	}
+	if n := e.count("SELECT count(*) FROM pc.orgs WHERE id = $1 AND name = 'changed'", e.org); n != 0 {
+		t.Error("Apply's writes were kept")
+	}
+	if n := e.count("SELECT count(*) FROM pc.change_confirmations WHERE org_id = $1 AND request_id = $2", e.org, r.ID); n != 1 {
+		t.Errorf("confirmations %d", n)
+	}
+	if len(log.states) != 1 || log.states[0] != "TEST_CHANGE:VOIDED" {
+		t.Errorf("closed callbacks %v", log.states)
 	}
 }

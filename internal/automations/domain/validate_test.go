@@ -257,3 +257,27 @@ func TestOwnerComesFromTheRow(t *testing.T) {
 		}
 	}
 }
+
+// TestManualStepUpForIrreversibleCeiling (D87 P3): a manual start of an
+// automation whose ceiling has an irreversible operation needs step_up.
+func TestManualStepUpForIrreversibleCeiling(t *testing.T) {
+	doc := strings.Replace(sample, `  inbound:
+    source: 0192f000-0000-7000-8000-000000000002
+    type: ticket.created
+    params:
+      ticket:
+        from: /ticket/id
+`, `  manual:
+    params:
+      ticket:
+`, 1)
+	irreversible := fakeEnv{irreversible: map[string]bool{"payments.refund": true}, approvers: 1}
+	fs := validate(t, doc, irreversible)
+	if !slices.ContainsFunc(fs, func(f autodomain.Finding) bool { return f.Path == "/when/manual/step_up" }) {
+		t.Errorf("no step_up finding: %+v", fs)
+	}
+	fs = validate(t, strings.Replace(doc, "  manual:\n", "  manual:\n    step_up: true\n", 1), irreversible)
+	if slices.ContainsFunc(fs, func(f autodomain.Finding) bool { return f.Path == "/when/manual/step_up" }) {
+		t.Errorf("step_up: true still refused: %+v", fs)
+	}
+}

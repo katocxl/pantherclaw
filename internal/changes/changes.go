@@ -110,6 +110,18 @@ type VoidError struct{ Reason string }
 
 func (e *VoidError) Error() string { return "changes: request voided: " + e.Reason }
 
+// VoidReason implements Voider.
+func (e *VoidError) VoidReason() string { return e.Reason }
+
+// Voider is an Apply error that voids the request instead of failing the
+// confirmation (*VoidError, or a domain's own, D88): what Apply wrote is
+// rolled back and the request is VOIDED with VoidReason in the confirming
+// transaction.
+type Voider interface {
+	error
+	VoidReason() string
+}
+
 // Confirmation is one person's confirmation.
 type Confirmation struct {
 	User       ids.UUID
@@ -154,7 +166,7 @@ func (r Request) Confirmers() []ids.UUID {
 // many people must confirm (1 or 2, fixed at request time). Eligible says
 // whether a person may confirm now (checked at confirmation and again for
 // every earlier confirmer when the last one applies it). Apply runs in the
-// confirming transaction with every confirmer; a *VoidError voids the
+// confirming transaction with every confirmer; a Voider (*VoidError) voids the
 // request. Closed, when set, runs in the same transaction when a request
 // becomes DECLINED, EXPIRED or VOIDED (D74). TTL is how long a request
 // stays open (0: 24 hours; at most MaxTTL).
@@ -736,27 +748,20 @@ func (s *Service) Confirm(ctx context.Context, id ids.UUID, a Assertion) (Reques
 			return nil
 		}
 		req.Confirmations = append(req.Confirmations, Confirmation{User: caller.Principal.ID, Credential: a.Credential})
-		if err := h.Apply(ctx, tx, req, confirmers); err != nil {
+		err = tx.Savepoint(ctx, "change_apply", func() error { return h.Apply(ctx, tx, req, confirmers) })
+		var v Voider
+		switch {
+		case errors.As(err, &v):
+			voided = v.VoidReason()
+			return s.decide(ctx, tx, q, caller, req, StateVoided, voided)
+		case err != nil:
 			return err
 		}
 		return s.decide(ctx, tx, q, caller, req, StateApproved, "")
 	})
-	var ve *VoidError
 	switch {
 	case err == nil && expired:
 		return Request{}, ErrExpired
-	case errors.As(err, &ve):
-		voided = ve.Reason
-		if err := s.Pool.InTenantTx(ctx, caller.Org, func(ctx context.Context, tx db.TenantTx) error {
-			q := dbq.New(tx)
-			r, err := s.load(ctx, q, caller.Org, id)
-			if err != nil {
-				return err
-			}
-			return s.decide(ctx, tx, q, caller, r, StateVoided, voided)
-		}); err != nil {
-			return Request{}, err
-		}
 	case errors.Is(err, db.ErrLostRace):
 		return Request{}, ErrNotPending
 	case err != nil:
