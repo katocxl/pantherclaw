@@ -16,6 +16,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -121,4 +123,36 @@ func validate(f reflexdomain.Failure) error {
 		}
 	}
 	return nil
+}
+
+// Resolve resolves, in the caller's transaction, the open failures of
+// kind whose dedupe key is one of keys, once their cause is gone, and
+// records incident.failure_resolved for each as a manual resolution does
+// (G0 M11 part 2 D106 D2). It returns the resolved ids; none is open, none
+// is recorded.
+func (s *Sink) Resolve(ctx context.Context, ptx pgx.Tx, org ids.OrgID, kind string, keys []string, resolution string,
+	actor evdomain.Actor,
+) ([]ids.UUID, error) {
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	tx, err := db.AdoptTenantTx(ctx, ptx, org)
+	if err != nil {
+		return nil, err
+	}
+	resolved, err := dbq.New(tx).ResolveOpenFailures(ctx, dbq.ResolveOpenFailuresParams{
+		Resolution: resolution, OrgID: org, Kind: kind, DedupeKeys: keys,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failures: resolve: %w", err)
+	}
+	for _, id := range resolved {
+		if _, err := audit.Record(ctx, tx, audit.Event{
+			Name: "incident.failure_resolved", Actor: actor, Outcome: audit.Success,
+			Object: &audit.Object{Type: "failure", ID: id.String()}, Details: map[string]string{"kind": kind},
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return resolved, nil
 }
