@@ -138,8 +138,18 @@ func (s *Service) failure(ctx context.Context, tx db.TenantTx, a dbq.PcAutomatio
 // never do.
 func (s *Service) VoidCeiling(ctx context.Context, org ids.OrgID, ceiling ids.UUID, reason string) error {
 	return s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		return s.endCeilingTx(ctx, tx, org, ceiling, autodomain.CeilingVoid, reason, autodomain.PauseCeilingVoid)
+		return s.VoidCeilingTx(ctx, tx, org, ceiling, reason)
 	})
+}
+
+// VoidCeilingTx is VoidCeiling in the caller's transaction (D111), for a
+// caller that voids as part of its own change (protect's marking). A
+// ceiling that is no longer ACTIVE is left as it is.
+func (s *Service) VoidCeilingTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, ceiling ids.UUID, reason string) error {
+	if org != tx.OrgID() {
+		return db.ErrTenantMismatch
+	}
+	return s.endCeilingTx(ctx, tx, org, ceiling, autodomain.CeilingVoid, reason, autodomain.PauseCeilingVoid)
 }
 
 func (s *Service) endCeilingTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, ceiling ids.UUID, state autodomain.CeilingState,
@@ -543,3 +553,22 @@ func (s *Service) resolveFailures(ctx context.Context, tx db.TenantTx, kind stri
 }
 
 func ceilingKey(ceiling ids.UUID) string { return "ceiling:" + ceiling.String() }
+
+// scopedResolver resolves owned failures by the subject in their scope
+// (reflex failures.Sink, D111 G1).
+type scopedResolver interface {
+	ResolveInScope(ctx context.Context, tx pgx.Tx, org ids.OrgID, kind string, subject reflexdomain.Subject, resolution string,
+		actor evdomain.Actor) ([]ids.UUID, error)
+}
+
+// resolveAutomationFailures resolves the open failures of kind scoped to
+// the automation, as PantherClaw itself.
+func (s *Service) resolveAutomationFailures(ctx context.Context, tx db.TenantTx, automation ids.UUID, kind, resolution string) error {
+	r, ok := s.Failures.(scopedResolver)
+	if !ok {
+		return nil
+	}
+	_, err := r.ResolveInScope(ctx, tx.Pgx(), tx.OrgID(), kind,
+		reflexdomain.Subject{Type: reflexdomain.SubjectAutomation, ID: automation.String()}, resolution, systemActor)
+	return err
+}
