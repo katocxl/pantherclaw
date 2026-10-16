@@ -916,7 +916,7 @@ func (q *Queries) OpsUnconfirmedContainment(ctx context.Context, orgID ids.OrgID
 }
 
 const opsWaitingApprovals = `-- name: OpsWaitingApprovals :many
-SELECT a.id, a.agent_id, a.operation, a.state, a.created_at, a.deadline_at, a.transaction_id
+SELECT a.id, a.agent_id, a.operation, a.state, a.created_at, a.deadline_at, a.transaction_id, a.subject_kind
 FROM pc.approval_requests a
 WHERE a.org_id = $1 AND a.state IN ('PENDING', 'EVIDENCE_REQUESTED') AND a.deadline_at > now()
   AND a.deadline_at <= $2::timestamptz
@@ -941,6 +941,7 @@ type OpsWaitingApprovalsRow struct {
 	CreatedAt     time.Time
 	DeadlineAt    time.Time
 	TransactionID *ids.UUID
+	SubjectKind   string
 }
 
 // Approval requests still waiting for a person whose deadline falls
@@ -968,6 +969,7 @@ func (q *Queries) OpsWaitingApprovals(ctx context.Context, arg OpsWaitingApprova
 			&i.CreatedAt,
 			&i.DeadlineAt,
 			&i.TransactionID,
+			&i.SubjectKind,
 		); err != nil {
 			return nil, err
 		}

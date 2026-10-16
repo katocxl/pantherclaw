@@ -44,7 +44,7 @@ LIMIT sqlc.arg(max_rows);
 -- name: OpsWaitingApprovals :many
 -- Approval requests still waiting for a person whose deadline falls
 -- within the horizon, soonest first.
-SELECT a.id, a.agent_id, a.operation, a.state, a.created_at, a.deadline_at, a.transaction_id
+SELECT a.id, a.agent_id, a.operation, a.state, a.created_at, a.deadline_at, a.transaction_id, a.subject_kind
 FROM pc.approval_requests a
 WHERE a.org_id = sqlc.arg(org_id) AND a.state IN ('PENDING', 'EVIDENCE_REQUESTED') AND a.deadline_at > now()
   AND a.deadline_at <= sqlc.arg(horizon)::timestamptz

@@ -400,7 +400,12 @@ func decisionItems(ctx context.Context, b *builder) error {
 		if r.AgentID != nil {
 			agentIDs = append(agentIDs, r.AgentID.String())
 		}
-		acts, err := v.actions(ctx, agentIDs, Action{"open_approval", td.PermApprovalRespond, "approval:" + r.ID.String()})
+		// An automation gate is decided by automation.approve holders (D84).
+		perm := td.PermApprovalRespond
+		if r.SubjectKind == "AUTOMATION_GATE" {
+			perm = td.PermAutomationApprove
+		}
+		acts, err := v.actions(ctx, agentIDs, Action{"open_approval", perm, "approval:" + r.ID.String()})
 		if err != nil {
 			return err
 		}
