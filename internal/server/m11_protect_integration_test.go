@@ -87,7 +87,9 @@ func TestD110_MarkingVoidsTheCeilingsThePersonApproved(t *testing.T) {
 	d := dbtest.New(t)
 	pool := d.AppPool(t)
 	core, p := newM11Core(pool, nil, "https://pc.example.test")
-	// As in a worker: the core gets its grants and runs services.
+	// As in a worker: cmdServe attaches the gated grants and runs services
+	// before the role split (D113), then the core jobs register.
+	attachM11Issuance(core, pool)
 	if _, err := registerAutomationsCoreJobs(nil, jobs.NewRegistry(), core, nil); err != nil {
 		t.Fatal(err)
 	}

@@ -25,6 +25,7 @@ func TestHR290_TheProductionGrantsStoreAndServiceHaveTheGate(t *testing.T) {
 	api := newAutomationsCore(pool, nil, "")
 	api.attach(pool, svc, runsapp.New(pool).WithGrants(store))
 	worker := newAutomationsCore(pool, nil, "")
+	attachM11Issuance(worker, pool) // as cmdServe does before the role split (D113)
 	if _, err := registerAutomationsCoreJobs(nil, jobs.NewRegistry(), worker, nil); err != nil {
 		t.Fatal(err)
 	}

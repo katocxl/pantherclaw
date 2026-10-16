@@ -25,8 +25,10 @@ import (
 func TestM11ProtectWiring(t *testing.T) {
 	for _, role := range []string{RoleAPI, RoleWorker} {
 		t.Run(role, func(t *testing.T) {
-			core, p := newM11Core(&db.Pool{}, nil, "https://pc.example.test")
+			pool := &db.Pool{}
+			core, p := newM11Core(pool, nil, "https://pc.example.test")
 			if role == RoleWorker {
+				attachM11Issuance(core, pool) // as cmdServe does before the role split (D113)
 				if _, err := registerAutomationsCoreJobs(nil, jobs.NewRegistry(), core, nil); err != nil {
 					t.Fatal(err)
 				}
