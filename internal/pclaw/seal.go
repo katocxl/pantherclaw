@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"google.golang.org/protobuf/proto"
 
@@ -52,27 +53,47 @@ func init() {
 	})
 }
 
-// readCredential reads a credential file: at most 64 KiB, with one trailing
-// line break removed (editors add one).
-func readCredential(path string) ([]byte, error) {
+// readCredential reads a credential file of at most 64 KiB and reports
+// whether it holds a private key. Text (a token) loses one trailing line
+// break, which editors add; binary input is never trimmed, since a DER key
+// may end in 0x0a or 0x0d. A private key is looked for on the bytes as read
+// and on the trimmed bytes, and a match on either counts (HR-204).
+func readCredential(path string) (secret []byte, privateKey bool, err error) {
 	f, err := os.Open(path) //nolint:gosec // G304: the operator names the file
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer func() { _ = f.Close() }()
 	b, err := io.ReadAll(io.LimitReader(f, maxCredential+1))
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if len(b) > maxCredential {
-		return nil, fmt.Errorf("the credential file is larger than %d bytes", maxCredential)
+		return nil, false, fmt.Errorf("the credential file is larger than %d bytes", maxCredential)
 	}
-	b = bytes.TrimSuffix(b, []byte("\n"))
-	b = bytes.TrimSuffix(b, []byte("\r"))
+	trimmed := bytes.TrimSuffix(bytes.TrimSuffix(b, []byte("\n")), []byte("\r"))
+	privateKey = domain.HoldsPrivateKey(b) || domain.HoldsPrivateKey(trimmed)
+	if !binary(b) {
+		b = trimmed
+	}
 	if len(b) == 0 {
-		return nil, errors.New("the credential file is empty")
+		return nil, false, errors.New("the credential file is empty")
 	}
-	return b, nil
+	return b, privateKey, nil
+}
+
+// binary reports whether b is not text: not UTF-8, or holding a control
+// byte other than a tab or a line break.
+func binary(b []byte) bool {
+	if !utf8.Valid(b) {
+		return true
+	}
+	for _, c := range b {
+		if (c < 0x20 && c != '\t' && c != '\n' && c != '\r') || c == 0x7f {
+			return true
+		}
+	}
+	return false
 }
 
 func seal(ctx context.Context, a *app, args []string) error {
@@ -114,11 +135,11 @@ func seal(ctx context.Context, a *app, args []string) error {
 		"It will be sent only to %s, in the %s header%s.\n",
 		k.GetVersion(), k.GetConnectionId(), fp, k.GetGatewayId(), strings.Join(k.GetAllowedHosts(), ", "), k.GetHeader(),
 		map[bool]string{true: " with scheme " + k.GetScheme(), false: ""}[k.GetScheme() != ""])
-	secret, err := readCredential(*from)
+	secret, privateKey, err := readCredential(*from)
 	if err != nil {
 		return err
 	}
-	if *app == "" && domain.HoldsPrivateKey(secret) {
+	if *app == "" && privateKey {
 		// A static credential goes to the target in a header: a private key
 		// must never be one.
 		clear(secret)
