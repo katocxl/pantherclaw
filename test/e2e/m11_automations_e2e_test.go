@@ -604,19 +604,24 @@ func (a *autoStack) reciprocalLoop(t *testing.T) {
 	f := &triggerstest.Fixture{Pool: s.pool, Org: s.org, User: a.r.aliceID}
 	ping := f.Automation(t, "loop-ping", f.Definition(`"event":{"on":"grant.revoked"}`, ""), autodomain.RolloutShadow)
 	pong := f.Automation(t, "loop-pong", f.Definition(`"event":{"on":"grant.issued"}`, ""), autodomain.RolloutShadow)
-	feed := func() int {
+	feed := func() {
 		t.Helper()
 		if _, err := ledger.ChainAll(ctx, s.pool, s.org, 1000); err != nil {
 			t.Fatal(err)
 		}
-		r, err := a.triggers.ProcessFeed(ctx, s.org)
-		if err != nil {
+		if _, err := a.triggers.ProcessFeed(ctx, s.org); err != nil {
 			t.Fatal(err)
 		}
-		return r.Events
 	}
-	record := func(name string, actor evdomain.Actor, details map[string]string) {
+	triggers := func(x triggerstest.Automation) string {
+		return s.row(t, "SELECT count(*)::text FROM pc.automation_triggers WHERE automation_id = $1", x.ID)
+	}
+	// record writes the event and feeds until target has a new trigger: the
+	// e2e server chains the ledger too, so the event may not be chained when
+	// the test first processes the feed.
+	record := func(name string, actor evdomain.Actor, details map[string]string, target triggerstest.Automation) {
 		t.Helper()
+		before := triggers(target)
 		if err := s.pool.InTenantTx(ctx, s.org, func(ctx context.Context, tx db.TenantTx) error {
 			_, err := audit.Record(ctx, tx, audit.Event{
 				Name: name, Actor: actor, Outcome: audit.Success,
@@ -626,23 +631,25 @@ func (a *autoStack) reciprocalLoop(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		// The e2e server chains the ledger too: feed until the event is in.
-		eventually(t, 15*time.Second, "the feed to take "+name, func() (bool, error) { return feed() > 0, nil })
+		eventually(t, 15*time.Second, "the feed to take "+name, func() (bool, error) {
+			feed()
+			return triggers(target) != before, nil
+		})
 	}
 	sa := func(x triggerstest.Automation) evdomain.Actor {
 		return evdomain.Actor{Type: "service_account", ID: x.ServiceAccount.String()}
 	}
 	feed() // the cursor starts at the head
-	record("grant.revoked", evdomain.Actor{Type: "user", ID: a.r.aliceID.String()}, nil)
+	record("grant.revoked", evdomain.Actor{Type: "user", ID: a.r.aliceID.String()}, nil, ping)
 	first := a.latestExecution(t, ping.ID)
 	a.advance(t, first)
 	// ping's work (a grant issued) starts pong.
-	record("grant.issued", sa(ping), map[string]string{"execution": first.String(), "automation": ping.ID.String()})
+	record("grant.issued", sa(ping), map[string]string{"execution": first.String(), "automation": ping.ID.String()}, pong)
 	second := a.latestExecution(t, pong.ID)
 	a.advance(t, second)
 	// pong's work (a grant revoked) comes back to ping: refused, its lineage
 	// holds ping.
-	record("grant.revoked", sa(pong), map[string]string{"execution": second.String(), "automation": pong.ID.String()})
+	record("grant.revoked", sa(pong), map[string]string{"execution": second.String(), "automation": pong.ID.String()}, ping)
 	if n := s.row(t, "SELECT count(*)::text FROM pc.automation_triggers WHERE automation_id = $1 AND state = 'REFUSED_LOOP'", ping.ID); n == "0" {
 		t.Fatal("ping was not refused REFUSED_LOOP")
 	}
