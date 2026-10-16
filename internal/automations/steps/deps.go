@@ -31,6 +31,7 @@ type LaunchIssue struct {
 	Automation     ids.UUID
 	Version        ids.UUID
 	Execution      ids.UUID
+	Trigger        ids.UUID
 	Ceiling        ids.UUID
 	ServiceAccount ids.UUID
 	Agent          ids.UUID
@@ -41,13 +42,18 @@ type LaunchIssue struct {
 	Bounds         gdomain.Bounds
 	Requirements   []gdomain.Requirement
 	Limits         gdomain.Limits
-	DryRun         bool
+	// Live is false for SHADOW and TEST executions, which never issue (D54).
+	Live   bool
+	DryRun bool
 }
 
 // LaunchStart is the run a launch starts under its grant (D10
 // AutomationStart).
 type LaunchStart struct {
 	Org            ids.OrgID
+	Automation     ids.UUID
+	Version        ids.UUID
+	Trigger        ids.UUID
 	Execution      ids.UUID
 	ServiceAccount ids.UUID
 	Agent          ids.UUID
@@ -62,13 +68,24 @@ type LaunchStart struct {
 // GrantRevoke asks for grants of an execution to be revoked (D9
 // AutomationRevoke).
 type GrantRevoke struct {
-	Org       ids.OrgID
-	Execution ids.UUID
+	Org            ids.OrgID
+	Automation     ids.UUID
+	Execution      ids.UUID
+	Trigger        ids.UUID
+	Ceiling        ids.UUID
+	ServiceAccount ids.UUID
+	// Agents are the ceiling's agents (CEILING_AGENTS).
+	Agents []ids.UUID
 	// Grant narrows EXECUTION to one grant of the execution, and names the
 	// trigger's grant for TRIGGER_GRANT.
 	Grant  *ids.UUID
 	Scope  string
 	Reason string
+	// Revocable is the version's authority.revocable (D65, D84 E10): the
+	// agents whose grants TRIGGER_GRANT and CEILING_AGENTS may revoke, or
+	// every agent with RevocableAll. The issuer side enforces it.
+	Revocable    []ids.UUID
+	RevocableAll bool
 }
 
 // Grants issues and revokes grants for automations (grants/app, core-B).
@@ -84,20 +101,25 @@ type Grants interface {
 // Runs starts and ends runs for automations (runs/app, core-B).
 type Runs interface {
 	StartForAutomation(ctx context.Context, tx pgx.Tx, in LaunchStart) (ids.UUID, error)
-	EndForAutomation(ctx context.Context, tx pgx.Tx, org ids.OrgID, execution, run ids.UUID, reason string) error
+	EndForAutomation(ctx context.Context, tx pgx.Tx, org ids.OrgID, execution, serviceAccount, run ids.UUID, reason string) error
 }
 
 // GateRequest asks people to approve one gate (D25, HR-281).
 type GateRequest struct {
-	Org          ids.OrgID
-	Automation   ids.UUID
-	Execution    ids.UUID
-	StepID       string
-	Attempt      int
-	ParamsDigest []byte
-	Summary      string
-	Roles        []string
-	Users        []ids.UUID
+	Org        ids.OrgID
+	Automation ids.UUID
+	// AutomationName, ServiceAccount and Params (as text, shown as
+	// untrusted) render the approval page.
+	AutomationName string
+	ServiceAccount ids.UUID
+	Params         map[string]string
+	Execution      ids.UUID
+	StepID         string
+	Attempt        int
+	ParamsDigest   []byte
+	Summary        string
+	Roles          []string
+	Users          []ids.UUID
 	// Exclude are the people who never decide it (owner, confirmers,
 	// principal, as the gate declares).
 	Exclude      []ids.UUID
@@ -126,6 +148,8 @@ type Gates interface {
 	GateStatus(ctx context.Context, tx pgx.Tx, org ids.OrgID, request ids.UUID) (GateState, error)
 	// EndGate ends an open gate of a finished execution.
 	EndGate(ctx context.Context, tx pgx.Tx, org ids.OrgID, request ids.UUID, reason string) error
+	// ConsumeGate uses an APPROVED gate once (CONSUMED), closing its entry.
+	ConsumeGate(ctx context.Context, tx pgx.Tx, org ids.OrgID, request ids.UUID) error
 }
 
 // Notice is an automation.notice to people (D25 notify).

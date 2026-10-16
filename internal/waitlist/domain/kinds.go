@@ -28,6 +28,8 @@ var DefaultDeadlines = map[string]time.Duration{
 	KindToolReview:     30 * 24 * time.Hour,
 	KindRestoration:    24 * time.Hour,
 	KindReconciliation: 72 * time.Hour,
+	// A gate's entry shares its approval request's deadline (≤ 72 h, D25).
+	KindAutomationGate: 72 * time.Hour,
 }
 
 // Deadline is the wait of kind: the org's setting when it has one, which

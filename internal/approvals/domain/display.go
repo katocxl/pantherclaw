@@ -286,6 +286,9 @@ func (out *Display) finish(reqs []Requirement, variants []VariantLine, context [
 		if r.Kind == KindApproval {
 			rule.Scope = "bound on the agent's environment, team, business unit or org"
 		}
+		if r.Kind == KindGate {
+			rule.Scope = "holding automation.approve at the org"
+		}
 		out.Deciders = append(out.Deciders, rule)
 	}
 	out.Variants = append([]VariantLine{}, variants...)

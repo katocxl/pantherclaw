@@ -111,8 +111,11 @@ type Service struct {
 	// what they hold).
 	Bundles  *evapp.Service
 	Captures CaptureSource
-	Clock    clock.Clock
-	Log      *slog.Logger
+	// Executions reads automation executions for packs of scope
+	// automation_execution (G0 M11 part 2 D30); nil fails them.
+	Executions Executions
+	Clock      clock.Clock
+	Log        *slog.Logger
 }
 
 func (s *Service) now() time.Time {
@@ -214,6 +217,13 @@ func (s *Service) Build(ctx context.Context, org ids.OrgID, id ids.UUID) error {
 			return err
 		}
 	}
+	if r.scope.Kind == pack.ScopeAutomationExecution {
+		if b.execData, err = b.loadExecution(); errors.Is(err, errExecution) {
+			return s.fail(ctx, org, id, CodeExecutionUnavailable)
+		} else if err != nil {
+			return err
+		}
+	}
 	content, manifest, items, err := b.build()
 	switch {
 	case errors.Is(err, pack.ErrTooLarge):
@@ -274,6 +284,8 @@ type builder struct {
 	first, last time.Time
 	// rangeData is the range of a pack of scope range.
 	rangeData *rangeData
+	// execData is the execution of a pack of scope automation_execution.
+	execData *execData
 }
 
 func (b *builder) gap(subject, reason, format string, args ...any) {
@@ -307,6 +319,11 @@ func (b *builder) build() ([]byte, string, int, error) {
 	}
 	if b.rangeData != nil {
 		if err := b.assurance(); err != nil {
+			return nil, "", 0, err
+		}
+	}
+	if b.execData != nil {
+		if err := b.automation(); err != nil {
 			return nil, "", 0, err
 		}
 	}
@@ -398,6 +415,9 @@ func (b *builder) scopeIDs() ([]ids.UUID, bool, error) {
 	sc := b.r.scope
 	if sc.Kind == pack.ScopeRange {
 		return b.rangeData.transactions(), true, nil
+	}
+	if sc.Kind == pack.ScopeAutomationExecution {
+		return b.execData.transactions, true, nil
 	}
 	if sc.Kind == pack.ScopeTransactions {
 		out := make([]ids.UUID, 0, len(sc.Transactions))

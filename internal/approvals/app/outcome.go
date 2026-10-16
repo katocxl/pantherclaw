@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	notifapp "github.com/katocxl/pantherclaw/internal/notifications/app"
@@ -55,7 +56,16 @@ func tellAdmins(ctx context.Context, tx db.TenantTx, n Notifier, org ids.OrgID, 
 func send(ctx context.Context, tx db.TenantTx, n Notifier, org ids.OrgID, row dbq.PcApprovalRequest, typ string, params map[string]string,
 	people []ids.UUID,
 ) error {
-	p := map[string]string{"operation": row.Operation, "agent": row.AgentID.String(), "request": row.ID.String()}
+	p := map[string]string{"operation": row.Operation, "request": row.ID.String()}
+	if row.AgentID != nil {
+		p["agent"] = row.AgentID.String()
+	}
+	if row.SubjectKind == subjectGate {
+		var err error
+		if typ, p, err = gateNotice(ctx, dbq.New(tx), org, row, typ); err != nil {
+			return err
+		}
+	}
 	for k, v := range params {
 		p[k] = v
 	}
@@ -64,4 +74,25 @@ func send(ctx context.Context, tx db.TenantTx, n Notifier, org ids.OrgID, row db
 		DedupeKey: typ + ":" + row.ID.String(),
 	})
 	return err
+}
+
+// gateNotice maps an approval notice of an automation gate to its gate
+// type (approval.decided → automation.gate_decided), naming the automation
+// and the step instead of an agent and an operation (D25a).
+func gateNotice(ctx context.Context, q *dbq.Queries, org ids.OrgID, row dbq.PcApprovalRequest, typ string,
+) (string, map[string]string, error) {
+	name := ""
+	if row.RequestedByAutomation != nil {
+		a, err := q.GetAutomation(ctx, org, *row.RequestedByAutomation)
+		if err != nil {
+			return "", nil, err
+		}
+		name = a.Name
+	}
+	step := ""
+	if row.StepID != nil {
+		step = *row.StepID
+	}
+	return "automation.gate_" + strings.TrimPrefix(typ, "approval."),
+		map[string]string{"automation": name, "step": step, "request": row.ID.String()}, nil
 }

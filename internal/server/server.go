@@ -419,6 +419,13 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if evidenceJobs, err = registerM10EdgesJobs(evidenceJobs, jreg, pool, kp, bill, m5, cfg.Auth.PublicURL, log); err != nil {
 			return err
 		}
+		if evidenceJobs, err = registerAutomationTriggersJobs(evidenceJobs, jreg, pool, kp, bill, cfg.Auth.PublicURL, log); err != nil {
+			return err
+		}
+		if evidenceJobs, err = registerAutomationEngineJobs(evidenceJobs, jreg, pool, kp, bill, cfg.Auth.PublicURL,
+			m5.notifications, log); err != nil {
+			return err
+		}
 		reflexJobs, err := registerReflexCoreJobs(jreg, pool, cfg.CEL, bill, m5.notifications, log)
 		if err != nil {
 			return err
@@ -644,10 +651,15 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	registerReflexCore(rs, d)
 	autos = registerAutomationsCore(rs, d, grants, runs)
-	registerAutomationsEngine(rs, d)
+	registerAutomationsEngine(rs, d, workload, autos)
 	registerAutomationTemplates(rs, d, autos)
+	automationTriggers, err := registerAutomationTriggers(rs, d)
+	if err != nil {
+		return nil, err
+	}
 	mux := http.NewServeMux()
 	edges.mount(mux)
+	automationTriggers.mount(mux)
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)
 	d.oauth.Mount(mux)

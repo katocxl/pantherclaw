@@ -48,8 +48,13 @@ type Eligibility struct {
 // requirement to its own roles.
 func deciderRoles(subjectKind string, reqs []apdomain.Requirement) []string {
 	perms := []td.Permission{td.PermApprovalRespond}
-	if subjectKind == subjectRestoration {
+	switch subjectKind {
+	case subjectRestoration:
 		perms = []td.Permission{td.PermAgentRestore}
+	case subjectGate:
+		// An automation gate is decided by automation.approve holders
+		// only (D25, HR-281).
+		perms = []td.Permission{td.PermAutomationApprove}
 	}
 	if slices.ContainsFunc(reqs, func(r apdomain.Requirement) bool { return r.Kind == apdomain.KindContainment }) {
 		perms = append(perms, td.PermIncidentRespond)
@@ -65,6 +70,9 @@ func deciderRoles(subjectKind string, reqs []apdomain.Requirement) []string {
 
 // subjectRestoration is the subject kind of a restoration request.
 const subjectRestoration = "RESTORATION"
+
+// subjectGate is the subject kind of an automation gate (D25a).
+const subjectGate = "AUTOMATION_GATE"
 
 func principal(user, sa, instance *ids.UUID) gdomain.Principal {
 	switch {

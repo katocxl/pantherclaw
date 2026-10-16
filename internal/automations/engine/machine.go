@@ -315,6 +315,12 @@ func (m *Machine) poll(ctx context.Context, tx pgx.Tx, x *Exec, spec autodomain.
 		return m.record(x, a, refused(ReasonUnsupported))
 	}
 	if x.Mode == autodomain.ModeLive {
+		// A waiting execution is revalidated at every poll too: the kill
+		// switch or a lost authority stops it at its next boundary (D14,
+		// HR-273, HR-283), not only before its next effectful step.
+		if r, err := m.revalidate(ctx, tx, x); err != nil || r != "" {
+			return m.authorityLost(ctx, tx, x, r, err)
+		}
 		if q, err := m.Hooks.Quarantined(ctx, tx, x); err != nil {
 			return err
 		} else if q {
@@ -524,10 +530,8 @@ func (m *Machine) stop(ctx context.Context, tx pgx.Tx, x *Exec, reason string) e
 // finish computes the final state (D27, HR-282), cleans up and records
 // the result.
 func (m *Machine) finish(ctx context.Context, tx pgx.Tx, x *Exec, reason string, canceled bool) error {
-	for _, a := range x.Attempts {
-		if !a.Terminal() {
-			a.State, a.Reason, a.EndedAt, a.WakeAt, a.Dirty = autodomain.StepFailed, cmpOr(reason, ReasonTimeout), m.Now(), time.Time{}, true
-		}
+	if err := m.settle(ctx, tx, x, cmpOr(reason, ReasonTimeout)); err != nil {
+		return err
 	}
 	res := m.account(x)
 	switch {
@@ -601,7 +605,7 @@ func cmpOr(a, b string) string {
 // unknownIrreversible reports a step whose outcome on an irreversible
 // operation is unknown (HR-280).
 func unknownIrreversible(x *Exec) bool {
-	return slices.ContainsFunc(x.Latest(), func(a *Attempt) bool {
+	return slices.ContainsFunc(x.Attempts, func(a *Attempt) bool {
 		return a.State == autodomain.StepUnknown && a.Output[OutputIrreversible] == "true"
 	})
 }
@@ -618,12 +622,14 @@ func (m *Machine) account(x *Exec) Result {
 				res.Compensated = append(res.Compensated, a.StepID)
 			}
 		}
-		switch {
-		case a.Effect == autodomain.EffectChanged:
-			res.Changed = append(res.Changed, a.StepID)
-		case a.Effect == autodomain.EffectUnknown || a.State == autodomain.StepUnknown:
+		switch x.effectOf(a.Index, a.Compensation) {
+		case autodomain.EffectUnknown:
 			res.Unknown = append(res.Unknown, a.StepID)
 			res.Unresolved = append(res.Unresolved, Unresolved{Step: a.StepID, Kind: "UNKNOWN_OUTCOME", Detail: a.Reason})
+		case autodomain.EffectChanged:
+			res.Changed = append(res.Changed, a.StepID)
+		case autodomain.EffectUnchanged, autodomain.EffectNone:
+			res.Unchanged = append(res.Unchanged, a.StepID)
 		default:
 			res.Unchanged = append(res.Unchanged, a.StepID)
 		}
@@ -651,4 +657,73 @@ func (m *Machine) account(x *Exec) Result {
 // D2).
 func finishMet(fs []FinishStatus) bool {
 	return len(fs) > 0 && !slices.ContainsFunc(fs, func(f FinishStatus) bool { return !f.Met })
+}
+
+// effectOf is a step's effect across all its attempts, the strongest
+// first (HR-282): UNKNOWN, then CHANGED, then UNCHANGED. A retried step
+// whose first attempt issued a grant still changed something.
+func (x *Exec) effectOf(index int, compensation bool) autodomain.Effect {
+	out := autodomain.EffectUnchanged
+	for _, a := range x.Attempts {
+		if a.Index != index || a.Compensation != compensation {
+			continue
+		}
+		switch {
+		case a.Effect == autodomain.EffectUnknown || a.State == autodomain.StepUnknown:
+			return autodomain.EffectUnknown
+		case a.Effect == autodomain.EffectChanged:
+			out = autodomain.EffectChanged
+		}
+	}
+	return out
+}
+
+// settle ends every waiting attempt when the execution ends (deadline,
+// cancel, kill switch, authority lost). A LIVE attempt is asked for its
+// final state first, its Expirer or a last Poll, so an unknown outcome of
+// an irreversible operation is never hidden behind a cancel (HR-280); what
+// still waits then fails with reason.
+func (m *Machine) settle(ctx context.Context, tx pgx.Tx, x *Exec, reason string) error {
+	for _, a := range x.Attempts {
+		if a.Terminal() {
+			continue
+		}
+		res := autodomain.StepResult{State: autodomain.StepWaiting}
+		if x.Mode == autodomain.ModeLive || m.Stubbed {
+			specs := x.steps(a.Compensation)
+			if rt, ok := m.Steps[a.Kind]; ok && a.Index < len(specs) {
+				spec := specs[a.Index]
+				if sc, err := m.context(x, spec, a.Index, a.Number); err == nil {
+					sc.Outputs[spec.ID] = a.Output
+					if e, ok := rt.(Expirer); ok {
+						res, err = e.Expire(ctx, tx, sc)
+					} else {
+						res, err = rt.Poll(ctx, tx, sc)
+					}
+					if err != nil {
+						return err
+					}
+				}
+			}
+		}
+		if res.State == autodomain.StepWaiting || res.State == autodomain.StepRunning || !res.Valid() {
+			res = autodomain.StepResult{
+				State: autodomain.StepFailed, Reason: reason, Effect: res.Effect,
+				Output: res.Output, Refs: res.Refs,
+			}
+		}
+		a.Dirty = true
+		a.State, a.Reason = res.State, cmpOr(res.Reason, reason)
+		if res.Output != nil {
+			a.Output = res.Output
+		}
+		if res.Refs != nil {
+			a.Refs = cloneRefs(res.Refs)
+		}
+		if res.Effect != "" {
+			a.Effect = res.Effect
+		}
+		a.EndedAt, a.WakeAt = m.Now(), time.Time{}
+	}
+	return nil
 }

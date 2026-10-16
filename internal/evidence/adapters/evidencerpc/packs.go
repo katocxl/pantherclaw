@@ -81,6 +81,11 @@ func (e *Evidence) CreateEvidencePack(ctx context.Context, req *pantherclawv1.Cr
 	case *pantherclawv1.CreateEvidencePackRequest_TimeRange:
 		r.Kind = pack.ScopeTimeRange
 		rangeOf(s.TimeRange)
+	case *pantherclawv1.CreateEvidencePackRequest_AutomationExecutionId:
+		r.Kind = pack.ScopeAutomationExecution
+		if r.Execution, err = parseID(s.AutomationExecutionId); err != nil {
+			return nil, err
+		}
 	}
 	if req.GetWithin() != nil && r.Kind != pack.ScopeRun && r.Kind != pack.ScopeAgent {
 		return nil, evapp.ErrBadPackScope

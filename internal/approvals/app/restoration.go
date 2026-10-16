@@ -38,11 +38,15 @@ const maxRestoreReason = 1000
 const (
 	subjectAction      = "ACTION"
 	subjectRestoration = "RESTORATION"
+	// subjectGate: an automation gate (G0 M11 part 2 D25, D25a).
+	subjectGate = "AUTOMATION_GATE"
 )
 
 // approvalSubject reports whether requests of kind are approved on the
-// page: held actions and restorations.
-func approvalSubject(kind string) bool { return kind == subjectAction || kind == subjectRestoration }
+// page: held actions, restorations and automation gates.
+func approvalSubject(kind string) bool {
+	return kind == subjectAction || kind == subjectRestoration || kind == subjectGate
+}
 
 // RequestRestoration asks for a suspended agent to be restored to the state
 // it was suspended from (decision 11, F563). The caller must be a person

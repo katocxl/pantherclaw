@@ -1,0 +1,28 @@
+{{template "head" .}}
+<h1>Automation destination: {{.Name}}</h1>
+<p>State: <strong>{{.State}}</strong>. Created at {{.CreatedAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{with .ActivatedAt}}; activated {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}.</p>
+<dl>
+<dt>Destination</dt><dd><code>{{.ID}}</code></dd>
+<dt>URL</dt><dd class="untrusted"><code>{{.URL}}</code></dd>
+<dt>Network</dt><dd>{{if .Internal}}<strong>Internal</strong>: this destination may be a private or loopback address inside your network.{{else}}Public addresses only.{{end}}</dd>
+<dt>Receives</dt><dd>{{range $i, $p := .Purposes}}{{if $i}}, {{end}}<code>{{$p}}</code>{{end}}</dd>
+<dt>Format</dt><dd>JSON webhooks signed with Standard Webhooks</dd>
+{{with .RotationEndsAt}}<dt>Rotation</dt><dd>The previous secret also signs until {{.UTC.Format "2006-01-02 15:04:05 UTC"}}</dd>{{end}}
+</dl>
+{{if .CanManage}}
+{{if eq .State "PENDING"}}
+<h2>Activate</h2>
+<p class="note">Once active, automations whose versions list this destination may send it webhooks{{if .Internal}}, inside your network{{end}}. Check the URL before you go on. Activating needs your security key.</p>
+<p><button type="button" class="danger" data-action="activate" data-path="/automations/destinations/{{.ID}}/activate">Activate with your security key</button></p>
+{{else if or (eq .State "ACTIVE") (eq .State "PAUSED")}}
+<h2>Rotate the secret</h2>
+<p class="note">A new secret is shown once; webhooks carry both signatures for 24 hours. Rotating needs your security key.</p>
+<p><button type="button" data-action="rotate" data-path="/automations/destinations/{{.ID}}/rotate">Rotate with your security key</button></p>
+{{end}}
+{{else}}{{if eq .State "PENDING"}}
+<p class="note">You cannot activate this destination: that needs automation.endpoints.manage and a security key.</p>
+{{end}}{{end}}
+<p id="status" role="status"></p>
+<p><code id="secret"></code></p>
+<script src="/static/automation_endpoints.js"></script>
+{{template "foot" .}}

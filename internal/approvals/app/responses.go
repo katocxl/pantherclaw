@@ -449,6 +449,11 @@ func approved(ctx context.Context, tx db.TenantTx, q *dbq.Queries, orgID ids.Org
 	}
 	now := l.elig.Context.Now
 	by := apdomain.ConsumeBy(now, l.row.DeadlineAt, window)
+	if l.row.SubjectKind == subjectGate {
+		// The gate's step consumes it when it next polls, up to the gate's
+		// own deadline (D25).
+		by = l.row.DeadlineAt
+	}
 	n, err := q.MarkApproved(ctx, &by, orgID, l.row.ID)
 	if err != nil {
 		return err
