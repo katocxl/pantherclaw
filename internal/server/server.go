@@ -645,7 +645,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerReflexCore(rs, d)
 	autos = registerAutomationsCore(rs, d, grants, runs)
 	registerAutomationsEngine(rs, d)
-	registerAutomationTemplates(rs, d)
+	registerAutomationTemplates(rs, d, autos)
 	mux := http.NewServeMux()
 	edges.mount(mux)
 	rpc.Mount(mux, rs)

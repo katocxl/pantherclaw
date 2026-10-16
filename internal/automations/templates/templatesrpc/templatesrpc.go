@@ -48,9 +48,11 @@ type Draft struct {
 	Definition []byte
 }
 
-// Drafts creates a DRAFT automation, its execution identity and a DRAFT
-// version in one transaction, as the caller (core, D5). It checks the
-// caller's permissions like CreateAutomation and CreateDraftVersion.
+// Drafts creates a DRAFT automation with its execution identity, then its
+// DRAFT version, as the caller (core, D5), with the permissions of
+// CreateAutomation and CreateDraftVersion. They are two transactions: when
+// the version fails, the automation stays a DRAFT without a version, as
+// after CreateAutomation alone.
 type Drafts interface {
 	CreateDraft(ctx context.Context, d Draft) (automation, version ids.UUID, err error)
 }
