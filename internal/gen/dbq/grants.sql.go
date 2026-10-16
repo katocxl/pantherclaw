@@ -233,36 +233,38 @@ const getGrant = `-- name: GetGrant :one
 SELECT g.id, g.agent_id, g.instance_id, g.principal_user_id, g.principal_sa_id, g.environment_id, g.parent_id,
        g.depth, g.state, g.current_revision, g.grantor_kind, g.grantor_id, g.basis,
        r.task_ref, r.not_before, r.expires_at, r.bounds, r.requirements, r.limits,
-       r.delegation_depth, r.max_children, r.min_attestation, r.created_at
+       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id
 FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
 WHERE g.org_id = $1 AND g.id = $2
 `
 
 type GetGrantRow struct {
-	ID              ids.UUID
-	AgentID         ids.UUID
-	InstanceID      *ids.UUID
-	PrincipalUserID *ids.UUID
-	PrincipalSaID   *ids.UUID
-	EnvironmentID   ids.UUID
-	ParentID        *ids.UUID
-	Depth           int16
-	State           string
-	CurrentRevision int32
-	GrantorKind     string
-	GrantorID       ids.UUID
-	Basis           string
-	TaskRef         string
-	NotBefore       time.Time
-	ExpiresAt       time.Time
-	Bounds          []byte
-	Requirements    []byte
-	Limits          []byte
-	DelegationDepth int16
-	MaxChildren     int16
-	MinAttestation  int16
-	CreatedAt       time.Time
+	ID                    ids.UUID
+	AgentID               ids.UUID
+	InstanceID            *ids.UUID
+	PrincipalUserID       *ids.UUID
+	PrincipalSaID         *ids.UUID
+	EnvironmentID         ids.UUID
+	ParentID              *ids.UUID
+	Depth                 int16
+	State                 string
+	CurrentRevision       int32
+	GrantorKind           string
+	GrantorID             ids.UUID
+	Basis                 string
+	TaskRef               string
+	NotBefore             time.Time
+	ExpiresAt             time.Time
+	Bounds                []byte
+	Requirements          []byte
+	Limits                []byte
+	DelegationDepth       int16
+	MaxChildren           int16
+	MinAttestation        int16
+	CreatedAt             time.Time
+	CeilingID             *ids.UUID
+	AutomationExecutionID *ids.UUID
 }
 
 // SPDX-License-Identifier: BUSL-1.1
@@ -299,6 +301,8 @@ func (q *Queries) GetGrant(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (G
 		&i.MaxChildren,
 		&i.MinAttestation,
 		&i.CreatedAt,
+		&i.CeilingID,
+		&i.AutomationExecutionID,
 	)
 	return i, err
 }
@@ -307,7 +311,7 @@ const getGrantChain = `-- name: GetGrantChain :many
 SELECT g.id, g.agent_id, g.instance_id, g.principal_user_id, g.principal_sa_id, g.environment_id, g.parent_id,
        g.depth, g.state, g.current_revision, g.grantor_kind, g.grantor_id, g.basis,
        r.task_ref, r.not_before, r.expires_at, r.bounds, r.requirements, r.limits,
-       r.delegation_depth, r.max_children, r.min_attestation, r.created_at
+       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id
 FROM pc.grant_lineage l
 JOIN pc.grants g ON g.org_id = l.org_id AND g.id = l.ancestor_id
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
@@ -316,29 +320,31 @@ ORDER BY l.distance DESC
 `
 
 type GetGrantChainRow struct {
-	ID              ids.UUID
-	AgentID         ids.UUID
-	InstanceID      *ids.UUID
-	PrincipalUserID *ids.UUID
-	PrincipalSaID   *ids.UUID
-	EnvironmentID   ids.UUID
-	ParentID        *ids.UUID
-	Depth           int16
-	State           string
-	CurrentRevision int32
-	GrantorKind     string
-	GrantorID       ids.UUID
-	Basis           string
-	TaskRef         string
-	NotBefore       time.Time
-	ExpiresAt       time.Time
-	Bounds          []byte
-	Requirements    []byte
-	Limits          []byte
-	DelegationDepth int16
-	MaxChildren     int16
-	MinAttestation  int16
-	CreatedAt       time.Time
+	ID                    ids.UUID
+	AgentID               ids.UUID
+	InstanceID            *ids.UUID
+	PrincipalUserID       *ids.UUID
+	PrincipalSaID         *ids.UUID
+	EnvironmentID         ids.UUID
+	ParentID              *ids.UUID
+	Depth                 int16
+	State                 string
+	CurrentRevision       int32
+	GrantorKind           string
+	GrantorID             ids.UUID
+	Basis                 string
+	TaskRef               string
+	NotBefore             time.Time
+	ExpiresAt             time.Time
+	Bounds                []byte
+	Requirements          []byte
+	Limits                []byte
+	DelegationDepth       int16
+	MaxChildren           int16
+	MinAttestation        int16
+	CreatedAt             time.Time
+	CeilingID             *ids.UUID
+	AutomationExecutionID *ids.UUID
 }
 
 // GetGrantChain returns a grant and every ancestor, root first.
@@ -375,6 +381,8 @@ func (q *Queries) GetGrantChain(ctx context.Context, orgID ids.OrgID, iD ids.UUI
 			&i.MaxChildren,
 			&i.MinAttestation,
 			&i.CreatedAt,
+			&i.CeilingID,
+			&i.AutomationExecutionID,
 		); err != nil {
 			return nil, err
 		}
@@ -468,26 +476,30 @@ func (q *Queries) InsertEnvelopeRevision(ctx context.Context, arg InsertEnvelope
 
 const insertGrant = `-- name: InsertGrant :exec
 INSERT INTO pc.grants (org_id, id, agent_id, instance_id, principal_user_id, principal_sa_id, environment_id,
-                       parent_id, depth, current_revision, grantor_kind, grantor_id, basis)
+                       parent_id, depth, current_revision, grantor_kind, grantor_id, basis, ceiling_id,
+                       automation_execution_id)
 VALUES ($1, $2, $3, $4, $5,
         $6, $7, $8, $9,
-        $10, $11, $12, $13)
+        $10, $11, $12, $13, $14,
+        $15)
 `
 
 type InsertGrantParams struct {
-	OrgID           ids.OrgID
-	ID              ids.UUID
-	AgentID         ids.UUID
-	InstanceID      *ids.UUID
-	PrincipalUserID *ids.UUID
-	PrincipalSaID   *ids.UUID
-	EnvironmentID   ids.UUID
-	ParentID        *ids.UUID
-	Depth           int16
-	CurrentRevision int32
-	GrantorKind     string
-	GrantorID       ids.UUID
-	Basis           string
+	OrgID                 ids.OrgID
+	ID                    ids.UUID
+	AgentID               ids.UUID
+	InstanceID            *ids.UUID
+	PrincipalUserID       *ids.UUID
+	PrincipalSaID         *ids.UUID
+	EnvironmentID         ids.UUID
+	ParentID              *ids.UUID
+	Depth                 int16
+	CurrentRevision       int32
+	GrantorKind           string
+	GrantorID             ids.UUID
+	Basis                 string
+	CeilingID             *ids.UUID
+	AutomationExecutionID *ids.UUID
 }
 
 func (q *Queries) InsertGrant(ctx context.Context, arg InsertGrantParams) error {
@@ -505,6 +517,8 @@ func (q *Queries) InsertGrant(ctx context.Context, arg InsertGrantParams) error 
 		arg.GrantorKind,
 		arg.GrantorID,
 		arg.Basis,
+		arg.CeilingID,
+		arg.AutomationExecutionID,
 	)
 	return err
 }

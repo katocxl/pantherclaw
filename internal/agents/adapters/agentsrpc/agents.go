@@ -30,6 +30,9 @@ type Agents struct {
 	pantherclawv1connect.UnimplementedAgentServiceHandler
 	inv     *app.Inventory
 	restore *approvals.Service
+	// automations lists automations as execution identities (G0 M11 part 2
+	// D15); nil when automations are not wired.
+	automations AutomationIdentities
 }
 
 // NewAgents returns the AgentService handler.
@@ -202,6 +205,13 @@ func (s *Agents) ListAgents(ctx context.Context, req *pantherclawv1.ListAgentsRe
 	for _, a := range p.Items {
 		out.Agents = append(out.Agents, agentProto(a))
 	}
+	if req.GetIncludeAutomations() && req.GetPageToken() == "" {
+		if s.automations == nil {
+			out.AutomationsNote = "automations are not available on this server"
+		} else if out.Automations, out.AutomationsNote, err = s.automations(ctx); err != nil {
+			return nil, err
+		}
+	}
 	return out, nil
 }
 
@@ -348,4 +358,14 @@ func scanResult(r app.ScanResult) *pantherclawv1.SubmitScanFindingsResponse {
 	return &pantherclawv1.SubmitScanFindingsResponse{
 		Created: int32(r.Created), Counted: int32(r.Counted), Dropped: int32(r.Dropped), //nolint:gosec // G115: at most 200
 	}
+}
+
+// AutomationIdentities lists the org's automations for the inventory, or
+// none with a note when the caller may not read them (D15).
+type AutomationIdentities func(ctx context.Context) ([]*pantherclawv1.AutomationIdentity, string, error)
+
+// WithAutomations adds automations to ListAgents (D15, F025).
+func (s *Agents) WithAutomations(f AutomationIdentities) *Agents {
+	s.automations = f
+	return s
 }

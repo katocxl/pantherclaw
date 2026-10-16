@@ -55,6 +55,9 @@ const (
 	ConfirmNone          ConfirmAt = ""
 	ConfirmCeilingAgents ConfirmAt = "CEILING_AGENTS"
 	ConfirmOrg           ConfirmAt = "ORG"
+	// ConfirmEvidence: at the paths of a build_digest step's evidence
+	// agents, or at the org for all (D85).
+	ConfirmEvidence ConfirmAt = "EVIDENCE"
 )
 
 // Platform scope options (D3 column "scope"). Destination ids are also
@@ -103,6 +106,11 @@ type KindSpec struct {
 	// confirmer must hold at ConfirmAt (D7, HR-272).
 	ConfirmerPermissions []string
 	ConfirmAt            ConfirmAt
+	// ConfirmRevocable: a use that revokes beyond the execution's own
+	// grants (revoke_grant TRIGGER_GRANT or CEILING_AGENTS, contain
+	// REVOKE_GRANT) needs grant.revoke at authority.revocable instead: each
+	// listed agent's path, or the org for all (D65).
+	ConfirmRevocable bool
 	// DeciderPermission is what a gate's deciders need.
 	DeciderPermission string
 	// Templatable are the `with` fields that may hold {{params.x}} or
@@ -145,7 +153,8 @@ const (
 	permEvidenceExport  = "evidence.export"
 	permIncidentRespond = "incident.respond"
 	permCaseManage      = "case.manage"
-	permAutomationMgr   = "automation.manage"
+	permAutomationPub   = "automation.publish"
+	permEvidenceRead    = "evidence.read"
 	permAutomationAppr  = "automation.approve"
 	permCoverageRead    = "coverage.read"
 	permAgentRead       = "agent.read"
@@ -180,7 +189,7 @@ var Catalog = map[string]KindSpec{
 	},
 	KindRevokeGrant: {
 		Kind: KindRevokeGrant, Owner: OwnerEngine, Edition: EditionTeam, Effectful: true, Narrowing: true, RetrySafe: true,
-		ConfirmerPermissions: []string{permGrantRevoke}, ConfirmAt: ConfirmCeilingAgents,
+		ConfirmerPermissions: []string{permGrantRevoke}, ConfirmAt: ConfirmCeilingAgents, ConfirmRevocable: true,
 		Templatable: []string{"/reason"}, Scopes: []string{ScopeExecution, ScopeTriggerGrant, ScopeCeilingAgents},
 		Finishes: []FinishCondition{FinishGrantRevoked}, newWith: newOf[RevokeGrantWith](),
 	},
@@ -201,7 +210,7 @@ var Catalog = map[string]KindSpec{
 	},
 	KindContain: {
 		Kind: KindContain, Owner: OwnerTemplates, Edition: EditionBusiness, Effectful: true, RetrySafe: true,
-		ConfirmerPermissions: []string{permIncidentRespond}, ConfirmAt: ConfirmOrg,
+		ConfirmerPermissions: []string{permIncidentRespond}, ConfirmAt: ConfirmOrg, ConfirmRevocable: true,
 		Templatable: []string{"/reason"}, Scopes: []string{ScopeTriggerRun, ScopeTriggerGrant},
 		Finishes: []FinishCondition{FinishContainmentConfirmed}, newWith: newOf[ContainWith](),
 	},
@@ -213,12 +222,12 @@ var Catalog = map[string]KindSpec{
 	},
 	KindPauseLaunches: {
 		Kind: KindPauseLaunches, Owner: OwnerTemplates, Edition: EditionTeam, Effectful: true, RetrySafe: true,
-		ConfirmerPermissions: []string{permAutomationMgr}, ConfirmAt: ConfirmOrg,
+		ConfirmerPermissions: []string{permAutomationPub}, ConfirmAt: ConfirmOrg,
 		Scopes: []string{ScopeAffected, ScopeList}, newWith: newOf[PauseLaunchesWith](),
 	},
 	KindResumeLaunches: {
 		Kind: KindResumeLaunches, Owner: OwnerTemplates, Edition: EditionTeam, Effectful: true, RetrySafe: true,
-		ConfirmerPermissions: []string{permAutomationMgr}, ConfirmAt: ConfirmOrg,
+		ConfirmerPermissions: []string{permAutomationPub}, ConfirmAt: ConfirmOrg,
 		Scopes: []string{ScopeAffected, ScopeList}, newWith: newOf[ResumeLaunchesWith](),
 	},
 	KindWaitCoverage: {
@@ -264,7 +273,7 @@ var Catalog = map[string]KindSpec{
 	},
 	KindBuildDigest: {
 		Kind: KindBuildDigest, Owner: OwnerTemplates, Edition: EditionTeam, Effectful: true, RetrySafe: true,
-		ConfirmerPermissions: []string{permEvidenceExport}, ConfirmAt: ConfirmOrg,
+		ConfirmerPermissions: []string{permEvidenceRead, permEvidenceExport}, ConfirmAt: ConfirmEvidence,
 		Templatable: []string{"/title"}, Scopes: []string{ScopeTimeRange, ScopeTriggerCase}, newWith: newOf[BuildDigestWith](),
 	},
 }
