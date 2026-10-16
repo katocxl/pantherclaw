@@ -288,16 +288,16 @@ func (a *autoStack) withRefund(t *testing.T, raw []byte, amount string) []byte {
 // latestExecution is the automation's newest execution.
 func (a *autoStack) latestExecution(t *testing.T, automation ids.UUID) ids.UUID {
 	t.Helper()
-	var id ids.UUID
-	eventually(t, 10*time.Second, "an execution", func() (bool, error) {
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(250 * time.Millisecond) {
 		got := a.r.s.row(t, "SELECT coalesce((SELECT id::text FROM pc.automation_executions WHERE automation_id = $1 ORDER BY created_at DESC LIMIT 1), '')", automation)
-		if got == "" {
-			return false, nil
+		if got != "" {
+			return mustUUID(t, got)
 		}
-		id = mustUUID(t, got)
-		return true, nil
-	})
-	return id
+		if time.Now().After(deadline) {
+			t.Fatalf("no execution of %s within 10s; its triggers: %s", automation, a.r.s.row(t, `SELECT coalesce(string_agg(kind || ':' || state || ':' || coalesce(reason, ''),
+				', ' ORDER BY received_at), 'none') FROM pc.automation_triggers WHERE automation_id = $1`, automation))
+		}
+	}
 }
 
 // assuranceCases are a template's baseline tests as assurance's cases, as
@@ -604,14 +604,16 @@ func (a *autoStack) reciprocalLoop(t *testing.T) {
 	f := &triggerstest.Fixture{Pool: s.pool, Org: s.org, User: a.r.aliceID}
 	ping := f.Automation(t, "loop-ping", f.Definition(`"event":{"on":"grant.revoked"}`, ""), autodomain.RolloutShadow)
 	pong := f.Automation(t, "loop-pong", f.Definition(`"event":{"on":"grant.issued"}`, ""), autodomain.RolloutShadow)
-	feed := func() {
+	feed := func() int {
 		t.Helper()
 		if _, err := ledger.ChainAll(ctx, s.pool, s.org, 1000); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := a.triggers.ProcessFeed(ctx, s.org); err != nil {
+		r, err := a.triggers.ProcessFeed(ctx, s.org)
+		if err != nil {
 			t.Fatal(err)
 		}
+		return r.Events
 	}
 	record := func(name string, actor evdomain.Actor, details map[string]string) {
 		t.Helper()
@@ -624,7 +626,8 @@ func (a *autoStack) reciprocalLoop(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		feed()
+		// The e2e server chains the ledger too: feed until the event is in.
+		eventually(t, 15*time.Second, "the feed to take "+name, func() (bool, error) { return feed() > 0, nil })
 	}
 	sa := func(x triggerstest.Automation) evdomain.Actor {
 		return evdomain.Actor{Type: "service_account", ID: x.ServiceAccount.String()}
