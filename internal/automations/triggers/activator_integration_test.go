@@ -60,7 +60,7 @@ func (h *harness) activator(t *testing.T, fn func(ctx context.Context, act Activ
 func TestActivator_SchedulesFollowTheEnabledVersion(t *testing.T) {
 	h := newHarness(t)
 	f := h.f
-	def := f.Definition("nightly", `"schedule":{"cron":"30 1 * * *","timezone":"Europe/London"}`, "")
+	def := f.Definition(`"schedule":{"cron":"30 1 * * *","timezone":"Europe/London"}`, "")
 	a := f.Automation(t, "nightly", def, autodomain.RolloutFull)
 	h.activator(t, func(ctx context.Context, act Activator, tx db.TenantTx) error {
 		return act.Activate(ctx, tx.Pgx(), a.ID, a.Version)
@@ -97,7 +97,7 @@ func TestActivator_SchedulesFollowTheEnabledVersion(t *testing.T) {
 		t.Fatal("resume did not restart the schedule from now")
 	}
 	// A version without a schedule removes it.
-	v2 := f.NewVersion(t, a, f.Definition("nightly", `"manual":{}`, ""))
+	v2 := f.NewVersion(t, a, f.Definition(`"manual":{}`, ""))
 	h.activator(t, func(ctx context.Context, act Activator, tx db.TenantTx) error {
 		return act.Activate(ctx, tx.Pgx(), a.ID, v2)
 	})
@@ -105,7 +105,7 @@ func TestActivator_SchedulesFollowTheEnabledVersion(t *testing.T) {
 		t.Fatalf("schedules after a manual version: %d", n)
 	}
 	// Activate refuses a version of another automation.
-	b := f.Automation(t, "other", f.Definition("other", `"manual":{}`, ""), autodomain.RolloutFull)
+	b := f.Automation(t, "other", f.Definition(`"manual":{}`, ""), autodomain.RolloutFull)
 	if err := f.Pool.InTenantTx(context.Background(), f.Org, func(ctx context.Context, tx db.TenantTx) error {
 		return h.svc.Activator().Activate(ctx, tx.Pgx(), a.ID, b.Version)
 	}); err == nil {
@@ -119,13 +119,13 @@ func TestActivator_SchedulesFollowTheEnabledVersion(t *testing.T) {
 func TestHR278_PausedAutomationsFollowTheirPolicy(t *testing.T) {
 	h := newHarness(t)
 	f := h.f
-	disc := f.Automation(t, "discard", f.Definition("discard", `"manual":{}`, ""), autodomain.RolloutFull)
+	disc := f.Automation(t, "discard", f.Definition(`"manual":{}`, ""), autodomain.RolloutFull)
 	f.Pause(t, disc)
 	if out := h.fire(t, disc, "manual:d1", nil, Lineage{}); out.State != StateDiscarded || out.Reason != ReasonPaused {
 		t.Fatalf("DISCARD: %+v", out)
 	}
 
-	q := f.Automation(t, "queue", f.Definition("queue", `"manual":{}`, `"paused_triggers":"QUEUE","queue_max":2`), autodomain.RolloutFull)
+	q := f.Automation(t, "queue", f.Definition(`"manual":{}`, `"paused_triggers":"QUEUE","queue_max":2`), autodomain.RolloutFull)
 	f.Pause(t, q)
 	for i, want := range []State{StateQueued, StateQueued, StateDiscarded} {
 		out := h.fire(t, q, "manual:q"+string(rune('a'+i)), nil, Lineage{})
@@ -155,7 +155,7 @@ func TestHR278_PausedAutomationsFollowTheirPolicy(t *testing.T) {
 	}
 
 	// Queued for v1, resumed under v2: expired, never started.
-	e := f.Automation(t, "expire", f.Definition("expire", `"manual":{}`, `"paused_triggers":"EXPIRE"`), autodomain.RolloutFull)
+	e := f.Automation(t, "expire", f.Definition(`"manual":{}`, `"paused_triggers":"EXPIRE"`), autodomain.RolloutFull)
 	f.Pause(t, e)
 	if out := h.fire(t, e, "manual:e1", nil, Lineage{}); out.State != StateQueued {
 		t.Fatalf("EXPIRE queues: %+v", out)
@@ -163,7 +163,7 @@ func TestHR278_PausedAutomationsFollowTheirPolicy(t *testing.T) {
 	if n := f.Count(t, "SELECT count(*) FROM pc.automation_triggers WHERE org_id = $1 AND automation_id = $2 AND queued_until > now() + interval '23 hours'", e.ID); n != 1 {
 		t.Fatal("EXPIRE trigger has no 24 h time to live")
 	}
-	f.NewVersion(t, e, f.Definition("expire", `"manual":{}`, `"paused_triggers":"EXPIRE"`))
+	f.NewVersion(t, e, f.Definition(`"manual":{}`, `"paused_triggers":"EXPIRE"`))
 	f.Unpause(t, e)
 	before := h.st.Count()
 	h.activator(t, func(ctx context.Context, act Activator, tx db.TenantTx) error {
@@ -188,7 +188,7 @@ func TestHR278_PausedAutomationsFollowTheirPolicy(t *testing.T) {
 func TestHR277_OneExecutionPerKey(t *testing.T) {
 	h := newHarness(t)
 	f := h.f
-	a := f.Automation(t, "dedupe", f.Definition("dedupe", `"manual":{"params":{"ticket":{"type":"string","pattern":"T-[0-9]+"}}},"dedupe":{"key":"{{params.ticket}}","window":"1d"}`, ""), autodomain.RolloutFull)
+	a := f.Automation(t, "dedupe", f.Definition(`"manual":{"params":{"ticket":{"type":"string","pattern":"T-[0-9]+"}}},"dedupe":{"key":"{{params.ticket}}","window":"1d"}`, ""), autodomain.RolloutFull)
 	p := func(v string) map[string]autodomain.Value { return map[string]autodomain.Value{"ticket": str(v)} }
 	if out := h.fire(t, a, "manual:1", p("T-1"), Lineage{}); out.State != StateAccepted || out.Execution.IsZero() {
 		t.Fatalf("first: %+v", out)

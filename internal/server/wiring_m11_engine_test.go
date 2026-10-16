@@ -4,10 +4,15 @@
 package server
 
 import (
+	"fmt"
+	"log/slog"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/automations/engine/adapters/pgengine"
+	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/automations/steps"
+	"github.com/katocxl/pantherclaw/internal/automations/triggers/endpoints"
+	"github.com/katocxl/pantherclaw/internal/billing"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	runsapp "github.com/katocxl/pantherclaw/internal/runs/app"
@@ -19,26 +24,28 @@ import (
 // them, the promotion gate included) and its svc as Pauser, Voider and
 // Ceilings. The core gets the engine's, triggers' and destinations' ports.
 // Both process roles: RoleAll attaches the API's grants and runs before the
-// workers start; RoleWorker attaches its own in the core jobs, after the
-// engine jobs are registered.
+// workers start; RoleWorker attaches the process's after the engine jobs
+// are registered (the core jobs refuse to start without them, D112 X1).
 func TestAutomationEnginePortsAreWired(t *testing.T) {
 	roles := map[string]func(core *automationsCore){
 		RoleAll: func(core *automationsCore) {
 			core.attach(nil, &grantsapp.Service{}, runsapp.New(nil))
 		},
 		RoleWorker: func(core *automationsCore) {
+			core.attach(nil, &grantsapp.Service{}, runsapp.New(nil))
 			if _, err := registerAutomationsCoreJobs(nil, jobs.NewRegistry(), core, nil); err != nil {
 				t.Fatal(err)
 			}
 		},
 	}
+	bill, log := &billing.Service{}, slog.New(slog.DiscardHandler)
 	for role, attach := range roles {
 		t.Run(role, func(t *testing.T) {
 			core := newAutomationsCore(nil, nil, "")
 			if role == RoleAll {
 				attach(core)
 			}
-			e := driverEngine(core, nil, nil, "", nil, nil)
+			e := driverEngine(core, engineDeps{bill: bill, log: log})
 			if role == RoleWorker {
 				attach(core)
 			}
@@ -66,17 +73,17 @@ func TestAutomationEnginePortsAreWired(t *testing.T) {
 			if p := automationPauser(core); any(p) != any(core.svc) {
 				t.Fatalf("triggers' Pauser %T is not the shared core", p)
 			}
-			starter, ok := automationStarter(core, nil, nil, nil).(*pgengine.Engine)
+			starter, ok := automationStarter(core, nil, bill, log).(*pgengine.Engine)
 			if !ok {
 				t.Fatal("triggers' Starter is not the engine")
 			}
 			sharesCore(t, "starter", starter, core)
-			lookup, ok := automationExecutions(core, nil).(*pgengine.Engine)
+			lookup, ok := automationExecutions(core, nil, bill, log).(*pgengine.Engine)
 			if !ok {
 				t.Fatal("triggers' ExecutionLookup is not the engine")
 			}
 			sharesCore(t, "lookup", lookup, core)
-			packs, ok := newPackBuilder(&Config{}, nil, nil, core, nil).Executions.(*pgengine.Engine)
+			packs, ok := newPackBuilder(&Config{}, nil, nil, core, bill, log).Executions.(*pgengine.Engine)
 			if !ok {
 				t.Fatal("packbuild.Executions is not the engine")
 			}
@@ -86,11 +93,14 @@ func TestAutomationEnginePortsAreWired(t *testing.T) {
 }
 
 // sharesCore fails unless e pauses, voids and checks ceilings through the
-// shared core.
+// shared core, and has the edition and the logger (D112).
 func sharesCore(t *testing.T, name string, e *pgengine.Engine, core *automationsCore) {
 	t.Helper()
 	if any(e.Pauser) != any(core.svc) || any(e.Voider) != any(core.svc) || any(e.Ceilings) != any(core.svc) {
 		t.Fatalf("%s engine: Pauser, Voider or Ceilings is not the shared core", name)
+	}
+	if e.Editions == nil || e.Log == nil {
+		t.Fatalf("%s engine: Editions %v, Log %v", name, e.Editions != nil, e.Log != nil)
 	}
 }
 
@@ -99,5 +109,46 @@ func sharesCore(t *testing.T, name string, e *pgengine.Engine, core *automations
 func TestAutomationWithdrawUsesTheGrantScope(t *testing.T) {
 	if steps.RevokeOneGrant != grantsapp.RevokeScopeGrant {
 		t.Fatalf("steps %q, core %q", steps.RevokeOneGrant, grantsapp.RevokeScopeGrant)
+	}
+}
+
+// D108, D108a: the driver builds the security steps from the process's
+// core and the server config.
+func TestAutomationSecurityStepsGetTheConfig(t *testing.T) {
+	var got []securityStepDeps
+	prev := automationSecuritySteps
+	automationSecuritySteps = func(d securityStepDeps) autoports.StepRegistry {
+		got = append(got, d)
+		return nil
+	}
+	t.Cleanup(func() { automationSecuritySteps = prev })
+	cfg := &Config{}
+	cfg.CEL.MaxCost = 1234
+	core := newAutomationsCore(nil, nil, "")
+	if _, err := registerAutomationEngineJobs(nil, jobs.NewRegistry(), core, cfg, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 {
+		t.Fatal("the driver built no security steps")
+	}
+	d := got[0]
+	if d.Core != core || d.CEL != cfg.CEL || d.Freshness != freshnessOf(cfg) || d.LogOrigin != cfg.logOrigin() {
+		t.Fatalf("security step deps %+v", d)
+	}
+}
+
+// D97 N1, D105 N3: the cleanup recognizes triggers' exported Cancel errors
+// (errors.Is, no copied reason), so a delivery that may have been sent is
+// never reported canceled.
+func TestAutomationCleanupClassifiesDeliveryErrors(t *testing.T) {
+	c, ok := driverEngine(newAutomationsCore(nil, nil, ""), engineDeps{}).Cleaner.(pgengine.Cleanup)
+	if !ok || c.MaybeSent == nil || c.NotPending == nil {
+		t.Fatal("the driver's cleanup cannot classify Cancel errors")
+	}
+	if !c.MaybeSent(fmt.Errorf("cancel: %w", endpoints.ErrDeliveryMayHaveBeenSent)) || c.MaybeSent(endpoints.ErrDeliveryNotPending) {
+		t.Fatal("MaybeSent does not match triggers' ErrDeliveryMayHaveBeenSent alone")
+	}
+	if !c.NotPending(endpoints.ErrDeliveryNotPending) || c.NotPending(endpoints.ErrDeliveryMayHaveBeenSent) {
+		t.Fatal("NotPending does not match triggers' ErrDeliveryNotPending alone")
 	}
 }

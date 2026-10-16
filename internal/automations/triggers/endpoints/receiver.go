@@ -286,6 +286,7 @@ func parseBody(body []byte, types []string) (inbound.Event, string) {
 // signature does (D87 L10).
 var dummyKey = []byte("pantherclaw-automations-no-source-key")
 
-func dummyVerify(hdr inbound.Headers, body []byte) {
+// dummyVerify is a variable so tests can see the dummy path taken.
+var dummyVerify = func(hdr inbound.Headers, body []byte) {
 	_ = inbound.VerifySignature([][]byte{dummyKey}, hdr, body)
 }

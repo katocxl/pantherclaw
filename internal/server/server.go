@@ -381,7 +381,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if err := authority.RegisterSweeper(jreg, pool, svc, cfg.Authority.StaleDispatch.D()); err != nil {
 			return err
 		}
-		evidenceJobs, err := registerEvidenceWorkers(jreg, cfg, pool, reg, m5.notifications, autos, log)
+		evidenceJobs, err := registerEvidenceWorkers(jreg, cfg, pool, reg, m5.notifications, autos, bill, log)
 		if err != nil {
 			return err
 		}
@@ -426,7 +426,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if evidenceJobs, err = registerAutomationTriggersJobs(evidenceJobs, jreg, pool, kp, bill, cfg.Auth.PublicURL, autos, log); err != nil {
 			return err
 		}
-		if evidenceJobs, err = registerAutomationEngineJobs(evidenceJobs, jreg, autos, kp, bill, cfg.Auth.PublicURL,
+		if evidenceJobs, err = registerAutomationEngineJobs(evidenceJobs, jreg, autos, cfg, kp, bill,
 			m5.notifications, log); err != nil {
 			return err
 		}
@@ -664,7 +664,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		return nil, err
 	}
 	registerAutomationsEngine(rs, d, workload, autos)
-	automationTriggers, err := registerAutomationTriggers(rs, d)
+	automationTriggers, err := registerAutomationTriggers(rs, d, autos)
 	if err != nil {
 		return nil, err
 	}

@@ -158,10 +158,10 @@ func (s *Service) closingCases(ctx context.Context, q *dbq.Queries, org ids.OrgI
 
 // lineages finds, per event, the lineage it inherits (D23): an event an
 // automation's identity recorded (its execution from the audit details),
-// or one about a run or grant of an automation execution, descends from
-// that execution's trigger.
+// or one about a run, grant or gate request of an automation execution,
+// descends from that execution's trigger.
 func (s *Service) lineages(ctx context.Context, q *dbq.Queries, org ids.OrgID, events []feed.Event) ([]Lineage, error) {
-	var sas, runs, grants []ids.UUID
+	var sas, runs, grants, approvals []ids.UUID
 	for _, e := range events {
 		if e.ActorType == "service_account" {
 			if id, err := ids.ParseUUID(e.ActorID); err == nil {
@@ -176,6 +176,11 @@ func (s *Service) lineages(ctx context.Context, q *dbq.Queries, org ids.OrgID, e
 		if v, ok := e.Subject(reflexdomain.SubjectGrant); ok {
 			if id, err := ids.ParseUUID(v); err == nil {
 				grants = append(grants, id)
+			}
+		}
+		if e.Attrs["object_type"] == "approval_request" {
+			if id, err := ids.ParseUUID(e.Attrs["object_id"]); err == nil {
+				approvals = append(approvals, id)
 			}
 		}
 	}
@@ -209,6 +214,17 @@ func (s *Service) lineages(ctx context.Context, q *dbq.Queries, org ids.OrgID, e
 			grantExec[r.ID.String()] = r.ExecutionID
 		}
 	}
+	// A gate request descends from its execution (D87 L6).
+	approvalExec := map[string]ids.UUID{}
+	if len(approvals) > 0 {
+		rows, err := q.ApprovalsAutomationExecution(ctx, org, approvals)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range rows {
+			approvalExec[r.ID.String()] = r.ExecutionID
+		}
+	}
 	execs := map[ids.UUID]Lineage{}
 	lineageOf := func(exec ids.UUID) (Lineage, error) {
 		if l, ok := execs[exec]; ok {
@@ -231,7 +247,9 @@ func (s *Service) lineages(ctx context.Context, q *dbq.Queries, org ids.OrgID, e
 			}
 			cands = append(cands, l)
 		}
-		for _, x := range []ids.UUID{runExec[subjectOf(e, reflexdomain.SubjectRun)], grantExec[subjectOf(e, reflexdomain.SubjectGrant)]} {
+		for _, x := range []ids.UUID{
+			runExec[subjectOf(e, reflexdomain.SubjectRun)], grantExec[subjectOf(e, reflexdomain.SubjectGrant)], approvalExec[approvalOf(e)],
+		} {
 			if x.IsZero() {
 				continue
 			}
@@ -396,4 +414,11 @@ func (s *Service) count(ctx context.Context, tx db.TenantTx, l listener, e feed.
 		return 1, nil
 	}
 	return 0, nil
+}
+
+func approvalOf(e feed.Event) string {
+	if e.Attrs["object_type"] != "approval_request" {
+		return ""
+	}
+	return e.Attrs["object_id"]
 }

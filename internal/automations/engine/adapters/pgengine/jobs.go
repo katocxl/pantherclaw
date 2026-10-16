@@ -34,11 +34,23 @@ func unique() river.InsertOpts {
 	}}
 }
 
-// ExecutionArgs asks for one execution to be advanced. Job args carry ids
-// only (HR-056).
+// ExecutionKind is the kind of an execution's id in job arguments.
+type ExecutionKind struct{}
+
+// KindName implements ids.Kind.
+func (ExecutionKind) KindName() string { return "automation execution" }
+
+// ExecutionArgs asks for one execution to be advanced. Job args carry
+// typed ids only (HR-056).
 type ExecutionArgs struct {
-	Org       ids.OrgID `json:"org"`
-	Execution ids.UUID  `json:"execution"`
+	Org       ids.OrgID             `json:"org"`
+	Execution ids.ID[ExecutionKind] `json:"execution"`
+}
+
+// executionArgs is the job that advances execution id.
+func executionArgs(org ids.OrgID, id ids.UUID) (ExecutionArgs, error) {
+	x, err := ids.FromUUID[ExecutionKind](id)
+	return ExecutionArgs{Org: org, Execution: x}, err
 }
 
 // Kind implements river.JobArgs.
@@ -53,7 +65,7 @@ type executionWorker struct {
 }
 
 func (w *executionWorker) Work(ctx context.Context, job *river.Job[ExecutionArgs]) error {
-	return w.e.Advance(ctx, job.Args.Org, job.Args.Execution)
+	return w.e.Advance(ctx, job.Args.Org, job.Args.Execution.UUID())
 }
 
 // SweepOrgArgs wakes one org's due executions.
@@ -98,7 +110,11 @@ func (e *Engine) Sweep(ctx context.Context, org ids.OrgID) (int, error) {
 	}
 	params := make([]river.InsertManyParams, 0, len(due))
 	for _, id := range due {
-		params = append(params, river.InsertManyParams{Args: ExecutionArgs{Org: org, Execution: id}})
+		args, err := executionArgs(org, id)
+		if err != nil {
+			return 0, err
+		}
+		params = append(params, river.InsertManyParams{Args: args})
 	}
 	_, err = client.InsertMany(ctx, params)
 	return len(due), err

@@ -22,6 +22,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/automations/triggers"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/endpoints"
 	"github.com/katocxl/pantherclaw/internal/billing"
+	coverage "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/packbuild"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -29,6 +30,7 @@ import (
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/workloadrpc"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
@@ -39,19 +41,34 @@ import (
 )
 
 // automationSecuritySteps adds the templates stream's security steps
-// (D31); nil: none.
-var automationSecuritySteps func(pool *db.Pool, d steps.Deps) autoports.StepRegistry
+// (D31, D108); nil: none.
+var automationSecuritySteps func(securityStepDeps) autoports.StepRegistry
+
+// securityStepDeps is what the security steps are built from: the
+// process's one core and the generic steps' ports, filled identically for
+// the API and the driver (RoleAll and RoleWorker).
+type securityStepDeps struct {
+	Core      *automationsCore
+	Pool      *db.Pool
+	Bill      *billing.Service
+	Log       *slog.Logger
+	Steps     steps.Deps
+	Notify    *napp.Service
+	CEL       celenv.Limits
+	Freshness coverage.Freshness
+	LogOrigin string
+}
 
 func init() {
 	automationStarter = func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) autoports.Starter {
 		return newAutomationEngine(engineDeps{pool: pool, bill: bill, core: core, log: log})
 	}
-	automationExecutions = func(core *automationsCore, pool *db.Pool) triggers.ExecutionLookup {
-		return newAutomationEngine(engineDeps{pool: pool, core: core})
+	automationExecutions = func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) triggers.ExecutionLookup {
+		return newAutomationEngine(engineDeps{pool: pool, bill: bill, core: core, log: log})
 	}
 	automationPauser = func(core *automationsCore) autoports.Pauser { return core.svc }
-	automationPackExecutions = func(core *automationsCore, pool *db.Pool) packbuild.Executions {
-		return newAutomationEngine(engineDeps{pool: pool, core: core})
+	automationPackExecutions = func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) packbuild.Executions {
+		return newAutomationEngine(engineDeps{pool: pool, bill: bill, core: core, log: log})
 	}
 }
 
@@ -67,6 +84,10 @@ type engineDeps struct {
 	notify    *napp.Service
 	core      *automationsCore
 	log       *slog.Logger
+	// cel, freshness and logOrigin come from the server config (D108a).
+	cel       celenv.Limits
+	freshness coverage.Freshness
+	logOrigin string
 }
 
 // newAutomationEngine builds the engine as pc_app (D24–D27): the generic
@@ -84,7 +105,7 @@ func newAutomationEngine(d engineDeps) *pgengine.Engine {
 	}
 	var deliveries pgengine.DeliveryCanceler
 	if d.kp != nil {
-		if del, err := automationDeliverer(d.pool, d.kp, d.bill, d.publicURL, d.log); err == nil {
+		if del, err := automationDeliverer(d.pool, d.kp, d.bill, d.publicURL, d.log, d.core); err == nil {
 			deps.Deliverer = del
 			if c, ok := del.(pgengine.DeliveryCanceler); ok {
 				deliveries = c
@@ -93,7 +114,9 @@ func newAutomationEngine(d engineDeps) *pgengine.Engine {
 			d.log.Warn("automation.deliverer_unavailable", slog.String("error", err.Error()))
 		}
 	}
-	cleanup := pgengine.Cleanup{Gates: approvals, Deliveries: deliveries}
+	cleanup := pgengine.Cleanup{
+		Gates: approvals, Deliveries: deliveries, NotPending: deliveryNotPending, MaybeSent: deliveryMaybeSent,
+	}
 	if d.core != nil {
 		g, r := grantsPort{core: d.core}, runsPort{core: d.core}
 		deps.Grants, deps.Runs = g, r
@@ -101,7 +124,10 @@ func newAutomationEngine(d engineDeps) *pgengine.Engine {
 	}
 	reg := steps.Generic(deps)
 	if automationSecuritySteps != nil {
-		for k, s := range automationSecuritySteps(d.pool, deps) {
+		for k, s := range automationSecuritySteps(securityStepDeps{
+			Core: d.core, Pool: d.pool, Bill: d.bill, Log: d.log, Steps: deps, Notify: d.notify, CEL: d.cel,
+			Freshness: d.freshness, LogOrigin: d.logOrigin,
+		}) {
 			if _, taken := reg[k]; !taken {
 				reg[k] = s
 			}
@@ -133,7 +159,10 @@ func newAutomationEngine(d engineDeps) *pgengine.Engine {
 // authenticated by the workload's PAP/1 credentials. Core's controls cancel
 // executions through the engine (D28).
 func registerAutomationsEngine(rs *connect.Server, d apiDeps, workload *workloadrpc.Workload, core *automationsCore) {
-	ed := engineDeps{pool: d.pool, bill: d.billing, kp: d.kp, publicURL: d.publicURL, core: core, log: d.log}
+	ed := engineDeps{
+		pool: d.pool, bill: d.billing, kp: d.kp, publicURL: d.publicURL, core: core, log: d.log, cel: d.cel,
+		freshness: d.freshness, logOrigin: d.logOrigin,
+	}
 	if d.m5 != nil {
 		ed.notify = d.m5.notifications
 	}
@@ -157,10 +186,13 @@ func shareCore(core *automationsCore, e *pgengine.Engine, pool *db.Pool, bill *b
 // registerAutomationEngineJobs adds the driver and the wake sweep (D24) on
 // the process's one core, and attaches the engine's ports to it (a
 // worker-only process too, D105).
-func registerAutomationEngineJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, core *automationsCore, kp keys.KeyProvider,
-	bill *billing.Service, publicURL string, notify *napp.Service, log *slog.Logger,
+func registerAutomationEngineJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, core *automationsCore, cfg *Config,
+	kp keys.KeyProvider, bill *billing.Service, notify *napp.Service, log *slog.Logger,
 ) ([]*river.PeriodicJob, error) {
-	e := driverEngine(core, kp, bill, publicURL, notify, log)
+	e := driverEngine(core, engineDeps{
+		bill: bill, kp: kp, publicURL: cfg.Auth.PublicURL, notify: notify, log: log, cel: cfg.CEL,
+		freshness: freshnessOf(cfg), logOrigin: cfg.logOrigin(),
+	})
 	p, err := pgengine.Register(reg, e)
 	if err != nil {
 		return nil, err
@@ -171,13 +203,10 @@ func registerAutomationEngineJobs(periodic []*river.PeriodicJob, reg *jobs.Regis
 // driverEngine is the engine the River driver runs every step with: it
 // shares the process's core, whose grants and runs services are attached
 // by the API or the core jobs.
-func driverEngine(core *automationsCore, kp keys.KeyProvider, bill *billing.Service, publicURL string, notify *napp.Service,
-	log *slog.Logger,
-) *pgengine.Engine {
-	e := newAutomationEngine(engineDeps{
-		pool: core.svc.Pool, bill: bill, kp: kp, publicURL: publicURL, notify: notify, core: core, log: log,
-	})
-	shareCore(core, e, core.svc.Pool, bill, log)
+func driverEngine(core *automationsCore, d engineDeps) *pgengine.Engine {
+	d.pool, d.core = core.svc.Pool, core
+	e := newAutomationEngine(d)
+	shareCore(core, e, d.pool, d.bill, d.log)
 	return e
 }
 
@@ -402,4 +431,10 @@ func (p executionsPort) CancelActive(ctx context.Context, tx pgx.Tx, org ids.Org
 
 // automationPackExecutions reads executions for evidence packs of scope
 // automation_execution (D30); set by init.
-var automationPackExecutions func(core *automationsCore, pool *db.Pool) packbuild.Executions
+var automationPackExecutions func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) packbuild.Executions
+
+// deliveryNotPending and deliveryMaybeSent classify triggers' Cancel
+// errors for the engine's cleanup (D89, D97 N1).
+func deliveryNotPending(err error) bool { return errors.Is(err, endpoints.ErrDeliveryNotPending) }
+
+func deliveryMaybeSent(err error) bool { return errors.Is(err, endpoints.ErrDeliveryMayHaveBeenSent) }

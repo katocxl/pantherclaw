@@ -32,6 +32,10 @@ const (
 // ErrGateInvalid refuses a gate request the engine should never make.
 var ErrGateInvalid = pcerr.New(pcerr.InvalidArgument, "GATE_INVALID", "the automation gate request is invalid")
 
+// ReasonGateSuperseded ends an earlier attempt's live gate when a later
+// attempt of its step asks for one (D109 E2): the gate binds its attempt.
+const ReasonGateSuperseded = "GATE_SUPERSEDED"
+
 // ErrGateAttempt refuses a gate request while the step has a live gate
 // bound to another attempt.
 var ErrGateAttempt = pcerr.New(pcerr.FailedPrecondition, "GATE_ATTEMPT_MISMATCH",
@@ -90,13 +94,21 @@ func (s *Service) RequestAutomationGateTx(ctx context.Context, tx pgx.Tx, g Auto
 	}
 	q := dbq.New(ttx)
 	if live, err := q.LiveAutomationGate(ctx, g.Org, &g.Execution, &g.StepID); err == nil {
-		if int(live.Attempt) != g.Attempt {
-			// A live gate binds its own attempt (HR-281): another attempt
-			// never reuses it.
+		switch a := int(live.Attempt); {
+		case a == g.Attempt:
+			n, err := gateEligible(ctx, q, g.Org, live.ID)
+			return live.ID, n, err
+		case a > g.Attempt:
+			// A live gate binds its own attempt (HR-281): an earlier attempt
+			// never reuses a later one's.
 			return ids.UUID{}, 0, ErrGateAttempt
+		default:
+			// An earlier attempt's gate is stale (D109 E2): it ends and this
+			// attempt gets its own.
+			if err := s.EndAutomationGateTx(ctx, tx, g.Org, live.ID, ReasonGateSuperseded); err != nil {
+				return ids.UUID{}, 0, err
+			}
 		}
-		n, err := gateEligible(ctx, q, g.Org, live.ID)
-		return live.ID, n, err
 	} else if !db.IsNoRows(err) {
 		return ids.UUID{}, 0, err
 	}
