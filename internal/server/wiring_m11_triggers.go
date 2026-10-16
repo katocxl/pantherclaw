@@ -121,9 +121,10 @@ func (m m11Triggers) mount(mux *http.ServeMux) {
 }
 
 // registerAutomationTriggers serves TriggerService and prepares the
-// endpoint and pages.
-func registerAutomationTriggers(rs *connect.Server, d apiDeps) (m11Triggers, error) {
-	trig := newAutomationTriggers(d.pool, d.billing, d.log, d.autos)
+// endpoint and pages, with the process's shared core (its Starter and
+// Pauser) passed explicitly (D109 E3).
+func registerAutomationTriggers(rs *connect.Server, d apiDeps, autos *automationsCore) (m11Triggers, error) {
+	trig := newAutomationTriggers(d.pool, d.billing, d.log, autos)
 	ep, err := newAutomationEndpoints(d.pool, d.kp, trig, d.billing, d.publicURL, d.clientIP, d.log)
 	if err != nil {
 		return m11Triggers{}, err
