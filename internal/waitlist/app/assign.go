@@ -107,7 +107,7 @@ func decides(ctx context.Context, q *dbq.Queries, c tenancy.Caller, r dbq.PcWait
 		return false, nil
 	}
 	switch r.Kind {
-	case wdomain.KindActionHold:
+	case wdomain.KindActionHold, wdomain.KindAutomationGate:
 		e, err := pgapprovals.LoadEligibility(ctx, q, c.Org, r.SubjectID, []ids.UUID{c.Principal.ID})
 		if err != nil {
 			return false, err

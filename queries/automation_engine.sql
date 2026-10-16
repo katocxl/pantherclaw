@@ -27,7 +27,7 @@ SELECT * FROM pc.automation_executions WHERE org_id = sqlc.arg(org_id) AND id = 
 -- name: SaveAutomationExecution :execrows
 UPDATE pc.automation_executions
 SET state = sqlc.arg(state), reason = sqlc.narg(reason), current_step = sqlc.arg(current_step),
-    compensating = sqlc.arg(compensating), result = sqlc.narg(result), transitions = sqlc.arg(transitions),
+    compensating = sqlc.arg(compensating), result = sqlc.narg(result), transitions = sqlc.arg(transitions), engine_errors = 0,
     started_at = sqlc.narg(started_at), wake_at = sqlc.narg(wake_at)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 
@@ -154,9 +154,14 @@ UPDATE pc.automation_launches SET state = 'CLAIMED', claimed_instance_id = sqlc.
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';
 
 -- name: EndAutomationLaunch :execrows
--- EXPIRED (claim deadline passed) or CANCELLED (cleanup).
+-- CANCELLED (cleanup) a PENDING or CLAIMED launch.
 UPDATE pc.automation_launches SET state = sqlc.arg(state)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('PENDING', 'CLAIMED');
+
+-- name: ExpireAutomationLaunch :execrows
+-- EXPIRED: still PENDING past its claim deadline (a concurrent claim wins).
+UPDATE pc.automation_launches SET state = 'EXPIRED'
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING' AND now() >= claim_deadline;
 
 -- name: OpenAutomationLaunches :many
 SELECT id, run_id, grant_id, delivery_id FROM pc.automation_launches
@@ -169,7 +174,7 @@ WHERE org_id = sqlc.arg(org_id) AND execution_id = sqlc.arg(execution_id) AND st
 SELECT count(*) FILTER (WHERE t.effect_state = ANY(sqlc.arg(states)::text[]))::int AS matched,
        count(*) FILTER (WHERE t.effect_state IN ('UNKNOWN', 'CONFLICTING', 'UNVERIFIABLE', 'PROPAGATION_PENDING'))::int AS unknown,
        count(*) FILTER (WHERE t.effect_state = 'NONE_CONFIRMED')::int AS none_confirmed,
-       count(*) FILTER (WHERE t.effect_state IS NULL AND t.decision = 'ALLOW')::int AS pending,
+       count(*) FILTER (WHERE t.effect_state IS NULL AND t.decision IN ('ALLOW', 'ALLOW_WITH_OBLIGATIONS'))::int AS pending,
        count(*)::int AS total
 FROM pc.transactions t
 WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id) AND t.operation = sqlc.arg(operation);
@@ -188,13 +193,28 @@ FROM pc.transactions t
 WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id);
 
 -- name: OperationIrreversible :one
--- Whether the pinned definition of an operation declares it irreversible.
-SELECT EXISTS (
+-- Whether an operation counts as irreversible: its pinned definition says
+-- so, or no pinned definition describes it (HR-280, D84 E6).
+SELECT (NOT EXISTS (
     SELECT 1 FROM pc.package_pins p
     JOIN pc.action_definitions d ON d.org_id = p.org_id AND d.version_id = p.version_id
     WHERE p.org_id = sqlc.arg(org_id) AND d.operation = sqlc.arg(operation)
-        AND convert_from(d.canonical, 'UTF8')::jsonb ->> 'reversibility' = 'irreversible'
-)::bool;
+        AND convert_from(d.canonical, 'UTF8')::jsonb ->> 'reversibility' IN ('reversible', 'compensatable')
+))::bool AS irreversible;
+
+-- name: RunUnknownIrreversible :one
+-- How many of a run's allowed transactions have no known outcome yet
+-- (UNKNOWN, CONFLICTING, UNVERIFIABLE, PROPAGATION_PENDING or not yet
+-- recorded) on an operation that counts as irreversible (D84 E1, E6).
+SELECT count(*)::int FROM pc.transactions t
+WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id)
+    AND t.decision IN ('ALLOW', 'ALLOW_WITH_OBLIGATIONS')
+    AND (t.effect_state IS NULL OR t.effect_state IN ('UNKNOWN', 'CONFLICTING', 'UNVERIFIABLE', 'PROPAGATION_PENDING'))
+    AND NOT EXISTS (
+        SELECT 1 FROM pc.package_pins p
+        JOIN pc.action_definitions d ON d.org_id = p.org_id AND d.version_id = p.version_id
+        WHERE p.org_id = t.org_id AND d.operation = t.operation
+            AND convert_from(d.canonical, 'UTF8')::jsonb ->> 'reversibility' IN ('reversible', 'compensatable'));
 
 -- name: AutomationExecutionInfo :one
 -- What a retry needs to know (D59, D75): the execution and whether a step
@@ -205,3 +225,145 @@ SELECT e.automation_id, e.version_id, e.state, e.trigger_id,
                    AND a.output ->> 'irreversible' = 'true')::bool AS unknown_irreversible
 FROM pc.automation_executions e
 WHERE e.org_id = sqlc.arg(org_id) AND e.id = sqlc.arg(id);
+
+-- name: CountAutomationExecutionError :one
+-- One more consecutive driver error of an active execution (D84).
+UPDATE pc.automation_executions e SET engine_errors = least(e.engine_errors + 1, 100)
+FROM pc.automations a
+WHERE e.org_id = sqlc.arg(org_id) AND e.id = sqlc.arg(id) AND e.state IN ('PENDING', 'RUNNING', 'WAITING')
+    AND a.org_id = e.org_id AND a.id = e.automation_id
+RETURNING e.engine_errors, e.automation_id, e.version_id, e.trigger_id, e.service_account_id, e.mode, a.name,
+    a.owner_user_id;
+
+-- name: FailAutomationExecution :execrows
+-- Ends an active execution the driver cannot work (ENGINE_ERROR).
+UPDATE pc.automation_executions SET state = 'FAILED', reason = sqlc.arg(reason), result = sqlc.arg(result), wake_at = NULL
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('PENDING', 'RUNNING', 'WAITING');
+
+-- name: AutomationDestinationUsable :one
+-- Whether a destination is ACTIVE and serves a purpose (D22, D84).
+SELECT (d.state = 'ACTIVE' AND sqlc.arg(purpose)::text = ANY(d.purposes))::bool AS usable
+FROM pc.automation_destinations d
+WHERE d.org_id = sqlc.arg(org_id) AND d.id = sqlc.arg(id);
+
+-- name: InstanceAgent :one
+-- The agent of an enrolled instance and whether it may work.
+SELECT agent_id, state FROM pc.agent_instances WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- name: ClaimAutomationLaunch :one
+-- Claims the oldest PENDING launch of an agent for one instance (D26):
+-- instance-pinned launches only for that instance, never past the claim
+-- deadline, only while its run is active and unbound or bound to it.
+UPDATE pc.automation_launches l SET state = 'CLAIMED', claimed_instance_id = sqlc.arg(instance_id)
+WHERE l.org_id = sqlc.arg(org_id) AND l.id = (
+    SELECT c.id FROM pc.automation_launches c
+    JOIN pc.runs r ON r.org_id = c.org_id AND r.id = c.run_id
+    WHERE c.org_id = sqlc.arg(org_id) AND c.agent_id = sqlc.arg(agent_id) AND c.state = 'PENDING'
+        AND (c.instance_id IS NULL OR c.instance_id = sqlc.arg(instance_id)) AND now() < c.claim_deadline
+        AND r.state = 'ACTIVE' AND r.expires_at > now()
+        AND (r.instance_id IS NULL OR r.instance_id = sqlc.arg(instance_id))
+    ORDER BY c.created_at
+    LIMIT 1
+    FOR UPDATE OF c SKIP LOCKED)
+RETURNING l.id, l.execution_id, l.run_id, l.task_ref, l.calls, l.run_params,
+    (SELECT r.expires_at FROM pc.runs r WHERE r.org_id = l.org_id AND r.id = l.run_id) AS complete_by;
+
+-- name: CompleteAutomationLaunch :one
+-- Only the claiming instance completes a launch, once (D26).
+UPDATE pc.automation_launches SET state = 'COMPLETED', outcome = sqlc.arg(outcome), report = sqlc.arg(report)
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'CLAIMED' AND claimed_instance_id = sqlc.arg(instance_id)
+RETURNING execution_id, run_id;
+
+-- Inspector (D29).
+
+-- name: ExecutionTrigger :one
+SELECT t.kind, t.authenticity, t.authenticity_detail, t.source_ref
+FROM pc.automation_triggers t WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(id);
+
+-- name: ExecutionGrants :many
+-- The grants an execution issued, with their current revision's expiry
+-- and limits and what their budget accounts spent.
+SELECT g.id, g.agent_id, g.state, v.expires_at, v.limits,
+       coalesce((SELECT jsonb_object_agg(a.rule || ' ' || coalesce(a.currency, ''), a.total)
+                 FROM (SELECT b.rule, b.currency, sum(b.spent)::text AS total FROM pc.budget_accounts b
+                       WHERE b.org_id = g.org_id AND b.owner_kind = 'grant' AND b.owner_id = g.id
+                       GROUP BY b.rule, b.currency) a), '{}')::jsonb AS spent
+FROM pc.grants g
+JOIN pc.grant_revisions v ON v.org_id = g.org_id AND v.grant_id = g.id AND v.revision = g.current_revision
+WHERE g.org_id = sqlc.arg(org_id) AND g.automation_execution_id = sqlc.arg(execution_id)
+ORDER BY g.created_at;
+
+-- name: ExecutionRuns :many
+SELECT r.id, r.agent_id, r.instance_id, r.expires_at,
+       (CASE WHEN r.state = 'ACTIVE' AND r.expires_at <= now() THEN 'EXPIRED' ELSE r.state END)::text AS effective_state,
+       (SELECT count(*) FROM pc.transactions t WHERE t.org_id = r.org_id AND t.run_id = r.id)::int AS transactions,
+       (SELECT count(*) FROM pc.transactions t WHERE t.org_id = r.org_id AND t.run_id = r.id
+            AND t.effect_state IN ('UNKNOWN', 'CONFLICTING', 'UNVERIFIABLE'))::int AS unknown
+FROM pc.runs r
+WHERE r.org_id = sqlc.arg(org_id) AND r.automation_execution_id = sqlc.arg(execution_id)
+ORDER BY r.created_at;
+
+-- name: ExecutionLaunches :many
+SELECT * FROM pc.automation_launches
+WHERE org_id = sqlc.arg(org_id) AND execution_id = sqlc.arg(execution_id) ORDER BY created_at;
+
+-- name: ExecutionGates :many
+SELECT r.id, r.step_id, r.state, r.deadline_at, r.requirements,
+       (SELECT count(DISTINCT x.user_id) FROM pc.approval_responses x WHERE x.org_id = r.org_id AND x.request_id = r.id
+            AND x.kind = 'APPROVE' AND x.voided_at IS NULL)::int AS approvals
+FROM pc.approval_requests r
+WHERE r.org_id = sqlc.arg(org_id) AND r.execution_id = sqlc.arg(execution_id) AND r.subject_kind = 'AUTOMATION_GATE'
+ORDER BY r.created_at;
+
+-- name: ExecutionDeliveries :many
+SELECT d.id, d.destination_id, d.kind, d.state, d.attempts, d.delivered_at
+FROM pc.automation_deliveries d
+WHERE d.org_id = sqlc.arg(org_id) AND d.execution_id = sqlc.arg(execution_id) ORDER BY d.created_at;
+
+-- name: ExecutionOfRun :one
+SELECT automation_execution_id::uuid AS execution_id FROM pc.runs
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND automation_execution_id IS NOT NULL;
+
+-- name: ExecutionOfGrant :one
+SELECT automation_execution_id::uuid AS execution_id FROM pc.grants
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND automation_execution_id IS NOT NULL;
+
+-- name: ExecutionOfTransaction :one
+SELECT r.automation_execution_id::uuid AS execution_id FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(id) AND r.automation_execution_id IS NOT NULL;
+
+-- name: ExecutionTransactions :many
+-- The transactions of an execution's runs, in id order (D30).
+SELECT t.id FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = sqlc.arg(org_id) AND r.automation_execution_id = sqlc.arg(execution_id)
+ORDER BY t.id
+LIMIT 10000;
+
+-- name: AutomationRolloutOf :one
+SELECT rollout, cohort_agents FROM pc.automations WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- name: ExecutionGateApprovers :many
+-- The people who approved an execution's gates (notify APPROVERS).
+SELECT DISTINCT x.user_id FROM pc.approval_responses x
+JOIN pc.approval_requests r ON r.org_id = x.org_id AND r.id = x.request_id
+WHERE x.org_id = sqlc.arg(org_id) AND r.execution_id = sqlc.arg(execution_id) AND x.kind = 'APPROVE' AND x.voided_at IS NULL;
+
+-- name: AgentOwnerOf :one
+SELECT owner_user_id FROM pc.agents WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- name: ExecutionUnresolved :one
+-- Reconciliation of an execution (D27): how many of its runs' allowed
+-- transactions still have no known outcome, and how many changed something.
+SELECT count(*) FILTER (WHERE t.effect_state IS NULL
+           OR t.effect_state IN ('UNKNOWN', 'CONFLICTING', 'UNVERIFIABLE', 'PROPAGATION_PENDING'))::int AS unresolved,
+       count(*) FILTER (WHERE t.effect_state IN ('CONFIRMED', 'PARTIAL', 'COMPENSATED'))::int AS changed
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = sqlc.arg(org_id) AND r.automation_execution_id = sqlc.arg(execution_id)
+    AND t.decision IN ('ALLOW', 'ALLOW_WITH_OBLIGATIONS');
+
+-- name: PendingExecutionDeliveries :many
+SELECT id FROM pc.automation_deliveries
+WHERE org_id = sqlc.arg(org_id) AND execution_id = sqlc.arg(execution_id) AND state = 'PENDING';

@@ -80,7 +80,7 @@ func TestM11Engine_PcAppUpdatesOnlyTransitions(t *testing.T) {
 	ctx := context.Background()
 	updatable := map[string][]string{
 		"automation_executions": {
-			"state", "reason", "current_step", "compensating", "result", "transitions", "started_at", "updated_at",
+			"state", "reason", "current_step", "compensating", "result", "transitions", "engine_errors", "started_at", "updated_at",
 			"ended_at", "wake_at", "cancel_requested_by", "cancel_reason", "cancel_requested_at",
 		},
 		"automation_step_attempts": {"state", "decision", "reason", "output", "refs", "effect", "ended_at", "wake_at"},

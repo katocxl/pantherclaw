@@ -55,9 +55,11 @@ var (
 	ErrRunNotFound   = pcerr.New(pcerr.NotFound, "RUN_NOT_FOUND", "run not found")
 	ErrAgentNotFound = pcerr.New(pcerr.NotFound, "AGENT_NOT_FOUND", "agent not found")
 	ErrRangeNotFound = pcerr.New(pcerr.NotFound, "RANGE_NOT_FOUND", "range not found")
-	ErrRangeNotDone  = pcerr.New(pcerr.FailedPrecondition, "RANGE_NOT_FINISHED", "the range has not finished")
-	ErrPacksUnwired  = pcerr.New(pcerr.Unavailable, "PACKS_UNAVAILABLE", "evidence packs are not available on this server")
-	errPackNoContent = errors.New("app: a ready pack without content")
+	// ErrExecutionNotFound: no automation execution of the org (D30).
+	ErrExecutionNotFound = pcerr.New(pcerr.NotFound, "EXECUTION_NOT_FOUND", "automation execution not found")
+	ErrRangeNotDone      = pcerr.New(pcerr.FailedPrecondition, "RANGE_NOT_FINISHED", "the range has not finished")
+	ErrPacksUnwired      = pcerr.New(pcerr.Unavailable, "PACKS_UNAVAILABLE", "evidence packs are not available on this server")
+	errPackNoContent     = errors.New("app: a ready pack without content")
 )
 
 // PackEnqueuer enqueues a pack's build job in the creating transaction.
@@ -81,6 +83,9 @@ type PackRequest struct {
 	Run, Agent   ids.UUID
 	// Range is the adversarial range of a pack of scope range (G0 M12).
 	Range ids.UUID
+	// Execution is the automation execution of a pack of scope
+	// automation_execution (G0 M11 part 2 D30).
+	Execution ids.UUID
 	// From and To bound a time range, or narrow a run or an agent.
 	From, To *time.Time
 	Include  pack.Include
@@ -140,6 +145,11 @@ func (r PackRequest) scope() (pack.Scope, error) {
 			return sc, ErrBadPackScope
 		}
 		sc.Range = r.Range.String()
+	case pack.ScopeAutomationExecution:
+		if r.Execution.IsZero() || r.From != nil {
+			return sc, ErrBadPackScope
+		}
+		sc.Execution = r.Execution.String()
 	case pack.ScopeTimeRange:
 		if r.From == nil {
 			return sc, ErrBadPackScope
@@ -199,6 +209,12 @@ func (s *Service) CreateEvidencePack(ctx context.Context, req PackRequest) (Pack
 		case pack.ScopeAgent:
 			if _, err := q.GetAgent(ctx, c.Org, req.Agent); db.IsNoRows(err) {
 				return ErrAgentNotFound
+			} else if err != nil {
+				return err
+			}
+		case pack.ScopeAutomationExecution:
+			if _, err := q.GetAutomationExecution(ctx, c.Org, req.Execution); db.IsNoRows(err) {
+				return ErrExecutionNotFound
 			} else if err != nil {
 				return err
 			}

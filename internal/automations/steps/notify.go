@@ -27,7 +27,8 @@ func (*revokeGrant) Kind() string { return autodomain.KindRevokeGrant }
 
 func (s *revokeGrant) revoke(sc autodomain.StepContext) (GrantRevoke, string) {
 	w, ok := sc.With.(*autodomain.RevokeGrantWith)
-	if !ok || len([]rune(w.Reason)) > 1000 {
+	if !ok || len(w.Reason) > 256 {
+		// A revocation reason is 1..256 bytes (grants).
 		return GrantRevoke{}, ReasonBadWith
 	}
 	switch w.Scope {
@@ -38,7 +39,11 @@ func (s *revokeGrant) revoke(sc autodomain.StepContext) (GrantRevoke, string) {
 	if !inScope(sc.Def, autodomain.KindRevokeGrant, w.Scope) {
 		return GrantRevoke{}, ReasonOutsideScope
 	}
-	in := GrantRevoke{Org: sc.Org, Execution: sc.Execution.ID, Scope: w.Scope, Reason: w.Reason}
+	reason := w.Reason
+	if reason == "" {
+		reason = "automation step " + sc.Spec.ID
+	}
+	in := revokeOf(sc, w.Scope, nil, reason)
 	if w.Scope == autodomain.RevokeTriggerGrant {
 		for _, sub := range sc.Execution.Trigger.Subjects {
 			if sub.Type == reflexdomain.SubjectGrant {
@@ -112,30 +117,36 @@ type notify struct{ d Deps }
 
 func (*notify) Kind() string { return autodomain.KindNotify }
 
-func (s *notify) check(sc autodomain.StepContext) (*autodomain.NotifyWith, string) {
+func (s *notify) check(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (*autodomain.NotifyWith, string, error) {
 	w, ok := sc.With.(*autodomain.NotifyWith)
 	if !ok || w.Message.Title == "" || utf8.RuneCountInString(w.Message.Title) > MaxNoticeTitle ||
 		utf8.RuneCountInString(w.Message.Body) > MaxNoticeBody || len(w.To) == 0 && w.Destination == nil {
-		return nil, ReasonBadWith
+		return nil, ReasonBadWith, nil
 	}
 	for _, to := range w.To {
 		if !inScope(sc.Def, autodomain.KindNotify, to) {
-			return nil, ReasonOutsideScope
+			return nil, ReasonOutsideScope, nil
 		}
 	}
 	if w.Destination != nil && (!slices.Contains(sc.Def.Authority.Destinations, *w.Destination) ||
 		!inScope(sc.Def, autodomain.KindNotify, w.Destination.String())) {
-		return nil, ReasonOutsideScope
+		return nil, ReasonOutsideScope, nil
 	}
-	return w, ""
+	if w.Destination != nil {
+		if r, err := destinationUsable(ctx, tx, sc.Org, w.Destination.UUID(), string(autodomain.DeliveryNotice)); err != nil || r != "" {
+			return nil, r, err
+		}
+	}
+	return w, "", nil
 }
 
 func (s *notify) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
-	w, reason := s.check(sc)
-	if reason != "" {
-		return failed(reason)
+	w, reason, err := s.check(ctx, tx, sc)
+	if err != nil || reason != "" {
+		return autodomain.StepResult{State: autodomain.StepFailed, Reason: reason, Effect: autodomain.EffectNone}, err
 	}
 	out := map[string]string{}
+	messageOutput(out, w.Message)
 	var refs []reflexdomain.EvidenceRef
 	if len(w.To) > 0 {
 		if s.d.Notifier == nil || s.d.Recipients == nil {
@@ -192,7 +203,10 @@ func (s *notify) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext)
 
 // Preview tells the owner only, marked as a shadow (HR-288).
 func (s *notify) Preview(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
-	w, reason := s.check(sc)
+	w, reason, err := s.check(ctx, tx, sc)
+	if err != nil {
+		return autodomain.StepResult{}, err
+	}
 	if reason != "" {
 		return autodomain.StepResult{
 			State: autodomain.StepFailed, Reason: reason,
@@ -200,6 +214,7 @@ func (s *notify) Preview(ctx context.Context, tx pgx.Tx, sc autodomain.StepConte
 		}, nil
 	}
 	out := map[string]string{"shadow": "true"}
+	messageOutput(out, w.Message)
 	if s.d.Notifier != nil && sc.Mode == autodomain.ModeShadow && !sc.Execution.Owner.IsZero() {
 		id, err := s.d.Notifier.Notify(ctx, tx, Notice{
 			Org: sc.Org, Automation: sc.Execution.Automation, Execution: sc.Execution.ID, StepID: sc.Spec.ID,
@@ -242,6 +257,9 @@ func (s *deliver) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext)
 	w, from, reason := s.check(sc)
 	if reason != "" {
 		return failed(reason)
+	}
+	if r, err := destinationUsable(ctx, tx, sc.Org, w.Destination.UUID(), string(autodomain.DeliveryDigest)); err != nil || r != "" {
+		return autodomain.StepResult{State: autodomain.StepFailed, Reason: r, Effect: autodomain.EffectNone}, err
 	}
 	body, err := json.Marshal(map[string]string{
 		"type": "automation.digest", "execution": sc.Execution.ID.String(), "pack_id": from["pack_id"],
@@ -295,8 +313,15 @@ func (s *deliver) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext
 	}, nil
 }
 
-func (s *deliver) Preview(_ context.Context, _ pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
-	_, _, reason := s.check(sc)
+func (s *deliver) Preview(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
+	w, _, reason := s.check(sc)
+	if reason == "" {
+		r, err := destinationUsable(ctx, tx, sc.Org, w.Destination.UUID(), string(autodomain.DeliveryDigest))
+		if err != nil {
+			return autodomain.StepResult{}, err
+		}
+		reason = r
+	}
 	if reason != "" && reason != ReasonBadWith {
 		return autodomain.StepResult{
 			State: autodomain.StepFailed, Reason: reason,
@@ -304,4 +329,23 @@ func (s *deliver) Preview(_ context.Context, _ pgx.Tx, sc autodomain.StepContext
 		}, nil
 	}
 	return shadowed(map[string]string{"shadow": "true"})
+}
+
+// MaxOutputPart is the size of one output value (D11).
+const MaxOutputPart = autodomain.MaxOutputValue
+
+// messageOutput keeps a notice's text in the step's output for the
+// execution page (D89, HR-158): notices themselves carry ids only. The
+// body is cut into parts of at most 512 bytes, never inside a character.
+func messageOutput(out map[string]string, m autodomain.NotifyMessage) {
+	out["title"] = m.Title
+	body, n := m.Body, 1
+	for body != "" {
+		cut := min(len(body), MaxOutputPart)
+		for cut < len(body) && !utf8.RuneStart(body[cut]) {
+			cut--
+		}
+		out["body_"+strconv.Itoa(n)] = body[:cut]
+		body, n = body[cut:], n+1
+	}
 }

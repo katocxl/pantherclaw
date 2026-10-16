@@ -5,6 +5,7 @@ package steps
 
 import (
 	"context"
+	"regexp"
 	"slices"
 	"strconv"
 	"time"
@@ -71,10 +72,28 @@ func (*waitRun) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) 
 	if launch.Outcome != nil {
 		out["launch_outcome"] = *launch.Outcome
 	}
+	if res, unknown, err := unknownIrreversible(ctx, tx, sc.Org, launch.RunID, out); err != nil || unknown {
+		return res, err
+	}
 	return autodomain.StepResult{
 		State: autodomain.StepDone, Effect: autodomain.EffectNone, Output: out,
 		Refs: []reflexdomain.EvidenceRef{ref(reflexdomain.EvidenceRun, launch.RunID)},
 	}, nil
+}
+
+// Expire implements engine.Expirer: when the execution ends during the
+// wait, a run with transactions of an irreversible operation whose outcome
+// is unknown makes the step UNKNOWN (HR-280, D84 E1).
+func (*waitRun) Expire(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
+	w, ok := sc.With.(*autodomain.WaitRunWith)
+	if !ok {
+		return failed(ReasonBadWith)
+	}
+	l, ok := launchOf(sc, w.Step)
+	if !ok {
+		return failed(ReasonBadWith)
+	}
+	return expireLaunch(ctx, tx, sc, l, autodomain.EffectNone)
 }
 
 func (s *waitRun) Preview(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
@@ -190,10 +209,12 @@ func (*waitEffect) check(ctx context.Context, tx pgx.Tx, sc autodomain.StepConte
 	return autodomain.StepResult{State: autodomain.StepFailed, Effect: autodomain.EffectNone, Output: out, Reason: reason}, nil
 }
 
-// ceilingOperation reports whether op is a ceiling operation (D25).
+// ceilingOperation reports whether op is one exact operation the ceiling
+// covers (D25; a pattern is refused, D84 E6: it would match no
+// transaction and hide unknown outcomes).
 func ceilingOperation(def *autodomain.Definition, op string) bool {
 	c := def.Authority.Ceiling
-	if c == nil || c.Bounds.Operations == nil || op == "" {
+	if c == nil || c.Bounds.Operations == nil || !exactOperation.MatchString(op) {
 		return false
 	}
 	return slices.ContainsFunc(*c.Bounds.Operations, func(p string) bool {
@@ -248,3 +269,39 @@ func (s *wait) Preview(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext
 	}
 	return s.Run(ctx, tx, sc)
 }
+
+// unknownIrreversible reports, as an UNKNOWN result, a run whose
+// transactions of an irreversible operation (or one no pinned definition
+// describes) have no known outcome (HR-280, D84 E1, E6).
+func unknownIrreversible(ctx context.Context, tx pgx.Tx, org ids.OrgID, run ids.UUID, out map[string]string,
+) (autodomain.StepResult, bool, error) {
+	n, err := q(tx).RunUnknownIrreversible(ctx, org, run)
+	if err != nil || n == 0 {
+		return autodomain.StepResult{}, false, err
+	}
+	o := clone(out)
+	o[engine.OutputIrreversible] = "true"
+	o["unknown_irreversible"] = strconv.Itoa(int(n))
+	return autodomain.StepResult{
+		State: autodomain.StepUnknown, Effect: autodomain.EffectUnknown, Reason: engine.ReasonEffectUnknown, Output: o,
+		Refs: []reflexdomain.EvidenceRef{ref(reflexdomain.EvidenceRun, run)},
+	}, true, nil
+}
+
+// expireLaunch is a waiting launch-bound step's final state when the
+// execution ends: UNKNOWN when its run has unknown irreversible outcomes,
+// else FAILED with the effect it had.
+func expireLaunch(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext, launch ids.UUID, effect autodomain.Effect,
+) (autodomain.StepResult, error) {
+	l, err := q(tx).GetAutomationLaunch(ctx, sc.Org, launch)
+	if err != nil {
+		return autodomain.StepResult{}, err
+	}
+	if res, unknown, err := unknownIrreversible(ctx, tx, sc.Org, l.RunID, own(sc)); err != nil || unknown {
+		return res, err
+	}
+	return autodomain.StepResult{State: autodomain.StepFailed, Effect: effect, Output: own(sc)}, nil
+}
+
+// exactOperation is one operation name, never a pattern.
+var exactOperation = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z0-9_]+){1,7}$`)
