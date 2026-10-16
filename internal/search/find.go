@@ -47,6 +47,7 @@ const (
 	FindPolicyVersions  FindKind = "policy_versions"
 	FindAudit           FindKind = "audit"
 	FindAutomations     FindKind = "automations"
+	FindExecutions      FindKind = "automation_executions"
 )
 
 // How a match was made.
@@ -103,7 +104,7 @@ type finder struct {
 var findOrder = []FindKind{
 	FindAgents, FindConnections, FindCases, FindIncidents, FindAlerts, FindPackages, FindGateways,
 	FindServiceAccounts, FindPeople, FindRuns, FindTransactions, FindGrants, FindApprovals, FindFindings,
-	FindPolicyVersions, FindAudit, FindAutomations,
+	FindPolicyVersions, FindAudit, FindAutomations, FindExecutions,
 }
 
 var finders = map[FindKind]finder{
@@ -216,6 +217,10 @@ var finders = map[FindKind]finder{
 			Contains: a.contains, NameLo: a.nameLo, NameHi: a.nameHi, Lowered: a.lowered, PageLimit: a.limit,
 		})
 		return convert(rows, func(r dbq.FindAutomationsRow) findRow { return findRow(r) }), err
+	}},
+	FindExecutions: {td.PermAutomationRead, true, false, "automation_execution", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, _ Scope, a findArgs) ([]findRow, error) {
+		rows, err := q.FindAutomationExecutions(ctx, dbq.FindAutomationExecutionsParams{OrgID: c.Org, IDLo: *a.lo, IDHi: *a.hi, PageLimit: a.limit})
+		return convert(rows, func(r dbq.FindAutomationExecutionsRow) findRow { return findRow(r) }), err
 	}},
 	FindAudit: {td.PermAuditRead, true, false, "ledger", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, _ Scope, a findArgs) ([]findRow, error) {
 		rows, err := q.FindAudit(ctx, dbq.FindAuditParams{OrgID: c.Org, IDLo: *a.lo, IDHi: *a.hi, PageLimit: a.limit})

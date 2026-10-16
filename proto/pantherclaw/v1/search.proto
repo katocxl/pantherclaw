@@ -136,6 +136,8 @@ message SearchFilters {
   repeated string severities = 29 [(buf.validate.field).repeated.max_items = 16];
   // Transaction effect states (CONFIRMED, NONE_CONFIRMED, PARTIAL, UNKNOWN, ...).
   repeated string effect_states = 30 [(buf.validate.field).repeated.max_items = 16];
+  // Automation executions of this automation.
+  optional string automation_id = 31 [(buf.validate.field).string.uuid = true];
 }
 
 // Query is one structured query.
@@ -143,7 +145,7 @@ message Query {
   // "transactions", "runs", "agents", "grants", "grant_changes",
   // "connections", "approvals", "audit", "operations", "alerts",
   // "incidents", "cases", "findings", "policy_versions", "packages",
-  // "gateways" or "automations".
+  // "gateways", "automations" or "automation_executions".
   string entity = 1 [(buf.validate.field).string = {
     in: [
       "transactions",
@@ -162,7 +164,8 @@ message Query {
       "policy_versions",
       "packages",
       "gateways",
-      "automations"
+      "automations",
+      "automation_executions"
     ]
   }];
   SearchFilters filters = 2;
@@ -429,7 +432,7 @@ message FindRequest {
   }];
   // The kinds to match; none: every kind.
   repeated string kinds = 2 [(buf.validate.field).repeated = {
-    max_items: 17
+    max_items: 18
     items: {
       string: {
         in: [
@@ -449,7 +452,8 @@ message FindRequest {
           "findings",
           "policy_versions",
           "audit",
-          "automations"
+          "automations",
+          "automation_executions"
         ]
       }
     }

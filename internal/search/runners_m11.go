@@ -295,3 +295,37 @@ func single(agents []string) string {
 	}
 	return ""
 }
+
+func init() { runners[EntityExecutions] = runner{pageExecutions, countExecutions} }
+
+func pageExecutions(ctx context.Context, _ *Service, c tenancy.Caller, tx db.TenantTx, _ Scope, f Filters, pr page.Request) ([]Item, string, error) {
+	rows, err := dbq.New(tx).SearchAutomationExecutions(ctx, dbq.SearchAutomationExecutionsParams{
+		OrgID: c.Org, Before: before(pr), ID: f.ID, AutomationID: f.Automation, States: list(f.States), Modes: list(f.Modes),
+		Kinds: list(f.Kinds), StartTime: f.Start, EndTime: f.End, PageLimit: pr.Limit(),
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	rows, next := page.Finish(pr, rows, func(r dbq.SearchAutomationExecutionsRow) ids.UUID { return r.ID })
+	items := make([]Item, 0, len(rows))
+	for _, r := range rows {
+		items = append(items, Item{
+			Entity: EntityExecutions, ID: r.ID.String(), Time: r.CreatedAt, Label: r.State,
+			Fields: fields("automation", r.AutomationID.String(), "automation_name", r.AutomationName,
+				"version", r.VersionID.String(), "mode", r.Mode, "state", r.State, "reason", str(r.Reason),
+				"trigger_kind", r.TriggerKind, "depth", strconv.Itoa(int(r.Depth)),
+				"principal_user", idStr(r.PrincipalUserID), "principal_service_account", idStr(r.PrincipalSaID),
+				"started_at", ts(r.StartedAt), "ended_at", ts(r.EndedAt)),
+			Evidence: []string{"automation_execution:" + r.ID.String(), "automation:" + r.AutomationID.String()},
+		})
+	}
+	return items, next, nil
+}
+
+func countExecutions(ctx context.Context, _ *Service, c tenancy.Caller, tx db.TenantTx, _ Scope, f Filters) (int, error) {
+	n, err := dbq.New(tx).CountAutomationExecutions(ctx, dbq.CountAutomationExecutionsParams{
+		OrgID: c.Org, ID: f.ID, AutomationID: f.Automation, States: list(f.States), Modes: list(f.Modes),
+		Kinds: list(f.Kinds), StartTime: f.Start, EndTime: f.End,
+	})
+	return int(n), err
+}

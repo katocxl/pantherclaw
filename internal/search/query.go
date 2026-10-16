@@ -44,6 +44,7 @@ const (
 	EntityPackages       Entity = "packages"
 	EntityGateways       Entity = "gateways"
 	EntityAutomations    Entity = "automations"
+	EntityExecutions     Entity = "automation_executions"
 )
 
 // entities lists the entities a structured query may name.
@@ -51,6 +52,7 @@ var entities = []Entity{
 	EntityTransactions, EntityRuns, EntityAgents, EntityGrants, EntityGrantChanges, EntityConnections,
 	EntityApprovals, EntityAudit, EntityOperations, EntityAlerts, EntityIncidents, EntityCases, EntityFindings,
 	EntityPolicyVersions, EntityPackages, EntityGateways, EntityAutomations,
+	EntityExecutions,
 }
 
 // Filters are the typed filters of a structured query. Each entity accepts
@@ -64,6 +66,7 @@ type Filters struct {
 	Connection      *ids.UUID  `json:"connection,omitzero"`
 	Gateway         *ids.UUID  `json:"gateway,omitzero"`
 	Alert           *ids.UUID  `json:"alert,omitzero"`
+	Automation      *ids.UUID  `json:"automation,omitzero"`
 	Incident        *ids.UUID  `json:"incident,omitzero"`
 	Team            *ids.UUID  `json:"team,omitzero"`
 	PrincipalUser   *ids.UUID  `json:"principal_user,omitzero"`
@@ -127,6 +130,7 @@ const (
 	fPrincipal, fUsedConnection, fOperation, fTargetType, fEffect, fKind     field = "principal", "used_connection", "operation", "target_type", "effect_prefix", "kind_prefix"
 	fActor, fDecisions, fModes, fStates, fKinds, fAccessModes, fEnv, fUnused field = "actor", "decisions", "modes", "states", "kinds", "access_modes", "environment_kinds", "unused_since"
 	fWidens, fRange, fAlert, fIncident, fSeverities, fEffectStates           field = "widens_only", "range", "alert", "incident", "severities", "effect_states"
+	fAutomation                                                              field = "automation"
 )
 
 // allowedFilters lists, per entity, the filters it accepts.
@@ -150,6 +154,8 @@ var allowedFilters = map[Entity][]field{
 	EntityGateways:       {fID, fStates, fRange},
 	// An automation's kinds are AGENT_WORK and SECURITY_WORK.
 	EntityAutomations: {fID, fStates, fKinds, fRange},
+	// An execution's kinds are its trigger kinds; its modes LIVE, SHADOW, TEST.
+	EntityExecutions: {fID, fAutomation, fStates, fModes, fKinds, fRange},
 }
 
 // used lists the filters f sets.
@@ -167,6 +173,7 @@ func (f Filters) used() []field {
 	add(f.Connection != nil, fConnection)
 	add(f.Gateway != nil, fGateway)
 	add(f.Alert != nil, fAlert)
+	add(f.Automation != nil, fAutomation)
 	add(f.Incident != nil, fIncident)
 	add(f.Team != nil, fTeam)
 	add(f.PrincipalUser != nil || f.PrincipalSA != nil, fPrincipal)

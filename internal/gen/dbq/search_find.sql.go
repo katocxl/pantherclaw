@@ -288,6 +288,64 @@ func (q *Queries) FindAudit(ctx context.Context, arg FindAuditParams) ([]FindAud
 	return items, nil
 }
 
+const findAutomationExecutions = `-- name: FindAutomationExecutions :many
+SELECT e.id, a.name::text AS label, e.state, e.created_at AS at, count(*) OVER () AS total
+FROM pc.automation_executions e
+JOIN pc.automations a ON a.org_id = e.org_id AND a.id = e.automation_id
+WHERE e.org_id = $1
+  AND e.id BETWEEN $2::uuid AND $3::uuid
+ORDER BY e.id DESC
+LIMIT $4
+`
+
+type FindAutomationExecutionsParams struct {
+	OrgID     ids.OrgID
+	IDLo      ids.UUID
+	IDHi      ids.UUID
+	PageLimit int32
+}
+
+type FindAutomationExecutionsRow struct {
+	ID    ids.UUID
+	Label string
+	State string
+	At    time.Time
+	Total int64
+}
+
+// Executions have no name: they are found by id, labelled with their
+// automation's name.
+func (q *Queries) FindAutomationExecutions(ctx context.Context, arg FindAutomationExecutionsParams) ([]FindAutomationExecutionsRow, error) {
+	rows, err := q.db.Query(ctx, findAutomationExecutions,
+		arg.OrgID,
+		arg.IDLo,
+		arg.IDHi,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FindAutomationExecutionsRow{}
+	for rows.Next() {
+		var i FindAutomationExecutionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Label,
+			&i.State,
+			&i.At,
+			&i.Total,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const findAutomations = `-- name: FindAutomations :many
 SELECT a.id, a.name::text AS label, a.state, a.created_at AS at, count(*) OVER () AS total
 FROM pc.automations a

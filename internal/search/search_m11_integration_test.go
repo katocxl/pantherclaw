@@ -398,7 +398,7 @@ func TestT130_CorrelationStaysInTheViewersScope(t *testing.T) {
 // omission, never a match or a count.
 func TestHR295_AutomationsNeedAutomationReadAcrossTheOrg(t *testing.T) {
 	f := newM11Fx(t)
-	sa, auto := ids.NewV7(), ids.NewV7()
+	sa, auto, version, trigger, exec := ids.NewV7(), ids.NewV7(), ids.NewV7(), ids.NewV7(), ids.NewV7()
 	// The identity and the automation reference each other (deferred keys).
 	if err := f.p.InTenantTx(context.Background(), f.fx.org, func(ctx context.Context, tx db.TenantTx) error {
 		if _, err := tx.Exec(ctx, `INSERT INTO pc.service_accounts (org_id, id, name, created_by, automation_id)
@@ -407,7 +407,28 @@ func TestHR295_AutomationsNeedAutomationReadAcrossTheOrg(t *testing.T) {
 		}
 		_, err := tx.Exec(ctx, `INSERT INTO pc.automations (org_id, id, name, purpose, kind, owner_user_id, service_account_id, created_by)
 		VALUES ($1, $2, 'nightly-triage', 'Triage alerts nightly', 'SECURITY_WORK', $3, $4, $3)`, f.fx.org, auto, f.user, sa)
-		return err
+		if err != nil {
+			return err
+		}
+		// One TEST execution of a draft version, from a manual trigger.
+		for _, s := range []struct {
+			sql  string
+			args []any
+		}{
+			{`INSERT INTO pc.automation_versions (org_id, id, automation_id, number, definition, digest, created_by)
+			VALUES ($1, $2, $3, 1, '{}', $5, $4)`, []any{f.fx.org, version, auto, f.user, make([]byte, 32)}},
+			{`INSERT INTO pc.automation_triggers (org_id, id, automation_id, version_id, kind, mode, source_ref, authenticity,
+			root_trigger_id, state, occurred_at) VALUES ($1, $4, $3, $2, 'MANUAL', 'TEST', 'test', 'USER_SESSION', $4,
+			'ACCEPTED', now())`, []any{f.fx.org, version, auto, trigger}},
+			{`INSERT INTO pc.automation_executions (org_id, id, automation_id, version_id, trigger_id, mode, service_account_id,
+			principal_user_id, trigger_kind, occurred_at, root_trigger_id, deadline_at)
+			VALUES ($1, $2, $3, $4, $5, 'TEST', $6, $7, 'MANUAL', now(), $5, now() + interval '1 hour')`, []any{f.fx.org, exec, auto, version, trigger, sa, f.user}},
+		} {
+			if _, err := tx.Exec(ctx, s.sql, s.args...); err != nil {
+				return err
+			}
+		}
+		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -431,6 +452,24 @@ func TestHR295_AutomationsNeedAutomationReadAcrossTheOrg(t *testing.T) {
 	}
 	if _, ok := kindOf(team, FindAutomations); ok || !hasOmission(team.Omissions, omissionRestricted, "automations: outside your permissions") {
 		t.Fatalf("team find: %+v", team)
+	}
+	// Executions: searched by automation and found by id, org-wide only.
+	if r := f.search(f.auditor, Query{Entity: EntityExecutions, Filters: Filters{Automation: &auto, Modes: []string{"TEST"}}}); r.Count != 1 ||
+		r.Items[0].ID != exec.String() || r.Items[0].Fields["automation_name"] != "nightly-triage" {
+		t.Fatalf("auditor executions: %+v", r)
+	}
+	if r := f.search(f.responder, Query{Entity: EntityExecutions}); r.Empty != EmptyRestricted {
+		t.Fatalf("team responder executions: %+v", r)
+	}
+	byID, err := f.s.Find(as(f.auditor), FindRequest{Text: exec.String()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if k, _ := kindOf(byID, FindExecutions); k.Count != 1 || k.Matches[0].Label != "nightly-triage" || k.Matches[0].MatchedBy != MatchedID {
+		t.Fatalf("execution by id: %+v", byID)
+	}
+	if a, err := f.s.Ask(as(f.auditor), "executions of nightly-triage", "", page.Request{}); err != nil || a.Result == nil || a.Result.Count != 1 {
+		t.Fatalf("ask: %+v %v", a, err)
 	}
 }
 

@@ -194,3 +194,14 @@ WHERE a.org_id = sqlc.arg(org_id)
        OR (sqlc.arg(contains)::text <> '' AND lower(a.name) LIKE sqlc.arg(contains)::text ESCAPE '\'))
 ORDER BY lower(a.name) = sqlc.arg(lowered)::text DESC, starts_with(lower(a.name), sqlc.arg(lowered)::text) DESC, a.name, a.id
 LIMIT sqlc.arg(page_limit);
+
+-- Executions have no name: they are found by id, labelled with their
+-- automation's name.
+-- name: FindAutomationExecutions :many
+SELECT e.id, a.name::text AS label, e.state, e.created_at AS at, count(*) OVER () AS total
+FROM pc.automation_executions e
+JOIN pc.automations a ON a.org_id = e.org_id AND a.id = e.automation_id
+WHERE e.org_id = sqlc.arg(org_id)
+  AND e.id BETWEEN sqlc.arg(id_lo)::uuid AND sqlc.arg(id_hi)::uuid
+ORDER BY e.id DESC
+LIMIT sqlc.arg(page_limit);

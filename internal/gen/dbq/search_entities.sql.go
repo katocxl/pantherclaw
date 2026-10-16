@@ -69,6 +69,48 @@ func (q *Queries) CountAlerts(ctx context.Context, arg CountAlertsParams) (int64
 	return count, err
 }
 
+const countAutomationExecutions = `-- name: CountAutomationExecutions :one
+SELECT count(*) FROM (
+    SELECT 1 FROM pc.automation_executions e
+    WHERE e.org_id = $1
+      AND ($2::uuid IS NULL OR e.id = $2::uuid)
+      AND ($3::uuid IS NULL OR e.automation_id = $3::uuid)
+      AND (cardinality($4::text[]) = 0 OR e.state = ANY ($4::text[]))
+      AND (cardinality($5::text[]) = 0 OR e.mode = ANY ($5::text[]))
+      AND (cardinality($6::text[]) = 0 OR e.trigger_kind = ANY ($6::text[]))
+      AND ($7::timestamptz IS NULL OR e.created_at >= $7::timestamptz)
+      AND ($8::timestamptz IS NULL OR e.created_at < $8::timestamptz)
+    LIMIT 10001
+) x
+`
+
+type CountAutomationExecutionsParams struct {
+	OrgID        ids.OrgID
+	ID           *ids.UUID
+	AutomationID *ids.UUID
+	States       []string
+	Modes        []string
+	Kinds        []string
+	StartTime    *time.Time
+	EndTime      *time.Time
+}
+
+func (q *Queries) CountAutomationExecutions(ctx context.Context, arg CountAutomationExecutionsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAutomationExecutions,
+		arg.OrgID,
+		arg.ID,
+		arg.AutomationID,
+		arg.States,
+		arg.Modes,
+		arg.Kinds,
+		arg.StartTime,
+		arg.EndTime,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countAutomations = `-- name: CountAutomations :one
 SELECT count(*) FROM (
     SELECT 1 FROM pc.automations a
@@ -472,6 +514,104 @@ func (q *Queries) SearchAlerts(ctx context.Context, arg SearchAlertsParams) ([]S
 			&i.Test,
 			&i.CreatedAt,
 			&i.Agents,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchAutomationExecutions = `-- name: SearchAutomationExecutions :many
+SELECT e.id, e.automation_id, a.name AS automation_name, e.version_id, e.mode, e.state, e.reason, e.trigger_kind,
+       e.depth, e.principal_user_id, e.principal_sa_id, e.created_at, e.started_at, e.ended_at
+FROM pc.automation_executions e
+JOIN pc.automations a ON a.org_id = e.org_id AND a.id = e.automation_id
+WHERE e.org_id = $1
+  AND ($2::uuid IS NULL OR e.id < $2::uuid)
+  AND ($3::uuid IS NULL OR e.id = $3::uuid)
+  AND ($4::uuid IS NULL OR e.automation_id = $4::uuid)
+  AND (cardinality($5::text[]) = 0 OR e.state = ANY ($5::text[]))
+  AND (cardinality($6::text[]) = 0 OR e.mode = ANY ($6::text[]))
+  AND (cardinality($7::text[]) = 0 OR e.trigger_kind = ANY ($7::text[]))
+  AND ($8::timestamptz IS NULL OR e.created_at >= $8::timestamptz)
+  AND ($9::timestamptz IS NULL OR e.created_at < $9::timestamptz)
+ORDER BY e.id DESC
+LIMIT $10
+`
+
+type SearchAutomationExecutionsParams struct {
+	OrgID        ids.OrgID
+	Before       *ids.UUID
+	ID           *ids.UUID
+	AutomationID *ids.UUID
+	States       []string
+	Modes        []string
+	Kinds        []string
+	StartTime    *time.Time
+	EndTime      *time.Time
+	PageLimit    int32
+}
+
+type SearchAutomationExecutionsRow struct {
+	ID              ids.UUID
+	AutomationID    ids.UUID
+	AutomationName  string
+	VersionID       ids.UUID
+	Mode            string
+	State           string
+	Reason          *string
+	TriggerKind     string
+	Depth           int16
+	PrincipalUserID *ids.UUID
+	PrincipalSaID   *ids.UUID
+	CreatedAt       time.Time
+	StartedAt       *time.Time
+	EndedAt         *time.Time
+}
+
+// Automation executions (D44, D79 S5): org-level under automation.read.
+// Rows carry no trigger parameters, subjects or evidence: the runs and
+// transactions an execution caused are read through their own entities,
+// in the viewer's agent scope.
+func (q *Queries) SearchAutomationExecutions(ctx context.Context, arg SearchAutomationExecutionsParams) ([]SearchAutomationExecutionsRow, error) {
+	rows, err := q.db.Query(ctx, searchAutomationExecutions,
+		arg.OrgID,
+		arg.Before,
+		arg.ID,
+		arg.AutomationID,
+		arg.States,
+		arg.Modes,
+		arg.Kinds,
+		arg.StartTime,
+		arg.EndTime,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchAutomationExecutionsRow{}
+	for rows.Next() {
+		var i SearchAutomationExecutionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AutomationID,
+			&i.AutomationName,
+			&i.VersionID,
+			&i.Mode,
+			&i.State,
+			&i.Reason,
+			&i.TriggerKind,
+			&i.Depth,
+			&i.PrincipalUserID,
+			&i.PrincipalSaID,
+			&i.CreatedAt,
+			&i.StartedAt,
+			&i.EndedAt,
 		); err != nil {
 			return nil, err
 		}

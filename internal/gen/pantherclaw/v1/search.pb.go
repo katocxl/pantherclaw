@@ -68,7 +68,9 @@ type SearchFilters struct {
 	// Alert, incident and finding severities (LOW, MEDIUM, HIGH, CRITICAL).
 	Severities []string `protobuf:"bytes,29,rep,name=severities,proto3" json:"severities,omitempty"`
 	// Transaction effect states (CONFIRMED, NONE_CONFIRMED, PARTIAL, UNKNOWN, ...).
-	EffectStates  []string `protobuf:"bytes,30,rep,name=effect_states,json=effectStates,proto3" json:"effect_states,omitempty"`
+	EffectStates []string `protobuf:"bytes,30,rep,name=effect_states,json=effectStates,proto3" json:"effect_states,omitempty"`
+	// Automation executions of this automation.
+	AutomationId  *string `protobuf:"bytes,31,opt,name=automation_id,json=automationId,proto3,oneof" json:"automation_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -313,13 +315,20 @@ func (x *SearchFilters) GetEffectStates() []string {
 	return nil
 }
 
+func (x *SearchFilters) GetAutomationId() string {
+	if x != nil && x.AutomationId != nil {
+		return *x.AutomationId
+	}
+	return ""
+}
+
 // Query is one structured query.
 type Query struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// "transactions", "runs", "agents", "grants", "grant_changes",
 	// "connections", "approvals", "audit", "operations", "alerts",
 	// "incidents", "cases", "findings", "policy_versions", "packages",
-	// "gateways" or "automations".
+	// "gateways", "automations" or "automation_executions".
 	Entity        string         `protobuf:"bytes,1,opt,name=entity,proto3" json:"entity,omitempty"`
 	Filters       *SearchFilters `protobuf:"bytes,2,opt,name=filters,proto3" json:"filters,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -3120,7 +3129,7 @@ var File_pantherclaw_v1_search_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_search_proto_rawDesc = "" +
 	"\n" +
-	"\x1bpantherclaw/v1/search.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb3\f\n" +
+	"\x1bpantherclaw/v1/search.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf9\f\n" +
 	"\rSearchFilters\x12\x1d\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x02id\x88\x01\x01\x12(\n" +
 	"\bagent_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x01R\aagentId\x88\x01\x01\x12$\n" +
@@ -3161,7 +3170,8 @@ const file_pantherclaw_v1_search_proto_rawDesc = "" +
 	"\n" +
 	"severities\x18\x1d \x03(\tB\b\xbaH\x05\x92\x01\x02\x10\x10R\n" +
 	"severities\x12-\n" +
-	"\reffect_states\x18\x1e \x03(\tB\b\xbaH\x05\x92\x01\x02\x10\x10R\feffectStatesB\x05\n" +
+	"\reffect_states\x18\x1e \x03(\tB\b\xbaH\x05\x92\x01\x02\x10\x10R\feffectStates\x122\n" +
+	"\rautomation_id\x18\x1f \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\fR\fautomationId\x88\x01\x01B\x05\n" +
 	"\x03_idB\v\n" +
 	"\t_agent_idB\t\n" +
 	"\a_run_idB\v\n" +
@@ -3174,10 +3184,11 @@ const file_pantherclaw_v1_search_proto_rawDesc = "" +
 	"\x1d_principal_service_account_idB\x15\n" +
 	"\x13_used_connection_idB\v\n" +
 	"\t_alert_idB\x0e\n" +
-	"\f_incident_id\"\x97\x02\n" +
-	"\x05Query\x12\xd4\x01\n" +
-	"\x06entity\x18\x01 \x01(\tB\xbb\x01\xbaH\xb7\x01r\xb4\x01R\ftransactionsR\x04runsR\x06agentsR\x06grantsR\rgrant_changesR\vconnectionsR\tapprovalsR\x05auditR\n" +
-	"operationsR\x06alertsR\tincidentsR\x05casesR\bfindingsR\x0fpolicy_versionsR\bpackagesR\bgatewaysR\vautomationsR\x06entity\x127\n" +
+	"\f_incident_idB\x10\n" +
+	"\x0e_automation_id\"\xae\x02\n" +
+	"\x05Query\x12\xeb\x01\n" +
+	"\x06entity\x18\x01 \x01(\tB\xd2\x01\xbaH\xce\x01r\xcb\x01R\ftransactionsR\x04runsR\x06agentsR\x06grantsR\rgrant_changesR\vconnectionsR\tapprovalsR\x05auditR\n" +
+	"operationsR\x06alertsR\tincidentsR\x05casesR\bfindingsR\x0fpolicy_versionsR\bpackagesR\bgatewaysR\vautomationsR\x15automation_executionsR\x06entity\x127\n" +
 	"\afilters\x18\x02 \x01(\v2\x1d.pantherclaw.v1.SearchFiltersR\afilters\"\x90\x06\n" +
 	"\rBuiltinParams\x124\n" +
 	"\x0etransaction_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\rtransactionId\x88\x01\x01\x12(\n" +
@@ -3323,10 +3334,10 @@ const file_pantherclaw_v1_search_proto_rawDesc = "" +
 	"\x18UpdateSavedQueryResponse\x120\n" +
 	"\x05query\x18\x01 \x01(\v2\x1a.pantherclaw.v1.SavedQueryR\x05query\"I\n" +
 	"\x15GetSavedQueryResponse\x120\n" +
-	"\x05query\x18\x01 \x01(\v2\x1a.pantherclaw.v1.SavedQueryR\x05query\"\xaa\x02\n" +
+	"\x05query\x18\x01 \x01(\v2\x1a.pantherclaw.v1.SavedQueryR\x05query\"\xc1\x02\n" +
 	"\vFindRequest\x12\x1d\n" +
-	"\x04text\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x02\x18dR\x04text\x12\xda\x01\n" +
-	"\x05kinds\x18\x02 \x03(\tB\xc3\x01\xbaH\xbf\x01\x92\x01\xbb\x01\x10\x11\"\xb6\x01r\xb3\x01R\x06agentsR\vconnectionsR\x05casesR\tincidentsR\x06alertsR\bpackagesR\bgatewaysR\x10service_accountsR\x06peopleR\x04runsR\ftransactionsR\x06grantsR\tapprovalsR\bfindingsR\x0fpolicy_versionsR\x05auditR\vautomationsR\x05kinds\x12\x1f\n" +
+	"\x04text\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x02\x18dR\x04text\x12\xf1\x01\n" +
+	"\x05kinds\x18\x02 \x03(\tB\xda\x01\xbaH\xd6\x01\x92\x01\xd2\x01\x10\x12\"\xcd\x01r\xca\x01R\x06agentsR\vconnectionsR\x05casesR\tincidentsR\x06alertsR\bpackagesR\bgatewaysR\x10service_accountsR\x06peopleR\x04runsR\ftransactionsR\x06grantsR\tapprovalsR\bfindingsR\x0fpolicy_versionsR\x05auditR\vautomationsR\x15automation_executionsR\x05kinds\x12\x1f\n" +
 	"\x05limit\x18\x03 \x01(\x05B\t\xbaH\x06\x1a\x04\x18\n" +
 	"(\x00R\x05limit\"\xc6\x01\n" +
 	"\tFindMatch\x12\x12\n" +

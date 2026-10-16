@@ -281,3 +281,38 @@ SELECT count(*) FROM (
       AND (sqlc.narg(end_time)::timestamptz IS NULL OR a.created_at < sqlc.narg(end_time)::timestamptz)
     LIMIT 10001
 ) x;
+
+-- Automation executions (D44, D79 S5): org-level under automation.read.
+-- Rows carry no trigger parameters, subjects or evidence: the runs and
+-- transactions an execution caused are read through their own entities,
+-- in the viewer's agent scope.
+-- name: SearchAutomationExecutions :many
+SELECT e.id, e.automation_id, a.name AS automation_name, e.version_id, e.mode, e.state, e.reason, e.trigger_kind,
+       e.depth, e.principal_user_id, e.principal_sa_id, e.created_at, e.started_at, e.ended_at
+FROM pc.automation_executions e
+JOIN pc.automations a ON a.org_id = e.org_id AND a.id = e.automation_id
+WHERE e.org_id = sqlc.arg(org_id)
+  AND (sqlc.narg(before)::uuid IS NULL OR e.id < sqlc.narg(before)::uuid)
+  AND (sqlc.narg(id)::uuid IS NULL OR e.id = sqlc.narg(id)::uuid)
+  AND (sqlc.narg(automation_id)::uuid IS NULL OR e.automation_id = sqlc.narg(automation_id)::uuid)
+  AND (cardinality(sqlc.arg(states)::text[]) = 0 OR e.state = ANY (sqlc.arg(states)::text[]))
+  AND (cardinality(sqlc.arg(modes)::text[]) = 0 OR e.mode = ANY (sqlc.arg(modes)::text[]))
+  AND (cardinality(sqlc.arg(kinds)::text[]) = 0 OR e.trigger_kind = ANY (sqlc.arg(kinds)::text[]))
+  AND (sqlc.narg(start_time)::timestamptz IS NULL OR e.created_at >= sqlc.narg(start_time)::timestamptz)
+  AND (sqlc.narg(end_time)::timestamptz IS NULL OR e.created_at < sqlc.narg(end_time)::timestamptz)
+ORDER BY e.id DESC
+LIMIT sqlc.arg(page_limit);
+
+-- name: CountAutomationExecutions :one
+SELECT count(*) FROM (
+    SELECT 1 FROM pc.automation_executions e
+    WHERE e.org_id = sqlc.arg(org_id)
+      AND (sqlc.narg(id)::uuid IS NULL OR e.id = sqlc.narg(id)::uuid)
+      AND (sqlc.narg(automation_id)::uuid IS NULL OR e.automation_id = sqlc.narg(automation_id)::uuid)
+      AND (cardinality(sqlc.arg(states)::text[]) = 0 OR e.state = ANY (sqlc.arg(states)::text[]))
+      AND (cardinality(sqlc.arg(modes)::text[]) = 0 OR e.mode = ANY (sqlc.arg(modes)::text[]))
+      AND (cardinality(sqlc.arg(kinds)::text[]) = 0 OR e.trigger_kind = ANY (sqlc.arg(kinds)::text[]))
+      AND (sqlc.narg(start_time)::timestamptz IS NULL OR e.created_at >= sqlc.narg(start_time)::timestamptz)
+      AND (sqlc.narg(end_time)::timestamptz IS NULL OR e.created_at < sqlc.narg(end_time)::timestamptz)
+    LIMIT 10001
+) x;

@@ -90,6 +90,7 @@ func filtersOf(f *pantherclawv1.SearchFilters) (search.Filters, error) {
 		{&out.UsedConnection, f.UsedConnectionId},
 		{&out.Alert, f.AlertId},
 		{&out.Incident, f.IncidentId},
+		{&out.Automation, f.AutomationId},
 	} {
 		id, err := optID(p.src)
 		if err != nil {
@@ -149,7 +150,7 @@ func filtersProto(f search.Filters) *pantherclawv1.SearchFilters {
 		TargetType: f.TargetType, EffectPrefix: f.EffectPrefix, KindPrefix: f.KindPrefix, Actor: f.Actor,
 		Decisions: f.Decisions, Modes: f.Modes, States: f.States, Kinds: f.Kinds, AccessModes: f.AccessModes,
 		EnvironmentKinds: f.EnvKinds, UnusedSince: ts(f.UnusedSince), WidensOnly: f.WidensOnly,
-		StartTime: ts(f.Start), EndTime: ts(f.End), AlertId: idPtr(f.Alert), IncidentId: idPtr(f.Incident),
+		StartTime: ts(f.Start), EndTime: ts(f.End), AlertId: idPtr(f.Alert), IncidentId: idPtr(f.Incident), AutomationId: idPtr(f.Automation),
 		Severities: f.Severities, EffectStates: f.EffectStates,
 	}
 }

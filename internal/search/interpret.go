@@ -119,6 +119,7 @@ var entityWords = map[string]Entity{
 	"package": EntityPackages, "packages": EntityPackages,
 	"gateway": EntityGateways, "gateways": EntityGateways,
 	"automation": EntityAutomations, "automations": EntityAutomations,
+	"execution": EntityExecutions, "executions": EntityExecutions,
 }
 
 // multiEntity are entity phrases of more than one word, longest first.
@@ -560,7 +561,7 @@ type ref struct {
 
 // nameKinds are the kinds a bare name may name; a preceding "agent" or
 // "connection" narrows it.
-var nameKinds = []FindKind{FindAgents, FindConnections}
+var nameKinds = []FindKind{FindAgents, FindConnections, FindAutomations}
 
 // names resolves the remaining words that name records: quoted phrases,
 // ids, and words after "agent", "connection", "for" or "on". Every other
@@ -699,7 +700,7 @@ func (p *parser) applyRef(ent Entity, f *Filters, r ref) bool {
 	desc := fmt.Sprintf("%s is %s (%s)", strings.TrimSuffix(string(r.match.Kind), "s"), r.match.Label, r.match.Evidence[0])
 	slot := map[FindKind]**ids.UUID{
 		FindAgents: &f.Agent, FindRuns: &f.Run, FindGrants: &f.Grant, FindConnections: &f.Connection,
-		FindGateways: &f.Gateway, FindAlerts: &f.Alert, FindIncidents: &f.Incident,
+		FindGateways: &f.Gateway, FindAlerts: &f.Alert, FindIncidents: &f.Incident, FindAutomations: &f.Automation,
 	}
 	if (r.match.Kind == FindKind(ent)) || (ent == EntityTransactions && r.match.Kind == FindTransactions) {
 		f.ID = &id
