@@ -139,6 +139,9 @@ func (s *Service) SetTestCasesTx(ctx context.Context, tx db.TenantTx, versionID 
 			return err
 		}
 		if err := Check(def, cases); err != nil {
+			if errors.Is(err, ErrCaseName) {
+				return pcerr.Wrap(err, pcerr.InvalidArgument, "TEST_CASE_NAME", err.Error())
+			}
 			return pcerr.Wrap(err, pcerr.InvalidArgument, "TEST_CASES_INVALID", err.Error())
 		}
 		if _, err := q.DeleteAutomationTestCases(ctx, c.Org, versionID); err != nil {

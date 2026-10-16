@@ -25,6 +25,7 @@ import (
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -128,6 +129,12 @@ func TestT127_TestsAndSimulationAreInert(t *testing.T) {
 	before := effects(t, o)
 
 	// The mock refund is irreversible, so PARTIAL or UNKNOWN is required.
+	// D119: a name outside the stored rule is refused before the insert.
+	bad := scenario()[:1]
+	bad[0].Name = "Bad Name"
+	if _, err := svc.SetTestCases(ctx, v, bad); pcerr.ReasonOf(err) != "TEST_CASE_NAME" {
+		t.Fatalf("a bad case name: %v", err)
+	}
 	// D103 T1: in the caller's transaction, as a template sets them.
 	var missing []string
 	if err := o.P.InTenantTx(ctx, o.Org, func(ctx context.Context, tx db.TenantTx) error {
