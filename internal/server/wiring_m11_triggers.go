@@ -17,6 +17,8 @@ import (
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/endpoints"
 	"github.com/katocxl/pantherclaw/internal/billing"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
+	defsdomain "github.com/katocxl/pantherclaw/internal/definitions/domain"
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/keystore"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
@@ -50,7 +52,7 @@ var (
 // (nil) they read as "not available".
 func newAutomationTriggers(pool *db.Pool, bill *billing.Service, log *slog.Logger, core *automationsCore) *triggers.Service {
 	d := triggers.Deps{
-		Pool: pool, Raiser: m10Raiser{pool: pool}, Failures: &failures.Sink{}, Operations: &defspg.Store{Pool: pool},
+		Pool: pool, Raiser: m10Raiser{pool: pool}, Failures: &failures.Sink{}, Operations: automationOperations{store: &defspg.Store{Pool: pool}},
 		Clock: clock.System{}, Log: log,
 	}
 	if bill != nil {
@@ -119,9 +121,10 @@ func (m m11Triggers) mount(mux *http.ServeMux) {
 }
 
 // registerAutomationTriggers serves TriggerService and prepares the
-// endpoint and pages.
-func registerAutomationTriggers(rs *connect.Server, d apiDeps) (m11Triggers, error) {
-	trig := newAutomationTriggers(d.pool, d.billing, d.log, d.autos)
+// endpoint and pages, with the process's shared core (its Starter and
+// Pauser) passed explicitly (D109 E3).
+func registerAutomationTriggers(rs *connect.Server, d apiDeps, autos *automationsCore) (m11Triggers, error) {
+	trig := newAutomationTriggers(d.pool, d.billing, d.log, autos)
 	ep, err := newAutomationEndpoints(d.pool, d.kp, trig, d.billing, d.publicURL, d.clientIP, d.log)
 	if err != nil {
 		return m11Triggers{}, err
@@ -193,4 +196,31 @@ func (p automationPages) StartExecution(ctx context.Context, in triggers.ManualS
 
 func (p automationPages) RetryExecution(ctx context.Context, execution ids.UUID, idem string, su *stepup.StepUp) (triggers.Outcome, error) {
 	return p.trig.RetryExecution(ctx, execution, idem, su)
+}
+
+// automationOperations answers the trigger service's operation lookup in
+// the trigger's own transaction (D97 N3): the org's ACTIVE definition of
+// op from the highest active version that defines it, as the definitions
+// store's Active does.
+type automationOperations struct{ store *defspg.Store }
+
+func (o automationOperations) Active(ctx context.Context, tx db.TenantTx, org ids.OrgID, op string) (*defsdomain.Definition, error) {
+	rows, err := dbq.New(tx).ListActiveVersionsWith(ctx, org, op)
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	best := rows[0]
+	for _, r := range rows[1:] {
+		a, err1 := defsdomain.ParseVersion(r.Version)
+		b, err2 := defsdomain.ParseVersion(best.Version)
+		if err1 == nil && err2 == nil && a.Compare(b) > 0 {
+			best = r
+		}
+	}
+	p, err := o.store.VersionInTx(ctx, tx, org, best.ID)
+	if err != nil {
+		return nil, err
+	}
+	d, _ := p.Definition(op)
+	return d, nil
 }

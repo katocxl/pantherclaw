@@ -120,11 +120,18 @@ func RunProbe(ctx context.Context, q *dbq.Queries, org ids.OrgID, probe string, 
 			s := ProbeSubject{
 				Probe: probe, Key: "approval_request:" + r.ID.String(),
 				Fields: map[string]string{
-					"request": r.ID.String(), "kind": r.SubjectKind, "operation": r.Operation, "agent": r.AgentID.String(),
+					"request": r.ID.String(), "kind": r.SubjectKind, "operation": r.Operation, "agent": uuidText(r.AgentID),
 					"run": uuidText(r.RunID), "minutes_waiting": strconv.Itoa(int(now.Sub(r.CreatedAt).Minutes())),
 				},
-				Subjects:  []reflexdomain.Subject{{Type: reflexdomain.SubjectAgent, ID: r.AgentID.String()}},
 				Execution: r.AutomationExecutionID,
+			}
+			// A gate request may have no agent (D25a).
+			if r.AgentID != nil {
+				s.Subjects = append(s.Subjects, reflexdomain.Subject{Type: reflexdomain.SubjectAgent, ID: r.AgentID.String()})
+			}
+			// A gate request descends from its own execution (D87 L6).
+			if r.GateExecutionID != nil {
+				s.Execution = r.GateExecutionID
 			}
 			if r.RunID != nil {
 				s.Subjects = append(s.Subjects, reflexdomain.Subject{Type: reflexdomain.SubjectRun, ID: r.RunID.String()})
