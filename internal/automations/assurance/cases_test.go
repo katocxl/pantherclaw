@@ -5,7 +5,9 @@ package assurance_test
 
 import (
 	"bytes"
+	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/automations/assurance"
@@ -182,5 +184,21 @@ func TestCheckAndDigest(t *testing.T) {
 	c, _ := assurance.Digest(good)
 	if !bytes.Equal(a, b) || bytes.Equal(a, c) {
 		t.Error("the digest is not deterministic or misses a change")
+	}
+}
+
+// D119: a case name outside the stored rule is refused before any insert.
+func TestCaseNamesFollowTheStoredRule(t *testing.T) {
+	d := parse(t)
+	for name, ok := range map[string]bool{
+		"normal-1": true, "a": true, "Normal": false, "1st": false, "has space": false, "": false,
+		"a" + strings.Repeat("b", 62): true, "a" + strings.Repeat("b", 63): false,
+	} {
+		c := cases(assurance.CaseNormal)
+		c[0].Name = name
+		err := assurance.Check(d, c)
+		if ok != (err == nil) || (!ok && !errors.Is(err, assurance.ErrCaseName)) {
+			t.Errorf("%q: %v", name, err)
+		}
 	}
 }

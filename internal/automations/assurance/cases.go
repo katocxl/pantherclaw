@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/json/v2"
 	"fmt"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -74,6 +75,12 @@ type Case struct {
 // ErrCase reports a case that does not fit the version.
 var ErrCase = fmt.Errorf("%w: test case", autodomain.ErrInvalid)
 
+// ErrCaseName is a case name outside the stored rule (D119).
+var ErrCaseName = fmt.Errorf("%w name", ErrCase)
+
+// caseName is the stored rule for a case name (00144 CHECK).
+var caseName = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,62}$`)
+
 var (
 	caseKinds  = []CaseKind{CaseNormal, CaseDenied, CaseTimeout, CaseDuplicate, CasePartial, CaseUnknown, CaseCustom}
 	stubStates = []string{
@@ -96,6 +103,8 @@ func Check(def *autodomain.Definition, cases []Case) error {
 	seen := map[string]bool{}
 	for _, c := range cases {
 		switch {
+		case !caseName.MatchString(c.Name):
+			return fmt.Errorf("%w %q: lowercase letters, digits, _ and -, starting with a letter, at most 63", ErrCaseName, c.Name)
 		case seen[c.Name]:
 			return fmt.Errorf("%w: %q twice", ErrCase, c.Name)
 		case !slices.Contains(caseKinds, c.Kind):
