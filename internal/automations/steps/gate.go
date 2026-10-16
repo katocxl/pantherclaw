@@ -73,7 +73,12 @@ func (s *gate) request(sc autodomain.StepContext) (GateRequest, bool) {
 	for _, u := range w.Approvers.Users {
 		users = append(users, u.UUID())
 	}
+	params := make(map[string]string, len(sc.Params))
+	for k, v := range sc.Params {
+		params[k] = v.Text()
+	}
 	return GateRequest{
+		AutomationName: ex.AutomationName, ServiceAccount: ex.ServiceAccount, Params: params,
 		Org: sc.Org, Automation: ex.Automation, Execution: ex.ID, StepID: sc.Spec.ID, Attempt: sc.Attempt,
 		ParamsDigest: ParamsDigest(sc.Params), Summary: w.Summary, Roles: w.Approvers.Roles, Users: users, Exclude: out,
 		MinApprovals: n, Deadline: w.Deadline.D(),

@@ -17,6 +17,9 @@ const (
 	KindToolReview     = "TOOL_REVIEW"
 	KindRestoration    = "RESTORATION"
 	KindReconciliation = "RECONCILIATION"
+	// KindAutomationGate: an automation waits at a gate step for people
+	// holding automation.approve (G0 M11 part 2 D25, D25a).
+	KindAutomationGate = "AUTOMATION_GATE"
 )
 
 // Priorities run from 1 (most urgent) to 4.

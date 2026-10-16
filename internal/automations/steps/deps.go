@@ -94,15 +94,20 @@ type Runs interface {
 
 // GateRequest asks people to approve one gate (D25, HR-281).
 type GateRequest struct {
-	Org          ids.OrgID
-	Automation   ids.UUID
-	Execution    ids.UUID
-	StepID       string
-	Attempt      int
-	ParamsDigest []byte
-	Summary      string
-	Roles        []string
-	Users        []ids.UUID
+	Org        ids.OrgID
+	Automation ids.UUID
+	// AutomationName, ServiceAccount and Params (as text, shown as
+	// untrusted) render the approval page.
+	AutomationName string
+	ServiceAccount ids.UUID
+	Params         map[string]string
+	Execution      ids.UUID
+	StepID         string
+	Attempt        int
+	ParamsDigest   []byte
+	Summary        string
+	Roles          []string
+	Users          []ids.UUID
 	// Exclude are the people who never decide it (owner, confirmers,
 	// principal, as the gate declares).
 	Exclude      []ids.UUID

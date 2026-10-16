@@ -137,6 +137,9 @@ func (e *Engine) Start(ctx context.Context, tx pgx.Tx, t autodomain.TriggerRef) 
 	}
 	var ceiling *ids.UUID
 	if c, err := q.GetActiveAutomationCeiling(ctx, t.Org, t.Automation); err == nil {
+		if c.VersionID != t.Version {
+			return ids.UUID{}, autodomain.ErrNotActive
+		}
 		ceiling = &c.ID
 	} else if !db.IsNoRows(err) {
 		return ids.UUID{}, err

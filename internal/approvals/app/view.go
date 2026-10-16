@@ -102,7 +102,9 @@ func (s *Service) Inbox(ctx context.Context) (Inbox, error) {
 				continue
 			}
 			e, err := pgapprovals.LoadEligibility(ctx, q, c.Org, r.ID, []ids.UUID{user})
-			if err != nil {
+			if skipRow(err) {
+				continue
+			} else if err != nil {
 				return err
 			}
 			if !(locked{elig: e}).mayRespond(user) {

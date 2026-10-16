@@ -9,6 +9,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	pgapprovals "github.com/katocxl/pantherclaw/internal/approvals/adapters/pgapprovals"
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -89,7 +91,9 @@ func (s *Service) List(ctx context.Context, pr page.Request, f ListFilter) (Requ
 		}
 		for _, r := range rows {
 			e, err := pgapprovals.LoadEligibility(ctx, q, c.Org, r.ID, users)
-			if err != nil {
+			if skipRow(err) {
+				continue
+			} else if err != nil {
 				return err
 			}
 			l := locked{row: r, elig: e}
@@ -170,4 +174,16 @@ func eligibility(ctx context.Context, q *dbq.Queries, c tenancy.Caller, l locked
 		}
 	}
 	return out, nil
+}
+
+// skipRow reports a row whose eligibility could not be read for a reason
+// of its own (a stored requirement that no longer decodes, a row that
+// vanished): a list leaves it out rather than failing every other row
+// (D84 E2). A database error aborts the transaction and is returned.
+func skipRow(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pg *pgconn.PgError
+	return !errors.As(err, &pg) && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
 }

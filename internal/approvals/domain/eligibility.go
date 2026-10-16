@@ -180,6 +180,9 @@ func Check(r Requirement, p Person, c Context, cred ids.UUID) (bool, string) {
 	if r.Kind == KindContainment {
 		return checkContainment(p, c, cred)
 	}
+	if r.Kind == KindGate {
+		return checkGate(r, p, c, cred)
+	}
 	switch {
 	case isUser(c.Run.Launcher, p.UserID):
 		return false, IneligibleLauncher
