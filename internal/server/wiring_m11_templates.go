@@ -139,7 +139,7 @@ func securityPorts(in securityStepDeps) securitysteps.Deps {
 		Owners:   securitysteps.StoreOwners{},
 	}
 	if in.Core != nil && in.Core.svc != nil {
-		deps.Pauser = in.Core.svc
+		deps.Pauser, deps.Resumer = in.Core.svc, in.Core.svc
 	}
 	var notify rapp.Notifier
 	if in.Notify != nil {
