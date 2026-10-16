@@ -717,7 +717,7 @@ func (q *Queries) FormerGitHubUsers(ctx context.Context, orgID ids.OrgID, github
 }
 
 const getApprovalRequest = `-- name: GetApprovalRequest :one
-SELECT org_id, id, subject_kind, agent_id, transaction_id, evaluation, run_id, grant_id, grant_revision, variant_key, requested_by, operation, previous_id, binding, binding_input, requirements, display, display_hash, state, end_reason, created_at, deadline_at, evidence_deadline_at, approved_at, consume_by, consumed_at, permit_id, ended_at, action_ir, invalidation_key FROM pc.approval_requests WHERE org_id = $1 AND id = $2
+SELECT org_id, id, subject_kind, agent_id, transaction_id, evaluation, run_id, grant_id, grant_revision, variant_key, requested_by, operation, previous_id, binding, binding_input, requirements, display, display_hash, state, end_reason, created_at, deadline_at, evidence_deadline_at, approved_at, consume_by, consumed_at, permit_id, ended_at, action_ir, invalidation_key, execution_id, step_id, requested_by_automation FROM pc.approval_requests WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetApprovalRequest(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcApprovalRequest, error) {
@@ -754,12 +754,15 @@ func (q *Queries) GetApprovalRequest(ctx context.Context, orgID ids.OrgID, iD id
 		&i.EndedAt,
 		&i.ActionIr,
 		&i.InvalidationKey,
+		&i.ExecutionID,
+		&i.StepID,
+		&i.RequestedByAutomation,
 	)
 	return i, err
 }
 
 const getApprovalRequestForUpdate = `-- name: GetApprovalRequestForUpdate :one
-SELECT org_id, id, subject_kind, agent_id, transaction_id, evaluation, run_id, grant_id, grant_revision, variant_key, requested_by, operation, previous_id, binding, binding_input, requirements, display, display_hash, state, end_reason, created_at, deadline_at, evidence_deadline_at, approved_at, consume_by, consumed_at, permit_id, ended_at, action_ir, invalidation_key FROM pc.approval_requests WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, subject_kind, agent_id, transaction_id, evaluation, run_id, grant_id, grant_revision, variant_key, requested_by, operation, previous_id, binding, binding_input, requirements, display, display_hash, state, end_reason, created_at, deadline_at, evidence_deadline_at, approved_at, consume_by, consumed_at, permit_id, ended_at, action_ir, invalidation_key, execution_id, step_id, requested_by_automation FROM pc.approval_requests WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 // Responses (G0 M5 part 2 slice 207). Each use case locks the request,
@@ -798,6 +801,9 @@ func (q *Queries) GetApprovalRequestForUpdate(ctx context.Context, orgID ids.Org
 		&i.EndedAt,
 		&i.ActionIr,
 		&i.InvalidationKey,
+		&i.ExecutionID,
+		&i.StepID,
+		&i.RequestedByAutomation,
 	)
 	return i, err
 }
@@ -926,7 +932,7 @@ VALUES ($1, $2, 'ACTION', $3, $4, $5,
 type InsertApprovalRequestParams struct {
 	OrgID           ids.OrgID
 	ID              ids.UUID
-	AgentID         ids.UUID
+	AgentID         *ids.UUID
 	TransactionID   *ids.UUID
 	Evaluation      *int32
 	RunID           *ids.UUID
@@ -1101,7 +1107,7 @@ VALUES ($1, $2, 'RESTORATION', $3, $4, 'agent.restore',
 type InsertRestorationRequestParams struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID
-	AgentID      ids.UUID
+	AgentID      *ids.UUID
 	RequestedBy  *ids.UUID
 	Binding      []byte
 	BindingInput []byte
@@ -1233,7 +1239,7 @@ func (q *Queries) LinkedGitHubUsers(ctx context.Context, orgID ids.OrgID, github
 }
 
 const listApprovalRequests = `-- name: ListApprovalRequests :many
-SELECT org_id, id, subject_kind, agent_id, transaction_id, evaluation, run_id, grant_id, grant_revision, variant_key, requested_by, operation, previous_id, binding, binding_input, requirements, display, display_hash, state, end_reason, created_at, deadline_at, evidence_deadline_at, approved_at, consume_by, consumed_at, permit_id, ended_at, action_ir, invalidation_key FROM pc.approval_requests
+SELECT org_id, id, subject_kind, agent_id, transaction_id, evaluation, run_id, grant_id, grant_revision, variant_key, requested_by, operation, previous_id, binding, binding_input, requirements, display, display_hash, state, end_reason, created_at, deadline_at, evidence_deadline_at, approved_at, consume_by, consumed_at, permit_id, ended_at, action_ir, invalidation_key, execution_id, step_id, requested_by_automation FROM pc.approval_requests
 WHERE org_id = $1 AND state = ANY ($2::text[])
   AND ($3::uuid IS NULL OR id < $3::uuid)
   AND ($4::uuid IS NULL OR agent_id = $4::uuid)
@@ -1300,6 +1306,9 @@ func (q *Queries) ListApprovalRequests(ctx context.Context, arg ListApprovalRequ
 			&i.EndedAt,
 			&i.ActionIr,
 			&i.InvalidationKey,
+			&i.ExecutionID,
+			&i.StepID,
+			&i.RequestedByAutomation,
 		); err != nil {
 			return nil, err
 		}
@@ -1312,7 +1321,7 @@ func (q *Queries) ListApprovalRequests(ctx context.Context, arg ListApprovalRequ
 }
 
 const liveRequestOfTransaction = `-- name: LiveRequestOfTransaction :one
-SELECT org_id, id, subject_kind, agent_id, transaction_id, evaluation, run_id, grant_id, grant_revision, variant_key, requested_by, operation, previous_id, binding, binding_input, requirements, display, display_hash, state, end_reason, created_at, deadline_at, evidence_deadline_at, approved_at, consume_by, consumed_at, permit_id, ended_at, action_ir, invalidation_key FROM pc.approval_requests
+SELECT org_id, id, subject_kind, agent_id, transaction_id, evaluation, run_id, grant_id, grant_revision, variant_key, requested_by, operation, previous_id, binding, binding_input, requirements, display, display_hash, state, end_reason, created_at, deadline_at, evidence_deadline_at, approved_at, consume_by, consumed_at, permit_id, ended_at, action_ir, invalidation_key, execution_id, step_id, requested_by_automation FROM pc.approval_requests
 WHERE org_id = $1 AND transaction_id = $2
   AND state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED')
 FOR UPDATE
@@ -1352,6 +1361,9 @@ func (q *Queries) LiveRequestOfTransaction(ctx context.Context, orgID ids.OrgID,
 		&i.EndedAt,
 		&i.ActionIr,
 		&i.InvalidationKey,
+		&i.ExecutionID,
+		&i.StepID,
+		&i.RequestedByAutomation,
 	)
 	return i, err
 }
@@ -1392,7 +1404,7 @@ WHERE org_id = $1 AND agent_id = $2 AND subject_kind = 'RESTORATION'
   AND state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED')
 `
 
-func (q *Queries) LiveRestoration(ctx context.Context, orgID ids.OrgID, agentID ids.UUID) (ids.UUID, error) {
+func (q *Queries) LiveRestoration(ctx context.Context, orgID ids.OrgID, agentID *ids.UUID) (ids.UUID, error) {
 	row := q.db.QueryRow(ctx, liveRestoration, orgID, agentID)
 	var id ids.UUID
 	err := row.Scan(&id)
@@ -2134,7 +2146,7 @@ func (q *Queries) WaitRequest(ctx context.Context, arg WaitRequestParams) (WaitR
 }
 
 const waitingApprovalRequests = `-- name: WaitingApprovalRequests :many
-SELECT r.org_id, r.id, r.subject_kind, r.agent_id, r.transaction_id, r.evaluation, r.run_id, r.grant_id, r.grant_revision, r.variant_key, r.requested_by, r.operation, r.previous_id, r.binding, r.binding_input, r.requirements, r.display, r.display_hash, r.state, r.end_reason, r.created_at, r.deadline_at, r.evidence_deadline_at, r.approved_at, r.consume_by, r.consumed_at, r.permit_id, r.ended_at, r.action_ir, r.invalidation_key, coalesce(e.priority, 4)::integer AS priority
+SELECT r.org_id, r.id, r.subject_kind, r.agent_id, r.transaction_id, r.evaluation, r.run_id, r.grant_id, r.grant_revision, r.variant_key, r.requested_by, r.operation, r.previous_id, r.binding, r.binding_input, r.requirements, r.display, r.display_hash, r.state, r.end_reason, r.created_at, r.deadline_at, r.evidence_deadline_at, r.approved_at, r.consume_by, r.consumed_at, r.permit_id, r.ended_at, r.action_ir, r.invalidation_key, r.execution_id, r.step_id, r.requested_by_automation, coalesce(e.priority, 4)::integer AS priority
 FROM pc.approval_requests r
 LEFT JOIN pc.waitlist_entries e
   ON e.org_id = r.org_id AND e.subject_type = 'approval_request' AND e.subject_id = r.id AND e.state = 'OPEN'
@@ -2145,37 +2157,40 @@ LIMIT $2
 `
 
 type WaitingApprovalRequestsRow struct {
-	OrgID              ids.OrgID
-	ID                 ids.UUID
-	SubjectKind        string
-	AgentID            ids.UUID
-	TransactionID      *ids.UUID
-	Evaluation         *int32
-	RunID              *ids.UUID
-	GrantID            *ids.UUID
-	GrantRevision      *int32
-	VariantKey         []byte
-	RequestedBy        *ids.UUID
-	Operation          string
-	PreviousID         *ids.UUID
-	Binding            []byte
-	BindingInput       []byte
-	Requirements       []byte
-	Display            []byte
-	DisplayHash        []byte
-	State              string
-	EndReason          *string
-	CreatedAt          time.Time
-	DeadlineAt         time.Time
-	EvidenceDeadlineAt *time.Time
-	ApprovedAt         *time.Time
-	ConsumeBy          *time.Time
-	ConsumedAt         *time.Time
-	PermitID           *ids.UUID
-	EndedAt            *time.Time
-	ActionIr           []byte
-	InvalidationKey    *string
-	Priority           int32
+	OrgID                 ids.OrgID
+	ID                    ids.UUID
+	SubjectKind           string
+	AgentID               *ids.UUID
+	TransactionID         *ids.UUID
+	Evaluation            *int32
+	RunID                 *ids.UUID
+	GrantID               *ids.UUID
+	GrantRevision         *int32
+	VariantKey            []byte
+	RequestedBy           *ids.UUID
+	Operation             string
+	PreviousID            *ids.UUID
+	Binding               []byte
+	BindingInput          []byte
+	Requirements          []byte
+	Display               []byte
+	DisplayHash           []byte
+	State                 string
+	EndReason             *string
+	CreatedAt             time.Time
+	DeadlineAt            time.Time
+	EvidenceDeadlineAt    *time.Time
+	ApprovedAt            *time.Time
+	ConsumeBy             *time.Time
+	ConsumedAt            *time.Time
+	PermitID              *ids.UUID
+	EndedAt               *time.Time
+	ActionIr              []byte
+	InvalidationKey       *string
+	ExecutionID           *ids.UUID
+	StepID                *string
+	RequestedByAutomation *ids.UUID
+	Priority              int32
 }
 
 // The approval page (G0 M5 part 2 slice 209). The list reads the most
@@ -2221,6 +2236,9 @@ func (q *Queries) WaitingApprovalRequests(ctx context.Context, orgID ids.OrgID, 
 			&i.EndedAt,
 			&i.ActionIr,
 			&i.InvalidationKey,
+			&i.ExecutionID,
+			&i.StepID,
+			&i.RequestedByAutomation,
 			&i.Priority,
 		); err != nil {
 			return nil, err

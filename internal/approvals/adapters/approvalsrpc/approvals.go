@@ -78,7 +78,7 @@ func stateProto(s string) pantherclawv1.ApprovalState {
 func RequestProto(r app.Request, satisfied map[int]int) *pantherclawv1.ApprovalRequest {
 	out := &pantherclawv1.ApprovalRequest{
 		Id: r.ID.String(), SubjectKind: pantherclawv1.ApprovalSubjectKind(pantherclawv1.ApprovalSubjectKind_value["APPROVAL_SUBJECT_KIND_"+r.SubjectKind]),
-		State: stateProto(r.State), AgentId: r.AgentID.String(), RunId: str(r.RunID), TransactionId: str(r.TransactionID),
+		State: stateProto(r.State), AgentId: str(r.AgentID), RunId: str(r.RunID), TransactionId: str(r.TransactionID),
 		GrantId: str(r.GrantID), Operation: r.Operation, Binding: base64.RawURLEncoding.EncodeToString(r.Binding),
 		CreateTime: timestamppb.New(r.CreatedAt), DeadlineTime: timestamppb.New(r.DeadlineAt),
 		EvidenceDeadlineTime: ts(r.EvidenceDeadlineAt), ApproveTime: ts(r.ApprovedAt), ConsumeByTime: ts(r.ConsumeBy),
