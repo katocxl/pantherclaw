@@ -127,6 +127,7 @@ func TestHR290_ANewAgentIsPromotedProvisionallyAndItsGrantsEndWithIt(t *testing.
 func TestHR290_AFailingCoverageRecordIsNeverProvisional(t *testing.T) {
 	w := newWorld(t)
 	w.publishTest()
+	promotiontest.Route(t, w.scope) // the connection serves the agent (D101)
 	entry := ids.NewV7()
 	w.exec(`INSERT INTO pc.ledger_entries (org_id, id, kind, actor_type, actor_id, body) VALUES ($1, $2, 'coverage.test', 'test', 'test', '\x7b7d')`, w.org, entry)
 	w.exec(`INSERT INTO pc.coverage_snapshots (org_id, id, agent_id, connection_id, operation, state, reasons, body, body_sha256, ledger_entry_id)

@@ -332,3 +332,26 @@ func TestHR290_AGrantPrefixWithNothingKnownUnderItIsRefused(t *testing.T) {
 		t.Fatalf("the promoted exact operation: %v", err)
 	}
 }
+
+// TestHR290_OnlyActiveServingConnectionsCount (D114): COVERAGE reads the
+// records of the agent's ACTIVE serving connections only; a failing record
+// on a retired connection, or on one the agent has no route through,
+// counts for nothing, so the new agent is still promotable provisionally.
+func TestHR290_OnlyActiveServingConnectionsCount(t *testing.T) {
+	w := newWorld(t)
+	w.publishTest()
+	retired := w.secondConnection()
+	w.exec("UPDATE pc.connections SET state = 'RETIRED' WHERE id = $1", retired)
+	failing := func(conn ids.UUID) {
+		entry := ids.NewV7()
+		w.exec(`INSERT INTO pc.ledger_entries (org_id, id, kind, actor_type, actor_id, body) VALUES ($1, $2, 'coverage.test', 'test', 'test', '\x7b7d')`, w.org, entry)
+		w.exec(`INSERT INTO pc.coverage_snapshots (org_id, id, agent_id, connection_id, operation, state, reasons, body, body_sha256, ledger_entry_id)
+			VALUES ($1, $2, $3, $4, $5, 'OBSERVE_ONLY', '{monitor_mode}', '{}', $6, $7)`, w.org, ids.NewV7(), w.agent, conn, refund, make([]byte, 32), entry)
+	}
+	failing(retired) // routed, but retired
+	failing(w.conn)  // ACTIVE, but no route of the agent through it
+	res := w.promote(promotiontest.NewPromoter(t, w.scope))
+	if len(res.Promoted) != 1 || res.Promoted[0].State != promotions.StateProvisional {
+		t.Fatalf("records on retired and non-serving connections promoted %+v, readiness %+v", res.Promoted, res.Readiness[0])
+	}
+}
