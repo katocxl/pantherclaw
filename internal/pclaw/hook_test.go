@@ -266,7 +266,7 @@ func TestHR186_TheHookDecidesMonitorCommandsAsBashCommands(t *testing.T) {
 	f.mu.Lock()
 	now := len(f.body)
 	f.mu.Unlock()
-	if code != 2 || out != "" || !strings.Contains(errs, "PantherClaw could not decide this command, so it is blocked") ||
+	if code != 2 || out != "" || !strings.Contains(errs, "PantherClaw cannot decide this call, so it is blocked") ||
 		!strings.Contains(errs, "without a command") || now != asked {
 		t.Fatalf("monitor without a command: %d %q %q, %d requests", code, out, errs, now-asked)
 	}
@@ -297,7 +297,7 @@ func TestHR186_TheHookFailsClosed(t *testing.T) {
 	} {
 		start := time.Now()
 		code, out, errs := runHook(t, tc.env, tc.stdin, tc.args...)
-		if code != 2 || out != "" || !strings.Contains(errs, "PantherClaw could not decide this command, so it is blocked") ||
+		if code != 2 || out != "" || !strings.Contains(errs, "PantherClaw cannot decide this call, so it is blocked") ||
 			time.Since(start) > 900*time.Millisecond {
 			t.Errorf("%s: %d %q %q after %s", name, code, out, errs, time.Since(start))
 		}

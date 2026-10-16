@@ -89,7 +89,9 @@ func hookClaudeCode(ctx context.Context, a *app, args []string) error {
 	ans, err := a.hookAsk(ctx, args)
 	switch {
 	case err != nil:
-		return &exitError{code: 2, msg: "PantherClaw could not decide this command, so it is blocked: " + describe(err)}
+		// Worded as the gateway words CANNOT_AUTHORIZE (internal/gateway/hook,
+		// sdk), so a refusal reads the same whichever side made it (T-069).
+		return &exitError{code: 2, msg: "PantherClaw cannot decide this call, so it is blocked: " + describe(err)}
 	case ans.Decision != "allow":
 		reason := ans.Reason
 		if reason == "" {
