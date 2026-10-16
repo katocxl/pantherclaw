@@ -216,7 +216,11 @@ func (e *Engine) enqueue(ctx context.Context, tx pgx.Tx, org ids.OrgID, id ids.U
 	if e.Client == nil {
 		return nil // the wake sweep picks it up
 	}
-	if _, err := e.Client.InsertTx(ctx, tx, ExecutionArgs{Org: org, Execution: id}, nil); err != nil {
+	args, err := executionArgs(org, id)
+	if err != nil {
+		return err
+	}
+	if _, err := e.Client.InsertTx(ctx, tx, args, nil); err != nil {
 		return fmt.Errorf("pgengine: enqueue %s: %w", id, err)
 	}
 	return nil
