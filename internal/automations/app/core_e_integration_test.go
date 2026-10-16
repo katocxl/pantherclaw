@@ -7,10 +7,12 @@ package app_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	autoapp "github.com/katocxl/pantherclaw/internal/automations/app"
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -101,5 +103,78 @@ func TestD106_EnableResolvesAuthorityChanged(t *testing.T) {
 	e.confirmEnable(next.ID, autodomain.RolloutShadow)
 	if n := e.openFailures(autoapp.FailureAuthorityChanged); n != 0 {
 		t.Errorf("an ENABLE left %d authority_changed open", n)
+	}
+}
+
+// TestD111_VoidCeilingTxInTheCallersTransaction: the void, its pause and
+// its revocations commit or roll back with the caller's transaction.
+func TestD111_VoidCeilingTxInTheCallersTransaction(t *testing.T) {
+	e := newEnv(t)
+	a, v := e.enabled("refunds", autodomain.RolloutCohort, 5)
+	g, err := e.issue(a, v, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errMarking := errors.New("the marking failed")
+	err = e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		if err := e.svc.VoidCeilingTx(ctx, tx, e.org, a.Ceiling.ID, "PUBLISHER_COMPROMISED"); err != nil {
+			return err
+		}
+		return errMarking
+	})
+	if !errors.Is(err, errMarking) {
+		t.Fatal(err)
+	}
+	if got, _ := e.svc.GetAutomation(e.alice.cli, a.ID); got.State != autodomain.StateActive || e.grantState(g) != "ACTIVE" {
+		t.Fatalf("a rolled-back void left %s, grant %s", got.State, e.grantState(g))
+	}
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		return e.svc.VoidCeilingTx(ctx, tx, e.org, a.Ceiling.ID, "PUBLISHER_COMPROMISED")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := e.svc.GetAutomation(e.alice.cli, a.ID)
+	if got.State != autodomain.StatePaused || got.PauseReason != autodomain.PauseCeilingVoid || e.grantState(g) != "REVOKED" {
+		t.Errorf("after the void: %s %s, grant %s", got.State, got.PauseReason, e.grantState(g))
+	}
+	if n := e.count(`SELECT count(*) FROM pc.automation_ceilings WHERE org_id = $1 AND id = $2 AND state = 'VOID'
+		AND void_reason = 'PUBLISHER_COMPROMISED'`, e.org, a.Ceiling.ID); n != 1 {
+		t.Error("the ceiling is not VOID with the reason")
+	}
+	if err := e.pool.InTenantTx(context.Background(), ids.New[ids.Org](), func(ctx context.Context, tx db.TenantTx) error {
+		return e.svc.VoidCeilingTx(ctx, tx, e.org, a.Ceiling.ID, "TEST")
+	}); !errors.Is(err, db.ErrTenantMismatch) {
+		t.Errorf("another org's transaction: %v", err)
+	}
+}
+
+// TestD111_EnableResolvesByScope (G1): an ENABLE resolves the automation's
+// authority_changed failures whatever their dedupe key (the engine's are
+// keyed by execution), and leaves another automation's open.
+func TestD111_EnableResolvesByScope(t *testing.T) {
+	e := newEnv(t)
+	a, _ := e.validated("refunds")
+	other, _ := e.validated("payouts")
+	scoped := func(automation ids.UUID, key string) {
+		e.exec(`INSERT INTO pc.operational_failures (org_id, id, kind, summary, next_step, deadline, dedupe_key, scope)
+			VALUES ($1, gen_random_uuid(), $2, 'failed', 'look', now() + interval '1 day', $3,
+			jsonb_build_array(jsonb_build_object('type', 'automation', 'id', $4::text),
+			                  jsonb_build_object('type', 'automation_execution', 'id', gen_random_uuid()::text)))`,
+			e.org, autoapp.FailureAuthorityChanged, key, automation.String())
+	}
+	scoped(a.ID, "automation.authority_changed:"+ids.NewV7().String())
+	scoped(a.ID, "automation.authority_changed:ceiling:"+ids.NewV7().String())
+	scoped(other.ID, "automation.authority_changed:"+ids.NewV7().String())
+	vs, err := e.svc.ListVersions(e.alice.cli, a.ID, 0, 10)
+	if err != nil || len(vs) != 1 {
+		t.Fatalf("versions %v %v", vs, err)
+	}
+	e.confirmEnable(vs[0].ID, autodomain.RolloutShadow)
+	if n := e.openFailures(autoapp.FailureAuthorityChanged); n != 1 {
+		t.Errorf("open after the ENABLE: %d, want only the other automation's", n)
+	}
+	if n := e.count(`SELECT count(*) FROM pc.operational_failures WHERE org_id = $1 AND state <> 'RESOLVED'
+		AND scope @> jsonb_build_array(jsonb_build_object('type', 'automation', 'id', $2::text))`, e.org, other.ID.String()); n != 1 {
+		t.Error("another automation's failure was resolved")
 	}
 }

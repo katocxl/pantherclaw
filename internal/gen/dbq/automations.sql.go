@@ -248,31 +248,6 @@ func (q *Queries) AutomationAgentNames(ctx context.Context, orgID ids.OrgID, ids
 	return items, nil
 }
 
-const automationCeilingIDs = `-- name: AutomationCeilingIDs :many
-SELECT id FROM pc.automation_ceilings WHERE org_id = $1 AND automation_id = $2
-`
-
-// Every authority row of an automation, whatever its state.
-func (q *Queries) AutomationCeilingIDs(ctx context.Context, orgID ids.OrgID, automationID ids.UUID) ([]ids.UUID, error) {
-	rows, err := q.db.Query(ctx, automationCeilingIDs, orgID, automationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ids.UUID{}
-	for rows.Next() {
-		var id ids.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const ceilingsApprovedBy = `-- name: CeilingsApprovedBy :many
 SELECT c.id, c.automation_id FROM pc.automation_ceilings c
 WHERE c.org_id = $1 AND c.state = 'ACTIVE' AND $2::uuid = ANY (c.approved_by)

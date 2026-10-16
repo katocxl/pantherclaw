@@ -295,17 +295,10 @@ func (s *Service) apply(ctx context.Context, tx db.TenantTx, r changes.Request, 
 	}
 	// A new version's enabling is the people's review of the authority:
 	// the automation's open authority_changed failures are resolved; a
-	// ROLLOUT of the same version resolves none (D106 A3).
+	// ROLLOUT of the same version resolves none (D106 A3). They are found
+	// by the automation in their scope, whoever raised them (D111 G1).
 	if r.Kind == KindEnable {
-		rows, err := q.AutomationCeilingIDs(ctx, r.Org, a.ID)
-		if err != nil {
-			return err
-		}
-		keys := make([]string, 0, len(rows))
-		for _, id := range rows {
-			keys = append(keys, ceilingKey(id))
-		}
-		if err := s.resolveFailures(ctx, tx, FailureAuthorityChanged, keys,
+		if err := s.resolveAutomationFailures(ctx, tx, a.ID, FailureAuthorityChanged,
 			"Version "+itoa(int(v.Number))+" was enabled with fresh confirmations."); err != nil {
 			return err
 		}
