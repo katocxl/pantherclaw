@@ -18,6 +18,7 @@ import (
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -68,6 +69,15 @@ type Service struct {
 	Listing Listing
 	// Refusals audits refused grant changes (optional; G0 M10 D59 H1).
 	Refusals RefusalRecorder
+	// Store is the repository's in-transaction side (automation issuance
+	// and revocation, promotion checks; G0 M11 part 2 D9). Optional.
+	Store TxStore
+	// Ceilings checks automation ceilings and daily caps (the automations
+	// app). Without it nothing is issued under a ceiling.
+	Ceilings Ceilings
+	// Promotion is the production promotion gate (D39); nil checks nothing
+	// until it is wired.
+	Promotion PromotionGate
 }
 
 // IssueRequest asks for a new root grant.
@@ -127,6 +137,9 @@ func (s *Service) Issue(ctx context.Context, req IssueRequest) (domain.Grant, er
 		return domain.Grant{}, err
 	}
 	if err := g.ValidateIssue(domain.IssueContext{Now: now, Envelopes: envs, Lookup: lookup}); err != nil {
+		return domain.Grant{}, apiError(err)
+	}
+	if err := s.checkPromotion(ctx, c.Org, agent, g.Bounds); err != nil {
 		return domain.Grant{}, apiError(err)
 	}
 	ev := grantEvent(c.Actor(), "grant.issued", g, map[string]string{
@@ -191,7 +204,11 @@ func (s *Service) Revise(ctx context.Context, req ReviseRequest) (domain.Grant, 
 	if err != nil {
 		return domain.Grant{}, domain.Revision{}, apiError(err)
 	}
-	ic := domain.IssueContext{Now: s.Clock.Now()}
+	if !cur.Ceiling.IsZero() && rev.Widens {
+		// D56: people narrow or revoke an automation's grant, never widen it.
+		return domain.Grant{}, domain.Revision{}, ErrCeilingGrant
+	}
+	ic := domain.IssueContext{Now: s.Clock.Now(), Ceiling: cur.Ceiling}
 	if ic.Envelopes, err = s.Repo.Envelopes(ctx, c.Org, scopesFor(agent, next.EnvironmentID, next.Principal)); err != nil {
 		return domain.Grant{}, domain.Revision{}, err
 	}
@@ -207,6 +224,11 @@ func (s *Service) Revise(ctx context.Context, req ReviseRequest) (domain.Grant, 
 	}
 	if err := next.ValidateIssue(ic); err != nil {
 		return domain.Grant{}, domain.Revision{}, apiError(err)
+	}
+	if rev.Widens {
+		if err := s.checkPromotion(ctx, c.Org, agent, next.Bounds); err != nil {
+			return domain.Grant{}, domain.Revision{}, err
+		}
 	}
 	ev := grantEvent(c.Actor(), "grant.revised", next, map[string]string{
 		"revision": strconv.Itoa(next.Revision), "widens": strconv.FormatBool(rev.Widens), "change": rev.Detail,
@@ -430,4 +452,24 @@ func (s *Service) refuse(ctx context.Context, c tapp.Caller, op string, agent, g
 		return errors.Join(ErrHumanOnly, err)
 	}
 	return ErrHumanOnly
+}
+
+// checkPromotion runs the production promotion gate for a person's new or
+// widened grant (G0 M11 part 2 D9, D39, HR-290); a nil gate checks
+// nothing. The gate itself decides whether the environment is a
+// production one.
+func (s *Service) checkPromotion(ctx context.Context, org ids.OrgID, agent Agent, b domain.Bounds) error {
+	if s.Promotion == nil {
+		return nil
+	}
+	if s.Store == nil {
+		return ErrNotPromoted // fail closed: a gate without a store cannot check
+	}
+	var ops domain.Ops
+	if b.Operations != nil {
+		ops = *b.Operations
+	}
+	return s.Store.ReadTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		return s.Promotion.Check(ctx, tx.Pgx(), org, agent.ID, agent.EnvironmentID, ops)
+	})
 }
