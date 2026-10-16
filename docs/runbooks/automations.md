@@ -49,7 +49,7 @@ An automation is a versioned definition that starts work on a schedule, a platfo
 5. Widen in steps: SHADOW → COHORT → FULL. Each widening is a ROLLOUT change request with the same ceremony; FULL needs a verified cohort stage (at least one SUCCEEDED live execution with completion evidence, and no authority failures or open reconciliations). Narrowing (`NarrowRollout`) takes one person.
 6. Any change to the definition or the ceiling is a new version and a new ceremony. Review dates: the owner is told 7 days and 1 day before `review_by`; at `review_by` the ceiling expires and the automation pauses (CEILING_EXPIRED). To continue, enable a new version, then Resume: enabling never un-pauses an automation, and only Resume (with its revalidation) does.
 
-**Expired requests.** A change request that is not confirmed before its expiry (at most 24 hours; at most 72 hours for an emergency review of a protected change) is marked EXPIRED by a per-org sweep that runs every minute, which also emits `change.expired`. Nothing is applied; request again.
+**Expired requests.** A change request that is not confirmed before its expiry (at most 24 hours; at most 72 hours for an emergency review of a protected change) is marked EXPIRED by a per-org sweep that runs every minute, which also emits `change.expired`. Nothing is applied; request again. The exception is the emergency review of a protected change: the emergency change was already applied and stays applied (nothing is undone automatically). The protected change shows review state REVIEW_EXPIRED, and the emergency publisher gets an owned failure `protected_change.review_expired` in the operations queue. A person with the category's permission can open a new review: a fresh 72-hour emergency review, with the same author and publisher exclusions.
 
 If an approver later loses a permission or is marked compromised, the ceiling is voided, the automation pauses (CEILING_VOID) and the owner gets an owned failure. This happens at the next issuance, or within 5 minutes through the ceiling sweep, which checks every ACTIVE ceiling's approvers and review date per org. To recover, enable a new version with current approvers, then Resume.
 
@@ -88,12 +88,12 @@ Every control returns its verified effects (grants revoked, runs ended, launches
 
 ## 6. Automation destinations
 
-Destinations receive launches (LAUNCH), digests (DIGEST) and notices (NOTICE). They follow the same lifecycle as sources: created PENDING, activated with a step-up, HTTPS only; private and loopback hosts only when marked internal, metadata hosts never. Deliveries are signed with Standard Webhooks and retried up to 8 times (30 seconds to 1 hour). Rotate a destination's secret with a step-up; during the 24-hour overlap each delivery carries both signatures, so the receiver can switch at any time. A step that delivers succeeds only when the destination answered 2xx (DELIVERY_CONFIRMED). A PAUSED destination returns to ACTIVE without a step-up: its URL cannot change, and the URL is checked again at every send.
+Destinations receive launches (LAUNCH), digests (DIGEST) and notices (NOTICE). They follow the same lifecycle as sources: created PENDING, activated with a step-up, HTTPS only; private and loopback hosts only when marked internal, metadata hosts never. Deliveries are signed with Standard Webhooks and retried up to 8 times (30 seconds to 1 hour). Rotate a destination's secret with a step-up; during the 24-hour overlap each delivery carries both signatures, so the receiver can switch at any time. A step that delivers succeeds only when the destination answered 2xx (DELIVERY_CONFIRMED). A PAUSED destination returns to ACTIVE without a step-up: its URL cannot change, and the URL is checked again at every send. A delivery that has already been attempted cannot be cancelled, because it may have been sent: cancel and cleanup list it as "not verified".
 
 ## 7. A compromised publisher (Business)
 
 If a person who confirms changes may be compromised:
-1. A holder of `publisher.compromise` marks them compromised on the web page with a step-up and a `since` time. At once they can no longer confirm, approve, publish, activate or promote; their pending change requests are voided; automations whose ceiling they approved are paused (COMPROMISED_PUBLISHER); open policy rollouts they confirmed are halted (HR-293).
+1. A holder of `publisher.compromise` marks them compromised on the web page with a step-up and a `since` time. At once they can no longer confirm, approve, publish, activate or promote; pending change requests they requested or confirmed are voided, in both ceremonies (policy and change service); automations whose ceiling they approved are paused (COMPROMISED_PUBLISHER); open policy rollouts they confirmed are halted (HR-293).
 2. Read `ListExposed`: policy versions, package activations, org package keys (revoke them, see [key-rotation.md](key-rotation.md)), automation versions, protected changes, promotions and grants since `since`.
 3. Another person reviews each item KEEP or ROLLBACK. For a paused automation: KEEP it by enabling a new version through a ceremony with other confirmers and then resuming it, or retire it. What ROLLBACK does per item:
 
@@ -101,14 +101,16 @@ If a person who confirms changes may be compromised:
    |---|---|
    | Policy version | Rolls the policy back. If the rollback loosens the policy, it opens a change request instead and the review answers ROLLBACK_PENDING_CONFIRMATION with the request id; nothing is recorded yet. Once that request is confirmed, record ROLLBACK again: the undo is idempotent ("already rolled back" counts as success). |
    | Grant | Revokes the grant as the reviewer (reason PUBLISHER_COMPROMISED). |
-   | Automation | Pauses it. |
+   | Package activation | Quarantines the package. |
+   | Org package key | Revokes the key as COMPROMISED. |
+   | Automation version | Pauses the automation. |
    | Promotion | Revokes the promotion. |
    | Policy change request, protected change | KEEP_ONLY: only KEEP can be recorded (pending policy change requests were already voided at marking). |
 4. Clearing the mark is a change request that two other people confirm, and only once every item is reviewed.
 
 ## 8. Promote an agent for production
 
-In a PRODUCTION environment, a new, widened or delegated grant, whether a person or an automation issues it, needs the agent promoted for each operation the grant lists (HR-290). Grants issued before the gate keep working until they expire.
+In a PRODUCTION environment, a new, widened or delegated grant (issued by a person or an automation, or delegated to a child run) needs the agent promoted for each operation the grant lists (HR-290). Grants issued before the gate keep working until they expire.
 
 1. Check readiness: `GetReadiness(agent, environment)` reports each operation's checks (OWNER, IDENTITY, TESTS, APPROVALS, COVERAGE, FAILURE_BEHAVIOUR). It never makes a global claim.
 2. Promote: a `fleet_manager` with `agent.promote` runs `PromoteAgent(agent, environment, operations, failure behaviour)` with a security-key step-up. An `x.*` prefix expands to every operation currently reachable under it through the agent's connections, and each is checked and stored separately. Passing operations are promoted and failing ones are reported.
@@ -117,8 +119,8 @@ In a PRODUCTION environment, a new, widened or delegated grant, whether a person
    - it lasts at most 7 days;
    - every production grant it covers, issued by a person or an automation, widened or delegated to a child run, expires no later than the promotion, so plan short tasks. The cap is worked out in the same transaction that issues the grant, from the same promotion rows the gate reads, and only PROVISIONAL promotions cap: an ACTIVE promotion never shortens a grant;
    - readiness says "coverage pending until <time>";
-   - within 5 minutes of ENFORCED or PARTIAL coverage appearing on the agent's serving routes, it becomes ACTIVE (audited);
-   - if no such coverage appears, it EXPIRES and the agent owner gets an owned failure (`promotion.provisional_lapsed`). Get the agent's routes covered, then promote again; you can promote provisionally again only while there is still no coverage record.
+   - within 5 minutes of a passing coverage record (ENFORCED or PARTIAL, not lapsed) appearing on every serving connection, it becomes ACTIVE (audited);
+   - if no such coverage appears, it EXPIRES and the agent owner gets an owned failure (`promotion.provisional_lapsed`). Get the agent's routes covered, then promote again; you can promote provisionally again only while no serving connection has a failing record and at least one still has none.
    - A coverage record in a failing state never gives a provisional promotion: fix the coverage first.
 5. Revoke a promotion with `RevokePromotion`. Existing grants keep their own expiry; new grants for those operations are refused NOT_PROMOTED.
 
@@ -132,6 +134,7 @@ A new operation added later under a promoted prefix blocks new grants that use t
 | Execution FAILED `USAGE_EXCEEDED` | Per-day grant, run or budget cap reached | Wait for the next day, or enable a version with a larger ceiling |
 | Execution FAILED `NOT_PROMOTED` | A production grant lists operations the agent is not promoted for | Promote the agent for those operations (section 8); a new agent with no coverage yet can be promoted provisionally |
 | Grants end earlier than their TTL | The agent's promotion is PROVISIONAL, and grants it covers expire with it | Get the agent's routes covered so the promotion becomes ACTIVE (section 8) |
+| A manual start answers REFUSED_DUPLICATE | Another start with the same idempotency key ran at the same time; only one execution is created | Wait for the first answer, then retry: a repeat with the key returns the original execution |
 | Execution FAILED `LAUNCH_NOT_CLAIMED` | No runner or agent claimed the launch in time | Check that the agent's workload (or `pclaw automation runner`) is running and enrolled |
 | Triggers REFUSED_DUPLICATE | The same dedupe key within its window | Expected for retries; check the sender's ids |
 | Triggers REFUSED_LOOP | The automation is already in the trigger's ancestry | Change the triggers so automations do not feed each other |
