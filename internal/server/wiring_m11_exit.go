@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 
+	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/promotions"
@@ -47,18 +48,28 @@ func wireM11Cross(d apiDeps, prom *promotions.Service) {
 	probeM11("promotions", prom)
 }
 
-// wireM11Worker gives a worker-only process's core the grants and runs services
-// the API attaches in a combined one (D109 E1): their store and service
-// run govern's promotion gate, so automation issuance from the jobs is
-// gated. Protect wires its compromised-publisher check in every role (D110).
-func wireM11Worker(core *automationsCore, pool *db.Pool) {
-	if core == nil || core.svc == nil {
+// attachM11Issuance builds the process's one grants and runs pair through
+// govern's newGrants, so its store and service run the promotion gate, and
+// attaches it to the process's one core before the role split (D113): the
+// API, the jobs and a worker-only process issue through the same gated
+// services, and no ungated fallback exists.
+func attachM11Issuance(core *automationsCore, pool *db.Pool) {
+	if core == nil || core.svc == nil || core.grants != nil {
 		return
 	}
-	if core.grants == nil {
-		gstore, grants := newGrants(pool)
-		core.attach(pool, grants, runsapp.New(pool).WithGrants(gstore))
+	gstore, grants := newGrants(pool)
+	core.attach(pool, grants, runsapp.New(pool).WithGrants(gstore))
+}
+
+// m11Issuance is the grants and runs pair the API serves: the core's when
+// the process attached one, else a fresh gated pair (apiHandler built on
+// its own, in tests).
+func m11Issuance(d apiDeps) (*grantsapp.Service, *runsapp.Service) {
+	if d.autos != nil && d.autos.grants != nil && d.autos.runs != nil {
+		return d.autos.grants, d.autos.runs
 	}
+	gstore, grants := newGrants(d.pool)
+	return grants, runsapp.New(d.pool).WithGrants(gstore)
 }
 
 // promotionRevoker is protect's PromotionRevoker over govern's

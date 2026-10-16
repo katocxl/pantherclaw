@@ -270,8 +270,8 @@ func TestSimulationResumesAfterAFailedAttempt(t *testing.T) {
 // notPromoted is a promotion gate that refuses every operation.
 type notPromoted struct{}
 
-func (notPromoted) Check(context.Context, pgx.Tx, ids.OrgID, ids.UUID, ids.UUID, gdomain.Ops) error {
-	return grantsapp.ErrNotPromoted
+func (notPromoted) Check(context.Context, pgx.Tx, ids.OrgID, ids.UUID, ids.UUID, gdomain.Ops) (*time.Time, error) {
+	return nil, grantsapp.ErrNotPromoted
 }
 
 // D107 A1: the preview runs real issuance's promotion gate, so a launch

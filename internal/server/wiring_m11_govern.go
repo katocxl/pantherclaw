@@ -87,8 +87,10 @@ func registerM11GovernJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, po
 func newGrants(pool *db.Pool) (*grantspg.Store, *grantsapp.Service) {
 	gate := newPromotionGate(pool)
 	gstore := &grantspg.Store{Pool: pool, Promotions: gate}
-	return gstore, &grantsapp.Service{
+	grants := &grantsapp.Service{
 		Repo: gstore, Subjects: gstore, Defs: &defspg.Store{Pool: pool}, Authz: grantsapp.SubjectAuthorizer{},
 		Clock: clock.System{}, Listing: gstore, Refusals: gstore, Store: gstore, Promotions: gate,
 	}
+	probeM11("grants", grants)
+	return gstore, grants
 }

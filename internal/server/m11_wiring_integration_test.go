@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 )
 
@@ -216,10 +217,21 @@ func driverUsesSharedCore(t *testing.T, role string, got map[string][]any) {
 			}
 		}
 	}
+	// One gated grants service per process, the core's (D113).
+	if gs := got["grants"]; len(gs) != 1 {
+		t.Errorf("%s: %d grants services built through newGrants, want the one shared", role, len(gs))
+	} else if len(cores) == 1 && gs[0] != any(cores[0].(*automationsCore).grants) {
+		t.Errorf("%s: the core issues through another grants service than the process's gated one", role)
+	}
 	for i, c := range cores {
 		core := c.(*automationsCore)
 		if core.grants == nil || core.grants.Promotions == nil {
 			t.Errorf("%s: automations core #%d: its grants service has no promotion gate", role, i+1)
+		}
+		if core.grants != nil {
+			if st, ok := core.grants.Store.(*grantspg.Store); !ok || st.Promotions == nil {
+				t.Errorf("%s: automations core #%d: its grants store does not gate in the transaction (D93)", role, i+1)
+			}
 		}
 		if core.svc.Compromise == nil {
 			t.Errorf("%s: automations core #%d: no compromised-publisher check (D109 E1)", role, i+1)
