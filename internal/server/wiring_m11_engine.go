@@ -114,7 +114,9 @@ func newAutomationEngine(d engineDeps) *pgengine.Engine {
 			d.log.Warn("automation.deliverer_unavailable", slog.String("error", err.Error()))
 		}
 	}
-	cleanup := pgengine.Cleanup{Gates: approvals, Deliveries: deliveries}
+	cleanup := pgengine.Cleanup{
+		Gates: approvals, Deliveries: deliveries, NotPending: deliveryNotPending, MaybeSent: deliveryMaybeSent,
+	}
 	if d.core != nil {
 		g, r := grantsPort{core: d.core}, runsPort{core: d.core}
 		deps.Grants, deps.Runs = g, r
@@ -430,3 +432,9 @@ func (p executionsPort) CancelActive(ctx context.Context, tx pgx.Tx, org ids.Org
 // automationPackExecutions reads executions for evidence packs of scope
 // automation_execution (D30); set by init.
 var automationPackExecutions func(core *automationsCore, pool *db.Pool) packbuild.Executions
+
+// deliveryNotPending and deliveryMaybeSent classify triggers' Cancel
+// errors for the engine's cleanup (D89, D97 N1).
+func deliveryNotPending(err error) bool { return errors.Is(err, endpoints.ErrDeliveryNotPending) }
+
+func deliveryMaybeSent(err error) bool { return errors.Is(err, endpoints.ErrDeliveryMayHaveBeenSent) }

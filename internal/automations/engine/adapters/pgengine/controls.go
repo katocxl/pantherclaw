@@ -254,7 +254,13 @@ type Cleanup struct {
 	Runs   RunEnder
 	Gates  GateCloser
 	// Deliveries cancels pending webhooks (triggers' Deliverer.Cancel, D89).
+	// NotPending reports a delivery that already left PENDING (nothing to
+	// cancel); MaybeSent one whose sending may have started, listed as not
+	// verified, never as canceled (D97 N1). The wiring matches triggers'
+	// exported errors; an error neither names fails the cleanup.
 	Deliveries DeliveryCanceler
+	NotPending func(error) bool
+	MaybeSent  func(error) bool
 }
 
 // DeliveryCanceler cancels a pending delivery (PENDING → FAILED).
@@ -302,10 +308,10 @@ func (c Cleanup) Cleanup(ctx context.Context, tx pgx.Tx, x *engine.Exec) ([]refl
 		}
 		for _, d := range pending {
 			if err := c.Deliveries.Cancel(ctx, tx, d); err != nil {
-				if notPending(err) {
+				if c.NotPending != nil && c.NotPending(err) {
 					continue
 				}
-				if maybeSent(err) {
+				if c.MaybeSent != nil && c.MaybeSent(err) {
 					refs = append(refs, reflexdomain.EvidenceRef{Kind: steps.RefDeliveryNotVerified, ID: d})
 					continue
 				}
@@ -334,16 +340,3 @@ func (c Cleanup) Cleanup(ctx context.Context, tx pgx.Tx, x *engine.Exec) ([]refl
 	}
 	return refs, nil
 }
-
-// notPending reports a delivery that left PENDING meanwhile (delivered or
-// failed by its sender): there is nothing left to cancel.
-func notPending(err error) bool { return pcerr.ReasonOf(err) == "DELIVERY_NOT_PENDING" }
-
-// ReasonDeliveryMayHaveBeenSent is the reason of triggers'
-// ErrDeliveryMayHaveBeenSent: an attempt has started, so the cancel cannot
-// be verified (D97 N1).
-const ReasonDeliveryMayHaveBeenSent = "DELIVERY_MAY_HAVE_BEEN_SENT"
-
-// maybeSent reports a delivery whose sending may have started: cleanup
-// lists it as not verified, never as canceled.
-func maybeSent(err error) bool { return pcerr.ReasonOf(err) == ReasonDeliveryMayHaveBeenSent }

@@ -4,11 +4,13 @@
 package server
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/automations/engine/adapters/pgengine"
 	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/automations/steps"
+	"github.com/katocxl/pantherclaw/internal/automations/triggers/endpoints"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	runsapp "github.com/katocxl/pantherclaw/internal/runs/app"
@@ -125,5 +127,21 @@ func TestAutomationSecurityStepsGetTheConfig(t *testing.T) {
 	d := got[0]
 	if d.Core != core || d.CEL != cfg.CEL || d.Freshness != freshnessOf(cfg) || d.LogOrigin != cfg.logOrigin() {
 		t.Fatalf("security step deps %+v", d)
+	}
+}
+
+// D97 N1, D105 N3: the cleanup recognises triggers' exported Cancel errors
+// (errors.Is, no copied reason), so a delivery that may have been sent is
+// never reported canceled.
+func TestAutomationCleanupClassifiesDeliveryErrors(t *testing.T) {
+	c, ok := driverEngine(newAutomationsCore(nil, nil, ""), engineDeps{}).Cleaner.(pgengine.Cleanup)
+	if !ok || c.MaybeSent == nil || c.NotPending == nil {
+		t.Fatal("the driver's cleanup cannot classify Cancel errors")
+	}
+	if !c.MaybeSent(fmt.Errorf("cancel: %w", endpoints.ErrDeliveryMayHaveBeenSent)) || c.MaybeSent(endpoints.ErrDeliveryNotPending) {
+		t.Fatal("MaybeSent does not match triggers' ErrDeliveryMayHaveBeenSent alone")
+	}
+	if !c.NotPending(endpoints.ErrDeliveryNotPending) || c.NotPending(endpoints.ErrDeliveryMayHaveBeenSent) {
+		t.Fatal("NotPending does not match triggers' ErrDeliveryNotPending alone")
 	}
 }

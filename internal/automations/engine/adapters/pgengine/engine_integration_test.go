@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -21,9 +22,12 @@ import (
 	"github.com/katocxl/pantherclaw/internal/automations/engine/adapters/pgengine"
 	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/automations/steps"
+	"github.com/katocxl/pantherclaw/internal/automations/triggers"
+	"github.com/katocxl/pantherclaw/internal/automations/triggers/endpoints"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/triggerstest"
 	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
+	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -526,14 +530,7 @@ func TestHR283_ADestinationRefusalRevokesOnlyTheLaunchGrant(t *testing.T) {
 // all record, and each entry names this automation and execution.
 func TestD111_StepEffectsAuditUnderTheAutomationContext(t *testing.T) {
 	g := newEfx(t, gateSteps)
-	op, key := ids.NewV7(), bytes.Repeat([]byte{6}, 32)
-	g.Exec(t, `INSERT INTO pc.users (org_id, id, issuer, subject, created_at) VALUES ($1, $2, 'https://idp.test', 'olga',
-		now() - interval '30 days')`, g.Org, op)
-	g.Exec(t, `INSERT INTO pc.webauthn_credentials (org_id, id, user_id, credential_id, public_key, alg, backup_eligible,
-		backup_state, attestation_fmt, name, created_at) VALUES ($1, $2, $3, $4, $5, -7, false, false, 'none', 'key',
-		now() - interval '30 days')`, g.Org, ids.NewV7(), op, key[:16], key)
-	g.Exec(t, `INSERT INTO pc.role_bindings (org_id, id, role, user_id, scope_type, created_by, created_at)
-		VALUES ($1, $2, 'automation_operator', $3, 'ORG', 'test', now() - interval '30 days')`, g.Org, ids.NewV7(), op)
+	g.operator(t)
 	gated := g.start("T-8")
 	g.advance(gated)
 	if _, _, err := g.e.CancelExecution(g.manager(), gated, "audit check"); err != nil {
@@ -570,17 +567,88 @@ func (f *efx) attributed(t *testing.T, exec ids.UUID, kinds ...string) {
 // the version's authority and makes every delivery to it refused.
 func withRefusingDestination(t *testing.T, dest ids.UUID) func(*efx) {
 	return func(f *efx) {
-		f.Exec(t, `INSERT INTO pc.automation_destinations (org_id, id, name, url, purposes, secret, created_by)
-			VALUES ($1, $2, 'runner', 'https://runner.example.com/hook', ARRAY['LAUNCH'], $3, $4)`,
-			f.Org, dest, bytes.Repeat([]byte{9}, 32), f.User)
-		cred, key := ids.NewV7(), bytes.Repeat([]byte{5}, 32)
-		f.Exec(t, `INSERT INTO pc.webauthn_credentials (org_id, id, user_id, credential_id, public_key, alg, backup_eligible,
-			backup_state, attestation_fmt, name) VALUES ($1, $2, $3, $4, $5, -7, false, false, 'none', 'key')`,
-			f.Org, cred, f.User, key[:16], key)
-		f.Exec(t, `UPDATE pc.automation_destinations SET state = 'ACTIVE', activated_by = $3, activated_credential = $4,
-			activated_at = now() WHERE org_id = $1 AND id = $2`, f.Org, dest, f.User, cred)
+		f.activeDestination(t, dest, "LAUNCH")
 		f.Exec(t, "INSERT INTO pc.org_containment (org_id) VALUES ($1)", f.Org) // core's revocation raises the epoch
 		f.authority = `,"destinations":["` + dest.String() + `"]`
 		f.deliverer = refusingDeliverer{}
+	}
+}
+
+// activeDestination records an ACTIVE destination dest serving purpose,
+// activated by the fixture's user with a security key.
+func (f *efx) activeDestination(t *testing.T, dest ids.UUID, purpose string) {
+	t.Helper()
+	f.Exec(t, `INSERT INTO pc.automation_destinations (org_id, id, name, url, purposes, secret, created_by)
+		VALUES ($1, $2, 'runner', 'https://runner.example.com/hook', ARRAY[$5], $3, $4)`,
+		f.Org, dest, bytes.Repeat([]byte{9}, 32), f.User, purpose)
+	cred := ids.NewV7()
+	key := append(cred[:], bytes.Repeat([]byte{5}, 16)...)
+	f.Exec(t, `INSERT INTO pc.webauthn_credentials (org_id, id, user_id, credential_id, public_key, alg, backup_eligible,
+		backup_state, attestation_fmt, name) VALUES ($1, $2, $3, $4, $5, -7, false, false, 'none', 'key')`,
+		f.Org, cred, f.User, key[:16], key)
+	f.Exec(t, `UPDATE pc.automation_destinations SET state = 'ACTIVE', activated_by = $3, activated_credential = $4,
+		activated_at = now() WHERE org_id = $1 AND id = $2`, f.Org, dest, f.User, cred)
+}
+
+// operator adds an Automation Operator with a security key, so a gate has
+// an eligible decider and its execution waits.
+func (f *efx) operator(t *testing.T) {
+	t.Helper()
+	op := ids.NewV7()
+	key := append(op[:], bytes.Repeat([]byte{6}, 16)...)
+	f.Exec(t, `INSERT INTO pc.users (org_id, id, issuer, subject, created_at) VALUES ($1, $2, 'https://idp.test', 'olga',
+		now() - interval '30 days')`, f.Org, op)
+	f.Exec(t, `INSERT INTO pc.webauthn_credentials (org_id, id, user_id, credential_id, public_key, alg, backup_eligible,
+		backup_state, attestation_fmt, name, created_at) VALUES ($1, $2, $3, $4, $5, -7, false, false, 'none', 'key',
+		now() - interval '30 days')`, f.Org, ids.NewV7(), op, key[:16], key)
+	f.Exec(t, `INSERT INTO pc.role_bindings (org_id, id, role, user_id, scope_type, created_by, created_at)
+		VALUES ($1, $2, 'automation_operator', $3, 'ORG', 'test', now() - interval '30 days')`, f.Org, ids.NewV7(), op)
+}
+
+// TestHR283_ADeliveryThatMayHaveBeenSentIsNeverReportedCanceled (D97 N1,
+// D105 N3): cancel cleans up through triggers' real Deliverer. A delivery
+// with no attempt is canceled; one whose send has started is listed as
+// not verified, never as canceled, and stays as it was.
+func TestHR283_ADeliveryThatMayHaveBeenSentIsNeverReportedCanceled(t *testing.T) {
+	f := newEfx(t, gateSteps)
+	f.operator(t)
+	trig := triggers.New(triggers.Deps{Pool: f.Pool, Starter: &triggerstest.Starter{}, Editions: triggerstest.Team})
+	svc, err := endpoints.New(f.Pool, f.Envelope, trig, triggerstest.Team, endpoints.Config{PublicURL: "https://pc.example.com"},
+		clock.System{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.e.Cleaner = pgengine.Cleanup{
+		Grants: f.grants, Runs: fakeRuns{f: f}, Gates: f.approvals, Deliveries: svc.Deliverer(),
+		NotPending: func(err error) bool { return errors.Is(err, endpoints.ErrDeliveryNotPending) },
+		MaybeSent:  func(err error) bool { return errors.Is(err, endpoints.ErrDeliveryMayHaveBeenSent) },
+	}
+	dest := ids.NewV7()
+	f.activeDestination(t, dest, "NOTICE")
+	exec := f.start("T-10")
+	f.advance(exec) // waits on its gate
+	deliver := func(n string) ids.UUID {
+		var id ids.UUID
+		f.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
+			var err error
+			id, err = svc.Deliverer().Deliver(ctx, tx.Pgx(), autodomain.Delivery{
+				Org: f.Org, Destination: dest, Execution: exec, Kind: autodomain.DeliveryNotice, Body: []byte(`{"n":` + n + `}`),
+			})
+			return err
+		})
+		return id
+	}
+	pending, started := deliver("1"), deliver("2")
+	f.Exec(t, "UPDATE pc.automation_deliveries SET attempts = 1 WHERE org_id = $1 AND id = $2", f.Org, started)
+
+	_, eff, err := f.e.CancelExecution(f.manager(), exec, "wrong ticket")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(eff.Deliveries, []ids.UUID{pending}) || !slices.Equal(eff.DeliveriesNotVerified, []ids.UUID{started}) {
+		t.Fatalf("canceled %v, not verified %v; want %s and %s", eff.Deliveries, eff.DeliveriesNotVerified, pending, started)
+	}
+	if s := f.str("SELECT state FROM pc.automation_deliveries WHERE org_id = $1 AND id = $2", f.Org, started); s != "PENDING" {
+		t.Fatalf("the started delivery is %s", s)
 	}
 }
