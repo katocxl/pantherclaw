@@ -439,6 +439,16 @@ func TestHR295_AutomationsNeedAutomationReadAcrossTheOrg(t *testing.T) {
 	if r := f.search(f.responder, Query{Entity: EntityAutomations}); r.Empty != EmptyRestricted || r.Count != 0 {
 		t.Fatalf("team responder: %+v", r)
 	}
+	// An org-wide responder reads automations but not service accounts:
+	// the identity is left out (D86 Q5).
+	orgResponder := f.caller(td.RoleResponder, td.Scope{Type: td.ScopeOrg, ID: f.fx.org.UUID()})
+	if r := f.search(orgResponder, Query{Entity: EntityAutomations}); r.Count != 1 || r.Items[0].Fields["service_account"] != "" ||
+		len(r.Items[0].Evidence) != 1 {
+		t.Fatalf("org responder: %+v", r.Items)
+	}
+	if r := f.search(f.auditor, Query{Entity: EntityAutomations}); r.Items[0].Fields["service_account"] != sa.String() {
+		t.Fatalf("auditor identity: %+v", r.Items)
+	}
 	org, err := f.s.Find(as(f.auditor), FindRequest{Text: "triage", Kinds: []FindKind{FindAutomations}})
 	if err != nil {
 		t.Fatal(err)

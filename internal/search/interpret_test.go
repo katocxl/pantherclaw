@@ -298,3 +298,36 @@ func TestHR295_DecisionAndEffectOutcomesAreNeverJoined(t *testing.T) {
 		t.Errorf("two decision outcomes are one union: %+v", in)
 	}
 }
+
+// TestFindKindsHavePrefixQueries: every kind that matches names has its
+// own index-served name-prefix query (D86 Q4), and no other kind has one.
+func TestFindKindsHavePrefixQueries(t *testing.T) {
+	for k, f := range finders {
+		if _, ok := prefixFinders[k]; ok != f.named {
+			t.Errorf("%s: named %v, prefix query %v", k, f.named, ok)
+		}
+	}
+}
+
+// TestHR295_OperationWordsNeverReplaceOrDropEachOther (D86 Q1–Q3): two
+// operation words ask for one; a group that is itself an operation offers
+// it and its children apart; "agent X" names an agent only.
+func TestHR295_OperationWordsNeverReplaceOrDropEachOther(t *testing.T) {
+	ops := []string{"payments.refund.create", "payments.charge.create"}
+	if in := askWith(t, ops, "denied refunds charges today"); in.Query != nil || !slices.Contains(in.Clarifications, "name one operation") {
+		t.Fatalf("two operation words: %+v", in)
+	}
+	in := askWith(t, []string{"payments.refund", "payments.refund.partial"}, "denied refunds")
+	if in.Query != nil || len(in.Ambiguities) != 1 || len(in.Ambiguities[0].Candidates) != 2 ||
+		in.Ambiguities[0].Candidates[0].ID != "payments.refund" || in.Ambiguities[0].Candidates[1].ID != "payments.refund." {
+		t.Fatalf("a root with children: %+v", in)
+	}
+	deploy := named(FindAgents, "refunds")
+	in2, err := interpret(context.Background(), "denied actions by agent refunds", "UTC", askNow, names{"refunds": {deploy}}.resolve, ops)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if in2.Query == nil || in2.Query.Filters.Agent == nil || in2.Query.Filters.Operation != "" {
+		t.Fatalf("agent refunds: %+v", in2)
+	}
+}

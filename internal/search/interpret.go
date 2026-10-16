@@ -596,7 +596,8 @@ func (p *parser) names(ctx context.Context, b Builtin) ([]ref, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !uuidRe.MatchString(t.text) {
+		// "agent X" and "connection X" name only that kind (D86 Q3).
+		if !uuidRe.MatchString(t.text) && p.word(i-1) != "agent" && p.word(i-1) != "connection" {
 			ms = append(ms, p.operationsNamed(t.text)...)
 		}
 		switch len(ms) {
@@ -660,6 +661,11 @@ func (p *parser) query(ent Entity, env string, ocs []outcome, refs []ref) {
 	}
 	if len(f.EffectStates) > 0 {
 		p.in.Filters = append(p.in.Filters, "effect is one of "+strings.Join(f.EffectStates, ", "))
+	}
+	if n := len(slices.DeleteFunc(slices.Clone(refs), func(r ref) bool { return r.match.Kind != FindOperations })); n > 1 {
+		// Two operation words cannot both filter one query (D86 Q1).
+		p.clarify("name one operation")
+		return
 	}
 	for _, r := range refs {
 		if !p.applyRef(ent, &f, r) {
@@ -905,6 +911,15 @@ func (p *parser) operationsNamed(word string) []Match {
 	out := make([]Match, 0, len(order))
 	for _, g := range order {
 		ops := groups[g]
+		if len(ops) > 1 && slices.Contains(ops, g) {
+			// The group is itself an operation with others under it: the word
+			// names that operation or all of them, which a prefix alone would
+			// not say (it leaves the root out). Both are offered (D86 Q2).
+			out = append(out, Match{
+				Kind: FindOperations, ID: g, Label: g, MatchedBy: MatchedOperation,
+				Evidence: []string{"operation:" + g},
+			})
+		}
 		m := Match{Kind: FindOperations, ID: ops[0], Label: ops[0], MatchedBy: MatchedOperation}
 		if len(ops) > 1 {
 			m.ID, m.Label, m.MatchedBy = g+".", g+".*", MatchedOperationPrefix

@@ -23,10 +23,9 @@ FROM pc.agents a
 WHERE a.org_id = $1
   AND ($2::boolean OR a.id = ANY ($3::uuid[]))
   AND (($4::uuid IS NOT NULL AND a.id BETWEEN $4::uuid AND $5::uuid)
-       OR ($6::text <> '' AND lower(a.name) ~>=~ $7::text AND lower(a.name) ~<=~ $6::text)
-       OR ($8::text <> '' AND lower(a.name) LIKE $8::text ESCAPE '\'))
-ORDER BY lower(a.name) = $9::text DESC, starts_with(lower(a.name), $9::text) DESC, a.name, a.id
-LIMIT $10
+       OR ($6::text <> '' AND lower(a.name) LIKE $6::text ESCAPE '\'))
+ORDER BY lower(a.name) = $7::text DESC, starts_with(lower(a.name), $7::text) DESC, a.name, a.id
+LIMIT $8
 `
 
 type FindAgentsParams struct {
@@ -35,8 +34,6 @@ type FindAgentsParams struct {
 	Agents    []ids.UUID
 	IDLo      *ids.UUID
 	IDHi      *ids.UUID
-	NameHi    string
-	NameLo    string
 	Contains  string
 	Lowered   string
 	PageLimit int32
@@ -55,12 +52,11 @@ type FindAgentsRow struct {
 // Quick find (G0 M11 part 2 coordinator decision D45; F304, F320, HR-295).
 // Each query matches one kind by an id range (an exact id has id_lo =
 // id_hi; an id prefix of at least 8 hex digits spans the ids that start
-// with it) or, for kinds with names, first by a name prefix (name_lo..name_hi,
-// byte-wise, served by the lower(name) text_pattern_ops indexes of migration
-// 00147), then, only to fill the limit, by an escaped case-insensitive LIKE
-// anywhere in the name (contains is '%<escaped text>%'; ” or name_hi ”
-// leaves that match out). Rows outside
-// the viewer's scope are filtered before the limit, and total counts only
+// with it) or, for kinds with names, by an escaped case-insensitive LIKE
+// anywhere in the name (contains is '%<escaped text>%', ” when unused). For
+// a text that is no id, it runs only when the name-prefix pass
+// (search_find_prefix.sql) leaves the limit unfilled, and it ranks exact and
+// prefix names first. Rows outside the viewer's scope are filtered before the limit, and total counts only
 // the rows in scope, so hidden records never show in matches or counts.
 // Every row has the same columns: id, label, state, at, total.
 func (q *Queries) FindAgents(ctx context.Context, arg FindAgentsParams) ([]FindAgentsRow, error) {
@@ -70,8 +66,6 @@ func (q *Queries) FindAgents(ctx context.Context, arg FindAgentsParams) ([]FindA
 		arg.Agents,
 		arg.IDLo,
 		arg.IDHi,
-		arg.NameHi,
-		arg.NameLo,
 		arg.Contains,
 		arg.Lowered,
 		arg.PageLimit,
@@ -109,10 +103,9 @@ WHERE a.org_id = $1
            AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(a.subjects) s
                            WHERE s ->> 'type' = 'agent' AND NOT (s ->> 'id') = ANY ($3::uuid[]::text[]))))
   AND (($4::uuid IS NOT NULL AND a.id BETWEEN $4::uuid AND $5::uuid)
-       OR ($6::text <> '' AND lower(a.title) ~>=~ $7::text AND lower(a.title) ~<=~ $6::text)
-       OR ($8::text <> '' AND lower(a.title) LIKE $8::text ESCAPE '\'))
-ORDER BY lower(a.title) = $9::text DESC, starts_with(lower(a.title), $9::text) DESC, a.title, a.id
-LIMIT $10
+       OR ($6::text <> '' AND lower(a.title) LIKE $6::text ESCAPE '\'))
+ORDER BY lower(a.title) = $7::text DESC, starts_with(lower(a.title), $7::text) DESC, a.title, a.id
+LIMIT $8
 `
 
 type FindAlertsParams struct {
@@ -121,8 +114,6 @@ type FindAlertsParams struct {
 	Agents    []ids.UUID
 	IDLo      *ids.UUID
 	IDHi      *ids.UUID
-	NameHi    string
-	NameLo    string
 	Contains  string
 	Lowered   string
 	PageLimit int32
@@ -143,8 +134,6 @@ func (q *Queries) FindAlerts(ctx context.Context, arg FindAlertsParams) ([]FindA
 		arg.Agents,
 		arg.IDLo,
 		arg.IDHi,
-		arg.NameHi,
-		arg.NameLo,
 		arg.Contains,
 		arg.Lowered,
 		arg.PageLimit,
@@ -351,18 +340,15 @@ SELECT a.id, a.name::text AS label, a.state, a.created_at AS at, count(*) OVER (
 FROM pc.automations a
 WHERE a.org_id = $1
   AND (($2::uuid IS NOT NULL AND a.id BETWEEN $2::uuid AND $3::uuid)
-       OR ($4::text <> '' AND lower(a.name) ~>=~ $5::text AND lower(a.name) ~<=~ $4::text)
-       OR ($6::text <> '' AND lower(a.name) LIKE $6::text ESCAPE '\'))
-ORDER BY lower(a.name) = $7::text DESC, starts_with(lower(a.name), $7::text) DESC, a.name, a.id
-LIMIT $8
+       OR ($4::text <> '' AND lower(a.name) LIKE $4::text ESCAPE '\'))
+ORDER BY lower(a.name) = $5::text DESC, starts_with(lower(a.name), $5::text) DESC, a.name, a.id
+LIMIT $6
 `
 
 type FindAutomationsParams struct {
 	OrgID     ids.OrgID
 	IDLo      *ids.UUID
 	IDHi      *ids.UUID
-	NameHi    string
-	NameLo    string
 	Contains  string
 	Lowered   string
 	PageLimit int32
@@ -381,8 +367,6 @@ func (q *Queries) FindAutomations(ctx context.Context, arg FindAutomationsParams
 		arg.OrgID,
 		arg.IDLo,
 		arg.IDHi,
-		arg.NameHi,
-		arg.NameLo,
 		arg.Contains,
 		arg.Lowered,
 		arg.PageLimit,
@@ -417,10 +401,9 @@ FROM pc.cases c
 WHERE c.org_id = $1
   AND ($2::boolean OR pc.case_within(c.org_id, c.id, $3::uuid[]))
   AND (($4::uuid IS NOT NULL AND c.id BETWEEN $4::uuid AND $5::uuid)
-       OR ($6::text <> '' AND lower(c.title) ~>=~ $7::text AND lower(c.title) ~<=~ $6::text)
-       OR ($8::text <> '' AND lower(c.title) LIKE $8::text ESCAPE '\'))
-ORDER BY lower(c.title) = $9::text DESC, starts_with(lower(c.title), $9::text) DESC, c.title, c.id
-LIMIT $10
+       OR ($6::text <> '' AND lower(c.title) LIKE $6::text ESCAPE '\'))
+ORDER BY lower(c.title) = $7::text DESC, starts_with(lower(c.title), $7::text) DESC, c.title, c.id
+LIMIT $8
 `
 
 type FindCasesParams struct {
@@ -429,8 +412,6 @@ type FindCasesParams struct {
 	Agents    []ids.UUID
 	IDLo      *ids.UUID
 	IDHi      *ids.UUID
-	NameHi    string
-	NameLo    string
 	Contains  string
 	Lowered   string
 	PageLimit int32
@@ -451,8 +432,6 @@ func (q *Queries) FindCases(ctx context.Context, arg FindCasesParams) ([]FindCas
 		arg.Agents,
 		arg.IDLo,
 		arg.IDHi,
-		arg.NameHi,
-		arg.NameLo,
 		arg.Contains,
 		arg.Lowered,
 		arg.PageLimit,
@@ -486,18 +465,15 @@ SELECT c.id, c.name::text AS label, c.state, c.created_at AS at, count(*) OVER (
 FROM pc.connections c
 WHERE c.org_id = $1
   AND (($2::uuid IS NOT NULL AND c.id BETWEEN $2::uuid AND $3::uuid)
-       OR ($4::text <> '' AND lower(c.name) ~>=~ $5::text AND lower(c.name) ~<=~ $4::text)
-       OR ($6::text <> '' AND lower(c.name) LIKE $6::text ESCAPE '\'))
-ORDER BY lower(c.name) = $7::text DESC, starts_with(lower(c.name), $7::text) DESC, c.name, c.id
-LIMIT $8
+       OR ($4::text <> '' AND lower(c.name) LIKE $4::text ESCAPE '\'))
+ORDER BY lower(c.name) = $5::text DESC, starts_with(lower(c.name), $5::text) DESC, c.name, c.id
+LIMIT $6
 `
 
 type FindConnectionsParams struct {
 	OrgID     ids.OrgID
 	IDLo      *ids.UUID
 	IDHi      *ids.UUID
-	NameHi    string
-	NameLo    string
 	Contains  string
 	Lowered   string
 	PageLimit int32
@@ -516,8 +492,6 @@ func (q *Queries) FindConnections(ctx context.Context, arg FindConnectionsParams
 		arg.OrgID,
 		arg.IDLo,
 		arg.IDHi,
-		arg.NameHi,
-		arg.NameLo,
 		arg.Contains,
 		arg.Lowered,
 		arg.PageLimit,
@@ -611,18 +585,15 @@ SELECT g.id, g.name::text AS label, g.state, g.created_at AS at, count(*) OVER (
 FROM pc.gateways g
 WHERE g.org_id = $1
   AND (($2::uuid IS NOT NULL AND g.id BETWEEN $2::uuid AND $3::uuid)
-       OR ($4::text <> '' AND lower(g.name) ~>=~ $5::text AND lower(g.name) ~<=~ $4::text)
-       OR ($6::text <> '' AND lower(g.name) LIKE $6::text ESCAPE '\'))
-ORDER BY lower(g.name) = $7::text DESC, starts_with(lower(g.name), $7::text) DESC, g.name, g.id
-LIMIT $8
+       OR ($4::text <> '' AND lower(g.name) LIKE $4::text ESCAPE '\'))
+ORDER BY lower(g.name) = $5::text DESC, starts_with(lower(g.name), $5::text) DESC, g.name, g.id
+LIMIT $6
 `
 
 type FindGatewaysParams struct {
 	OrgID     ids.OrgID
 	IDLo      *ids.UUID
 	IDHi      *ids.UUID
-	NameHi    string
-	NameLo    string
 	Contains  string
 	Lowered   string
 	PageLimit int32
@@ -641,8 +612,6 @@ func (q *Queries) FindGateways(ctx context.Context, arg FindGatewaysParams) ([]F
 		arg.OrgID,
 		arg.IDLo,
 		arg.IDHi,
-		arg.NameHi,
-		arg.NameLo,
 		arg.Contains,
 		arg.Lowered,
 		arg.PageLimit,
@@ -742,10 +711,9 @@ WHERE i.org_id = $1
                            WHERE a.org_id = i.org_id AND a.incident_id = i.id AND s ->> 'type' = 'agent'
                              AND NOT (s ->> 'id') = ANY ($3::uuid[]::text[]))))
   AND (($4::uuid IS NOT NULL AND i.id BETWEEN $4::uuid AND $5::uuid)
-       OR ($6::text <> '' AND lower(i.title) ~>=~ $7::text AND lower(i.title) ~<=~ $6::text)
-       OR ($8::text <> '' AND lower(i.title) LIKE $8::text ESCAPE '\'))
-ORDER BY lower(i.title) = $9::text DESC, starts_with(lower(i.title), $9::text) DESC, i.title, i.id
-LIMIT $10
+       OR ($6::text <> '' AND lower(i.title) LIKE $6::text ESCAPE '\'))
+ORDER BY lower(i.title) = $7::text DESC, starts_with(lower(i.title), $7::text) DESC, i.title, i.id
+LIMIT $8
 `
 
 type FindIncidentsParams struct {
@@ -754,8 +722,6 @@ type FindIncidentsParams struct {
 	Agents    []ids.UUID
 	IDLo      *ids.UUID
 	IDHi      *ids.UUID
-	NameHi    string
-	NameLo    string
 	Contains  string
 	Lowered   string
 	PageLimit int32
@@ -776,8 +742,6 @@ func (q *Queries) FindIncidents(ctx context.Context, arg FindIncidentsParams) ([
 		arg.Agents,
 		arg.IDLo,
 		arg.IDHi,
-		arg.NameHi,
-		arg.NameLo,
 		arg.Contains,
 		arg.Lowered,
 		arg.PageLimit,
@@ -811,18 +775,15 @@ SELECT k.id, k.name::text AS label, ''::text AS state, k.created_at AS at, count
 FROM pc.tool_packages k
 WHERE k.org_id = $1
   AND (($2::uuid IS NOT NULL AND k.id BETWEEN $2::uuid AND $3::uuid)
-       OR ($4::text <> '' AND lower(k.name) ~>=~ $5::text AND lower(k.name) ~<=~ $4::text)
-       OR ($6::text <> '' AND lower(k.name) LIKE $6::text ESCAPE '\'))
-ORDER BY lower(k.name) = $7::text DESC, starts_with(lower(k.name), $7::text) DESC, k.name, k.id
-LIMIT $8
+       OR ($4::text <> '' AND lower(k.name) LIKE $4::text ESCAPE '\'))
+ORDER BY lower(k.name) = $5::text DESC, starts_with(lower(k.name), $5::text) DESC, k.name, k.id
+LIMIT $6
 `
 
 type FindPackagesParams struct {
 	OrgID     ids.OrgID
 	IDLo      *ids.UUID
 	IDHi      *ids.UUID
-	NameHi    string
-	NameLo    string
 	Contains  string
 	Lowered   string
 	PageLimit int32
@@ -841,8 +802,6 @@ func (q *Queries) FindPackages(ctx context.Context, arg FindPackagesParams) ([]F
 		arg.OrgID,
 		arg.IDLo,
 		arg.IDHi,
-		arg.NameHi,
-		arg.NameLo,
 		arg.Contains,
 		arg.Lowered,
 		arg.PageLimit,
@@ -877,22 +836,18 @@ SELECT u.id, (CASE WHEN u.display_name <> '' THEN u.display_name ELSE u.email EN
 FROM pc.users u
 WHERE u.org_id = $1
   AND (($2::uuid IS NOT NULL AND u.id BETWEEN $2::uuid AND $3::uuid)
-       OR ($4::text <> '' AND (lower(u.display_name) ~>=~ $5::text AND lower(u.display_name) ~<=~ $4::text
-                                       OR lower(u.email) ~>=~ $5::text AND lower(u.email) ~<=~ $4::text))
-       OR ($6::text <> '' AND (lower(u.display_name) LIKE $6::text ESCAPE '\'
-                                               OR lower(u.email) LIKE $6::text ESCAPE '\')))
-ORDER BY (lower(u.display_name) = $7::text OR lower(u.email) = $7::text) DESC,
-         (starts_with(lower(u.display_name), $7::text) OR starts_with(lower(u.email), $7::text)) DESC,
+       OR ($4::text <> '' AND (lower(u.display_name) LIKE $4::text ESCAPE '\'
+                                               OR lower(u.email) LIKE $4::text ESCAPE '\')))
+ORDER BY (lower(u.display_name) = $5::text OR lower(u.email) = $5::text) DESC,
+         (starts_with(lower(u.display_name), $5::text) OR starts_with(lower(u.email), $5::text)) DESC,
          u.display_name, u.email, u.id
-LIMIT $8
+LIMIT $6
 `
 
 type FindPeopleParams struct {
 	OrgID     ids.OrgID
 	IDLo      *ids.UUID
 	IDHi      *ids.UUID
-	NameHi    string
-	NameLo    string
 	Contains  string
 	Lowered   string
 	PageLimit int32
@@ -913,8 +868,6 @@ func (q *Queries) FindPeople(ctx context.Context, arg FindPeopleParams) ([]FindP
 		arg.OrgID,
 		arg.IDLo,
 		arg.IDHi,
-		arg.NameHi,
-		arg.NameLo,
 		arg.Contains,
 		arg.Lowered,
 		arg.PageLimit,
@@ -1064,18 +1017,15 @@ SELECT s.id, s.name::text AS label, s.state, s.created_at AS at, count(*) OVER (
 FROM pc.service_accounts s
 WHERE s.org_id = $1
   AND (($2::uuid IS NOT NULL AND s.id BETWEEN $2::uuid AND $3::uuid)
-       OR ($4::text <> '' AND lower(s.name) ~>=~ $5::text AND lower(s.name) ~<=~ $4::text)
-       OR ($6::text <> '' AND lower(s.name) LIKE $6::text ESCAPE '\'))
-ORDER BY lower(s.name) = $7::text DESC, starts_with(lower(s.name), $7::text) DESC, s.name, s.id
-LIMIT $8
+       OR ($4::text <> '' AND lower(s.name) LIKE $4::text ESCAPE '\'))
+ORDER BY lower(s.name) = $5::text DESC, starts_with(lower(s.name), $5::text) DESC, s.name, s.id
+LIMIT $6
 `
 
 type FindServiceAccountsParams struct {
 	OrgID     ids.OrgID
 	IDLo      *ids.UUID
 	IDHi      *ids.UUID
-	NameHi    string
-	NameLo    string
 	Contains  string
 	Lowered   string
 	PageLimit int32
@@ -1094,8 +1044,6 @@ func (q *Queries) FindServiceAccounts(ctx context.Context, arg FindServiceAccoun
 		arg.OrgID,
 		arg.IDLo,
 		arg.IDHi,
-		arg.NameHi,
-		arg.NameLo,
 		arg.Contains,
 		arg.Lowered,
 		arg.PageLimit,

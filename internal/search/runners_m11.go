@@ -13,6 +13,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // The entities G0 M11 part 2 adds (D44): alerts, incidents, cases and
@@ -267,15 +268,22 @@ func pageAutomations(ctx context.Context, _ *Service, c tenancy.Caller, tx db.Te
 		return nil, "", err
 	}
 	rows, next := page.Finish(pr, rows, func(r dbq.SearchAutomationsRow) ids.UUID { return r.ID })
+	// An automation's identity is a service account: shown only with
+	// service_account.read across the org (D86 Q5).
+	saRead := c.Can(td.PermServiceAccountRead, td.OrgPath(c.Org))
 	items := make([]Item, 0, len(rows))
 	for _, r := range rows {
-		items = append(items, Item{
+		it := Item{
 			Entity: EntityAutomations, ID: r.ID.String(), Time: r.CreatedAt, Label: r.State,
 			Fields: fields("name", r.Name, "kind", r.Kind, "state", r.State, "rollout", str(r.Rollout),
-				"owner", r.OwnerUserID.String(), "service_account", r.ServiceAccountID.String(),
-				"enabled_version", idStr(r.EnabledVersionID), "pause_reason", str(r.PauseReason)),
-			Evidence: []string{"automation:" + r.ID.String(), "service_account:" + r.ServiceAccountID.String()},
-		})
+				"owner", r.OwnerUserID.String(), "enabled_version", idStr(r.EnabledVersionID), "pause_reason", str(r.PauseReason)),
+			Evidence: []string{"automation:" + r.ID.String()},
+		}
+		if saRead {
+			it.Fields["service_account"] = r.ServiceAccountID.String()
+			it.Evidence = append(it.Evidence, "service_account:"+r.ServiceAccountID.String())
+		}
+		items = append(items, it)
 	}
 	return items, next, nil
 }
