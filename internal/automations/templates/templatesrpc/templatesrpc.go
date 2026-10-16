@@ -48,24 +48,23 @@ type Draft struct {
 	Definition []byte
 }
 
-// Drafts creates a DRAFT automation with its execution identity, then its
-// DRAFT version, as the caller (core, D5), with the permissions of
-// CreateAutomation and CreateDraftVersion. They are two transactions: when
-// the version fails, the automation stays a DRAFT without a version, as
-// after CreateAutomation alone.
+// Drafts creates a DRAFT automation, its execution identity and its first
+// DRAFT version in the caller's transaction, as the caller (core
+// CreateDraftTx, D5, D103 T1).
 type Drafts interface {
-	CreateDraft(ctx context.Context, d Draft) (automation, version ids.UUID, err error)
+	CreateDraftTx(ctx context.Context, tx db.TenantTx, d Draft) (automation, version ids.UUID, err error)
 }
 
-// TestStore stores a version's test cases (assurance, D34 SetTestCases),
-// as the caller.
+// TestStore stores a version's test cases in the caller's transaction, as
+// the caller (assurance SetTestCasesTx, D34, D103 T1).
 type TestStore interface {
-	SetTestCases(ctx context.Context, version ids.UUID, cases []templates.TestCase) (int, error)
+	SetTestCasesTx(ctx context.Context, tx db.TenantTx, version ids.UUID, cases []templates.TestCase) (int, error)
 }
 
 // TemplateHandler serves TemplateService.
 type TemplateHandler struct {
 	pantherclawv1connect.UnimplementedTemplateServiceHandler
+	Pool   *db.Pool
 	Drafts Drafts
 	Tests  TestStore
 }
@@ -140,7 +139,9 @@ func (h *TemplateHandler) CreateFromTemplate(ctx context.Context, req *panthercl
 	if err != nil {
 		return nil, err
 	}
-	if h.Drafts == nil {
+	// The automation, its version and its baseline tests are one unit
+	// (D103 T1): without both ports nothing is created.
+	if h.Pool == nil || h.Drafts == nil || h.Tests == nil {
 		return nil, ErrUnavailable
 	}
 	t, ok := templates.Get(req.GetTemplateId())
@@ -164,15 +165,19 @@ func (h *TemplateHandler) CreateFromTemplate(ctx context.Context, req *panthercl
 	if purpose == "" {
 		purpose = t.Summary
 	}
-	automation, version, err := h.Drafts.CreateDraft(ctx, Draft{Name: req.GetName(), Purpose: purpose, Kind: t.Kind, Owner: owner, Definition: doc})
+	var automation, version ids.UUID
+	var n int
+	err = h.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		automation, version, err = h.Drafts.CreateDraftTx(ctx, tx, Draft{Name: req.GetName(), Purpose: purpose, Kind: t.Kind, Owner: owner, Definition: doc})
+		if err != nil {
+			return err
+		}
+		n, err = h.Tests.SetTestCasesTx(ctx, tx, version, tests)
+		return err
+	})
 	if err != nil {
 		return nil, err
-	}
-	n := 0
-	if h.Tests != nil {
-		if n, err = h.Tests.SetTestCases(ctx, version, tests); err != nil {
-			return nil, err
-		}
 	}
 	return &pantherclawv1.CreateFromTemplateResponse{
 		AutomationId: automation.String(), VersionId: version.String(), Tests: int32(n),

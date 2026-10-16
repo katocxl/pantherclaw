@@ -34,17 +34,18 @@ import (
 // server's: the server never calls a tool (F3, HR-279).
 
 // registerAutomationTemplates serves TemplateService and ProposalService.
-// Creating from a template goes through core's automations app (D96); the
-// baseline tests are stored once assurance sets automationTestStore.
+// Creating from a template creates the automation, its version and its
+// baseline tests in one transaction (D96, D103 T1).
 func registerAutomationTemplates(rs *connect.Server, d apiDeps, core *automationsCore) {
 	pantherclawv1connect.RegisterTemplateServiceHandler(rs, templateHandler(d, core))
 	pantherclawv1connect.RegisterProposalServiceHandler(rs, &templatesrpc.ProposalHandler{Pool: d.pool})
 }
 
-// templateHandler creates from templates through core's automations app
-// (D96). automationTestStore is set by the assurance wiring (D34).
+// templateHandler creates through core's CreateDraftTx and assurance's
+// test store (automationTestStore, set by the assurance wiring, D34);
+// until both are set CreateFromTemplate answers UNAVAILABLE.
 func templateHandler(d apiDeps, core *automationsCore) *templatesrpc.TemplateHandler {
-	h := &templatesrpc.TemplateHandler{Tests: automationTestStore(d)}
+	h := &templatesrpc.TemplateHandler{Pool: d.pool, Tests: automationTestStore(d)}
 	if core != nil && core.svc != nil {
 		h.Drafts = automationDrafts{svc: core.svc}
 	}
@@ -53,20 +54,14 @@ func templateHandler(d apiDeps, core *automationsCore) *templatesrpc.TemplateHan
 
 var automationTestStore = func(apiDeps) templatesrpc.TestStore { return nil }
 
-// automationDrafts is the Drafts port over core's CreateAutomation and
-// CreateDraftVersion, each checking the caller.
+// automationDrafts is the Drafts port over core's CreateDraftTx.
 type automationDrafts struct{ svc *autoapp.Service }
 
-func (a automationDrafts) CreateDraft(ctx context.Context, d templatesrpc.Draft) (automation, version ids.UUID, err error) {
-	auto, err := a.svc.CreateAutomation(ctx, d.Name, d.Purpose, autodomain.WorkKind(d.Kind), d.Owner)
-	if err != nil {
-		return ids.UUID{}, ids.UUID{}, err
-	}
-	v, err := a.svc.CreateDraftVersion(ctx, auto.ID, d.Definition)
-	if err != nil {
-		return auto.ID, ids.UUID{}, err
-	}
-	return auto.ID, v.ID, nil
+func (a automationDrafts) CreateDraftTx(ctx context.Context, tx db.TenantTx, d templatesrpc.Draft) (automation, version ids.UUID, err error) {
+	auto, v, err := a.svc.CreateDraftTx(ctx, tx, autoapp.Draft{
+		Name: d.Name, Purpose: d.Purpose, Kind: autodomain.WorkKind(d.Kind), Owner: d.Owner, Definition: d.Definition,
+	})
+	return auto.ID, v.ID, err
 }
 
 // templateSteps are the security-work step kinds (D31) the engine's
