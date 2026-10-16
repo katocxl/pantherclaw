@@ -5,8 +5,10 @@ package domain
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strconv"
@@ -321,6 +323,9 @@ func (v *validator) ceiling(c *Ceiling) {
 	}
 	if c.PerGrant.MinAttestation < 0 || c.PerGrant.MinAttestation > 2 {
 		v.err(CodeLimitRange, at+"/per_grant/min_attestation", "min_attestation is 0, 1 or 2")
+	}
+	if err := c.PerGrant.Limits.ValidateOnGrant(); err != nil {
+		v.err(CodeLimitInvalid, at+"/per_grant/limits", "%v", err)
 	}
 	for _, b := range c.PerGrant.Limits.Budgets {
 		if b.Grouping != "task" {
@@ -640,6 +645,9 @@ func (v *validator) withChecks(at string, s StepSpec, w any, seen map[string]int
 			}
 		}
 		if x.Grant.Limits != nil {
+			if err := x.Grant.Limits.ValidateOnGrant(); err != nil {
+				v.err(CodeLimitInvalid, at+"/grant/limits", "%v", err)
+			}
 			if _, err := gdomain.NarrowLimits(c.PerGrant.Limits, *x.Grant.Limits); err != nil {
 				v.err(CodeLimitRange, at+"/grant/limits", "a launch may only lower the ceiling's per-grant limits: %v", err)
 			}
@@ -677,8 +685,14 @@ func (v *validator) withChecks(at string, s StepSpec, w any, seen map[string]int
 			default:
 				v.err(CodeLimitRange, p+"/face", "face is MCP or HTTP")
 			}
-			for _, in := range call.Input {
+			for _, k := range slices.Sorted(maps.Keys(call.Input)) {
+				in := call.Input[k]
 				templated = templated || strings.Contains(in, "{{")
+				// Each value is JSON text the runner puts in the input
+				// object; a template renders as a JSON value (D83).
+				if !jsontext.Value(templateRef.ReplaceAllString(in, "null")).IsValid() {
+					v.err(CodeInputNotJSON, p+"/input/"+k, "input values are JSON text, such as \"text\", 3 or {\"a\": 1}")
+				}
 			}
 		}
 		// L3: a templated input may carry a value to a budget-consuming

@@ -230,14 +230,14 @@ func TestBuildDigestEvidenceScope(t *testing.T) {
 // per-grant limits, every spending operation needs a per-grant budget, and
 // wait_effect names an exact operation.
 func TestLaunchLimitsOnlyNarrow(t *testing.T) {
-	ceiling := "    per_grant:\n      ttl: 1h\n      limits:\n        budgets:\n          - id: spend\n            grouping: task\n            operations: [payments.refund]\n            currency: USD\n            limit: \"50.00\"\n            period: grant\n"
+	ceiling := "    per_grant:\n      ttl: 1h\n      limits:\n        budgets:\n          - id: spend\n            grouping: task\n            operations: [payments.refund]\n            currency: USD\n            limit: \"50.00\"\n            period: none\n"
 	doc := strings.Replace(sample, "    per_grant:\n      ttl: 1h\n", ceiling, 1)
 	spend := fakeEnv{budget: map[string]bool{"payments.refund": true}, approvers: 1}
 	if fs := validate(t, doc, spend); autodomain.HasErrors(fs) {
 		t.Fatalf("findings: %+v", fs)
 	}
 	launch := func(limit string) string {
-		return strings.Replace(doc, "      task_ref: \"ticket {{params.ticket}}\"\n", "      task_ref: \"ticket {{params.ticket}}\"\n      grant:\n        limits:\n          budgets:\n            - id: spend\n              grouping: task\n              operations: [payments.refund]\n              currency: USD\n              limit: \""+limit+"\"\n              period: grant\n", 1)
+		return strings.Replace(doc, "      task_ref: \"ticket {{params.ticket}}\"\n", "      task_ref: \"ticket {{params.ticket}}\"\n      grant:\n        limits:\n          budgets:\n            - id: spend\n              grouping: task\n              operations: [payments.refund]\n              currency: USD\n              limit: \""+limit+"\"\n              period: none\n", 1)
 	}
 	if fs := validate(t, launch("20.00"), spend); autodomain.HasErrors(fs) {
 		t.Errorf("a lower limit is refused: %+v", fs)
@@ -414,6 +414,47 @@ func TestD106_PlatformWithin(t *testing.T) {
 	} {
 		if got := (autodomain.Authority{Platform: tc.p}).NotWiderThan(prev); got != tc.want {
 			t.Errorf("%s: %v", name, got)
+		}
+	}
+}
+
+// TestD119_LimitsAndCallInputs: every limits block passes the grants
+// domain's own check, and each call input is JSON text once its templates
+// render (D83).
+func TestD119_LimitsAndCallInputs(t *testing.T) {
+	budget := func(id string) string {
+		return "        budgets:\n          - id: " + id + "\n            grouping: task\n            operations: [payments.refund]\n" +
+			"            currency: USD\n            limit: \"50.00\"\n            period: none\n"
+	}
+	perGrant := func(id string) string {
+		return strings.Replace(sample, "    per_grant:\n      ttl: 1h\n", "    per_grant:\n      ttl: 1h\n      limits:\n"+budget(id), 1)
+	}
+	spend := fakeEnv{budget: map[string]bool{"payments.refund": true}, approvers: 1}
+	if fs := validate(t, perGrant("per_run"), spend); autodomain.HasErrors(fs) {
+		t.Fatalf("a valid budget: %+v", fs)
+	}
+	if got := codes(validate(t, perGrant("per-run"), spend)); !slices.Contains(got, autodomain.CodeLimitInvalid) {
+		t.Errorf("budget id per-run: %v", got)
+	}
+	bad := strings.Replace(perGrant("per_run"), "      task_ref: \"ticket {{params.ticket}}\"\n",
+		"      task_ref: \"ticket {{params.ticket}}\"\n      grant:\n        limits:\n          counters:\n            - id: calls\n"+
+			"              operations: [payments.refund]\n              key: task\n              window: 1h\n              max: \"0\"\n", 1)
+	if got := codes(validate(t, bad, spend)); !slices.Contains(got, autodomain.CodeLimitInvalid) {
+		t.Errorf("a launch counter of max 0: %v", got)
+	}
+	call := func(input string) string {
+		return strings.Replace(perGrant("per_run"), "      task_ref: \"ticket {{params.ticket}}\"\n",
+			"      task_ref: \"ticket {{params.ticket}}\"\n      calls:\n        - connection: 0192f000-0000-7000-8000-000000000009\n"+
+				"          face: MCP\n          tool: refund\n          input:\n            ticket: '"+input+"'\n", 1)
+	}
+	for _, in := range []string{`"{{params.ticket}}"`, `{{params.ticket}}`, `{"id": {{params.ticket}}, "n": 2}`, `"T-1"`, `3`} {
+		if got := codes(validate(t, call(in), spend)); slices.Contains(got, autodomain.CodeInputNotJSON) {
+			t.Errorf("%s refused: %v", in, got)
+		}
+	}
+	for _, in := range []string{`T-1`, `{{params.ticket}} and more`, `{"id": }`} {
+		if got := codes(validate(t, call(in), spend)); !slices.Contains(got, autodomain.CodeInputNotJSON) {
+			t.Errorf("%s accepted: %v", in, got)
 		}
 	}
 }
