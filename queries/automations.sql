@@ -339,7 +339,7 @@ JOIN pc.automation_ceilings c ON c.org_id = g.org_id AND c.id = g.ceiling_id
 WHERE g.org_id = sqlc.arg(org_id) AND c.automation_id = sqlc.arg(automation_id) AND g.state = 'ACTIVE'
 ORDER BY g.id;
 
--- name: CountActiveAutomationExecutions :one
+-- name: CountActiveAutomationRuns :one
 -- Without the engine's port, the automation's active runs stand for its
 -- active executions (D91 K10): Retire refuses while any is live.
 SELECT count(*)::int FROM pc.runs r
