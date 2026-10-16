@@ -51,7 +51,7 @@ An automation is a versioned definition that starts work on a schedule, a platfo
 
 **Expired requests.** A change request that is not confirmed before its expiry (at most 24 hours; at most 72 hours for an emergency review of a protected change) is marked EXPIRED by a per-org sweep that runs every minute, which also emits `change.expired`. Nothing is applied; request again. The exception is the emergency review of a protected change: the emergency change was already applied and stays applied (nothing is undone automatically). The protected change shows review state REVIEW_EXPIRED, and the emergency publisher gets an owned failure `protected_change.review_expired` in the operations queue. A person with the category's permission can open a new review: a fresh 72-hour emergency review, with the same author and publisher exclusions.
 
-If an approver later loses a permission, the ceiling is voided, the automation pauses (CEILING_VOID) and the owner gets an owned failure. This happens at the next issuance, or within 5 minutes through the ceiling sweep, which checks every ACTIVE ceiling's approvers and review date per org. If an approver is marked compromised, the ceilings they approved are voided at once and their live grants revoked (section 7). To recover, enable a new version with current approvers, then Resume. Enabling a new version also resolves the automation's open `automation.authority_changed` failures, because its ceremony is the human review; a rollout of the same version does not.
+If an approver later loses a permission, the ceiling is voided, the automation pauses (CEILING_VOID) and the owner gets an owned failure. This happens at the next issuance, or within 5 minutes through the ceiling sweep, which checks every ACTIVE ceiling's approvers and review date per org. If an approver is marked compromised, the ceilings they approved are voided at once and their live grants revoked (section 7). To recover, enable a new version with current approvers, then Resume. Enabling a new version also resolves every open `automation.authority_changed` failure of the automation, including those recorded per execution, because its ceremony is the human review; a rollout of the same version does not.
 
 ## 3. Pause, resume, cancel, retire, revoke authority
 
@@ -104,7 +104,7 @@ If a person who confirms changes may be compromised:
    | Package activation | Quarantines the package. |
    | Org package key | Revokes the key as COMPROMISED. |
    | Automation version | Pauses the automation. |
-   | Promotion | Revokes the promotion. |
+   | Promotion | Revokes the promotion; the reviewer needs `agent.promote`. An already-ended promotion counts as done. |
    | Policy change request, protected change | KEEP_ONLY: only KEEP can be recorded (pending policy change requests were already voided at marking). |
 4. Clearing the mark is a change request that two other people confirm, and only once every item is reviewed.
 
@@ -126,6 +126,8 @@ In a PRODUCTION environment, a new, widened or delegated grant (issued by a pers
 
 A new operation added later under a promoted prefix blocks new grants that use that prefix until the new operation is promoted too.
 
+**Workers use the same gate.** One shared grants service, with the promotion gate set, serves the API and the workers, so an automation launched by a worker is gated like a person's grant. A worker-only process refuses to start without it.
+
 ## 9. Troubleshooting
 
 | Symptom | Likely cause | What to do |
@@ -135,6 +137,7 @@ A new operation added later under a promoted prefix blocks new grants that use t
 | Execution FAILED `NOT_PROMOTED` | A production grant lists operations the agent is not promoted for | Promote the agent for those operations (section 8); a new agent with no coverage yet can be promoted provisionally |
 | Grants end earlier than their TTL | The agent's promotion is PROVISIONAL, and grants it covers expire with it | Get the agent's routes covered so the promotion becomes ACTIVE (section 8) |
 | A manual start answers REFUSED_DUPLICATE | Another start with the same idempotency key ran at the same time; only one execution is created | Wait for the first answer, then retry: a repeat with the key returns the original execution |
+| A worker-only process does not start | The shared, gated grants service is missing from its wiring | The build is miswired: report it, and never work around it with an ungated grants service |
 | Execution FAILED `LAUNCH_NOT_CLAIMED` | No runner or agent claimed the launch in time | Check that the agent's workload (or `pclaw automation runner`) is running and enrolled |
 | Triggers REFUSED_DUPLICATE | The same dedupe key within its window | Expected for retries; check the sender's ids |
 | Triggers REFUSED_LOOP | The automation is already in the trigger's ancestry | Change the triggers so automations do not feed each other |
