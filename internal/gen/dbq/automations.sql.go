@@ -17,6 +17,90 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
 
+const activeGrantsOfCeiling = `-- name: ActiveGrantsOfCeiling :many
+SELECT g.id FROM pc.grants g
+WHERE g.org_id = $1 AND g.ceiling_id = $2 AND g.state = 'ACTIVE'
+ORDER BY g.id
+`
+
+// RevokeForAutomationTx CEILING: every active grant issued under a ceiling.
+func (q *Queries) ActiveGrantsOfCeiling(ctx context.Context, orgID ids.OrgID, ceilingID *ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, activeGrantsOfCeiling, orgID, ceilingID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const activeGrantsOfExecution = `-- name: ActiveGrantsOfExecution :many
+SELECT g.id FROM pc.grants g
+WHERE g.org_id = $1 AND g.automation_execution_id = $2 AND g.state = 'ACTIVE'
+ORDER BY g.id
+`
+
+// RevokeForAutomationTx EXECUTION: the execution's own active grants.
+func (q *Queries) ActiveGrantsOfExecution(ctx context.Context, orgID ids.OrgID, executionID *ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, activeGrantsOfExecution, orgID, executionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const activeRootGrantsOfAgents = `-- name: ActiveRootGrantsOfAgents :many
+SELECT g.id FROM pc.grants g
+WHERE g.org_id = $1 AND g.agent_id = ANY ($2::uuid[]) AND g.state = 'ACTIVE'
+  AND g.parent_id IS NULL
+ORDER BY g.id
+LIMIT 1000
+`
+
+// RevokeForAutomationTx CEILING_AGENTS: the active root grants of the
+// ceiling's agents (revoking a root revokes its delegations).
+func (q *Queries) ActiveRootGrantsOfAgents(ctx context.Context, orgID ids.OrgID, agents []ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, activeRootGrantsOfAgents, orgID, agents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const ceilingsApprovedBy = `-- name: CeilingsApprovedBy :many
 SELECT c.id, c.automation_id FROM pc.automation_ceilings c
 WHERE c.org_id = $1 AND c.state = 'ACTIVE' AND $2::uuid = ANY (c.approved_by)

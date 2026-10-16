@@ -19,7 +19,6 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -114,6 +113,7 @@ type grantRow struct {
 	NotBefore, ExpiresAt                        time.Time
 	Bounds, Requirements, Limits                []byte
 	RevisedAt                                   time.Time
+	Ceiling, Execution                          *ids.UUID
 }
 
 func toGrant(org ids.OrgID, r grantRow) (domain.Grant, error) {
@@ -138,6 +138,12 @@ func toGrant(org ids.OrgID, r grantRow) (domain.Grant, error) {
 		Grantor: domain.Principal{Kind: domain.PrincipalKind(r.GrantorKind), ID: r.GrantorID}, Basis: r.Basis,
 		RevisedAt: r.RevisedAt,
 	}
+	if r.Ceiling != nil {
+		g.Ceiling = *r.Ceiling
+	}
+	if r.Execution != nil {
+		g.Execution = *r.Execution
+	}
 	if g.ID, err = domain.ParseGrantID(r.ID.String()); err != nil {
 		return domain.Grant{}, err
 	}
@@ -156,7 +162,8 @@ func fromGetGrant(r dbq.GetGrantRow) grantRow {
 	return grantRow{
 		r.ID, r.AgentID, r.EnvironmentID, r.GrantorID, r.InstanceID, r.PrincipalUserID, r.PrincipalSaID, r.ParentID,
 		r.Depth, r.DelegationDepth, r.MaxChildren, r.MinAttestation, r.State, r.GrantorKind, r.Basis, r.TaskRef,
-		r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt,
+		r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt, r.CeilingID,
+		r.AutomationExecutionID,
 	}
 }
 
@@ -164,7 +171,8 @@ func fromChain(r dbq.GetGrantChainRow) grantRow {
 	return grantRow{
 		r.ID, r.AgentID, r.EnvironmentID, r.GrantorID, r.InstanceID, r.PrincipalUserID, r.PrincipalSaID, r.ParentID,
 		r.Depth, r.DelegationDepth, r.MaxChildren, r.MinAttestation, r.State, r.GrantorKind, r.Basis, r.TaskRef,
-		r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt,
+		r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt, r.CeilingID,
+		r.AutomationExecutionID,
 	}
 }
 
@@ -306,7 +314,7 @@ func (s *Store) ListGrants(ctx context.Context, org ids.OrgID, f app.GrantFilter
 			g, err := toGrant(org, grantRow{
 				r.ID, r.AgentID, r.EnvironmentID, r.GrantorID, r.InstanceID, r.PrincipalUserID, r.PrincipalSaID, r.ParentID,
 				r.Depth, r.DelegationDepth, r.MaxChildren, r.MinAttestation, r.State, r.GrantorKind, r.Basis, r.TaskRef,
-				r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt,
+				r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt, nil, nil,
 			})
 			if err != nil {
 				return err
@@ -453,6 +461,7 @@ func insertGrant(ctx context.Context, q *dbq.Queries, org ids.OrgID, g domain.Gr
 			OrgID: org, ID: g.ID.UUID(), AgentID: g.AgentID, InstanceID: optUUID(g.InstanceID), PrincipalUserID: user,
 			PrincipalSaID: sa, EnvironmentID: g.EnvironmentID, ParentID: parent, Depth: int16(g.Depth), //nolint:gosec // 0..4
 			CurrentRevision: 1, GrantorKind: string(g.Grantor.Kind), GrantorID: g.Grantor.ID, Basis: g.Basis,
+			CeilingID: optUUID(g.Ceiling), AutomationExecutionID: optUUID(g.Execution),
 		}); err != nil {
 			return err
 		}
@@ -574,34 +583,8 @@ func (s *Store) Revise(ctx context.Context, org ids.OrgID, next domain.Grant, wi
 func (s *Store) Revoke(ctx context.Context, org ids.OrgID, id domain.GrantID, ev audit.Event) ([]domain.GrantID, error) {
 	var out []domain.GrantID
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
-		if err := db.ExpectOneRow(q.RaiseContainmentEpoch(ctx, org)); err != nil {
-			return fmt.Errorf("grants: containment epoch: %w", err)
-		}
-		if _, err := q.GetGrant(ctx, org, id.UUID()); db.IsNoRows(err) {
-			return app.ErrNotFound
-		} else if err != nil {
-			return err
-		}
-		reason := ev.Details["reason"]
-		if reason == "" {
-			reason = "revoked"
-		}
-		revoked, err := q.RevokeGrantTree(ctx, &reason, org, id.UUID())
-		if err != nil {
-			return err
-		}
-		for _, r := range revoked {
-			g, err := domain.ParseGrantID(r.String())
-			if err != nil {
-				return err
-			}
-			out = append(out, g)
-		}
-		if ev.Details != nil {
-			ev.Details["revoked"] = strconv.Itoa(len(out))
-		}
-		_, err = audit.Record(ctx, tx, ev)
+		var err error
+		out, err = revokeTx(ctx, tx, org, id, ev)
 		return err
 	})
 	return out, err

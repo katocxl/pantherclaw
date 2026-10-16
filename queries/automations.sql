@@ -258,3 +258,24 @@ LEFT JOIN pc.automation_ceilings c ON c.org_id = a.org_id AND c.automation_id = 
 WHERE a.org_id = sqlc.arg(org_id) AND a.state <> 'RETIRED'
 ORDER BY a.name
 LIMIT sqlc.arg(max_rows)::int;
+
+-- name: ActiveGrantsOfExecution :many
+-- RevokeForAutomationTx EXECUTION: the execution's own active grants.
+SELECT g.id FROM pc.grants g
+WHERE g.org_id = sqlc.arg(org_id) AND g.automation_execution_id = sqlc.arg(execution_id) AND g.state = 'ACTIVE'
+ORDER BY g.id;
+
+-- name: ActiveGrantsOfCeiling :many
+-- RevokeForAutomationTx CEILING: every active grant issued under a ceiling.
+SELECT g.id FROM pc.grants g
+WHERE g.org_id = sqlc.arg(org_id) AND g.ceiling_id = sqlc.arg(ceiling_id) AND g.state = 'ACTIVE'
+ORDER BY g.id;
+
+-- name: ActiveRootGrantsOfAgents :many
+-- RevokeForAutomationTx CEILING_AGENTS: the active root grants of the
+-- ceiling's agents (revoking a root revokes its delegations).
+SELECT g.id FROM pc.grants g
+WHERE g.org_id = sqlc.arg(org_id) AND g.agent_id = ANY (sqlc.arg(agents)::uuid[]) AND g.state = 'ACTIVE'
+  AND g.parent_id IS NULL
+ORDER BY g.id
+LIMIT 1000;
