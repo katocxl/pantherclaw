@@ -10,6 +10,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/promotions"
 	"github.com/katocxl/pantherclaw/internal/protect"
+	runsapp "github.com/katocxl/pantherclaw/internal/runs/app"
 )
 
 // Cross-stream wiring no single M11 stream holds (G0 M11 part 2 D92, D96):
@@ -42,4 +43,21 @@ func wireM11Cross(d apiDeps, prom *promotions.Service) {
 		prom.Compromise = promotionsCompromise{p: pub}
 	}
 	probeM11("promotions", prom)
+}
+
+// wireM11Worker gives a worker-only process's core what the API wires in
+// a combined one (D109 E1): grants and runs services whose store and
+// service run govern's promotion gate, so automation issuance from the
+// jobs is gated, and protect's compromised-publisher check.
+func wireM11Worker(core *automationsCore, pool *db.Pool) {
+	if core == nil || core.svc == nil {
+		return
+	}
+	if core.grants == nil {
+		gstore, grants := newGrants(pool)
+		core.attach(pool, grants, runsapp.New(pool).WithGrants(gstore))
+	}
+	if core.svc.Compromise == nil {
+		core.svc.Compromise = &protect.Publishers{Pool: pool}
+	}
 }

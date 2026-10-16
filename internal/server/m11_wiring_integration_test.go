@@ -212,6 +212,9 @@ func driverUsesSharedCore(t *testing.T, role string, got map[string][]any) {
 		if core.grants == nil || core.grants.Promotions == nil {
 			t.Errorf("%s: automations core #%d: its grants service has no promotion gate", role, i+1)
 		}
+		if core.svc.Compromise == nil {
+			t.Errorf("%s: automations core #%d: no compromised-publisher check (D109 E1)", role, i+1)
+		}
 		if core.svc.Grants != core.grants {
 			t.Errorf("%s: automations core #%d: the app issues through another grants service", role, i+1)
 		}

@@ -260,6 +260,9 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	// autos is the one M11 part 2 core of this process: the API and the
 	// jobs share it, so every port set on it reaches both (D91 K6).
 	autos := newAutomationsCore(pool, bill, cfg.Auth.PublicURL)
+	if cfg.Role == RoleWorker {
+		wireM11Worker(autos, pool)
+	}
 	if cfg.Role == RoleAPI || cfg.Role == RoleAll {
 		tokens, err := token.New(reg, cfg.Auth.PublicURL, token.Audience)
 		if err != nil {
