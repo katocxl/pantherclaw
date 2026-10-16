@@ -138,15 +138,15 @@ type securityInputs struct {
 // securitySteps are the security-work step kinds the engine's registry
 // merges with its generic kinds (D11).
 func securitySteps(in securityInputs) autoports.StepRegistry { //nolint:unused // set as the engine's hook (D108)
-	return securitysteps.All(securityStepDeps(in))
+	return securitysteps.All(securityPorts(in))
 }
 
-// securityStepDeps ties each step to its port. A step whose port could not
+// securityPorts ties each step to its port. A step whose port could not
 // be built here fails DEPENDENCY_UNAVAILABLE and never acts in part
 // (D108, HR-284): contain needs its escalation's failure sink and case
 // opener, remind and escalate need the approvals router, simulations and
 // digest packs a licence and the job queue.
-func securityStepDeps(in securityInputs) securitysteps.Deps {
+func securityPorts(in securityInputs) securitysteps.Deps {
 	deps := securitysteps.Deps{
 		Grants:   in.steps.Grants,
 		Actions:  securitysteps.Actions{},
