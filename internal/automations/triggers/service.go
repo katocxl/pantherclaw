@@ -305,11 +305,9 @@ func (s *Service) decide(ctx context.Context, q *dbq.Queries, org ids.OrgID, c C
 	ref autodomain.TriggerRef, declKey string, now time.Time,
 ) (State, string, error) {
 	a, def := c.Automation, c.Automation.Def
-	// A refusal is the outcome of a bad candidate, not an error of Fire.
-	badParams := c.ParamErr != nil
 	switch {
-	case badParams:
-		return StateRefusedInvalid, ReasonParams, nil
+	case c.ParamErr != nil:
+		return StateRefusedInvalid, ReasonParams, nil //nolint:nilerr // bad parameters are a recorded refusal
 	case lin.Loop(a.ID):
 		switch {
 		case slices.Contains(lin.Ancestry, a.ID):
@@ -335,11 +333,10 @@ func (s *Service) decide(ctx context.Context, q *dbq.Queries, org ids.OrgID, c C
 			return StateRefusedDuplicate, ReasonDuplicate, nil
 		}
 	}
-	ok, matchErr := MatchIf(ctx, def.If, c.Kind, c.OccurredAt, ref.Params)
-	badIf := matchErr != nil
+	ok, err := MatchIf(ctx, def.If, c.Kind, c.OccurredAt, ref.Params)
 	switch {
-	case badIf:
-		return StateRefusedCondition, ReasonConditionError, nil
+	case err != nil:
+		return StateRefusedCondition, ReasonConditionError, nil //nolint:nilerr // a failing `if` is a recorded refusal
 	case !ok:
 		return StateRefusedCondition, ReasonCondition, nil
 	}

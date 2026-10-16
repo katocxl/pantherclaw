@@ -220,7 +220,7 @@ func (s *Service) sendOne(ctx context.Context, org ids.OrgID, id ids.UUID) (bool
 		a.url, a.internal = d.Url, d.Internal
 		if CheckURL(a.url, s.ownHost, a.internal, s.cfg.AllowedPrivateRanges) != nil {
 			fail = "destination_url"
-			return nil
+			return nil //nolint:nilerr // a refused URL fails the delivery below
 		}
 		if a.attempts >= MaxAttempts {
 			// A sender died after leasing the last attempt: it is not tried again.
