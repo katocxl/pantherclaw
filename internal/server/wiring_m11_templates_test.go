@@ -67,10 +67,9 @@ func TestTemplateTestsAreAssuranceCases(t *testing.T) {
 }
 
 // securityPending are the security-step ports another stream still owes:
-// core's resume of what a step paused, govern's fleet cohorts
-// (COHORT_BASELINE). Until then those steps fail DEPENDENCY_UNAVAILABLE.
+// govern's fleet cohorts (COHORT_BASELINE), wired on the top. Until then those steps fail DEPENDENCY_UNAVAILABLE.
 // The list is exact, so a new gap and a filled one both fail the test.
-var securityPending = []string{"Intake.Cohorts", "Resumer"}
+var securityPending = []string{"Intake.Cohorts"}
 
 // TestSecurityStepsAreFullyWired (D108): in both process roles the driver
 // builds the security steps from the process's core and the server's
@@ -79,6 +78,7 @@ func TestSecurityStepsAreFullyWired(t *testing.T) {
 	roles := map[string]func(core *automationsCore){
 		RoleAll: func(core *automationsCore) { core.attach(&db.Pool{}, &grantsapp.Service{}, runsapp.New(&db.Pool{})) },
 		RoleWorker: func(core *automationsCore) {
+			core.attach(&db.Pool{}, &grantsapp.Service{}, runsapp.New(&db.Pool{}))
 			if _, err := registerAutomationsCoreJobs(nil, jobs.NewRegistry(), core, nil); err != nil {
 				t.Fatal(err)
 			}
