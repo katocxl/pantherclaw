@@ -12,6 +12,7 @@ import (
 	"context"
 	"maps"
 	"slices"
+	"strconv"
 
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -218,4 +219,52 @@ func (h *Handler) GetTestRun(ctx context.Context, req *pb.GetTestRunRequest) (*p
 		return nil, err
 	}
 	return &pb.GetTestRunResponse{Run: runPB(r)}, nil
+}
+
+// StartAutomationSimulation implements AssuranceServiceHandler.
+func (h *Handler) StartAutomationSimulation(ctx context.Context, req *pb.StartAutomationSimulationRequest) (*pb.StartAutomationSimulationResponse, error) {
+	sim, err := h.svc.StartSimulation(ctx, id(req.GetVersionId()), req.GetStartTime().AsTime(), req.GetEndTime().AsTime())
+	if err != nil {
+		return nil, err
+	}
+	return &pb.StartAutomationSimulationResponse{SimulationId: sim.String()}, nil
+}
+
+// GetAutomationSimulation implements AssuranceServiceHandler.
+func (h *Handler) GetAutomationSimulation(ctx context.Context, req *pb.GetAutomationSimulationRequest) (*pb.GetAutomationSimulationResponse, error) {
+	s, err := h.svc.GetSimulation(ctx, id(req.GetId()))
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.AutomationSimulation{
+		Id: s.ID.String(), VersionId: s.Version.String(), StartTime: timestamppb.New(s.From), EndTime: timestamppb.New(s.To),
+		State: s.State, Error: s.Error, CreateTime: timestamppb.New(s.CreatedAt),
+	}
+	if s.FinishedAt != nil {
+		out.FinishTime = timestamppb.New(*s.FinishedAt)
+	}
+	if r := s.Results; r != nil {
+		for _, d := range r.Days {
+			out.Days = append(out.Days, &pb.SimulationDay{Day: d.Day, WouldFire: count(d.WouldFire), Unevaluable: count(d.Unevaluable)})
+		}
+		for _, x := range r.Samples {
+			sample := &pb.SimulationSample{OccurTime: timestamppb.New(x.At), TriggerKind: x.Kind, SourceRef: x.SourceRef}
+			for _, st := range x.Steps {
+				sample.Steps = append(sample.Steps, &pb.SimulationStep{StepId: st.ID, Kind: st.Kind, Decision: st.Decision, Reason: st.Reason})
+			}
+			out.Samples = append(out.Samples, sample)
+		}
+		for _, k := range slices.Sorted(maps.Keys(r.Missing)) {
+			out.MissingContext = append(out.MissingContext, k+"="+strconv.Itoa(r.Missing[k]))
+		}
+		f := &pb.SimulationForecast{
+			ExecutionsPerDay: r.Forecast.ExecutionsPerDay, GatesPerDay: r.Forecast.GatesPerDay,
+			EligibleApprovers: count(r.Forecast.EligibleApprovers), GrantsPerDay: r.Forecast.GrantsPerDay,
+		}
+		for _, b := range r.Forecast.Budget {
+			f.Budget = append(f.Budget, &pb.SimulationBudget{Currency: b.Currency, MaxPerDay: b.Max, ExpectedPerDay: b.Expected})
+		}
+		out.Forecast = f
+	}
+	return &pb.GetAutomationSimulationResponse{Simulation: out}, nil
 }

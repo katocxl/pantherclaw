@@ -51,6 +51,67 @@ func (q *Queries) AssuranceEnabledDefinitions(ctx context.Context, orgID ids.Org
 	return items, nil
 }
 
+const assuranceFeedSeqAt = `-- name: AssuranceFeedSeqAt :one
+SELECT coalesce((SELECT c.seq FROM pc.ledger_chain c
+                 JOIN pc.ledger_entries e ON e.org_id = c.org_id AND e.id = c.entry_id
+                 WHERE c.org_id = $1 AND e.occurred_at >= $2::timestamptz
+                 ORDER BY c.seq LIMIT 1) - 1, -1)::bigint AS seq
+`
+
+// The feed position just before the first entry at or after a time (D35).
+func (q *Queries) AssuranceFeedSeqAt(ctx context.Context, orgID ids.OrgID, at time.Time) (int64, error) {
+	row := q.db.QueryRow(ctx, assuranceFeedSeqAt, orgID, at)
+	var seq int64
+	err := row.Scan(&seq)
+	return seq, err
+}
+
+const assuranceGrantExpiries = `-- name: AssuranceGrantExpiries :many
+SELECT g.id, g.agent_id, g.principal_user_id, g.principal_sa_id, r.task_ref, r.expires_at
+FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+WHERE g.org_id = $1 AND r.expires_at >= $2 AND r.expires_at < $3
+ORDER BY r.expires_at, g.id
+LIMIT 10000
+`
+
+type AssuranceGrantExpiriesRow struct {
+	ID              ids.UUID
+	AgentID         ids.UUID
+	PrincipalUserID *ids.UUID
+	PrincipalSaID   *ids.UUID
+	TaskRef         string
+	ExpiresAt       time.Time
+}
+
+// Grants whose current window ended or ends in a period (D35 grant.expiring).
+func (q *Queries) AssuranceGrantExpiries(ctx context.Context, orgID ids.OrgID, fromAt time.Time, toAt time.Time) ([]AssuranceGrantExpiriesRow, error) {
+	rows, err := q.db.Query(ctx, assuranceGrantExpiries, orgID, fromAt, toAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AssuranceGrantExpiriesRow{}
+	for rows.Next() {
+		var i AssuranceGrantExpiriesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.PrincipalUserID,
+			&i.PrincipalSaID,
+			&i.TaskRef,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const assuranceIssuedGrants = `-- name: AssuranceIssuedGrants :many
 SELECT g.id, g.agent_id, g.automation_execution_id, r.bounds, g.created_at
 FROM pc.grants g
@@ -99,6 +160,56 @@ func (q *Queries) AssuranceIssuedGrants(ctx context.Context, arg AssuranceIssued
 			&i.Bounds,
 			&i.CreatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const assuranceReceipts = `-- name: AssuranceReceipts :many
+SELECT r.source_id, r.type, r.received_at
+FROM pc.automation_event_receipts r
+WHERE r.org_id = $1 AND r.source_id = $2 AND r.type = $3
+  AND r.received_at >= $4 AND r.received_at < $5
+ORDER BY r.received_at
+LIMIT 100000
+`
+
+type AssuranceReceiptsParams struct {
+	OrgID    ids.OrgID
+	SourceID ids.UUID
+	Type     string
+	FromAt   time.Time
+	ToAt     time.Time
+}
+
+type AssuranceReceiptsRow struct {
+	SourceID   ids.UUID
+	Type       string
+	ReceivedAt time.Time
+}
+
+// Past inbound deliveries of one source and type (types only, D35).
+func (q *Queries) AssuranceReceipts(ctx context.Context, arg AssuranceReceiptsParams) ([]AssuranceReceiptsRow, error) {
+	rows, err := q.db.Query(ctx, assuranceReceipts,
+		arg.OrgID,
+		arg.SourceID,
+		arg.Type,
+		arg.FromAt,
+		arg.ToAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AssuranceReceiptsRow{}
+	for rows.Next() {
+		var i AssuranceReceiptsRow
+		if err := rows.Scan(&i.SourceID, &i.Type, &i.ReceivedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

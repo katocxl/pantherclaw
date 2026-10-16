@@ -98,3 +98,28 @@ LIMIT sqlc.arg(max_rows)::int;
 -- The org of a version visible under the tenant setting (TestGate is
 -- called inside the confirming transaction with no org argument).
 SELECT v.org_id FROM pc.automation_versions v WHERE v.id = sqlc.arg(id);
+
+-- name: AssuranceFeedSeqAt :one
+-- The feed position just before the first entry at or after a time (D35).
+SELECT coalesce((SELECT c.seq FROM pc.ledger_chain c
+                 JOIN pc.ledger_entries e ON e.org_id = c.org_id AND e.id = c.entry_id
+                 WHERE c.org_id = sqlc.arg(org_id) AND e.occurred_at >= sqlc.arg(at)::timestamptz
+                 ORDER BY c.seq LIMIT 1) - 1, -1)::bigint AS seq;
+
+-- name: AssuranceReceipts :many
+-- Past inbound deliveries of one source and type (types only, D35).
+SELECT r.source_id, r.type, r.received_at
+FROM pc.automation_event_receipts r
+WHERE r.org_id = sqlc.arg(org_id) AND r.source_id = sqlc.arg(source_id) AND r.type = sqlc.arg(type)
+  AND r.received_at >= sqlc.arg(from_at) AND r.received_at < sqlc.arg(to_at)
+ORDER BY r.received_at
+LIMIT 100000;
+
+-- name: AssuranceGrantExpiries :many
+-- Grants whose current window ended or ends in a period (D35 grant.expiring).
+SELECT g.id, g.agent_id, g.principal_user_id, g.principal_sa_id, r.task_ref, r.expires_at
+FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+WHERE g.org_id = sqlc.arg(org_id) AND r.expires_at >= sqlc.arg(from_at) AND r.expires_at < sqlc.arg(to_at)
+ORDER BY r.expires_at, g.id
+LIMIT 10000;

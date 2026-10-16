@@ -13,6 +13,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -42,6 +43,9 @@ type Service struct {
 	Pool  *db.Pool
 	Ents  Entitlements
 	Clock clock.Clock
+	// Jobs is an insert-only River client; without it no simulation is
+	// queued.
+	Jobs *jobs.Client
 }
 
 func (s *Service) now() clock.Clock {
