@@ -332,3 +332,11 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND automation_execution_i
 SELECT r.automation_execution_id::uuid AS execution_id FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(id) AND r.automation_execution_id IS NOT NULL;
+
+-- name: ExecutionTransactions :many
+-- The transactions of an execution's runs, in id order (D30).
+SELECT t.id FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = sqlc.arg(org_id) AND r.automation_execution_id = sqlc.arg(execution_id)
+ORDER BY t.id
+LIMIT 10000;

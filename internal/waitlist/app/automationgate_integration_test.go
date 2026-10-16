@@ -36,16 +36,20 @@ func (f *rfx) gate(owner ids.UUID) (entry, request ids.UUID) {
 			{`INSERT INTO pc.automation_triggers (org_id, id, automation_id, version_id, kind, mode, source_ref, authenticity,
 				root_trigger_id, state, occurred_at) VALUES ($1, $2, $3, $4, 'MANUAL', 'SHADOW', 'manual:test', 'USER_SESSION',
 				$2, 'SHADOW', now())`, []any{f.org, trigger, automation, version}},
-			{`INSERT INTO pc.automation_executions (org_id, id, automation_id, version_id, trigger_id, mode, service_account_id,
+			{
+				`INSERT INTO pc.automation_executions (org_id, id, automation_id, version_id, trigger_id, mode, service_account_id,
 				principal_sa_id, trigger_kind, occurred_at, root_trigger_id, deadline_at)
 				VALUES ($1, $2, $3, $4, $5, 'SHADOW', $6, $6, 'MANUAL', now(), $5, now() + interval '1 day')`,
-				[]any{f.org, execution, automation, version, trigger, sa}},
-			{`INSERT INTO pc.approval_requests (org_id, id, subject_kind, requested_by_automation, execution_id, step_id, operation,
+				[]any{f.org, execution, automation, version, trigger, sa},
+			},
+			{
+				`INSERT INTO pc.approval_requests (org_id, id, subject_kind, requested_by_automation, execution_id, step_id, operation,
 				binding, binding_input, requirements, display, display_hash, deadline_at)
 				VALUES ($1, $2, 'AUTOMATION_GATE', $3, $4, 'approve', 'automation.gate', $5, '\x7b7d',
 				jsonb_build_array(jsonb_build_object('kind', 'gate', 'count', 1, 'sources', '[]'::jsonb,
 					'exclude', jsonb_build_array($6::text))), '{}', $5, date_trunc('second', now()) + interval '1 hour')`,
-				[]any{f.org, request, automation, execution, append(append([]byte{}, request[:]...), request[:]...), owner.String()}},
+				[]any{f.org, request, automation, execution, append(append([]byte{}, request[:]...), request[:]...), owner.String()},
+			},
 		} {
 			if _, err := tx.Exec(ctx, s.sql, s.args...); err != nil {
 				return err

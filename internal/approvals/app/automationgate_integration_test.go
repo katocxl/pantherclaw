@@ -45,13 +45,17 @@ func newGateFx(t *testing.T) gateFx {
 			{`INSERT INTO pc.automation_triggers (org_id, id, automation_id, version_id, kind, mode, source_ref, authenticity,
 				root_trigger_id, state, occurred_at) VALUES ($1, $2, $3, $4, 'MANUAL', 'SHADOW', 'manual:test', 'USER_SESSION',
 				$2, 'SHADOW', now())`, []any{g.org, trigger, g.automation, g.version}},
-			{`INSERT INTO pc.automation_executions (org_id, id, automation_id, version_id, trigger_id, mode, service_account_id,
+			{
+				`INSERT INTO pc.automation_executions (org_id, id, automation_id, version_id, trigger_id, mode, service_account_id,
 				principal_sa_id, trigger_kind, occurred_at, root_trigger_id, deadline_at)
 				VALUES ($1, $2, $3, $4, $5, 'SHADOW', $6, $6, 'MANUAL', now(), $5, now() + interval '1 day')`,
-				[]any{g.org, g.execution, g.automation, g.version, trigger, g.sa}},
-			{`INSERT INTO pc.role_bindings (org_id, id, role, user_id, scope_type, created_by, created_at)
+				[]any{g.org, g.execution, g.automation, g.version, trigger, g.sa},
+			},
+			{
+				`INSERT INTO pc.role_bindings (org_id, id, role, user_id, scope_type, created_by, created_at)
 				VALUES ($1, $2, 'automation_operator', $3, 'ORG', $4, now() - interval '30 days')`,
-				[]any{g.org, ids.NewV7(), g.dave.id, "user:" + g.alice.id.String()}},
+				[]any{g.org, ids.NewV7(), g.dave.id, "user:" + g.alice.id.String()},
+			},
 		} {
 			if _, err := tx.Exec(ctx, s.sql, s.args...); err != nil {
 				return err

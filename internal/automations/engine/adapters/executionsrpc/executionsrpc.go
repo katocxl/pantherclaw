@@ -169,8 +169,8 @@ func attempt(a engine.Attempt) *pantherclawv1.AutomationStepAttempt {
 	return &pantherclawv1.AutomationStepAttempt{
 		Id: a.ID.String(), StepIndex: int32(a.Index), StepId: a.StepID, Attempt: int32(a.Number), Kind: a.Kind, //nolint:gosec // ≤ 40, ≤ 5
 		Compensation: a.Compensation,
-		State: pantherclawv1.AutomationStepState(pantherclawv1.AutomationStepState_value["AUTOMATION_STEP_STATE_"+string(a.State)]),
-		Decision: decision, Reason: a.Reason, Output: a.Output, Refs: refs(a.Refs),
+		State:        pantherclawv1.AutomationStepState(pantherclawv1.AutomationStepState_value["AUTOMATION_STEP_STATE_"+string(a.State)]),
+		Decision:     decision, Reason: a.Reason, Output: a.Output, Refs: refs(a.Refs),
 		Effect:    pantherclawv1.AutomationEffect(pantherclawv1.AutomationEffect_value["AUTOMATION_EFFECT_"+string(a.Effect)]),
 		StartedAt: ts(a.StartedAt), EndedAt: ts(a.EndedAt), WakeAt: ts(a.WakeAt),
 	}
@@ -210,7 +210,7 @@ func (s *Executions) GetExecution(ctx context.Context, req *pantherclawv1.GetExe
 		out.Launches = append(out.Launches, &pantherclawv1.AutomationLaunch{
 			Id: l.ID.String(), AgentId: l.AgentID.String(), InstanceId: idp(l.InstanceID), RunId: l.RunID.String(),
 			GrantId: l.GrantID.String(), Delivery: l.Delivery, DestinationId: idp(l.DestinationID),
-			State: pantherclawv1.AutomationLaunchState(pantherclawv1.AutomationLaunchState_value["AUTOMATION_LAUNCH_STATE_"+l.State]),
+			State:             pantherclawv1.AutomationLaunchState(pantherclawv1.AutomationLaunchState_value["AUTOMATION_LAUNCH_STATE_"+l.State]),
 			ClaimedInstanceId: idp(l.ClaimedInstanceID), ClaimedAt: tsp(l.ClaimedAt), ClaimDeadline: ts(l.ClaimDeadline),
 			CompletedAt: tsp(l.CompletedAt), TaskRef: l.TaskRef,
 			Outcome: pantherclawv1.AutomationLaunchOutcome(

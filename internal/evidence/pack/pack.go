@@ -96,6 +96,9 @@ const (
 	// ledger entries with their inclusion proofs, the checkpoints and the
 	// anchor.
 	KindBundle = "bundle"
+	// KindAutomation is an automation execution's record (G0 M11 part 2 D30):
+	// the execution, its grants, runs and gates.
+	KindAutomation = "automation"
 )
 
 // Scope kinds (design decision 15).
@@ -107,6 +110,10 @@ const (
 	// ScopeRange is the transactions of one adversarial range and its
 	// assurance report (G0 M12, HR-224).
 	ScopeRange = "range"
+	// ScopeAutomationExecution is one automation execution: what it was asked
+	// to do and under which authority, its steps, and the transactions of its
+	// runs (G0 M11 part 2 D30, F533).
+	ScopeAutomationExecution = "automation_execution"
 )
 
 // ErrInvalid reports a pack or manifest that is malformed or does not
@@ -155,6 +162,7 @@ type Scope struct {
 	Run          string   `json:"run,omitzero"`
 	Agent        string   `json:"agent,omitzero"`
 	Range        string   `json:"range,omitzero"`
+	Execution    string   `json:"execution,omitzero"`
 	From         string   `json:"from,omitzero"`
 	To           string   `json:"to,omitzero"`
 }

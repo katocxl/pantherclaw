@@ -644,6 +644,35 @@ func (q *Queries) ExecutionRuns(ctx context.Context, orgID ids.OrgID, executionI
 	return items, nil
 }
 
+const executionTransactions = `-- name: ExecutionTransactions :many
+SELECT t.id FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = $1 AND r.automation_execution_id = $2
+ORDER BY t.id
+LIMIT 10000
+`
+
+// The transactions of an execution's runs, in id order (D30).
+func (q *Queries) ExecutionTransactions(ctx context.Context, orgID ids.OrgID, executionID *ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, executionTransactions, orgID, executionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const executionTrigger = `-- name: ExecutionTrigger :one
 
 SELECT t.kind, t.authenticity, t.authenticity_detail, t.source_ref
