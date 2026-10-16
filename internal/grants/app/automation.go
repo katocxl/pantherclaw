@@ -273,7 +273,7 @@ func (s *Service) IssueForAutomationTx(ctx context.Context, tx db.TenantTx, in A
 	} else if prod, err := s.Store.ProductionInTx(ctx, tx, in.Org, agent.EnvironmentID); err != nil {
 		return domain.Grant{}, err
 	} else if prod {
-		return domain.Grant{}, errNoGate
+		return domain.Grant{}, ErrNoGate
 	}
 	budgets, err := taskBudgets(g.Limits)
 	if err != nil {

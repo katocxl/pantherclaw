@@ -41,6 +41,54 @@ func (q *Queries) AddFleetCohortMember(ctx context.Context, arg AddFleetCohortMe
 	return result.RowsAffected(), nil
 }
 
+const agentBaselineCohorts = `-- name: AgentBaselineCohorts :many
+SELECT c.org_id, c.id, c.name, c.description, c.rule, c.owner_user_id, c.baseline, c.created_by, c.created_at, c.updated_at FROM pc.fleet_cohorts c
+JOIN pc.agents a ON a.org_id = c.org_id AND a.id = $1
+WHERE c.org_id = $2 AND c.baseline IS NOT NULL
+  AND (EXISTS (SELECT 1 FROM pc.fleet_cohort_members m
+               WHERE m.org_id = c.org_id AND m.cohort_id = c.id AND m.agent_id = a.id)
+       OR (c.rule IS NOT NULL
+           AND (c.rule->>'team_id' IS NULL OR a.team_id = encode(decode(c.rule->>'team_id', 'base64'), 'hex')::uuid)
+           AND (c.rule->>'environment_id' IS NULL OR a.environment_id = encode(decode(c.rule->>'environment_id', 'base64'), 'hex')::uuid)
+           AND (c.rule->>'task_type' IS NULL OR a.task_type = c.rule->>'task_type')))
+ORDER BY c.id
+LIMIT 2
+`
+
+// The cohorts with a baseline an agent belongs to (static member or rule
+// match), at most two: one is the agent's baseline, two make it ambiguous
+// (D115 R2b). A rule's ids are stored base64 (ids.UUID's JSON).
+func (q *Queries) AgentBaselineCohorts(ctx context.Context, agentID ids.UUID, orgID ids.OrgID) ([]PcFleetCohort, error) {
+	rows, err := q.db.Query(ctx, agentBaselineCohorts, agentID, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcFleetCohort{}
+	for rows.Next() {
+		var i PcFleetCohort
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.Rule,
+			&i.OwnerUserID,
+			&i.Baseline,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteFleetCohort = `-- name: DeleteFleetCohort :execrows
 DELETE FROM pc.fleet_cohorts WHERE org_id = $1 AND id = $2
 `

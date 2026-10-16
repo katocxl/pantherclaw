@@ -149,9 +149,10 @@ func (ceilings) Reserve(context.Context, db.TenantTx, gapp.AutomationIssue, map[
 	return nil
 }
 
-// TestHR290_AutomationIssuanceIsGatedAndCapped (D80, D93): automation
-// issuance runs the same gate in the engine's transaction: an unpromoted
-// production agent is refused NOT_PROMOTED, and a grant under a
+// TestHR290_AutomationIssuanceIsGatedAndCapped (D80, D93, D105, D112):
+// automation issuance, and a preview's dry run, run the same gate in the
+// engine's transaction, and refuse a production grant without one: an
+// unpromoted production agent is refused NOT_PROMOTED, and a grant under a
 // provisional promotion is capped at its expiry.
 func TestHR290_AutomationIssuanceIsGatedAndCapped(t *testing.T) {
 	w := newWorld(t)
@@ -172,33 +173,39 @@ func TestHR290_AutomationIssuanceIsGatedAndCapped(t *testing.T) {
 			Bounds: gdomain.Bounds{Operations: &ops}, TTL: 24 * time.Hour, Limits: lim,
 		}},
 	}
-	issueFor := func(agent ids.UUID) (gdomain.Grant, error) {
+	// live false is a SHADOW or TEST execution's preview (previewCeiling's
+	// dry run, D84), which runs every check of a live one.
+	issueAs := func(agent ids.UUID, live bool) (gdomain.Grant, error) {
 		var g gdomain.Grant
 		err := w.pool.InTenantTx(context.Background(), w.org, func(ctx context.Context, tx db.TenantTx) error {
 			var err error
 			g, err = svc.IssueForAutomationTx(ctx, tx, gapp.AutomationIssue{
 				Org: w.org, Automation: ids.NewV7(), Version: ids.NewV7(), Execution: ids.NewV7(), Ceiling: ceiling,
 				ServiceAccount: sa, AgentID: agent, Principal: principal, TaskRef: "ticket T-1",
-				Bounds: gdomain.Bounds{Operations: &gdomain.Ops{refund}}, Limits: lim, Live: true, DryRun: true,
+				Bounds: gdomain.Bounds{Operations: &gdomain.Ops{refund}}, Limits: lim, Live: live, DryRun: true,
 			})
 			return err
 		})
 		return g, err
 	}
-	issue := func() (gdomain.Grant, error) { return issueFor(w.agent) }
+	issue := func() (gdomain.Grant, error) { return issueAs(w.agent, true) }
 
-	// Without a gate a production grant is refused, a development one not
-	// (D105).
+	// Without a gate a production grant is refused, live or previewed, a
+	// development one not (D105, D112).
 	svc.Promotions = nil
-	_, err = issue()
-	notPromoted(t, "automation issuance with no gate wired", err)
-	if _, err := issueFor(w.devAgent); err != nil {
-		t.Fatalf("a development grant with no gate wired: %v", err)
+	for _, live := range []bool{true, false} {
+		_, err = issueAs(w.agent, live)
+		notPromoted(t, fmt.Sprintf("automation issuance (live %v) with no gate wired", live), err)
+		if _, err := issueAs(w.devAgent, live); err != nil {
+			t.Fatalf("a development grant (live %v) with no gate wired: %v", live, err)
+		}
 	}
 	svc.Promotions = gate
 
 	_, err = issue()
 	notPromoted(t, "automation issuance for an unpromoted production agent", err)
+	_, err = issueAs(w.agent, false)
+	notPromoted(t, "a preview's dry run for an unpromoted production agent", err)
 
 	pr := promotiontest.PromoteNew(t, w.scope, refund)
 	g, err := issue()
@@ -324,4 +331,55 @@ func TestHR290_AGrantPrefixWithNothingKnownUnderItIsRefused(t *testing.T) {
 	if _, err := w.issue(w.agent, `{"operations": ["payments.refund.create"]}`); err != nil {
 		t.Fatalf("the promoted exact operation: %v", err)
 	}
+}
+
+// TestHR290_OnlyActiveServingConnectionsCount (D114): COVERAGE reads the
+// records of the agent's ACTIVE serving connections only; a failing record
+// on a retired connection, or on one the agent has no route through,
+// counts for nothing, so the new agent is still promotable provisionally.
+func TestHR290_OnlyActiveServingConnectionsCount(t *testing.T) {
+	w := newWorld(t)
+	w.publishTest()
+	retired := w.secondConnection()
+	w.exec("UPDATE pc.connections SET state = 'RETIRED' WHERE id = $1", retired)
+	failing := func(conn ids.UUID) {
+		entry := ids.NewV7()
+		w.exec(`INSERT INTO pc.ledger_entries (org_id, id, kind, actor_type, actor_id, body) VALUES ($1, $2, 'coverage.test', 'test', 'test', '\x7b7d')`, w.org, entry)
+		w.exec(`INSERT INTO pc.coverage_snapshots (org_id, id, agent_id, connection_id, operation, state, reasons, body, body_sha256, ledger_entry_id)
+			VALUES ($1, $2, $3, $4, $5, 'OBSERVE_ONLY', '{monitor_mode}', '{}', $6, $7)`, w.org, ids.NewV7(), w.agent, conn, refund, make([]byte, 32), entry)
+	}
+	failing(retired) // routed, but retired
+	failing(w.conn)  // ACTIVE, but no route of the agent through it
+	res := w.promote(promotiontest.NewPromoter(t, w.scope))
+	if len(res.Promoted) != 1 || res.Promoted[0].State != promotions.StateProvisional {
+		t.Fatalf("records on retired and non-serving connections promoted %+v, readiness %+v", res.Promoted, res.Readiness[0])
+	}
+}
+
+// TestHR290_PersonIssuanceFailsClosedWithoutAGate (D114 Q1): a store with
+// no promotion gate refuses a person's production grant and a widening
+// revision of one NOT_PROMOTED; a development grant is unaffected.
+func TestHR290_PersonIssuanceFailsClosedWithoutAGate(t *testing.T) {
+	w := newWorld(t)
+	gated := w.grants
+	gs := &gpg.Store{Pool: w.pool}
+	w.grants = &gapp.Service{Repo: gs, Subjects: gs, Defs: &defpg.Store{Pool: w.pool}, Authz: gapp.SubjectAuthorizer{}, Clock: clock.System{}}
+	_, err := w.issue(w.agent, `{"operations": ["payments.refund.create"]}`)
+	notPromoted(t, "a production grant with no gate", err)
+	if _, err := w.issue(w.devAgent, `{"operations": ["payments.refund.create"]}`); err != nil {
+		t.Fatalf("a development grant with no gate: %v", err)
+	}
+
+	promotiontest.Promote(t, w.scope, refund)
+	w.grants = gated
+	g, err := w.issue(w.agent, `{"operations": ["payments.refund.create"]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.grants = &gapp.Service{Repo: gs, Subjects: gs, Defs: &defpg.Store{Pool: w.pool}, Authz: gapp.SubjectAuthorizer{}, Clock: clock.System{}}
+	b, _ := gdomain.DecodeBounds([]byte(`{"operations": ["payments.refund.create"]}`))
+	_, _, err = w.grants.Revise(w.issuer, gapp.ReviseRequest{
+		ID: g.ID, Revision: 1, TaskRef: "refunds", Bounds: b, ExpiresAt: g.ExpiresAt.Add(time.Hour),
+	})
+	notPromoted(t, "a widening revision with no gate", err)
 }

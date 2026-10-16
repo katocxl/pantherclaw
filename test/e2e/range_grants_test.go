@@ -27,6 +27,7 @@ import (
 	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
+	"github.com/katocxl/pantherclaw/internal/grants/grantstest"
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/redteam/domain"
@@ -103,7 +104,7 @@ func (d *rangeDriver) revokeGrant() (domain.Observation, error) {
 		return domain.Observation{}, err
 	}
 	p := d.s.person(d.t, "range-security", td.RoleSecurityAdmin)
-	gs := &grantspg.Store{Pool: d.s.pool}
+	gs := &grantspg.Store{Pool: d.s.pool, Promotions: grantstest.OpenGate{}}
 	svc := &grantsapp.Service{Repo: gs, Subjects: gs, Defs: &defspg.Store{Pool: d.s.pool}, Authz: grantsapp.SubjectAuthorizer{}, Clock: clock.System{}}
 	if _, err := svc.Revoke(p.ctx, gid, "range"); err != nil {
 		return domain.Observation{}, err

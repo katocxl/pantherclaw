@@ -17,9 +17,10 @@ import (
 )
 
 // coverage is checked per serving connection (D80, D93 V4): the agent's
-// connections whose packages declare the operation. Any coverage record
-// of the operation that is not ENFORCED or PARTIAL, or has lapsed, fails
-// it; a passing record on every serving connection passes it; otherwise
+// ACTIVE connections whose packages declare the operation; a record on any
+// other connection (retired, or not serving it) counts for nothing (D114).
+// A serving connection's record that is not ENFORCED or PARTIAL, or has
+// lapsed, fails it; a passing record on every serving connection passes it; otherwise
 // (a serving connection without a record yet, or none serving it) it is
 // pending, so the operation is promotable provisionally. Every current
 // record of the agent and operation is read: no row cap can drop one.
@@ -28,9 +29,13 @@ func (s *subject) coverage(ctx context.Context, q *dbq.Queries, op string, now t
 	if err != nil {
 		return Check{}, err
 	}
+	serving := s.catalog.serving[op]
 	var bad []string
 	var passing []ids.UUID
 	for _, row := range rows {
+		if !slices.Contains(serving, row.ConnectionID) {
+			continue // a retired or non-serving connection's record counts for nothing (D114)
+		}
 		st, _ := cdomain.ParseState(row.State)
 		if st != cdomain.Enforced && st != cdomain.Partial {
 			bad = append(bad, fmt.Sprintf("%s on connection %s is %s", row.Operation, row.ConnectionID, row.State))
@@ -49,7 +54,6 @@ func (s *subject) coverage(ctx context.Context, q *dbq.Queries, op string, now t
 	if len(bad) > 0 {
 		return Check{Name: CheckCoverage, Detail: clip(strings.Join(bad, "; "))}, nil
 	}
-	serving := s.catalog.serving[op]
 	var without []string
 	for _, c := range serving {
 		if !slices.Contains(passing, c) {
