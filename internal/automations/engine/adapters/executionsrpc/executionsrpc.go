@@ -300,6 +300,7 @@ func effect(e pgengine.CancelEffect) *pantherclawv1.AutomationCancelEffect {
 	return &pantherclawv1.AutomationCancelEffect{
 		ExecutionsAffected: idStrings(e.Executions), GrantsRevoked: idStrings(e.Grants), RunsEnded: idStrings(e.Runs),
 		LaunchesCancelled: idStrings(e.Launches), GatesCancelled: idStrings(e.Gates), DeliveriesCancelled: idStrings(e.Deliveries),
+		DeliveriesNotVerified: idStrings(e.DeliveriesNotVerified),
 	}
 }
 

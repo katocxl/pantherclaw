@@ -42,6 +42,9 @@ const (
 	RefApprovalRequest = "approval_request"
 	RefDelivery        = "automation_delivery"
 	RefNotification    = "notification"
+	// RefDeliveryNotVerified is a delivery cleanup could not cancel because
+	// its sending may have started (D97 N1): never reported as canceled.
+	RefDeliveryNotVerified = "automation_delivery_not_verified"
 )
 
 // Output keys.
