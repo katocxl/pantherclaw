@@ -323,6 +323,44 @@ func (s *Service) ResumeAutomation(ctx context.Context, automation ids.UUID) (Au
 	return out, replayed, err
 }
 
+// ResumePaused resumes, in the caller's transaction, an automation that is
+// still PAUSED for reason, after the same revalidation as ResumeAutomation
+// (D31 resume_launches, D115 R2a). An automation that is not PAUSED, or
+// paused for another reason, is left as it is and false is returned; a
+// failed revalidation returns its error and changes nothing.
+func (s *Service) ResumePaused(ctx context.Context, ptx pgx.Tx, org ids.OrgID, automation ids.UUID, reason autodomain.PauseReason) (bool, error) {
+	tx, err := db.AdoptTenantTx(ctx, ptx, org)
+	if err != nil {
+		return false, err
+	}
+	q := dbq.New(tx)
+	a, err := loadAutomation(ctx, q, org, automation, true)
+	if err != nil {
+		return false, err
+	}
+	if a.State != string(autodomain.StatePaused) || a.EnabledVersionID == nil || deref2(a.PauseReason) != string(reason) {
+		return false, nil
+	}
+	if err := s.revalidate(ctx, tx, q, a); err != nil {
+		return false, err
+	}
+	if err := oneRow(q.ResumeAutomation(ctx, org, a.ID)); err != nil {
+		return false, err
+	}
+	replayed := 0
+	if s.Triggers != nil {
+		if err := s.Triggers.Activate(ctx, tx.Pgx(), a.ID, *a.EnabledVersionID); err != nil {
+			return false, err
+		}
+		if replayed, err = s.Triggers.Resume(ctx, tx.Pgx(), a.ID); err != nil {
+			return false, err
+		}
+	}
+	return true, record(ctx, tx, systemActor, "automation.resumed", a.ID, map[string]string{
+		"was": string(reason), "replayed": itoa(replayed),
+	})
+}
+
 func deref2(s *string) string {
 	if s == nil {
 		return ""
