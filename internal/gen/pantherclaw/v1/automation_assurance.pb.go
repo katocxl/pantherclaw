@@ -1431,6 +1431,8 @@ type AutomationSimulation struct {
 	// (or the version's ceiling), as "step=ALLOWED" or
 	// "step=REFUSED:<reason>".
 	LaunchPreview []string `protobuf:"bytes,14,rep,name=launch_preview,json=launchPreview,proto3" json:"launch_preview,omitempty"`
+	// Why hidden samples are hidden ("involves more than 64 agents").
+	Notes         []string `protobuf:"bytes,15,rep,name=notes,proto3" json:"notes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1559,6 +1561,13 @@ func (x *AutomationSimulation) GetSamplesHidden() int32 {
 func (x *AutomationSimulation) GetLaunchPreview() []string {
 	if x != nil {
 		return x.LaunchPreview
+	}
+	return nil
+}
+
+func (x *AutomationSimulation) GetNotes() []string {
+	if x != nil {
+		return x.Notes
 	}
 	return nil
 }
@@ -3090,7 +3099,7 @@ const file_pantherclaw_v1_automation_assurance_proto_rawDesc = "" +
 	"\x10SimulationBudget\x12\x1a\n" +
 	"\bcurrency\x18\x01 \x01(\tR\bcurrency\x12\x1e\n" +
 	"\vmax_per_day\x18\x02 \x01(\tR\tmaxPerDay\x12(\n" +
-	"\x10expected_per_day\x18\x03 \x01(\tR\x0eexpectedPerDay\"\x83\x05\n" +
+	"\x10expected_per_day\x18\x03 \x01(\tR\x0eexpectedPerDay\"\x99\x05\n" +
 	"\x14AutomationSimulation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -3110,7 +3119,8 @@ const file_pantherclaw_v1_automation_assurance_proto_rawDesc = "" +
 	"\vfinish_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"finishTime\x12%\n" +
 	"\x0esamples_hidden\x18\r \x01(\x05R\rsamplesHidden\x12%\n" +
-	"\x0elaunch_preview\x18\x0e \x03(\tR\rlaunchPreview\"g\n" +
+	"\x0elaunch_preview\x18\x0e \x03(\tR\rlaunchPreview\x12\x14\n" +
+	"\x05notes\x18\x0f \x03(\tR\x05notes\"g\n" +
 	"\x1fGetAutomationSimulationResponse\x12D\n" +
 	"\n" +
 	"simulation\x18\x01 \x01(\v2$.pantherclaw.v1.AutomationSimulationR\n" +

@@ -98,6 +98,8 @@ type Sample struct {
 	// launch_run steps'); a reader sees the sample only when every one is
 	// in their exposure.read scope (D94 S6).
 	Agents []string `json:"agents,omitzero"`
+	// Note says why no reader sees the sample, when that is so.
+	Note string `json:"note,omitzero"`
 }
 
 // Budget forecast of one currency.
@@ -127,6 +129,8 @@ type SimResults struct {
 	// SamplesHidden counts samples left out because they involve an agent
 	// outside the reader's exposure.read scope (set when read, D94 S6).
 	SamplesHidden int `json:"samples_hidden,omitzero"`
+	// Notes say why hidden samples are hidden, once each (set when read).
+	Notes []string `json:"notes,omitzero"`
 	// LaunchPreview is each launch_run step's dry-run issuance, "ALLOWED"
 	// or "REFUSED:<reason>" (D94 S5); empty when not previewed.
 	LaunchPreview map[string]string `json:"launch_preview,omitzero"`
@@ -148,6 +152,9 @@ const maxSampleAgents = 64
 // AgentsOverflow stands for more than maxSampleAgents agents; it is no
 // agent id, so no reader may see the sample.
 const AgentsOverflow = "OVERFLOW"
+
+// NoteTooManyAgents is the overflowing sample's note.
+const NoteTooManyAgents = "involves more than 64 agents"
 
 // maxGroupKey bounds a threshold group key, as the trigger path stores it.
 const maxGroupKey = 300
@@ -218,7 +225,11 @@ func Replay(ctx context.Context, def *autodomain.Definition, h History, from, to
 				// Too many to list: hidden from every reader (D107 A4).
 				agents = []string{AgentsOverflow}
 			}
-			out.Samples = append(out.Samples, Sample{At: f.at, Kind: string(w.Kind()), SourceRef: f.ref, Steps: steps, Agents: agents})
+			sm := Sample{At: f.at, Kind: string(w.Kind()), SourceRef: f.ref, Steps: steps, Agents: agents}
+			if len(agents) == 1 && agents[0] == AgentsOverflow {
+				sm.Note = NoteTooManyAgents // D111 F2
+			}
+			out.Samples = append(out.Samples, sm)
 		}
 	}
 	for i := range out.Days {

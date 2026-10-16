@@ -267,6 +267,7 @@ func (h *Handler) GetAutomationSimulation(ctx context.Context, req *pb.GetAutoma
 		}
 		out.Forecast = f
 		out.SamplesHidden = count(r.SamplesHidden)
+		out.Notes = r.Notes
 		for _, k := range slices.Sorted(maps.Keys(r.LaunchPreview)) {
 			out.LaunchPreview = append(out.LaunchPreview, k+"="+r.LaunchPreview[k])
 		}
