@@ -51,11 +51,11 @@ var (
 	ErrNameTaken       = pcerr.New(pcerr.AlreadyExists, "AUTOMATION_NAME_TAKEN", "an automation or service account with this name exists")
 	ErrName            = pcerr.New(pcerr.InvalidArgument, "AUTOMATION_NAME",
 		"a name is a lowercase slug of at most 52 characters starting with a letter")
-	ErrOwner = pcerr.New(pcerr.FailedPrecondition, "OWNER_NOT_ACTIVE_PERSON", "the owner must be an active person of the organization")
-	ErrState = pcerr.New(pcerr.FailedPrecondition, "AUTOMATION_STATE", "the automation is not in a state that allows this")
+	ErrOwner        = pcerr.New(pcerr.FailedPrecondition, "OWNER_NOT_ACTIVE_PERSON", "the owner must be an active person of the organization")
+	ErrState        = pcerr.New(pcerr.FailedPrecondition, "AUTOMATION_STATE", "the automation is not in a state that allows this")
 	ErrVersionState = pcerr.New(pcerr.FailedPrecondition, "VERSION_STATE",
 		"the version is not in a state that allows this")
-	ErrDefinition = pcerr.New(pcerr.InvalidArgument, "DEFINITION_INVALID", "the definition cannot be read")
+	ErrDefinition     = pcerr.New(pcerr.InvalidArgument, "DEFINITION_INVALID", "the definition cannot be read")
 	ErrDefinitionName = pcerr.New(pcerr.InvalidArgument, "DEFINITION_NAME",
 		"the definition's name must be the automation's name")
 	ErrRevisionChanged = pcerr.New(pcerr.Aborted, "REVISION_CHANGED", "the version changed; read it again")

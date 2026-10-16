@@ -300,7 +300,10 @@ func TestHR270_ExecutionIdentityHoldsNoCredentials(t *testing.T) {
 	jwk, _ := jose.JSONWebKey{Key: pub}.MarshalJSON()
 	desc := "changed"
 	for name, call := range map[string]func() error{
-		"api key":   func() error { _, _, err := sas.CreateAPIKey(e.alice.cli, sa, "k", []td.Permission{td.PermAgentRead}, 0); return err },
+		"api key": func() error {
+			_, _, err := sas.CreateAPIKey(e.alice.cli, sa, "k", []td.Permission{td.PermAgentRead}, 0)
+			return err
+		},
 		"key":       func() error { _, err := sas.AddKey(e.alice.cli, sa, assertion.EdDSA, string(jwk), 0); return err },
 		"update":    func() error { _, err := sas.Update(e.alice.cli, sa, &desc); return err },
 		"set state": func() error { _, err := sas.SetState(e.alice.cli, sa, td.Disabled); return err },
@@ -429,9 +432,11 @@ func TestHR271_IssuanceStaysInsideTheCeiling(t *testing.T) {
 	for name, mod := range map[string]func(*grantsapp.AutomationIssue){
 		"another agent":     func(in *grantsapp.AutomationIssue) { in.AgentID = e.other },
 		"another operation": func(in *grantsapp.AutomationIssue) { in.Bounds.Operations = &gdomain.Ops{"payments.charge.create"} },
-		"another principal": func(in *grantsapp.AutomationIssue) { in.Principal = gdomain.Principal{Kind: gdomain.PrincipalUser, ID: e.bob.id} },
-		"shadow":            func(in *grantsapp.AutomationIssue) { in.Live = false },
-		"another identity":  func(in *grantsapp.AutomationIssue) { in.ServiceAccount = ids.NewV7() },
+		"another principal": func(in *grantsapp.AutomationIssue) {
+			in.Principal = gdomain.Principal{Kind: gdomain.PrincipalUser, ID: e.bob.id}
+		},
+		"shadow":           func(in *grantsapp.AutomationIssue) { in.Live = false },
+		"another identity": func(in *grantsapp.AutomationIssue) { in.ServiceAccount = ids.NewV7() },
 	} {
 		if _, err := e.issue(a, v, mod); err == nil {
 			t.Errorf("%s: issued", name)

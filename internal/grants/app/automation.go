@@ -188,9 +188,9 @@ func (s *Service) IssueForAutomationTx(ctx context.Context, tx db.TenantTx, in A
 		Requirements: append(slices.Clone(c.Requirements), in.Requirements...),
 		Limits:       domain.Limits{Budgets: append(slices.Clone(c.Limits.Budgets), in.Limits.Budgets...), Counters: append(slices.Clone(c.Limits.Counters), in.Limits.Counters...)},
 		Delegation:   c.Delegation, MinAttestation: c.MinAttestation,
-		Grantor:      domain.Principal{Kind: domain.PrincipalServiceAccount, ID: in.ServiceAccount},
-		Basis:        fmt.Sprintf("automation %s ceiling %s", c.AutomationName, c.ID),
-		Ceiling:      c.ID, Execution: in.Execution,
+		Grantor: domain.Principal{Kind: domain.PrincipalServiceAccount, ID: in.ServiceAccount},
+		Basis:   fmt.Sprintf("automation %s ceiling %s", c.AutomationName, c.ID),
+		Ceiling: c.ID, Execution: in.Execution,
 	}
 	if in.InstanceID != nil {
 		g.InstanceID = *in.InstanceID

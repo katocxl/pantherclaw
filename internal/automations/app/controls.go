@@ -125,8 +125,8 @@ func (s *Service) failure(ctx context.Context, tx db.TenantTx, a dbq.PcAutomatio
 	owner := reflexdomain.Subject{Type: reflexdomain.SubjectUser, ID: a.OwnerUserID.String()}
 	_, err := s.Failures.Report(ctx, tx.Pgx(), reflexdomain.Failure{
 		Org: a.OrgID, Kind: kind, Summary: summary, NextStep: next,
-		Scope:     []reflexdomain.Subject{{Type: reflexdomain.SubjectAutomation, ID: a.ID.String()}},
-		Owner:     &owner, Deadline: s.now().Add(7 * 24 * time.Hour), DedupeKey: dedupe,
+		Scope: []reflexdomain.Subject{{Type: reflexdomain.SubjectAutomation, ID: a.ID.String()}},
+		Owner: &owner, Deadline: s.now().Add(7 * 24 * time.Hour), DedupeKey: dedupe,
 	})
 	return err
 }

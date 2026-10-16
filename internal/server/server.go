@@ -577,7 +577,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	// ListAgents reads it only while serving.
 	var autos *automationsCore
 	pantherclawv1connect.RegisterAgentServiceHandler(rs, d.m5p2.agents(agentsrpc.NewAgents(aapp.NewInventory(pool, d.billing)).
-		WithAutomations(func(ctx context.Context) ([]*pantherclawv1.AutomationIdentity, string, error) { return autos.identities(ctx) })))
+		WithAutomations(func(ctx context.Context) ([]*pantherclawv1.AutomationIdentity, string, error) {
+			return autos.identities(ctx)
+		})))
 	pantherclawv1connect.RegisterWaitlistServiceHandler(rs, d.m5p2.waitlist())
 	attestors, err := newAttestors(d.clusters)
 	if err != nil {

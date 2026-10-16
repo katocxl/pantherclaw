@@ -83,8 +83,8 @@ var (
 	ErrExpired = pcerr.New(pcerr.FailedPrecondition, "CHANGE_EXPIRED", "the change request has expired")
 	ErrVoided  = pcerr.New(pcerr.FailedPrecondition, "CHANGE_VOIDED",
 		"the change request was voided: what it would change is no longer what was confirmed")
-	ErrSamePerson = pcerr.New(pcerr.PermissionDenied, "SAME_PERSON", "each confirmation must come from a different person")
-	ErrSameKey    = pcerr.New(pcerr.PermissionDenied, "SAME_KEY", "each confirmation needs a different security key")
+	ErrSamePerson  = pcerr.New(pcerr.PermissionDenied, "SAME_PERSON", "each confirmation must come from a different person")
+	ErrSameKey     = pcerr.New(pcerr.PermissionDenied, "SAME_KEY", "each confirmation needs a different security key")
 	ErrNotEligible = pcerr.New(pcerr.PermissionDenied, "NOT_ELIGIBLE",
 		"you cannot confirm this change: it needs permissions you do not hold where it acts")
 	ErrCompromised = pcerr.New(pcerr.PermissionDenied, "PUBLISHER_COMPROMISED",

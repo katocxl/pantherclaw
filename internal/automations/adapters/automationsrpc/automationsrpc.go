@@ -426,4 +426,3 @@ func IdentityPB(x autoapp.Identity) *pantherclawv1.AutomationIdentity {
 		ActiveGrants: int32(x.ActiveGrants), ReviewBy: ts(x.ReviewBy), //nolint:gosec // bounded
 	}
 }
-
