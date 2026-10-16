@@ -402,12 +402,15 @@ CREATE TRIGGER runs_automation_execution_guard BEFORE INSERT OR UPDATE ON pc.run
 
 -- Gates are approval requests (D25, D25a, D62). The new columns are
 -- nullable without defaults (no rewrite); the CHECKs are added NOT VALID
--- and validated, and existing rows already satisfy them.
+-- and validated, and existing rows already satisfy them. agent_id drops NOT
+-- NULL for agentless AUTOMATION_GATE rows (D25a); the subject CHECK below
+-- still requires it for every other kind.
 -- squawk-ignore adding-not-nullable-field
 ALTER TABLE pc.approval_requests
     ADD COLUMN execution_id            uuid,
     ADD COLUMN step_id                 text CHECK (step_id ~ '^[a-z][a-z0-9_-]{0,62}$'),
     ADD COLUMN requested_by_automation uuid,
+    -- squawk-ignore ban-drop-not-null
     ALTER COLUMN agent_id DROP NOT NULL,
     DROP CONSTRAINT approval_requests_subject_kind_check,
     DROP CONSTRAINT approval_requests_subject,
