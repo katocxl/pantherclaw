@@ -53,7 +53,11 @@ func registerEvidenceWorkers(reg *jobs.Registry, cfg *Config, pool *db.Pool, key
 	if err := checkpoints.Register(reg, svc); err != nil {
 		return nil, err
 	}
-	if err := packbuild.Register(reg, newPackBuilder(cfg, pool, keyReg, autos, bill, log)); err != nil {
+	packs, err := newPackBuilder(cfg, pool, keyReg, autos, bill, log)
+	if err != nil {
+		return nil, err
+	}
+	if err := packbuild.Register(reg, packs); err != nil {
 		return nil, err
 	}
 	periodic := append(checkpoints.PeriodicJobs(cfg.checkpointInterval()), packbuild.PeriodicJobs()...)
@@ -158,14 +162,18 @@ func registerEvidence(rs *connect.Server, d apiDeps) (*evapp.Service, error) {
 // gap.
 func newPackBuilder(cfg *Config, pool *db.Pool, keyReg *keys.Registry, autos *automationsCore, bill *billing.Service,
 	log *slog.Logger,
-) *packbuild.Service {
+) (*packbuild.Service, error) {
 	s := &packbuild.Service{
 		Pool: pool, Keys: keyReg, LogOrigin: cfg.logOrigin(), Cosign: cfg.Evidence.MLDSACosign,
 		Explorer: &txapp.Explorer{Pool: pool}, Bundles: evapp.New(pool, cfg.logOrigin()), Log: log,
 	}
 	if autos != nil && automationPackExecutions != nil {
-		s.Executions = automationPackExecutions(autos, pool, bill, log)
+		executions, err := automationPackExecutions(autos, pool, bill, log)
+		if err != nil {
+			return nil, err
+		}
+		s.Executions = executions
 	}
 	probeM11("packbuild", s)
-	return s
+	return s, nil
 }

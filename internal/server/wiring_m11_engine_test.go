@@ -45,7 +45,10 @@ func TestAutomationEnginePortsAreWired(t *testing.T) {
 			if role == RoleAll {
 				attach(core)
 			}
-			e := driverEngine(core, engineDeps{bill: bill, log: log})
+			e, err := driverEngine(core, engineDeps{bill: bill, log: log})
+			if err != nil {
+				t.Fatal(err)
+			}
 			if role == RoleWorker {
 				attach(core)
 			}
@@ -73,17 +76,23 @@ func TestAutomationEnginePortsAreWired(t *testing.T) {
 			if p := automationPauser(core); any(p) != any(core.svc) {
 				t.Fatalf("triggers' Pauser %T is not the shared core", p)
 			}
-			starter, ok := automationStarter(core, nil, bill, log).(*pgengine.Engine)
-			if !ok {
-				t.Fatal("triggers' Starter is not the engine")
+			s, err := automationStarter(core, nil, bill, log)
+			starter, ok := s.(*pgengine.Engine)
+			if err != nil || !ok {
+				t.Fatalf("triggers' Starter is not the engine (%v)", err)
 			}
 			sharesCore(t, "starter", starter, core)
-			lookup, ok := automationExecutions(core, nil, bill, log).(*pgengine.Engine)
-			if !ok {
-				t.Fatal("triggers' ExecutionLookup is not the engine")
+			l, err := automationExecutions(core, nil, bill, log)
+			lookup, ok := l.(*pgengine.Engine)
+			if err != nil || !ok {
+				t.Fatalf("triggers' ExecutionLookup is not the engine (%v)", err)
 			}
 			sharesCore(t, "lookup", lookup, core)
-			packs, ok := newPackBuilder(&Config{}, nil, nil, core, bill, log).Executions.(*pgengine.Engine)
+			pb, err := newPackBuilder(&Config{}, nil, nil, core, bill, log)
+			if err != nil {
+				t.Fatal(err)
+			}
+			packs, ok := pb.Executions.(*pgengine.Engine)
 			if !ok {
 				t.Fatal("packbuild.Executions is not the engine")
 			}
@@ -117,9 +126,9 @@ func TestAutomationWithdrawUsesTheGrantScope(t *testing.T) {
 func TestAutomationSecurityStepsGetTheConfig(t *testing.T) {
 	var got []securityStepDeps
 	prev := automationSecuritySteps
-	automationSecuritySteps = func(d securityStepDeps) autoports.StepRegistry {
+	automationSecuritySteps = func(d securityStepDeps) (autoports.StepRegistry, error) {
 		got = append(got, d)
-		return nil
+		return nil, nil
 	}
 	t.Cleanup(func() { automationSecuritySteps = prev })
 	cfg := &Config{}
@@ -141,7 +150,11 @@ func TestAutomationSecurityStepsGetTheConfig(t *testing.T) {
 // (errors.Is, no copied reason), so a delivery that may have been sent is
 // never reported canceled.
 func TestAutomationCleanupClassifiesDeliveryErrors(t *testing.T) {
-	c, ok := driverEngine(newAutomationsCore(nil, nil, ""), engineDeps{}).Cleaner.(pgengine.Cleanup)
+	e, err := driverEngine(newAutomationsCore(nil, nil, ""), engineDeps{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, ok := e.Cleaner.(pgengine.Cleanup)
 	if !ok || c.MaybeSent == nil || c.NotPending == nil {
 		t.Fatal("the driver's cleanup cannot classify Cancel errors")
 	}

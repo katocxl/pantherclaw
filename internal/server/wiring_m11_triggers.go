@@ -42,15 +42,16 @@ import (
 // core's Pauser. Core and engine take this stream's TriggerActivator and
 // Deliverer from automationTriggerActivator and automationDeliverer.
 var (
-	automationStarter    func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) autoports.Starter
-	automationExecutions func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) triggers.ExecutionLookup
+	automationStarter    func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) (autoports.Starter, error)
+	automationExecutions func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) (triggers.ExecutionLookup, error)
 	automationPauser     func(core *automationsCore) autoports.Pauser
 )
 
 // newAutomationTriggers builds the trigger service as pc_app. The engine's
 // and core's ports come from the process's one core (D105); without it
-// (nil) they read as "not available".
-func newAutomationTriggers(pool *db.Pool, bill *billing.Service, log *slog.Logger, core *automationsCore) *triggers.Service {
+// (nil) they read as "not available". An engine that cannot be built is an
+// error (D120).
+func newAutomationTriggers(pool *db.Pool, bill *billing.Service, log *slog.Logger, core *automationsCore) (*triggers.Service, error) {
 	d := triggers.Deps{
 		Pool: pool, Raiser: m10Raiser{pool: pool}, Failures: &failures.Sink{}, Operations: automationOperations{store: &defspg.Store{Pool: pool}},
 		Clock: clock.System{}, Log: log,
@@ -59,17 +60,25 @@ func newAutomationTriggers(pool *db.Pool, bill *billing.Service, log *slog.Logge
 		d.Editions = bill
 	}
 	if core != nil && automationStarter != nil {
-		d.Starter = automationStarter(core, pool, bill, log)
+		starter, err := automationStarter(core, pool, bill, log)
+		if err != nil {
+			return nil, err
+		}
+		d.Starter = starter
 	}
 	if core != nil && automationExecutions != nil {
-		d.Executions = automationExecutions(core, pool, bill, log)
+		lookup, err := automationExecutions(core, pool, bill, log)
+		if err != nil {
+			return nil, err
+		}
+		d.Executions = lookup
 	}
 	if core != nil && automationPauser != nil {
 		d.Pauser = automationPauser(core)
 	}
 	s := triggers.New(d)
 	probeM11("automations.triggers", s)
-	return s
+	return s, nil
 }
 
 // newAutomationEndpoints builds the endpoints service: secrets under the
@@ -94,7 +103,10 @@ func newAutomationEndpoints(pool *db.Pool, kp keys.KeyProvider, trig *triggers.S
 func automationTriggerServices(pool *db.Pool, kp keys.KeyProvider, bill *billing.Service, publicURL string,
 	clientIP httpx.ClientIPFunc, core *automationsCore, log *slog.Logger,
 ) (*triggers.Service, *endpoints.Service, error) {
-	trig := newAutomationTriggers(pool, bill, log, core)
+	trig, err := newAutomationTriggers(pool, bill, log, core)
+	if err != nil {
+		return nil, nil, err
+	}
 	ep, err := newAutomationEndpoints(pool, kp, trig, bill, publicURL, clientIP, log)
 	if err != nil {
 		return nil, nil, err
@@ -104,17 +116,22 @@ func automationTriggerServices(pool *db.Pool, kp keys.KeyProvider, bill *billing
 
 // automationTriggerActivator is the TriggerActivator core calls when it
 // enables, pauses or resumes an automation (D11).
-func automationTriggerActivator(pool *db.Pool, bill *billing.Service, log *slog.Logger, core *automationsCore) autoports.TriggerActivator {
-	return newAutomationTriggers(pool, bill, log, core).Activator()
+func automationTriggerActivator(pool *db.Pool, bill *billing.Service, log *slog.Logger, core *automationsCore,
+) (autoports.TriggerActivator, error) {
+	trig, err := newAutomationTriggers(pool, bill, log, core)
+	if err != nil {
+		return nil, err
+	}
+	return trig.Activator(), nil
 }
 
 // automationDeliverer is the Deliverer the engine's deliver and notify
-// steps use (D22). Its trigger service, like every one, is built on the
-// process's shared core (D112).
-func automationDeliverer(pool *db.Pool, kp keys.KeyProvider, bill *billing.Service, publicURL string, log *slog.Logger,
-	core *automationsCore,
+// steps use (D22), over trig: a trigger service that, like every one, the
+// caller built on the process's shared core (D112).
+func automationDeliverer(pool *db.Pool, kp keys.KeyProvider, trig *triggers.Service, bill *billing.Service, publicURL string,
+	log *slog.Logger,
 ) (autoports.Deliverer, error) {
-	ep, err := newAutomationEndpoints(pool, kp, newAutomationTriggers(pool, bill, log, core), bill, publicURL, nil, log)
+	ep, err := newAutomationEndpoints(pool, kp, trig, bill, publicURL, nil, log)
 	if err != nil {
 		return nil, err
 	}
