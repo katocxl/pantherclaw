@@ -77,6 +77,10 @@ type fixture struct {
 	svc  *Service
 	clk  *clock.Fake
 	recv *receiver
+	// trig starts the executions deliveries name (00142 FK); host is the
+	// automation it starts.
+	trig *triggers.Service
+	host triggerstest.Automation
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -84,13 +88,28 @@ func newFixture(t *testing.T) *fixture {
 	f := &fixture{Fixture: triggerstest.New(t), clk: clock.NewFake(time.Now()), recv: newReceiver(t)}
 	roots := x509.NewCertPool()
 	roots.AddCert(f.recv.srv.Certificate())
-	trig := triggers.New(triggers.Deps{Pool: f.Pool, Editions: triggerstest.Team})
+	trig := triggers.New(triggers.Deps{Pool: f.Pool, Starter: &triggerstest.Starter{}, Editions: triggerstest.Team})
+	f.trig = trig
 	var err error
 	f.svc, err = New(f.Pool, f.Envelope, trig, triggerstest.Team, Config{PublicURL: "https://pc.example.com", RootCAs: roots}, f.clk, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return f
+}
+
+// execution starts the host automation by hand and returns its execution.
+func (f *fixture) execution(t *testing.T) ids.UUID {
+	t.Helper()
+	if f.host.ID.IsZero() {
+		f.host = f.Automation(t, "deliveries", f.Definition(`"manual":{}`, ""), autodomain.RolloutFull)
+	}
+	out, err := f.trig.StartExecution(f.As(td.KindUser, td.RoleAutomationOperator),
+		triggers.ManualStart{Automation: f.host.ID, IdempotencyKey: ids.NewV7().String()}, nil)
+	if err != nil || out.Execution.IsZero() {
+		t.Fatalf("execution: %+v %v", out, err)
+	}
+	return out.Execution
 }
 
 func (f *fixture) author() context.Context { return f.As(td.KindUser, td.RoleAutomationAuthor) }
@@ -154,7 +173,7 @@ func (f *fixture) status(t *testing.T, id ids.UUID) autodomain.DeliveryStatus {
 func TestDeliverer_SignsDeliversAndConfirms(t *testing.T) {
 	f := newFixture(t)
 	d, _ := f.activeDestination(t, "launches", "LAUNCH")
-	exec := ids.NewV7()
+	exec := f.execution(t)
 	id, err := f.deliver(t, autodomain.Delivery{Org: f.Org, Destination: d.ID, Execution: exec, Kind: autodomain.DeliveryLaunch, Body: []byte(`{"task":"T-1"}`)})
 	if err != nil {
 		t.Fatal(err)
@@ -220,7 +239,7 @@ func TestDeliverer_RetriesWithBackoffThenFails(t *testing.T) {
 	f := newFixture(t)
 	d, _ := f.activeDestination(t, "notices", "NOTICE")
 	f.recv.status = http.StatusServiceUnavailable
-	id, err := f.deliver(t, autodomain.Delivery{Org: f.Org, Destination: d.ID, Execution: ids.NewV7(), Kind: autodomain.DeliveryNotice, Body: []byte(`{"n":1}`)})
+	id, err := f.deliver(t, autodomain.Delivery{Org: f.Org, Destination: d.ID, Execution: f.execution(t), Kind: autodomain.DeliveryNotice, Body: []byte(`{"n":1}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +301,7 @@ func TestDeliverer_RotationOverlapSignsWithBoth(t *testing.T) {
 		f.recv.mu.Lock()
 		f.recv.secrets = [][]byte{secret}
 		f.recv.mu.Unlock()
-		if _, err := f.deliver(t, autodomain.Delivery{Org: f.Org, Destination: d.ID, Execution: ids.NewV7(), Kind: autodomain.DeliveryDigest, Body: []byte(`{}`)}); err != nil {
+		if _, err := f.deliver(t, autodomain.Delivery{Org: f.Org, Destination: d.ID, Execution: f.execution(t), Kind: autodomain.DeliveryDigest, Body: []byte(`{}`)}); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := f.svc.SendDue(context.Background(), f.Org); err != nil {
@@ -303,7 +322,7 @@ func TestDeliverer_RotationOverlapSignsWithBoth(t *testing.T) {
 func TestDeliverer_CancelStopsOnlyPendingDeliveries(t *testing.T) {
 	f := newFixture(t)
 	d, _ := f.activeDestination(t, "cancel", "NOTICE")
-	pending, err := f.deliver(t, autodomain.Delivery{Org: f.Org, Destination: d.ID, Execution: ids.NewV7(), Kind: autodomain.DeliveryNotice, Body: []byte(`{"n":1}`)})
+	pending, err := f.deliver(t, autodomain.Delivery{Org: f.Org, Destination: d.ID, Execution: f.execution(t), Kind: autodomain.DeliveryNotice, Body: []byte(`{"n":1}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -325,7 +344,7 @@ func TestDeliverer_CancelStopsOnlyPendingDeliveries(t *testing.T) {
 	if err := cancel(pending); !errors.Is(err, ErrDeliveryNotPending) {
 		t.Fatalf("second cancel: %v", err)
 	}
-	sent, err := f.deliver(t, autodomain.Delivery{Org: f.Org, Destination: d.ID, Execution: ids.NewV7(), Kind: autodomain.DeliveryNotice, Body: []byte(`{"n":2}`)})
+	sent, err := f.deliver(t, autodomain.Delivery{Org: f.Org, Destination: d.ID, Execution: f.execution(t), Kind: autodomain.DeliveryNotice, Body: []byte(`{"n":2}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -347,7 +366,7 @@ func TestDeliverer_CancelStopsOnlyPendingDeliveries(t *testing.T) {
 func TestDeliverer_ALeasedSendIsNeitherCancelledNorSentTwice(t *testing.T) {
 	f := newFixture(t)
 	d, _ := f.activeDestination(t, "leased", "NOTICE")
-	id, err := f.deliver(t, autodomain.Delivery{Org: f.Org, Destination: d.ID, Execution: ids.NewV7(), Kind: autodomain.DeliveryNotice, Body: []byte(`{"n":1}`)})
+	id, err := f.deliver(t, autodomain.Delivery{Org: f.Org, Destination: d.ID, Execution: f.execution(t), Kind: autodomain.DeliveryNotice, Body: []byte(`{"n":1}`)})
 	if err != nil {
 		t.Fatal(err)
 	}

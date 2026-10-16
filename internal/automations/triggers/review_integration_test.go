@@ -46,7 +46,7 @@ func (f fakeOperations) Active(_ context.Context, _ db.TenantTx, _ ids.OrgID, op
 }
 
 func ceilingDef(f *triggerstest.Fixture, name, op string) string {
-	return strings.Replace(f.Definition(name, `"manual":{}`, ""), `"authority":{"principal":"self"}`,
+	return strings.Replace(f.Definition(`"manual":{}`, ""), `"authority":{"principal":"self"}`,
 		`"authority":{"principal":"self","ceiling":{"agents":["`+ids.NewV7().String()+
 			`"],"bounds":{"operations":["`+op+`"]},"per_grant":{"ttl":"1h"},"per_day":{"grants":5,"runs":5}}}`, 1)
 }
@@ -55,7 +55,7 @@ func ceilingDef(f *triggerstest.Fixture, name, op string) string {
 func TestD87_ActivateWhilePausedKeepsTheSchedulePaused(t *testing.T) {
 	h := newHarness(t)
 	f := h.f
-	a := f.Automation(t, "paused", f.Definition("paused", `"schedule":{"cron":"* * * * *","timezone":"UTC"}`, ""), autodomain.RolloutFull)
+	a := f.Automation(t, "paused", f.Definition(`"schedule":{"cron":"* * * * *","timezone":"UTC"}`, ""), autodomain.RolloutFull)
 	f.Pause(t, a)
 	h.activator(t, func(ctx context.Context, act Activator, tx db.TenantTx) error {
 		return act.Activate(ctx, tx.Pgx(), a.ID, a.Version)
@@ -69,7 +69,7 @@ func TestD87_ActivateWhilePausedKeepsTheSchedulePaused(t *testing.T) {
 func TestHR277_DiscardedAndExpiredQueuedTriggersReleaseTheirKeys(t *testing.T) {
 	h := newHarness(t)
 	f := h.f
-	a := f.Automation(t, "queue", f.Definition("queue", `"manual":{}`, `"paused_triggers":"EXPIRE"`), autodomain.RolloutFull)
+	a := f.Automation(t, "queue", f.Definition(`"manual":{}`, `"paused_triggers":"EXPIRE"`), autodomain.RolloutFull)
 	f.Pause(t, a)
 	if out := h.fire(t, a, "manual:x", nil, Lineage{}); out.State != StateQueued {
 		t.Fatalf("queued: %+v", out)
@@ -98,7 +98,7 @@ func TestHR277_DiscardedAndExpiredQueuedTriggersReleaseTheirKeys(t *testing.T) {
 func TestHR278_TooWideOrTooLargeIsRefusedNotFailed(t *testing.T) {
 	h := newHarness(t)
 	f := h.f
-	a := f.Automation(t, "wide", f.Definition("wide", `"manual":{}`, ""), autodomain.RolloutFull)
+	a := f.Automation(t, "wide", f.Definition(`"manual":{}`, ""), autodomain.RolloutFull)
 	var anc []ids.UUID
 	for range 9 {
 		anc = append(anc, ids.NewV7())
@@ -169,7 +169,7 @@ func TestD87_ManualStartsAndRetries(t *testing.T) {
 	if r2, err := h.svc.RetryExecution(op, first.Execution, "r", nil); err != nil || r2.Trigger != r1.Trigger {
 		t.Fatalf("a repeated retry must return the original: %+v %v", r2, err)
 	}
-	shadow := f.Automation(t, "shadowed", f.Definition("shadowed", `"manual":{}`, ""), autodomain.RolloutShadow)
+	shadow := f.Automation(t, "shadowed", f.Definition(`"manual":{}`, ""), autodomain.RolloutShadow)
 	sh, err := h.svc.StartExecution(op, ManualStart{Automation: shadow.ID, IdempotencyKey: "s"}, nil)
 	if err != nil || sh.State != StateShadow {
 		t.Fatalf("shadow start: %+v %v", sh, err)

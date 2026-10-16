@@ -87,7 +87,7 @@ func (f *inboundFixture) post(t *testing.T, url, msgID string, ts time.Time, bod
 func (f *inboundFixture) automation(t *testing.T, name, params string) triggerstest.Automation {
 	t.Helper()
 	when := `"inbound":{"source":"` + f.source.ID.String() + `","type":"ticket.created"` + params + `}`
-	return f.Automation(t, name, f.Definition(name, when, ""), autodomain.RolloutFull)
+	return f.Automation(t, name, f.Definition(when, ""), autodomain.RolloutFull)
 }
 
 // TestHR275_InboundEventsAreSignedFreshUnseenAndDeclared: a source accepts

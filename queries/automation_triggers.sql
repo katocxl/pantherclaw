@@ -209,6 +209,11 @@ WHERE r.org_id = sqlc.arg(org_id) AND r.id = ANY (sqlc.arg(ids)::uuid[]) AND r.a
 SELECT g.id, g.automation_execution_id::uuid AS execution_id FROM pc.grants g
 WHERE g.org_id = sqlc.arg(org_id) AND g.id = ANY (sqlc.arg(ids)::uuid[]) AND g.automation_execution_id IS NOT NULL;
 
+-- name: ApprovalsAutomationExecution :many
+-- Gate requests of automation executions (D23 ancestry, D87 L6).
+SELECT a.id, a.execution_id::uuid AS execution_id FROM pc.approval_requests a
+WHERE a.org_id = sqlc.arg(org_id) AND a.id = ANY (sqlc.arg(ids)::uuid[]) AND a.execution_id IS NOT NULL;
+
 -- name: ServiceAccountAutomations :many
 SELECT s.id, s.automation_id::uuid AS automation_id FROM pc.service_accounts s
 WHERE s.org_id = sqlc.arg(org_id) AND s.id = ANY (sqlc.arg(ids)::uuid[]) AND s.automation_id IS NOT NULL;
@@ -419,7 +424,10 @@ ORDER BY r.expires_at, g.id
 LIMIT sqlc.arg(max_rows);
 
 -- name: ProbeApprovalsWaiting :many
-SELECT a.id, a.subject_kind, a.operation, a.created_at, a.agent_id, a.run_id, ru.automation_execution_id
+-- A gate request carries its own execution (D87 L6); an action request
+-- the execution of its run.
+SELECT a.id, a.subject_kind, a.operation, a.created_at, a.agent_id, a.run_id, a.execution_id AS gate_execution_id,
+       ru.automation_execution_id
 FROM pc.approval_requests a
 LEFT JOIN pc.runs ru ON ru.org_id = a.org_id AND ru.id = a.run_id
 WHERE a.org_id = sqlc.arg(org_id) AND a.state IN ('PENDING', 'EVIDENCE_REQUESTED')

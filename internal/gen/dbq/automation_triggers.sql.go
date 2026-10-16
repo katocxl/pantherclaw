@@ -198,6 +198,37 @@ func (q *Queries) AdvanceAutomationSchedule(ctx context.Context, arg AdvanceAuto
 	return result.RowsAffected(), nil
 }
 
+const approvalsAutomationExecution = `-- name: ApprovalsAutomationExecution :many
+SELECT a.id, a.execution_id::uuid AS execution_id FROM pc.approval_requests a
+WHERE a.org_id = $1 AND a.id = ANY ($2::uuid[]) AND a.execution_id IS NOT NULL
+`
+
+type ApprovalsAutomationExecutionRow struct {
+	ID          ids.UUID
+	ExecutionID ids.UUID
+}
+
+// Gate requests of automation executions (D23 ancestry, D87 L6).
+func (q *Queries) ApprovalsAutomationExecution(ctx context.Context, orgID ids.OrgID, ids []ids.UUID) ([]ApprovalsAutomationExecutionRow, error) {
+	rows, err := q.db.Query(ctx, approvalsAutomationExecution, orgID, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ApprovalsAutomationExecutionRow{}
+	for rows.Next() {
+		var i ApprovalsAutomationExecutionRow
+		if err := rows.Scan(&i.ID, &i.ExecutionID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const attachTriggerExecution = `-- name: AttachTriggerExecution :execrows
 UPDATE pc.automation_triggers SET execution_id = $1
 WHERE org_id = $2 AND id = $3 AND state IN ('ACCEPTED', 'SHADOW') AND execution_id IS NULL
@@ -1619,7 +1650,8 @@ func (q *Queries) ProbeAgentsUnclaimed(ctx context.Context, orgID ids.OrgID, max
 }
 
 const probeApprovalsWaiting = `-- name: ProbeApprovalsWaiting :many
-SELECT a.id, a.subject_kind, a.operation, a.created_at, a.agent_id, a.run_id, ru.automation_execution_id
+SELECT a.id, a.subject_kind, a.operation, a.created_at, a.agent_id, a.run_id, a.execution_id AS gate_execution_id,
+       ru.automation_execution_id
 FROM pc.approval_requests a
 LEFT JOIN pc.runs ru ON ru.org_id = a.org_id AND ru.id = a.run_id
 WHERE a.org_id = $1 AND a.state IN ('PENDING', 'EVIDENCE_REQUESTED')
@@ -1634,9 +1666,12 @@ type ProbeApprovalsWaitingRow struct {
 	CreatedAt             time.Time
 	AgentID               *ids.UUID
 	RunID                 *ids.UUID
+	GateExecutionID       *ids.UUID
 	AutomationExecutionID *ids.UUID
 }
 
+// A gate request carries its own execution (D87 L6); an action request
+// the execution of its run.
 func (q *Queries) ProbeApprovalsWaiting(ctx context.Context, orgID ids.OrgID, maxRows int32) ([]ProbeApprovalsWaitingRow, error) {
 	rows, err := q.db.Query(ctx, probeApprovalsWaiting, orgID, maxRows)
 	if err != nil {
@@ -1653,6 +1688,7 @@ func (q *Queries) ProbeApprovalsWaiting(ctx context.Context, orgID ids.OrgID, ma
 			&i.CreatedAt,
 			&i.AgentID,
 			&i.RunID,
+			&i.GateExecutionID,
 			&i.AutomationExecutionID,
 		); err != nil {
 			return nil, err
