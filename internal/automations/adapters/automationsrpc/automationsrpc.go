@@ -110,7 +110,7 @@ var ceilingStates = map[autodomain.CeilingState]pantherclawv1.AutomationCeilingS
 	autodomain.CeilingRevoked:    pantherclawv1.AutomationCeilingState_AUTOMATION_CEILING_STATE_REVOKED,
 }
 
-func reverse[K comparable, V comparable](m map[K]V, v V) (K, bool) {
+func reverse[K, V comparable](m map[K]V, v V) (K, bool) {
 	for k, x := range m {
 		if x == v {
 			return k, true

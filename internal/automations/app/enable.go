@@ -320,7 +320,7 @@ type Enabled struct {
 // to FULL needs a verified cohort stage. COHORT agents are a subset of the
 // ceiling's agents (D55).
 func (s *Service) RequestEnable(ctx context.Context, version ids.UUID, rollout autodomain.Rollout, cohortAgents []ids.UUID, cohortID ids.UUID) (Enabled, error) {
-	c, err := person(ctx, td.PermAutomationManage)
+	c, err := manager(ctx)
 	if err != nil {
 		return Enabled{}, err
 	}
@@ -418,7 +418,7 @@ func (s *Service) RequestEnable(ctx context.Context, version ids.UUID, rollout a
 // FULL to COHORT to SHADOW, or COHORT to a smaller cohort. Narrowing needs
 // one person; the authority row stays.
 func (s *Service) NarrowRollout(ctx context.Context, automation ids.UUID, rollout autodomain.Rollout, cohortAgents []ids.UUID) (Automation, error) {
-	c, err := person(ctx, td.PermAutomationManage)
+	c, err := manager(ctx)
 	if err != nil {
 		return Automation{}, err
 	}

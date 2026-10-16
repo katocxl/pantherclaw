@@ -160,11 +160,11 @@ func (h *Handler) changeError(w http.ResponseWriter, r *http.Request, err error)
 			return
 		}
 	}
-	switch pcerr.CodeOf(err) {
-	case pcerr.PermissionDenied:
+	if pcerr.CodeOf(err) == pcerr.PermissionDenied {
 		h.jsonError(w, http.StatusForbidden, "not_permitted")
 		return
-	case pcerr.FailedPrecondition:
+	}
+	if pcerr.CodeOf(err) == pcerr.FailedPrecondition {
 		h.jsonError(w, http.StatusConflict, "not_applied")
 		return
 	}

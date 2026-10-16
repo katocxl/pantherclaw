@@ -19,7 +19,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
-	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // Owned failure kinds this package reports (D38).
@@ -39,11 +38,11 @@ func pausedPolicy(d *autodomain.Definition) autodomain.PausedTriggers {
 }
 
 // pauseTx pauses one ACTIVE automation in tx and tells the triggers.
-func (s *Service) pauseTx(ctx context.Context, tx db.TenantTx, q *dbq.Queries, a dbq.PcAutomation, reason autodomain.PauseReason) (bool, error) {
+func (s *Service) pauseTx(ctx context.Context, tx db.TenantTx, q *dbq.Queries, a dbq.PcAutomation, reason autodomain.PauseReason) error {
 	r := string(reason)
 	n, err := q.PauseAutomation(ctx, &r, a.OrgID, a.ID)
 	if err != nil || n == 0 {
-		return false, err
+		return err
 	}
 	if s.Triggers != nil {
 		var d *autodomain.Definition
@@ -52,11 +51,9 @@ func (s *Service) pauseTx(ctx context.Context, tx db.TenantTx, q *dbq.Queries, a
 				d, _ = definitionOf(v)
 			}
 		}
-		if err := s.Triggers.Deactivate(ctx, tx.Pgx(), a.ID, pausedPolicy(d)); err != nil {
-			return false, err
-		}
+		return s.Triggers.Deactivate(ctx, tx.Pgx(), a.ID, pausedPolicy(d))
 	}
-	return true, nil
+	return nil
 }
 
 // Pause implements autoports.Pauser (D14, D31): it pauses the ACTIVE
@@ -163,7 +160,7 @@ func (s *Service) endCeilingTx(ctx context.Context, tx db.TenantTx, org ids.OrgI
 	if err != nil {
 		return err
 	}
-	if _, err := s.pauseTx(ctx, tx, q, a, pause); err != nil {
+	if err := s.pauseTx(ctx, tx, q, a, pause); err != nil {
 		return err
 	}
 	if err := record(ctx, tx, systemActor, "automation.ceiling_ended", a.ID, map[string]string{
@@ -180,7 +177,7 @@ func (s *Service) endCeilingTx(ctx context.Context, tx db.TenantTx, org ids.OrgI
 // unless cancelActive is set, when the engine cancels them at their next
 // boundary.
 func (s *Service) PauseAutomation(ctx context.Context, automation ids.UUID, cancelActive bool, reason string) (Automation, ControlEffect, error) {
-	c, err := person(ctx, td.PermAutomationManage)
+	c, err := manager(ctx)
 	if err != nil {
 		return Automation{}, ControlEffect{}, err
 	}
@@ -195,7 +192,7 @@ func (s *Service) PauseAutomation(ctx context.Context, automation ids.UUID, canc
 		if a.State != string(autodomain.StateActive) {
 			return ErrState
 		}
-		if _, err := s.pauseTx(ctx, tx, q, a, autodomain.PauseUser); err != nil {
+		if err := s.pauseTx(ctx, tx, q, a, autodomain.PauseUser); err != nil {
 			return err
 		}
 		if cancelActive && s.Executions != nil {
@@ -212,7 +209,7 @@ func (s *Service) PauseAutomation(ctx context.Context, automation ids.UUID, canc
 		out = automationView(r)
 		return record(ctx, tx, c.Actor(), "automation.paused", a.ID, map[string]string{
 			"reason": string(autodomain.PauseUser), "cancel_active": boolString(cancelActive), "note_sha256": noteDigest(reason),
-			"executions_cancelled": itoa(len(eff.ExecutionsAffected)),
+			"executions_canceled": itoa(len(eff.ExecutionsAffected)),
 		})
 	})
 	return out, eff, err
@@ -222,7 +219,7 @@ func (s *Service) PauseAutomation(ctx context.Context, automation ids.UUID, canc
 // identity, the principal, the edition and the kill switch, then resumes;
 // missed irreversible work is never replayed (HR-283).
 func (s *Service) ResumeAutomation(ctx context.Context, automation ids.UUID) (Automation, int, error) {
-	c, err := person(ctx, td.PermAutomationManage)
+	c, err := manager(ctx)
 	if err != nil {
 		return Automation{}, 0, err
 	}
@@ -343,7 +340,7 @@ func (s *Service) revalidate(ctx context.Context, tx db.TenantTx, q *dbq.Queries
 // RetireAutomation cancels active executions, retires the triggers, the
 // versions and the ceiling and disables the identity. Final.
 func (s *Service) RetireAutomation(ctx context.Context, automation ids.UUID, reason string) (Automation, ControlEffect, error) {
-	c, err := person(ctx, td.PermAutomationManage)
+	c, err := manager(ctx)
 	if err != nil {
 		return Automation{}, ControlEffect{}, err
 	}
@@ -396,7 +393,7 @@ func (s *Service) RetireAutomation(ctx context.Context, automation ids.UUID, rea
 		}
 		out = automationView(r)
 		return record(ctx, tx, c.Actor(), "automation.retired", a.ID, map[string]string{
-			"note_sha256": noteDigest(reason), "executions_cancelled": itoa(len(eff.ExecutionsAffected)),
+			"note_sha256": noteDigest(reason), "executions_canceled": itoa(len(eff.ExecutionsAffected)),
 		})
 	})
 	return out, eff, err
@@ -406,7 +403,7 @@ func (s *Service) RetireAutomation(ctx context.Context, automation ids.UUID, rea
 // ends their runs and pauses the automation (AUTHORITY_REVOKED); it
 // reports what it verifiably did (D28, HR-283).
 func (s *Service) RevokeAuthority(ctx context.Context, automation ids.UUID, reason string) (Automation, ControlEffect, error) {
-	c, err := person(ctx, td.PermAutomationManage)
+	c, err := manager(ctx)
 	if err != nil {
 		return Automation{}, ControlEffect{}, err
 	}
@@ -463,7 +460,7 @@ func (s *Service) RevokeAuthority(ctx context.Context, automation ids.UUID, reas
 			}
 		}
 		if a.State == string(autodomain.StateActive) {
-			if _, err := s.pauseTx(ctx, tx, q, a, autodomain.PauseAuthorityRevoked); err != nil {
+			if err := s.pauseTx(ctx, tx, q, a, autodomain.PauseAuthorityRevoked); err != nil {
 				return err
 			}
 		}

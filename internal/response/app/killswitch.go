@@ -223,7 +223,7 @@ func record(ctx context.Context, tx db.TenantTx, c tenancy.Caller, name string, 
 // why, writes security.kill_switch_engaged and notifies the org. The record
 // states what else the kill switch did for the org's connections: nothing
 // is revoked at a provider in M6; every active automation is paused
-// (KILL_SWITCH) and its executions are cancelled by the engine at their
+// (KILL_SWITCH) and its executions are canceled by the engine at their
 // next boundary.
 func (s *Service) Engage(ctx context.Context, su StepUp, reason string) (State, error) {
 	if !reasonOK(reason) {

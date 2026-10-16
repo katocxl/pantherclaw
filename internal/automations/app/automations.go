@@ -13,14 +13,13 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
-	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // CreateAutomation creates a DRAFT automation and its execution identity
 // (D8, HR-270): a service account named automation-<name>, bound to the
 // automation for good, with no keys and no role bindings.
 func (s *Service) CreateAutomation(ctx context.Context, name, purpose string, kind autodomain.WorkKind, owner ids.UUID) (Automation, error) {
-	c, err := person(ctx, td.PermAutomationManage)
+	c, err := manager(ctx)
 	if err != nil {
 		return Automation{}, err
 	}
@@ -115,7 +114,7 @@ func (s *Service) ListAutomations(ctx context.Context, states []autodomain.State
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		rows, err := q.ListAutomations(ctx, dbq.ListAutomationsParams{
-			OrgID: c.Org, States: ss, AfterName: after, MaxRows: int32(min(max(limit, 1), 200)), //nolint:gosec // bounded
+			OrgID: c.Org, States: ss, AfterName: after, MaxRows: int32(min(max(limit, 1), 200)),
 		})
 		if err != nil {
 			return err

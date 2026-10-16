@@ -489,7 +489,7 @@ func (s *Service) List(ctx context.Context, f Filter) ([]Request, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := dbq.ListChangeRequestsParams{OrgID: caller.Org, States: f.States, MaxRows: int32(min(max(f.Limit, 1), 200))} //nolint:gosec // bounded
+	p := dbq.ListChangeRequestsParams{OrgID: caller.Org, States: f.States, MaxRows: int32(min(max(f.Limit, 1), 200))}
 	if p.States == nil {
 		p.States = []string{}
 	}

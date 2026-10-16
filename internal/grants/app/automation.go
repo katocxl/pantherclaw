@@ -273,7 +273,7 @@ func taskBudgets(l domain.Limits) (map[string]money.Decimal, error) {
 		}
 		d, err := money.Parse(b.Limit)
 		if err != nil {
-			return nil, fmt.Errorf("%w: budget %s: %v", domain.ErrInvalid, b.ID, err)
+			return nil, fmt.Errorf("%w: budget %s: %w", domain.ErrInvalid, b.ID, err)
 		}
 		if out[b.Currency], err = out[b.Currency].Add(d); err != nil {
 			return nil, err

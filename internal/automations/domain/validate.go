@@ -466,12 +466,12 @@ func (v *validator) steps() {
 	}
 	seen := map[string]int{}
 	for i := range do {
-		v.step("/do/"+strconv.Itoa(i), i, do[i], seen, false)
+		v.step("/do/"+strconv.Itoa(i), do[i], seen, false)
 		seen[do[i].ID] = i
 	}
 }
 
-func (v *validator) step(at string, i int, s StepSpec, seen map[string]int, compensation bool) {
+func (v *validator) step(at string, s StepSpec, seen map[string]int, compensation bool) {
 	if !stepIDFormat.MatchString(s.ID) {
 		v.err(CodeLimitRange, at+"/id", "a step id is a lowercase slug")
 	} else if _, dup := seen[s.ID]; dup {
@@ -840,6 +840,8 @@ func (v *validator) ifFails() {
 	}
 	switch f.Default {
 	case "", OnFailureStop, OnFailureEscalate:
+	case OnFailureContinue:
+		v.err(CodeLimitRange, "/if_fails/default", "default is STOP or ESCALATE")
 	default:
 		v.err(CodeLimitRange, "/if_fails/default", "default is STOP or ESCALATE")
 	}
@@ -849,7 +851,7 @@ func (v *validator) ifFails() {
 	}
 	for i := range f.Compensate {
 		at := "/if_fails/compensate/" + strconv.Itoa(i)
-		v.step(at, i, f.Compensate[i], seen, true)
+		v.step(at, f.Compensate[i], seen, true)
 		seen[f.Compensate[i].ID] = len(v.d.Do) + i
 	}
 	for i, n := range f.Notify {
@@ -933,7 +935,7 @@ func (v *validator) irreversible() {
 // loops warns when the trigger listens to an event the version's own
 // steps can produce (D4; runtime ancestry still refuses loops).
 func (v *validator) loops() {
-	on := ""
+	var on string
 	switch {
 	case v.d.When.Event != nil:
 		on = v.d.When.Event.On

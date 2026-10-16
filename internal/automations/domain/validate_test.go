@@ -29,10 +29,13 @@ func (fakeEnv) AgentGrantable(context.Context, ids.UUID) (bool, error) { return 
 func (e fakeEnv) Operation(_ context.Context, op string) (autodomain.OperationInfo, error) {
 	return autodomain.OperationInfo{Known: true, Irreversible: e.irreversible[op], ConsumesBudget: e.budget[op]}, nil
 }
+
 func (fakeEnv) DestinationActive(context.Context, ids.UUID, string) (bool, error) { return true, nil }
+
 func (e fakeEnv) EligibleApprovers(context.Context, autodomain.GateWith, ids.UUID) (int, error) {
 	return e.approvers, nil
 }
+
 func (e fakeEnv) Edition(x autodomain.Edition) bool {
 	return e.edition == autodomain.EditionBusiness || x == autodomain.EditionTeam
 }
@@ -83,10 +86,14 @@ func TestValidateFindings(t *testing.T) {
 		name, from, to, code string
 		env                  fakeEnv
 	}{
-		{"irreversible without wait_effect", "", "", autodomain.CodeIrreversibleUnreconciled,
-			fakeEnv{irreversible: map[string]bool{"payments.refund": true}, approvers: 1}},
-		{"budget without per-grant budget", "", "", autodomain.CodeCeilingUnbounded,
-			fakeEnv{budget: map[string]bool{"payments.refund": true}, approvers: 1}},
+		{
+			"irreversible without wait_effect", "", "", autodomain.CodeIrreversibleUnreconciled,
+			fakeEnv{irreversible: map[string]bool{"payments.refund": true}, approvers: 1},
+		},
+		{
+			"budget without per-grant budget", "", "", autodomain.CodeCeilingUnbounded,
+			fakeEnv{budget: map[string]bool{"payments.refund": true}, approvers: 1},
+		},
 		{"templated delivery", "      agent: 0192f000-0000-7000-8000-000000000003\n", "      agent: 0192f000-0000-7000-8000-000000000003\n      delivery: \"{{params.ticket}}\"\n", autodomain.CodeTemplateField, fakeEnv{approvers: 1}},
 		{"undeclared parameter", "{{params.ticket}}", "{{params.amount}}", autodomain.CodeParamUndeclared, fakeEnv{approvers: 1}},
 		{"unbounded string param", `pattern: "T-[0-9]{1,10}"`, "max_len: 20", autodomain.CodeParamUnbounded, fakeEnv{approvers: 1}},

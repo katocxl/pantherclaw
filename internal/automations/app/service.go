@@ -221,13 +221,14 @@ func versionView(r dbq.PcAutomationVersion) Version {
 	return out
 }
 
-// person checks that the caller is a person holding p at the org.
-func person(ctx context.Context, p td.Permission) (tapp.Caller, error) {
+// manager checks that the caller is a person holding automation.manage at
+// the org: every automation change is human only (HR-279).
+func manager(ctx context.Context) (tapp.Caller, error) {
 	c, err := tapp.CallerFrom(ctx)
 	if err != nil {
 		return c, err
 	}
-	if err := c.Require(p, td.OrgPath(c.Org)); err != nil {
+	if err := c.Require(td.PermAutomationManage, td.OrgPath(c.Org)); err != nil {
 		return c, err
 	}
 	if !c.Human() {

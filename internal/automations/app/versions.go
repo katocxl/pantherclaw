@@ -42,7 +42,7 @@ func parseDefinition(raw []byte) (*autodomain.Definition, []byte, []byte, error)
 // CreateDraftVersion stores a definition as the automation's next DRAFT
 // version.
 func (s *Service) CreateDraftVersion(ctx context.Context, automation ids.UUID, raw []byte) (Version, error) {
-	c, err := person(ctx, td.PermAutomationManage)
+	c, err := manager(ctx)
 	if err != nil {
 		return Version{}, err
 	}
@@ -89,7 +89,7 @@ func (s *Service) CreateDraftVersion(ctx context.Context, automation ids.UUID, r
 // published, when it still has baseDigest; it returns to DRAFT and the
 // automation's pending change requests are voided (new content).
 func (s *Service) UpdateDraftVersion(ctx context.Context, version ids.UUID, raw, baseDigest []byte) (Version, error) {
-	c, err := person(ctx, td.PermAutomationManage)
+	c, err := manager(ctx)
 	if err != nil {
 		return Version{}, err
 	}
@@ -142,7 +142,7 @@ func (s *Service) UpdateDraftVersion(ctx context.Context, version ids.UUID, raw,
 // (D4): with no error finding it becomes VALIDATED and its plain-language
 // summary is stored; otherwise it stays DRAFT with the findings.
 func (s *Service) ValidateVersion(ctx context.Context, version ids.UUID) (Version, bool, error) {
-	c, err := person(ctx, td.PermAutomationManage)
+	c, err := manager(ctx)
 	if err != nil {
 		return Version{}, false, err
 	}
