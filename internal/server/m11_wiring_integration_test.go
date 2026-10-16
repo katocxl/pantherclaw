@@ -56,7 +56,7 @@ func TestM11_WiringComplete(t *testing.T) {
 			}
 			for kind, vs := range got {
 				for i, v := range vs {
-					for _, gap := range nilPorts(v) {
+					for _, gap := range m11NilPorts(v) {
 						t.Errorf("%s: %s #%d: %s is nil", role, kind, i+1, gap)
 					}
 				}
@@ -146,17 +146,17 @@ wait:
 	return got
 }
 
-// nilPorts lists v's exported pointer, interface, func and map fields that
+// m11NilPorts lists v's exported pointer, interface, func and map fields that
 // are nil and not listed in m11Optional.
-func nilPorts(v any) []string {
-	out := structPorts(reflect.ValueOf(v))
+func m11NilPorts(v any) []string {
+	out := m11StructPorts(reflect.ValueOf(v))
 	slices.Sort(out)
 	return out
 }
 
-// structPorts is nilPorts over a value; a service that keeps its ports in
+// m11StructPorts is m11NilPorts over a value; a service that keeps its ports in
 // an unexported dependencies struct (triggers.Service.d) is looked into.
-func structPorts(rv reflect.Value) []string {
+func m11StructPorts(rv reflect.Value) []string {
 	for rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
 			return []string{"the instance"}
@@ -172,7 +172,7 @@ func structPorts(rv reflect.Value) []string {
 		f := rt.Field(i)
 		if !f.IsExported() {
 			if f.Type.Kind() == reflect.Struct && f.Type.Name() == "Deps" {
-				out = append(out, structPorts(rv.Field(i))...)
+				out = append(out, m11StructPorts(rv.Field(i))...)
 			}
 			continue
 		}
