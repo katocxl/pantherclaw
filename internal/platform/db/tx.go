@@ -259,22 +259,27 @@ func AdoptTenantTx(ctx context.Context, tx pgx.Tx, org ids.OrgID) (TenantTx, err
 
 // Savepoint runs fn inside a savepoint of t: when fn fails, everything it
 // wrote is rolled back and t stays usable; when it succeeds, its writes
-// stay in t. name is a fixed identifier chosen by the caller.
+// stay in t. name is a fixed identifier chosen by the caller; it labels
+// errors only. The savepoint itself is pgx's nested transaction, so no
+// SQL is built from the name.
 func (t TenantTx) Savepoint(ctx context.Context, name string, fn func() error) error {
 	if !savepointName.MatchString(name) {
 		return errors.New("db: invalid savepoint name")
 	}
-	if _, err := t.Exec(ctx, "SAVEPOINT "+name); err != nil {
-		return err
+	sp, err := t.tx.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("db: savepoint %s: %w", name, err)
 	}
 	if err := fn(); err != nil {
-		if _, rerr := t.Exec(ctx, "ROLLBACK TO SAVEPOINT "+name); rerr != nil {
-			return errors.Join(err, rerr)
+		if rerr := sp.Rollback(ctx); rerr != nil {
+			return errors.Join(err, fmt.Errorf("db: roll back savepoint %s: %w", name, rerr))
 		}
 		return err
 	}
-	_, err := t.Exec(ctx, "RELEASE SAVEPOINT "+name)
-	return err
+	if err := sp.Commit(ctx); err != nil {
+		return fmt.Errorf("db: release savepoint %s: %w", name, err)
+	}
+	return nil
 }
 
 var savepointName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,40}$`)
