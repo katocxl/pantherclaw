@@ -396,7 +396,7 @@ func (p executionsPort) CancelActive(ctx context.Context, tx pgx.Tx, org ids.Org
 	eff, err := p.e.CancelAutomationTx(ctx, ttx, automation, by, reason, actor, "")
 	return autoapp.ControlEffect{
 		GrantsRevoked: eff.Grants, RunsEnded: eff.Runs, LaunchesCancelled: eff.Launches,
-		DeliveriesCancelled: eff.Deliveries, ExecutionsAffected: eff.Executions,
+		DeliveriesCancelled: eff.Deliveries, DeliveriesNotVerified: eff.DeliveriesNotVerified, ExecutionsAffected: eff.Executions,
 	}, err
 }
 

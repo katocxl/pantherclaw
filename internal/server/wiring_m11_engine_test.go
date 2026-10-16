@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/automations/engine/adapters/pgengine"
+	"github.com/katocxl/pantherclaw/internal/automations/steps"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	runsapp "github.com/katocxl/pantherclaw/internal/runs/app"
@@ -90,5 +91,13 @@ func sharesCore(t *testing.T, name string, e *pgengine.Engine, core *automations
 	t.Helper()
 	if any(e.Pauser) != any(core.svc) || any(e.Voider) != any(core.svc) || any(e.Ceilings) != any(core.svc) {
 		t.Fatalf("%s engine: Pauser, Voider or Ceilings is not the shared core", name)
+	}
+}
+
+// D104: a failed launch's withdraw names core's GRANT scope, so it revokes
+// only the grant the launch was issued.
+func TestAutomationWithdrawUsesTheGrantScope(t *testing.T) {
+	if steps.RevokeOneGrant != grantsapp.RevokeScopeGrant {
+		t.Fatalf("steps %q, core %q", steps.RevokeOneGrant, grantsapp.RevokeScopeGrant)
 	}
 }
