@@ -69,6 +69,9 @@ func PreviewSchedule(expr, zone string, dstShift bool, from time.Time, count int
 // still inside its window. Each occurrence's key is
 // schedule:<automation>:<instant>.
 func (s *Service) DispatchSchedules(ctx context.Context, org ids.OrgID) (fired int, err error) {
+	if ok, err := s.licensed(ctx); !ok {
+		return 0, err
+	}
 	err = s.d.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		fired = 0
 		q := dbq.New(tx)
