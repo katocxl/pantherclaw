@@ -4,6 +4,7 @@
 package steps
 
 import (
+	"context"
 	"errors"
 	"regexp"
 	"slices"
@@ -14,6 +15,7 @@ import (
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/engine"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
@@ -28,6 +30,8 @@ const (
 	ReasonDelivery     = "DELIVERY_FAILED"
 	ReasonGateEnded    = "GATE_INVALIDATED"
 	ReasonConnection   = "CONNECTION_INACTIVE"
+	// ReasonLaunchCancelled: cleanup or a control canceled the launch.
+	ReasonLaunchCancelled = "LAUNCH_CANCELLED" //nolint:misspell // stable code, British spelling as the stored states
 )
 
 // Evidence and output ref kinds the engine records beside the Reflex
@@ -125,4 +129,14 @@ func shadowed(out map[string]string) (autodomain.StepResult, error) {
 func upstreamShadowed(sc autodomain.StepContext, step string) bool {
 	o, ok := stepOutput(sc, step)
 	return sc.Mode != autodomain.ModeLive || ok && o["shadow"] == "true"
+}
+
+// destinationUsable refuses a destination that is not ACTIVE or does not
+// serve purpose (DESTINATION_INACTIVE).
+func destinationUsable(ctx context.Context, tx pgx.Tx, org ids.OrgID, id ids.UUID, purpose string) (string, error) {
+	ok, err := q(tx).AutomationDestinationUsable(ctx, purpose, org, id)
+	if db.IsNoRows(err) || err == nil && !ok {
+		return autodomain.ReasonDestinationInactive, nil
+	}
+	return "", err
 }

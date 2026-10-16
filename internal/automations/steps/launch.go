@@ -62,7 +62,11 @@ func (s *launchRun) plan(ctx context.Context, tx pgx.Tx, sc autodomain.StepConte
 		}
 		p.claim = w.ClaimWithin.D()
 	}
-	if s.d.Rollout != nil && sc.Mode == autodomain.ModeLive {
+	if sc.Mode == autodomain.ModeLive {
+		if s.d.Rollout == nil {
+			// The COHORT check never fails open (D84 E9).
+			return plan{}, engine.ReasonUnsupported, nil
+		}
 		rollout, cohort, err := s.d.Rollout.Cohort(ctx, tx, sc.Org, sc.Execution.Automation)
 		if err != nil {
 			return plan{}, "", err
@@ -98,9 +102,9 @@ func (s *launchRun) plan(ctx context.Context, tx pgx.Tx, sc autodomain.StepConte
 			bounds.Params = g.Params
 		}
 	}
-	limits := c.PerGrant.Limits
-	if w.Grant.Limits != nil {
-		limits = *w.Grant.Limits
+	limits, ok := launchLimits(c.PerGrant.Limits, w.Grant.Limits)
+	if !ok {
+		return plan{}, "OUTSIDE_CEILING", nil
 	}
 	var instance *ids.UUID
 	if w.Instance != nil {
@@ -135,9 +139,14 @@ func (s *launchRun) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContex
 			Effect: autodomain.EffectNone,
 		}, nil
 	}
-	if p.w.Delivery == autodomain.DeliveryWebhook && (p.w.Destination == nil || s.d.Deliverer == nil ||
-		!slices.Contains(sc.Def.Authority.Destinations, *p.w.Destination)) {
-		return failed(autodomain.ReasonDestinationInactive)
+	if reason, err := s.checkDelivery(ctx, tx, sc, p); err != nil || reason != "" {
+		return autodomain.StepResult{State: autodomain.StepFailed, Reason: reason, Effect: autodomain.EffectNone}, err
+	}
+	// Calls are resolved before anything is issued: a refusal leaves no
+	// grant behind.
+	stored, reason, err := callsOf(ctx, tx, sc.Org, p.w.Calls)
+	if err != nil || reason != "" {
+		return autodomain.StepResult{State: autodomain.StepFailed, Reason: reason, Effect: autodomain.EffectNone}, err
 	}
 	grant, err := s.d.Grants.IssueForAutomation(ctx, tx, p.issue)
 	if err != nil {
@@ -162,13 +171,6 @@ func (s *launchRun) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContex
 			}, nil
 		}
 		return autodomain.StepResult{}, err
-	}
-	stored, reason, err := callsOf(ctx, tx, sc.Org, p.w.Calls)
-	if err != nil {
-		return autodomain.StepResult{}, err
-	}
-	if reason != "" {
-		return failed(reason)
 	}
 	calls, err := json.Marshal(stored, json.Deterministic(true))
 	if err != nil {
@@ -213,10 +215,9 @@ func (s *launchRun) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContex
 		})
 		if err != nil {
 			if r, ok := refusal(err); ok {
-				return autodomain.StepResult{
-					State: autodomain.StepFailed, Reason: r, Effect: autodomain.EffectChanged,
-					Output: out,
-				}, nil
+				// Nothing can claim it: revoke the grant and end the run now,
+				// so a retry never leaves a second grant (D84 E8).
+				return s.withdraw(ctx, tx, sc, grant, run, launch, r, out)
 			}
 			return autodomain.StepResult{}, err
 		}
@@ -319,27 +320,66 @@ func (s *launchRun) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepConte
 				WakeAt: minTime(l.ClaimDeadline, sc.Now.Add(engine.PollInterval)),
 			}, nil
 		}
-		if _, err := q(tx).EndAutomationLaunch(ctx, "EXPIRED", sc.Org, launch); err != nil {
+		n, err := q(tx).ExpireAutomationLaunch(ctx, sc.Org, launch)
+		if err != nil {
 			return autodomain.StepResult{}, err
 		}
+		if n == 0 {
+			// A claim committed first: look again at the next poll.
+			return autodomain.StepResult{
+				State: autodomain.StepWaiting, Effect: autodomain.EffectChanged, Output: o, WakeAt: sc.Now,
+			}, nil
+		}
+		return s.withdraw(ctx, tx, sc, l.GrantID, l.RunID, launch, autodomain.ReasonLaunchNotClaimed, o)
+	case launchCanceled:
+		return autodomain.StepResult{
+			State: autodomain.StepFailed, Reason: ReasonLaunchCancelled, Effect: autodomain.EffectChanged, Output: o,
+			Refs: []reflexdomain.EvidenceRef{run},
+		}, nil
+	}
+	return s.withdraw(ctx, tx, sc, l.GrantID, l.RunID, launch, autodomain.ReasonLaunchNotClaimed, o)
+}
+
+// withdraw ends a launch nobody will work: its grant is revoked and its run
+// ended in this transaction; the step fails with reason (CHANGED: a grant
+// was issued).
+func (s *launchRun) withdraw(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext, grant, run, launch ids.UUID,
+	reason string, out map[string]string,
+) (autodomain.StepResult, error) {
+	if _, err := q(tx).EndAutomationLaunch(ctx, launchCanceled, sc.Org, launch); err != nil {
+		return autodomain.StepResult{}, err
 	}
 	if s.d.Grants != nil {
 		if _, err := s.d.Grants.RevokeForAutomation(ctx, tx, GrantRevoke{
-			Org: sc.Org, Execution: sc.Execution.ID, Grant: &l.GrantID, Scope: autodomain.RevokeExecution,
-			Reason: autodomain.ReasonLaunchNotClaimed,
+			Org: sc.Org, Execution: sc.Execution.ID, Grant: &grant, Scope: autodomain.RevokeExecution, Reason: reason,
 		}); err != nil {
 			return autodomain.StepResult{}, err
 		}
 	}
 	if s.d.Runs != nil {
-		if err := s.d.Runs.EndForAutomation(ctx, tx, sc.Org, sc.Execution.ID, l.RunID, autodomain.ReasonLaunchNotClaimed); err != nil {
+		if err := s.d.Runs.EndForAutomation(ctx, tx, sc.Org, sc.Execution.ID, run, reason); err != nil {
 			return autodomain.StepResult{}, err
 		}
 	}
 	return autodomain.StepResult{
-		State: autodomain.StepFailed, Reason: autodomain.ReasonLaunchNotClaimed,
-		Effect: autodomain.EffectChanged, Output: o, Refs: []reflexdomain.EvidenceRef{run},
+		State: autodomain.StepFailed, Reason: reason, Effect: autodomain.EffectChanged, Output: out,
+		Refs: []reflexdomain.EvidenceRef{ref(reflexdomain.EvidenceRun, run), ref(RefGrant, grant)},
 	}, nil
+}
+
+// checkDelivery checks a WEBHOOK launch's destination before anything
+// is issued: declared by the version, ACTIVE, serving LAUNCH (D22, D84).
+func (s *launchRun) checkDelivery(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext, p plan) (string, error) {
+	if p.w.Delivery != autodomain.DeliveryWebhook {
+		return "", nil
+	}
+	if p.w.Destination == nil || !slices.Contains(sc.Def.Authority.Destinations, *p.w.Destination) {
+		return ReasonOutsideScope, nil
+	}
+	if s.d.Deliverer == nil {
+		return engine.ReasonUnsupported, nil
+	}
+	return destinationUsable(ctx, tx, sc.Org, p.w.Destination.UUID(), string(autodomain.DeliveryLaunch))
 }
 
 // Preview implements autoports.Step: the issuance and the run start as
@@ -356,6 +396,12 @@ func (s *launchRun) Preview(ctx context.Context, tx pgx.Tx, sc autodomain.StepCo
 	}
 	if p.outside {
 		return autodomain.StepResult{State: autodomain.StepSkipped, Reason: autodomain.ReasonOutsideCohort}, nil
+	}
+	if r, err := s.checkDelivery(ctx, tx, sc, p); err != nil {
+		return autodomain.StepResult{}, err
+	} else if r != "" {
+		out["decision"], out["reason"] = "REFUSED", r
+		return autodomain.StepResult{State: autodomain.StepFailed, Reason: r, Output: out}, nil
 	}
 	if s.d.Grants != nil && sc.Mode != autodomain.ModeTest {
 		if _, err := s.d.Grants.IssueForAutomation(ctx, tx, p.issue); err != nil {
@@ -394,3 +440,6 @@ func (*launchRun) Expire(ctx context.Context, tx pgx.Tx, sc autodomain.StepConte
 	}
 	return expireLaunch(ctx, tx, sc, launch, autodomain.EffectChanged)
 }
+
+// launchCanceled is the stored state of a canceled launch.
+const launchCanceled = "CANCELLED" //nolint:misspell // stored value, British spelling as in ARCHITECTURE §6.2

@@ -112,28 +112,33 @@ type notify struct{ d Deps }
 
 func (*notify) Kind() string { return autodomain.KindNotify }
 
-func (s *notify) check(sc autodomain.StepContext) (*autodomain.NotifyWith, string) {
+func (s *notify) check(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (*autodomain.NotifyWith, string, error) {
 	w, ok := sc.With.(*autodomain.NotifyWith)
 	if !ok || w.Message.Title == "" || utf8.RuneCountInString(w.Message.Title) > MaxNoticeTitle ||
 		utf8.RuneCountInString(w.Message.Body) > MaxNoticeBody || len(w.To) == 0 && w.Destination == nil {
-		return nil, ReasonBadWith
+		return nil, ReasonBadWith, nil
 	}
 	for _, to := range w.To {
 		if !inScope(sc.Def, autodomain.KindNotify, to) {
-			return nil, ReasonOutsideScope
+			return nil, ReasonOutsideScope, nil
 		}
 	}
 	if w.Destination != nil && (!slices.Contains(sc.Def.Authority.Destinations, *w.Destination) ||
 		!inScope(sc.Def, autodomain.KindNotify, w.Destination.String())) {
-		return nil, ReasonOutsideScope
+		return nil, ReasonOutsideScope, nil
 	}
-	return w, ""
+	if w.Destination != nil {
+		if r, err := destinationUsable(ctx, tx, sc.Org, w.Destination.UUID(), string(autodomain.DeliveryNotice)); err != nil || r != "" {
+			return nil, r, err
+		}
+	}
+	return w, "", nil
 }
 
 func (s *notify) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
-	w, reason := s.check(sc)
-	if reason != "" {
-		return failed(reason)
+	w, reason, err := s.check(ctx, tx, sc)
+	if err != nil || reason != "" {
+		return autodomain.StepResult{State: autodomain.StepFailed, Reason: reason, Effect: autodomain.EffectNone}, err
 	}
 	out := map[string]string{}
 	var refs []reflexdomain.EvidenceRef
@@ -192,7 +197,10 @@ func (s *notify) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext)
 
 // Preview tells the owner only, marked as a shadow (HR-288).
 func (s *notify) Preview(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
-	w, reason := s.check(sc)
+	w, reason, err := s.check(ctx, tx, sc)
+	if err != nil {
+		return autodomain.StepResult{}, err
+	}
 	if reason != "" {
 		return autodomain.StepResult{
 			State: autodomain.StepFailed, Reason: reason,
@@ -242,6 +250,9 @@ func (s *deliver) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext)
 	w, from, reason := s.check(sc)
 	if reason != "" {
 		return failed(reason)
+	}
+	if r, err := destinationUsable(ctx, tx, sc.Org, w.Destination.UUID(), string(autodomain.DeliveryDigest)); err != nil || r != "" {
+		return autodomain.StepResult{State: autodomain.StepFailed, Reason: r, Effect: autodomain.EffectNone}, err
 	}
 	body, err := json.Marshal(map[string]string{
 		"type": "automation.digest", "execution": sc.Execution.ID.String(), "pack_id": from["pack_id"],
@@ -295,8 +306,15 @@ func (s *deliver) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext
 	}, nil
 }
 
-func (s *deliver) Preview(_ context.Context, _ pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
-	_, _, reason := s.check(sc)
+func (s *deliver) Preview(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
+	w, _, reason := s.check(sc)
+	if reason == "" {
+		r, err := destinationUsable(ctx, tx, sc.Org, w.Destination.UUID(), string(autodomain.DeliveryDigest))
+		if err != nil {
+			return autodomain.StepResult{}, err
+		}
+		reason = r
+	}
 	if reason != "" && reason != ReasonBadWith {
 		return autodomain.StepResult{
 			State: autodomain.StepFailed, Reason: reason,

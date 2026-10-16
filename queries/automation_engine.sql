@@ -154,9 +154,14 @@ UPDATE pc.automation_launches SET state = 'CLAIMED', claimed_instance_id = sqlc.
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';
 
 -- name: EndAutomationLaunch :execrows
--- EXPIRED (claim deadline passed) or CANCELLED (cleanup).
+-- CANCELLED (cleanup) a PENDING or CLAIMED launch.
 UPDATE pc.automation_launches SET state = sqlc.arg(state)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('PENDING', 'CLAIMED');
+
+-- name: ExpireAutomationLaunch :execrows
+-- EXPIRED: still PENDING past its claim deadline (a concurrent claim wins).
+UPDATE pc.automation_launches SET state = 'EXPIRED'
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING' AND now() >= claim_deadline;
 
 -- name: OpenAutomationLaunches :many
 SELECT id, run_id, grant_id, delivery_id FROM pc.automation_launches
@@ -234,3 +239,9 @@ RETURNING e.engine_errors, e.automation_id, e.version_id, e.trigger_id, e.servic
 -- Ends an active execution the driver cannot work (ENGINE_ERROR).
 UPDATE pc.automation_executions SET state = 'FAILED', reason = sqlc.arg(reason), result = sqlc.arg(result), wake_at = NULL
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('PENDING', 'RUNNING', 'WAITING');
+
+-- name: AutomationDestinationUsable :one
+-- Whether a destination is ACTIVE and serves a purpose (D22, D84).
+SELECT (d.state = 'ACTIVE' AND sqlc.arg(purpose)::text = ANY(d.purposes))::bool AS usable
+FROM pc.automation_destinations d
+WHERE d.org_id = sqlc.arg(org_id) AND d.id = sqlc.arg(id);

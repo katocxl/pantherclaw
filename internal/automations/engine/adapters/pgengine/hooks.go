@@ -84,10 +84,12 @@ func (h hooks) Revalidate(ctx context.Context, tx pgx.Tx, x *engine.Exec) (strin
 			// execution started under: it goes on under the current one
 			// (D54, D84 E3).
 			c, err := q.GetActiveAutomationCeiling(ctx, x.Org, x.Automation)
-			if err != nil && !db.IsNoRows(err) {
+			if db.IsNoRows(err) {
+				return autodomain.ReasonCeilingVoid, nil
+			} else if err != nil {
 				return "", err
 			}
-			if err != nil || c.VersionID != x.Version {
+			if c.VersionID != x.Version {
 				return autodomain.ReasonCeilingVoid, nil
 			}
 			ceiling, approvers = &c.ID, c.ApprovedBy

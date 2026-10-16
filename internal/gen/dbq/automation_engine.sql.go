@@ -142,6 +142,20 @@ func (q *Queries) AutomationAuthorityState(ctx context.Context, arg AutomationAu
 	return i, err
 }
 
+const automationDestinationUsable = `-- name: AutomationDestinationUsable :one
+SELECT (d.state = 'ACTIVE' AND $1::text = ANY(d.purposes))::bool AS usable
+FROM pc.automation_destinations d
+WHERE d.org_id = $2 AND d.id = $3
+`
+
+// Whether a destination is ACTIVE and serves a purpose (D22, D84).
+func (q *Queries) AutomationDestinationUsable(ctx context.Context, purpose string, orgID ids.OrgID, iD ids.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, automationDestinationUsable, purpose, orgID, iD)
+	var usable bool
+	err := row.Scan(&usable)
+	return usable, err
+}
+
 const automationExecutionInfo = `-- name: AutomationExecutionInfo :one
 SELECT e.automation_id, e.version_id, e.state, e.trigger_id,
        EXISTS (SELECT 1 FROM pc.automation_step_attempts a
@@ -272,9 +286,23 @@ UPDATE pc.automation_launches SET state = $1
 WHERE org_id = $2 AND id = $3 AND state IN ('PENDING', 'CLAIMED')
 `
 
-// EXPIRED (claim deadline passed) or CANCELLED (cleanup).
+// CANCELLED (cleanup) a PENDING or CLAIMED launch.
 func (q *Queries) EndAutomationLaunch(ctx context.Context, state string, orgID ids.OrgID, iD ids.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, endAutomationLaunch, state, orgID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const expireAutomationLaunch = `-- name: ExpireAutomationLaunch :execrows
+UPDATE pc.automation_launches SET state = 'EXPIRED'
+WHERE org_id = $1 AND id = $2 AND state = 'PENDING' AND now() >= claim_deadline
+`
+
+// EXPIRED: still PENDING past its claim deadline (a concurrent claim wins).
+func (q *Queries) ExpireAutomationLaunch(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, expireAutomationLaunch, orgID, iD)
 	if err != nil {
 		return 0, err
 	}

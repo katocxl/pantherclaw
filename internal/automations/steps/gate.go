@@ -150,6 +150,16 @@ func (s *gate) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (
 	refs := []reflexdomain.EvidenceRef{ref(RefApprovalRequest, id)}
 	switch st.State {
 	case "APPROVED", "CONSUMED":
+		in, ok := s.request(sc)
+		if !ok || len(st.Approvers) < in.MinApprovals {
+			return failed(ReasonGateEnded)
+		}
+		if st.State == "APPROVED" {
+			// The approval is used once, by this step (HR-281).
+			if err := s.d.Gates.ConsumeGate(ctx, tx, sc.Org, id); err != nil {
+				return autodomain.StepResult{}, err
+			}
+		}
 		out := clone(o)
 		out["approvals"] = strconv.Itoa(len(st.Approvers))
 		return autodomain.StepResult{State: autodomain.StepDone, Effect: autodomain.EffectNone, Output: out, Refs: refs}, nil
@@ -169,9 +179,23 @@ func (s *gate) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (
 			Effect: autodomain.EffectNone, Output: o, Refs: refs,
 		}, nil
 	}
+	deadline, ok := parseRFC(o["deadline"])
+	if ok && !sc.Now.Before(deadline) {
+		// The gate's own deadline ends it, whatever the request says.
+		if err := s.d.Gates.EndGate(ctx, tx, sc.Org, id, autodomain.ReasonGateExpired); err != nil {
+			return autodomain.StepResult{}, err
+		}
+		return autodomain.StepResult{
+			State: autodomain.StepFailed, Reason: autodomain.ReasonGateExpired, Effect: autodomain.EffectNone,
+			Output: o, Refs: refs,
+		}, nil
+	}
+	wake := sc.Now.Add(engine.PollInterval)
+	if ok && deadline.Before(wake) {
+		wake = deadline
+	}
 	return autodomain.StepResult{
-		State: autodomain.StepWaiting, Effect: autodomain.EffectNone, Output: o,
-		WakeAt: sc.Now.Add(engine.PollInterval),
+		State: autodomain.StepWaiting, Effect: autodomain.EffectNone, Output: o, WakeAt: wake,
 	}, nil
 }
 
