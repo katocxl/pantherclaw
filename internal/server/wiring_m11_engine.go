@@ -39,8 +39,19 @@ import (
 )
 
 // automationSecuritySteps adds the templates stream's security steps
-// (D31); nil: none.
-var automationSecuritySteps func(pool *db.Pool, d steps.Deps) autoports.StepRegistry
+// (D31, D108); nil: none.
+var automationSecuritySteps func(securityStepDeps) autoports.StepRegistry
+
+// securityStepDeps is what the security steps are built from: the
+// process's one core and the generic steps' ports, filled identically for
+// the API and the driver (RoleAll and RoleWorker).
+type securityStepDeps struct {
+	Core  *automationsCore
+	Pool  *db.Pool
+	Bill  *billing.Service
+	Log   *slog.Logger
+	Steps steps.Deps
+}
 
 func init() {
 	automationStarter = func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) autoports.Starter {
@@ -101,7 +112,7 @@ func newAutomationEngine(d engineDeps) *pgengine.Engine {
 	}
 	reg := steps.Generic(deps)
 	if automationSecuritySteps != nil {
-		for k, s := range automationSecuritySteps(d.pool, deps) {
+		for k, s := range automationSecuritySteps(securityStepDeps{Core: d.core, Pool: d.pool, Bill: d.bill, Log: d.log, Steps: deps}) {
 			if _, taken := reg[k]; !taken {
 				reg[k] = s
 			}
