@@ -201,14 +201,15 @@ CREATE TABLE pc.automation_condition_state (
 
 -- Matching platform events per (automation, group, minute) (D19, D58):
 -- ancestry is the union of the counted events' ancestries (≤ 8) and depth
--- their greatest depth.
+-- their greatest depth; one past the ancestry bound is kept so a
+-- too-wide chain is refused, never truncated (D87 L1).
 CREATE TABLE pc.automation_threshold_counts (
     org_id        uuid        NOT NULL REFERENCES pc.orgs (id),
     automation_id uuid        NOT NULL,
     group_key     text        NOT NULL CHECK (char_length(group_key) BETWEEN 1 AND 300),
     minute        timestamptz NOT NULL CHECK (date_trunc('minute', minute) = minute),
     count         integer     NOT NULL CHECK (count > 0),
-    ancestry      uuid[]      NOT NULL DEFAULT '{}' CHECK (cardinality(ancestry) <= 8
+    ancestry      uuid[]      NOT NULL DEFAULT '{}' CHECK (cardinality(ancestry) <= 9
                                                            AND array_position(ancestry, NULL) IS NULL),
     depth         integer     NOT NULL DEFAULT 0 CHECK (depth BETWEEN 0 AND 4),
     root_trigger_id uuid,

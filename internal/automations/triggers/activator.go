@@ -86,9 +86,23 @@ func (a Activator) Activate(ctx context.Context, tx pgx.Tx, automation, version 
 	if err != nil {
 		return err
 	}
-	return q.UpsertAutomationSchedule(ctx, dbq.UpsertAutomationScheduleParams{
+	if err := q.UpsertAutomationSchedule(ctx, dbq.UpsertAutomationScheduleParams{
 		OrgID: org, AutomationID: automation, VersionID: version, Cron: sch.Cron, Timezone: sch.Timezone, NextFireAt: next,
-	})
+	}); err != nil {
+		return err
+	}
+	// A version enabled while the automation is paused keeps its schedule
+	// paused: Resume restarts it, and the paused period never fires (D87 P1).
+	au, err := q.GetAutomation(ctx, org, automation)
+	if err != nil {
+		return err
+	}
+	if au.State != string(autodomain.StateActive) {
+		_, err = q.SetAutomationScheduleState(ctx, dbq.SetAutomationScheduleStateParams{
+			State: "PAUSED", OrgID: org, AutomationID: automation,
+		})
+	}
+	return err
 }
 
 // nextFire is the schedule's first firing occurrence after t (nil when it
@@ -132,7 +146,7 @@ func (a Activator) Deactivate(ctx context.Context, tx pgx.Tx, automation ids.UUI
 	}
 	if policy == autodomain.PausedDiscard || policy == "" {
 		reason := ReasonPaused
-		_, err = q.DiscardQueuedTriggers(ctx, &reason, org, automation)
+		_, err = q.DiscardQueuedTriggers(ctx, org, &reason, automation)
 	}
 	return err
 }

@@ -217,6 +217,11 @@ func (s *Service) sendOne(ctx context.Context, org ids.OrgID, id ids.UUID) (bool
 			fail = "destination_disabled"
 			return nil
 		}
+		// The send is leased before the POST: a sender that dies after posting
+		// and before recording leaves it alone for the lease (D87 L11).
+		if _, err := q.LeaseAutomationDelivery(ctx, org, id); err != nil {
+			return err
+		}
 		a.url, a.internal = d.Url, d.Internal
 		cur, err := s.envelope.Decrypt(ctx, field(org, destinationsTable, r.DestinationID, secretColumn), SecretPurpose, d.Secret)
 		if err != nil {
@@ -325,4 +330,20 @@ func (s *Service) finish(ctx context.Context, org ids.OrgID, id ids.UUID, a atte
 			return err
 		}
 	})
+}
+
+// DestinationChecker answers core's validation lookup (D4
+// DESTINATION_INVALID): whether a destination is ACTIVE and serves the
+// purpose.
+type DestinationChecker struct{}
+
+// Active implements core's Destinations port.
+func (DestinationChecker) Active(ctx context.Context, tx pgx.Tx, org ids.OrgID, destination ids.UUID, purpose string) (bool, error) {
+	d, err := dbq.New(tx).GetAutomationDestination(ctx, org, destination)
+	if db.IsNoRows(err) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	return d.State == StateActive && slices.Contains(d.Purposes, purpose), nil
 }

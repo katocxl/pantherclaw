@@ -34,6 +34,7 @@ import (
 //	POST /automations/destinations/{id}/rotate    rotate its secret
 //	GET  /automations/{id}/start                  start an automation by hand
 //	POST /automations/{id}/start                  start it
+//	POST /automations/executions/{id}/retry       retry an execution
 //
 // Activating, rotating and a start whose version requires it need a
 // security-key step-up of this browser session within five minutes, made
@@ -59,6 +60,7 @@ type AutomationEndpoints interface {
 	RotateDestinationSecret(ctx context.Context, id ids.UUID, su *stepup.StepUp) (string, error)
 	Form(ctx context.Context, automation ids.UUID) (triggers.ManualForm, error)
 	StartExecution(ctx context.Context, in triggers.ManualStart, su *stepup.StepUp) (triggers.Outcome, error)
+	RetryExecution(ctx context.Context, execution ids.UUID, idempotency string, su *stepup.StepUp) (triggers.Outcome, error)
 }
 
 // MountAutomationEndpoints adds the automation endpoint pages to mux. The
@@ -76,6 +78,7 @@ func (h *Handler) MountAutomationEndpoints(mux *http.ServeMux, ae AutomationEndp
 	h.withSession(mux, http.MethodPost, AutomationDestinationsPath+"/{id}/rotate", p.rotateDestination)
 	h.withSession(mux, http.MethodGet, AutomationsPath+"/{id}/start", p.startPage)
 	h.withSession(mux, http.MethodPost, AutomationsPath+"/{id}/start", p.start)
+	h.withSession(mux, http.MethodPost, AutomationsPath+"/executions/{id}/retry", p.retry)
 }
 
 type automationPages struct {
@@ -224,6 +227,7 @@ var automationErrors = []struct {
 	{triggers.ErrEdition, http.StatusForbidden, "edition"},
 	{triggers.ErrNotManual, http.StatusConflict, "not_manual"},
 	{triggers.ErrIdemKey, http.StatusBadRequest, "invalid"},
+	{triggers.ErrNotRetry, http.StatusConflict, "not_retryable"},
 }
 
 func (p automationPages) fail(w http.ResponseWriter, r *http.Request, err error) {
@@ -340,4 +344,35 @@ func execText(id ids.UUID) string {
 		return ""
 	}
 	return id.String()
+}
+
+// retryBody is the retry action's request.
+type retryBody struct {
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+// retry starts an execution again with the session's step-up (D87 L8):
+// a version that needs a step-up can be retried only here.
+func (p automationPages) retry(w http.ResponseWriter, r *http.Request, s authnapp.BrowserSession) {
+	id, ok := p.h.requestID(w, r)
+	if !ok {
+		return
+	}
+	var body retryBody
+	b, err := io.ReadAll(r.Body)
+	if err == nil && len(bytes.TrimSpace(b)) > 0 {
+		err = json.Unmarshal(b, &body, json.RejectUnknownMembers(true))
+	}
+	if err != nil {
+		p.h.jsonError(w, http.StatusBadRequest, "invalid")
+		return
+	}
+	out, err := p.ae.RetryExecution(callerContext(r, s), id, body.IdempotencyKey, stepUpPtr(s))
+	if err != nil {
+		p.fail(w, r, err)
+		return
+	}
+	p.h.writeJSON(w, http.StatusOK, map[string]string{
+		"trigger": out.Trigger.String(), "state": string(out.State), "reason": out.Reason, "execution": execText(out.Execution),
+	})
 }

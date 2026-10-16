@@ -130,6 +130,10 @@ func TestHR275_InboundEventsAreSignedFreshUnseenAndDeclared(t *testing.T) {
 	if f.st.Count() != 1 || f.st.Starts[0].Automation != a.ID || f.st.Starts[0].Kind != autodomain.TriggerInbound {
 		t.Fatalf("starts: %+v", f.st.Starts)
 	}
+	// The occurrence time is the receive time; the sender's is a detail (D87 L9).
+	if n := f.Count(t, "SELECT count(*) FROM pc.automation_triggers WHERE org_id = $1 AND occurred_at > now() - interval '1 minute' AND authenticity_detail ? 'sent_at'"); n != 1 {
+		t.Fatal("inbound occurred_at is not the receive time")
+	}
 
 	other := ids.NewV7()
 	for name, tc := range map[string]struct {

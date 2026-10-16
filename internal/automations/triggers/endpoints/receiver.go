@@ -140,6 +140,7 @@ func (s *Service) receive(ctx context.Context, h *Receiver, org ids.OrgID, src i
 		q := dbq.New(tx)
 		row, err := q.LoadEventSourceSecrets(ctx, org, src)
 		if db.IsNoRows(err) || (err == nil && row.State != StateActive) {
+			dummyVerify(hdr, body)
 			status, code = http.StatusUnauthorized, CodeUnauthorized
 			return nil
 		} else if err != nil {
@@ -147,6 +148,7 @@ func (s *Service) receive(ctx context.Context, h *Receiver, org ids.OrgID, src i
 		}
 		// A lapsed licence accepts nothing, with the same answer.
 		if licensed := s.entitled(ctx) == nil; !licensed {
+			dummyVerify(hdr, body)
 			status, code = http.StatusUnauthorized, CodeUnauthorized
 			return nil
 		}
@@ -214,6 +216,7 @@ func (s *Service) receive(ctx context.Context, h *Receiver, org ids.OrgID, src i
 		}
 		_, err = s.triggers.FireInbound(ctx, tx, triggers.InboundEvent{
 			Source: src, Type: ev.Type, WebhookID: hdr.ID, Secret: which, Body: body, SentAt: time.Unix(hdr.Timestamp, 0).UTC(),
+			ReceivedAt: now,
 		})
 		return err
 	})
@@ -276,4 +279,13 @@ func parseBody(body []byte, types []string) (inbound.Event, string) {
 		return ev, CodeBody
 	}
 	return ev, ""
+}
+
+// dummyKey is verified against when there is no usable source, so an
+// unknown, inactive or unlicensed source answers in the time a bad
+// signature does (D87 L10).
+var dummyKey = []byte("pantherclaw-automations-no-source-key")
+
+func dummyVerify(hdr inbound.Headers, body []byte) {
+	_ = inbound.VerifySignature([][]byte{dummyKey}, hdr, body)
 }

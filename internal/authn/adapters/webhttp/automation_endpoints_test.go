@@ -107,6 +107,7 @@ func TestD53_AutomationEndpointActionsNeedThePagesStepUp(t *testing.T) {
 		{Method: http.MethodPost, Path: "/automations/destinations/{id}/rotate", Session: true, CSRF: true},
 		{Method: http.MethodGet, Path: "/automations/{id}/start", Session: true},
 		{Method: http.MethodPost, Path: "/automations/{id}/start", Session: true, CSRF: true},
+		{Method: http.MethodPost, Path: "/automations/executions/{id}/retry", Session: true, CSRF: true},
 	} {
 		if !slices.Contains(h.Routes(), want) {
 			t.Errorf("route %+v is not mounted", want)
@@ -150,6 +151,12 @@ func TestD53_AutomationEndpointActionsNeedThePagesStepUp(t *testing.T) {
 	if fake.start.IdempotencyKey != "k1" || fake.start.Params["ticket"] != "T-1" {
 		t.Fatalf("start request: %+v", fake.start)
 	}
+	// Retry with the step-up (D87 L8).
+	r = withCookie(post("/automations/executions/"+id+"/retry"), "responder")
+	r.Body = httpBody(`{"idempotency_key":"r1"}`)
+	if resp := do(t, mux, r); resp.StatusCode != http.StatusOK || fake.start.IdempotencyKey != "r1" || fake.got[len(fake.got)-1] == nil {
+		t.Fatalf("retry: %d %s", resp.StatusCode, resp.Body)
+	}
 	r = withCookie(post("/automations/"+id+"/start"), "responder")
 	r.Body = httpBody(`{"params":{"ticket":"T-1"},"idempotency_key":"k1","agent":"x"}`)
 	if resp := do(t, mux, r); resp.StatusCode != http.StatusBadRequest {
@@ -175,4 +182,9 @@ func TestD53_AutomationPagesEscapeUntrustedText(t *testing.T) {
 	if resp := do(t, mux, r); resp.StatusCode != http.StatusOK || !strings.Contains(resp.Header.Get("Content-Type"), "javascript") {
 		t.Fatalf("script: %d", resp.StatusCode)
 	}
+}
+
+func (f *fakeAutomationEndpoints) RetryExecution(_ context.Context, _ ids.UUID, idem string, su *stepup.StepUp) (triggers.Outcome, error) {
+	f.start = triggers.ManualStart{IdempotencyKey: idem}
+	return triggers.Outcome{Trigger: ids.NewV7(), State: triggers.StateAccepted, Execution: ids.NewV7()}, f.need(su)
 }

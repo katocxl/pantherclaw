@@ -184,6 +184,14 @@ func TestDeliverer_SignsDeliversAndConfirms(t *testing.T) {
 			t.Errorf("%s: delivered", name)
 		}
 	}
+	// Readers without automation.endpoints.manage see scheme and host only
+	// (D87 P4): a webhook URL's path often carries its credential.
+	if got, err := f.svc.GetDestination(f.As(td.KindUser, td.RoleAutomationOperator), d.ID); err != nil || got.URL != RedactURL(d.URL) || strings.Contains(got.URL, "/hook") {
+		t.Fatalf("reader: %q %v", got.URL, err)
+	}
+	if got, err := f.svc.GetDestination(f.author(), d.ID); err != nil || got.URL != d.URL {
+		t.Fatalf("manager: %q %v", got.URL, err)
+	}
 	// A PENDING destination receives nothing.
 	c, err := f.svc.CreateDestination(f.author(), NewDestination{Name: "pending", URL: f.recv.srv.URL, Internal: true, Purposes: []string{"NOTICE"}})
 	if err != nil {
