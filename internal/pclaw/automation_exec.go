@@ -20,7 +20,7 @@ import (
 // execution (its trigger, version, authority, steps, grants, runs,
 // launches, gates and result), find the execution behind a run, grant or
 // transaction, and cancel executions. Reading needs automation.read,
-// cancelling automation.manage.
+// canceling automation.manage.
 
 func init() {
 	commands["automation exec"] = group("automation exec", automationExecCommands())
@@ -77,7 +77,7 @@ func automationExecCommands() map[string]command {
 			func(fs *flag.FlagSet) execCall {
 				automation := fs.String("automation", "", "only this automation's executions")
 				var states list
-				fs.Var(&states, "state", "pending, running, waiting, succeeded, partially_completed, failed, cancelled or needs_reconciliation (repeatable)")
+				fs.Var(&states, "state", "pending, running, waiting, succeeded, partially_completed, failed, cancelled or needs_reconciliation (repeatable)") //nolint:misspell // the stored state name
 				mode := fs.String("mode", "", "live or shadow")
 				since := fs.String("since", "", "created at or after (RFC 3339)")
 				until := fs.String("until", "", "created before (RFC 3339)")
