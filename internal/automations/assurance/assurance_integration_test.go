@@ -17,6 +17,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/exposure/exposuretest"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -179,5 +180,9 @@ func TestT127_TestsAndSimulationAreInert(t *testing.T) {
 	}
 	if _, err := svc.GetAutomationMetrics(ctx, nil, time.Now().Add(-time.Hour), time.Now()); err != nil {
 		t.Fatal(err)
+	}
+	// D38: no gate is stalled and no automation failed three times running.
+	if n, err := assurance.Sweep(context.Background(), o.P, &failures.Sink{}, o.Org); err != nil || n != 0 {
+		t.Fatalf("sweep: %d %v", n, err)
 	}
 }

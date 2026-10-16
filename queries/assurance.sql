@@ -199,3 +199,32 @@ SELECT
 -- name: AssuranceNextRun :one
 SELECT s.next_fire_at FROM pc.automation_schedules s
 WHERE s.org_id = sqlc.arg(org_id) AND s.automation_id = sqlc.arg(automation_id) AND s.state = 'ACTIVE';
+
+-- name: AssuranceStalledGates :many
+-- Pending automation gates past half their deadline (D38 gate_stalled),
+-- with the automation and its owner.
+SELECT r.id, r.deadline_at, e.id AS execution_id, a.id AS automation_id, a.name, a.owner_user_id
+FROM pc.approval_requests r
+JOIN pc.automation_executions e ON e.org_id = r.org_id AND e.id = r.execution_id
+JOIN pc.automations a ON a.org_id = e.org_id AND a.id = e.automation_id
+WHERE r.org_id = sqlc.arg(org_id) AND r.subject_kind = 'AUTOMATION_GATE' AND r.state IN ('PENDING', 'EVIDENCE_REQUESTED')
+  AND now() >= r.created_at + (r.deadline_at - r.created_at) / 2
+ORDER BY r.deadline_at
+LIMIT 500;
+
+-- name: AssuranceFailingAutomations :many
+-- ACTIVE automations whose last three LIVE executions all FAILED (D38
+-- recovery_failed), with the newest one.
+SELECT a.id, a.name, a.owner_user_id,
+  (SELECT e.id FROM pc.automation_executions e
+   WHERE e.org_id = a.org_id AND e.automation_id = a.id AND e.mode = 'LIVE' AND e.ended_at IS NOT NULL
+   ORDER BY e.ended_at DESC, e.id DESC LIMIT 1)::uuid AS execution_id
+FROM pc.automations a
+WHERE a.org_id = sqlc.arg(org_id) AND a.state = 'ACTIVE'
+  AND (SELECT count(*) FROM (
+         SELECT e.state FROM pc.automation_executions e
+         WHERE e.org_id = a.org_id AND e.automation_id = a.id AND e.mode = 'LIVE' AND e.ended_at IS NOT NULL
+         ORDER BY e.ended_at DESC, e.id DESC LIMIT 3) l
+       WHERE l.state = 'FAILED') = 3
+ORDER BY a.id
+LIMIT 500;

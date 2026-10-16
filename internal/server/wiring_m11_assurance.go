@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"connectrpc.com/connect/v2"
+	"github.com/riverqueue/river"
 
 	"github.com/katocxl/pantherclaw/internal/automations/assurance"
 	"github.com/katocxl/pantherclaw/internal/automations/assurance/adapters/assurancerpc"
@@ -14,6 +15,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
+	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 )
 
 // assuranceService is the assurance use cases over pool; without a licence
@@ -41,7 +43,16 @@ func registerAutomationAssurance(rs *connect.Server, d apiDeps) error {
 }
 
 // registerAutomationAssuranceJobs adds the historical-simulation worker
-// (D35).
-func registerAutomationAssuranceJobs(reg *jobs.Registry, pool *db.Pool, bill *billing.Service, log *slog.Logger) error {
-	return assurance.RegisterJobs(reg, assuranceService(pool, bill), log)
+// (D35) and the sweep that raises the derived automation exceptions (D38).
+func registerAutomationAssuranceJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, pool *db.Pool, bill *billing.Service,
+	log *slog.Logger,
+) ([]*river.PeriodicJob, error) {
+	if err := assurance.RegisterJobs(reg, assuranceService(pool, bill), log); err != nil {
+		return nil, err
+	}
+	sweep, err := assurance.RegisterSweep(reg, pool, &failures.Sink{})
+	if err != nil {
+		return nil, err
+	}
+	return append(periodic, sweep...), nil
 }

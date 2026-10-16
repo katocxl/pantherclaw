@@ -169,6 +169,56 @@ func (q *Queries) AssuranceExecutionCounts(ctx context.Context, orgID ids.OrgID,
 	return items, nil
 }
 
+const assuranceFailingAutomations = `-- name: AssuranceFailingAutomations :many
+SELECT a.id, a.name, a.owner_user_id,
+  (SELECT e.id FROM pc.automation_executions e
+   WHERE e.org_id = a.org_id AND e.automation_id = a.id AND e.mode = 'LIVE' AND e.ended_at IS NOT NULL
+   ORDER BY e.ended_at DESC, e.id DESC LIMIT 1)::uuid AS execution_id
+FROM pc.automations a
+WHERE a.org_id = $1 AND a.state = 'ACTIVE'
+  AND (SELECT count(*) FROM (
+         SELECT e.state FROM pc.automation_executions e
+         WHERE e.org_id = a.org_id AND e.automation_id = a.id AND e.mode = 'LIVE' AND e.ended_at IS NOT NULL
+         ORDER BY e.ended_at DESC, e.id DESC LIMIT 3) l
+       WHERE l.state = 'FAILED') = 3
+ORDER BY a.id
+LIMIT 500
+`
+
+type AssuranceFailingAutomationsRow struct {
+	ID          ids.UUID
+	Name        string
+	OwnerUserID ids.UUID
+	ExecutionID ids.UUID
+}
+
+// ACTIVE automations whose last three LIVE executions all FAILED (D38
+// recovery_failed), with the newest one.
+func (q *Queries) AssuranceFailingAutomations(ctx context.Context, orgID ids.OrgID) ([]AssuranceFailingAutomationsRow, error) {
+	rows, err := q.db.Query(ctx, assuranceFailingAutomations, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AssuranceFailingAutomationsRow{}
+	for rows.Next() {
+		var i AssuranceFailingAutomationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.OwnerUserID,
+			&i.ExecutionID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const assuranceFeedSeqAt = `-- name: AssuranceFeedSeqAt :one
 SELECT coalesce((SELECT c.seq FROM pc.ledger_chain c
                  JOIN pc.ledger_entries e ON e.org_id = c.org_id AND e.id = c.entry_id
@@ -457,6 +507,55 @@ func (q *Queries) AssuranceShadowSteps(ctx context.Context, orgID ids.OrgID, aut
 			&i.Decision,
 			&i.Reason,
 			&i.N,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const assuranceStalledGates = `-- name: AssuranceStalledGates :many
+SELECT r.id, r.deadline_at, e.id AS execution_id, a.id AS automation_id, a.name, a.owner_user_id
+FROM pc.approval_requests r
+JOIN pc.automation_executions e ON e.org_id = r.org_id AND e.id = r.execution_id
+JOIN pc.automations a ON a.org_id = e.org_id AND a.id = e.automation_id
+WHERE r.org_id = $1 AND r.subject_kind = 'AUTOMATION_GATE' AND r.state IN ('PENDING', 'EVIDENCE_REQUESTED')
+  AND now() >= r.created_at + (r.deadline_at - r.created_at) / 2
+ORDER BY r.deadline_at
+LIMIT 500
+`
+
+type AssuranceStalledGatesRow struct {
+	ID           ids.UUID
+	DeadlineAt   time.Time
+	ExecutionID  ids.UUID
+	AutomationID ids.UUID
+	Name         string
+	OwnerUserID  ids.UUID
+}
+
+// Pending automation gates past half their deadline (D38 gate_stalled),
+// with the automation and its owner.
+func (q *Queries) AssuranceStalledGates(ctx context.Context, orgID ids.OrgID) ([]AssuranceStalledGatesRow, error) {
+	rows, err := q.db.Query(ctx, assuranceStalledGates, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AssuranceStalledGatesRow{}
+	for rows.Next() {
+		var i AssuranceStalledGatesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeadlineAt,
+			&i.ExecutionID,
+			&i.AutomationID,
+			&i.Name,
+			&i.OwnerUserID,
 		); err != nil {
 			return nil, err
 		}
