@@ -24,14 +24,15 @@ import (
 // them, the promotion gate included) and its svc as Pauser, Voider and
 // Ceilings. The core gets the engine's, triggers' and destinations' ports.
 // Both process roles: RoleAll attaches the API's grants and runs before the
-// workers start; RoleWorker attaches its own in the core jobs, after the
-// engine jobs are registered.
+// workers start; RoleWorker attaches the process's after the engine jobs
+// are registered (the core jobs refuse to start without them, D112 X1).
 func TestAutomationEnginePortsAreWired(t *testing.T) {
 	roles := map[string]func(core *automationsCore){
 		RoleAll: func(core *automationsCore) {
 			core.attach(nil, &grantsapp.Service{}, runsapp.New(nil))
 		},
 		RoleWorker: func(core *automationsCore) {
+			core.attach(nil, &grantsapp.Service{}, runsapp.New(nil))
 			if _, err := registerAutomationsCoreJobs(nil, jobs.NewRegistry(), core, nil); err != nil {
 				t.Fatal(err)
 			}
