@@ -141,6 +141,14 @@ type fire struct {
 	agents []string
 }
 
+// maxSampleAgents bounds the agents a sample lists; a sample involving
+// more is hidden from every reader (D107 A4).
+const maxSampleAgents = 64
+
+// AgentsOverflow stands for more than maxSampleAgents agents; it is no
+// agent id, so no reader may see the sample.
+const AgentsOverflow = "OVERFLOW"
+
 // maxGroupKey bounds a threshold group key, as the trigger path stores it.
 const maxGroupKey = 300
 
@@ -206,6 +214,10 @@ func Replay(ctx context.Context, def *autodomain.Definition, h History, from, to
 		steps := prospective(def, h.Issuance, grantsByDay, day)
 		if i%every == 0 && len(out.Samples) < maxSamples {
 			agents := slices.Compact(slices.Sorted(slices.Values(slices.Concat(f.agents, launched))))
+			if len(agents) > maxSampleAgents {
+				// Too many to list: hidden from every reader (D107 A4).
+				agents = []string{AgentsOverflow}
+			}
 			out.Samples = append(out.Samples, Sample{At: f.at, Kind: string(w.Kind()), SourceRef: f.ref, Steps: steps, Agents: agents})
 		}
 	}
@@ -317,8 +329,9 @@ func thresholdFires(ctx context.Context, t *autodomain.ThresholdWhen, events []f
 	// MaxThresholdGroups groups have counts in the window; the trigger fires
 	// when the window holds at_least, once per group and `over` bucket.
 	type minute struct {
-		at time.Time
-		n  int
+		at     time.Time
+		n      int
+		agents []string
 	}
 	counts := map[string][]minute{}
 	window := func(group string, since time.Time) int {
@@ -359,8 +372,9 @@ func thresholdFires(ctx context.Context, t *autodomain.ThresholdWhen, events []f
 		}
 		if ms := counts[group]; len(ms) > 0 && ms[len(ms)-1].at.Equal(at) {
 			ms[len(ms)-1].n++
+			ms[len(ms)-1].agents = append(ms[len(ms)-1].agents, f.agents...)
 		} else {
-			counts[group] = append(counts[group], minute{at: at, n: 1})
+			counts[group] = append(counts[group], minute{at: at, n: 1, agents: slices.Clone(f.agents)})
 		}
 		if window(group, since) < t.AtLeast {
 			continue
@@ -372,7 +386,13 @@ func thresholdFires(ctx context.Context, t *autodomain.ThresholdWhen, events []f
 		}
 		fired[k] = true
 		if !f.at.Before(from) {
-			out = append(out, fire{at: f.at, ref: "threshold:" + group + ":" + bucket.Format(time.RFC3339), agents: f.agents})
+			// D107 A4: the agents of every event the window counts.
+			var agents []string
+			for _, m := range counts[group] {
+				agents = append(agents, m.agents...)
+			}
+			agents = slices.Compact(slices.Sorted(slices.Values(agents)))
+			out = append(out, fire{at: f.at, ref: "threshold:" + group + ":" + bucket.Format(time.RFC3339), agents: agents})
 		}
 	}
 	return out

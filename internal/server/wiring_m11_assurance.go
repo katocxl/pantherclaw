@@ -4,6 +4,8 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 
 	"connectrpc.com/connect/v2"
@@ -12,11 +14,9 @@ import (
 	"github.com/katocxl/pantherclaw/internal/automations/assurance"
 	"github.com/katocxl/pantherclaw/internal/automations/assurance/adapters/assurancerpc"
 	"github.com/katocxl/pantherclaw/internal/billing"
-	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
-	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
-	"github.com/katocxl/pantherclaw/internal/platform/clock"
+	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
@@ -57,25 +57,30 @@ func registerAutomationAssurance(rs *connect.Server, d apiDeps, core *automation
 	return nil
 }
 
-// assuranceIssuer is the grants service a simulation previews launches
-// with (DryRun, D94 S5), its ceilings checked by a core of its own.
-func assuranceIssuer(pool *db.Pool, bill *billing.Service) *grantsapp.Service {
-	gstore := &grantspg.Store{Pool: pool}
-	grants := &grantsapp.Service{
-		Repo: gstore, Subjects: gstore, Defs: &defspg.Store{Pool: pool}, Authz: grantsapp.SubjectAuthorizer{},
-		Clock: clock.System{}, Store: gstore,
+// coreIssuer previews launches with the process's one core's grants
+// service (D107 A1): the same ceilings and promotion gate as real
+// issuance. It reads the service at call time, once the API or the core
+// jobs attached it; before that every preview fails and the job retries.
+type coreIssuer struct{ core *automationsCore }
+
+var errNoIssuer = errors.New("server: the automations core has no grants service attached")
+
+func (c coreIssuer) IssueForAutomationTx(ctx context.Context, tx db.TenantTx, in grantsapp.AutomationIssue) (gdomain.Grant, error) {
+	if c.core == nil || c.core.grants == nil {
+		return gdomain.Grant{}, errNoIssuer
 	}
-	newAutomationsCore(pool, bill, "", grants, nil) // sets grants.Ceilings
-	return grants
+	return c.core.grants.IssueForAutomationTx(ctx, tx, in)
 }
 
 // registerAutomationAssuranceJobs adds the historical-simulation worker
 // (D35) and the sweep that raises the derived automation exceptions (D38).
-func registerAutomationAssuranceJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, pool *db.Pool, bill *billing.Service,
+func registerAutomationAssuranceJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, core *automationsCore, bill *billing.Service,
 	log *slog.Logger,
 ) ([]*river.PeriodicJob, error) {
+	assurancePorts(core)
+	pool := core.svc.Pool
 	svc := assuranceService(pool, bill)
-	svc.Issuer = assuranceIssuer(pool, bill)
+	svc.Issuer = coreIssuer{core: core}
 	if err := assurance.RegisterJobs(reg, svc, log); err != nil {
 		return nil, err
 	}

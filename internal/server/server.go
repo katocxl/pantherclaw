@@ -441,7 +441,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if err := registerSimulationJobs(jreg, pool, kp, bill, log); err != nil {
 			return err
 		}
-		if evidenceJobs, err = registerAutomationAssuranceJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
+		if evidenceJobs, err = registerAutomationAssuranceJobs(evidenceJobs, jreg, autos, bill, log); err != nil {
 			return err
 		}
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {
