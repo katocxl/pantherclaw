@@ -1,0 +1,99 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+package engine
+
+import (
+	"context"
+	"sync"
+
+	"cel.dev/cel-go/cel"
+
+	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
+)
+
+// guards evaluates steps' `when` guards (D2): CEL booleans over `trigger`
+// (params, kind, occurred_at) and `steps` (steps.<id>.output.<key>),
+// cost-limited and failing closed.
+type guards struct {
+	env *celenv.Env
+	mu  sync.Mutex
+	// compiled caches programs by source; definitions are immutable.
+	compiled map[string]*celenv.Program
+}
+
+// GuardVariables are the variables a step guard may read.
+var GuardVariables = []celenv.Variable{
+	{Name: "trigger", Type: cel.MapType(cel.StringType, cel.DynType)},
+	{Name: "steps", Type: cel.MapType(cel.StringType, cel.DynType)},
+}
+
+func newGuards() (*guards, error) {
+	env, err := celenv.New(celenv.DefaultLimits, nil, GuardVariables...)
+	if err != nil {
+		return nil, err
+	}
+	return &guards{env: env, compiled: map[string]*celenv.Program{}}, nil
+}
+
+// CompileGuard checks a guard expression (for validation and tests).
+func CompileGuard(src string) error {
+	g, err := newGuards()
+	if err != nil {
+		return err
+	}
+	_, err = g.program(src)
+	return err
+}
+
+func (g *guards) program(src string) (*celenv.Program, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if p, ok := g.compiled[src]; ok {
+		return p, nil
+	}
+	p, err := g.env.Compile(src, cel.BoolType)
+	if err != nil {
+		return nil, err
+	}
+	g.compiled[src] = p
+	return p, nil
+}
+
+func (g *guards) eval(ctx context.Context, src string, t autodomain.TriggerRef, outputs map[string]map[string]string) (bool, error) {
+	p, err := g.program(src)
+	if err != nil {
+		return false, err
+	}
+	ok, _, err := p.EvalBool(ctx, guardVars(t, outputs))
+	return ok, err
+}
+
+// guardVars maps the trigger and outputs to CEL values: parameters keep
+// their declared types.
+func guardVars(t autodomain.TriggerRef, outputs map[string]map[string]string) map[string]any {
+	params := make(map[string]any, len(t.Params))
+	for k, v := range t.Params {
+		switch v.Type {
+		case autodomain.ParamInt:
+			params[k] = v.Int
+		case autodomain.ParamBool:
+			params[k] = v.Bool
+		default:
+			params[k] = v.Text()
+		}
+	}
+	steps := make(map[string]any, len(outputs))
+	for id, out := range outputs {
+		o := make(map[string]any, len(out))
+		for k, v := range out {
+			o[k] = v
+		}
+		steps[id] = map[string]any{"output": o}
+	}
+	return map[string]any{
+		"trigger": map[string]any{"params": params, "kind": string(t.Kind), "occurred_at": t.OccurredAt},
+		"steps":   steps,
+	}
+}
