@@ -168,7 +168,7 @@ func (r *reflexStack) m11Promotion(t *testing.T) {
 		}
 		return o
 	}
-	for _, role := range []string{"agent_owner", "agent_admitter", "grant_issuer", "fleet_manager"} {
+	for _, role := range []string{"agent_owner", "agent_admitter", "grant_issuer", "fleet_manager", "approver"} {
 		if code, o, e := r.alice.pclaw(t, "role", "bind", "--role", role, "--user", r.aliceID.String()); code != 0 &&
 			!strings.Contains(e, "ROLE_BINDING_EXISTS") {
 			t.Fatalf("role bind %s: %d %s %s", role, code, o, e)
@@ -201,8 +201,9 @@ func (r *reflexStack) m11Promotion(t *testing.T) {
 		t.Fatalf("a production grant before the promotion: %d %s", code, e)
 	}
 
-	// The checks run for real: the scenario tests and the route's coverage
-	// are recorded as a team would; the promotion itself is alice's, on the
+	// The checks run for real (alice is also an approver, so the seeded
+	// policy's large-refund approvals have someone eligible): the scenario
+	// tests and the route's coverage are recorded as a team would; the promotion itself is alice's, on the
 	// page, with a step-up.
 	promotiontest.Record(t, promotiontest.Scope{
 		Pool: s.pool, Org: s.org, Agent: mustUUID(t, agent), Env: mustUUID(t, env), Connection: s.conn, Publish: policytest.Publish,
@@ -219,7 +220,7 @@ func (r *reflexStack) m11Promotion(t *testing.T) {
 	k.stepUp(t)
 	code, out := k.b.post(t, path, body)
 	if code != http.StatusOK || !strings.Contains(string(out["promoted"]), "payments.refund.create") {
-		t.Fatalf("promote: %d %v", code, out)
+		t.Fatalf("promote: %d %v; failing checks: %s", code, out, r.failingChecks(t, agent, env, "payments.refund.create"))
 	}
 	if code, o, e := issue(); code != 0 || field(t, o, "id") == "" {
 		t.Fatalf("the production grant after the promotion: %d %s %s", code, o, e)
@@ -452,4 +453,24 @@ func (r *reflexStack) m11Compromise(t *testing.T, bob *user, bobID string) {
 		string(body["error"]) != `"compromised"` {
 		t.Fatalf("a compromised person confirming a change: %d %v", code, body)
 	}
+}
+
+// failingChecks lists the promotion checks an operation fails, for a
+// refusal's message.
+func (r *reflexStack) failingChecks(t *testing.T, agent, env, op string) string {
+	t.Helper()
+	res, err := pantherclawv1connect.NewPromotionServiceClient(r.client(bearerOf(t, r.alice))).GetReadiness(context.Background(),
+		&pantherclawv1.GetReadinessRequest{AgentId: agent, EnvironmentId: env, Operations: []string{op}})
+	if err != nil {
+		return err.Error()
+	}
+	var out []string
+	for _, x := range res.GetReadiness() {
+		for _, c := range x.GetChecks() {
+			if !c.GetPassed() {
+				out = append(out, c.GetName()+": "+c.GetDetail())
+			}
+		}
+	}
+	return strings.Join(out, "; ")
 }
