@@ -63,12 +63,12 @@ func init() {
 	automationStarter = func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) autoports.Starter {
 		return newAutomationEngine(engineDeps{pool: pool, bill: bill, core: core, log: log})
 	}
-	automationExecutions = func(core *automationsCore, pool *db.Pool) triggers.ExecutionLookup {
-		return newAutomationEngine(engineDeps{pool: pool, core: core})
+	automationExecutions = func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) triggers.ExecutionLookup {
+		return newAutomationEngine(engineDeps{pool: pool, bill: bill, core: core, log: log})
 	}
 	automationPauser = func(core *automationsCore) autoports.Pauser { return core.svc }
-	automationPackExecutions = func(core *automationsCore, pool *db.Pool) packbuild.Executions {
-		return newAutomationEngine(engineDeps{pool: pool, core: core})
+	automationPackExecutions = func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) packbuild.Executions {
+		return newAutomationEngine(engineDeps{pool: pool, bill: bill, core: core, log: log})
 	}
 }
 
@@ -431,7 +431,7 @@ func (p executionsPort) CancelActive(ctx context.Context, tx pgx.Tx, org ids.Org
 
 // automationPackExecutions reads executions for evidence packs of scope
 // automation_execution (D30); set by init.
-var automationPackExecutions func(core *automationsCore, pool *db.Pool) packbuild.Executions
+var automationPackExecutions func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) packbuild.Executions
 
 // deliveryNotPending and deliveryMaybeSent classify triggers' Cancel
 // errors for the engine's cleanup (D89, D97 N1).

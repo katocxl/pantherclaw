@@ -5,12 +5,14 @@ package server
 
 import (
 	"fmt"
+	"log/slog"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/automations/engine/adapters/pgengine"
 	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/automations/steps"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/endpoints"
+	"github.com/katocxl/pantherclaw/internal/billing"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	runsapp "github.com/katocxl/pantherclaw/internal/runs/app"
@@ -35,13 +37,14 @@ func TestAutomationEnginePortsAreWired(t *testing.T) {
 			}
 		},
 	}
+	bill, log := &billing.Service{}, slog.New(slog.DiscardHandler)
 	for role, attach := range roles {
 		t.Run(role, func(t *testing.T) {
 			core := newAutomationsCore(nil, nil, "")
 			if role == RoleAll {
 				attach(core)
 			}
-			e := driverEngine(core, engineDeps{})
+			e := driverEngine(core, engineDeps{bill: bill, log: log})
 			if role == RoleWorker {
 				attach(core)
 			}
@@ -69,17 +72,17 @@ func TestAutomationEnginePortsAreWired(t *testing.T) {
 			if p := automationPauser(core); any(p) != any(core.svc) {
 				t.Fatalf("triggers' Pauser %T is not the shared core", p)
 			}
-			starter, ok := automationStarter(core, nil, nil, nil).(*pgengine.Engine)
+			starter, ok := automationStarter(core, nil, bill, log).(*pgengine.Engine)
 			if !ok {
 				t.Fatal("triggers' Starter is not the engine")
 			}
 			sharesCore(t, "starter", starter, core)
-			lookup, ok := automationExecutions(core, nil).(*pgengine.Engine)
+			lookup, ok := automationExecutions(core, nil, bill, log).(*pgengine.Engine)
 			if !ok {
 				t.Fatal("triggers' ExecutionLookup is not the engine")
 			}
 			sharesCore(t, "lookup", lookup, core)
-			packs, ok := newPackBuilder(&Config{}, nil, nil, core, nil).Executions.(*pgengine.Engine)
+			packs, ok := newPackBuilder(&Config{}, nil, nil, core, bill, log).Executions.(*pgengine.Engine)
 			if !ok {
 				t.Fatal("packbuild.Executions is not the engine")
 			}
@@ -89,11 +92,14 @@ func TestAutomationEnginePortsAreWired(t *testing.T) {
 }
 
 // sharesCore fails unless e pauses, voids and checks ceilings through the
-// shared core.
+// shared core, and has the edition and the logger (D112).
 func sharesCore(t *testing.T, name string, e *pgengine.Engine, core *automationsCore) {
 	t.Helper()
 	if any(e.Pauser) != any(core.svc) || any(e.Voider) != any(core.svc) || any(e.Ceilings) != any(core.svc) {
 		t.Fatalf("%s engine: Pauser, Voider or Ceilings is not the shared core", name)
+	}
+	if e.Editions == nil || e.Log == nil {
+		t.Fatalf("%s engine: Editions %v, Log %v", name, e.Editions != nil, e.Log != nil)
 	}
 }
 

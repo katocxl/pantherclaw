@@ -43,7 +43,7 @@ import (
 // Deliverer from automationTriggerActivator and automationDeliverer.
 var (
 	automationStarter    func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) autoports.Starter
-	automationExecutions func(core *automationsCore, pool *db.Pool) triggers.ExecutionLookup
+	automationExecutions func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) triggers.ExecutionLookup
 	automationPauser     func(core *automationsCore) autoports.Pauser
 )
 
@@ -62,7 +62,7 @@ func newAutomationTriggers(pool *db.Pool, bill *billing.Service, log *slog.Logge
 		d.Starter = automationStarter(core, pool, bill, log)
 	}
 	if core != nil && automationExecutions != nil {
-		d.Executions = automationExecutions(core, pool)
+		d.Executions = automationExecutions(core, pool, bill, log)
 	}
 	if core != nil && automationPauser != nil {
 		d.Pauser = automationPauser(core)
