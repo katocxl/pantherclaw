@@ -39,7 +39,7 @@ const EntityCorrelations Entity = "correlations"
 const (
 	CorrIncidentRun       = "INCIDENT_RUN"
 	CorrSharedDestination = "SHARED_DESTINATION"
-	CorrSharedCredential  = "SHARED_CREDENTIAL"
+	CorrSharedCredential  = "SHARED_CREDENTIAL" //nolint:gosec // G101: a label, not a credential
 	CorrSharedSequence    = "SHARED_OPERATION_SEQUENCE"
 	CorrGrantChange       = "GRANT_CHANGE"
 	CorrToolChange        = "TOOL_CHANGE"

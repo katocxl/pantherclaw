@@ -197,9 +197,7 @@ func tokenize(q string) ([]token, error) {
 			i = len(rest)
 		}
 		w := strings.Trim(strings.ToLower(rest[:i]), ",.?!;:()[]")
-		if strings.HasSuffix(w, "'s") {
-			w = strings.TrimSuffix(w, "'s")
-		}
+		w = strings.TrimSuffix(w, "'s")
 		if w != "" {
 			out = append(out, token{text: w})
 		}
@@ -707,6 +705,7 @@ func (p *parser) builtin(b Builtin, env string, ocs []outcome, refs []ref) {
 	}
 	for _, r := range refs {
 		id, _ := ids.ParseUUID(r.match.ID)
+		//exhaustive:ignore // only these kinds are parameters of a built-in query; the rest ask for clarification
 		switch r.match.Kind {
 		case FindTransactions:
 			bq.Params.Transaction = &id
@@ -724,6 +723,7 @@ func (p *parser) builtin(b Builtin, env string, ocs []outcome, refs []ref) {
 		}
 		p.in.Filters = append(p.in.Filters, fmt.Sprintf("%s is %s (%s)", strings.TrimSuffix(string(r.match.Kind), "s"), r.match.Label, r.match.Evidence[0]))
 	}
+	//exhaustive:ignore // only these built-in queries take parameters the question does not name
 	switch b {
 	case BuiltinToolCapability:
 		bq.Params.Effect = "funds."

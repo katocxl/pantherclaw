@@ -365,7 +365,7 @@ func (s *Service) find(ctx context.Context, c tenancy.Caller, q *dbq.Queries, te
 	}
 	lo, hi, exact := idRange(text)
 	lowered := strings.ToLower(text)
-	args := findArgs{lo: lo, hi: hi, lowered: lowered, contains: likeContains(lowered), limit: int32(limit)} //nolint:gosec // G115: at most 10
+	args := findArgs{lo: lo, hi: hi, lowered: lowered, contains: likeContains(lowered), limit: int32(limit)}
 	out := FindResult{Text: text, AsOf: s.now()}
 	for _, k := range findOrder {
 		if len(kinds) > 0 && !slices.Contains(kinds, k) {
