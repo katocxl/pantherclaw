@@ -154,7 +154,7 @@ func securityPorts(in securityStepDeps) securitysteps.Deps {
 	deps.Intake = securitysteps.IntakeDeps{
 		Agents: reads, Candidates: reads, Routes: reads, Operations: reads,
 		Tests:     securitysteps.NewScenarioTests(scenario.New(defs, facts, in.CEL, policyapp.DefaultBudget)),
-		Proposals: securitysteps.TableProposals{},
+		Proposals: securitysteps.TableProposals{}, Cohorts: cohortBaselines{},
 	}
 	deps.Review = securitysteps.ReviewDeps{
 		Unused: securitysteps.NewUnusedGrants(), Drafts: securitysteps.NewPolicyDrafts(facts, defs, in.CEL),

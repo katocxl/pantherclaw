@@ -8,6 +8,10 @@ import (
 	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
+	"github.com/katocxl/pantherclaw/internal/automations/securitysteps"
+	"github.com/katocxl/pantherclaw/internal/cohorts"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -118,4 +122,27 @@ func (r promotionRevoker) RevokePromotion(ctx context.Context, id ids.UUID, reas
 		return nil
 	}
 	return err
+}
+
+// cohortBaselines is templates' draft_baseline COHORT_BASELINE source over
+// govern's fleet cohorts (D115 R2b): the baseline of the one cohort with a
+// baseline the agent belongs to, in the step's transaction (the step
+// already authorized the read). No such cohort, or several, is the step's
+// refusal (NO_BASELINE, COHORT_AMBIGUOUS).
+type cohortBaselines struct{}
+
+var _ securitysteps.CohortBaselines = cohortBaselines{}
+
+func (cohortBaselines) CohortBaseline(ctx context.Context, tx pgx.Tx, org ids.OrgID, agent ids.UUID) (securitysteps.Baseline, error) {
+	ttx, err := db.AdoptTenantTx(ctx, tx, org)
+	if err != nil {
+		return securitysteps.Baseline{}, err
+	}
+	b, cohort, err := cohorts.BaselineForAgent(ctx, ttx, org, agent)
+	if err != nil {
+		return securitysteps.Baseline{}, err
+	}
+	return securitysteps.Baseline{
+		Bounds: b.Bounds, Limits: b.Limits, TTLSeconds: b.TTLSeconds, Basis: "the baseline of fleet cohort " + cohort.String(),
+	}, nil
 }

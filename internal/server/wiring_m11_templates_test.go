@@ -66,10 +66,10 @@ func TestTemplateTestsAreAssuranceCases(t *testing.T) {
 	}
 }
 
-// securityPending are the security-step ports another stream still owes:
-// govern's fleet cohorts (COHORT_BASELINE), wired on the top. Until then those steps fail DEPENDENCY_UNAVAILABLE.
-// The list is exact, so a new gap and a filled one both fail the test.
-var securityPending = []string{"Intake.Cohorts"}
+// securityPending are the security-step ports another stream still owes;
+// none since the top wired govern's fleet cohorts (COHORT_BASELINE, D115
+// R2b). The list is exact, so a new gap and a filled one both fail the test.
+var securityPending []string
 
 // TestSecurityStepsAreFullyWired (D108): in both process roles the driver
 // builds the security steps from the process's core and the server's
