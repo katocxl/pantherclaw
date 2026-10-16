@@ -256,15 +256,24 @@ func correlateRuns(ctx context.Context, c tenancy.Caller, q *dbq.Queries, ev Sco
 	if err != nil {
 		return err
 	}
-	for _, d := range dests {
-		out.Items = append(out.Items, Item{
-			Entity: EntityCorrelations, ID: "destination:" + d.RunID.String() + ":" + d.Host, Time: d.FirstAt,
+	// Connections, credentials and hosts are org-level records: without
+	// connection.read across the org a shared row says only which run shares
+	// something (D79 S4).
+	conn := c.Can(td.PermConnectionRead, td.OrgPath(c.Org))
+	for i, d := range dests {
+		it := Item{
+			Entity: EntityCorrelations, ID: "destination:" + d.RunID.String() + ":" + strconv.Itoa(i), Time: d.FirstAt,
 			Label: CorrSharedDestination,
-			Fields: fields("run", d.RunID.String(), "agent", d.AgentID.String(), "host", d.Host,
-				"destination_class", d.DestinationClass, "connection", d.ConnectionID.String(),
+			Fields: fields("run", d.RunID.String(), "agent", d.AgentID.String(),
 				"actions", strconv.FormatInt(d.Actions, 10), "last_at", ts(&d.LastAt), "basis", "OBSERVED"),
-			Evidence: []string{"run:" + d.RunID.String(), "connection:" + d.ConnectionID.String()},
-		})
+			Evidence: []string{"run:" + d.RunID.String()},
+		}
+		if conn {
+			it.Fields["host"], it.Fields["destination_class"] = d.Host, d.DestinationClass
+			it.Fields["connection"] = d.ConnectionID.String()
+			it.Evidence = append(it.Evidence, "connection:"+d.ConnectionID.String())
+		}
+		out.Items = append(out.Items, it)
 	}
 	creds, err := q.CorrSharedCredentials(ctx, dbq.CorrSharedCredentialsParams{
 		OrgID: c.Org, RunIds: runIDs, AllAgents: ev.All, Agents: ev.agentList(), StartTime: start, EndTime: end,
@@ -272,14 +281,25 @@ func correlateRuns(ctx context.Context, c tenancy.Caller, q *dbq.Queries, ev Sco
 	if err != nil {
 		return err
 	}
-	for _, r := range creds {
-		out.Items = append(out.Items, Item{
-			Entity: EntityCorrelations, ID: "credential:" + r.RunID.String() + ":" + r.CredentialID.String(), Time: r.FirstAt,
+	for i, r := range creds {
+		it := Item{
+			Entity: EntityCorrelations, ID: "credential:" + r.RunID.String() + ":" + strconv.Itoa(i), Time: r.FirstAt,
 			Label: CorrSharedCredential,
-			Fields: fields("run", r.RunID.String(), "agent", r.AgentID.String(), "credential", r.CredentialID.String(),
-				"connection", r.ConnectionID.String(), "credential_version", strconv.Itoa(int(r.Version)),
+			Fields: fields("run", r.RunID.String(), "agent", r.AgentID.String(),
 				"actions", strconv.FormatInt(r.Actions, 10), "last_at", ts(&r.LastAt), "basis", "INFERRED"),
-			Evidence: []string{"run:" + r.RunID.String(), "credential:" + r.CredentialID.String()},
+			Evidence: []string{"run:" + r.RunID.String()},
+		}
+		if conn {
+			it.Fields["credential"], it.Fields["connection"] = r.CredentialID.String(), r.ConnectionID.String()
+			it.Fields["credential_version"] = strconv.Itoa(int(r.Version))
+			it.Evidence = append(it.Evidence, "credential:"+r.CredentialID.String())
+		}
+		out.Items = append(out.Items, it)
+	}
+	if !conn && len(dests)+len(creds) > 0 {
+		out.Omissions = append(out.Omissions, Omission{
+			Code:   omissionRestricted,
+			Detail: "shared hosts, connections and credentials need " + string(td.PermConnectionRead) + " across the org",
 		})
 	}
 	if len(creds) > 0 {

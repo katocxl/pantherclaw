@@ -2177,6 +2177,9 @@ type FindKindResult struct {
 	CountCapped     bool   `protobuf:"varint,4,opt,name=count_capped,json=countCapped,proto3" json:"count_capped,omitempty"`
 	ScopePermission string `protobuf:"bytes,5,opt,name=scope_permission,json=scopePermission,proto3" json:"scope_permission,omitempty"`
 	ScopeWhole      bool   `protobuf:"varint,6,opt,name=scope_whole,json=scopeWhole,proto3" json:"scope_whole,omitempty"`
+	// Name prefixes filled the limit: count covers ids and name prefixes
+	// only, not names that contain the text elsewhere.
+	CountPrefixOnly bool `protobuf:"varint,7,opt,name=count_prefix_only,json=countPrefixOnly,proto3" json:"count_prefix_only,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -2249,6 +2252,13 @@ func (x *FindKindResult) GetScopePermission() string {
 func (x *FindKindResult) GetScopeWhole() bool {
 	if x != nil {
 		return x.ScopeWhole
+	}
+	return false
+}
+
+func (x *FindKindResult) GetCountPrefixOnly() bool {
+	if x != nil {
+		return x.CountPrefixOnly
 	}
 	return false
 }
@@ -3327,7 +3337,7 @@ const file_pantherclaw_v1_search_proto_rawDesc = "" +
 	"\x04time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x1d\n" +
 	"\n" +
 	"matched_by\x18\x06 \x01(\tR\tmatchedBy\x12\x1a\n" +
-	"\bevidence\x18\a \x03(\tR\bevidence\"\xde\x01\n" +
+	"\bevidence\x18\a \x03(\tR\bevidence\"\x8a\x02\n" +
 	"\x0eFindKindResult\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x123\n" +
 	"\amatches\x18\x02 \x03(\v2\x19.pantherclaw.v1.FindMatchR\amatches\x12\x14\n" +
@@ -3335,7 +3345,8 @@ const file_pantherclaw_v1_search_proto_rawDesc = "" +
 	"\fcount_capped\x18\x04 \x01(\bR\vcountCapped\x12)\n" +
 	"\x10scope_permission\x18\x05 \x01(\tR\x0fscopePermission\x12\x1f\n" +
 	"\vscope_whole\x18\x06 \x01(\bR\n" +
-	"scopeWhole\"\xca\x01\n" +
+	"scopeWhole\x12*\n" +
+	"\x11count_prefix_only\x18\a \x01(\bR\x0fcountPrefixOnly\"\xca\x01\n" +
 	"\fFindResponse\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x124\n" +
 	"\x05kinds\x18\x02 \x03(\v2\x1e.pantherclaw.v1.FindKindResultR\x05kinds\x126\n" +

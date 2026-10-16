@@ -14,6 +14,7 @@ import (
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	capp "github.com/katocxl/pantherclaw/internal/cases/app"
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -147,6 +148,16 @@ func TestHR295_FindMatchesOnlyTheViewersScope(t *testing.T) {
 	}
 	if k, _ := kindOf(find(f.responder, "alpha", FindAgents), FindAgents); k.Matches[0].MatchedBy != MatchedNameExact {
 		t.Fatalf("exact: %+v", k)
+	}
+	// A prefix filling the limit counts prefixes only, and says so (D79 S3);
+	// "ha" matches only inside names, so the substring pass ran.
+	if r, err := f.s.Find(as(f.auditor), FindRequest{Text: "al", Kinds: []FindKind{FindAgents}, Limit: 1}); err != nil {
+		t.Fatal(err)
+	} else if k, _ := kindOf(r, FindAgents); !k.PrefixOnly || k.Matches[0].MatchedBy != MatchedNamePrefix {
+		t.Fatalf("prefix pass: %+v", k)
+	}
+	if org.PrefixOnly {
+		t.Fatalf("substring pass: %+v", org)
 	}
 	inc, _ := kindOf(find(f.responder, "exfil", FindIncidents), FindIncidents)
 	if inc.Count != 1 || inc.Matches[0].ID != f.incidentA.String() {
@@ -420,5 +431,53 @@ func TestHR295_AutomationsNeedAutomationReadAcrossTheOrg(t *testing.T) {
 	}
 	if _, ok := kindOf(team, FindAutomations); ok || !hasOmission(team.Omissions, omissionRestricted, "automations: outside your permissions") {
 		t.Fatalf("team find: %+v", team)
+	}
+}
+
+// catalog is a definitions store with fixed active operations.
+type catalog []string
+
+func (c catalog) ActiveDefinitionsInTx(context.Context, db.TenantTx, ids.OrgID) ([]*defs.Definition, error) {
+	out := make([]*defs.Definition, 0, len(c))
+	for _, op := range c {
+		out = append(out, &defs.Definition{Operation: op})
+	}
+	return out, nil
+}
+
+// TestHR295_DeniedRefundsLastSevenDays (D49, D79 S1): the exit question
+// reads its operation word from the catalog the viewer may read, and runs;
+// a viewer without the catalog gets an unknown word, never a guess.
+func TestHR295_DeniedRefundsLastSevenDays(t *testing.T) {
+	f := newM11Fx(t)
+	f.s.Defs = catalog{"payments.refund.create", "payments.charge.create"}
+	a, err := f.s.Ask(as(f.auditor), "denied refunds last 7 days", "UTC", page.Request{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Result == nil || a.Result.Count != 1 || a.Interpretation.Query.Filters.Operation != "payments.refund.create" {
+		t.Fatalf("auditor: %+v %+v", a.Interpretation, a.Result)
+	}
+	a, err = f.s.Ask(as(f.responder), "denied refunds last 7 days", "UTC", page.Request{})
+	if err != nil || a.Result != nil || !slices.Equal(a.Interpretation.UnknownWords, []string{"refunds"}) {
+		t.Fatalf("responder without the catalog: %+v %v", a, err)
+	}
+}
+
+// TestHR296_ATeamCaseManagerOpensACaseFromAlerts (D79 S6): alert rows name
+// their agent, so a case manager scoped to that agent's team may open a
+// case from them.
+func TestHR296_ATeamCaseManagerOpensACaseFromAlerts(t *testing.T) {
+	f := newM11Fx(t)
+	q := Query{Entity: EntityAlerts}
+	r := f.search(f.responder, q)
+	if len(r.Items) != 1 || r.Items[0].Fields["agent"] != f.agentA.String() {
+		t.Fatalf("alert rows: %+v", r.Items)
+	}
+	if _, err := f.s.OpenCaseFromResults(as(f.responder), OpenCaseRequest{Source: Source{Query: &q}, Items: []string{r.Items[0].ID}, Title: "Exfil"}); err != nil {
+		t.Fatal(err)
+	}
+	if c := f.search(f.responder, Query{Entity: EntityCases}); c.Count != 1 || c.Items[0].Fields["agent"] != f.agentA.String() {
+		t.Fatalf("case rows: %+v", c.Items)
 	}
 }

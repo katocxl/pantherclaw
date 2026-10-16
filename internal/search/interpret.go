@@ -16,6 +16,8 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // Plain-language questions (G0 M11 part 2 D46; F305, F321, HR-295, founder
@@ -214,6 +216,8 @@ type parser struct {
 	loc     *time.Location
 	now     time.Time
 	resolve nameResolver
+	// ops is the operation catalog the viewer may read (sorted, unique).
+	ops []string
 	// resource is the resource group of who_can_write.
 	resource string
 }
@@ -270,14 +274,19 @@ func (s *Service) Interpret(ctx context.Context, question, timezone string) (Int
 		res := func(ctx context.Context, phrase string, kinds []FindKind) ([]Match, error) {
 			return exactMatches(ctx, s, c, tx, phrase, kinds)
 		}
-		out, err = interpret(ctx, question, timezone, s.now(), res)
+		ops, err := s.visibleOperations(ctx, c, tx)
+		if err != nil {
+			return err
+		}
+		out, err = interpret(ctx, question, timezone, s.now(), res, ops)
 		return err
 	}, db.ReadOnly())
 	return out, err
 }
 
-// interpret is Interpret with its clock and resolver given.
-func interpret(ctx context.Context, question, timezone string, now time.Time, resolve nameResolver) (Interpretation, error) {
+// interpret is Interpret with its clock, resolver and the viewer-visible
+// operation catalog (nil: none visible) given.
+func interpret(ctx context.Context, question, timezone string, now time.Time, resolve nameResolver, ops []string) (Interpretation, error) {
 	q := strings.TrimSpace(question)
 	switch {
 	case q == "" || utf8.RuneCountInString(q) > maxQuestion:
@@ -297,7 +306,7 @@ func interpret(ctx context.Context, question, timezone string, now time.Time, re
 		return Interpretation{}, err
 	}
 	p := &parser{
-		toks: toks, used: make([]bool, len(toks)), loc: loc, now: now.In(loc), resolve: resolve,
+		toks: toks, used: make([]bool, len(toks)), loc: loc, now: now.In(loc), resolve: resolve, ops: ops,
 		in: Interpretation{Question: q, Timezone: timezone},
 	}
 	if err := p.parse(ctx); err != nil {
@@ -586,6 +595,9 @@ func (p *parser) names(ctx context.Context, b Builtin) ([]ref, error) {
 		if err != nil {
 			return nil, err
 		}
+		if !uuidRe.MatchString(t.text) {
+			ms = append(ms, p.operationsNamed(t.text)...)
+		}
 		switch len(ms) {
 		case 0:
 			if t.quoted {
@@ -628,6 +640,13 @@ func (p *parser) query(ent Entity, env string, ocs []outcome, refs []ref) {
 		p.clarify("outcome words (denied, held, allowed, failed, unknown) apply to actions only")
 		return
 	}
+	if slices.ContainsFunc(ocs, func(o outcome) bool { return len(o.decisions) > 0 }) &&
+		slices.ContainsFunc(ocs, func(o outcome) bool { return len(o.effects) > 0 }) {
+		// "allowed or failed" is a union of a decision and an effect, which
+		// one query cannot say: ask instead of reading "or" as "and".
+		p.clarify("choose decisions (denied, held, allowed) or effects (confirmed, failed, unknown), not both")
+		return
+	}
 	for _, o := range ocs {
 		f.Decisions = appendNew(f.Decisions, o.decisions...)
 		f.EffectStates = appendNew(f.EffectStates, o.effects...)
@@ -660,6 +679,19 @@ func (p *parser) query(ent Entity, env string, ocs []outcome, refs []ref) {
 
 // applyRef sets the filter a named record becomes for ent.
 func (p *parser) applyRef(ent Entity, f *Filters, r ref) bool {
+	if r.match.Kind == FindOperations {
+		switch {
+		case r.match.MatchedBy == MatchedOperation:
+			f.Operation = r.match.ID
+			p.in.Filters = append(p.in.Filters, "operation is "+r.match.ID)
+		case ent == EntityApprovals:
+			return false // approvals filter by one exact operation
+		default:
+			f.OperationPrefix = r.match.ID
+			p.in.Filters = append(p.in.Filters, "operation starts with "+r.match.ID)
+		}
+		return true
+	}
 	id, err := ids.ParseUUID(r.match.ID)
 	if err != nil {
 		return false
@@ -801,4 +833,83 @@ func (p *parser) resourceGroup(refs []ref) {
 		p.resource = p.toks[left].text
 		p.take(left, 1, "resource group "+p.resource)
 	}
+}
+
+// FindOperations is the kind of an operation a question names: it is read
+// from the operation catalog, not by quick find.
+const FindOperations FindKind = "operations"
+
+// How a question's word names operations.
+const (
+	MatchedOperation       = "OPERATION"
+	MatchedOperationPrefix = "OPERATION_PREFIX"
+)
+
+// visibleOperations returns the org's active operations when c may read
+// the catalog (package.read at the org, as the operations entity), else
+// nil: an operation word then reads like any unknown word.
+func (s *Service) visibleOperations(ctx context.Context, c tenancy.Caller, tx db.TenantTx) ([]string, error) {
+	if s.Defs == nil || !c.Can(entityPerm[EntityOperations], td.OrgPath(c.Org)) {
+		return nil, nil
+	}
+	defs, err := s.operations(ctx, c, tx, Filters{})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(defs))
+	for _, d := range defs {
+		out = append(out, d.Operation)
+	}
+	return out, nil
+}
+
+// nounForms returns w and its singular forms (refunds → refund,
+// batches → batch, policies → policy).
+func nounForms(w string) []string {
+	out := []string{w}
+	switch {
+	case strings.HasSuffix(w, "ies") && len(w) > 3:
+		out = append(out, w[:len(w)-3]+"y")
+	case strings.HasSuffix(w, "es") && len(w) > 2:
+		out = append(out, w[:len(w)-2], w[:len(w)-1])
+	case strings.HasSuffix(w, "s") && len(w) > 1:
+		out = append(out, w[:len(w)-1])
+	}
+	return out
+}
+
+// operationsNamed returns the operations word names in the viewer-visible
+// catalog: the operations with a segment equal to the word or its
+// singular, grouped by the path up to that segment. One group is one
+// candidate (its single operation, or every operation under its prefix);
+// several groups are an ambiguity, never a guess.
+func (p *parser) operationsNamed(word string) []Match {
+	forms := nounForms(word)
+	groups := map[string][]string{}
+	var order []string
+	for _, op := range p.ops {
+		segs := strings.Split(op, ".")
+		for j, s := range segs {
+			if !slices.Contains(forms, s) {
+				continue
+			}
+			g := strings.Join(segs[:j+1], ".")
+			if _, ok := groups[g]; !ok {
+				order = append(order, g)
+			}
+			groups[g] = append(groups[g], op)
+			break
+		}
+	}
+	out := make([]Match, 0, len(order))
+	for _, g := range order {
+		ops := groups[g]
+		m := Match{Kind: FindOperations, ID: ops[0], Label: ops[0], MatchedBy: MatchedOperation}
+		if len(ops) > 1 {
+			m.ID, m.Label, m.MatchedBy = g+".", g+".*", MatchedOperationPrefix
+		}
+		m.Evidence = []string{"operation:" + m.ID}
+		out = append(out, m)
+	}
+	return out
 }

@@ -436,19 +436,29 @@ func caseSeed(c tenancy.Caller, title string, items []Item) (reflexdomain.CaseSe
 	seenRef := map[string]bool{}
 	agentSet := map[ids.UUID]bool{}
 	for _, i := range items {
-		for _, k := range []string{"agent"} {
-			if a, err := ids.ParseUUID(i.Fields[k]); err == nil {
-				agentSet[a] = true
-			}
-		}
-		for _, a := range strings.Split(i.Fields["agents"], ",") {
-			if id, err := ids.ParseUUID(a); err == nil {
-				agentSet[id] = true
+		var mine []ids.UUID
+		for _, a := range slices.Concat([]string{i.Fields["agent"]}, strings.Split(i.Fields["agents"], ",")) {
+			if id, err := ids.ParseUUID(a); err == nil && !slices.Contains(mine, id) {
+				mine = append(mine, id)
 			}
 		}
 		if i.Entity == EntityAgents {
 			if id, err := ids.ParseUUID(i.ID); err == nil {
-				agentSet[id] = true
+				mine = append(mine, id)
+			}
+		}
+		// A row whose evidence names no run, transaction or agent (an alert,
+		// an incident, a finding) carries its agents as subjects, so the case
+		// is about them and readable where they are (D79 S6).
+		linked := slices.ContainsFunc(i.Evidence, func(ev string) bool {
+			k, _, _ := strings.Cut(ev, ":")
+			return k == "run" || k == "transaction" || k == "agent"
+		})
+		for _, a := range mine {
+			agentSet[a] = true
+			if ref := "agent:" + a.String(); !linked && !seenRef[ref] {
+				seenRef[ref] = true
+				seed.Subjects = append(seed.Subjects, reflexdomain.Subject{Type: reflexdomain.SubjectAgent, ID: a.String()})
 			}
 		}
 		for _, ev := range i.Evidence {

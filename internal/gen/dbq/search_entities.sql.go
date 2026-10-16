@@ -565,7 +565,8 @@ func (q *Queries) SearchAutomations(ctx context.Context, arg SearchAutomationsPa
 
 const searchCases = `-- name: SearchCases :many
 SELECT c.id, c.title, c.source, c.state, c.owner_id, c.alert_id, c.incident_id, c.disposition, c.impact,
-       c.created_at, c.closed_at
+       c.created_at, c.closed_at,
+       ARRAY(SELECT x::text FROM pc.case_agents(c.org_id, c.id) x ORDER BY 1)::text[] AS agents
 FROM pc.cases c
 WHERE c.org_id = $1
   AND ($2::boolean OR pc.case_within(c.org_id, c.id, $3::uuid[]))
@@ -609,6 +610,7 @@ type SearchCasesRow struct {
 	Impact      *string
 	CreatedAt   time.Time
 	ClosedAt    *time.Time
+	Agents      []string
 }
 
 func (q *Queries) SearchCases(ctx context.Context, arg SearchCasesParams) ([]SearchCasesRow, error) {
@@ -645,6 +647,7 @@ func (q *Queries) SearchCases(ctx context.Context, arg SearchCasesParams) ([]Sea
 			&i.Impact,
 			&i.CreatedAt,
 			&i.ClosedAt,
+			&i.Agents,
 		); err != nil {
 			return nil, err
 		}

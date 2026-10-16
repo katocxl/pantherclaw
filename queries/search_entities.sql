@@ -102,7 +102,8 @@ SELECT count(*) FROM (
 
 -- name: SearchCases :many
 SELECT c.id, c.title, c.source, c.state, c.owner_id, c.alert_id, c.incident_id, c.disposition, c.impact,
-       c.created_at, c.closed_at
+       c.created_at, c.closed_at,
+       ARRAY(SELECT x::text FROM pc.case_agents(c.org_id, c.id) x ORDER BY 1)::text[] AS agents
 FROM pc.cases c
 WHERE c.org_id = sqlc.arg(org_id)
   AND (sqlc.arg(all_agents)::boolean OR pc.case_within(c.org_id, c.id, sqlc.arg(agents)::uuid[]))

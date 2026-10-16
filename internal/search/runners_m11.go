@@ -62,7 +62,7 @@ func pageAlerts(ctx context.Context, _ *Service, c tenancy.Caller, tx db.TenantT
 			Fields: fields("title", r.Title, "source", r.Source, "rule", r.RuleID, "severity", r.Severity,
 				"attention", r.Attention, "basis", r.Basis, "state", r.State, "incident", idStr(r.IncidentID),
 				"count", strconv.Itoa(int(r.Count)), "first_seen", ts(&r.FirstSeen), "last_seen", ts(&r.LastSeen),
-				"agents", strings.Join(r.Agents, ","), "test", boolStr(r.Test)),
+				"agents", strings.Join(r.Agents, ","), "agent", single(r.Agents), "test", boolStr(r.Test)),
 			Evidence: ev,
 		})
 	}
@@ -92,7 +92,7 @@ func pageIncidents(ctx context.Context, _ *Service, c tenancy.Caller, tx db.Tena
 		items = append(items, Item{
 			Entity: EntityIncidents, ID: r.ID.String(), Time: r.CreatedAt, Label: r.State,
 			Fields: fields("title", r.Title, "severity", r.Severity, "state", r.State, "owner", idStr(r.OwnerID),
-				"opened_by", r.OpenedBy, "agents", strings.Join(r.Agents, ","), "updated_at", ts(&r.UpdatedAt),
+				"opened_by", r.OpenedBy, "agents", strings.Join(r.Agents, ","), "agent", single(r.Agents), "updated_at", ts(&r.UpdatedAt),
 				"test", boolStr(r.Test)),
 			Evidence: []string{"incident:" + r.ID.String()},
 		})
@@ -124,7 +124,8 @@ func pageCases(ctx context.Context, _ *Service, c tenancy.Caller, tx db.TenantTx
 			Entity: EntityCases, ID: r.ID.String(), Time: r.CreatedAt, Label: r.State,
 			Fields: fields("title", r.Title, "source", r.Source, "state", r.State, "owner", idStr(r.OwnerID),
 				"alert", idStr(r.AlertID), "incident", idStr(r.IncidentID), "disposition", str(r.Disposition),
-				"impact", str(r.Impact), "closed_at", ts(r.ClosedAt)),
+				"impact", str(r.Impact), "closed_at", ts(r.ClosedAt), "agents", strings.Join(r.Agents, ","),
+				"agent", single(r.Agents)),
 			Evidence: []string{"case:" + r.ID.String()},
 		})
 	}
@@ -284,4 +285,13 @@ func countAutomations(ctx context.Context, _ *Service, c tenancy.Caller, tx db.T
 		OrgID: c.Org, ID: f.ID, States: list(f.States), Kinds: list(f.Kinds), StartTime: f.Start, EndTime: f.End,
 	})
 	return int(n), err
+}
+
+// single is the one agent a row is about, else "" (several are listed in
+// "agents"), so a case opened from it knows its agent (D79 S6).
+func single(agents []string) string {
+	if len(agents) == 1 {
+		return agents[0]
+	}
+	return ""
 }

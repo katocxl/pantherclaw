@@ -40,7 +40,7 @@ var askNow = time.Date(2026, 10, 15, 15, 30, 0, 0, time.UTC) // a Thursday
 
 func ask(t *testing.T, n names, q, tz string) Interpretation {
 	t.Helper()
-	in, err := interpret(context.Background(), q, tz, askNow, n.resolve)
+	in, err := interpret(context.Background(), q, tz, askNow, n.resolve, nil)
 	if err != nil {
 		t.Fatalf("%q: %v", q, err)
 	}
@@ -159,7 +159,7 @@ func TestHR295_ParserNeverGuesses(t *testing.T) {
 		{"actions between 2026-10-07 and 2026-10-01", ""},
 		{"actions since 2020-01-01", ""},
 	} {
-		if _, err := interpret(context.Background(), bad.q, bad.tz, askNow, n.resolve); !invalid(err) {
+		if _, err := interpret(context.Background(), bad.q, bad.tz, askNow, n.resolve, nil); !invalid(err) {
 			t.Errorf("%q in %q: accepted (%v)", bad.q, bad.tz, err)
 		}
 	}
@@ -245,5 +245,56 @@ func TestT130_CorrelationParameters(t *testing.T) {
 	}
 	if got := ngrams([]string{"a", "b", "c", "d"}); !slices.Equal(got, []string{"a\x00b\x00c", "b\x00c\x00d"}) {
 		t.Errorf("ngrams %q", got)
+	}
+}
+
+func askWith(t *testing.T, ops []string, q string) Interpretation {
+	t.Helper()
+	in, err := interpret(context.Background(), q, "UTC", askNow, names{}.resolve, ops)
+	if err != nil {
+		t.Fatalf("%q: %v", q, err)
+	}
+	return in
+}
+
+// TestHR295_OperationWordsReadFromTheVisibleCatalog (D79 S1, D49): a word
+// naming an operation segment, or its plural, reads as that operation (or
+// every operation under the same path); two paths are an ambiguity; with
+// no catalog visible it is an unknown word.
+func TestHR295_OperationWordsReadFromTheVisibleCatalog(t *testing.T) {
+	one := []string{"payments.refund.create", "payments.charge.create"}
+	in := askWith(t, one, "denied refunds last 7 days")
+	if q := in.Query; q == nil || q.Entity != EntityTransactions || q.Filters.Operation != "payments.refund.create" ||
+		!slices.Equal(q.Filters.Decisions, []string{"DENY", "CANNOT_AUTHORIZE"}) || !q.Filters.Start.Equal(askNow.Add(-7*24*time.Hour)) {
+		t.Fatalf("denied refunds last 7 days: %+v", in)
+	}
+	in = askWith(t, []string{"payments.refund.create", "payments.refund.cancel"}, "denied refunds")
+	if q := in.Query; q == nil || q.Filters.OperationPrefix != "payments.refund." || q.Filters.Operation != "" {
+		t.Fatalf("two refund operations: %+v", in)
+	}
+	in = askWith(t, []string{"payments.refund.create", "billing.refund.issue"}, "denied refunds")
+	if in.Query != nil || !in.NeedsClarification || len(in.Ambiguities) != 1 || len(in.Ambiguities[0].Candidates) != 2 {
+		t.Fatalf("two refund paths: %+v", in)
+	}
+	in = askWith(t, nil, "denied refunds")
+	if in.Query != nil || !slices.Equal(in.UnknownWords, []string{"refunds"}) {
+		t.Fatalf("no visible catalog: %+v", in)
+	}
+	if in := askWith(t, []string{"payments.refund.create", "payments.refund.cancel"}, "approvals of refunds"); in.Query != nil || !in.NeedsClarification || len(in.UnknownWords) != 0 {
+		t.Fatalf("an operation prefix on approvals: %+v", in)
+	}
+}
+
+// TestHR295_DecisionAndEffectOutcomesAreNeverJoined (D79 S2): "allowed or
+// failed" is a union one query cannot express, so it asks; it never reads
+// "or" as "and".
+func TestHR295_DecisionAndEffectOutcomesAreNeverJoined(t *testing.T) {
+	for _, q := range []string{"allowed or failed actions today", "denied and confirmed actions"} {
+		if in := askWith(t, nil, q); in.Query != nil || !in.NeedsClarification {
+			t.Errorf("%q: %+v", q, in)
+		}
+	}
+	if in := askWith(t, nil, "denied or held actions"); in.Query == nil || len(in.Query.Filters.Decisions) != 4 {
+		t.Errorf("two decision outcomes are one union: %+v", in)
 	}
 }

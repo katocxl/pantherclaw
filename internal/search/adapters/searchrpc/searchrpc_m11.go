@@ -48,7 +48,7 @@ func (h *Handler) Find(ctx context.Context, req *pantherclawv1.FindRequest) (*pa
 	for _, k := range res.Kinds {
 		kr := &pantherclawv1.FindKindResult{
 			Kind: string(k.Kind), Count: int32(k.Count), CountCapped: k.Capped, //nolint:gosec // G115: at most MaxCount
-			ScopePermission: string(k.Scope.Permission), ScopeWhole: k.Scope.All,
+			ScopePermission: string(k.Scope.Permission), ScopeWhole: k.Scope.All, CountPrefixOnly: k.PrefixOnly,
 		}
 		for _, m := range k.Matches {
 			kr.Matches = append(kr.Matches, matchProto(m))

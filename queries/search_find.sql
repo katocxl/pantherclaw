@@ -4,8 +4,11 @@
 -- Quick find (G0 M11 part 2 coordinator decision D45; F304, F320, HR-295).
 -- Each query matches one kind by an id range (an exact id has id_lo =
 -- id_hi; an id prefix of at least 8 hex digits spans the ids that start
--- with it) or, for kinds with names, by an escaped case-insensitive LIKE on
--- the name (contains is '%<escaped text>%', '' when unused). Rows outside
+-- with it) or, for kinds with names, first by a name prefix (name_lo..name_hi,
+-- byte-wise, served by the lower(name) text_pattern_ops indexes of migration
+-- 00147), then, only to fill the limit, by an escaped case-insensitive LIKE
+-- anywhere in the name (contains is '%<escaped text>%'; '' or name_hi ''
+-- leaves that match out). Rows outside
 -- the viewer's scope are filtered before the limit, and total counts only
 -- the rows in scope, so hidden records never show in matches or counts.
 -- Every row has the same columns: id, label, state, at, total.
@@ -16,6 +19,7 @@ FROM pc.agents a
 WHERE a.org_id = sqlc.arg(org_id)
   AND (sqlc.arg(all_agents)::boolean OR a.id = ANY (sqlc.arg(agents)::uuid[]))
   AND ((sqlc.narg(id_lo)::uuid IS NOT NULL AND a.id BETWEEN sqlc.narg(id_lo)::uuid AND sqlc.narg(id_hi)::uuid)
+       OR (sqlc.arg(name_hi)::text <> '' AND lower(a.name) ~>=~ sqlc.arg(name_lo)::text AND lower(a.name) ~<=~ sqlc.arg(name_hi)::text)
        OR (sqlc.arg(contains)::text <> '' AND lower(a.name) LIKE sqlc.arg(contains)::text ESCAPE '\'))
 ORDER BY lower(a.name) = sqlc.arg(lowered)::text DESC, starts_with(lower(a.name), sqlc.arg(lowered)::text) DESC, a.name, a.id
 LIMIT sqlc.arg(page_limit);
@@ -25,6 +29,7 @@ SELECT c.id, c.name::text AS label, c.state, c.created_at AS at, count(*) OVER (
 FROM pc.connections c
 WHERE c.org_id = sqlc.arg(org_id)
   AND ((sqlc.narg(id_lo)::uuid IS NOT NULL AND c.id BETWEEN sqlc.narg(id_lo)::uuid AND sqlc.narg(id_hi)::uuid)
+       OR (sqlc.arg(name_hi)::text <> '' AND lower(c.name) ~>=~ sqlc.arg(name_lo)::text AND lower(c.name) ~<=~ sqlc.arg(name_hi)::text)
        OR (sqlc.arg(contains)::text <> '' AND lower(c.name) LIKE sqlc.arg(contains)::text ESCAPE '\'))
 ORDER BY lower(c.name) = sqlc.arg(lowered)::text DESC, starts_with(lower(c.name), sqlc.arg(lowered)::text) DESC, c.name, c.id
 LIMIT sqlc.arg(page_limit);
@@ -35,6 +40,7 @@ FROM pc.cases c
 WHERE c.org_id = sqlc.arg(org_id)
   AND (sqlc.arg(all_agents)::boolean OR pc.case_within(c.org_id, c.id, sqlc.arg(agents)::uuid[]))
   AND ((sqlc.narg(id_lo)::uuid IS NOT NULL AND c.id BETWEEN sqlc.narg(id_lo)::uuid AND sqlc.narg(id_hi)::uuid)
+       OR (sqlc.arg(name_hi)::text <> '' AND lower(c.title) ~>=~ sqlc.arg(name_lo)::text AND lower(c.title) ~<=~ sqlc.arg(name_hi)::text)
        OR (sqlc.arg(contains)::text <> '' AND lower(c.title) LIKE sqlc.arg(contains)::text ESCAPE '\'))
 ORDER BY lower(c.title) = sqlc.arg(lowered)::text DESC, starts_with(lower(c.title), sqlc.arg(lowered)::text) DESC, c.title, c.id
 LIMIT sqlc.arg(page_limit);
@@ -50,6 +56,7 @@ WHERE i.org_id = sqlc.arg(org_id)
                            WHERE a.org_id = i.org_id AND a.incident_id = i.id AND s ->> 'type' = 'agent'
                              AND NOT (s ->> 'id') = ANY (sqlc.arg(agents)::uuid[]::text[]))))
   AND ((sqlc.narg(id_lo)::uuid IS NOT NULL AND i.id BETWEEN sqlc.narg(id_lo)::uuid AND sqlc.narg(id_hi)::uuid)
+       OR (sqlc.arg(name_hi)::text <> '' AND lower(i.title) ~>=~ sqlc.arg(name_lo)::text AND lower(i.title) ~<=~ sqlc.arg(name_hi)::text)
        OR (sqlc.arg(contains)::text <> '' AND lower(i.title) LIKE sqlc.arg(contains)::text ESCAPE '\'))
 ORDER BY lower(i.title) = sqlc.arg(lowered)::text DESC, starts_with(lower(i.title), sqlc.arg(lowered)::text) DESC, i.title, i.id
 LIMIT sqlc.arg(page_limit);
@@ -63,6 +70,7 @@ WHERE a.org_id = sqlc.arg(org_id)
            AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(a.subjects) s
                            WHERE s ->> 'type' = 'agent' AND NOT (s ->> 'id') = ANY (sqlc.arg(agents)::uuid[]::text[]))))
   AND ((sqlc.narg(id_lo)::uuid IS NOT NULL AND a.id BETWEEN sqlc.narg(id_lo)::uuid AND sqlc.narg(id_hi)::uuid)
+       OR (sqlc.arg(name_hi)::text <> '' AND lower(a.title) ~>=~ sqlc.arg(name_lo)::text AND lower(a.title) ~<=~ sqlc.arg(name_hi)::text)
        OR (sqlc.arg(contains)::text <> '' AND lower(a.title) LIKE sqlc.arg(contains)::text ESCAPE '\'))
 ORDER BY lower(a.title) = sqlc.arg(lowered)::text DESC, starts_with(lower(a.title), sqlc.arg(lowered)::text) DESC, a.title, a.id
 LIMIT sqlc.arg(page_limit);
@@ -72,6 +80,7 @@ SELECT k.id, k.name::text AS label, ''::text AS state, k.created_at AS at, count
 FROM pc.tool_packages k
 WHERE k.org_id = sqlc.arg(org_id)
   AND ((sqlc.narg(id_lo)::uuid IS NOT NULL AND k.id BETWEEN sqlc.narg(id_lo)::uuid AND sqlc.narg(id_hi)::uuid)
+       OR (sqlc.arg(name_hi)::text <> '' AND lower(k.name) ~>=~ sqlc.arg(name_lo)::text AND lower(k.name) ~<=~ sqlc.arg(name_hi)::text)
        OR (sqlc.arg(contains)::text <> '' AND lower(k.name) LIKE sqlc.arg(contains)::text ESCAPE '\'))
 ORDER BY lower(k.name) = sqlc.arg(lowered)::text DESC, starts_with(lower(k.name), sqlc.arg(lowered)::text) DESC, k.name, k.id
 LIMIT sqlc.arg(page_limit);
@@ -81,6 +90,7 @@ SELECT g.id, g.name::text AS label, g.state, g.created_at AS at, count(*) OVER (
 FROM pc.gateways g
 WHERE g.org_id = sqlc.arg(org_id)
   AND ((sqlc.narg(id_lo)::uuid IS NOT NULL AND g.id BETWEEN sqlc.narg(id_lo)::uuid AND sqlc.narg(id_hi)::uuid)
+       OR (sqlc.arg(name_hi)::text <> '' AND lower(g.name) ~>=~ sqlc.arg(name_lo)::text AND lower(g.name) ~<=~ sqlc.arg(name_hi)::text)
        OR (sqlc.arg(contains)::text <> '' AND lower(g.name) LIKE sqlc.arg(contains)::text ESCAPE '\'))
 ORDER BY lower(g.name) = sqlc.arg(lowered)::text DESC, starts_with(lower(g.name), sqlc.arg(lowered)::text) DESC, g.name, g.id
 LIMIT sqlc.arg(page_limit);
@@ -90,6 +100,7 @@ SELECT s.id, s.name::text AS label, s.state, s.created_at AS at, count(*) OVER (
 FROM pc.service_accounts s
 WHERE s.org_id = sqlc.arg(org_id)
   AND ((sqlc.narg(id_lo)::uuid IS NOT NULL AND s.id BETWEEN sqlc.narg(id_lo)::uuid AND sqlc.narg(id_hi)::uuid)
+       OR (sqlc.arg(name_hi)::text <> '' AND lower(s.name) ~>=~ sqlc.arg(name_lo)::text AND lower(s.name) ~<=~ sqlc.arg(name_hi)::text)
        OR (sqlc.arg(contains)::text <> '' AND lower(s.name) LIKE sqlc.arg(contains)::text ESCAPE '\'))
 ORDER BY lower(s.name) = sqlc.arg(lowered)::text DESC, starts_with(lower(s.name), sqlc.arg(lowered)::text) DESC, s.name, s.id
 LIMIT sqlc.arg(page_limit);
@@ -102,6 +113,8 @@ SELECT u.id, (CASE WHEN u.display_name <> '' THEN u.display_name ELSE u.email EN
 FROM pc.users u
 WHERE u.org_id = sqlc.arg(org_id)
   AND ((sqlc.narg(id_lo)::uuid IS NOT NULL AND u.id BETWEEN sqlc.narg(id_lo)::uuid AND sqlc.narg(id_hi)::uuid)
+       OR (sqlc.arg(name_hi)::text <> '' AND (lower(u.display_name) ~>=~ sqlc.arg(name_lo)::text AND lower(u.display_name) ~<=~ sqlc.arg(name_hi)::text
+                                       OR lower(u.email) ~>=~ sqlc.arg(name_lo)::text AND lower(u.email) ~<=~ sqlc.arg(name_hi)::text))
        OR (sqlc.arg(contains)::text <> '' AND (lower(u.display_name) LIKE sqlc.arg(contains)::text ESCAPE '\'
                                                OR lower(u.email) LIKE sqlc.arg(contains)::text ESCAPE '\')))
 ORDER BY (lower(u.display_name) = sqlc.arg(lowered)::text OR lower(u.email) = sqlc.arg(lowered)::text) DESC,
@@ -177,6 +190,7 @@ SELECT a.id, a.name::text AS label, a.state, a.created_at AS at, count(*) OVER (
 FROM pc.automations a
 WHERE a.org_id = sqlc.arg(org_id)
   AND ((sqlc.narg(id_lo)::uuid IS NOT NULL AND a.id BETWEEN sqlc.narg(id_lo)::uuid AND sqlc.narg(id_hi)::uuid)
+       OR (sqlc.arg(name_hi)::text <> '' AND lower(a.name) ~>=~ sqlc.arg(name_lo)::text AND lower(a.name) ~<=~ sqlc.arg(name_hi)::text)
        OR (sqlc.arg(contains)::text <> '' AND lower(a.name) LIKE sqlc.arg(contains)::text ESCAPE '\'))
 ORDER BY lower(a.name) = sqlc.arg(lowered)::text DESC, starts_with(lower(a.name), sqlc.arg(lowered)::text) DESC, a.name, a.id
 LIMIT sqlc.arg(page_limit);

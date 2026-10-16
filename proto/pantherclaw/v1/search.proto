@@ -483,6 +483,9 @@ message FindKindResult {
   bool count_capped = 4;
   string scope_permission = 5;
   bool scope_whole = 6;
+  // Name prefixes filled the limit: count covers ids and name prefixes
+  // only, not names that contain the text elsewhere.
+  bool count_prefix_only = 7;
 }
 
 // FindResponse lists the matches of each kind the caller may read; kinds

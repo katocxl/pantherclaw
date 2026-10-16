@@ -82,8 +82,10 @@ type findRow struct {
 type findArgs struct {
 	lo, hi   *ids.UUID
 	contains string
-	lowered  string
-	limit    int32
+	// nameLo..nameHi is the name-prefix range ("" leaves it out).
+	nameLo, nameHi string
+	lowered        string
+	limit          int32
 }
 
 // finder matches one kind. org: the permission is read at the org (all or
@@ -108,56 +110,56 @@ var finders = map[FindKind]finder{
 	FindAgents: {td.PermAgentRead, false, true, "agent", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, sc Scope, a findArgs) ([]findRow, error) {
 		rows, err := q.FindAgents(ctx, dbq.FindAgentsParams{
 			OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
-			IDLo: a.lo, IDHi: a.hi, Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+			IDLo: a.lo, IDHi: a.hi, Contains: a.contains, NameLo: a.nameLo, NameHi: a.nameHi, Lowered: a.lowered, PageLimit: a.limit,
 		})
 		return convert(rows, func(r dbq.FindAgentsRow) findRow { return findRow(r) }), err
 	}},
 	FindConnections: {td.PermConnectionRead, true, true, "connection", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, _ Scope, a findArgs) ([]findRow, error) {
 		rows, err := q.FindConnections(ctx, dbq.FindConnectionsParams{
 			OrgID: c.Org, IDLo: a.lo, IDHi: a.hi,
-			Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+			Contains: a.contains, NameLo: a.nameLo, NameHi: a.nameHi, Lowered: a.lowered, PageLimit: a.limit,
 		})
 		return convert(rows, func(r dbq.FindConnectionsRow) findRow { return findRow(r) }), err
 	}},
 	FindCases: {td.PermCaseRead, false, true, "case", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, sc Scope, a findArgs) ([]findRow, error) {
 		rows, err := q.FindCases(ctx, dbq.FindCasesParams{
 			OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
-			IDLo: a.lo, IDHi: a.hi, Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+			IDLo: a.lo, IDHi: a.hi, Contains: a.contains, NameLo: a.nameLo, NameHi: a.nameHi, Lowered: a.lowered, PageLimit: a.limit,
 		})
 		return convert(rows, func(r dbq.FindCasesRow) findRow { return findRow(r) }), err
 	}},
 	FindIncidents: {td.PermIncidentRead, false, true, "incident", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, sc Scope, a findArgs) ([]findRow, error) {
 		rows, err := q.FindIncidents(ctx, dbq.FindIncidentsParams{
 			OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
-			IDLo: a.lo, IDHi: a.hi, Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+			IDLo: a.lo, IDHi: a.hi, Contains: a.contains, NameLo: a.nameLo, NameHi: a.nameHi, Lowered: a.lowered, PageLimit: a.limit,
 		})
 		return convert(rows, func(r dbq.FindIncidentsRow) findRow { return findRow(r) }), err
 	}},
 	FindAlerts: {td.PermIncidentRead, false, true, "alert", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, sc Scope, a findArgs) ([]findRow, error) {
 		rows, err := q.FindAlerts(ctx, dbq.FindAlertsParams{
 			OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
-			IDLo: a.lo, IDHi: a.hi, Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+			IDLo: a.lo, IDHi: a.hi, Contains: a.contains, NameLo: a.nameLo, NameHi: a.nameHi, Lowered: a.lowered, PageLimit: a.limit,
 		})
 		return convert(rows, func(r dbq.FindAlertsRow) findRow { return findRow(r) }), err
 	}},
 	FindPackages: {td.PermPackageRead, true, true, "package", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, _ Scope, a findArgs) ([]findRow, error) {
 		rows, err := q.FindPackages(ctx, dbq.FindPackagesParams{
 			OrgID: c.Org, IDLo: a.lo, IDHi: a.hi,
-			Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+			Contains: a.contains, NameLo: a.nameLo, NameHi: a.nameHi, Lowered: a.lowered, PageLimit: a.limit,
 		})
 		return convert(rows, func(r dbq.FindPackagesRow) findRow { return findRow(r) }), err
 	}},
 	FindGateways: {td.PermGatewayRead, true, true, "gateway", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, _ Scope, a findArgs) ([]findRow, error) {
 		rows, err := q.FindGateways(ctx, dbq.FindGatewaysParams{
 			OrgID: c.Org, IDLo: a.lo, IDHi: a.hi,
-			Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+			Contains: a.contains, NameLo: a.nameLo, NameHi: a.nameHi, Lowered: a.lowered, PageLimit: a.limit,
 		})
 		return convert(rows, func(r dbq.FindGatewaysRow) findRow { return findRow(r) }), err
 	}},
 	FindServiceAccounts: {td.PermServiceAccountRead, true, true, "service_account", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, _ Scope, a findArgs) ([]findRow, error) {
 		rows, err := q.FindServiceAccounts(ctx, dbq.FindServiceAccountsParams{
 			OrgID: c.Org, IDLo: a.lo, IDHi: a.hi,
-			Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+			Contains: a.contains, NameLo: a.nameLo, NameHi: a.nameHi, Lowered: a.lowered, PageLimit: a.limit,
 		})
 		return convert(rows, func(r dbq.FindServiceAccountsRow) findRow { return findRow(r) }), err
 	}},
@@ -165,7 +167,7 @@ var finders = map[FindKind]finder{
 	FindPeople: {td.PermUserRead, true, true, "user", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, _ Scope, a findArgs) ([]findRow, error) {
 		rows, err := q.FindPeople(ctx, dbq.FindPeopleParams{
 			OrgID: c.Org, IDLo: a.lo, IDHi: a.hi,
-			Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+			Contains: a.contains, NameLo: a.nameLo, NameHi: a.nameHi, Lowered: a.lowered, PageLimit: a.limit,
 		})
 		return convert(rows, func(r dbq.FindPeopleRow) findRow { return findRow(r) }), err
 	}},
@@ -211,7 +213,7 @@ var finders = map[FindKind]finder{
 	FindAutomations: {td.PermAutomationRead, true, true, "automation", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, _ Scope, a findArgs) ([]findRow, error) {
 		rows, err := q.FindAutomations(ctx, dbq.FindAutomationsParams{
 			OrgID: c.Org, IDLo: a.lo, IDHi: a.hi,
-			Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+			Contains: a.contains, NameLo: a.nameLo, NameHi: a.nameHi, Lowered: a.lowered, PageLimit: a.limit,
 		})
 		return convert(rows, func(r dbq.FindAutomationsRow) findRow { return findRow(r) }), err
 	}},
@@ -250,7 +252,11 @@ type KindResult struct {
 	Matches []Match
 	Count   int
 	Capped  bool
-	Scope   Scope
+	// PrefixOnly: the name prefixes filled the limit, so Count covers id
+	// and name-prefix matches only; names containing the text elsewhere
+	// were not counted (D79 S3).
+	PrefixOnly bool
+	Scope      Scope
 }
 
 // FindResult is a quick find's answer. Omissions name the kinds the viewer
@@ -401,18 +407,16 @@ func (s *Service) find(ctx context.Context, c tenancy.Caller, q *dbq.Queries, te
 				Code: omissionScopeLimited, Detail: string(k) + ": only the agents where you hold " + string(f.perm),
 			})
 		}
-		a := args
-		if !f.named {
-			a.contains = ""
-		}
-		rows, err := f.run(ctx, q, c, sc, a)
+		rows, total, prefixOnly, err := findKind(ctx, f, q, c, sc, args)
 		if err != nil {
 			return FindResult{}, err
 		}
-		kr := KindResult{Kind: k, Scope: sc, Matches: []Match{}}
+		kr := KindResult{
+			Kind: k, Scope: sc, Matches: []Match{}, Count: int(min(total, MaxCount)), Capped: total > MaxCount,
+			PrefixOnly: prefixOnly,
+		}
+		a := args
 		for _, r := range rows {
-			kr.Count = int(min(r.Total, MaxCount))
-			kr.Capped = r.Total > MaxCount
 			kr.Matches = append(kr.Matches, Match{
 				Kind: k, ID: r.ID.String(), Label: r.Label, State: r.State, Time: r.At, MatchedBy: matchedBy(r, a, exact),
 				Evidence: []string{f.evidence + ":" + r.ID.String()},
@@ -442,4 +446,46 @@ func exactMatches(ctx context.Context, s *Service, c tenancy.Caller, tx db.Tenan
 		}
 	}
 	return out, nil
+}
+
+// findKind matches one kind: ids and name prefixes first (index-served);
+// only when they leave the limit unfilled does it match names containing
+// the text anywhere, which scans the kind's rows in the viewer's scope
+// (D79 S3). total counts the matches the last pass looked for.
+func findKind(ctx context.Context, f finder, q *dbq.Queries, c tenancy.Caller, sc Scope, args findArgs) ([]findRow, int64, bool, error) {
+	if !f.named {
+		a := args
+		a.contains, a.nameLo, a.nameHi = "", "", ""
+		rows, err := f.run(ctx, q, c, sc, a)
+		return rows, total(rows), false, err
+	}
+	pre := args
+	pre.contains, pre.nameLo, pre.nameHi = "", args.lowered, args.lowered+string(utf8.MaxRune)
+	rows, err := f.run(ctx, q, c, sc, pre)
+	if err != nil || len(rows) >= int(args.limit) {
+		return rows, total(rows), err == nil, err
+	}
+	sub := args
+	sub.nameLo, sub.nameHi = "", ""
+	more, err := f.run(ctx, q, c, sc, sub)
+	if err != nil {
+		return nil, 0, false, err
+	}
+	seen := map[ids.UUID]bool{}
+	for _, r := range rows {
+		seen[r.ID] = true
+	}
+	for _, r := range more {
+		if len(rows) < int(args.limit) && !seen[r.ID] {
+			rows = append(rows, r)
+		}
+	}
+	return rows, total(more), false, nil
+}
+
+func total(rows []findRow) int64 {
+	if len(rows) == 0 {
+		return 0
+	}
+	return rows[0].Total
 }
