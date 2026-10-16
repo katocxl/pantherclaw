@@ -17,6 +17,12 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+
+	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -129,7 +135,7 @@ func mcpCallTo(conn, tool, input string) runnerCall {
 // Each HTTP call is a signed request in the launch's run with its own
 // action id; the runner stops at the first denied call and sends nothing
 // after it.
-func TestAutomationRunner_HTTPCallsStopAtTheFirstDenial(t *testing.T) {
+func TestHR285_EachCallIsSignedInTheLaunchRunAndStopsAtADenial(t *testing.T) {
 	g := newFakeGateway(t)
 	g.answer = func(w http.ResponseWriter, r *http.Request, _ []byte, n int) {
 		switch n {
@@ -152,6 +158,7 @@ func TestAutomationRunner_HTTPCallsStopAtTheFirstDenial(t *testing.T) {
 	want := []callResult{
 		{Index: 0, Status: callSucceeded, TransactionID: "tx-1"},
 		{Index: 1, Status: callDenied, TransactionID: "tx-2", ErrorCode: "refund_over_limit"},
+		{Index: 2, Status: callSkipped},
 	}
 	if !equalResults(results, want) {
 		t.Fatalf("results = %+v, want %+v", results, want)
@@ -198,7 +205,7 @@ func TestAutomationRunner_HeldCallStops(t *testing.T) {
 				call = mcpCallTo("payments", "refund", `{}`)
 			}
 			results, outcome := c.runCalls(t.Context(), []runnerCall{call, call})
-			want := []callResult{{Index: 0, Status: callHeld, TransactionID: "tx-h", ErrorCode: "approval_required"}}
+			want := []callResult{{Index: 0, Status: callHeld, TransactionID: "tx-h", ErrorCode: "approval_required"}, {Status: callSkipped}}
 			if outcome != launchFailed || !equalResults(results, want) {
 				t.Fatalf("results = %+v %s, want %+v FAILED", results, outcome, want)
 			}
@@ -212,7 +219,7 @@ func TestAutomationRunner_HeldCallStops(t *testing.T) {
 // An unknown outcome is reported UNKNOWN and never sent again: the
 // gateway's "uncertain" class, an answer that did not come from the
 // dispatch path, and a connection that broke after the request left.
-func TestAutomationRunner_UnknownOutcomesAreNeverRetried(t *testing.T) {
+func TestHR285_UnknownOutcomesAreNeverRetried(t *testing.T) {
 	cases := map[string]struct {
 		face   string
 		answer func(w http.ResponseWriter, r *http.Request, b []byte)
@@ -245,7 +252,7 @@ func TestAutomationRunner_UnknownOutcomesAreNeverRetried(t *testing.T) {
 				call = mcpCallTo("payments", "refund", `{"amount":1}`)
 			}
 			results, outcome := c.runCalls(t.Context(), []runnerCall{call, call})
-			if outcome != launchFailed || len(results) != 1 || results[0].Status != callUnknown || results[0].ErrorCode != tc.code {
+			if outcome != launchFailed || len(results) != 2 || results[0].Status != callUnknown || results[0].ErrorCode != tc.code || results[1].Status != callSkipped {
 				t.Fatalf("results = %+v %s, want one UNKNOWN %s", results, outcome, tc.code)
 			}
 			if reqs, _ := g.calls(); len(reqs) != 1 {
@@ -410,7 +417,7 @@ func TestAutomationRunner_GetInputIsTheQuery(t *testing.T) {
 }
 
 // A launch whose declared calls do not all check runs none of them.
-func TestAutomationRunner_InvalidCallsRunNothing(t *testing.T) {
+func TestHR285_OnlyWellFormedDeclaredCallsRun(t *testing.T) {
 	ok := httpCallTo("payments", http.MethodPost, "/v1/refunds", `{}`)
 	tooMany := make([]runnerCall, runnerMaxCalls+1)
 	for i := range tooMany {
@@ -437,7 +444,7 @@ func TestAutomationRunner_InvalidCallsRunNothing(t *testing.T) {
 			}
 			c, _ := newCallRunner(t, g)
 			results, outcome := c.runCalls(t.Context(), calls)
-			if outcome != launchFailed || len(results) != 1 || results[0].Status != callFailed {
+			if outcome != launchFailed || !oneFailedRestSkipped(results, len(calls)) {
 				t.Fatalf("results = %+v %s", results, outcome)
 			}
 			if all, _ := g.seen(); len(all) != 0 {
@@ -559,4 +566,213 @@ func equalResults(got, want []callResult) bool {
 		}
 	}
 	return true
+}
+
+// A target answer the gateway passes through says nothing definite when
+// it is a 5xx or the gateway recorded the outcome UNKNOWN (D82): the call
+// is UNKNOWN and never sent again. A 4xx with a known outcome is FAILED.
+func TestAutomationRunner_TargetAnswersFollowTheRecordedOutcome(t *testing.T) {
+	cases := map[string]struct {
+		status  int
+		outcome string
+		want    callStatus
+	}{
+		"502 unknown":      {http.StatusBadGateway, "UNKNOWN", callUnknown},
+		"500 no outcome":   {http.StatusInternalServerError, "", callUnknown},
+		"409 unknown":      {http.StatusConflict, "UNKNOWN", callUnknown},
+		"409 failed":       {http.StatusConflict, "FAILED", callFailed},
+		"200 confirmed":    {http.StatusOK, "CONFIRMED", callSucceeded},
+		"302 not followed": {http.StatusFound, "", callUnknown},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			g := newFakeGateway(t)
+			g.answer = func(w http.ResponseWriter, _ *http.Request, _ []byte, _ int) {
+				hdr := map[string]string{"PC-Decision": "ALLOW", "PC-Transaction-Id": "tx"}
+				if tc.outcome != "" {
+					hdr["PC-Outcome"] = tc.outcome
+				}
+				if tc.status == http.StatusFound {
+					hdr["Location"] = "https://elsewhere.example/x"
+				}
+				gatewayJSON(w, tc.status, hdr, `{}`)
+			}
+			c, _ := newCallRunner(t, g)
+			results, _ := c.runCalls(t.Context(), []runnerCall{httpCallTo("payments", http.MethodPost, "/v1/refunds", `{}`), httpCallTo("payments", http.MethodPost, "/v1/refunds", `{}`)})
+			if results[0].Status != tc.want {
+				t.Fatalf("status = %s, want %s", results[0].Status, tc.want)
+			}
+			if reqs, _ := g.calls(); tc.want != callSucceeded && len(reqs) != 1 {
+				t.Fatalf("%d calls reached the gateway, want 1", len(reqs))
+			}
+		})
+	}
+}
+
+// A refusal or tool error whose recorded outcome is UNKNOWN is UNKNOWN
+// whatever its class, and a tool error without PantherClaw's facts has no
+// definite outcome (the gateway puts them on every error it makes after
+// dispatch; JSON-RPC errors are all made before it, gateway/mcp).
+func TestAutomationRunner_UncertainToolErrorsAreUnknown(t *testing.T) {
+	cases := map[string]struct {
+		face   string
+		answer func(w http.ResponseWriter, b []byte)
+	}{
+		"http class with unknown outcome": {faceHTTP, func(w http.ResponseWriter, _ []byte) {
+			gatewayJSON(w, http.StatusBadGateway, nil, `{"error_class":"tool_failed","error":"target_refused","outcome":"UNKNOWN"}`)
+		}},
+		"mcp class with unknown outcome": {faceMCP, func(w http.ResponseWriter, b []byte) {
+			mcpResult(w, b, `{"content":[],"isError":true,"_meta":{"io.pantherclaw/error":{"error_class":"enforcement_failed","error":"x","outcome":"UNKNOWN"}}}`)
+		}},
+		"mcp tool error without facts": {faceMCP, func(w http.ResponseWriter, b []byte) {
+			mcpResult(w, b, `{"content":[{"type":"text","text":"boom"}],"isError":true}`)
+		}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			g := newFakeGateway(t)
+			g.answer = func(w http.ResponseWriter, _ *http.Request, b []byte, _ int) { tc.answer(w, b) }
+			c, _ := newCallRunner(t, g)
+			call := httpCallTo("payments", http.MethodPost, "/v1/refunds", `{}`)
+			if tc.face == faceMCP {
+				call = mcpCallTo("payments", "refund", `{}`)
+			}
+			results, _ := c.runCalls(t.Context(), []runnerCall{call, call})
+			if len(results) != 2 || results[0].Status != callUnknown || results[1].Status != callSkipped {
+				t.Fatalf("results = %+v, want one UNKNOWN", results)
+			}
+			if reqs, _ := g.calls(); len(reqs) != 1 {
+				t.Fatalf("%d calls reached the gateway, want 1", len(reqs))
+			}
+		})
+	}
+}
+
+// The runner's log shows method, path and status, never a rendered query
+// or input (D82 R5), and says when parameter headers cannot be mirrored
+// (R6).
+func TestAutomationRunner_LogsCarryNoInputs(t *testing.T) {
+	g := newFakeGateway(t)
+	g.tools = `[{"name":"refund","inputSchema":{"type":"object","properties":{"charge":{"type":"string","x-mcp-header":"Charge"}}}}]`
+	g.answer = hangUp2
+	c, _ := newCallRunner(t, g)
+	var log bytes.Buffer
+	c.log = &log
+	c.runCalls(t.Context(), []runnerCall{httpCallTo("payments", http.MethodGet, "/v1/charges", `{"customer":"secret-customer-42"}`)})
+	c.runCalls(t.Context(), []runnerCall{mcpCallTo("payments", "refund", `{"charge":{"secret":1}}`)})
+	got := log.String()
+	if strings.Contains(got, "secret") {
+		t.Fatalf("the log carries inputs:\n%s", got)
+	}
+	if !strings.Contains(got, "GET /payments/v1/charges") || !strings.Contains(got, "cannot be mirrored") {
+		t.Fatalf("log = %s", got)
+	}
+}
+
+func hangUp2(w http.ResponseWriter, r *http.Request, b []byte, _ int) { hangUp(w, r, b) }
+
+// --gateway is https, or http on this machine only with --dev-insecure
+// (D82 R4).
+func TestHR285_TheGatewayMustBeHTTPS(t *testing.T) {
+	for raw, want := range map[string]bool{
+		"https://gw.example.com":   true,
+		"https://gw.example.com/":  true,
+		"http://gw.example.com":    false,
+		"http://127.0.0.1:8443":    false,
+		"https://gw.example.com/x": false,
+		"https://u@gw.example.com": false,
+	} {
+		if _, err := checkGateway(raw, false); (err == nil) != want {
+			t.Errorf("checkGateway(%q) err = %v", raw, err)
+		}
+	}
+	if _, err := checkGateway("http://127.0.0.1:8443", true); err != nil {
+		t.Errorf("loopback with --dev-insecure: %v", err)
+	}
+	if _, err := checkGateway("http://gw.example.com", true); err == nil {
+		t.Error("--dev-insecure allowed a remote http gateway")
+	}
+}
+
+// A claim with fields the runner does not know, or a call it cannot read,
+// runs nothing: the launch is returned without a run and completes FAILED
+// (D82 R4).
+func TestHR285_ClaimsTheRunnerCannotReadRunNothing(t *testing.T) {
+	launch := ids.NewV7().String()
+	ok := &pantherclawv1.ClaimLaunchResponse{
+		Claimed: true, LaunchId: launch, RunId: ids.NewV7().String(),
+		Calls: []*pantherclawv1.AutomationRunnerCall{{
+			ConnectionId: ids.NewV7().String(), Face: "HTTP", Method: "POST", Path: "/v1/refunds",
+			Input: map[string]string{"a": "1", "b": `"x"`, "c": "12.50"},
+		}},
+	}
+	// The gateway routes by connection name (D83); a claim without one
+	// cannot be performed.
+	named := true
+	if fd := ok.Calls[0].ProtoReflect().Descriptor().Fields().ByName("connection_name"); fd != nil {
+		ok.Calls[0].ProtoReflect().Set(fd, protoreflect.ValueOfString("payments"))
+	} else {
+		named = false
+	}
+	unnamed := proto.Clone(ok).(*pantherclawv1.ClaimLaunchResponse)
+	if fd := unnamed.Calls[0].ProtoReflect().Descriptor().Fields().ByName("connection_name"); fd != nil {
+		unnamed.Calls[0].ProtoReflect().Clear(fd)
+	}
+	unknown := proto.Clone(ok).(*pantherclawv1.ClaimLaunchResponse)
+	unknown.ProtoReflect().SetUnknown(protowire.AppendVarint(protowire.AppendTag(nil, 99, protowire.VarintType), 1))
+	badCall := proto.Clone(ok).(*pantherclawv1.ClaimLaunchResponse)
+	badCall.Calls[0].ProtoReflect().SetUnknown(protowire.AppendVarint(protowire.AppendTag(nil, 99, protowire.VarintType), 1))
+	notJSON := proto.Clone(ok).(*pantherclawv1.ClaimLaunchResponse)
+	notJSON.Calls[0].Input["b"] = "x"
+	for name, tc := range map[string]struct {
+		res     *pantherclawv1.ClaimLaunchResponse
+		wantRun bool
+	}{
+		"ok": {ok, named}, "no connection name": {unnamed, false}, "unknown field": {unknown, false},
+		"unknown call field": {badCall, false}, "input not JSON": {notJSON, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			l, err := rpcLaunches{c: fakeLaunchClient{claim: tc.res}}.Claim(t.Context())
+			if err != nil || l == nil || l.ID != launch {
+				t.Fatalf("claim = %+v, %v", l, err)
+			}
+			if (l.RunID != "") != tc.wantRun {
+				t.Fatalf("run = %q", l.RunID)
+			}
+			if tc.wantRun && string(l.Calls[0].Input) != `{"a":1,"b":"x","c":12.50}` {
+				t.Fatalf("input = %s", l.Calls[0].Input)
+			}
+		})
+	}
+	if _, err := (rpcLaunches{c: fakeLaunchClient{claim: &pantherclawv1.ClaimLaunchResponse{Claimed: true}}}).Claim(t.Context()); err == nil {
+		t.Fatal("a claim without a launch id was accepted")
+	}
+}
+
+// fakeLaunchClient answers ClaimLaunch with claim and records completions.
+type fakeLaunchClient struct {
+	pantherclawv1connect.AutomationLaunchServiceClient
+	claim *pantherclawv1.ClaimLaunchResponse
+}
+
+func (f fakeLaunchClient) ClaimLaunch(context.Context, *pantherclawv1.ClaimLaunchRequest) (*pantherclawv1.ClaimLaunchResponse, error) {
+	return f.claim, nil
+}
+
+// oneFailedRestSkipped reports whether results itemize n calls of which
+// one FAILED and none was sent.
+func oneFailedRestSkipped(results []callResult, n int) bool {
+	if len(results) != n && !(n > runnerMaxCalls && len(results) == 1) {
+		return false
+	}
+	failed := 0
+	for i, r := range results {
+		switch {
+		case r.Status == callFailed:
+			failed++
+		case r.Status != callSkipped || r.Index != i:
+			return false
+		}
+	}
+	return failed == 1
 }

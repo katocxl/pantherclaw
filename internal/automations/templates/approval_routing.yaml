@@ -1,0 +1,127 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# approval_routing (D32): a held action whose approval waits is followed up:
+# after a while its approvers are reminded, the request is escalated, and the
+# execution finishes when the request is resolved. The automation never
+# decides the request itself (HR-279).
+id: approval_routing
+title: Approval routing
+summary: >-
+  Follow up held actions: remind the approvers, escalate the request, and
+  finish when a person has resolved it.
+edition: TEAM
+params:
+  - name: purpose
+    description: What the automation is for, shown to reviewers and approvers.
+    type: string
+    pattern: '[^{}$]{1,1000}'
+    max_len: 1000
+    default: Make sure held actions are decided by reminding and escalating their approvers.
+  - name: review_by
+    description: The date (YYYY-MM-DD) by which the owner reviews the automation again; at most 90 days ahead.
+    type: string
+    format: date
+    pattern: '[0-9]{4}-[0-9]{2}-[0-9]{2}'
+    max_len: 10
+    example: "2026-12-31"
+  - name: remind_after
+    description: How long after the hold the approvers are reminded.
+    type: enum
+    values: [15m, 1h, 4h, 24h]
+    default: 1h
+  - name: resolution_timeout
+    description: How long after the escalation the execution waits for the request to be resolved.
+    type: enum
+    values: [1h, 4h, 24h]
+    default: 24h
+
+definition:
+  apiVersion: automations.pantherclaw.dev/v1
+  kind: Automation
+  purpose: "${purpose}"
+  work_kind: SECURITY_WORK
+  review_by: "${review_by}"
+  when:
+    event:
+      on: action.held
+      params:
+        txn: {from: subjects.transaction, type: uuid}
+    dedupe:
+      key: "{{params.txn}}"
+      window: 3d
+  authority:
+    principal: self
+    platform:
+      - step: remind_approvers
+        scopes: [TRIGGER_REQUEST]
+      - step: escalate_approval
+        scopes: [TRIGGER_REQUEST]
+      - step: wait_resolution
+        scopes: [TRIGGER_REQUEST]
+  do:
+    - id: pause
+      step: wait
+      with:
+        duration: "${remind_after}"
+    - id: remind
+      step: remind_approvers
+      with:
+        request: TRIGGER_REQUEST
+    - id: escalate
+      step: escalate_approval
+      with:
+        request: TRIGGER_REQUEST
+    - id: resolved
+      step: wait_resolution
+      with:
+        request: TRIGGER_REQUEST
+      timeout: "${resolution_timeout}"
+  finish_when:
+    - step: resolved
+      condition: APPROVAL_RESOLVED
+  limits:
+    deadline: 2d
+
+tests:
+  - name: the request is resolved
+    kind: NORMAL
+    trigger:
+      params: {txn: 0192f000-0000-7000-8000-0000000000e1}
+    stubs:
+      remind: [{state: DONE, effect: CHANGED, refs: [approval_request]}]
+      escalate: [{state: DONE, effect: CHANGED, refs: [approval_request]}]
+      resolved: [{state: WAITING}, {state: DONE, refs: [approval_request]}]
+    expect:
+      state: SUCCEEDED
+      steps: {pause: DONE, remind: DONE, escalate: DONE, resolved: DONE}
+  - name: the reminder is refused
+    kind: DENIED
+    trigger:
+      params: {txn: 0192f000-0000-7000-8000-0000000000e2}
+    stubs:
+      remind: [{state: FAILED, reason: AUTHORITY_CHANGED}]
+    expect:
+      state: FAILED
+      reason: AUTHORITY_CHANGED
+      steps: {remind: FAILED}
+  - name: nobody resolves the request in time
+    kind: TIMEOUT
+    trigger:
+      params: {txn: 0192f000-0000-7000-8000-0000000000e3}
+    stubs:
+      remind: [{state: DONE, effect: CHANGED, refs: [approval_request]}]
+      escalate: [{state: DONE, effect: CHANGED, refs: [approval_request]}]
+      resolved: [{state: WAITING}]
+    expect:
+      state: PARTIALLY_COMPLETED
+      reason: TIMEOUT
+      steps: {escalate: DONE, resolved: FAILED}
+  - name: the same hold twice starts one execution
+    kind: DUPLICATE
+    trigger:
+      params: {txn: 0192f000-0000-7000-8000-0000000000e4}
+    stubs:
+      resolved: [{state: DONE, refs: [approval_request]}]
+    expect:
+      state: SUCCEEDED

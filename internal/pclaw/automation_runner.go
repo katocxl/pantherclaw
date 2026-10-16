@@ -6,9 +6,11 @@ package pclaw
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"mime"
@@ -16,8 +18,17 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"google.golang.org/protobuf/reflect/protoreflect"
+
+	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	"github.com/katocxl/pantherclaw/internal/identity/pap"
+	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/mcpheader"
 )
@@ -86,6 +97,9 @@ const (
 	// callUnknown: the gateway may have acted and the outcome is unknown;
 	// never sent again (reconciliation follows).
 	callUnknown callStatus = "UNKNOWN"
+	// callSkipped: declared after the call that stopped the launch, or in a
+	// list that did not check; never sent (D83).
+	callSkipped callStatus = "SKIPPED"
 )
 
 // callResult is one call's result for CompleteLaunch.
@@ -123,16 +137,19 @@ type callRunner struct {
 }
 
 // runCalls performs calls in order and stops at the first that did not
-// succeed. It returns the results of the calls it attempted and the
-// launch's outcome. A list that does not validate runs nothing.
+// succeed. It returns a result for every declared call (SKIPPED for those
+// it never sent, D83) and the launch's outcome. A list that does not
+// check runs nothing.
 func (c *callRunner) runCalls(ctx context.Context, calls []runnerCall) ([]callResult, launchOutcome) {
 	if len(calls) > runnerMaxCalls {
-		return []callResult{{Index: runnerMaxCalls, Status: callFailed, ErrorCode: "too_many_calls"}}, launchFailed
+		return []callResult{{Index: 0, Status: callFailed, ErrorCode: "too_many_calls"}}, launchFailed
 	}
 	for i, call := range calls {
 		if err := checkCall(call); err != nil {
 			c.logf("call %d: %v", i, err)
-			return []callResult{{Index: i, Status: callFailed, ErrorCode: "invalid_call"}}, launchFailed
+			results := skipped(len(calls))
+			results[i] = callResult{Index: i, Status: callFailed, ErrorCode: "invalid_call"}
+			return results, launchFailed
 		}
 	}
 	results := make([]callResult, 0, len(calls))
@@ -145,6 +162,7 @@ func (c *callRunner) runCalls(ctx context.Context, calls []runnerCall) ([]callRe
 		}
 		results = append(results, r)
 		if r.Status != callSucceeded {
+			results = append(results, skipped(len(calls))[i+1:]...)
 			break
 		}
 	}
@@ -245,7 +263,7 @@ func (c *callRunner) httpCall(ctx context.Context, i int, call runnerCall) callR
 	if call.Method == http.MethodGet || call.Method == http.MethodDelete {
 		q, err := queryOf(call.Input)
 		if err != nil {
-			c.logf("call %d: %v", i, err)
+			c.logf("call %d: %s /%s%s: the input is not a flat query", i, call.Method, call.Connection, call.Path)
 			return callResult{Index: i, Status: callFailed, ErrorCode: "invalid_call"}
 		}
 		if q != "" {
@@ -260,7 +278,7 @@ func (c *callRunner) httpCall(ctx context.Context, i int, call runnerCall) callR
 	}
 	req, err := http.NewRequestWithContext(ctx, call.Method, target, body)
 	if err != nil {
-		c.logf("call %d: %v", i, err)
+		c.logf("call %d: %s /%s%s: the request cannot be built", i, call.Method, call.Connection, call.Path)
 		return callResult{Index: i, Status: callFailed, ErrorCode: "invalid_call"}
 	}
 	if body != nil {
@@ -272,7 +290,7 @@ func (c *callRunner) httpCall(ctx context.Context, i int, call runnerCall) callR
 	status, header, b, err := c.send(req)
 	if err != nil {
 		// The request may have reached the gateway: never sent again.
-		c.logf("call %d: %v", i, err)
+		c.logf("call %d: %s /%s%s: %v", i, call.Method, call.Connection, call.Path, transportError(err))
 		return callResult{Index: i, Status: callUnknown, ErrorCode: "gateway_unreachable"}
 	}
 	return classifyHTTP(i, status, header, b)
@@ -312,6 +330,7 @@ type httpRefusal struct {
 	ErrorClass    string `json:"error_class"`
 	Error         string `json:"error"`
 	TransactionID string `json:"transaction_id"`
+	Outcome       string `json:"outcome"`
 }
 
 // classifyHTTP reads the HTTP face's answer: a target answer carries
@@ -320,11 +339,19 @@ type httpRefusal struct {
 func classifyHTTP(i, status int, header http.Header, body []byte) callResult {
 	r := callResult{Index: i, TransactionID: header.Get("PC-Transaction-Id")}
 	if header.Get("PC-Decision") != "" {
-		if status >= 200 && status < 300 {
-			r.Status = callSucceeded
-			return r
+		// A target's 5xx, or an outcome the gateway itself records as
+		// UNKNOWN, does not show whether the effect happened (D82).
+		r.ErrorCode = "target_status_" + strconv.Itoa(status)
+		switch {
+		case status >= 200 && status < 300:
+			r.Status, r.ErrorCode = callSucceeded, ""
+		case status >= 500 || header.Get("PC-Outcome") == outcomeUnknown:
+			r.Status = callUnknown
+		case status >= 400:
+			r.Status = callFailed
+		default:
+			r.Status = callUnknown
 		}
-		r.Status, r.ErrorCode = callFailed, "target_status_"+strconv.Itoa(status)
 		return r
 	}
 	var ref httpRefusal
@@ -333,15 +360,22 @@ func classifyHTTP(i, status int, header http.Header, body []byte) callResult {
 		if r.TransactionID == "" {
 			r.TransactionID = ref.TransactionID
 		}
-		r.Status, r.ErrorCode = statusOfClass(ref.ErrorClass), codeOf(ref.ErrorClass, ref.Error)
+		r.Status, r.ErrorCode = statusOf(ref.ErrorClass, ref.Outcome), codeOf(ref.ErrorClass, ref.Error)
 		return r
 	}
 	r.Status, r.ErrorCode = callUnknown, "unrecognized_answer"
 	return r
 }
 
-// statusOfClass maps a gateway error class (F642) to a call status.
-func statusOfClass(class string) callStatus {
+// outcomeUnknown is the gateway's UNKNOWN outcome (PC-Outcome, _meta).
+const outcomeUnknown = "UNKNOWN"
+
+// statusOf maps a gateway error class (F642) and the recorded outcome to a
+// call status: an UNKNOWN outcome is unknown whatever the class (D82).
+func statusOf(class, outcome string) callStatus {
+	if outcome == outcomeUnknown {
+		return callUnknown
+	}
 	switch class {
 	case "policy_denied":
 		return callDenied
@@ -391,10 +425,14 @@ func (c *callRunner) mcpCall(ctx context.Context, i int, call runnerCall) callRe
 		return callResult{Index: i, Status: callFailed, ErrorCode: "invalid_call"}
 	}
 	for attempt := 0; ; attempt++ {
-		mirrored, _ := mcpheader.Mirror(c.declared[call.Connection][call.Tool], args)
+		mirrored, err := mcpheader.Mirror(c.declared[call.Connection][call.Tool], args)
+		if err != nil {
+			// Sent without them: the gateway refuses before dispatch.
+			c.logf("call %d: MCP %s: the parameter headers of tool %q cannot be mirrored", i, call.Connection, call.Tool)
+		}
 		status, header, b, err := c.postMCP(ctx, call.Connection, "tools/call", call.Tool, action, mirrored, body)
 		if err != nil {
-			c.logf("call %d: %v", i, err)
+			c.logf("call %d: MCP %s %q: %v", i, call.Connection, call.Tool, transportError(err))
 			return callResult{Index: i, Status: callUnknown, ErrorCode: "gateway_unreachable"}
 		}
 		if attempt == 0 && status == http.StatusBadRequest && headerMismatch(b) {
@@ -457,7 +495,7 @@ func (c *callRunner) listTools(ctx context.Context, conn string) {
 	}
 	status, header, b, err := c.postMCP(ctx, conn, "tools/list", "", "", nil, body)
 	if err != nil || status != http.StatusOK {
-		c.logf("listing the tools of %s: HTTP %d %v", conn, status, err)
+		c.logf("listing the tools of %s: HTTP %d %v", conn, status, transportError(err))
 		return
 	}
 	for _, a := range answersOf(header, b) {
@@ -499,13 +537,15 @@ type mcpAnswer struct {
 				ErrorClass    string `json:"error_class"`
 				Error         string `json:"error"`
 				TransactionID string `json:"transaction_id"`
+				Outcome       string `json:"outcome"`
 			} `json:"io.pantherclaw/error"`
 		} `json:"_meta"`
 	} `json:"result"`
 }
 
 // classifyMCP reads the MCP face's answer to a tools/call. A JSON-RPC
-// error is a refusal made before dispatch; a tool result says what the
+// error is a refusal made before dispatch (gateway/mcp: unknown tool, no
+// run, header mismatch, a workload the Authority did not verify); a tool result says what the
 // dispatch path did in _meta. No answer to this call means the outcome is
 // unknown.
 func classifyMCP(i int, id string, header http.Header, body []byte) callResult {
@@ -528,9 +568,11 @@ func classifyMCP(i int, id string, header http.Header, body []byte) callResult {
 			return r
 		case m.Result.Meta.Error != nil:
 			e := m.Result.Meta.Error
-			return callResult{Index: i, Status: statusOfClass(e.ErrorClass), TransactionID: e.TransactionID, ErrorCode: codeOf(e.ErrorClass, e.Error)}
+			return callResult{Index: i, Status: statusOf(e.ErrorClass, e.Outcome), TransactionID: e.TransactionID, ErrorCode: codeOf(e.ErrorClass, e.Error)}
 		}
-		return callResult{Index: i, Status: callFailed, ErrorCode: "tool_error"}
+		// The gateway puts its facts on every tool error it makes after
+		// dispatch; one without them has no definite outcome.
+		return callResult{Index: i, Status: callUnknown, ErrorCode: "tool_error"}
 	}
 	return callResult{Index: i, Status: callUnknown, ErrorCode: "unrecognized_answer"}
 }
@@ -608,8 +650,12 @@ func noteOf(results []callResult, outcome launchOutcome) string {
 	if outcome == launchSucceeded || len(results) == 0 {
 		return ""
 	}
-	last := results[len(results)-1]
-	return fmt.Sprintf("stopped at call %d: %s %s", last.Index, last.Status, last.ErrorCode)
+	for _, r := range results {
+		if r.Status != callSucceeded && r.Status != callSkipped {
+			return fmt.Sprintf("stopped at call %d: %s %s", r.Index, r.Status, r.ErrorCode)
+		}
+	}
+	return ""
 }
 
 // run claims and performs launches until ctx ends, or, with once, until
@@ -645,4 +691,286 @@ func (l *launchRunner) run(ctx context.Context, once bool) error {
 		case <-time.After(l.poll):
 		}
 	}
+}
+
+// transportError is a transport error without the request URL, which can
+// carry a rendered query (D82 R5: logs show method, path and status only).
+func transportError(err error) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		return ue.Err
+	}
+	return err
+}
+
+func init() {
+	commands["automation runner"] = command{
+		usage: "automation runner --key FILE --gateway URL [--server URL] [--once] [--poll 5s] [--dev-insecure]",
+		run:   automationRunner,
+	}
+}
+
+// runnerMinPoll and runnerMaxPoll bound --poll.
+const (
+	runnerMinPoll = time.Second
+	runnerMaxPoll = 5 * time.Minute
+)
+
+func automationRunner(ctx context.Context, a *app, args []string) error {
+	fs := flag.NewFlagSet("automation runner", flag.ContinueOnError)
+	fs.SetOutput(a.stderr)
+	keyFile := fs.String("key", "", "the enrolled runner workload's key file")
+	gateway := fs.String("gateway", "", "the gateway's public URL")
+	server := fs.String("server", "", "the PantherClaw server (default: the key file's)")
+	once := fs.Bool("once", false, "perform the waiting launches, then exit")
+	poll := fs.Duration("poll", 5*time.Second, "how often to look for launches when idle")
+	devInsecure := fs.Bool("dev-insecure", false, "allow an http gateway on this machine (development only)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *keyFile == "" || *gateway == "" || fs.NArg() != 0 || *poll < runnerMinPoll || *poll > runnerMaxPoll {
+		return errUsage
+	}
+	gw, err := checkGateway(*gateway, *devInsecure)
+	if err != nil {
+		return err
+	}
+	kf, err := workloadclient.ReadKeyFile(*keyFile)
+	if err != nil {
+		return err
+	}
+	srv := kf.Server
+	if *server != "" {
+		srv = *server
+	}
+	if kf.Identifier == "" || srv == "" {
+		return errors.New("the key file is not enrolled yet: run pclaw workload enroll")
+	}
+	key, err := kf.Key()
+	if err != nil {
+		return err
+	}
+	token, err := a.runnerTokens(ctx, srv, kf)
+	if err != nil {
+		return err
+	}
+	src, err := a.launchClient(srv, key, token)
+	if err != nil {
+		return err
+	}
+	rt := a.http.Transport
+	if rt == nil {
+		rt = http.DefaultTransport
+	}
+	// One client for every call: signed with the runner's own key, and
+	// never following a redirect, so a signed request and its run never
+	// reach another host (HR-285, D82).
+	client := &http.Client{
+		Transport:     &workloadclient.Transport{Key: key, Base: rt, Token: token},
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	lr := &launchRunner{src: src, poll: *poll, log: a.stderr, caller: func(run string) *callRunner {
+		return &callRunner{gateway: gw, run: run, client: client, log: a.stderr}
+	}}
+	return lr.run(ctx, *once)
+}
+
+// checkGateway accepts an https base URL, or with devInsecure an http one
+// on this machine (D82).
+func checkGateway(raw string, devInsecure bool) (string, error) {
+	u, err := url.Parse(strings.TrimRight(raw, "/"))
+	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" {
+		return "", errors.New("--gateway must be a base URL like https://gateway.example.com")
+	}
+	switch host := u.Hostname(); {
+	case u.Scheme == "https":
+	case u.Scheme == "http" && devInsecure && (host == "localhost" || host == "127.0.0.1" || host == "::1"):
+	default:
+		return "", errors.New("--gateway must use https (http only on this machine, with --dev-insecure)")
+	}
+	return u.Scheme + "://" + u.Host, nil
+}
+
+// runnerTokens issues workload tokens from server and renews them halfway
+// through each one's lifetime until ctx ends.
+func (a *app) runnerTokens(ctx context.Context, server string, kf workloadclient.KeyFile) (func() string, error) {
+	wc, err := a.workloadClientAt(server, kf, nil)
+	if err != nil {
+		return nil, err
+	}
+	var mu sync.Mutex
+	var cur string
+	tr := &tokenRenewal{a: a, wc: wc, identifier: kf.Identifier, name: "pclaw automation runner"}
+	r := tr.renewer(func(iss workloadclient.Issued) error {
+		mu.Lock()
+		cur = iss.Token
+		mu.Unlock()
+		return nil
+	})
+	if err := r.Renew(ctx); err != nil {
+		return nil, fmt.Errorf("workload token: %w", err)
+	}
+	go func() {
+		var refusal *workloadclient.RefusalError
+		if err := r.Run(ctx); errors.As(err, &refusal) {
+			inst, _ := pap.ParseInstance(kf.Identifier)
+			tr.report(refusalHelp(refusal.Code, inst, "the key file", server) + " Claims fail from now on.")
+		} else if err != nil {
+			tr.report(err.Error())
+		}
+	}()
+	return func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		return cur
+	}, nil
+}
+
+// launchClient is AutomationLaunchService at server, as the workload: the
+// same key, the same tokens, no redirects.
+func (a *app) launchClient(server string, key ed25519.PrivateKey, token func() string) (launchSource, error) {
+	base, err := checkServer(server)
+	if err != nil {
+		return nil, err
+	}
+	rt := a.http.Transport
+	if rt == nil {
+		rt = http.DefaultTransport
+	}
+	hc := &http.Client{
+		Timeout: a.http.Timeout, Transport: &workloadclient.Transport{Key: key, Base: rt, Token: token},
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	return rpcLaunches{c: pantherclawv1connect.NewAutomationLaunchServiceClient(connect.NewClient(connecthttp.NewTransport(hc, base)))}, nil
+}
+
+// rpcLaunches is the launch source over AutomationLaunchService (D26).
+type rpcLaunches struct {
+	c pantherclawv1connect.AutomationLaunchServiceClient
+}
+
+// Claim implements launchSource. A claim the runner cannot read exactly
+// (fields it does not know, or calls it cannot map) runs nothing: it is
+// returned without a run, so the launch completes FAILED (D82).
+func (r rpcLaunches) Claim(ctx context.Context) (*claimedLaunch, error) {
+	res, err := r.c.ClaimLaunch(ctx, &pantherclawv1.ClaimLaunchRequest{})
+	if err != nil {
+		return nil, err
+	}
+	m := res
+	if !m.GetClaimed() {
+		return nil, nil
+	}
+	l := &claimedLaunch{ID: m.GetLaunchId(), RunID: m.GetRunId()}
+	if _, err := ids.ParseUUID(l.ID); err != nil {
+		return nil, errors.New("the server's claim has no launch id")
+	}
+	if len(m.ProtoReflect().GetUnknown()) > 0 {
+		l.RunID = ""
+		return l, nil
+	}
+	for _, c := range m.GetCalls() {
+		call, ok := callOf(c)
+		if !ok {
+			l.RunID = ""
+			return l, nil
+		}
+		l.Calls = append(l.Calls, call)
+	}
+	return l, nil
+}
+
+// callOf maps a declared call (D83): the gateway routes by the connection's
+// name, and each input value is JSON text the server rendered from typed
+// parameters. ok is false for a call carrying fields the runner does not
+// know, no connection name, or a value that is not JSON.
+func callOf(c *pantherclawv1.AutomationRunnerCall) (runnerCall, bool) {
+	if len(c.ProtoReflect().GetUnknown()) > 0 {
+		return runnerCall{}, false
+	}
+	call := runnerCall{Connection: runnerConnection(c), Face: c.GetFace(), Tool: c.GetTool(), Method: c.GetMethod(), Path: c.GetPath()}
+	if call.Connection == "" {
+		return runnerCall{}, false
+	}
+	if len(c.GetInput()) > 0 {
+		in := make(map[string]jsontext.Value, len(c.GetInput()))
+		for k, v := range c.GetInput() {
+			val := jsontext.Value(v)
+			if !val.IsValid() {
+				return runnerCall{}, false
+			}
+			in[k] = val
+		}
+		b, err := json.Marshal(in, json.Deterministic(true))
+		if err != nil {
+			return runnerCall{}, false
+		}
+		call.Input = b
+	}
+	return call, true
+}
+
+// Complete implements launchSource.
+func (r rpcLaunches) Complete(ctx context.Context, launch string, outcome launchOutcome, results []callResult, note string) error {
+	req := &pantherclawv1.CompleteLaunchRequest{LaunchId: launch, Note: note}
+	switch outcome {
+	case launchSucceeded:
+		req.Outcome = pantherclawv1.AutomationLaunchOutcome_AUTOMATION_LAUNCH_OUTCOME_SUCCEEDED
+	case launchPartial:
+		req.Outcome = pantherclawv1.AutomationLaunchOutcome_AUTOMATION_LAUNCH_OUTCOME_PARTIAL
+	case launchFailed:
+		req.Outcome = pantherclawv1.AutomationLaunchOutcome_AUTOMATION_LAUNCH_OUTCOME_FAILED
+	}
+	for _, res := range results {
+		status := string(res.Status)
+		if res.Status == callSucceeded {
+			status = "OK"
+		}
+		out := &pantherclawv1.AutomationCallResult{
+			CallIndex: int32(res.Index), //nolint:gosec // G115: below runnerMaxCalls
+			Status:    status, ErrorCode: safeCode(res.ErrorCode),
+		}
+		if _, err := ids.ParseUUID(res.TransactionID); err == nil {
+			out.TransactionId = res.TransactionID
+		}
+		req.Results = append(req.Results, out)
+	}
+	_, err := r.c.CompleteLaunch(ctx, req)
+	return err
+}
+
+// safeCode keeps an error code within the report's pattern
+// (^[A-Za-z0-9_.-]{0,64}$).
+func safeCode(s string) string {
+	b := make([]byte, 0, min(len(s), 64))
+	for i := 0; i < len(s) && len(b) < 64; i++ {
+		switch c := s[i]; {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '_', c == '.', c == '-':
+			b = append(b, c)
+		default:
+			b = append(b, '_')
+		}
+	}
+	return string(b)
+}
+
+// skipped is a SKIPPED result for each of n calls.
+func skipped(n int) []callResult {
+	out := make([]callResult, n)
+	for i := range out {
+		out[i] = callResult{Index: i, Status: callSkipped}
+	}
+	return out
+}
+
+// runnerConnection is a declared call's connection_name (D83), read by name
+// so the runner keeps building while the field lands; a call without one
+// cannot be routed.
+func runnerConnection(c *pantherclawv1.AutomationRunnerCall) string {
+	m := c.ProtoReflect()
+	fd := m.Descriptor().Fields().ByName("connection_name")
+	if fd == nil || fd.Kind() != protoreflect.StringKind || fd.IsList() {
+		return ""
+	}
+	return m.Get(fd).String()
 }

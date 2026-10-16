@@ -1,0 +1,167 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# audit_digest (D32): on a schedule or when a case closes, build a report and
+# evidence pack and deliver it to a declared destination; the execution
+# finishes on the confirmed delivery.
+id: audit_digest
+title: Audit digest
+summary: >-
+  Build a report and evidence pack on a schedule or when a case closes, and
+  deliver it to a declared destination.
+edition: TEAM
+params:
+  - name: purpose
+    description: What the automation is for, shown to reviewers and approvers.
+    type: string
+    pattern: '[^{}$]{1,1000}'
+    max_len: 1000
+    default: Deliver a regular report and evidence pack of what agents and automations did.
+  - name: review_by
+    description: The date (YYYY-MM-DD) by which the owner reviews the automation again; at most 90 days ahead.
+    type: string
+    format: date
+    pattern: '[0-9]{4}-[0-9]{2}-[0-9]{2}'
+    max_len: 10
+    example: "2026-12-31"
+  - name: trigger
+    description: What starts an execution, a schedule or a closed case.
+    type: enum
+    values: [schedule, case.closed]
+    default: schedule
+  - name: cron
+    description: The five-field cron of the schedule (for the schedule trigger).
+    type: string
+    pattern: '[0-9*/,-]{1,20}( [0-9*/,-]{1,20}){4}'
+    max_len: 104
+    default: "0 7 * * 1"
+  - name: timezone
+    description: The IANA time zone of the schedule.
+    type: string
+    format: timezone
+    pattern: '[A-Za-z][A-Za-z0-9_+-]{0,31}(/[A-Za-z0-9_+-]{1,32}){0,2}'
+    max_len: 100
+    default: UTC
+  - name: days
+    description: For the schedule, how many days back the digest covers.
+    type: int
+    min: "1"
+    max: "31"
+    default: "7"
+  - name: sections
+    description: The digest's sections, comma-separated.
+    type: enum
+    list: true
+    max_items: 5
+    values: [decisions, effects, holds, alerts, open_items]
+    default: decisions,effects,holds,alerts,open_items
+  - name: destination
+    description: The active automation destination (purpose DIGEST) the digest is delivered to.
+    type: uuid
+    example: 0192f000-0000-7000-8000-0000000000c9
+
+definition:
+  apiVersion: automations.pantherclaw.dev/v1
+  kind: Automation
+  purpose: "${purpose}"
+  work_kind: SECURITY_WORK
+  review_by: "${review_by}"
+  when:
+    $switch: trigger
+    $cases:
+      schedule:
+        schedule:
+          cron: "${cron}"
+          timezone: "${timezone}"
+      case.closed:
+        event:
+          on: case.closed
+          params:
+            case: {from: subjects.case, type: uuid}
+        dedupe:
+          key: "{{params.case}}"
+          window: 1d
+  authority:
+    principal: self
+    destinations: ["${destination}"]
+    platform:
+      - step: build_digest
+        scopes:
+          - $switch: trigger
+            $cases: {schedule: TIME_RANGE, case.closed: TRIGGER_CASE}
+      - step: deliver
+        scopes: ["${destination}"]
+  do:
+    - id: digest
+      step: build_digest
+      with:
+        scope:
+          $switch: trigger
+          $cases: {schedule: TIME_RANGE, case.closed: TRIGGER_CASE}
+        days: {$when: {param: trigger, in: [schedule]}, $value: "${days}"}
+        sections: "${sections}"
+        title:
+          $switch: trigger
+          $cases:
+            schedule: Audit digest
+            case.closed: "Case {{params.case}} digest"
+    - id: send
+      step: deliver
+      with:
+        destination: "${destination}"
+        from: digest
+      timeout: 1h
+  finish_when:
+    - step: send
+      condition: DELIVERY_CONFIRMED
+  limits:
+    deadline: 1d
+
+tests:
+  - name: the digest is delivered
+    kind: NORMAL
+    trigger:
+      params:
+        $switch: trigger
+        $cases: {schedule: {}, case.closed: {case: 0192f000-0000-7000-8000-000000000301}}
+    stubs:
+      digest: [{state: DONE, effect: CHANGED, refs: [evidence_pack]}]
+      send: [{state: WAITING}, {state: DONE, effect: CHANGED, refs: [ledger]}]
+    expect:
+      state: SUCCEEDED
+      steps: {digest: DONE, send: DONE}
+  - name: the digest is refused
+    kind: DENIED
+    trigger:
+      params:
+        $switch: trigger
+        $cases: {schedule: {}, case.closed: {case: 0192f000-0000-7000-8000-000000000302}}
+    stubs:
+      digest: [{state: FAILED, reason: AUTHORITY_CHANGED}]
+    expect:
+      state: FAILED
+      reason: AUTHORITY_CHANGED
+      steps: {digest: FAILED}
+  - name: the delivery is not confirmed in time
+    kind: TIMEOUT
+    trigger:
+      params:
+        $switch: trigger
+        $cases: {schedule: {}, case.closed: {case: 0192f000-0000-7000-8000-000000000303}}
+    stubs:
+      digest: [{state: DONE, effect: CHANGED, refs: [evidence_pack]}]
+      send: [{state: WAITING}]
+    expect:
+      state: PARTIALLY_COMPLETED
+      reason: TIMEOUT
+      steps: {digest: DONE, send: FAILED}
+  - name: the same trigger twice starts one execution
+    kind: DUPLICATE
+    trigger:
+      params:
+        $switch: trigger
+        $cases: {schedule: {}, case.closed: {case: 0192f000-0000-7000-8000-000000000304}}
+    stubs:
+      send: [{state: DONE, effect: CHANGED, refs: [ledger]}]
+    expect:
+      state: SUCCEEDED

@@ -492,6 +492,21 @@ type PcAutomationLaunch struct {
 	EndedAt           *time.Time
 }
 
+type PcAutomationProposal struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	ExecutionID ids.UUID
+	StepID      string
+	Kind        string
+	SubjectType string
+	SubjectID   ids.UUID
+	Body        []byte
+	State       string
+	CreatedAt   time.Time
+	DecidedBy   *ids.UUID
+	DecidedAt   *time.Time
+}
+
 type PcAutomationSchedule struct {
 	OrgID        ids.OrgID
 	AutomationID ids.UUID
