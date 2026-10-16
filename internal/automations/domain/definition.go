@@ -267,9 +267,25 @@ func (s *AgentScope) Within(prev *AgentScope) bool {
 }
 
 // NotWiderThan reports whether a grants nothing prev did not: its ceiling
-// is not wider and its revocable scope is within prev's (D91, D102 L4).
+// is not wider, its revocable scope is within prev's (D91, D102 L4) and
+// every platform step kind and scope it lists prev listed (D106 D4).
 func (a Authority) NotWiderThan(prev Authority) bool {
-	return a.Ceiling.NotWiderThan(prev.Ceiling) && a.Revocable.Within(prev.Revocable)
+	return a.Ceiling.NotWiderThan(prev.Ceiling) && a.Revocable.Within(prev.Revocable) && platformWithin(a.Platform, prev.Platform)
+}
+
+func platformWithin(p, prev []PlatformScope) bool {
+	for _, s := range p {
+		i := slices.IndexFunc(prev, func(x PlatformScope) bool { return x.Step == s.Step })
+		if i < 0 {
+			return false
+		}
+		for _, sc := range s.Scopes {
+			if !slices.Contains(prev[i].Scopes, sc) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // PrincipalSelf is the automation's own execution identity.

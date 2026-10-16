@@ -110,13 +110,17 @@ func validateDetails(details map[string]string, keys int) error {
 // annotated validates ev as its caller gave it, then adds the attribution
 // details of ctx. The limits reserve the annotation's keys beyond the
 // caller's 16, and its values are ids, so annotating never makes a valid
-// event invalid; a caller's own key is never overwritten (D102 T5).
+// event invalid (D102 T5). A caller key that names an attribution detail
+// with another value is refused, never kept or overwritten (D106 D3).
 func annotated(ctx context.Context, ev Event) (Event, error) {
 	if err := ev.validate(); err != nil {
 		return ev, err
 	}
 	if _, ok := automationctx.From(ctx); !ok {
 		return ev, nil
+	}
+	if k, bad := automationctx.Conflict(ctx, ev.Details); bad {
+		return ev, fmt.Errorf("%w: detail %q contradicts the automation attribution", ErrInvalidEvent, k)
 	}
 	ev.Details = automationctx.Annotate(ctx, maps.Clone(ev.Details))
 	return ev, validateDetails(ev.Details, maxDetails+automationctx.MaxDetails)

@@ -54,6 +54,15 @@ ON CONFLICT (org_id, dedupe_key) WHERE state <> 'RESOLVED'
 DO UPDATE SET count = pc.operational_failures.count + 1, last_seen = now()
 RETURNING id, (xmax = 0) AS inserted;
 
+-- name: ResolveOpenFailures :many
+-- Resolves the open failures of one kind with one of the dedupe keys,
+-- once their cause is gone (G0 M11 part 2 D106 D2).
+UPDATE pc.operational_failures
+SET state = 'RESOLVED', resolved_at = now(), resolution = sqlc.arg(resolution)::text
+WHERE org_id = sqlc.arg(org_id) AND kind = sqlc.arg(kind)::text AND dedupe_key = ANY (sqlc.arg(dedupe_keys)::text[])
+  AND state <> 'RESOLVED'
+RETURNING id;
+
 -- name: ScopeAgentPlacements :many
 -- Every agent's placement, for computing the agents a scoped viewer may
 -- read (D60); at most max_rows.
