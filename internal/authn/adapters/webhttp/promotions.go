@@ -133,8 +133,8 @@ func (h *Handler) promote(w http.ResponseWriter, r *http.Request, s authnapp.Bro
 		h.jsonError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
-	su := stepUpOfSession(s)
-	res, err := h.promotions.PromoteAgent(callerContext(r, s), promotions.PromoteInput{
+	ctx, su := callerContext(r, s), stepUpOfSession(s)
+	res, err := h.promotions.PromoteAgent(ctx, promotions.PromoteInput{
 		Agent: agent, Environment: env, Operations: req.Operations, FailureBehavior: req.FailureBehavior,
 	}, &su)
 	if err != nil {
@@ -144,13 +144,12 @@ func (h *Handler) promote(w http.ResponseWriter, r *http.Request, s authnapp.Bro
 				return
 			}
 		}
-		switch pcerr.CodeOf(err) {
-		case pcerr.PermissionDenied:
+		if c := pcerr.CodeOf(err); c == pcerr.PermissionDenied {
 			h.jsonError(w, http.StatusForbidden, "forbidden")
-		case pcerr.InvalidArgument:
+		} else if c == pcerr.InvalidArgument {
 			h.jsonError(w, http.StatusBadRequest, "bad_request")
-		default:
-			h.log.ErrorContext(r.Context(), "web.promotions", pclog.Err(err))
+		} else {
+			h.log.ErrorContext(ctx, "web.promotions", pclog.Err(err))
 			h.jsonError(w, http.StatusInternalServerError, "internal")
 		}
 		return
