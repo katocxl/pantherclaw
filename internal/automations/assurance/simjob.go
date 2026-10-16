@@ -41,10 +41,17 @@ const (
 	SimJobTimeout = 5 * time.Minute
 )
 
-// SimulateArgs runs one automation simulation; ids only (HR-056).
+// SimulationKind is the kind of an automation simulation's id in job
+// arguments.
+type SimulationKind struct{}
+
+// KindName implements ids.Kind.
+func (SimulationKind) KindName() string { return "automation simulation" }
+
+// SimulateArgs runs one automation simulation; typed ids only (HR-056).
 type SimulateArgs struct {
-	Org        ids.OrgID `json:"org"`
-	Simulation ids.UUID  `json:"simulation"`
+	Org        ids.OrgID              `json:"org"`
+	Simulation ids.ID[SimulationKind] `json:"simulation"`
 }
 
 // Kind implements river.JobArgs.
@@ -88,7 +95,8 @@ func (s *Service) StartSimulation(ctx context.Context, versionID ids.UUID, from,
 	if s.Jobs == nil {
 		return ids.UUID{}, ErrJobs
 	}
-	id := ids.NewV7()
+	simID := ids.New[SimulationKind]()
+	id := simID.UUID()
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		v, _, err := version(ctx, q, c.Org, versionID)
@@ -100,7 +108,7 @@ func (s *Service) StartSimulation(ctx context.Context, versionID ids.UUID, from,
 		}); err != nil {
 			return err
 		}
-		if err := jobs.InsertTx(ctx, s.Jobs, tx, SimulateArgs{Org: c.Org, Simulation: id}, nil); err != nil {
+		if err := jobs.InsertTx(ctx, s.Jobs, tx, SimulateArgs{Org: c.Org, Simulation: simID}, nil); err != nil {
 			return err
 		}
 		return record(ctx, tx, c, "automation.simulation_started", versionID, map[string]string{
@@ -297,13 +305,13 @@ func (w *simulateWorker) Timeout(*river.Job[SimulateArgs]) time.Duration { retur
 // simulation is left running forever.
 func (w *simulateWorker) Work(ctx context.Context, job *river.Job[SimulateArgs]) error {
 	a := job.Args
-	err := w.svc.RunSimulation(ctx, a.Org, a.Simulation)
+	err := w.svc.RunSimulation(ctx, a.Org, a.Simulation.UUID())
 	if err == nil || job.Attempt < job.MaxAttempts {
 		return err
 	}
 	w.log.WarnContext(ctx, "automation.simulation_failed", slog.String("org", a.Org.String()),
 		slog.String("simulation", a.Simulation.String()), pclog.Err(err))
-	return w.svc.FailSimulation(context.WithoutCancel(ctx), a.Org, a.Simulation, "SIMULATION_FAILED")
+	return w.svc.FailSimulation(context.WithoutCancel(ctx), a.Org, a.Simulation.UUID(), "SIMULATION_FAILED")
 }
 
 // RegisterJobs adds the simulation worker.
