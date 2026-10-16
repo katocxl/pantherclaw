@@ -25,14 +25,16 @@ WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(id)
 FOR UPDATE;
 
 -- name: ListChangeRequests :many
--- Newest first; domain, states and subject filter when set.
+-- Newest first; domain, states and subject filter when set. A pending
+-- request past its expiry counts as EXPIRED (the sweep may not have run).
 SELECT r.org_id, r.id, r.domain, r.kind, r.subject_id, r.content_digest, r.binding, r.summary, r.required, r.state,
        r.requested_by, r.created_at, r.expires_at, r.decided_at, r.decided_reason, (r.expires_at <= now())::bool AS expired
 FROM pc.change_requests r
 WHERE r.org_id = sqlc.arg(org_id)
   AND (sqlc.narg(domain)::text IS NULL OR r.domain = sqlc.narg(domain)::text)
   AND (sqlc.narg(subject_id)::uuid IS NULL OR r.subject_id = sqlc.narg(subject_id)::uuid)
-  AND (cardinality(sqlc.arg(states)::text[]) = 0 OR r.state = ANY (sqlc.arg(states)::text[]))
+  AND (cardinality(sqlc.arg(states)::text[]) = 0
+       OR (CASE WHEN r.state = 'PENDING' AND r.expires_at <= now() THEN 'EXPIRED' ELSE r.state END) = ANY (sqlc.arg(states)::text[]))
   AND (sqlc.narg(before_id)::uuid IS NULL OR r.id < sqlc.narg(before_id)::uuid)
 ORDER BY r.id DESC
 LIMIT sqlc.arg(max_rows)::int;
@@ -83,3 +85,7 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND purpose = 'BINDING'
   AND change_request_id = sqlc.arg(request_id) AND user_id = sqlc.arg(user_id)
   AND session_id = sqlc.arg(session_id) AND challenge = sqlc.arg(challenge) AND consumed_at IS NULL
   AND expires_at > now();
+
+-- name: CountOverdueChangeRequests :one
+SELECT count(*)::int FROM pc.change_requests
+WHERE org_id = sqlc.arg(org_id) AND state = 'PENDING' AND expires_at <= now();

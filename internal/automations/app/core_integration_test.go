@@ -72,6 +72,13 @@ func (g *testGate) Passed(context.Context, pgx.Tx, ids.UUID, []byte) (ids.UUID, 
 	return ids.NewV7(), g.ok, nil
 }
 
+// verified is assurance's rollout evidence, always shown (D36).
+type verified struct{}
+
+func (verified) Verified(context.Context, pgx.Tx, ids.UUID, ids.UUID) (bool, []string, error) {
+	return true, nil, nil
+}
+
 type person struct {
 	id, key, session ids.UUID
 	page, cli        context.Context
@@ -170,7 +177,7 @@ func newEnv(t *testing.T) *env {
 	ch := changes.New(e.pool, "https://pc.example.test")
 	e.svc = &autoapp.Service{
 		Pool: e.pool, Clock: clock.System{}, Changes: ch, Grants: e.grants, Runs: e.runs, Editions: editions{},
-		Operations: operations{}, TestGate: e.gate,
+		Operations: operations{}, TestGate: e.gate, Rollout: verified{},
 	}
 	e.svc.RegisterChanges()
 	e.grants.Ceilings = e.svc
@@ -236,13 +243,24 @@ func (e *env) enabled(name string, rollout autodomain.Rollout, perDay int) (auto
 	if err != nil || !ok {
 		e.t.Fatalf("validate: %v %+v", err, v.Findings)
 	}
-	en, err := e.svc.RequestEnable(e.alice.cli, v.ID, rollout, nil, ids.UUID{})
-	if err != nil {
-		e.t.Fatal(err)
+	// FULL comes through COHORT and a ROLLOUT (D91).
+	steps := []autodomain.Rollout{rollout}
+	if rollout == autodomain.RolloutFull {
+		steps = []autodomain.Rollout{autodomain.RolloutCohort, autodomain.RolloutFull}
 	}
-	for _, p := range []person{e.bob, e.cat}[:en.Required] {
-		if _, err := e.svc.Changes.Confirm(p.page, en.Request.ID, e.sign(p, en.Request)); err != nil {
-			e.t.Fatalf("confirm: %v", err)
+	for _, r := range steps {
+		var cohort []ids.UUID
+		if r == autodomain.RolloutCohort {
+			cohort = []ids.UUID{e.agent}
+		}
+		en, err := e.svc.RequestEnable(e.alice.cli, v.ID, r, cohort, ids.UUID{})
+		if err != nil {
+			e.t.Fatal(err)
+		}
+		for _, p := range []person{e.bob, e.cat}[:en.Required] {
+			if _, err := e.svc.Changes.Confirm(p.page, en.Request.ID, e.sign(p, en.Request)); err != nil {
+				e.t.Fatalf("confirm: %v", err)
+			}
 		}
 	}
 	a, err = e.svc.GetAutomation(e.alice.cli, a.ID)
@@ -368,19 +386,23 @@ func TestHR272_EnablingNeedsDistinctEligibleConfirmers(t *testing.T) {
 	if v, _, err = e.svc.ValidateVersion(e.alice.cli, v.ID); err != nil || v.State != autodomain.VersionValidated || v.Summary == "" {
 		t.Fatalf("validate: %v %s", err, v.State)
 	}
+	cohort := []ids.UUID{e.agent}
 	e.gate.ok = false
-	if _, err := e.svc.RequestEnable(e.alice.cli, v.ID, autodomain.RolloutFull, nil, ids.UUID{}); reason(err) != "VERSION_UNTESTED" {
-		t.Errorf("an untested full rollout: %v", err)
+	if _, err := e.svc.RequestEnable(e.alice.cli, v.ID, autodomain.RolloutCohort, cohort, ids.UUID{}); reason(err) != "VERSION_UNTESTED" {
+		t.Errorf("an untested cohort rollout: %v", err)
 	}
 	e.gate.ok = true
-	en, err := e.svc.RequestEnable(e.alice.cli, v.ID, autodomain.RolloutFull, nil, ids.UUID{})
+	if _, err := e.svc.RequestEnable(e.alice.cli, v.ID, autodomain.RolloutFull, nil, ids.UUID{}); reason(err) != "FULL_NEEDS_COHORT" {
+		t.Errorf("a first enabling straight to FULL: %v", err)
+	}
+	en, err := e.svc.RequestEnable(e.alice.cli, v.ID, autodomain.RolloutCohort, cohort, ids.UUID{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if en.Required != 2 {
 		t.Fatalf("required %d, want 2 (two eligible people)", en.Required)
 	}
-	if _, err := e.svc.RequestEnable(e.bob.cli, v.ID, autodomain.RolloutFull, nil, ids.UUID{}); err == nil {
+	if _, err := e.svc.RequestEnable(e.bob.cli, v.ID, autodomain.RolloutCohort, cohort, ids.UUID{}); err == nil {
 		t.Error("a publisher asked for an enabling without automation.manage")
 	}
 	if _, err := e.svc.Changes.Confirm(e.alice.page, en.Request.ID, e.sign(e.alice, en.Request)); reason(err) != "NOT_ELIGIBLE" {
@@ -406,7 +428,7 @@ func TestHR272_EnablingNeedsDistinctEligibleConfirmers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.State != autodomain.StateActive || got.Rollout != autodomain.RolloutFull || got.Ceiling == nil ||
+	if got.State != autodomain.StateActive || got.Rollout != autodomain.RolloutCohort || got.Ceiling == nil ||
 		!slices.Equal(got.Ceiling.ApprovedBy, []ids.UUID{e.bob.id, e.cat.id}) {
 		t.Fatalf("after enabling: %+v %+v", got, got.Ceiling)
 	}

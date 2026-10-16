@@ -435,7 +435,8 @@ func (s *Service) StartChildRun(ctx context.Context, in ChildInput) (Run, error)
 			OrgID: org, ID: ids.NewV7(), AgentID: a.ID, InstanceID: in.InstanceID, EnvironmentID: *a.EnvironmentID,
 			LauncherInstanceID: &inst.ID, PrincipalUserID: parent.PrincipalUserID, PrincipalSaID: parent.PrincipalSaID,
 			PrincipalSource: SourceParentRun, ActorChain: chainJSON, ParentRunID: &parent.ID, Depth: parent.Depth + 1,
-			TaskRef: in.TaskRef, TtlMinutes: minutes, NotAfter: &parent.ExpiresAt,
+			AutomationExecutionID: parent.AutomationExecutionID, // HR-274 attribution one level down (D91)
+			TaskRef:               in.TaskRef, TtlMinutes: minutes, NotAfter: &parent.ExpiresAt,
 			Simulated: parent.Simulated || a.RangeAgent,
 		})
 		if err != nil {
