@@ -2477,13 +2477,18 @@ type AutomationRunnerCall struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	ConnectionId string                 `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
 	// MCP or HTTP.
-	Face          string            `protobuf:"bytes,2,opt,name=face,proto3" json:"face,omitempty"`
-	Tool          string            `protobuf:"bytes,3,opt,name=tool,proto3" json:"tool,omitempty"`
-	Method        string            `protobuf:"bytes,4,opt,name=method,proto3" json:"method,omitempty"`
-	Path          string            `protobuf:"bytes,5,opt,name=path,proto3" json:"path,omitempty"`
-	Input         map[string]string `protobuf:"bytes,6,rep,name=input,proto3" json:"input,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Face   string `protobuf:"bytes,2,opt,name=face,proto3" json:"face,omitempty"`
+	Tool   string `protobuf:"bytes,3,opt,name=tool,proto3" json:"tool,omitempty"`
+	Method string `protobuf:"bytes,4,opt,name=method,proto3" json:"method,omitempty"`
+	Path   string `protobuf:"bytes,5,opt,name=path,proto3" json:"path,omitempty"`
+	// Each value is JSON text: typed parameters rendered as JSON (strings
+	// quoted, numbers exact), never a float.
+	Input map[string]string `protobuf:"bytes,6,rep,name=input,proto3" json:"input,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// The connection's name, resolved when the launch was created: the
+	// gateway faces route by name.
+	ConnectionName string `protobuf:"bytes,7,opt,name=connection_name,json=connectionName,proto3" json:"connection_name,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *AutomationRunnerCall) Reset() {
@@ -2556,6 +2561,13 @@ func (x *AutomationRunnerCall) GetInput() map[string]string {
 		return x.Input
 	}
 	return nil
+}
+
+func (x *AutomationRunnerCall) GetConnectionName() string {
+	if x != nil {
+		return x.ConnectionName
+	}
+	return ""
 }
 
 type ClaimLaunchRequest struct {
@@ -2692,7 +2704,8 @@ func (x *ClaimLaunchResponse) GetCompleteBy() *timestamppb.Timestamp {
 type AutomationCallResult struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	CallIndex int32                  `protobuf:"varint,1,opt,name=call_index,json=callIndex,proto3" json:"call_index,omitempty"`
-	// OK, DENIED, HELD, FAILED, UNKNOWN or SKIPPED.
+	// OK, DENIED, HELD, FAILED, UNKNOWN, or SKIPPED for each declared call
+	// after the runner stopped.
 	Status        string `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
 	TransactionId string `protobuf:"bytes,3,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
 	ErrorCode     string `protobuf:"bytes,4,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
@@ -3084,14 +3097,15 @@ const file_pantherclaw_v1_automation_executions_proto_rawDesc = "" +
 	"\rautomation_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fautomationId\x12 \n" +
 	"\x06reason\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\xf4\x03R\x06reason\"`\n" +
 	"\x1eCancelActiveExecutionsResponse\x12>\n" +
-	"\x06effect\x18\x01 \x01(\v2&.pantherclaw.v1.AutomationCancelEffectR\x06effect\"\x90\x02\n" +
+	"\x06effect\x18\x01 \x01(\v2&.pantherclaw.v1.AutomationCancelEffectR\x06effect\"\xb9\x02\n" +
 	"\x14AutomationRunnerCall\x12#\n" +
 	"\rconnection_id\x18\x01 \x01(\tR\fconnectionId\x12\x12\n" +
 	"\x04face\x18\x02 \x01(\tR\x04face\x12\x12\n" +
 	"\x04tool\x18\x03 \x01(\tR\x04tool\x12\x16\n" +
 	"\x06method\x18\x04 \x01(\tR\x06method\x12\x12\n" +
 	"\x04path\x18\x05 \x01(\tR\x04path\x12E\n" +
-	"\x05input\x18\x06 \x03(\v2/.pantherclaw.v1.AutomationRunnerCall.InputEntryR\x05input\x1a8\n" +
+	"\x05input\x18\x06 \x03(\v2/.pantherclaw.v1.AutomationRunnerCall.InputEntryR\x05input\x12'\n" +
+	"\x0fconnection_name\x18\a \x01(\tR\x0econnectionName\x1a8\n" +
 	"\n" +
 	"InputEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +

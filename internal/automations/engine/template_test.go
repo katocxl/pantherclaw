@@ -61,3 +61,34 @@ func TestHR276_RenderIsTypedAndOnlyInTemplatableFields(t *testing.T) {
 		t.Errorf("gate summary %v %v", g, err)
 	}
 }
+
+// D83: a runner call's input values are JSON text, rendered from typed
+// parameters (strings quoted, numbers exact); text around a placeholder is
+// refused.
+func TestHR276_CallInputsRenderAsTypedJSON(t *testing.T) {
+	p := map[string]autodomain.Value{
+		"ticket": {Type: autodomain.ParamString, String: `T-"42"`},
+		"amount": {Type: autodomain.ParamDecimal, Decimal: "12.50"},
+		"count":  {Type: autodomain.ParamInt, Int: 3},
+		"dry":    {Type: autodomain.ParamBool, Bool: true},
+	}
+	w, err := render(spec(autodomain.KindLaunchRun, `{"agent":"0192f000-0000-7000-8000-000000000003",
+		"calls":[{"connection":"0192f000-0000-7000-8000-000000000009","face":"MCP","tool":"refund",
+		"input":{"ticket":"{{params.ticket}}","amount":"{{params.amount}}","count":"{{params.count}}",
+		"dry":"{{params.dry}}","fixed":"\"literal\""}}]}`), p, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := w.(*autodomain.LaunchRunWith).Calls[0].Input
+	want := map[string]string{"ticket": `"T-\"42\""`, "amount": "12.50", "count": "3", "dry": "true", "fixed": `"literal"`}
+	for k, v := range want {
+		if in[k] != v {
+			t.Errorf("input %s = %s, want %s", k, in[k], v)
+		}
+	}
+	if _, err := render(spec(autodomain.KindLaunchRun, `{"agent":"0192f000-0000-7000-8000-000000000003",
+		"calls":[{"connection":"0192f000-0000-7000-8000-000000000009","face":"MCP","tool":"refund",
+		"input":{"note":"ticket {{params.ticket}}"}}]}`), p, nil); !errors.Is(err, ErrTemplate) {
+		t.Errorf("mixed input rendered: %v", err)
+	}
+}

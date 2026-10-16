@@ -27,6 +27,7 @@ const (
 	ReasonNoEffect     = "NO_EFFECT"
 	ReasonDelivery     = "DELIVERY_FAILED"
 	ReasonGateEnded    = "GATE_INVALIDATED"
+	ReasonConnection   = "CONNECTION_INACTIVE"
 )
 
 // Evidence and output ref kinds the engine records beside the Reflex
