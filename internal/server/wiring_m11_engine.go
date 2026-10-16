@@ -164,6 +164,7 @@ func registerAutomationEngineJobs(periodic []*river.PeriodicJob, reg *jobs.Regis
 	bill *billing.Service, publicURL string, notify *napp.Service, log *slog.Logger,
 ) ([]*river.PeriodicJob, error) {
 	e := newAutomationEngine(engineDeps{pool: pool, bill: bill, kp: kp, publicURL: publicURL, notify: notify, log: log})
+	probeM11("automations.engine.driver", e)
 	p, err := pgengine.Register(reg, e)
 	if err != nil {
 		return nil, err

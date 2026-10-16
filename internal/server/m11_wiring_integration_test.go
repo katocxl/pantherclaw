@@ -31,9 +31,9 @@ var m11Optional = map[string]string{
 var m11Required = map[string][]string{
 	RoleAll: {
 		"automations.core", "automations.engine", "automations.triggers", "protect.gate", "protect.publishers", "promotions",
-		"packbuild",
+		"packbuild", "automations.engine.driver",
 	},
-	RoleWorker: {"automations.core", "automations.engine", "automations.triggers", "packbuild"},
+	RoleWorker: {"automations.core", "automations.engine", "automations.engine.driver", "automations.triggers", "packbuild"},
 }
 
 // TestM11_WiringComplete: the real server, started as one process (all)
@@ -60,6 +60,7 @@ func TestM11_WiringComplete(t *testing.T) {
 					}
 				}
 			}
+			driverUsesSharedCore(t, role, got)
 			for i, v := range got["protect.publishers"] {
 				p := reflect.ValueOf(v).Elem()
 				undo := p.FieldByName("Undo")
@@ -103,26 +104,33 @@ func serveAndRecord(t *testing.T, role string) map[string][]any {
 		return n
 	}
 	deadline, last, since := time.Now().Add(60*time.Second), -1, time.Now()
+	exited := false
+wait:
 	for time.Now().Before(deadline) {
 		select {
 		case err := <-done:
-			t.Fatalf("serve exited early: %v\n%s", err, logs.String())
+			// What was built before start-up failed is still checked.
+			t.Errorf("serve exited early: %v", err)
+			exited = true
+			break wait
 		case <-time.After(200 * time.Millisecond):
 		}
 		if n := count(); n != last {
 			last, since = n, time.Now()
 		} else if n > 0 && time.Since(since) > 2*time.Second {
-			break
+			break wait
 		}
 	}
 	cancel()
-	select {
-	case err := <-done:
-		if err != nil && !errors.Is(err, context.Canceled) {
-			t.Errorf("serve: %v", err)
+	if !exited {
+		select {
+		case err := <-done:
+			if err != nil && !errors.Is(err, context.Canceled) {
+				t.Errorf("serve: %v", err)
+			}
+		case <-time.After(30 * time.Second):
+			t.Fatal("graceful shutdown did not finish")
 		}
-	case <-time.After(30 * time.Second):
-		t.Fatal("graceful shutdown did not finish")
 	}
 	mu.Lock()
 	defer mu.Unlock()
@@ -173,4 +181,39 @@ func nilPorts(v any) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+// driverUsesSharedCore: the engine the driver jobs run pauses, voids and
+// checks ceilings through the process's one core, whose grants service
+// runs the promotion gate, so automation issuance never skips it (D105).
+func driverUsesSharedCore(t *testing.T, role string, got map[string][]any) {
+	t.Helper()
+	cores := got["automations.core"]
+	for i, v := range got["automations.engine.driver"] {
+		e := reflect.ValueOf(v).Elem()
+		for _, port := range []string{"Pauser", "Voider", "Ceilings"} {
+			p := e.FieldByName(port)
+			var core *automationsCore
+			for _, c := range cores {
+				if !p.IsNil() && p.Elem().Interface() == any(c.(*automationsCore).svc) {
+					core = c.(*automationsCore)
+				}
+			}
+			switch {
+			case core == nil:
+				t.Errorf("%s: driver engine #%d: %s is not an automations core", role, i+1, port)
+			case len(cores) > 1 || core.grants == nil || core.grants.Promotions == nil:
+				t.Errorf("%s: driver engine #%d: %s is not the process's one core with the promotion gate", role, i+1, port)
+			}
+		}
+	}
+	for i, c := range cores {
+		core := c.(*automationsCore)
+		if core.grants == nil || core.grants.Promotions == nil {
+			t.Errorf("%s: automations core #%d: its grants service has no promotion gate", role, i+1)
+		}
+		if core.svc.Grants != core.grants {
+			t.Errorf("%s: automations core #%d: the app issues through another grants service", role, i+1)
+		}
+	}
 }
