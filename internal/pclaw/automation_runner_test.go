@@ -718,20 +718,24 @@ func TestHR285_ClaimsTheRunnerCannotReadRunNothing(t *testing.T) {
 	notJSON.Calls[0].Input["b"] = "x"
 	for name, tc := range map[string]struct {
 		res     *pantherclawv1.ClaimLaunchResponse
-		wantRun bool
+		refused string
 	}{
-		"ok": {ok, true}, "no connection name": {unnamed, false}, "unknown field": {unknown, false},
-		"unknown call field": {badCall, false}, "input not JSON": {notJSON, false},
+		"ok": {ok, ""}, "no connection name": {unnamed, "call 0: no connection name"},
+		"unknown field":      {unknown, "the claim carries fields this runner does not know"},
+		"unknown call field": {badCall, "call 0: fields this runner does not know"},
+		"input not JSON":     {notJSON, `call 0: input "b" is not JSON`},
 	} {
 		t.Run(name, func(t *testing.T) {
 			l, err := rpcLaunches{c: fakeLaunchClient{claim: tc.res}}.Claim(t.Context())
 			if err != nil || l == nil || l.ID != launch {
 				t.Fatalf("claim = %+v, %v", l, err)
 			}
-			if (l.RunID != "") != tc.wantRun {
-				t.Fatalf("run = %q", l.RunID)
+			// Refused names what cannot be read, never "no run" (D119),
+			// and a refused claim keeps no call to perform.
+			if l.Refused != tc.refused || (tc.refused != "" && len(l.Calls) != 0) {
+				t.Fatalf("refused %q, %d calls", l.Refused, len(l.Calls))
 			}
-			if tc.wantRun && string(l.Calls[0].Input) != `{"a":1,"b":"x","c":12.50}` {
+			if tc.refused == "" && string(l.Calls[0].Input) != `{"a":1,"b":"x","c":12.50}` {
 				t.Fatalf("input = %s", l.Calls[0].Input)
 			}
 		})
@@ -767,4 +771,31 @@ func oneFailedRestSkipped(results []callResult, n int) bool {
 		}
 	}
 	return failed == 1
+}
+
+// TestD119_AnUnreadableCallIsReportedAsSuch: a claim whose call cannot be
+// read completes FAILED with that call FAILED invalid_call, the other
+// declared calls SKIPPED and a note naming what is wrong; no call reaches
+// the gateway and the note never says the launch has no run (D119, D83).
+func TestD119_AnUnreadableCallIsReportedAsSuch(t *testing.T) {
+	g := newFakeGateway(t)
+	c, _ := newCallRunner(t, g)
+	src := &fakeLaunches{launches: []*claimedLaunch{{
+		ID: "l1", RunID: ids.NewV7().String(), Refused: `call 1: input "b" is not JSON`, Invalid: 1, Declared: 3,
+	}}}
+	lr := &launchRunner{src: src, poll: time.Millisecond, log: io.Discard, caller: func(string) *callRunner { return c }}
+	if err := lr.run(t.Context(), true); err != nil {
+		t.Fatal(err)
+	}
+	if reqs, _ := g.calls(); len(reqs) != 0 {
+		t.Fatalf("%d calls reached the gateway", len(reqs))
+	}
+	want := []callResult{
+		{Index: 0, Status: callSkipped}, {Index: 1, Status: callFailed, ErrorCode: "invalid_call"}, {Index: 2, Status: callSkipped},
+	}
+	got := src.completed
+	if len(got) != 1 || got[0].outcome != launchFailed || !equalResults(got[0].results, want) ||
+		got[0].note != `call 1: input "b" is not JSON` {
+		t.Fatalf("completed %+v", got)
+	}
 }

@@ -580,6 +580,11 @@ func classifyMCP(i int, id string, header http.Header, body []byte) callResult {
 type claimedLaunch struct {
 	ID, RunID string
 	Calls     []runnerCall
+	// Refused says why the claim runs nothing: it carries fields the
+	// runner does not know, or call Invalid cannot be read (of Declared).
+	Refused  string
+	Invalid  int
+	Declared int
 }
 
 // launchSource claims the runner's launches and completes them. Claim
@@ -630,9 +635,19 @@ func (l *launchRunner) step(ctx context.Context) (bool, error) {
 	var results []callResult
 	outcome := launchFailed
 	var note string
-	if _, perr := ids.ParseUUID(launch.RunID); perr != nil {
+	switch _, perr := ids.ParseUUID(launch.RunID); {
+	case launch.Refused != "":
+		note = launch.Refused
+		if launch.Declared > 0 {
+			results = make([]callResult, launch.Declared)
+			for i := range results {
+				results[i] = callResult{Index: i, Status: callSkipped}
+			}
+			results[launch.Invalid] = callResult{Index: launch.Invalid, Status: callFailed, ErrorCode: "invalid_call"}
+		}
+	case perr != nil:
 		note = "the launch has no run"
-	} else {
+	default:
 		results, outcome = l.caller(launch.RunID).runCalls(ctx, launch.Calls)
 		note = noteOf(results, outcome)
 	}
@@ -849,8 +864,9 @@ type rpcLaunches struct {
 }
 
 // Claim implements launchSource. A claim the runner cannot read exactly
-// (fields it does not know, or calls it cannot map) runs nothing: it is
-// returned without a run, so the launch completes FAILED (D82).
+// (fields it does not know, or a call it cannot map) runs nothing: it is
+// returned Refused with the reason, so the launch completes FAILED and says
+// why (D82, D119).
 func (r rpcLaunches) Claim(ctx context.Context) (*claimedLaunch, error) {
 	res, err := r.c.ClaimLaunch(ctx, &pantherclawv1.ClaimLaunchRequest{})
 	if err != nil {
@@ -865,13 +881,14 @@ func (r rpcLaunches) Claim(ctx context.Context) (*claimedLaunch, error) {
 		return nil, errors.New("the server's claim has no launch id")
 	}
 	if len(m.ProtoReflect().GetUnknown()) > 0 {
-		l.RunID = ""
+		l.Refused = "the claim carries fields this runner does not know"
 		return l, nil
 	}
-	for _, c := range m.GetCalls() {
-		call, ok := callOf(c)
-		if !ok {
-			l.RunID = ""
+	l.Declared = len(m.GetCalls())
+	for i, c := range m.GetCalls() {
+		call, why := callOf(c)
+		if why != "" {
+			l.Refused, l.Invalid, l.Calls = fmt.Sprintf("call %d: %s", i, why), i, nil
 			return l, nil
 		}
 		l.Calls = append(l.Calls, call)
@@ -881,32 +898,32 @@ func (r rpcLaunches) Claim(ctx context.Context) (*claimedLaunch, error) {
 
 // callOf maps a declared call (D83): the gateway routes by the connection's
 // name, and each input value is JSON text the server rendered from typed
-// parameters. ok is false for a call carrying fields the runner does not
-// know, no connection name, or a value that is not JSON.
-func callOf(c *pantherclawv1.AutomationRunnerCall) (runnerCall, bool) {
+// parameters. why says what is wrong with a call carrying fields the runner
+// does not know, no connection name, or an input value that is not JSON.
+func callOf(c *pantherclawv1.AutomationRunnerCall) (call runnerCall, why string) {
 	if len(c.ProtoReflect().GetUnknown()) > 0 {
-		return runnerCall{}, false
+		return runnerCall{}, "fields this runner does not know"
 	}
-	call := runnerCall{Connection: c.GetConnectionName(), Face: c.GetFace(), Tool: c.GetTool(), Method: c.GetMethod(), Path: c.GetPath()}
+	call = runnerCall{Connection: c.GetConnectionName(), Face: c.GetFace(), Tool: c.GetTool(), Method: c.GetMethod(), Path: c.GetPath()}
 	if call.Connection == "" {
-		return runnerCall{}, false
+		return runnerCall{}, "no connection name"
 	}
 	if len(c.GetInput()) > 0 {
 		in := make(map[string]jsontext.Value, len(c.GetInput()))
 		for k, v := range c.GetInput() {
 			val := jsontext.Value(v)
 			if !val.IsValid() {
-				return runnerCall{}, false
+				return runnerCall{}, "input " + strconv.Quote(k) + " is not JSON"
 			}
 			in[k] = val
 		}
 		b, err := json.Marshal(in, json.Deterministic(true))
 		if err != nil {
-			return runnerCall{}, false
+			return runnerCall{}, "the input cannot be encoded"
 		}
 		call.Input = b
 	}
-	return call, true
+	return call, ""
 }
 
 // Complete implements launchSource.
