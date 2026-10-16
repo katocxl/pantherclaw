@@ -20,6 +20,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
@@ -55,34 +56,39 @@ func (s *Service) CreateDraftVersion(ctx context.Context, automation ids.UUID, r
 	}
 	var out Version
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
-		a, err := loadAutomation(ctx, q, c.Org, automation, true)
-		if err != nil {
-			return err
-		}
-		if a.State == string(autodomain.StateRetired) {
-			return ErrState
-		}
-		n, err := q.NextAutomationVersionNumber(ctx, c.Org, automation)
-		if err != nil {
-			return err
-		}
-		id := ids.NewV7()
-		if err := q.InsertAutomationVersion(ctx, dbq.InsertAutomationVersionParams{
-			OrgID: c.Org, ID: id, AutomationID: automation, Number: n, Definition: canonical, Digest: digest, CreatedBy: c.Principal.ID,
-		}); err != nil {
-			return err
-		}
-		v, err := loadVersion(ctx, q, c.Org, id, false)
-		if err != nil {
-			return err
-		}
-		out = versionView(v)
-		return record(ctx, tx, c.Actor(), "automation.version_created", automation, map[string]string{
-			"version": id.String(), "number": itoa(int(n)), "digest": hexDigest(digest),
-		})
+		var err error
+		out, err = createVersionTx(ctx, tx, c, automation, canonical, digest)
+		return err
 	})
 	return out, err
+}
+
+func createVersionTx(ctx context.Context, tx db.TenantTx, c tapp.Caller, automation ids.UUID, canonical, digest []byte) (Version, error) {
+	q := dbq.New(tx)
+	a, err := loadAutomation(ctx, q, c.Org, automation, true)
+	if err != nil {
+		return Version{}, err
+	}
+	if a.State == string(autodomain.StateRetired) {
+		return Version{}, ErrState
+	}
+	n, err := q.NextAutomationVersionNumber(ctx, c.Org, automation)
+	if err != nil {
+		return Version{}, err
+	}
+	id := ids.NewV7()
+	if err := q.InsertAutomationVersion(ctx, dbq.InsertAutomationVersionParams{
+		OrgID: c.Org, ID: id, AutomationID: automation, Number: n, Definition: canonical, Digest: digest, CreatedBy: c.Principal.ID,
+	}); err != nil {
+		return Version{}, err
+	}
+	v, err := loadVersion(ctx, q, c.Org, id, false)
+	if err != nil {
+		return Version{}, err
+	}
+	return versionView(v), record(ctx, tx, c.Actor(), "automation.version_created", automation, map[string]string{
+		"version": id.String(), "number": itoa(int(n)), "digest": hexDigest(digest),
+	})
 }
 
 // UpdateDraftVersion replaces the definition of a version that is not
@@ -313,19 +319,22 @@ func (e *validationEnv) Operation(ctx context.Context, op string) (autodomain.Op
 		// A prefix may cover any operation: treat it as irreversible and
 		// spending, so the version must reconcile and budget it, and name
 		// the irreversible operations it covers today (D91 K4).
+		// Without a list of the definitions the prefix is refused (D102 L2).
 		out := autodomain.OperationInfo{Known: true, Irreversible: true, ConsumesBudget: true}
-		if l, ok := e.s.Operations.(operationLister); ok {
-			all, err := l.ActiveDefinitions(ctx, e.org)
-			if err != nil {
-				return autodomain.OperationInfo{}, err
-			}
-			for _, d := range all {
-				if d.Reversibility == defs.Irreversible && (gdomain.Ops{op}).Matches(d.Operation) {
-					out.IrreversibleUnder = append(out.IrreversibleUnder, d.Operation)
-				}
-			}
-			slices.Sort(out.IrreversibleUnder)
+		l, ok := e.s.Operations.(operationLister)
+		if !ok {
+			return autodomain.OperationInfo{}, errors.New("the operations under a prefix cannot be listed here")
 		}
+		all, err := l.ActiveDefinitions(ctx, e.org)
+		if err != nil {
+			return autodomain.OperationInfo{}, err
+		}
+		for _, d := range all {
+			if d.Reversibility == defs.Irreversible && (gdomain.Ops{op}).Matches(d.Operation) {
+				out.IrreversibleUnder = append(out.IrreversibleUnder, d.Operation)
+			}
+		}
+		slices.Sort(out.IrreversibleUnder)
 		return out, nil
 	}
 	if e.s.Operations == nil {

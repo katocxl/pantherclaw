@@ -159,6 +159,7 @@ func effectPB(e autoapp.ControlEffect) *pantherclawv1.AutomationControlEffect {
 	return &pantherclawv1.AutomationControlEffect{
 		GrantsRevoked: strs(e.GrantsRevoked), RunsEnded: strs(e.RunsEnded), LaunchesCancelled: strs(e.LaunchesCancelled),
 		DeliveriesCancelled: strs(e.DeliveriesCancelled), ExecutionsAffected: strs(e.ExecutionsAffected),
+		DeliveriesNotVerified: strs(e.DeliveriesNotVerified),
 	}
 }
 

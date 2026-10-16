@@ -35,39 +35,97 @@ func (s *Service) CreateAutomation(ctx context.Context, name, purpose string, ki
 	}
 	var out Automation
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
-		if ok, err := q.SubjectUserActive(ctx, c.Org, owner); err != nil && !db.IsNoRows(err) {
-			return err
-		} else if !ok {
-			return ErrOwner
-		}
-		id, sa := ids.NewV7(), ids.NewV7()
-		aid := id
-		if err := q.InsertAutomationServiceAccount(ctx, dbq.InsertAutomationServiceAccountParams{
-			OrgID: c.Org, ID: sa, Name: tapp.AutomationAccountPrefix + name,
-			Description: "Execution identity of automation " + name, CreatedBy: c.Principal.String(), AutomationID: &aid,
-		}); err != nil {
-			return err
-		}
-		if err := q.InsertAutomation(ctx, dbq.InsertAutomationParams{
-			OrgID: c.Org, ID: id, Name: name, Purpose: purpose, Kind: string(kind), OwnerUserID: owner,
-			ServiceAccountID: sa, CreatedBy: c.Principal.ID,
-		}); err != nil {
-			return err
-		}
-		r, err := q.GetAutomation(ctx, c.Org, id)
-		if err != nil {
-			return err
-		}
-		out = automationView(r)
-		return record(ctx, tx, c.Actor(), "automation.created", id, map[string]string{
-			"name": name, "kind": string(kind), "owner": owner.String(), "service_account": sa.String(),
-		})
+		var err error
+		out, err = createAutomationTx(ctx, tx, c, name, purpose, kind, owner)
+		return err
 	})
 	if db.IsUniqueViolation(err) {
 		return Automation{}, ErrNameTaken
 	}
 	return out, err
+}
+
+func createAutomationTx(ctx context.Context, tx db.TenantTx, c tapp.Caller, name, purpose string, kind autodomain.WorkKind,
+	owner ids.UUID,
+) (Automation, error) {
+	q := dbq.New(tx)
+	if ok, err := q.SubjectUserActive(ctx, c.Org, owner); err != nil && !db.IsNoRows(err) {
+		return Automation{}, err
+	} else if !ok {
+		return Automation{}, ErrOwner
+	}
+	id, sa := ids.NewV7(), ids.NewV7()
+	aid := id
+	if err := q.InsertAutomationServiceAccount(ctx, dbq.InsertAutomationServiceAccountParams{
+		OrgID: c.Org, ID: sa, Name: tapp.AutomationAccountPrefix + name,
+		Description: "Execution identity of automation " + name, CreatedBy: c.Principal.String(), AutomationID: &aid,
+	}); err != nil {
+		return Automation{}, err
+	}
+	if err := q.InsertAutomation(ctx, dbq.InsertAutomationParams{
+		OrgID: c.Org, ID: id, Name: name, Purpose: purpose, Kind: string(kind), OwnerUserID: owner,
+		ServiceAccountID: sa, CreatedBy: c.Principal.ID,
+	}); err != nil {
+		return Automation{}, err
+	}
+	r, err := q.GetAutomation(ctx, c.Org, id)
+	if err != nil {
+		return Automation{}, err
+	}
+	return automationView(r), record(ctx, tx, c.Actor(), "automation.created", id, map[string]string{
+		"name": name, "kind": string(kind), "owner": owner.String(), "service_account": sa.String(),
+	})
+}
+
+// Draft is a new automation with its first DRAFT version (D102, D103 T1).
+type Draft struct {
+	Name, Purpose string
+	Kind          autodomain.WorkKind
+	Owner         ids.UUID
+	Definition    []byte
+}
+
+// CreateDraftTx creates, in the caller's transaction, a DRAFT automation,
+// its execution identity and its first DRAFT version (D102 for D103 T1):
+// CreateAutomation and CreateDraftVersion as one unit, so a later failure
+// in the same transaction leaves nothing behind. The caller needs what
+// both need; a taken name is ErrNameTaken and leaves the transaction
+// usable.
+func (s *Service) CreateDraftTx(ctx context.Context, tx db.TenantTx, in Draft) (Automation, Version, error) {
+	c, err := manager(ctx)
+	if err != nil {
+		return Automation{}, Version{}, err
+	}
+	if c.Org != tx.OrgID() {
+		return Automation{}, Version{}, ErrNotFound
+	}
+	if err := s.edition(ctx); err != nil {
+		return Automation{}, Version{}, err
+	}
+	if !autodomain.NamePattern.MatchString(in.Name) {
+		return Automation{}, Version{}, ErrName
+	}
+	if n := utf8.RuneCountInString(strings.TrimSpace(in.Purpose)); n < 1 || n > 2000 || !in.Kind.Valid() {
+		return Automation{}, Version{}, ErrDefinition
+	}
+	canonical, digest, err := parseDefinition(in.Definition)
+	if err != nil {
+		return Automation{}, Version{}, err
+	}
+	var a Automation
+	var v Version
+	err = tx.Savepoint(ctx, "automation_draft", func() error {
+		var err error
+		if a, err = createAutomationTx(ctx, tx, c, in.Name, in.Purpose, in.Kind, in.Owner); err != nil {
+			return err
+		}
+		v, err = createVersionTx(ctx, tx, c, a.ID, canonical, digest)
+		return err
+	})
+	if db.IsUniqueViolation(err) {
+		return Automation{}, Version{}, ErrNameTaken
+	}
+	return a, v, err
 }
 
 // GetAutomation returns an automation with its ACTIVE ceiling.

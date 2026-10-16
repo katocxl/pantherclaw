@@ -85,9 +85,11 @@ func (e Event) validate() error {
 // ValidateDetails checks small, non-secret context the way audit details
 // are checked: at most 16 lowercase keys, none suggesting a secret, values
 // of at most 512 bytes. Reflex signal facts reuse it (G0 M10 D1).
-func ValidateDetails(details map[string]string) error {
-	if len(details) > maxDetails {
-		return fmt.Errorf("%w: at most %d details", ErrInvalidEvent, maxDetails)
+func ValidateDetails(details map[string]string) error { return validateDetails(details, maxDetails) }
+
+func validateDetails(details map[string]string, keys int) error {
+	if len(details) > keys {
+		return fmt.Errorf("%w: at most %d details", ErrInvalidEvent, keys)
 	}
 	for k, v := range details {
 		if !keyPattern.MatchString(k) {
@@ -105,15 +107,28 @@ func ValidateDetails(details map[string]string) error {
 	return nil
 }
 
+// annotated validates ev as its caller gave it, then adds the attribution
+// details of ctx. The limits reserve the annotation's keys beyond the
+// caller's 16, and its values are ids, so annotating never makes a valid
+// event invalid; a caller's own key is never overwritten (D102 T5).
+func annotated(ctx context.Context, ev Event) (Event, error) {
+	if err := ev.validate(); err != nil {
+		return ev, err
+	}
+	if _, ok := automationctx.From(ctx); !ok {
+		return ev, nil
+	}
+	ev.Details = automationctx.Annotate(ctx, maps.Clone(ev.Details))
+	return ev, validateDetails(ev.Details, maxDetails+automationctx.MaxDetails)
+}
+
 // Record writes ev to the ledger in tx (the privileged change's transaction).
 // Under an automation's attribution context (automationctx) the details
 // also name the automation, version, execution and trigger (G0 M11 part 2
 // D8, HR-274).
 func Record(ctx context.Context, tx db.TenantTx, ev Event) (domain.Entry, error) {
-	if _, ok := automationctx.From(ctx); ok {
-		ev.Details = automationctx.Annotate(ctx, maps.Clone(ev.Details))
-	}
-	if err := ev.validate(); err != nil {
+	ev, err := annotated(ctx, ev)
+	if err != nil {
 		return domain.Entry{}, err
 	}
 	body, err := domain.CanonicalBody(struct {
