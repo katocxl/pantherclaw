@@ -179,35 +179,16 @@ WHERE org_id = sqlc.arg(org_id) AND automation_id = sqlc.arg(automation_id) AND 
 WITH ins AS (
     INSERT INTO pc.automation_feed_cursors (org_id, seq) VALUES (sqlc.arg(org_id), sqlc.arg(head))
     ON CONFLICT (org_id) DO NOTHING
-    RETURNING seq, agent_change_at, agent_change_id
+    RETURNING seq
 )
-SELECT seq, agent_change_at, agent_change_id FROM ins
+SELECT seq FROM ins
 UNION ALL
-SELECT c.seq, c.agent_change_at, c.agent_change_id FROM pc.automation_feed_cursors c WHERE c.org_id = sqlc.arg(org_id)
+SELECT c.seq FROM pc.automation_feed_cursors c WHERE c.org_id = sqlc.arg(org_id)
 LIMIT 1;
 
 -- name: AdvanceAutomationFeedCursor :execrows
 UPDATE pc.automation_feed_cursors SET seq = sqlc.arg(seq)
 WHERE org_id = sqlc.arg(org_id) AND seq = sqlc.arg(expected);
-
--- name: AdvanceAutomationAgentCursor :execrows
-UPDATE pc.automation_feed_cursors SET agent_change_at = sqlc.arg(at), agent_change_id = sqlc.arg(id)
-WHERE org_id = sqlc.arg(org_id) AND agent_change_id IS NOT DISTINCT FROM sqlc.narg(expected_id);
-
--- name: AgentDiscoveriesAfter :many
--- agent.discovered is recorded in pc.agent_changes, not the ledger (D18).
-SELECT c.id, c.agent_id, c.created_at, c.actor FROM pc.agent_changes c
-WHERE c.org_id = sqlc.arg(org_id) AND c.kind = 'agent.discovered'
-  AND (sqlc.narg(after_at)::timestamptz IS NULL OR (c.created_at, c.id) > (sqlc.narg(after_at)::timestamptz, sqlc.arg(after_id)::uuid))
-  AND c.created_at >= sqlc.arg(not_before)
-ORDER BY c.created_at, c.id
-LIMIT sqlc.arg(max_rows);
-
--- name: LatestAgentChange :one
-SELECT c.created_at, c.id FROM pc.agent_changes c
-WHERE c.org_id = sqlc.arg(org_id) AND c.kind = 'agent.discovered'
-ORDER BY c.created_at DESC, c.id DESC
-LIMIT 1;
 
 -- name: RunsAutomationExecution :many
 -- Runs started by automation executions (D23 ancestry).
@@ -259,13 +240,14 @@ SELECT count(DISTINCT group_key)::int AS n FROM pc.automation_threshold_counts
 WHERE org_id = sqlc.arg(org_id) AND automation_id = sqlc.arg(automation_id) AND minute >= sqlc.arg(since);
 
 -- name: ThresholdGroupWindow :one
-SELECT coalesce(sum(count), 0)::int AS total, max(depth)::int AS depth,
+SELECT coalesce(sum(count), 0)::int AS total, coalesce(max(depth), 0)::int AS depth,
        (SELECT coalesce(array_agg(DISTINCT x), '{}') FROM (
             SELECT unnest(c.ancestry) AS x FROM pc.automation_threshold_counts c
             WHERE c.org_id = sqlc.arg(org_id) AND c.automation_id = sqlc.arg(automation_id)
               AND c.group_key = sqlc.arg(group_key) AND c.minute >= sqlc.arg(since)
             LIMIT 64) u)::uuid[] AS ancestry,
-       (array_agg(root_trigger_id ORDER BY minute) FILTER (WHERE root_trigger_id IS NOT NULL))[1]::uuid AS root_trigger_id
+       coalesce((array_agg(root_trigger_id ORDER BY minute) FILTER (WHERE root_trigger_id IS NOT NULL))[1],
+                '00000000-0000-0000-0000-000000000000')::uuid AS root_trigger_id
 FROM pc.automation_threshold_counts
 WHERE org_id = sqlc.arg(org_id) AND automation_id = sqlc.arg(automation_id) AND group_key = sqlc.arg(group_key)
   AND minute >= sqlc.arg(since);

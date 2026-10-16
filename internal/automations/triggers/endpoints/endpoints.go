@@ -27,6 +27,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/automations/triggers"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	pccrypto "github.com/katocxl/pantherclaw/internal/platform/crypto"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -209,4 +210,15 @@ func hostOf(raw string) string {
 		return ""
 	}
 	return u.Host
+}
+
+// PruneReceipts deletes inbound receipts past their seven days (D21).
+func (s *Service) PruneReceipts(ctx context.Context, org ids.OrgID) (int64, error) {
+	var n int64
+	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		n, err = dbq.New(tx).PruneEventReceipts(ctx, org)
+		return err
+	})
+	return n, err
 }

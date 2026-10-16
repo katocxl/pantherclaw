@@ -241,3 +241,33 @@ func (s *Service) loadAutomation(ctx context.Context, q *dbq.Queries, org ids.Or
 	}
 	return automationOf(r.ID, r.Name, r.State, r.Rollout, r.ServiceAccountID, r.OwnerUserID, r.VersionID, r.Definition)
 }
+
+// ManualForm is what the start page shows: the automation, its declared
+// parameters and whether starting needs a step-up.
+type ManualForm struct {
+	Automation ids.UUID
+	Name       string
+	Params     map[string]autodomain.ParamSpec
+	StepUp     bool
+}
+
+// Form returns the manual start form of an automation (automation.run).
+func (s *Service) Form(ctx context.Context, automation ids.UUID) (ManualForm, error) {
+	c, err := s.runner(ctx)
+	if err != nil {
+		return ManualForm{}, err
+	}
+	var out ManualForm
+	err = s.d.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		a, err := s.loadAutomation(ctx, dbq.New(tx), c.Org, automation)
+		if err != nil {
+			return err
+		}
+		if a.Def.When.Manual == nil {
+			return ErrNotManual
+		}
+		out = ManualForm{Automation: a.ID, Name: a.Name, Params: a.Def.When.Manual.Params, StepUp: requiresStepUp(a.Def)}
+		return nil
+	}, db.ReadOnly())
+	return out, err
+}

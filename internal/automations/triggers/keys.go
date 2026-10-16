@@ -36,10 +36,6 @@ func ScheduleKey(automation ids.UUID, fireAt time.Time) string {
 // EventKey is a platform event's key: its ledger entry id.
 func EventKey(entry ids.UUID) string { return "event:" + entry.String() }
 
-// AgentChangeKey is an agent discovery's key (agent changes are not in the
-// ledger).
-func AgentChangeKey(change ids.UUID) string { return "event:agent_change:" + change.String() }
-
 // InboundKey is a signed inbound event's key: its source and webhook-id.
 func InboundKey(source ids.UUID, webhookID string) string {
 	return "inbound:" + source.String() + ":" + digest(webhookID)
