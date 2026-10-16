@@ -51,7 +51,13 @@ type listener struct {
 // and threshold trigger.
 func (s *Service) ProcessFeed(ctx context.Context, org ids.OrgID) (FeedResult, error) {
 	var res FeedResult
-	err := s.d.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+	// Without the edition the cursor still moves, firing nothing (D117): a
+	// licence that returns never replays what happened meanwhile.
+	licensed, err := s.licensed(ctx)
+	if err != nil {
+		return FeedResult{}, err
+	}
+	err = s.d.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		res = FeedResult{}
 		q := dbq.New(tx)
 		head, err := feed.Reader{}.Head(ctx, tx)
@@ -71,7 +77,7 @@ func (s *Service) ProcessFeed(ctx context.Context, org ids.OrgID) (FeedResult, e
 		if err != nil {
 			return err
 		}
-		if len(ls) > 0 {
+		if len(ls) > 0 && licensed {
 			now, err := q.DBNow(ctx)
 			if err != nil {
 				return err

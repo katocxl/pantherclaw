@@ -6,6 +6,7 @@ package triggers
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"strings"
 	"unicode/utf8"
 
@@ -340,4 +341,16 @@ func (s *Service) repeat(ctx context.Context, q *dbq.Queries, org ids.OrgID, aut
 		out.Execution = *t.ExecutionID
 	}
 	return out, true, nil
+}
+
+// licensed reports whether the install's edition includes Automations
+// (D117): the feed, schedule and condition jobs fire nothing without it,
+// as the engine refuses at revalidation. A failure to read the licence is
+// an error, never a "no".
+func (s *Service) licensed(ctx context.Context) (bool, error) {
+	err := s.entitled(ctx)
+	if errors.Is(err, ErrEdition) {
+		return false, nil
+	}
+	return err == nil, err
 }

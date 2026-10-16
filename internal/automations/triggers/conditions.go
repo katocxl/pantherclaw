@@ -207,6 +207,9 @@ func RunProbe(ctx context.Context, q *dbq.Queries, org ids.OrgID, probe string, 
 // episode that has held for `for` fires once, and episodes whose subject
 // no longer matches end.
 func (s *Service) EvaluateConditions(ctx context.Context, org ids.OrgID) (fired int, err error) {
+	if ok, err := s.licensed(ctx); !ok {
+		return 0, err
+	}
 	err = s.d.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		fired = 0
 		q := dbq.New(tx)

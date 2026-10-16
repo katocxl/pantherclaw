@@ -7,12 +7,16 @@ package triggers
 
 import (
 	"context"
+	"log/slog"
+	"os"
 	"slices"
 	"sync"
 	"testing"
 	"time"
 
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
+	"github.com/katocxl/pantherclaw/internal/automations/triggers/triggerstest"
+	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -171,5 +175,66 @@ func TestT123_GateRequestsInheritTheirExecutionsLineage(t *testing.T) {
 	})
 	if depth != 1 || !slices.Equal(anc, []ids.UUID{a.ID}) {
 		t.Fatalf("B lineage: depth %d ancestry %v", depth, anc)
+	}
+}
+
+// TestHR276_WithoutTheEditionNothingFires (D117): on a Community install
+// the feed, schedule and condition jobs fire nothing (no trigger rows, no
+// dedupe keys, no failures); the feed cursor still moves, so the events of
+// that time never fire once the edition returns.
+func TestHR276_WithoutTheEditionNothingFires(t *testing.T) {
+	h, rec := newRecordingHarness(t)
+	f := h.f
+	ctx := context.Background()
+	deps := func(ed Editions) *Service {
+		return New(Deps{
+			Pool: f.Pool, Starter: h.st, Editions: ed, Raiser: rec, Failures: rec, Pauser: rec,
+			Log: slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		})
+	}
+	sched := f.Automation(t, "minutely", f.Definition(`"schedule":{"cron":"* * * * *","timezone":"UTC"}`, ""), autodomain.RolloutFull)
+	ev := f.Automation(t, "on-revoke", f.Definition(`"event":{"on":"grant.revoked"}`, ""), autodomain.RolloutFull)
+	cond := f.Automation(t, "waiting", f.Definition(`"condition":{"probe":"approval.waiting","for":"1m"}`, ""), autodomain.RolloutFull)
+	h.activator(t, func(ctx context.Context, act Activator, tx db.TenantTx) error {
+		return act.Activate(ctx, tx.Pgx(), sched.ID, sched.Version)
+	})
+	h.feed(t) // the cursor starts at the head
+
+	h.svc = deps(triggerstest.Editions{Edition: billing.Community})
+	f.Exec(t, "UPDATE pc.automation_schedules SET next_fire_at = date_trunc('minute', now()) WHERE org_id = $1", f.Org)
+	h.record(t, "grant.revoked", person(h), nil)
+	if n, err := h.svc.DispatchSchedules(ctx, f.Org); err != nil || n != 0 {
+		t.Fatalf("schedules: %d %v", n, err)
+	}
+	if res := h.feed(t); res.Fired != 0 || res.To == 0 {
+		t.Fatalf("feed: %+v", res)
+	}
+	if n, err := h.svc.EvaluateConditions(ctx, f.Org); err != nil || n != 0 {
+		t.Fatalf("conditions: %d %v", n, err)
+	}
+	for _, q := range []string{
+		"SELECT count(*) FROM pc.automation_triggers WHERE org_id = $1",
+		"SELECT count(*) FROM pc.automation_dedupe WHERE org_id = $1",
+	} {
+		if n := f.Count(t, q); n != 0 {
+			t.Fatalf("%s: %d", q, n)
+		}
+	}
+	if len(rec.failures) != 0 || len(rec.signals) != 0 || h.st.Count() != 0 {
+		t.Fatalf("%d failures, %d signals, %d starts", len(rec.failures), len(rec.signals), h.st.Count())
+	}
+
+	// The edition returns: the revocation from before is not replayed; the
+	// due schedule fires.
+	h.svc = deps(triggerstest.Team)
+	h.feed(t)
+	if got := f.States(t, ev); len(got) != 0 {
+		t.Fatalf("an event from without the edition fired: %v", got)
+	}
+	if n, err := h.svc.DispatchSchedules(ctx, f.Org); err != nil || n != 1 {
+		t.Fatalf("schedules with the edition: %d %v", n, err)
+	}
+	if got := f.States(t, cond); len(got) != 0 {
+		t.Fatalf("a condition fired: %v", got)
 	}
 }
