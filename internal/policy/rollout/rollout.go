@@ -831,7 +831,7 @@ const VoidCompromised = "PUBLISHER_COMPROMISED"
 // Halt ends an open rollout (StageCancelled) and voids its pending change
 // requests, in the caller's transaction (G0 M11 D43, HR-293: its creator
 // or a confirmer was marked compromised). The rollout is audited
-// policy.rollout_cancelled with the reason.
+// with the cancel event and the reason.
 func Halt(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, r dbq.PcPolicyRollout, reason string) error {
 	if err := cancel(ctx, tx, actor, r, reason); err != nil {
 		return err
