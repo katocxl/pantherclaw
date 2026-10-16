@@ -99,11 +99,31 @@ func (s *Service) SetTestCases(ctx context.Context, versionID ids.UUID, cases []
 	if err != nil {
 		return nil, err
 	}
+	var missing []string
+	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		missing, err = s.SetTestCasesTx(ctx, tx, versionID, cases)
+		return err
+	})
+	return missing, err
+}
+
+// SetTestCasesTx is SetTestCases in the caller's transaction (D103 T1),
+// so a template can create an automation, its version and its cases
+// atomically. The caller in ctx needs automation.manage in tx's org.
+func (s *Service) SetTestCasesTx(ctx context.Context, tx db.TenantTx, versionID ids.UUID, cases []Case) ([]string, error) {
+	c, err := caller(ctx, td.PermAutomationManage)
+	if err != nil {
+		return nil, err
+	}
+	if c.Org != tx.OrgID() {
+		return nil, ErrNotFound
+	}
 	if err := s.edition(ctx, false); err != nil {
 		return nil, err
 	}
 	var missing []string
-	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+	err = func() error {
 		q := dbq.New(tx)
 		lv, err := q.LockAssuranceVersion(ctx, c.Org, versionID)
 		if db.IsNoRows(err) {
@@ -146,7 +166,7 @@ func (s *Service) SetTestCases(ctx context.Context, versionID ids.UUID, cases []
 		return record(ctx, tx, c, "automation.tests_set", versionID, map[string]string{
 			"automation": lv.AutomationID.String(), "cases": strconv.Itoa(len(cases)),
 		})
-	})
+	}()
 	return missing, err
 }
 

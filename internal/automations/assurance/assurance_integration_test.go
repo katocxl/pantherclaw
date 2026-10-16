@@ -125,8 +125,13 @@ func TestT127_TestsAndSimulationAreInert(t *testing.T) {
 	before := effects(t, o)
 
 	// The mock refund is irreversible, so PARTIAL or UNKNOWN is required.
-	missing, err := svc.SetTestCases(ctx, v, scenario()[:4])
-	if err != nil {
+	// D103 T1: in the caller's transaction, as a template sets them.
+	var missing []string
+	if err := o.P.InTenantTx(ctx, o.Org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		missing, err = svc.SetTestCasesTx(ctx, tx, v, scenario()[:4])
+		return err
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if len(missing) != 1 || missing[0] != "PARTIAL|UNKNOWN" {
