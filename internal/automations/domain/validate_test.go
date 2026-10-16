@@ -398,3 +398,22 @@ func TestD102_RevocableWithin(t *testing.T) {
 		t.Error("Authority.NotWiderThan ignores revocable")
 	}
 }
+
+// TestD106_PlatformWithin: a replacement that lists another step kind or
+// scope is wider (D106 D4).
+func TestD106_PlatformWithin(t *testing.T) {
+	prev := autodomain.Authority{Platform: []autodomain.PlatformScope{{Step: "notify", Scopes: []string{"OWNER"}}}}
+	for name, tc := range map[string]struct {
+		p    []autodomain.PlatformScope
+		want bool
+	}{
+		"none":          {nil, true},
+		"same":          {prev.Platform, true},
+		"another step":  {[]autodomain.PlatformScope{{Step: "contain", Scopes: []string{"TRIGGER_GRANT"}}}, false},
+		"another scope": {[]autodomain.PlatformScope{{Step: "notify", Scopes: []string{"OWNER", "CONFIRMERS"}}}, false},
+	} {
+		if got := (autodomain.Authority{Platform: tc.p}).NotWiderThan(prev); got != tc.want {
+			t.Errorf("%s: %v", name, got)
+		}
+	}
+}

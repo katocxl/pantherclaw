@@ -159,6 +159,48 @@ func (q *Queries) InsertAlertEvidence(ctx context.Context, arg InsertAlertEviden
 	return err
 }
 
+const resolveOpenFailures = `-- name: ResolveOpenFailures :many
+UPDATE pc.operational_failures
+SET state = 'RESOLVED', resolved_at = now(), resolution = $1::text
+WHERE org_id = $2 AND kind = $3::text AND dedupe_key = ANY ($4::text[])
+  AND state <> 'RESOLVED'
+RETURNING id
+`
+
+type ResolveOpenFailuresParams struct {
+	Resolution string
+	OrgID      ids.OrgID
+	Kind       string
+	DedupeKeys []string
+}
+
+// Resolves the open failures of one kind with one of the dedupe keys,
+// once their cause is gone (G0 M11 part 2 D106 D2).
+func (q *Queries) ResolveOpenFailures(ctx context.Context, arg ResolveOpenFailuresParams) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, resolveOpenFailures,
+		arg.Resolution,
+		arg.OrgID,
+		arg.Kind,
+		arg.DedupeKeys,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const scopeAgentPlacements = `-- name: ScopeAgentPlacements :many
 SELECT id, team_id, environment_id FROM pc.agents
 WHERE org_id = $1

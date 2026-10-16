@@ -86,3 +86,15 @@ func Annotate(ctx context.Context, details map[string]string) map[string]string 
 	}
 	return details
 }
+
+// Conflict returns a key of details that names an attribution detail of
+// ctx with a different value (D106 D3): a record made under an automation
+// may repeat its attribution but never contradict it.
+func Conflict(ctx context.Context, details map[string]string) (string, bool) {
+	for k, v := range Details(ctx) {
+		if got, ok := details[k]; ok && got != v {
+			return k, true
+		}
+	}
+	return "", false
+}
