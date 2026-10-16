@@ -178,3 +178,56 @@ func TestD111_EnableResolvesByScope(t *testing.T) {
 		t.Error("another automation's failure was resolved")
 	}
 }
+
+// TestD115_ResumePausedOnlyForItsReason (R2a): resume_launches resumes
+// what is still paused for its reason, after revalidation, and nothing
+// else.
+func TestD115_ResumePausedOnlyForItsReason(t *testing.T) {
+	e := newEnv(t)
+	a, _ := e.enabled("refunds", autodomain.RolloutShadow, 5)
+	inTx := func(fn func(ctx context.Context, tx db.TenantTx) error) {
+		t.Helper()
+		if err := e.pool.InTenantTx(context.Background(), e.org, fn); err != nil {
+			t.Fatal(err)
+		}
+	}
+	resume := func(reason autodomain.PauseReason) (bool, error) {
+		var ok bool
+		err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+			var err error
+			ok, err = e.svc.ResumePaused(ctx, tx.Pgx(), e.org, a.ID, reason)
+			return err
+		})
+		return ok, err
+	}
+	state := func() autodomain.State {
+		got, err := e.svc.GetAutomation(e.alice.cli, a.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got.State
+	}
+	if ok, err := resume(autodomain.PauseCoverageRecovery); ok || err != nil {
+		t.Fatalf("resumed an ACTIVE automation: %v %v", ok, err)
+	}
+	inTx(func(ctx context.Context, tx db.TenantTx) error {
+		_, err := e.svc.Pause(ctx, tx.Pgx(), e.org, autodomain.PauseSelector{Automations: []ids.UUID{a.ID}}, autodomain.PauseCoverageRecovery)
+		return err
+	})
+	if ok, err := resume(autodomain.PauseUser); ok || err != nil || state() != autodomain.StatePaused {
+		t.Fatalf("another reason resumed it: %v %v %s", ok, err, state())
+	}
+	e.exec(`UPDATE pc.org_containment SET kill_switch = true, engaged_by = 'user:test', engaged_at = now(), engage_reason = 'test'
+		WHERE org_id = $1`, e.org)
+	if ok, err := resume(autodomain.PauseCoverageRecovery); ok || err == nil || state() != autodomain.StatePaused {
+		t.Fatalf("resumed during the kill switch: %v %v %s", ok, err, state())
+	}
+	e.exec(`UPDATE pc.org_containment SET kill_switch = false, engaged_by = NULL, engaged_at = NULL, engage_reason = NULL
+		WHERE org_id = $1`, e.org)
+	if ok, err := resume(autodomain.PauseCoverageRecovery); !ok || err != nil || state() != autodomain.StateActive {
+		t.Fatalf("its own reason: %v %v %s", ok, err, state())
+	}
+	if ok, err := resume(autodomain.PauseCoverageRecovery); ok || err != nil {
+		t.Errorf("resumed twice: %v %v", ok, err)
+	}
+}
