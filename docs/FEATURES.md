@@ -245,6 +245,10 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | F723 | Automation retries & compensation | Bounded attempts and a deadline; only safe operations retry, with stable step identity. Unknown irreversible outcomes need reconciliation. Partial completion is itemised, and compensation is separately authorized. | MVP | Team | M11 | F723–F728 |
 | F738 | Automation tests & rollout | Tests normal, denied, timeout, duplicate and partial cases, plus historical trigger simulation and shadow runs without effectful steps. Volume and approver forecasts; a bounded cohort goes first, and outcomes are verified before widening. | MVP | Team | M11 | F738–F745 |
 
+**Delivery status of the M11 rows and of search (2026-10-15; [g0/M11.md](g0/M11.md), M11 part 2).** The rows stay the planned scope; this list says where each stands. The exit updates it to delivered or partly.
+
+- **In progress — M11 part 2:** every row marked M11, in this section and elsewhere: F025, F221, F262, F283, F333, F533, F562, F582, F595, F600, F652, F655, F665, F672, F678, F683, F691, F692, F693, F697, F701, F706, F710, F715, F718, F723, F729, F732, F734, F738, F762 (F764 read-only diagnostics and F767 coding-to-production; F762, F763, F765 and F766 wait for M14's connectors). Also universal search, §23 of the traceability table (F304–F321): F304 gains quick find and rule-based plain-language questions (F305; no AI model, nothing leaves the server, founder decision F5); F317 gains opening a case from results and export (F318), suggestions (F320) and evidence-grounded answers (F321); and incident correlation (F316, a source of F241) becomes a built-in search query. M10 delivered the structured search, the built-in queries F306–F315 and result integrity.
+
 ## 6. Non-bypassable Transaction Boundary
 
 **Components:** Checkpoint (6A, 6C, 6D) and Stash (6B).
