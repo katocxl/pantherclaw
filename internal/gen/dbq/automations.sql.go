@@ -279,7 +279,7 @@ func (q *Queries) CeilingsApprovedBy(ctx context.Context, orgID ids.OrgID, userI
 	return items, nil
 }
 
-const countActiveAutomationExecutions = `-- name: CountActiveAutomationExecutions :one
+const countActiveAutomationRuns = `-- name: CountActiveAutomationRuns :one
 SELECT count(*)::int FROM pc.runs r
 WHERE r.org_id = $1 AND r.launcher_sa_id = $2
   AND r.automation_execution_id IS NOT NULL AND r.state = 'ACTIVE'
@@ -287,8 +287,8 @@ WHERE r.org_id = $1 AND r.launcher_sa_id = $2
 
 // Without the engine's port, the automation's active runs stand for its
 // active executions (D91 K10): Retire refuses while any is live.
-func (q *Queries) CountActiveAutomationExecutions(ctx context.Context, orgID ids.OrgID, serviceAccountID *ids.UUID) (int32, error) {
-	row := q.db.QueryRow(ctx, countActiveAutomationExecutions, orgID, serviceAccountID)
+func (q *Queries) CountActiveAutomationRuns(ctx context.Context, orgID ids.OrgID, serviceAccountID *ids.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countActiveAutomationRuns, orgID, serviceAccountID)
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -1404,6 +1404,36 @@ func (q *Queries) ReserveAutomationBudget(ctx context.Context, arg ReserveAutoma
 	var reserved money.Decimal
 	err := row.Scan(&reserved)
 	return reserved, err
+}
+
+const resolveAutomationFailure = `-- name: ResolveAutomationFailure :execrows
+UPDATE pc.operational_failures
+SET state = 'RESOLVED', resolved_at = now(), resolution = $1::text
+WHERE org_id = $2 AND kind = $3::text AND dedupe_key = $4::text
+  AND state <> 'RESOLVED'
+`
+
+type ResolveAutomationFailureParams struct {
+	Resolution string
+	OrgID      ids.OrgID
+	Kind       string
+	DedupeKey  string
+}
+
+// Resolves an open owned failure the automations core raised, by its kind
+// and dedupe key, once its cause is gone (D102 L6: the next successful
+// ceiling check resolves automation.sweep_failed).
+func (q *Queries) ResolveAutomationFailure(ctx context.Context, arg ResolveAutomationFailureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, resolveAutomationFailure,
+		arg.Resolution,
+		arg.OrgID,
+		arg.Kind,
+		arg.DedupeKey,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const resumeAutomation = `-- name: ResumeAutomation :execrows

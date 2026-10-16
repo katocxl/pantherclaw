@@ -339,7 +339,7 @@ JOIN pc.automation_ceilings c ON c.org_id = g.org_id AND c.id = g.ceiling_id
 WHERE g.org_id = sqlc.arg(org_id) AND c.automation_id = sqlc.arg(automation_id) AND g.state = 'ACTIVE'
 ORDER BY g.id;
 
--- name: CountActiveAutomationExecutions :one
+-- name: CountActiveAutomationRuns :one
 -- Without the engine's port, the automation's active runs stand for its
 -- active executions (D91 K10): Retire refuses while any is live.
 SELECT count(*)::int FROM pc.runs r
@@ -350,3 +350,12 @@ WHERE r.org_id = sqlc.arg(org_id) AND r.launcher_sa_id = sqlc.arg(service_accoun
 -- An enabling's apply takes the org's containment row as the kill switch's
 -- Engage does, so the two serialize (D91 K5).
 SELECT kill_switch FROM pc.org_containment WHERE org_id = sqlc.arg(org_id) FOR UPDATE;
+
+-- name: ResolveAutomationFailure :execrows
+-- Resolves an open owned failure the automations core raised, by its kind
+-- and dedupe key, once its cause is gone (D102 L6: the next successful
+-- ceiling check resolves automation.sweep_failed).
+UPDATE pc.operational_failures
+SET state = 'RESOLVED', resolved_at = now(), resolution = sqlc.arg(resolution)::text
+WHERE org_id = sqlc.arg(org_id) AND kind = sqlc.arg(kind)::text AND dedupe_key = sqlc.arg(dedupe_key)::text
+  AND state <> 'RESOLVED';

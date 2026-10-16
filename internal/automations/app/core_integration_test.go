@@ -94,6 +94,7 @@ type env struct {
 	grants          *grantsapp.Service
 	runs            *runsapp.Service
 	gate            *testGate
+	db              *dbtest.DB
 	alice, bob, cat person
 }
 
@@ -158,7 +159,7 @@ func (e *env) person(name string, roles ...td.RoleName) person {
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	d := dbtest.New(t)
-	e := &env{t: t, pool: d.AppPool(t), org: ids.New[ids.Org](), team: ids.NewV7(), envID: ids.NewV7(), gate: &testGate{ok: true}}
+	e := &env{t: t, pool: d.AppPool(t), db: d, org: ids.New[ids.Org](), team: ids.NewV7(), envID: ids.NewV7(), gate: &testGate{ok: true}}
 	e.exec("INSERT INTO pc.orgs (id, name) VALUES ($1, 'acme')", e.org)
 	e.exec("INSERT INTO pc.org_containment (org_id) VALUES ($1)", e.org)
 	e.exec("INSERT INTO pc.teams (org_id, id, slug, name) VALUES ($1, $2, 'ops', 'Ops')", e.org, e.team)

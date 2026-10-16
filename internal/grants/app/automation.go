@@ -59,6 +59,9 @@ const (
 	// authority rows, whatever their state (RevokeAuthority, D91 K2).
 	RevokeScopeAutomation = "AUTOMATION"
 	RevokeScopeCeiling    = "CEILING"
+	// RevokeScopeGrant is one grant of the given execution (Grant), for a
+	// failed launch's withdraw (D102).
+	RevokeScopeGrant = "GRANT"
 )
 
 // TxStore is the repository's in-transaction side, for issuance and
@@ -357,7 +360,7 @@ type AutomationRevoke struct {
 	// scopes.
 	Revocable    []ids.UUID
 	RevocableAll bool
-	// Grant is the trigger's grant (TRIGGER_GRANT).
+	// Grant is the trigger's grant (TRIGGER_GRANT), or the execution's grant (GRANT).
 	Grant  ids.UUID
 	Scope  string
 	Reason string
@@ -367,7 +370,8 @@ type AutomationRevoke struct {
 // of the scope and every grant delegated from them (D9): the execution's
 // own grants (EXECUTION), the trigger's grant when it is one of a
 // revocable agent's (TRIGGER_GRANT), the root grants of the ceiling agents
-// that are revocable (CEILING_AGENTS), every grant under one ceiling
+// that are revocable (CEILING_AGENTS), one grant that belongs to the execution
+// (GRANT), every grant under one ceiling
 // (CEILING: a void or expired authority row) or under any of the
 // automation's ceilings (AUTOMATION, for RevokeAuthority). It returns the
 // revoked ids.
@@ -408,6 +412,21 @@ func (s *Service) RevokeForAutomationTx(ctx context.Context, tx db.TenantTx, in 
 			return nil, errNotRevocable
 		}
 		targets, err = s.Store.AutomationGrantsInTx(ctx, tx, in, agents)
+	case RevokeScopeGrant:
+		gid, perr := domain.ParseGrantID(in.Grant.String())
+		if perr != nil || in.Execution.IsZero() {
+			return nil, ErrGrantNotFound
+		}
+		g, found, gerr := s.Store.GrantInTx(ctx, tx, in.Org, gid)
+		switch {
+		case gerr != nil:
+			return nil, gerr
+		case !found || g.Execution != in.Execution:
+			return nil, ErrGrantNotFound
+		case g.State != domain.StateActive:
+			return nil, nil
+		}
+		targets = []ids.UUID{g.ID.UUID()}
 	case RevokeScopeTriggerGrant:
 		gid, perr := domain.ParseGrantID(in.Grant.String())
 		if perr != nil {

@@ -4,11 +4,15 @@
 package audit
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/katocxl/pantherclaw/internal/automations/automationctx"
 	"github.com/katocxl/pantherclaw/internal/evidence/domain"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
 func valid() Event {
@@ -50,4 +54,38 @@ func manyDetails(n int) map[string]string {
 		m["k"+strings.Repeat("a", i+1)] = "v"
 	}
 	return m
+}
+
+// TestAnnotationFitsAMaximumEvent: a caller's event at every detail limit
+// stays valid under an automation's attribution, its own keys kept (G0
+// M11 part 2 D102 T5).
+func TestAnnotationFitsAMaximumEvent(t *testing.T) {
+	r := automationctx.Ref{Automation: ids.NewV7(), Version: ids.NewV7(), Execution: ids.NewV7(), Trigger: ids.NewV7()}
+	ctx := automationctx.With(context.Background(), r)
+	ev := valid()
+	ev.Details = map[string]string{}
+	for i := range maxDetails {
+		ev.Details[fmt.Sprintf("k%02d", i)] = strings.Repeat("v", maxDetailValue)
+	}
+	got, err := annotated(ctx, ev)
+	if err != nil {
+		t.Fatalf("a maximum event under an automation: %v", err)
+	}
+	if len(got.Details) != maxDetails+automationctx.MaxDetails || got.Details["trigger"] != r.Trigger.String() {
+		t.Errorf("annotated %d details", len(got.Details))
+	}
+	if len(ev.Details) != maxDetails {
+		t.Error("the caller's map was changed")
+	}
+	ev.Details = map[string]string{"execution": "the caller's"}
+	if got, err := annotated(ctx, ev); err != nil || got.Details["execution"] != "the caller's" || got.Details["automation"] != r.Automation.String() {
+		t.Errorf("caller key: %v %v", got.Details, err)
+	}
+	ev.Details = map[string]string{}
+	for i := range maxDetails + 1 {
+		ev.Details[fmt.Sprintf("k%02d", i)] = "v"
+	}
+	if _, err := annotated(ctx, ev); !errors.Is(err, ErrInvalidEvent) {
+		t.Errorf("17 caller details: %v", err)
+	}
 }
