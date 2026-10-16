@@ -18,6 +18,7 @@ import (
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/templates"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/endpoints"
+	"github.com/katocxl/pantherclaw/internal/pclaw"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
@@ -135,6 +136,26 @@ func TestE2E_M11_GovernedAutomations(t *testing.T) {
 	if n := s.row(t, "SELECT count(*)::text FROM pc.grants g JOIN pc.automation_ceilings c ON c.org_id = g.org_id AND c.id = g.ceiling_id WHERE c.automation_id = $1", auto.ID); n != "0" {
 		t.Fatalf("a SHADOW execution issued %s grants", n)
 	}
+
+	// 5. COHORT needs two people (D8): bob, then carol. A signed event now
+	// starts a LIVE execution: a grant from the automation's service account
+	// under its ceiling, a run, and a launch the real runner claims; the
+	// runner refunds through the real gateway, which decides, holds and
+	// receipts the refund (HR-285); the confirmed effect finishes the
+	// execution SUCCEEDED and its grant is revoked.
+	carol := a.confirmer(t, "carol")
+	en, err = a.core.RequestEnable(aliceCtx, v.ID, autodomain.RolloutCohort, []ids.UUID{r.agent}, ids.UUID{})
+	if err != nil || en.Required != 2 {
+		t.Fatalf("RequestEnable COHORT: %+v %v", en, err)
+	}
+	if st := bob.confirmAt(t, "/changes/"+en.Request.ID.String()); st != "PENDING" {
+		t.Fatalf("COHORT enabling after one of two: %s", st)
+	}
+	if st := carol.confirmAt(t, "/changes/"+en.Request.ID.String()); st != "APPROVED" {
+		t.Fatalf("COHORT enabling after both: %s", st)
+	}
+	live := a.liveRefund(t, auto.ID, source, created.Secret, "msg-2", "T-2")
+	_ = live
 }
 
 // person is an in-process caller: the user with roles at the org.
@@ -196,13 +217,20 @@ func (a *autoStack) withRefund(t *testing.T, raw []byte, amount string) []byte {
 		}
 		with["calls"] = []map[string]any{{
 			"connection": a.r.s.conn.String(), "face": "HTTP", "method": "POST", "path": "/v1/refunds",
-			"input": map[string]string{"charge": "ch_1", "amount": amount, "currency": "USD", "reason": "duplicate"},
+			// Each input value is JSON text (AutomationRunnerCall.input).
+			"input": map[string]string{"charge": `"ch_1"`, "amount": `"` + amount + `"`, "currency": `"USD"`, "reason": `"duplicate"`},
 		}}
 		b, err := json.Marshal(with)
 		if err != nil {
 			t.Fatal(err)
 		}
 		def.Do[i].With = jsontext.Value(b)
+	}
+	// The template names its per-run budget "per-run", which grants refuse
+	// as a rule id (lowercase letters, digits and underscores): reported to
+	// the coordinator as a cross-stream gap; the test uses a valid id.
+	for i := range def.Authority.Ceiling.PerGrant.Limits.Budgets {
+		def.Authority.Ceiling.PerGrant.Limits.Budgets[i].ID = strings.ReplaceAll(def.Authority.Ceiling.PerGrant.Limits.Budgets[i].ID, "-", "_")
 	}
 	out, err := def.Canonical()
 	if err != nil {
@@ -278,4 +306,60 @@ func slug(s string) string {
 		}
 	}
 	return strings.TrimSuffix(b.String(), "-")
+}
+
+// liveRun is a LIVE execution's grant and run.
+type liveRun struct{ execution, grant, run ids.UUID }
+
+// liveRefund sends a signed event for ref, drives its LIVE execution
+// through the launch, the real runner and the confirmed refund, and
+// checks the grant's provenance and its revocation at the finish.
+func (a *autoStack) liveRefund(t *testing.T, automation, source ids.UUID, secret, msgID, ref string) liveRun {
+	t.Helper()
+	s := a.r.s
+	if code := a.signedEvent(t, source, secret, msgID, `{"type":"ticket.created","ref":"`+ref+`"}`); code != http.StatusAccepted {
+		t.Fatalf("a signed event: %d", code)
+	}
+	x := a.latestExecution(t, automation)
+	a.advance(t, x)
+	var out liveRun
+	out.execution = x
+	launch := s.row(t, "SELECT coalesce((SELECT grant_id::text || ' ' || run_id::text FROM pc.automation_launches WHERE execution_id = $1), '')", x)
+	if launch == "" {
+		t.Fatalf("no launch: the execution is %s; attempts: %s", s.row(t, "SELECT mode || '/' || state || '/' || coalesce(reason, '') FROM pc.automation_executions WHERE id = $1", x),
+			s.row(t, "SELECT coalesce(string_agg(step_id || ':' || state || ':' || coalesce(reason, '') || ':' || coalesce(output::text, ''), '; '), '') FROM pc.automation_step_attempts WHERE execution_id = $1", x))
+	}
+	parts := strings.Fields(launch)
+	out.grant, out.run = mustUUID(t, parts[0]), mustUUID(t, parts[1])
+	// The grant's grantor is the automation's service account, under its
+	// ceiling (D9, D69 C1).
+	if got := s.row(t, `SELECT g.grantor_kind || ' ' || (g.grantor_id = a.service_account_id)::text || ' ' || (c.automation_id = a.id)::text
+		FROM pc.grants g JOIN pc.automation_ceilings c ON c.org_id = g.org_id AND c.id = g.ceiling_id
+		JOIN pc.automations a ON a.org_id = c.org_id AND a.id = c.automation_id WHERE g.id = $1`, out.grant); !strings.HasSuffix(got, " true true") {
+		t.Fatalf("the launch's grant: %s", got)
+	}
+
+	// The real runner claims the launch through the in-process launch
+	// service and makes its refund call through the real gateway.
+	var stdout, stderr strings.Builder
+	if code := pclaw.Run(context.Background(), []string{
+		"automation", "runner", "--key", s.keyFile, "--gateway", s.gateway, "--server", a.launches.URL, "--once", "--dev-insecure",
+	}, &stdout, &stderr, noEnv, pclaw.Options{}); code != 0 {
+		t.Fatalf("pclaw automation runner: %d %s %s", code, stdout.String(), stderr.String())
+	}
+	if n := s.row(t, "SELECT count(*)::text FROM pc.transactions WHERE run_id = $1 AND decision = 'ALLOW'", out.run); n != "1" {
+		t.Fatalf("the runner's refund: %s allowed transactions in the run (%s %s)", n, stdout.String(), stderr.String()+" launch: "+s.row(t, "SELECT state || ' ' || coalesce(instance_id::text, '-') || ' ' || delivery FROM pc.automation_launches WHERE run_id = $1", out.run)+" txns: "+s.row(t, "SELECT coalesce(string_agg(decision || '/' || coalesce(effect_state, ''), ','), 'none') FROM pc.transactions WHERE run_id = $1", out.run)+" calls: "+s.row(t, "SELECT calls::text || ' outcome=' || coalesce(outcome, '') || ' report=' || coalesce(report::text, '') FROM pc.automation_launches WHERE run_id = $1", out.run)+" runner: "+stdout.String()+stderr.String())
+	}
+	eventually(t, 90*time.Second, "the execution to finish", func() (bool, error) {
+		a.advance(t, x)
+		st := s.row(t, "SELECT state FROM pc.automation_executions WHERE id = $1", x)
+		return st != "PENDING" && st != "RUNNING" && st != "WAITING", nil
+	})
+	if st := s.row(t, "SELECT state || '/' || coalesce(reason, '') FROM pc.automation_executions WHERE id = $1", x); st != "SUCCEEDED/" {
+		t.Fatalf("the LIVE execution: %s", st)
+	}
+	if st := s.row(t, "SELECT state FROM pc.grants WHERE id = $1", out.grant); st != "REVOKED" {
+		t.Fatalf("the execution's grant after the finish: %s", st)
+	}
+	return out
 }

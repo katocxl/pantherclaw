@@ -79,8 +79,8 @@ type autoStack struct {
 	sources  *endpoints.Service
 	asr      *assurance.Service
 	// receiver serves the inbound events endpoint; launches serves
-	// AutomationLaunchService in-process and forwards every other request
-	// (workload tokens) to the real server.
+	// WorkloadService and AutomationLaunchService in-process and forwards
+	// every other request to the real server.
 	receiver, launches *httptest.Server
 }
 
@@ -146,8 +146,9 @@ func startAutomations(t *testing.T, r *reflexStack) *autoStack {
 
 	a.asr = &assurance.Service{Pool: pool, Ents: a.ents, Issuer: a.grants}
 
-	// The launch service, as the workload API serves it: tokens are the real
-	// server's (its keys, its issuer), PAP/1 proofs name this URL.
+	// The launch service and workload tokens, as the workload API serves
+	// them: the real server's keys and issuer, so the gateway accepts the
+	// tokens; PAP/1 proofs name this URL.
 	reg := keys.NewRegistry()
 	if err := keystore.LoadSigningKeys(context.Background(), pool, kp, reg); err != nil {
 		t.Fatal(err)
@@ -161,8 +162,9 @@ func startAutomations(t *testing.T, r *reflexStack) *autoStack {
 	lmux.Handle("/", httputil.NewSingleHostReverseProxy(upstream))
 	a.launches = httptest.NewUnstartedServer(nil)
 	cs := connect.NewServer()
-	pantherclawv1connect.RegisterAutomationLaunchServiceHandler(cs,
-		workloadrpc.NewAutomationLaunches(workloadrpc.NewWorkload(identity, a.runs, "http://"+a.launches.Listener.Addr().String(), clock.System{}), e))
+	w := workloadrpc.NewWorkload(identity, a.runs, "http://"+a.launches.Listener.Addr().String(), clock.System{}).WithGrants(a.grants)
+	pantherclawv1connect.RegisterWorkloadServiceHandler(cs, w)
+	pantherclawv1connect.RegisterAutomationLaunchServiceHandler(cs, workloadrpc.NewAutomationLaunches(w, e))
 	connecthttp.Mount(lmux, cs)
 	a.launches.Config.Handler = workloadrpc.RawBody(lmux, nil)
 	a.launches.Start()
