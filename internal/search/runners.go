@@ -321,7 +321,7 @@ func pageApprovals(ctx context.Context, _ *Service, c tenancy.Caller, tx db.Tena
 		}
 		items = append(items, Item{
 			Entity: EntityApprovals, ID: r.ID.String(), Time: r.CreatedAt, Label: r.State,
-			Fields: fields("agent", r.AgentID.String(), "run", idStr(r.RunID), "transaction", idStr(r.TransactionID),
+			Fields: fields("agent", idStr(r.AgentID), "run", idStr(r.RunID), "transaction", idStr(r.TransactionID),
 				"operation", r.Operation, "state", r.State, "end_reason", str(r.EndReason),
 				"deadline", ts(&r.DeadlineAt), "ended_at", ts(r.EndedAt)),
 			Evidence: ev,

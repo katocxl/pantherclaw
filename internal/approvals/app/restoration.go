@@ -89,7 +89,7 @@ func (s *Service) RequestRestoration(ctx context.Context, agent ids.UUID, reason
 		if a.State != string(adomain.StateSuspended) || a.SuspendedFrom == nil {
 			return ErrNotSuspended
 		}
-		if live, err := q.LiveRestoration(ctx, c.Org, agent); err == nil {
+		if live, err := q.LiveRestoration(ctx, c.Org, &agent); err == nil {
 			if out, err = q.GetApprovalRequest(ctx, c.Org, live); err != nil {
 				return err
 			}
@@ -156,7 +156,7 @@ func insertRestoration(ctx context.Context, q *dbq.Queries, org ids.OrgID, a dbq
 	}
 	id := ids.NewV7()
 	return id, q.InsertRestorationRequest(ctx, dbq.InsertRestorationRequestParams{
-		OrgID: org, ID: id, AgentID: a.ID, RequestedBy: &user, Binding: binding.Hash[:], BindingInput: binding.Input,
+		OrgID: org, ID: id, AgentID: &a.ID, RequestedBy: &user, Binding: binding.Hash[:], BindingInput: binding.Input,
 		Requirements: rs, Display: display.Input, DisplayHash: display.Hash[:], DeadlineAt: deadline,
 	})
 }
@@ -169,11 +169,11 @@ func restored(ctx context.Context, q *dbq.Queries, orgID ids.OrgID, l locked, by
 	if err := json.Unmarshal(l.row.BindingInput, &b); err != nil {
 		return err
 	}
-	a, err := q.GetAgent(ctx, orgID, l.row.AgentID)
+	a, err := q.GetAgent(ctx, orgID, *l.row.AgentID)
 	if err != nil {
 		return err
 	}
-	seq, err := q.AgentChangeCount(ctx, orgID, l.row.AgentID)
+	seq, err := q.AgentChangeCount(ctx, orgID, *l.row.AgentID)
 	if err != nil {
 		return err
 	}
@@ -187,5 +187,5 @@ func restored(ctx context.Context, q *dbq.Queries, orgID ids.OrgID, l locked, by
 	if n == 0 {
 		return ErrNotWaiting
 	}
-	return agents.Restore(ctx, q, orgID, l.row.AgentID, adomain.State(b.RequestedState), adomain.UserActor(by), l.row.ID)
+	return agents.Restore(ctx, q, orgID, *l.row.AgentID, adomain.State(b.RequestedState), adomain.UserActor(by), l.row.ID)
 }
