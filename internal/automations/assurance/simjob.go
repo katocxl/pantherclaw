@@ -8,6 +8,7 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/riverqueue/river"
@@ -158,6 +159,9 @@ func (s *Service) GetSimulation(ctx context.Context, id ids.UUID) (Simulation, e
 					shown = append(shown, sm)
 				} else {
 					res.SamplesHidden++
+					if sm.Note != "" && !slices.Contains(res.Notes, sm.Note) {
+						res.Notes = append(res.Notes, sm.Note)
+					}
 				}
 			}
 			res.Samples = shown

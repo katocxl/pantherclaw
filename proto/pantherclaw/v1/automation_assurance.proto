@@ -300,6 +300,8 @@ message AutomationSimulation {
   // (or the version's ceiling), as "step=ALLOWED" or
   // "step=REFUSED:<reason>".
   repeated string launch_preview = 14;
+  // Why hidden samples are hidden ("involves more than 64 agents").
+  repeated string notes = 15;
 }
 
 message GetAutomationSimulationResponse {
