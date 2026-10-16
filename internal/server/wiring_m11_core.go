@@ -5,6 +5,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"connectrpc.com/connect/v2"
@@ -106,19 +107,19 @@ func (c *automationsCore) identities(ctx context.Context) ([]*pantherclawv1.Auto
 	return out, note, nil
 }
 
+// errAutomationsNoGrants refuses to start the automations jobs without the
+// process's grants service (D112 X1).
+var errAutomationsNoGrants = errors.New("server: the automations jobs need the process's grants and runs services attached")
+
 // registerAutomationsCoreJobs adds the ceiling sweep (D57) and the change
 // requests' expiry sweep (D91 K7) on the process's core, and returns
-// periodic with their schedules appended. A worker-only process attaches
-// grants and runs services of its own.
+// periodic with their schedules appended. The core must already have the
+// process's grants and runs services attached: the jobs never build an
+// ungated grants service of their own (D112 X1).
 func registerAutomationsCoreJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, core *automationsCore, log *slog.Logger,
 ) ([]*river.PeriodicJob, error) {
-	if core.grants == nil {
-		pool := core.svc.Pool
-		gstore := &grantspg.Store{Pool: pool}
-		core.attach(pool, &grantsapp.Service{
-			Repo: gstore, Subjects: gstore, Defs: &defspg.Store{Pool: pool}, Authz: grantsapp.SubjectAuthorizer{},
-			Clock: clock.System{}, Store: gstore,
-		}, runsapp.New(pool).WithGrants(gstore))
+	if core.grants == nil || core.svc.Grants == nil || core.svc.Runs == nil {
+		return nil, errAutomationsNoGrants
 	}
 	if err := core.svc.RegisterJobs(reg, log); err != nil {
 		return nil, err
