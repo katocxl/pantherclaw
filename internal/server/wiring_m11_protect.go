@@ -65,7 +65,7 @@ type protectPages struct {
 }
 
 func (p protectPages) ProtectedChange(ctx context.Context, request ids.UUID) (dbq.PcProtectedChange, error) {
-	return p.Service.ByRequest(ctx, request)
+	return p.ByRequest(ctx, request)
 }
 
 // protectCoverage holds coverage exclusions behind the Gate.

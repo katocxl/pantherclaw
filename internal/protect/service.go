@@ -155,7 +155,7 @@ func (s *Service) List(ctx context.Context, state string, cat Category, before i
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	p := dbq.ListProtectedChangesParams{OrgID: c.Org, MaxRows: int32(limit)} //nolint:gosec // G115: 1..200
+	p := dbq.ListProtectedChangesParams{OrgID: c.Org, MaxRows: int32(limit)}
 	if state != "" {
 		p.State = &state
 	}

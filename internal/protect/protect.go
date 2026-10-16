@@ -77,7 +77,7 @@ const (
 	SurfacePackageActivate  Surface = "package.activate"
 	SurfaceWindowCreate     Surface = "release.window.create"
 	SurfaceWindowRetire     Surface = "release.window.retire"
-	SurfaceCredentialPut    Surface = "credential.put"
+	SurfaceCredentialPut    Surface = "credential.put" //nolint:gosec // G101: a surface name, not a credential
 	SurfaceConnectionUpdate Surface = "connection.update"
 	SurfaceRouteMode        Surface = "connection.route_mode"
 	SurfaceExclusionCreate  Surface = "coverage.exclusion.create"

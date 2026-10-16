@@ -101,7 +101,7 @@ func (h *Handler) protectError(w http.ResponseWriter, r *http.Request, err error
 			return
 		}
 	}
-	switch pcerr.CodeOf(err) {
+	switch pcerr.CodeOf(err) { //nolint:exhaustive // the rest are internal errors
 	case pcerr.PermissionDenied:
 		h.jsonError(w, http.StatusForbidden, "forbidden")
 		return
