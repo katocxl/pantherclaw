@@ -537,7 +537,6 @@ func (s *Service) ListPromotions(ctx context.Context, f Filter, after *ids.UUID,
 	return out, next, err
 }
 
-func ptr[T any](v T) *T { return &v }
 
 // noKnown refuses prefixes no operation is known under (D70).
 func noKnown(prefixes []string) error {

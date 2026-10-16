@@ -71,7 +71,7 @@ func (r Readiness) Provisional() bool {
 		return false
 	}
 	for _, c := range r.Checks {
-		if !c.Passed && !(c.Name == CheckCoverage && c.Pending) {
+		if !c.Passed && (c.Name != CheckCoverage || !c.Pending) {
 			return false
 		}
 	}
