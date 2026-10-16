@@ -19,7 +19,6 @@ import (
 
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
@@ -708,16 +707,9 @@ func TestHR285_ClaimsTheRunnerCannotReadRunNothing(t *testing.T) {
 	}
 	// The gateway routes by connection name (D83); a claim without one
 	// cannot be performed.
-	named := true
-	if fd := ok.Calls[0].ProtoReflect().Descriptor().Fields().ByName("connection_name"); fd != nil {
-		ok.Calls[0].ProtoReflect().Set(fd, protoreflect.ValueOfString("payments"))
-	} else {
-		named = false
-	}
+	ok.Calls[0].ConnectionName = "payments"
 	unnamed := proto.Clone(ok).(*pantherclawv1.ClaimLaunchResponse)
-	if fd := unnamed.Calls[0].ProtoReflect().Descriptor().Fields().ByName("connection_name"); fd != nil {
-		unnamed.Calls[0].ProtoReflect().Clear(fd)
-	}
+	unnamed.Calls[0].ConnectionName = ""
 	unknown := proto.Clone(ok).(*pantherclawv1.ClaimLaunchResponse)
 	unknown.ProtoReflect().SetUnknown(protowire.AppendVarint(protowire.AppendTag(nil, 99, protowire.VarintType), 1))
 	badCall := proto.Clone(ok).(*pantherclawv1.ClaimLaunchResponse)
@@ -728,7 +720,7 @@ func TestHR285_ClaimsTheRunnerCannotReadRunNothing(t *testing.T) {
 		res     *pantherclawv1.ClaimLaunchResponse
 		wantRun bool
 	}{
-		"ok": {ok, named}, "no connection name": {unnamed, false}, "unknown field": {unknown, false},
+		"ok": {ok, true}, "no connection name": {unnamed, false}, "unknown field": {unknown, false},
 		"unknown call field": {badCall, false}, "input not JSON": {notJSON, false},
 	} {
 		t.Run(name, func(t *testing.T) {

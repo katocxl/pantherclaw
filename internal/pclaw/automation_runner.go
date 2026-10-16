@@ -23,7 +23,6 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
-	"google.golang.org/protobuf/reflect/protoreflect"
 
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
@@ -888,7 +887,7 @@ func callOf(c *pantherclawv1.AutomationRunnerCall) (runnerCall, bool) {
 	if len(c.ProtoReflect().GetUnknown()) > 0 {
 		return runnerCall{}, false
 	}
-	call := runnerCall{Connection: runnerConnection(c), Face: c.GetFace(), Tool: c.GetTool(), Method: c.GetMethod(), Path: c.GetPath()}
+	call := runnerCall{Connection: c.GetConnectionName(), Face: c.GetFace(), Tool: c.GetTool(), Method: c.GetMethod(), Path: c.GetPath()}
 	if call.Connection == "" {
 		return runnerCall{}, false
 	}
@@ -961,16 +960,4 @@ func skipped(n int) []callResult {
 		out[i] = callResult{Index: i, Status: callSkipped}
 	}
 	return out
-}
-
-// runnerConnection is a declared call's connection_name (D83), read by name
-// so the runner keeps building while the field lands; a call without one
-// cannot be routed.
-func runnerConnection(c *pantherclawv1.AutomationRunnerCall) string {
-	m := c.ProtoReflect()
-	fd := m.Descriptor().Fields().ByName("connection_name")
-	if fd == nil || fd.Kind() != protoreflect.StringKind || fd.IsList() {
-		return ""
-	}
-	return m.Get(fd).String()
 }
