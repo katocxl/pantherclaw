@@ -172,14 +172,21 @@ func operations(raw []byte) ([]domain.Operation, []defs.Definition, bool) {
 		return nil, nil, false
 	}
 	var p struct {
-		Definitions []defs.Definition `json:"definitions"`
+		Definitions  []defs.Definition      `json:"definitions"`
+		Consequences []defs.ConsequenceRule `json:"consequences"`
 	}
 	if err := json.Unmarshal(doc, &p); err != nil || len(p.Definitions) == 0 {
 		return nil, nil, false
 	}
 	out := make([]domain.Operation, 0, len(p.Definitions))
 	for _, d := range p.Definitions {
-		out = append(out, domain.OperationOf(d))
+		o := domain.OperationOf(d)
+		for _, c := range p.Consequences {
+			if c.Operation == d.Operation {
+				o.Consequences = append(o.Consequences, c.Consequence.Operation+" "+c.Consequence.Effect)
+			}
+		}
+		out = append(out, o)
 	}
 	return out, p.Definitions, true
 }

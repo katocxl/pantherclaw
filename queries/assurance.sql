@@ -72,3 +72,29 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'RUNNING';
 -- name: FailAutomationSimulation :execrows
 UPDATE pc.automation_simulations SET state = 'FAILED', error = sqlc.arg(error), finished_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('QUEUED', 'RUNNING');
+
+-- name: AssuranceEnabledDefinitions :many
+-- The enabled versions of the org's ACTIVE or PAUSED automations (D37:
+-- triggered workflows).
+SELECT a.id AS automation_id, v.definition
+FROM pc.automations a
+JOIN pc.automation_versions v ON v.org_id = a.org_id AND v.id = a.enabled_version_id
+WHERE a.org_id = sqlc.arg(org_id) AND a.state IN ('ACTIVE', 'PAUSED')
+ORDER BY a.id
+LIMIT 1000;
+
+-- name: AssuranceIssuedGrants :many
+-- Grants an automation's executions were issued since a time, with the
+-- bounds of their first revision (D37 CompareRestriction).
+SELECT g.id, g.agent_id, g.automation_execution_id, r.bounds, g.created_at
+FROM pc.grants g
+JOIN pc.automation_ceilings c ON c.org_id = g.org_id AND c.id = g.ceiling_id
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = 1
+WHERE g.org_id = sqlc.arg(org_id) AND c.automation_id = sqlc.arg(automation_id) AND g.created_at >= sqlc.arg(since)
+ORDER BY g.created_at DESC, g.id DESC
+LIMIT sqlc.arg(max_rows)::int;
+
+-- name: AssuranceVersionOrg :one
+-- The org of a version visible under the tenant setting (TestGate is
+-- called inside the confirming transaction with no org argument).
+SELECT v.org_id FROM pc.automation_versions v WHERE v.id = sqlc.arg(id);

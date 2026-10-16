@@ -15,6 +15,100 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const assuranceEnabledDefinitions = `-- name: AssuranceEnabledDefinitions :many
+SELECT a.id AS automation_id, v.definition
+FROM pc.automations a
+JOIN pc.automation_versions v ON v.org_id = a.org_id AND v.id = a.enabled_version_id
+WHERE a.org_id = $1 AND a.state IN ('ACTIVE', 'PAUSED')
+ORDER BY a.id
+LIMIT 1000
+`
+
+type AssuranceEnabledDefinitionsRow struct {
+	AutomationID ids.UUID
+	Definition   []byte
+}
+
+// The enabled versions of the org's ACTIVE or PAUSED automations (D37:
+// triggered workflows).
+func (q *Queries) AssuranceEnabledDefinitions(ctx context.Context, orgID ids.OrgID) ([]AssuranceEnabledDefinitionsRow, error) {
+	rows, err := q.db.Query(ctx, assuranceEnabledDefinitions, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AssuranceEnabledDefinitionsRow{}
+	for rows.Next() {
+		var i AssuranceEnabledDefinitionsRow
+		if err := rows.Scan(&i.AutomationID, &i.Definition); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const assuranceIssuedGrants = `-- name: AssuranceIssuedGrants :many
+SELECT g.id, g.agent_id, g.automation_execution_id, r.bounds, g.created_at
+FROM pc.grants g
+JOIN pc.automation_ceilings c ON c.org_id = g.org_id AND c.id = g.ceiling_id
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = 1
+WHERE g.org_id = $1 AND c.automation_id = $2 AND g.created_at >= $3
+ORDER BY g.created_at DESC, g.id DESC
+LIMIT $4::int
+`
+
+type AssuranceIssuedGrantsParams struct {
+	OrgID        ids.OrgID
+	AutomationID ids.UUID
+	Since        time.Time
+	MaxRows      int32
+}
+
+type AssuranceIssuedGrantsRow struct {
+	ID                    ids.UUID
+	AgentID               ids.UUID
+	AutomationExecutionID *ids.UUID
+	Bounds                []byte
+	CreatedAt             time.Time
+}
+
+// Grants an automation's executions were issued since a time, with the
+// bounds of their first revision (D37 CompareRestriction).
+func (q *Queries) AssuranceIssuedGrants(ctx context.Context, arg AssuranceIssuedGrantsParams) ([]AssuranceIssuedGrantsRow, error) {
+	rows, err := q.db.Query(ctx, assuranceIssuedGrants,
+		arg.OrgID,
+		arg.AutomationID,
+		arg.Since,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AssuranceIssuedGrantsRow{}
+	for rows.Next() {
+		var i AssuranceIssuedGrantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.AutomationExecutionID,
+			&i.Bounds,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const assuranceVersion = `-- name: AssuranceVersion :one
 
 
@@ -65,6 +159,19 @@ func (q *Queries) AssuranceVersion(ctx context.Context, orgID ids.OrgID, iD ids.
 		&i.ServiceAccountID,
 	)
 	return i, err
+}
+
+const assuranceVersionOrg = `-- name: AssuranceVersionOrg :one
+SELECT v.org_id FROM pc.automation_versions v WHERE v.id = $1
+`
+
+// The org of a version visible under the tenant setting (TestGate is
+// called inside the confirming transaction with no org argument).
+func (q *Queries) AssuranceVersionOrg(ctx context.Context, id ids.UUID) (ids.OrgID, error) {
+	row := q.db.QueryRow(ctx, assuranceVersionOrg, id)
+	var org_id ids.OrgID
+	err := row.Scan(&org_id)
+	return org_id, err
 }
 
 const deleteAutomationTestCases = `-- name: DeleteAutomationTestCases :execrows

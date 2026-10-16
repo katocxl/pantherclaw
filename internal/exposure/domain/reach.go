@@ -193,13 +193,19 @@ type Operation struct {
 	Reversibility defs.Reversibility
 	// Verified reports a verifier the definition declares.
 	Verified bool
+	// Reconciled reports an unknown outcome the definition sends to
+	// reconciliation (D59 InspectVersion).
+	Reconciled bool
+	// Consequences are the package's consequence rules for the operation,
+	// as "<operation> <effect>" (F405).
+	Consequences []string
 }
 
 // OperationOf reduces a definition to what exposure reads.
 func OperationOf(d defs.Definition) Operation {
 	o := Operation{
 		Name: d.Operation, Access: d.Access, TargetType: d.Target.Type, Reversibility: d.Reversibility,
-		Verified: d.Verifier != nil,
+		Verified: d.Verifier != nil, Reconciled: d.Retry.OnUnknown == defs.OnUnknownReconcile,
 	}
 	for _, e := range slices.Concat(d.Effects, d.SideEffects) {
 		o.Effects = append(o.Effects, e.Kind)
