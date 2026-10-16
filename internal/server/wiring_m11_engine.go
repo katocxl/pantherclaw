@@ -22,6 +22,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/automations/triggers"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/endpoints"
 	"github.com/katocxl/pantherclaw/internal/billing"
+	coverage "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/packbuild"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -29,6 +30,7 @@ import (
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/workloadrpc"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
@@ -46,11 +48,15 @@ var automationSecuritySteps func(securityStepDeps) autoports.StepRegistry
 // process's one core and the generic steps' ports, filled identically for
 // the API and the driver (RoleAll and RoleWorker).
 type securityStepDeps struct {
-	Core  *automationsCore
-	Pool  *db.Pool
-	Bill  *billing.Service
-	Log   *slog.Logger
-	Steps steps.Deps
+	Core      *automationsCore
+	Pool      *db.Pool
+	Bill      *billing.Service
+	Log       *slog.Logger
+	Steps     steps.Deps
+	Notify    *napp.Service
+	CEL       celenv.Limits
+	Freshness coverage.Freshness
+	LogOrigin string
 }
 
 func init() {
@@ -78,6 +84,10 @@ type engineDeps struct {
 	notify    *napp.Service
 	core      *automationsCore
 	log       *slog.Logger
+	// cel, freshness and logOrigin come from the server config (D108a).
+	cel       celenv.Limits
+	freshness coverage.Freshness
+	logOrigin string
 }
 
 // newAutomationEngine builds the engine as pc_app (D24–D27): the generic
@@ -112,7 +122,10 @@ func newAutomationEngine(d engineDeps) *pgengine.Engine {
 	}
 	reg := steps.Generic(deps)
 	if automationSecuritySteps != nil {
-		for k, s := range automationSecuritySteps(securityStepDeps{Core: d.core, Pool: d.pool, Bill: d.bill, Log: d.log, Steps: deps}) {
+		for k, s := range automationSecuritySteps(securityStepDeps{
+			Core: d.core, Pool: d.pool, Bill: d.bill, Log: d.log, Steps: deps, Notify: d.notify, CEL: d.cel,
+			Freshness: d.freshness, LogOrigin: d.logOrigin,
+		}) {
 			if _, taken := reg[k]; !taken {
 				reg[k] = s
 			}
@@ -144,7 +157,10 @@ func newAutomationEngine(d engineDeps) *pgengine.Engine {
 // authenticated by the workload's PAP/1 credentials. Core's controls cancel
 // executions through the engine (D28).
 func registerAutomationsEngine(rs *connect.Server, d apiDeps, workload *workloadrpc.Workload, core *automationsCore) {
-	ed := engineDeps{pool: d.pool, bill: d.billing, kp: d.kp, publicURL: d.publicURL, core: core, log: d.log}
+	ed := engineDeps{
+		pool: d.pool, bill: d.billing, kp: d.kp, publicURL: d.publicURL, core: core, log: d.log, cel: d.cel,
+		freshness: d.freshness, logOrigin: d.logOrigin,
+	}
 	if d.m5 != nil {
 		ed.notify = d.m5.notifications
 	}
@@ -168,10 +184,13 @@ func shareCore(core *automationsCore, e *pgengine.Engine, pool *db.Pool, bill *b
 // registerAutomationEngineJobs adds the driver and the wake sweep (D24) on
 // the process's one core, and attaches the engine's ports to it (a
 // worker-only process too, D105).
-func registerAutomationEngineJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, core *automationsCore, kp keys.KeyProvider,
-	bill *billing.Service, publicURL string, notify *napp.Service, log *slog.Logger,
+func registerAutomationEngineJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, core *automationsCore, cfg *Config,
+	kp keys.KeyProvider, bill *billing.Service, notify *napp.Service, log *slog.Logger,
 ) ([]*river.PeriodicJob, error) {
-	e := driverEngine(core, kp, bill, publicURL, notify, log)
+	e := driverEngine(core, engineDeps{
+		bill: bill, kp: kp, publicURL: cfg.Auth.PublicURL, notify: notify, log: log, cel: cfg.CEL,
+		freshness: freshnessOf(cfg), logOrigin: cfg.logOrigin(),
+	})
 	p, err := pgengine.Register(reg, e)
 	if err != nil {
 		return nil, err
@@ -182,13 +201,10 @@ func registerAutomationEngineJobs(periodic []*river.PeriodicJob, reg *jobs.Regis
 // driverEngine is the engine the River driver runs every step with: it
 // shares the process's core, whose grants and runs services are attached
 // by the API or the core jobs.
-func driverEngine(core *automationsCore, kp keys.KeyProvider, bill *billing.Service, publicURL string, notify *napp.Service,
-	log *slog.Logger,
-) *pgengine.Engine {
-	e := newAutomationEngine(engineDeps{
-		pool: core.svc.Pool, bill: bill, kp: kp, publicURL: publicURL, notify: notify, core: core, log: log,
-	})
-	shareCore(core, e, core.svc.Pool, bill, log)
+func driverEngine(core *automationsCore, d engineDeps) *pgengine.Engine {
+	d.pool, d.core = core.svc.Pool, core
+	e := newAutomationEngine(d)
+	shareCore(core, e, d.pool, d.bill, d.log)
 	return e
 }
 

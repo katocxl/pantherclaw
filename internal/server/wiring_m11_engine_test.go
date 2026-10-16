@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/automations/engine/adapters/pgengine"
+	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/automations/steps"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
@@ -38,7 +39,7 @@ func TestAutomationEnginePortsAreWired(t *testing.T) {
 			if role == RoleAll {
 				attach(core)
 			}
-			e := driverEngine(core, nil, nil, "", nil, nil)
+			e := driverEngine(core, engineDeps{})
 			if role == RoleWorker {
 				attach(core)
 			}
@@ -99,5 +100,30 @@ func sharesCore(t *testing.T, name string, e *pgengine.Engine, core *automations
 func TestAutomationWithdrawUsesTheGrantScope(t *testing.T) {
 	if steps.RevokeOneGrant != grantsapp.RevokeScopeGrant {
 		t.Fatalf("steps %q, core %q", steps.RevokeOneGrant, grantsapp.RevokeScopeGrant)
+	}
+}
+
+// D108, D108a: the driver builds the security steps from the process's
+// core and the server config.
+func TestAutomationSecurityStepsGetTheConfig(t *testing.T) {
+	var got []securityStepDeps
+	prev := automationSecuritySteps
+	automationSecuritySteps = func(d securityStepDeps) autoports.StepRegistry {
+		got = append(got, d)
+		return nil
+	}
+	t.Cleanup(func() { automationSecuritySteps = prev })
+	cfg := &Config{}
+	cfg.CEL.MaxCost = 1234
+	core := newAutomationsCore(nil, nil, "")
+	if _, err := registerAutomationEngineJobs(nil, jobs.NewRegistry(), core, cfg, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 {
+		t.Fatal("the driver built no security steps")
+	}
+	d := got[0]
+	if d.Core != core || d.CEL != cfg.CEL || d.Freshness != freshnessOf(cfg) || d.LogOrigin != cfg.logOrigin() {
+		t.Fatalf("security step deps %+v", d)
 	}
 }
