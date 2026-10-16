@@ -163,8 +163,10 @@ func searchCommands() map[string]command {
 					if s.SavedQueryId != nil {
 						return nil, errors.New("save takes --query or --builtin")
 					}
-					in := &pantherclawv1.SavedQueryInput{Name: a[0], Description: *desc, Visibility: strings.ToUpper(*vis),
-						Query: s.GetQuery(), Builtin: s.GetBuiltin()}
+					in := &pantherclawv1.SavedQueryInput{
+						Name: a[0], Description: *desc, Visibility: strings.ToUpper(*vis),
+						Query: s.GetQuery(), Builtin: s.GetBuiltin(),
+					}
 					if *team != "" {
 						in.TeamId = team
 					}

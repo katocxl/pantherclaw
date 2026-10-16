@@ -297,8 +297,10 @@ func interpret(ctx context.Context, question, timezone string, now time.Time, re
 	if err != nil {
 		return Interpretation{}, err
 	}
-	p := &parser{toks: toks, used: make([]bool, len(toks)), loc: loc, now: now.In(loc), resolve: resolve,
-		in: Interpretation{Question: q, Timezone: timezone}}
+	p := &parser{
+		toks: toks, used: make([]bool, len(toks)), loc: loc, now: now.In(loc), resolve: resolve,
+		in: Interpretation{Question: q, Timezone: timezone},
+	}
 	if err := p.parse(ctx); err != nil {
 		return Interpretation{}, err
 	}
@@ -391,8 +393,10 @@ func (p *parser) timePhrases() error {
 				n, _ = strconv.Atoi(p.word(k))
 				k++
 			}
-			unit := map[string]time.Duration{"hour": time.Hour, "hours": time.Hour, "day": 24 * time.Hour,
-				"days": 24 * time.Hour, "week": 7 * 24 * time.Hour, "weeks": 7 * 24 * time.Hour}[p.word(k)]
+			unit := map[string]time.Duration{
+				"hour": time.Hour, "hours": time.Hour, "day": 24 * time.Hour,
+				"days": 24 * time.Hour, "week": 7 * 24 * time.Hour, "weeks": 7 * 24 * time.Hour,
+			}[p.word(k)]
 			if unit == 0 || n < 1 {
 				continue
 			}

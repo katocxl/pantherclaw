@@ -96,8 +96,10 @@ func correlationSubject(ctx context.Context, c tenancy.Caller, q *dbq.Queries, b
 		if err != nil || sc.Restricted {
 			return out, firstErr(err, ErrSubjectNotFound)
 		}
-		rows, err := q.SearchIncidents(ctx, dbq.SearchIncidentsParams{OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
-			ID: b.Params.Incident, States: []string{}, Severities: []string{}, PageLimit: 1})
+		rows, err := q.SearchIncidents(ctx, dbq.SearchIncidentsParams{
+			OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
+			ID: b.Params.Incident, States: []string{}, Severities: []string{}, PageLimit: 1,
+		})
 		if err != nil || len(rows) == 0 {
 			return out, firstErr(err, ErrSubjectNotFound)
 		}
@@ -108,8 +110,10 @@ func correlationSubject(ctx context.Context, c tenancy.Caller, q *dbq.Queries, b
 	if err != nil || sc.Restricted {
 		return out, firstErr(err, ErrSubjectNotFound)
 	}
-	rows, err := q.SearchCases(ctx, dbq.SearchCasesParams{OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
-		ID: b.Params.Case, States: []string{}, PageLimit: 1})
+	rows, err := q.SearchCases(ctx, dbq.SearchCasesParams{
+		OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
+		ID: b.Params.Case, States: []string{}, PageLimit: 1,
+	})
 	if err != nil || len(rows) == 0 {
 		return out, firstErr(err, ErrSubjectNotFound)
 	}
@@ -204,11 +208,15 @@ func (s *Service) correlate(ctx context.Context, c tenancy.Caller, q *dbq.Querie
 		return Result{}, err
 	}
 	out := Result{Scope: ev, AsOf: asOf, Range: Range{Start: &start, Changing: true}}
-	out.Omissions = append(out.Omissions, Omission{Code: "CORRELATION_NOT_CAUSE",
-		Detail: "shared destinations, credentials, sequences and changes are correlations, never causes"})
+	out.Omissions = append(out.Omissions, Omission{
+		Code:   "CORRELATION_NOT_CAUSE",
+		Detail: "shared destinations, credentials, sequences and changes are correlations, never causes",
+	})
 	if !ev.All {
-		out.Omissions = append(out.Omissions, Omission{Code: omissionScopeLimited,
-			Detail: "runs cover only the agents where you hold " + string(td.PermEvidenceRead)})
+		out.Omissions = append(out.Omissions, Omission{
+			Code:   omissionScopeLimited,
+			Detail: "runs cover only the agents where you hold " + string(td.PermEvidenceRead),
+		})
 	}
 	var runIDs []ids.UUID
 	for _, r := range subj.runs {
@@ -275,8 +283,10 @@ func correlateRuns(ctx context.Context, c tenancy.Caller, q *dbq.Queries, ev Sco
 		})
 	}
 	if len(creds) > 0 {
-		out.Omissions = append(out.Omissions, Omission{Code: "INFERRED",
-			Detail: "which credential version an action used is inferred from the versions' lifetimes"})
+		out.Omissions = append(out.Omissions, Omission{
+			Code:   "INFERRED",
+			Detail: "which credential version an action used is inferred from the versions' lifetimes",
+		})
 	}
 	ops, err := q.CorrRunOperations(ctx, dbq.CorrRunOperationsParams{
 		OrgID: c.Org, AllAgents: ev.All, Agents: ev.agentList(), RunIds: runIDs, StartTime: start, EndTime: end,
@@ -366,15 +376,19 @@ func correlateChanges(ctx context.Context, c tenancy.Caller, q *dbq.Queries, sub
 		}
 	}
 	if hidden {
-		out.Omissions = append(out.Omissions, Omission{Code: omissionScopeLimited,
-			Detail: "grant changes cover only the agents where you hold " + string(td.PermGrantRead)})
+		out.Omissions = append(out.Omissions, Omission{
+			Code:   omissionScopeLimited,
+			Detail: "grant changes cover only the agents where you hold " + string(td.PermGrantRead),
+		})
 	}
 	if len(runIDs) == 0 {
 		return nil
 	}
 	if !c.Can(td.PermPackageRead, td.OrgPath(c.Org)) || !c.Can(td.PermConnectionRead, td.OrgPath(c.Org)) {
-		out.Omissions = append(out.Omissions, Omission{Code: omissionRestricted,
-			Detail: "tool changes need " + string(td.PermPackageRead) + " and " + string(td.PermConnectionRead) + " across the org"})
+		out.Omissions = append(out.Omissions, Omission{
+			Code:   omissionRestricted,
+			Detail: "tool changes need " + string(td.PermPackageRead) + " and " + string(td.PermConnectionRead) + " across the org",
+		})
 		return nil
 	}
 	conns, err := q.CorrRunConnections(ctx, c.Org, runIDs)

@@ -149,8 +149,14 @@ func TestHR295_ParserNeverGuesses(t *testing.T) {
 		}
 	}
 	for _, bad := range []struct{ q, tz string }{
-		{"", ""}, {strings.Repeat("a ", 151), ""}, {"actions\x00", ""}, {"actions", "Mars/Olympus"}, {"actions", "Local"},
-		{`actions by "deploy`, ""}, {"actions since 2026-02-30", ""}, {"actions between 2026-10-07 and 2026-10-01", ""},
+		{"", ""},
+		{strings.Repeat("a ", 151), ""},
+		{"actions\x00", ""},
+		{"actions", "Mars/Olympus"},
+		{"actions", "Local"},
+		{`actions by "deploy`, ""},
+		{"actions since 2026-02-30", ""},
+		{"actions between 2026-10-07 and 2026-10-01", ""},
 		{"actions since 2020-01-01", ""},
 	} {
 		if _, err := interpret(context.Background(), bad.q, bad.tz, askNow, n.resolve); !invalid(err) {
@@ -192,8 +198,13 @@ func TestT130_FindTextNeverBecomesAPattern(t *testing.T) {
 			t.Errorf("%q read as an id", s)
 		}
 	}
-	for _, r := range []FindRequest{{Text: "a"}, {Text: strings.Repeat("a", 101)}, {Text: "ab\x01"}, {Text: "ab", Limit: 11},
-		{Text: "ab", Kinds: []FindKind{"secrets"}}} {
+	for _, r := range []FindRequest{
+		{Text: "a"},
+		{Text: strings.Repeat("a", 101)},
+		{Text: "ab\x01"},
+		{Text: "ab", Limit: 11},
+		{Text: "ab", Kinds: []FindKind{"secrets"}},
+	} {
 		if _, err := r.validate(); !invalid(err) {
 			t.Errorf("%+v accepted", r)
 		}
@@ -203,8 +214,10 @@ func TestT130_FindTextNeverBecomesAPattern(t *testing.T) {
 // TestT130_CSVCellsNeverRunAsFormulas: exported cells a spreadsheet would
 // evaluate are prefixed.
 func TestT130_CSVCellsNeverRunAsFormulas(t *testing.T) {
-	b, _, err := encode([]Item{{Entity: EntityAgents, ID: "x", Label: "=HYPERLINK(\"http://evil\")",
-		Fields: map[string]string{"name": "+1", "team": "ok"}}}, FormatCSV)
+	b, _, err := encode([]Item{{
+		Entity: EntityAgents, ID: "x", Label: "=HYPERLINK(\"http://evil\")",
+		Fields: map[string]string{"name": "+1", "team": "ok"},
+	}}, FormatCSV)
 	if err != nil {
 		t.Fatal(err)
 	}

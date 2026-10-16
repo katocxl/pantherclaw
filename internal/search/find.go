@@ -105,74 +105,102 @@ var findOrder = []FindKind{
 
 var finders = map[FindKind]finder{
 	FindAgents: {td.PermAgentRead, false, true, "agent", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, sc Scope, a findArgs) ([]findRow, error) {
-		rows, err := q.FindAgents(ctx, dbq.FindAgentsParams{OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
-			IDLo: a.lo, IDHi: a.hi, Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit})
+		rows, err := q.FindAgents(ctx, dbq.FindAgentsParams{
+			OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
+			IDLo: a.lo, IDHi: a.hi, Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+		})
 		return convert(rows, func(r dbq.FindAgentsRow) findRow { return findRow(r) }), err
 	}},
 	FindConnections: {td.PermConnectionRead, true, true, "connection", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, _ Scope, a findArgs) ([]findRow, error) {
-		rows, err := q.FindConnections(ctx, dbq.FindConnectionsParams{OrgID: c.Org, IDLo: a.lo, IDHi: a.hi,
-			Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit})
+		rows, err := q.FindConnections(ctx, dbq.FindConnectionsParams{
+			OrgID: c.Org, IDLo: a.lo, IDHi: a.hi,
+			Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+		})
 		return convert(rows, func(r dbq.FindConnectionsRow) findRow { return findRow(r) }), err
 	}},
 	FindCases: {td.PermCaseRead, false, true, "case", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, sc Scope, a findArgs) ([]findRow, error) {
-		rows, err := q.FindCases(ctx, dbq.FindCasesParams{OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
-			IDLo: a.lo, IDHi: a.hi, Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit})
+		rows, err := q.FindCases(ctx, dbq.FindCasesParams{
+			OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
+			IDLo: a.lo, IDHi: a.hi, Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+		})
 		return convert(rows, func(r dbq.FindCasesRow) findRow { return findRow(r) }), err
 	}},
 	FindIncidents: {td.PermIncidentRead, false, true, "incident", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, sc Scope, a findArgs) ([]findRow, error) {
-		rows, err := q.FindIncidents(ctx, dbq.FindIncidentsParams{OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
-			IDLo: a.lo, IDHi: a.hi, Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit})
+		rows, err := q.FindIncidents(ctx, dbq.FindIncidentsParams{
+			OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
+			IDLo: a.lo, IDHi: a.hi, Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+		})
 		return convert(rows, func(r dbq.FindIncidentsRow) findRow { return findRow(r) }), err
 	}},
 	FindAlerts: {td.PermIncidentRead, false, true, "alert", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, sc Scope, a findArgs) ([]findRow, error) {
-		rows, err := q.FindAlerts(ctx, dbq.FindAlertsParams{OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
-			IDLo: a.lo, IDHi: a.hi, Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit})
+		rows, err := q.FindAlerts(ctx, dbq.FindAlertsParams{
+			OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
+			IDLo: a.lo, IDHi: a.hi, Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+		})
 		return convert(rows, func(r dbq.FindAlertsRow) findRow { return findRow(r) }), err
 	}},
 	FindPackages: {td.PermPackageRead, true, true, "package", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, _ Scope, a findArgs) ([]findRow, error) {
-		rows, err := q.FindPackages(ctx, dbq.FindPackagesParams{OrgID: c.Org, IDLo: a.lo, IDHi: a.hi,
-			Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit})
+		rows, err := q.FindPackages(ctx, dbq.FindPackagesParams{
+			OrgID: c.Org, IDLo: a.lo, IDHi: a.hi,
+			Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+		})
 		return convert(rows, func(r dbq.FindPackagesRow) findRow { return findRow(r) }), err
 	}},
 	FindGateways: {td.PermGatewayRead, true, true, "gateway", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, _ Scope, a findArgs) ([]findRow, error) {
-		rows, err := q.FindGateways(ctx, dbq.FindGatewaysParams{OrgID: c.Org, IDLo: a.lo, IDHi: a.hi,
-			Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit})
+		rows, err := q.FindGateways(ctx, dbq.FindGatewaysParams{
+			OrgID: c.Org, IDLo: a.lo, IDHi: a.hi,
+			Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+		})
 		return convert(rows, func(r dbq.FindGatewaysRow) findRow { return findRow(r) }), err
 	}},
 	FindServiceAccounts: {td.PermServiceAccountRead, true, true, "service_account", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, _ Scope, a findArgs) ([]findRow, error) {
-		rows, err := q.FindServiceAccounts(ctx, dbq.FindServiceAccountsParams{OrgID: c.Org, IDLo: a.lo, IDHi: a.hi,
-			Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit})
+		rows, err := q.FindServiceAccounts(ctx, dbq.FindServiceAccountsParams{
+			OrgID: c.Org, IDLo: a.lo, IDHi: a.hi,
+			Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+		})
 		return convert(rows, func(r dbq.FindServiceAccountsRow) findRow { return findRow(r) }), err
 	}},
 	// People only with the member read permission at the org (D45).
 	FindPeople: {td.PermUserRead, true, true, "user", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, _ Scope, a findArgs) ([]findRow, error) {
-		rows, err := q.FindPeople(ctx, dbq.FindPeopleParams{OrgID: c.Org, IDLo: a.lo, IDHi: a.hi,
-			Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit})
+		rows, err := q.FindPeople(ctx, dbq.FindPeopleParams{
+			OrgID: c.Org, IDLo: a.lo, IDHi: a.hi,
+			Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+		})
 		return convert(rows, func(r dbq.FindPeopleRow) findRow { return findRow(r) }), err
 	}},
 	FindRuns: {td.PermRunRead, false, false, "run", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, sc Scope, a findArgs) ([]findRow, error) {
-		rows, err := q.FindRuns(ctx, dbq.FindRunsParams{OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
-			IDLo: *a.lo, IDHi: *a.hi, PageLimit: a.limit})
+		rows, err := q.FindRuns(ctx, dbq.FindRunsParams{
+			OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
+			IDLo: *a.lo, IDHi: *a.hi, PageLimit: a.limit,
+		})
 		return convert(rows, func(r dbq.FindRunsRow) findRow { return findRow(r) }), err
 	}},
 	FindTransactions: {td.PermEvidenceRead, false, false, "transaction", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, sc Scope, a findArgs) ([]findRow, error) {
-		rows, err := q.FindTransactions(ctx, dbq.FindTransactionsParams{OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
-			IDLo: *a.lo, IDHi: *a.hi, PageLimit: a.limit})
+		rows, err := q.FindTransactions(ctx, dbq.FindTransactionsParams{
+			OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
+			IDLo: *a.lo, IDHi: *a.hi, PageLimit: a.limit,
+		})
 		return convert(rows, func(r dbq.FindTransactionsRow) findRow { return findRow(r) }), err
 	}},
 	FindGrants: {td.PermGrantRead, false, false, "grant", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, sc Scope, a findArgs) ([]findRow, error) {
-		rows, err := q.FindGrants(ctx, dbq.FindGrantsParams{OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
-			IDLo: *a.lo, IDHi: *a.hi, PageLimit: a.limit})
+		rows, err := q.FindGrants(ctx, dbq.FindGrantsParams{
+			OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
+			IDLo: *a.lo, IDHi: *a.hi, PageLimit: a.limit,
+		})
 		return convert(rows, func(r dbq.FindGrantsRow) findRow { return findRow(r) }), err
 	}},
 	FindApprovals: {td.PermApprovalRead, false, false, "approval", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, sc Scope, a findArgs) ([]findRow, error) {
-		rows, err := q.FindApprovals(ctx, dbq.FindApprovalsParams{OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
-			IDLo: *a.lo, IDHi: *a.hi, PageLimit: a.limit})
+		rows, err := q.FindApprovals(ctx, dbq.FindApprovalsParams{
+			OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
+			IDLo: *a.lo, IDHi: *a.hi, PageLimit: a.limit,
+		})
 		return convert(rows, func(r dbq.FindApprovalsRow) findRow { return findRow(r) }), err
 	}},
 	FindFindings: {td.PermPostureRead, false, false, "finding", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, sc Scope, a findArgs) ([]findRow, error) {
-		rows, err := q.FindFindings(ctx, dbq.FindFindingsParams{OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
-			IDLo: *a.lo, IDHi: *a.hi, PageLimit: a.limit})
+		rows, err := q.FindFindings(ctx, dbq.FindFindingsParams{
+			OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(),
+			IDLo: *a.lo, IDHi: *a.hi, PageLimit: a.limit,
+		})
 		return convert(rows, func(r dbq.FindFindingsRow) findRow { return findRow(r) }), err
 	}},
 	FindPolicyVersions: {td.PermPolicyRead, true, false, "policy_version", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, _ Scope, a findArgs) ([]findRow, error) {

@@ -59,8 +59,10 @@ func (r *recordSearch) RunBuiltinQuery(_ context.Context, req *pantherclawv1.Run
 
 func (r *recordSearch) ExportResults(_ context.Context, req *pantherclawv1.ExportResultsRequest) (*pantherclawv1.ExportResultsResponse, error) {
 	r.export = req
-	return &pantherclawv1.ExportResultsResponse{Format: req.GetFormat(), Data: []byte("entity,id\n"), Rows: 0,
-		AsOfTime: timestamppb.Now(), AuditEntryId: "a-1", ScopePermission: "evidence.read"}, nil
+	return &pantherclawv1.ExportResultsResponse{
+		Format: req.GetFormat(), Data: []byte("entity,id\n"), Rows: 0,
+		AsOfTime: timestamppb.Now(), AuditEntryId: "a-1", ScopePermission: "evidence.read",
+	}, nil
 }
 
 // TestSearchCommands: pclaw search sends the text, question, query,
