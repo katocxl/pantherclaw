@@ -57,7 +57,7 @@ func (q *Queries) AssertionKey(ctx context.Context, orgID ids.OrgID, serviceAcco
 }
 
 const getServiceAccount = `-- name: GetServiceAccount :one
-SELECT org_id, id, name, description, state, created_by, created_at, updated_at FROM pc.service_accounts WHERE org_id = $1 AND id = $2
+SELECT org_id, id, name, description, state, created_by, created_at, updated_at, automation_id FROM pc.service_accounts WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetServiceAccount(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcServiceAccount, error) {
@@ -72,6 +72,7 @@ func (q *Queries) GetServiceAccount(ctx context.Context, orgID ids.OrgID, iD ids
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AutomationID,
 	)
 	return i, err
 }
@@ -174,7 +175,7 @@ const insertServiceAccount = `-- name: InsertServiceAccount :one
 
 INSERT INTO pc.service_accounts (org_id, id, name, description, created_by)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING org_id, id, name, description, state, created_by, created_at, updated_at
+RETURNING org_id, id, name, description, state, created_by, created_at, updated_at, automation_id
 `
 
 type InsertServiceAccountParams struct {
@@ -209,6 +210,7 @@ func (q *Queries) InsertServiceAccount(ctx context.Context, arg InsertServiceAcc
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AutomationID,
 	)
 	return i, err
 }
@@ -418,7 +420,7 @@ func (q *Queries) ListServiceAccountKeys(ctx context.Context, arg ListServiceAcc
 }
 
 const listServiceAccounts = `-- name: ListServiceAccounts :many
-SELECT org_id, id, name, description, state, created_by, created_at, updated_at FROM pc.service_accounts
+SELECT org_id, id, name, description, state, created_by, created_at, updated_at, automation_id FROM pc.service_accounts
 WHERE org_id = $1 AND id > coalesce($2::uuid, '00000000-0000-0000-0000-000000000000')
 ORDER BY id
 LIMIT $3
@@ -442,6 +444,7 @@ func (q *Queries) ListServiceAccounts(ctx context.Context, orgID ids.OrgID, afte
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AutomationID,
 		); err != nil {
 			return nil, err
 		}
@@ -554,7 +557,7 @@ func (q *Queries) ServiceAccountKeyExists(ctx context.Context, orgID ids.OrgID, 
 const setServiceAccountState = `-- name: SetServiceAccountState :one
 UPDATE pc.service_accounts SET state = $1, updated_at = now()
 WHERE org_id = $2 AND id = $3
-RETURNING org_id, id, name, description, state, created_by, created_at, updated_at
+RETURNING org_id, id, name, description, state, created_by, created_at, updated_at, automation_id
 `
 
 func (q *Queries) SetServiceAccountState(ctx context.Context, state string, orgID ids.OrgID, iD ids.UUID) (PcServiceAccount, error) {
@@ -569,6 +572,7 @@ func (q *Queries) SetServiceAccountState(ctx context.Context, state string, orgI
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AutomationID,
 	)
 	return i, err
 }
@@ -576,7 +580,7 @@ func (q *Queries) SetServiceAccountState(ctx context.Context, state string, orgI
 const updateServiceAccount = `-- name: UpdateServiceAccount :one
 UPDATE pc.service_accounts SET description = coalesce($1, description), updated_at = now()
 WHERE org_id = $2 AND id = $3
-RETURNING org_id, id, name, description, state, created_by, created_at, updated_at
+RETURNING org_id, id, name, description, state, created_by, created_at, updated_at, automation_id
 `
 
 func (q *Queries) UpdateServiceAccount(ctx context.Context, description *string, orgID ids.OrgID, iD ids.UUID) (PcServiceAccount, error) {
@@ -591,6 +595,7 @@ func (q *Queries) UpdateServiceAccount(ctx context.Context, description *string,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AutomationID,
 	)
 	return i, err
 }
