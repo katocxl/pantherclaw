@@ -412,7 +412,7 @@ func (s *Service) GetReadiness(ctx context.Context, agent, env ids.UUID, operati
 			}
 		}
 		if ops == nil {
-			if ops, err = knownOperations(ctx, q, c.Org, agent, env, active, sub); err != nil {
+			if ops, err = knownOperations(ctx, q, c.Org, agent, env, active); err != nil {
 				return err
 			}
 		}
@@ -443,9 +443,7 @@ func (s *Service) GetReadiness(ctx context.Context, agent, env ids.UUID, operati
 // knownOperations are the operations an agent's promotions, active grants
 // and coverage records name in the environment, sorted, at most
 // maxOperations.
-func knownOperations(ctx context.Context, q *dbq.Queries, org ids.OrgID, agent, env ids.UUID, active []dbq.PcAgentPromotion,
-	sub *subject,
-) ([]string, error) {
+func knownOperations(ctx context.Context, q *dbq.Queries, org ids.OrgID, agent, env ids.UUID, active []dbq.PcAgentPromotion) ([]string, error) {
 	var ops []string
 	for _, a := range active {
 		ops = append(ops, a.Operation)
