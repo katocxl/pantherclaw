@@ -151,3 +151,10 @@ WHERE org_id = sqlc.arg(org_id) AND agent_id = ANY (sqlc.arg(agent_ids)::uuid[])
   AND (promoted_at >= sqlc.arg(since) OR revoked_at >= sqlc.arg(since))
 ORDER BY promoted_at, id
 LIMIT 500;
+
+-- A cohort's static members with what their paths are read from.
+-- name: FleetCohortStaticAgents :many
+SELECT a.* FROM pc.agents a
+JOIN pc.fleet_cohort_members m ON m.org_id = a.org_id AND m.agent_id = a.id
+WHERE m.org_id = sqlc.arg(org_id) AND m.cohort_id = sqlc.arg(cohort_id)
+ORDER BY a.id;

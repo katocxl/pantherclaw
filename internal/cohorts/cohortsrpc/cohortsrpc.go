@@ -204,11 +204,11 @@ func (h *Handler) ListFleetCohortMembers(ctx context.Context, r *pantherclawv1.L
 	if err != nil {
 		return nil, err
 	}
-	ms, hidden, next, err := h.svc.Members(ctx, id, after, int(r.GetPageSize()))
+	ms, next, err := h.svc.Members(ctx, id, after, int(r.GetPageSize()))
 	if err != nil {
 		return nil, err
 	}
-	out := &pantherclawv1.ListFleetCohortMembersResponse{Hidden: int32(hidden), NextPageToken: str(next)} //nolint:gosec // ≤ 201
+	out := &pantherclawv1.ListFleetCohortMembersResponse{NextPageToken: str(next)}
 	for _, m := range ms {
 		out.Members = append(out.Members, &pantherclawv1.FleetCohortMember{
 			AgentId: m.Agent.ID.String(), Name: m.Agent.Name, State: m.Agent.State, StaticMember: m.Static,
@@ -271,7 +271,7 @@ func (h *Handler) GetCohortQueue(ctx context.Context, r *pantherclawv1.GetCohort
 	}
 	out := &pantherclawv1.GetCohortQueueResponse{
 		Unowned: agentsPB(q.Unowned), Unpromoted: agentsPB(q.Unpromoted), PendingApprovals: agentsPB(q.Pending),
-		Hidden: int32(q.Hidden), Notes: q.Notes, //nolint:gosec // ≤ 2000
+		Truncated: q.Truncated, Notes: q.Notes,
 	}
 	for _, d := range q.OverBaseline {
 		out.OverBaseline = append(out.OverBaseline, &pantherclawv1.BaselineDeparture{GrantId: d.Grant.String(), AgentId: d.Agent.String(), Reason: d.Reason})
@@ -293,7 +293,7 @@ func (h *Handler) GetCohortChanges(ctx context.Context, r *pantherclawv1.GetCoho
 	if err != nil {
 		return nil, err
 	}
-	out := &pantherclawv1.GetCohortChangesResponse{Since: timestamppb.New(ch.Since), Hidden: int32(ch.Hidden)} //nolint:gosec // ≤ 2000
+	out := &pantherclawv1.GetCohortChangesResponse{Since: timestamppb.New(ch.Since), Truncated: ch.Truncated}
 	add := func(kind string, at time.Time, agent, subject, actor, detail string) {
 		out.Changes = append(out.Changes, &pantherclawv1.CohortChange{
 			Kind: kind, Time: timestamppb.New(at), AgentId: agent, SubjectId: subject, Actor: actor, Detail: detail,
@@ -347,5 +347,5 @@ func (h *Handler) GetFleetOverview(ctx context.Context, r *pantherclawv1.GetFlee
 	if err != nil {
 		return nil, err
 	}
-	return &pantherclawv1.GetFleetOverviewResponse{Agents: agentsPB(o.Agents), Hidden: int32(o.Hidden), NextPageToken: str(o.Next)}, nil //nolint:gosec // ≤ 200
+	return &pantherclawv1.GetFleetOverviewResponse{Agents: agentsPB(o.Agents), NextPageToken: str(o.Next)}, nil
 }

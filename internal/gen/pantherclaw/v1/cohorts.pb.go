@@ -1002,11 +1002,9 @@ func (x *FleetCohortMember) GetStaticMember() bool {
 }
 
 type ListFleetCohortMembersResponse struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Members []*FleetCohortMember   `protobuf:"bytes,1,rep,name=members,proto3" json:"members,omitempty"`
-	// hidden counts the agents of the page the caller may not read.
-	Hidden        int32  `protobuf:"varint,2,opt,name=hidden,proto3" json:"hidden,omitempty"`
-	NextPageToken string `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Members       []*FleetCohortMember   `protobuf:"bytes,1,rep,name=members,proto3" json:"members,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1046,13 +1044,6 @@ func (x *ListFleetCohortMembersResponse) GetMembers() []*FleetCohortMember {
 		return x.Members
 	}
 	return nil
-}
-
-func (x *ListFleetCohortMembersResponse) GetHidden() int32 {
-	if x != nil {
-		return x.Hidden
-	}
-	return 0
 }
 
 func (x *ListFleetCohortMembersResponse) GetNextPageToken() string {
@@ -1454,10 +1445,12 @@ type GetCohortQueueResponse struct {
 	Unpromoted       []*FleetAgent          `protobuf:"bytes,2,rep,name=unpromoted,proto3" json:"unpromoted,omitempty"`
 	PendingApprovals []*FleetAgent          `protobuf:"bytes,3,rep,name=pending_approvals,json=pendingApprovals,proto3" json:"pending_approvals,omitempty"`
 	OverBaseline     []*BaselineDeparture   `protobuf:"bytes,4,rep,name=over_baseline,json=overBaseline,proto3" json:"over_baseline,omitempty"`
-	Hidden           int32                  `protobuf:"varint,5,opt,name=hidden,proto3" json:"hidden,omitempty"`
-	Notes            []string               `protobuf:"bytes,6,rep,name=notes,proto3" json:"notes,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// truncated: the cohort has more agents or active grants than the queue
+	// reads; the lists hold the first ones.
+	Truncated     bool     `protobuf:"varint,5,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	Notes         []string `protobuf:"bytes,6,rep,name=notes,proto3" json:"notes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetCohortQueueResponse) Reset() {
@@ -1518,11 +1511,11 @@ func (x *GetCohortQueueResponse) GetOverBaseline() []*BaselineDeparture {
 	return nil
 }
 
-func (x *GetCohortQueueResponse) GetHidden() int32 {
+func (x *GetCohortQueueResponse) GetTruncated() bool {
 	if x != nil {
-		return x.Hidden
+		return x.Truncated
 	}
-	return 0
+	return false
 }
 
 func (x *GetCohortQueueResponse) GetNotes() []string {
@@ -1675,11 +1668,12 @@ func (x *CohortChange) GetDetail() string {
 }
 
 type GetCohortChangesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Since         *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=since,proto3" json:"since,omitempty"`
-	Changes       []*CohortChange        `protobuf:"bytes,2,rep,name=changes,proto3" json:"changes,omitempty"`
-	Hidden        int32                  `protobuf:"varint,3,opt,name=hidden,proto3" json:"hidden,omitempty"`
-	Promotions    []*Promotion           `protobuf:"bytes,4,rep,name=promotions,proto3" json:"promotions,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Since   *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=since,proto3" json:"since,omitempty"`
+	Changes []*CohortChange        `protobuf:"bytes,2,rep,name=changes,proto3" json:"changes,omitempty"`
+	// truncated: some kind of change holds only its first rows.
+	Truncated     bool         `protobuf:"varint,3,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	Promotions    []*Promotion `protobuf:"bytes,4,rep,name=promotions,proto3" json:"promotions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1728,11 +1722,11 @@ func (x *GetCohortChangesResponse) GetChanges() []*CohortChange {
 	return nil
 }
 
-func (x *GetCohortChangesResponse) GetHidden() int32 {
+func (x *GetCohortChangesResponse) GetTruncated() bool {
 	if x != nil {
-		return x.Hidden
+		return x.Truncated
 	}
-	return 0
+	return false
 }
 
 func (x *GetCohortChangesResponse) GetPromotions() []*Promotion {
@@ -1797,7 +1791,6 @@ func (x *GetFleetOverviewRequest) GetPageToken() string {
 type GetFleetOverviewResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Agents        []*FleetAgent          `protobuf:"bytes,1,rep,name=agents,proto3" json:"agents,omitempty"`
-	Hidden        int32                  `protobuf:"varint,2,opt,name=hidden,proto3" json:"hidden,omitempty"`
 	NextPageToken string                 `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1838,13 +1831,6 @@ func (x *GetFleetOverviewResponse) GetAgents() []*FleetAgent {
 		return x.Agents
 	}
 	return nil
-}
-
-func (x *GetFleetOverviewResponse) GetHidden() int32 {
-	if x != nil {
-		return x.Hidden
-	}
-	return 0
 }
 
 func (x *GetFleetOverviewResponse) GetNextPageToken() string {
@@ -1933,10 +1919,9 @@ const file_pantherclaw_v1_cohorts_proto_rawDesc = "" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
 	"\x05state\x18\x03 \x01(\tR\x05state\x12#\n" +
-	"\rstatic_member\x18\x04 \x01(\bR\fstaticMember\"\x9d\x01\n" +
+	"\rstatic_member\x18\x04 \x01(\bR\fstaticMember\"\x85\x01\n" +
 	"\x1eListFleetCohortMembersResponse\x12;\n" +
-	"\amembers\x18\x01 \x03(\v2!.pantherclaw.v1.FleetCohortMemberR\amembers\x12\x16\n" +
-	"\x06hidden\x18\x02 \x01(\x05R\x06hidden\x12&\n" +
+	"\amembers\x18\x01 \x03(\v2!.pantherclaw.v1.FleetCohortMemberR\amembers\x12&\n" +
 	"\x0fnext_page_token\x18\x03 \x01(\tR\rnextPageToken\"v\n" +
 	"\x1cAddFleetCohortMembersRequest\x12%\n" +
 	"\tcohort_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bcohortId\x12/\n" +
@@ -1957,15 +1942,15 @@ const file_pantherclaw_v1_cohorts_proto_rawDesc = "" +
 	"\x11BaselineDeparture\x12\x19\n" +
 	"\bgrant_id\x18\x01 \x01(\tR\agrantId\x12\x19\n" +
 	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xc9\x02\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xcf\x02\n" +
 	"\x16GetCohortQueueResponse\x124\n" +
 	"\aunowned\x18\x01 \x03(\v2\x1a.pantherclaw.v1.FleetAgentR\aunowned\x12:\n" +
 	"\n" +
 	"unpromoted\x18\x02 \x03(\v2\x1a.pantherclaw.v1.FleetAgentR\n" +
 	"unpromoted\x12G\n" +
 	"\x11pending_approvals\x18\x03 \x03(\v2\x1a.pantherclaw.v1.FleetAgentR\x10pendingApprovals\x12F\n" +
-	"\rover_baseline\x18\x04 \x03(\v2!.pantherclaw.v1.BaselineDepartureR\foverBaseline\x12\x16\n" +
-	"\x06hidden\x18\x05 \x01(\x05R\x06hidden\x12\x14\n" +
+	"\rover_baseline\x18\x04 \x03(\v2!.pantherclaw.v1.BaselineDepartureR\foverBaseline\x12\x1c\n" +
+	"\ttruncated\x18\x05 \x01(\bR\ttruncated\x12\x14\n" +
 	"\x05notes\x18\x06 \x03(\tR\x05notes\"r\n" +
 	"\x17GetCohortChangesRequest\x12%\n" +
 	"\tcohort_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bcohortId\x120\n" +
@@ -1977,11 +1962,11 @@ const file_pantherclaw_v1_cohorts_proto_rawDesc = "" +
 	"\n" +
 	"subject_id\x18\x04 \x01(\tR\tsubjectId\x12\x14\n" +
 	"\x05actor\x18\x05 \x01(\tR\x05actor\x12\x16\n" +
-	"\x06detail\x18\x06 \x01(\tR\x06detail\"\xd7\x01\n" +
+	"\x06detail\x18\x06 \x01(\tR\x06detail\"\xdd\x01\n" +
 	"\x18GetCohortChangesResponse\x120\n" +
 	"\x05since\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05since\x126\n" +
-	"\achanges\x18\x02 \x03(\v2\x1c.pantherclaw.v1.CohortChangeR\achanges\x12\x16\n" +
-	"\x06hidden\x18\x03 \x01(\x05R\x06hidden\x129\n" +
+	"\achanges\x18\x02 \x03(\v2\x1c.pantherclaw.v1.CohortChangeR\achanges\x12\x1c\n" +
+	"\ttruncated\x18\x03 \x01(\bR\ttruncated\x129\n" +
 	"\n" +
 	"promotions\x18\x04 \x03(\v2\x19.pantherclaw.v1.PromotionR\n" +
 	"promotions\"n\n" +
@@ -1989,10 +1974,9 @@ const file_pantherclaw_v1_cohorts_proto_rawDesc = "" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x12*\n" +
 	"\n" +
-	"page_token\x18\x02 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\tpageToken\"\x8e\x01\n" +
+	"page_token\x18\x02 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\tpageToken\"v\n" +
 	"\x18GetFleetOverviewResponse\x122\n" +
-	"\x06agents\x18\x01 \x03(\v2\x1a.pantherclaw.v1.FleetAgentR\x06agents\x12\x16\n" +
-	"\x06hidden\x18\x02 \x01(\x05R\x06hidden\x12&\n" +
+	"\x06agents\x18\x01 \x03(\v2\x1a.pantherclaw.v1.FleetAgentR\x06agents\x12&\n" +
 	"\x0fnext_page_token\x18\x03 \x01(\tR\rnextPageToken2\xb7\n" +
 	"\n" +
 	"\rCohortService\x12h\n" +

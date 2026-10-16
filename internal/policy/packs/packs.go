@@ -30,7 +30,6 @@ import (
 	aapp "github.com/katocxl/pantherclaw/internal/agents/app"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/cohorts"
-	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -155,7 +154,7 @@ type Editions interface {
 // and policy.read are checked there).
 type Drafts interface {
 	Published(ctx context.Context) (*policyapp.VersionInfo, error)
-	CreateExpecting(ctx context.Context, raw []byte, expected *ids.UUID) (policyapp.VersionInfo, error)
+	CreateExpectingWith(ctx context.Context, raw []byte, expected *ids.UUID, details map[string]string) (policyapp.VersionInfo, error)
 }
 
 // Service applies packs.
@@ -329,19 +328,10 @@ func (s *Service) ApplyPack(ctx context.Context, in Apply) (Applied, error) {
 	if err != nil {
 		return Applied{}, err
 	}
-	if out.Version, err = s.Drafts.CreateExpecting(ctx, raw, &expected); err != nil {
-		return Applied{}, err
-	}
-	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		_, err := audit.Record(ctx, tx, audit.Event{
-			Name: "policy.pack_applied", Actor: c.Actor(), Outcome: audit.Success,
-			Object: &audit.Object{Type: "policy_version", ID: out.Version.ID.String()},
-			Details: map[string]string{
-				"pack": p.Name, "environment": in.Environment.String(), "agents": fmt.Sprint(len(agents)),
-				"added": fmt.Sprint(len(out.Added)), "replaced": fmt.Sprint(len(out.Replaced)),
-			},
-		})
-		return err
+	// The draft's own audit record names the pack, in its transaction (G11).
+	out.Version, err = s.Drafts.CreateExpectingWith(ctx, raw, &expected, map[string]string{
+		"pack": p.Name, "environment": in.Environment.String(), "agents": fmt.Sprint(len(agents)),
+		"added": fmt.Sprint(len(out.Added)), "replaced": fmt.Sprint(len(out.Replaced)),
 	})
 	return out, err
 }

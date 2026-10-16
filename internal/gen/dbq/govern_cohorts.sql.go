@@ -312,6 +312,53 @@ func (q *Queries) FleetCohortAgents(ctx context.Context, arg FleetCohortAgentsPa
 	return items, nil
 }
 
+const fleetCohortStaticAgents = `-- name: FleetCohortStaticAgents :many
+SELECT a.org_id, a.id, a.name, a.purpose, a.team_id, a.environment_id, a.owner_user_id, a.backup_owner_user_id, a.execution_context, a.state, a.suspended_from, a.created_by, a.created_at, a.updated_at, a.claimed_at, a.retired_at, a.range_agent, a.task_type FROM pc.agents a
+JOIN pc.fleet_cohort_members m ON m.org_id = a.org_id AND m.agent_id = a.id
+WHERE m.org_id = $1 AND m.cohort_id = $2
+ORDER BY a.id
+`
+
+// A cohort's static members with what their paths are read from.
+func (q *Queries) FleetCohortStaticAgents(ctx context.Context, orgID ids.OrgID, cohortID ids.UUID) ([]PcAgent, error) {
+	rows, err := q.db.Query(ctx, fleetCohortStaticAgents, orgID, cohortID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcAgent{}
+	for rows.Next() {
+		var i PcAgent
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.Name,
+			&i.Purpose,
+			&i.TeamID,
+			&i.EnvironmentID,
+			&i.OwnerUserID,
+			&i.BackupOwnerUserID,
+			&i.ExecutionContext,
+			&i.State,
+			&i.SuspendedFrom,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ClaimedAt,
+			&i.RetiredAt,
+			&i.RangeAgent,
+			&i.TaskType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const fleetGrantRevisionsSince = `-- name: FleetGrantRevisionsSince :many
 SELECT r.grant_id, g.agent_id, r.revision, r.widens, r.created_by, r.created_at
 FROM pc.grant_revisions r

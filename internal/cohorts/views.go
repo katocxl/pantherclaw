@@ -18,6 +18,14 @@ import (
 
 const production = "PRODUCTION"
 
+// What one read holds at most (the queries' LIMITs): a list this long may
+// have been cut, and the result says so (D71 G5).
+const (
+	maxGrantsRead   = 2000
+	maxChangesRead  = 500
+	maxReleasesRead = 100
+)
+
 // AgentFacts is what the fleet overview and the queue show about an agent.
 type AgentFacts struct {
 	dbq.FleetAgentFactsRow
@@ -45,8 +53,9 @@ type Queue struct {
 	// OverBaseline are active grants beyond the cohort's baseline (empty
 	// without a baseline).
 	OverBaseline []Departure
-	// Hidden counts the cohort's agents the caller may not read.
-	Hidden int
+	// Truncated: the cohort has more agents or active grants than the
+	// queue reads (D71 G5).
+	Truncated bool
 	// Notes say what the queue could not include.
 	Notes []string
 }
@@ -79,17 +88,15 @@ func (s *Service) GetQueue(ctx context.Context, id ids.UUID) (Queue, error) {
 	var out Queue
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		co, err := q.GetFleetCohort(ctx, c.Org, id)
-		if db.IsNoRows(err) {
-			return ErrNotFound
-		} else if err != nil {
-			return err
-		}
-		agents, hidden, err := readable(ctx, q, c, co)
+		co, _, err := readableCohort(ctx, q, c, id, false)
 		if err != nil {
 			return err
 		}
-		out.Hidden = hidden
+		agents, truncated, err := readable(ctx, q, c, co)
+		if err != nil {
+			return err
+		}
+		out.Truncated = truncated
 		fs, err := facts(ctx, q, c.Org, agents)
 		if err != nil {
 			return err
@@ -117,6 +124,7 @@ func (s *Service) GetQueue(ctx context.Context, id ids.UUID) (Queue, error) {
 			if err != nil {
 				return err
 			}
+			out.Truncated = out.Truncated || len(grants) >= maxGrantsRead
 			for _, g := range grants {
 				if why := beyond(b, g); why != "" {
 					out.OverBaseline = append(out.OverBaseline, Departure{Grant: g.ID, Agent: g.AgentID, Reason: why})
@@ -155,7 +163,8 @@ type Changes struct {
 	PolicyVersions  []dbq.FleetPolicyVersionsPublishedSinceRow
 	PackageVersions []dbq.FleetPackageActivationsSinceRow
 	Promotions      []dbq.PcAgentPromotion
-	Hidden          int
+	// Truncated: some list holds only its first rows (D71 G5).
+	Truncated bool
 }
 
 // GetChanges returns what moved for a cohort's agents since a time, at
@@ -177,17 +186,15 @@ func (s *Service) GetChanges(ctx context.Context, id ids.UUID, since time.Time) 
 		if out.Since.IsZero() || out.Since.Before(now.Add(-31*24*time.Hour)) {
 			out.Since = now.Add(-31 * 24 * time.Hour)
 		}
-		co, err := q.GetFleetCohort(ctx, c.Org, id)
-		if db.IsNoRows(err) {
-			return ErrNotFound
-		} else if err != nil {
-			return err
-		}
-		agents, hidden, err := readable(ctx, q, c, co)
+		co, _, err := readableCohort(ctx, q, c, id, false)
 		if err != nil {
 			return err
 		}
-		out.Hidden = hidden
+		agents, truncated, err := readable(ctx, q, c, co)
+		if err != nil {
+			return err
+		}
+		out.Truncated = truncated
 		if out.MembersAdded, err = q.FleetMembersAddedSince(ctx, c.Org, id, out.Since); err != nil {
 			return err
 		}
@@ -195,6 +202,7 @@ func (s *Service) GetChanges(ctx context.Context, id ids.UUID, since time.Time) 
 		for _, a := range agents {
 			visible[a] = true
 		}
+		out.Truncated = out.Truncated || len(out.MembersAdded) >= maxChangesRead
 		kept := out.MembersAdded[:0]
 		for _, m := range out.MembersAdded {
 			if visible[m.AgentID] {
@@ -218,8 +226,13 @@ func (s *Service) GetChanges(ctx context.Context, id ids.UUID, since time.Time) 
 				return err
 			}
 		}
-		out.Promotions, err = q.FleetPromotionsSince(ctx, c.Org, agents, out.Since)
-		return err
+		if out.Promotions, err = q.FleetPromotionsSince(ctx, c.Org, agents, out.Since); err != nil {
+			return err
+		}
+		out.Truncated = out.Truncated || len(out.GrantRevisions) >= maxChangesRead ||
+			len(out.GrantRevoked) >= maxChangesRead || len(out.Promotions) >= maxChangesRead ||
+			len(out.PolicyVersions) >= maxReleasesRead || len(out.PackageVersions) >= maxReleasesRead
+		return nil
 	}, db.ReadOnly())
 	return out, err
 }
@@ -227,7 +240,6 @@ func (s *Service) GetChanges(ctx context.Context, id ids.UUID, since time.Time) 
 // Overview is one page of the fleet overview.
 type Overview struct {
 	Agents []AgentFacts
-	Hidden int
 	Next   *ids.UUID
 }
 
@@ -262,8 +274,6 @@ func (s *Service) GetFleetOverview(ctx context.Context, after *ids.UUID, limit i
 			}
 			if ok {
 				shown = append(shown, id)
-			} else {
-				out.Hidden++
 			}
 		}
 		out.Agents, err = facts(ctx, q, c.Org, shown)

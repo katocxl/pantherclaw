@@ -210,7 +210,9 @@ func (s *Service) team(ctx context.Context) error {
 	return nil
 }
 
-// manager is a person holding cohort.manage at the org, in a Team org.
+// manager is a person holding cohort.manage somewhere, in a Team org; each
+// change checks it again at the cohort's scope and the agents it touches
+// (D71 G4).
 func (s *Service) manager(ctx context.Context) (tapp.Caller, error) {
 	c, err := tapp.CallerFrom(ctx)
 	if err != nil {
@@ -219,10 +221,33 @@ func (s *Service) manager(ctx context.Context) (tapp.Caller, error) {
 	if !c.Human() || c.Credential == tapp.CredAPIKey {
 		return c, ErrHumanOnly
 	}
-	if err := c.Require(PermManage, td.OrgPath(c.Org)); err != nil {
-		return c, err
+	if !c.CanAnywhere(PermManage) {
+		return c, td.ErrPermissionDenied(PermManage)
 	}
 	return c, s.team(ctx)
+}
+
+// readable loads a cohort the caller may see: agent.read at its scope
+// (D71 G8); any other is not found.
+func readableCohort(ctx context.Context, q *dbq.Queries, c tapp.Caller, id ids.UUID, lock bool) (dbq.PcFleetCohort, td.Path, error) {
+	get := q.GetFleetCohort
+	if lock {
+		get = q.LockFleetCohort
+	}
+	co, err := get(ctx, c.Org, id)
+	if db.IsNoRows(err) {
+		return co, nil, ErrNotFound
+	} else if err != nil {
+		return co, nil, err
+	}
+	scope, err := storedScope(ctx, q, co)
+	if err != nil {
+		return co, nil, err
+	}
+	if !c.Can(PermRead, scope) {
+		return co, nil, ErrNotFound
+	}
+	return co, scope, nil
 }
 
 // reader holds agent.read somewhere in a Team org.
@@ -269,8 +294,16 @@ func (s *Service) Create(ctx context.Context, in Input) (Cohort, error) {
 		if err := ownerActive(ctx, q, c.Org, in.Owner); err != nil {
 			return err
 		}
+		id := ids.NewV7()
+		scope, err := scopeOf(ctx, q, c.Org, id, in.Rule)
+		if err != nil {
+			return err
+		}
+		if err := c.Require(PermManage, scope); err != nil {
+			return err
+		}
 		row, err := q.InsertFleetCohort(ctx, dbq.InsertFleetCohortParams{
-			OrgID: c.Org, ID: ids.NewV7(), Name: in.Name, Description: in.Description, Rule: rule, OwnerUserID: in.Owner,
+			OrgID: c.Org, ID: id, Name: in.Name, Description: in.Description, Rule: rule, OwnerUserID: in.Owner,
 			Baseline: baseline, CreatedBy: c.Principal.String(),
 		})
 		if db.IsUniqueViolation(err) {
@@ -300,6 +333,17 @@ func (s *Service) Update(ctx context.Context, id ids.UUID, in Input) (Cohort, er
 		if err := ownerActive(ctx, q, c.Org, in.Owner); err != nil {
 			return err
 		}
+		_, scope, err := readableCohort(ctx, q, c, id, true)
+		if err != nil {
+			return err
+		}
+		next, err := scopeOf(ctx, q, c.Org, id, in.Rule)
+		if err != nil {
+			return err
+		}
+		if err := errors.Join(c.Require(PermManage, scope), c.Require(PermManage, next)); err != nil {
+			return td.ErrPermissionDenied(PermManage)
+		}
 		row, err := q.UpdateFleetCohort(ctx, dbq.UpdateFleetCohortParams{
 			OrgID: c.Org, ID: id, Name: in.Name, Description: in.Description, Rule: rule, OwnerUserID: in.Owner, Baseline: baseline,
 		})
@@ -325,10 +369,11 @@ func (s *Service) Delete(ctx context.Context, id ids.UUID) error {
 	}
 	return s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		row, err := q.LockFleetCohort(ctx, c.Org, id)
-		if db.IsNoRows(err) {
-			return ErrNotFound
-		} else if err != nil {
+		row, scope, err := readableCohort(ctx, q, c, id, true)
+		if err != nil {
+			return err
+		}
+		if err := c.Require(PermManage, scope); err != nil {
 			return err
 		}
 		if _, err := q.DeleteFleetCohortMembers(ctx, c.Org, id); err != nil {
@@ -349,10 +394,7 @@ func (s *Service) Get(ctx context.Context, id ids.UUID) (Cohort, error) {
 	}
 	var out Cohort
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		row, err := dbq.New(tx).GetFleetCohort(ctx, c.Org, id)
-		if db.IsNoRows(err) {
-			return ErrNotFound
-		}
+		row, _, err := readableCohort(ctx, dbq.New(tx), c, id, false)
 		out = cohortOf(row, 0)
 		return err
 	}, db.ReadOnly())
@@ -376,7 +418,8 @@ func (s *Service) List(ctx context.Context, after string, limit int) ([]Cohort, 
 	var out []Cohort
 	var next string
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		rows, err := dbq.New(tx).ListFleetCohorts(ctx, c.Org, aft, int32(limit+1)) //nolint:gosec // ≤ 201
+		q := dbq.New(tx)
+		rows, err := q.ListFleetCohorts(ctx, c.Org, aft, int32(limit+1)) //nolint:gosec // ≤ 201
 		if err != nil {
 			return err
 		}
@@ -384,10 +427,17 @@ func (s *Service) List(ctx context.Context, after string, limit int) ([]Cohort, 
 			rows, next = rows[:limit], rows[limit-1].Name
 		}
 		for _, r := range rows {
-			out = append(out, cohortOf(dbq.PcFleetCohort{
+			co := dbq.PcFleetCohort{
 				OrgID: r.OrgID, ID: r.ID, Name: r.Name, Description: r.Description, Rule: r.Rule, OwnerUserID: r.OwnerUserID,
 				Baseline: r.Baseline, CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
-			}, int(r.StaticMembers)))
+			}
+			scope, err := storedScope(ctx, q, co)
+			if err != nil {
+				return err
+			}
+			if c.Can(PermRead, scope) { // a cohort outside the viewer's scope is not listed (G8)
+				out = append(out, cohortOf(co, int(r.StaticMembers)))
+			}
 		}
 		return nil
 	}, db.ReadOnly())
@@ -424,16 +474,23 @@ func (s *Service) ChangeMembers(ctx context.Context, id ids.UUID, agents []ids.U
 	var n int
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		if _, err := q.LockFleetCohort(ctx, c.Org, id); db.IsNoRows(err) {
-			return ErrNotFound
-		} else if err != nil {
+		co, _, err := readableCohort(ctx, q, c, id, true)
+		if err != nil {
 			return err
 		}
 		for _, a := range agents {
-			if _, ok, err := visible(ctx, q, c, a, PermRead); err != nil {
+			ag, ok, err := visible(ctx, q, c, a, PermRead)
+			if err != nil {
 				return err
 			} else if !ok {
 				return ErrAgentNotFound
+			}
+			path, err := aapp.PathOf(ctx, q, ag)
+			if err != nil {
+				return err
+			}
+			if err := c.Require(PermManage, path); err != nil {
+				return err
 			}
 			var k int64
 			if remove {
@@ -449,6 +506,15 @@ func (s *Service) ChangeMembers(ctx context.Context, id ids.UUID, agents []ids.U
 				return err
 			}
 			n += int(k)
+		}
+		// The cohort's scope after the change must be one the caller
+		// manages: adding another team's agent widens it.
+		scope, err := storedScope(ctx, q, co)
+		if err != nil {
+			return err
+		}
+		if err := c.Require(PermManage, scope); err != nil {
+			return err
 		}
 		name := "cohort.members_added"
 		if remove {
@@ -546,22 +612,21 @@ type Member struct {
 	Static bool
 }
 
-// Members lists a cohort's agents the caller may read, by id (agent.read,
-// Team). Agents the caller cannot read are left out and counted.
-func (s *Service) Members(ctx context.Context, id ids.UUID, after *ids.UUID, limit int) (members []Member, hidden int, next *ids.UUID, err error) {
+// Members lists a cohort's agents the caller may read, by id (agent.read
+// at the cohort's scope, Team). Agents outside the caller's scope are left
+// out and never counted (D71 G8).
+func (s *Service) Members(ctx context.Context, id ids.UUID, after *ids.UUID, limit int) (members []Member, next *ids.UUID, err error) {
 	c, err := s.reader(ctx)
 	if err != nil {
-		return nil, 0, nil, err
+		return nil, nil, err
 	}
 	if limit <= 0 || limit > maxList {
 		limit = maxList
 	}
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		co, err := q.GetFleetCohort(ctx, c.Org, id)
-		if db.IsNoRows(err) {
-			return ErrNotFound
-		} else if err != nil {
+		co, _, err := readableCohort(ctx, q, c, id, false)
+		if err != nil {
 			return err
 		}
 		rows, err := agentsOf(ctx, q, c.Org, co, after, limit+1)
@@ -580,14 +645,13 @@ func (s *Service) Members(ctx context.Context, id ids.UUID, after *ids.UUID, lim
 				return err
 			}
 			if !c.Can(PermRead, path) {
-				hidden++
 				continue
 			}
 			members = append(members, Member{Agent: a, Static: r.StaticMember})
 		}
 		return nil
 	}, db.ReadOnly())
-	return members, hidden, next, err
+	return members, next, err
 }
 
 func agentOf(r dbq.FleetCohortAgentsRow) dbq.PcAgent {
@@ -599,26 +663,31 @@ func agentOf(r dbq.FleetCohortAgentsRow) dbq.PcAgent {
 	}
 }
 
-// readable lists the cohort's agents the caller may read (all of them, at
-// most MaxMembers*2) and how many were left out.
-func readable(ctx context.Context, q *dbq.Queries, c tapp.Caller, co dbq.PcFleetCohort) ([]ids.UUID, int, error) {
-	rows, err := agentsOf(ctx, q, c.Org, co, nil, MaxMembers*2)
+// maxResolved bounds the agents a cohort's queue and changes read.
+const maxResolved = MaxMembers * 2
+
+// readable lists the cohort's agents the caller may read, by id, at most
+// maxResolved, and whether more were left out (D71 G5). Agents outside the
+// caller's scope are left out and never counted (G8).
+func readable(ctx context.Context, q *dbq.Queries, c tapp.Caller, co dbq.PcFleetCohort) ([]ids.UUID, bool, error) {
+	rows, err := agentsOf(ctx, q, c.Org, co, nil, maxResolved+1)
 	if err != nil {
-		return nil, 0, err
+		return nil, false, err
+	}
+	truncated := len(rows) > maxResolved
+	if truncated {
+		rows = rows[:maxResolved]
 	}
 	var out []ids.UUID
-	var hidden int
 	for _, r := range rows {
 		path, err := aapp.PathOf(ctx, q, agentOf(r))
 		if err != nil {
-			return nil, 0, err
+			return nil, false, err
 		}
 		if c.Can(PermRead, path) {
 			out = append(out, r.ID)
-		} else {
-			hidden++
 		}
 	}
 	slices.SortFunc(out, func(a, b ids.UUID) int { return bytes.Compare(a[:], b[:]) })
-	return out, hidden, nil
+	return out, truncated, nil
 }

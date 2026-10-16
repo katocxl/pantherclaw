@@ -17,9 +17,12 @@ import "pantherclaw/v1/promotions.proto";
 // issues grants from. These are not the policy rollout cohorts of
 // PolicyRolloutService.
 //
-// Needs the Team edition. Every change is made by a person holding
-// cohort.manage; reads need agent.read, and list only agents the caller
-// may read (the others are counted as hidden).
+// Needs the Team edition. A cohort's scope is the narrowest one holding
+// its rule's scope (a team, an environment, or the org for a task type
+// alone) and its static members. Every change is made by a person holding
+// cohort.manage there (and where each agent added or removed lives);
+// reads need agent.read there. Agents outside the reader's scope are
+// left out and never counted.
 service CohortService {
   // permission: cohort.manage
   rpc CreateFleetCohort(CreateFleetCohortRequest) returns (CreateFleetCohortResponse);
@@ -200,8 +203,6 @@ message FleetCohortMember {
 
 message ListFleetCohortMembersResponse {
   repeated FleetCohortMember members = 1;
-  // hidden counts the agents of the page the caller may not read.
-  int32 hidden = 2;
   string next_page_token = 3;
 }
 
@@ -262,7 +263,9 @@ message GetCohortQueueResponse {
   repeated FleetAgent unpromoted = 2;
   repeated FleetAgent pending_approvals = 3;
   repeated BaselineDeparture over_baseline = 4;
-  int32 hidden = 5;
+  // truncated: the cohort has more agents or active grants than the queue
+  // reads; the lists hold the first ones.
+  bool truncated = 5;
   repeated string notes = 6;
 }
 
@@ -289,7 +292,8 @@ message CohortChange {
 message GetCohortChangesResponse {
   google.protobuf.Timestamp since = 1;
   repeated CohortChange changes = 2;
-  int32 hidden = 3;
+  // truncated: some kind of change holds only its first rows.
+  bool truncated = 3;
   repeated Promotion promotions = 4;
 }
 
@@ -306,6 +310,5 @@ message GetFleetOverviewRequest {
 
 message GetFleetOverviewResponse {
   repeated FleetAgent agents = 1;
-  int32 hidden = 2;
   string next_page_token = 3;
 }
