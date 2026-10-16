@@ -384,19 +384,19 @@ LIMIT 100;
 
 -- name: MarkAutomationDeliveryDelivered :execrows
 UPDATE pc.automation_deliveries
-SET state = 'DELIVERED', body = NULL, attempts = attempts + 1, last_status = sqlc.arg(status), last_error = NULL,
+SET state = 'DELIVERED', body = NULL, last_status = sqlc.arg(status), last_error = NULL,
     delivered_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';
 
 -- name: MarkAutomationDeliveryAttempt :execrows
 UPDATE pc.automation_deliveries
-SET attempts = attempts + 1, last_status = sqlc.narg(status), last_error = sqlc.arg(error),
+SET last_status = sqlc.narg(status), last_error = sqlc.arg(error),
     next_attempt_at = sqlc.arg(next_attempt_at)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';
 
 -- name: MarkAutomationDeliveryFailed :execrows
 UPDATE pc.automation_deliveries
-SET state = 'FAILED', body = NULL, attempts = least(attempts + sqlc.arg(add_attempt)::int, 8), last_status = sqlc.narg(status),
+SET state = 'FAILED', body = NULL, last_status = sqlc.narg(status),
     last_error = sqlc.arg(error)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';
 
@@ -470,13 +470,17 @@ SELECT d.trigger_id FROM pc.automation_dedupe d
 WHERE d.org_id = sqlc.arg(org_id) AND d.automation_id = sqlc.arg(automation_id) AND d.key = sqlc.arg(key)
   AND d.expires_at > now();
 
--- name: LeaseAutomationDelivery :execrows
+-- name: LeaseAutomationDelivery :one
 -- Takes a delivery for one send (D87 L11): no other sender picks it up
--- before the lease ends, even if this one never records the outcome.
-UPDATE pc.automation_deliveries SET next_attempt_at = now() + interval '2 minutes'
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';
+-- before the lease ends, even if this one never records the outcome. The
+-- lease counts the attempt before the POST (D97 N1), so a delivery with
+-- attempts > 0 may have reached its destination.
+UPDATE pc.automation_deliveries SET next_attempt_at = now() + interval '2 minutes', attempts = attempts + 1
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING'
+RETURNING attempts;
 
 -- name: CancelAutomationDelivery :execrows
--- The engine's cleanup cancels a delivery that has not been sent (D89).
+-- The engine's cleanup cancels a delivery that has not been sent (D89):
+-- never one an attempt was leased for (D97 N1).
 UPDATE pc.automation_deliveries SET state = 'FAILED', body = NULL, last_error = sqlc.arg(code)
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING' AND attempts = 0;

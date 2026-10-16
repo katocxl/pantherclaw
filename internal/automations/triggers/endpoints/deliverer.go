@@ -217,12 +217,25 @@ func (s *Service) sendOne(ctx context.Context, org ids.OrgID, id ids.UUID) (bool
 			fail = "destination_disabled"
 			return nil
 		}
-		// The send is leased before the POST: a sender that dies after posting
-		// and before recording leaves it alone for the lease (D87 L11).
-		if _, err := q.LeaseAutomationDelivery(ctx, org, id); err != nil {
+		a.url, a.internal = d.Url, d.Internal
+		if err := CheckURL(a.url, s.ownHost, a.internal, s.cfg.AllowedPrivateRanges); err != nil {
+			fail = "destination_url"
+			return nil
+		}
+		if a.attempts >= MaxAttempts {
+			// A sender died after leasing the last attempt: it is not tried again.
+			fail = "attempts_exhausted"
+			return nil
+		}
+		// The send is leased before the POST and the lease counts the attempt:
+		// a sender that dies after posting and before recording leaves it
+		// alone for the lease (D87 L11), and Cancel sees it may have been
+		// sent (D97 N1).
+		n, err := q.LeaseAutomationDelivery(ctx, org, id)
+		if err != nil {
 			return err
 		}
-		a.url, a.internal = d.Url, d.Internal
+		a.attempts = int(n)
 		cur, err := s.envelope.Decrypt(ctx, field(org, destinationsTable, r.DestinationID, secretColumn), SecretPurpose, d.Secret)
 		if err != nil {
 			return fmt.Errorf("endpoints: decrypt secret: %w", err)
@@ -243,9 +256,6 @@ func (s *Service) sendOne(ctx context.Context, org ids.OrgID, id ids.UUID) (bool
 	if fail != "" {
 		return false, s.finish(ctx, org, id, a, nil, fail, true)
 	}
-	if err := CheckURL(a.url, s.ownHost, a.internal, s.cfg.AllowedPrivateRanges); err != nil {
-		return false, s.finish(ctx, org, id, a, nil, "destination_url", true)
-	}
 	status, code := s.post(ctx, a)
 	if status >= 200 && status < 300 {
 		return true, s.finish(ctx, org, id, a, &status, "", false)
@@ -254,7 +264,7 @@ func (s *Service) sendOne(ctx context.Context, org ids.OrgID, id ids.UUID) (bool
 	if status > 0 {
 		st = &status
 	}
-	return false, s.finish(ctx, org, id, a, st, code, a.attempts+1 >= MaxAttempts)
+	return false, s.finish(ctx, org, id, a, st, code, a.attempts >= MaxAttempts)
 }
 
 // post sends one attempt with Standard Webhooks headers: one signature per
@@ -291,6 +301,9 @@ func (s *Service) post(ctx context.Context, a attempt) (int, string) {
 	return resp.StatusCode, "http_" + strconv.Itoa(resp.StatusCode)
 }
 
+// finish records an attempt's outcome. The attempt was counted by its
+// lease (D97 N1); a guarded update that matches nothing (the delivery left
+// PENDING meanwhile) is logged.
 func (s *Service) finish(ctx context.Context, org ids.OrgID, id ids.UUID, a attempt, status *int, code string, final bool) error {
 	return s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
@@ -299,20 +312,27 @@ func (s *Service) finish(ctx context.Context, org ids.OrgID, id ids.UUID, a atte
 			v := int32(*status) //nolint:gosec // an HTTP status code
 			st = &v
 		}
+		unmatched := func(n int64) {
+			if n == 0 {
+				s.log.WarnContext(ctx, "automations.delivery_not_pending", slog.String("delivery", id.String()),
+					slog.String("outcome", code))
+			}
+		}
 		switch {
 		case code == "":
-			_, err := q.MarkAutomationDeliveryDelivered(ctx, st, org, id)
+			n, err := q.MarkAutomationDeliveryDelivered(ctx, st, org, id)
+			unmatched(n)
 			return err
 		case final:
-			add := int32(1)
-			if code == "destination_disabled" || code == "destination_url" {
-				add = 0
-			}
 			n, err := q.MarkAutomationDeliveryFailed(ctx, dbq.MarkAutomationDeliveryFailedParams{
-				AddAttempt: add, Status: st, Error: &code, OrgID: org, ID: id,
+				Status: st, Error: &code, OrgID: org, ID: id,
 			})
-			if err != nil || n == 0 || s.failures == nil {
+			if err != nil {
 				return err
+			}
+			unmatched(n)
+			if n == 0 || s.failures == nil {
+				return nil
 			}
 			_, err = s.failures.Report(ctx, tx.Pgx(), reflexdomain.Failure{
 				Org: org, Kind: FailureDelivery, DedupeKey: FailureDelivery + ":" + a.dest.String() + ":" + a.exec.String(),
@@ -324,9 +344,10 @@ func (s *Service) finish(ctx context.Context, org ids.OrgID, id ids.UUID, a atte
 			})
 			return err
 		default:
-			_, err := q.MarkAutomationDeliveryAttempt(ctx, dbq.MarkAutomationDeliveryAttemptParams{
-				Status: st, Error: &code, NextAttemptAt: s.clock.Now().Add(Backoff(a.attempts + 1)), OrgID: org, ID: id,
+			n, err := q.MarkAutomationDeliveryAttempt(ctx, dbq.MarkAutomationDeliveryAttemptParams{
+				Status: st, Error: &code, NextAttemptAt: s.clock.Now().Add(Backoff(a.attempts)), OrgID: org, ID: id,
 			})
+			unmatched(n)
 			return err
 		}
 	})
@@ -351,14 +372,24 @@ func (DestinationChecker) Active(ctx context.Context, tx pgx.Tx, org ids.OrgID, 
 // CancelCode is the last_error of a delivery Cancel stopped.
 const CancelCode = "cancelled" //nolint:misspell // the stored value D89 names
 
-// ErrDeliveryNotPending reports a delivery that was already delivered or
-// failed (a cancel included): Cancel changes nothing.
-var ErrDeliveryNotPending = pcerr.New(pcerr.FailedPrecondition, "DELIVERY_NOT_PENDING", "the delivery is no longer pending")
+// Cancel errors.
+var (
+	// ErrDeliveryNotPending reports a delivery that was already failed (a
+	// cancel included) without an attempt: Cancel changes nothing.
+	ErrDeliveryNotPending = pcerr.New(pcerr.FailedPrecondition, "DELIVERY_NOT_PENDING", "the delivery is no longer pending")
+	// ErrDeliveryMayHaveBeenSent reports a delivery with an attempt (a
+	// leased send included): it may have reached its destination, so it is
+	// never reported as cancelled (D97 N1).
+	ErrDeliveryMayHaveBeenSent = pcerr.New(pcerr.FailedPrecondition, "DELIVERY_MAY_HAVE_BEEN_SENT",
+		"the delivery may have been sent")
+)
 
 // Cancel stops a delivery that has not been sent (D89, the engine's
-// cleanup): PENDING becomes FAILED with last_error CancelCode and its
-// body is dropped. A delivery in another state is left as it is
-// (ErrDeliveryNotPending); an unknown one is ErrDeliveryNotFound.
+// cleanup): PENDING with no attempt becomes FAILED with last_error
+// CancelCode and its body is dropped. A delivery with an attempt is left
+// as it is (ErrDeliveryMayHaveBeenSent, D97 N1), as is one already failed
+// without one (ErrDeliveryNotPending); an unknown one is
+// ErrDeliveryNotFound.
 func (dl Deliverer) Cancel(ctx context.Context, tx pgx.Tx, id ids.UUID) error {
 	t, org, err := adopt(ctx, tx)
 	if err != nil {
@@ -373,10 +404,14 @@ func (dl Deliverer) Cancel(ctx context.Context, tx pgx.Tx, id ids.UUID) error {
 	if n == 1 {
 		return nil
 	}
-	if _, err := q.GetAutomationDelivery(ctx, org, id); db.IsNoRows(err) {
+	r, err := q.GetAutomationDelivery(ctx, org, id)
+	if db.IsNoRows(err) {
 		return ErrDeliveryNotFound
 	} else if err != nil {
 		return err
+	}
+	if r.Attempts > 0 {
+		return ErrDeliveryMayHaveBeenSent
 	}
 	return ErrDeliveryNotPending
 }

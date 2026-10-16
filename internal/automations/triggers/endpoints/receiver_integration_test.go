@@ -323,3 +323,51 @@ func (s *failureSink) count() int {
 	defer s.mu.Unlock()
 	return len(s.fs)
 }
+
+// TestHR275_UnusableSourcesVerifyAgainstTheDummyKey (D87 L10): an
+// unknown, inactive or unlicensed source runs one signature check against
+// the dummy key and answers with the same 401 as a bad signature; a usable
+// source checks its own secrets instead.
+func TestHR275_UnusableSourcesVerifyAgainstTheDummyKey(t *testing.T) {
+	f := newInboundFixture(t, 0, "ticket.created")
+	var mu sync.Mutex
+	dummies := 0
+	orig := dummyVerify
+	dummyVerify = func(hdr inbound.Headers, body []byte) {
+		mu.Lock()
+		dummies++
+		mu.Unlock()
+		orig(hdr, body)
+	}
+	t.Cleanup(func() { dummyVerify = orig })
+	taken := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		n := dummies
+		dummies = 0
+		return n
+	}
+	body := `{"type":"ticket.created","data":{}}`
+	refused := func(name, url string, wantDummy int) {
+		t.Helper()
+		status, got := f.post(t, url, "msg_"+name, time.Now(), body, f.secret)
+		if status != http.StatusUnauthorized || !strings.Contains(got, CodeUnauthorized) {
+			t.Fatalf("%s: %d %s", name, status, got)
+		}
+		if n := taken(); n != wantDummy {
+			t.Fatalf("%s: %d dummy checks, want %d", name, n, wantDummy)
+		}
+	}
+	refused("unknown", f.url(f.Org, ids.NewV7()), 1)
+	refused("pending", f.url(f.Org, f.source.ID), 1)
+	if _, err := f.svc.ActivateEventSource(f.author(), f.source.ID, f.stepUp()); err != nil {
+		t.Fatal(err)
+	}
+	f.svc.editions = nil
+	refused("unlicensed", f.url(f.Org, f.source.ID), 1)
+	f.svc.editions = triggerstest.Team
+	status, _ := f.post(t, f.url(f.Org, f.source.ID), "msg_badsig", time.Now(), body, []byte("not-the-source-secret-at-all"))
+	if status != http.StatusUnauthorized || taken() != 0 {
+		t.Fatalf("a bad signature on a usable source: %d", status)
+	}
+}

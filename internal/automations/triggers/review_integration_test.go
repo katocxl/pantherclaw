@@ -37,7 +37,7 @@ func (f fakeExecutions) Execution(_ context.Context, _ pgx.Tx, _ ids.OrgID, id i
 // fakeOperations says which operations are irreversible.
 type fakeOperations map[string]defs.Reversibility
 
-func (f fakeOperations) Active(_ context.Context, _ ids.OrgID, op string) (*defs.Definition, error) {
+func (f fakeOperations) Active(_ context.Context, _ db.TenantTx, _ ids.OrgID, op string) (*defs.Definition, error) {
 	r, ok := f[op]
 	if !ok {
 		return nil, nil

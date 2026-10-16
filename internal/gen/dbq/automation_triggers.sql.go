@@ -266,10 +266,11 @@ func (q *Queries) AutomationVersionDefinition(ctx context.Context, orgID ids.Org
 
 const cancelAutomationDelivery = `-- name: CancelAutomationDelivery :execrows
 UPDATE pc.automation_deliveries SET state = 'FAILED', body = NULL, last_error = $1
-WHERE org_id = $2 AND id = $3 AND state = 'PENDING'
+WHERE org_id = $2 AND id = $3 AND state = 'PENDING' AND attempts = 0
 `
 
-// The engine's cleanup cancels a delivery that has not been sent (D89).
+// The engine's cleanup cancels a delivery that has not been sent (D89):
+// never one an attempt was leased for (D97 N1).
 func (q *Queries) CancelAutomationDelivery(ctx context.Context, code *string, orgID ids.OrgID, iD ids.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, cancelAutomationDelivery, code, orgID, iD)
 	if err != nil {
@@ -1094,19 +1095,21 @@ func (q *Queries) InsertEventSource(ctx context.Context, arg InsertEventSourcePa
 	return err
 }
 
-const leaseAutomationDelivery = `-- name: LeaseAutomationDelivery :execrows
-UPDATE pc.automation_deliveries SET next_attempt_at = now() + interval '2 minutes'
+const leaseAutomationDelivery = `-- name: LeaseAutomationDelivery :one
+UPDATE pc.automation_deliveries SET next_attempt_at = now() + interval '2 minutes', attempts = attempts + 1
 WHERE org_id = $1 AND id = $2 AND state = 'PENDING'
+RETURNING attempts
 `
 
 // Takes a delivery for one send (D87 L11): no other sender picks it up
-// before the lease ends, even if this one never records the outcome.
-func (q *Queries) LeaseAutomationDelivery(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, leaseAutomationDelivery, orgID, iD)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+// before the lease ends, even if this one never records the outcome. The
+// lease counts the attempt before the POST (D97 N1), so a delivery with
+// attempts > 0 may have reached its destination.
+func (q *Queries) LeaseAutomationDelivery(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, leaseAutomationDelivery, orgID, iD)
+	var attempts int32
+	err := row.Scan(&attempts)
+	return attempts, err
 }
 
 const listAutomationDestinations = `-- name: ListAutomationDestinations :many
@@ -1473,7 +1476,7 @@ func (q *Queries) LockQueuedTriggers(ctx context.Context, orgID ids.OrgID, autom
 
 const markAutomationDeliveryAttempt = `-- name: MarkAutomationDeliveryAttempt :execrows
 UPDATE pc.automation_deliveries
-SET attempts = attempts + 1, last_status = $1, last_error = $2,
+SET last_status = $1, last_error = $2,
     next_attempt_at = $3
 WHERE org_id = $4 AND id = $5 AND state = 'PENDING'
 `
@@ -1502,7 +1505,7 @@ func (q *Queries) MarkAutomationDeliveryAttempt(ctx context.Context, arg MarkAut
 
 const markAutomationDeliveryDelivered = `-- name: MarkAutomationDeliveryDelivered :execrows
 UPDATE pc.automation_deliveries
-SET state = 'DELIVERED', body = NULL, attempts = attempts + 1, last_status = $1, last_error = NULL,
+SET state = 'DELIVERED', body = NULL, last_status = $1, last_error = NULL,
     delivered_at = now()
 WHERE org_id = $2 AND id = $3 AND state = 'PENDING'
 `
@@ -1517,22 +1520,20 @@ func (q *Queries) MarkAutomationDeliveryDelivered(ctx context.Context, status *i
 
 const markAutomationDeliveryFailed = `-- name: MarkAutomationDeliveryFailed :execrows
 UPDATE pc.automation_deliveries
-SET state = 'FAILED', body = NULL, attempts = least(attempts + $1::int, 8), last_status = $2,
-    last_error = $3
-WHERE org_id = $4 AND id = $5 AND state = 'PENDING'
+SET state = 'FAILED', body = NULL, last_status = $1,
+    last_error = $2
+WHERE org_id = $3 AND id = $4 AND state = 'PENDING'
 `
 
 type MarkAutomationDeliveryFailedParams struct {
-	AddAttempt int32
-	Status     *int32
-	Error      *string
-	OrgID      ids.OrgID
-	ID         ids.UUID
+	Status *int32
+	Error  *string
+	OrgID  ids.OrgID
+	ID     ids.UUID
 }
 
 func (q *Queries) MarkAutomationDeliveryFailed(ctx context.Context, arg MarkAutomationDeliveryFailedParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markAutomationDeliveryFailed,
-		arg.AddAttempt,
 		arg.Status,
 		arg.Error,
 		arg.OrgID,

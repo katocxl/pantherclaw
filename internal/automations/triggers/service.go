@@ -112,9 +112,9 @@ type Editions interface {
 }
 
 // Operations returns the org's active definition of an exact operation
-// (nil when there is none).
+// (nil when there is none), in the trigger's transaction (D97 N3).
 type Operations interface {
-	Active(ctx context.Context, org ids.OrgID, op string) (*defs.Definition, error)
+	Active(ctx context.Context, tx db.TenantTx, org ids.OrgID, op string) (*defs.Definition, error)
 }
 
 // Deps are the service's collaborators. Ports left nil are "not
@@ -256,7 +256,10 @@ func (s *Service) Fire(ctx context.Context, tx db.TenantTx, c Candidate) (Outcom
 	}
 	declKey := DedupeKey(def, ref)
 
-	state, reason := s.decide(ctx, q, org, c, lin, ref, declKey, now)
+	state, reason, err := s.decide(ctx, q, org, c, lin, ref, declKey, now)
+	if err != nil {
+		return Outcome{}, err
+	}
 	var queuedUntil *time.Time
 	if state == StateQueued {
 		if ttl := queueTTL(def); ttl > 0 {
@@ -300,59 +303,67 @@ func (s *Service) Fire(ctx context.Context, tx db.TenantTx, c Candidate) (Outcom
 // decide applies the checks in their fixed order.
 func (s *Service) decide(ctx context.Context, q *dbq.Queries, org ids.OrgID, c Candidate, lin Lineage,
 	ref autodomain.TriggerRef, declKey string, now time.Time,
-) (State, string) {
+) (State, string, error) {
 	a, def := c.Automation, c.Automation.Def
 	switch {
 	case c.ParamErr != nil:
-		return StateRefusedInvalid, ReasonParams
+		return StateRefusedInvalid, ReasonParams, nil
 	case lin.Loop(a.ID):
 		switch {
 		case slices.Contains(lin.Ancestry, a.ID):
-			return StateRefusedLoop, ReasonLoop
+			return StateRefusedLoop, ReasonLoop, nil
 		case len(lin.Ancestry) > autodomain.MaxAncestry:
-			return StateRefusedLoop, ReasonWidth
+			return StateRefusedLoop, ReasonWidth, nil
 		}
-		return StateRefusedLoop, ReasonDepth
+		return StateRefusedLoop, ReasonDepth, nil
 	case paramsTooLarge(ref.Params):
-		return StateRefusedInvalid, ReasonParamsSize
+		return StateRefusedInvalid, ReasonParamsSize, nil
 	case !inWindow(def, c.OccurredAt):
-		return StateRefusedWindow, ReasonWindow
+		return StateRefusedWindow, ReasonWindow, nil
 	}
 	for _, k := range []string{c.BaseKey, declKey} {
 		if k == "" {
 			continue
 		}
 		held, err := q.DedupeKeyHeld(ctx, org, a.ID, k)
-		if err != nil || held {
-			return StateRefusedDuplicate, ReasonDuplicate
+		if err != nil {
+			return "", "", err
+		}
+		if held {
+			return StateRefusedDuplicate, ReasonDuplicate, nil
 		}
 	}
 	ok, err := MatchIf(ctx, def.If, c.Kind, c.OccurredAt, ref.Params)
 	switch {
 	case err != nil:
-		return StateRefusedCondition, ReasonConditionError
+		return StateRefusedCondition, ReasonConditionError, nil
 	case !ok:
-		return StateRefusedCondition, ReasonCondition
+		return StateRefusedCondition, ReasonCondition, nil
 	}
 	if a.State == autodomain.StatePaused {
-		return s.pausedPolicy(ctx, q, org, c)
+		st, why := s.pausedPolicy(ctx, q, org, c)
+		return st, why, nil
 	}
 	if a.State != autodomain.StateActive {
-		return StateRefusedInvalid, ReasonNotActive
+		return StateRefusedInvalid, ReasonNotActive, nil
 	}
 	// The cap is counted under the automation's lock, so concurrent triggers
-	// never overrun it (D87 L4).
+	// never overrun it (D87 L4). A failure is an error, never a refusal
+	// (D97 N4).
 	if _, err := q.LockAutomation(ctx, org, a.ID); err != nil {
-		return StateRefusedInvalid, ReasonNotActive
+		return "", "", err
 	}
 	n, err := q.CountStartedTriggersSince(ctx, org, a.ID, now.Add(-time.Hour))
-	if err != nil || int(n) >= def.Limits.PerHourOrDefault() {
-		return StateRefusedLimit, ReasonHourlyCap
+	if err != nil {
+		return "", "", err
+	}
+	if int(n) >= def.Limits.PerHourOrDefault() {
+		return StateRefusedLimit, ReasonHourlyCap, nil
 	}
 	if ref.Mode == autodomain.ModeShadow {
-		return StateShadow, ""
+		return StateShadow, "", nil
 	}
-	return StateAccepted, ""
+	return StateAccepted, "", nil
 }
 
 func (s *Service) pausedPolicy(ctx context.Context, q *dbq.Queries, org ids.OrgID, c Candidate) (State, string) {

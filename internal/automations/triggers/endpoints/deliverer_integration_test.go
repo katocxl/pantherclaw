@@ -41,12 +41,23 @@ type receiver struct {
 	got     []http.Header
 	bodies  []string
 	badSigs int
+	// hold, when set, keeps each request open until it is closed; arrived
+	// is told of each held request.
+	hold    chan struct{}
+	arrived chan struct{}
 }
 
 func newReceiver(t *testing.T) *receiver {
 	r := &receiver{status: http.StatusOK}
 	r.srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		body, _ := io.ReadAll(req.Body)
+		r.mu.Lock()
+		hold, arrived := r.hold, r.arrived
+		r.mu.Unlock()
+		if hold != nil {
+			arrived <- struct{}{}
+			<-hold
+		}
 		h, err := inbound.ReadHeaders(req.Header)
 		r.mu.Lock()
 		defer r.mu.Unlock()
@@ -321,10 +332,70 @@ func TestDeliverer_CancelStopsOnlyPendingDeliveries(t *testing.T) {
 	if _, err := f.svc.SendDue(context.Background(), f.Org); err != nil {
 		t.Fatal(err)
 	}
-	if err := cancel(sent); !errors.Is(err, ErrDeliveryNotPending) || f.status(t, sent).State != autodomain.DeliveryDelivered {
+	if err := cancel(sent); !errors.Is(err, ErrDeliveryMayHaveBeenSent) || f.status(t, sent).State != autodomain.DeliveryDelivered {
 		t.Fatalf("a delivered delivery: %v", err)
 	}
 	if err := cancel(ids.NewV7()); !errors.Is(err, ErrDeliveryNotFound) {
 		t.Fatalf("unknown: %v", err)
+	}
+}
+
+// TestDeliverer_ALeasedSendIsNeitherCancelledNorSentTwice (D97 N1, D87
+// L11): the lease counts the attempt before the POST, so Cancel during the
+// send is refused (the delivery may have been sent) and a second sender
+// skips the leased row; the first sender then records the outcome.
+func TestDeliverer_ALeasedSendIsNeitherCancelledNorSentTwice(t *testing.T) {
+	f := newFixture(t)
+	d, _ := f.activeDestination(t, "leased", "NOTICE")
+	id, err := f.deliver(t, autodomain.Delivery{Org: f.Org, Destination: d.ID, Execution: ids.NewV7(), Kind: autodomain.DeliveryNotice, Body: []byte(`{"n":1}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hold := make(chan struct{})
+	f.recv.mu.Lock()
+	f.recv.hold, f.recv.arrived = hold, make(chan struct{}, 4)
+	f.recv.mu.Unlock()
+	done := make(chan error, 1)
+	go func() {
+		_, err := f.svc.SendDue(context.Background(), f.Org)
+		done <- err
+	}()
+	<-f.recv.arrived
+	released := false
+	t.Cleanup(func() {
+		if !released {
+			close(hold)
+		}
+	})
+
+	if st := f.status(t, id); st.State != autodomain.DeliveryPending || st.Attempts != 1 {
+		t.Fatalf("leased: %+v", st)
+	}
+	err = f.Pool.InTenantTx(context.Background(), f.Org, func(ctx context.Context, tx db.TenantTx) error {
+		return f.svc.Deliverer().Cancel(ctx, tx.Pgx(), id)
+	})
+	if !errors.Is(err, ErrDeliveryMayHaveBeenSent) {
+		t.Fatalf("cancel during a leased send: %v", err)
+	}
+	if n, err := f.svc.SendDue(context.Background(), f.Org); err != nil || n != 0 {
+		t.Fatalf("second sender: %d %v", n, err)
+	}
+	f.recv.mu.Lock()
+	posts := len(f.recv.bodies)
+	f.recv.mu.Unlock()
+	if posts != 0 {
+		t.Fatal("a leased delivery was posted twice")
+	}
+
+	close(hold)
+	released = true
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if st := f.status(t, id); st.State != autodomain.DeliveryDelivered || st.Attempts != 1 {
+		t.Fatalf("after the send: %+v", st)
+	}
+	if len(f.recv.bodies) != 1 {
+		t.Fatalf("posts: %d", len(f.recv.bodies))
 	}
 }
