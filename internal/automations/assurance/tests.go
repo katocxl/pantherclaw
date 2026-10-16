@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -204,4 +205,133 @@ func (TestGate) Passed(ctx context.Context, tx pgx.Tx, version ids.UUID, digest 
 		return ids.UUID{}, false, err
 	}
 	return run.ID, bytes.Equal(cur, run.TestsDigest), nil
+}
+
+// TestRun is a stored run.
+type TestRun struct {
+	ID, Version      ids.UUID
+	DefinitionDigest []byte
+	TestsDigest      []byte
+	Passed           bool
+	Result           RunResult
+	RunBy            ids.UUID
+	CreatedAt        time.Time
+	// VersionState is the version's state after the run.
+	VersionState string
+}
+
+// RunTests runs a VALIDATED or TESTED version's cases against its current
+// digest and stores the run; a passing run makes a VALIDATED version
+// TESTED (D34, HR-287). Nothing outside the run's own row is written
+// (HR-288).
+func (s *Service) RunTests(ctx context.Context, versionID ids.UUID) (TestRun, error) {
+	c, err := caller(ctx, td.PermAutomationManage)
+	if err != nil {
+		return TestRun{}, err
+	}
+	if err := s.edition(ctx, false); err != nil {
+		return TestRun{}, err
+	}
+	var out TestRun
+	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		lv, err := q.LockAssuranceVersion(ctx, c.Org, versionID)
+		if db.IsNoRows(err) {
+			return ErrNotFound
+		} else if err != nil {
+			return err
+		}
+		if lv.State != string(autodomain.VersionValidated) && lv.State != string(autodomain.VersionTested) {
+			return ErrVersionState
+		}
+		_, def, err := version(ctx, q, c.Org, versionID)
+		if err != nil {
+			return err
+		}
+		cases, err := storedCases(ctx, q, c.Org, versionID)
+		if err != nil {
+			return err
+		}
+		irr, err := irreversibleCeiling(ctx, tx, def)
+		if err != nil {
+			return err
+		}
+		res, err := Run(ctx, def, c.Org, lv.AutomationID, versionID, cases, irr, s.now().Now())
+		if err != nil {
+			return err
+		}
+		tests, err := Digest(cases)
+		if err != nil {
+			return err
+		}
+		body, err := json.Marshal(res, json.Deterministic(true))
+		if err != nil {
+			return err
+		}
+		out = TestRun{
+			ID: ids.NewV7(), Version: versionID, DefinitionDigest: lv.Digest, TestsDigest: tests, Passed: res.Passed(), Result: res,
+			RunBy: c.Principal.ID, VersionState: lv.State,
+		}
+		if out.CreatedAt, err = q.InsertAutomationTestRun(ctx, dbq.InsertAutomationTestRunParams{
+			OrgID: c.Org, ID: out.ID, VersionID: versionID, DefinitionDigest: lv.Digest, TestsDigest: tests, Passed: out.Passed,
+			Results: body, RunBy: c.Principal.ID,
+		}); err != nil {
+			return err
+		}
+		if out.Passed && lv.State == string(autodomain.VersionValidated) {
+			n, err := q.MarkAutomationVersionTested(ctx, dbq.MarkAutomationVersionTestedParams{
+				RunID: &out.ID, OrgID: c.Org, ID: versionID, Digest: lv.Digest,
+			})
+			if err != nil {
+				return err
+			}
+			if n == 1 {
+				out.VersionState = string(autodomain.VersionTested)
+			}
+		}
+		outcome := "failed"
+		if out.Passed {
+			outcome = "passed"
+		}
+		return record(ctx, tx, c, "automation.tests_run", versionID, map[string]string{
+			"automation": lv.AutomationID.String(), "run": out.ID.String(), "result": outcome,
+			"cases": strconv.Itoa(len(res.Cases)),
+		})
+	})
+	return out, err
+}
+
+// GetTestRun returns a stored run.
+func (s *Service) GetTestRun(ctx context.Context, id ids.UUID) (TestRun, error) {
+	c, err := caller(ctx, td.PermAutomationRead)
+	if err != nil {
+		return TestRun{}, err
+	}
+	if err := s.edition(ctx, false); err != nil {
+		return TestRun{}, err
+	}
+	var out TestRun
+	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		r, err := q.GetAutomationTestRun(ctx, c.Org, id)
+		if db.IsNoRows(err) {
+			return ErrNotFound
+		} else if err != nil {
+			return err
+		}
+		out = TestRun{
+			ID: r.ID, Version: r.VersionID, DefinitionDigest: r.DefinitionDigest, TestsDigest: r.TestsDigest, Passed: r.Passed,
+			RunBy: r.RunBy, CreatedAt: r.CreatedAt,
+		}
+		if err := json.Unmarshal(r.Results, &out.Result); err != nil {
+			return fmt.Errorf("assurance: stored run %s: %w", r.ID, err)
+		}
+		v, err := q.AssuranceVersion(ctx, c.Org, r.VersionID)
+		if err != nil {
+			return err
+		}
+		out.VersionState = v.State
+		return nil
+	}, db.ReadOnly())
+	return out, err
 }

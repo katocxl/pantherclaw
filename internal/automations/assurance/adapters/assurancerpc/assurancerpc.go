@@ -14,6 +14,7 @@ import (
 	"slices"
 
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/katocxl/pantherclaw/internal/automations/assurance"
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
@@ -185,4 +186,36 @@ func (h *Handler) CompareRestriction(ctx context.Context, req *pb.CompareRestric
 		out.FailingExecutionIds = append(out.FailingExecutionIds, x.String())
 	}
 	return out, nil
+}
+
+func runPB(r assurance.TestRun) *pb.AutomationTestRun {
+	out := &pb.AutomationTestRun{
+		Id: r.ID.String(), VersionId: r.Version.String(), DefinitionDigest: r.DefinitionDigest, TestsDigest: r.TestsDigest,
+		Passed: r.Passed, MissingKinds: r.Result.Missing, RunBy: r.RunBy.String(), CreateTime: timestamppb.New(r.CreatedAt),
+	}
+	for _, c := range r.Result.Cases {
+		out.Cases = append(out.Cases, &pb.AutomationCaseResult{
+			Name: c.Name, Kind: string(c.Kind), Passed: c.Passed, State: c.State, Reason: c.Reason, Steps: c.Steps,
+			Differences: c.Differences, DuplicateRefused: c.DuplicateRefused, Elapsed: durationpb.New(c.Elapsed.D()),
+		})
+	}
+	return out
+}
+
+// RunTests implements AssuranceServiceHandler.
+func (h *Handler) RunTests(ctx context.Context, req *pb.RunTestsRequest) (*pb.RunTestsResponse, error) {
+	r, err := h.svc.RunTests(ctx, id(req.GetVersionId()))
+	if err != nil {
+		return nil, err
+	}
+	return &pb.RunTestsResponse{Run: runPB(r), VersionState: r.VersionState}, nil
+}
+
+// GetTestRun implements AssuranceServiceHandler.
+func (h *Handler) GetTestRun(ctx context.Context, req *pb.GetTestRunRequest) (*pb.GetTestRunResponse, error) {
+	r, err := h.svc.GetTestRun(ctx, id(req.GetId()))
+	if err != nil {
+		return nil, err
+	}
+	return &pb.GetTestRunResponse{Run: runPB(r)}, nil
 }
