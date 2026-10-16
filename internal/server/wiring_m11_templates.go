@@ -6,6 +6,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"connectrpc.com/connect/v2"
 	"github.com/jackc/pgx/v5"
@@ -120,8 +121,18 @@ func init() { automationSecuritySteps = securitySteps }
 // securitySteps are the security-work step kinds (D31) the engine's
 // registry merges with its generic kinds (D11), built from the same
 // inputs in the API and the worker (D108).
-func securitySteps(in securityStepDeps) autoports.StepRegistry {
-	return securitysteps.All(securityPorts(in))
+func securitySteps(in securityStepDeps) (autoports.StepRegistry, error) {
+	deps, err := securityPorts(in)
+	if err != nil {
+		return nil, err
+	}
+	return securitysteps.All(deps), nil
+}
+
+// insertJobClient builds the insert-only job client simulations and
+// digest packs enqueue with; a test makes it fail.
+var insertJobClient = func(pool *db.Pool, log *slog.Logger) (*jobs.Client, error) {
+	return jobs.NewClient(pool, nil, jobs.Config{Logger: log})
 }
 
 // securityPorts ties each step to its port. A step whose port could not
@@ -129,7 +140,7 @@ func securitySteps(in securityStepDeps) autoports.StepRegistry {
 // (D108, HR-284): contain needs its escalation's failure sink and case
 // opener, remind and escalate need the approvals router, simulations and
 // digest packs a licence and the job queue.
-func securityPorts(in securityStepDeps) securitysteps.Deps {
+func securityPorts(in securityStepDeps) (securitysteps.Deps, error) {
 	deps := securitysteps.Deps{
 		Grants:   in.Steps.Grants,
 		Actions:  securitysteps.Actions{},
@@ -161,14 +172,14 @@ func securityPorts(in securityStepDeps) securitysteps.Deps {
 		Digests: securitysteps.NewDigestCounts(), Proposals: securitysteps.TableProposals{},
 	}
 	if in.Bill == nil || in.Pool == nil {
-		return deps // Community (or no database): no simulations or packs
+		return deps, nil // Community (or no database): no simulations or packs
 	}
-	insert, err := jobs.NewClient(in.Pool, nil, jobs.Config{Logger: in.Log}) // insert-only: enqueue in the step's transaction
+	insert, err := insertJobClient(in.Pool, in.Log) // insert-only: enqueue in the step's transaction
 	if err != nil {
 		// A licensed server without its job queue is misconfigured: it does
 		// not start (D115 R3), as the engine does not start without its
-		// guard environment.
-		panic(fmt.Errorf("automation security steps: job client: %w", err))
+		// guard environment; the error reaches cmdServe (D120).
+		return securitysteps.Deps{}, fmt.Errorf("automation security steps: job client: %w", err)
 	}
 	deps.Review.Simulations = securitysteps.NewPolicySimulations(insert, in.Bill)
 	// Digest packs are the automation's own, within its declared agents
@@ -181,7 +192,7 @@ func securityPorts(in securityStepDeps) securitysteps.Deps {
 			}
 			return jobs.InsertTx(ctx, insert, tx, args, nil)
 		}, in.Bill))
-	return deps
+	return deps, nil
 }
 
 // routeCoverage is wait_coverage's view of coverage (D31): the trigger's

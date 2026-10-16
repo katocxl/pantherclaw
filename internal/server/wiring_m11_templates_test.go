@@ -4,8 +4,11 @@
 package server
 
 import (
+	"errors"
+	"log/slog"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/automations/assurance"
@@ -88,7 +91,7 @@ func TestSecurityStepsAreFullyWired(t *testing.T) {
 		t.Run(role, func(t *testing.T) {
 			var got []securityStepDeps
 			prev := automationSecuritySteps
-			automationSecuritySteps = func(d securityStepDeps) autoports.StepRegistry {
+			automationSecuritySteps = func(d securityStepDeps) (autoports.StepRegistry, error) {
 				got = append(got, d)
 				return securitySteps(d)
 			}
@@ -106,10 +109,51 @@ func TestSecurityStepsAreFullyWired(t *testing.T) {
 			if len(got) == 0 {
 				t.Fatal("the driver built no security steps")
 			}
-			if missing := nilPorts(reflect.ValueOf(securityPorts(got[0])), ""); !slices.Equal(missing, securityPending) {
+			deps, err := securityPorts(got[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if missing := nilPorts(reflect.ValueOf(deps), ""); !slices.Equal(missing, securityPending) {
 				t.Fatalf("unset ports %v, want exactly %v", missing, securityPending)
 			}
 		})
+	}
+}
+
+// TestSecurityStepsWithoutAJobClientStopStartUp (D115 R3, D120): when the
+// insert-only job client cannot be built, every builder that reaches the
+// engine returns that error, without a panic, so the server does not
+// start; cmdServe's own test is TestM11_NoJobClientStopsStartUp.
+func TestSecurityStepsWithoutAJobClientStopStartUp(t *testing.T) {
+	boom := errors.New("no job queue")
+	prev := insertJobClient
+	insertJobClient = func(*db.Pool, *slog.Logger) (*jobs.Client, error) { return nil, boom }
+	t.Cleanup(func() { insertJobClient = prev })
+	pool, bill := &db.Pool{}, &billing.Service{}
+	core := newAutomationsCore(pool, nil, "")
+	builders := map[string]func() error{
+		"engine jobs": func() error {
+			_, err := registerAutomationEngineJobs(nil, jobs.NewRegistry(), core, &Config{}, nil, bill, &napp.Service{}, nil)
+			return err
+		},
+		"trigger services": func() error {
+			_, _, err := automationTriggerServices(pool, nil, bill, "https://pc.example.com", nil, core, nil)
+			return err
+		},
+		"trigger activator": func() error {
+			_, err := automationTriggerActivator(pool, bill, nil, core)
+			return err
+		},
+		"pack builder": func() error {
+			_, err := newPackBuilder(&Config{}, pool, nil, core, bill, nil)
+			return err
+		},
+	}
+	for name, build := range builders {
+		err := build()
+		if !errors.Is(err, boom) || !strings.Contains(err.Error(), "automation security steps: job client") {
+			t.Errorf("%s: %v, want the security steps' job client error", name, err)
+		}
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"reflect"
 	"slices"
 	"strings"
@@ -17,7 +18,9 @@ import (
 	"time"
 
 	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
+	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	"github.com/katocxl/pantherclaw/internal/promotions"
 	"github.com/katocxl/pantherclaw/internal/protect"
 )
@@ -75,6 +78,35 @@ func TestM11_WiringComplete(t *testing.T) {
 						t.Errorf("%s: protect.publishers #%d: the %s rollback is not wired", role, i+1, k)
 					}
 				}
+			}
+		})
+	}
+}
+
+// TestM11_NoJobClientStopsStartUp (D115 R3, D120): when the security
+// steps' insert-only job client cannot be built, the server, started as
+// one process (all) and as a worker-only process, refuses to start:
+// cmdServe returns that error instead of panicking, and the API never
+// listens.
+func TestM11_NoJobClientStopsStartUp(t *testing.T) {
+	boom := errors.New("no job queue")
+	prev := insertJobClient
+	insertJobClient = func(*db.Pool, *slog.Logger) (*jobs.Client, error) { return nil, boom }
+	t.Cleanup(func() { insertJobClient = prev })
+	for _, role := range []string{RoleAll, RoleWorker} {
+		t.Run(role, func(t *testing.T) {
+			d := dbtest.New(t)
+			cfg := testConfig(t, d, role)
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+			var logs bytes.Buffer
+			listening := false
+			err := cmdServe(ctx, []string{"--config", cfg}, &logs, noEnv, func(string) { listening = true })
+			if !errors.Is(err, boom) || !strings.Contains(err.Error(), "automation security steps: job client") {
+				t.Fatalf("serve: %v, want the security steps' job client error\n%s", err, logs.String())
+			}
+			if listening {
+				t.Fatal("the API listened before start-up failed")
 			}
 		})
 	}
