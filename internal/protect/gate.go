@@ -295,6 +295,9 @@ func (g *Gate) Apply(ctx context.Context, tx db.TenantTx, request ids.UUID, conf
 		if err := one(q.ReviewEmergencyChange(ctx, publisher, org, row.ID)); err != nil {
 			return ErrState
 		}
+		if err := g.resolveReviewFailure(ctx, tx, row.ID, "The emergency change was reviewed.", actor.Actor()); err != nil {
+			return err
+		}
 		return record(ctx, tx, actor, "protected_change.emergency_reviewed", row.ID, map[string]string{
 			"category": row.Category, "subject": row.Subject, "applied_by": uuidString(row.Publisher),
 		})
