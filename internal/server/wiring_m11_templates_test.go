@@ -78,6 +78,7 @@ func TestSecurityStepsAreFullyWired(t *testing.T) {
 	roles := map[string]func(core *automationsCore){
 		RoleAll: func(core *automationsCore) { core.attach(&db.Pool{}, &grantsapp.Service{}, runsapp.New(&db.Pool{})) },
 		RoleWorker: func(core *automationsCore) {
+			core.attach(&db.Pool{}, &grantsapp.Service{}, runsapp.New(&db.Pool{}))
 			if _, err := registerAutomationsCoreJobs(nil, jobs.NewRegistry(), core, nil); err != nil {
 				t.Fatal(err)
 			}

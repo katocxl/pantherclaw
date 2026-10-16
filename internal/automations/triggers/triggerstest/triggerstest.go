@@ -9,6 +9,7 @@ package triggerstest
 import (
 	"bytes"
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -96,10 +97,11 @@ func (f *Fixture) As(kind td.PrincipalKind, roles ...td.RoleName) context.Contex
 
 // Definition returns a minimal definition document (JSON) whose `when` is
 // the given JSON object member list, e.g. `"manual":{}`; extra is merged
-// at the top level (e.g. `"paused_triggers":"QUEUE"`).
-func (f *Fixture) Definition(name, when, extra string) string {
-	doc := `{"apiVersion":"` + autodomain.APIVersion + `","kind":"Automation","name":"` + name +
-		`","purpose":"test","work_kind":"AGENT_WORK","owner":"` + f.User.String() + `","when":{` + when +
+// at the top level (e.g. `"paused_triggers":"QUEUE"`). Name and owner live
+// on the automation row (D68).
+func (f *Fixture) Definition(when, extra string) string {
+	doc := `{"apiVersion":"` + autodomain.APIVersion + `","kind":"Automation",` +
+		`"purpose":"test","work_kind":"AGENT_WORK","when":{` + when +
 		`},"authority":{"principal":"self"},"do":[],"finish_when":[]`
 	if extra != "" {
 		doc += "," + extra
@@ -237,8 +239,11 @@ func (f *Fixture) States(t *testing.T, a Automation) []string {
 	return out
 }
 
-// Starter is a fake engine Starter: it records each start and returns a
-// new execution id, or Err when set.
+// Starter is a fake engine Starter: it records each start and inserts a
+// PENDING execution for it (the trigger log names its execution, 00142),
+// or returns Err when set. The row is a TEST execution whatever the
+// trigger's mode: a LIVE one needs an approved ceiling, which these tests
+// do not exercise.
 type Starter struct {
 	mu     sync.Mutex
 	Starts []autodomain.TriggerRef
@@ -246,14 +251,27 @@ type Starter struct {
 }
 
 // Start implements autoports.Starter.
-func (s *Starter) Start(_ context.Context, _ pgx.Tx, t autodomain.TriggerRef) (ids.UUID, error) {
+func (s *Starter) Start(ctx context.Context, tx pgx.Tx, t autodomain.TriggerRef) (ids.UUID, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.Err != nil {
 		return ids.UUID{}, s.Err
 	}
+	id := ids.NewV7()
+	tag, err := tx.Exec(ctx, `INSERT INTO pc.automation_executions (org_id, id, automation_id, version_id, trigger_id, mode,
+		service_account_id, principal_sa_id, trigger_kind, occurred_at, root_trigger_id, ancestry, depth, deadline_at)
+	SELECT a.org_id, $2, a.id, $4, $5, $6, a.service_account_id, a.service_account_id, $7, $8, $9, $10, $11,
+		now() + interval '1 hour'
+	FROM pc.automations a WHERE a.org_id = $1 AND a.id = $3`,
+		t.Org, id, t.Automation, t.Version, t.ID, string(autodomain.ModeTest), string(t.Kind), t.OccurredAt, t.Root, ancestry(t.Ancestry), t.Depth)
+	if err != nil {
+		return ids.UUID{}, err
+	}
+	if tag.RowsAffected() != 1 {
+		return ids.UUID{}, errors.New("triggerstest: no such automation")
+	}
 	s.Starts = append(s.Starts, t)
-	return ids.NewV7(), nil
+	return id, nil
 }
 
 // Count returns the number of starts.
@@ -291,3 +309,10 @@ func Slug(t *testing.T) string {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+func ancestry(a []ids.UUID) []ids.UUID {
+	if a == nil {
+		return []ids.UUID{}
+	}
+	return a
+}

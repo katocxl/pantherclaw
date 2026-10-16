@@ -116,16 +116,6 @@ func TestHR281_AnAgentlessGateIsApprovedEndToEnd(t *testing.T) {
 	if again != id {
 		t.Fatalf("a second request for the step: %s", again)
 	}
-	// Another attempt never reuses the live gate bound to attempt 1 (D105 N4).
-	retry := g.gate("approve", g.alice.id)
-	retry.Attempt = 2
-	if err := g.p.InTenantTx(context.Background(), g.org, func(ctx context.Context, tx db.TenantTx) error {
-		_, _, err := g.svc.RequestAutomationGateTx(ctx, tx.Pgx(), retry)
-		return err
-	}); !errors.Is(err, approvals.ErrGateAttempt) {
-		t.Fatalf("attempt 2 with attempt 1's gate live: %v", err)
-	}
-
 	// An ACTION hold beside it: one gate never breaks the lists (E2).
 	hold := g.fx.request(1)
 	// dave is also an Approver: he sees both; bob only the hold.
@@ -195,5 +185,35 @@ func TestHR281_NoEligibleDeciderWritesNoGate(t *testing.T) {
 	if s := g.str(`SELECT r.state || ' ' || e.state FROM pc.approval_requests r JOIN pc.waitlist_entries e
 		ON e.subject_id = r.id WHERE r.id = $1`, id); s != "EXPIRED EXPIRED" {
 		t.Fatalf("ended gate %q", s)
+	}
+}
+
+// TestHR281_ARetriedGateStepSupersedesTheStaleGate (D105 N4, D109 E2): a
+// gate binds its attempt. Attempt 2 of the step ends attempt 1's live gate
+// (INVALIDATED, entry closed) and gets a gate of its own, without an error
+// the driver would retry; attempt 1 never reuses attempt 2's gate.
+func TestHR281_ARetriedGateStepSupersedesTheStaleGate(t *testing.T) {
+	g := newGateFx(t)
+	first, _ := g.request(g.gate("retry", g.alice.id))
+	retry := g.gate("retry", g.alice.id)
+	retry.Attempt = 2
+	second, n := g.request(retry)
+	if second.IsZero() || second == first || n != 1 {
+		t.Fatalf("attempt 2: gate %s (attempt 1's %s), %d eligible", second, first, n)
+	}
+	if s := g.str(`SELECT state || ' ' || end_reason FROM pc.approval_requests WHERE id = $1`, first); s != "INVALIDATED "+approvals.ReasonGateSuperseded {
+		t.Fatalf("attempt 1's gate %q", s)
+	}
+	if s := g.str(`SELECT state FROM pc.waitlist_entries WHERE subject_id = $1`, first); s == "OPEN" {
+		t.Fatal("attempt 1's entry is still open")
+	}
+	if again, _ := g.request(retry); again != second {
+		t.Fatalf("attempt 2 asked again: %s, want %s", again, second)
+	}
+	if err := g.p.InTenantTx(context.Background(), g.org, func(ctx context.Context, tx db.TenantTx) error {
+		_, _, err := g.svc.RequestAutomationGateTx(ctx, tx.Pgx(), g.gate("retry", g.alice.id))
+		return err
+	}); !errors.Is(err, approvals.ErrGateAttempt) {
+		t.Fatalf("attempt 1 with attempt 2's gate live: %v", err)
 	}
 }

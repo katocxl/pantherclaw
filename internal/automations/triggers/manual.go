@@ -98,9 +98,10 @@ func (s *Service) runner(ctx context.Context) (tenancy.Caller, error) {
 
 // requiresStepUp reports whether starting the version by hand needs a
 // step-up (D2, D20, D87 P3): it asks for one, its ceiling spends budget, or
-// its ceiling has an irreversible operation (a prefix counts as one, and
-// so does every operation when operations cannot be looked up).
-func (s *Service) requiresStepUp(ctx context.Context, org ids.OrgID, def *autodomain.Definition) (bool, error) {
+// its ceiling has an irreversible operation (a prefix counts as one, so
+// does every operation when operations cannot be looked up, and so does a
+// ceiling that does not bound operations, D97 N2).
+func (s *Service) requiresStepUp(ctx context.Context, tx db.TenantTx, org ids.OrgID, def *autodomain.Definition) (bool, error) {
 	if m := def.When.Manual; m != nil && m.StepUp {
 		return true, nil
 	}
@@ -112,13 +113,13 @@ func (s *Service) requiresStepUp(ctx context.Context, org ids.OrgID, def *autodo
 		return true, nil
 	}
 	if c.Bounds.Operations == nil {
-		return false, nil
+		return true, nil
 	}
 	for _, op := range *c.Bounds.Operations {
 		if strings.HasSuffix(op, ".*") || s.d.Operations == nil {
 			return true, nil
 		}
-		d, err := s.d.Operations.Active(ctx, org, op)
+		d, err := s.d.Operations.Active(ctx, tx, org, op)
 		if err != nil {
 			return false, err
 		}
@@ -174,7 +175,7 @@ func (s *Service) StartExecution(ctx context.Context, in ManualStart, su *stepup
 
 func (s *Service) checkStepUp(ctx context.Context, tx db.TenantTx, c tenancy.Caller, def *autodomain.Definition, su *stepup.StepUp) (autodomain.Authenticity, map[string]string, error) {
 	detail := map[string]string{"user": c.Principal.ID.String()}
-	need, err := s.requiresStepUp(ctx, c.Org, def)
+	need, err := s.requiresStepUp(ctx, tx, c.Org, def)
 	if err != nil {
 		return "", nil, err
 	}
@@ -308,7 +309,7 @@ func (s *Service) Form(ctx context.Context, automation ids.UUID) (ManualForm, er
 		if a.Def.When.Manual == nil {
 			return ErrNotManual
 		}
-		need, err := s.requiresStepUp(ctx, c.Org, a.Def)
+		need, err := s.requiresStepUp(ctx, tx, c.Org, a.Def)
 		if err != nil {
 			return err
 		}

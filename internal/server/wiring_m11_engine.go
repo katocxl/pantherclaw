@@ -63,12 +63,12 @@ func init() {
 	automationStarter = func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) autoports.Starter {
 		return newAutomationEngine(engineDeps{pool: pool, bill: bill, core: core, log: log})
 	}
-	automationExecutions = func(core *automationsCore, pool *db.Pool) triggers.ExecutionLookup {
-		return newAutomationEngine(engineDeps{pool: pool, core: core})
+	automationExecutions = func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) triggers.ExecutionLookup {
+		return newAutomationEngine(engineDeps{pool: pool, bill: bill, core: core, log: log})
 	}
 	automationPauser = func(core *automationsCore) autoports.Pauser { return core.svc }
-	automationPackExecutions = func(core *automationsCore, pool *db.Pool) packbuild.Executions {
-		return newAutomationEngine(engineDeps{pool: pool, core: core})
+	automationPackExecutions = func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) packbuild.Executions {
+		return newAutomationEngine(engineDeps{pool: pool, bill: bill, core: core, log: log})
 	}
 }
 
@@ -105,7 +105,7 @@ func newAutomationEngine(d engineDeps) *pgengine.Engine {
 	}
 	var deliveries pgengine.DeliveryCanceler
 	if d.kp != nil {
-		if del, err := automationDeliverer(d.pool, d.kp, d.bill, d.publicURL, d.log); err == nil {
+		if del, err := automationDeliverer(d.pool, d.kp, d.bill, d.publicURL, d.log, d.core); err == nil {
 			deps.Deliverer = del
 			if c, ok := del.(pgengine.DeliveryCanceler); ok {
 				deliveries = c
@@ -114,7 +114,9 @@ func newAutomationEngine(d engineDeps) *pgengine.Engine {
 			d.log.Warn("automation.deliverer_unavailable", slog.String("error", err.Error()))
 		}
 	}
-	cleanup := pgengine.Cleanup{Gates: approvals, Deliveries: deliveries}
+	cleanup := pgengine.Cleanup{
+		Gates: approvals, Deliveries: deliveries, NotPending: deliveryNotPending, MaybeSent: deliveryMaybeSent,
+	}
 	if d.core != nil {
 		g, r := grantsPort{core: d.core}, runsPort{core: d.core}
 		deps.Grants, deps.Runs = g, r
@@ -429,4 +431,10 @@ func (p executionsPort) CancelActive(ctx context.Context, tx pgx.Tx, org ids.Org
 
 // automationPackExecutions reads executions for evidence packs of scope
 // automation_execution (D30); set by init.
-var automationPackExecutions func(core *automationsCore, pool *db.Pool) packbuild.Executions
+var automationPackExecutions func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) packbuild.Executions
+
+// deliveryNotPending and deliveryMaybeSent classify triggers' Cancel
+// errors for the engine's cleanup (D89, D97 N1).
+func deliveryNotPending(err error) bool { return errors.Is(err, endpoints.ErrDeliveryNotPending) }
+
+func deliveryMaybeSent(err error) bool { return errors.Is(err, endpoints.ErrDeliveryMayHaveBeenSent) }

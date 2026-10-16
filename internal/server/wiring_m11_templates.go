@@ -160,8 +160,8 @@ func securityPorts(in securityStepDeps) securitysteps.Deps {
 		Unused: securitysteps.NewUnusedGrants(), Drafts: securitysteps.NewPolicyDrafts(facts, defs, in.CEL),
 		Digests: securitysteps.NewDigestCounts(), Proposals: securitysteps.TableProposals{},
 	}
-	if in.Bill == nil {
-		return deps // Community: no simulations or packs
+	if in.Bill == nil || in.Pool == nil {
+		return deps // Community (or no database): no simulations or packs
 	}
 	insert, err := jobs.NewClient(in.Pool, nil, jobs.Config{Logger: in.Log}) // insert-only: enqueue in the step's transaction
 	if err != nil {
