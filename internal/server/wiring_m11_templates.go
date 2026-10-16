@@ -5,6 +5,7 @@ package server
 
 import (
 	"context"
+	"log/slog"
 
 	"connectrpc.com/connect/v2"
 	"github.com/jackc/pgx/v5"
@@ -14,20 +15,26 @@ import (
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/automations/securitysteps"
+	"github.com/katocxl/pantherclaw/internal/automations/steps"
 	"github.com/katocxl/pantherclaw/internal/automations/templates"
 	"github.com/katocxl/pantherclaw/internal/automations/templates/templatesrpc"
+	"github.com/katocxl/pantherclaw/internal/billing"
 	covapp "github.com/katocxl/pantherclaw/internal/coverage/app"
+	coverage "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/packbuild"
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	policyapp "github.com/katocxl/pantherclaw/internal/policy/app"
 	"github.com/katocxl/pantherclaw/internal/policy/scenario"
 	rapp "github.com/katocxl/pantherclaw/internal/response/app"
+	wapp "github.com/katocxl/pantherclaw/internal/waitlist/app"
 )
 
 // The M11 templates stream (G0 M11 part 2 D31–D33): the security-work
@@ -113,76 +120,92 @@ func (a automationDrafts) CreateDraftTx(ctx context.Context, tx db.TenantTx, d t
 	return auto.ID, v.ID, err
 }
 
-// templateSteps are the security-work step kinds (D31) the engine's
-// registry merges with its generic kinds (D11). core pauses automations
-// (pause_launches). The grants port (contain REVOKE_GRANT) is the
-// engine's issuance wiring and resuming only what a step paused is not
-// core's yet; while nil, their kinds refuse with UNSUPPORTED_CAPABILITY
-// rather than pretend.
-func templateSteps(d apiDeps, core *automationsCore) autoports.StepRegistry { //nolint:unused // merged by the engine wiring (D11)
-	deps := securitysteps.Deps{
-		Actions:  securitysteps.Actions{},
-		Cases:    m10CaseOpener(d.billing),
-		Failures: edgesFailures(),
-		Coverage: routeCoverage{svc: &covapp.Service{Pool: d.pool, Freshness: d.freshness, Verifier: covapp.ConnectionTests{}}},
-		Owners:   securitysteps.StoreOwners{},
-	}
-	if core != nil && core.svc != nil {
-		deps.Pauser = core.svc
-	}
-	var notify rapp.Notifier
-	if d.m5 != nil && d.m5.notifications != nil {
-		notify = d.m5.notifications
-	}
-	deps.Container = m10Container(d.pool, d.billing, notify)
-	if d.m5p2 != nil && d.m5p2.router != nil {
-		deps.Approvals = securitysteps.StoreApprovals{Nudger: d.m5p2.router}
-	}
-	templateStepDeps(d, &deps)
-	return securitysteps.All(deps)
+// securityInputs are what the security-work steps (D31) are built from,
+// the same in the API and the worker (D108): the process's one core, the
+// engine's generic step ports and the configured services.
+type securityInputs struct {
+	core      *automationsCore
+	pool      *db.Pool
+	bill      *billing.Service
+	log       *slog.Logger
+	steps     steps.Deps
+	notify    *napp.Service
+	cel       celenv.Limits
+	freshness coverage.Freshness
+	logOrigin string
 }
 
-// templateStepDeps fills the intake and review kinds' ties: definitions
-// and scenario tests as the M11.1 gate reads them, policy drafts and
-// simulations in the driver's transaction, and evidence packs enqueued
-// like EvidenceService's. Fleet cohorts (COHORT_BASELINE) are govern's.
-func templateStepDeps(d apiDeps, deps *securitysteps.Deps) { //nolint:unused // with templateSteps
-	defs := &defspg.Store{Pool: d.pool}
-	facts := &factspg.Store{Pool: d.pool}
+// securitySteps are the security-work step kinds the engine's registry
+// merges with its generic kinds (D11).
+func securitySteps(in securityInputs) autoports.StepRegistry { //nolint:unused // set as the engine's hook (D108)
+	return securitysteps.All(securityStepDeps(in))
+}
+
+// securityStepDeps ties each step to its port. A step whose port could not
+// be built here fails DEPENDENCY_UNAVAILABLE and never acts in part
+// (D108, HR-284): contain needs its escalation's failure sink and case
+// opener, remind and escalate need the approvals router, simulations and
+// digest packs a licence and the job queue.
+func securityStepDeps(in securityInputs) securitysteps.Deps {
+	deps := securitysteps.Deps{
+		Grants:   in.steps.Grants,
+		Actions:  securitysteps.Actions{},
+		Cases:    m10CaseOpener(in.bill),
+		Failures: edgesFailures(),
+		Coverage: routeCoverage{svc: &covapp.Service{Pool: in.pool, Freshness: in.freshness, Verifier: covapp.ConnectionTests{}}},
+		Owners:   securitysteps.StoreOwners{},
+	}
+	if in.core != nil && in.core.svc != nil {
+		deps.Pauser = in.core.svc
+	}
+	var notify rapp.Notifier
+	if in.notify != nil {
+		notify = in.notify
+		deps.Approvals = securitysteps.StoreApprovals{Nudger: &wapp.Router{Pool: in.pool, Notify: in.notify}}
+	}
+	deps.Container = m10Container(in.pool, in.bill, notify)
+
+	defs := &defspg.Store{Pool: in.pool}
+	facts := &factspg.Store{Pool: in.pool}
 	reads := securitysteps.NewIntakeReads(defs)
 	deps.Intake = securitysteps.IntakeDeps{
 		Agents: reads, Candidates: reads, Routes: reads, Operations: reads,
-		Tests: securitysteps.NewScenarioTests(scenario.New(defs, facts, d.cel, policyapp.DefaultBudget)),
+		Tests:     securitysteps.NewScenarioTests(scenario.New(defs, facts, in.cel, policyapp.DefaultBudget)),
+		Proposals: securitysteps.TableProposals{},
 	}
 	deps.Review = securitysteps.ReviewDeps{
-		Unused: securitysteps.NewUnusedGrants(), Drafts: securitysteps.NewPolicyDrafts(facts, defs, d.cel),
-		Digests: securitysteps.NewDigestCounts(),
+		Unused: securitysteps.NewUnusedGrants(), Drafts: securitysteps.NewPolicyDrafts(facts, defs, in.cel),
+		Digests: securitysteps.NewDigestCounts(), Proposals: securitysteps.TableProposals{},
 	}
-	if d.billing == nil {
-		return // Community: no simulations or packs
+	if in.bill == nil {
+		return deps // Community: no simulations or packs
 	}
-	insert, err := jobs.NewClient(d.pool, nil, jobs.Config{Logger: d.log}) // insert-only: enqueue in the step's transaction
+	insert, err := jobs.NewClient(in.pool, nil, jobs.Config{Logger: in.log}) // insert-only: enqueue in the step's transaction
 	if err != nil {
-		return // the kinds that need it refuse with UNSUPPORTED_CAPABILITY
+		if in.log != nil {
+			in.log.Warn("automation.security_steps_queue_unavailable", slog.String("error", err.Error()))
+		}
+		return deps
 	}
-	deps.Review.Simulations = securitysteps.NewPolicySimulations(insert, d.billing)
+	deps.Review.Simulations = securitysteps.NewPolicySimulations(insert, in.bill)
 	// Digest packs are the automation's own, within its declared agents
 	// (D85).
-	deps.Review.Packs = securitysteps.NewDigestPacks(evapp.New(d.pool, d.logOrigin).WithPacks(
+	deps.Review.Packs = securitysteps.NewDigestPacks(evapp.New(in.pool, in.logOrigin).WithPacks(
 		func(ctx context.Context, tx db.TenantTx, org ids.OrgID, pack ids.UUID) error {
 			args, err := packbuild.NewBuildArgs(org, pack)
 			if err != nil {
 				return err
 			}
 			return jobs.InsertTx(ctx, insert, tx, args, nil)
-		}, d.billing))
+		}, in.bill))
+	return deps
 }
 
 // routeCoverage is wait_coverage's view of coverage (D31): the trigger's
 // own route, read without a viewer.
-type routeCoverage struct{ svc *covapp.Service } //nolint:unused // with templateSteps
+type routeCoverage struct{ svc *covapp.Service } //nolint:unused // with securitySteps
 
-//nolint:unused // with templateSteps
+//nolint:unused // with securitySteps
 func (c routeCoverage) RouteState(ctx context.Context, tx pgx.Tx, org ids.OrgID, agent, connection ids.UUID, operation string) (string, ids.UUID, error) {
 	return c.svc.RouteStateForAutomationTx(ctx, tx, org, agent, connection, operation)
 }

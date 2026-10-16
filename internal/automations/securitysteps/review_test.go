@@ -16,7 +16,6 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/authority/replay"
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
-	"github.com/katocxl/pantherclaw/internal/automations/engine"
 	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
@@ -197,7 +196,7 @@ func TestReview_UnwiredIsUnsupported(t *testing.T) {
 			sc = simulateCtx(map[string]string{OutPolicyVersion: ids.NewV7().String(), "drafted": "true"})
 		}
 		r, err := reg[kind].Run(ctx, nil, sc)
-		mustState(t, r, err, autodomain.StepFailed, engine.ReasonUnsupported)
+		mustState(t, r, err, autodomain.StepFailed, ReasonDependency)
 	}
 }
 

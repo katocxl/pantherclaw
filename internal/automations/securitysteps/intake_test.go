@@ -251,14 +251,14 @@ func TestIntake_UnwiredIsUnsupported(t *testing.T) {
 			continue // needs its baseline first; covered below
 		}
 		r, err := reg[kind].Run(ctx, nil, sc)
-		mustState(t, r, err, autodomain.StepFailed, engine.ReasonUnsupported)
+		mustState(t, r, err, autodomain.StepFailed, ReasonDependency)
 	}
 	cohort := stepCtx(autodomain.KindDraftBaseline, "b", &autodomain.DraftBaselineWith{From: BaselineCohort},
 		[]string{autodomain.ScopeTriggerAgent}, agentSubject(ids.NewV7()))
 	f := &intakeFakes{t: t}
 	reg = intakeSteps(Deps{Intake: IntakeDeps{Operations: f, Proposals: &recProposals{t: t}}})
 	r, err := reg[autodomain.KindDraftBaseline].Run(ctx, nil, cohort)
-	mustState(t, r, err, autodomain.StepFailed, engine.ReasonUnsupported)
+	mustState(t, r, err, autodomain.StepFailed, ReasonDependency)
 }
 
 // TestIntake_ProposeOwner records an OWNER proposal about the trigger's
