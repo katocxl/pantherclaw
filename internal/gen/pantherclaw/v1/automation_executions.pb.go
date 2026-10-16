@@ -2195,8 +2195,11 @@ type AutomationCancelEffect struct {
 	LaunchesCancelled   []string               `protobuf:"bytes,4,rep,name=launches_cancelled,json=launchesCancelled,proto3" json:"launches_cancelled,omitempty"`
 	GatesCancelled      []string               `protobuf:"bytes,5,rep,name=gates_cancelled,json=gatesCancelled,proto3" json:"gates_cancelled,omitempty"`
 	DeliveriesCancelled []string               `protobuf:"bytes,6,rep,name=deliveries_cancelled,json=deliveriesCancelled,proto3" json:"deliveries_cancelled,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Deliveries whose sending may have started before the cancel: not
+	// verified as stopped, never counted as cancelled (D97).
+	DeliveriesNotVerified []string `protobuf:"bytes,7,rep,name=deliveries_not_verified,json=deliveriesNotVerified,proto3" json:"deliveries_not_verified,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *AutomationCancelEffect) Reset() {
@@ -2267,6 +2270,13 @@ func (x *AutomationCancelEffect) GetGatesCancelled() []string {
 func (x *AutomationCancelEffect) GetDeliveriesCancelled() []string {
 	if x != nil {
 		return x.DeliveriesCancelled
+	}
+	return nil
+}
+
+func (x *AutomationCancelEffect) GetDeliveriesNotVerified() []string {
+	if x != nil {
+		return x.DeliveriesNotVerified
 	}
 	return nil
 }
@@ -3078,7 +3088,7 @@ const file_pantherclaw_v1_automation_executions_proto_rawDesc = "" +
 	"\x0etransaction_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\rtransactionIdB\x10\n" +
 	"\asubject\x12\x05\xbaH\x02\b\x01\"\\\n" +
 	"\x17LookupExecutionResponse\x12A\n" +
-	"\texecution\x18\x01 \x01(\v2#.pantherclaw.v1.AutomationExecutionR\texecution\"\x9a\x02\n" +
+	"\texecution\x18\x01 \x01(\v2#.pantherclaw.v1.AutomationExecutionR\texecution\"\xd2\x02\n" +
 	"\x16AutomationCancelEffect\x12/\n" +
 	"\x13executions_affected\x18\x01 \x03(\tR\x12executionsAffected\x12%\n" +
 	"\x0egrants_revoked\x18\x02 \x03(\tR\rgrantsRevoked\x12\x1d\n" +
@@ -3086,7 +3096,8 @@ const file_pantherclaw_v1_automation_executions_proto_rawDesc = "" +
 	"runs_ended\x18\x03 \x03(\tR\trunsEnded\x12-\n" +
 	"\x12launches_cancelled\x18\x04 \x03(\tR\x11launchesCancelled\x12'\n" +
 	"\x0fgates_cancelled\x18\x05 \x03(\tR\x0egatesCancelled\x121\n" +
-	"\x14deliveries_cancelled\x18\x06 \x03(\tR\x13deliveriesCancelled\"T\n" +
+	"\x14deliveries_cancelled\x18\x06 \x03(\tR\x13deliveriesCancelled\x126\n" +
+	"\x17deliveries_not_verified\x18\a \x03(\tR\x15deliveriesNotVerified\"T\n" +
 	"\x16CancelExecutionRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12 \n" +
 	"\x06reason\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\xf4\x03R\x06reason\"\x9c\x01\n" +

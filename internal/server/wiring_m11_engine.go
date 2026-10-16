@@ -6,6 +6,7 @@ package server
 import (
 	"context"
 	"log/slog"
+	"sync"
 
 	"connectrpc.com/connect/v2"
 	"github.com/jackc/pgx/v5"
@@ -13,15 +14,18 @@ import (
 
 	approvalsapp "github.com/katocxl/pantherclaw/internal/approvals/app"
 	autoapp "github.com/katocxl/pantherclaw/internal/automations/app"
+	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/engine"
 	"github.com/katocxl/pantherclaw/internal/automations/engine/adapters/executionsrpc"
 	"github.com/katocxl/pantherclaw/internal/automations/engine/adapters/pgengine"
 	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/automations/steps"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers"
+	"github.com/katocxl/pantherclaw/internal/automations/triggers/endpoints"
 	"github.com/katocxl/pantherclaw/internal/billing"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
+	"github.com/katocxl/pantherclaw/internal/evidence/packbuild"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
@@ -47,6 +51,10 @@ func init() {
 		return newAutomationEngine(engineDeps{pool: pool, bill: bill, log: log})
 	}
 	automationExecutions = func(pool *db.Pool) triggers.ExecutionLookup {
+		return newAutomationEngine(engineDeps{pool: pool})
+	}
+	automationPauser = func(pool *db.Pool) autoports.Pauser { return &lazyPauser{pool: pool} }
+	automationPackExecutions = func(pool *db.Pool) packbuild.Executions {
 		return newAutomationEngine(engineDeps{pool: pool})
 	}
 }
@@ -134,11 +142,20 @@ func registerAutomationsEngine(rs *connect.Server, d apiDeps, workload *workload
 		ed.notify = d.m5.notifications
 	}
 	e := newAutomationEngine(ed)
-	if core != nil && core.svc != nil {
-		core.svc.Executions = executionsPort{e: e}
-	}
+	shareCore(core, e, d.pool, d.billing, d.log)
 	pantherclawv1connect.RegisterExecutionServiceHandler(rs, executionsrpc.New(e))
 	pantherclawv1connect.RegisterAutomationLaunchServiceHandler(rs, workloadrpc.NewAutomationLaunches(workload, e))
+}
+
+// shareCore sets the engine, triggers and destinations ports on the one
+// shared core instance (D96, K6).
+func shareCore(core *automationsCore, e *pgengine.Engine, pool *db.Pool, bill *billing.Service, log *slog.Logger) {
+	if core == nil || core.svc == nil {
+		return
+	}
+	core.svc.Executions = executionsPort{e: e}
+	core.svc.Triggers = automationTriggerActivator(pool, bill, log)
+	core.svc.Destinations = endpoints.DestinationChecker{}
 }
 
 // registerAutomationEngineJobs adds the driver and the wake sweep (D24).
@@ -353,4 +370,27 @@ func (p executionsPort) CancelActive(ctx context.Context, tx pgx.Tx, org ids.Org
 		GrantsRevoked: eff.Grants, RunsEnded: eff.Runs, LaunchesCancelled: eff.Launches,
 		DeliveriesCancelled: eff.Deliveries, ExecutionsAffected: eff.Executions,
 	}, err
+}
+
+// automationPackExecutions reads executions for evidence packs of scope
+// automation_execution (D30); set by init.
+var automationPackExecutions func(pool *db.Pool) packbuild.Executions
+
+// lazyPauser is the Pauser triggers call (core's pause, D14): core is built
+// on first use, with triggers' activator, so building triggers never
+// builds core again.
+type lazyPauser struct {
+	pool *db.Pool
+	once sync.Once
+	svc  *autoapp.Service
+}
+
+// Pause implements autoports.Pauser.
+func (p *lazyPauser) Pause(ctx context.Context, tx pgx.Tx, org ids.OrgID, sel autodomain.PauseSelector, reason autodomain.PauseReason,
+) ([]ids.UUID, error) {
+	p.once.Do(func() {
+		p.svc = engineCore(p.pool, nil, nil).svc
+		p.svc.Triggers = automationTriggerActivator(p.pool, nil, nil)
+	})
+	return p.svc.Pause(ctx, tx, org, sel, reason)
 }

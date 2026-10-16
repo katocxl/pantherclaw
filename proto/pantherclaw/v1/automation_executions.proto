@@ -369,6 +369,9 @@ message AutomationCancelEffect {
   repeated string launches_cancelled = 4;
   repeated string gates_cancelled = 5;
   repeated string deliveries_cancelled = 6;
+  // Deliveries whose sending may have started before the cancel: not
+  // verified as stopped, never counted as cancelled (D97).
+  repeated string deliveries_not_verified = 7;
 }
 
 message CancelExecutionRequest {

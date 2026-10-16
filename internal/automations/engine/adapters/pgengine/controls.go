@@ -32,13 +32,15 @@ var ErrCancelReason = pcerr.New(pcerr.InvalidArgument, "REASON_INVALID", "the re
 // CancelEffect is what a cancellation verifiably did (HR-283): read back
 // from the executions' cleanup, never assumed.
 type CancelEffect struct {
-	Executions  []ids.UUID
-	Grants      []ids.UUID
-	Runs        []ids.UUID
-	Launches    []ids.UUID
-	Gates       []ids.UUID
-	Deliveries  []ids.UUID
-	StillActive []ids.UUID
+	Executions []ids.UUID
+	Grants     []ids.UUID
+	Runs       []ids.UUID
+	Launches   []ids.UUID
+	Gates      []ids.UUID
+	Deliveries []ids.UUID
+	// DeliveriesNotVerified may have been sent before the cancel (D97 N1).
+	DeliveriesNotVerified []ids.UUID
+	StillActive           []ids.UUID
 }
 
 // maxCancelBatch bounds CancelActiveExecutions; a kill switch pauses the
@@ -202,6 +204,8 @@ func (e *Engine) CancelTx(ctx context.Context, tx db.TenantTx, executions []ids.
 				eff.Gates = append(eff.Gates, r.ID)
 			case steps.RefDelivery:
 				eff.Deliveries = append(eff.Deliveries, r.ID)
+			case steps.RefDeliveryNotVerified:
+				eff.DeliveriesNotVerified = append(eff.DeliveriesNotVerified, r.ID)
 			}
 		}
 	}
@@ -301,6 +305,10 @@ func (c Cleanup) Cleanup(ctx context.Context, tx pgx.Tx, x *engine.Exec) ([]refl
 				if notPending(err) {
 					continue
 				}
+				if maybeSent(err) {
+					refs = append(refs, reflexdomain.EvidenceRef{Kind: steps.RefDeliveryNotVerified, ID: d})
+					continue
+				}
 				return nil, err
 			}
 			refs = append(refs, reflexdomain.EvidenceRef{Kind: steps.RefDelivery, ID: d})
@@ -330,3 +338,12 @@ func (c Cleanup) Cleanup(ctx context.Context, tx pgx.Tx, x *engine.Exec) ([]refl
 // notPending reports a delivery that left PENDING meanwhile (delivered or
 // failed by its sender): there is nothing left to cancel.
 func notPending(err error) bool { return pcerr.ReasonOf(err) == "DELIVERY_NOT_PENDING" }
+
+// ReasonDeliveryMayHaveBeenSent is the reason of triggers'
+// ErrDeliveryMayHaveBeenSent: an attempt has started, so the cancel cannot
+// be verified (D97 N1).
+const ReasonDeliveryMayHaveBeenSent = "DELIVERY_MAY_HAVE_BEEN_SENT"
+
+// maybeSent reports a delivery whose sending may have started: cleanup
+// lists it as not verified, never as canceled.
+func maybeSent(err error) bool { return pcerr.ReasonOf(err) == ReasonDeliveryMayHaveBeenSent }
