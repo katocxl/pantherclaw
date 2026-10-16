@@ -89,6 +89,19 @@ func newAutomationEndpoints(pool *db.Pool, kp keys.KeyProvider, trig *triggers.S
 	return ep.WithFailures(&failures.Sink{}), nil
 }
 
+// automationTriggerServices builds the trigger and endpoints services the
+// API and the workers serve, on the process's shared core (D112).
+func automationTriggerServices(pool *db.Pool, kp keys.KeyProvider, bill *billing.Service, publicURL string,
+	clientIP httpx.ClientIPFunc, core *automationsCore, log *slog.Logger,
+) (*triggers.Service, *endpoints.Service, error) {
+	trig := newAutomationTriggers(pool, bill, log, core)
+	ep, err := newAutomationEndpoints(pool, kp, trig, bill, publicURL, clientIP, log)
+	if err != nil {
+		return nil, nil, err
+	}
+	return trig, ep, nil
+}
+
 // automationTriggerActivator is the TriggerActivator core calls when it
 // enables, pauses or resumes an automation (D11).
 func automationTriggerActivator(pool *db.Pool, bill *billing.Service, log *slog.Logger, core *automationsCore) autoports.TriggerActivator {
@@ -96,9 +109,12 @@ func automationTriggerActivator(pool *db.Pool, bill *billing.Service, log *slog.
 }
 
 // automationDeliverer is the Deliverer the engine's deliver and notify
-// steps use (D22).
-func automationDeliverer(pool *db.Pool, kp keys.KeyProvider, bill *billing.Service, publicURL string, log *slog.Logger) (autoports.Deliverer, error) {
-	ep, err := newAutomationEndpoints(pool, kp, newAutomationTriggers(pool, bill, log, nil), bill, publicURL, nil, log)
+// steps use (D22). Its trigger service, like every one, is built on the
+// process's shared core (D112).
+func automationDeliverer(pool *db.Pool, kp keys.KeyProvider, bill *billing.Service, publicURL string, log *slog.Logger,
+	core *automationsCore,
+) (autoports.Deliverer, error) {
+	ep, err := newAutomationEndpoints(pool, kp, newAutomationTriggers(pool, bill, log, core), bill, publicURL, nil, log)
 	if err != nil {
 		return nil, err
 	}
@@ -126,8 +142,7 @@ func (m m11Triggers) mount(mux *http.ServeMux) {
 // endpoint and pages, with the process's shared core (its Starter and
 // Pauser) passed explicitly (D109 E3).
 func registerAutomationTriggers(rs *connect.Server, d apiDeps, autos *automationsCore) (m11Triggers, error) {
-	trig := newAutomationTriggers(d.pool, d.billing, d.log, autos)
-	ep, err := newAutomationEndpoints(d.pool, d.kp, trig, d.billing, d.publicURL, d.clientIP, d.log)
+	trig, ep, err := automationTriggerServices(d.pool, d.kp, d.billing, d.publicURL, d.clientIP, autos, d.log)
 	if err != nil {
 		return m11Triggers{}, err
 	}
@@ -146,8 +161,7 @@ func registerAutomationTriggers(rs *connect.Server, d apiDeps, autos *automation
 func registerAutomationTriggersJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, pool *db.Pool, kp keys.KeyProvider,
 	bill *billing.Service, publicURL string, core *automationsCore, log *slog.Logger,
 ) ([]*river.PeriodicJob, error) {
-	trig := newAutomationTriggers(pool, bill, log, core)
-	ep, err := newAutomationEndpoints(pool, kp, trig, bill, publicURL, nil, log)
+	trig, ep, err := automationTriggerServices(pool, kp, bill, publicURL, nil, core, log)
 	if err != nil {
 		return nil, err
 	}

@@ -105,7 +105,7 @@ func newAutomationEngine(d engineDeps) *pgengine.Engine {
 	}
 	var deliveries pgengine.DeliveryCanceler
 	if d.kp != nil {
-		if del, err := automationDeliverer(d.pool, d.kp, d.bill, d.publicURL, d.log); err == nil {
+		if del, err := automationDeliverer(d.pool, d.kp, d.bill, d.publicURL, d.log, d.core); err == nil {
 			deps.Deliverer = del
 			if c, ok := del.(pgengine.DeliveryCanceler); ok {
 				deliveries = c
