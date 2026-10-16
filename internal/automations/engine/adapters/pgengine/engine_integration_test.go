@@ -19,9 +19,13 @@ import (
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/engine"
 	"github.com/katocxl/pantherclaw/internal/automations/engine/adapters/pgengine"
+	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/automations/steps"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/triggerstest"
+	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
+	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -37,7 +41,12 @@ type efx struct {
 	ceiling    ids.UUID
 	e          *pgengine.Engine
 	grants     *fakeGrants
-	approvals  *approvalsapp.Service
+	// authority is extra JSON for the authority section; deliverer, when
+	// set, is the steps' Deliverer. Both are set by options before the
+	// automation is created.
+	authority string
+	deliverer autoports.Deliverer
+	approvals *approvalsapp.Service
 }
 
 const launchSteps = `"do":[
@@ -49,21 +58,24 @@ const gateSteps = `"do":[
 	{"id":"approve","step":"gate","with":{"approvers":{"roles":["automation_operator"]},"deadline":"1h","summary":"refund {{params.ticket}}"}}],
 	"finish_when":[]`
 
-func definition(agent ids.UUID, body string) string {
+func definition(agent ids.UUID, authority, body string) string {
 	return `{"apiVersion":"` + autodomain.APIVersion + `","kind":"Automation","purpose":"test","work_kind":"AGENT_WORK",
 		"review_by":"` + time.Now().AddDate(0, 0, 30).Format(time.DateOnly) + `",
 		"when":{"manual":{"params":{"ticket":{"type":"string","pattern":"T-[0-9]+"}}}},
 		"authority":{"principal":"self","ceiling":{"agents":["` + agent.String() + `"],
-			"bounds":{"operations":["payments.refund"]},"per_grant":{"ttl":"1h"},"per_day":{"grants":5,"runs":5},"concurrency":2}},` +
+			"bounds":{"operations":["payments.refund"]},"per_grant":{"ttl":"1h"},"per_day":{"grants":5,"runs":5},"concurrency":2}` + authority + `},` +
 		strings.ReplaceAll(body, "AGENT", agent.String()) + `}`
 }
 
-func newEfx(t *testing.T, body string) *efx {
+func newEfx(t *testing.T, body string, opts ...func(*efx)) *efx {
 	t.Helper()
 	f := &efx{Fixture: triggerstest.New(t), t: t, agent: ids.NewV7(), env: ids.NewV7(), ceiling: ids.NewV7()}
 	f.Exec(t, "INSERT INTO pc.environments (org_id, id, slug, name, kind) VALUES ($1, $2, 'dev', 'Dev', 'DEVELOPMENT')", f.Org, f.env)
 	f.Exec(t, "INSERT INTO pc.agents (org_id, id, name, state, created_by) VALUES ($1, $2, 'refunder', 'DISCOVERED', 'test')", f.Org, f.agent)
-	f.auto = f.Automation(t, "refunds", definition(f.agent, body), autodomain.RolloutFull)
+	for _, o := range opts {
+		o(f)
+	}
+	f.auto = f.Automation(t, "refunds", definition(f.agent, f.authority, body), autodomain.RolloutFull)
 	request := ids.NewV7()
 	f.Exec(t, `INSERT INTO pc.change_requests (org_id, id, domain, kind, subject_id, content_digest, binding, summary, required,
 		requested_by, expires_at) VALUES ($1, $2, 'automation', 'ENABLE', $3, $4, $4, '{}', 1, 'user:test', now() + interval '1 hour')`,
@@ -75,7 +87,7 @@ func newEfx(t *testing.T, body string) *efx {
 	f.approvals = &approvalsapp.Service{Pool: f.Pool}
 	reg := steps.Generic(steps.Deps{
 		Grants: f.grants, Runs: fakeRuns{f: f}, Gates: gates{f.approvals}, Rollout: pgengine.Rollout{},
-		Recipients: pgengine.Recipients{},
+		Recipients: pgengine.Recipients{}, Deliverer: f.deliverer,
 	})
 	e, err := pgengine.New(f.Pool, reg, nil)
 	if err != nil {
@@ -141,6 +153,8 @@ func (f *efx) manager() context.Context {
 type fakeGrants struct {
 	f       *efx
 	revoked []ids.UUID
+	// one is what core's GRANT scope revoked (withdraws).
+	one []ids.UUID
 }
 
 func (g *fakeGrants) IssueForAutomation(ctx context.Context, tx pgx.Tx, in steps.LaunchIssue) (ids.UUID, error) {
@@ -149,10 +163,24 @@ func (g *fakeGrants) IssueForAutomation(ctx context.Context, tx pgx.Tx, in steps
 		grantor_kind, grantor_id, basis, ceiling_id, automation_execution_id)
 		VALUES ($1, $2, $3, $4, $5, 0, 1, 'service_account', $4, 'automation refunds', $6, $7)`,
 		in.Org, id, in.Agent, in.ServiceAccount, g.f.env, in.Ceiling, in.Execution)
+	if err != nil {
+		return id, err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO pc.grant_revisions (org_id, id, grant_id, revision, not_before, expires_at, bounds,
+		requirements, limits, delegation_depth, max_children, min_attestation, widens, created_by)
+		VALUES ($1, $2, $3, 1, now() - interval '1 minute', now() + interval '1 hour', '{"operations":["payments.refund"]}', '[]', '{}', 0, 0, 0, false,
+		'automation')`, in.Org, ids.NewV7(), id)
+	if err != nil {
+		return id, err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO pc.grant_lineage (org_id, grant_id, ancestor_id, distance) VALUES ($1, $2, $2, 0)`, in.Org, id)
 	return id, err
 }
 
 func (g *fakeGrants) RevokeForAutomation(ctx context.Context, tx pgx.Tx, in steps.GrantRevoke) ([]ids.UUID, error) {
+	if in.Scope == steps.RevokeOneGrant {
+		return g.revokeOne(ctx, tx, in)
+	}
 	return g.revoke(ctx, tx, in.Org, in.Execution, in.Reason)
 }
 
@@ -410,5 +438,95 @@ func TestT125_AGateApprovalNeverCarriesToAnotherExecution(t *testing.T) {
 	}
 	if s := f.str("SELECT state FROM pc.approval_requests WHERE id = $1", r2); s != "EXPIRED" {
 		t.Fatalf("the expired gate's request: %s", s)
+	}
+}
+
+// revokeOne revokes through core's GRANT scope (D104) on the real rows, so
+// what it leaves standing is core's behavior, not the fake's.
+func (g *fakeGrants) revokeOne(ctx context.Context, tx pgx.Tx, in steps.GrantRevoke) ([]ids.UUID, error) {
+	ttx, err := db.AdoptTenantTx(ctx, tx, in.Org)
+	if err != nil {
+		return nil, err
+	}
+	r := grantsapp.AutomationRevoke{
+		Org: in.Org, Automation: in.Automation, Execution: in.Execution, Trigger: in.Trigger, Ceiling: in.Ceiling,
+		ServiceAccount: in.ServiceAccount, Scope: grantsapp.RevokeScopeGrant, Reason: in.Reason,
+	}
+	if in.Grant != nil {
+		r.Grant = *in.Grant
+	}
+	revoked, err := (&grantsapp.Service{Store: &grantspg.Store{Pool: g.f.Pool}}).RevokeForAutomationTx(ctx, ttx, r)
+	out := make([]ids.UUID, 0, len(revoked))
+	for _, id := range revoked {
+		out = append(out, id.UUID())
+	}
+	g.one = append(g.one, out...)
+	g.revoked = append(g.revoked, out...)
+	return out, err
+}
+
+// refusingDeliverer refuses every delivery as a receiver that is gone.
+type refusingDeliverer struct{}
+
+func (refusingDeliverer) Deliver(context.Context, pgx.Tx, autodomain.Delivery) (ids.UUID, error) {
+	return ids.UUID{}, pcerr.New(pcerr.FailedPrecondition, autodomain.ReasonDestinationInactive, "the destination refused")
+}
+
+func (refusingDeliverer) Status(context.Context, pgx.Tx, ids.UUID) (autodomain.DeliveryStatus, error) {
+	return autodomain.DeliveryStatus{}, errors.New("no deliveries")
+}
+
+// TestHR283_ADestinationRefusalRevokesOnlyTheLaunchGrant (D84 E8, D104,
+// D109 E4): when the launch's webhook is refused, the step withdraws: it
+// revokes exactly the grant it issued, through core's GRANT scope, and
+// leaves another live grant of the same execution standing.
+func TestHR283_ADestinationRefusalRevokesOnlyTheLaunchGrant(t *testing.T) {
+	dest := ids.NewV7()
+	body := `"do":[{"id":"launch","step":"launch_run","with":{"agent":"AGENT","delivery":"WEBHOOK","destination":"` + dest.String() + `"}}],
+		"finish_when":[]`
+	f := newEfx(t, body, func(f *efx) {
+		f.Exec(t, `INSERT INTO pc.automation_destinations (org_id, id, name, url, purposes, secret, created_by)
+			VALUES ($1, $2, 'runner', 'https://runner.example.com/hook', ARRAY['LAUNCH'], $3, $4)`,
+			f.Org, dest, bytes.Repeat([]byte{9}, 32), f.User)
+		cred, key := ids.NewV7(), bytes.Repeat([]byte{5}, 32)
+		f.Exec(t, `INSERT INTO pc.webauthn_credentials (org_id, id, user_id, credential_id, public_key, alg, backup_eligible,
+			backup_state, attestation_fmt, name) VALUES ($1, $2, $3, $4, $5, -7, false, false, 'none', 'key')`,
+			f.Org, cred, f.User, key[:16], key)
+		f.Exec(t, `UPDATE pc.automation_destinations SET state = 'ACTIVE', activated_by = $3, activated_credential = $4,
+			activated_at = now() WHERE org_id = $1 AND id = $2`, f.Org, dest, f.User, cred)
+		f.Exec(t, "INSERT INTO pc.org_containment (org_id) VALUES ($1)", f.Org) // core's revocation raises the epoch
+		f.authority = `,"destinations":["` + dest.String() + `"]`
+		f.deliverer = refusingDeliverer{}
+	})
+	exec := f.start("T-7")
+	var other ids.UUID
+	f.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		other, err = f.grants.IssueForAutomation(ctx, tx.Pgx(), steps.LaunchIssue{
+			Org: f.Org, Agent: f.agent, ServiceAccount: f.auto.ServiceAccount, Ceiling: f.ceiling, Execution: exec,
+		})
+		return err
+	})
+	f.advance(exec)
+
+	launchGrant := f.str(`SELECT coalesce(output ->> '`+steps.OutGrant+`', '') FROM pc.automation_step_attempts
+		WHERE org_id = $1 AND execution_id = $2 AND step_id = 'launch'`, f.Org, exec)
+	if launchGrant == "" || launchGrant == other.String() {
+		t.Fatalf("launch grant %q (other %s)", launchGrant, other)
+	}
+	// The withdraw (core's GRANT scope) revoked the launch's grant alone;
+	// the other grant ended only with the execution's terminal cleanup.
+	if len(f.grants.one) != 1 || f.grants.one[0].String() != launchGrant {
+		t.Fatalf("the withdraw revoked %v, want only the launch's grant %s", f.grants.one, launchGrant)
+	}
+	if s := f.str(`SELECT state || ' ' || revoke_reason FROM pc.grants WHERE org_id = $1 AND id = $2`, f.Org, launchGrant); s != "REVOKED "+autodomain.ReasonDestinationInactive {
+		t.Fatalf("the launch's grant: %s", s)
+	}
+	if s := f.str(`SELECT revoke_reason FROM pc.grants WHERE org_id = $1 AND id = $2`, f.Org, other); s == autodomain.ReasonDestinationInactive {
+		t.Fatal("the withdraw revoked the execution's other grant")
+	}
+	if s := f.str(`SELECT state || ' ' || coalesce(reason, '') FROM pc.automation_step_attempts
+		WHERE org_id = $1 AND execution_id = $2 AND step_id = 'launch'`, f.Org, exec); !strings.HasPrefix(s, "FAILED "+autodomain.ReasonDestinationInactive) {
+		t.Fatalf("launch step %q", s)
 	}
 }
