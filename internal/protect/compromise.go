@@ -583,3 +583,38 @@ var (
 	ErrRollbackNoEarlier = pcerr.New(pcerr.FailedPrecondition, "ROLLBACK_NO_EARLIER",
 		"no version was published before this one to roll back to")
 )
+
+// ErrKeepOnly: the kind has no undo of its own (a policy change request
+// is already voided by the mark; a protected change's effect is undone by
+// a new change), so it is reviewed KEEP (D90 Q2).
+var ErrKeepOnly = pcerr.New(pcerr.FailedPrecondition, "KEEP_ONLY",
+	"this kind of item is reviewed KEEP: undo its effect with a new change if needed")
+
+// RollbackPending is a ROLLBACK that opened a change request instead of
+// applying (a loosening policy rollback, D90 Q1): nothing is recorded, and
+// the reviewer records ROLLBACK again once the request is confirmed.
+func RollbackPending(request ids.UUID) error {
+	return pcerr.New(pcerr.FailedPrecondition, "ROLLBACK_PENDING_CONFIRMATION",
+		"the rollback waits for its change request "+request.String()+" to be confirmed; review ROLLBACK again once it applies")
+}
+
+// PromotionRevoker revokes an agent's promotion (govern's
+// RevokePromotion), as the reviewer in ctx.
+type PromotionRevoker interface {
+	RevokePromotion(ctx context.Context, id ids.UUID, reason string) error
+}
+
+// PromotionUndo is the ROLLBACK of an exposed promotion through r.
+func PromotionUndo(r PromotionRevoker) Rollback {
+	return func(ctx context.Context, item string) error {
+		id, err := ids.ParseUUID(item)
+		if err != nil {
+			return ErrNotExposed
+		}
+		return r.RevokePromotion(ctx, id, ReasonCompromisedPublisher)
+	}
+}
+
+// ReasonCompromisedPublisher is the reason recorded by undoing an item of
+// a compromised publisher.
+const ReasonCompromisedPublisher = "PUBLISHER_COMPROMISED"

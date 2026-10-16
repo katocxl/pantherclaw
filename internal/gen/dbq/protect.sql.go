@@ -934,15 +934,18 @@ func (q *Queries) OverdueEmergencyChanges(ctx context.Context, orgID ids.OrgID) 
 }
 
 const pendingPolicyChangeRequestsBy = `-- name: PendingPolicyChangeRequestsBy :many
-SELECT id FROM pc.policy_change_requests
-WHERE org_id = $1 AND requested_by = $2::text AND state = 'PENDING'
-FOR UPDATE
+SELECT r.id FROM pc.policy_change_requests r
+WHERE r.org_id = $1 AND r.state = 'PENDING'
+  AND (r.requested_by = $2::text
+       OR EXISTS (SELECT 1 FROM pc.policy_change_confirmations c
+                  WHERE c.org_id = r.org_id AND c.request_id = r.id AND c.principal_id = $3::uuid))
+FOR UPDATE OF r
 `
 
-// A person's pending M11.1 policy change requests (voided when they are
-// marked compromised).
-func (q *Queries) PendingPolicyChangeRequestsBy(ctx context.Context, orgID ids.OrgID, principal string) ([]ids.UUID, error) {
-	rows, err := q.db.Query(ctx, pendingPolicyChangeRequestsBy, orgID, principal)
+// The pending M11.1 policy change requests a person asked for or
+// confirmed (voided when they are marked compromised, D43).
+func (q *Queries) PendingPolicyChangeRequestsBy(ctx context.Context, orgID ids.OrgID, principal string, userID ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, pendingPolicyChangeRequestsBy, orgID, principal, userID)
 	if err != nil {
 		return nil, err
 	}

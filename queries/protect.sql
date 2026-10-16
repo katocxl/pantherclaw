@@ -201,11 +201,14 @@ SELECT DISTINCT user_id FROM pc.compromised_publishers
 WHERE org_id = sqlc.arg(org_id) AND state = 'ACTIVE' AND user_id = ANY (sqlc.arg(user_ids)::uuid[]);
 
 -- name: PendingPolicyChangeRequestsBy :many
--- A person's pending M11.1 policy change requests (voided when they are
--- marked compromised).
-SELECT id FROM pc.policy_change_requests
-WHERE org_id = sqlc.arg(org_id) AND requested_by = sqlc.arg(principal)::text AND state = 'PENDING'
-FOR UPDATE;
+-- The pending M11.1 policy change requests a person asked for or
+-- confirmed (voided when they are marked compromised, D43).
+SELECT r.id FROM pc.policy_change_requests r
+WHERE r.org_id = sqlc.arg(org_id) AND r.state = 'PENDING'
+  AND (r.requested_by = sqlc.arg(principal)::text
+       OR EXISTS (SELECT 1 FROM pc.policy_change_confirmations c
+                  WHERE c.org_id = r.org_id AND c.request_id = r.id AND c.principal_id = sqlc.arg(user_id)::uuid))
+FOR UPDATE OF r;
 
 -- name: PolicyRolloutConfirmedBy :one
 -- Whether the person created the rollout or confirmed a request of it

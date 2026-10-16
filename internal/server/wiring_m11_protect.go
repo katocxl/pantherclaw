@@ -18,6 +18,8 @@ import (
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
+	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	policyapp "github.com/katocxl/pantherclaw/internal/policy/app"
@@ -45,6 +47,7 @@ func newM11Protect(d apiDeps) m11Protect {
 		// Automations pause through core-B's Pauser and promotions revoke through
 		// govern; until those are merged their ROLLBACK is refused (D72 P1).
 		protect.ItemAutomationVersion: notYet, protect.ItemPromotion: notYet,
+		protect.ItemPolicyChange: keepOnly, protect.ItemProtectedChange: keepOnly,
 	}}
 	pub.On = append(pub.On, policyOnCompromise)
 	if d.billing != nil {
@@ -85,6 +88,9 @@ func registerM11Protect(rs *connect.Server, d apiDeps, core *automationsCore) {
 func protectCore(p m11Protect, core *automationsCore) {
 	core.changes.Compromise = p.publishers
 	core.svc.Compromise = p.publishers
+	if core.grants != nil {
+		p.publishers.Undo[protect.ItemGrant] = grantUndo(core.grants)
+	}
 	p.gate.Requests = protect.Ceremony{Changes: core.changes}
 	protect.Register(core.changes, p.gate, p.publishers)
 	pub := p.publishers
@@ -184,7 +190,7 @@ func policyOnCompromise(ctx context.Context, tx db.TenantTx, user ids.UUID, _ ti
 	q := dbq.New(tx)
 	org := tx.OrgID()
 	principal := td.PrincipalRef{Kind: td.KindUser, ID: user}.String()
-	pending, err := q.PendingPolicyChangeRequestsBy(ctx, org, principal)
+	pending, err := q.PendingPolicyChangeRequestsBy(ctx, org, principal, user)
 	if err != nil {
 		return nil, err
 	}
@@ -241,8 +247,10 @@ func init() {
 }
 
 // policyRollback rolls a published version back to the one published
-// before it, as the reviewer; a version no longer published has nothing to
-// roll back.
+// before it, as the reviewer (D90 Q1, L3). A version no longer published
+// has nothing left to roll back (already rolled back counts as done). A
+// loosening rollback that only opened a change request is not done yet:
+// it returns ROLLBACK_PENDING_CONFIRMATION and nothing is recorded.
 func policyRollback(pool *db.Pool, v *policyapp.Versions) protect.Rollback {
 	return func(ctx context.Context, item string) error {
 		id, err := ids.ParseUUID(item)
@@ -265,26 +273,78 @@ func policyRollback(pool *db.Pool, v *policyapp.Versions) protect.Rollback {
 		case err != nil:
 			return err
 		case !before.Current:
-			return protect.ErrRollbackNotCurrent
+			return nil
 		}
-		_, err = v.Rollback(ctx, before.BeforeID, &id)
-		return err
+		out, err := v.Rollback(ctx, before.BeforeID, &id)
+		if err != nil {
+			return err
+		}
+		if out.Version.State != policyapp.StatePublished {
+			if out.ChangeRequest != nil {
+				return protect.RollbackPending(out.ChangeRequest.ID)
+			}
+			return protect.RollbackPending(ids.UUID{})
+		}
+		return nil
 	}
 }
 
 // packageUndo quarantines an exposed package version and revokes an
-// exposed org package key as COMPROMISED (F596), as the reviewer.
+// exposed org package key as COMPROMISED (F596), as the reviewer. A
+// version already quarantined or retired, or a key already revoked,
+// counts as done (D90 L3).
 func packageUndo(a *defsapp.Admin, p *protect.Publishers) {
 	p.Undo[protect.ItemPackageVersion] = func(ctx context.Context, item string) error {
 		i := strings.LastIndex(item, "@")
 		if i <= 0 || i == len(item)-1 {
 			return protect.ErrNotExposed
 		}
-		_, err := a.Transition(ctx, item[:i], item[i+1:], defsdomain.StateQuarantined)
+		name, version := item[:i], item[i+1:]
+		vs, err := a.List(ctx, name)
+		if err != nil {
+			return err
+		}
+		for _, v := range vs {
+			if v.Version == version && (v.State == defsdomain.StateQuarantined || v.State == defsdomain.StateRetired) {
+				return nil
+			}
+		}
+		_, err = a.Transition(ctx, name, version, defsdomain.StateQuarantined)
 		return err
 	}
 	p.Undo[protect.ItemPackageKey] = func(ctx context.Context, kid string) error {
-		_, _, err := a.RevokeKey(ctx, kid, defsapp.RevokeCompromised)
+		keys, err := a.ListKeys(ctx)
+		if err != nil {
+			return err
+		}
+		for _, k := range keys {
+			if k.KID == kid && k.State != defsapp.KeyActive {
+				return nil
+			}
+		}
+		_, _, err = a.RevokeKey(ctx, kid, defsapp.RevokeCompromised)
 		return err
 	}
 }
+
+// grantUndo revokes an exposed grant (and its children) as the reviewer
+// (D90 Q2); a grant already revoked counts as done.
+func grantUndo(grants *grantsapp.Service) protect.Rollback {
+	return func(ctx context.Context, item string) error {
+		id, err := gdomain.ParseGrantID(item)
+		if err != nil {
+			return protect.ErrNotExposed
+		}
+		v, err := grants.Get(ctx, id)
+		if err != nil {
+			return err
+		}
+		if v.Grant.State != gdomain.StateActive {
+			return nil
+		}
+		_, err = grants.Revoke(ctx, id, protect.ReasonCompromisedPublisher)
+		return err
+	}
+}
+
+func keepOnly(context.Context, string) error { return protect.ErrKeepOnly }
