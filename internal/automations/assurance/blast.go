@@ -483,7 +483,7 @@ func guardrails(envs []dbq.ListEnvelopesRow, ops []string) []string {
 	for _, e := range envs {
 		var b gdomain.Bounds
 		var reqs []gdomain.Requirement
-		_ = json.Unmarshal(e.Bounds, &b)          // an unreadable part restricts nothing we can name
+		_ = json.Unmarshal(e.Bounds, &b) // an unreadable part restricts nothing we can name
 		_ = json.Unmarshal(e.Requirements, &reqs)
 		touches := slices.ContainsFunc(ops, func(op string) bool {
 			if b.Operations != nil && !b.Operations.Matches(op) {
