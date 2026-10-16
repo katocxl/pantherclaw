@@ -609,6 +609,24 @@ func (q *Queries) GetAutomationVersion(ctx context.Context, orgID ids.OrgID, iD 
 	return i, err
 }
 
+const identityContained = `-- name: IdentityContained :one
+SELECT EXISTS (
+    SELECT 1 FROM pc.containment_controls
+    WHERE org_id = $1 AND lifted_at IS NULL AND scope_type = 'principal'
+      AND scope_id = 'service_account:' || $2::uuid::text
+      AND (expires_at IS NULL OR expires_at > now())
+)::bool AS contained
+`
+
+// Whether an unlifted containment control names the automation's identity
+// as a principal (D14): it then cannot act.
+func (q *Queries) IdentityContained(ctx context.Context, orgID ids.OrgID, serviceAccountID ids.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, identityContained, orgID, serviceAccountID)
+	var contained bool
+	err := row.Scan(&contained)
+	return contained, err
+}
+
 const incrementAutomationGrants = `-- name: IncrementAutomationGrants :one
 INSERT INTO pc.automation_usage AS u (org_id, automation_id, day, grants)
 SELECT $1, $2, (now() AT TIME ZONE 'UTC')::date, 1 WHERE $3::int >= 1

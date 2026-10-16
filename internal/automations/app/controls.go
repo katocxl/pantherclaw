@@ -286,6 +286,11 @@ func (s *Service) revalidate(ctx context.Context, tx db.TenantTx, q *dbq.Queries
 	if st, err := q.ServiceAccountState(ctx, a.OrgID, a.ServiceAccountID); err != nil || st != "ACTIVE" {
 		return ErrRevalidation
 	}
+	if contained, err := q.IdentityContained(ctx, a.OrgID, a.ServiceAccountID); err != nil {
+		return err
+	} else if contained {
+		return ErrContained
+	}
 	if err := q.InsertContainment(ctx, a.OrgID); err != nil {
 		return err
 	}

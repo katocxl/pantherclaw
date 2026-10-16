@@ -68,6 +68,7 @@ var (
 	ErrRevalidation  = pcerr.New(pcerr.FailedPrecondition, "AUTHORITY_CHANGED",
 		"the automation's authority no longer holds; ask for a new enabling")
 	ErrKillSwitch = pcerr.New(pcerr.FailedPrecondition, "KILL_SWITCH_ENGAGED", "the kill switch is engaged")
+	ErrContained  = pcerr.New(pcerr.FailedPrecondition, "CONTAINED", "a containment control holds the automation's identity")
 )
 
 // Editions reports the licence's entitlements.

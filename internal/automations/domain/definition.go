@@ -251,10 +251,11 @@ type PlatformScope struct {
 	Scopes []string `json:"scopes,omitzero"`
 }
 
-// Ceiling bounds every grant an execution may issue (D2, F1, D9).
+// Ceiling bounds every grant an execution may issue (D2, F1, D9). Its
+// agents are always an explicit list (D55): a fleet cohort only narrows a
+// COHORT rollout, never the ceiling.
 type Ceiling struct {
 	Agents       []RefID               `json:"agents,omitzero"`
-	Cohort       *RefID                `json:"cohort,omitzero"`
 	Bounds       gdomain.Bounds        `json:"bounds"`
 	Requirements []gdomain.Requirement `json:"requirements,omitzero"`
 	PerGrant     PerGrant              `json:"per_grant"`

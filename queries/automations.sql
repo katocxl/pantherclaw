@@ -315,3 +315,13 @@ SELECT state FROM pc.service_accounts WHERE org_id = sqlc.arg(org_id) AND id = s
 
 -- name: AutomationAgentNames :many
 SELECT id, name FROM pc.agents WHERE org_id = sqlc.arg(org_id) AND id = ANY (sqlc.arg(ids)::uuid[]);
+
+-- name: IdentityContained :one
+-- Whether an unlifted containment control names the automation's identity
+-- as a principal (D14): it then cannot act.
+SELECT EXISTS (
+    SELECT 1 FROM pc.containment_controls
+    WHERE org_id = sqlc.arg(org_id) AND lifted_at IS NULL AND scope_type = 'principal'
+      AND scope_id = 'service_account:' || sqlc.arg(service_account_id)::uuid::text
+      AND (expires_at IS NULL OR expires_at > now())
+)::bool AS contained;
