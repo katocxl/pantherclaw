@@ -128,8 +128,10 @@ func (f *efx) str(sql string, args ...any) string {
 
 func (f *efx) manager() context.Context {
 	return tenancy.WithCaller(context.Background(), tenancy.Caller{
-		Subject: td.Subject{Org: f.Org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: f.User},
-			Bindings: []td.Binding{{Role: td.RoleAutomationAuthor, Scope: td.Scope{Type: td.ScopeOrg, ID: f.Org.UUID()}}}},
+		Subject: td.Subject{
+			Org: f.Org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: f.User},
+			Bindings: []td.Binding{{Role: td.RoleAutomationAuthor, Scope: td.Scope{Type: td.ScopeOrg, ID: f.Org.UUID()}}},
+		},
 		Credential: tenancy.CredBrowserSession,
 	})
 }
@@ -375,14 +377,18 @@ func TestT125_AGateApprovalNeverCarriesToAnotherExecution(t *testing.T) {
 		SELECT $1, $2, $3, $4, 'BINDING', binding, id, now() + interval '5 minutes' FROM pc.approval_requests WHERE id = $5`,
 		f.Org, ceremony, browser, op, r1)
 	if _, err := f.approvals.Approve(context.Background(), f.Org, approvalsapp.Responder{User: op, Browser: browser}, r1,
-		approvalsapp.Assertion{Ceremony: ceremony, Credential: cred, AuthenticatorData: make([]byte, 37),
-			ClientDataJSON: []byte(`{}`), Signature: []byte{1}}); err != nil {
+		approvalsapp.Assertion{
+			Ceremony: ceremony, Credential: cred, AuthenticatorData: make([]byte, 37),
+			ClientDataJSON: []byte(`{}`), Signature: []byte{1},
+		}); err != nil {
 		t.Fatal(err)
 	}
 	// The ceremony of the first never approves the second.
 	if _, err := f.approvals.Approve(context.Background(), f.Org, approvalsapp.Responder{User: op, Browser: browser}, r2,
-		approvalsapp.Assertion{Ceremony: ceremony, Credential: cred, AuthenticatorData: make([]byte, 37),
-			ClientDataJSON: []byte(`{}`), Signature: []byte{1}}); !errors.Is(err, approvalsapp.ErrCeremony) {
+		approvalsapp.Assertion{
+			Ceremony: ceremony, Credential: cred, AuthenticatorData: make([]byte, 37),
+			ClientDataJSON: []byte(`{}`), Signature: []byte{1},
+		}); !errors.Is(err, approvalsapp.ErrCeremony) {
 		t.Fatalf("a reused ceremony: %v", err)
 	}
 	f.advance(first)
