@@ -16,6 +16,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/changes"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -310,8 +311,22 @@ func (e *validationEnv) AgentGrantable(ctx context.Context, agent ids.UUID) (boo
 func (e *validationEnv) Operation(ctx context.Context, op string) (autodomain.OperationInfo, error) {
 	if strings.HasSuffix(op, ".*") {
 		// A prefix may cover any operation: treat it as irreversible and
-		// spending, so the version must reconcile and budget it.
-		return autodomain.OperationInfo{Known: true, Irreversible: true, ConsumesBudget: true}, nil
+		// spending, so the version must reconcile and budget it, and name
+		// the irreversible operations it covers today (D91 K4).
+		out := autodomain.OperationInfo{Known: true, Irreversible: true, ConsumesBudget: true}
+		if l, ok := e.s.Operations.(operationLister); ok {
+			all, err := l.ActiveDefinitions(ctx, e.org)
+			if err != nil {
+				return autodomain.OperationInfo{}, err
+			}
+			for _, d := range all {
+				if d.Reversibility == defs.Irreversible && (gdomain.Ops{op}).Matches(d.Operation) {
+					out.IrreversibleUnder = append(out.IrreversibleUnder, d.Operation)
+				}
+			}
+			slices.Sort(out.IrreversibleUnder)
+		}
+		return out, nil
 	}
 	if e.s.Operations == nil {
 		return autodomain.OperationInfo{}, errors.New("operations cannot be checked here")
@@ -321,6 +336,12 @@ func (e *validationEnv) Operation(ctx context.Context, op string) (autodomain.Op
 		return autodomain.OperationInfo{}, err
 	}
 	return OperationInfo(d), nil
+}
+
+// operationLister lists the org's active definitions (the definitions
+// store does).
+type operationLister interface {
+	ActiveDefinitions(ctx context.Context, org ids.OrgID) ([]*defs.Definition, error)
 }
 
 // OperationInfo describes a definition for validation: irreversible when
@@ -342,24 +363,39 @@ func (e *validationEnv) DestinationActive(ctx context.Context, destination ids.U
 	return e.s.Destinations.Active(ctx, e.tx.Pgx(), e.org, destination, purpose)
 }
 
-func (e *validationEnv) EligibleApprovers(ctx context.Context, g autodomain.GateWith, owner ids.UUID) (int, error) {
-	people, err := e.q.OrgUsersWithRoles(ctx, e.org, rolesWith(td.PermAutomationApprove))
+// EligibleApprovers counts the active people who hold automation.approve
+// through the gate's roles (any role with it when none is named), are
+// among its users when it names any, and are not excluded. The enabling's
+// confirmers are not known yet: excluding them removes the most there can
+// be (2), so the count never overstates (D91).
+func (e *validationEnv) EligibleApprovers(ctx context.Context, g autodomain.GateWith, owner, principal ids.UUID) (int, error) {
+	roles := rolesWith(td.PermAutomationApprove)
+	if len(g.Approvers.Roles) > 0 {
+		roles = slices.DeleteFunc(slices.Clone(roles), func(r string) bool { return !slices.Contains(g.Approvers.Roles, r) })
+		if len(roles) == 0 {
+			return 0, nil
+		}
+	}
+	people, err := e.q.OrgUsersWithRoles(ctx, e.org, roles)
 	if err != nil {
 		return 0, err
 	}
+	exclude := g.Exclude
+	if len(exclude) == 0 {
+		exclude = []string{autodomain.ExcludeOwner}
+	}
 	n := 0
 	for _, p := range people {
-		if len(g.Approvers.Users) > 0 && !slices.Contains(g.Approvers.Users, autodomain.RefID(p)) {
-			continue
+		switch {
+		case len(g.Approvers.Users) > 0 && !slices.Contains(g.Approvers.Users, autodomain.RefID(p)):
+		case p == owner && slices.Contains(exclude, autodomain.ExcludeOwner):
+		case !principal.IsZero() && p == principal && slices.Contains(exclude, autodomain.ExcludePrincipal):
+		default:
+			n++
 		}
-		exclude := g.Exclude
-		if len(exclude) == 0 {
-			exclude = []string{autodomain.ExcludeOwner}
-		}
-		if p == owner && slices.Contains(exclude, autodomain.ExcludeOwner) {
-			continue
-		}
-		n++
+	}
+	if slices.Contains(exclude, autodomain.ExcludeConfirmers) {
+		n = max(n-2, 0)
 	}
 	return n, nil
 }

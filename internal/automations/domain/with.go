@@ -72,7 +72,7 @@ type WaitEffectWith struct {
 	Step      string   `json:"step"`
 	Operation string   `json:"operation"`
 	States    []string `json:"states,omitzero"` // default [CONFIRMED]
-	Min       int      `json:"min,omitzero"`    // 1..100, default 1
+	Min       int      `json:"min,omitzero"`    // 1..100
 }
 
 // GateWith asks people for an approval bound to this execution, step and
@@ -80,7 +80,7 @@ type WaitEffectWith struct {
 type GateWith struct {
 	Approvers    GateApprovers `json:"approvers"`
 	Exclude      []string      `json:"exclude,omitzero"`       // OWNER | CONFIRMERS | PRINCIPAL; default [OWNER]
-	MinApprovals int           `json:"min_approvals,omitzero"` // 1..2, default 1
+	MinApprovals int           `json:"min_approvals,omitzero"` // 1..2
 	Deadline     Duration      `json:"deadline"`               // ≤ 72h
 	Summary      string        `json:"summary,omitzero"`       // templatable
 }

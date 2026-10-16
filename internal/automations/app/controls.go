@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -25,6 +26,7 @@ import (
 const (
 	FailureAuthorityChanged = "automation.authority_changed"
 	FailureReviewDue        = "automation.review_due"
+	FailureSweep            = "automation.sweep_failed"
 )
 
 var _ autoports.Pauser = (*Service)(nil)
@@ -163,14 +165,58 @@ func (s *Service) endCeilingTx(ctx context.Context, tx db.TenantTx, org ids.OrgI
 	if err := s.pauseTx(ctx, tx, q, a, pause); err != nil {
 		return err
 	}
+	// Authority that changed revokes what was issued under it (D91 K2).
+	var eff ControlEffect
+	if err := s.revokeGrantsTx(ctx, tx, q, a, grantsapp.RevokeScopeCeiling, ceiling, "ceiling "+strings.ToLower(string(state)), &eff); err != nil {
+		return err
+	}
 	if err := record(ctx, tx, systemActor, "automation.ceiling_ended", a.ID, map[string]string{
 		"ceiling": ceiling.String(), "state": string(state), "reason": reason,
+		"grants_revoked": itoa(len(eff.GrantsRevoked)), "runs_ended": itoa(len(eff.RunsEnded)),
 	}); err != nil {
 		return err
 	}
 	return s.failure(ctx, tx, a, FailureAuthorityChanged,
 		"Automation "+a.Name+" was paused: its ceiling is "+string(state)+" ("+reason+").",
 		"Review the automation, then enable a new version or confirm its authority again.", "ceiling:"+ceiling.String())
+}
+
+// revokeGrantsTx revokes the automation's grants of scope (CEILING: those
+// of one authority row; AUTOMATION: those of every row, whatever its
+// state) and every grant delegated from them, and ends the automation runs
+// they bound, adding both to eff.
+func (s *Service) revokeGrantsTx(ctx context.Context, tx db.TenantTx, q *dbq.Queries, a dbq.PcAutomation, scope string,
+	ceiling ids.UUID, reason string, eff *ControlEffect,
+) error {
+	if s.Grants == nil {
+		return ErrGrantsUnavailable
+	}
+	revoked, err := s.Grants.RevokeForAutomationTx(ctx, tx, grantsapp.AutomationRevoke{
+		Org: a.OrgID, Automation: a.ID, Ceiling: ceiling, ServiceAccount: a.ServiceAccountID, Scope: scope, Reason: reason,
+	})
+	if err != nil {
+		return err
+	}
+	for _, g := range revoked {
+		eff.GrantsRevoked = append(eff.GrantsRevoked, g.UUID())
+	}
+	if s.Runs == nil || len(eff.GrantsRevoked) == 0 {
+		return nil
+	}
+	runs, err := q.ActiveRunsOfGrants(ctx, a.OrgID, eff.GrantsRevoked)
+	if err != nil {
+		return err
+	}
+	for _, r := range runs {
+		if r.AutomationExecutionID == nil || slices.Contains(eff.RunsEnded, r.ID) {
+			continue
+		}
+		if _, err := s.Runs.EndForAutomationTx(ctx, tx, a.OrgID, *r.AutomationExecutionID, a.ServiceAccountID, r.ID, "authority_revoked"); err != nil {
+			return err
+		}
+		eff.RunsEnded = append(eff.RunsEnded, r.ID)
+	}
+	return nil
 }
 
 // PauseAutomation stops new executions (HR-283); active executions go on
@@ -192,10 +238,13 @@ func (s *Service) PauseAutomation(ctx context.Context, automation ids.UUID, canc
 		if a.State != string(autodomain.StateActive) {
 			return ErrState
 		}
+		if cancelActive && s.Executions == nil {
+			return ErrExecutionsUnavailable // never report a cancellation that did not happen (D91 K10)
+		}
 		if err := s.pauseTx(ctx, tx, q, a, autodomain.PauseUser); err != nil {
 			return err
 		}
-		if cancelActive && s.Executions != nil {
+		if cancelActive {
 			e, err := s.Executions.CancelActive(ctx, tx.Pgx(), c.Org, a.ID, autodomain.ReasonCancelledByUser)
 			if err != nil {
 				return err
@@ -355,7 +404,14 @@ func (s *Service) RetireAutomation(ctx context.Context, automation ids.UUID, rea
 		if a.State == string(autodomain.StateRetired) {
 			return ErrState
 		}
-		if s.Executions != nil {
+		if s.Executions == nil {
+			sa := a.ServiceAccountID
+			if n, err := q.CountActiveAutomationRuns(ctx, c.Org, &sa); err != nil {
+				return err
+			} else if n > 0 {
+				return ErrExecutionsUnavailable // D91 K10
+			}
+		} else {
 			e, err := s.Executions.CancelActive(ctx, tx.Pgx(), c.Org, a.ID, autodomain.ReasonCancelledByUser)
 			if err != nil {
 				return err
@@ -421,43 +477,17 @@ func (s *Service) RevokeAuthority(ctx context.Context, automation ids.UUID, reas
 		if a.State == string(autodomain.StateRetired) {
 			return ErrState
 		}
-		ceil, err := q.GetActiveAutomationCeiling(ctx, c.Org, a.ID)
-		if db.IsNoRows(err) {
-			return ErrState
-		} else if err != nil {
+		// The ACTIVE row, if any, ends; every grant of every row the
+		// automation ever had is revoked (D91 K2): a superseded, void or
+		// expired row's grants live until they expire otherwise.
+		ended, err := q.EndActiveAutomationCeilings(ctx, dbq.EndActiveAutomationCeilingsParams{
+			State: string(autodomain.CeilingRevoked), OrgID: c.Org, AutomationID: a.ID,
+		})
+		if err != nil {
 			return err
 		}
-		if err := oneRow(q.EndAutomationCeiling(ctx, dbq.EndAutomationCeilingParams{
-			State: string(autodomain.CeilingRevoked), OrgID: c.Org, ID: ceil.ID,
-		})); err != nil {
+		if err := s.revokeGrantsTx(ctx, tx, q, a, grantsapp.RevokeScopeAutomation, ids.UUID{}, "authority revoked", &eff); err != nil {
 			return err
-		}
-		if s.Grants != nil {
-			revoked, err := s.Grants.RevokeForAutomationTx(ctx, tx, grantsapp.AutomationRevoke{
-				Org: c.Org, Automation: a.ID, Ceiling: ceil.ID, ServiceAccount: a.ServiceAccountID,
-				Scope: grantsapp.RevokeScopeCeiling, Reason: "authority revoked",
-			})
-			if err != nil {
-				return err
-			}
-			for _, g := range revoked {
-				eff.GrantsRevoked = append(eff.GrantsRevoked, g.UUID())
-			}
-		}
-		if s.Runs != nil && len(eff.GrantsRevoked) > 0 {
-			runs, err := q.ActiveRunsOfGrants(ctx, c.Org, eff.GrantsRevoked)
-			if err != nil {
-				return err
-			}
-			for _, r := range runs {
-				if r.AutomationExecutionID == nil {
-					continue
-				}
-				if _, err := s.Runs.EndForAutomationTx(ctx, tx, c.Org, *r.AutomationExecutionID, a.ServiceAccountID, r.ID, "authority_revoked"); err != nil {
-					return err
-				}
-				eff.RunsEnded = append(eff.RunsEnded, r.ID)
-			}
 		}
 		if a.State == string(autodomain.StateActive) {
 			if err := s.pauseTx(ctx, tx, q, a, autodomain.PauseAuthorityRevoked); err != nil {
@@ -477,7 +507,7 @@ func (s *Service) RevokeAuthority(ctx context.Context, automation ids.UUID, reas
 		}
 		out = automationView(r)
 		return record(ctx, tx, c.Actor(), "automation.authority_revoked", a.ID, map[string]string{
-			"ceiling": ceil.ID.String(), "grants_revoked": itoa(len(eff.GrantsRevoked)), "runs_ended": itoa(len(eff.RunsEnded)),
+			"ceilings_revoked": itoa(len(ended)), "grants_revoked": itoa(len(eff.GrantsRevoked)), "runs_ended": itoa(len(eff.RunsEnded)),
 			"note_sha256": noteDigest(reason),
 		})
 	})
