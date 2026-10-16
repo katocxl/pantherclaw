@@ -15,6 +15,7 @@ import (
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/changes"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -137,8 +138,18 @@ func (s *Service) failure(ctx context.Context, tx db.TenantTx, a dbq.PcAutomatio
 // never do.
 func (s *Service) VoidCeiling(ctx context.Context, org ids.OrgID, ceiling ids.UUID, reason string) error {
 	return s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		return s.endCeilingTx(ctx, tx, org, ceiling, autodomain.CeilingVoid, reason, autodomain.PauseCeilingVoid)
+		return s.VoidCeilingTx(ctx, tx, org, ceiling, reason)
 	})
+}
+
+// VoidCeilingTx is VoidCeiling in the caller's transaction (D111), for a
+// caller that voids as part of its own change (protect's marking). A
+// ceiling that is no longer ACTIVE is left as it is.
+func (s *Service) VoidCeilingTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, ceiling ids.UUID, reason string) error {
+	if org != tx.OrgID() {
+		return db.ErrTenantMismatch
+	}
+	return s.endCeilingTx(ctx, tx, org, ceiling, autodomain.CeilingVoid, reason, autodomain.PauseCeilingVoid)
 }
 
 func (s *Service) endCeilingTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, ceiling ids.UUID, state autodomain.CeilingState,
@@ -178,7 +189,7 @@ func (s *Service) endCeilingTx(ctx context.Context, tx db.TenantTx, org ids.OrgI
 	}
 	return s.failure(ctx, tx, a, FailureAuthorityChanged,
 		"Automation "+a.Name+" was paused: its ceiling is "+string(state)+" ("+reason+").",
-		"Review the automation, then enable a new version or confirm its authority again.", "ceiling:"+ceiling.String())
+		"Review the automation, then enable a new version or confirm its authority again.", ceilingKey(ceiling))
 }
 
 // revokeGrantsTx revokes the automation's grants of scope (CEILING: those
@@ -508,6 +519,7 @@ func (s *Service) RevokeAuthority(ctx context.Context, automation ids.UUID, reas
 		out = automationView(r)
 		return record(ctx, tx, c.Actor(), "automation.authority_revoked", a.ID, map[string]string{
 			"ceilings_revoked": itoa(len(ended)), "grants_revoked": itoa(len(eff.GrantsRevoked)), "runs_ended": itoa(len(eff.RunsEnded)),
+			"executions_canceled": itoa(len(eff.ExecutionsAffected)), "deliveries_not_verified": itoa(len(eff.DeliveriesNotVerified)),
 			"note_sha256": noteDigest(reason),
 		})
 	})
@@ -520,4 +532,43 @@ func noteDigest(s string) string {
 	}
 	sum := sha256.Sum256([]byte(s))
 	return hexDigest(sum[:])
+}
+
+// failureResolver resolves owned failures through the failure sink's
+// resolution path (reflex failures.Sink, D106 D2).
+type failureResolver interface {
+	Resolve(ctx context.Context, tx pgx.Tx, org ids.OrgID, kind string, keys []string, resolution string,
+		actor evdomain.Actor) ([]ids.UUID, error)
+}
+
+// resolveFailures resolves the open failures of kind with one of keys, as
+// PantherClaw itself; a sink that cannot resolve leaves them open.
+func (s *Service) resolveFailures(ctx context.Context, tx db.TenantTx, kind string, keys []string, resolution string) error {
+	r, ok := s.Failures.(failureResolver)
+	if !ok {
+		return nil
+	}
+	_, err := r.Resolve(ctx, tx.Pgx(), tx.OrgID(), kind, keys, resolution, systemActor)
+	return err
+}
+
+func ceilingKey(ceiling ids.UUID) string { return "ceiling:" + ceiling.String() }
+
+// scopedResolver resolves owned failures by the subject in their scope
+// (reflex failures.Sink, D111 G1).
+type scopedResolver interface {
+	ResolveInScope(ctx context.Context, tx pgx.Tx, org ids.OrgID, kind string, subject reflexdomain.Subject, resolution string,
+		actor evdomain.Actor) ([]ids.UUID, error)
+}
+
+// resolveAutomationFailures resolves the open failures of kind scoped to
+// the automation, as PantherClaw itself.
+func (s *Service) resolveAutomationFailures(ctx context.Context, tx db.TenantTx, automation ids.UUID, kind, resolution string) error {
+	r, ok := s.Failures.(scopedResolver)
+	if !ok {
+		return nil
+	}
+	_, err := r.ResolveInScope(ctx, tx.Pgx(), tx.OrgID(), kind,
+		reflexdomain.Subject{Type: reflexdomain.SubjectAutomation, ID: automation.String()}, resolution, systemActor)
+	return err
 }
