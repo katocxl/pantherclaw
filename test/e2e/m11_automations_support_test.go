@@ -205,6 +205,7 @@ func (a *autoStack) advance(t *testing.T, id ids.UUID) {
 	t.Helper()
 	s := a.r.s
 	s.exec(t, "UPDATE pc.automation_executions SET wake_at = now() - interval '1 second' WHERE id = $1 AND wake_at IS NOT NULL", id)
+	s.exec(t, "UPDATE pc.automation_step_attempts SET wake_at = now() - interval '1 second' WHERE execution_id = $1 AND wake_at IS NOT NULL", id)
 	if err := a.engine.Advance(context.Background(), s.org, id); err != nil {
 		t.Fatalf("advance %s: %v", id, err)
 	}

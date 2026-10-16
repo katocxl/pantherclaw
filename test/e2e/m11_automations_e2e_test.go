@@ -21,6 +21,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/pclaw"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
+	rapp "github.com/katocxl/pantherclaw/internal/response/app"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -185,6 +186,9 @@ func TestE2E_M11_GovernedAutomations(t *testing.T) {
 	if got := s.row(t, "SELECT state || '/' || rollout FROM pc.automations WHERE id = $1", auto.ID); got != "ACTIVE/FULL" {
 		t.Fatalf("the automation after FULL: %s", got)
 	}
+
+	a.killSwitch(t, auto.ID, source, created.Secret, aliceCtx)
+	a.ceilingVoid(t, auto.ID, source, created.Secret)
 }
 
 // person is an in-process caller: the user with roles at the org.
@@ -379,6 +383,12 @@ func (a *autoStack) liveRefund(t *testing.T, automation, source ids.UUID, secret
 	if n := s.row(t, "SELECT count(*)::text FROM pc.transactions WHERE run_id = $1 AND decision = 'ALLOW'", out.run); n != "1" {
 		t.Fatalf("the runner's refund: %s allowed transactions in the run (%s %s)", n, stdout.String(), stderr.String()+" launch: "+s.row(t, "SELECT state || ' ' || coalesce(instance_id::text, '-') || ' ' || delivery FROM pc.automation_launches WHERE run_id = $1", out.run)+" txns: "+s.row(t, "SELECT coalesce(string_agg(decision || '/' || coalesce(effect_state, ''), ','), 'none') FROM pc.transactions WHERE run_id = $1", out.run)+" calls: "+s.row(t, "SELECT calls::text || ' outcome=' || coalesce(outcome, '') || ' report=' || coalesce(report::text, '') FROM pc.automation_launches WHERE run_id = $1", out.run)+" runner: "+stdout.String()+stderr.String())
 	}
+	// The gateway confirms the refund's effect asynchronously (M7): the
+	// execution waits for it.
+	eventually(t, 90*time.Second, "the refund's confirmed effect", func() (bool, error) {
+		return s.row(t, `SELECT coalesce((SELECT e.state FROM pc.effect_receipts e JOIN pc.transactions x ON x.id = e.transaction_id
+			WHERE x.run_id = $1 ORDER BY e.seq DESC LIMIT 1), '')`, out.run) == "CONFIRMED", nil
+	})
 	eventually(t, 90*time.Second, "the execution to finish", func() (bool, error) {
 		a.advance(t, x)
 		st := s.row(t, "SELECT state FROM pc.automation_executions WHERE id = $1", x)
@@ -391,4 +401,99 @@ func (a *autoStack) liveRefund(t *testing.T, automation, source ids.UUID, secret
 		t.Fatalf("the execution's grant after the finish: %s", st)
 	}
 	return out
+}
+
+// state is an automation's state and pause reason, or an execution's
+// state and reason.
+func (a *autoStack) automationState(t *testing.T, id ids.UUID) string {
+	t.Helper()
+	return a.r.s.row(t, "SELECT state || '/' || coalesce(pause_reason, '') FROM pc.automations WHERE id = $1", id)
+}
+
+func (a *autoStack) executionState(t *testing.T, id ids.UUID) string {
+	t.Helper()
+	return a.r.s.row(t, "SELECT state || '/' || coalesce(reason, '') FROM pc.automation_executions WHERE id = $1", id)
+}
+
+func (a *autoStack) userID(t *testing.T, subject string) ids.UUID {
+	t.Helper()
+	return mustUUID(t, a.r.s.row(t, "SELECT id::text FROM pc.users WHERE subject = $1", subject))
+}
+
+// killSwitch: a LIVE execution waits for its runner; alice engages the kill
+// switch with a step-up; the automation pauses KILL_SWITCH and the
+// execution stops (its grant revoked); bob proposes and carol
+// confirms the restore, which lifts the switch and resumes nothing; the
+// owner then resumes the automation (D14, HR-251).
+func (a *autoStack) killSwitch(t *testing.T, automation, source ids.UUID, secret string, owner context.Context) {
+	t.Helper()
+	s := a.r.s
+	if code := a.signedEvent(t, source, secret, "msg-4", `{"type":"ticket.created","ref":"T-4"}`); code != http.StatusAccepted {
+		t.Fatalf("a signed event: %d", code)
+	}
+	x := a.latestExecution(t, automation)
+	a.advance(t, x)
+	grant := s.row(t, "SELECT coalesce((SELECT grant_id::text FROM pc.automation_launches WHERE execution_id = $1), '')", x)
+	if st := a.executionState(t, x); !strings.HasPrefix(st, "WAITING/") || grant == "" {
+		t.Fatalf("the execution before the kill switch: %s, grant %q", st, grant)
+	}
+	alice, bob, carol := a.r.aliceID, a.userID(t, "bob"), a.userID(t, "carol")
+	ks := rapp.New(s.pool, nil, s.apiURL).WithPauser(a.core)
+	if _, err := ks.Engage(a.person(alice, td.RoleEmergency), rapp.StepUp{Credential: a.key(t, alice), At: time.Now()}, "runaway refunds"); err != nil {
+		t.Fatalf("Engage: %v", err)
+	}
+	if st := a.automationState(t, automation); st != "PAUSED/KILL_SWITCH" {
+		t.Fatalf("the automation under the kill switch: %s", st)
+	}
+	a.advance(t, x)
+	// It stops with KILL_SWITCH: PARTIALLY_COMPLETED, since it already
+	// launched (CANCELLED when it had not acted yet).
+	if st := a.executionState(t, x); st != "PARTIALLY_COMPLETED/KILL_SWITCH" && st != "CANCELLED/KILL_SWITCH" {
+		t.Fatalf("the waiting execution under the kill switch: %s", st)
+	}
+	if st := s.row(t, "SELECT state FROM pc.grants WHERE id = $1", grant); st != "REVOKED" {
+		t.Fatalf("the cancelled execution's grant: %s", st)
+	}
+	p, err := ks.ProposeRestore(a.person(bob, td.RoleEmergency), rapp.StepUp{Credential: a.key(t, bob), At: time.Now()}, "contained")
+	if err != nil {
+		t.Fatalf("ProposeRestore: %v", err)
+	}
+	if _, err := ks.ConfirmRestore(a.person(carol, td.RoleEmergency), rapp.StepUp{Credential: a.key(t, carol), At: time.Now()}, p.ID); err != nil {
+		t.Fatalf("ConfirmRestore: %v", err)
+	}
+	if st := a.automationState(t, automation); st != "PAUSED/KILL_SWITCH" {
+		t.Fatalf("a restore resumed the automation: %s", st)
+	}
+	if _, _, err := a.core.ResumeAutomation(owner, automation); err != nil {
+		t.Fatalf("ResumeAutomation: %v", err)
+	}
+	if st := a.automationState(t, automation); st != "ACTIVE/" {
+		t.Fatalf("the automation after its owner resumed it: %s", st)
+	}
+}
+
+// ceilingVoid: bob, one of the ceiling's approvers, loses grant.issue; the
+// next execution fails CEILING_VOID, the automation pauses CEILING_VOID and
+// its owner gets an owned failure (D9, D57, HR-271).
+func (a *autoStack) ceilingVoid(t *testing.T, automation, source ids.UUID, secret string) {
+	t.Helper()
+	s := a.r.s
+	binding := s.row(t, "SELECT id::text FROM pc.role_bindings WHERE user_id = $1 AND role = 'grant_issuer'", a.userID(t, "bob"))
+	if code, o, e := a.r.alice.pclaw(t, "role", "unbind", binding); code != 0 {
+		t.Fatalf("role unbind: %d %s %s", code, o, e)
+	}
+	if code := a.signedEvent(t, source, secret, "msg-5", `{"type":"ticket.created","ref":"T-5"}`); code != http.StatusAccepted {
+		t.Fatalf("a signed event: %d", code)
+	}
+	x := a.latestExecution(t, automation)
+	a.advance(t, x)
+	if st := a.executionState(t, x); st != "FAILED/CEILING_VOID" {
+		t.Fatalf("the execution after an approver lost grant.issue: %s", st)
+	}
+	if st := a.automationState(t, automation); st != "PAUSED/CEILING_VOID" {
+		t.Fatalf("the automation after its ceiling was voided: %s", st)
+	}
+	if n := s.row(t, "SELECT count(*)::text FROM pc.operational_failures WHERE kind = 'automation.authority_changed' AND owner_id = $1", a.r.aliceID); n == "0" {
+		t.Fatal("the owner has no owned failure for the void ceiling")
+	}
 }
