@@ -147,7 +147,7 @@ definition:
         limits:
           $when: {param: budget_per_run, set: true}
           budgets:
-            - id: per-run
+            - id: per_run
               grouping: task
               operations: "${operations}"
               currency: "${budget_currency}"
@@ -194,7 +194,7 @@ definition:
     deadline: 2d
 
 tests:
-  - name: the run ends and its effect is confirmed
+  - name: the_run_ends_and_its_effect_is_confirmed
     kind: NORMAL
     trigger:
       params:
@@ -210,7 +210,7 @@ tests:
         launch: DONE
         wait: DONE
         confirm: {$when: {param: confirm_operation, set: true}, $value: DONE}
-  - name: the ceiling refuses the launch
+  - name: the_ceiling_refuses_the_launch
     kind: DENIED
     trigger:
       params:
@@ -222,7 +222,7 @@ tests:
       state: FAILED
       reason: USAGE_EXCEEDED
       steps: {launch: FAILED}
-  - name: the run does not end in time
+  - name: the_run_does_not_end_in_time
     kind: TIMEOUT
     trigger:
       params:
@@ -235,7 +235,7 @@ tests:
       state: PARTIALLY_COMPLETED
       reason: TIMEOUT
       steps: {launch: DONE, wait: FAILED}
-  - name: the same request twice starts one execution
+  - name: the_same_request_twice_starts_one_execution
     kind: DUPLICATE
     trigger:
       params:
@@ -247,7 +247,7 @@ tests:
       confirm: {$when: {param: confirm_operation, set: true}, $value: [{state: DONE, refs: [receipt]}]}
     expect:
       state: SUCCEEDED
-  - name: the run fails after it acted
+  - name: the_run_fails_after_it_acted
     kind: PARTIAL
     trigger:
       params:
@@ -261,7 +261,7 @@ tests:
       reason: STEP_FAILED
       steps: {launch: DONE, wait: FAILED}
   - $when: {param: confirm_operation, set: true}
-    name: the irreversible effect is unknown
+    name: the_irreversible_effect_is_unknown
     kind: UNKNOWN
     trigger:
       params:

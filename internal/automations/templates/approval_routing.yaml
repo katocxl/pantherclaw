@@ -84,7 +84,7 @@ definition:
     deadline: 2d
 
 tests:
-  - name: the request is resolved
+  - name: the_request_is_resolved
     kind: NORMAL
     trigger:
       params: {txn: 0192f000-0000-7000-8000-0000000000e1}
@@ -95,7 +95,7 @@ tests:
     expect:
       state: SUCCEEDED
       steps: {pause: DONE, remind: DONE, escalate: DONE, resolved: DONE}
-  - name: the reminder is refused
+  - name: the_reminder_is_refused
     kind: DENIED
     trigger:
       params: {txn: 0192f000-0000-7000-8000-0000000000e2}
@@ -105,7 +105,7 @@ tests:
       state: FAILED
       reason: AUTHORITY_CHANGED
       steps: {remind: FAILED}
-  - name: nobody resolves the request in time
+  - name: nobody_resolves_the_request_in_time
     kind: TIMEOUT
     trigger:
       params: {txn: 0192f000-0000-7000-8000-0000000000e3}
@@ -117,7 +117,7 @@ tests:
       state: PARTIALLY_COMPLETED
       reason: TIMEOUT
       steps: {escalate: DONE, resolved: FAILED}
-  - name: the same hold twice starts one execution
+  - name: the_same_hold_twice_starts_one_execution
     kind: DUPLICATE
     trigger:
       params: {txn: 0192f000-0000-7000-8000-0000000000e4}

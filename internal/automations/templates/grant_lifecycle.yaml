@@ -122,7 +122,7 @@ definition:
     deadline: 1h
 
 tests:
-  - name: the grant is revoked
+  - name: the_grant_is_revoked
     kind: NORMAL
     trigger:
       params: {grant: 0192f000-0000-7000-8000-0000000000d3}
@@ -132,7 +132,7 @@ tests:
     expect:
       state: SUCCEEDED
       steps: {tell: DONE, revoke: DONE}
-  - name: the revocation is refused
+  - name: the_revocation_is_refused
     kind: DENIED
     trigger:
       params: {grant: 0192f000-0000-7000-8000-0000000000d4}
@@ -142,7 +142,7 @@ tests:
       state: FAILED
       reason: AUTHORITY_CHANGED
       steps: {revoke: FAILED}
-  - name: the revocation does not complete in time
+  - name: the_revocation_does_not_complete_in_time
     kind: TIMEOUT
     trigger:
       params: {grant: 0192f000-0000-7000-8000-0000000000d5}
@@ -152,7 +152,7 @@ tests:
       state: FAILED
       reason: TIMEOUT
       steps: {revoke: FAILED}
-  - name: the same grant twice starts one execution
+  - name: the_same_grant_twice_starts_one_execution
     kind: DUPLICATE
     trigger:
       params: {grant: 0192f000-0000-7000-8000-0000000000d6}

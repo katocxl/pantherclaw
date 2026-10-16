@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -556,4 +557,55 @@ func TestT126_RevocableHasNoDefault(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestD119_NamesAndIDsFitTheirStores: a baseline test's name fits
+// pc.automation_test_cases (`^[a-z][a-z0-9_-]{0,62}$`), and every budget
+// and counter id fits grants' limit rules (`^[a-z][a-z0-9_]{0,31}$`), in
+// every variant of every template (D119).
+func TestD119_NamesAndIDsFitTheirStores(t *testing.T) {
+	caseName := regexp.MustCompile(`^[a-z][a-z0-9_-]{0,62}$`)
+	ruleID := regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
+	for id, rs := range renderAll(t) {
+		for _, r := range rs {
+			for _, tc := range r.tests {
+				if !caseName.MatchString(tc.Name) {
+					t.Errorf("%s: test %q", r.name, tc.Name)
+				}
+			}
+			var doc any
+			if err := yaml.Unmarshal(r.doc, &doc); err != nil {
+				t.Fatal(err)
+			}
+			for _, rule := range limitRules(doc) {
+				if !ruleID.MatchString(rule) {
+					t.Errorf("%s: limit rule id %q", id, rule)
+				}
+			}
+		}
+	}
+}
+
+// limitRules returns the ids under every budgets and counters list.
+func limitRules(v any) []string {
+	var out []string
+	switch x := v.(type) {
+	case map[string]any:
+		for k, c := range x {
+			if items, ok := c.([]any); ok && (k == "budgets" || k == "counters") {
+				for _, it := range items {
+					if m, ok := it.(map[string]any); ok {
+						id, _ := m["id"].(string)
+						out = append(out, id)
+					}
+				}
+			}
+			out = append(out, limitRules(c)...)
+		}
+	case []any:
+		for _, c := range x {
+			out = append(out, limitRules(c)...)
+		}
+	}
+	return out
 }
