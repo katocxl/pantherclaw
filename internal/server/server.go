@@ -380,7 +380,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if err := authority.RegisterSweeper(jreg, pool, svc, cfg.Authority.StaleDispatch.D()); err != nil {
 			return err
 		}
-		evidenceJobs, err := registerEvidenceWorkers(jreg, cfg, pool, reg, m5.notifications, log)
+		evidenceJobs, err := registerEvidenceWorkers(jreg, cfg, pool, reg, m5.notifications, autos, log)
 		if err != nil {
 			return err
 		}
@@ -425,10 +425,10 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if evidenceJobs, err = registerM10EdgesJobs(evidenceJobs, jreg, pool, kp, bill, m5, cfg.Auth.PublicURL, log); err != nil {
 			return err
 		}
-		if evidenceJobs, err = registerAutomationTriggersJobs(evidenceJobs, jreg, pool, kp, bill, cfg.Auth.PublicURL, log); err != nil {
+		if evidenceJobs, err = registerAutomationTriggersJobs(evidenceJobs, jreg, pool, kp, bill, cfg.Auth.PublicURL, autos, log); err != nil {
 			return err
 		}
-		if evidenceJobs, err = registerAutomationEngineJobs(evidenceJobs, jreg, pool, kp, bill, cfg.Auth.PublicURL,
+		if evidenceJobs, err = registerAutomationEngineJobs(evidenceJobs, jreg, autos, kp, bill, cfg.Auth.PublicURL,
 			m5.notifications, log); err != nil {
 			return err
 		}

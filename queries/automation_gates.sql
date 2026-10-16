@@ -13,7 +13,7 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), 'AUTOMATION_GATE', sqlc.narg(agent_id), 
     sqlc.arg(requirements), sqlc.arg(display), sqlc.arg(display_hash), sqlc.arg(deadline_at));
 
 -- name: LiveAutomationGate :one
-SELECT id FROM pc.approval_requests
+SELECT id, (convert_from(binding_input, 'UTF8')::jsonb ->> 'attempt')::int AS attempt FROM pc.approval_requests
 WHERE org_id = sqlc.arg(org_id) AND execution_id = sqlc.arg(execution_id) AND step_id = sqlc.arg(step_id)
   AND subject_kind = 'AUTOMATION_GATE' AND state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED');
 

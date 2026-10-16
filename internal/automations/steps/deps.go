@@ -65,6 +65,10 @@ type LaunchStart struct {
 	DryRun         bool
 }
 
+// RevokeOneGrant revokes only GrantRevoke.Grant of the execution: a failed
+// launch's withdraw (core's GRANT scope, D102, D104).
+const RevokeOneGrant = "GRANT"
+
 // GrantRevoke asks for grants of an execution to be revoked (D9
 // AutomationRevoke).
 type GrantRevoke struct {

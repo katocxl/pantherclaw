@@ -162,7 +162,7 @@ func (s *launchRun) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContex
 	if err != nil {
 		if r, ok := refusal(err); ok {
 			// The grant was issued in this transaction: revoke it at once.
-			if _, rerr := s.d.Grants.RevokeForAutomation(ctx, tx, revokeOf(sc, autodomain.RevokeExecution, &grant, r)); rerr != nil {
+			if _, rerr := s.d.Grants.RevokeForAutomation(ctx, tx, revokeOf(sc, RevokeOneGrant, &grant, r)); rerr != nil {
 				return autodomain.StepResult{}, rerr
 			}
 			return autodomain.StepResult{
@@ -350,7 +350,7 @@ func (s *launchRun) withdraw(ctx context.Context, tx pgx.Tx, sc autodomain.StepC
 		return autodomain.StepResult{}, err
 	}
 	if s.d.Grants != nil {
-		if _, err := s.d.Grants.RevokeForAutomation(ctx, tx, revokeOf(sc, autodomain.RevokeExecution, &grant, reason)); err != nil {
+		if _, err := s.d.Grants.RevokeForAutomation(ctx, tx, revokeOf(sc, RevokeOneGrant, &grant, reason)); err != nil {
 			return autodomain.StepResult{}, err
 		}
 	}
