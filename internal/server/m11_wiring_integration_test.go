@@ -18,6 +18,8 @@ import (
 
 	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
+	"github.com/katocxl/pantherclaw/internal/promotions"
+	"github.com/katocxl/pantherclaw/internal/protect"
 )
 
 // m11Optional are the fields of the M11 instances that may stay nil, and
@@ -64,6 +66,9 @@ func TestM11_WiringComplete(t *testing.T) {
 			driverUsesSharedCore(t, role, got)
 			for i, v := range got["protect.publishers"] {
 				p := reflect.ValueOf(v).Elem()
+				if pub := v.(*protect.Publishers); pub.Sources[protect.ItemPromotion] == nil {
+					t.Errorf("%s: protect.publishers #%d: promotions are not an exposure source (D116 U1)", role, i+1)
+				}
 				undo := p.FieldByName("Undo")
 				for _, k := range undo.MapKeys() {
 					if undo.MapIndex(k).Pointer() == reflect.ValueOf(notYet).Pointer() {
@@ -227,10 +232,14 @@ func driverUsesSharedCore(t *testing.T, role string, got map[string][]any) {
 		core := c.(*automationsCore)
 		if core.grants == nil || core.grants.Promotions == nil {
 			t.Errorf("%s: automations core #%d: its grants service has no promotion gate", role, i+1)
+		} else if _, ok := core.grants.Promotions.(promotions.Gate); !ok {
+			t.Errorf("%s: automations core #%d: the production gate is %T, not govern's promotions.Gate (D116)", role, i+1, core.grants.Promotions)
 		}
 		if core.grants != nil {
 			if st, ok := core.grants.Store.(*grantspg.Store); !ok || st.Promotions == nil {
 				t.Errorf("%s: automations core #%d: its grants store does not gate in the transaction (D93)", role, i+1)
+			} else if _, real := st.Promotions.(promotions.Gate); !real {
+				t.Errorf("%s: automations core #%d: the store gate is %T, not promotions.Gate (D116)", role, i+1, st.Promotions)
 			}
 		}
 		if core.svc.Compromise == nil {

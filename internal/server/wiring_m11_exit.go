@@ -6,7 +6,9 @@ package server
 import (
 	"context"
 	"errors"
+	"time"
 
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -64,12 +66,31 @@ func attachM11Issuance(core *automationsCore, pool *db.Pool) {
 // instances, in every role, before the role split: the gated grants and
 // runs pair on the one core (D113), and protect's PromotionRevoker on
 // govern's RevokePromotion, so a compromised publisher's promotion rolls
-// back as the reviewer (D90 Q2).
+// back as the reviewer (D90 Q2). Their promotions are an exposure source
+// (D116 U1).
 func wireM11Process(core *automationsCore, p m11Protect, pool *db.Pool) {
 	attachM11Issuance(core, pool)
 	if p.publishers != nil {
 		p.publishers.Undo[protect.ItemPromotion] = protect.PromotionUndo(promotionRevoker{s: newPromotions(pool)})
+		if p.publishers.Sources == nil {
+			p.publishers.Sources = map[string]protect.ExposureSource{}
+		}
+		p.publishers.Sources[protect.ItemPromotion] = exposedPromotions
 	}
+}
+
+// exposedPromotions is the promotions a compromised person made since the
+// time they are compromised from, still live, for review (D43, D116 U1).
+func exposedPromotions(ctx context.Context, tx db.TenantTx, user ids.UUID, since time.Time) ([]protect.Item, error) {
+	rows, err := dbq.New(tx).ExposedPromotions(ctx, tx.OrgID(), user, since)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]protect.Item, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, protect.Item{Kind: protect.ItemPromotion, ID: r.ItemID, Label: r.Label, At: r.At})
+	}
+	return out, nil
 }
 
 // m11Issuance is the grants and runs pair the API serves: the core's when

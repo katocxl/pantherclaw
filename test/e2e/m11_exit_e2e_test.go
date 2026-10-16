@@ -35,6 +35,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/policy/policytest"
+	"github.com/katocxl/pantherclaw/internal/promotions"
 	"github.com/katocxl/pantherclaw/internal/promotions/promotiontest"
 	"github.com/katocxl/pantherclaw/internal/protect"
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
@@ -377,7 +378,8 @@ func (k keyHolder) confirmAt(t *testing.T, path string) string {
 // the server wires them (wiring_m11_protect.go protectCore): bob marks
 // alice compromised with a fresh step-up of his security key; in that
 // transaction her pending protected change is voided and the automation
-// whose ceiling she approved is paused. Back on the real server, the
+// whose ceiling she approved is paused. Her live promotion is listed as
+// exposed and ROLLBACK revokes it (D116 U1). Back on the real server, the
 // change ceremony's CompromiseChecker refuses her as a confirmer (K9).
 func (r *reflexStack) m11Compromise(t *testing.T, bob *user, bobID string) {
 	t.Helper()
@@ -406,6 +408,18 @@ func (r *reflexStack) m11Compromise(t *testing.T, bob *user, bobID string) {
 	gate := &protect.Gate{Requests: protect.Ceremony{Changes: ch}}
 	pub := &protect.Publishers{Pool: s.pool, Gate: gate, Editions: business, Undo: map[string]protect.Rollback{}}
 	gate.Compromise, ch.Compromise, core.Compromise = pub, pub, pub
+	// Her promotions are exposure, rolled back by revoking them (D90, D116 U1).
+	pub.Sources = map[string]protect.ExposureSource{protect.ItemPromotion: func(ctx context.Context, tx db.TenantTx, user ids.UUID,
+		since time.Time,
+	) ([]protect.Item, error) {
+		rows, err := dbq.New(tx).ExposedPromotions(ctx, tx.OrgID(), user, since)
+		var out []protect.Item
+		for _, r := range rows {
+			out = append(out, protect.Item{Kind: protect.ItemPromotion, ID: r.ItemID, Label: r.Label, At: r.At})
+		}
+		return out, err
+	}}
+	pub.Undo[protect.ItemPromotion] = protect.PromotionUndo(revoker{s: &promotions.Service{Pool: s.pool}})
 	pub.On = append(pub.On,
 		func(ctx context.Context, tx db.TenantTx, user ids.UUID, _ time.Time, by tapp.Caller) (map[string]string, error) {
 			voided, err := ch.VoidByPerson(ctx, tx, by, user, "PUBLISHER_COMPROMISED")
@@ -427,14 +441,17 @@ func (r *reflexStack) m11Compromise(t *testing.T, bob *user, bobID string) {
 
 	bobCtx := tapp.WithCaller(ctx, tapp.Caller{Subject: td.Subject{
 		Org: s.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: mustUUID(t, bobID)},
-		Bindings: []td.Binding{{Role: td.RoleSecurityAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: s.org.UUID()}}},
+		Bindings: []td.Binding{
+			{Role: td.RoleSecurityAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: s.org.UUID()}},
+			{Role: td.RoleFleetManager, Scope: td.Scope{Type: td.ScopeOrg, ID: s.org.UUID()}},
+		},
 	}, Credential: tapp.CredAccessToken})
 	key := mustUUID(t, s.row(t, "SELECT id::text FROM pc.webauthn_credentials WHERE user_id = $1 AND state = 'ACTIVE'", bobID))
 	if _, err := pub.MarkCompromised(bobCtx, r.aliceID, time.Now().Add(-time.Hour), "phished", stepup.StepUp{}); err == nil {
 		t.Fatal("marking without a step-up was accepted")
 	}
-	if _, err := pub.MarkCompromised(bobCtx, r.aliceID, time.Now().Add(-time.Hour), "phished",
-		stepup.StepUp{Credential: key, At: time.Now()}); err != nil {
+	mark, err := pub.MarkCompromised(bobCtx, r.aliceID, time.Now().Add(-time.Hour), "phished", stepup.StepUp{Credential: key, At: time.Now()})
+	if err != nil {
 		t.Fatalf("MarkCompromised: %v", err)
 	}
 	if st := s.row(t, "SELECT state FROM pc.change_requests WHERE id = $1", alicePending); st != "VOIDED" {
@@ -443,6 +460,23 @@ func (r *reflexStack) m11Compromise(t *testing.T, bob *user, bobID string) {
 	if st := s.row(t, "SELECT state || '/' || coalesce(pause_reason, '') FROM pc.automations WHERE id = $1", auto.ID); st !=
 		"PAUSED/COMPROMISED_PUBLISHER" {
 		t.Fatalf("the automation alice approved: %s", st)
+	}
+
+	// Her production promotion is listed as exposed; ROLLBACK revokes it
+	// (D116 U1).
+	seen, err := pub.Get(bobCtx, mark.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.IndexFunc(seen.Items, func(x protect.Item) bool { return x.Kind == protect.ItemPromotion })
+	if i < 0 {
+		t.Fatalf("her promotion is not listed as exposed: %+v", seen.Items)
+	}
+	if _, err := pub.ReviewExposed(bobCtx, mark.ID, protect.ItemPromotion, seen.Items[i].ID, protect.DecisionRollback, "phished promoter"); err != nil {
+		t.Fatalf("ROLLBACK of her promotion: %v", err)
+	}
+	if st := s.row(t, "SELECT state FROM pc.agent_promotions WHERE id = $1", seen.Items[i].ID); st != "REVOKED" {
+		t.Fatalf("her promotion after ROLLBACK: %s", st)
 	}
 
 	// The real server's change ceremony refuses her as a confirmer (D69
@@ -473,4 +507,13 @@ func (r *reflexStack) failingChecks(t *testing.T, agent, env, op string) string 
 		}
 	}
 	return strings.Join(out, "; ")
+}
+
+// revoker is protect's PromotionRevoker over govern's RevokePromotion, as
+// the top branch wires it (wiring_m11_exit.go).
+type revoker struct{ s *promotions.Service }
+
+func (r revoker) RevokePromotion(ctx context.Context, id ids.UUID, reason string) error {
+	_, err := r.s.RevokePromotion(ctx, id, reason)
+	return err
 }
