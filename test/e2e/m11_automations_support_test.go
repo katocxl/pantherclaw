@@ -25,6 +25,7 @@ import (
 	approvalsapp "github.com/katocxl/pantherclaw/internal/approvals/app"
 	autoapp "github.com/katocxl/pantherclaw/internal/automations/app"
 	"github.com/katocxl/pantherclaw/internal/automations/assurance"
+	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/engine"
 	"github.com/katocxl/pantherclaw/internal/automations/engine/adapters/pgengine"
 	"github.com/katocxl/pantherclaw/internal/automations/steps"
@@ -66,7 +67,14 @@ import (
 // the database and its River queue. Its engine driver and wake sweep would
 // pick up an in-process LIVE execution and fail it (no Automations
 // entitlement), so this engine enqueues nothing, the test advances each
-// execution itself, and parks it (wake_at an hour ahead) between steps.
+// execution itself, and every execution is parked (wake_at an hour ahead)
+// from its start and between steps.
+//
+// Scope: this e2e drives the scenario's generic kinds (launch_run,
+// wait_run, wait_effect) through adapters copied from the server's wiring;
+// the server's own adapters and the deliver, notify and security-step kinds
+// are outside it, covered by TestM11_WiringComplete and the streams' tests
+// (D120 E2).
 type autoStack struct {
 	r        *reflexStack
 	ents     ents
@@ -123,7 +131,7 @@ func startAutomations(t *testing.T, r *reflexStack) *autoStack {
 	a.core.Executions = e2eExecutions{e: e}
 
 	a.triggers = triggers.New(triggers.Deps{
-		Pool: pool, Starter: e, Pauser: a.core, Executions: e, Editions: a.ents, Failures: &failures.Sink{},
+		Pool: pool, Starter: parkingStarter{e: e}, Pauser: a.core, Executions: e, Editions: a.ents, Failures: &failures.Sink{},
 		Raiser: (&reflexapp.Hooks{Ents: a.ents}).Raiser(), Clock: clock.System{}, Log: log,
 	})
 	a.core.Triggers = a.triggers.Activator()
@@ -197,6 +205,21 @@ func (a *autoStack) signedEvent(t *testing.T, source ids.UUID, secret, msgID, bo
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, resp.Body)
 	return resp.StatusCode
+}
+
+// parkingStarter starts executions on the in-process engine and parks each
+// new row an hour ahead in the same transaction (D120 E1): a new execution
+// is due at once (wake_at NULL), so the e2e server's sweep could otherwise
+// take it before the test advances it.
+type parkingStarter struct{ e *pgengine.Engine }
+
+func (p parkingStarter) Start(ctx context.Context, tx pgx.Tx, ref autodomain.TriggerRef) (ids.UUID, error) {
+	id, err := p.e.Start(ctx, tx, ref)
+	if err != nil {
+		return id, err
+	}
+	_, err = tx.Exec(ctx, "UPDATE pc.automation_executions SET wake_at = now() + interval '1 hour' WHERE id = $1", id)
+	return id, err
 }
 
 // advance runs an execution's ready steps now, then parks it an hour ahead
