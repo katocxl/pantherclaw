@@ -406,7 +406,7 @@ func (s *Service) RetireAutomation(ctx context.Context, automation ids.UUID, rea
 		}
 		if s.Executions == nil {
 			sa := a.ServiceAccountID
-			if n, err := q.CountActiveAutomationExecutions(ctx, c.Org, &sa); err != nil {
+			if n, err := q.CountActiveAutomationRuns(ctx, c.Org, &sa); err != nil {
 				return err
 			} else if n > 0 {
 				return ErrExecutionsUnavailable // D91 K10

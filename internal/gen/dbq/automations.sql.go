@@ -279,7 +279,7 @@ func (q *Queries) CeilingsApprovedBy(ctx context.Context, orgID ids.OrgID, userI
 	return items, nil
 }
 
-const countActiveAutomationExecutions = `-- name: CountActiveAutomationExecutions :one
+const countActiveAutomationRuns = `-- name: CountActiveAutomationRuns :one
 SELECT count(*)::int FROM pc.runs r
 WHERE r.org_id = $1 AND r.launcher_sa_id = $2
   AND r.automation_execution_id IS NOT NULL AND r.state = 'ACTIVE'
@@ -287,8 +287,8 @@ WHERE r.org_id = $1 AND r.launcher_sa_id = $2
 
 // Without the engine's port, the automation's active runs stand for its
 // active executions (D91 K10): Retire refuses while any is live.
-func (q *Queries) CountActiveAutomationExecutions(ctx context.Context, orgID ids.OrgID, serviceAccountID *ids.UUID) (int32, error) {
-	row := q.db.QueryRow(ctx, countActiveAutomationExecutions, orgID, serviceAccountID)
+func (q *Queries) CountActiveAutomationRuns(ctx context.Context, orgID ids.OrgID, serviceAccountID *ids.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countActiveAutomationRuns, orgID, serviceAccountID)
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
