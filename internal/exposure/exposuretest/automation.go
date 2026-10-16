@@ -78,11 +78,15 @@ func (o *Org) Automation(t *testing.T, name string, agents []ids.UUID, ops ...st
 				requested_by, expires_at) VALUES ($1, $2, 'automation', 'ENABLE', $3, $4, $5, '{}', 1, 'test',
 				now() + interval '1 hour')`, []any{o.Org, request, a.ID, digest[:], binding[:]}},
 			{`UPDATE pc.automation_versions SET state = 'PUBLISHED', change_request_id = $2 WHERE id = $1`, []any{a.Version, request}},
-			{`UPDATE pc.automations SET state = 'ACTIVE', rollout = 'FULL', enabled_version_id = $2 WHERE id = $1`,
-				[]any{a.ID, a.Version}},
-			{`INSERT INTO pc.automation_ceilings (org_id, id, automation_id, version_id, digest, approved_by, change_request_id,
+			{
+				`UPDATE pc.automations SET state = 'ACTIVE', rollout = 'FULL', enabled_version_id = $2 WHERE id = $1`,
+				[]any{a.ID, a.Version},
+			},
+			{
+				`INSERT INTO pc.automation_ceilings (org_id, id, automation_id, version_id, digest, approved_by, change_request_id,
 				review_by) VALUES ($1, $2, $3, $4, $5, ARRAY[$6::uuid], $7, now() + interval '30 days')`,
-				[]any{o.Org, a.Ceiling, a.ID, a.Version, digest[:], o.User, request}},
+				[]any{o.Org, a.Ceiling, a.ID, a.Version, digest[:], o.User, request},
+			},
 		} {
 			if _, err := tx.Exec(ctx, s.sql, s.args...); err != nil {
 				t.Fatalf("%s: %v", s.sql, err)

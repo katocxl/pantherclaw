@@ -77,19 +77,29 @@ func scenario() []assurance.Case {
 	ticket := assurance.CaseTrigger{Params: map[string]string{"ticket": "T-1"}}
 	ok := []assurance.StubResult{{State: "DONE", Effect: "CHANGED", Evidence: true}}
 	return []assurance.Case{
-		{Name: "normal", Kind: assurance.CaseNormal, Trigger: ticket, Stubs: map[string][]assurance.StubResult{"launch": ok, "wait": ok},
-			Expect: assurance.Expect{State: "SUCCEEDED"}},
-		{Name: "denied", Kind: assurance.CaseDenied, Trigger: ticket,
+		{
+			Name: "normal", Kind: assurance.CaseNormal, Trigger: ticket, Stubs: map[string][]assurance.StubResult{"launch": ok, "wait": ok},
+			Expect: assurance.Expect{State: "SUCCEEDED"},
+		},
+		{
+			Name: "denied", Kind: assurance.CaseDenied, Trigger: ticket,
 			Stubs:  map[string][]assurance.StubResult{"launch": {{State: "FAILED", Reason: "OUTSIDE_CEILING"}}},
-			Expect: assurance.Expect{State: "FAILED"}},
-		{Name: "timeout", Kind: assurance.CaseTimeout, Trigger: ticket,
+			Expect: assurance.Expect{State: "FAILED"},
+		},
+		{
+			Name: "timeout", Kind: assurance.CaseTimeout, Trigger: ticket,
 			Stubs:  map[string][]assurance.StubResult{"launch": ok, "wait": {{State: "WAITING"}}},
-			Expect: assurance.Expect{State: "PARTIALLY_COMPLETED", Reason: "TIMEOUT"}},
-		{Name: "dup", Kind: assurance.CaseDuplicate, Trigger: ticket,
-			Stubs: map[string][]assurance.StubResult{"launch": ok, "wait": ok}, Expect: assurance.Expect{State: "SUCCEEDED"}},
-		{Name: "unknown", Kind: assurance.CaseUnknown, Trigger: ticket,
+			Expect: assurance.Expect{State: "PARTIALLY_COMPLETED", Reason: "TIMEOUT"},
+		},
+		{
+			Name: "dup", Kind: assurance.CaseDuplicate, Trigger: ticket,
+			Stubs: map[string][]assurance.StubResult{"launch": ok, "wait": ok}, Expect: assurance.Expect{State: "SUCCEEDED"},
+		},
+		{
+			Name: "unknown", Kind: assurance.CaseUnknown, Trigger: ticket,
 			Stubs:  map[string][]assurance.StubResult{"launch": ok, "wait": {{State: "UNKNOWN", Output: map[string]string{"irreversible": "true"}}}},
-			Expect: assurance.Expect{State: "NEEDS_RECONCILIATION"}},
+			Expect: assurance.Expect{State: "NEEDS_RECONCILIATION"},
+		},
 	}
 }
 

@@ -86,6 +86,7 @@ func baseKey(t autodomain.TriggerRef, delivery ids.UUID) string {
 		return triggers.InboundKey(t.Automation, delivery.String()) // one source stands for the version's
 	case autodomain.TriggerManual:
 		return triggers.ManualKey(delivery.String())
+	case autodomain.TriggerEvent, autodomain.TriggerCondition, autodomain.TriggerThreshold:
 	}
 	return triggers.EventKey(delivery)
 }
@@ -109,8 +110,8 @@ func RunCase(ctx context.Context, def *autodomain.Definition, org ids.OrgID, aut
 ) (CaseResult, error) {
 	t, err := triggerOf(def, org, automation, version, c, start)
 	if err != nil {
-		r := Judge(c, Outcome{State: "REFUSED_INVALID", Reason: err.Error()})
-		return r, nil
+		// A trigger refused for its parameters is the case's outcome (HR-276).
+		return Judge(c, Outcome{State: "REFUSED_INVALID", Reason: err.Error()}), nil //nolint:nilerr // the refusal is the result
 	}
 	stubs := engine.Stubs{}
 	for id, rs := range c.Stubs {

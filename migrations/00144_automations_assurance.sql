@@ -138,18 +138,23 @@ GRANT SELECT ON pc.automation_test_cases, pc.automation_test_runs, pc.automation
 -- Exposure: the automation holder and the issuance-ceiling view (D37a).
 -- squawk: a nullable column without a default and CHECKs on rows that are
 -- pruned within days; goose runs each migration in one transaction.
--- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.exposure_rights
     ADD COLUMN automation_ids uuid[] NOT NULL DEFAULT '{}',
     DROP CONSTRAINT exposure_rights_reach_view_check,
     ADD CONSTRAINT exposure_rights_reach_view_check
-        CHECK (reach_view IN ('OBSERVED', 'EFFECTIVE', 'CREDENTIAL', 'ISSUANCE_CEILING')),
+        CHECK (reach_view IN ('OBSERVED', 'EFFECTIVE', 'CREDENTIAL', 'ISSUANCE_CEILING')) NOT VALID,
     ADD CONSTRAINT exposure_rights_ceiling CHECK (reach_view <> 'ISSUANCE_CEILING'
         OR (cardinality(automation_ids) = 1 AND grant_id IS NULL AND agent_id IS NOT NULL
-            AND label IN ('CONDITIONAL', 'UNCERTAIN'))),
+            AND label IN ('CONDITIONAL', 'UNCERTAIN'))) NOT VALID,
     ADD CONSTRAINT exposure_rights_automation CHECK (cardinality(automation_ids) <= 64
         AND array_position(automation_ids, NULL) IS NULL
-        AND (cardinality(automation_ids) = 0 OR reach_view IN ('EFFECTIVE', 'ISSUANCE_CEILING')));
+        AND (cardinality(automation_ids) = 0 OR reach_view IN ('EFFECTIVE', 'ISSUANCE_CEILING'))) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.exposure_rights VALIDATE CONSTRAINT exposure_rights_reach_view_check;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.exposure_rights VALIDATE CONSTRAINT exposure_rights_ceiling;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.exposure_rights VALIDATE CONSTRAINT exposure_rights_automation;
 
 -- +goose Down
 DELETE FROM pc.exposure_rights WHERE reach_view = 'ISSUANCE_CEILING';

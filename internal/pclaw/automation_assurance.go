@@ -86,7 +86,7 @@ func init() {
 				if *file == "" {
 					return nil, errCasesFile
 				}
-				raw, err := os.ReadFile(*file) //nolint:gosec // G304: the user's own test cases
+				raw, err := os.ReadFile(*file)
 				if err != nil {
 					return nil, err
 				}
@@ -159,7 +159,7 @@ func init() {
 				if *file == "" {
 					return nil, errUsage
 				}
-				raw, err := os.ReadFile(*file) //nolint:gosec // G304: the user's own ceiling document
+				raw, err := os.ReadFile(*file)
 				if err != nil {
 					return nil, err
 				}

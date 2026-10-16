@@ -116,7 +116,7 @@ func (s *Service) SetTestCases(ctx context.Context, versionID ids.UUID, cases []
 			}
 			if err := q.InsertAutomationTestCase(ctx, dbq.InsertAutomationTestCaseParams{
 				OrgID: c.Org, ID: ids.NewV7(), VersionID: versionID, Name: x.Name, CaseKind: string(x.Kind), Trigger: trig,
-				Stubs: stubs, Expect: exp, Seq: int32(i + 1), CreatedBy: c.Principal.ID, //nolint:gosec // G115: ≤ MaxCases
+				Stubs: stubs, Expect: exp, Seq: int32(i + 1), CreatedBy: c.Principal.ID,
 			}); err != nil {
 				return err
 			}
