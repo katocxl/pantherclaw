@@ -41,6 +41,7 @@ func probeM11(kind string, v any) {
 func wireM11Cross(d apiDeps, prom *promotions.Service) {
 	if pub := d.m11protect.publishers; pub != nil && prom != nil {
 		prom.Compromise = promotionsCompromise{p: pub}
+		pub.Undo[protect.ItemPromotion] = protect.PromotionUndo(promotionRevoker{s: prom})
 	}
 	probeM11("promotions", prom)
 }
@@ -57,4 +58,16 @@ func wireM11Worker(core *automationsCore, pool *db.Pool) {
 		gstore, grants := newGrants(pool)
 		core.attach(pool, grants, runsapp.New(pool).WithGrants(gstore))
 	}
+}
+
+// promotionRevoker is protect's PromotionRevoker over govern's
+// RevokePromotion: an exposed promotion's ROLLBACK revokes it as the
+// reviewer (D90 Q2).
+type promotionRevoker struct{ s *promotions.Service }
+
+var _ protect.PromotionRevoker = promotionRevoker{}
+
+func (r promotionRevoker) RevokePromotion(ctx context.Context, id ids.UUID, reason string) error {
+	_, err := r.s.RevokePromotion(ctx, id, reason)
+	return err
 }
