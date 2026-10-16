@@ -138,8 +138,18 @@ func (s *Service) failure(ctx context.Context, tx db.TenantTx, a dbq.PcAutomatio
 // never do.
 func (s *Service) VoidCeiling(ctx context.Context, org ids.OrgID, ceiling ids.UUID, reason string) error {
 	return s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		return s.endCeilingTx(ctx, tx, org, ceiling, autodomain.CeilingVoid, reason, autodomain.PauseCeilingVoid)
+		return s.VoidCeilingTx(ctx, tx, org, ceiling, reason)
 	})
+}
+
+// VoidCeilingTx is VoidCeiling in the caller's transaction (D111), for a
+// caller that voids as part of its own change (protect's marking). A
+// ceiling that is no longer ACTIVE is left as it is.
+func (s *Service) VoidCeilingTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, ceiling ids.UUID, reason string) error {
+	if org != tx.OrgID() {
+		return db.ErrTenantMismatch
+	}
+	return s.endCeilingTx(ctx, tx, org, ceiling, autodomain.CeilingVoid, reason, autodomain.PauseCeilingVoid)
 }
 
 func (s *Service) endCeilingTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, ceiling ids.UUID, state autodomain.CeilingState,
@@ -280,12 +290,19 @@ func (s *Service) ResumeAutomation(ctx context.Context, automation ids.UUID) (Au
 	var replayed int
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		killed, err := lockKillSwitch(ctx, q, c.Org)
+		if err != nil {
+			return err
+		}
 		a, err := loadAutomation(ctx, q, c.Org, automation, true)
 		if err != nil {
 			return err
 		}
 		if a.State != string(autodomain.StatePaused) || a.EnabledVersionID == nil {
 			return ErrState
+		}
+		if killed {
+			return ErrKillSwitch
 		}
 		if err := s.revalidate(ctx, tx, q, a); err != nil {
 			return err
@@ -311,6 +328,63 @@ func (s *Service) ResumeAutomation(ctx context.Context, automation ids.UUID) (Au
 		})
 	})
 	return out, replayed, err
+}
+
+// ResumePaused resumes, in the caller's transaction, an automation that is
+// still PAUSED for reason, after the same revalidation as ResumeAutomation
+// (D31 resume_launches, D115 R2a). An automation that is not PAUSED, or
+// paused for another reason, is left as it is and false is returned; a
+// failed revalidation returns its error and changes nothing.
+func (s *Service) ResumePaused(ctx context.Context, ptx pgx.Tx, org ids.OrgID, automation ids.UUID, reason autodomain.PauseReason) (bool, error) {
+	tx, err := db.AdoptTenantTx(ctx, ptx, org)
+	if err != nil {
+		return false, err
+	}
+	q := dbq.New(tx)
+	killed, err := lockKillSwitch(ctx, q, org)
+	if err != nil {
+		return false, err
+	}
+	a, err := loadAutomation(ctx, q, org, automation, true)
+	if err != nil {
+		return false, err
+	}
+	if a.State != string(autodomain.StatePaused) || a.EnabledVersionID == nil || deref2(a.PauseReason) != string(reason) {
+		return false, nil
+	}
+	if killed {
+		return false, ErrKillSwitch
+	}
+	if err := s.revalidate(ctx, tx, q, a); err != nil {
+		return false, err
+	}
+	if err := oneRow(q.ResumeAutomation(ctx, org, a.ID)); err != nil {
+		return false, err
+	}
+	replayed := 0
+	if s.Triggers != nil {
+		if err := s.Triggers.Activate(ctx, tx.Pgx(), a.ID, *a.EnabledVersionID); err != nil {
+			return false, err
+		}
+		if replayed, err = s.Triggers.Resume(ctx, tx.Pgx(), a.ID); err != nil {
+			return false, err
+		}
+	}
+	return true, record(ctx, tx, systemActor, "automation.resumed", a.ID, map[string]string{
+		"was": string(reason), "replayed": itoa(replayed),
+	})
+}
+
+// lockKillSwitch locks the org's containment row and reports whether the
+// kill switch is engaged. Every path that makes an automation ACTIVE takes
+// it before the automation row, the order Engage takes them in, so a
+// resume never reads the switch from before an engage it races (D102 C1,
+// D118).
+func lockKillSwitch(ctx context.Context, q *dbq.Queries, org ids.OrgID) (bool, error) {
+	if err := q.InsertContainment(ctx, org); err != nil {
+		return false, err
+	}
+	return q.LockKillSwitch(ctx, org)
 }
 
 func deref2(s *string) string {
@@ -543,3 +617,22 @@ func (s *Service) resolveFailures(ctx context.Context, tx db.TenantTx, kind stri
 }
 
 func ceilingKey(ceiling ids.UUID) string { return "ceiling:" + ceiling.String() }
+
+// scopedResolver resolves owned failures by the subject in their scope
+// (reflex failures.Sink, D111 G1).
+type scopedResolver interface {
+	ResolveInScope(ctx context.Context, tx pgx.Tx, org ids.OrgID, kind string, subject reflexdomain.Subject, resolution string,
+		actor evdomain.Actor) ([]ids.UUID, error)
+}
+
+// resolveAutomationFailures resolves the open failures of kind scoped to
+// the automation, as PantherClaw itself.
+func (s *Service) resolveAutomationFailures(ctx context.Context, tx db.TenantTx, automation ids.UUID, kind, resolution string) error {
+	r, ok := s.Failures.(scopedResolver)
+	if !ok {
+		return nil
+	}
+	_, err := r.ResolveInScope(ctx, tx.Pgx(), tx.OrgID(), kind,
+		reflexdomain.Subject{Type: reflexdomain.SubjectAutomation, ID: automation.String()}, resolution, systemActor)
+	return err
+}

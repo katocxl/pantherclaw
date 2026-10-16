@@ -63,6 +63,15 @@ WHERE org_id = sqlc.arg(org_id) AND kind = sqlc.arg(kind)::text AND dedupe_key =
   AND state <> 'RESOLVED'
 RETURNING id;
 
+-- name: ResolveOpenFailuresInScope :many
+-- Resolves the open failures of one kind whose scope names the subject
+-- (G0 M11 part 2 D111 G1).
+UPDATE pc.operational_failures
+SET state = 'RESOLVED', resolved_at = now(), resolution = sqlc.arg(resolution)::text
+WHERE org_id = sqlc.arg(org_id) AND kind = sqlc.arg(kind)::text AND state <> 'RESOLVED'
+  AND scope @> jsonb_build_array(jsonb_build_object('type', sqlc.arg(subject_type)::text, 'id', sqlc.arg(subject_id)::text))
+RETURNING id;
+
 -- name: ScopeAgentPlacements :many
 -- Every agent's placement, for computing the agents a scoped viewer may
 -- read (D60); at most max_rows.

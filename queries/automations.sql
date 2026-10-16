@@ -356,7 +356,3 @@ SELECT kill_switch FROM pc.org_containment WHERE org_id = sqlc.arg(org_id) FOR U
 -- resolves only what is open, D106 D2).
 SELECT dedupe_key FROM pc.operational_failures
 WHERE org_id = sqlc.arg(org_id) AND kind = sqlc.arg(kind)::text AND state <> 'RESOLVED';
-
--- name: AutomationCeilingIDs :many
--- Every authority row of an automation, whatever its state.
-SELECT id FROM pc.automation_ceilings WHERE org_id = sqlc.arg(org_id) AND automation_id = sqlc.arg(automation_id);
