@@ -61,7 +61,9 @@ func newAutomationsCore(pool *db.Pool, bill *billing.Service, publicURL string, 
 	if runs != nil {
 		runs.WithAutomationRuns(svc)
 	}
-	return &automationsCore{changes: ch, svc: svc, grants: grants, runs: runs}
+	core := &automationsCore{changes: ch, svc: svc, grants: grants, runs: runs}
+	probeM11("automations.core", core)
+	return core
 }
 
 // registerAutomationsCore serves AutomationService and ChangeService,

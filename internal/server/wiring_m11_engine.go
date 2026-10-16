@@ -129,6 +129,7 @@ func newAutomationEngine(d engineDeps) *pgengine.Engine {
 	if core != nil {
 		e.Pauser, e.Ceilings, e.Voider = core.svc, core.svc, core.svc
 	}
+	probeM11("automations.engine", e)
 	return e
 }
 

@@ -63,6 +63,7 @@ func newAutomationTriggers(pool *db.Pool, bill *billing.Service, log *slog.Logge
 	if automationPauser != nil {
 		d.Pauser = automationPauser(pool)
 	}
+	probeM11("automations.triggers", &d)
 	return triggers.New(d)
 }
 

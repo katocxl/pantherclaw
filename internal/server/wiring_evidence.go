@@ -163,5 +163,6 @@ func newPackBuilder(cfg *Config, pool *db.Pool, keyReg *keys.Registry, log *slog
 	if automationPackExecutions != nil {
 		s.Executions = automationPackExecutions(pool)
 	}
+	probeM11("packbuild", s)
 	return s
 }

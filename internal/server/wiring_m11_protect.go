@@ -51,6 +51,8 @@ func newM11Protect(d apiDeps) m11Protect {
 		pub.Editions = d.billing
 	}
 	gate.Compromise = pub
+	probeM11("protect.gate", gate)
+	probeM11("protect.publishers", pub)
 	return m11Protect{gate: gate, publishers: pub}
 }
 

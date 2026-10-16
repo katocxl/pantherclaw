@@ -26,9 +26,20 @@ func (c promotionsCompromise) Compromised(ctx context.Context, tx db.TenantTx, o
 	return c.p.Compromised(ctx, tx.Pgx(), org, user)
 }
 
+// m11Probe, when a test sets it, receives each M11 instance the server
+// builds, by kind (TestM11_WiringComplete, D96); nil in production.
+var m11Probe func(kind string, v any)
+
+func probeM11(kind string, v any) {
+	if m11Probe != nil {
+		m11Probe(kind, v)
+	}
+}
+
 // wireM11Cross wires the cross-stream pairs onto the API's instances.
 func wireM11Cross(d apiDeps, prom *promotions.Service) {
 	if pub := d.m11protect.publishers; pub != nil && prom != nil {
 		prom.Compromise = promotionsCompromise{p: pub}
 	}
+	probeM11("promotions", prom)
 }
