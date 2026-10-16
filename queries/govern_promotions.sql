@@ -79,10 +79,25 @@ WHERE g.org_id = sqlc.arg(org_id) AND g.agent_id = sqlc.arg(agent_id) AND g.envi
 ORDER BY g.id
 LIMIT 200;
 
--- The packages the org's ACTIVE connections serve: a prefix expands to the
--- operations their active definitions declare (D70).
--- name: PromotionConnectionPackages :many
-SELECT DISTINCT package FROM pc.connections WHERE org_id = sqlc.arg(org_id) AND state = 'ACTIVE' ORDER BY package;
+-- The agent's connections (D70, D93 L2, V4): the ACTIVE connections a
+-- coverage route of the agent, or one of every agent of the connection,
+-- goes through. A prefix expands to the operations their packages' active
+-- definitions declare, and they are the connections COVERAGE needs a
+-- passing record on.
+-- name: PromotionAgentConnections :many
+SELECT c.id, c.package FROM pc.connections c
+WHERE c.org_id = sqlc.arg(org_id) AND c.state = 'ACTIVE'
+  AND EXISTS (SELECT 1 FROM pc.coverage_routes r
+              WHERE r.org_id = c.org_id AND r.connection_id = c.id
+                AND (r.agent_id = sqlc.arg(agent_id) OR r.agent_id IS NULL))
+ORDER BY c.id;
+
+-- The agent's current coverage snapshot of one operation on each
+-- connection, every one (no row cap can drop a record, D93 V4).
+-- name: PromotionCoverageSnapshots :many
+SELECT DISTINCT ON (connection_id) * FROM pc.coverage_snapshots
+WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id) AND operation = sqlc.arg(operation)
+ORDER BY connection_id, id DESC;
 
 -- How many change windows the org has: a hold that counts only inside a
 -- window can be answered only when one exists (D71 G10).

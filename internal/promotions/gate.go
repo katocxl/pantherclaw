@@ -59,7 +59,7 @@ func (g Gate) read(ctx context.Context, q *dbq.Queries, org ids.OrgID, agent, en
 	}
 	d.exact = []string(ops)
 	if slices.ContainsFunc(d.exact, func(op string) bool { _, ok := prefixOf(op); return ok }) {
-		c, err := loadCatalog(ctx, q, g.Packages, org)
+		c, err := loadCatalog(ctx, q, g.Packages, org, agent)
 		if err != nil {
 			return d, err
 		}

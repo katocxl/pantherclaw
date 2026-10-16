@@ -8,6 +8,8 @@ package promotions_test
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 	"github.com/katocxl/pantherclaw/internal/promotions"
@@ -196,5 +199,103 @@ func TestHR290_AutomationIssuanceIsGatedAndCapped(t *testing.T) {
 	w.replace(pr[0], "1 minute")
 	if g, err = issue(); err != nil || time.Until(g.ExpiresAt) > 2*time.Minute {
 		t.Fatalf("automation issuance under a promotion ending in a minute: %v, expires in %s", err, time.Until(g.ExpiresAt))
+	}
+}
+
+// secondConnection adds another ACTIVE connection serving the payments
+// package, with a route of the world's agent through it.
+func (w *world) secondConnection() ids.UUID {
+	w.t.Helper()
+	id := ids.NewV7()
+	w.exec(`INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, access_mode, default_mode, created_by, updated_by)
+		SELECT org_id, $2, 'payments-eu', kind, gateway_id, package, 'https://payments-eu.example.test', access_mode, default_mode, created_by, updated_by
+		FROM pc.connections WHERE id = $1`, w.conn, id)
+	sc := w.scope
+	sc.Connection = id
+	promotiontest.Route(w.t, sc)
+	return id
+}
+
+// TestHR290_CoverageIsCheckedOnEveryServingConnection (D93 V4): with two
+// connections serving the operation, a passing record on one only makes
+// the promotion PROVISIONAL, on both ACTIVE; a failing record on any
+// connection refuses it outright.
+func TestHR290_CoverageIsCheckedOnEveryServingConnection(t *testing.T) {
+	w := newWorld(t)
+	w.publishTest()
+	promotiontest.Route(t, w.scope)
+	eu := w.secondConnection()
+	promotiontest.Record(t, w.scope, refund)
+	p := promotiontest.NewPromoter(t, w.scope)
+	res := w.promote(p)
+	if len(res.Promoted) != 1 || res.Promoted[0].State != promotions.StateProvisional {
+		t.Fatalf("a passing record on one of two serving connections promoted %+v", res.Promoted)
+	}
+	if c := res.Readiness[0].Checks[4]; !c.Pending || !strings.Contains(c.Detail, "coverage pending until ") {
+		t.Fatalf("coverage %+v", c)
+	}
+	sc := w.scope
+	sc.Connection = eu
+	promotiontest.Record(t, sc, refund)
+	if res = w.promote(p); len(res.Promoted) != 1 || res.Promoted[0].State != promotions.StateActive {
+		t.Fatalf("passing records on every serving connection promoted %+v", res.Promoted)
+	}
+
+	// A failing record on either connection refuses the operation.
+	w.exec("UPDATE pc.agent_promotions SET state = 'REVOKED', revoked_by = promoted_by, revoke_reason = 'test' WHERE id = $1", res.Promoted[0].ID)
+	entry := ids.NewV7()
+	w.exec(`INSERT INTO pc.ledger_entries (org_id, id, kind, actor_type, actor_id, body) VALUES ($1, $2, 'coverage.test', 'test', 'test', '\x7b7d')`, w.org, entry)
+	w.exec(`INSERT INTO pc.coverage_snapshots (org_id, id, agent_id, connection_id, operation, state, reasons, body, body_sha256, ledger_entry_id)
+		VALUES ($1, $2, $3, $4, $5, 'OBSERVE_ONLY', '{monitor_mode}', '{}', $6, $7)`, w.org, ids.NewV7(), w.agent, eu, refund, make([]byte, 32), entry)
+	if res = w.promote(p); len(res.Promoted) != 0 || res.Readiness[0].Checks[4].Pending || res.Readiness[0].Provisional() {
+		t.Fatalf("a failing record on a serving connection promoted %+v, readiness %+v", res.Promoted, res.Readiness[0])
+	}
+}
+
+// TestHR290_NoRowCapDropsAFailingRecord (D93 V4): however many coverage
+// records the agent has of other operations, the failing record of the
+// operation checked is read and refuses it.
+func TestHR290_NoRowCapDropsAFailingRecord(t *testing.T) {
+	w := newWorld(t)
+	w.publishTest()
+	promotiontest.Route(t, w.scope)
+	entry := ids.NewV7()
+	w.exec(`INSERT INTO pc.ledger_entries (org_id, id, kind, actor_type, actor_id, body) VALUES ($1, $2, 'coverage.test', 'test', 'test', '\x7b7d')`, w.org, entry)
+	w.exec(`WITH e AS (
+			INSERT INTO pc.ledger_entries (org_id, id, kind, actor_type, actor_id, body)
+			SELECT $1, gen_random_uuid(), 'coverage.test', 'test', 'test', '\x7b7d' FROM generate_series(1, 1100)
+			RETURNING id)
+		INSERT INTO pc.coverage_snapshots (org_id, id, agent_id, connection_id, operation, state, reasons, body, body_sha256, ledger_entry_id)
+		SELECT $1, gen_random_uuid(), $2, $3, 'payments.other.op_' || row_number() OVER (), 'PARTIAL', '{agent_held}', '{}', $4, e.id
+		FROM e`, w.org, w.agent, w.conn, make([]byte, 32))
+	w.exec(`INSERT INTO pc.coverage_snapshots (org_id, id, agent_id, connection_id, operation, state, reasons, body, body_sha256, ledger_entry_id)
+		VALUES ($1, $2, $3, $4, $5, 'OBSERVE_ONLY', '{monitor_mode}', '{}', $6, $7)`, w.org, ids.NewV7(), w.agent, w.conn, refund, make([]byte, 32), entry)
+	res := w.promote(promotiontest.NewPromoter(t, w.scope))
+	if len(res.Promoted) != 0 || res.Readiness[0].Checks[4].Pending {
+		t.Fatalf("promoted %+v with readiness %+v", res.Promoted, res.Readiness[0])
+	}
+}
+
+// TestHR290_APrefixCoversWhatTheAgentsConnectionsReach (D93 L2): a prefix
+// expands to the operations the agent's own connections reach, not the
+// org's: an agent with no connection yet finds nothing under payments.*.
+func TestHR290_APrefixCoversWhatTheAgentsConnectionsReach(t *testing.T) {
+	w := newWorld(t)
+	p := promotiontest.NewPromoter(t, w.scope)
+	_, err := w.svc.PromoteAgent(p.Ctx, promotions.PromoteInput{
+		Agent: w.agent, Environment: w.prod, Operations: []string{"payments.*"}, FailureBehavior: promotions.FailClosed,
+	}, p.StepUp())
+	if pcerr.ReasonOf(err) != "NO_KNOWN_OPERATION" {
+		t.Fatalf("a prefix for an agent without connections: %v, want NO_KNOWN_OPERATION", err)
+	}
+	promotiontest.Route(t, w.scope)
+	if err := w.pool.InTenantTx(context.Background(), w.org, func(ctx context.Context, tx db.TenantTx) error {
+		known, err := promotions.KnownUnder(ctx, tx, &defpg.Store{Pool: w.pool}, w.agent, "payments.*")
+		if err == nil && !slices.Contains(known, refund) {
+			t.Errorf("payments.* through the agent's connection covers %v", known)
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
 	}
 }

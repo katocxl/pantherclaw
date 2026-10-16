@@ -11,8 +11,6 @@ import (
 	"strings"
 	"time"
 
-	coverage "github.com/katocxl/pantherclaw/internal/coverage/app"
-	cdomain "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -30,15 +28,11 @@ type subject struct {
 	env ids.UUID
 	// bundle is the published policy (nil: none is published).
 	bundle *pdomain.Bundle
-	// snapshots are the agent's current coverage snapshots.
-	snapshots []dbq.PcCoverageSnapshot
-	// catalog is what the org's connections reach, with consequences.
+	// catalog is what the agent's connections reach, with consequences.
 	catalog catalog
 	// windows counts the org's change windows.
 	windows int32
 }
-
-const maxSnapshots = 1000
 
 // load reads what every operation's checks need.
 func load(ctx context.Context, q *dbq.Queries, org ids.OrgID, row dbq.PromotionSubjectRow, env ids.UUID, c catalog) (*subject, error) {
@@ -54,12 +48,6 @@ func load(ctx context.Context, q *dbq.Queries, org ids.OrgID, row dbq.PromotionS
 			return nil, fmt.Errorf("promotions: published policy %s: %w", pub.ID, err)
 		}
 		s.bundle = &b
-	}
-	agent := row.ID
-	if s.snapshots, err = q.ListCurrentCoverageSnapshotsPage(ctx, dbq.ListCurrentCoverageSnapshotsPageParams{
-		OrgID: org, AgentID: &agent, MaxRows: maxSnapshots,
-	}); err != nil {
-		return nil, err
 	}
 	if s.windows, err = q.PromotionChangeWindows(ctx, org); err != nil {
 		return nil, err
@@ -187,39 +175,6 @@ func (s *subject) approvals(ctx context.Context, q *dbq.Queries, op string) (Che
 	return Check{Name: CheckApprovals, Passed: true, Detail: clip("an eligible approver for " + strings.Join(rules, ", "))}, nil
 }
 
-// coverage: every connection serving the operation for the agent reads
-// ENFORCED or PARTIAL from a snapshot that has not lapsed; an operation
-// with no coverage record is UNKNOWN and fails.
-func (s *subject) coverage(ctx context.Context, q *dbq.Queries, op string, now time.Time) (Check, error) {
-	var n int
-	var bad []string
-	for _, row := range s.snapshots {
-		if row.Operation != op {
-			continue
-		}
-		n++
-		st, _ := cdomain.ParseState(row.State)
-		if st != cdomain.Enforced && st != cdomain.Partial {
-			bad = append(bad, fmt.Sprintf("%s on connection %s is %s", row.Operation, row.ConnectionID, row.State))
-			continue
-		}
-		lapse, err := coverage.Lapsed(ctx, q, row, now)
-		if err != nil {
-			return Check{}, err
-		}
-		if lapse != "" {
-			bad = append(bad, fmt.Sprintf("%s on connection %s lapsed (%s)", row.Operation, row.ConnectionID, lapse))
-		}
-	}
-	switch {
-	case n == 0:
-		// No record at all, not a failing one: promotable provisionally (D80).
-		return Check{Name: CheckCoverage, Pending: true, Detail: "no coverage record yet: no traffic of " + op + " has been seen for the agent"}, nil
-	case len(bad) > 0:
-		return Check{Name: CheckCoverage, Detail: clip(strings.Join(bad, "; "))}, nil
-	}
-	return Check{Name: CheckCoverage, Passed: true, Detail: fmt.Sprintf("%d route(s) ENFORCED or PARTIAL", n)}, nil
-}
 
 func declared(fb string) Check {
 	if !slices.Contains(FailureBehaviors, fb) {

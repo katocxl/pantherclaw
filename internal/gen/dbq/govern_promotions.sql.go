@@ -345,6 +345,45 @@ func (q *Queries) PromotedOperations(ctx context.Context, orgID ids.OrgID, agent
 	return items, nil
 }
 
+const promotionAgentConnections = `-- name: PromotionAgentConnections :many
+SELECT c.id, c.package FROM pc.connections c
+WHERE c.org_id = $1 AND c.state = 'ACTIVE'
+  AND EXISTS (SELECT 1 FROM pc.coverage_routes r
+              WHERE r.org_id = c.org_id AND r.connection_id = c.id
+                AND (r.agent_id = $2 OR r.agent_id IS NULL))
+ORDER BY c.id
+`
+
+type PromotionAgentConnectionsRow struct {
+	ID      ids.UUID
+	Package string
+}
+
+// The agent's connections (D70, D93 L2, V4): the ACTIVE connections a
+// coverage route of the agent, or one of every agent of the connection,
+// goes through. A prefix expands to the operations their packages' active
+// definitions declare, and they are the connections COVERAGE needs a
+// passing record on.
+func (q *Queries) PromotionAgentConnections(ctx context.Context, orgID ids.OrgID, agentID *ids.UUID) ([]PromotionAgentConnectionsRow, error) {
+	rows, err := q.db.Query(ctx, promotionAgentConnections, orgID, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PromotionAgentConnectionsRow{}
+	for rows.Next() {
+		var i PromotionAgentConnectionsRow
+		if err := rows.Scan(&i.ID, &i.Package); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const promotionChangeWindows = `-- name: PromotionChangeWindows :one
 SELECT count(*)::integer FROM pc.change_windows WHERE org_id = $1
 `
@@ -358,25 +397,43 @@ func (q *Queries) PromotionChangeWindows(ctx context.Context, orgID ids.OrgID) (
 	return column_1, err
 }
 
-const promotionConnectionPackages = `-- name: PromotionConnectionPackages :many
-SELECT DISTINCT package FROM pc.connections WHERE org_id = $1 AND state = 'ACTIVE' ORDER BY package
+const promotionCoverageSnapshots = `-- name: PromotionCoverageSnapshots :many
+SELECT DISTINCT ON (connection_id) org_id, id, agent_id, connection_id, operation, state, reasons, closure_id, last_valid_id, invalidation_id, body, body_sha256, ledger_entry_id, computed_at, expires_at FROM pc.coverage_snapshots
+WHERE org_id = $1 AND agent_id = $2 AND operation = $3
+ORDER BY connection_id, id DESC
 `
 
-// The packages the org's ACTIVE connections serve: a prefix expands to the
-// operations their active definitions declare (D70).
-func (q *Queries) PromotionConnectionPackages(ctx context.Context, orgID ids.OrgID) ([]string, error) {
-	rows, err := q.db.Query(ctx, promotionConnectionPackages, orgID)
+// The agent's current coverage snapshot of one operation on each
+// connection, every one (no row cap can drop a record, D93 V4).
+func (q *Queries) PromotionCoverageSnapshots(ctx context.Context, orgID ids.OrgID, agentID ids.UUID, operation string) ([]PcCoverageSnapshot, error) {
+	rows, err := q.db.Query(ctx, promotionCoverageSnapshots, orgID, agentID, operation)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []string{}
+	items := []PcCoverageSnapshot{}
 	for rows.Next() {
-		var package_ string
-		if err := rows.Scan(&package_); err != nil {
+		var i PcCoverageSnapshot
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.AgentID,
+			&i.ConnectionID,
+			&i.Operation,
+			&i.State,
+			&i.Reasons,
+			&i.ClosureID,
+			&i.LastValidID,
+			&i.InvalidationID,
+			&i.Body,
+			&i.BodySha256,
+			&i.LedgerEntryID,
+			&i.ComputedAt,
+			&i.ExpiresAt,
+		); err != nil {
 			return nil, err
 		}
-		items = append(items, package_)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
