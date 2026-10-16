@@ -46,9 +46,6 @@ type reviewFakes struct {
 	cs        CaseScope
 	packs     []evapp.AutomationPack
 	packID    ids.UUID
-	// declared is the build_digest evidence scope the tests declare
-	// (digestScope reads none until core adds the field); all with nil.
-	declared []ids.UUID
 }
 
 func (f *reviewFakes) touch() {
@@ -104,14 +101,11 @@ func (f *reviewFakes) CreateForAutomationTx(_ context.Context, _ pgx.Tx, in evap
 
 func newReview(t *testing.T) (*reviewFakes, *recProposals, autoports.StepRegistry) {
 	t.Helper()
-	f := &reviewFakes{t: t, draftID: ids.NewV7(), simID: ids.NewV7(), packID: ids.NewV7(), pubID: ids.NewV7(), declared: []ids.UUID{ids.NewV7()}}
+	f := &reviewFakes{t: t, draftID: ids.NewV7(), simID: ids.NewV7(), packID: ids.NewV7(), pubID: ids.NewV7()}
 	p := &recProposals{t: t}
 	reg := reviewSteps(Deps{Grants: noGrants{t}, Review: ReviewDeps{
 		Unused: f, Drafts: f, Simulations: f, Digests: f, Packs: f, Proposals: p,
 	}})
-	reg[autodomain.KindBuildDigest].(*buildDigest).scope = func(*autodomain.BuildDigestWith) ([]ids.UUID, bool, bool) {
-		return f.declared, f.declared == nil, true
-	}
 	return f, p, reg
 }
 
@@ -122,7 +116,7 @@ func reviewWith(kind string) any {
 	case autodomain.KindSimulateRestriction:
 		return &autodomain.SimulateRestrictionWith{Step: "draft", Days: 14}
 	}
-	return &autodomain.BuildDigestWith{Scope: autodomain.ScopeTimeRange, Days: 7, Sections: []string{SectionDecisions}}
+	return &autodomain.BuildDigestWith{Scope: autodomain.ScopeTimeRange, Days: 7, Sections: []string{SectionDecisions}, Evidence: allAgents}
 }
 
 func reviewScope(kind string) string {
@@ -168,7 +162,7 @@ func TestReview_RefusesOutsideItsScope(t *testing.T) {
 	// A digest of the trigger's case needs TRIGGER_CASE, not TIME_RANGE.
 	_, _, reg := newReview(t)
 	sc := stepCtx(autodomain.KindBuildDigest, "d",
-		&autodomain.BuildDigestWith{Scope: autodomain.ScopeTriggerCase, Sections: []string{SectionHolds}}, []string{autodomain.ScopeTimeRange},
+		&autodomain.BuildDigestWith{Scope: autodomain.ScopeTriggerCase, Sections: []string{SectionHolds}, Evidence: allAgents}, []string{autodomain.ScopeTimeRange},
 		reflexdomain.Subject{Type: reflexdomain.SubjectCase, ID: ids.NewV7().String()})
 	r, err := reg[autodomain.KindBuildDigest].Run(ctx, nil, sc)
 	mustState(t, r, err, autodomain.StepFailed, ReasonOutsideScope)
@@ -197,9 +191,6 @@ func TestReview_PreviewWritesNothing(t *testing.T) {
 func TestReview_UnwiredIsUnsupported(t *testing.T) {
 	ctx := context.Background()
 	reg := reviewSteps(Deps{})
-	reg[autodomain.KindBuildDigest].(*buildDigest).scope = func(*autodomain.BuildDigestWith) ([]ids.UUID, bool, bool) {
-		return nil, true, true
-	}
 	for _, kind := range reviewKinds {
 		sc := stepCtx(kind, "s", reviewWith(kind), []string{reviewScope(kind)})
 		if kind == autodomain.KindSimulateRestriction {
@@ -351,7 +342,10 @@ func TestReview_BuildDigest(t *testing.T) {
 		SectionDecisions: {"ALLOW": 5, "DENY": 2},
 		SectionHolds:     {"PENDING": 1},
 	}
-	w := &autodomain.BuildDigestWith{Scope: autodomain.ScopeTimeRange, Days: 7, Sections: []string{SectionDecisions, SectionHolds}, Title: "Weekly"}
+	declared := []ids.UUID{ids.NewV7()}
+	w := &autodomain.BuildDigestWith{
+		Scope: autodomain.ScopeTimeRange, Days: 7, Sections: []string{SectionDecisions, SectionHolds}, Title: "Weekly", Evidence: agentsOf(declared...),
+	}
 	sc := stepCtx(autodomain.KindBuildDigest, "digest", w, []string{autodomain.ScopeTimeRange})
 	sc.Execution.ServiceAccount = ids.NewV7()
 	r, err := s.Run(ctx, nil, sc)
@@ -366,12 +360,12 @@ func TestReview_BuildDigest(t *testing.T) {
 	}
 	pk := f.packs[0]
 	if pk.ServiceAccount != sc.Execution.ServiceAccount || pk.Automation != sc.Execution.Automation || pk.Execution != sc.Execution.ID ||
-		!slices.Equal(pk.Agents, f.declared) || pk.Request.Kind != "time_range" || pk.Request.From == nil || pk.Request.To == nil ||
+		!slices.Equal(pk.Agents, declared) || pk.Request.Kind != "time_range" || pk.Request.From == nil || pk.Request.To == nil ||
 		pk.Request.To.Sub(*pk.Request.From) != 7*24*time.Hour || !pk.Request.To.Equal(sc.Now) {
 		t.Fatalf("pack: %+v", pk)
 	}
 	for _, in := range f.countedIn {
-		if !slices.Equal(in, f.declared) {
+		if !slices.Equal(in, declared) {
 			t.Fatalf("counted outside the declared agents: %v", in)
 		}
 	}
@@ -382,7 +376,7 @@ func TestReview_BuildDigest(t *testing.T) {
 		t.Fatal("report digest is not deterministic")
 	}
 	// All agents: no agent list on the pack or the counts.
-	f.declared, f.countedIn = nil, nil
+	w.Evidence, f.countedIn = allAgents, nil
 	r, err = s.Run(ctx, nil, sc)
 	mustState(t, r, err, autodomain.StepDone, "")
 	if r.Output["agents"] != "all" || f.packs[2].Agents != nil || f.countedIn[0] != nil {
@@ -392,7 +386,7 @@ func TestReview_BuildDigest(t *testing.T) {
 	// The trigger's case: a pack of its linked transactions, its link.
 	cse, txn := ids.NewV7(), ids.NewV7()
 	f.cs = CaseScope{From: sc.Now.Add(-48 * time.Hour), To: sc.Now.Add(-time.Hour), Transactions: []ids.UUID{txn}}
-	cw := &autodomain.BuildDigestWith{Scope: autodomain.ScopeTriggerCase, Sections: []string{SectionOpenItems}}
+	cw := &autodomain.BuildDigestWith{Scope: autodomain.ScopeTriggerCase, Sections: []string{SectionOpenItems}, Evidence: allAgents}
 	csc := stepCtx(autodomain.KindBuildDigest, "digest", cw, []string{autodomain.ScopeTriggerCase},
 		reflexdomain.Subject{Type: reflexdomain.SubjectCase, ID: cse.String()})
 	csc.Execution.ServiceAccount = ids.NewV7()
@@ -419,30 +413,40 @@ func TestReview_BuildDigest(t *testing.T) {
 
 	// Bad sections and days.
 	for _, bad := range []*autodomain.BuildDigestWith{
-		{Scope: autodomain.ScopeTimeRange, Days: 7},
-		{Scope: autodomain.ScopeTimeRange, Days: 7, Sections: []string{"payloads"}},
-		{Scope: autodomain.ScopeTimeRange, Days: 7, Sections: []string{SectionAlerts, SectionAlerts}},
-		{Scope: autodomain.ScopeTimeRange, Days: 32, Sections: []string{SectionAlerts}},
-		{Scope: "EVERYTHING", Sections: []string{SectionAlerts}},
+		{Scope: autodomain.ScopeTimeRange, Days: 7, Evidence: allAgents},
+		{Scope: autodomain.ScopeTimeRange, Days: 7, Sections: []string{"payloads"}, Evidence: allAgents},
+		{Scope: autodomain.ScopeTimeRange, Days: 7, Sections: []string{SectionAlerts, SectionAlerts}, Evidence: allAgents},
+		{Scope: autodomain.ScopeTimeRange, Days: 32, Sections: []string{SectionAlerts}, Evidence: allAgents},
+		{Scope: "EVERYTHING", Sections: []string{SectionAlerts}, Evidence: allAgents},
 	} {
 		sc.With = bad
 		r, err = s.Run(ctx, nil, sc)
 		mustState(t, r, err, autodomain.StepFailed, ReasonBadWith)
 	}
-	// An empty or oversized agent list is no declared scope.
-	sc.With = w
-	f.declared = []ids.UUID{}
-	r, err = s.Run(ctx, nil, sc)
-	mustState(t, r, err, autodomain.StepFailed, ReasonBadWith)
+	// No scope, an empty or oversized agent list, or both agents and all
+	// is no declared scope.
+	tooMany := make([]ids.UUID, evapp.MaxAutomationPackAgents+1)
+	for i := range tooMany {
+		tooMany[i] = ids.NewV7()
+	}
+	for _, ev := range []autodomain.DigestEvidence{{}, {Agents: []autodomain.RefID{}}, agentsOf(tooMany...), {Agents: agentsOf(declared...).Agents, All: true}} {
+		bad := *w
+		bad.Evidence = ev
+		sc.With = &bad
+		r, err = s.Run(ctx, nil, sc)
+		mustState(t, r, err, autodomain.StepFailed, ReasonBadWith)
+	}
 }
 
-// TestReview_DigestNeedsADeclaredScope: until core adds the evidence
-// field, digestScope declares nothing, so the step and its preview are
-// refused WITH_INVALID and nothing is read or written.
+// TestReview_DigestNeedsADeclaredScope: a build_digest that declares no
+// evidence scope is refused WITH_INVALID, in the step and its preview,
+// and nothing is read or written (D85).
 func TestReview_DigestNeedsADeclaredScope(t *testing.T) {
 	f, _, _ := newReview(t)
 	reg := reviewSteps(Deps{Review: ReviewDeps{Digests: f, Packs: f}})
-	sc := stepCtx(autodomain.KindBuildDigest, "d", reviewWith(autodomain.KindBuildDigest), []string{autodomain.ScopeTimeRange})
+	w := reviewWith(autodomain.KindBuildDigest).(*autodomain.BuildDigestWith)
+	w.Evidence = autodomain.DigestEvidence{}
+	sc := stepCtx(autodomain.KindBuildDigest, "d", w, []string{autodomain.ScopeTimeRange})
 	r, err := reg[autodomain.KindBuildDigest].Run(context.Background(), nil, sc)
 	mustState(t, r, err, autodomain.StepFailed, ReasonBadWith)
 	r, err = reg[autodomain.KindBuildDigest].Preview(context.Background(), nil, sc)
@@ -465,4 +469,16 @@ func TestReview_DigestReportHoldsNoContent(t *testing.T) {
 	if a == b || len(a) != 64 {
 		t.Fatalf("digests %s %s", a, b)
 	}
+}
+
+// allAgents is `evidence: {all: true}`.
+var allAgents = autodomain.DigestEvidence{All: true}
+
+// agentsOf is `evidence: {agents: [...]}`.
+func agentsOf(agents ...ids.UUID) autodomain.DigestEvidence {
+	ev := autodomain.DigestEvidence{Agents: make([]autodomain.RefID, 0, len(agents))}
+	for _, a := range agents {
+		ev.Agents = append(ev.Agents, autodomain.RefID(a))
+	}
+	return ev
 }

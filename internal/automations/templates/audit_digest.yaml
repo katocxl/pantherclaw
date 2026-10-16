@@ -59,6 +59,12 @@ params:
     description: The active automation destination (purpose DIGEST) the digest is delivered to.
     type: uuid
     example: 0192f000-0000-7000-8000-0000000000c9
+  - name: agents
+    description: The agents whose evidence the digest and its pack may hold, comma-separated; leave empty for every agent of the organization.
+    type: uuid
+    list: true
+    max_items: 50
+    required: false
 
 definition:
   apiVersion: automations.pantherclaw.dev/v1
@@ -100,6 +106,9 @@ definition:
           $cases: {schedule: TIME_RANGE, case.closed: TRIGGER_CASE}
         days: {$when: {param: trigger, in: [schedule]}, $value: "${days}"}
         sections: "${sections}"
+        evidence:
+          agents: {$when: {param: agents, set: true}, $value: "${agents}"}
+          all: {$when: {param: agents, set: false}, $value: true}
         title:
           $switch: trigger
           $cases:

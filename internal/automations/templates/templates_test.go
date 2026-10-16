@@ -18,6 +18,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/automations/triggers"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"go.yaml.in/yaml/v3"
 )
 
 // d32 are the templates of D32.
@@ -45,6 +46,7 @@ var variants = map[string][]map[string]string{
 		{"trigger": "run.ended"},
 		{"trigger": "case.closed"},
 		{"hours_left": "24"},
+		{"agents": "0192f000-0000-7000-8000-0000000000a1,0192f000-0000-7000-8000-0000000000a2"},
 	},
 	"approval_routing":       {{}, {"remind_after": "24h", "resolution_timeout": "1h"}},
 	"new_agent_intake":       {{}, {"baseline_from": "TEMPLATE", "claim_timeout": "6d"}},
@@ -53,10 +55,12 @@ var variants = map[string][]map[string]string{
 	"scoped_incident_containment": {
 		{},
 		{"event": "incident.opened", "contain": "REVOKE_GRANT", "contain_at": "HIGH"},
+		{"contain": "REVOKE_GRANT", "agents": "0192f000-0000-7000-8000-0000000000a1"},
 	},
 	"audit_digest": {
 		{},
 		{"trigger": "case.closed", "sections": "decisions,open_items"},
+		{"agents": "0192f000-0000-7000-8000-0000000000a1"},
 	},
 }
 
@@ -98,20 +102,10 @@ func renderAll(t *testing.T) map[string][]rendered {
 			if err != nil {
 				t.Fatalf("%s variant %d: %v\n%s", tm.ID, i, err, doc)
 			}
-			identify(def)
 			out[tm.ID] = append(out[tm.ID], rendered{name: tm.ID + "/" + string(rune('a'+i)), params: params, doc: doc, def: def, tests: tests})
 		}
 	}
 	return out
-}
-
-var owner = autodomain.RefID(ids.NewV7())
-
-// identify supplies what the caller puts on the automation, not the
-// template (D68): until core moves name and owner out of the document,
-// they are set on the parsed definition.
-func identify(d *autodomain.Definition) {
-	d.Name, d.Owner = "from-template", owner
 }
 
 func TestListHasTheD32Templates(t *testing.T) {
@@ -147,12 +141,14 @@ func TestListHasTheD32Templates(t *testing.T) {
 func TestRenderedDocumentsHaveNoIdentity(t *testing.T) {
 	for id, rs := range renderAll(t) {
 		for _, r := range rs {
-			def, err := autodomain.Parse(r.doc)
-			if err != nil {
+			var top map[string]any
+			if err := yaml.Unmarshal(r.doc, &top); err != nil {
 				t.Fatal(err)
 			}
-			if def.Name != "" || !def.Owner.IsZero() {
-				t.Errorf("%s: rendered name %q owner %s", id, def.Name, def.Owner)
+			for _, k := range []string{"name", "owner"} {
+				if _, ok := top[k]; ok {
+					t.Errorf("%s: the rendered document has %s", id, k)
+				}
 			}
 		}
 	}

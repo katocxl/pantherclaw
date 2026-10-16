@@ -50,16 +50,21 @@ var (
 )
 
 // templateSteps are the security-work step kinds (D31) the engine's
-// registry merges with its generic kinds (D11). The grants, pause and
-// resume ports are core's; left nil until core wires them, their kinds
-// refuse with UNSUPPORTED_CAPABILITY rather than pretend.
-func templateSteps(d apiDeps) autoports.StepRegistry { //nolint:unused // merged by the engine wiring (D11)
+// registry merges with its generic kinds (D11). core pauses automations
+// (pause_launches). The grants port (contain REVOKE_GRANT) is the
+// engine's issuance wiring and resuming only what a step paused is not
+// core's yet; while nil, their kinds refuse with UNSUPPORTED_CAPABILITY
+// rather than pretend.
+func templateSteps(d apiDeps, core *automationsCore) autoports.StepRegistry { //nolint:unused // merged by the engine wiring (D11)
 	deps := securitysteps.Deps{
 		Actions:  securitysteps.Actions{},
 		Cases:    m10CaseOpener(d.billing),
 		Failures: edgesFailures(),
 		Coverage: routeCoverage{svc: &covapp.Service{Pool: d.pool, Freshness: d.freshness, Verifier: covapp.ConnectionTests{}}},
 		Owners:   securitysteps.StoreOwners{},
+	}
+	if core != nil && core.svc != nil {
+		deps.Pauser = core.svc
 	}
 	var notify rapp.Notifier
 	if d.m5 != nil && d.m5.notifications != nil {

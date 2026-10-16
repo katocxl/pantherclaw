@@ -35,6 +35,12 @@ params:
     type: enum
     values: ["1", "4", "12", "24"]
     default: "4"
+  - name: agents
+    description: The agents whose grants it may revoke (authority.revocable), comma-separated; leave empty for every agent of the organization.
+    type: uuid
+    list: true
+    max_items: 50
+    required: false
 
 definition:
   apiVersion: automations.pantherclaw.dev/v1
@@ -84,6 +90,9 @@ definition:
         scopes: [TRIGGER_OWNER]
       - step: revoke_grant
         scopes: [TRIGGER_GRANT]
+    revocable:
+      agents: {$when: {param: agents, set: true}, $value: "${agents}"}
+      all: {$when: {param: agents, set: false}, $value: true}
   do:
     - id: tell
       step: notify

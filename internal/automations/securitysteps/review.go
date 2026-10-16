@@ -452,22 +452,26 @@ func (s *simulateRestriction) Preview(_ context.Context, _ pgx.Tx, sc autodomain
 // automation's service account creates, built with evidence.read only
 // within the declared agents. The deliver step sends pack_id and
 // report_digest on.
-type buildDigest struct {
-	d ReviewDeps
-	// scope reads the declared evidence scope (digestScope; tests replace
-	// it until core adds the field).
-	scope func(*autodomain.BuildDigestWith) ([]ids.UUID, bool, bool)
-}
+type buildDigest struct{ d ReviewDeps }
 
 func (*buildDigest) Kind() string { return autodomain.KindBuildDigest }
 
-// digestScope returns the evidence scope a build_digest declares: the
-// agents of `evidence: {agents: [...]}`, or all for `evidence: {all: true}`
-// (exactly one is set). It reads w.Evidence once core adds the field to
-// BuildDigestWith (D85); until then no scope is declared, so the step is
-// refused (WITH_INVALID).
-func digestScope(_ *autodomain.BuildDigestWith) (agents []ids.UUID, all, ok bool) {
-	return nil, false, false
+// digestScope returns the evidence scope a build_digest declares (D85):
+// the agents of `evidence: {agents: [...]}`, or all for
+// `evidence: {all: true}`. Anything but exactly one of the two is no
+// scope, and the step is refused (WITH_INVALID).
+func digestScope(w *autodomain.BuildDigestWith) (agents []ids.UUID, all, ok bool) {
+	if !w.Evidence.Valid() {
+		return nil, false, false
+	}
+	if w.Evidence.All {
+		return nil, true, true
+	}
+	agents = make([]ids.UUID, 0, len(w.Evidence.Agents))
+	for _, a := range w.Evidence.Agents {
+		agents = append(agents, a.UUID())
+	}
+	return agents, false, true
 }
 
 // digestPlan is a checked build_digest.
@@ -493,11 +497,7 @@ func (s *buildDigest) plan(sc autodomain.StepContext) (digestPlan, string) {
 		seen[x] = true
 	}
 	p := digestPlan{w: w}
-	scope := s.scope
-	if scope == nil {
-		scope = digestScope
-	}
-	if p.agents, p.all, ok = scope(w); !ok || p.all != (p.agents == nil) ||
+	if p.agents, p.all, ok = digestScope(w); !ok || p.all != (p.agents == nil) ||
 		(!p.all && (len(p.agents) == 0 || len(p.agents) > evapp.MaxAutomationPackAgents)) {
 		return digestPlan{}, ReasonBadWith
 	}
