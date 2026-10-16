@@ -73,7 +73,7 @@ func TestReadinessIsPerOperationAndComplete(t *testing.T) {
 		t.Errorf("failed coverage: ready %v, failed %v", r.Ready(), r.Failed())
 	}
 	if c := declared(""); c.Passed {
-		t.Error("an undeclared failure behaviour passed")
+		t.Error("an undeclared failure behavior passed")
 	}
 	if c := declared(Queue); !c.Passed {
 		t.Error("QUEUE did not pass")

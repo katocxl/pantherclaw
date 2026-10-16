@@ -60,7 +60,7 @@ func load(ctx context.Context, q *dbq.Queries, org ids.OrgID, row dbq.PromotionS
 }
 
 // evaluate runs every check for each operation (D39). failureBehavior is
-// the declared behaviour ("" when none is declared yet).
+// the declared behavior ("" when none is declared yet).
 func (s *subject) evaluate(ctx context.Context, q *dbq.Queries, ops []string, failureBehavior string, now time.Time) ([]Readiness, error) {
 	out := make([]Readiness, 0, len(ops))
 	for _, op := range ops {

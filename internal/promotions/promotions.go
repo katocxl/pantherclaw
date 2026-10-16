@@ -11,7 +11,7 @@
 // instance), TESTS (the published policy has a scenario test of it),
 // APPROVALS (each approval requirement on it has an eligible approver),
 // COVERAGE (every route ENFORCED or PARTIAL, not lapsed) and
-// FAILURE_BEHAVIOUR (declared). Readiness is always per operation.
+// FAILURE_BEHAVIOR (declared). Readiness is always per operation.
 //
 // The Gate implements grants' PromotionGate: in a PRODUCTION environment a
 // grant must list its operations, and each must be covered by an ACTIVE
@@ -308,8 +308,8 @@ func (s *Service) RevokePromotion(ctx context.Context, id ids.UUID, reason strin
 // GetReadiness states each operation's readiness for an agent in an
 // environment (agent.read). Without operations it reads those of the
 // agent's ACTIVE promotions, its active grants' bounds and its coverage
-// records there. failureBehavior, when given, is the behaviour the
-// FAILURE_BEHAVIOUR check considers declared.
+// records there. failureBehavior, when given, is the behavior the
+// failure-behavior check considers declared.
 func (s *Service) GetReadiness(ctx context.Context, agent, env ids.UUID, operations []string, failureBehavior string) ([]Readiness, error) {
 	c, err := tapp.CallerFrom(ctx)
 	if err != nil {

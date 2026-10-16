@@ -58,7 +58,7 @@ func promoteCommands() map[string]command {
 			func(fs *flag.FlagSet) call {
 				var ops list
 				fs.Var(&ops, "operation", "an operation or a prefix such as payments.* (repeatable; none: those the agent's promotions, grants and coverage name)")
-				fb := fs.String("failure-behavior", "", "the failure behaviour to check as declared")
+				fb := fs.String("failure-behavior", "", "the failure behavior to check as declared")
 				return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
 					req := &pantherclawv1.GetReadinessRequest{AgentId: a[0], EnvironmentId: a[1], Operations: ops}
 					if *fb != "" {

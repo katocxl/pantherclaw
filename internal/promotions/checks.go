@@ -19,13 +19,13 @@ const (
 	CheckTests           = "TESTS"
 	CheckApprovals       = "APPROVALS"
 	CheckCoverage        = "COVERAGE"
-	CheckFailureBehavior = "FAILURE_BEHAVIOUR"
+	CheckFailureBehavior = "FAILURE_BEHAVIOUR" //nolint:misspell // the check name D39 gives
 )
 
 // CheckNames are every check, in order.
 var CheckNames = []string{CheckOwner, CheckIdentity, CheckTests, CheckApprovals, CheckCoverage, CheckFailureBehavior}
 
-// Failure behaviours a promotion declares: what the agent's work does when
+// Failure behaviors a promotion declares: what the agent's work does when
 // PantherClaw cannot decide (F334).
 const (
 	FailClosed       = "FAIL_CLOSED"
@@ -37,7 +37,7 @@ const (
 	promotionOpMaxLn = 128
 )
 
-// FailureBehaviors are the declarable failure behaviours.
+// FailureBehaviors are the declarable failure behaviors.
 var FailureBehaviors = []string{FailClosed, Queue, DegradeReadOnly}
 
 // Check is one check of one operation: whether it passed and why.

@@ -59,7 +59,7 @@ func TestPacksRenderToValidBundles(t *testing.T) {
 		}
 		var decisions []string
 		for _, tc := range b.Tests {
-			decisions = append(decisions, string(tc.Expect.Decision))
+			decisions = append(decisions, tc.Expect.Decision)
 		}
 		slices.Sort(decisions)
 		if got := slices.Compact(decisions); !slices.Equal(got, wantDecisions[p.Name]) {
