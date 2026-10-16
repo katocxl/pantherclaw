@@ -10,9 +10,11 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	autoapp "github.com/katocxl/pantherclaw/internal/automations/app"
+	"github.com/katocxl/pantherclaw/internal/automations/assurance"
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/automations/securitysteps"
+	"github.com/katocxl/pantherclaw/internal/automations/templates"
 	"github.com/katocxl/pantherclaw/internal/automations/templates/templatesrpc"
 	covapp "github.com/katocxl/pantherclaw/internal/coverage/app"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
@@ -42,17 +44,64 @@ func registerAutomationTemplates(rs *connect.Server, d apiDeps, core *automation
 }
 
 // templateHandler creates through core's CreateDraftTx and assurance's
-// test store (automationTestStore, set by the assurance wiring, D34);
-// until both are set CreateFromTemplate answers UNAVAILABLE.
+// SetTestCasesTx (D34) in one transaction; without core
+// CreateFromTemplate answers UNAVAILABLE.
 func templateHandler(d apiDeps, core *automationsCore) *templatesrpc.TemplateHandler {
-	h := &templatesrpc.TemplateHandler{Pool: d.pool, Tests: automationTestStore(d)}
+	h := &templatesrpc.TemplateHandler{Pool: d.pool, Tests: automationTests{svc: assuranceService(d.pool, d.billing)}}
 	if core != nil && core.svc != nil {
 		h.Drafts = automationDrafts{svc: core.svc}
 	}
 	return h
 }
 
-var automationTestStore = func(apiDeps) templatesrpc.TestStore { return nil }
+// automationTests is the TestStore port over assurance's SetTestCasesTx.
+// A template's case becomes an assurance case: trigger parameters as text,
+// stubbed results with their state, effect, reason and output, and
+// evidence when the template's result carries refs. Assurance cases carry
+// no trigger subjects; the stubs stand for the steps that read them.
+type automationTests struct{ svc *assurance.Service }
+
+func (a automationTests) SetTestCasesTx(ctx context.Context, tx db.TenantTx, version ids.UUID, cases []templates.TestCase) (int, error) {
+	ac := assuranceCases(cases)
+	if _, err := a.svc.SetTestCasesTx(ctx, tx, version, ac); err != nil {
+		return 0, err
+	}
+	return len(ac), nil
+}
+
+func assuranceCases(cases []templates.TestCase) []assurance.Case {
+	out := make([]assurance.Case, 0, len(cases))
+	for _, tc := range cases {
+		c := assurance.Case{
+			Name: tc.Name, Kind: assurance.CaseKind(tc.Kind),
+			Expect: assurance.Expect{State: string(tc.Expect.State), Reason: tc.Expect.Reason},
+		}
+		if len(tc.Trigger.Params) > 0 {
+			c.Trigger.Params = make(map[string]string, len(tc.Trigger.Params))
+			for k, v := range tc.Trigger.Params {
+				c.Trigger.Params[k] = v.Text()
+			}
+		}
+		if len(tc.Expect.Steps) > 0 {
+			c.Expect.Steps = make(map[string]string, len(tc.Expect.Steps))
+			for k, v := range tc.Expect.Steps {
+				c.Expect.Steps[k] = string(v)
+			}
+		}
+		if len(tc.Stubs) > 0 {
+			c.Stubs = make(map[string][]assurance.StubResult, len(tc.Stubs))
+			for step, rs := range tc.Stubs {
+				for _, r := range rs {
+					c.Stubs[step] = append(c.Stubs[step], assurance.StubResult{
+						State: string(r.State), Effect: string(r.Effect), Reason: r.Reason, Output: r.Output, Evidence: len(r.Refs) > 0,
+					})
+				}
+			}
+		}
+		out = append(out, c)
+	}
+	return out
+}
 
 // automationDrafts is the Drafts port over core's CreateDraftTx.
 type automationDrafts struct{ svc *autoapp.Service }
