@@ -58,13 +58,15 @@ If an approver later loses a permission, the ceiling is voided, the automation p
 | Control | Who | Effect |
 |---|---|---|
 | Pause | `automation.manage` | No new executions. Triggers follow the version's paused policy (DISCARD, QUEUE or EXPIRE). Active executions continue unless you set `cancel_active`. |
-| Resume | `automation.manage` | Re-checks the owner, ceiling and approvers, identity, principal, edition and kill switch, then replays unexpired queued triggers. Missed irreversible work is never replayed. |
+| Resume | `automation.manage` | Takes the kill-switch lock first, so it cannot race an engage; then re-checks the owner, ceiling and approvers, identity, principal, edition and kill switch, and replays unexpired queued triggers. Missed irreversible work is never replayed. |
 | Cancel an execution, or all active ones | `automation.manage` | CANCELLED at the next step boundary; its grants are revoked, its runs ended, pending launches and deliveries cancelled. |
 | Retry an execution | `automation.run` | Starts a new manual execution with the original parameters, only for a FAILED, PARTIALLY_COMPLETED or CANCELLED execution with no UNKNOWN irreversible effect, under the same enabled version; it revalidates like any start. |
 | Retire | `automation.manage` | Cancels active executions, deactivates triggers, revokes the ceiling and disables the identity. Final. |
 | Revoke authority | `automation.manage` | Revokes the ceiling and every grant issued under it, ends their runs and pauses the automation (AUTHORITY_REVOKED). Use it when you suspect the automation itself. |
 
 Every control returns its verified effects (grants revoked, runs ended, launches and deliveries cancelled, executions affected). Check them; an execution with an UNKNOWN irreversible effect stays NEEDS_RECONCILIATION until M7 reconciliation resolves it.
+
+**Licence.** An org without the Automations edition fires no triggers: the trigger feed and the schedule jobs skip it, and the engine refuses its executions at revalidation. If a licence lapses, event, threshold and coverage triggers from that period are lost, not queued. Schedules apply their missed policy (SKIP or CATCH_UP) when the licence returns.
 
 ## 4. The kill switch and containment
 

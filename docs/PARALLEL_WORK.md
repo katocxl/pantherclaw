@@ -56,6 +56,7 @@ These files are touched by many tasks. Keep your edits to them small and prefer 
 
 - **Test database:** all sessions share the cluster on `127.0.0.1:5433`. Each test creates its own database, so concurrent runs are safe. If it is down, `task up PROFILE=test`. Never stop, reset or wipe containers another session may be using.
 - **Targeted database tests:** to run a few database tests directly with `go test -run …` instead of `task test:integration`, set `PC_TEST_PG_ADMIN_URL` to the test cluster's admin URL (as the Taskfile does, with the password from `deploy/compose/.env`) and `PC_TEST_REQUIRE_DB=1`. Without the URL those tests skip and the run looks green; with `PC_TEST_REQUIRE_DB=1` a missing database fails instead.
+- **Test-only packages:** `grantstest` (including its open promotion gate) and `pipelinetest` may be imported only from `_test.go` files and `test/`; a depguard rule in the lint configuration enforces this, so production code can never pick up a test gate.
 - **Lint:** golangci-lint keeps one lock per machine; `task lint` waits for another session's run instead of failing.
 - **Ports:** if you run a local server or gateway, use ports no other session uses.
 - **Docker, the founder's credentials and GitHub settings** are shared. Change none of them unless the founder asks.
