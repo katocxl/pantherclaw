@@ -459,11 +459,9 @@ type PcAutomationExecution struct {
 }
 
 type PcAutomationFeedCursor struct {
-	OrgID         ids.OrgID
-	Seq           int64
-	AgentChangeAt *time.Time
-	AgentChangeID *ids.UUID
-	UpdatedAt     time.Time
+	OrgID     ids.OrgID
+	Seq       int64
+	UpdatedAt time.Time
 }
 
 type PcAutomationLaunch struct {

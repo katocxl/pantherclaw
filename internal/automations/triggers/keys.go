@@ -36,21 +36,20 @@ func ScheduleKey(automation ids.UUID, fireAt time.Time) string {
 // EventKey is a platform event's key: its ledger entry id.
 func EventKey(entry ids.UUID) string { return "event:" + entry.String() }
 
-// AgentChangeKey is an agent discovery's key (agent changes are not in the
-// ledger).
-func AgentChangeKey(change ids.UUID) string { return "event:agent_change:" + change.String() }
-
 // InboundKey is a signed inbound event's key: its source and webhook-id.
 func InboundKey(source ids.UUID, webhookID string) string {
 	return "inbound:" + source.String() + ":" + digest(webhookID)
 }
 
-// ManualKey is a manual start's key: the caller's idempotency key.
-func ManualKey(idempotency string) string { return "manual:" + digest(idempotency) }
+// ManualKey is a manual start's key: the person's own idempotency key
+// (D87 L7: keys are per person, so nobody can take another's).
+func ManualKey(person ids.UUID, idempotency string) string {
+	return "manual:" + person.String() + ":" + digest(idempotency)
+}
 
 // RetryKey is a retry's key (D59).
-func RetryKey(execution ids.UUID, idempotency string) string {
-	return "retry:" + execution.String() + ":" + digest(idempotency)
+func RetryKey(execution, person ids.UUID, idempotency string) string {
+	return "retry:" + execution.String() + ":" + person.String() + ":" + digest(idempotency)
 }
 
 // ThresholdKey is a threshold window's key.

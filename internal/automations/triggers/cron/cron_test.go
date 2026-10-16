@@ -139,10 +139,48 @@ func TestDayOfMonthOrDayOfWeek(t *testing.T) {
 			t.Errorf("occurrence %d = %s, want %s", i, o.At.Format("2006-01-02"), want[i])
 		}
 	}
-	// "*/2" in day-of-week starts with "*": only day-of-month counts.
-	o, _ := MustParse("0 0 13 * */2").Next(utc("2027-08-01T00:00:00Z"), time.UTC, GapSkip)
-	if o.At.Format("2006-01-02") != "2027-08-13" {
-		t.Errorf("*/2 day-of-week should not widen: %v", o.At)
+	// A day field starting with "*" intersects (Vixie): the 13th that is
+	// also Sunday, Tuesday, Thursday or Saturday.
+	s := MustParse("0 0 13 * */2")
+	if !s.Intersects() {
+		t.Error("a stepped day-of-week meeting a day-of-month should intersect")
+	}
+	o, _ := s.Next(utc("2027-08-01T00:00:00Z"), time.UTC, GapSkip)
+	if o.At.Day() != 13 || o.At.Weekday()%2 != 0 {
+		t.Errorf("13th on an even weekday: %v (%v)", o.At, o.At.Weekday())
+	}
+	// "0 0 */2 * MON" is odd-numbered Mondays.
+	for _, occ := range MustParse("0 0 */2 * MON").Preview(utc("2027-01-01T00:00:00Z"), time.UTC, GapSkip, 20) {
+		if occ.At.Weekday() != time.Monday || occ.At.Day()%2 != 1 {
+			t.Fatalf("odd Mondays: %v", occ.At)
+		}
+	}
+	for _, expr := range []string{"0 0 */2 * *", "0 0 * * */2", "0 0 13 * MON", "0 0 * * MON"} {
+		if MustParse(expr).Intersects() {
+			t.Errorf("%q does not intersect", expr)
+		}
+	}
+}
+
+// Ranges ending in SUN run to the end of the week.
+func TestSundayEndsARange(t *testing.T) {
+	t.Parallel()
+	from := utc("2027-06-01T00:00:00Z") // a Tuesday
+	for expr, want := range map[string][]time.Weekday{
+		"0 9 * * MON-SUN": {time.Tuesday, time.Wednesday, time.Thursday, time.Friday, time.Saturday, time.Sunday, time.Monday},
+		"0 9 * * FRI-SUN": {time.Friday, time.Saturday, time.Sunday, time.Friday},
+		"0 9 * * sat-sun": {time.Saturday, time.Sunday, time.Saturday},
+		"0 9 * * SUN-SUN": {time.Sunday, time.Sunday},
+	} {
+		got := MustParse(expr).Preview(from, time.UTC, GapSkip, len(want))
+		for i, o := range got {
+			if o.At.Weekday() != want[i] {
+				t.Errorf("%q #%d: %v, want %v", expr, i, o.At.Weekday(), want[i])
+			}
+		}
+	}
+	if o, _ := MustParse("0 9 * * SUN-MON").Next(from, time.UTC, GapSkip); o.At.Weekday() != time.Sunday {
+		t.Errorf("SUN-MON is Sunday and Monday: %v", o.At.Weekday())
 	}
 }
 

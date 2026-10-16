@@ -36,6 +36,12 @@ func TestF015_ScanFindingsBecomeDiscoveredAgents(t *testing.T) {
 		  AND e.evidence->'untrusted'->>'client' = 'cursor'`, w.org); n != 2 {
 		t.Fatalf("discovered agents with entries: %d", n)
 	}
+	// Each discovery is an audit record too, so it reaches the evidence feed
+	// (the agent.discovered automation trigger, G0 M11 part 2 D18a).
+	if n := w.count(t, `SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.agent.discovered'
+		AND convert_from(body, 'UTF8')::jsonb #>> '{details,source}' = 'scan'`, w.org); n != 2 {
+		t.Fatalf("agent.discovered audit records: %d", n)
+	}
 	r, err = w.inv.SubmitScan(w.teamOwner(), "laptop", fs)
 	if err != nil || r.Created != 0 || r.Counted != 2 || w.count(t, "SELECT max(seen_count) FROM pc.discoveries WHERE org_id = $1", w.org) != 2 {
 		t.Fatalf("resubmission: %+v, %v", r, err)

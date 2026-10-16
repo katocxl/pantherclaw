@@ -12,6 +12,8 @@ import (
 	"strconv"
 
 	"github.com/katocxl/pantherclaw/internal/agents/domain"
+	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -124,7 +126,8 @@ func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []Sc
 				res.Dropped++
 				continue
 			}
-			if err := insertFinding(ctx, q, c.Org, discoverer{by: c.Principal.String(), actor: actor(c), source: "scan"}, f, obs, observed, reopen); err != nil {
+			w := discoverer{by: c.Principal.String(), actor: actor(c), ledger: c.Actor(), source: "scan"}
+			if err := insertFinding(ctx, tx, q, c.Org, w, f, obs, observed, reopen); err != nil {
 				return err
 			}
 			open++
@@ -154,6 +157,7 @@ func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []Sc
 type discoverer struct {
 	by     string
 	actor  domain.Actor
+	ledger evdomain.Actor
 	source string
 	// trusted are more trusted facts for the admission entry (the scan and
 	// gateway of an organization scan).
@@ -163,8 +167,8 @@ type discoverer struct {
 // insertFinding records a new finding as a DISCOVERED agent with its
 // discovery, an ADMISSION entry and a history entry. With reopen, the
 // finding was dismissed: that discovery reopens for the new agent instead.
-func insertFinding(ctx context.Context, q *dbq.Queries, org ids.OrgID, w discoverer, f ScanFinding, obs []byte, observed map[string]string,
-	reopen ids.UUID,
+func insertFinding(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, w discoverer, f ScanFinding, obs []byte,
+	observed map[string]string, reopen ids.UUID,
 ) error {
 	a, err := q.InsertDiscoveredAgent(ctx, dbq.InsertDiscoveredAgentParams{
 		OrgID: org, ID: ids.NewV7(), Name: scanName(f), CreatedBy: w.by,
@@ -202,7 +206,16 @@ func insertFinding(ctx context.Context, q *dbq.Queries, org ids.OrgID, w discove
 	if !reopen.IsZero() {
 		details["reopened"] = "true"
 	}
-	return RecordChange(ctx, q, org, a.ID, domain.Change{Kind: domain.ChangeDiscovered, Actor: w.actor, Details: details})
+	if err := RecordChange(ctx, q, org, a.ID, domain.Change{Kind: domain.ChangeDiscovered, Actor: w.actor, Details: details}); err != nil {
+		return err
+	}
+	// The discovery is also an audit record, so it reaches the evidence feed
+	// in chain order (G0 M11 part 2 D18a: the agent.discovered trigger).
+	_, err = audit.Record(ctx, tx, audit.Event{
+		Name: string(domain.ChangeDiscovered), Actor: w.ledger, Outcome: audit.Success,
+		Object: &audit.Object{Type: "agent", ID: a.ID.String()}, Details: details,
+	})
+	return err
 }
 
 // Kinds of findings: a local `pclaw scan` reports MCP servers and agent
