@@ -4,6 +4,7 @@
 package server
 
 import (
+	"errors"
 	"testing"
 
 	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
@@ -33,11 +34,16 @@ func TestM11Core_JobsShareTheAPICore(t *testing.T) {
 	case core.svc.Failures == nil, core.svc.Operations == nil:
 		t.Fatalf("core ports: failures %v operations %v", core.svc.Failures, core.svc.Operations)
 	}
-	worker := newAutomationsCore(pool, nil, "")
-	if _, err := registerAutomationsCoreJobs(nil, jobs.NewRegistry(), worker, nil); err != nil {
-		t.Fatal(err)
+}
+
+// TestM11Core_JobsNeverBuildUngatedGrants (D112 X1): without the
+// process's grants service the jobs refuse to start rather than build one.
+func TestM11Core_JobsNeverBuildUngatedGrants(t *testing.T) {
+	worker := newAutomationsCore(&db.Pool{}, nil, "")
+	if _, err := registerAutomationsCoreJobs(nil, jobs.NewRegistry(), worker, nil); !errors.Is(err, errAutomationsNoGrants) {
+		t.Fatalf("jobs without grants: %v", err)
 	}
-	if worker.svc.Grants == nil || worker.svc.Runs == nil {
-		t.Fatal("a worker-only process has no issuance services")
+	if worker.grants != nil || worker.svc.Grants != nil || worker.svc.Runs != nil {
+		t.Fatal("the jobs built their own grants or runs services")
 	}
 }

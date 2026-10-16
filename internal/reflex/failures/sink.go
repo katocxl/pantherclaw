@@ -146,13 +146,35 @@ func (s *Sink) Resolve(ctx context.Context, ptx pgx.Tx, org ids.OrgID, kind stri
 	if err != nil {
 		return nil, fmt.Errorf("failures: resolve: %w", err)
 	}
+	return resolved, recordResolved(ctx, tx, kind, resolved, actor)
+}
+
+// ResolveInScope is Resolve for every open failure of kind whose scope
+// names the subject, whatever its dedupe key (G0 M11 part 2 D111 G1).
+func (s *Sink) ResolveInScope(ctx context.Context, ptx pgx.Tx, org ids.OrgID, kind string, subject reflexdomain.Subject,
+	resolution string, actor evdomain.Actor,
+) ([]ids.UUID, error) {
+	tx, err := db.AdoptTenantTx(ctx, ptx, org)
+	if err != nil {
+		return nil, err
+	}
+	resolved, err := dbq.New(tx).ResolveOpenFailuresInScope(ctx, dbq.ResolveOpenFailuresInScopeParams{
+		Resolution: resolution, OrgID: org, Kind: kind, SubjectType: string(subject.Type), SubjectID: subject.ID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failures: resolve: %w", err)
+	}
+	return resolved, recordResolved(ctx, tx, kind, resolved, actor)
+}
+
+func recordResolved(ctx context.Context, tx db.TenantTx, kind string, resolved []ids.UUID, actor evdomain.Actor) error {
 	for _, id := range resolved {
 		if _, err := audit.Record(ctx, tx, audit.Event{
 			Name: "incident.failure_resolved", Actor: actor, Outcome: audit.Success,
 			Object: &audit.Object{Type: "failure", ID: id.String()}, Details: map[string]string{"kind": kind},
 		}); err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return resolved, nil
+	return nil
 }
