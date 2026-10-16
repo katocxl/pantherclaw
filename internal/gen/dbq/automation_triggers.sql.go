@@ -153,31 +153,6 @@ func (q *Queries) AddThresholdCount(ctx context.Context, arg AddThresholdCountPa
 	return err
 }
 
-const advanceAutomationAgentCursor = `-- name: AdvanceAutomationAgentCursor :execrows
-UPDATE pc.automation_feed_cursors SET agent_change_at = $1, agent_change_id = $2
-WHERE org_id = $3 AND agent_change_id IS NOT DISTINCT FROM $4
-`
-
-type AdvanceAutomationAgentCursorParams struct {
-	At         *time.Time
-	ID         *ids.UUID
-	OrgID      ids.OrgID
-	ExpectedID *ids.UUID
-}
-
-func (q *Queries) AdvanceAutomationAgentCursor(ctx context.Context, arg AdvanceAutomationAgentCursorParams) (int64, error) {
-	result, err := q.db.Exec(ctx, advanceAutomationAgentCursor,
-		arg.At,
-		arg.ID,
-		arg.OrgID,
-		arg.ExpectedID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const advanceAutomationFeedCursor = `-- name: AdvanceAutomationFeedCursor :execrows
 UPDATE pc.automation_feed_cursors SET seq = $1
 WHERE org_id = $2 AND seq = $3
@@ -217,62 +192,6 @@ func (q *Queries) AdvanceAutomationSchedule(ctx context.Context, arg AdvanceAuto
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const agentDiscoveriesAfter = `-- name: AgentDiscoveriesAfter :many
-SELECT c.id, c.agent_id, c.created_at, c.actor FROM pc.agent_changes c
-WHERE c.org_id = $1 AND c.kind = 'agent.discovered'
-  AND ($2::timestamptz IS NULL OR (c.created_at, c.id) > ($2::timestamptz, $3::uuid))
-  AND c.created_at >= $4
-ORDER BY c.created_at, c.id
-LIMIT $5
-`
-
-type AgentDiscoveriesAfterParams struct {
-	OrgID     ids.OrgID
-	AfterAt   *time.Time
-	AfterID   ids.UUID
-	NotBefore time.Time
-	MaxRows   int32
-}
-
-type AgentDiscoveriesAfterRow struct {
-	ID        ids.UUID
-	AgentID   ids.UUID
-	CreatedAt time.Time
-	Actor     string
-}
-
-// agent.discovered is recorded in pc.agent_changes, not the ledger (D18).
-func (q *Queries) AgentDiscoveriesAfter(ctx context.Context, arg AgentDiscoveriesAfterParams) ([]AgentDiscoveriesAfterRow, error) {
-	rows, err := q.db.Query(ctx, agentDiscoveriesAfter,
-		arg.OrgID,
-		arg.AfterAt,
-		arg.AfterID,
-		arg.NotBefore,
-		arg.MaxRows,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []AgentDiscoveriesAfterRow{}
-	for rows.Next() {
-		var i AgentDiscoveriesAfterRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.AgentID,
-			&i.CreatedAt,
-			&i.Actor,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const attachTriggerExecution = `-- name: AttachTriggerExecution :execrows
@@ -624,27 +543,21 @@ const ensureAutomationFeedCursor = `-- name: EnsureAutomationFeedCursor :one
 WITH ins AS (
     INSERT INTO pc.automation_feed_cursors (org_id, seq) VALUES ($1, $2)
     ON CONFLICT (org_id) DO NOTHING
-    RETURNING seq, agent_change_at, agent_change_id
+    RETURNING seq
 )
-SELECT seq, agent_change_at, agent_change_id FROM ins
+SELECT seq FROM ins
 UNION ALL
-SELECT c.seq, c.agent_change_at, c.agent_change_id FROM pc.automation_feed_cursors c WHERE c.org_id = $1
+SELECT c.seq FROM pc.automation_feed_cursors c WHERE c.org_id = $1
 LIMIT 1
 `
 
-type EnsureAutomationFeedCursorRow struct {
-	Seq           int64
-	AgentChangeAt *time.Time
-	AgentChangeID *ids.UUID
-}
-
 // A new cursor starts at the feed's head: nothing recorded before it
 // triggers anything.
-func (q *Queries) EnsureAutomationFeedCursor(ctx context.Context, orgID ids.OrgID, head int64) (EnsureAutomationFeedCursorRow, error) {
+func (q *Queries) EnsureAutomationFeedCursor(ctx context.Context, orgID ids.OrgID, head int64) (int64, error) {
 	row := q.db.QueryRow(ctx, ensureAutomationFeedCursor, orgID, head)
-	var i EnsureAutomationFeedCursorRow
-	err := row.Scan(&i.Seq, &i.AgentChangeAt, &i.AgentChangeID)
-	return i, err
+	var seq int64
+	err := row.Scan(&seq)
+	return seq, err
 }
 
 const expireQueuedTriggers = `-- name: ExpireQueuedTriggers :execrows
@@ -1137,25 +1050,6 @@ func (q *Queries) InsertEventSource(ctx context.Context, arg InsertEventSourcePa
 		arg.CreatedBy,
 	)
 	return err
-}
-
-const latestAgentChange = `-- name: LatestAgentChange :one
-SELECT c.created_at, c.id FROM pc.agent_changes c
-WHERE c.org_id = $1 AND c.kind = 'agent.discovered'
-ORDER BY c.created_at DESC, c.id DESC
-LIMIT 1
-`
-
-type LatestAgentChangeRow struct {
-	CreatedAt time.Time
-	ID        ids.UUID
-}
-
-func (q *Queries) LatestAgentChange(ctx context.Context, orgID ids.OrgID) (LatestAgentChangeRow, error) {
-	row := q.db.QueryRow(ctx, latestAgentChange, orgID)
-	var i LatestAgentChangeRow
-	err := row.Scan(&i.CreatedAt, &i.ID)
-	return i, err
 }
 
 const listAutomationDestinations = `-- name: ListAutomationDestinations :many
@@ -2098,13 +1992,14 @@ func (q *Queries) SetTriggerState(ctx context.Context, arg SetTriggerStateParams
 }
 
 const thresholdGroupWindow = `-- name: ThresholdGroupWindow :one
-SELECT coalesce(sum(count), 0)::int AS total, max(depth)::int AS depth,
+SELECT coalesce(sum(count), 0)::int AS total, coalesce(max(depth), 0)::int AS depth,
        (SELECT coalesce(array_agg(DISTINCT x), '{}') FROM (
             SELECT unnest(c.ancestry) AS x FROM pc.automation_threshold_counts c
             WHERE c.org_id = $1 AND c.automation_id = $2
               AND c.group_key = $3 AND c.minute >= $4
             LIMIT 64) u)::uuid[] AS ancestry,
-       (array_agg(root_trigger_id ORDER BY minute) FILTER (WHERE root_trigger_id IS NOT NULL))[1]::uuid AS root_trigger_id
+       coalesce((array_agg(root_trigger_id ORDER BY minute) FILTER (WHERE root_trigger_id IS NOT NULL))[1],
+                '00000000-0000-0000-0000-000000000000')::uuid AS root_trigger_id
 FROM pc.automation_threshold_counts
 WHERE org_id = $1 AND automation_id = $2 AND group_key = $3
   AND minute >= $4

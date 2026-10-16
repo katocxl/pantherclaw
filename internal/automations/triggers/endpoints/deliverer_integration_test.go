@@ -11,8 +11,10 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -73,7 +75,7 @@ func newFixture(t *testing.T) *fixture {
 	roots.AddCert(f.recv.srv.Certificate())
 	trig := triggers.New(triggers.Deps{Pool: f.Pool, Editions: triggerstest.Team})
 	var err error
-	f.svc, err = New(f.Pool, f.Envelope, trig, triggerstest.Team, Config{PublicURL: "https://pc.example.com", RootCAs: roots}, f.clk, nil)
+	f.svc, err = New(f.Pool, f.Envelope, trig, triggerstest.Team, Config{PublicURL: "https://pc.example.com", RootCAs: roots}, f.clk, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}

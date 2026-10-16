@@ -77,7 +77,7 @@ func TestT122_BaseKeys(t *testing.T) {
 	a, src, exec := ids.NewV7(), ids.NewV7(), ids.NewV7()
 	at := time.Date(2027, 3, 28, 1, 0, 0, 0, time.UTC)
 	keys := []string{
-		ScheduleKey(a, at), ScheduleKey(a, at.Add(time.Minute)), EventKey(src), AgentChangeKey(src),
+		ScheduleKey(a, at), ScheduleKey(a, at.Add(time.Minute)), EventKey(src),
 		InboundKey(src, "msg_1"), InboundKey(src, "msg_2"), ManualKey("k"), RetryKey(exec, "k"),
 		ThresholdKey(a, "agent:x", at), ConditionKey(a, "grant:x", at),
 	}

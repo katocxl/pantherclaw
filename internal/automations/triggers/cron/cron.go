@@ -9,9 +9,11 @@
 // A schedule is "minute hour day-of-month month day-of-week". Each field is
 // a comma-separated list of items; an item is "*", "*/step", "n", "a-b" or
 // "a-b/step". Months accept JAN–DEC and days of the week SUN–SAT (case
-// insensitive); day-of-week 0 and 7 are both Sunday. As in Vixie cron, when
-// both day fields are restricted a day matches either of them; when one of
-// them starts with "*" only the other one counts.
+// insensitive); day-of-week 0 and 7 are both Sunday, and SUN ending a range
+// (MON-SUN, FRI-SUN) reads as 7. As in Vixie cron, when both day fields are
+// restricted a day matches either of them; when one of them starts with "*"
+// a day must match both (so "0 0 */2 * MON" is odd-numbered Mondays:
+// Intersects reports that case, and previews say so).
 //
 // Wall-clock times are resolved in the zone:
 //   - a time that does not exist (spring forward) is skipped (GapSkip) or
@@ -50,6 +52,8 @@ type Spec struct {
 	expr                         string
 	minute, hour, dom, month, dw field
 	domStar, dowStar             bool
+	// intersect: a stepped day field ("*/n") meets a restricted one.
+	intersect bool
 }
 
 // String returns the expression as parsed.
@@ -108,6 +112,7 @@ func Parse(expr string) (Spec, error) {
 		domStar: strings.HasPrefix(parts[2], "*"),
 		dowStar: strings.HasPrefix(parts[4], "*"),
 	}
+	s.intersect = parts[2] != "*" && parts[4] != "*" && (s.domStar || s.dowStar)
 	if !s.canFire() {
 		return Spec{}, ErrNeverFires
 	}
@@ -145,6 +150,9 @@ func parseField(raw string, d fieldDef) (field, error) {
 			}
 			if hi, err = value(b, d); err != nil {
 				return 0, bad(err.Error())
+			}
+			if d.name == "day-of-week" && hi == 0 && lo > 0 && strings.EqualFold(b, "SUN") {
+				hi = 7 // SUN closing a range is the end of the week
 			}
 			if lo > hi {
 				return 0, bad("a range runs from low to high")
@@ -197,7 +205,7 @@ var maxDays = [13]int{0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
 // restriction without a day-of-week one can rule every date out (for
 // example "0 0 30 2 *").
 func (s Spec) canFire() bool {
-	if s.domStar || !s.dowStar {
+	if !s.domStar && !s.dowStar {
 		return true
 	}
 	for m := 1; m <= 12; m++ {
@@ -220,17 +228,16 @@ func (s Spec) dayMatches(y int, m time.Month, d int) bool {
 	}
 	wd := int(time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Weekday())
 	domOK, dowOK := s.dom.has(d), s.dw.has(wd)
-	switch {
-	case s.domStar && s.dowStar:
-		return true
-	case s.domStar:
-		return dowOK
-	case s.dowStar:
-		return domOK
-	default:
-		return domOK || dowOK
+	if s.domStar || s.dowStar {
+		return domOK && dowOK
 	}
+	return domOK || dowOK
 }
+
+// Intersects reports whether a stepped day field ("*/n") meets a
+// restricted one, so a day must match both (Vixie cron): "0 0 */2 * MON"
+// is odd-numbered Mondays, not odd days and Mondays.
+func (s Spec) Intersects() bool { return s.intersect }
 
 // Gap says what a wall-clock time inside a spring-forward gap does.
 type Gap int
@@ -277,9 +284,9 @@ func LoadZone(name string) (*time.Location, error) {
 	return loc, nil
 }
 
-// searchDays bounds the search for the next matching day: nine years cover
-// any leap-day schedule (2096 → 2104 skips 2100).
-const searchDays = 9*366 + 1
+// searchDays bounds the search for the next matching day: 29 years cover a
+// leap day on any day of the week (2100 is not a leap year).
+const searchDays = 29*366 + 1
 
 // Next returns the first occurrence that fires strictly after after.
 func (s Spec) Next(after time.Time, loc *time.Location, gap Gap) (Occurrence, bool) {

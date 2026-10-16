@@ -161,16 +161,12 @@ CREATE TABLE pc.automation_schedules (
 CREATE INDEX automation_schedules_due ON pc.automation_schedules (org_id, next_fire_at) WHERE state = 'ACTIVE';
 
 -- The platform-event consumer's cursor per org (D18): the last feed seq
--- read, moved by compare-and-set; and the last agent change read (agent
--- discovery is recorded in pc.agent_changes, not in the ledger).
+-- read, moved by compare-and-set.
 CREATE TABLE pc.automation_feed_cursors (
-    org_id          uuid        NOT NULL REFERENCES pc.orgs (id),
-    seq             bigint      NOT NULL DEFAULT 0 CHECK (seq >= 0),
-    agent_change_at timestamptz,
-    agent_change_id uuid,
-    updated_at      timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (org_id),
-    CHECK ((agent_change_at IS NULL) = (agent_change_id IS NULL))
+    org_id     uuid        NOT NULL REFERENCES pc.orgs (id),
+    seq        bigint      NOT NULL DEFAULT 0 CHECK (seq >= 0),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (org_id)
 );
 
 -- +goose StatementBegin
@@ -179,8 +175,7 @@ LANGUAGE plpgsql
 SET search_path = pc, pg_temp
 AS $$
 BEGIN
-    IF NEW.seq < OLD.seq OR (OLD.agent_change_at IS NOT NULL AND (NEW.agent_change_at IS NULL
-            OR (NEW.agent_change_at, NEW.agent_change_id) < (OLD.agent_change_at, OLD.agent_change_id))) THEN
+    IF NEW.seq < OLD.seq THEN
         RAISE EXCEPTION 'an automation feed cursor never moves backwards' USING ERRCODE = 'check_violation';
     END IF;
     NEW.updated_at := now();
@@ -457,13 +452,14 @@ GRANT UPDATE (trigger_id, expires_at) ON pc.automation_dedupe TO pc_app;
 GRANT DELETE ON pc.automation_dedupe TO pc_app;
 GRANT UPDATE (version_id, cron, timezone, next_fire_at, last_fire_at, state, updated_at) ON pc.automation_schedules TO pc_app;
 GRANT DELETE ON pc.automation_schedules TO pc_app;
-GRANT UPDATE (seq, agent_change_at, agent_change_id, updated_at) ON pc.automation_feed_cursors TO pc_app;
+GRANT UPDATE (seq, updated_at) ON pc.automation_feed_cursors TO pc_app;
 GRANT UPDATE (since, fired_at, seen_at) ON pc.automation_condition_state TO pc_app;
 GRANT DELETE ON pc.automation_condition_state TO pc_app;
 GRANT UPDATE (count, ancestry, depth, root_trigger_id) ON pc.automation_threshold_counts TO pc_app;
 GRANT DELETE ON pc.automation_threshold_counts TO pc_app;
 GRANT UPDATE (secret, prev_secret, prev_until, state, activated_by, activated_credential, activated_at, disabled_by,
     disabled_at, updated_at) ON pc.automation_event_sources, pc.automation_destinations TO pc_app;
+GRANT UPDATE (type, body_sha256, received_at, expires_at) ON pc.automation_event_receipts TO pc_app;
 GRANT DELETE ON pc.automation_event_receipts TO pc_app;
 GRANT UPDATE (body, state, attempts, next_attempt_at, last_status, last_error, delivered_at) ON pc.automation_deliveries TO pc_app;
 GRANT SELECT ON pc.automation_triggers, pc.automation_dedupe, pc.automation_schedules, pc.automation_feed_cursors,
