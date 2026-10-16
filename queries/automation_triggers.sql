@@ -209,6 +209,11 @@ WHERE r.org_id = sqlc.arg(org_id) AND r.id = ANY (sqlc.arg(ids)::uuid[]) AND r.a
 SELECT g.id, g.automation_execution_id::uuid AS execution_id FROM pc.grants g
 WHERE g.org_id = sqlc.arg(org_id) AND g.id = ANY (sqlc.arg(ids)::uuid[]) AND g.automation_execution_id IS NOT NULL;
 
+-- name: ApprovalsAutomationExecution :many
+-- Gate requests of automation executions (D23 ancestry, D87 L6).
+SELECT a.id, a.execution_id::uuid AS execution_id FROM pc.approval_requests a
+WHERE a.org_id = sqlc.arg(org_id) AND a.id = ANY (sqlc.arg(ids)::uuid[]) AND a.execution_id IS NOT NULL;
+
 -- name: ServiceAccountAutomations :many
 SELECT s.id, s.automation_id::uuid AS automation_id FROM pc.service_accounts s
 WHERE s.org_id = sqlc.arg(org_id) AND s.id = ANY (sqlc.arg(ids)::uuid[]) AND s.automation_id IS NOT NULL;
@@ -384,19 +389,19 @@ LIMIT 100;
 
 -- name: MarkAutomationDeliveryDelivered :execrows
 UPDATE pc.automation_deliveries
-SET state = 'DELIVERED', body = NULL, attempts = attempts + 1, last_status = sqlc.arg(status), last_error = NULL,
+SET state = 'DELIVERED', body = NULL, last_status = sqlc.arg(status), last_error = NULL,
     delivered_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';
 
 -- name: MarkAutomationDeliveryAttempt :execrows
 UPDATE pc.automation_deliveries
-SET attempts = attempts + 1, last_status = sqlc.narg(status), last_error = sqlc.arg(error),
+SET last_status = sqlc.narg(status), last_error = sqlc.arg(error),
     next_attempt_at = sqlc.arg(next_attempt_at)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';
 
 -- name: MarkAutomationDeliveryFailed :execrows
 UPDATE pc.automation_deliveries
-SET state = 'FAILED', body = NULL, attempts = least(attempts + sqlc.arg(add_attempt)::int, 8), last_status = sqlc.narg(status),
+SET state = 'FAILED', body = NULL, last_status = sqlc.narg(status),
     last_error = sqlc.arg(error)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';
 
@@ -419,7 +424,10 @@ ORDER BY r.expires_at, g.id
 LIMIT sqlc.arg(max_rows);
 
 -- name: ProbeApprovalsWaiting :many
-SELECT a.id, a.subject_kind, a.operation, a.created_at, a.agent_id, a.run_id, ru.automation_execution_id
+-- A gate request carries its own execution (D87 L6); an action request
+-- the execution of its run.
+SELECT a.id, a.subject_kind, a.operation, a.created_at, a.agent_id, a.run_id, a.execution_id AS gate_execution_id,
+       ru.automation_execution_id
 FROM pc.approval_requests a
 LEFT JOIN pc.runs ru ON ru.org_id = a.org_id AND ru.id = a.run_id
 WHERE a.org_id = sqlc.arg(org_id) AND a.state IN ('PENDING', 'EVIDENCE_REQUESTED')
@@ -470,13 +478,17 @@ SELECT d.trigger_id FROM pc.automation_dedupe d
 WHERE d.org_id = sqlc.arg(org_id) AND d.automation_id = sqlc.arg(automation_id) AND d.key = sqlc.arg(key)
   AND d.expires_at > now();
 
--- name: LeaseAutomationDelivery :execrows
+-- name: LeaseAutomationDelivery :one
 -- Takes a delivery for one send (D87 L11): no other sender picks it up
--- before the lease ends, even if this one never records the outcome.
-UPDATE pc.automation_deliveries SET next_attempt_at = now() + interval '2 minutes'
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';
+-- before the lease ends, even if this one never records the outcome. The
+-- lease counts the attempt before the POST (D97 N1), so a delivery with
+-- attempts > 0 may have reached its destination.
+UPDATE pc.automation_deliveries SET next_attempt_at = now() + interval '2 minutes', attempts = attempts + 1
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING'
+RETURNING attempts;
 
 -- name: CancelAutomationDelivery :execrows
--- The engine's cleanup cancels a delivery that has not been sent (D89).
+-- The engine's cleanup cancels a delivery that has not been sent (D89):
+-- never one an attempt was leased for (D97 N1).
 UPDATE pc.automation_deliveries SET state = 'FAILED', body = NULL, last_error = sqlc.arg(code)
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING' AND attempts = 0;

@@ -145,7 +145,7 @@ func TestHR275_SourcesActivateOnlyOnThePageWithAStepUp(t *testing.T) {
 	}
 
 	// A manual version that requires a step-up starts only on the page.
-	a := f.Automation(t, "refunds", f.Definition("refunds", `"manual":{"step_up":true,"params":{"ticket":{"type":"string","pattern":"T-[0-9]+"}}}`, ""),
+	a := f.Automation(t, "refunds", f.Definition(`"manual":{"step_up":true,"params":{"ticket":{"type":"string","pattern":"T-[0-9]+"}}}`, ""),
 		autodomain.RolloutFull)
 	op := f.As(td.KindUser, td.RoleAutomationOperator)
 	if _, err := trig.StartExecution(op, triggers.ManualStart{Automation: a.ID, Params: map[string]string{"ticket": "T-1"}, IdempotencyKey: "k"}, nil); !stepup.Is(err) {

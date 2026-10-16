@@ -110,8 +110,8 @@ func TestT123_TriggerLoopsAreRefusedOncePerRoot(t *testing.T) {
 	h, rec := newRecordingHarness(t)
 	f := h.f
 	when := `"event":{"on":"grant.issued","params":{"agent":{"from":"attrs.agent","type":"uuid","required":false}}}`
-	a := f.Automation(t, "loopy", f.Definition("loopy", when, ""), autodomain.RolloutFull)
-	b := f.Automation(t, "bystander", f.Definition("bystander", `"event":{"on":"grant.issued"}`, ""), autodomain.RolloutFull)
+	a := f.Automation(t, "loopy", f.Definition(when, ""), autodomain.RolloutFull)
+	b := f.Automation(t, "bystander", f.Definition(`"event":{"on":"grant.issued"}`, ""), autodomain.RolloutFull)
 	h.feed(t) // the cursor starts at the head: history never triggers
 
 	// A starts by hand; its execution issues a grant.
@@ -172,7 +172,7 @@ func TestT123_TriggerLoopsAreRefusedOncePerRoot(t *testing.T) {
 func TestT123_HourlyCapRefusesExcessWithOneIssue(t *testing.T) {
 	h, rec := newRecordingHarness(t)
 	f := h.f
-	a := f.Automation(t, "capped", f.Definition("capped", `"manual":{}`, `"limits":{"per_hour":2}`), autodomain.RolloutFull)
+	a := f.Automation(t, "capped", f.Definition(`"manual":{}`, `"limits":{"per_hour":2}`), autodomain.RolloutFull)
 	var states []State
 	for i := range 4 {
 		states = append(states, h.fire(t, a, "manual:"+string(rune('a'+i)), nil, Lineage{}).State)
@@ -196,7 +196,7 @@ func TestT123_HourlyCapRefusesExcessWithOneIssue(t *testing.T) {
 func TestThresholds_CountOncePerBucketAndNeverTheirOwnWork(t *testing.T) {
 	h, _ := newRecordingHarness(t)
 	f := h.f
-	thr := f.Automation(t, "burst", f.Definition("burst", `"threshold":{"on":"grant.revoked","over":"1h","at_least":3}`, ""), autodomain.RolloutFull)
+	thr := f.Automation(t, "burst", f.Definition(`"threshold":{"on":"grant.revoked","over":"1h","at_least":3}`, ""), autodomain.RolloutFull)
 	h.feed(t)
 	own := h.fire(t, thr, "manual:own", nil, Lineage{})
 	saT := evdomain.Actor{Type: "service_account", ID: thr.ServiceAccount.String()}
@@ -227,7 +227,7 @@ func TestEvents_TestEventsNeverTrigger(t *testing.T) {
 	h, _ := newRecordingHarness(t)
 	f := h.f
 	when := `"event":{"on":"grant.issued","where":"event.attrs.?env.orValue('') == 'prod'","params":{"op":{"from":"attrs.operation_name","type":"string","pattern":"[a-z.]+"}}}`
-	a := f.Automation(t, "watch", f.Definition("watch", when, ""), autodomain.RolloutFull)
+	a := f.Automation(t, "watch", f.Definition(when, ""), autodomain.RolloutFull)
 	h.feed(t)
 	h.record(t, "grant.issued", person(h), map[string]string{"simulated": "true", "env": "prod", "operation_name": "refund"})
 	h.record(t, "grant.issued", person(h), map[string]string{"env": "dev", "operation_name": "refund"})
@@ -249,8 +249,8 @@ func TestSchedules_FireMissAndCatchUp(t *testing.T) {
 	h, _ := newRecordingHarness(t)
 	f := h.f
 	ctx := context.Background()
-	skip := f.Automation(t, "minutely", f.Definition("minutely", `"schedule":{"cron":"* * * * *","timezone":"UTC"}`, ""), autodomain.RolloutFull)
-	catch := f.Automation(t, "catchup", f.Definition("catchup", `"schedule":{"cron":"*/5 * * * *","timezone":"Europe/London","missed":"CATCH_UP","catch_up_window":"1h"}`, ""), autodomain.RolloutFull)
+	skip := f.Automation(t, "minutely", f.Definition(`"schedule":{"cron":"* * * * *","timezone":"UTC"}`, ""), autodomain.RolloutFull)
+	catch := f.Automation(t, "catchup", f.Definition(`"schedule":{"cron":"*/5 * * * *","timezone":"Europe/London","missed":"CATCH_UP","catch_up_window":"1h"}`, ""), autodomain.RolloutFull)
 	for _, a := range []triggerstest.Automation{skip, catch} {
 		h.activator(t, func(ctx context.Context, act Activator, tx db.TenantTx) error {
 			return act.Activate(ctx, tx.Pgx(), a.ID, a.Version)
@@ -296,7 +296,7 @@ func TestConditions_FireOncePerEpisode(t *testing.T) {
 	f := h.f
 	ctx := context.Background()
 	when := `"condition":{"probe":"agent.unclaimed","for":"1m","params":{"agent":{"from":"agent","type":"uuid"}}}`
-	a := f.Automation(t, "claims", f.Definition("claims", when, ""), autodomain.RolloutFull)
+	a := f.Automation(t, "claims", f.Definition(when, ""), autodomain.RolloutFull)
 	agent := ids.NewV7()
 	f.Exec(t, "INSERT INTO pc.agents (org_id, id, name, state, created_by) VALUES ($1, $2, 'stray', 'DISCOVERED', 'system')", f.Org, agent)
 	if n, err := h.svc.EvaluateConditions(ctx, f.Org); err != nil || n != 0 {
