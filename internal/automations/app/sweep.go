@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/riverqueue/river"
@@ -40,9 +41,14 @@ type SweptCeilings struct{ Expired, Voided, ReviewDue int }
 func (s *Service) SweepOrg(ctx context.Context, org ids.OrgID) (SweptCeilings, error) {
 	var out SweptCeilings
 	var rows []dbq.ActiveAutomationCeilingsRow
+	var failing []string
 	if err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
 		var err error
-		rows, err = dbq.New(tx).ActiveAutomationCeilings(ctx, org)
+		if rows, err = q.ActiveAutomationCeilings(ctx, org); err != nil {
+			return err
+		}
+		failing, err = q.OpenAutomationFailureKeys(ctx, org, FailureSweep)
 		return err
 	}, db.ReadOnly()); err != nil {
 		return out, err
@@ -56,6 +62,8 @@ func (s *Service) SweepOrg(ctx context.Context, org ids.OrgID) (SweptCeilings, e
 			if ferr := s.sweepFailed(ctx, org, c); ferr != nil {
 				errs = append(errs, ferr)
 			}
+		} else if !slices.Contains(failing, sweepKey(c.ID)) {
+			continue
 		} else if err := s.sweepRecovered(ctx, org, c); err != nil {
 			errs = append(errs, fmt.Errorf("ceiling %s: %w", c.ID, err))
 		}
@@ -114,14 +122,11 @@ func (s *Service) sweepFailed(ctx context.Context, org ids.OrgID, c dbq.ActiveAu
 }
 
 // sweepRecovered resolves the ceiling's open sweep_failed once a check
-// succeeds again (D102 L6).
+// succeeds again (D102 L6); SweepOrg calls it only while one is open
+// (D106 D2).
 func (s *Service) sweepRecovered(ctx context.Context, org ids.OrgID, c dbq.ActiveAutomationCeilingsRow) error {
 	return s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		_, err := dbq.New(tx).ResolveAutomationFailure(ctx, dbq.ResolveAutomationFailureParams{
-			Resolution: "The next scheduled check of the authority succeeded.", OrgID: org, Kind: FailureSweep,
-			DedupeKey: sweepKey(c.ID),
-		})
-		return err
+		return s.resolveFailures(ctx, tx, FailureSweep, []string{sweepKey(c.ID)}, "The next scheduled check of the authority succeeded.")
 	})
 }
 

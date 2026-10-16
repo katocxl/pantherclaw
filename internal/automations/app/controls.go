@@ -15,6 +15,7 @@ import (
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/changes"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -178,7 +179,7 @@ func (s *Service) endCeilingTx(ctx context.Context, tx db.TenantTx, org ids.OrgI
 	}
 	return s.failure(ctx, tx, a, FailureAuthorityChanged,
 		"Automation "+a.Name+" was paused: its ceiling is "+string(state)+" ("+reason+").",
-		"Review the automation, then enable a new version or confirm its authority again.", "ceiling:"+ceiling.String())
+		"Review the automation, then enable a new version or confirm its authority again.", ceilingKey(ceiling))
 }
 
 // revokeGrantsTx revokes the automation's grants of scope (CEILING: those
@@ -508,6 +509,7 @@ func (s *Service) RevokeAuthority(ctx context.Context, automation ids.UUID, reas
 		out = automationView(r)
 		return record(ctx, tx, c.Actor(), "automation.authority_revoked", a.ID, map[string]string{
 			"ceilings_revoked": itoa(len(ended)), "grants_revoked": itoa(len(eff.GrantsRevoked)), "runs_ended": itoa(len(eff.RunsEnded)),
+			"executions_canceled": itoa(len(eff.ExecutionsAffected)), "deliveries_not_verified": itoa(len(eff.DeliveriesNotVerified)),
 			"note_sha256": noteDigest(reason),
 		})
 	})
@@ -521,3 +523,23 @@ func noteDigest(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hexDigest(sum[:])
 }
+
+// failureResolver resolves owned failures through the failure sink's
+// resolution path (reflex failures.Sink, D106 D2).
+type failureResolver interface {
+	Resolve(ctx context.Context, tx pgx.Tx, org ids.OrgID, kind string, keys []string, resolution string,
+		actor evdomain.Actor) ([]ids.UUID, error)
+}
+
+// resolveFailures resolves the open failures of kind with one of keys, as
+// PantherClaw itself; a sink that cannot resolve leaves them open.
+func (s *Service) resolveFailures(ctx context.Context, tx db.TenantTx, kind string, keys []string, resolution string) error {
+	r, ok := s.Failures.(failureResolver)
+	if !ok {
+		return nil
+	}
+	_, err := r.Resolve(ctx, tx.Pgx(), tx.OrgID(), kind, keys, resolution, systemActor)
+	return err
+}
+
+func ceilingKey(ceiling ids.UUID) string { return "ceiling:" + ceiling.String() }

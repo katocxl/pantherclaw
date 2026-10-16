@@ -34,6 +34,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 	runsapp "github.com/katocxl/pantherclaw/internal/runs/app"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -178,7 +179,7 @@ func newEnv(t *testing.T) *env {
 	ch := changes.New(e.pool, "https://pc.example.test")
 	e.svc = &autoapp.Service{
 		Pool: e.pool, Clock: clock.System{}, Changes: ch, Grants: e.grants, Runs: e.runs, Editions: editions{},
-		Operations: operations{}, TestGate: e.gate, Rollout: verified{},
+		Operations: operations{}, TestGate: e.gate, Rollout: verified{}, Failures: &failures.Sink{},
 	}
 	e.svc.RegisterChanges()
 	e.grants.Ceilings = e.svc
