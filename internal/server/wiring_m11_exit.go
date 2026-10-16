@@ -5,6 +5,7 @@ package server
 
 import (
 	"context"
+	"errors"
 
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -62,12 +63,16 @@ func wireM11Worker(core *automationsCore, pool *db.Pool) {
 
 // promotionRevoker is protect's PromotionRevoker over govern's
 // RevokePromotion: an exposed promotion's ROLLBACK revokes it as the
-// reviewer (D90 Q2).
+// reviewer (D90 Q2). A promotion already revoked or gone has nothing left
+// to roll back, so the undo is idempotent (D112 X2).
 type promotionRevoker struct{ s *promotions.Service }
 
 var _ protect.PromotionRevoker = promotionRevoker{}
 
 func (r promotionRevoker) RevokePromotion(ctx context.Context, id ids.UUID, reason string) error {
 	_, err := r.s.RevokePromotion(ctx, id, reason)
+	if errors.Is(err, promotions.ErrState) || errors.Is(err, promotions.ErrNotFound) {
+		return nil
+	}
 	return err
 }

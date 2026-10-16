@@ -67,8 +67,9 @@ func newAutomationTriggers(pool *db.Pool, bill *billing.Service, log *slog.Logge
 	if core != nil && automationPauser != nil {
 		d.Pauser = automationPauser(core)
 	}
-	probeM11("automations.triggers", &d)
-	return triggers.New(d)
+	s := triggers.New(d)
+	probeM11("automations.triggers", s)
+	return s
 }
 
 // newAutomationEndpoints builds the endpoints service: secrets under the

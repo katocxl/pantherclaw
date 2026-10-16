@@ -148,7 +148,14 @@ wait:
 // nilPorts lists v's exported pointer, interface, func and map fields that
 // are nil and not listed in m11Optional.
 func nilPorts(v any) []string {
-	rv := reflect.ValueOf(v)
+	out := structPorts(reflect.ValueOf(v))
+	slices.Sort(out)
+	return out
+}
+
+// structPorts is nilPorts over a value; a service that keeps its ports in
+// an unexported dependencies struct (triggers.Service.d) is looked into.
+func structPorts(rv reflect.Value) []string {
 	for rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
 			return []string{"the instance"}
@@ -163,6 +170,9 @@ func nilPorts(v any) []string {
 	for i := range rt.NumField() {
 		f := rt.Field(i)
 		if !f.IsExported() {
+			if f.Type.Kind() == reflect.Struct && f.Type.Name() == "Deps" {
+				out = append(out, structPorts(rv.Field(i))...)
+			}
 			continue
 		}
 		name := rt.Name() + "." + f.Name
@@ -179,7 +189,6 @@ func nilPorts(v any) []string {
 			}
 		}
 	}
-	slices.Sort(out)
 	return out
 }
 

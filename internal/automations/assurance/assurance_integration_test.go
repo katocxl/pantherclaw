@@ -231,7 +231,7 @@ func issuer(o *exposuretest.Org, gate ...grantsapp.PromotionGate) *grantsapp.Ser
 		Clock: clock.System{}, Store: gstore,
 	}
 	if len(gate) > 0 {
-		grants.Promotion = gate[0]
+		grants.Promotions = gate[0]
 	}
 	grants.Ceilings = &autoapp.Service{
 		Pool: o.P, Clock: clock.System{}, Changes: changes.New(o.P, "https://pc.example.test"), Grants: grants,
