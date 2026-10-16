@@ -18,7 +18,11 @@ import (
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/templates"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/endpoints"
+	"github.com/katocxl/pantherclaw/internal/automations/triggers/triggerstest"
 	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
+	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
+	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
 	"github.com/katocxl/pantherclaw/internal/evidence/pack"
 	"github.com/katocxl/pantherclaw/internal/evidence/packbuild"
 	"github.com/katocxl/pantherclaw/internal/pclaw"
@@ -195,6 +199,7 @@ func TestE2E_M11_GovernedAutomations(t *testing.T) {
 	}
 
 	a.widen(t, auto.ID, v.ID, source, aliceCtx, bob)
+	a.reciprocalLoop(t)
 	a.killSwitch(t, auto.ID, source, created.Secret, aliceCtx)
 	a.ceilingVoid(t, auto.ID, source, created.Secret)
 }
@@ -582,5 +587,73 @@ func (a *autoStack) widen(t *testing.T, automation, published, source ids.UUID, 
 	}
 	if got := s.row(t, "SELECT enabled_version_id::text FROM pc.automations WHERE id = $1", automation); got != published.String() {
 		t.Fatalf("a wider ceiling took effect before its ceremony: enabled %s, published %s", got, published)
+	}
+}
+
+// reciprocalLoop: ping starts on grant.revoked and pong on grant.issued. A
+// person's revocation starts ping; ping's work (a grant issued) starts pong
+// (its lineage names ping); pong's work (a grant revoked) comes back to
+// ping, which is refused REFUSED_LOOP and paused LOOP, with one
+// grouped alert and one owned failure for the root (D21, T-123). The two
+// automations are fixtures in the stack's org, published and in SHADOW (a
+// loop is a trigger refusal, whatever the mode), so the check runs on the
+// real trigger service and engine.
+func (a *autoStack) reciprocalLoop(t *testing.T) {
+	t.Helper()
+	s, ctx := a.r.s, context.Background()
+	f := &triggerstest.Fixture{Pool: s.pool, Org: s.org, User: a.r.aliceID}
+	ping := f.Automation(t, "loop-ping", f.Definition(`"event":{"on":"grant.revoked"}`, ""), autodomain.RolloutShadow)
+	pong := f.Automation(t, "loop-pong", f.Definition(`"event":{"on":"grant.issued"}`, ""), autodomain.RolloutShadow)
+	feed := func() {
+		t.Helper()
+		if _, err := ledger.ChainAll(ctx, s.pool, s.org, 1000); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := a.triggers.ProcessFeed(ctx, s.org); err != nil {
+			t.Fatal(err)
+		}
+	}
+	record := func(name string, actor evdomain.Actor, details map[string]string) {
+		t.Helper()
+		if err := s.pool.InTenantTx(ctx, s.org, func(ctx context.Context, tx db.TenantTx) error {
+			_, err := audit.Record(ctx, tx, audit.Event{
+				Name: name, Actor: actor, Outcome: audit.Success,
+				Object: &audit.Object{Type: "grant", ID: ids.NewV7().String()}, Details: details,
+			})
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		feed()
+	}
+	sa := func(x triggerstest.Automation) evdomain.Actor {
+		return evdomain.Actor{Type: "service_account", ID: x.ServiceAccount.String()}
+	}
+	feed() // the cursor starts at the head
+	record("grant.revoked", evdomain.Actor{Type: "user", ID: a.r.aliceID.String()}, nil)
+	first := a.latestExecution(t, ping.ID)
+	a.advance(t, first)
+	// ping's work (a grant issued) starts pong.
+	record("grant.issued", sa(ping), map[string]string{"execution": first.String(), "automation": ping.ID.String()})
+	second := a.latestExecution(t, pong.ID)
+	a.advance(t, second)
+	// pong's work (a grant revoked) comes back to ping: refused, its lineage
+	// holds ping.
+	record("grant.revoked", sa(pong), map[string]string{"execution": second.String(), "automation": pong.ID.String()})
+	if n := s.row(t, "SELECT count(*)::text FROM pc.automation_triggers WHERE automation_id = $1 AND state = 'REFUSED_LOOP'", ping.ID); n == "0" {
+		t.Fatal("ping was not refused REFUSED_LOOP")
+	}
+	if got := s.row(t, `SELECT ancestry::text FROM pc.automation_triggers WHERE automation_id = $1 AND state IN ('ACCEPTED', 'SHADOW')
+		ORDER BY received_at DESC LIMIT 1`, pong.ID); !strings.Contains(got, ping.ID.String()) {
+		t.Fatalf("pong's lineage does not name ping: %s", got)
+	}
+	if st := a.automationState(t, ping.ID); st != "PAUSED/LOOP" {
+		t.Fatalf("ping after the loop: %s", st)
+	}
+	if n := s.row(t, "SELECT count(*)::text FROM pc.alerts WHERE rule_id = 'automation.loop'"); n != "1" {
+		t.Fatalf("loop alerts: %s, want one grouped issue", n)
+	}
+	if n := s.row(t, "SELECT count(*)::text FROM pc.operational_failures WHERE kind = 'automation.loop_stopped'"); n == "0" {
+		t.Fatal("the loop has no owned failure")
 	}
 }
