@@ -14,6 +14,7 @@ import (
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/engine"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 )
@@ -77,12 +78,30 @@ func (h hooks) Revalidate(ctx context.Context, tx pgx.Tx, x *engine.Exec) (strin
 		return autodomain.ReasonAuthorityChanged, nil
 	}
 	if ceiling != nil {
+		approvers := s.CeilingApprovers
+		if s.CeilingState == string(autodomain.CeilingSuperseded) {
+			// A rollout of the same version superseded the ceiling the
+			// execution started under: it goes on under the current one
+			// (D54, D84 E3).
+			c, err := q.GetActiveAutomationCeiling(ctx, x.Org, x.Automation)
+			if db.IsNoRows(err) {
+				return autodomain.ReasonCeilingVoid, nil
+			} else if err != nil {
+				return "", err
+			}
+			if c.VersionID != x.Version {
+				return autodomain.ReasonCeilingVoid, nil
+			}
+			ceiling, approvers = &c.ID, c.ApprovedBy
+			s.CeilingState, s.CeilingInReview = c.State, c.InReview
+			x.View.Ceiling, x.View.Confirmers = c.ID, c.ApprovedBy
+		}
 		if s.CeilingState != string(autodomain.CeilingActive) || !s.CeilingInReview {
 			return autodomain.ReasonCeilingVoid, nil
 		}
 		if h.e.Ceilings != nil {
 			ok, _, err := h.e.Ceilings.Check(ctx, tx, autodomain.CeilingCheck{
-				Org: x.Org, Automation: x.Automation, Ceiling: *ceiling, Approvers: s.CeilingApprovers,
+				Org: x.Org, Automation: x.Automation, Ceiling: *ceiling, Approvers: approvers,
 				Agents: ceilingAgents(x.Def), Kinds: kindsOf(x.Def),
 			})
 			if err != nil {
@@ -199,6 +218,10 @@ func (h hooks) Escalate(ctx context.Context, tx pgx.Tx, x *engine.Exec, kind, st
 	key := kind + ":" + x.ID.String()
 	if step != "" {
 		key += ":" + step
+	}
+	if reason == autodomain.ReasonCeilingVoid && !x.View.Ceiling.IsZero() {
+		// One failure per ceiling, not per execution (D84 E4).
+		key = kind + ":ceiling:" + x.View.Ceiling.String()
 	}
 	_, err := h.e.Failures.Report(ctx, tx, reflexdomain.Failure{
 		Org: x.Org, Kind: kind, Summary: summary,

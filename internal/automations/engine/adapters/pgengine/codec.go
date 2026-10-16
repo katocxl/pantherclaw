@@ -101,3 +101,6 @@ func decodeOutput(b []byte) (map[string]string, error) {
 	}
 	return out, nil
 }
+
+// DecodeParams reads an execution's stored typed parameters (inspector).
+func DecodeParams(b []byte) (map[string]autodomain.Value, error) { return decodeParams(b) }

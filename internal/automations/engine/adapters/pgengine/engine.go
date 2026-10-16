@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -71,7 +72,8 @@ type Engine struct {
 	Reconciler Reconciler
 	Voider     CeilingVoider
 
-	defs definitions
+	defs   definitions
+	voided sync.Map
 }
 
 // New returns an engine whose Machine runs steps; set the ports before use.
@@ -135,6 +137,9 @@ func (e *Engine) Start(ctx context.Context, tx pgx.Tx, t autodomain.TriggerRef) 
 	}
 	var ceiling *ids.UUID
 	if c, err := q.GetActiveAutomationCeiling(ctx, t.Org, t.Automation); err == nil {
+		if c.VersionID != t.Version {
+			return ids.UUID{}, autodomain.ErrNotActive
+		}
 		ceiling = &c.ID
 	} else if !db.IsNoRows(err) {
 		return ids.UUID{}, err
@@ -221,6 +226,7 @@ var ErrNotFound = pcerr.New(pcerr.NotFound, "EXECUTION_NOT_FOUND", "execution no
 func (e *Engine) Advance(ctx context.Context, org ids.OrgID, id ids.UUID) error {
 	for range 5 {
 		again := false
+		var void ids.UUID
 		err := e.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 			q := dbq.New(tx)
 			x, err := e.load(ctx, q, org, id)
@@ -250,13 +256,27 @@ func (e *Engine) Advance(ctx context.Context, org ids.OrgID, id ids.UUID) error 
 			if err := e.audit(ctx, tx, x, before); err != nil {
 				return err
 			}
+			void = voidedCeiling(x)
 			return e.save(ctx, q, x)
 		})
 		if errors.Is(err, ErrNotFound) {
 			return nil
 		}
-		if err != nil || !again {
+		if err != nil {
+			if ctx.Err() == nil {
+				if ferr := e.countError(ctx, org, id, err); ferr != nil {
+					return errors.Join(err, ferr)
+				}
+			}
 			return err
+		}
+		if !void.IsZero() {
+			if err := e.voidCeiling(ctx, org, void); err != nil {
+				return err
+			}
+		}
+		if !again {
+			return nil
 		}
 	}
 	return nil
@@ -297,4 +317,112 @@ func (e *Engine) audit(ctx context.Context, tx db.TenantTx, x *engine.Exec, befo
 		}
 	}
 	return nil
+}
+
+// voidedCeiling is the ceiling a LIVE execution found void in this pass
+// (revalidation or issuance refused CEILING_VOID), else zero.
+func voidedCeiling(x *engine.Exec) ids.UUID {
+	if x.Mode != autodomain.ModeLive || x.View.Ceiling.IsZero() {
+		return ids.UUID{}
+	}
+	if !x.Active() && x.Reason == autodomain.ReasonCeilingVoid {
+		return x.View.Ceiling
+	}
+	for _, a := range x.Attempts {
+		if (a.New || a.Dirty) && a.Reason == autodomain.ReasonCeilingVoid {
+			return x.View.Ceiling
+		}
+	}
+	return ids.UUID{}
+}
+
+// voidCeiling asks core to void a ceiling whose approvers no longer hold,
+// in its own transaction (D57, D84 E4), once per ceiling per process.
+func (e *Engine) voidCeiling(ctx context.Context, org ids.OrgID, ceiling ids.UUID) error {
+	if e.Voider == nil {
+		return nil
+	}
+	if _, done := e.voided.LoadOrStore(ceiling, true); done {
+		return nil
+	}
+	if err := e.Voider.VoidCeiling(ctx, org, ceiling, autodomain.ReasonCeilingVoid); err != nil {
+		e.voided.Delete(ceiling)
+		return err
+	}
+	return nil
+}
+
+// MaxEngineErrors is how many consecutive driver errors fail an execution
+// (D84): a definition that no longer decodes, for example, never loops
+// forever.
+const MaxEngineErrors = 5
+
+// ReasonEngineError ends an execution the driver cannot work.
+const ReasonEngineError = "ENGINE_ERROR"
+
+// countError records a driver error in its own transaction; the fifth in
+// a row fails the execution with an owned failure for its owner.
+func (e *Engine) countError(ctx context.Context, org ids.OrgID, id ids.UUID, cause error) error {
+	return e.Pool.InTenantTx(context.WithoutCancel(ctx), org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		r, err := q.CountAutomationExecutionError(ctx, org, id)
+		if db.IsNoRows(err) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		if int(r.EngineErrors) < MaxEngineErrors {
+			return nil
+		}
+		res, err := encodeResult(engine.Result{
+			State: autodomain.ExecFailed, Reason: ReasonEngineError, Changed: []string{}, Unchanged: []string{},
+			Unknown: []string{}, Unresolved: []engine.Unresolved{{Kind: ReasonEngineError, Detail: errText(cause)}},
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := q.FailAutomationExecution(ctx, dbq.FailAutomationExecutionParams{
+			OrgID: org, ID: id, Reason: nonEmpty(ReasonEngineError), Result: res,
+		}); err != nil {
+			return err
+		}
+		actx := automationctx.With(ctx, automationctx.Ref{
+			Automation: r.AutomationID, Version: r.VersionID, Execution: id,
+			Trigger: r.TriggerID,
+		})
+		if _, err := audit.Record(actx, tx, audit.Event{
+			Name: "automation.execution_finished", Actor: evdomain.Actor{Type: "service_account", ID: r.ServiceAccountID.String()},
+			Outcome: audit.Failure, ReasonCode: ReasonEngineError, Object: &audit.Object{Type: "automation_execution", ID: id.String()},
+			Details: automationctx.Annotate(actx, map[string]string{"state": string(autodomain.ExecFailed), "mode": r.Mode}),
+		}); err != nil {
+			return err
+		}
+		if e.Failures == nil {
+			return nil
+		}
+		_, err = e.Failures.Report(ctx, tx.Pgx(), reflexdomain.Failure{
+			Org: org, Kind: FailureEngineError,
+			Summary:  "Automation " + r.Name + " execution " + id.String() + " could not be worked and was stopped",
+			NextStep: "Check the automation's enabled version and the server logs, then retry the execution.",
+			Scope: []reflexdomain.Subject{
+				{Type: reflexdomain.SubjectAutomation, ID: r.AutomationID.String()},
+				{Type: reflexdomain.SubjectAutomationExecution, ID: id.String()},
+			},
+			Owner:    &reflexdomain.Subject{Type: reflexdomain.SubjectUser, ID: r.OwnerUserID.String()},
+			Deadline: time.Now().Add(escalationWindow).UTC(), DedupeKey: FailureEngineError + ":" + id.String(),
+		})
+		return err
+	})
+}
+
+// FailureEngineError is the owned failure of an execution the driver
+// stopped (D38).
+const FailureEngineError = "automation.engine_error"
+
+// errText is a short, non-secret error class for the result.
+func errText(err error) string {
+	if r := pcerr.ReasonOf(err); r != "" {
+		return r
+	}
+	return "INTERNAL"
 }

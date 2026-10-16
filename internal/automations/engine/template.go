@@ -87,6 +87,9 @@ func (r renderer) walk(ptr string, v any) (any, error) {
 		if !ok {
 			return nil, fmt.Errorf("%w: %s is not templatable", ErrTemplate, ptr)
 		}
+		if pattern == jsonInputPattern {
+			return r.fillJSON(ptr, t)
+		}
 		return r.fill(ptr, t, strings.Contains(pattern, "/ids/"))
 	}
 	return v, nil
@@ -157,3 +160,54 @@ func (r renderer) fill(ptr, s string, identifier bool) (string, error) {
 func escapePointer(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "~", "~0"), "/", "~1")
 }
+
+// jsonInputPattern is the templatable field whose values are JSON text: a
+// runner call's input (D33, D83).
+const jsonInputPattern = "/calls/*/input/*"
+
+// fillJSON renders a runner call input: exactly one placeholder, rendered
+// as the JSON of its typed value (strings quoted, numbers exact, never a
+// float); an earlier step's output is a JSON string. Text around a
+// placeholder is refused (no concatenation, HR-276).
+func (r renderer) fillJSON(ptr, s string) (string, error) {
+	loc := placeholder.FindStringIndex(s)
+	if loc == nil || loc[0] != 0 || loc[1] != len(s) {
+		return "", fmt.Errorf("%w: %s takes exactly one placeholder", ErrTemplate, ptr)
+	}
+	sub := placeholder.FindStringSubmatch(s)
+	if sub[1] == "" {
+		v, ok := r.outputs[sub[2]][sub[3]]
+		if !ok {
+			return "", fmt.Errorf("%w: %s: step %q has no output %q", ErrTemplate, ptr, sub[2], sub[3])
+		}
+		b, err := json.Marshal(v)
+		return string(b), err
+	}
+	v, ok := r.params[sub[1]]
+	if !ok {
+		return "", fmt.Errorf("%w: %s: no parameter %q", ErrTemplate, ptr, sub[1])
+	}
+	return JSONValue(v)
+}
+
+// JSONValue is a typed parameter as JSON text: int and decimal as exact
+// JSON numbers, bool as true or false, everything else as a JSON string.
+func JSONValue(v autodomain.Value) (string, error) {
+	switch v.Type {
+	case autodomain.ParamInt:
+		return strconv.FormatInt(v.Int, 10), nil
+	case autodomain.ParamDecimal:
+		if !jsonNumber.MatchString(v.Decimal) {
+			return "", fmt.Errorf("%w: decimal %q", ErrTemplate, v.Decimal)
+		}
+		return v.Decimal, nil
+	case autodomain.ParamBool:
+		return strconv.FormatBool(v.Bool), nil
+	case autodomain.ParamString, autodomain.ParamEnum, autodomain.ParamUUID:
+	}
+	b, err := json.Marshal(v.Text())
+	return string(b), err
+}
+
+// jsonNumber is an exact decimal as JSON writes it.
+var jsonNumber = regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+)?$`)

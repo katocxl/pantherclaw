@@ -2150,6 +2150,7 @@ type CreateEvidencePackRequest struct {
 	//	*CreateEvidencePackRequest_RunId
 	//	*CreateEvidencePackRequest_AgentId
 	//	*CreateEvidencePackRequest_TimeRange
+	//	*CreateEvidencePackRequest_AutomationExecutionId
 	Scope isCreateEvidencePackRequest_Scope `protobuf_oneof:"scope"`
 	// For a run or an agent: only the transactions created in this range.
 	Within *PackTimeRange `protobuf:"bytes,5,opt,name=within,proto3" json:"within,omitempty"`
@@ -2232,6 +2233,15 @@ func (x *CreateEvidencePackRequest) GetTimeRange() *PackTimeRange {
 	return nil
 }
 
+func (x *CreateEvidencePackRequest) GetAutomationExecutionId() string {
+	if x != nil {
+		if x, ok := x.Scope.(*CreateEvidencePackRequest_AutomationExecutionId); ok {
+			return x.AutomationExecutionId
+		}
+	}
+	return ""
+}
+
 func (x *CreateEvidencePackRequest) GetWithin() *PackTimeRange {
 	if x != nil {
 		return x.Within
@@ -2270,6 +2280,12 @@ type CreateEvidencePackRequest_TimeRange struct {
 	TimeRange *PackTimeRange `protobuf:"bytes,4,opt,name=time_range,json=timeRange,proto3,oneof"`
 }
 
+type CreateEvidencePackRequest_AutomationExecutionId struct {
+	// One automation execution: its trigger, version, authority, steps and
+	// result, and every transaction of its runs (G0 M11 part 2 D30).
+	AutomationExecutionId string `protobuf:"bytes,7,opt,name=automation_execution_id,json=automationExecutionId,proto3,oneof"`
+}
+
 func (*CreateEvidencePackRequest_Transactions) isCreateEvidencePackRequest_Scope() {}
 
 func (*CreateEvidencePackRequest_RunId) isCreateEvidencePackRequest_Scope() {}
@@ -2277,6 +2293,8 @@ func (*CreateEvidencePackRequest_RunId) isCreateEvidencePackRequest_Scope() {}
 func (*CreateEvidencePackRequest_AgentId) isCreateEvidencePackRequest_Scope() {}
 
 func (*CreateEvidencePackRequest_TimeRange) isCreateEvidencePackRequest_Scope() {}
+
+func (*CreateEvidencePackRequest_AutomationExecutionId) isCreateEvidencePackRequest_Scope() {}
 
 // EvidencePack is a pack's state and, when ready, its signed manifest.
 type EvidencePack struct {
@@ -2963,13 +2981,14 @@ const file_pantherclaw_v1_evidence_proto_rawDesc = "" +
 	"\bversions\x18\x02 \x01(\bR\bversions\x12\x1c\n" +
 	"\tapprovals\x18\x03 \x01(\bR\tapprovals\x12 \n" +
 	"\vcontainment\x18\x04 \x01(\bR\vcontainment\x12\x1a\n" +
-	"\bcaptures\x18\x05 \x01(\bR\bcaptures\"\xf4\x02\n" +
+	"\bcaptures\x18\x05 \x01(\bR\bcaptures\"\xb8\x03\n" +
 	"\x19CreateEvidencePackRequest\x12F\n" +
 	"\ftransactions\x18\x01 \x01(\v2 .pantherclaw.v1.PackTransactionsH\x00R\ftransactions\x12!\n" +
 	"\x06run_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x05runId\x12%\n" +
 	"\bagent_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\aagentId\x12>\n" +
 	"\n" +
-	"time_range\x18\x04 \x01(\v2\x1d.pantherclaw.v1.PackTimeRangeH\x00R\ttimeRange\x125\n" +
+	"time_range\x18\x04 \x01(\v2\x1d.pantherclaw.v1.PackTimeRangeH\x00R\ttimeRange\x12B\n" +
+	"\x17automation_execution_id\x18\a \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x15automationExecutionId\x125\n" +
 	"\x06within\x18\x05 \x01(\v2\x1d.pantherclaw.v1.PackTimeRangeR\x06within\x12>\n" +
 	"\ainclude\x18\x06 \x01(\v2\x1c.pantherclaw.v1.PackContentsB\x06\xbaH\x03\xc8\x01\x01R\aincludeB\x0e\n" +
 	"\x05scope\x12\x05\xbaH\x02\b\x01\"\x94\x04\n" +
@@ -3185,6 +3204,7 @@ func file_pantherclaw_v1_evidence_proto_init() {
 		(*CreateEvidencePackRequest_RunId)(nil),
 		(*CreateEvidencePackRequest_AgentId)(nil),
 		(*CreateEvidencePackRequest_TimeRange)(nil),
+		(*CreateEvidencePackRequest_AutomationExecutionId)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

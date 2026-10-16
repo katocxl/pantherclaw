@@ -28,10 +28,10 @@ SELECT * FROM pc.waitlist_entries WHERE org_id = sqlc.arg(org_id) AND id = sqlc.
 -- subject, so a producer that finds one returns it.
 -- name: OpenWaitlistEntry :one
 INSERT INTO pc.waitlist_entries (org_id, id, kind, subject_type, subject_id, agent_id, run_id, transaction_id, requested_by,
-    evidence, priority, deadline_at)
+    requested_by_automation, evidence, priority, deadline_at)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(kind), sqlc.arg(subject_type), sqlc.arg(subject_id), sqlc.narg(agent_id),
-    sqlc.narg(run_id), sqlc.narg(transaction_id), sqlc.narg(requested_by), sqlc.arg(evidence), sqlc.arg(priority),
-    sqlc.arg(deadline_at))
+    sqlc.narg(run_id), sqlc.narg(transaction_id), sqlc.narg(requested_by), sqlc.narg(requested_by_automation),
+    sqlc.arg(evidence), sqlc.arg(priority), sqlc.arg(deadline_at))
 ON CONFLICT (org_id, subject_type, subject_id) WHERE state = 'OPEN' DO NOTHING
 RETURNING id;
 

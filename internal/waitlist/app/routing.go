@@ -210,6 +210,10 @@ var (
 	reconciliationNotices = family{
 		escalated: "reconciliation.escalated", reminder: "reconciliation.escalated", unroutable: "reconciliation.escalated",
 	}
+	// gateNotices are an automation gate's (G0 M11 part 2 D25a).
+	gateNotices = family{
+		escalated: "automation.gate_escalated", reminder: "automation.gate_reminder", unroutable: "automation.gate_unroutable",
+	}
 	// entryNotices are every other kind's.
 	entryNotices = family{
 		escalated: "waitlist.entry_escalated", reminder: "waitlist.entry_escalated", unroutable: "waitlist.entry_escalated",
@@ -381,10 +385,34 @@ func notice(ctx context.Context, q *dbq.Queries, org ids.OrgID, e dbq.EntryForRo
 		if err != nil {
 			return m, approvalNotices, err
 		}
+		agent := ""
+		if req.AgentID != nil {
+			agent = req.AgentID.String()
+		}
 		m.Type, m.Params = "approval.requested", map[string]string{
-			"operation": req.Operation, "agent": req.AgentID.String(), "deadline": deadline, "request": req.ID.String(),
+			"operation": req.Operation, "agent": agent, "deadline": deadline, "request": req.ID.String(),
 		}
 		return m, approvalNotices, nil
+	case wdomain.KindAutomationGate:
+		req, err := q.GetApprovalRequest(ctx, org, e.SubjectID)
+		if err != nil {
+			return m, gateNotices, err
+		}
+		name, step := "", ""
+		if req.RequestedByAutomation != nil {
+			a, err := q.GetAutomation(ctx, org, *req.RequestedByAutomation)
+			if err != nil {
+				return m, gateNotices, err
+			}
+			name = a.Name
+		}
+		if req.StepID != nil {
+			step = *req.StepID
+		}
+		m.Type, m.Params = "automation.gate_requested", map[string]string{
+			"automation": name, "step": step, "deadline": deadline, "request": req.ID.String(),
+		}
+		return m, gateNotices, nil
 	case wdomain.KindReconciliation:
 		k, err := q.ReconciliationOfTransaction(ctx, org, e.SubjectID)
 		switch {
@@ -433,7 +461,7 @@ func deciders(ctx context.Context, q *dbq.Queries, org ids.OrgID, e dbq.EntryFor
 	p := dbq.DeciderCandidatesParams{
 		OrgID: org, BusinessUnitID: e.BusinessUnitID, TeamID: e.TeamID, EnvironmentID: e.EnvironmentID, Lim: candidateScan,
 	}
-	if e.Kind != wdomain.KindActionHold && e.Kind != wdomain.KindRestoration {
+	if e.Kind != wdomain.KindActionHold && e.Kind != wdomain.KindRestoration && e.Kind != wdomain.KindAutomationGate {
 		perm, ok := wdomain.DeciderPermission(e.Kind)
 		if !ok {
 			return nil, nil
@@ -457,6 +485,8 @@ func deciders(ctx context.Context, q *dbq.Queries, org ids.OrgID, e dbq.EntryFor
 			p.Roles = append(p.Roles, rolesWith(td.PermAgentRestore)...)
 		case apdomain.KindContainment:
 			p.Roles = append(p.Roles, rolesWith(td.PermIncidentRespond)...)
+		case apdomain.KindGate:
+			p.Roles = append(p.Roles, rolesWith(td.PermAutomationApprove)...)
 		case apdomain.KindStepUp:
 			if u, err := apdomain.StepUpUser(r, el.Context.Run); err == nil {
 				named = append(named, u)

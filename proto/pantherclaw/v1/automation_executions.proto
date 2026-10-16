@@ -399,7 +399,12 @@ message AutomationRunnerCall {
   string tool = 3;
   string method = 4;
   string path = 5;
+  // Each value is JSON text: typed parameters rendered as JSON (strings
+  // quoted, numbers exact), never a float.
   map<string, string> input = 6;
+  // The connection's name, resolved when the launch was created: the
+  // gateway faces route by name.
+  string connection_name = 7;
 }
 
 message ClaimLaunchRequest {}
@@ -422,7 +427,8 @@ message AutomationCallResult {
     gte: 0
     lt: 10
   }];
-  // OK, DENIED, HELD, FAILED, UNKNOWN or SKIPPED.
+  // OK, DENIED, HELD, FAILED, UNKNOWN, or SKIPPED for each declared call
+  // after the runner stopped.
   string status = 2 [(buf.validate.field).string = {
     in: [
       "OK",

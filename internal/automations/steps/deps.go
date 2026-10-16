@@ -69,6 +69,11 @@ type GrantRevoke struct {
 	Grant  *ids.UUID
 	Scope  string
 	Reason string
+	// Revocable is the version's authority.revocable (D65, D84 E10): the
+	// agents whose grants TRIGGER_GRANT and CEILING_AGENTS may revoke, or
+	// every agent with RevocableAll. The issuer side enforces it.
+	Revocable    []ids.UUID
+	RevocableAll bool
 }
 
 // Grants issues and revokes grants for automations (grants/app, core-B).
@@ -89,15 +94,20 @@ type Runs interface {
 
 // GateRequest asks people to approve one gate (D25, HR-281).
 type GateRequest struct {
-	Org          ids.OrgID
-	Automation   ids.UUID
-	Execution    ids.UUID
-	StepID       string
-	Attempt      int
-	ParamsDigest []byte
-	Summary      string
-	Roles        []string
-	Users        []ids.UUID
+	Org        ids.OrgID
+	Automation ids.UUID
+	// AutomationName, ServiceAccount and Params (as text, shown as
+	// untrusted) render the approval page.
+	AutomationName string
+	ServiceAccount ids.UUID
+	Params         map[string]string
+	Execution      ids.UUID
+	StepID         string
+	Attempt        int
+	ParamsDigest   []byte
+	Summary        string
+	Roles          []string
+	Users          []ids.UUID
 	// Exclude are the people who never decide it (owner, confirmers,
 	// principal, as the gate declares).
 	Exclude      []ids.UUID
@@ -126,6 +136,8 @@ type Gates interface {
 	GateStatus(ctx context.Context, tx pgx.Tx, org ids.OrgID, request ids.UUID) (GateState, error)
 	// EndGate ends an open gate of a finished execution.
 	EndGate(ctx context.Context, tx pgx.Tx, org ids.OrgID, request ids.UUID, reason string) error
+	// ConsumeGate uses an APPROVED gate once (CONSUMED), closing its entry.
+	ConsumeGate(ctx context.Context, tx pgx.Tx, org ids.OrgID, request ids.UUID) error
 }
 
 // Notice is an automation.notice to people (D25 notify).
