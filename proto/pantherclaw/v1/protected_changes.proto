@@ -45,6 +45,14 @@ service ProtectedChangeService {
   // 72 hours.
   // permission: incident.respond
   rpc ApplyEmergencyProtectedChange(ApplyEmergencyProtectedChangeRequest) returns (ApplyEmergencyProtectedChangeResponse);
+  // OpenEmergencyReview opens a new review of an emergency change whose
+  // review expired unconfirmed (D98 L3; review_state REVIEW_EXPIRED): a
+  // fresh 72-hour review that neither the author nor the person who
+  // applied it may confirm. The change stays applied throughout. The
+  // caller is a person holding the change's category permission (the
+  // surface's, for example release.window.manage), not marked compromised.
+  // permission: authenticated (the use case checks the category permission)
+  rpc OpenEmergencyReview(OpenEmergencyReviewRequest) returns (OpenEmergencyReviewResponse);
 }
 
 // PublisherService handles compromised publishers (G0 M11 part 2 D43;
@@ -137,6 +145,10 @@ message ProtectedChange {
   string reviewed_by = 17;
   // When.
   google.protobuf.Timestamp review_time = 18;
+  // An emergency change's review state: "DUE", "REVIEWED" or
+  // "REVIEW_EXPIRED" (D98 L3). The change is applied in each of them;
+  // empty when it is not an emergency change.
+  string review_state = 19;
 }
 
 // GetProtectedChangeSettingsRequest asks for the settings.
@@ -226,6 +238,18 @@ message ApplyEmergencyProtectedChangeRequest {
 // ApplyEmergencyProtectedChangeResponse returns the applied change.
 message ApplyEmergencyProtectedChangeResponse {
   // The change (EMERGENCY, with its review request).
+  ProtectedChange change = 1;
+}
+
+// OpenEmergencyReviewRequest names the emergency change.
+message OpenEmergencyReviewRequest {
+  // The protected change id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// OpenEmergencyReviewResponse returns the change with its new review.
+message OpenEmergencyReviewResponse {
+  // The change (EMERGENCY, review_state DUE, a new review request).
   ProtectedChange change = 1;
 }
 

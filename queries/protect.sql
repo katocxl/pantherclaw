@@ -70,12 +70,27 @@ RETURNING *;
 
 -- name: SetEmergencyReviewRequest :execrows
 UPDATE pc.protected_changes SET review_request_id = sqlc.arg(review_request_id)::uuid
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'EMERGENCY' AND reviewed_by IS NULL;
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'EMERGENCY' AND review_request_id IS NULL;
 
 -- name: ReviewEmergencyChange :execrows
 UPDATE pc.protected_changes SET reviewed_by = sqlc.arg(reviewed_by)::uuid
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'EMERGENCY' AND reviewed_by IS NULL
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'EMERGENCY' AND review_state = 'DUE'
   AND publisher <> sqlc.arg(reviewed_by)::uuid AND author <> sqlc.arg(reviewed_by)::uuid;
+
+-- name: ExpireEmergencyReview :one
+-- An emergency change whose review request expired unconfirmed (D98 L3):
+-- it stays applied; only its review state changes.
+UPDATE pc.protected_changes SET review_state = 'REVIEW_EXPIRED'
+WHERE org_id = sqlc.arg(org_id) AND review_request_id = sqlc.arg(request_id)::uuid
+  AND state = 'EMERGENCY' AND review_state = 'DUE'
+RETURNING *;
+
+-- name: ReopenEmergencyReview :one
+-- A new review of an emergency change whose review expired: a new request
+-- and 72 hours (D98 L3).
+UPDATE pc.protected_changes SET review_state = 'DUE', review_request_id = sqlc.arg(review_request_id)::uuid
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'EMERGENCY' AND review_state = 'REVIEW_EXPIRED'
+RETURNING *;
 
 -- name: ListProtectedChanges :many
 SELECT * FROM pc.protected_changes
@@ -89,7 +104,7 @@ LIMIT sqlc.arg(max_rows)::int;
 -- name: OverdueEmergencyChanges :many
 -- Emergency changes past their 72-hour review without one.
 SELECT * FROM pc.protected_changes
-WHERE org_id = sqlc.arg(org_id) AND state = 'EMERGENCY' AND reviewed_by IS NULL AND review_due_at < now()
+WHERE org_id = sqlc.arg(org_id) AND state = 'EMERGENCY' AND review_state = 'DUE' AND review_due_at < now()
 ORDER BY review_due_at
 LIMIT 100;
 

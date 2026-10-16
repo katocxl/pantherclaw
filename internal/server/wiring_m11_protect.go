@@ -43,7 +43,7 @@ type m11Protect struct {
 // them to the process's core change ceremony (the Gate's Requests); without
 // it a category cannot be turned on (PROTECTED_CHANGES_UNAVAILABLE).
 func newM11Protect(pool *db.Pool, bill *billing.Service) m11Protect {
-	gate := &protect.Gate{}
+	gate := &protect.Gate{Failures: &failures.Sink{}}
 	pub := &protect.Publishers{Pool: pool, Gate: gate, Undo: map[string]protect.Rollback{
 		// Automations pause through core-B's Pauser and promotions revoke through
 		// govern; until those are merged their ROLLBACK is refused (D72 P1).

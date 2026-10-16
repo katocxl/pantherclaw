@@ -31,6 +31,14 @@ const (
 	StateVoided    = "VOIDED"
 )
 
+// An emergency change's review states (D98 L3). The change is applied in
+// each of them.
+const (
+	ReviewDue      = "DUE"
+	ReviewReviewed = "REVIEWED"
+	ReviewExpired  = "REVIEW_EXPIRED"
+)
+
 // Void reasons.
 const (
 	reasonSuperseded  = "SUPERSEDED"
@@ -73,7 +81,10 @@ type Checker interface {
 type Gate struct {
 	Requests   Requests
 	Compromise Checker
-	surfaces   map[Surface]surface
+	// Failures records an emergency review that expired (D98 L3); nil:
+	// none is recorded.
+	Failures FailureSink
+	surfaces map[Surface]surface
 }
 
 // State reads the state of a change's subject now, from the change's

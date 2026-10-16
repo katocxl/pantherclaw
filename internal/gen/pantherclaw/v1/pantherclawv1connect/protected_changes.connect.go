@@ -41,6 +41,9 @@ const (
 	// ProtectedChangeServiceApplyEmergencyProtectedChangeProcedure is the procedure name of the
 	// ProtectedChangeService's ApplyEmergencyProtectedChange RPC.
 	ProtectedChangeServiceApplyEmergencyProtectedChangeProcedure = "/pantherclaw.v1.ProtectedChangeService/ApplyEmergencyProtectedChange"
+	// ProtectedChangeServiceOpenEmergencyReviewProcedure is the procedure name of the
+	// ProtectedChangeService's OpenEmergencyReview RPC.
+	ProtectedChangeServiceOpenEmergencyReviewProcedure = "/pantherclaw.v1.ProtectedChangeService/OpenEmergencyReview"
 	// PublisherServiceMarkCompromisedProcedure is the procedure name of the PublisherService's
 	// MarkCompromised RPC.
 	PublisherServiceMarkCompromisedProcedure = "/pantherclaw.v1.PublisherService/MarkCompromised"
@@ -89,6 +92,13 @@ var (
 			Procedure:  ProtectedChangeServiceApplyEmergencyProtectedChangeProcedure,
 		}
 	})
+	protectedChangeServiceOpenEmergencyReviewSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_protected_changes_proto.Services().ByName("ProtectedChangeService").Methods().ByName("OpenEmergencyReview"),
+			Procedure:  ProtectedChangeServiceOpenEmergencyReviewProcedure,
+		}
+	})
 )
 
 // ProtectedChangeServiceClient is a client for the pantherclaw.v1.ProtectedChangeService service.
@@ -114,6 +124,14 @@ type ProtectedChangeServiceClient interface {
 	// 72 hours.
 	// permission: incident.respond
 	ApplyEmergencyProtectedChange(context.Context, *v1.ApplyEmergencyProtectedChangeRequest) (*v1.ApplyEmergencyProtectedChangeResponse, error)
+	// OpenEmergencyReview opens a new review of an emergency change whose
+	// review expired unconfirmed (D98 L3; review_state REVIEW_EXPIRED): a
+	// fresh 72-hour review that neither the author nor the person who
+	// applied it may confirm. The change stays applied throughout. The
+	// caller is a person holding the change's category permission (the
+	// surface's, for example release.window.manage), not marked compromised.
+	// permission: authenticated (the use case checks the category permission)
+	OpenEmergencyReview(context.Context, *v1.OpenEmergencyReviewRequest) (*v1.OpenEmergencyReviewResponse, error)
 }
 
 // NewProtectedChangeServiceClient constructs a client for the pantherclaw.v1.ProtectedChangeService
@@ -146,6 +164,14 @@ type ProtectedChangeServiceHandler interface {
 	// 72 hours.
 	// permission: incident.respond
 	ApplyEmergencyProtectedChange(context.Context, *v1.ApplyEmergencyProtectedChangeRequest) (*v1.ApplyEmergencyProtectedChangeResponse, error)
+	// OpenEmergencyReview opens a new review of an emergency change whose
+	// review expired unconfirmed (D98 L3; review_state REVIEW_EXPIRED): a
+	// fresh 72-hour review that neither the author nor the person who
+	// applied it may confirm. The change stays applied throughout. The
+	// caller is a person holding the change's category permission (the
+	// surface's, for example release.window.manage), not marked compromised.
+	// permission: authenticated (the use case checks the category permission)
+	OpenEmergencyReview(context.Context, *v1.OpenEmergencyReviewRequest) (*v1.OpenEmergencyReviewResponse, error)
 }
 
 // RegisterProtectedChangeServiceHandler registers svc as the pantherclaw.v1.ProtectedChangeService
@@ -157,6 +183,7 @@ func RegisterProtectedChangeServiceHandler(server *connect.Server, svc Protected
 		connect.Method{Spec: protectedChangeServiceSetProtectedCategoryModeSpec(), Handler: adapter.setProtectedCategoryMode},
 		connect.Method{Spec: protectedChangeServiceListProtectedChangesSpec(), Handler: adapter.listProtectedChanges},
 		connect.Method{Spec: protectedChangeServiceApplyEmergencyProtectedChangeSpec(), Handler: adapter.applyEmergencyProtectedChange},
+		connect.Method{Spec: protectedChangeServiceOpenEmergencyReviewSpec(), Handler: adapter.openEmergencyReview},
 	)
 }
 
@@ -177,6 +204,10 @@ func (UnimplementedProtectedChangeServiceHandler) ListProtectedChanges(context.C
 
 func (UnimplementedProtectedChangeServiceHandler) ApplyEmergencyProtectedChange(context.Context, *v1.ApplyEmergencyProtectedChangeRequest) (*v1.ApplyEmergencyProtectedChangeResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ProtectedChangeService.ApplyEmergencyProtectedChange is not implemented")
+}
+
+func (UnimplementedProtectedChangeServiceHandler) OpenEmergencyReview(context.Context, *v1.OpenEmergencyReviewRequest) (*v1.OpenEmergencyReviewResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ProtectedChangeService.OpenEmergencyReview is not implemented")
 }
 
 type protectedChangeServiceClient struct {
@@ -210,6 +241,14 @@ func (c *protectedChangeServiceClient) ListProtectedChanges(ctx context.Context,
 func (c *protectedChangeServiceClient) ApplyEmergencyProtectedChange(ctx context.Context, req *v1.ApplyEmergencyProtectedChangeRequest) (*v1.ApplyEmergencyProtectedChangeResponse, error) {
 	var res v1.ApplyEmergencyProtectedChangeResponse
 	if err := c.client.CallUnary(ctx, protectedChangeServiceApplyEmergencyProtectedChangeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *protectedChangeServiceClient) OpenEmergencyReview(ctx context.Context, req *v1.OpenEmergencyReviewRequest) (*v1.OpenEmergencyReviewResponse, error) {
+	var res v1.OpenEmergencyReviewResponse
+	if err := c.client.CallUnary(ctx, protectedChangeServiceOpenEmergencyReviewSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -259,6 +298,18 @@ func (h protectedChangeServiceHandler) applyEmergencyProtectedChange(ctx context
 		return err
 	}
 	res, err := h.svc.ApplyEmergencyProtectedChange(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h protectedChangeServiceHandler) openEmergencyReview(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.OpenEmergencyReviewRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.OpenEmergencyReview(ctx, &req)
 	if err != nil {
 		return err
 	}
