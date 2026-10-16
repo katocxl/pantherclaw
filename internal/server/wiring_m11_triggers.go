@@ -40,13 +40,15 @@ import (
 // core's Pauser. Core and engine take this stream's TriggerActivator and
 // Deliverer from automationTriggerActivator and automationDeliverer.
 var (
-	automationStarter    func(pool *db.Pool, bill *billing.Service, log *slog.Logger) autoports.Starter
-	automationExecutions func(pool *db.Pool) triggers.ExecutionLookup
-	automationPauser     func(pool *db.Pool) autoports.Pauser
+	automationStarter    func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) autoports.Starter
+	automationExecutions func(core *automationsCore, pool *db.Pool) triggers.ExecutionLookup
+	automationPauser     func(core *automationsCore) autoports.Pauser
 )
 
-// newAutomationTriggers builds the trigger service as pc_app.
-func newAutomationTriggers(pool *db.Pool, bill *billing.Service, log *slog.Logger) *triggers.Service {
+// newAutomationTriggers builds the trigger service as pc_app. The engine's
+// and core's ports come from the process's one core (D105); without it
+// (nil) they read as "not available".
+func newAutomationTriggers(pool *db.Pool, bill *billing.Service, log *slog.Logger, core *automationsCore) *triggers.Service {
 	d := triggers.Deps{
 		Pool: pool, Raiser: m10Raiser{pool: pool}, Failures: &failures.Sink{}, Operations: &defspg.Store{Pool: pool},
 		Clock: clock.System{}, Log: log,
@@ -54,14 +56,14 @@ func newAutomationTriggers(pool *db.Pool, bill *billing.Service, log *slog.Logge
 	if bill != nil {
 		d.Editions = bill
 	}
-	if automationStarter != nil {
-		d.Starter = automationStarter(pool, bill, log)
+	if core != nil && automationStarter != nil {
+		d.Starter = automationStarter(core, pool, bill, log)
 	}
-	if automationExecutions != nil {
-		d.Executions = automationExecutions(pool)
+	if core != nil && automationExecutions != nil {
+		d.Executions = automationExecutions(core, pool)
 	}
-	if automationPauser != nil {
-		d.Pauser = automationPauser(pool)
+	if core != nil && automationPauser != nil {
+		d.Pauser = automationPauser(core)
 	}
 	return triggers.New(d)
 }
@@ -85,14 +87,14 @@ func newAutomationEndpoints(pool *db.Pool, kp keys.KeyProvider, trig *triggers.S
 
 // automationTriggerActivator is the TriggerActivator core calls when it
 // enables, pauses or resumes an automation (D11).
-func automationTriggerActivator(pool *db.Pool, bill *billing.Service, log *slog.Logger) autoports.TriggerActivator {
-	return newAutomationTriggers(pool, bill, log).Activator()
+func automationTriggerActivator(pool *db.Pool, bill *billing.Service, log *slog.Logger, core *automationsCore) autoports.TriggerActivator {
+	return newAutomationTriggers(pool, bill, log, core).Activator()
 }
 
 // automationDeliverer is the Deliverer the engine's deliver and notify
 // steps use (D22).
 func automationDeliverer(pool *db.Pool, kp keys.KeyProvider, bill *billing.Service, publicURL string, log *slog.Logger) (autoports.Deliverer, error) {
-	ep, err := newAutomationEndpoints(pool, kp, newAutomationTriggers(pool, bill, log), bill, publicURL, nil, log)
+	ep, err := newAutomationEndpoints(pool, kp, newAutomationTriggers(pool, bill, log, nil), bill, publicURL, nil, log)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +121,7 @@ func (m m11Triggers) mount(mux *http.ServeMux) {
 // registerAutomationTriggers serves TriggerService and prepares the
 // endpoint and pages.
 func registerAutomationTriggers(rs *connect.Server, d apiDeps) (m11Triggers, error) {
-	trig := newAutomationTriggers(d.pool, d.billing, d.log)
+	trig := newAutomationTriggers(d.pool, d.billing, d.log, d.autos)
 	ep, err := newAutomationEndpoints(d.pool, d.kp, trig, d.billing, d.publicURL, d.clientIP, d.log)
 	if err != nil {
 		return m11Triggers{}, err
@@ -137,9 +139,9 @@ func registerAutomationTriggers(rs *connect.Server, d apiDeps) (m11Triggers, err
 // registerAutomationTriggersJobs adds the trigger workers and returns
 // their schedules.
 func registerAutomationTriggersJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, pool *db.Pool, kp keys.KeyProvider,
-	bill *billing.Service, publicURL string, log *slog.Logger,
+	bill *billing.Service, publicURL string, core *automationsCore, log *slog.Logger,
 ) ([]*river.PeriodicJob, error) {
-	trig := newAutomationTriggers(pool, bill, log)
+	trig := newAutomationTriggers(pool, bill, log, core)
 	ep, err := newAutomationEndpoints(pool, kp, trig, bill, publicURL, nil, log)
 	if err != nil {
 		return nil, err
