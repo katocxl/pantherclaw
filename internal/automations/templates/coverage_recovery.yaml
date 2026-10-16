@@ -53,6 +53,7 @@ definition:
       params:
         agent: {from: subjects.agent, type: uuid}
         connection: {from: subjects.connection, type: uuid, required: false}
+        operation: {from: operation, type: string, pattern: '[a-z][a-z0-9_]*(\.[a-z0-9_]+){1,6}', max_len: 128}
     dedupe:
       key: "{{params.agent}}/{{params.connection}}"
       window: 1d
@@ -98,7 +99,7 @@ tests:
   - name: coverage comes back and launches resume
     kind: NORMAL
     trigger:
-      params: {agent: 0192f000-0000-7000-8000-000000000101, connection: 0192f000-0000-7000-8000-000000000102}
+      params: {agent: 0192f000-0000-7000-8000-000000000101, connection: 0192f000-0000-7000-8000-000000000102, operation: tickets.update}
     stubs:
       assign: [{state: DONE, effect: CHANGED, refs: [owned_failure]}]
       pause: [{state: DONE, effect: CHANGED, refs: [automation]}]
@@ -110,7 +111,7 @@ tests:
   - name: the pause is refused
     kind: DENIED
     trigger:
-      params: {agent: 0192f000-0000-7000-8000-000000000103}
+      params: {agent: 0192f000-0000-7000-8000-000000000103, operation: tickets.update}
     stubs:
       pause: [{state: FAILED, reason: AUTHORITY_CHANGED}]
     expect:
@@ -120,7 +121,7 @@ tests:
   - name: coverage does not come back in time and launches stay paused
     kind: TIMEOUT
     trigger:
-      params: {agent: 0192f000-0000-7000-8000-000000000104}
+      params: {agent: 0192f000-0000-7000-8000-000000000104, operation: tickets.update}
     stubs:
       pause: [{state: DONE, effect: CHANGED, refs: [automation]}]
       restored: [{state: WAITING}, {state: FAILED, reason: TIMEOUT}]
@@ -131,7 +132,7 @@ tests:
   - name: the same loss twice starts one execution
     kind: DUPLICATE
     trigger:
-      params: {agent: 0192f000-0000-7000-8000-000000000105, connection: 0192f000-0000-7000-8000-000000000106}
+      params: {agent: 0192f000-0000-7000-8000-000000000105, connection: 0192f000-0000-7000-8000-000000000106, operation: tickets.update}
     stubs:
       restored: [{state: DONE, refs: [coverage]}]
     expect:

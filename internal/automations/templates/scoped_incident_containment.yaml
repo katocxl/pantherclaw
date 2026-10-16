@@ -48,12 +48,19 @@ params:
     type: enum
     values: [CRITICAL, HIGH]
     default: CRITICAL
+  - name: revocable
+    description: With REVOKE_GRANT, the agents whose grants it may revoke (authority.revocable) - AGENTS lists them in agents, ALL is every agent of the organization. There is no default.
+    type: enum
+    values: [AGENTS, ALL]
+    required: false
+    example: AGENTS
   - name: agents
-    description: With REVOKE_GRANT, the agents whose grants it may revoke (authority.revocable), comma-separated; leave empty for every agent of the organization.
+    description: With revocable AGENTS, the agents whose grants it may revoke, comma-separated.
     type: uuid
     list: true
     max_items: 50
     required: false
+    example: 0192f000-0000-7000-8000-0000000000a1
 
 definition:
   apiVersion: automations.pantherclaw.dev/v1
@@ -82,8 +89,10 @@ definition:
     revocable:
       $when: {param: contain, in: [REVOKE_GRANT]}
       $value:
-        agents: {$when: {param: agents, set: true}, $value: "${agents}"}
-        all: {$when: {param: agents, set: false}, $value: true}
+        $switch: revocable
+        $cases:
+          AGENTS: {agents: "${agents}"}
+          ALL: {all: true}
   do:
     - id: contain
       step: contain

@@ -9,7 +9,7 @@ import "testing"
 // through the automations core the server builds (D96); without that core
 // it stays UNAVAILABLE rather than pretend.
 func TestTemplateHandler_DraftsIsCoresApp(t *testing.T) {
-	core := newAutomationsCore(nil, nil, "", nil, nil)
+	core := newAutomationsCore(nil, nil, "")
 	h := templateHandler(apiDeps{}, core)
 	d, ok := h.Drafts.(automationDrafts)
 	if !ok || d.svc != core.svc {

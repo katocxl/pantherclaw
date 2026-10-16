@@ -164,6 +164,7 @@ definition:
         approvers:
           roles: ["${approver_role}"]
         exclude: [OWNER]
+        min_approvals: 1
         deadline: "${gate_deadline}"
         summary: "Approve request {{params.ref}}"
     - id: launch
@@ -187,6 +188,7 @@ definition:
       with:
         step: launch
         operation: "${operation}"
+        min: 1
       timeout: "${effect_timeout}"
   finish_when:
     - step: confirm
