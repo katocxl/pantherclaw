@@ -209,8 +209,10 @@ var finders = map[FindKind]finder{
 		return convert(rows, func(r dbq.FindPolicyVersionsRow) findRow { return findRow(r) }), err
 	}},
 	FindAutomations: {td.PermAutomationRead, true, true, "automation", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, _ Scope, a findArgs) ([]findRow, error) {
-		rows, err := q.FindAutomations(ctx, dbq.FindAutomationsParams{OrgID: c.Org, IDLo: a.lo, IDHi: a.hi,
-			Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit})
+		rows, err := q.FindAutomations(ctx, dbq.FindAutomationsParams{
+			OrgID: c.Org, IDLo: a.lo, IDHi: a.hi,
+			Contains: a.contains, Lowered: a.lowered, PageLimit: a.limit,
+		})
 		return convert(rows, func(r dbq.FindAutomationsRow) findRow { return findRow(r) }), err
 	}},
 	FindAudit: {td.PermAuditRead, true, false, "ledger", func(ctx context.Context, q *dbq.Queries, c tenancy.Caller, _ Scope, a findArgs) ([]findRow, error) {
