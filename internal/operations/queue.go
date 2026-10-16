@@ -341,7 +341,10 @@ func decisionItems(ctx context.Context, b *builder) error {
 		if r.DeadlineAt.Sub(b.now) <= 15*time.Minute {
 			sev = "HIGH"
 		}
-		agentIDs := []string{r.AgentID.String()}
+		agentIDs := []string{}
+		if r.AgentID != nil {
+			agentIDs = append(agentIDs, r.AgentID.String())
+		}
 		acts, err := v.actions(ctx, agentIDs, Action{"open_approval", td.PermApprovalRespond, "approval:" + r.ID.String()})
 		if err != nil {
 			return err

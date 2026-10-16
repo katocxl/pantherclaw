@@ -779,7 +779,7 @@ type OpsWaitingApprovalsParams struct {
 
 type OpsWaitingApprovalsRow struct {
 	ID            ids.UUID
-	AgentID       ids.UUID
+	AgentID       *ids.UUID
 	Operation     string
 	State         string
 	CreatedAt     time.Time

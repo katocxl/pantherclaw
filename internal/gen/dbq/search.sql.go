@@ -533,7 +533,7 @@ type SearchApprovalsParams struct {
 
 type SearchApprovalsRow struct {
 	ID            ids.UUID
-	AgentID       ids.UUID
+	AgentID       *ids.UUID
 	RunID         *ids.UUID
 	TransactionID *ids.UUID
 	Operation     string
