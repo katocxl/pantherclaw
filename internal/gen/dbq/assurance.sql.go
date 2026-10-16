@@ -439,8 +439,18 @@ SELECT
                    AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(e.result -> 'finish') f
                                    WHERE NOT coalesce((f ->> 'met')::boolean, false)
                                       OR jsonb_array_length(coalesce(f -> 'refs', '[]')) = 0))::int AS evidenced,
-  count(*) FILTER (WHERE e.state = 'FAILED' AND e.reason = 'AUTHORITY_CHANGED')::int AS authority_failed,
-  count(*) FILTER (WHERE e.state = 'NEEDS_RECONCILIATION')::int AS reconciling
+  (count(*) FILTER (WHERE e.state = 'FAILED' AND e.reason = 'AUTHORITY_CHANGED')
+   + (SELECT count(*) FROM pc.operational_failures f
+      WHERE f.org_id = $1 AND f.kind = 'automation.authority_changed' AND f.state <> 'RESOLVED'
+        AND EXISTS (SELECT 1 FROM jsonb_array_elements(f.scope) sa
+                    WHERE sa ->> 'type' = 'automation' AND sa ->> 'id' = (SELECT a.id::text FROM pc.automations a WHERE a.org_id = f.org_id AND a.id = $2))
+        AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(f.scope) s
+                        JOIN pc.automation_executions fx ON fx.org_id = f.org_id AND fx.id::text = s ->> 'id'
+                        WHERE s ->> 'type' = 'automation_execution' AND fx.version_id <> $3)))::int
+    AS authority_failed,
+  (SELECT count(*) FROM pc.automation_executions r
+   WHERE r.org_id = $1 AND r.automation_id = $2 AND r.version_id = $3
+     AND r.state = 'NEEDS_RECONCILIATION')::int AS reconciling
 FROM pc.automation_executions e
 WHERE e.org_id = $1 AND e.automation_id = $2 AND e.version_id = $3
   AND e.mode = 'LIVE' AND e.created_at >= $4
@@ -461,8 +471,11 @@ type AssuranceRolloutEvidenceRow struct {
 
 // What FULL rollout needs from the current COHORT stage (D36): LIVE
 // executions of the version since the stage began that SUCCEEDED with
-// completion evidence (every finish condition met with refs), those that
-// FAILED for AUTHORITY_CHANGED, and open reconciliations.
+// completion evidence (every finish condition met with refs) and those that
+// FAILED for AUTHORITY_CHANGED; and, whatever their date (D94 S4), the
+// version's open reconciliations and the open AUTHORITY_CHANGED failures
+// of the automation (raised for the automation, or for an execution of the
+// version).
 func (q *Queries) AssuranceRolloutEvidence(ctx context.Context, arg AssuranceRolloutEvidenceParams) (AssuranceRolloutEvidenceRow, error) {
 	row := q.db.QueryRow(ctx, assuranceRolloutEvidence,
 		arg.OrgID,
@@ -950,10 +963,12 @@ func (q *Queries) LockAssuranceVersion(ctx context.Context, orgID ids.OrgID, iD 
 }
 
 const startAutomationSimulation = `-- name: StartAutomationSimulation :execrows
-UPDATE pc.automation_simulations SET state = 'RUNNING', started_at = now()
-WHERE org_id = $1 AND id = $2 AND state = 'QUEUED'
+UPDATE pc.automation_simulations SET state = 'RUNNING', started_at = coalesce(started_at, now())
+WHERE org_id = $1 AND id = $2 AND state IN ('QUEUED', 'RUNNING')
 `
 
+// Claims a queued simulation, or resumes one a failed attempt left RUNNING
+// (the job retries; the last attempt marks it FAILED).
 func (q *Queries) StartAutomationSimulation(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, startAutomationSimulation, orgID, iD)
 	if err != nil {

@@ -63,10 +63,13 @@ func Sweep(ctx context.Context, pool *db.Pool, sink FailureSink, org ids.OrgID) 
 		}
 		for _, a := range failing {
 			owner := reflexdomain.Subject{Type: reflexdomain.SubjectUser, ID: a.OwnerUserID.String()}
+			// One failure per newest failed execution (D94 S10): a later run of
+			// three failures raises a new one, even after the last was resolved.
 			if _, _, err := sink.ReportTx(ctx, tx, reflexdomain.Failure{
-				Org: org, Kind: FailureRecoveryFailed, DedupeKey: FailureRecoveryFailed + ":" + a.ID.String(),
-				Summary:  fmt.Sprintf("Automation %s failed %d times in a row.", a.Name, RecoveryFailedRun),
-				NextStep: "Inspect the latest execution; pause the automation until the cause is fixed.",
+				Org: org, Kind: FailureRecoveryFailed,
+				DedupeKey: FailureRecoveryFailed + ":" + a.ID.String() + ":" + a.ExecutionID.String(),
+				Summary:   fmt.Sprintf("Automation %s failed %d times in a row.", a.Name, RecoveryFailedRun),
+				NextStep:  "Inspect the latest execution; pause the automation until the cause is fixed.",
 				Scope: []reflexdomain.Subject{
 					{Type: reflexdomain.SubjectAutomation, ID: a.ID.String()},
 					{Type: reflexdomain.SubjectAutomationExecution, ID: a.ExecutionID.String()},

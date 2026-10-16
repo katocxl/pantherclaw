@@ -16,6 +16,7 @@ import (
 
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	exapp "github.com/katocxl/pantherclaw/internal/exposure/app"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -52,27 +53,43 @@ func storedCases(ctx context.Context, q *dbq.Queries, org ids.OrgID, version ids
 	return out, nil
 }
 
-// irreversibleCeiling reports whether the version's ceiling reaches an
-// irreversible operation of any connection (HR-287's PARTIAL|UNKNOWN).
-// An operation of a connection whose package cannot be read may be
-// irreversible: such a connection counts as irreversible when the ceiling
-// names no operations.
-func irreversibleCeiling(ctx context.Context, tx db.TenantTx, def *autodomain.Definition) (bool, error) {
+// irreversibleCeiling reports whether the version's ceiling may reach an
+// irreversible operation of any connection (HR-287's PARTIAL|UNKNOWN; see
+// Irreversible for unknown and undeclared reversibility and unreadable
+// packages, D94 S2).
+func irreversibleCeiling(ctx context.Context, q *dbq.Queries, org ids.OrgID, def *autodomain.Definition) (bool, error) {
 	if def.Authority.Ceiling == nil {
 		return false, nil
 	}
-	l, err := exapp.Load(ctx, tx)
+	conns, err := exapp.LoadConnections(ctx, q, org)
 	if err != nil {
 		return false, err
 	}
-	if def.Authority.Ceiling.Bounds.Operations == nil {
-		for _, c := range l.Inputs.Connections {
-			if !c.Known {
-				return true, nil
+	ops := map[string]defs.Reversibility{}
+	unreadable := false
+	for _, c := range conns {
+		unreadable = unreadable || !c.Known
+		for _, o := range c.Operations {
+			// The weakest declaration wins: one connection's irreversible
+			// or unknown declaration is never hidden by another's.
+			if cur, seen := ops[o.Name]; !seen || reversibleRank(o.Reversibility) < reversibleRank(cur) {
+				ops[o.Name] = o.Reversibility
 			}
 		}
 	}
-	return Irreversible(def, l.Irreversible), nil
+	return Irreversible(def, ops, unreadable), nil
+}
+
+// reversibleRank orders reversibilities from the least safe.
+func reversibleRank(r defs.Reversibility) int {
+	switch r {
+	case defs.Reversible:
+		return 2
+	case defs.Compensatable:
+		return 1
+	case defs.Irreversible:
+	}
+	return 0
 }
 
 // SetTestCases replaces a DRAFT or VALIDATED version's cases and returns
@@ -82,11 +99,31 @@ func (s *Service) SetTestCases(ctx context.Context, versionID ids.UUID, cases []
 	if err != nil {
 		return nil, err
 	}
+	var missing []string
+	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		missing, err = s.SetTestCasesTx(ctx, tx, versionID, cases)
+		return err
+	})
+	return missing, err
+}
+
+// SetTestCasesTx is SetTestCases in the caller's transaction (D103 T1),
+// so a template can create an automation, its version and its cases
+// atomically. The caller in ctx needs automation.manage in tx's org.
+func (s *Service) SetTestCasesTx(ctx context.Context, tx db.TenantTx, versionID ids.UUID, cases []Case) ([]string, error) {
+	c, err := caller(ctx, td.PermAutomationManage)
+	if err != nil {
+		return nil, err
+	}
+	if c.Org != tx.OrgID() {
+		return nil, ErrNotFound
+	}
 	if err := s.edition(ctx, false); err != nil {
 		return nil, err
 	}
 	var missing []string
-	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+	err = func() error {
 		q := dbq.New(tx)
 		lv, err := q.LockAssuranceVersion(ctx, c.Org, versionID)
 		if db.IsNoRows(err) {
@@ -121,7 +158,7 @@ func (s *Service) SetTestCases(ctx context.Context, versionID ids.UUID, cases []
 				return err
 			}
 		}
-		irr, err := irreversibleCeiling(ctx, tx, def)
+		irr, err := irreversibleCeiling(ctx, dbq.New(tx), tx.OrgID(), def)
 		if err != nil {
 			return err
 		}
@@ -129,7 +166,7 @@ func (s *Service) SetTestCases(ctx context.Context, versionID ids.UUID, cases []
 		return record(ctx, tx, c, "automation.tests_set", versionID, map[string]string{
 			"automation": lv.AutomationID.String(), "cases": strconv.Itoa(len(cases)),
 		})
-	})
+	}()
 	return missing, err
 }
 
@@ -153,7 +190,7 @@ func (s *Service) ListTestCases(ctx context.Context, versionID ids.UUID) ([]Case
 		if cases, err = storedCases(ctx, q, c.Org, versionID); err != nil {
 			return err
 		}
-		irr, err := irreversibleCeiling(ctx, tx, def)
+		irr, err := irreversibleCeiling(ctx, dbq.New(tx), tx.OrgID(), def)
 		if err != nil {
 			return err
 		}
@@ -179,15 +216,15 @@ type TestGate struct{}
 var _ autoports.TestGate = TestGate{}
 
 // Passed implements autoports.TestGate.
-func (TestGate) Passed(ctx context.Context, tx pgx.Tx, version ids.UUID, digest []byte) (ids.UUID, bool, error) {
+func (TestGate) Passed(ctx context.Context, tx pgx.Tx, versionID ids.UUID, digest []byte) (ids.UUID, bool, error) {
 	q := dbq.New(tx)
-	org, err := q.AssuranceVersionOrg(ctx, version)
+	org, err := q.AssuranceVersionOrg(ctx, versionID)
 	if db.IsNoRows(err) {
 		return ids.UUID{}, false, nil
 	} else if err != nil {
 		return ids.UUID{}, false, err
 	}
-	run, err := q.LatestAutomationTestRun(ctx, org, version, digest)
+	run, err := q.LatestAutomationTestRun(ctx, org, versionID, digest)
 	if db.IsNoRows(err) {
 		return ids.UUID{}, false, nil
 	} else if err != nil {
@@ -196,7 +233,7 @@ func (TestGate) Passed(ctx context.Context, tx pgx.Tx, version ids.UUID, digest 
 	if !run.Passed {
 		return run.ID, false, nil
 	}
-	cases, err := storedCases(ctx, q, org, version)
+	cases, err := storedCases(ctx, q, org, versionID)
 	if err != nil {
 		return ids.UUID{}, false, err
 	}
@@ -204,7 +241,21 @@ func (TestGate) Passed(ctx context.Context, tx pgx.Tx, version ids.UUID, digest 
 	if err != nil {
 		return ids.UUID{}, false, err
 	}
-	return run.ID, bytes.Equal(cur, run.TestsDigest), nil
+	if !bytes.Equal(cur, run.TestsDigest) {
+		return run.ID, false, nil
+	}
+	// D94 S3: the required kinds are recomputed from what the ceiling
+	// reaches now; a connection that became irreversible since the run
+	// requires a PARTIAL or UNKNOWN case the run may not have had.
+	_, def, err := version(ctx, q, org, versionID)
+	if err != nil {
+		return ids.UUID{}, false, err
+	}
+	irr, err := irreversibleCeiling(ctx, q, org, def)
+	if err != nil {
+		return ids.UUID{}, false, err
+	}
+	return run.ID, len(Missing(cases, irr)) == 0, nil
 }
 
 // TestRun is a stored run.
@@ -252,7 +303,7 @@ func (s *Service) RunTests(ctx context.Context, versionID ids.UUID) (TestRun, er
 		if err != nil {
 			return err
 		}
-		irr, err := irreversibleCeiling(ctx, tx, def)
+		irr, err := irreversibleCeiling(ctx, dbq.New(tx), tx.OrgID(), def)
 		if err != nil {
 			return err
 		}

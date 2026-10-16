@@ -22,7 +22,7 @@ type Automation struct {
 
 // Definition is a minimal valid version document whose ceiling covers ops
 // (none: every operation) through agents.
-func (o *Org) Definition(t *testing.T, name string, agents []ids.UUID, ops ...string) *autodomain.Definition {
+func (o *Org) Definition(t *testing.T, agents []ids.UUID, ops ...string) *autodomain.Definition {
 	t.Helper()
 	as := make([]string, 0, len(agents))
 	for _, a := range agents {
@@ -32,8 +32,8 @@ func (o *Org) Definition(t *testing.T, name string, agents []ids.UUID, ops ...st
 	if len(ops) > 0 {
 		bounds = `{"operations": ["` + strings.Join(ops, `", "`) + `"]}`
 	}
-	doc := `{"apiVersion": "automations.pantherclaw.dev/v1", "kind": "Automation", "name": "` + name + `",
-		"purpose": "Exposure test.", "work_kind": "AGENT_WORK", "owner": "` + o.User.String() + `", "review_by": "2099-01-01",
+	doc := `{"apiVersion": "automations.pantherclaw.dev/v1", "kind": "Automation",
+		"purpose": "Exposure test.", "work_kind": "AGENT_WORK", "review_by": "2099-01-01",
 		"when": {"manual": {"params": {"ticket": {"type": "string", "pattern": "T-[0-9]{1,10}"}}},
 			"dedupe": {"key": "{{params.ticket}}", "window": "24h"}},
 		"authority": {"principal": "self", "ceiling": {"agents": ["` + strings.Join(as, `", "`) + `"], "bounds": ` + bounds + `,
@@ -54,7 +54,7 @@ func (o *Org) Definition(t *testing.T, name string, agents []ids.UUID, ops ...st
 func (o *Org) Automation(t *testing.T, name string, agents []ids.UUID, ops ...string) Automation {
 	t.Helper()
 	a := Automation{ID: ids.NewV7(), ServiceAccount: ids.NewV7(), Version: ids.NewV7(), Ceiling: ids.NewV7()}
-	a.Definition = o.Definition(t, name, agents, ops...)
+	a.Definition = o.Definition(t, agents, ops...)
 	canon, err := a.Definition.Canonical()
 	if err != nil {
 		t.Fatal(err)

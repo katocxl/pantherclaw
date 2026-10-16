@@ -249,7 +249,7 @@ func (h *Handler) GetAutomationSimulation(ctx context.Context, req *pb.GetAutoma
 			out.Days = append(out.Days, &pb.SimulationDay{Day: d.Day, WouldFire: count(d.WouldFire), Unevaluable: count(d.Unevaluable)})
 		}
 		for _, x := range r.Samples {
-			sample := &pb.SimulationSample{OccurTime: timestamppb.New(x.At), TriggerKind: x.Kind, SourceRef: x.SourceRef}
+			sample := &pb.SimulationSample{OccurTime: timestamppb.New(x.At), TriggerKind: x.Kind, SourceRef: x.SourceRef, AgentIds: x.Agents}
 			for _, st := range x.Steps {
 				sample.Steps = append(sample.Steps, &pb.SimulationStep{StepId: st.ID, Kind: st.Kind, Decision: st.Decision, Reason: st.Reason})
 			}
@@ -266,6 +266,10 @@ func (h *Handler) GetAutomationSimulation(ctx context.Context, req *pb.GetAutoma
 			f.Budget = append(f.Budget, &pb.SimulationBudget{Currency: b.Currency, MaxPerDay: b.Max, ExpectedPerDay: b.Expected})
 		}
 		out.Forecast = f
+		out.SamplesHidden = count(r.SamplesHidden)
+		for _, k := range slices.Sorted(maps.Keys(r.LaunchPreview)) {
+			out.LaunchPreview = append(out.LaunchPreview, k+"="+r.LaunchPreview[k])
+		}
 	}
 	return &pb.GetAutomationSimulationResponse{Simulation: out}, nil
 }

@@ -248,6 +248,10 @@ message SimulationSample {
   // Per step: id, kind and the would-be decision (ALLOWED, REFUSED with a
   // reason, SKIPPED, UNEVALUABLE).
   repeated SimulationStep steps = 4;
+  // The agents the sample involves (its trigger's and its launch_run
+  // steps'); shown only when every one is in the caller's exposure.read
+  // scope.
+  repeated string agent_ids = 5;
 }
 
 message SimulationStep {
@@ -289,6 +293,13 @@ message AutomationSimulation {
   string error = 10;
   google.protobuf.Timestamp create_time = 11;
   google.protobuf.Timestamp finish_time = 12;
+  // samples_hidden counts samples left out because they involve an agent
+  // outside the caller's exposure.read scope.
+  int32 samples_hidden = 13;
+  // Each launch_run step's dry-run issuance against the authority row
+  // (or the version's ceiling), as "step=ALLOWED" or
+  // "step=REFUSED:<reason>".
+  repeated string launch_preview = 14;
 }
 
 message GetAutomationSimulationResponse {

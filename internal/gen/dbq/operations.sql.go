@@ -117,8 +117,9 @@ SELECT x.automation_id, x.outcome, count(*)::bigint AS n FROM (
               ELSE 'cancelled' END AS outcome
   FROM pc.automation_executions e
   WHERE e.org_id = $1 AND e.mode = 'LIVE'
-    AND ((e.ended_at >= $2::timestamptz AND e.ended_at < $3::timestamptz)
-         OR (e.state = 'NEEDS_RECONCILIATION' AND e.updated_at >= $2::timestamptz AND e.updated_at < $3::timestamptz))
+    -- Each execution counts once, in its ended_at hour, with its current
+    -- state (D94 S8).
+    AND e.ended_at >= $2::timestamptz AND e.ended_at < $3::timestamptz
   UNION ALL
   SELECT e.automation_id, 'interventions'
   FROM pc.approval_requests r

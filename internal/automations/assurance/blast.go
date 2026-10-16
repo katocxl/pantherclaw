@@ -315,22 +315,12 @@ func triggered(def *autodomain.Definition, self ids.UUID, others []dbq.Assurance
 	return out
 }
 
-// produces maps step kinds to the platform events (D18 vocabulary) their
-// effects can put on the feed. Every execution produces
-// automation.finished.
-var produces = map[string][]string{
-	"launch_run": {
-		"run.ended", "grant.issued", "grant.revoked", "action.decided", "action.held", "action.denied",
-		"effect.recorded", "approval.expired",
-	},
-	"revoke_grant": {"grant.revoked"},
-}
-
-// Produces is the set of events a version's steps can produce.
+// Produces is the set of events a version's steps can produce (D78:
+// autodomain.Produces per kind), always with automation.finished.
 func Produces(def *autodomain.Definition) map[string]bool {
-	out := map[string]bool{"automation.finished": true}
+	out := map[string]bool{autodomain.EventAutomationFinished: true}
 	for _, s := range def.Do {
-		for _, e := range produces[s.Step] {
+		for _, e := range autodomain.Produces(s.Step) {
 			out[e] = true
 		}
 	}
@@ -496,4 +486,29 @@ func guardrails(envs []dbq.ListEnvelopesRow, ops []string) []string {
 		}
 	}
 	return out
+}
+
+// agentsVisible reports whether the caller may see every agent (by
+// exposure.read through the agent scope, as the previews filter, D94 S6
+// and S9). A caller without exposure.read sees none; an id that is not an
+// agent's is never visible.
+func agentsVisible(ctx context.Context, c tenancy.Caller, q *dbq.Queries, agents []string) (bool, error) {
+	if len(agents) == 0 {
+		return true, nil
+	}
+	view, err := exposureViewer(c, q)
+	if err != nil {
+		return false, nil //nolint:nilerr // without exposure.read no agent is visible
+	}
+	for _, s := range agents {
+		a, err := ids.ParseUUID(s)
+		if err != nil {
+			return false, nil //nolint:nilerr // not an agent id: hidden
+		}
+		ok, err := view.Agent(ctx, a)
+		if err != nil || !ok {
+			return false, err
+		}
+	}
+	return true, nil
 }

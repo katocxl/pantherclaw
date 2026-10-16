@@ -1127,7 +1127,11 @@ type SimulationSample struct {
 	SourceRef   string                 `protobuf:"bytes,3,opt,name=source_ref,json=sourceRef,proto3" json:"source_ref,omitempty"`
 	// Per step: id, kind and the would-be decision (ALLOWED, REFUSED with a
 	// reason, SKIPPED, UNEVALUABLE).
-	Steps         []*SimulationStep `protobuf:"bytes,4,rep,name=steps,proto3" json:"steps,omitempty"`
+	Steps []*SimulationStep `protobuf:"bytes,4,rep,name=steps,proto3" json:"steps,omitempty"`
+	// The agents the sample involves (its trigger's and its launch_run
+	// steps'); shown only when every one is in the caller's exposure.read
+	// scope.
+	AgentIds      []string `protobuf:"bytes,5,rep,name=agent_ids,json=agentIds,proto3" json:"agent_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1186,6 +1190,13 @@ func (x *SimulationSample) GetSourceRef() string {
 func (x *SimulationSample) GetSteps() []*SimulationStep {
 	if x != nil {
 		return x.Steps
+	}
+	return nil
+}
+
+func (x *SimulationSample) GetAgentIds() []string {
+	if x != nil {
+		return x.AgentIds
 	}
 	return nil
 }
@@ -1413,8 +1424,15 @@ type AutomationSimulation struct {
 	Error          string                 `protobuf:"bytes,10,opt,name=error,proto3" json:"error,omitempty"`
 	CreateTime     *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	FinishTime     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=finish_time,json=finishTime,proto3" json:"finish_time,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// samples_hidden counts samples left out because they involve an agent
+	// outside the caller's exposure.read scope.
+	SamplesHidden int32 `protobuf:"varint,13,opt,name=samples_hidden,json=samplesHidden,proto3" json:"samples_hidden,omitempty"`
+	// Each launch_run step's dry-run issuance against the authority row
+	// (or the version's ceiling), as "step=ALLOWED" or
+	// "step=REFUSED:<reason>".
+	LaunchPreview []string `protobuf:"bytes,14,rep,name=launch_preview,json=launchPreview,proto3" json:"launch_preview,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AutomationSimulation) Reset() {
@@ -1527,6 +1545,20 @@ func (x *AutomationSimulation) GetCreateTime() *timestamppb.Timestamp {
 func (x *AutomationSimulation) GetFinishTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.FinishTime
+	}
+	return nil
+}
+
+func (x *AutomationSimulation) GetSamplesHidden() int32 {
+	if x != nil {
+		return x.SamplesHidden
+	}
+	return 0
+}
+
+func (x *AutomationSimulation) GetLaunchPreview() []string {
+	if x != nil {
+		return x.LaunchPreview
 	}
 	return nil
 }
@@ -3035,14 +3067,15 @@ const file_pantherclaw_v1_automation_assurance_proto_rawDesc = "" +
 	"\x03day\x18\x01 \x01(\tR\x03day\x12\x1d\n" +
 	"\n" +
 	"would_fire\x18\x02 \x01(\x05R\twouldFire\x12 \n" +
-	"\vunevaluable\x18\x03 \x01(\x05R\vunevaluable\"\xc5\x01\n" +
+	"\vunevaluable\x18\x03 \x01(\x05R\vunevaluable\"\xe2\x01\n" +
 	"\x10SimulationSample\x129\n" +
 	"\n" +
 	"occur_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\toccurTime\x12!\n" +
 	"\ftrigger_kind\x18\x02 \x01(\tR\vtriggerKind\x12\x1d\n" +
 	"\n" +
 	"source_ref\x18\x03 \x01(\tR\tsourceRef\x124\n" +
-	"\x05steps\x18\x04 \x03(\v2\x1e.pantherclaw.v1.SimulationStepR\x05steps\"q\n" +
+	"\x05steps\x18\x04 \x03(\v2\x1e.pantherclaw.v1.SimulationStepR\x05steps\x12\x1b\n" +
+	"\tagent_ids\x18\x05 \x03(\tR\bagentIds\"q\n" +
 	"\x0eSimulationStep\x12\x17\n" +
 	"\astep_id\x18\x01 \x01(\tR\x06stepId\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x1a\n" +
@@ -3057,7 +3090,7 @@ const file_pantherclaw_v1_automation_assurance_proto_rawDesc = "" +
 	"\x10SimulationBudget\x12\x1a\n" +
 	"\bcurrency\x18\x01 \x01(\tR\bcurrency\x12\x1e\n" +
 	"\vmax_per_day\x18\x02 \x01(\tR\tmaxPerDay\x12(\n" +
-	"\x10expected_per_day\x18\x03 \x01(\tR\x0eexpectedPerDay\"\xb5\x04\n" +
+	"\x10expected_per_day\x18\x03 \x01(\tR\x0eexpectedPerDay\"\x83\x05\n" +
 	"\x14AutomationSimulation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -3075,7 +3108,9 @@ const file_pantherclaw_v1_automation_assurance_proto_rawDesc = "" +
 	"\vcreate_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12;\n" +
 	"\vfinish_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"finishTime\"g\n" +
+	"finishTime\x12%\n" +
+	"\x0esamples_hidden\x18\r \x01(\x05R\rsamplesHidden\x12%\n" +
+	"\x0elaunch_preview\x18\x0e \x03(\tR\rlaunchPreview\"g\n" +
 	"\x1fGetAutomationSimulationResponse\x12D\n" +
 	"\n" +
 	"simulation\x18\x01 \x01(\v2$.pantherclaw.v1.AutomationSimulationR\n" +

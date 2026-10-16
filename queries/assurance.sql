@@ -62,8 +62,10 @@ FROM pc.automation_simulations s
 WHERE s.org_id = sqlc.arg(org_id) AND s.id = sqlc.arg(id);
 
 -- name: StartAutomationSimulation :execrows
-UPDATE pc.automation_simulations SET state = 'RUNNING', started_at = now()
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'QUEUED';
+-- Claims a queued simulation, or resumes one a failed attempt left RUNNING
+-- (the job retries; the last attempt marks it FAILED).
+UPDATE pc.automation_simulations SET state = 'RUNNING', started_at = coalesce(started_at, now())
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('QUEUED', 'RUNNING');
 
 -- name: FinishAutomationSimulation :execrows
 UPDATE pc.automation_simulations SET state = 'DONE', results = sqlc.arg(results), finished_at = now()
@@ -157,15 +159,28 @@ GROUP BY a.state, a.decision, a.reason;
 -- name: AssuranceRolloutEvidence :one
 -- What FULL rollout needs from the current COHORT stage (D36): LIVE
 -- executions of the version since the stage began that SUCCEEDED with
--- completion evidence (every finish condition met with refs), those that
--- FAILED for AUTHORITY_CHANGED, and open reconciliations.
+-- completion evidence (every finish condition met with refs) and those that
+-- FAILED for AUTHORITY_CHANGED; and, whatever their date (D94 S4), the
+-- version's open reconciliations and the open AUTHORITY_CHANGED failures
+-- of the automation (raised for the automation, or for an execution of the
+-- version).
 SELECT
   count(*) FILTER (WHERE e.state = 'SUCCEEDED' AND jsonb_array_length(coalesce(e.result -> 'finish', '[]')) > 0
                    AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(e.result -> 'finish') f
                                    WHERE NOT coalesce((f ->> 'met')::boolean, false)
                                       OR jsonb_array_length(coalesce(f -> 'refs', '[]')) = 0))::int AS evidenced,
-  count(*) FILTER (WHERE e.state = 'FAILED' AND e.reason = 'AUTHORITY_CHANGED')::int AS authority_failed,
-  count(*) FILTER (WHERE e.state = 'NEEDS_RECONCILIATION')::int AS reconciling
+  (count(*) FILTER (WHERE e.state = 'FAILED' AND e.reason = 'AUTHORITY_CHANGED')
+   + (SELECT count(*) FROM pc.operational_failures f
+      WHERE f.org_id = sqlc.arg(org_id) AND f.kind = 'automation.authority_changed' AND f.state <> 'RESOLVED'
+        AND EXISTS (SELECT 1 FROM jsonb_array_elements(f.scope) sa
+                    WHERE sa ->> 'type' = 'automation' AND sa ->> 'id' = (SELECT a.id::text FROM pc.automations a WHERE a.org_id = f.org_id AND a.id = sqlc.arg(automation_id)))
+        AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(f.scope) s
+                        JOIN pc.automation_executions fx ON fx.org_id = f.org_id AND fx.id::text = s ->> 'id'
+                        WHERE s ->> 'type' = 'automation_execution' AND fx.version_id <> sqlc.arg(version_id))))::int
+    AS authority_failed,
+  (SELECT count(*) FROM pc.automation_executions r
+   WHERE r.org_id = sqlc.arg(org_id) AND r.automation_id = sqlc.arg(automation_id) AND r.version_id = sqlc.arg(version_id)
+     AND r.state = 'NEEDS_RECONCILIATION')::int AS reconciling
 FROM pc.automation_executions e
 WHERE e.org_id = sqlc.arg(org_id) AND e.automation_id = sqlc.arg(automation_id) AND e.version_id = sqlc.arg(version_id)
   AND e.mode = 'LIVE' AND e.created_at >= sqlc.arg(since);
