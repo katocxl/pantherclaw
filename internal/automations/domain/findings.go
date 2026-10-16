@@ -50,6 +50,8 @@ const (
 	CodePrincipalInvalid         = "PRINCIPAL_INVALID"
 	CodeDestinationInvalid       = "DESTINATION_INVALID"
 	CodePrefixIrreversible       = "CEILING_PREFIX_IRREVERSIBLE"
+	CodeLimitInvalid             = "LIMIT_INVALID"
+	CodeInputNotJSON             = "INPUT_NOT_JSON"
 )
 
 // HasErrors reports whether any finding is an error.
