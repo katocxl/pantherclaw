@@ -23,7 +23,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
-	"github.com/katocxl/pantherclaw/internal/protect"
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 	runsapp "github.com/katocxl/pantherclaw/internal/runs/app"
 )
@@ -40,36 +39,44 @@ type automationsCore struct {
 	runs    *runsapp.Service
 }
 
-// newAutomationsCore builds the core services. grants and runs are the API's
-// own services: they gain the automation ceilings, the in-transaction
-// store and the daily run cap.
-func newAutomationsCore(pool *db.Pool, bill *billing.Service, publicURL string, grants *grantsapp.Service, runs *runsapp.Service) *automationsCore {
+// newAutomationsCore builds the process's one core (D91 K6): the API and
+// the jobs share it, so a port another stream sets on svc reaches both.
+// Set ports here, not in registerAutomationsCore, so a worker-only process
+// has them too. attach gives it its grants and runs services.
+func newAutomationsCore(pool *db.Pool, bill *billing.Service, publicURL string) *automationsCore {
 	ch := changes.New(pool, publicURL)
 	svc := &autoapp.Service{
-		Pool: pool, Clock: clock.System{}, Changes: ch, Grants: grants, Runs: runs,
+		Pool: pool, Clock: clock.System{}, Changes: ch,
 		Operations: &defspg.Store{Pool: pool}, Failures: &failures.Sink{},
 	}
 	if bill != nil {
 		svc.Editions = bill
 	}
 	svc.RegisterChanges()
-	if grants != nil {
-		if grants.Store == nil {
-			grants.Store = &grantspg.Store{Pool: pool}
-		}
-		grants.Ceilings = svc
+	return &automationsCore{changes: ch, svc: svc}
+}
+
+// attach makes grants and runs the core's issuance services: they gain the
+// automation ceilings, the in-transaction store and the daily run cap.
+func (c *automationsCore) attach(pool *db.Pool, grants *grantsapp.Service, runs *runsapp.Service) {
+	if grants.Store == nil {
+		grants.Store = &grantspg.Store{Pool: pool}
 	}
-	if runs != nil {
-		runs.WithAutomationRuns(svc)
-	}
-	return &automationsCore{changes: ch, svc: svc, grants: grants, runs: runs}
+	grants.Ceilings = c.svc
+	runs.WithAutomationRuns(c.svc)
+	c.grants, c.runs = grants, runs
+	c.svc.Grants, c.svc.Runs = grants, runs
 }
 
 // registerAutomationsCore serves AutomationService and ChangeService,
 // mounts the /changes pages when security keys are configured, and lets
 // the kill switch pause every automation (D14).
 func registerAutomationsCore(rs *connect.Server, d apiDeps, grants *grantsapp.Service, runs *runsapp.Service) *automationsCore {
-	core := newAutomationsCore(d.pool, d.billing, d.publicURL, grants, runs)
+	core := d.autos
+	if core == nil {
+		core = newAutomationsCore(d.pool, d.billing, d.publicURL)
+	}
+	core.attach(d.pool, grants, runs)
 	pantherclawv1connect.RegisterAutomationServiceHandler(rs, automationsrpc.New(core.svc))
 	pantherclawv1connect.RegisterChangeServiceHandler(rs, changesrpc.New(core.changes))
 	if d.web != nil && d.m5 != nil && d.m5.webauthn != nil {
@@ -97,20 +104,25 @@ func (c *automationsCore) identities(ctx context.Context) ([]*pantherclawv1.Auto
 	return out, note, nil
 }
 
-// registerAutomationsCoreJobs adds the ceiling sweep (D57) and returns
-// periodic with its schedule appended.
-func registerAutomationsCoreJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, pool *db.Pool, bill *billing.Service, log *slog.Logger,
+// registerAutomationsCoreJobs adds the ceiling sweep (D57) and the change
+// requests' expiry sweep (D91 K7) on the process's core, and returns
+// periodic with their schedules appended. A worker-only process attaches
+// grants and runs services of its own.
+func registerAutomationsCoreJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, core *automationsCore, log *slog.Logger,
 ) ([]*river.PeriodicJob, error) {
-	gstore := &grantspg.Store{Pool: pool}
-	grants := &grantsapp.Service{
-		Repo: gstore, Subjects: gstore, Defs: &defspg.Store{Pool: pool}, Authz: grantsapp.SubjectAuthorizer{},
-		Clock: clock.System{}, Store: gstore,
+	if core.grants == nil {
+		pool := core.svc.Pool
+		gstore := &grantspg.Store{Pool: pool}
+		core.attach(pool, &grantsapp.Service{
+			Repo: gstore, Subjects: gstore, Defs: &defspg.Store{Pool: pool}, Authz: grantsapp.SubjectAuthorizer{},
+			Clock: clock.System{}, Store: gstore,
+		}, runsapp.New(pool).WithGrants(gstore))
 	}
-	core := newAutomationsCore(pool, bill, "", grants, runsapp.New(pool).WithGrants(gstore))
-	// The ceiling sweep counts no approver marked compromised (G0 M11 D43).
-	core.svc.Compromise = &protect.Publishers{Pool: pool}
 	if err := core.svc.RegisterJobs(reg, log); err != nil {
 		return nil, err
 	}
-	return append(periodic, autoapp.PeriodicJobs()...), nil
+	if err := core.changes.RegisterJobs(reg, log); err != nil {
+		return nil, err
+	}
+	return append(append(periodic, autoapp.PeriodicJobs()...), changes.PeriodicJobs()...), nil
 }

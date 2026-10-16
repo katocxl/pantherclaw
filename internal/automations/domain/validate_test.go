@@ -5,6 +5,7 @@ package domain_test
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -20,6 +21,7 @@ type fakeEnv struct {
 	approvers    int
 	edition      autodomain.Edition
 	noOwner      bool
+	under        map[string][]string
 }
 
 func (fakeEnv) Now() time.Time { return time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC) }
@@ -36,12 +38,14 @@ func (fakeEnv) OwnerActivePerson(context.Context, ids.UUID) (bool, error) {
 }
 func (fakeEnv) AgentGrantable(context.Context, ids.UUID) (bool, error) { return true, nil }
 func (e fakeEnv) Operation(_ context.Context, op string) (autodomain.OperationInfo, error) {
-	return autodomain.OperationInfo{Known: true, Irreversible: e.irreversible[op], ConsumesBudget: e.budget[op]}, nil
+	return autodomain.OperationInfo{
+		Known: true, Irreversible: e.irreversible[op], ConsumesBudget: e.budget[op], IrreversibleUnder: e.under[op],
+	}, nil
 }
 
 func (fakeEnv) DestinationActive(context.Context, ids.UUID, string) (bool, error) { return true, nil }
 
-func (e fakeEnv) EligibleApprovers(context.Context, autodomain.GateWith, ids.UUID) (int, error) {
+func (e fakeEnv) EligibleApprovers(context.Context, autodomain.GateWith, ids.UUID, ids.UUID) (int, error) {
 	return e.approvers, nil
 }
 
@@ -279,5 +283,118 @@ func TestManualStepUpForIrreversibleCeiling(t *testing.T) {
 	fs = validate(t, strings.Replace(doc, "  manual:\n", "  manual:\n    step_up: true\n", 1), irreversible)
 	if slices.ContainsFunc(fs, func(f autodomain.Finding) bool { return f.Path == "/when/manual/step_up" }) {
 		t.Errorf("step_up: true still refused: %+v", fs)
+	}
+}
+
+// TestD91_ValidationFixes: the params envelope fits its CHECK (K3), a
+// prefix never hides an irreversible operation (K4), and the summary says
+// whose grants the version may revoke.
+func TestD91_ValidationFixes(t *testing.T) {
+	var params strings.Builder
+	for i := range 16 {
+		fmt.Fprintf(&params, "      p%02d:\n        from: /p%d\n        type: string\n        pattern: \"[a-z]+\"\n        max_len: 256\n", i, i)
+	}
+	big := strings.Replace(sample, "      ticket:\n        from: /ticket/id\n        type: string\n        pattern: \"T-[0-9]{1,10}\"\n", params.String(), 1)
+	big = strings.ReplaceAll(big, "{{params.ticket}}", "{{params.p00}}")
+	if got := codes(validate(t, big, fakeEnv{approvers: 1})); !slices.Contains(got, autodomain.CodeParamUnbounded) {
+		t.Errorf("16 params of 256 characters: %v", got)
+	}
+	prefix := strings.Replace(sample, "operations: [payments.refund]", "operations: [payments.*]", 1)
+	env := fakeEnv{approvers: 1, under: map[string][]string{"payments.*": {"payments.transfer"}}}
+	if got := codes(validate(t, prefix, env)); !slices.Contains(got, autodomain.CodePrefixIrreversible) {
+		t.Errorf("a prefix covering an irreversible operation: %v", got)
+	}
+	d, err := autodomain.Parse([]byte(revoking("  revocable:\n    all: true\n")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := autodomain.Summary(d, nil); !strings.Contains(s, "may revoke grants of any agent") {
+		t.Errorf("summary lacks the revocable scope:\n%s", s)
+	}
+}
+
+func TestCeilingNotWiderThan(t *testing.T) {
+	d, err := autodomain.Parse([]byte(sample))
+	if err != nil {
+		t.Fatal(err)
+	}
+	prev := d.Authority.Ceiling
+	same := *prev
+	if !same.NotWiderThan(prev) {
+		t.Error("the same ceiling is wider")
+	}
+	more := *prev
+	more.PerDay.Grants++
+	other := *prev
+	other.Agents = append(slices.Clone(prev.Agents), autodomain.RefID{})
+	longer := *prev
+	longer.PerGrant.TTL = prev.PerGrant.TTL * 2
+	for name, c := range map[string]autodomain.Ceiling{"more grants": more, "another agent": other, "longer grants": longer} {
+		if c.NotWiderThan(prev) {
+			t.Errorf("%s is not wider", name)
+		}
+	}
+}
+
+// TestD102_AbsentMinMeansOne: an absent or 0 wait_effect min and gate
+// min_approvals mean 1; a negative one is refused (D102 C2).
+func TestD102_AbsentMinMeansOne(t *testing.T) {
+	doc := func(extra string) string {
+		return strings.Replace(sample, "  - id: wait\n    step: wait_run\n    with:\n      step: launch\n    timeout: 2h\n",
+			"  - id: wait\n    step: wait_effect\n    with:\n      step: launch\n      operation: payments.refund\n"+extra+"    timeout: 2h\n"+
+				"  - id: ok\n    step: gate\n    with:\n      approvers:\n        roles: [automation_operator]\n      deadline: 1h\n"+
+				strings.ReplaceAll(extra, "min:", "min_approvals:"), 1)
+	}
+	bad := func(fs []autodomain.Finding) []string {
+		var out []string
+		for _, f := range fs {
+			if strings.HasSuffix(f.Path, "/min") || strings.HasSuffix(f.Path, "/min_approvals") {
+				out = append(out, f.Path)
+			}
+		}
+		return out
+	}
+	for _, extra := range []string{"", "      min: 0\n"} {
+		if got := bad(validate(t, doc(extra), fakeEnv{approvers: 2})); len(got) != 0 {
+			t.Errorf("%q refused: %v", extra, got)
+		}
+	}
+	if got := bad(validate(t, doc("      min: -1\n"), fakeEnv{approvers: 2})); len(got) != 2 {
+		t.Errorf("negative minimums: %v", got)
+	}
+	if (autodomain.WaitEffectWith{}).Effects() != 1 || (autodomain.GateWith{}).Approvals() != 1 || (autodomain.GateWith{MinApprovals: 2}).Approvals() != 2 {
+		t.Error("absent minimums are not 1")
+	}
+}
+
+// TestD102_RevocableWithin: a replacement that widens revocable is wider
+// (D102 L4).
+func TestD102_RevocableWithin(t *testing.T) {
+	a, b := autodomain.RefID{}, autodomain.RefID(ids.NewV7())
+	agents := &autodomain.AgentScope{Agents: []autodomain.RefID{a}}
+	all := &autodomain.AgentScope{All: true}
+	for name, tc := range map[string]struct {
+		s, prev *autodomain.AgentScope
+		want    bool
+	}{
+		"absent":         {nil, agents, true},
+		"same":           {agents, agents, true},
+		"agents in all":  {agents, all, true},
+		"all over list":  {all, agents, false},
+		"another agent":  {&autodomain.AgentScope{Agents: []autodomain.RefID{a, b}}, agents, false},
+		"new revocation": {agents, nil, false},
+	} {
+		if got := tc.s.Within(tc.prev); got != tc.want {
+			t.Errorf("%s: %v", name, got)
+		}
+	}
+	d, err := autodomain.Parse([]byte(sample))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wider := d.Authority
+	wider.Revocable = all
+	if wider.NotWiderThan(d.Authority) || !d.Authority.NotWiderThan(d.Authority) {
+		t.Error("Authority.NotWiderThan ignores revocable")
 	}
 }

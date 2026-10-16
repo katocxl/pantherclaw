@@ -72,15 +72,19 @@ type WaitEffectWith struct {
 	Step      string   `json:"step"`
 	Operation string   `json:"operation"`
 	States    []string `json:"states,omitzero"` // default [CONFIRMED]
-	Min       int      `json:"min,omitzero"`    // 1..100, default 1
+	Min       int      `json:"min,omitzero"`    // 1..100; absent (0) means 1
 }
+
+// Effects is how many confirmed effects the step waits for: absent or 0
+// means 1 (D102 C2).
+func (x WaitEffectWith) Effects() int { return max(x.Min, 1) }
 
 // GateWith asks people for an approval bound to this execution, step and
 // parameters (HR-281).
 type GateWith struct {
 	Approvers    GateApprovers `json:"approvers"`
 	Exclude      []string      `json:"exclude,omitzero"`       // OWNER | CONFIRMERS | PRINCIPAL; default [OWNER]
-	MinApprovals int           `json:"min_approvals,omitzero"` // 1..2, default 1
+	MinApprovals int           `json:"min_approvals,omitzero"` // 1..2; absent (0) means 1
 	Deadline     Duration      `json:"deadline"`               // ≤ 72h
 	Summary      string        `json:"summary,omitzero"`       // templatable
 }
@@ -90,6 +94,10 @@ type GateApprovers struct {
 	Roles []string `json:"roles,omitzero"`
 	Users []RefID  `json:"users,omitzero"`
 }
+
+// Approvals is how many approvals the gate needs: absent or 0 means 1
+// (D102 C2).
+func (x GateWith) Approvals() int { return max(x.MinApprovals, 1) }
 
 // Gate exclusions.
 const (

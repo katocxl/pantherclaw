@@ -162,7 +162,7 @@ func TestD66_ChangeServicePermissions(t *testing.T) {
 		if got := err == nil; got != tc.sees {
 			t.Errorf("%s: Get %v, want visible %v", tc.who, err, tc.sees)
 		}
-		list, err := e.svc.Changes.List(tc.p.cli, changes.Filter{Limit: 200})
+		list, _, err := e.svc.Changes.List(tc.p.cli, changes.Filter{Limit: 200})
 		if err != nil {
 			t.Fatal(err)
 		}

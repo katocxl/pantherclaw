@@ -258,6 +258,14 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	m6.scans = agentsrpc.NewGatewayScans(aapp.NewInventory(pool, bill))
 
 	g, ctx := errgroup.WithContext(ctx)
+	// autos is the one M11 part 2 core of this process: the API and the
+	// jobs share it, so every port set on it reaches both (D91 K6).
+	autos := newAutomationsCore(pool, bill, cfg.Auth.PublicURL)
+	// protect sets its ports on that core here, so the jobs have them too:
+	// the expiry sweep closes protected changes and their reviews (D98), and
+	// the ceiling sweep counts no approver marked compromised (D43).
+	m11protect := newM11Protect(pool, bill)
+	protectCore(m11protect, autos)
 	if cfg.Role == RoleAPI || cfg.Role == RoleAll {
 		tokens, err := token.New(reg, cfg.Auth.PublicURL, token.Audience)
 		if err != nil {
@@ -334,6 +342,8 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			kp:           kp,
 			freshness:    freshnessOf(cfg),
 			m10ops:       m10OpsDeps{authn: authn, tokens: tokens},
+			autos:        autos,
+			m11protect:   m11protect,
 		})
 		if err != nil {
 			return err
@@ -424,7 +434,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			return err
 		}
 		evidenceJobs = append(evidenceJobs, reflexJobs...)
-		if evidenceJobs, err = registerAutomationsCoreJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
+		if evidenceJobs, err = registerAutomationsCoreJobs(evidenceJobs, jreg, autos, log); err != nil {
 			return err
 		}
 		if err := registerSimulationJobs(jreg, pool, kp, bill, log); err != nil {
@@ -557,12 +567,16 @@ type apiDeps struct {
 	m10ops m10OpsDeps
 	// M11 protect: the protected-change Gate and compromised publishers.
 	m11protect m11Protect
+	// autos is the process's M11 part 2 core (nil: apiHandler builds one).
+	autos *automationsCore
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
 func apiHandler(d apiDeps) (http.Handler, error) {
 	pool, reg, log := d.pool, d.reg, d.log
-	d.m11protect = newM11Protect(d)
+	if d.m11protect.gate == nil {
+		d.m11protect = newM11Protect(d.pool, d.billing)
+	}
 	rs, err := rpc.NewServer(rpc.Options{
 		Logger:       log,
 		Public:       publicProcedures(),

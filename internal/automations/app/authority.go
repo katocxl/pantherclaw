@@ -162,7 +162,7 @@ func (s *Service) liveCeiling(ctx context.Context, tx db.TenantTx, org ids.OrgID
 		return a, nil, zero, grantsapp.ErrCeilingInactive
 	case *a.Rollout != string(autodomain.RolloutCohort) && *a.Rollout != string(autodomain.RolloutFull):
 		return a, nil, zero, grantsapp.ErrCeilingInactive // SHADOW issues nothing (D54)
-	case *a.Rollout == string(autodomain.RolloutCohort) && !agent.IsZero() && !slices.Contains(a.CohortAgents, agent):
+	case *a.Rollout == string(autodomain.RolloutCohort) && (agent.IsZero() || !slices.Contains(a.CohortAgents, agent)):
 		return a, nil, zero, pcerr.Wrap(grantsapp.ErrOutsideCeiling, pcerr.FailedPrecondition, "OUTSIDE_COHORT",
 			"the agent is outside the cohort this version is rolled out to")
 	}

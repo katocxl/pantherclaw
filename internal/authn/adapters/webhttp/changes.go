@@ -18,6 +18,7 @@ import (
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	tenancyapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 )
 
 // The change request pages (G0 M11 part 2 D6, D53; HR-272, HR-151): GET
@@ -37,6 +38,7 @@ type Changes interface {
 	BeginConfirm(ctx context.Context, id ids.UUID) (changes.Request, error)
 	Confirm(ctx context.Context, id ids.UUID, a changes.Assertion) (changes.Request, error)
 	Decline(ctx context.Context, id ids.UUID, reason string) (changes.Request, error)
+	MayDecline(caller tenancyapp.Caller, r changes.Request) bool
 }
 
 // WithChanges adds the change request pages; call it before Mount.
@@ -73,6 +75,7 @@ type changeView struct {
 	MixedScript  bool
 	SummaryLabel string
 	MayConfirm   bool
+	MayDecline   bool
 	MaxReason    int
 }
 
@@ -120,7 +123,8 @@ func (h *Handler) changePage(w http.ResponseWriter, r *http.Request, s authnapp.
 	view := changeView{
 		page: page{Title: "Change", Session: s}, Request: c, SummaryLabel: ChangeSummaryLabel,
 		Digest:     base64.RawURLEncoding.EncodeToString(c.ContentDigest[:]),
-		MayConfirm: changes.MayConfirm(callerOf(s), c), MaxReason: changes.MaxDeclineReason,
+		MayConfirm: changes.MayConfirm(callerOf(s), c), MayDecline: h.changes.MayDecline(callerOf(s), c),
+		MaxReason: changes.MaxDeclineReason,
 	}
 	for line := range strings.Lines(pretty.String()) {
 		u := apdomain.Clean("summary", line, maxSummaryLine)

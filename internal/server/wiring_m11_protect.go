@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/connect/v2"
 
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
+	"github.com/katocxl/pantherclaw/internal/billing"
 	covapp "github.com/katocxl/pantherclaw/internal/coverage/app"
 	defsapp "github.com/katocxl/pantherclaw/internal/definitions/app"
 	defsdomain "github.com/katocxl/pantherclaw/internal/definitions/domain"
@@ -38,20 +39,20 @@ type m11Protect struct {
 	publishers *protect.Publishers
 }
 
-// newM11Protect builds the Gate and the publishers. registerM11Protect
-// connects them to the core's change ceremony (the Gate's Requests); without
+// newM11Protect builds the Gate and the publishers. protectCore connects
+// them to the process's core change ceremony (the Gate's Requests); without
 // it a category cannot be turned on (PROTECTED_CHANGES_UNAVAILABLE).
-func newM11Protect(d apiDeps) m11Protect {
+func newM11Protect(pool *db.Pool, bill *billing.Service) m11Protect {
 	gate := &protect.Gate{}
-	pub := &protect.Publishers{Pool: d.pool, Gate: gate, Undo: map[string]protect.Rollback{
+	pub := &protect.Publishers{Pool: pool, Gate: gate, Undo: map[string]protect.Rollback{
 		// Automations pause through core-B's Pauser and promotions revoke through
 		// govern; until those are merged their ROLLBACK is refused (D72 P1).
 		protect.ItemAutomationVersion: notYet, protect.ItemPromotion: notYet,
 		protect.ItemPolicyChange: keepOnly, protect.ItemProtectedChange: keepOnly,
 	}}
 	pub.On = append(pub.On, policyOnCompromise)
-	if d.billing != nil {
-		pub.Editions = d.billing
+	if bill != nil {
+		pub.Editions = bill
 	}
 	gate.Compromise = pub
 	return m11Protect{gate: gate, publishers: pub}
@@ -69,7 +70,13 @@ func registerM11Protect(rs *connect.Server, d apiDeps, core *automationsCore) {
 		d.m6.credentials.WithProtect(p.gate)
 	}
 	if core != nil {
-		protectCore(p, core)
+		if p.gate.Requests == nil {
+			protectCore(p, core)
+		}
+		// ROLLBACK of an exposed grant revokes it (D90 Q2).
+		if core.grants != nil {
+			p.publishers.Undo[protect.ItemGrant] = grantUndo(core.grants)
+		}
 	}
 	svc := &protect.Service{Pool: d.pool, Gate: p.gate, Failures: &failures.Sink{}}
 	pantherclawv1connect.RegisterProtectedChangeServiceHandler(rs, protectrpc.NewChanges(svc))
@@ -84,13 +91,11 @@ func registerM11Protect(rs *connect.Server, d apiDeps, core *automationsCore) {
 // change request and from counting toward a ceiling (D11's
 // CompromiseChecker), and on marking voids their change requests, pauses
 // the automations whose ceiling they approved (D54) and exposes the
-// automations they confirmed.
+// automations they confirmed. It runs once, on the process's one core, so
+// the jobs have it too (D91 K6).
 func protectCore(p m11Protect, core *automationsCore) {
 	core.changes.Compromise = p.publishers
 	core.svc.Compromise = p.publishers
-	if core.grants != nil {
-		p.publishers.Undo[protect.ItemGrant] = grantUndo(core.grants)
-	}
 	p.gate.Requests = protect.Ceremony{Changes: core.changes}
 	protect.Register(core.changes, p.gate, p.publishers)
 	pub := p.publishers

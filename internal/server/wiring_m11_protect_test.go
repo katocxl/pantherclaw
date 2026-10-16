@@ -14,8 +14,8 @@ import (
 // shared automations service both refuse compromised people through the
 // same publishers. Promotions stay NOT_YET until the top wires govern.
 func TestM11ProtectWiring(t *testing.T) {
-	core := newAutomationsCore(nil, nil, "https://pc.example.test", nil, nil)
-	p := newM11Protect(apiDeps{})
+	core := newAutomationsCore(nil, nil, "https://pc.example.test")
+	p := newM11Protect(nil, nil)
 	protectCore(p, core)
 	c, ok := p.gate.Requests.(protect.Ceremony)
 	if !ok || c.Changes == nil || c.Changes != core.changes {
