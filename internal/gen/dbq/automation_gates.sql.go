@@ -162,16 +162,21 @@ func (q *Queries) InsertAutomationGateRequest(ctx context.Context, arg InsertAut
 }
 
 const liveAutomationGate = `-- name: LiveAutomationGate :one
-SELECT id FROM pc.approval_requests
+SELECT id, (convert_from(binding_input, 'UTF8')::jsonb ->> 'attempt')::int AS attempt FROM pc.approval_requests
 WHERE org_id = $1 AND execution_id = $2 AND step_id = $3
   AND subject_kind = 'AUTOMATION_GATE' AND state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED')
 `
 
-func (q *Queries) LiveAutomationGate(ctx context.Context, orgID ids.OrgID, executionID *ids.UUID, stepID *string) (ids.UUID, error) {
+type LiveAutomationGateRow struct {
+	ID      ids.UUID
+	Attempt int32
+}
+
+func (q *Queries) LiveAutomationGate(ctx context.Context, orgID ids.OrgID, executionID *ids.UUID, stepID *string) (LiveAutomationGateRow, error) {
 	row := q.db.QueryRow(ctx, liveAutomationGate, orgID, executionID, stepID)
-	var id ids.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i LiveAutomationGateRow
+	err := row.Scan(&i.ID, &i.Attempt)
+	return i, err
 }
 
 const openAutomationGates = `-- name: OpenAutomationGates :many

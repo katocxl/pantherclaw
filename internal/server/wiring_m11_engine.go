@@ -213,17 +213,13 @@ func (p noticePort) Notify(ctx context.Context, tx pgx.Tx, n steps.Notice) (ids.
 	if err != nil {
 		return ids.UUID{}, err
 	}
-	a, err := dbq.New(ttx).GetAutomation(ctx, n.Org, n.Automation)
-	if err != nil {
-		return ids.UUID{}, err
-	}
 	typ := "automation.notice"
 	if n.Shadow {
 		typ = "automation.notice_shadow"
 	}
 	r, err := p.n.Enqueue(ctx, ttx, napp.Message{
 		Org: n.Org, Type: typ, Personal: n.People, PersonalOnly: true,
-		Params:    map[string]string{"automation": a.Name, "step": n.StepID, "execution": n.Execution.String()},
+		Params:    map[string]string{"automation": n.Automation.String(),"step": n.StepID, "execution": n.Execution.String()},
 		Subject:   &napp.Subject{Type: "automation_execution", ID: n.Execution},
 		DedupeKey: typ + ":" + n.Execution.String() + ":" + n.StepID,
 	})
@@ -334,9 +330,7 @@ func (r runsPort) EndExecutionRuns(ctx context.Context, tx pgx.Tx, x *engine.Exe
 	if err != nil {
 		return nil, err
 	}
-	if len(reason) > 64 {
-		reason = reason[:64]
-	}
+	reason = steps.CutUTF8(reason, 64)
 	var out []ids.UUID
 	for _, run := range runs {
 		if run.EffectiveState != "ACTIVE" {

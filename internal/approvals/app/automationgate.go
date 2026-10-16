@@ -32,6 +32,11 @@ const (
 // ErrGateInvalid refuses a gate request the engine should never make.
 var ErrGateInvalid = pcerr.New(pcerr.InvalidArgument, "GATE_INVALID", "the automation gate request is invalid")
 
+// ErrGateAttempt refuses a gate request while the step has a live gate
+// bound to another attempt.
+var ErrGateAttempt = pcerr.New(pcerr.FailedPrecondition, "GATE_ATTEMPT_MISMATCH",
+	"the step has a live gate bound to another attempt")
+
 // AutomationGate is a gate the engine asks for (D25, D25a, HR-281): one
 // step of one execution, bound to the parameters' digest, decided by
 // MinApprovals people holding automation.approve at the org (narrowed to
@@ -85,8 +90,13 @@ func (s *Service) RequestAutomationGateTx(ctx context.Context, tx pgx.Tx, g Auto
 	}
 	q := dbq.New(ttx)
 	if live, err := q.LiveAutomationGate(ctx, g.Org, &g.Execution, &g.StepID); err == nil {
-		n, err := gateEligible(ctx, q, g.Org, live)
-		return live, n, err
+		if int(live.Attempt) != g.Attempt {
+			// A live gate binds its own attempt (HR-281): another attempt
+			// never reuses it.
+			return ids.UUID{}, 0, ErrGateAttempt
+		}
+		n, err := gateEligible(ctx, q, g.Org, live.ID)
+		return live.ID, n, err
 	} else if !db.IsNoRows(err) {
 		return ids.UUID{}, 0, err
 	}
