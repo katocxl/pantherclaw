@@ -24,13 +24,15 @@
 <h2>Confirm</h2>
 <p class="note">Your security key signs this change request: its domain and kind, the organization, its subject, the digest of exactly what it applies and exactly the summary above. Each confirmation must come from a different person with a different key.</p>
 <p><button type="button" class="danger" id="confirm" data-id="{{.ID}}">Confirm with your security key</button></p>
+{{else}}{{if eq .State "PENDING"}}
+<p class="note">You cannot confirm this change here: that needs a browser session, a security key, and that you have not confirmed it already.</p>
+{{end}}{{end}}
+{{if .MayDecline}}
 <h2>Decline</h2>
 <p><label for="decline-reason">Reason</label></p>
 <p><textarea id="decline-reason" rows="3" cols="72" maxlength="{{.MaxReason}}" spellcheck="true"></textarea></p>
 <p><button type="button" id="decline" data-id="{{.ID}}">Decline</button></p>
-{{else}}{{if eq .State "PENDING"}}
-<p class="note">You cannot confirm this change here: that needs a browser session, a security key, and that you have not confirmed it already.</p>
-{{end}}{{end}}
+{{end}}
 <p id="status" role="status"></p>
 <script src="/static/changes.js"></script>
 {{template "foot" .}}

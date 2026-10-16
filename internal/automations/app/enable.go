@@ -206,6 +206,13 @@ func (s *Service) apply(ctx context.Context, tx db.TenantTx, r changes.Request, 
 		if !slices.Contains([]string{"VALIDATED", "TESTED"}, v.State) {
 			return &changes.VoidError{Reason: VoidState}
 		}
+		if rollout == autodomain.RolloutFull {
+			if ok, err := fullEnableAllowed(ctx, q, a, d); err != nil {
+				return err
+			} else if !ok {
+				return &changes.VoidError{Reason: VoidState}
+			}
+		}
 	case KindRollout:
 		if a.EnabledVersionID == nil || *a.EnabledVersionID != v.ID || a.Rollout == nil ||
 			autodomain.Rollout(*a.Rollout).Rank() >= rollout.Rank() {
@@ -228,6 +235,15 @@ func (s *Service) apply(ctx context.Context, tx db.TenantTx, r changes.Request, 
 	}
 	if u, ok := d.Authority.PrincipalUser(); ok && !slices.Contains(confirmers, u.UUID()) {
 		return &changes.VoidError{Reason: VoidPrincipal}
+	}
+	// Serialize with the kill switch (D91 K5): an enabling applied while
+	// it is engaged leaves the automation PAUSED (KILL_SWITCH).
+	if err := q.InsertContainment(ctx, r.Org); err != nil {
+		return err
+	}
+	killed, err := q.LockKillSwitch(ctx, r.Org)
+	if err != nil {
+		return err
 	}
 	now, err := dbNow(ctx, q)
 	if err != nil {
@@ -275,7 +291,16 @@ func (s *Service) apply(ctx context.Context, tx db.TenantTx, r changes.Request, 
 	})); err != nil {
 		return err
 	}
-	if a.State != string(autodomain.StatePaused) && s.Triggers != nil {
+	switch {
+	case killed:
+		enabled, err := loadAutomation(ctx, q, r.Org, a.ID, false)
+		if err != nil {
+			return err
+		}
+		if err := s.pauseTx(ctx, tx, q, enabled, autodomain.PauseKillSwitch); err != nil {
+			return err
+		}
+	case a.State != string(autodomain.StatePaused) && s.Triggers != nil:
 		if err := s.Triggers.Activate(ctx, tx.Pgx(), a.ID, v.ID); err != nil {
 			return err
 		}
@@ -291,7 +316,30 @@ func (s *Service) apply(ctx context.Context, tx db.TenantTx, r changes.Request, 
 	return record(ctx, tx, caller.Actor(), name, a.ID, map[string]string{
 		"version": v.ID.String(), "rollout": ro, "ceiling": ceiling.String(), "approvers": strings.Join(strs(confirmers), ","),
 		"change_request": r.ID.String(), "review_by": reviewBy.UTC().Format(time.RFC3339), "superseded": itoa(len(ended)),
+		"kill_switch": boolString(killed),
 	})
+}
+
+// fullEnableAllowed says whether a version may be enabled straight at
+// FULL (D91): only one without launch_run, or one replacing a FULL
+// version whose ceiling it does not widen. Otherwise it is enabled at
+// COHORT and widened by a ROLLOUT with rollout evidence (D36).
+func fullEnableAllowed(ctx context.Context, q *dbq.Queries, a dbq.PcAutomation, d *autodomain.Definition) (bool, error) {
+	if !slices.Contains(d.Kinds(), autodomain.KindLaunchRun) {
+		return true, nil
+	}
+	if a.Rollout == nil || *a.Rollout != string(autodomain.RolloutFull) || a.EnabledVersionID == nil {
+		return false, nil
+	}
+	pv, err := loadVersion(ctx, q, a.OrgID, *a.EnabledVersionID, false)
+	if err != nil {
+		return false, err
+	}
+	prev, err := definitionOf(pv)
+	if err != nil {
+		return false, err
+	}
+	return d.Authority.Ceiling.NotWiderThan(prev.Authority.Ceiling), nil
 }
 
 // tested asks the TestGate (assurance, D34); without one nothing is
@@ -358,7 +406,8 @@ func (s *Service) RequestEnable(ctx context.Context, version ids.UUID, rollout a
 			return err
 		}
 		kind := KindEnable
-		if a.EnabledVersionID != nil && *a.EnabledVersionID == v.ID {
+		switch {
+		case a.EnabledVersionID != nil && *a.EnabledVersionID == v.ID:
 			kind = KindRollout
 			if a.Rollout == nil || autodomain.Rollout(*a.Rollout).Rank() >= rollout.Rank() {
 				return ErrRollout // narrowing is NarrowRollout's
@@ -370,8 +419,14 @@ func (s *Service) RequestEnable(ctx context.Context, version ids.UUID, rollout a
 					return ErrRolloutUnverified
 				}
 			}
-		} else if !slices.Contains([]string{"VALIDATED", "TESTED"}, v.State) {
+		case !slices.Contains([]string{"VALIDATED", "TESTED"}, v.State):
 			return ErrVersionState
+		case rollout == autodomain.RolloutFull:
+			if ok, err := fullEnableAllowed(ctx, q, a, d); err != nil {
+				return err
+			} else if !ok {
+				return ErrFullNeedsCohort
+			}
 		}
 		agents := d.CeilingAgents()
 		for _, x := range cohortAgents {

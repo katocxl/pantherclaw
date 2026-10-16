@@ -98,17 +98,17 @@ func revokeTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, id domain.Gran
 }
 
 // AutomationGrantsInTx implements app.TxStore.
-func (s *Store) AutomationGrantsInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, scope string, execution, ceiling ids.UUID,
-	agents []ids.UUID,
-) ([]ids.UUID, error) {
+func (s *Store) AutomationGrantsInTx(ctx context.Context, tx db.TenantTx, in app.AutomationRevoke, agents []ids.UUID) ([]ids.UUID, error) {
 	q := dbq.New(tx)
-	switch scope {
+	switch in.Scope {
 	case app.RevokeScopeExecution:
-		return q.ActiveGrantsOfExecution(ctx, org, &execution)
+		return q.ActiveGrantsOfExecution(ctx, in.Org, &in.Execution)
 	case app.RevokeScopeCeiling:
-		return q.ActiveGrantsOfCeiling(ctx, org, &ceiling)
+		return q.ActiveGrantsOfCeiling(ctx, in.Org, &in.Ceiling)
 	case app.RevokeScopeCeilingAgents:
-		return q.ActiveRootGrantsOfAgents(ctx, org, agents)
+		return q.ActiveRootGrantsOfAgents(ctx, in.Org, agents)
+	case app.RevokeScopeAutomation:
+		return q.ActiveGrantsOfAutomation(ctx, in.Org, in.Automation)
 	}
-	return nil, fmt.Errorf("grants: unknown revocation scope %q", scope)
+	return nil, fmt.Errorf("grants: unknown revocation scope %q", in.Scope)
 }

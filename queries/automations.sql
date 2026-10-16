@@ -330,3 +330,23 @@ SELECT EXISTS (
 -- A new owner (D68); a retired automation keeps its last one.
 UPDATE pc.automations SET owner_user_id = sqlc.arg(owner_user_id)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state <> 'RETIRED' AND owner_user_id <> sqlc.arg(owner_user_id);
+
+-- name: ActiveGrantsOfAutomation :many
+-- RevokeForAutomationTx AUTOMATION: every active grant issued under any of
+-- the automation's authority rows, whatever their state (RevokeAuthority).
+SELECT g.id FROM pc.grants g
+JOIN pc.automation_ceilings c ON c.org_id = g.org_id AND c.id = g.ceiling_id
+WHERE g.org_id = sqlc.arg(org_id) AND c.automation_id = sqlc.arg(automation_id) AND g.state = 'ACTIVE'
+ORDER BY g.id;
+
+-- name: CountActiveAutomationRuns :one
+-- Without the engine's port, the automation's active runs stand for its
+-- active executions (D91 K10): Retire refuses while any is live.
+SELECT count(*)::int FROM pc.runs r
+WHERE r.org_id = sqlc.arg(org_id) AND r.launcher_sa_id = sqlc.arg(service_account_id)
+  AND r.automation_execution_id IS NOT NULL AND r.state = 'ACTIVE';
+
+-- name: LockKillSwitch :one
+-- An enabling's apply takes the org's containment row as the kill switch's
+-- Engage does, so the two serialize (D91 K5).
+SELECT kill_switch FROM pc.org_containment WHERE org_id = sqlc.arg(org_id) FOR UPDATE;

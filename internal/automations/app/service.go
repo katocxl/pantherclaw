@@ -61,12 +61,17 @@ var (
 		"a cohort or full rollout needs a version whose scenario tests passed for its current content (HR-287)")
 	ErrRolloutUnverified = pcerr.New(pcerr.FailedPrecondition, "ROLLOUT_UNVERIFIED",
 		"widening to a full rollout needs a verified cohort stage")
-	ErrRollout       = pcerr.New(pcerr.InvalidArgument, "ROLLOUT_INVALID", "the rollout or its cohort is not valid here")
+	ErrRollout         = pcerr.New(pcerr.InvalidArgument, "ROLLOUT_INVALID", "the rollout or its cohort is not valid here")
+	ErrFullNeedsCohort = pcerr.New(pcerr.FailedPrecondition, "FULL_NEEDS_COHORT",
+		"enable this version at COHORT first, then widen it to FULL with rollout evidence")
 	ErrCohortUnavail = pcerr.New(pcerr.FailedPrecondition, "COHORT_UNAVAILABLE", "fleet cohorts are not available on this server")
 	ErrRevalidation  = pcerr.New(pcerr.FailedPrecondition, "AUTHORITY_CHANGED",
 		"the automation's authority no longer holds; ask for a new enabling")
-	ErrKillSwitch = pcerr.New(pcerr.FailedPrecondition, "KILL_SWITCH_ENGAGED", "the kill switch is engaged")
-	ErrContained  = pcerr.New(pcerr.FailedPrecondition, "CONTAINED", "a containment control holds the automation's identity")
+	ErrKillSwitch            = pcerr.New(pcerr.FailedPrecondition, "KILL_SWITCH_ENGAGED", "the kill switch is engaged")
+	ErrExecutionsUnavailable = pcerr.New(pcerr.FailedPrecondition, "EXECUTIONS_UNAVAILABLE",
+		"active executions cannot be canceled here: the execution engine is not available")
+	ErrGrantsUnavailable = pcerr.New(pcerr.Unavailable, "GRANTS_UNAVAILABLE", "grants cannot be revoked here")
+	ErrContained         = pcerr.New(pcerr.FailedPrecondition, "CONTAINED", "a containment control holds the automation's identity")
 )
 
 // Editions reports the licence's entitlements.
