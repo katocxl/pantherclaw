@@ -272,12 +272,6 @@ func (a *autoStack) withRefund(t *testing.T, raw []byte, amount string) []byte {
 		}
 		def.Do[i].With = jsontext.Value(b)
 	}
-	// The template names its per-run budget "per-run", which grants refuse
-	// as a rule id (lowercase letters, digits and underscores): reported to
-	// the coordinator as a cross-stream gap; the test uses a valid id.
-	for i := range def.Authority.Ceiling.PerGrant.Limits.Budgets {
-		def.Authority.Ceiling.PerGrant.Limits.Budgets[i].ID = strings.ReplaceAll(def.Authority.Ceiling.PerGrant.Limits.Budgets[i].ID, "-", "_")
-	}
 	out, err := def.Canonical()
 	if err != nil {
 		t.Fatal(err)
@@ -301,14 +295,12 @@ func (a *autoStack) latestExecution(t *testing.T, automation ids.UUID) ids.UUID 
 }
 
 // assuranceCases are a template's baseline tests as assurance's cases, as
-// the server converts them (wiring_m11_templates.go), except that names
-// are slugged: a template's test names have spaces, which assurance's
-// name CHECK refuses (reported to the coordinator as a cross-stream gap).
+// the server converts them (wiring_m11_templates.go).
 func assuranceCases(cases []templates.TestCase) []assurance.Case {
 	out := make([]assurance.Case, 0, len(cases))
 	for _, tc := range cases {
 		c := assurance.Case{
-			Name: slug(tc.Name), Kind: assurance.CaseKind(tc.Kind),
+			Name: tc.Name, Kind: assurance.CaseKind(tc.Kind),
 			Expect: assurance.Expect{State: string(tc.Expect.State), Reason: tc.Expect.Reason},
 		}
 		if len(tc.Trigger.Params) > 0 {
@@ -336,22 +328,6 @@ func assuranceCases(cases []templates.TestCase) []assurance.Case {
 		out = append(out, c)
 	}
 	return out
-}
-
-// slug is s lower-cased with every run of other characters one hyphen.
-func slug(s string) string {
-	var b strings.Builder
-	dash := false
-	for _, r := range strings.ToLower(s) {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			b.WriteRune(r)
-			dash = false
-		} else if !dash && b.Len() > 0 {
-			b.WriteByte('-')
-			dash = true
-		}
-	}
-	return strings.TrimSuffix(b.String(), "-")
 }
 
 // liveRun is a LIVE execution's grant and run.
