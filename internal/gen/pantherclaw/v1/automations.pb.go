@@ -2265,8 +2265,11 @@ type AutomationControlEffect struct {
 	LaunchesCancelled   []string               `protobuf:"bytes,3,rep,name=launches_cancelled,json=launchesCancelled,proto3" json:"launches_cancelled,omitempty"`
 	DeliveriesCancelled []string               `protobuf:"bytes,4,rep,name=deliveries_cancelled,json=deliveriesCancelled,proto3" json:"deliveries_cancelled,omitempty"`
 	ExecutionsAffected  []string               `protobuf:"bytes,5,rep,name=executions_affected,json=executionsAffected,proto3" json:"executions_affected,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Deliveries already handed to a receiver whose cancellation could not be
+	// confirmed (D97, D102): they may still arrive.
+	DeliveriesNotVerified []string `protobuf:"bytes,6,rep,name=deliveries_not_verified,json=deliveriesNotVerified,proto3" json:"deliveries_not_verified,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *AutomationControlEffect) Reset() {
@@ -2330,6 +2333,13 @@ func (x *AutomationControlEffect) GetDeliveriesCancelled() []string {
 func (x *AutomationControlEffect) GetExecutionsAffected() []string {
 	if x != nil {
 		return x.ExecutionsAffected
+	}
+	return nil
+}
+
+func (x *AutomationControlEffect) GetDeliveriesNotVerified() []string {
+	if x != nil {
+		return x.DeliveriesNotVerified
 	}
 	return nil
 }
@@ -3034,14 +3044,15 @@ const file_pantherclaw_v1_automations_proto_rawDesc = "" +
 	"\x15NarrowRolloutResponse\x12:\n" +
 	"\n" +
 	"automation\x18\x01 \x01(\v2\x1a.pantherclaw.v1.AutomationR\n" +
-	"automation\"\xf2\x01\n" +
+	"automation\"\xaa\x02\n" +
 	"\x17AutomationControlEffect\x12%\n" +
 	"\x0egrants_revoked\x18\x01 \x03(\tR\rgrantsRevoked\x12\x1d\n" +
 	"\n" +
 	"runs_ended\x18\x02 \x03(\tR\trunsEnded\x12-\n" +
 	"\x12launches_cancelled\x18\x03 \x03(\tR\x11launchesCancelled\x121\n" +
 	"\x14deliveries_cancelled\x18\x04 \x03(\tR\x13deliveriesCancelled\x12/\n" +
-	"\x13executions_affected\x18\x05 \x03(\tR\x12executionsAffected\"\x8e\x01\n" +
+	"\x13executions_affected\x18\x05 \x03(\tR\x12executionsAffected\x126\n" +
+	"\x17deliveries_not_verified\x18\x06 \x03(\tR\x15deliveriesNotVerified\"\x8e\x01\n" +
 	"\x16PauseAutomationRequest\x12-\n" +
 	"\rautomation_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fautomationId\x12#\n" +
 	"\rcancel_active\x18\x02 \x01(\bR\fcancelActive\x12 \n" +

@@ -16,9 +16,11 @@ import (
 	"github.com/katocxl/pantherclaw/internal/changes"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
@@ -54,34 +56,39 @@ func (s *Service) CreateDraftVersion(ctx context.Context, automation ids.UUID, r
 	}
 	var out Version
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
-		a, err := loadAutomation(ctx, q, c.Org, automation, true)
-		if err != nil {
-			return err
-		}
-		if a.State == string(autodomain.StateRetired) {
-			return ErrState
-		}
-		n, err := q.NextAutomationVersionNumber(ctx, c.Org, automation)
-		if err != nil {
-			return err
-		}
-		id := ids.NewV7()
-		if err := q.InsertAutomationVersion(ctx, dbq.InsertAutomationVersionParams{
-			OrgID: c.Org, ID: id, AutomationID: automation, Number: n, Definition: canonical, Digest: digest, CreatedBy: c.Principal.ID,
-		}); err != nil {
-			return err
-		}
-		v, err := loadVersion(ctx, q, c.Org, id, false)
-		if err != nil {
-			return err
-		}
-		out = versionView(v)
-		return record(ctx, tx, c.Actor(), "automation.version_created", automation, map[string]string{
-			"version": id.String(), "number": itoa(int(n)), "digest": hexDigest(digest),
-		})
+		var err error
+		out, err = createVersionTx(ctx, tx, c, automation, canonical, digest)
+		return err
 	})
 	return out, err
+}
+
+func createVersionTx(ctx context.Context, tx db.TenantTx, c tapp.Caller, automation ids.UUID, canonical, digest []byte) (Version, error) {
+	q := dbq.New(tx)
+	a, err := loadAutomation(ctx, q, c.Org, automation, true)
+	if err != nil {
+		return Version{}, err
+	}
+	if a.State == string(autodomain.StateRetired) {
+		return Version{}, ErrState
+	}
+	n, err := q.NextAutomationVersionNumber(ctx, c.Org, automation)
+	if err != nil {
+		return Version{}, err
+	}
+	id := ids.NewV7()
+	if err := q.InsertAutomationVersion(ctx, dbq.InsertAutomationVersionParams{
+		OrgID: c.Org, ID: id, AutomationID: automation, Number: n, Definition: canonical, Digest: digest, CreatedBy: c.Principal.ID,
+	}); err != nil {
+		return Version{}, err
+	}
+	v, err := loadVersion(ctx, q, c.Org, id, false)
+	if err != nil {
+		return Version{}, err
+	}
+	return versionView(v), record(ctx, tx, c.Actor(), "automation.version_created", automation, map[string]string{
+		"version": id.String(), "number": itoa(int(n)), "digest": hexDigest(digest),
+	})
 }
 
 // UpdateDraftVersion replaces the definition of a version that is not
@@ -310,8 +317,25 @@ func (e *validationEnv) AgentGrantable(ctx context.Context, agent ids.UUID) (boo
 func (e *validationEnv) Operation(ctx context.Context, op string) (autodomain.OperationInfo, error) {
 	if strings.HasSuffix(op, ".*") {
 		// A prefix may cover any operation: treat it as irreversible and
-		// spending, so the version must reconcile and budget it.
-		return autodomain.OperationInfo{Known: true, Irreversible: true, ConsumesBudget: true}, nil
+		// spending, so the version must reconcile and budget it, and name
+		// the irreversible operations it covers today (D91 K4).
+		// Without a list of the definitions the prefix is refused (D102 L2).
+		out := autodomain.OperationInfo{Known: true, Irreversible: true, ConsumesBudget: true}
+		l, ok := e.s.Operations.(operationLister)
+		if !ok {
+			return autodomain.OperationInfo{}, errors.New("the operations under a prefix cannot be listed here")
+		}
+		all, err := l.ActiveDefinitions(ctx, e.org)
+		if err != nil {
+			return autodomain.OperationInfo{}, err
+		}
+		for _, d := range all {
+			if d.Reversibility == defs.Irreversible && (gdomain.Ops{op}).Matches(d.Operation) {
+				out.IrreversibleUnder = append(out.IrreversibleUnder, d.Operation)
+			}
+		}
+		slices.Sort(out.IrreversibleUnder)
+		return out, nil
 	}
 	if e.s.Operations == nil {
 		return autodomain.OperationInfo{}, errors.New("operations cannot be checked here")
@@ -321,6 +345,12 @@ func (e *validationEnv) Operation(ctx context.Context, op string) (autodomain.Op
 		return autodomain.OperationInfo{}, err
 	}
 	return OperationInfo(d), nil
+}
+
+// operationLister lists the org's active definitions (the definitions
+// store does).
+type operationLister interface {
+	ActiveDefinitions(ctx context.Context, org ids.OrgID) ([]*defs.Definition, error)
 }
 
 // OperationInfo describes a definition for validation: irreversible when
@@ -342,24 +372,39 @@ func (e *validationEnv) DestinationActive(ctx context.Context, destination ids.U
 	return e.s.Destinations.Active(ctx, e.tx.Pgx(), e.org, destination, purpose)
 }
 
-func (e *validationEnv) EligibleApprovers(ctx context.Context, g autodomain.GateWith, owner ids.UUID) (int, error) {
-	people, err := e.q.OrgUsersWithRoles(ctx, e.org, rolesWith(td.PermAutomationApprove))
+// EligibleApprovers counts the active people who hold automation.approve
+// through the gate's roles (any role with it when none is named), are
+// among its users when it names any, and are not excluded. The enabling's
+// confirmers are not known yet: excluding them removes the most there can
+// be (2), so the count never overstates (D91).
+func (e *validationEnv) EligibleApprovers(ctx context.Context, g autodomain.GateWith, owner, principal ids.UUID) (int, error) {
+	roles := rolesWith(td.PermAutomationApprove)
+	if len(g.Approvers.Roles) > 0 {
+		roles = slices.DeleteFunc(slices.Clone(roles), func(r string) bool { return !slices.Contains(g.Approvers.Roles, r) })
+		if len(roles) == 0 {
+			return 0, nil
+		}
+	}
+	people, err := e.q.OrgUsersWithRoles(ctx, e.org, roles)
 	if err != nil {
 		return 0, err
 	}
+	exclude := g.Exclude
+	if len(exclude) == 0 {
+		exclude = []string{autodomain.ExcludeOwner}
+	}
 	n := 0
 	for _, p := range people {
-		if len(g.Approvers.Users) > 0 && !slices.Contains(g.Approvers.Users, autodomain.RefID(p)) {
-			continue
+		switch {
+		case len(g.Approvers.Users) > 0 && !slices.Contains(g.Approvers.Users, autodomain.RefID(p)):
+		case p == owner && slices.Contains(exclude, autodomain.ExcludeOwner):
+		case !principal.IsZero() && p == principal && slices.Contains(exclude, autodomain.ExcludePrincipal):
+		default:
+			n++
 		}
-		exclude := g.Exclude
-		if len(exclude) == 0 {
-			exclude = []string{autodomain.ExcludeOwner}
-		}
-		if p == owner && slices.Contains(exclude, autodomain.ExcludeOwner) {
-			continue
-		}
-		n++
+	}
+	if slices.Contains(exclude, autodomain.ExcludeConfirmers) {
+		n = max(n-2, 0)
 	}
 	return n, nil
 }

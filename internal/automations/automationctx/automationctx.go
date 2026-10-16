@@ -48,6 +48,11 @@ const (
 	DetailTrigger    = "trigger"
 )
 
+// MaxDetails is how many detail keys Details adds at most; their values
+// are ids (36 bytes). Record reserves them beyond its callers' limit
+// (D102 T5).
+const MaxDetails = 4
+
 // Details returns the attribution details of ctx (nil when none). Unset
 // ids are left out.
 func Details(ctx context.Context) map[string]string {

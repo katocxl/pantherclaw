@@ -336,16 +336,29 @@ const MaxOutputPart = autodomain.MaxOutputValue
 
 // messageOutput keeps a notice's text in the step's output for the
 // execution page (D89, HR-158): notices themselves carry ids only. The
-// body is cut into parts of at most 512 bytes, never inside a character.
+// output is title, body_1 and body_2 only, each at most 512 bytes and never
+// cut inside a character; a longer body is cut short.
 func messageOutput(out map[string]string, m autodomain.NotifyMessage) {
-	out["title"] = m.Title
-	body, n := m.Body, 1
-	for body != "" {
-		cut := min(len(body), MaxOutputPart)
-		for cut < len(body) && !utf8.RuneStart(body[cut]) {
-			cut--
-		}
-		out["body_"+strconv.Itoa(n)] = body[:cut]
-		body, n = body[cut:], n+1
+	out["title"] = CutUTF8(m.Title, MaxOutputPart)
+	body := m.Body
+	for n := 1; n <= maxBodyParts && body != ""; n++ {
+		part := CutUTF8(body, MaxOutputPart)
+		out["body_"+strconv.Itoa(n)] = part
+		body = body[len(part):]
 	}
+}
+
+// maxBodyParts bounds a notice's body in the step output (D89).
+const maxBodyParts = 2
+
+// CutUTF8 returns the longest prefix of s of at most n bytes that ends on a
+// character boundary.
+func CutUTF8(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }

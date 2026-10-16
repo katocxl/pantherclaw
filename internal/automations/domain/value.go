@@ -155,3 +155,37 @@ func (p ParamSpec) inRange(name string, d money.Decimal) error {
 	}
 	return nil
 }
+
+// MaxParamsEnvelope bounds a trigger's stored parameters (the 4 KiB CHECK
+// on their JSON, D87 L3).
+const MaxParamsEnvelope = 4096
+
+// ParamsEnvelopeBytes is the most a trigger's parameters can take as
+// stored JSON: every parameter present at its longest, each character
+// escaped as \uXXXX (D91 K3).
+func ParamsEnvelopeBytes(ps map[string]ParamSpec) int {
+	n := 2 // {}
+	for name, p := range ps {
+		// "name":{"type":"…","string":"…"},
+		n += len(name) + 4 + len(`{"type":"","string":""}`) + len(p.Type) + 10
+		switch p.Type {
+		case ParamString:
+			n += 6 * p.MaxLenOrDefault()
+		case ParamEnum:
+			longest := 0
+			for _, v := range p.Values {
+				longest = max(longest, len(v))
+			}
+			n += 6 * longest
+		case ParamUUID:
+			n += 36
+		case ParamInt:
+			n += 20
+		case ParamDecimal:
+			n += 80
+		case ParamBool:
+			n += 5
+		}
+	}
+	return n
+}
