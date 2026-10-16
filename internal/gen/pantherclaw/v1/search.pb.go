@@ -60,9 +60,17 @@ type SearchFilters struct {
 	// Grants with no recorded use since then.
 	UnusedSince *timestamppb.Timestamp `protobuf:"bytes,23,opt,name=unused_since,json=unusedSince,proto3" json:"unused_since,omitempty"`
 	// Grant changes: only new grants and widening revisions.
-	WidensOnly    bool                   `protobuf:"varint,24,opt,name=widens_only,json=widensOnly,proto3" json:"widens_only,omitempty"`
-	StartTime     *timestamppb.Timestamp `protobuf:"bytes,25,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	EndTime       *timestamppb.Timestamp `protobuf:"bytes,26,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	WidensOnly bool                   `protobuf:"varint,24,opt,name=widens_only,json=widensOnly,proto3" json:"widens_only,omitempty"`
+	StartTime  *timestamppb.Timestamp `protobuf:"bytes,25,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	EndTime    *timestamppb.Timestamp `protobuf:"bytes,26,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	AlertId    *string                `protobuf:"bytes,27,opt,name=alert_id,json=alertId,proto3,oneof" json:"alert_id,omitempty"`
+	IncidentId *string                `protobuf:"bytes,28,opt,name=incident_id,json=incidentId,proto3,oneof" json:"incident_id,omitempty"`
+	// Alert, incident and finding severities (LOW, MEDIUM, HIGH, CRITICAL).
+	Severities []string `protobuf:"bytes,29,rep,name=severities,proto3" json:"severities,omitempty"`
+	// Transaction effect states (CONFIRMED, NONE_CONFIRMED, PARTIAL, UNKNOWN, ...).
+	EffectStates []string `protobuf:"bytes,30,rep,name=effect_states,json=effectStates,proto3" json:"effect_states,omitempty"`
+	// Automation executions of this automation.
+	AutomationId  *string `protobuf:"bytes,31,opt,name=automation_id,json=automationId,proto3,oneof" json:"automation_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -279,11 +287,48 @@ func (x *SearchFilters) GetEndTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *SearchFilters) GetAlertId() string {
+	if x != nil && x.AlertId != nil {
+		return *x.AlertId
+	}
+	return ""
+}
+
+func (x *SearchFilters) GetIncidentId() string {
+	if x != nil && x.IncidentId != nil {
+		return *x.IncidentId
+	}
+	return ""
+}
+
+func (x *SearchFilters) GetSeverities() []string {
+	if x != nil {
+		return x.Severities
+	}
+	return nil
+}
+
+func (x *SearchFilters) GetEffectStates() []string {
+	if x != nil {
+		return x.EffectStates
+	}
+	return nil
+}
+
+func (x *SearchFilters) GetAutomationId() string {
+	if x != nil && x.AutomationId != nil {
+		return *x.AutomationId
+	}
+	return ""
+}
+
 // Query is one structured query.
 type Query struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// "transactions", "runs", "agents", "grants", "grant_changes",
-	// "connections", "approvals", "audit" or "operations".
+	// "connections", "approvals", "audit", "operations", "alerts",
+	// "incidents", "cases", "findings", "policy_versions", "packages",
+	// "gateways", "automations" or "automation_executions".
 	Entity        string         `protobuf:"bytes,1,opt,name=entity,proto3" json:"entity,omitempty"`
 	Filters       *SearchFilters `protobuf:"bytes,2,opt,name=filters,proto3" json:"filters,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -349,7 +394,10 @@ type BuiltinParams struct {
 	StartTime                 *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
 	EndTime                   *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
 	// A resource group (who_can_write).
-	Resource      string `protobuf:"bytes,11,opt,name=resource,proto3" json:"resource,omitempty"`
+	Resource string `protobuf:"bytes,11,opt,name=resource,proto3" json:"resource,omitempty"`
+	// An incident or a case (incident_correlation).
+	IncidentId    *string `protobuf:"bytes,12,opt,name=incident_id,json=incidentId,proto3,oneof" json:"incident_id,omitempty"`
+	CaseId        *string `protobuf:"bytes,13,opt,name=case_id,json=caseId,proto3,oneof" json:"case_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -457,6 +505,20 @@ func (x *BuiltinParams) GetEndTime() *timestamppb.Timestamp {
 func (x *BuiltinParams) GetResource() string {
 	if x != nil {
 		return x.Resource
+	}
+	return ""
+}
+
+func (x *BuiltinParams) GetIncidentId() string {
+	if x != nil && x.IncidentId != nil {
+		return *x.IncidentId
+	}
+	return ""
+}
+
+func (x *BuiltinParams) GetCaseId() string {
+	if x != nil && x.CaseId != nil {
+		return *x.CaseId
 	}
 	return ""
 }
@@ -1954,12 +2016,1120 @@ func (x *GetSavedQueryResponse) GetQuery() *SavedQuery {
 	return nil
 }
 
+// FindRequest is a quick find.
+type FindRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 2 to 100 characters: an id, an id prefix of at least 8 hex digits, or
+	// part of a name or title (matched literally, ignoring case).
+	Text string `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	// The kinds to match; none: every kind.
+	Kinds []string `protobuf:"bytes,2,rep,name=kinds,proto3" json:"kinds,omitempty"`
+	// Matches per kind (default 5, at most 10).
+	Limit         int32 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FindRequest) Reset() {
+	*x = FindRequest{}
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FindRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FindRequest) ProtoMessage() {}
+
+func (x *FindRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FindRequest.ProtoReflect.Descriptor instead.
+func (*FindRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_search_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *FindRequest) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *FindRequest) GetKinds() []string {
+	if x != nil {
+		return x.Kinds
+	}
+	return nil
+}
+
+func (x *FindRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+// FindMatch is one record quick find matched.
+type FindMatch struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Kind  string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	Id    string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	// The name or title, else what identifies the record.
+	Label string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	State string                 `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
+	Time  *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=time,proto3" json:"time,omitempty"`
+	// "ID", "ID_PREFIX", "NAME_EXACT", "NAME_PREFIX" or "NAME_CONTAINS".
+	MatchedBy     string   `protobuf:"bytes,6,opt,name=matched_by,json=matchedBy,proto3" json:"matched_by,omitempty"`
+	Evidence      []string `protobuf:"bytes,7,rep,name=evidence,proto3" json:"evidence,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FindMatch) Reset() {
+	*x = FindMatch{}
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FindMatch) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FindMatch) ProtoMessage() {}
+
+func (x *FindMatch) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FindMatch.ProtoReflect.Descriptor instead.
+func (*FindMatch) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_search_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *FindMatch) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *FindMatch) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *FindMatch) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *FindMatch) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *FindMatch) GetTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Time
+	}
+	return nil
+}
+
+func (x *FindMatch) GetMatchedBy() string {
+	if x != nil {
+		return x.MatchedBy
+	}
+	return ""
+}
+
+func (x *FindMatch) GetEvidence() []string {
+	if x != nil {
+		return x.Evidence
+	}
+	return nil
+}
+
+// FindKindResult is one kind's matches.
+type FindKindResult struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Kind    string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	Matches []*FindMatch           `protobuf:"bytes,2,rep,name=matches,proto3" json:"matches,omitempty"`
+	// Matching records in the caller's scope, at most 10000.
+	Count           int32  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
+	CountCapped     bool   `protobuf:"varint,4,opt,name=count_capped,json=countCapped,proto3" json:"count_capped,omitempty"`
+	ScopePermission string `protobuf:"bytes,5,opt,name=scope_permission,json=scopePermission,proto3" json:"scope_permission,omitempty"`
+	ScopeWhole      bool   `protobuf:"varint,6,opt,name=scope_whole,json=scopeWhole,proto3" json:"scope_whole,omitempty"`
+	// Name prefixes filled the limit: count covers ids and name prefixes
+	// only, not names that contain the text elsewhere.
+	CountPrefixOnly bool `protobuf:"varint,7,opt,name=count_prefix_only,json=countPrefixOnly,proto3" json:"count_prefix_only,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *FindKindResult) Reset() {
+	*x = FindKindResult{}
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FindKindResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FindKindResult) ProtoMessage() {}
+
+func (x *FindKindResult) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FindKindResult.ProtoReflect.Descriptor instead.
+func (*FindKindResult) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_search_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *FindKindResult) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *FindKindResult) GetMatches() []*FindMatch {
+	if x != nil {
+		return x.Matches
+	}
+	return nil
+}
+
+func (x *FindKindResult) GetCount() int32 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+func (x *FindKindResult) GetCountCapped() bool {
+	if x != nil {
+		return x.CountCapped
+	}
+	return false
+}
+
+func (x *FindKindResult) GetScopePermission() string {
+	if x != nil {
+		return x.ScopePermission
+	}
+	return ""
+}
+
+func (x *FindKindResult) GetScopeWhole() bool {
+	if x != nil {
+		return x.ScopeWhole
+	}
+	return false
+}
+
+func (x *FindKindResult) GetCountPrefixOnly() bool {
+	if x != nil {
+		return x.CountPrefixOnly
+	}
+	return false
+}
+
+// FindResponse lists the matches of each kind the caller may read; kinds
+// it may not read are omissions ("outside your permissions").
+type FindResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Text          string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	Kinds         []*FindKindResult      `protobuf:"bytes,2,rep,name=kinds,proto3" json:"kinds,omitempty"`
+	Omissions     []*Omission            `protobuf:"bytes,3,rep,name=omissions,proto3" json:"omissions,omitempty"`
+	AsOfTime      *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=as_of_time,json=asOfTime,proto3" json:"as_of_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FindResponse) Reset() {
+	*x = FindResponse{}
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FindResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FindResponse) ProtoMessage() {}
+
+func (x *FindResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FindResponse.ProtoReflect.Descriptor instead.
+func (*FindResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_search_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *FindResponse) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *FindResponse) GetKinds() []*FindKindResult {
+	if x != nil {
+		return x.Kinds
+	}
+	return nil
+}
+
+func (x *FindResponse) GetOmissions() []*Omission {
+	if x != nil {
+		return x.Omissions
+	}
+	return nil
+}
+
+func (x *FindResponse) GetAsOfTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.AsOfTime
+	}
+	return nil
+}
+
+// InterpretRequest is a plain-language question.
+type InterpretRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Question string                 `protobuf:"bytes,1,opt,name=question,proto3" json:"question,omitempty"`
+	// The IANA time zone "today" and dates are read in (default UTC).
+	Timezone      string `protobuf:"bytes,2,opt,name=timezone,proto3" json:"timezone,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InterpretRequest) Reset() {
+	*x = InterpretRequest{}
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InterpretRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InterpretRequest) ProtoMessage() {}
+
+func (x *InterpretRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InterpretRequest.ProtoReflect.Descriptor instead.
+func (*InterpretRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_search_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *InterpretRequest) GetQuestion() string {
+	if x != nil {
+		return x.Question
+	}
+	return ""
+}
+
+func (x *InterpretRequest) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
+	}
+	return ""
+}
+
+// Ambiguity is a phrase that names more than one record the caller may
+// read.
+type Ambiguity struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Phrase        string                 `protobuf:"bytes,1,opt,name=phrase,proto3" json:"phrase,omitempty"`
+	Candidates    []*FindMatch           `protobuf:"bytes,2,rep,name=candidates,proto3" json:"candidates,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Ambiguity) Reset() {
+	*x = Ambiguity{}
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Ambiguity) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Ambiguity) ProtoMessage() {}
+
+func (x *Ambiguity) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Ambiguity.ProtoReflect.Descriptor instead.
+func (*Ambiguity) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_search_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *Ambiguity) GetPhrase() string {
+	if x != nil {
+		return x.Phrase
+	}
+	return ""
+}
+
+func (x *Ambiguity) GetCandidates() []*FindMatch {
+	if x != nil {
+		return x.Candidates
+	}
+	return nil
+}
+
+// Interpretation is how a question was read.
+type Interpretation struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Question string                 `protobuf:"bytes,1,opt,name=question,proto3" json:"question,omitempty"`
+	// The query it became: exactly one of query and builtin, unless
+	// needs_clarification.
+	Query   *Query        `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"`
+	Builtin *BuiltinQuery `protobuf:"bytes,3,opt,name=builtin,proto3" json:"builtin,omitempty"`
+	// The entity or built-in query searched.
+	Entity string `protobuf:"bytes,4,opt,name=entity,proto3" json:"entity,omitempty"`
+	// The filters, in words.
+	Filters        []string               `protobuf:"bytes,5,rep,name=filters,proto3" json:"filters,omitempty"`
+	Environment    string                 `protobuf:"bytes,6,opt,name=environment,proto3" json:"environment,omitempty"`
+	RangeStartTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=range_start_time,json=rangeStartTime,proto3" json:"range_start_time,omitempty"`
+	RangeEndTime   *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=range_end_time,json=rangeEndTime,proto3" json:"range_end_time,omitempty"`
+	Timezone       string                 `protobuf:"bytes,9,opt,name=timezone,proto3" json:"timezone,omitempty"`
+	// What action rows mean: "ATTEMPTS", "CONFIRMED", "DECISIONS" or
+	// "EFFECTS"; empty for other entities.
+	EventMeaning string `protobuf:"bytes,10,opt,name=event_meaning,json=eventMeaning,proto3" json:"event_meaning,omitempty"`
+	// Each phrase understood and what it became.
+	Matched      []string     `protobuf:"bytes,11,rep,name=matched,proto3" json:"matched,omitempty"`
+	UnknownWords []string     `protobuf:"bytes,12,rep,name=unknown_words,json=unknownWords,proto3" json:"unknown_words,omitempty"`
+	Ambiguities  []*Ambiguity `protobuf:"bytes,13,rep,name=ambiguities,proto3" json:"ambiguities,omitempty"`
+	// Nothing runs until the question is clarified.
+	NeedsClarification bool     `protobuf:"varint,14,opt,name=needs_clarification,json=needsClarification,proto3" json:"needs_clarification,omitempty"`
+	Clarifications     []string `protobuf:"bytes,15,rep,name=clarifications,proto3" json:"clarifications,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *Interpretation) Reset() {
+	*x = Interpretation{}
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Interpretation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Interpretation) ProtoMessage() {}
+
+func (x *Interpretation) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Interpretation.ProtoReflect.Descriptor instead.
+func (*Interpretation) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_search_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *Interpretation) GetQuestion() string {
+	if x != nil {
+		return x.Question
+	}
+	return ""
+}
+
+func (x *Interpretation) GetQuery() *Query {
+	if x != nil {
+		return x.Query
+	}
+	return nil
+}
+
+func (x *Interpretation) GetBuiltin() *BuiltinQuery {
+	if x != nil {
+		return x.Builtin
+	}
+	return nil
+}
+
+func (x *Interpretation) GetEntity() string {
+	if x != nil {
+		return x.Entity
+	}
+	return ""
+}
+
+func (x *Interpretation) GetFilters() []string {
+	if x != nil {
+		return x.Filters
+	}
+	return nil
+}
+
+func (x *Interpretation) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
+func (x *Interpretation) GetRangeStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RangeStartTime
+	}
+	return nil
+}
+
+func (x *Interpretation) GetRangeEndTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RangeEndTime
+	}
+	return nil
+}
+
+func (x *Interpretation) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
+	}
+	return ""
+}
+
+func (x *Interpretation) GetEventMeaning() string {
+	if x != nil {
+		return x.EventMeaning
+	}
+	return ""
+}
+
+func (x *Interpretation) GetMatched() []string {
+	if x != nil {
+		return x.Matched
+	}
+	return nil
+}
+
+func (x *Interpretation) GetUnknownWords() []string {
+	if x != nil {
+		return x.UnknownWords
+	}
+	return nil
+}
+
+func (x *Interpretation) GetAmbiguities() []*Ambiguity {
+	if x != nil {
+		return x.Ambiguities
+	}
+	return nil
+}
+
+func (x *Interpretation) GetNeedsClarification() bool {
+	if x != nil {
+		return x.NeedsClarification
+	}
+	return false
+}
+
+func (x *Interpretation) GetClarifications() []string {
+	if x != nil {
+		return x.Clarifications
+	}
+	return nil
+}
+
+// InterpretResponse is the interpretation.
+type InterpretResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Interpretation *Interpretation        `protobuf:"bytes,1,opt,name=interpretation,proto3" json:"interpretation,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *InterpretResponse) Reset() {
+	*x = InterpretResponse{}
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InterpretResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InterpretResponse) ProtoMessage() {}
+
+func (x *InterpretResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InterpretResponse.ProtoReflect.Descriptor instead.
+func (*InterpretResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_search_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *InterpretResponse) GetInterpretation() *Interpretation {
+	if x != nil {
+		return x.Interpretation
+	}
+	return nil
+}
+
+// AskRequest asks a question.
+type AskRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Question      string                 `protobuf:"bytes,1,opt,name=question,proto3" json:"question,omitempty"`
+	Timezone      string                 `protobuf:"bytes,2,opt,name=timezone,proto3" json:"timezone,omitempty"`
+	PageSize      int32                  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string                 `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AskRequest) Reset() {
+	*x = AskRequest{}
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AskRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AskRequest) ProtoMessage() {}
+
+func (x *AskRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AskRequest.ProtoReflect.Descriptor instead.
+func (*AskRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_search_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *AskRequest) GetQuestion() string {
+	if x != nil {
+		return x.Question
+	}
+	return ""
+}
+
+func (x *AskRequest) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
+	}
+	return ""
+}
+
+func (x *AskRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *AskRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+// AskResponse is the interpretation and, unless it needs clarification,
+// the first page of results.
+type AskResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Interpretation *Interpretation        `protobuf:"bytes,1,opt,name=interpretation,proto3" json:"interpretation,omitempty"`
+	Result         *SearchResult          `protobuf:"bytes,2,opt,name=result,proto3" json:"result,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *AskResponse) Reset() {
+	*x = AskResponse{}
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AskResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AskResponse) ProtoMessage() {}
+
+func (x *AskResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AskResponse.ProtoReflect.Descriptor instead.
+func (*AskResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_search_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *AskResponse) GetInterpretation() *Interpretation {
+	if x != nil {
+		return x.Interpretation
+	}
+	return nil
+}
+
+func (x *AskResponse) GetResult() *SearchResult {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
+// SearchSource names a search: exactly one of a structured query, a
+// built-in query and a saved query.
+type SearchSource struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Query         *Query                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	Builtin       *BuiltinQuery          `protobuf:"bytes,2,opt,name=builtin,proto3" json:"builtin,omitempty"`
+	SavedQueryId  *string                `protobuf:"bytes,3,opt,name=saved_query_id,json=savedQueryId,proto3,oneof" json:"saved_query_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SearchSource) Reset() {
+	*x = SearchSource{}
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchSource) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchSource) ProtoMessage() {}
+
+func (x *SearchSource) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchSource.ProtoReflect.Descriptor instead.
+func (*SearchSource) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_search_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *SearchSource) GetQuery() *Query {
+	if x != nil {
+		return x.Query
+	}
+	return nil
+}
+
+func (x *SearchSource) GetBuiltin() *BuiltinQuery {
+	if x != nil {
+		return x.Builtin
+	}
+	return nil
+}
+
+func (x *SearchSource) GetSavedQueryId() string {
+	if x != nil && x.SavedQueryId != nil {
+		return *x.SavedQueryId
+	}
+	return ""
+}
+
+// OpenCaseFromResultsRequest opens a case from chosen results.
+type OpenCaseFromResultsRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Source *SearchSource          `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	// The chosen results' ids, as the search returned them.
+	ItemIds       []string `protobuf:"bytes,2,rep,name=item_ids,json=itemIds,proto3" json:"item_ids,omitempty"`
+	Title         string   `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenCaseFromResultsRequest) Reset() {
+	*x = OpenCaseFromResultsRequest{}
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenCaseFromResultsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenCaseFromResultsRequest) ProtoMessage() {}
+
+func (x *OpenCaseFromResultsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenCaseFromResultsRequest.ProtoReflect.Descriptor instead.
+func (*OpenCaseFromResultsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_search_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *OpenCaseFromResultsRequest) GetSource() *SearchSource {
+	if x != nil {
+		return x.Source
+	}
+	return nil
+}
+
+func (x *OpenCaseFromResultsRequest) GetItemIds() []string {
+	if x != nil {
+		return x.ItemIds
+	}
+	return nil
+}
+
+func (x *OpenCaseFromResultsRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+// OpenCaseFromResultsResponse names the case opened.
+type OpenCaseFromResultsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CaseId        string                 `protobuf:"bytes,1,opt,name=case_id,json=caseId,proto3" json:"case_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenCaseFromResultsResponse) Reset() {
+	*x = OpenCaseFromResultsResponse{}
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenCaseFromResultsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenCaseFromResultsResponse) ProtoMessage() {}
+
+func (x *OpenCaseFromResultsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenCaseFromResultsResponse.ProtoReflect.Descriptor instead.
+func (*OpenCaseFromResultsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_search_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *OpenCaseFromResultsResponse) GetCaseId() string {
+	if x != nil {
+		return x.CaseId
+	}
+	return ""
+}
+
+// ExportResultsRequest exports a search's results.
+type ExportResultsRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Source *SearchSource          `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	// "JSON" or "CSV".
+	Format        string `protobuf:"bytes,2,opt,name=format,proto3" json:"format,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportResultsRequest) Reset() {
+	*x = ExportResultsRequest{}
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportResultsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportResultsRequest) ProtoMessage() {}
+
+func (x *ExportResultsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportResultsRequest.ProtoReflect.Descriptor instead.
+func (*ExportResultsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_search_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *ExportResultsRequest) GetSource() *SearchSource {
+	if x != nil {
+		return x.Source
+	}
+	return nil
+}
+
+func (x *ExportResultsRequest) GetFormat() string {
+	if x != nil {
+		return x.Format
+	}
+	return ""
+}
+
+// ExportResultsResponse is the export, inline.
+type ExportResultsResponse struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Format      string                 `protobuf:"bytes,1,opt,name=format,proto3" json:"format,omitempty"`
+	ContentType string                 `protobuf:"bytes,2,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	Data        []byte                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	Rows        int32                  `protobuf:"varint,4,opt,name=rows,proto3" json:"rows,omitempty"`
+	// More rows matched than the 10000 exported.
+	Truncated       bool                   `protobuf:"varint,5,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	Omissions       []*Omission            `protobuf:"bytes,6,rep,name=omissions,proto3" json:"omissions,omitempty"`
+	ScopePermission string                 `protobuf:"bytes,7,opt,name=scope_permission,json=scopePermission,proto3" json:"scope_permission,omitempty"`
+	ScopeWhole      bool                   `protobuf:"varint,8,opt,name=scope_whole,json=scopeWhole,proto3" json:"scope_whole,omitempty"`
+	AsOfTime        *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=as_of_time,json=asOfTime,proto3" json:"as_of_time,omitempty"`
+	// The audit ledger entry that records the export.
+	AuditEntryId  string `protobuf:"bytes,10,opt,name=audit_entry_id,json=auditEntryId,proto3" json:"audit_entry_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportResultsResponse) Reset() {
+	*x = ExportResultsResponse{}
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportResultsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportResultsResponse) ProtoMessage() {}
+
+func (x *ExportResultsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_search_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportResultsResponse.ProtoReflect.Descriptor instead.
+func (*ExportResultsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_search_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *ExportResultsResponse) GetFormat() string {
+	if x != nil {
+		return x.Format
+	}
+	return ""
+}
+
+func (x *ExportResultsResponse) GetContentType() string {
+	if x != nil {
+		return x.ContentType
+	}
+	return ""
+}
+
+func (x *ExportResultsResponse) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *ExportResultsResponse) GetRows() int32 {
+	if x != nil {
+		return x.Rows
+	}
+	return 0
+}
+
+func (x *ExportResultsResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+func (x *ExportResultsResponse) GetOmissions() []*Omission {
+	if x != nil {
+		return x.Omissions
+	}
+	return nil
+}
+
+func (x *ExportResultsResponse) GetScopePermission() string {
+	if x != nil {
+		return x.ScopePermission
+	}
+	return ""
+}
+
+func (x *ExportResultsResponse) GetScopeWhole() bool {
+	if x != nil {
+		return x.ScopeWhole
+	}
+	return false
+}
+
+func (x *ExportResultsResponse) GetAsOfTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.AsOfTime
+	}
+	return nil
+}
+
+func (x *ExportResultsResponse) GetAuditEntryId() string {
+	if x != nil {
+		return x.AuditEntryId
+	}
+	return ""
+}
+
 var File_pantherclaw_v1_search_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_search_proto_rawDesc = "" +
 	"\n" +
-	"\x1bpantherclaw/v1/search.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe3\n" +
-	"\n" +
+	"\x1bpantherclaw/v1/search.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf9\f\n" +
 	"\rSearchFilters\x12\x1d\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x02id\x88\x01\x01\x12(\n" +
 	"\bagent_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x01R\aagentId\x88\x01\x01\x12$\n" +
@@ -1992,7 +3162,16 @@ const file_pantherclaw_v1_search_proto_rawDesc = "" +
 	"widensOnly\x129\n" +
 	"\n" +
 	"start_time\x18\x19 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +
-	"\bend_time\x18\x1a \x01(\v2\x1a.google.protobuf.TimestampR\aendTimeB\x05\n" +
+	"\bend_time\x18\x1a \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12(\n" +
+	"\balert_id\x18\x1b \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\n" +
+	"R\aalertId\x88\x01\x01\x12.\n" +
+	"\vincident_id\x18\x1c \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\vR\n" +
+	"incidentId\x88\x01\x01\x12(\n" +
+	"\n" +
+	"severities\x18\x1d \x03(\tB\b\xbaH\x05\x92\x01\x02\x10\x10R\n" +
+	"severities\x12-\n" +
+	"\reffect_states\x18\x1e \x03(\tB\b\xbaH\x05\x92\x01\x02\x10\x10R\feffectStates\x122\n" +
+	"\rautomation_id\x18\x1f \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\fR\fautomationId\x88\x01\x01B\x05\n" +
 	"\x03_idB\v\n" +
 	"\t_agent_idB\t\n" +
 	"\a_run_idB\v\n" +
@@ -2003,11 +3182,14 @@ const file_pantherclaw_v1_search_proto_rawDesc = "" +
 	"\b_team_idB\x14\n" +
 	"\x12_principal_user_idB\x1f\n" +
 	"\x1d_principal_service_account_idB\x15\n" +
-	"\x13_used_connection_id\"\xbd\x01\n" +
-	"\x05Query\x12{\n" +
-	"\x06entity\x18\x01 \x01(\tBc\xbaH`r^R\ftransactionsR\x04runsR\x06agentsR\x06grantsR\rgrant_changesR\vconnectionsR\tapprovalsR\x05auditR\n" +
-	"operationsR\x06entity\x127\n" +
-	"\afilters\x18\x02 \x01(\v2\x1d.pantherclaw.v1.SearchFiltersR\afilters\"\x9c\x05\n" +
+	"\x13_used_connection_idB\v\n" +
+	"\t_alert_idB\x0e\n" +
+	"\f_incident_idB\x10\n" +
+	"\x0e_automation_id\"\xae\x02\n" +
+	"\x05Query\x12\xeb\x01\n" +
+	"\x06entity\x18\x01 \x01(\tB\xd2\x01\xbaH\xce\x01r\xcb\x01R\ftransactionsR\x04runsR\x06agentsR\x06grantsR\rgrant_changesR\vconnectionsR\tapprovalsR\x05auditR\n" +
+	"operationsR\x06alertsR\tincidentsR\x05casesR\bfindingsR\x0fpolicy_versionsR\bpackagesR\bgatewaysR\vautomationsR\x15automation_executionsR\x06entity\x127\n" +
+	"\afilters\x18\x02 \x01(\v2\x1d.pantherclaw.v1.SearchFiltersR\afilters\"\x90\x06\n" +
 	"\rBuiltinParams\x124\n" +
 	"\x0etransaction_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\rtransactionId\x88\x01\x01\x12(\n" +
 	"\bagent_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x01R\aagentId\x88\x01\x01\x122\n" +
@@ -2023,12 +3205,18 @@ const file_pantherclaw_v1_search_proto_rawDesc = "" +
 	"start_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +
 	"\bend_time\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12$\n" +
-	"\bresource\x18\v \x01(\tB\b\xbaH\x05r\x03\x18\xc8\x01R\bresourceB\x11\n" +
+	"\bresource\x18\v \x01(\tB\b\xbaH\x05r\x03\x18\xc8\x01R\bresource\x12.\n" +
+	"\vincident_id\x18\f \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x05R\n" +
+	"incidentId\x88\x01\x01\x12&\n" +
+	"\acase_id\x18\r \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x06R\x06caseId\x88\x01\x01B\x11\n" +
 	"\x0f_transaction_idB\v\n" +
 	"\t_agent_idB\x10\n" +
 	"\x0e_connection_idB\x14\n" +
 	"\x12_principal_user_idB\x1f\n" +
-	"\x1d_principal_service_account_id\"o\n" +
+	"\x1d_principal_service_account_idB\x0e\n" +
+	"\f_incident_idB\n" +
+	"\n" +
+	"\b_case_id\"o\n" +
 	"\fBuiltinQuery\x12(\n" +
 	"\x04name\x18\x01 \x01(\tB\x14\xbaH\x11r\x0f\x10\x01\x18@2\t^[a-z_]+$R\x04name\x125\n" +
 	"\x06params\x18\x02 \x01(\v2\x1d.pantherclaw.v1.BuiltinParamsR\x06params\"\x91\x02\n" +
@@ -2146,7 +3334,106 @@ const file_pantherclaw_v1_search_proto_rawDesc = "" +
 	"\x18UpdateSavedQueryResponse\x120\n" +
 	"\x05query\x18\x01 \x01(\v2\x1a.pantherclaw.v1.SavedQueryR\x05query\"I\n" +
 	"\x15GetSavedQueryResponse\x120\n" +
-	"\x05query\x18\x01 \x01(\v2\x1a.pantherclaw.v1.SavedQueryR\x05query2\x8a\a\n" +
+	"\x05query\x18\x01 \x01(\v2\x1a.pantherclaw.v1.SavedQueryR\x05query\"\xc1\x02\n" +
+	"\vFindRequest\x12\x1d\n" +
+	"\x04text\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x02\x18dR\x04text\x12\xf1\x01\n" +
+	"\x05kinds\x18\x02 \x03(\tB\xda\x01\xbaH\xd6\x01\x92\x01\xd2\x01\x10\x12\"\xcd\x01r\xca\x01R\x06agentsR\vconnectionsR\x05casesR\tincidentsR\x06alertsR\bpackagesR\bgatewaysR\x10service_accountsR\x06peopleR\x04runsR\ftransactionsR\x06grantsR\tapprovalsR\bfindingsR\x0fpolicy_versionsR\x05auditR\vautomationsR\x15automation_executionsR\x05kinds\x12\x1f\n" +
+	"\x05limit\x18\x03 \x01(\x05B\t\xbaH\x06\x1a\x04\x18\n" +
+	"(\x00R\x05limit\"\xc6\x01\n" +
+	"\tFindMatch\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12\x14\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\x12\x14\n" +
+	"\x05state\x18\x04 \x01(\tR\x05state\x12.\n" +
+	"\x04time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x1d\n" +
+	"\n" +
+	"matched_by\x18\x06 \x01(\tR\tmatchedBy\x12\x1a\n" +
+	"\bevidence\x18\a \x03(\tR\bevidence\"\x8a\x02\n" +
+	"\x0eFindKindResult\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x123\n" +
+	"\amatches\x18\x02 \x03(\v2\x19.pantherclaw.v1.FindMatchR\amatches\x12\x14\n" +
+	"\x05count\x18\x03 \x01(\x05R\x05count\x12!\n" +
+	"\fcount_capped\x18\x04 \x01(\bR\vcountCapped\x12)\n" +
+	"\x10scope_permission\x18\x05 \x01(\tR\x0fscopePermission\x12\x1f\n" +
+	"\vscope_whole\x18\x06 \x01(\bR\n" +
+	"scopeWhole\x12*\n" +
+	"\x11count_prefix_only\x18\a \x01(\bR\x0fcountPrefixOnly\"\xca\x01\n" +
+	"\fFindResponse\x12\x12\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text\x124\n" +
+	"\x05kinds\x18\x02 \x03(\v2\x1e.pantherclaw.v1.FindKindResultR\x05kinds\x126\n" +
+	"\tomissions\x18\x03 \x03(\v2\x18.pantherclaw.v1.OmissionR\tomissions\x128\n" +
+	"\n" +
+	"as_of_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\basOfTime\"_\n" +
+	"\x10InterpretRequest\x12&\n" +
+	"\bquestion\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xac\x02R\bquestion\x12#\n" +
+	"\btimezone\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x18@R\btimezone\"^\n" +
+	"\tAmbiguity\x12\x16\n" +
+	"\x06phrase\x18\x01 \x01(\tR\x06phrase\x129\n" +
+	"\n" +
+	"candidates\x18\x02 \x03(\v2\x19.pantherclaw.v1.FindMatchR\n" +
+	"candidates\"\x83\x05\n" +
+	"\x0eInterpretation\x12\x1a\n" +
+	"\bquestion\x18\x01 \x01(\tR\bquestion\x12+\n" +
+	"\x05query\x18\x02 \x01(\v2\x15.pantherclaw.v1.QueryR\x05query\x126\n" +
+	"\abuiltin\x18\x03 \x01(\v2\x1c.pantherclaw.v1.BuiltinQueryR\abuiltin\x12\x16\n" +
+	"\x06entity\x18\x04 \x01(\tR\x06entity\x12\x18\n" +
+	"\afilters\x18\x05 \x03(\tR\afilters\x12 \n" +
+	"\venvironment\x18\x06 \x01(\tR\venvironment\x12D\n" +
+	"\x10range_start_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x0erangeStartTime\x12@\n" +
+	"\x0erange_end_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\frangeEndTime\x12\x1a\n" +
+	"\btimezone\x18\t \x01(\tR\btimezone\x12#\n" +
+	"\revent_meaning\x18\n" +
+	" \x01(\tR\feventMeaning\x12\x18\n" +
+	"\amatched\x18\v \x03(\tR\amatched\x12#\n" +
+	"\runknown_words\x18\f \x03(\tR\funknownWords\x12;\n" +
+	"\vambiguities\x18\r \x03(\v2\x19.pantherclaw.v1.AmbiguityR\vambiguities\x12/\n" +
+	"\x13needs_clarification\x18\x0e \x01(\bR\x12needsClarification\x12&\n" +
+	"\x0eclarifications\x18\x0f \x03(\tR\x0eclarifications\"[\n" +
+	"\x11InterpretResponse\x12F\n" +
+	"\x0einterpretation\x18\x01 \x01(\v2\x1e.pantherclaw.v1.InterpretationR\x0einterpretation\"\xbc\x01\n" +
+	"\n" +
+	"AskRequest\x12&\n" +
+	"\bquestion\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xac\x02R\bquestion\x12#\n" +
+	"\btimezone\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x18@R\btimezone\x12'\n" +
+	"\tpage_size\x18\x03 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x128\n" +
+	"\n" +
+	"page_token\x18\x04 \x01(\tB\x19\xbaH\x16r\x14\x18@2\x10^[A-Za-z0-9_-]*$R\tpageToken\"\x8b\x01\n" +
+	"\vAskResponse\x12F\n" +
+	"\x0einterpretation\x18\x01 \x01(\v2\x1e.pantherclaw.v1.InterpretationR\x0einterpretation\x124\n" +
+	"\x06result\x18\x02 \x01(\v2\x1c.pantherclaw.v1.SearchResultR\x06result\"\xbb\x01\n" +
+	"\fSearchSource\x12+\n" +
+	"\x05query\x18\x01 \x01(\v2\x15.pantherclaw.v1.QueryR\x05query\x126\n" +
+	"\abuiltin\x18\x02 \x01(\v2\x1c.pantherclaw.v1.BuiltinQueryR\abuiltin\x123\n" +
+	"\x0esaved_query_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\fsavedQueryId\x88\x01\x01B\x11\n" +
+	"\x0f_saved_query_id\"\xac\x01\n" +
+	"\x1aOpenCaseFromResultsRequest\x12<\n" +
+	"\x06source\x18\x01 \x01(\v2\x1c.pantherclaw.v1.SearchSourceB\x06\xbaH\x03\xc8\x01\x01R\x06source\x12.\n" +
+	"\bitem_ids\x18\x02 \x03(\tB\x13\xbaH\x10\x92\x01\r\b\x01\x102\"\ar\x05\x10\x01\x18\xc8\x01R\aitemIds\x12 \n" +
+	"\x05title\x18\x03 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xc8\x01R\x05title\"6\n" +
+	"\x1bOpenCaseFromResultsResponse\x12\x17\n" +
+	"\acase_id\x18\x01 \x01(\tR\x06caseId\"~\n" +
+	"\x14ExportResultsRequest\x12<\n" +
+	"\x06source\x18\x01 \x01(\v2\x1c.pantherclaw.v1.SearchSourceB\x06\xbaH\x03\xc8\x01\x01R\x06source\x12(\n" +
+	"\x06format\x18\x02 \x01(\tB\x10\xbaH\rr\vR\x04JSONR\x03CSVR\x06format\"\xfc\x02\n" +
+	"\x15ExportResultsResponse\x12\x16\n" +
+	"\x06format\x18\x01 \x01(\tR\x06format\x12!\n" +
+	"\fcontent_type\x18\x02 \x01(\tR\vcontentType\x12\x12\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\x12\x12\n" +
+	"\x04rows\x18\x04 \x01(\x05R\x04rows\x12\x1c\n" +
+	"\ttruncated\x18\x05 \x01(\bR\ttruncated\x126\n" +
+	"\tomissions\x18\x06 \x03(\v2\x18.pantherclaw.v1.OmissionR\tomissions\x12)\n" +
+	"\x10scope_permission\x18\a \x01(\tR\x0fscopePermission\x12\x1f\n" +
+	"\vscope_whole\x18\b \x01(\bR\n" +
+	"scopeWhole\x128\n" +
+	"\n" +
+	"as_of_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\basOfTime\x12$\n" +
+	"\x0eaudit_entry_id\x18\n" +
+	" \x01(\tR\fauditEntryId2\xbc\n" +
+	"\n" +
 	"\rSearchService\x12L\n" +
 	"\x06Search\x12\x1d.pantherclaw.v1.SearchRequest\x1a\x1e.pantherclaw.v1.SearchResponse\"\x03\x90\x02\x01\x12p\n" +
 	"\x12ListBuiltinQueries\x12).pantherclaw.v1.ListBuiltinQueriesRequest\x1a*.pantherclaw.v1.ListBuiltinQueriesResponse\"\x03\x90\x02\x01\x12g\n" +
@@ -2156,7 +3443,12 @@ const file_pantherclaw_v1_search_proto_rawDesc = "" +
 	"\x10DeleteSavedQuery\x12'.pantherclaw.v1.DeleteSavedQueryRequest\x1a(.pantherclaw.v1.DeleteSavedQueryResponse\x12a\n" +
 	"\rGetSavedQuery\x12$.pantherclaw.v1.GetSavedQueryRequest\x1a%.pantherclaw.v1.GetSavedQueryResponse\"\x03\x90\x02\x01\x12j\n" +
 	"\x10ListSavedQueries\x12'.pantherclaw.v1.ListSavedQueriesRequest\x1a(.pantherclaw.v1.ListSavedQueriesResponse\"\x03\x90\x02\x01\x12a\n" +
-	"\rRunSavedQuery\x12$.pantherclaw.v1.RunSavedQueryRequest\x1a%.pantherclaw.v1.RunSavedQueryResponse\"\x03\x90\x02\x01B\xc4\x01\n" +
+	"\rRunSavedQuery\x12$.pantherclaw.v1.RunSavedQueryRequest\x1a%.pantherclaw.v1.RunSavedQueryResponse\"\x03\x90\x02\x01\x12F\n" +
+	"\x04Find\x12\x1b.pantherclaw.v1.FindRequest\x1a\x1c.pantherclaw.v1.FindResponse\"\x03\x90\x02\x01\x12U\n" +
+	"\tInterpret\x12 .pantherclaw.v1.InterpretRequest\x1a!.pantherclaw.v1.InterpretResponse\"\x03\x90\x02\x01\x12C\n" +
+	"\x03Ask\x12\x1a.pantherclaw.v1.AskRequest\x1a\x1b.pantherclaw.v1.AskResponse\"\x03\x90\x02\x01\x12n\n" +
+	"\x13OpenCaseFromResults\x12*.pantherclaw.v1.OpenCaseFromResultsRequest\x1a+.pantherclaw.v1.OpenCaseFromResultsResponse\x12\\\n" +
+	"\rExportResults\x12$.pantherclaw.v1.ExportResultsRequest\x1a%.pantherclaw.v1.ExportResultsResponseB\xc4\x01\n" +
 	"\x12com.pantherclaw.v1B\vSearchProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -2171,61 +3463,76 @@ func file_pantherclaw_v1_search_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_search_proto_rawDescData
 }
 
-var file_pantherclaw_v1_search_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_pantherclaw_v1_search_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
 var file_pantherclaw_v1_search_proto_goTypes = []any{
-	(*SearchFilters)(nil),              // 0: pantherclaw.v1.SearchFilters
-	(*Query)(nil),                      // 1: pantherclaw.v1.Query
-	(*BuiltinParams)(nil),              // 2: pantherclaw.v1.BuiltinParams
-	(*BuiltinQuery)(nil),               // 3: pantherclaw.v1.BuiltinQuery
-	(*SearchItem)(nil),                 // 4: pantherclaw.v1.SearchItem
-	(*Omission)(nil),                   // 5: pantherclaw.v1.Omission
-	(*SearchResult)(nil),               // 6: pantherclaw.v1.SearchResult
-	(*SearchRequest)(nil),              // 7: pantherclaw.v1.SearchRequest
-	(*ListBuiltinQueriesRequest)(nil),  // 8: pantherclaw.v1.ListBuiltinQueriesRequest
-	(*BuiltinQueryInfo)(nil),           // 9: pantherclaw.v1.BuiltinQueryInfo
-	(*ListBuiltinQueriesResponse)(nil), // 10: pantherclaw.v1.ListBuiltinQueriesResponse
-	(*RunBuiltinQueryRequest)(nil),     // 11: pantherclaw.v1.RunBuiltinQueryRequest
-	(*SavedQuery)(nil),                 // 12: pantherclaw.v1.SavedQuery
-	(*SavedQueryInput)(nil),            // 13: pantherclaw.v1.SavedQueryInput
-	(*SaveQueryRequest)(nil),           // 14: pantherclaw.v1.SaveQueryRequest
-	(*UpdateSavedQueryRequest)(nil),    // 15: pantherclaw.v1.UpdateSavedQueryRequest
-	(*DeleteSavedQueryRequest)(nil),    // 16: pantherclaw.v1.DeleteSavedQueryRequest
-	(*DeleteSavedQueryResponse)(nil),   // 17: pantherclaw.v1.DeleteSavedQueryResponse
-	(*GetSavedQueryRequest)(nil),       // 18: pantherclaw.v1.GetSavedQueryRequest
-	(*ListSavedQueriesRequest)(nil),    // 19: pantherclaw.v1.ListSavedQueriesRequest
-	(*ListSavedQueriesResponse)(nil),   // 20: pantherclaw.v1.ListSavedQueriesResponse
-	(*RunSavedQueryRequest)(nil),       // 21: pantherclaw.v1.RunSavedQueryRequest
-	(*SearchResponse)(nil),             // 22: pantherclaw.v1.SearchResponse
-	(*RunBuiltinQueryResponse)(nil),    // 23: pantherclaw.v1.RunBuiltinQueryResponse
-	(*RunSavedQueryResponse)(nil),      // 24: pantherclaw.v1.RunSavedQueryResponse
-	(*SaveQueryResponse)(nil),          // 25: pantherclaw.v1.SaveQueryResponse
-	(*UpdateSavedQueryResponse)(nil),   // 26: pantherclaw.v1.UpdateSavedQueryResponse
-	(*GetSavedQueryResponse)(nil),      // 27: pantherclaw.v1.GetSavedQueryResponse
-	nil,                                // 28: pantherclaw.v1.SearchItem.FieldsEntry
-	(*timestamppb.Timestamp)(nil),      // 29: google.protobuf.Timestamp
+	(*SearchFilters)(nil),               // 0: pantherclaw.v1.SearchFilters
+	(*Query)(nil),                       // 1: pantherclaw.v1.Query
+	(*BuiltinParams)(nil),               // 2: pantherclaw.v1.BuiltinParams
+	(*BuiltinQuery)(nil),                // 3: pantherclaw.v1.BuiltinQuery
+	(*SearchItem)(nil),                  // 4: pantherclaw.v1.SearchItem
+	(*Omission)(nil),                    // 5: pantherclaw.v1.Omission
+	(*SearchResult)(nil),                // 6: pantherclaw.v1.SearchResult
+	(*SearchRequest)(nil),               // 7: pantherclaw.v1.SearchRequest
+	(*ListBuiltinQueriesRequest)(nil),   // 8: pantherclaw.v1.ListBuiltinQueriesRequest
+	(*BuiltinQueryInfo)(nil),            // 9: pantherclaw.v1.BuiltinQueryInfo
+	(*ListBuiltinQueriesResponse)(nil),  // 10: pantherclaw.v1.ListBuiltinQueriesResponse
+	(*RunBuiltinQueryRequest)(nil),      // 11: pantherclaw.v1.RunBuiltinQueryRequest
+	(*SavedQuery)(nil),                  // 12: pantherclaw.v1.SavedQuery
+	(*SavedQueryInput)(nil),             // 13: pantherclaw.v1.SavedQueryInput
+	(*SaveQueryRequest)(nil),            // 14: pantherclaw.v1.SaveQueryRequest
+	(*UpdateSavedQueryRequest)(nil),     // 15: pantherclaw.v1.UpdateSavedQueryRequest
+	(*DeleteSavedQueryRequest)(nil),     // 16: pantherclaw.v1.DeleteSavedQueryRequest
+	(*DeleteSavedQueryResponse)(nil),    // 17: pantherclaw.v1.DeleteSavedQueryResponse
+	(*GetSavedQueryRequest)(nil),        // 18: pantherclaw.v1.GetSavedQueryRequest
+	(*ListSavedQueriesRequest)(nil),     // 19: pantherclaw.v1.ListSavedQueriesRequest
+	(*ListSavedQueriesResponse)(nil),    // 20: pantherclaw.v1.ListSavedQueriesResponse
+	(*RunSavedQueryRequest)(nil),        // 21: pantherclaw.v1.RunSavedQueryRequest
+	(*SearchResponse)(nil),              // 22: pantherclaw.v1.SearchResponse
+	(*RunBuiltinQueryResponse)(nil),     // 23: pantherclaw.v1.RunBuiltinQueryResponse
+	(*RunSavedQueryResponse)(nil),       // 24: pantherclaw.v1.RunSavedQueryResponse
+	(*SaveQueryResponse)(nil),           // 25: pantherclaw.v1.SaveQueryResponse
+	(*UpdateSavedQueryResponse)(nil),    // 26: pantherclaw.v1.UpdateSavedQueryResponse
+	(*GetSavedQueryResponse)(nil),       // 27: pantherclaw.v1.GetSavedQueryResponse
+	(*FindRequest)(nil),                 // 28: pantherclaw.v1.FindRequest
+	(*FindMatch)(nil),                   // 29: pantherclaw.v1.FindMatch
+	(*FindKindResult)(nil),              // 30: pantherclaw.v1.FindKindResult
+	(*FindResponse)(nil),                // 31: pantherclaw.v1.FindResponse
+	(*InterpretRequest)(nil),            // 32: pantherclaw.v1.InterpretRequest
+	(*Ambiguity)(nil),                   // 33: pantherclaw.v1.Ambiguity
+	(*Interpretation)(nil),              // 34: pantherclaw.v1.Interpretation
+	(*InterpretResponse)(nil),           // 35: pantherclaw.v1.InterpretResponse
+	(*AskRequest)(nil),                  // 36: pantherclaw.v1.AskRequest
+	(*AskResponse)(nil),                 // 37: pantherclaw.v1.AskResponse
+	(*SearchSource)(nil),                // 38: pantherclaw.v1.SearchSource
+	(*OpenCaseFromResultsRequest)(nil),  // 39: pantherclaw.v1.OpenCaseFromResultsRequest
+	(*OpenCaseFromResultsResponse)(nil), // 40: pantherclaw.v1.OpenCaseFromResultsResponse
+	(*ExportResultsRequest)(nil),        // 41: pantherclaw.v1.ExportResultsRequest
+	(*ExportResultsResponse)(nil),       // 42: pantherclaw.v1.ExportResultsResponse
+	nil,                                 // 43: pantherclaw.v1.SearchItem.FieldsEntry
+	(*timestamppb.Timestamp)(nil),       // 44: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_search_proto_depIdxs = []int32{
-	29, // 0: pantherclaw.v1.SearchFilters.unused_since:type_name -> google.protobuf.Timestamp
-	29, // 1: pantherclaw.v1.SearchFilters.start_time:type_name -> google.protobuf.Timestamp
-	29, // 2: pantherclaw.v1.SearchFilters.end_time:type_name -> google.protobuf.Timestamp
+	44, // 0: pantherclaw.v1.SearchFilters.unused_since:type_name -> google.protobuf.Timestamp
+	44, // 1: pantherclaw.v1.SearchFilters.start_time:type_name -> google.protobuf.Timestamp
+	44, // 2: pantherclaw.v1.SearchFilters.end_time:type_name -> google.protobuf.Timestamp
 	0,  // 3: pantherclaw.v1.Query.filters:type_name -> pantherclaw.v1.SearchFilters
-	29, // 4: pantherclaw.v1.BuiltinParams.start_time:type_name -> google.protobuf.Timestamp
-	29, // 5: pantherclaw.v1.BuiltinParams.end_time:type_name -> google.protobuf.Timestamp
+	44, // 4: pantherclaw.v1.BuiltinParams.start_time:type_name -> google.protobuf.Timestamp
+	44, // 5: pantherclaw.v1.BuiltinParams.end_time:type_name -> google.protobuf.Timestamp
 	2,  // 6: pantherclaw.v1.BuiltinQuery.params:type_name -> pantherclaw.v1.BuiltinParams
-	29, // 7: pantherclaw.v1.SearchItem.time:type_name -> google.protobuf.Timestamp
-	28, // 8: pantherclaw.v1.SearchItem.fields:type_name -> pantherclaw.v1.SearchItem.FieldsEntry
+	44, // 7: pantherclaw.v1.SearchItem.time:type_name -> google.protobuf.Timestamp
+	43, // 8: pantherclaw.v1.SearchItem.fields:type_name -> pantherclaw.v1.SearchItem.FieldsEntry
 	4,  // 9: pantherclaw.v1.SearchResult.items:type_name -> pantherclaw.v1.SearchItem
-	29, // 10: pantherclaw.v1.SearchResult.range_start_time:type_name -> google.protobuf.Timestamp
-	29, // 11: pantherclaw.v1.SearchResult.range_end_time:type_name -> google.protobuf.Timestamp
-	29, // 12: pantherclaw.v1.SearchResult.as_of_time:type_name -> google.protobuf.Timestamp
+	44, // 10: pantherclaw.v1.SearchResult.range_start_time:type_name -> google.protobuf.Timestamp
+	44, // 11: pantherclaw.v1.SearchResult.range_end_time:type_name -> google.protobuf.Timestamp
+	44, // 12: pantherclaw.v1.SearchResult.as_of_time:type_name -> google.protobuf.Timestamp
 	5,  // 13: pantherclaw.v1.SearchResult.omissions:type_name -> pantherclaw.v1.Omission
 	1,  // 14: pantherclaw.v1.SearchRequest.query:type_name -> pantherclaw.v1.Query
 	9,  // 15: pantherclaw.v1.ListBuiltinQueriesResponse.queries:type_name -> pantherclaw.v1.BuiltinQueryInfo
 	3,  // 16: pantherclaw.v1.RunBuiltinQueryRequest.query:type_name -> pantherclaw.v1.BuiltinQuery
 	1,  // 17: pantherclaw.v1.SavedQuery.query:type_name -> pantherclaw.v1.Query
 	3,  // 18: pantherclaw.v1.SavedQuery.builtin:type_name -> pantherclaw.v1.BuiltinQuery
-	29, // 19: pantherclaw.v1.SavedQuery.create_time:type_name -> google.protobuf.Timestamp
-	29, // 20: pantherclaw.v1.SavedQuery.update_time:type_name -> google.protobuf.Timestamp
+	44, // 19: pantherclaw.v1.SavedQuery.create_time:type_name -> google.protobuf.Timestamp
+	44, // 20: pantherclaw.v1.SavedQuery.update_time:type_name -> google.protobuf.Timestamp
 	1,  // 21: pantherclaw.v1.SavedQueryInput.query:type_name -> pantherclaw.v1.Query
 	3,  // 22: pantherclaw.v1.SavedQueryInput.builtin:type_name -> pantherclaw.v1.BuiltinQuery
 	13, // 23: pantherclaw.v1.SaveQueryRequest.input:type_name -> pantherclaw.v1.SavedQueryInput
@@ -2237,29 +3544,59 @@ var file_pantherclaw_v1_search_proto_depIdxs = []int32{
 	12, // 29: pantherclaw.v1.SaveQueryResponse.query:type_name -> pantherclaw.v1.SavedQuery
 	12, // 30: pantherclaw.v1.UpdateSavedQueryResponse.query:type_name -> pantherclaw.v1.SavedQuery
 	12, // 31: pantherclaw.v1.GetSavedQueryResponse.query:type_name -> pantherclaw.v1.SavedQuery
-	7,  // 32: pantherclaw.v1.SearchService.Search:input_type -> pantherclaw.v1.SearchRequest
-	8,  // 33: pantherclaw.v1.SearchService.ListBuiltinQueries:input_type -> pantherclaw.v1.ListBuiltinQueriesRequest
-	11, // 34: pantherclaw.v1.SearchService.RunBuiltinQuery:input_type -> pantherclaw.v1.RunBuiltinQueryRequest
-	14, // 35: pantherclaw.v1.SearchService.SaveQuery:input_type -> pantherclaw.v1.SaveQueryRequest
-	15, // 36: pantherclaw.v1.SearchService.UpdateSavedQuery:input_type -> pantherclaw.v1.UpdateSavedQueryRequest
-	16, // 37: pantherclaw.v1.SearchService.DeleteSavedQuery:input_type -> pantherclaw.v1.DeleteSavedQueryRequest
-	18, // 38: pantherclaw.v1.SearchService.GetSavedQuery:input_type -> pantherclaw.v1.GetSavedQueryRequest
-	19, // 39: pantherclaw.v1.SearchService.ListSavedQueries:input_type -> pantherclaw.v1.ListSavedQueriesRequest
-	21, // 40: pantherclaw.v1.SearchService.RunSavedQuery:input_type -> pantherclaw.v1.RunSavedQueryRequest
-	22, // 41: pantherclaw.v1.SearchService.Search:output_type -> pantherclaw.v1.SearchResponse
-	10, // 42: pantherclaw.v1.SearchService.ListBuiltinQueries:output_type -> pantherclaw.v1.ListBuiltinQueriesResponse
-	23, // 43: pantherclaw.v1.SearchService.RunBuiltinQuery:output_type -> pantherclaw.v1.RunBuiltinQueryResponse
-	25, // 44: pantherclaw.v1.SearchService.SaveQuery:output_type -> pantherclaw.v1.SaveQueryResponse
-	26, // 45: pantherclaw.v1.SearchService.UpdateSavedQuery:output_type -> pantherclaw.v1.UpdateSavedQueryResponse
-	17, // 46: pantherclaw.v1.SearchService.DeleteSavedQuery:output_type -> pantherclaw.v1.DeleteSavedQueryResponse
-	27, // 47: pantherclaw.v1.SearchService.GetSavedQuery:output_type -> pantherclaw.v1.GetSavedQueryResponse
-	20, // 48: pantherclaw.v1.SearchService.ListSavedQueries:output_type -> pantherclaw.v1.ListSavedQueriesResponse
-	24, // 49: pantherclaw.v1.SearchService.RunSavedQuery:output_type -> pantherclaw.v1.RunSavedQueryResponse
-	41, // [41:50] is the sub-list for method output_type
-	32, // [32:41] is the sub-list for method input_type
-	32, // [32:32] is the sub-list for extension type_name
-	32, // [32:32] is the sub-list for extension extendee
-	0,  // [0:32] is the sub-list for field type_name
+	44, // 32: pantherclaw.v1.FindMatch.time:type_name -> google.protobuf.Timestamp
+	29, // 33: pantherclaw.v1.FindKindResult.matches:type_name -> pantherclaw.v1.FindMatch
+	30, // 34: pantherclaw.v1.FindResponse.kinds:type_name -> pantherclaw.v1.FindKindResult
+	5,  // 35: pantherclaw.v1.FindResponse.omissions:type_name -> pantherclaw.v1.Omission
+	44, // 36: pantherclaw.v1.FindResponse.as_of_time:type_name -> google.protobuf.Timestamp
+	29, // 37: pantherclaw.v1.Ambiguity.candidates:type_name -> pantherclaw.v1.FindMatch
+	1,  // 38: pantherclaw.v1.Interpretation.query:type_name -> pantherclaw.v1.Query
+	3,  // 39: pantherclaw.v1.Interpretation.builtin:type_name -> pantherclaw.v1.BuiltinQuery
+	44, // 40: pantherclaw.v1.Interpretation.range_start_time:type_name -> google.protobuf.Timestamp
+	44, // 41: pantherclaw.v1.Interpretation.range_end_time:type_name -> google.protobuf.Timestamp
+	33, // 42: pantherclaw.v1.Interpretation.ambiguities:type_name -> pantherclaw.v1.Ambiguity
+	34, // 43: pantherclaw.v1.InterpretResponse.interpretation:type_name -> pantherclaw.v1.Interpretation
+	34, // 44: pantherclaw.v1.AskResponse.interpretation:type_name -> pantherclaw.v1.Interpretation
+	6,  // 45: pantherclaw.v1.AskResponse.result:type_name -> pantherclaw.v1.SearchResult
+	1,  // 46: pantherclaw.v1.SearchSource.query:type_name -> pantherclaw.v1.Query
+	3,  // 47: pantherclaw.v1.SearchSource.builtin:type_name -> pantherclaw.v1.BuiltinQuery
+	38, // 48: pantherclaw.v1.OpenCaseFromResultsRequest.source:type_name -> pantherclaw.v1.SearchSource
+	38, // 49: pantherclaw.v1.ExportResultsRequest.source:type_name -> pantherclaw.v1.SearchSource
+	5,  // 50: pantherclaw.v1.ExportResultsResponse.omissions:type_name -> pantherclaw.v1.Omission
+	44, // 51: pantherclaw.v1.ExportResultsResponse.as_of_time:type_name -> google.protobuf.Timestamp
+	7,  // 52: pantherclaw.v1.SearchService.Search:input_type -> pantherclaw.v1.SearchRequest
+	8,  // 53: pantherclaw.v1.SearchService.ListBuiltinQueries:input_type -> pantherclaw.v1.ListBuiltinQueriesRequest
+	11, // 54: pantherclaw.v1.SearchService.RunBuiltinQuery:input_type -> pantherclaw.v1.RunBuiltinQueryRequest
+	14, // 55: pantherclaw.v1.SearchService.SaveQuery:input_type -> pantherclaw.v1.SaveQueryRequest
+	15, // 56: pantherclaw.v1.SearchService.UpdateSavedQuery:input_type -> pantherclaw.v1.UpdateSavedQueryRequest
+	16, // 57: pantherclaw.v1.SearchService.DeleteSavedQuery:input_type -> pantherclaw.v1.DeleteSavedQueryRequest
+	18, // 58: pantherclaw.v1.SearchService.GetSavedQuery:input_type -> pantherclaw.v1.GetSavedQueryRequest
+	19, // 59: pantherclaw.v1.SearchService.ListSavedQueries:input_type -> pantherclaw.v1.ListSavedQueriesRequest
+	21, // 60: pantherclaw.v1.SearchService.RunSavedQuery:input_type -> pantherclaw.v1.RunSavedQueryRequest
+	28, // 61: pantherclaw.v1.SearchService.Find:input_type -> pantherclaw.v1.FindRequest
+	32, // 62: pantherclaw.v1.SearchService.Interpret:input_type -> pantherclaw.v1.InterpretRequest
+	36, // 63: pantherclaw.v1.SearchService.Ask:input_type -> pantherclaw.v1.AskRequest
+	39, // 64: pantherclaw.v1.SearchService.OpenCaseFromResults:input_type -> pantherclaw.v1.OpenCaseFromResultsRequest
+	41, // 65: pantherclaw.v1.SearchService.ExportResults:input_type -> pantherclaw.v1.ExportResultsRequest
+	22, // 66: pantherclaw.v1.SearchService.Search:output_type -> pantherclaw.v1.SearchResponse
+	10, // 67: pantherclaw.v1.SearchService.ListBuiltinQueries:output_type -> pantherclaw.v1.ListBuiltinQueriesResponse
+	23, // 68: pantherclaw.v1.SearchService.RunBuiltinQuery:output_type -> pantherclaw.v1.RunBuiltinQueryResponse
+	25, // 69: pantherclaw.v1.SearchService.SaveQuery:output_type -> pantherclaw.v1.SaveQueryResponse
+	26, // 70: pantherclaw.v1.SearchService.UpdateSavedQuery:output_type -> pantherclaw.v1.UpdateSavedQueryResponse
+	17, // 71: pantherclaw.v1.SearchService.DeleteSavedQuery:output_type -> pantherclaw.v1.DeleteSavedQueryResponse
+	27, // 72: pantherclaw.v1.SearchService.GetSavedQuery:output_type -> pantherclaw.v1.GetSavedQueryResponse
+	20, // 73: pantherclaw.v1.SearchService.ListSavedQueries:output_type -> pantherclaw.v1.ListSavedQueriesResponse
+	24, // 74: pantherclaw.v1.SearchService.RunSavedQuery:output_type -> pantherclaw.v1.RunSavedQueryResponse
+	31, // 75: pantherclaw.v1.SearchService.Find:output_type -> pantherclaw.v1.FindResponse
+	35, // 76: pantherclaw.v1.SearchService.Interpret:output_type -> pantherclaw.v1.InterpretResponse
+	37, // 77: pantherclaw.v1.SearchService.Ask:output_type -> pantherclaw.v1.AskResponse
+	40, // 78: pantherclaw.v1.SearchService.OpenCaseFromResults:output_type -> pantherclaw.v1.OpenCaseFromResultsResponse
+	42, // 79: pantherclaw.v1.SearchService.ExportResults:output_type -> pantherclaw.v1.ExportResultsResponse
+	66, // [66:80] is the sub-list for method output_type
+	52, // [52:66] is the sub-list for method input_type
+	52, // [52:52] is the sub-list for extension type_name
+	52, // [52:52] is the sub-list for extension extendee
+	0,  // [0:52] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_search_proto_init() }
@@ -2270,13 +3607,14 @@ func file_pantherclaw_v1_search_proto_init() {
 	file_pantherclaw_v1_search_proto_msgTypes[0].OneofWrappers = []any{}
 	file_pantherclaw_v1_search_proto_msgTypes[2].OneofWrappers = []any{}
 	file_pantherclaw_v1_search_proto_msgTypes[13].OneofWrappers = []any{}
+	file_pantherclaw_v1_search_proto_msgTypes[38].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_search_proto_rawDesc), len(file_pantherclaw_v1_search_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   29,
+			NumMessages:   44,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

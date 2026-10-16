@@ -50,10 +50,10 @@ import (
 	"github.com/katocxl/pantherclaw/internal/facts/adapters/factsrpc"
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	factsapp "github.com/katocxl/pantherclaw/internal/facts/app"
+	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	githubapp "github.com/katocxl/pantherclaw/internal/github/app"
 	"github.com/katocxl/pantherclaw/internal/grants/adapters/grantsrpc"
-	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/identityrpc"
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/issuerkeys"
@@ -75,7 +75,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/rpc"
 	"github.com/katocxl/pantherclaw/internal/platform/version"
 	"github.com/katocxl/pantherclaw/internal/runs/adapters/runsrpc"
-	runsapp "github.com/katocxl/pantherclaw/internal/runs/app"
 	"github.com/katocxl/pantherclaw/internal/tenancy/adapters/tenancyrpc"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	txapp "github.com/katocxl/pantherclaw/internal/transactions/app"
@@ -257,6 +256,11 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	m6.scans = agentsrpc.NewGatewayScans(aapp.NewInventory(pool, bill))
 
 	g, ctx := errgroup.WithContext(ctx)
+	// autos is the one M11 part 2 core of this process: the API and the
+	// jobs share it, so every port set on it reaches both (D91 K6).
+	// protect sets its ports on it in every role (D110 P1).
+	autos, m11protect := newM11Core(pool, bill, cfg.Auth.PublicURL)
+	wireM11Process(autos, m11protect, pool)
 	if cfg.Role == RoleAPI || cfg.Role == RoleAll {
 		tokens, err := token.New(reg, cfg.Auth.PublicURL, token.Audience)
 		if err != nil {
@@ -333,6 +337,8 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			kp:           kp,
 			freshness:    freshnessOf(cfg),
 			m10ops:       m10OpsDeps{authn: authn, tokens: tokens},
+			autos:        autos,
+			m11protect:   m11protect,
 		})
 		if err != nil {
 			return err
@@ -376,7 +382,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if err := authority.RegisterSweeper(jreg, pool, svc, cfg.Authority.StaleDispatch.D()); err != nil {
 			return err
 		}
-		evidenceJobs, err := registerEvidenceWorkers(jreg, cfg, pool, reg, m5.notifications, log)
+		evidenceJobs, err := registerEvidenceWorkers(jreg, cfg, pool, reg, m5.notifications, autos, bill, log)
 		if err != nil {
 			return err
 		}
@@ -415,7 +421,17 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if evidenceJobs, err = registerM10OpsJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
 			return err
 		}
+		if evidenceJobs, err = registerM11GovernJobs(evidenceJobs, jreg, pool, log); err != nil {
+			return err
+		}
 		if evidenceJobs, err = registerM10EdgesJobs(evidenceJobs, jreg, pool, kp, bill, m5, cfg.Auth.PublicURL, log); err != nil {
+			return err
+		}
+		if evidenceJobs, err = registerAutomationTriggersJobs(evidenceJobs, jreg, pool, kp, bill, cfg.Auth.PublicURL, autos, log); err != nil {
+			return err
+		}
+		if evidenceJobs, err = registerAutomationEngineJobs(evidenceJobs, jreg, autos, cfg, kp, bill,
+			m5.notifications, log); err != nil {
 			return err
 		}
 		reflexJobs, err := registerReflexCoreJobs(jreg, pool, cfg.CEL, bill, m5.notifications, log)
@@ -423,7 +439,13 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			return err
 		}
 		evidenceJobs = append(evidenceJobs, reflexJobs...)
+		if evidenceJobs, err = registerAutomationsCoreJobs(evidenceJobs, jreg, autos, log); err != nil {
+			return err
+		}
 		if err := registerSimulationJobs(jreg, pool, kp, bill, log); err != nil {
+			return err
+		}
+		if evidenceJobs, err = registerAutomationAssuranceJobs(evidenceJobs, jreg, autos, bill, log); err != nil {
 			return err
 		}
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {
@@ -551,11 +573,18 @@ type apiDeps struct {
 	freshness coverage.Freshness
 	// M10 ops: the live stream's bearer authentication.
 	m10ops m10OpsDeps
+	// M11 protect: the protected-change Gate and compromised publishers.
+	m11protect m11Protect
+	// autos is the process's M11 part 2 core (nil: apiHandler builds one).
+	autos *automationsCore
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
 func apiHandler(d apiDeps) (http.Handler, error) {
 	pool, reg, log := d.pool, d.reg, d.log
+	if d.m11protect.gate == nil {
+		d.m11protect = newM11Protect(d.pool, d.billing)
+	}
 	rs, err := rpc.NewServer(rpc.Options{
 		Logger:       log,
 		Public:       publicProcedures(),
@@ -569,7 +598,13 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	pantherclawv1connect.RegisterTenancyServiceHandler(rs, tenancyrpc.NewTenancy(tapp.NewHierarchy(pool, d.billing)))
 	pantherclawv1connect.RegisterAccessServiceHandler(rs, tenancyrpc.NewAccess(tapp.NewAccess(pool, log)))
 	pantherclawv1connect.RegisterServiceAccountServiceHandler(rs, tenancyrpc.NewServiceAccounts(tapp.NewServiceAccounts(pool, d.apiKeyEnv)))
-	pantherclawv1connect.RegisterAgentServiceHandler(rs, d.m5p2.agents(agentsrpc.NewAgents(aapp.NewInventory(pool, d.billing))))
+	// autos is the M11 part 2 core, set below once grants and runs exist;
+	// ListAgents reads it only while serving.
+	var autos *automationsCore
+	pantherclawv1connect.RegisterAgentServiceHandler(rs, d.m5p2.agents(agentsrpc.NewAgents(aapp.NewInventory(pool, d.billing)).
+		WithAutomations(func(ctx context.Context) ([]*pantherclawv1.AutomationIdentity, string, error) {
+			return autos.identities(ctx)
+		})))
 	pantherclawv1connect.RegisterWaitlistServiceHandler(rs, d.m5p2.waitlist())
 	attestors, err := newAttestors(d.clusters)
 	if err != nil {
@@ -577,12 +612,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	identity := iapp.New(pool, reg, d.publicURL, clock.System{}).WithAttestors(attestors)
 	pantherclawv1connect.RegisterIdentityServiceHandler(rs, identityrpc.NewIdentity(identity, d.clusters))
-	gstore := &grantspg.Store{Pool: pool}
-	grants := &grantsapp.Service{
-		Repo: gstore, Subjects: gstore, Defs: &defspg.Store{Pool: pool}, Authz: grantsapp.SubjectAuthorizer{},
-		Clock: clock.System{}, Listing: gstore, Refusals: gstore,
-	}
-	runs := runsapp.New(pool).WithGrants(gstore)
+	grants, runs := m11Issuance(d)
 	if len(d.subjects) > 0 {
 		runs.WithSubjects(d.subjects)
 	}
@@ -619,12 +649,13 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err := registerSimulation(rs, d); err != nil {
 		return nil, err
 	}
-	registerReleases(rs, pool)
+	registerReleases(rs, pool, d.m11protect)
 	registerPolicyExceptions(rs, d)
 	mountM10Ops, err := registerM10Ops(rs, d)
 	if err != nil {
 		return nil, err
 	}
+	registerM11Search(rs, d)
 	registerCases(rs, d)
 	registerResponse(rs, d)
 	registerExposure(rs, d)
@@ -633,8 +664,21 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		return nil, err
 	}
 	registerReflexCore(rs, d)
+	registerM11Govern(rs, d)
+	autos = registerAutomationsCore(rs, d, grants, runs)
+	if err := registerAutomationAssurance(rs, d, autos); err != nil {
+		return nil, err
+	}
+	registerAutomationsEngine(rs, d, workload, autos)
+	registerAutomationTemplates(rs, d, autos)
+	automationTriggers, err := registerAutomationTriggers(rs, d, autos)
+	if err != nil {
+		return nil, err
+	}
+	registerM11Protect(rs, d, autos)
 	mux := http.NewServeMux()
 	edges.mount(mux)
+	automationTriggers.mount(mux)
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)
 	d.oauth.Mount(mux)
@@ -862,10 +906,10 @@ func registerAuthorityAdmin(rs *connect.Server, d apiDeps, grants *grantsapp.Ser
 			return err
 		}
 	}
-	pantherclawv1connect.RegisterPackageServiceHandler(rs, packagesrpc.New(&defsapp.Admin{
+	pantherclawv1connect.RegisterPackageServiceHandler(rs, packagesrpc.New(protectPackages(&defsapp.Admin{
 		Importer: &defsapp.Importer{Roots: roots, Repo: defs, Keys: defs, Clock: clock.System{}}, Reads: defs, Authz: authz,
 		Ents: d.billing,
-	}))
+	}, d)))
 	registerPolicyGate(rs, d)
 	return nil
 }

@@ -1,0 +1,21 @@
+{{template "head" .}}
+<h1>Protected change: {{.Category}}</h1>
+<p>State: <strong>{{.State}}</strong>{{with .DecidedReason}} ({{.}}){{end}}. Requested by <code>user:{{.Author}}</code> at {{.CreatedAt.UTC.Format "2006-01-02 15:04:05 UTC"}}.</p>
+<dl>
+<dt>Change</dt><dd><code>{{.ID}}</code></dd>
+<dt>What applies it</dt><dd><code>{{.Surface}}</code></dd>
+<dt>Subject</dt><dd class="untrusted"><code>{{.Subject}}</code></dd>
+<dt>What it weakens</dt><dd>{{range $i, $w := .Widening}}{{if $i}}, {{end}}<code>{{$w}}</code>{{end}}</dd>
+<dt>Details</dt><dd><table><tbody>{{range $k, $v := .Summary}}<tr><th><code>{{$k}}</code></th><td class="untrusted">{{$v}}</td></tr>{{end}}</tbody></table></dd>
+{{with .ReviewDueAt}}<dt>Review due</dt><dd>{{.UTC.Format "2006-01-02 15:04:05 UTC"}}</dd>{{end}}
+</dl>
+{{if .CanApply}}
+<h2>Apply in an emergency</h2>
+<p class="note">This change waits for a different person to confirm it. Applying it now skips that: it is recorded as an emergency change with you as its publisher, and a publisher other than you must review it within 72 hours. Applying needs your security key.</p>
+<p><button type="button" class="danger" id="activate" data-path="/protected-changes/{{.Request}}/emergency">Apply now with your security key</button></p>
+{{else}}{{if eq .State "PENDING"}}
+<p class="note">You cannot apply this change in an emergency: that needs incident.respond and a security key. A publisher confirms it on its change request's page.</p>
+{{end}}{{end}}
+<p id="status" role="status"></p>
+<script src="/static/protect.js"></script>
+{{template "foot" .}}

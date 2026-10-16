@@ -33,6 +33,7 @@ import (
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
+	"github.com/katocxl/pantherclaw/internal/protect"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -113,6 +114,9 @@ type Service struct {
 	// grantsPage is how many grants Health reads at a time; zero is
 	// grantPage. Tests set it smaller to read past the first page.
 	grantsPage int32
+	// protect holds weakening changes for a distinct publisher when the org
+	// protects CUSTODY (WithProtect, G0 M11 D42); nil holds none.
+	protect *protect.Gate
 }
 
 // New returns the connection use cases. publicURL and gatewayAPIURL are
@@ -156,6 +160,9 @@ type actor struct {
 	// By is recorded in created_by, updated_by and changed_by.
 	By    string
 	Audit evdomain.Actor
+	// Caller is the person (zero for the seeding operator): the author of a
+	// protected change.
+	Caller tenancy.Caller
 }
 
 func (s *Service) caller(ctx context.Context, p td.Permission) (actor, error) {
@@ -166,7 +173,7 @@ func (s *Service) caller(ctx context.Context, p td.Permission) (actor, error) {
 	if err := c.Require(p, td.OrgPath(c.Org)); err != nil {
 		return actor{}, err
 	}
-	return actor{Org: c.Org, By: c.Principal.String(), Audit: c.Actor()}, nil
+	return actor{Org: c.Org, By: c.Principal.String(), Audit: c.Actor(), Caller: c}, nil
 }
 
 func record(ctx context.Context, tx db.TenantTx, c actor, name string, conn ids.UUID, details map[string]string) error {

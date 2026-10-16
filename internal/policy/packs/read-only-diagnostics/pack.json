@@ -1,0 +1,12 @@
+{
+  "name": "read-only-diagnostics",
+  "summary": "Agents diagnose a production environment from a shell, read-only: scoped reads in the workspace are allowed; deletion, changes and network tools are denied.",
+  "template": "production-diagnostics",
+  "baseline_ttl_seconds": 28800,
+  "covers": [
+    "scoped production reads: one allow-listed reading command at a time, in the workspace",
+    "deletion and changes denied: writing commands and output redirection",
+    "network tools denied",
+    "commands outside the workspace denied"
+  ]
+}

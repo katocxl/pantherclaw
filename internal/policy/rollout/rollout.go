@@ -824,6 +824,25 @@ func cancel(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, r dbq.PcP
 	return voidRequests(ctx, tx, actor, "PUBLISH", r.VersionID, reason)
 }
 
+// VoidCompromised is the reason a rollout is halted when its creator or a
+// confirmer of its requests is marked compromised (G0 M11 D43).
+const VoidCompromised = "PUBLISHER_COMPROMISED"
+
+// Halt ends an open rollout (StageCancelled) and voids its pending change
+// requests, in the caller's transaction (G0 M11 D43, HR-293: its creator
+// or a confirmer was marked compromised). The rollout is audited
+// with the cancel event and the reason.
+func Halt(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, r dbq.PcPolicyRollout, reason string) error {
+	if err := cancel(ctx, tx, actor, r, reason); err != nil {
+		return err
+	}
+	_, err := audit.Record(ctx, tx, audit.Event{
+		Name: "policy.rollout_cancelled", Actor: actor, Outcome: audit.Success, ReasonCode: reason, //nolint:misspell // as the stage
+		Object: &audit.Object{Type: "policy_rollout", ID: r.ID.String()},
+	})
+	return err
+}
+
 // voidRequests voids the pending change requests of a kind for a subject.
 func voidRequests(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, kind string, subject ids.UUID, reason string) error {
 	q := dbq.New(tx)

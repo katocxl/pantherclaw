@@ -209,6 +209,14 @@ func (v *Versions) Create(ctx context.Context, raw []byte) (VersionInfo, error) 
 // published), else ErrPublishedChanged. Creating changes no published
 // version, so a read is enough; the publish checks again under a lock.
 func (v *Versions) CreateExpecting(ctx context.Context, raw []byte, expected *ids.UUID) (VersionInfo, error) {
+	return v.CreateExpectingWith(ctx, raw, expected, nil)
+}
+
+// CreateExpectingWith is CreateExpecting with details added to the
+// version's policy.version_created audit record, written in the same
+// transaction as the version (a reference pack names itself, G0 M11
+// part 2 D41, D71 G11).
+func (v *Versions) CreateExpectingWith(ctx context.Context, raw []byte, expected *ids.UUID, details map[string]string) (VersionInfo, error) {
 	c, err := v.caller(ctx, PermPolicyAuthor)
 	if err != nil {
 		return VersionInfo{}, err
@@ -231,7 +239,7 @@ func (v *Versions) CreateExpecting(ctx context.Context, raw []byte, expected *id
 	}
 	ev := &audit.Event{
 		Name: "policy.version_created", Actor: c.Actor(), Outcome: audit.Success,
-		Object: &audit.Object{Type: "policy", ID: b.ID},
+		Object: &audit.Object{Type: "policy", ID: b.ID}, Details: details,
 	}
 	id, _, err := v.Store.CreateVersion(ctx, c.Org, b, c.Principal.String(), ev)
 	if errors.Is(err, domain.ErrInvalid) {

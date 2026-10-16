@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	"github.com/katocxl/pantherclaw/internal/policy/packs/render"
 )
 
 // pclaw template apply (G0 M8 C4): a template is data in templates/, applied
@@ -58,8 +59,8 @@ type templateOptions struct {
 var (
 	templateNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
 	// templateRepoRe is a GitHub repository as pc.github names targets.
-	templateRepoRe   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,38}/\.?[a-z0-9_-][a-z0-9._-]{0,98}$`)
-	templateBranchRe = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}){0,7}$`)
+	templateRepoRe   = render.RepoRe
+	templateBranchRe = render.BranchRe
 	uuidRe           = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 )
 

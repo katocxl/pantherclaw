@@ -72,6 +72,7 @@ func filtersOf(f *pantherclawv1.SearchFilters) (search.Filters, error) {
 		Decisions: f.GetDecisions(), Modes: f.GetModes(), States: f.GetStates(), Kinds: f.GetKinds(),
 		AccessModes: f.GetAccessModes(), EnvKinds: f.GetEnvironmentKinds(), UnusedSince: optTime(f.GetUnusedSince()),
 		WidensOnly: f.GetWidensOnly(), Start: optTime(f.GetStartTime()), End: optTime(f.GetEndTime()),
+		Severities: f.GetSeverities(), EffectStates: f.GetEffectStates(),
 	}
 	for _, p := range []struct {
 		dst **ids.UUID
@@ -87,6 +88,9 @@ func filtersOf(f *pantherclawv1.SearchFilters) (search.Filters, error) {
 		{&out.PrincipalUser, f.PrincipalUserId},
 		{&out.PrincipalSA, f.PrincipalServiceAccountId},
 		{&out.UsedConnection, f.UsedConnectionId},
+		{&out.Alert, f.AlertId},
+		{&out.Incident, f.IncidentId},
+		{&out.Automation, f.AutomationId},
 	} {
 		id, err := optID(p.src)
 		if err != nil {
@@ -117,6 +121,8 @@ func builtinOf(b *pantherclawv1.BuiltinQuery) (search.BuiltinQuery, error) {
 		{&out.Params.Connection, p.ConnectionId},
 		{&out.Params.PrincipalUser, p.PrincipalUserId},
 		{&out.Params.PrincipalSA, p.PrincipalServiceAccountId},
+		{&out.Params.Incident, p.IncidentId},
+		{&out.Params.Case, p.CaseId},
 	} {
 		id, err := optID(x.src)
 		if err != nil {
@@ -144,7 +150,8 @@ func filtersProto(f search.Filters) *pantherclawv1.SearchFilters {
 		TargetType: f.TargetType, EffectPrefix: f.EffectPrefix, KindPrefix: f.KindPrefix, Actor: f.Actor,
 		Decisions: f.Decisions, Modes: f.Modes, States: f.States, Kinds: f.Kinds, AccessModes: f.AccessModes,
 		EnvironmentKinds: f.EnvKinds, UnusedSince: ts(f.UnusedSince), WidensOnly: f.WidensOnly,
-		StartTime: ts(f.Start), EndTime: ts(f.End),
+		StartTime: ts(f.Start), EndTime: ts(f.End), AlertId: idPtr(f.Alert), IncidentId: idPtr(f.Incident), AutomationId: idPtr(f.Automation),
+		Severities: f.Severities, EffectStates: f.EffectStates,
 	}
 }
 
@@ -154,7 +161,7 @@ func builtinProto(b search.BuiltinQuery) *pantherclawv1.BuiltinQuery {
 		TransactionId: idPtr(p.Transaction), AgentId: idPtr(p.Agent), ConnectionId: idPtr(p.Connection),
 		PrincipalUserId: idPtr(p.PrincipalUser), PrincipalServiceAccountId: idPtr(p.PrincipalSA),
 		Effect: p.Effect, TargetType: p.TargetType, Resource: p.Resource, Days: int32(p.Days), //nolint:gosec // G115: bounded by validation
-		StartTime: ts(p.Start), EndTime: ts(p.End),
+		StartTime: ts(p.Start), EndTime: ts(p.End), IncidentId: idPtr(p.Incident), CaseId: idPtr(p.Case),
 	}}
 }
 

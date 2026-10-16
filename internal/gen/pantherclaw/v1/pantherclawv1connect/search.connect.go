@@ -52,6 +52,18 @@ const (
 	// SearchServiceRunSavedQueryProcedure is the procedure name of the SearchService's RunSavedQuery
 	// RPC.
 	SearchServiceRunSavedQueryProcedure = "/pantherclaw.v1.SearchService/RunSavedQuery"
+	// SearchServiceFindProcedure is the procedure name of the SearchService's Find RPC.
+	SearchServiceFindProcedure = "/pantherclaw.v1.SearchService/Find"
+	// SearchServiceInterpretProcedure is the procedure name of the SearchService's Interpret RPC.
+	SearchServiceInterpretProcedure = "/pantherclaw.v1.SearchService/Interpret"
+	// SearchServiceAskProcedure is the procedure name of the SearchService's Ask RPC.
+	SearchServiceAskProcedure = "/pantherclaw.v1.SearchService/Ask"
+	// SearchServiceOpenCaseFromResultsProcedure is the procedure name of the SearchService's
+	// OpenCaseFromResults RPC.
+	SearchServiceOpenCaseFromResultsProcedure = "/pantherclaw.v1.SearchService/OpenCaseFromResults"
+	// SearchServiceExportResultsProcedure is the procedure name of the SearchService's ExportResults
+	// RPC.
+	SearchServiceExportResultsProcedure = "/pantherclaw.v1.SearchService/ExportResults"
 )
 
 var (
@@ -124,6 +136,44 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	searchServiceFindSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_search_proto.Services().ByName("SearchService").Methods().ByName("Find"),
+			Procedure:        SearchServiceFindProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	searchServiceInterpretSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_search_proto.Services().ByName("SearchService").Methods().ByName("Interpret"),
+			Procedure:        SearchServiceInterpretProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	searchServiceAskSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_search_proto.Services().ByName("SearchService").Methods().ByName("Ask"),
+			Procedure:        SearchServiceAskProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	searchServiceOpenCaseFromResultsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_search_proto.Services().ByName("SearchService").Methods().ByName("OpenCaseFromResults"),
+			Procedure:  SearchServiceOpenCaseFromResultsProcedure,
+		}
+	})
+	searchServiceExportResultsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_search_proto.Services().ByName("SearchService").Methods().ByName("ExportResults"),
+			Procedure:  SearchServiceExportResultsProcedure,
+		}
+	})
 )
 
 // SearchServiceClient is a client for the pantherclaw.v1.SearchService service.
@@ -157,6 +207,33 @@ type SearchServiceClient interface {
 	// RunSavedQuery runs a saved query under the caller's permissions.
 	// permission: search.read
 	RunSavedQuery(context.Context, *v1.RunSavedQueryRequest) (*v1.RunSavedQueryResponse, error)
+	// Find is quick find (G0 M11 part 2 D45; F304, F320, HR-295): records
+	// whose id, id prefix (at least 8 hex digits) or name matches the text,
+	// per kind, each under the caller's own read permission and scope; a
+	// hidden record never shows in matches or counts.
+	// permission: search.read
+	Find(context.Context, *v1.FindRequest) (*v1.FindResponse, error)
+	// Interpret reads a plain-language question with a fixed lexicon (no
+	// model; nothing leaves the server) and shows the query it becomes, its
+	// range and time zone, what the rows mean, and every word it did not
+	// understand or name it could not settle (D46; F305, HR-295).
+	// permission: search.read
+	Interpret(context.Context, *v1.InterpretRequest) (*v1.InterpretResponse, error)
+	// Ask interprets a question and, unless it needs clarification, runs it
+	// under the caller's permissions; every row links its evidence (F321).
+	// permission: search.read
+	Ask(context.Context, *v1.AskRequest) (*v1.AskResponse, error)
+	// OpenCaseFromResults re-runs a search under the caller's permissions and
+	// opens a case carrying only the chosen results' evidence (D48; F318,
+	// HR-296; Team). The caller also needs search.read, and case.manage over
+	// every agent the chosen results are about.
+	// permission: case.manage
+	OpenCaseFromResults(context.Context, *v1.OpenCaseFromResultsRequest) (*v1.OpenCaseFromResultsResponse, error)
+	// ExportResults exports at most 10000 rows of a search the caller may
+	// both read and export, and records the export with its query in the
+	// audit ledger (D48; F318, HR-296). The caller also needs search.read.
+	// permission: evidence.export
+	ExportResults(context.Context, *v1.ExportResultsRequest) (*v1.ExportResultsResponse, error)
 }
 
 // NewSearchServiceClient constructs a client for the pantherclaw.v1.SearchService service. Multiple
@@ -196,6 +273,33 @@ type SearchServiceHandler interface {
 	// RunSavedQuery runs a saved query under the caller's permissions.
 	// permission: search.read
 	RunSavedQuery(context.Context, *v1.RunSavedQueryRequest) (*v1.RunSavedQueryResponse, error)
+	// Find is quick find (G0 M11 part 2 D45; F304, F320, HR-295): records
+	// whose id, id prefix (at least 8 hex digits) or name matches the text,
+	// per kind, each under the caller's own read permission and scope; a
+	// hidden record never shows in matches or counts.
+	// permission: search.read
+	Find(context.Context, *v1.FindRequest) (*v1.FindResponse, error)
+	// Interpret reads a plain-language question with a fixed lexicon (no
+	// model; nothing leaves the server) and shows the query it becomes, its
+	// range and time zone, what the rows mean, and every word it did not
+	// understand or name it could not settle (D46; F305, HR-295).
+	// permission: search.read
+	Interpret(context.Context, *v1.InterpretRequest) (*v1.InterpretResponse, error)
+	// Ask interprets a question and, unless it needs clarification, runs it
+	// under the caller's permissions; every row links its evidence (F321).
+	// permission: search.read
+	Ask(context.Context, *v1.AskRequest) (*v1.AskResponse, error)
+	// OpenCaseFromResults re-runs a search under the caller's permissions and
+	// opens a case carrying only the chosen results' evidence (D48; F318,
+	// HR-296; Team). The caller also needs search.read, and case.manage over
+	// every agent the chosen results are about.
+	// permission: case.manage
+	OpenCaseFromResults(context.Context, *v1.OpenCaseFromResultsRequest) (*v1.OpenCaseFromResultsResponse, error)
+	// ExportResults exports at most 10000 rows of a search the caller may
+	// both read and export, and records the export with its query in the
+	// audit ledger (D48; F318, HR-296). The caller also needs search.read.
+	// permission: evidence.export
+	ExportResults(context.Context, *v1.ExportResultsRequest) (*v1.ExportResultsResponse, error)
 }
 
 // RegisterSearchServiceHandler registers svc as the pantherclaw.v1.SearchService implementation on
@@ -212,6 +316,11 @@ func RegisterSearchServiceHandler(server *connect.Server, svc SearchServiceHandl
 		connect.Method{Spec: searchServiceGetSavedQuerySpec(), Handler: adapter.getSavedQuery},
 		connect.Method{Spec: searchServiceListSavedQueriesSpec(), Handler: adapter.listSavedQueries},
 		connect.Method{Spec: searchServiceRunSavedQuerySpec(), Handler: adapter.runSavedQuery},
+		connect.Method{Spec: searchServiceFindSpec(), Handler: adapter.find},
+		connect.Method{Spec: searchServiceInterpretSpec(), Handler: adapter.interpret},
+		connect.Method{Spec: searchServiceAskSpec(), Handler: adapter.ask},
+		connect.Method{Spec: searchServiceOpenCaseFromResultsSpec(), Handler: adapter.openCaseFromResults},
+		connect.Method{Spec: searchServiceExportResultsSpec(), Handler: adapter.exportResults},
 	)
 }
 
@@ -252,6 +361,26 @@ func (UnimplementedSearchServiceHandler) ListSavedQueries(context.Context, *v1.L
 
 func (UnimplementedSearchServiceHandler) RunSavedQuery(context.Context, *v1.RunSavedQueryRequest) (*v1.RunSavedQueryResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.SearchService.RunSavedQuery is not implemented")
+}
+
+func (UnimplementedSearchServiceHandler) Find(context.Context, *v1.FindRequest) (*v1.FindResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.SearchService.Find is not implemented")
+}
+
+func (UnimplementedSearchServiceHandler) Interpret(context.Context, *v1.InterpretRequest) (*v1.InterpretResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.SearchService.Interpret is not implemented")
+}
+
+func (UnimplementedSearchServiceHandler) Ask(context.Context, *v1.AskRequest) (*v1.AskResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.SearchService.Ask is not implemented")
+}
+
+func (UnimplementedSearchServiceHandler) OpenCaseFromResults(context.Context, *v1.OpenCaseFromResultsRequest) (*v1.OpenCaseFromResultsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.SearchService.OpenCaseFromResults is not implemented")
+}
+
+func (UnimplementedSearchServiceHandler) ExportResults(context.Context, *v1.ExportResultsRequest) (*v1.ExportResultsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.SearchService.ExportResults is not implemented")
 }
 
 type searchServiceClient struct {
@@ -325,6 +454,46 @@ func (c *searchServiceClient) ListSavedQueries(ctx context.Context, req *v1.List
 func (c *searchServiceClient) RunSavedQuery(ctx context.Context, req *v1.RunSavedQueryRequest) (*v1.RunSavedQueryResponse, error) {
 	var res v1.RunSavedQueryResponse
 	if err := c.client.CallUnary(ctx, searchServiceRunSavedQuerySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *searchServiceClient) Find(ctx context.Context, req *v1.FindRequest) (*v1.FindResponse, error) {
+	var res v1.FindResponse
+	if err := c.client.CallUnary(ctx, searchServiceFindSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *searchServiceClient) Interpret(ctx context.Context, req *v1.InterpretRequest) (*v1.InterpretResponse, error) {
+	var res v1.InterpretResponse
+	if err := c.client.CallUnary(ctx, searchServiceInterpretSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *searchServiceClient) Ask(ctx context.Context, req *v1.AskRequest) (*v1.AskResponse, error) {
+	var res v1.AskResponse
+	if err := c.client.CallUnary(ctx, searchServiceAskSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *searchServiceClient) OpenCaseFromResults(ctx context.Context, req *v1.OpenCaseFromResultsRequest) (*v1.OpenCaseFromResultsResponse, error) {
+	var res v1.OpenCaseFromResultsResponse
+	if err := c.client.CallUnary(ctx, searchServiceOpenCaseFromResultsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *searchServiceClient) ExportResults(ctx context.Context, req *v1.ExportResultsRequest) (*v1.ExportResultsResponse, error) {
+	var res v1.ExportResultsResponse
+	if err := c.client.CallUnary(ctx, searchServiceExportResultsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -434,6 +603,66 @@ func (h searchServiceHandler) runSavedQuery(ctx context.Context, _ connect.Spec,
 		return err
 	}
 	res, err := h.svc.RunSavedQuery(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h searchServiceHandler) find(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.FindRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Find(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h searchServiceHandler) interpret(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.InterpretRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Interpret(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h searchServiceHandler) ask(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.AskRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Ask(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h searchServiceHandler) openCaseFromResults(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.OpenCaseFromResultsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.OpenCaseFromResults(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h searchServiceHandler) exportResults(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ExportResultsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ExportResults(ctx, &req)
 	if err != nil {
 		return err
 	}

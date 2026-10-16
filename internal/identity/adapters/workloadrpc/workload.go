@@ -66,7 +66,7 @@ func RawBody(next http.Handler, clientIP httpx.ClientIPFunc) http.Handler {
 		clientIP = httpx.ClientIP
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.Path, Prefix) {
+		if !strings.HasPrefix(r.URL.Path, Prefix) && !strings.HasPrefix(r.URL.Path, LaunchPrefix) {
 			next.ServeHTTP(w, r)
 			return
 		}

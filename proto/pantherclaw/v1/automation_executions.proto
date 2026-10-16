@@ -1,0 +1,468 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// ExecutionService shows and stops governed-automation executions (G0 M11
+// part 2 D24–D30; F283, F715–F722, F729–F733, F222; HR-280..283; Team).
+//
+// An execution is one accepted trigger worked through an automation
+// version's steps as the automation's own service account. The inspector
+// shows its trigger and how its origin was established, the version and its
+// digest, the authority it ran under (identity, principal, ceiling and its
+// approvers), every step attempt with its decision, reason, evidence and
+// effect, the grants, runs, launches, gates and deliveries it caused, and a
+// result that claims success only on evidence: what changed, what did not,
+// what is unknown and what work is left (HR-282). Transaction details are
+// filtered by the viewer's agent scope.
+service ExecutionService {
+  // GetExecution returns one execution with everything it caused.
+  // permission: automation.read
+  rpc GetExecution(GetExecutionRequest) returns (GetExecutionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListExecutions lists executions, newest first.
+  // permission: automation.read
+  rpc ListExecutions(ListExecutionsRequest) returns (ListExecutionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // LookupExecution finds the execution that caused a run, a grant or a
+  // transaction (drill-down from investigations and search).
+  // permission: automation.read
+  rpc LookupExecution(LookupExecutionRequest) returns (LookupExecutionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // CancelExecution stops an active execution at its next boundary: its
+  // grants are revoked, its runs ended and its pending launches, gates and
+  // deliveries cancelled (HR-283). It returns the verified effect.
+  // permission: automation.manage
+  rpc CancelExecution(CancelExecutionRequest) returns (CancelExecutionResponse);
+  // CancelActiveExecutions cancels every active execution of an
+  // automation.
+  // permission: automation.manage
+  rpc CancelActiveExecutions(CancelActiveExecutionsRequest) returns (CancelActiveExecutionsResponse);
+}
+
+// AutomationLaunchService is how an enrolled agent takes the work an
+// automation hands it (G0 M11 part 2 D26, D33; F3; HR-279, HR-285). Calls
+// are workload-authenticated like WorkloadService (PAP/1 token and proof).
+// An agent claims only its own agent's launches (an instance-pinned launch
+// only for that instance), binds the launch's run with its own key and
+// makes every tool call through the gateway, where it is decided, held and
+// receipted like any agent action. The server never calls a tool.
+service AutomationLaunchService {
+  // ClaimLaunch claims the oldest pending launch for the caller's agent.
+  // permission: workload.run
+  rpc ClaimLaunch(ClaimLaunchRequest) returns (ClaimLaunchResponse);
+  // CompleteLaunch reports a claimed launch's outcome; only the claiming
+  // instance may.
+  // permission: workload.run
+  rpc CompleteLaunch(CompleteLaunchRequest) returns (CompleteLaunchResponse);
+}
+
+enum AutomationExecutionState {
+  AUTOMATION_EXECUTION_STATE_UNSPECIFIED = 0;
+  AUTOMATION_EXECUTION_STATE_PENDING = 1;
+  AUTOMATION_EXECUTION_STATE_RUNNING = 2;
+  AUTOMATION_EXECUTION_STATE_WAITING = 3;
+  AUTOMATION_EXECUTION_STATE_SUCCEEDED = 4;
+  AUTOMATION_EXECUTION_STATE_PARTIALLY_COMPLETED = 5;
+  AUTOMATION_EXECUTION_STATE_FAILED = 6;
+  AUTOMATION_EXECUTION_STATE_CANCELLED = 7;
+  AUTOMATION_EXECUTION_STATE_NEEDS_RECONCILIATION = 8;
+}
+
+enum AutomationExecutionMode {
+  AUTOMATION_EXECUTION_MODE_UNSPECIFIED = 0;
+  AUTOMATION_EXECUTION_MODE_LIVE = 1;
+  // Effectful steps are recorded SHADOWED with their would-be decision
+  // (HR-288).
+  AUTOMATION_EXECUTION_MODE_SHADOW = 2;
+  AUTOMATION_EXECUTION_MODE_TEST = 3;
+}
+
+enum AutomationStepState {
+  AUTOMATION_STEP_STATE_UNSPECIFIED = 0;
+  AUTOMATION_STEP_STATE_RUNNING = 1;
+  AUTOMATION_STEP_STATE_WAITING = 2;
+  AUTOMATION_STEP_STATE_DONE = 3;
+  AUTOMATION_STEP_STATE_FAILED = 4;
+  AUTOMATION_STEP_STATE_SKIPPED = 5;
+  AUTOMATION_STEP_STATE_UNKNOWN = 6;
+  AUTOMATION_STEP_STATE_SHADOWED = 7;
+  AUTOMATION_STEP_STATE_COMPENSATION = 8;
+}
+
+enum AutomationEffect {
+  AUTOMATION_EFFECT_UNSPECIFIED = 0;
+  AUTOMATION_EFFECT_CHANGED = 1;
+  AUTOMATION_EFFECT_UNCHANGED = 2;
+  AUTOMATION_EFFECT_UNKNOWN = 3;
+  AUTOMATION_EFFECT_NONE = 4;
+}
+
+enum AutomationLaunchState {
+  AUTOMATION_LAUNCH_STATE_UNSPECIFIED = 0;
+  AUTOMATION_LAUNCH_STATE_PENDING = 1;
+  AUTOMATION_LAUNCH_STATE_CLAIMED = 2;
+  AUTOMATION_LAUNCH_STATE_COMPLETED = 3;
+  AUTOMATION_LAUNCH_STATE_EXPIRED = 4;
+  AUTOMATION_LAUNCH_STATE_CANCELLED = 5;
+}
+
+enum AutomationLaunchOutcome {
+  AUTOMATION_LAUNCH_OUTCOME_UNSPECIFIED = 0;
+  AUTOMATION_LAUNCH_OUTCOME_SUCCEEDED = 1;
+  AUTOMATION_LAUNCH_OUTCOME_FAILED = 2;
+  AUTOMATION_LAUNCH_OUTCOME_PARTIAL = 3;
+}
+
+// AutomationEvidenceRef points at a record: a run, a transaction, a ledger
+// entry, a grant, an approval request, a delivery.
+message AutomationEvidenceRef {
+  string kind = 1;
+  string id = 2;
+}
+
+// AutomationExecutionTrigger is the trigger an execution answers.
+message AutomationExecutionTrigger {
+  string id = 1;
+  // SCHEDULE, EVENT, INBOUND, CONDITION, THRESHOLD or MANUAL.
+  string kind = 2;
+  // How its origin was established: SCHEDULER, PLATFORM_FEED,
+  // SIGNED_SOURCE, USER_STEP_UP or USER_SESSION.
+  string authenticity = 3;
+  map<string, string> authenticity_detail = 4;
+  string source_ref = 5;
+  // The declared, typed parameters (HR-276), as text.
+  map<string, string> params = 6;
+  string root_trigger_id = 7;
+  // The automations upstream of this one (HR-278).
+  repeated string ancestry = 8;
+  int32 depth = 9;
+  google.protobuf.Timestamp occurred_at = 10;
+}
+
+// AutomationExecutionCeiling is the authority an execution issued under.
+message AutomationExecutionCeiling {
+  string id = 1;
+  repeated string approved_by = 2;
+  google.protobuf.Timestamp review_by = 3;
+  string state = 4;
+}
+
+// AutomationStepAttempt is one attempt of one step.
+message AutomationStepAttempt {
+  string id = 1;
+  int32 step_index = 2;
+  string step_id = 3;
+  int32 attempt = 4;
+  string kind = 5;
+  bool compensation = 6;
+  AutomationStepState state = 7;
+  // ALLOWED or REFUSED.
+  string decision = 8;
+  string reason = 9;
+  map<string, string> output = 10;
+  repeated AutomationEvidenceRef refs = 11;
+  AutomationEffect effect = 12;
+  google.protobuf.Timestamp started_at = 13;
+  google.protobuf.Timestamp ended_at = 14;
+  google.protobuf.Timestamp wake_at = 15;
+}
+
+// AutomationFinishStatus is one finish condition and its evidence.
+message AutomationFinishStatus {
+  string step = 1;
+  string condition = 2;
+  bool met = 3;
+  repeated AutomationEvidenceRef refs = 4;
+}
+
+// AutomationUnresolved is work an execution leaves open.
+message AutomationUnresolved {
+  string step = 1;
+  // UNKNOWN_OUTCOME, PENDING_GATE or RECONCILIATION.
+  string kind = 2;
+  string detail = 3;
+}
+
+// AutomationExecutionResult is an execution's final account (HR-282):
+// compensation is listed as such and never as an undo.
+message AutomationExecutionResult {
+  AutomationExecutionState state = 1;
+  string reason = 2;
+  repeated string changed = 3;
+  repeated string unchanged = 4;
+  repeated string unknown = 5;
+  repeated AutomationFinishStatus finish = 6;
+  repeated string compensated = 7;
+  repeated AutomationUnresolved unresolved = 8;
+  repeated AutomationEvidenceRef cleanup = 9;
+}
+
+// AutomationExecution is one execution.
+message AutomationExecution {
+  string id = 1;
+  string automation_id = 2;
+  string automation_name = 3;
+  string owner_user_id = 4;
+  string version_id = 5;
+  int32 version_number = 6;
+  // SHA-256 of the version's canonical definition, hex.
+  string version_digest = 7;
+  string version_summary = 8;
+  AutomationExecutionTrigger trigger = 9;
+  AutomationExecutionMode mode = 10;
+  AutomationExecutionState state = 11;
+  string reason = 12;
+  int32 current_step = 13;
+  bool compensating = 14;
+  // The execution identity.
+  string service_account_id = 15;
+  // "user:<id>" or "service_account:<id>".
+  string principal = 16;
+  AutomationExecutionCeiling ceiling = 17;
+  google.protobuf.Timestamp created_at = 18;
+  google.protobuf.Timestamp started_at = 19;
+  google.protobuf.Timestamp deadline_at = 20;
+  google.protobuf.Timestamp ended_at = 21;
+  int64 elapsed_seconds = 22;
+  string cancel_reason = 23;
+  string cancel_requested_by = 24;
+  AutomationExecutionResult result = 25;
+}
+
+// AutomationExecutionGrant is a grant an execution issued.
+message AutomationExecutionGrant {
+  string id = 1;
+  string agent_id = 2;
+  string state = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  // "<currency> <amount>" per budget, the limit and what is used.
+  repeated string budget_limit = 5;
+  repeated string budget_used = 6;
+}
+
+// AutomationExecutionRun is a run an execution started.
+message AutomationExecutionRun {
+  string id = 1;
+  string agent_id = 2;
+  string instance_id = 3;
+  string state = 4;
+  google.protobuf.Timestamp expires_at = 5;
+  int32 transactions = 6;
+  int32 unknown_transactions = 7;
+}
+
+// AutomationLaunch is work handed to an enrolled agent.
+message AutomationLaunch {
+  string id = 1;
+  string agent_id = 2;
+  string instance_id = 3;
+  string run_id = 4;
+  string grant_id = 5;
+  // PULL or WEBHOOK.
+  string delivery = 6;
+  string destination_id = 7;
+  AutomationLaunchState state = 8;
+  string claimed_instance_id = 9;
+  google.protobuf.Timestamp claimed_at = 10;
+  google.protobuf.Timestamp claim_deadline = 11;
+  google.protobuf.Timestamp completed_at = 12;
+  AutomationLaunchOutcome outcome = 13;
+  string task_ref = 14;
+}
+
+// AutomationGate is a gate's approval request.
+message AutomationGate {
+  string request_id = 1;
+  string step_id = 2;
+  string state = 3;
+  google.protobuf.Timestamp deadline_at = 4;
+  int32 approvals_needed = 5;
+  int32 approvals = 6;
+}
+
+// AutomationExecutionDelivery is a webhook an execution sent.
+message AutomationExecutionDelivery {
+  string id = 1;
+  string destination_id = 2;
+  // LAUNCH, DIGEST or NOTICE.
+  string kind = 3;
+  string state = 4;
+  int32 attempts = 5;
+  google.protobuf.Timestamp delivered_at = 6;
+}
+
+message GetExecutionRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetExecutionResponse {
+  AutomationExecution execution = 1;
+  repeated AutomationStepAttempt attempts = 2;
+  repeated AutomationExecutionGrant grants = 3;
+  repeated AutomationExecutionRun runs = 4;
+  repeated AutomationLaunch launches = 5;
+  repeated AutomationGate gates = 6;
+  repeated AutomationExecutionDelivery deliveries = 7;
+}
+
+message ListExecutionsRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  string automation_id = 3 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  repeated AutomationExecutionState states = 4 [(buf.validate.field).repeated = {
+    max_items: 8
+    unique: true
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+  AutomationExecutionMode mode = 5 [(buf.validate.field).enum.defined_only = true];
+  google.protobuf.Timestamp since = 6;
+  google.protobuf.Timestamp until = 7;
+}
+
+message ListExecutionsResponse {
+  repeated AutomationExecution executions = 1;
+  string next_page_token = 2;
+}
+
+message LookupExecutionRequest {
+  oneof subject {
+    option (buf.validate.oneof).required = true;
+    string run_id = 1 [(buf.validate.field).string.uuid = true];
+    string grant_id = 2 [(buf.validate.field).string.uuid = true];
+    string transaction_id = 3 [(buf.validate.field).string.uuid = true];
+  }
+}
+
+message LookupExecutionResponse {
+  // The execution, without its result details.
+  AutomationExecution execution = 1;
+}
+
+// AutomationCancelEffect is what a cancellation verifiably did (HR-283).
+message AutomationCancelEffect {
+  repeated string executions_affected = 1;
+  repeated string grants_revoked = 2;
+  repeated string runs_ended = 3;
+  repeated string launches_cancelled = 4;
+  repeated string gates_cancelled = 5;
+  repeated string deliveries_cancelled = 6;
+  // Deliveries whose sending may have started before the cancel: not
+  // verified as stopped, never counted as cancelled (D97).
+  repeated string deliveries_not_verified = 7;
+}
+
+message CancelExecutionRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  string reason = 2 [(buf.validate.field).string.max_len = 500];
+}
+
+message CancelExecutionResponse {
+  AutomationExecution execution = 1;
+  AutomationCancelEffect effect = 2;
+}
+
+message CancelActiveExecutionsRequest {
+  string automation_id = 1 [(buf.validate.field).string.uuid = true];
+  string reason = 2 [(buf.validate.field).string.max_len = 500];
+}
+
+message CancelActiveExecutionsResponse {
+  AutomationCancelEffect effect = 1;
+}
+
+// AutomationRunnerCall is one declared tool call of a launch (D33): part
+// of the reviewed version, made through the gateway.
+message AutomationRunnerCall {
+  string connection_id = 1;
+  // MCP or HTTP.
+  string face = 2;
+  string tool = 3;
+  string method = 4;
+  string path = 5;
+  // Each value is JSON text: typed parameters rendered as JSON (strings
+  // quoted, numbers exact), never a float.
+  map<string, string> input = 6;
+  // The connection's name, resolved when the launch was created: the
+  // gateway faces route by name.
+  string connection_name = 7;
+}
+
+message ClaimLaunchRequest {}
+
+message ClaimLaunchResponse {
+  // False when no launch is pending for the caller's agent.
+  bool claimed = 1;
+  string launch_id = 2;
+  string run_id = 3;
+  string task_ref = 4;
+  map<string, string> run_params = 5;
+  repeated AutomationRunnerCall calls = 6;
+  // Complete the launch before the run expires.
+  google.protobuf.Timestamp complete_by = 7;
+}
+
+// AutomationCallResult is the outcome of one declared call.
+message AutomationCallResult {
+  int32 call_index = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lt: 10
+  }];
+  // OK, DENIED, HELD, FAILED, UNKNOWN, or SKIPPED for each declared call
+  // after the runner stopped.
+  string status = 2 [(buf.validate.field).string = {
+    in: [
+      "OK",
+      "DENIED",
+      "HELD",
+      "FAILED",
+      "UNKNOWN",
+      "SKIPPED"
+    ]
+  }];
+  string transaction_id = 3 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  string error_code = 4 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_.-]*$"
+  }];
+}
+
+message CompleteLaunchRequest {
+  string launch_id = 1 [(buf.validate.field).string.uuid = true];
+  AutomationLaunchOutcome outcome = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  repeated AutomationCallResult results = 3 [(buf.validate.field).repeated.max_items = 20];
+  // UNTRUSTED text from the agent.
+  string note = 4 [(buf.validate.field).string.max_len = 500];
+}
+
+message CompleteLaunchResponse {
+  AutomationLaunchState state = 1;
+}

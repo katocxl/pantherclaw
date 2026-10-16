@@ -25,24 +25,34 @@ import (
 // Entity is what a structured query searches.
 type Entity string
 
-// Entities searchable in this release. Alerts, incidents, cases and
-// findings join when their streams land.
+// Entities searchable in this release (G0 M10 D34; G0 M11 part 2 D44).
 const (
-	EntityTransactions Entity = "transactions"
-	EntityRuns         Entity = "runs"
-	EntityAgents       Entity = "agents"
-	EntityGrants       Entity = "grants"
-	EntityGrantChanges Entity = "grant_changes"
-	EntityConnections  Entity = "connections"
-	EntityApprovals    Entity = "approvals"
-	EntityAudit        Entity = "audit"
-	EntityOperations   Entity = "operations"
+	EntityTransactions   Entity = "transactions"
+	EntityRuns           Entity = "runs"
+	EntityAgents         Entity = "agents"
+	EntityGrants         Entity = "grants"
+	EntityGrantChanges   Entity = "grant_changes"
+	EntityConnections    Entity = "connections"
+	EntityApprovals      Entity = "approvals"
+	EntityAudit          Entity = "audit"
+	EntityOperations     Entity = "operations"
+	EntityAlerts         Entity = "alerts"
+	EntityIncidents      Entity = "incidents"
+	EntityCases          Entity = "cases"
+	EntityFindings       Entity = "findings"
+	EntityPolicyVersions Entity = "policy_versions"
+	EntityPackages       Entity = "packages"
+	EntityGateways       Entity = "gateways"
+	EntityAutomations    Entity = "automations"
+	EntityExecutions     Entity = "automation_executions"
 )
 
 // entities lists the entities a structured query may name.
 var entities = []Entity{
 	EntityTransactions, EntityRuns, EntityAgents, EntityGrants, EntityGrantChanges, EntityConnections,
-	EntityApprovals, EntityAudit, EntityOperations,
+	EntityApprovals, EntityAudit, EntityOperations, EntityAlerts, EntityIncidents, EntityCases, EntityFindings,
+	EntityPolicyVersions, EntityPackages, EntityGateways, EntityAutomations,
+	EntityExecutions,
 }
 
 // Filters are the typed filters of a structured query. Each entity accepts
@@ -55,6 +65,9 @@ type Filters struct {
 	Grant           *ids.UUID  `json:"grant,omitzero"`
 	Connection      *ids.UUID  `json:"connection,omitzero"`
 	Gateway         *ids.UUID  `json:"gateway,omitzero"`
+	Alert           *ids.UUID  `json:"alert,omitzero"`
+	Automation      *ids.UUID  `json:"automation,omitzero"`
+	Incident        *ids.UUID  `json:"incident,omitzero"`
 	Team            *ids.UUID  `json:"team,omitzero"`
 	PrincipalUser   *ids.UUID  `json:"principal_user,omitzero"`
 	PrincipalSA     *ids.UUID  `json:"principal_service_account,omitzero"`
@@ -71,6 +84,8 @@ type Filters struct {
 	Kinds           []string   `json:"kinds,omitzero"`
 	AccessModes     []string   `json:"access_modes,omitzero"`
 	EnvKinds        []string   `json:"environment_kinds,omitzero"`
+	Severities      []string   `json:"severities,omitzero"`
+	EffectStates    []string   `json:"effect_states,omitzero"`
 	UnusedSince     *time.Time `json:"unused_since,omitzero"`
 	WidensOnly      bool       `json:"widens_only,omitzero"`
 	Start           *time.Time `json:"start,omitzero"`
@@ -114,12 +129,13 @@ const (
 	fID, fAgent, fRun, fGrant, fConnection, fGateway, fTeam                  field = "id", "agent", "run", "grant", "connection", "gateway", "team"
 	fPrincipal, fUsedConnection, fOperation, fTargetType, fEffect, fKind     field = "principal", "used_connection", "operation", "target_type", "effect_prefix", "kind_prefix"
 	fActor, fDecisions, fModes, fStates, fKinds, fAccessModes, fEnv, fUnused field = "actor", "decisions", "modes", "states", "kinds", "access_modes", "environment_kinds", "unused_since"
-	fWidens, fRange                                                          field = "widens_only", "range"
+	fWidens, fRange, fAlert, fIncident, fSeverities, fEffectStates           field = "widens_only", "range", "alert", "incident", "severities", "effect_states"
+	fAutomation                                                              field = "automation"
 )
 
 // allowedFilters lists, per entity, the filters it accepts.
 var allowedFilters = map[Entity][]field{
-	EntityTransactions: {fID, fAgent, fRun, fGrant, fConnection, fPrincipal, fOperation, fTargetType, fDecisions, fModes, fEnv, fRange},
+	EntityTransactions: {fID, fAgent, fRun, fGrant, fConnection, fPrincipal, fOperation, fTargetType, fDecisions, fModes, fEffectStates, fEnv, fRange},
 	EntityRuns:         {fID, fAgent, fGrant, fPrincipal, fStates, fRange},
 	EntityAgents:       {fID, fTeam, fStates, fEnv, fUsedConnection, fRange},
 	EntityGrants:       {fID, fAgent, fPrincipal, fStates, fUnused, fRange},
@@ -128,6 +144,18 @@ var allowedFilters = map[Entity][]field{
 	EntityApprovals:    {fID, fAgent, fRun, fOperation, fStates, fRange},
 	EntityAudit:        {fID, fKind, fActor, fRange},
 	EntityOperations:   {fOperation, fEffect},
+	// An alert's kinds are its sources; a finding's are its finding kinds.
+	EntityAlerts:         {fID, fAgent, fIncident, fStates, fSeverities, fKinds, fRange},
+	EntityIncidents:      {fID, fAgent, fStates, fSeverities, fRange},
+	EntityCases:          {fID, fAgent, fAlert, fIncident, fStates, fRange},
+	EntityFindings:       {fID, fAgent, fConnection, fGrant, fStates, fKinds, fSeverities, fRange},
+	EntityPolicyVersions: {fID, fStates, fRange},
+	EntityPackages:       {fID, fStates, fRange},
+	EntityGateways:       {fID, fStates, fRange},
+	// An automation's kinds are AGENT_WORK and SECURITY_WORK.
+	EntityAutomations: {fID, fStates, fKinds, fRange},
+	// An execution's kinds are its trigger kinds; its modes LIVE, SHADOW, TEST.
+	EntityExecutions: {fID, fAutomation, fStates, fModes, fKinds, fRange},
 }
 
 // used lists the filters f sets.
@@ -144,6 +172,9 @@ func (f Filters) used() []field {
 	add(f.Grant != nil, fGrant)
 	add(f.Connection != nil, fConnection)
 	add(f.Gateway != nil, fGateway)
+	add(f.Alert != nil, fAlert)
+	add(f.Automation != nil, fAutomation)
+	add(f.Incident != nil, fIncident)
 	add(f.Team != nil, fTeam)
 	add(f.PrincipalUser != nil || f.PrincipalSA != nil, fPrincipal)
 	add(f.UsedConnection != nil, fUsedConnection)
@@ -158,6 +189,8 @@ func (f Filters) used() []field {
 	add(len(f.Kinds) > 0, fKinds)
 	add(len(f.AccessModes) > 0, fAccessModes)
 	add(len(f.EnvKinds) > 0, fEnv)
+	add(len(f.Severities) > 0, fSeverities)
+	add(len(f.EffectStates) > 0, fEffectStates)
 	add(f.UnusedSince != nil, fUnused)
 	add(f.WidensOnly, fWidens)
 	add(f.Start != nil || f.End != nil, fRange)
@@ -202,7 +235,7 @@ func (f Filters) validate() error {
 	}
 	for name, vs := range map[string][]string{
 		"decisions": f.Decisions, "modes": f.Modes, "states": f.States, "kinds": f.Kinds,
-		"access_modes": f.AccessModes, "environment_kinds": f.EnvKinds,
+		"access_modes": f.AccessModes, "environment_kinds": f.EnvKinds, "severities": f.Severities, "effect_states": f.EffectStates,
 	} {
 		if len(vs) > maxListValues {
 			return ErrInvalidQuery(name + ": too many values")

@@ -68,6 +68,18 @@ type Service struct {
 	Listing Listing
 	// Refusals audits refused grant changes (optional; G0 M10 D59 H1).
 	Refusals RefusalRecorder
+	// Store is the repository's in-transaction side (automation issuance
+	// and revocation; G0 M11 part 2 D9). Optional.
+	Store TxStore
+	// Ceilings checks automation ceilings and daily caps (the automations
+	// app). Without it nothing is issued under a ceiling.
+	Ceilings Ceilings
+	// Promotions is the production promotion gate (G0 M11 part 2 D9, D39,
+	// D93), the one gate field: automation issuance runs it in the
+	// engine's transaction. Person issuance, widening revisions and
+	// delegation are gated by the store (pgstore.Store.Promotions, the same
+	// gate) in theirs. nil checks nothing.
+	Promotions PromotionGate
 }
 
 // IssueRequest asks for a new root grant.
@@ -132,7 +144,7 @@ func (s *Service) Issue(ctx context.Context, req IssueRequest) (domain.Grant, er
 	ev := grantEvent(c.Actor(), "grant.issued", g, map[string]string{
 		"agent": g.AgentID.String(), "principal": g.Principal.String(), "expires_at": g.ExpiresAt.UTC().Format(time.RFC3339),
 	})
-	if err := s.Repo.Issue(ctx, c.Org, g, ev); err != nil {
+	if err := s.Repo.Issue(ctx, c.Org, &g, ev); err != nil {
 		return domain.Grant{}, apiError(err)
 	}
 	g.RevisedAt = now
@@ -191,7 +203,11 @@ func (s *Service) Revise(ctx context.Context, req ReviseRequest) (domain.Grant, 
 	if err != nil {
 		return domain.Grant{}, domain.Revision{}, apiError(err)
 	}
-	ic := domain.IssueContext{Now: s.Clock.Now()}
+	if !cur.Ceiling.IsZero() && rev.Widens {
+		// D56: people narrow or revoke an automation's grant, never widen it.
+		return domain.Grant{}, domain.Revision{}, ErrCeilingGrant
+	}
+	ic := domain.IssueContext{Now: s.Clock.Now(), Ceiling: cur.Ceiling}
 	if ic.Envelopes, err = s.Repo.Envelopes(ctx, c.Org, scopesFor(agent, next.EnvironmentID, next.Principal)); err != nil {
 		return domain.Grant{}, domain.Revision{}, err
 	}
@@ -214,7 +230,7 @@ func (s *Service) Revise(ctx context.Context, req ReviseRequest) (domain.Grant, 
 	if !req.AccessRequest.IsZero() {
 		ev.Details["access_request"] = req.AccessRequest.String()
 	}
-	if err := s.Repo.Revise(ctx, c.Org, next, rev.Widens, req.AccessRequest, ev); err != nil {
+	if err := s.Repo.Revise(ctx, c.Org, &next, rev.Widens, req.AccessRequest, ev); err != nil {
 		return domain.Grant{}, domain.Revision{}, apiError(err)
 	}
 	next.RevisedAt = ic.Now

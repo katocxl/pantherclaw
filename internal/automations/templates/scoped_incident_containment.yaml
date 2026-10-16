@@ -1,0 +1,184 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# scoped_incident_containment (D32, Business): an alert or incident whose
+# severity meets the criteria contains the triggering run or grant - and only
+# that (HR-284) - and every signal opens a case. A containment that fails or
+# holds only in part escalates to the owner (the contain step also opens a
+# case with the unresolved paths). Signals below the criteria are not acted
+# on: the contain step is skipped and only the case is opened.
+#
+# The finish condition is CASE_OPENED for both paths: finish_when is a
+# conjunction and a skipped step never meets it, so "CONTAINMENT_CONFIRMED or
+# CASE_OPENED" is expressed as a case every time plus the contain step's
+# own result.
+id: scoped_incident_containment
+title: Scoped incident containment
+summary: >-
+  Contain the run or grant behind a severe alert or incident - nothing
+  else - and open a case for every signal; failed or partial containment
+  escalates to a person.
+edition: BUSINESS
+params:
+  - name: purpose
+    description: What the automation is for, shown to reviewers and approvers.
+    type: string
+    pattern: '[^{}$]{1,1000}'
+    max_len: 1000
+    default: Contain the run or grant behind severe signals and open a case for every signal.
+  - name: review_by
+    description: The date (YYYY-MM-DD) by which the owner reviews the automation again; at most 90 days ahead.
+    type: string
+    format: date
+    pattern: '[0-9]{4}-[0-9]{2}-[0-9]{2}'
+    max_len: 10
+    example: "2026-12-31"
+  - name: event
+    description: The signal that starts an execution, a raised alert or an opened incident.
+    type: enum
+    values: [alert.raised, incident.opened]
+    default: alert.raised
+  - name: contain
+    description: How the trigger is contained - suspend its run, or revoke its grant.
+    type: enum
+    values: [SUSPEND_RUN, REVOKE_GRANT]
+    default: SUSPEND_RUN
+  - name: contain_at
+    description: The least severity that is contained; other signals only open a case.
+    type: enum
+    values: [CRITICAL, HIGH]
+    default: CRITICAL
+  - name: revocable
+    description: With REVOKE_GRANT, the agents whose grants it may revoke (authority.revocable) - AGENTS lists them in agents, ALL is every agent of the organization. There is no default.
+    type: enum
+    values: [AGENTS, ALL]
+    required: false
+    example: AGENTS
+  - name: agents
+    description: With revocable AGENTS, the agents whose grants it may revoke, comma-separated.
+    type: uuid
+    list: true
+    max_items: 50
+    required: false
+    example: 0192f000-0000-7000-8000-0000000000a1
+
+definition:
+  apiVersion: automations.pantherclaw.dev/v1
+  kind: Automation
+  purpose: "${purpose}"
+  work_kind: SECURITY_WORK
+  review_by: "${review_by}"
+  when:
+    event:
+      on: "${event}"
+      params:
+        signal: {from: attrs.id, type: uuid}
+        severity: {from: attrs.severity, type: enum, values: [LOW, MEDIUM, HIGH, CRITICAL]}
+    dedupe:
+      key: "{{params.signal}}"
+      window: 1d
+  authority:
+    principal: self
+    platform:
+      - step: contain
+        scopes:
+          - $switch: contain
+            $cases: {SUSPEND_RUN: TRIGGER_RUN, REVOKE_GRANT: TRIGGER_GRANT}
+      - step: open_case
+        scopes: [TRIGGER_SUBJECTS]
+    revocable:
+      $when: {param: contain, in: [REVOKE_GRANT]}
+      $value:
+        $switch: revocable
+        $cases:
+          AGENTS: {agents: "${agents}"}
+          ALL: {all: true}
+  do:
+    - id: contain
+      step: contain
+      when:
+        $switch: contain_at
+        $cases:
+          CRITICAL: trigger.params.severity == "CRITICAL"
+          HIGH: trigger.params.severity in ["HIGH", "CRITICAL"]
+      with:
+        action: "${contain}"
+        subject:
+          $switch: contain
+          $cases: {SUSPEND_RUN: TRIGGER_RUN, REVOKE_GRANT: TRIGGER_GRANT}
+        reason: "Contained automatically: {{params.severity}} signal {{params.signal}}."
+      timeout: 15m
+      on_failure: ESCALATE
+    - id: case
+      step: open_case
+      with:
+        title: "Investigate {{params.severity}} signal {{params.signal}}"
+        questions:
+          - What did the run or grant behind the signal do?
+          - Was the containment enough, and can it be lifted?
+  finish_when:
+    - step: case
+      condition: CASE_OPENED
+  limits:
+    deadline: 1h
+
+tests:
+  - name: a_severe_signal_is_contained_and_a_case_opened
+    kind: NORMAL
+    trigger:
+      params: {signal: 0192f000-0000-7000-8000-000000000201, severity: CRITICAL}
+      subjects: [{type: run, id: 0192f000-0000-7000-8000-000000000202}, {type: grant, id: 0192f000-0000-7000-8000-000000000203}]
+    stubs:
+      contain: [{state: WAITING}, {state: DONE, effect: CHANGED, refs: [response_action]}]
+      case: [{state: DONE, effect: CHANGED, refs: [case]}]
+    expect:
+      state: SUCCEEDED
+      steps: {contain: DONE, case: DONE}
+  - name: a_signal_below_the_criteria_only_opens_a_case
+    kind: CUSTOM
+    trigger:
+      params: {signal: 0192f000-0000-7000-8000-000000000204, severity: LOW}
+    stubs:
+      case: [{state: DONE, effect: CHANGED, refs: [case]}]
+    expect:
+      state: SUCCEEDED
+      steps: {contain: SKIPPED, case: DONE}
+  - name: the_containment_is_refused
+    kind: DENIED
+    trigger:
+      params: {signal: 0192f000-0000-7000-8000-000000000205, severity: CRITICAL}
+    stubs:
+      contain: [{state: FAILED, reason: CONTAINMENT_UNSUPPORTED}]
+    expect:
+      state: FAILED
+      reason: CONTAINMENT_UNSUPPORTED
+      steps: {contain: FAILED}
+  - name: the_containment_does_not_hold_in_time
+    kind: TIMEOUT
+    trigger:
+      params: {signal: 0192f000-0000-7000-8000-000000000206, severity: CRITICAL}
+    stubs:
+      contain: [{state: WAITING}]
+    expect:
+      state: FAILED
+      reason: TIMEOUT
+      steps: {contain: FAILED}
+  - name: the_containment_holds_only_in_part
+    kind: PARTIAL
+    trigger:
+      params: {signal: 0192f000-0000-7000-8000-000000000207, severity: CRITICAL}
+    stubs:
+      contain: [{state: FAILED, effect: CHANGED, reason: CONTAINMENT_PARTIAL, refs: [response_action]}]
+    expect:
+      state: PARTIALLY_COMPLETED
+      reason: CONTAINMENT_PARTIAL
+      steps: {contain: FAILED}
+  - name: the_same_signal_twice_starts_one_execution
+    kind: DUPLICATE
+    trigger:
+      params: {signal: 0192f000-0000-7000-8000-000000000208, severity: CRITICAL}
+    stubs:
+      contain: [{state: DONE, effect: CHANGED, refs: [response_action]}]
+      case: [{state: DONE, effect: CHANGED, refs: [case]}]
+    expect:
+      state: SUCCEEDED

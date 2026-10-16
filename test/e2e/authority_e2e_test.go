@@ -32,6 +32,7 @@ import (
 	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
+	"github.com/katocxl/pantherclaw/internal/grants/grantstest"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -178,7 +179,7 @@ func seedFactsAndGrant(t *testing.T, pool *db.Pool, org ids.OrgID, defStore *def
 	if err != nil {
 		t.Fatal(err)
 	}
-	gs := &grantspg.Store{Pool: pool}
+	gs := &grantspg.Store{Pool: pool, Promotions: grantstest.OpenGate{}}
 	grants := &grantsapp.Service{Repo: gs, Subjects: gs, Defs: defStore, Authz: allowAll{}, Clock: clock.System{}}
 	g, err := grants.Issue(human, grantsapp.IssueRequest{
 		AgentID: agent, Principal: gdomain.Principal{Kind: gdomain.PrincipalUser, ID: user}, TaskRef: "refunds",

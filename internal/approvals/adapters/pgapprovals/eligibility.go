@@ -48,8 +48,13 @@ type Eligibility struct {
 // requirement to its own roles.
 func deciderRoles(subjectKind string, reqs []apdomain.Requirement) []string {
 	perms := []td.Permission{td.PermApprovalRespond}
-	if subjectKind == subjectRestoration {
+	switch subjectKind {
+	case subjectRestoration:
 		perms = []td.Permission{td.PermAgentRestore}
+	case subjectGate:
+		// An automation gate is decided by automation.approve holders
+		// only (D25, HR-281).
+		perms = []td.Permission{td.PermAutomationApprove}
 	}
 	if slices.ContainsFunc(reqs, func(r apdomain.Requirement) bool { return r.Kind == apdomain.KindContainment }) {
 		perms = append(perms, td.PermIncidentRespond)
@@ -65,6 +70,9 @@ func deciderRoles(subjectKind string, reqs []apdomain.Requirement) []string {
 
 // subjectRestoration is the subject kind of a restoration request.
 const subjectRestoration = "RESTORATION"
+
+// subjectGate is the subject kind of an automation gate (D25a).
+const subjectGate = "AUTOMATION_GATE"
 
 func principal(user, sa, instance *ids.UUID) gdomain.Principal {
 	switch {
@@ -164,6 +172,17 @@ func LoadEligibility(ctx context.Context, q *dbq.Queries, org ids.OrgID, request
 	}
 	for _, u := range us {
 		out.People[u.ID] = apdomain.Person{UserID: u.ID, Enabled: u.State == "ACTIVE", JoinedAt: u.CreatedAt}
+	}
+	// People marked compromised approve nothing (G0 M11 D43, HR-293).
+	bad, err := q.CompromisedAmong(ctx, org, users)
+	if err != nil {
+		return Eligibility{}, err
+	}
+	for _, u := range bad {
+		if p, ok := out.People[u]; ok {
+			p.Compromised = true
+			out.People[u] = p
+		}
 	}
 	bs, err := q.EligibilityBindings(ctx, dbq.EligibilityBindingsParams{
 		OrgID: org, Ids: users, Roles: deciderRoles(row.SubjectKind, out.Requirements), BusinessUnitID: row.BusinessUnitID, TeamID: row.TeamID,

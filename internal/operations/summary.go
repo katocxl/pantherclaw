@@ -40,6 +40,7 @@ const (
 	CountTelemetryGaps          = "telemetry_gaps"
 	CountUnconfirmedContainment = "unconfirmed_containment"
 	CountPostureFindings        = "posture_findings"
+	CountAutomationExceptions   = "automation_exceptions"
 )
 
 // GetSummary returns the viewer's summary.
@@ -71,7 +72,7 @@ func summarize(q Queue, es EvidenceStatus) Summary {
 	out := Summary{AsOf: q.AsOf, Whole: q.Whole, Truncated: q.Truncated, Counts: map[string]int{
 		CountActiveIncidents: 0, CountOpenAlerts: 0, CountCritical: 0, CountProtectionFailures: 0,
 		CountExpiringDecisions: 0, CountAuthorityExpansion: 0, CountTelemetryGaps: 0, CountUnconfirmedContainment: 0,
-		CountPostureFindings: 0,
+		CountPostureFindings: 0, CountAutomationExceptions: 0,
 	}}
 	out.Scope = "what your permissions cover"
 	if q.Whole {
@@ -85,6 +86,7 @@ func summarize(q Queue, es EvidenceStatus) Summary {
 	out.Counts[CountExpiringDecisions] = q.Counts[KindWaitingDecision]
 	out.Counts[CountUnconfirmedContainment] = q.Counts[KindUnconfirmedContainment]
 	out.Counts[CountPostureFindings] = q.Counts[KindPostureFinding]
+	out.Counts[CountAutomationExceptions] = q.Counts[KindAutomationException]
 	out.Counts[CountAuthorityExpansion] = q.Counts[KindAuthorityExpansion]
 	out.Counts[CountCritical] = q.Critical
 	for _, src := range es.Sources {
@@ -120,10 +122,10 @@ func summarize(q Queue, es EvidenceStatus) Summary {
 func statement(s Summary) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "As of %s, for %s: %d active incidents, %d unconfirmed containment actions, %d open alerts (%d critical), "+
-		"%d protection failures, %d decisions expiring within the hour, %d open posture findings, "+
+		"%d protection failures, %d automation exceptions, %d decisions expiring within the hour, %d open posture findings, "+
 		"%d authority expansions in the last day.",
 		s.AsOf.Format(time.RFC3339), s.Scope, s.Counts[CountActiveIncidents], s.Counts[CountUnconfirmedContainment],
-		s.Counts[CountOpenAlerts], s.Counts[CountCritical], s.Counts[CountProtectionFailures],
+		s.Counts[CountOpenAlerts], s.Counts[CountCritical], s.Counts[CountProtectionFailures], s.Counts[CountAutomationExceptions],
 		s.Counts[CountExpiringDecisions], s.Counts[CountPostureFindings], s.Counts[CountAuthorityExpansion])
 	if len(s.Unknown) > 0 {
 		b.WriteString(" Not known: " + strings.Join(s.Unknown, "; ") + ".")

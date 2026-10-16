@@ -623,7 +623,8 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - Templates: refunds, release deployment, production diagnostics (F4); support and internal analysis come with M14's connectors.
 
 ### M11 — Governed automations (M11 part 2; MVP subset, after M10)
-**F:** F652–F754 (subset).
+**HR:** HR-270..293, HR-295, HR-296 · **F:** F652–F754 (subset), F025, F221, F262, F283, F533, F562, F333, F582, F595, F600, F762, F304–F321 (the rest of universal search) · **ADR:** 0027 · **G0:** [g0/M11.md](g0/M11.md) (part 2).
+- The rest of M11 (G0 M11 part 2): fleet cohorts, the production promotion gate, protected changes beyond policies, the compromised-publisher response, the coding-to-production and read-only-diagnostics packs; universal search adds quick find, rule-based plain-language questions, incident correlation, open-case and export from results.
 - Automations: definitions (When/If/Under authority/Do/Wait/If fails/Finish), schedules (timezone, DST, missed-run policy), event/manual triggers, linear steps with waits and approvals, bounded retries, loop detection via ancestry, shadow mode, execution inspector data. Full branching engine = Next.
 
 ### M12 — Adversarial range (delivered after M9, before the preview)

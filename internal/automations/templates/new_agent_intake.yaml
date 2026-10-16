@@ -1,0 +1,140 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# new_agent_intake (D32, D31): a newly discovered agent gets a proposed
+# owner, an inspection of its routes, a drafted grant baseline and safe
+# tests; the owner is told and the execution waits until a person claims the
+# agent. Everything it makes is a proposal: no grant is issued (HR-286).
+id: new_agent_intake
+title: New agent intake
+summary: >-
+  Prepare a newly discovered agent for a person to claim: propose an owner,
+  inspect its routes, draft a baseline and run safe tests - proposals only.
+edition: TEAM
+params:
+  - name: purpose
+    description: What the automation is for, shown to reviewers and approvers.
+    type: string
+    pattern: '[^{}$]{1,1000}'
+    max_len: 1000
+    default: Prepare every newly discovered agent for a person to claim, with proposals only.
+  - name: review_by
+    description: The date (YYYY-MM-DD) by which the owner reviews the automation again; at most 90 days ahead.
+    type: string
+    format: date
+    pattern: '[0-9]{4}-[0-9]{2}-[0-9]{2}'
+    max_len: 10
+    example: "2026-12-31"
+  - name: baseline_from
+    description: Where the drafted grant baseline comes from - the agent's cohort or a template.
+    type: enum
+    values: [COHORT_BASELINE, TEMPLATE]
+    default: COHORT_BASELINE
+  - name: claim_timeout
+    description: How long the execution waits for a person to claim the agent.
+    type: enum
+    values: [1d, 3d, 6d]
+    default: 3d
+
+definition:
+  apiVersion: automations.pantherclaw.dev/v1
+  kind: Automation
+  purpose: "${purpose}"
+  work_kind: SECURITY_WORK
+  review_by: "${review_by}"
+  when:
+    event:
+      on: agent.discovered
+      params:
+        agent: {from: subjects.agent, type: uuid}
+    dedupe:
+      key: "{{params.agent}}"
+      window: 30d
+  authority:
+    principal: self
+    platform:
+      - step: propose_owner
+        scopes: [TRIGGER_AGENT]
+      - step: inspect_routes
+        scopes: [TRIGGER_AGENT]
+      - step: draft_baseline
+        scopes: [TRIGGER_AGENT]
+      - step: run_safe_tests
+        scopes: [TRIGGER_AGENT]
+      - step: notify
+        scopes: [OWNER]
+      - step: wait_claim
+        scopes: [TRIGGER_AGENT]
+  do:
+    - id: propose
+      step: propose_owner
+    - id: routes
+      step: inspect_routes
+    - id: baseline
+      step: draft_baseline
+      with:
+        from: "${baseline_from}"
+    - id: safe_tests
+      step: run_safe_tests
+    - id: tell
+      step: notify
+      with:
+        to: [OWNER]
+        message:
+          title: A new agent is waiting to be claimed
+          body: "Agent {{params.agent}} was discovered. Its proposed owner, routes, baseline and test results are ready; claim it to take it into use."
+    - id: claim
+      step: wait_claim
+      with:
+        timeout: "${claim_timeout}"
+  finish_when:
+    - step: claim
+      condition: AGENT_CLAIMED
+    - step: baseline
+      condition: PROPOSAL_RECORDED
+  limits:
+    deadline: 7d
+
+tests:
+  - name: the_agent_is_claimed
+    kind: NORMAL
+    trigger:
+      params: {agent: 0192f000-0000-7000-8000-0000000000f1}
+    stubs:
+      propose: [{state: DONE, refs: [automation_proposal]}]
+      baseline: [{state: DONE, refs: [automation_proposal]}]
+      safe_tests: [{state: DONE, refs: [automation_proposal]}]
+      claim: [{state: WAITING}, {state: DONE, refs: [agent]}]
+    expect:
+      state: SUCCEEDED
+      steps: {propose: DONE, routes: DONE, baseline: DONE, safe_tests: DONE, tell: DONE, claim: DONE}
+  - name: the_route_inspection_is_refused
+    kind: DENIED
+    trigger:
+      params: {agent: 0192f000-0000-7000-8000-0000000000f2}
+    stubs:
+      routes: [{state: FAILED, reason: AUTHORITY_CHANGED}]
+    expect:
+      state: FAILED
+      reason: AUTHORITY_CHANGED
+      steps: {propose: DONE, routes: FAILED}
+  - name: nobody_claims_the_agent_in_time
+    kind: TIMEOUT
+    trigger:
+      params: {agent: 0192f000-0000-7000-8000-0000000000f3}
+    stubs:
+      baseline: [{state: DONE, refs: [automation_proposal]}]
+      claim: [{state: WAITING}, {state: FAILED, reason: TIMEOUT}]
+    expect:
+      state: FAILED
+      reason: TIMEOUT
+      steps: {baseline: DONE, claim: FAILED}
+  - name: the_same_discovery_twice_starts_one_execution
+    kind: DUPLICATE
+    trigger:
+      params: {agent: 0192f000-0000-7000-8000-0000000000f4}
+    stubs:
+      baseline: [{state: DONE, refs: [automation_proposal]}]
+      claim: [{state: DONE, refs: [agent]}]
+    expect:
+      state: SUCCEEDED

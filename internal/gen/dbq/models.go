@@ -42,6 +42,7 @@ type PcAgent struct {
 	ClaimedAt         *time.Time
 	RetiredAt         *time.Time
 	RangeAgent        bool
+	TaskType          *string
 }
 
 type PcAgentChange struct {
@@ -80,6 +81,26 @@ type PcAgentInstance struct {
 	UpdatedAt         time.Time
 	ExpiresAt         *time.Time
 	SandboxSessionID  *ids.UUID
+}
+
+type PcAgentPromotion struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	AgentID         ids.UUID
+	EnvironmentID   ids.UUID
+	Operation       string
+	State           string
+	Checks          []byte
+	FailureBehavior string
+	PromotedBy      ids.UUID
+	CredentialID    ids.UUID
+	PromotedAt      time.Time
+	RevokedBy       *ids.UUID
+	RevokedAt       *time.Time
+	RevokeReason    *string
+	ExpiresAt       *time.Time
+	ConfirmedAt     *time.Time
+	ExpiredAt       *time.Time
 }
 
 type PcAlert struct {
@@ -206,36 +227,39 @@ type PcApprovalEvidence struct {
 }
 
 type PcApprovalRequest struct {
-	OrgID              ids.OrgID
-	ID                 ids.UUID
-	SubjectKind        string
-	AgentID            ids.UUID
-	TransactionID      *ids.UUID
-	Evaluation         *int32
-	RunID              *ids.UUID
-	GrantID            *ids.UUID
-	GrantRevision      *int32
-	VariantKey         []byte
-	RequestedBy        *ids.UUID
-	Operation          string
-	PreviousID         *ids.UUID
-	Binding            []byte
-	BindingInput       []byte
-	Requirements       []byte
-	Display            []byte
-	DisplayHash        []byte
-	State              string
-	EndReason          *string
-	CreatedAt          time.Time
-	DeadlineAt         time.Time
-	EvidenceDeadlineAt *time.Time
-	ApprovedAt         *time.Time
-	ConsumeBy          *time.Time
-	ConsumedAt         *time.Time
-	PermitID           *ids.UUID
-	EndedAt            *time.Time
-	ActionIr           []byte
-	InvalidationKey    *string
+	OrgID                 ids.OrgID
+	ID                    ids.UUID
+	SubjectKind           string
+	AgentID               *ids.UUID
+	TransactionID         *ids.UUID
+	Evaluation            *int32
+	RunID                 *ids.UUID
+	GrantID               *ids.UUID
+	GrantRevision         *int32
+	VariantKey            []byte
+	RequestedBy           *ids.UUID
+	Operation             string
+	PreviousID            *ids.UUID
+	Binding               []byte
+	BindingInput          []byte
+	Requirements          []byte
+	Display               []byte
+	DisplayHash           []byte
+	State                 string
+	EndReason             *string
+	CreatedAt             time.Time
+	DeadlineAt            time.Time
+	EvidenceDeadlineAt    *time.Time
+	ApprovedAt            *time.Time
+	ConsumeBy             *time.Time
+	ConsumedAt            *time.Time
+	PermitID              *ids.UUID
+	EndedAt               *time.Time
+	ActionIr              []byte
+	InvalidationKey       *string
+	ExecutionID           *ids.UUID
+	StepID                *string
+	RequestedByAutomation *ids.UUID
 }
 
 type PcApprovalRequestLinkedPerson struct {
@@ -287,6 +311,358 @@ type PcAuthReplay struct {
 	Issuer    string
 	Jti       string
 	ExpiresAt time.Time
+}
+
+type PcAutomation struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	Name             string
+	Purpose          string
+	Kind             string
+	OwnerUserID      ids.UUID
+	ServiceAccountID ids.UUID
+	State            string
+	Rollout          *string
+	CohortAgents     []ids.UUID
+	EnabledVersionID *ids.UUID
+	PauseReason      *string
+	PausedAt         *time.Time
+	CreatedBy        ids.UUID
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	RetiredAt        *time.Time
+}
+
+type PcAutomationBudgetUsage struct {
+	OrgID        ids.OrgID
+	AutomationID ids.UUID
+	Day          pgtype.Date
+	Currency     string
+	Reserved     money.Decimal
+}
+
+type PcAutomationCeiling struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	AutomationID    ids.UUID
+	VersionID       ids.UUID
+	Digest          []byte
+	ApprovedBy      []ids.UUID
+	ChangeRequestID ids.UUID
+	State           string
+	ReviewBy        time.Time
+	VoidReason      *string
+	CreatedAt       time.Time
+	EndedAt         *time.Time
+}
+
+type PcAutomationConditionState struct {
+	OrgID        ids.OrgID
+	AutomationID ids.UUID
+	SubjectKey   string
+	Since        time.Time
+	FiredAt      *time.Time
+	SeenAt       time.Time
+}
+
+type PcAutomationDedupe struct {
+	OrgID        ids.OrgID
+	AutomationID ids.UUID
+	Key          string
+	TriggerID    ids.UUID
+	ExpiresAt    time.Time
+}
+
+type PcAutomationDelivery struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	DestinationID ids.UUID
+	ExecutionID   ids.UUID
+	Kind          string
+	MsgID         string
+	Body          []byte
+	BodySha256    []byte
+	State         string
+	Attempts      int32
+	NextAttemptAt time.Time
+	LastStatus    *int32
+	LastError     *string
+	CreatedAt     time.Time
+	DeliveredAt   *time.Time
+}
+
+type PcAutomationDestination struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Name                string
+	Url                 string
+	Internal            bool
+	Purposes            []string
+	Secret              []byte
+	PrevSecret          []byte
+	PrevUntil           *time.Time
+	State               string
+	CreatedBy           ids.UUID
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	DisabledBy          *ids.UUID
+	DisabledAt          *time.Time
+	UpdatedAt           time.Time
+}
+
+type PcAutomationEventReceipt struct {
+	OrgID      ids.OrgID
+	SourceID   ids.UUID
+	WebhookID  string
+	Type       string
+	BodySha256 []byte
+	ReceivedAt time.Time
+	ExpiresAt  time.Time
+}
+
+type PcAutomationEventSource struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Name                string
+	Description         string
+	Types               []string
+	Secret              []byte
+	PrevSecret          []byte
+	PrevUntil           *time.Time
+	RatePerMinute       int32
+	State               string
+	CreatedBy           ids.UUID
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	DisabledBy          *ids.UUID
+	DisabledAt          *time.Time
+	UpdatedAt           time.Time
+}
+
+type PcAutomationExecution struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	AutomationID      ids.UUID
+	VersionID         ids.UUID
+	TriggerID         ids.UUID
+	Mode              string
+	State             string
+	Reason            *string
+	CurrentStep       int16
+	Compensating      bool
+	CeilingID         *ids.UUID
+	ServiceAccountID  ids.UUID
+	PrincipalUserID   *ids.UUID
+	PrincipalSaID     *ids.UUID
+	TriggerKind       string
+	Params            []byte
+	Subjects          []byte
+	Evidence          []byte
+	OccurredAt        time.Time
+	RootTriggerID     ids.UUID
+	Ancestry          []ids.UUID
+	Depth             int16
+	Result            []byte
+	Transitions       int32
+	EngineErrors      int16
+	CreatedAt         time.Time
+	StartedAt         *time.Time
+	DeadlineAt        time.Time
+	UpdatedAt         time.Time
+	EndedAt           *time.Time
+	WakeAt            *time.Time
+	CancelRequestedBy *string
+	CancelReason      *string
+	CancelRequestedAt *time.Time
+}
+
+type PcAutomationFeedCursor struct {
+	OrgID     ids.OrgID
+	Seq       int64
+	UpdatedAt time.Time
+}
+
+type PcAutomationLaunch struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	ExecutionID       ids.UUID
+	AttemptID         ids.UUID
+	AgentID           ids.UUID
+	InstanceID        *ids.UUID
+	RunID             ids.UUID
+	GrantID           ids.UUID
+	TaskRef           string
+	Delivery          string
+	DestinationID     *ids.UUID
+	DeliveryID        *ids.UUID
+	State             string
+	ClaimedInstanceID *ids.UUID
+	ClaimedAt         *time.Time
+	ClaimDeadline     time.Time
+	CompletedAt       *time.Time
+	Outcome           *string
+	Report            []byte
+	Calls             []byte
+	RunParams         []byte
+	CreatedAt         time.Time
+	EndedAt           *time.Time
+}
+
+type PcAutomationProposal struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	ExecutionID ids.UUID
+	StepID      string
+	Kind        string
+	SubjectType string
+	SubjectID   ids.UUID
+	Body        []byte
+	State       string
+	CreatedAt   time.Time
+	DecidedBy   *ids.UUID
+	DecidedAt   *time.Time
+}
+
+type PcAutomationSchedule struct {
+	OrgID        ids.OrgID
+	AutomationID ids.UUID
+	VersionID    ids.UUID
+	Cron         string
+	Timezone     string
+	NextFireAt   *time.Time
+	LastFireAt   *time.Time
+	State        string
+	UpdatedAt    time.Time
+}
+
+type PcAutomationSimulation struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	VersionID   ids.UUID
+	FromAt      time.Time
+	ToAt        time.Time
+	State       string
+	Results     []byte
+	Error       *string
+	RequestedBy ids.UUID
+	CreatedAt   time.Time
+	StartedAt   *time.Time
+	FinishedAt  *time.Time
+}
+
+type PcAutomationStepAttempt struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	ExecutionID  ids.UUID
+	StepIndex    int16
+	StepID       string
+	Attempt      int16
+	Kind         string
+	Compensation bool
+	State        string
+	Decision     string
+	Reason       *string
+	Output       []byte
+	Refs         []byte
+	Effect       string
+	StartedAt    time.Time
+	EndedAt      *time.Time
+	WakeAt       *time.Time
+}
+
+type PcAutomationTestCase struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	VersionID ids.UUID
+	Name      string
+	CaseKind  string
+	Trigger   []byte
+	Stubs     []byte
+	Expect    []byte
+	Seq       int32
+	CreatedBy ids.UUID
+	CreatedAt time.Time
+}
+
+type PcAutomationTestRun struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	VersionID        ids.UUID
+	DefinitionDigest []byte
+	TestsDigest      []byte
+	Passed           bool
+	Results          []byte
+	RunBy            ids.UUID
+	CreatedAt        time.Time
+}
+
+type PcAutomationThresholdCount struct {
+	OrgID         ids.OrgID
+	AutomationID  ids.UUID
+	GroupKey      string
+	Minute        time.Time
+	Count         int32
+	Ancestry      []ids.UUID
+	Depth         int32
+	RootTriggerID *ids.UUID
+}
+
+type PcAutomationTrigger struct {
+	OrgID              ids.OrgID
+	ID                 ids.UUID
+	AutomationID       ids.UUID
+	VersionID          ids.UUID
+	Kind               string
+	Mode               string
+	SourceRef          string
+	Authenticity       string
+	AuthenticityDetail []byte
+	Params             []byte
+	Subjects           []byte
+	Evidence           []byte
+	RootTriggerID      ids.UUID
+	Ancestry           []ids.UUID
+	Depth              int32
+	State              string
+	Reason             *string
+	ExecutionID        *ids.UUID
+	RetriedFrom        *ids.UUID
+	QueuedUntil        *time.Time
+	OccurredAt         time.Time
+	ReceivedAt         time.Time
+	DecidedAt          time.Time
+}
+
+type PcAutomationUsage struct {
+	OrgID        ids.OrgID
+	AutomationID ids.UUID
+	Day          pgtype.Date
+	Grants       int32
+	Runs         int32
+}
+
+type PcAutomationVersion struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	AutomationID    ids.UUID
+	Number          int32
+	State           string
+	Definition      []byte
+	Digest          []byte
+	Summary         string
+	Findings        []byte
+	TestedRunID     *ids.UUID
+	CreatedBy       ids.UUID
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	ValidatedAt     *time.Time
+	TestedAt        *time.Time
+	PublishedAt     *time.Time
+	ChangeRequestID *ids.UUID
 }
 
 type PcBrokerKey struct {
@@ -427,6 +803,32 @@ type PcCaseEntry struct {
 	CreatedAt           time.Time
 }
 
+type PcChangeConfirmation struct {
+	OrgID        ids.OrgID
+	RequestID    ids.UUID
+	UserID       ids.UUID
+	CredentialID ids.UUID
+	ConfirmedAt  time.Time
+}
+
+type PcChangeRequest struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Domain        string
+	Kind          string
+	SubjectID     ids.UUID
+	ContentDigest []byte
+	Binding       []byte
+	Summary       []byte
+	Required      int16
+	State         string
+	RequestedBy   string
+	CreatedAt     time.Time
+	ExpiresAt     time.Time
+	DecidedAt     *time.Time
+	DecidedReason *string
+}
+
 type PcChangeWindow struct {
 	OrgID       ids.OrgID
 	ID          ids.UUID
@@ -482,6 +884,31 @@ type PcCliSession struct {
 	ExpiresAt       time.Time
 	RefreshedAt     *time.Time
 	RevokedAt       *time.Time
+}
+
+type PcCompromiseReview struct {
+	OrgID        ids.OrgID
+	CompromiseID ids.UUID
+	ItemKind     string
+	ItemID       string
+	Decision     string
+	Reviewer     ids.UUID
+	Note         *string
+	ReviewedAt   time.Time
+}
+
+type PcCompromisedPublisher struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	UserID           ids.UUID
+	Since            time.Time
+	Reason           string
+	State            string
+	MarkedBy         ids.UUID
+	MarkedCredential ids.UUID
+	MarkedAt         time.Time
+	ClearRequestID   *ids.UUID
+	ClearedAt        *time.Time
 }
 
 type PcConnection struct {
@@ -1108,23 +1535,25 @@ type PcEvidenceIntegrity struct {
 }
 
 type PcEvidencePack struct {
-	OrgID          ids.OrgID
-	ID             ids.UUID
-	CreatedBy      ids.UUID
-	ScopeKind      string
-	Scope          []byte
-	Include        []byte
-	State          string
-	ErrorCode      *string
-	Manifest       *string
-	ManifestSha256 []byte
-	Content        []byte
-	ContentSha256  []byte
-	ContentSize    pgtype.Int8
-	Items          *int32
-	CreatedAt      time.Time
-	ReadyAt        *time.Time
-	ExpiresAt      *time.Time
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	CreatedBy        ids.UUID
+	ScopeKind        string
+	Scope            []byte
+	Include          []byte
+	State            string
+	ErrorCode        *string
+	Manifest         *string
+	ManifestSha256   []byte
+	Content          []byte
+	ContentSha256    []byte
+	ContentSize      pgtype.Int8
+	Items            *int32
+	CreatedAt        time.Time
+	ReadyAt          *time.Time
+	ExpiresAt        *time.Time
+	AutomationID     *ids.UUID
+	AutomationAgents []ids.UUID
 }
 
 type PcExecutionAttempt struct {
@@ -1181,6 +1610,7 @@ type PcExposureRight struct {
 	Observations  int32
 	Basis         string
 	Irreversible  bool
+	AutomationIds []ids.UUID
 }
 
 type PcExposureSnapshot struct {
@@ -1229,6 +1659,27 @@ type PcFactProvider struct {
 	CreatedAt        time.Time
 	GatewayID        *ids.UUID
 	ConnectionID     *ids.UUID
+}
+
+type PcFleetCohort struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	Name        string
+	Description string
+	Rule        []byte
+	OwnerUserID ids.UUID
+	Baseline    []byte
+	CreatedBy   string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type PcFleetCohortMember struct {
+	OrgID    ids.OrgID
+	CohortID ids.UUID
+	AgentID  ids.UUID
+	AddedBy  string
+	AddedAt  time.Time
 }
 
 type PcGateway struct {
@@ -1322,24 +1773,26 @@ type PcGithubScanRun struct {
 }
 
 type PcGrant struct {
-	OrgID           ids.OrgID
-	ID              ids.UUID
-	AgentID         ids.UUID
-	InstanceID      *ids.UUID
-	PrincipalUserID *ids.UUID
-	PrincipalSaID   *ids.UUID
-	EnvironmentID   ids.UUID
-	ParentID        *ids.UUID
-	Depth           int16
-	State           string
-	CurrentRevision int32
-	GrantorKind     string
-	GrantorID       ids.UUID
-	Basis           string
-	ChildrenTotal   int32
-	CreatedAt       time.Time
-	RevokedAt       *time.Time
-	RevokeReason    *string
+	OrgID                 ids.OrgID
+	ID                    ids.UUID
+	AgentID               ids.UUID
+	InstanceID            *ids.UUID
+	PrincipalUserID       *ids.UUID
+	PrincipalSaID         *ids.UUID
+	EnvironmentID         ids.UUID
+	ParentID              *ids.UUID
+	Depth                 int16
+	State                 string
+	CurrentRevision       int32
+	GrantorKind           string
+	GrantorID             ids.UUID
+	Basis                 string
+	ChildrenTotal         int32
+	CreatedAt             time.Time
+	RevokedAt             *time.Time
+	RevokeReason          *string
+	CeilingID             *ids.UUID
+	AutomationExecutionID *ids.UUID
 }
 
 type PcGrantLineage struct {
@@ -2039,6 +2492,41 @@ type PcProbeRun struct {
 	ReceivedAt   time.Time
 }
 
+type PcProtectedChange struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	Category         string
+	Surface          string
+	SubjectID        ids.UUID
+	Subject          string
+	Summary          []byte
+	Widening         []string
+	Digest           []byte
+	SubjectDigest    []byte
+	Payload          []byte
+	Author           ids.UUID
+	AuthorCredential string
+	State            string
+	ChangeRequestID  *ids.UUID
+	Publisher        *ids.UUID
+	CreatedAt        time.Time
+	DecidedAt        *time.Time
+	DecidedReason    *string
+	ReviewState      *string
+	ReviewDueAt      *time.Time
+	ReviewRequestID  *ids.UUID
+	ReviewedBy       *ids.UUID
+	ReviewedAt       *time.Time
+}
+
+type PcProtectedChangeSetting struct {
+	OrgID     ids.OrgID
+	Category  string
+	Mode      string
+	UpdatedBy ids.UUID
+	UpdatedAt time.Time
+}
+
 type PcReconciliationTask struct {
 	OrgID             ids.OrgID
 	ID                ids.UUID
@@ -2240,30 +2728,31 @@ type PcRoleBinding struct {
 }
 
 type PcRun struct {
-	OrgID              ids.OrgID
-	ID                 ids.UUID
-	AgentID            ids.UUID
-	InstanceID         *ids.UUID
-	EnvironmentID      ids.UUID
-	LauncherUserID     *ids.UUID
-	LauncherSaID       *ids.UUID
-	LauncherInstanceID *ids.UUID
-	PrincipalUserID    *ids.UUID
-	PrincipalSaID      *ids.UUID
-	PrincipalSource    string
-	SubjectIssuer      *string
-	SubjectSubject     *string
-	ActorChain         []byte
-	ParentRunID        *ids.UUID
-	Depth              int16
-	GrantID            *ids.UUID
-	TaskRef            string
-	State              string
-	EndReason          *string
-	CreatedAt          time.Time
-	ExpiresAt          time.Time
-	EndedAt            *time.Time
-	Simulated          bool
+	OrgID                 ids.OrgID
+	ID                    ids.UUID
+	AgentID               ids.UUID
+	InstanceID            *ids.UUID
+	EnvironmentID         ids.UUID
+	LauncherUserID        *ids.UUID
+	LauncherSaID          *ids.UUID
+	LauncherInstanceID    *ids.UUID
+	PrincipalUserID       *ids.UUID
+	PrincipalSaID         *ids.UUID
+	PrincipalSource       string
+	SubjectIssuer         *string
+	SubjectSubject        *string
+	ActorChain            []byte
+	ParentRunID           *ids.UUID
+	Depth                 int16
+	GrantID               *ids.UUID
+	TaskRef               string
+	State                 string
+	EndReason             *string
+	CreatedAt             time.Time
+	ExpiresAt             time.Time
+	EndedAt               *time.Time
+	Simulated             bool
+	AutomationExecutionID *ids.UUID
 }
 
 type PcSandboxSession struct {
@@ -2315,14 +2804,15 @@ type PcSavedQuery struct {
 }
 
 type PcServiceAccount struct {
-	OrgID       ids.OrgID
-	ID          ids.UUID
-	Name        string
-	Description string
-	State       string
-	CreatedBy   string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	Name         string
+	Description  string
+	State        string
+	CreatedBy    string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	AutomationID *ids.UUID
 }
 
 type PcServiceAccountKey struct {
@@ -2650,29 +3140,30 @@ type PcVerification struct {
 }
 
 type PcWaitlistEntry struct {
-	OrgID           ids.OrgID
-	ID              ids.UUID
-	Kind            string
-	SubjectType     string
-	SubjectID       ids.UUID
-	AgentID         *ids.UUID
-	State           string
-	Evidence        []byte
-	DeadlineAt      time.Time
-	DecidedBy       *string
-	DecidedAt       *time.Time
-	DecisionReason  string
-	CreatedAt       time.Time
-	Priority        int16
-	RunID           *ids.UUID
-	TransactionID   *ids.UUID
-	RequestedBy     *string
-	RoutingHealth   string
-	EscalationStep  int16
-	NextStepAt      *time.Time
-	AssigneeUserID  *ids.UUID
-	AssignedAt      *time.Time
-	FirstResponseAt *time.Time
+	OrgID                 ids.OrgID
+	ID                    ids.UUID
+	Kind                  string
+	SubjectType           string
+	SubjectID             ids.UUID
+	AgentID               *ids.UUID
+	State                 string
+	Evidence              []byte
+	DeadlineAt            time.Time
+	DecidedBy             *string
+	DecidedAt             *time.Time
+	DecisionReason        string
+	CreatedAt             time.Time
+	Priority              int16
+	RunID                 *ids.UUID
+	TransactionID         *ids.UUID
+	RequestedBy           *string
+	RoutingHealth         string
+	EscalationStep        int16
+	NextStepAt            *time.Time
+	AssigneeUserID        *ids.UUID
+	AssignedAt            *time.Time
+	FirstResponseAt       *time.Time
+	RequestedByAutomation *ids.UUID
 }
 
 type PcWaitlistRoute struct {
@@ -2721,6 +3212,7 @@ type PcWebauthnCeremony struct {
 	ReconciliationID          *ids.UUID
 	PolicyChangeRequestID     *ids.UUID
 	IdentityPlaybookRequestID *ids.UUID
+	ChangeRequestID           *ids.UUID
 }
 
 type PcWebauthnCredential struct {

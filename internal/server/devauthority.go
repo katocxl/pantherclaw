@@ -234,7 +234,7 @@ func seedGrant(ctx context.Context, pool *db.Pool, org ids.OrgID, w devWorkload,
 		Object:  &audit.Object{Type: "grant", ID: g.ID.String()},
 		Details: map[string]string{"agent": w.Agent.String(), "principal": g.Principal.String()},
 	}
-	if err := (&grantspg.Store{Pool: pool}).Issue(ctx, org, g, ev); err != nil {
+	if err := (&grantspg.Store{Pool: pool}).Issue(ctx, org, &g, ev); err != nil {
 		return gdomain.Grant{}, fmt.Errorf("dev seed: grant: %w", err)
 	}
 	return g, nil

@@ -1,0 +1,15 @@
+{
+  "name": "coding-to-production",
+  "summary": "Coding agents work vulnerability tasks on GitHub: they read, branch and open pull requests; a person reviews the exact head of every merge, a release approver gates every deployment inside a change window, one merge per run, and production revisions are verified after the fact.",
+  "template": "coding-to-production",
+  "baseline_ttl_seconds": 86400,
+  "automation_template": "bounded_task_launch",
+  "covers": [
+    "vulnerability-task reads (contents, pull requests)",
+    "branch and pull-request work on the named repositories, never on their default branches",
+    "an exact reviewed merge: an independent reviewer approves the merge bound to its head SHA",
+    "the deployment consequence: a release approver approves each deployment inside a change window",
+    "a one-merge budget per run",
+    "production revision verification through the GitHub connector's effect verification"
+  ]
+}

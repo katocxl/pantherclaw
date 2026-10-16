@@ -10,6 +10,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -38,7 +39,7 @@ var (
 	// lock timeout; nothing was done, and the request may be retried (D72).
 	ErrIdempotencyBusy = pcerr.New(pcerr.Unavailable, "IDEMPOTENCY_BUSY", "another request with this idempotency key is being processed; retry")
 	ErrIdempotency     = pcerr.New(pcerr.AlreadyExists, "ALREADY_EXISTS", "the idempotency key was used for a different request")
-	ErrActor           = pcerr.New(pcerr.InvalidArgument, "ACTOR_INVALID", "the actor must be a user, a service account or the identity playbook")
+	ErrActor           = pcerr.New(pcerr.InvalidArgument, "ACTOR_INVALID", "the actor must be a user, a service account, an automation or the identity playbook")
 	ErrActionNotFound  = pcerr.New(pcerr.NotFound, "ACTION_NOT_FOUND", "response action not found")
 )
 
@@ -89,10 +90,14 @@ func scopeOf(s reflexdomain.Subject) (string, string, error) {
 		return rdomain.ScopePrincipal, string(s.Type) + ":" + s.ID, nil
 	case reflexdomain.SubjectInstance, reflexdomain.SubjectTransaction, reflexdomain.SubjectCredential, reflexdomain.SubjectGateway,
 		reflexdomain.SubjectPackage, reflexdomain.SubjectPolicyVersion, reflexdomain.SubjectAlert, reflexdomain.SubjectIncident,
-		reflexdomain.SubjectCase, reflexdomain.SubjectFinding, reflexdomain.SubjectSystem:
+		reflexdomain.SubjectCase, reflexdomain.SubjectFinding, reflexdomain.SubjectSystem, reflexdomain.SubjectAutomation,
+		reflexdomain.SubjectAutomationExecution:
 	}
 	return "", "", rdomain.ErrScope
 }
+
+// automationActor prefixes the actor of an automation's action.
+const automationActor = "automation:"
 
 // actorOf is how an action records its actor, and where it came from.
 func actorOf(a reflexdomain.Subject) (string, string, evdomain.Actor, error) {
@@ -106,6 +111,12 @@ func actorOf(a reflexdomain.Subject) (string, string, evdomain.Actor, error) {
 	case a.Type == reflexdomain.SubjectServiceAccount:
 		if _, err := ids.ParseUUID(a.ID); err == nil {
 			return "service_account:" + a.ID, rdomain.SourceSOAR, evdomain.Actor{Type: "service_account", ID: a.ID}, nil
+		}
+	case a.Type == reflexdomain.SubjectAutomation:
+		// A governed automation's contain step (M11 D61, HR-284): a
+		// playbook, never SOAR, recorded with the automation as actor.
+		if _, err := ids.ParseUUID(a.ID); err == nil {
+			return automationActor + a.ID, rdomain.SourcePlaybook, evdomain.Actor{Type: "automation", ID: a.ID}, nil
 		}
 	}
 	return "", "", evdomain.Actor{}, ErrActor
@@ -202,7 +213,7 @@ func (s *Containment) contain(ctx context.Context, tx db.TenantTx, org ids.OrgID
 		return reflexdomain.ContainResult{}, err
 	}
 	if o.source == rdomain.SourcePlaybook {
-		if err := playbookScope(ctx, q, org, c); err != nil {
+		if err := playbookScope(ctx, q, org, c, strings.HasPrefix(o.actor, automationActor)); err != nil {
 			return reflexdomain.ContainResult{}, err
 		}
 	}
@@ -333,7 +344,16 @@ var (
 
 // playbookScope limits the identity playbook (D50): a DENY_ALL on a user,
 // or a control on a grant whose issuer the playbook already contains.
-func playbookScope(ctx context.Context, q *dbq.Queries, org ids.OrgID, c rdomain.Control) error {
+// An automation (M11 D61) may only DENY_ALL the triggering run.
+func playbookScope(ctx context.Context, q *dbq.Queries, org ids.OrgID, c rdomain.Control, automation bool) error {
+	if automation {
+		// An automation suspends only the triggering run (HR-284); its
+		// grants are revoked through the grants use case, not here.
+		if c.ScopeType == rdomain.ScopeRun && c.Control == rdomain.DenyAll {
+			return nil
+		}
+		return ErrPlaybookScope
+	}
 	switch c.ScopeType {
 	case rdomain.ScopePrincipal:
 		if kind, _, _ := cutPrincipal(c.ScopeID); kind == "user" && c.Control == rdomain.DenyAll {

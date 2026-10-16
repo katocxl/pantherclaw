@@ -1,0 +1,493 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// AutomationService manages governed automations (G0 M11 part 2 D5, D7,
+// D8, D28; F025, F652–F709, F729–F733; HR-270, HR-272, HR-283; Team).
+//
+// An automation is a named workflow owned by a person. It acts only as its
+// own execution identity, a service account created with it that never
+// holds keys or role bindings (HR-270). Its versions are immutable
+// documents: a definition (YAML or JSON, apiVersion
+// automations.pantherclaw.dev/v1), its SHA-256 digest and a plain-language
+// summary. A version is enabled, and the issuance ceiling it declares
+// activated, only through a change request (ChangeService) that people
+// holding automation.publish and every permission its steps use confirm
+// with security keys over the digest (HR-272). Every change is a new
+// version and a new confirmation; an automation never changes its own
+// definition, ceiling or rollout. Every call is made by a person.
+service AutomationService {
+  // CreateAutomation creates a DRAFT automation and its execution identity.
+  // permission: automation.manage
+  rpc CreateAutomation(CreateAutomationRequest) returns (CreateAutomationResponse);
+  // GetAutomation returns an automation with its enabled version, ceiling
+  // and identity.
+  // permission: automation.read
+  rpc GetAutomation(GetAutomationRequest) returns (GetAutomationResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListAutomations lists automations by name.
+  // permission: automation.read
+  rpc ListAutomations(ListAutomationsRequest) returns (ListAutomationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // CreateDraftVersion stores a new DRAFT version from a definition.
+  // permission: automation.manage
+  rpc CreateDraftVersion(CreateDraftVersionRequest) returns (CreateDraftVersionResponse);
+  // UpdateDraftVersion replaces the definition of a version that is not
+  // published (it returns to DRAFT).
+  // permission: automation.manage
+  rpc UpdateDraftVersion(UpdateDraftVersionRequest) returns (UpdateDraftVersionResponse);
+  // ValidateVersion validates a version: VALIDATED with its summary when it
+  // has no error findings, else DRAFT with the findings.
+  // permission: automation.manage
+  rpc ValidateVersion(ValidateVersionRequest) returns (ValidateVersionResponse);
+  // GetVersion returns a version's definition, digest, summary, findings
+  // and state.
+  // permission: automation.read
+  rpc GetVersion(GetVersionRequest) returns (GetVersionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListVersions lists an automation's versions, newest first.
+  // permission: automation.read
+  rpc ListVersions(ListVersionsRequest) returns (ListVersionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetVersionGraph returns a version as a graph: trigger, conditions,
+  // steps, gates and finish conditions, each step linked to the authority
+  // it uses (F663).
+  // permission: automation.read
+  rpc GetVersionGraph(GetVersionGraphRequest) returns (GetVersionGraphResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // RequestEnable asks for a version to be enabled at a rollout stage, or
+  // for the enabled version to widen its rollout. It returns the change
+  // request people confirm on its page.
+  // permission: automation.manage
+  rpc RequestEnable(RequestEnableRequest) returns (RequestEnableResponse);
+  // NarrowRollout narrows the enabled version's rollout (FULL to COHORT to
+  // SHADOW) at once; narrowing needs one person.
+  // permission: automation.manage
+  rpc NarrowRollout(NarrowRolloutRequest) returns (NarrowRolloutResponse);
+  // PauseAutomation stops new executions; active executions continue
+  // unless cancel_active is set.
+  // permission: automation.manage
+  rpc PauseAutomation(PauseAutomationRequest) returns (PauseAutomationResponse);
+  // ResumeAutomation revalidates the owner, ceiling, identity, principal,
+  // edition and kill switch, then resumes; missed irreversible work is
+  // never replayed.
+  // permission: automation.manage
+  rpc ResumeAutomation(ResumeAutomationRequest) returns (ResumeAutomationResponse);
+  // RetireAutomation cancels active executions, retires the triggers and
+  // the ceiling and disables the identity. Final.
+  // permission: automation.manage
+  rpc RetireAutomation(RetireAutomationRequest) returns (RetireAutomationResponse);
+  // SetAutomationOwner makes another active person the owner. Pending
+  // enabling requests are voided: they were asked for under the previous
+  // owner.
+  // permission: automation.manage
+  rpc SetAutomationOwner(SetAutomationOwnerRequest) returns (SetAutomationOwnerResponse);
+  // RevokeAuthority revokes the ceiling and every grant issued under it,
+  // ends their runs and pauses the automation (AUTHORITY_REVOKED).
+  // permission: automation.manage
+  rpc RevokeAuthority(RevokeAuthorityRequest) returns (RevokeAuthorityResponse);
+}
+
+// AutomationKind says what an automation is for.
+enum AutomationKind {
+  AUTOMATION_KIND_UNSPECIFIED = 0;
+  AUTOMATION_KIND_AGENT_WORK = 1;
+  AUTOMATION_KIND_SECURITY_WORK = 2;
+}
+
+// AutomationState is an automation's lifecycle state.
+enum AutomationState {
+  AUTOMATION_STATE_UNSPECIFIED = 0;
+  AUTOMATION_STATE_DRAFT = 1;
+  AUTOMATION_STATE_ACTIVE = 2;
+  AUTOMATION_STATE_PAUSED = 3;
+  AUTOMATION_STATE_RETIRED = 4;
+}
+
+// AutomationRollout is how far an enabled version reaches.
+enum AutomationRollout {
+  AUTOMATION_ROLLOUT_UNSPECIFIED = 0;
+  // Executions run in SHADOW mode: nothing outside them is changed.
+  AUTOMATION_ROLLOUT_SHADOW = 1;
+  // Live for the cohort's agents only.
+  AUTOMATION_ROLLOUT_COHORT = 2;
+  AUTOMATION_ROLLOUT_FULL = 3;
+}
+
+// AutomationVersionState is a version's state.
+enum AutomationVersionState {
+  AUTOMATION_VERSION_STATE_UNSPECIFIED = 0;
+  AUTOMATION_VERSION_STATE_DRAFT = 1;
+  AUTOMATION_VERSION_STATE_VALIDATED = 2;
+  AUTOMATION_VERSION_STATE_TESTED = 3;
+  AUTOMATION_VERSION_STATE_PUBLISHED = 4;
+  AUTOMATION_VERSION_STATE_SUPERSEDED = 5;
+  AUTOMATION_VERSION_STATE_RETIRED = 6;
+}
+
+// AutomationCeilingState is an issuance ceiling's state.
+enum AutomationCeilingState {
+  AUTOMATION_CEILING_STATE_UNSPECIFIED = 0;
+  AUTOMATION_CEILING_STATE_ACTIVE = 1;
+  AUTOMATION_CEILING_STATE_SUPERSEDED = 2;
+  AUTOMATION_CEILING_STATE_EXPIRED = 3;
+  AUTOMATION_CEILING_STATE_VOID = 4;
+  AUTOMATION_CEILING_STATE_REVOKED = 5;
+}
+
+// Automation is one governed automation.
+message Automation {
+  string id = 1;
+  string name = 2;
+  string purpose = 3;
+  AutomationKind kind = 4;
+  // The accountable person.
+  string owner_user_id = 5;
+  // The execution identity.
+  string service_account_id = 6;
+  AutomationState state = 7;
+  AutomationRollout rollout = 8;
+  // COHORT rollout: the agents it is live for.
+  repeated string cohort_agents = 9;
+  string enabled_version_id = 10;
+  // PAUSED: USER, KILL_SWITCH, CEILING_VOID, CEILING_EXPIRED,
+  // OWNER_INACTIVE, CONTAINED, COMPROMISED_PUBLISHER, AUTHORITY_REVOKED,
+  // COVERAGE_RECOVERY or LOOP.
+  string pause_reason = 11;
+  google.protobuf.Timestamp paused_at = 12;
+  string created_by = 13;
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp updated_at = 15;
+  google.protobuf.Timestamp retired_at = 16;
+  // The ACTIVE ceiling, when there is one.
+  AutomationCeiling ceiling = 17;
+}
+
+// AutomationCeiling is the issuance ceiling of an enabled version.
+message AutomationCeiling {
+  string id = 1;
+  string version_id = 2;
+  // SHA-256 of the version's canonical definition.
+  bytes digest = 3;
+  // The people who confirmed it.
+  repeated string approved_by = 4;
+  string change_request_id = 5;
+  AutomationCeilingState state = 6;
+  google.protobuf.Timestamp review_by = 7;
+  string void_reason = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp ended_at = 10;
+}
+
+// AutomationFinding is one validation finding.
+message AutomationFinding {
+  // Stable code (OWNER_MISSING, CEILING_UNBOUNDED, ...).
+  string code = 1;
+  // ERROR or WARNING.
+  string severity = 2;
+  // JSON Pointer into the definition.
+  string path = 3;
+  string message = 4;
+  string example = 5;
+}
+
+// AutomationVersion is one version of an automation.
+message AutomationVersion {
+  string id = 1;
+  string automation_id = 2;
+  int32 number = 3;
+  AutomationVersionState state = 4;
+  // The canonical definition (JSON).
+  string definition = 5;
+  bytes digest = 6;
+  // The plain-language summary (F681).
+  string summary = 7;
+  repeated AutomationFinding findings = 8;
+  string tested_run_id = 9;
+  string created_by = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp validated_at = 12;
+  google.protobuf.Timestamp tested_at = 13;
+  google.protobuf.Timestamp published_at = 14;
+  string change_request_id = 15;
+}
+
+// AutomationIdentity is an automation in the agent inventory (D15).
+message AutomationIdentity {
+  string automation_id = 1;
+  string service_account_id = 2;
+  string name = 3;
+  string owner_user_id = 4;
+  AutomationState state = 5;
+  AutomationRollout rollout = 6;
+  string enabled_version_id = 7;
+  int32 ceiling_agents = 8;
+  int32 active_grants = 9;
+  google.protobuf.Timestamp review_by = 10;
+}
+
+message CreateAutomationRequest {
+  string name = 1 [(buf.validate.field).string.pattern = "^[a-z][a-z0-9-]{0,62}$"];
+  string purpose = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 2000
+  }];
+  AutomationKind kind = 3 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  string owner_user_id = 4 [(buf.validate.field).string.uuid = true];
+}
+
+message CreateAutomationResponse {
+  Automation automation = 1;
+}
+
+message GetAutomationRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetAutomationResponse {
+  Automation automation = 1;
+}
+
+message ListAutomationsRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  repeated AutomationState states = 3 [(buf.validate.field).repeated = {
+    max_items: 4
+    unique: true
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+}
+
+message ListAutomationsResponse {
+  repeated Automation automations = 1;
+  string next_page_token = 2;
+}
+
+message CreateDraftVersionRequest {
+  string automation_id = 1 [(buf.validate.field).string.uuid = true];
+  // The definition, YAML or JSON.
+  string definition = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 262144
+  }];
+}
+
+message CreateDraftVersionResponse {
+  AutomationVersion version = 1;
+}
+
+message UpdateDraftVersionRequest {
+  string version_id = 1 [(buf.validate.field).string.uuid = true];
+  string definition = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 262144
+  }];
+  // The digest the caller edited; a different stored digest refuses
+  // (REVISION_CHANGED).
+  bytes base_digest = 3 [(buf.validate.field).bytes.len = 32];
+}
+
+message UpdateDraftVersionResponse {
+  AutomationVersion version = 1;
+}
+
+message ValidateVersionRequest {
+  string version_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message ValidateVersionResponse {
+  AutomationVersion version = 1;
+  // True when VALIDATED (no error findings).
+  bool valid = 2;
+}
+
+message GetVersionRequest {
+  string version_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetVersionResponse {
+  AutomationVersion version = 1;
+}
+
+message ListVersionsRequest {
+  string automation_id = 1 [(buf.validate.field).string.uuid = true];
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 3 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+message ListVersionsResponse {
+  // Versions without their definitions, newest first.
+  repeated AutomationVersion versions = 1;
+  string next_page_token = 2;
+}
+
+message GetVersionGraphRequest {
+  string version_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// AutomationGraphNode is one node of a version graph.
+message AutomationGraphNode {
+  string id = 1;
+  // TRIGGER, CONDITION, STEP, GATE or FINISH.
+  string type = 2;
+  // The step kind or trigger kind.
+  string kind = 3;
+  string label = 4;
+  // The authority the node uses: "ceiling" bounds or a platform scope.
+  repeated string authority = 5;
+  bool effectful = 6;
+}
+
+// AutomationGraphEdge connects two nodes.
+message AutomationGraphEdge {
+  string from = 1;
+  string to = 2;
+  // NEXT, ON_FAILURE, COMPENSATE, FINISHES or USES.
+  string type = 3;
+}
+
+message GetVersionGraphResponse {
+  repeated AutomationGraphNode nodes = 1;
+  repeated AutomationGraphEdge edges = 2;
+}
+
+message RequestEnableRequest {
+  string version_id = 1 [(buf.validate.field).string.uuid = true];
+  AutomationRollout rollout = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // COHORT: the agents (a subset of the ceiling's), or a fleet cohort.
+  repeated string cohort_agents = 3 [(buf.validate.field).repeated = {
+    max_items: 50
+    unique: true
+    items: {
+      string: {uuid: true}
+    }
+  }];
+  optional string cohort_id = 4 [(buf.validate.field).string.uuid = true];
+}
+
+message RequestEnableResponse {
+  // The change request to confirm on /changes/{id}.
+  string change_request_id = 1;
+  // How many people must confirm (1 or 2).
+  int32 required = 2;
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+message NarrowRolloutRequest {
+  string automation_id = 1 [(buf.validate.field).string.uuid = true];
+  AutomationRollout rollout = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  repeated string cohort_agents = 3 [(buf.validate.field).repeated = {
+    max_items: 50
+    unique: true
+    items: {
+      string: {uuid: true}
+    }
+  }];
+}
+
+message NarrowRolloutResponse {
+  Automation automation = 1;
+}
+
+// AutomationControlEffect is what a control verifiably did (HR-283).
+message AutomationControlEffect {
+  repeated string grants_revoked = 1;
+  repeated string runs_ended = 2;
+  repeated string launches_cancelled = 3;
+  repeated string deliveries_cancelled = 4;
+  repeated string executions_affected = 5;
+  // Deliveries already handed to a receiver whose cancellation could not be
+  // confirmed (D97, D102): they may still arrive.
+  repeated string deliveries_not_verified = 6;
+}
+
+message PauseAutomationRequest {
+  string automation_id = 1 [(buf.validate.field).string.uuid = true];
+  // Also cancel the active executions at their next boundary.
+  bool cancel_active = 2;
+  string reason = 3 [(buf.validate.field).string.max_len = 500];
+}
+
+message PauseAutomationResponse {
+  Automation automation = 1;
+  AutomationControlEffect effect = 2;
+}
+
+message ResumeAutomationRequest {
+  string automation_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message ResumeAutomationResponse {
+  Automation automation = 1;
+  // Queued triggers replayed.
+  int32 replayed = 2;
+}
+
+message RetireAutomationRequest {
+  string automation_id = 1 [(buf.validate.field).string.uuid = true];
+  string reason = 2 [(buf.validate.field).string.max_len = 500];
+}
+
+message RetireAutomationResponse {
+  Automation automation = 1;
+  AutomationControlEffect effect = 2;
+}
+
+message SetAutomationOwnerRequest {
+  string automation_id = 1 [(buf.validate.field).string.uuid = true];
+  string owner_user_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+message SetAutomationOwnerResponse {
+  Automation automation = 1;
+}
+
+message RevokeAuthorityRequest {
+  string automation_id = 1 [(buf.validate.field).string.uuid = true];
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+message RevokeAuthorityResponse {
+  Automation automation = 1;
+  AutomationControlEffect effect = 2;
+}

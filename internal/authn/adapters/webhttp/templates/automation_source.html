@@ -1,0 +1,29 @@
+{{template "head" .}}
+<h1>Inbound event source: {{.Name}}</h1>
+<p>State: <strong>{{.State}}</strong>. Created at {{.CreatedAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{with .ActivatedAt}}; activated {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}.</p>
+<dl>
+<dt>Source</dt><dd><code>{{.ID}}</code></dd>
+<dt>Description</dt><dd class="untrusted">{{.Description}}</dd>
+<dt>Event types</dt><dd>{{range $i, $t := .Types}}{{if $i}}, {{end}}<code>{{$t}}</code>{{end}}</dd>
+<dt>Rate</dt><dd>At most {{.RatePerMinute}} requests a minute</dd>
+<dt>Endpoint</dt><dd><code>POST {{.Endpoint}}</code>, signed with Standard Webhooks (webhook-id, webhook-timestamp, webhook-signature)</dd>
+{{with .RotationEndsAt}}<dt>Rotation</dt><dd>The previous secret is accepted until {{.UTC.Format "2006-01-02 15:04:05 UTC"}}</dd>{{end}}
+</dl>
+<p class="note">Events from this source can start automations. They fill only the parameters an automation declares, typed and bounded; they never choose who acts, with what authority, or which steps run.</p>
+{{if .CanManage}}
+{{if eq .State "PENDING"}}
+<h2>Activate</h2>
+<p class="note">Once active, signed events from whoever holds the secret are accepted. Activating needs your security key.</p>
+<p><button type="button" class="danger" data-action="activate" data-path="/automations/sources/{{.ID}}/activate">Activate with your security key</button></p>
+{{else if eq .State "ACTIVE"}}
+<h2>Rotate the secret</h2>
+<p class="note">A new secret is shown once; the current one keeps working for 24 hours. Rotating needs your security key.</p>
+<p><button type="button" data-action="rotate" data-path="/automations/sources/{{.ID}}/rotate">Rotate with your security key</button></p>
+{{end}}
+{{else}}{{if eq .State "PENDING"}}
+<p class="note">You cannot activate this source: that needs automation.endpoints.manage and a security key.</p>
+{{end}}{{end}}
+<p id="status" role="status"></p>
+<p><code id="secret"></code></p>
+<script src="/static/automation_endpoints.js"></script>
+{{template "foot" .}}

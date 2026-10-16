@@ -70,7 +70,7 @@ SET name = $1, purpose = $2, team_id = $3,
     backup_owner_user_id = $6, execution_context = $7,
     state = 'CLAIMED', claimed_at = now(), updated_at = now()
 WHERE org_id = $8 AND id = $9 AND state = 'DISCOVERED'
-RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent
+RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type
 `
 
 type ClaimDiscoveredAgentParams struct {
@@ -116,6 +116,7 @@ func (q *Queries) ClaimDiscoveredAgent(ctx context.Context, arg ClaimDiscoveredA
 		&i.ClaimedAt,
 		&i.RetiredAt,
 		&i.RangeAgent,
+		&i.TaskType,
 	)
 	return i, err
 }
@@ -196,7 +197,7 @@ func (q *Queries) CountRangeAgents(ctx context.Context, orgID ids.OrgID) (int64,
 }
 
 const getAgent = `-- name: GetAgent :one
-SELECT org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent FROM pc.agents WHERE org_id = $1 AND id = $2
+SELECT org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type FROM pc.agents WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetAgent(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcAgent, error) {
@@ -220,6 +221,7 @@ func (q *Queries) GetAgent(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (P
 		&i.ClaimedAt,
 		&i.RetiredAt,
 		&i.RangeAgent,
+		&i.TaskType,
 	)
 	return i, err
 }
@@ -325,7 +327,7 @@ INSERT INTO pc.agents (org_id, id, name, purpose, team_id, environment_id, owner
 VALUES ($1, $2, $3, $4, $5, $6,
     $7, $8, $9, 'CLAIMED',
     $10, now(), $11)
-RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent
+RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type
 `
 
 type InsertAgentParams struct {
@@ -382,6 +384,7 @@ func (q *Queries) InsertAgent(ctx context.Context, arg InsertAgentParams) (PcAge
 		&i.ClaimedAt,
 		&i.RetiredAt,
 		&i.RangeAgent,
+		&i.TaskType,
 	)
 	return i, err
 }
@@ -418,7 +421,7 @@ func (q *Queries) InsertAgentChange(ctx context.Context, arg InsertAgentChangePa
 const insertDiscoveredAgent = `-- name: InsertDiscoveredAgent :one
 INSERT INTO pc.agents (org_id, id, name, state, created_by)
 VALUES ($1, $2, $3, 'DISCOVERED', $4)
-RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent
+RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type
 `
 
 type InsertDiscoveredAgentParams struct {
@@ -454,6 +457,7 @@ func (q *Queries) InsertDiscoveredAgent(ctx context.Context, arg InsertDiscovere
 		&i.ClaimedAt,
 		&i.RetiredAt,
 		&i.RangeAgent,
+		&i.TaskType,
 	)
 	return i, err
 }
@@ -552,7 +556,7 @@ func (q *Queries) ListAgentChanges(ctx context.Context, arg ListAgentChangesPara
 }
 
 const listAgents = `-- name: ListAgents :many
-SELECT org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent FROM pc.agents
+SELECT org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type FROM pc.agents
 WHERE org_id = $1 AND id > coalesce($2::uuid, '00000000-0000-0000-0000-000000000000')
   AND (cardinality($3::text[]) = 0 OR state = ANY ($3::text[]))
   AND ($4::uuid IS NULL OR team_id = $4::uuid)
@@ -601,6 +605,7 @@ func (q *Queries) ListAgents(ctx context.Context, arg ListAgentsParams) ([]PcAge
 			&i.ClaimedAt,
 			&i.RetiredAt,
 			&i.RangeAgent,
+			&i.TaskType,
 		); err != nil {
 			return nil, err
 		}
@@ -613,7 +618,7 @@ func (q *Queries) ListAgents(ctx context.Context, arg ListAgentsParams) ([]PcAge
 }
 
 const lockAgent = `-- name: LockAgent :one
-SELECT org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent FROM pc.agents WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type FROM pc.agents WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockAgent(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcAgent, error) {
@@ -637,6 +642,7 @@ func (q *Queries) LockAgent(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (
 		&i.ClaimedAt,
 		&i.RetiredAt,
 		&i.RangeAgent,
+		&i.TaskType,
 	)
 	return i, err
 }
@@ -779,7 +785,7 @@ UPDATE pc.agents
 SET state = $1, suspended_from = $2, updated_at = now(),
     retired_at = CASE WHEN $1::text = 'RETIRED' THEN now() ELSE retired_at END
 WHERE org_id = $3 AND id = $4 AND state = $5
-RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent
+RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type
 `
 
 type SetAgentStateParams struct {
@@ -817,6 +823,7 @@ func (q *Queries) SetAgentState(ctx context.Context, arg SetAgentStateParams) (P
 		&i.ClaimedAt,
 		&i.RetiredAt,
 		&i.RangeAgent,
+		&i.TaskType,
 	)
 	return i, err
 }
@@ -854,7 +861,7 @@ const transferAgentOwnership = `-- name: TransferAgentOwnership :one
 UPDATE pc.agents
 SET owner_user_id = $1, backup_owner_user_id = $2, updated_at = now()
 WHERE org_id = $3 AND id = $4 AND claimed_at IS NOT NULL AND state <> 'RETIRED'
-RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent
+RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type
 `
 
 type TransferAgentOwnershipParams struct {
@@ -890,6 +897,7 @@ func (q *Queries) TransferAgentOwnership(ctx context.Context, arg TransferAgentO
 		&i.ClaimedAt,
 		&i.RetiredAt,
 		&i.RangeAgent,
+		&i.TaskType,
 	)
 	return i, err
 }
@@ -898,7 +906,7 @@ const updateAgentText = `-- name: UpdateAgentText :one
 UPDATE pc.agents
 SET name = coalesce($1, name), purpose = coalesce($2, purpose), updated_at = now()
 WHERE org_id = $3 AND id = $4 AND state <> 'RETIRED'
-RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent
+RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type
 `
 
 type UpdateAgentTextParams struct {
@@ -934,6 +942,7 @@ func (q *Queries) UpdateAgentText(ctx context.Context, arg UpdateAgentTextParams
 		&i.ClaimedAt,
 		&i.RetiredAt,
 		&i.RangeAgent,
+		&i.TaskType,
 	)
 	return i, err
 }

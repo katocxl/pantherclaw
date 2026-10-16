@@ -16,6 +16,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -118,6 +120,60 @@ func validate(f reflexdomain.Failure) error {
 	for _, s := range f.Scope {
 		if !s.Valid() {
 			return bad("invalid scope subject")
+		}
+	}
+	return nil
+}
+
+// Resolve resolves, in the caller's transaction, the open failures of
+// kind whose dedupe key is one of keys, once their cause is gone, and
+// records incident.failure_resolved for each as a manual resolution does
+// (G0 M11 part 2 D106 D2). It returns the resolved ids; none is open, none
+// is recorded.
+func (s *Sink) Resolve(ctx context.Context, ptx pgx.Tx, org ids.OrgID, kind string, keys []string, resolution string,
+	actor evdomain.Actor,
+) ([]ids.UUID, error) {
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	tx, err := db.AdoptTenantTx(ctx, ptx, org)
+	if err != nil {
+		return nil, err
+	}
+	resolved, err := dbq.New(tx).ResolveOpenFailures(ctx, dbq.ResolveOpenFailuresParams{
+		Resolution: resolution, OrgID: org, Kind: kind, DedupeKeys: keys,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failures: resolve: %w", err)
+	}
+	return resolved, recordResolved(ctx, tx, kind, resolved, actor)
+}
+
+// ResolveInScope is Resolve for every open failure of kind whose scope
+// names the subject, whatever its dedupe key (G0 M11 part 2 D111 G1).
+func (s *Sink) ResolveInScope(ctx context.Context, ptx pgx.Tx, org ids.OrgID, kind string, subject reflexdomain.Subject,
+	resolution string, actor evdomain.Actor,
+) ([]ids.UUID, error) {
+	tx, err := db.AdoptTenantTx(ctx, ptx, org)
+	if err != nil {
+		return nil, err
+	}
+	resolved, err := dbq.New(tx).ResolveOpenFailuresInScope(ctx, dbq.ResolveOpenFailuresInScopeParams{
+		Resolution: resolution, OrgID: org, Kind: kind, SubjectType: string(subject.Type), SubjectID: subject.ID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failures: resolve: %w", err)
+	}
+	return resolved, recordResolved(ctx, tx, kind, resolved, actor)
+}
+
+func recordResolved(ctx context.Context, tx db.TenantTx, kind string, resolved []ids.UUID, actor evdomain.Actor) error {
+	for _, id := range resolved {
+		if _, err := audit.Record(ctx, tx, audit.Event{
+			Name: "incident.failure_resolved", Actor: actor, Outcome: audit.Success,
+			Object: &audit.Object{Type: "failure", ID: id.String()}, Details: map[string]string{"kind": kind},
+		}); err != nil {
+			return err
 		}
 	}
 	return nil

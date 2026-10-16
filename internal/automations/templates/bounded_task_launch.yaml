@@ -1,0 +1,277 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# bounded_task_launch (D32): a signed inbound request or a schedule launches
+# one bounded run of one agent, waits for the run to end and, when the
+# ceiling has an irreversible operation, waits for its confirmed effect.
+id: bounded_task_launch
+title: Bounded task launch
+summary: >-
+  Launch one bounded run of an agent for each signed request or on a
+  schedule, wait for the run to end, and confirm the effect of an
+  irreversible operation.
+edition: TEAM
+params:
+  - name: purpose
+    description: What the automation is for, shown to reviewers and approvers.
+    type: string
+    pattern: '[^{}$]{1,1000}'
+    max_len: 1000
+    default: Launch one bounded agent run for each request and wait until it ends.
+  - name: review_by
+    description: The date (YYYY-MM-DD) by which the owner reviews the automation again; at most 90 days ahead.
+    type: string
+    format: date
+    pattern: '[0-9]{4}-[0-9]{2}-[0-9]{2}'
+    max_len: 10
+    example: "2026-12-31"
+  - name: trigger
+    description: What starts an execution, a signed inbound event or a schedule.
+    type: enum
+    values: [inbound, schedule]
+    default: inbound
+  - name: source
+    description: The inbound event source (for the inbound trigger).
+    type: uuid
+    required: false
+    example: 0192f000-0000-7000-8000-0000000000a1
+  - name: event_type
+    description: The inbound event type that starts an execution.
+    type: string
+    pattern: '[A-Za-z0-9][A-Za-z0-9._:-]{0,99}'
+    max_len: 100
+    default: task.requested
+  - name: cron
+    description: The five-field cron of the schedule (for the schedule trigger).
+    type: string
+    pattern: '[0-9*/,-]{1,20}( [0-9*/,-]{1,20}){4}'
+    max_len: 104
+    default: "0 9 * * 1-5"
+  - name: timezone
+    description: The IANA time zone of the schedule.
+    type: string
+    format: timezone
+    pattern: '[A-Za-z][A-Za-z0-9_+-]{0,31}(/[A-Za-z0-9_+-]{1,32}){0,2}'
+    max_len: 100
+    default: UTC
+  - name: agent
+    description: The agent each execution launches; the ceiling holds only this agent.
+    type: uuid
+    example: 0192f000-0000-7000-8000-0000000000b1
+  - name: operations
+    description: The operations an issued grant may cover (exact names or prefixes such as tickets.*), comma-separated.
+    type: string
+    list: true
+    max_items: 10
+    pattern: '[a-z][a-z0-9_]*(\.[a-z0-9_]+){1,6}|[a-z][a-z0-9_]*(\.[a-z0-9_]+){0,5}\.\*'
+    max_len: 128
+    example: tickets.update
+  - name: confirm_operation
+    description: An irreversible ceiling operation whose confirmed effect the execution waits for; leave empty when none is irreversible.
+    type: string
+    required: false
+    pattern: '[a-z][a-z0-9_]*(\.[a-z0-9_]+){1,6}'
+    max_len: 128
+  - name: grant_ttl
+    description: How long each issued grant lasts.
+    type: enum
+    values: [15m, 30m, 1h, 4h, 8h, 24h]
+    default: 1h
+  - name: run_timeout
+    description: How long the execution waits for the run to end.
+    type: enum
+    values: [30m, 1h, 2h, 4h, 8h, 12h, 24h]
+    default: 4h
+  - name: runs_per_day
+    description: The most grants and runs the automation issues per UTC day.
+    type: int
+    min: "1"
+    max: "1000"
+    default: "20"
+  - name: budget_currency
+    description: The currency of the budgets.
+    type: string
+    pattern: '[A-Z]{3}'
+    max_len: 3
+    default: USD
+  - name: budget_per_run
+    description: The most one execution's grant may spend; required when an operation spends money.
+    type: decimal
+    required: false
+    min: "0.01"
+    max: "1000000"
+    requires: [budget_per_day]
+    example: "50.00"
+  - name: budget_per_day
+    description: The most the automation's grants may spend per UTC day.
+    type: decimal
+    required: false
+    min: "0.01"
+    max: "10000000"
+    requires: [budget_per_run]
+    example: "500.00"
+
+definition:
+  apiVersion: automations.pantherclaw.dev/v1
+  kind: Automation
+  purpose: "${purpose}"
+  work_kind: AGENT_WORK
+  review_by: "${review_by}"
+  when:
+    $switch: trigger
+    $cases:
+      inbound:
+        inbound:
+          source: "${source}"
+          type: "${event_type}"
+          params:
+            ref:
+              from: /ref
+              type: string
+              pattern: '[A-Za-z0-9._:-]{1,64}'
+        dedupe:
+          key: "{{params.ref}}"
+          window: 1d
+      schedule:
+        schedule:
+          cron: "${cron}"
+          timezone: "${timezone}"
+  authority:
+    principal: self
+    ceiling:
+      agents: ["${agent}"]
+      bounds:
+        operations: "${operations}"
+      per_grant:
+        ttl: "${grant_ttl}"
+        limits:
+          $when: {param: budget_per_run, set: true}
+          budgets:
+            - id: per_run
+              grouping: task
+              operations: "${operations}"
+              currency: "${budget_currency}"
+              limit: "${budget_per_run}"
+              period: none
+      per_day:
+        grants: "${runs_per_day}"
+        runs: "${runs_per_day}"
+        budget:
+          $when: {param: budget_per_day, set: true}
+          $value:
+            - currency: "${budget_currency}"
+              amount: "${budget_per_day}"
+  do:
+    - id: launch
+      step: launch_run
+      with:
+        agent: "${agent}"
+        task_ref:
+          $switch: trigger
+          $cases:
+            inbound: "{{params.ref}}"
+            schedule: scheduled
+    - id: wait
+      step: wait_run
+      with:
+        step: launch
+      timeout: "${run_timeout}"
+    - $when: {param: confirm_operation, set: true}
+      id: confirm
+      step: wait_effect
+      with:
+        step: launch
+        operation: "${confirm_operation}"
+        min: 1
+      timeout: 1h
+  finish_when:
+    - step: wait
+      condition: RUN_ENDED
+    - $when: {param: confirm_operation, set: true}
+      step: confirm
+      condition: EFFECT_CONFIRMED
+  limits:
+    deadline: 2d
+
+tests:
+  - name: the_run_ends_and_its_effect_is_confirmed
+    kind: NORMAL
+    trigger:
+      params:
+        $switch: trigger
+        $cases: {inbound: {ref: T-100}, schedule: {}}
+    stubs:
+      launch: [{state: DONE, effect: CHANGED, refs: [run], output: {run_bound: "true"}}]
+      wait: [{state: WAITING}, {state: DONE, refs: [run]}]
+      confirm: {$when: {param: confirm_operation, set: true}, $value: [{state: DONE, refs: [receipt]}]}
+    expect:
+      state: SUCCEEDED
+      steps:
+        launch: DONE
+        wait: DONE
+        confirm: {$when: {param: confirm_operation, set: true}, $value: DONE}
+  - name: the_ceiling_refuses_the_launch
+    kind: DENIED
+    trigger:
+      params:
+        $switch: trigger
+        $cases: {inbound: {ref: T-101}, schedule: {}}
+    stubs:
+      launch: [{state: FAILED, reason: USAGE_EXCEEDED}]
+    expect:
+      state: FAILED
+      reason: USAGE_EXCEEDED
+      steps: {launch: FAILED}
+  - name: the_run_does_not_end_in_time
+    kind: TIMEOUT
+    trigger:
+      params:
+        $switch: trigger
+        $cases: {inbound: {ref: T-102}, schedule: {}}
+    stubs:
+      launch: [{state: DONE, effect: CHANGED, refs: [run], output: {run_bound: "true"}}]
+      wait: [{state: WAITING}]
+    expect:
+      state: PARTIALLY_COMPLETED
+      reason: TIMEOUT
+      steps: {launch: DONE, wait: FAILED}
+  - name: the_same_request_twice_starts_one_execution
+    kind: DUPLICATE
+    trigger:
+      params:
+        $switch: trigger
+        $cases: {inbound: {ref: T-103}, schedule: {}}
+    stubs:
+      launch: [{state: DONE, effect: CHANGED, refs: [run], output: {run_bound: "true"}}]
+      wait: [{state: DONE, refs: [run]}]
+      confirm: {$when: {param: confirm_operation, set: true}, $value: [{state: DONE, refs: [receipt]}]}
+    expect:
+      state: SUCCEEDED
+  - name: the_run_fails_after_it_acted
+    kind: PARTIAL
+    trigger:
+      params:
+        $switch: trigger
+        $cases: {inbound: {ref: T-104}, schedule: {}}
+    stubs:
+      launch: [{state: DONE, effect: CHANGED, refs: [run], output: {run_bound: "true"}}]
+      wait: [{state: FAILED, reason: STEP_FAILED, refs: [run]}]
+    expect:
+      state: PARTIALLY_COMPLETED
+      reason: STEP_FAILED
+      steps: {launch: DONE, wait: FAILED}
+  - $when: {param: confirm_operation, set: true}
+    name: the_irreversible_effect_is_unknown
+    kind: UNKNOWN
+    trigger:
+      params:
+        $switch: trigger
+        $cases: {inbound: {ref: T-105}, schedule: {}}
+    stubs:
+      launch: [{state: DONE, effect: CHANGED, refs: [run], output: {run_bound: "true"}}]
+      wait: [{state: DONE, refs: [run]}]
+      confirm: [{state: UNKNOWN, effect: UNKNOWN, output: {irreversible: "true"}}]
+    expect:
+      state: NEEDS_RECONCILIATION
+      reason: EFFECT_UNKNOWN
+      steps: {confirm: UNKNOWN}

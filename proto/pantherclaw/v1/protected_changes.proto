@@ -1,0 +1,400 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// ProtectedChangeService manages protected changes (G0 M11 part 2 D42;
+// F582–F593, F599, HR-292, T-129). An org protects a category of change
+// (TOOL_MEANING, CONSEQUENCE_RULES, CUSTODY, COVERAGE_EXCLUSION) by setting
+// it to DISTINCT_PUBLISHER. Then every widening change in it (activating a
+// package version; a change window that drops or shortens a freeze;
+// uploading a sealed credential; weakening a connection or setting a route
+// to monitor; a coverage exclusion) answers PROTECTED_CHANGE_PENDING with
+// its change request instead of applying, and applies when a different
+// person holding the same permission, not marked compromised, confirms it
+// on its page with a security key. Turning a category off is itself such a
+// request.
+service ProtectedChangeService {
+  // GetProtectedChangeSettings returns every category's mode (OFF when
+  // never set).
+  // permission: protected_change.manage
+  rpc GetProtectedChangeSettings(GetProtectedChangeSettingsRequest) returns (GetProtectedChangeSettingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SetProtectedCategoryMode turns a category on at once (a person only);
+  // turning it off answers PROTECTED_CHANGE_PENDING with a request a second
+  // person confirms.
+  // permission: protected_change.manage
+  rpc SetProtectedCategoryMode(SetProtectedCategoryModeRequest) returns (SetProtectedCategoryModeResponse);
+  // ListProtectedChanges lists protected changes, newest first. An author
+  // follows their own pending change through its change request.
+  // permission: protected_change.manage
+  rpc ListProtectedChanges(ListProtectedChangesRequest) returns (ListProtectedChangesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ApplyEmergencyProtectedChange applies a pending protected change now
+  // (F590): a person, not marked compromised, with a security-key step-up
+  // less than 5 minutes old, so over the API it always answers
+  // STEP_UP_REQUIRED and is done on the change's page. It is recorded
+  // EMERGENCY and opens a review a distinct publisher must confirm within
+  // 72 hours.
+  // permission: incident.respond
+  rpc ApplyEmergencyProtectedChange(ApplyEmergencyProtectedChangeRequest) returns (ApplyEmergencyProtectedChangeResponse);
+  // OpenEmergencyReview opens a new review of an emergency change whose
+  // review expired unconfirmed (D98 L3; review_state REVIEW_EXPIRED): a
+  // fresh 72-hour review that neither the author nor the person who
+  // applied it may confirm. The change stays applied throughout. The
+  // caller is a person holding the change's category permission (the
+  // surface's, for example release.window.manage), not marked compromised;
+  // the use case checks that permission.
+  // permission: authenticated
+  rpc OpenEmergencyReview(OpenEmergencyReviewRequest) returns (OpenEmergencyReviewResponse);
+}
+
+// PublisherService handles compromised publishers (G0 M11 part 2 D43;
+// F595, F596, HR-293, T-129; Business edition). Marking a person
+// compromised stops their confirming, approving, publishing, activating and
+// promoting at once, voids their pending requests, pauses the automations
+// whose ceiling they approved and halts the rollouts they confirmed; what
+// they published since the given time is listed, each item is reviewed
+// KEEP or ROLLBACK by someone else, and only then can two other people
+// clear the mark. A valid signature never exempts.
+service PublisherService {
+  // MarkCompromised marks a person compromised (one person: it only
+  // narrows) with a security-key step-up less than 5 minutes old, so over
+  // the API it always answers STEP_UP_REQUIRED and is done on the page.
+  // permission: publisher.compromise
+  rpc MarkCompromised(MarkCompromisedRequest) returns (MarkCompromisedResponse);
+  // ListCompromises lists marks, newest first.
+  // permission: publisher.compromise
+  rpc ListCompromises(ListCompromisesRequest) returns (ListCompromisesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListExposed returns a mark with everything the person published since
+  // its time and each item's review: policy versions published, policy
+  // change requests confirmed, package versions activated, org package
+  // keys registered (revoke them COMPROMISED), protected changes published,
+  // grants issued, automation versions confirmed and promotions made.
+  // permission: publisher.compromise
+  rpc ListExposed(ListExposedRequest) returns (ListExposedResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ReviewExposed records KEEP or ROLLBACK on one exposed item (anyone but
+  // the compromised person). ROLLBACK undoes it first through its own path
+  // (rollback, quarantine, pause, revoke).
+  // permission: publisher.compromise
+  rpc ReviewExposed(ReviewExposedRequest) returns (ReviewExposedResponse);
+  // ClearCompromise asks for a mark to be cleared once every exposed item
+  // is reviewed; two people other than the compromised person confirm the
+  // request on its page with security keys.
+  // permission: publisher.compromise
+  rpc ClearCompromise(ClearCompromiseRequest) returns (ClearCompromiseResponse);
+}
+
+// ProtectedCategorySetting is one category's protection.
+message ProtectedCategorySetting {
+  // "TOOL_MEANING", "CONSEQUENCE_RULES", "CUSTODY" or "COVERAGE_EXCLUSION".
+  string category = 1;
+  // "OFF" or "DISTINCT_PUBLISHER".
+  string mode = 2;
+  // Who last changed it; empty when never set.
+  string updated_by = 3;
+  // When.
+  google.protobuf.Timestamp update_time = 4;
+}
+
+// ProtectedChange is one stored protected change.
+message ProtectedChange {
+  // Change id.
+  string id = 1;
+  // Its category.
+  string category = 2;
+  // The surface that applies it (for example "credential.put").
+  string surface = 3;
+  // What it is about.
+  string subject = 4;
+  // What a publisher sees: metadata and fingerprints, never secrets.
+  map<string, string> summary = 5;
+  // The fields it weakens.
+  repeated string widening = 6;
+  // SHA-256 of the change, hex.
+  string digest = 7;
+  // Its author (a person).
+  string author = 8;
+  // "PENDING", "APPLIED", "EMERGENCY", "DECLINED", "EXPIRED" or "VOIDED".
+  string state = 9;
+  // Its change request (confirmed on that request's page).
+  string change_request_id = 10;
+  // Who published it (confirmed it, or applied it in an emergency).
+  string publisher = 11;
+  // When it was asked.
+  google.protobuf.Timestamp create_time = 12;
+  // When it ended.
+  google.protobuf.Timestamp decide_time = 13;
+  // Why it was voided (for example "SUPERSEDED").
+  string decided_reason = 14;
+  // An emergency change's review: its request, due time and reviewer.
+  string review_request_id = 15;
+  // When the review is due (72 hours after the emergency).
+  google.protobuf.Timestamp review_due_time = 16;
+  // Who reviewed it.
+  string reviewed_by = 17;
+  // When.
+  google.protobuf.Timestamp review_time = 18;
+  // An emergency change's review state: "DUE", "REVIEWED" or
+  // "REVIEW_EXPIRED" (D98 L3). The change is applied in each of them;
+  // empty when it is not an emergency change.
+  string review_state = 19;
+}
+
+// GetProtectedChangeSettingsRequest asks for the settings.
+message GetProtectedChangeSettingsRequest {}
+
+// GetProtectedChangeSettingsResponse returns every category.
+message GetProtectedChangeSettingsResponse {
+  // One per category.
+  repeated ProtectedCategorySetting settings = 1;
+}
+
+// SetProtectedCategoryModeRequest sets one category.
+message SetProtectedCategoryModeRequest {
+  // The category.
+  string category = 1 [(buf.validate.field).string = {
+    in: [
+      "TOOL_MEANING",
+      "CONSEQUENCE_RULES",
+      "CUSTODY",
+      "COVERAGE_EXCLUSION"
+    ]
+  }];
+  // The mode.
+  string mode = 2 [(buf.validate.field).string = {
+    in: [
+      "OFF",
+      "DISTINCT_PUBLISHER"
+    ]
+  }];
+}
+
+// SetProtectedCategoryModeResponse returns the category.
+message SetProtectedCategoryModeResponse {
+  // The setting.
+  ProtectedCategorySetting setting = 1;
+}
+
+// ListProtectedChangesRequest filters the list.
+message ListProtectedChangesRequest {
+  // Only this state; empty for every state.
+  string state = 1 [(buf.validate.field).string = {
+    in: [
+      "",
+      "PENDING",
+      "APPLIED",
+      "EMERGENCY",
+      "DECLINED",
+      "EXPIRED",
+      "VOIDED"
+    ]
+  }];
+  // Only this category; empty for every category.
+  string category = 2 [(buf.validate.field).string = {
+    in: [
+      "",
+      "TOOL_MEANING",
+      "CONSEQUENCE_RULES",
+      "CUSTODY",
+      "COVERAGE_EXCLUSION"
+    ]
+  }];
+  // Changes older than this one (from next_page_token).
+  string page_token = 3 [(buf.validate.field).string = {
+    max_len: 36
+  }];
+  // At most this many (1 to 200; default 50).
+  int32 page_size = 4 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+}
+
+// ListProtectedChangesResponse lists them.
+message ListProtectedChangesResponse {
+  // Changes, newest first.
+  repeated ProtectedChange changes = 1;
+  // The next page's token; empty at the end.
+  string next_page_token = 2;
+}
+
+// ApplyEmergencyProtectedChangeRequest names the change's request.
+message ApplyEmergencyProtectedChangeRequest {
+  // The pending change's change request id.
+  string change_request_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ApplyEmergencyProtectedChangeResponse returns the applied change.
+message ApplyEmergencyProtectedChangeResponse {
+  // The change (EMERGENCY, with its review request).
+  ProtectedChange change = 1;
+}
+
+// OpenEmergencyReviewRequest names the emergency change.
+message OpenEmergencyReviewRequest {
+  // The protected change id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// OpenEmergencyReviewResponse returns the change with its new review.
+message OpenEmergencyReviewResponse {
+  // The change (EMERGENCY, review_state DUE, a new review request).
+  ProtectedChange change = 1;
+}
+
+// PublisherCompromise is one mark.
+message PublisherCompromise {
+  // Mark id.
+  string id = 1;
+  // The person marked compromised.
+  string user_id = 2;
+  // From when their actions are exposed.
+  google.protobuf.Timestamp since = 3;
+  // Why (untrusted text).
+  string reason = 4;
+  // "ACTIVE" or "CLEARED".
+  string state = 5;
+  // Who marked them.
+  string marked_by = 6;
+  // When.
+  google.protobuf.Timestamp mark_time = 7;
+  // The pending or applied request to clear it.
+  string clear_request_id = 8;
+  // When it was cleared.
+  google.protobuf.Timestamp clear_time = 9;
+}
+
+// ExposedItem is one thing the person published since the mark's time.
+message ExposedItem {
+  // "POLICY_VERSION", "POLICY_CHANGE", "PACKAGE_VERSION", "PACKAGE_KEY",
+  // "AUTOMATION_VERSION", "PROTECTED_CHANGE", "PROMOTION" or "GRANT".
+  string kind = 1;
+  // The item's id (a uuid, a package name@version or a key id).
+  string id = 2;
+  // A short description.
+  string label = 3;
+  // When they did it.
+  google.protobuf.Timestamp time = 4;
+  // "KEEP" or "ROLLBACK" once reviewed; empty before.
+  string decision = 5;
+  // Who reviewed it.
+  string reviewer = 6;
+  // The reviewer's note (untrusted text).
+  string note = 7;
+  // When.
+  google.protobuf.Timestamp review_time = 8;
+}
+
+// MarkCompromisedRequest names the person.
+message MarkCompromisedRequest {
+  // The person.
+  string user_id = 1 [(buf.validate.field).string.uuid = true];
+  // From when their actions count as exposed (not in the future).
+  google.protobuf.Timestamp since = 2 [(buf.validate.field).required = true];
+  // Why (1 to 500 characters).
+  string reason = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+// MarkCompromisedResponse returns the mark.
+message MarkCompromisedResponse {
+  // The mark.
+  PublisherCompromise compromise = 1;
+}
+
+// ListCompromisesRequest filters the list.
+message ListCompromisesRequest {
+  // Only ACTIVE marks.
+  bool active_only = 1;
+}
+
+// ListCompromisesResponse lists marks, newest first (at most 200).
+message ListCompromisesResponse {
+  // Marks.
+  repeated PublisherCompromise compromises = 1;
+}
+
+// ListExposedRequest names a mark.
+message ListExposedRequest {
+  // Mark id.
+  string compromise_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ListExposedResponse returns the mark and its items, oldest first.
+message ListExposedResponse {
+  // The mark.
+  PublisherCompromise compromise = 1;
+  // What the person published since its time, at most 1000 items per
+  // source.
+  repeated ExposedItem items = 2;
+  // True when a source has more than it lists (1000 items): the list is
+  // not everything and the mark cannot be cleared (EXPOSURE_TRUNCATED).
+  bool truncated = 3;
+}
+
+// ReviewExposedRequest decides on one item.
+message ReviewExposedRequest {
+  // Mark id.
+  string compromise_id = 1 [(buf.validate.field).string.uuid = true];
+  // The item's kind.
+  string kind = 2 [(buf.validate.field).string = {
+    in: [
+      "POLICY_VERSION",
+      "POLICY_CHANGE",
+      "PACKAGE_VERSION",
+      "PACKAGE_KEY",
+      "AUTOMATION_VERSION",
+      "PROTECTED_CHANGE",
+      "PROMOTION",
+      "GRANT"
+    ]
+  }];
+  // The item's id.
+  string item_id = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 256
+  }];
+  // "KEEP" or "ROLLBACK".
+  string decision = 4 [(buf.validate.field).string = {
+    in: [
+      "KEEP",
+      "ROLLBACK"
+    ]
+  }];
+  // An optional note (at most 500 characters).
+  string note = 5 [(buf.validate.field).string = {
+    max_len: 500
+  }];
+}
+
+// ReviewExposedResponse returns the reviewed item.
+message ReviewExposedResponse {
+  // The item with its review.
+  ExposedItem item = 1;
+}
+
+// ClearCompromiseRequest names a mark.
+message ClearCompromiseRequest {
+  // Mark id.
+  string compromise_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ClearCompromiseResponse returns the request to confirm.
+message ClearCompromiseResponse {
+  // The change request two other people confirm.
+  string change_request_id = 1;
+}

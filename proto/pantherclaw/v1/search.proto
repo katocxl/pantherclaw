@@ -59,6 +59,39 @@ service SearchService {
   rpc RunSavedQuery(RunSavedQueryRequest) returns (RunSavedQueryResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // Find is quick find (G0 M11 part 2 D45; F304, F320, HR-295): records
+  // whose id, id prefix (at least 8 hex digits) or name matches the text,
+  // per kind, each under the caller's own read permission and scope; a
+  // hidden record never shows in matches or counts.
+  // permission: search.read
+  rpc Find(FindRequest) returns (FindResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // Interpret reads a plain-language question with a fixed lexicon (no
+  // model; nothing leaves the server) and shows the query it becomes, its
+  // range and time zone, what the rows mean, and every word it did not
+  // understand or name it could not settle (D46; F305, HR-295).
+  // permission: search.read
+  rpc Interpret(InterpretRequest) returns (InterpretResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // Ask interprets a question and, unless it needs clarification, runs it
+  // under the caller's permissions; every row links its evidence (F321).
+  // permission: search.read
+  rpc Ask(AskRequest) returns (AskResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // OpenCaseFromResults re-runs a search under the caller's permissions and
+  // opens a case carrying only the chosen results' evidence (D48; F318,
+  // HR-296; Team). The caller also needs search.read, and case.manage over
+  // every agent the chosen results are about.
+  // permission: case.manage
+  rpc OpenCaseFromResults(OpenCaseFromResultsRequest) returns (OpenCaseFromResultsResponse);
+  // ExportResults exports at most 10000 rows of a search the caller may
+  // both read and export, and records the export with its query in the
+  // audit ledger (D48; F318, HR-296). The caller also needs search.read.
+  // permission: evidence.export
+  rpc ExportResults(ExportResultsRequest) returns (ExportResultsResponse);
 }
 
 // SearchFilters are the typed filters of a structured query. Each entity
@@ -97,12 +130,22 @@ message SearchFilters {
   bool widens_only = 24;
   google.protobuf.Timestamp start_time = 25;
   google.protobuf.Timestamp end_time = 26;
+  optional string alert_id = 27 [(buf.validate.field).string.uuid = true];
+  optional string incident_id = 28 [(buf.validate.field).string.uuid = true];
+  // Alert, incident and finding severities (LOW, MEDIUM, HIGH, CRITICAL).
+  repeated string severities = 29 [(buf.validate.field).repeated.max_items = 16];
+  // Transaction effect states (CONFIRMED, NONE_CONFIRMED, PARTIAL, UNKNOWN, ...).
+  repeated string effect_states = 30 [(buf.validate.field).repeated.max_items = 16];
+  // Automation executions of this automation.
+  optional string automation_id = 31 [(buf.validate.field).string.uuid = true];
 }
 
 // Query is one structured query.
 message Query {
   // "transactions", "runs", "agents", "grants", "grant_changes",
-  // "connections", "approvals", "audit" or "operations".
+  // "connections", "approvals", "audit", "operations", "alerts",
+  // "incidents", "cases", "findings", "policy_versions", "packages",
+  // "gateways", "automations" or "automation_executions".
   string entity = 1 [(buf.validate.field).string = {
     in: [
       "transactions",
@@ -113,7 +156,16 @@ message Query {
       "connections",
       "approvals",
       "audit",
-      "operations"
+      "operations",
+      "alerts",
+      "incidents",
+      "cases",
+      "findings",
+      "policy_versions",
+      "packages",
+      "gateways",
+      "automations",
+      "automation_executions"
     ]
   }];
   SearchFilters filters = 2;
@@ -137,6 +189,9 @@ message BuiltinParams {
   google.protobuf.Timestamp end_time = 10;
   // A resource group (who_can_write).
   string resource = 11 [(buf.validate.field).string.max_len = 200];
+  // An incident or a case (incident_correlation).
+  optional string incident_id = 12 [(buf.validate.field).string.uuid = true];
+  optional string case_id = 13 [(buf.validate.field).string.uuid = true];
 }
 
 // BuiltinQuery is one built-in query with its parameters.
@@ -365,4 +420,217 @@ message UpdateSavedQueryResponse {
 // GetSavedQueryResponse is the saved query.
 message GetSavedQueryResponse {
   SavedQuery query = 1;
+}
+
+// FindRequest is a quick find.
+message FindRequest {
+  // 2 to 100 characters: an id, an id prefix of at least 8 hex digits, or
+  // part of a name or title (matched literally, ignoring case).
+  string text = 1 [(buf.validate.field).string = {
+    min_len: 2
+    max_len: 100
+  }];
+  // The kinds to match; none: every kind.
+  repeated string kinds = 2 [(buf.validate.field).repeated = {
+    max_items: 18
+    items: {
+      string: {
+        in: [
+          "agents",
+          "connections",
+          "cases",
+          "incidents",
+          "alerts",
+          "packages",
+          "gateways",
+          "service_accounts",
+          "people",
+          "runs",
+          "transactions",
+          "grants",
+          "approvals",
+          "findings",
+          "policy_versions",
+          "audit",
+          "automations",
+          "automation_executions"
+        ]
+      }
+    }
+  }];
+  // Matches per kind (default 5, at most 10).
+  int32 limit = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 10
+  }];
+}
+
+// FindMatch is one record quick find matched.
+message FindMatch {
+  string kind = 1;
+  string id = 2;
+  // The name or title, else what identifies the record.
+  string label = 3;
+  string state = 4;
+  google.protobuf.Timestamp time = 5;
+  // "ID", "ID_PREFIX", "NAME_EXACT", "NAME_PREFIX" or "NAME_CONTAINS".
+  string matched_by = 6;
+  repeated string evidence = 7;
+}
+
+// FindKindResult is one kind's matches.
+message FindKindResult {
+  string kind = 1;
+  repeated FindMatch matches = 2;
+  // Matching records in the caller's scope, at most 10000.
+  int32 count = 3;
+  bool count_capped = 4;
+  string scope_permission = 5;
+  bool scope_whole = 6;
+  // Name prefixes filled the limit: count covers ids and name prefixes
+  // only, not names that contain the text elsewhere.
+  bool count_prefix_only = 7;
+}
+
+// FindResponse lists the matches of each kind the caller may read; kinds
+// it may not read are omissions ("outside your permissions").
+message FindResponse {
+  string text = 1;
+  repeated FindKindResult kinds = 2;
+  repeated Omission omissions = 3;
+  google.protobuf.Timestamp as_of_time = 4;
+}
+
+// InterpretRequest is a plain-language question.
+message InterpretRequest {
+  string question = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 300
+  }];
+  // The IANA time zone "today" and dates are read in (default UTC).
+  string timezone = 2 [(buf.validate.field).string.max_len = 64];
+}
+
+// Ambiguity is a phrase that names more than one record the caller may
+// read.
+message Ambiguity {
+  string phrase = 1;
+  repeated FindMatch candidates = 2;
+}
+
+// Interpretation is how a question was read.
+message Interpretation {
+  string question = 1;
+  // The query it became: exactly one of query and builtin, unless
+  // needs_clarification.
+  Query query = 2;
+  BuiltinQuery builtin = 3;
+  // The entity or built-in query searched.
+  string entity = 4;
+  // The filters, in words.
+  repeated string filters = 5;
+  string environment = 6;
+  google.protobuf.Timestamp range_start_time = 7;
+  google.protobuf.Timestamp range_end_time = 8;
+  string timezone = 9;
+  // What action rows mean: "ATTEMPTS", "CONFIRMED", "DECISIONS" or
+  // "EFFECTS"; empty for other entities.
+  string event_meaning = 10;
+  // Each phrase understood and what it became.
+  repeated string matched = 11;
+  repeated string unknown_words = 12;
+  repeated Ambiguity ambiguities = 13;
+  // Nothing runs until the question is clarified.
+  bool needs_clarification = 14;
+  repeated string clarifications = 15;
+}
+
+// InterpretResponse is the interpretation.
+message InterpretResponse {
+  Interpretation interpretation = 1;
+}
+
+// AskRequest asks a question.
+message AskRequest {
+  string question = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 300
+  }];
+  string timezone = 2 [(buf.validate.field).string.max_len = 64];
+  int32 page_size = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 4 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// AskResponse is the interpretation and, unless it needs clarification,
+// the first page of results.
+message AskResponse {
+  Interpretation interpretation = 1;
+  SearchResult result = 2;
+}
+
+// SearchSource names a search: exactly one of a structured query, a
+// built-in query and a saved query.
+message SearchSource {
+  Query query = 1;
+  BuiltinQuery builtin = 2;
+  optional string saved_query_id = 3 [(buf.validate.field).string.uuid = true];
+}
+
+// OpenCaseFromResultsRequest opens a case from chosen results.
+message OpenCaseFromResultsRequest {
+  SearchSource source = 1 [(buf.validate.field).required = true];
+  // The chosen results' ids, as the search returned them.
+  repeated string item_ids = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 50
+    items: {
+      string: {
+        min_len: 1
+        max_len: 200
+      }
+    }
+  }];
+  string title = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+}
+
+// OpenCaseFromResultsResponse names the case opened.
+message OpenCaseFromResultsResponse {
+  string case_id = 1;
+}
+
+// ExportResultsRequest exports a search's results.
+message ExportResultsRequest {
+  SearchSource source = 1 [(buf.validate.field).required = true];
+  // "JSON" or "CSV".
+  string format = 2 [(buf.validate.field).string = {
+    in: [
+      "JSON",
+      "CSV"
+    ]
+  }];
+}
+
+// ExportResultsResponse is the export, inline.
+message ExportResultsResponse {
+  string format = 1;
+  string content_type = 2;
+  bytes data = 3;
+  int32 rows = 4;
+  // More rows matched than the 10000 exported.
+  bool truncated = 5;
+  repeated Omission omissions = 6;
+  string scope_permission = 7;
+  bool scope_whole = 8;
+  google.protobuf.Timestamp as_of_time = 9;
+  // The audit ledger entry that records the export.
+  string audit_entry_id = 10;
 }

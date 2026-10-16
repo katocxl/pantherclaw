@@ -1,0 +1,16 @@
+{{template "head" .}}
+<h1>Mark a publisher compromised</h1>
+<p class="note">Marking a person compromised stops them confirming, approving, publishing, activating and promoting at once, voids their pending requests, pauses the automations whose ceiling they approved and halts the policy rollouts they confirmed. Everything they published since the time you give is listed for review by someone else; two other people clear the mark once every item is reviewed.</p>
+{{if .CanMark}}
+<form id="compromise">
+<p><label for="user_id">Person (user id)</label><br><input id="user_id" name="user_id" required pattern="[0-9a-fA-F-]{36}" size="40"></p>
+<p><label for="since">Compromised since (UTC)</label><br><input id="since" name="since" type="datetime-local" required></p>
+<p><label for="reason">Reason</label><br><textarea id="reason" name="reason" required maxlength="500" rows="3" cols="60"></textarea></p>
+<p><button type="submit" class="danger">Mark compromised with your security key</button></p>
+</form>
+{{else}}
+<p class="note">You cannot mark a publisher compromised: that needs publisher.compromise and a security key.</p>
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/protect.js"></script>
+{{template "foot" .}}

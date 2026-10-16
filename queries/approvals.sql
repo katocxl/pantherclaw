@@ -156,7 +156,9 @@ SELECT a.owner_user_id, a.backup_owner_user_id, a.team_id, t.business_unit_id, a
        r.launcher_user_id, r.launcher_sa_id, r.launcher_instance_id, r.principal_user_id, r.principal_sa_id,
        ar.run_id, ar.grant_id, ar.requirements, ar.subject_kind, ar.requested_by
 FROM pc.approval_requests ar
-JOIN pc.agents a ON a.org_id = ar.org_id AND a.id = ar.agent_id
+-- An automation gate may have no agent (D25a): its deciders are bound at
+-- the org.
+LEFT JOIN pc.agents a ON a.org_id = ar.org_id AND a.id = ar.agent_id
 LEFT JOIN pc.teams t ON t.org_id = a.org_id AND t.id = a.team_id
 LEFT JOIN pc.runs r ON r.org_id = ar.org_id AND r.id = ar.run_id
 WHERE ar.org_id = sqlc.arg(org_id) AND ar.id = sqlc.arg(id);

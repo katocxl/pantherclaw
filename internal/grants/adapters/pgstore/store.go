@@ -19,7 +19,6 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -38,6 +37,10 @@ import (
 // Store implements app.Repository and app.Subjects.
 type Store struct {
 	Pool *db.Pool
+	// Promotions is the production promotion gate Issue and a widening
+	// Revise call in their transaction (G0 M11 part 2 D9, D39, HR-290);
+	// nil checks nothing.
+	Promotions app.PromotionGate
 	// refusals deduplicates refusal audits (G0 M10 D74).
 	refusals audit.Once
 }
@@ -114,6 +117,7 @@ type grantRow struct {
 	NotBefore, ExpiresAt                        time.Time
 	Bounds, Requirements, Limits                []byte
 	RevisedAt                                   time.Time
+	Ceiling, Execution                          *ids.UUID
 }
 
 func toGrant(org ids.OrgID, r grantRow) (domain.Grant, error) {
@@ -138,6 +142,12 @@ func toGrant(org ids.OrgID, r grantRow) (domain.Grant, error) {
 		Grantor: domain.Principal{Kind: domain.PrincipalKind(r.GrantorKind), ID: r.GrantorID}, Basis: r.Basis,
 		RevisedAt: r.RevisedAt,
 	}
+	if r.Ceiling != nil {
+		g.Ceiling = *r.Ceiling
+	}
+	if r.Execution != nil {
+		g.Execution = *r.Execution
+	}
 	if g.ID, err = domain.ParseGrantID(r.ID.String()); err != nil {
 		return domain.Grant{}, err
 	}
@@ -156,7 +166,8 @@ func fromGetGrant(r dbq.GetGrantRow) grantRow {
 	return grantRow{
 		r.ID, r.AgentID, r.EnvironmentID, r.GrantorID, r.InstanceID, r.PrincipalUserID, r.PrincipalSaID, r.ParentID,
 		r.Depth, r.DelegationDepth, r.MaxChildren, r.MinAttestation, r.State, r.GrantorKind, r.Basis, r.TaskRef,
-		r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt,
+		r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt, r.CeilingID,
+		r.AutomationExecutionID,
 	}
 }
 
@@ -164,7 +175,8 @@ func fromChain(r dbq.GetGrantChainRow) grantRow {
 	return grantRow{
 		r.ID, r.AgentID, r.EnvironmentID, r.GrantorID, r.InstanceID, r.PrincipalUserID, r.PrincipalSaID, r.ParentID,
 		r.Depth, r.DelegationDepth, r.MaxChildren, r.MinAttestation, r.State, r.GrantorKind, r.Basis, r.TaskRef,
-		r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt,
+		r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt, r.CeilingID,
+		r.AutomationExecutionID,
 	}
 }
 
@@ -306,7 +318,7 @@ func (s *Store) ListGrants(ctx context.Context, org ids.OrgID, f app.GrantFilter
 			g, err := toGrant(org, grantRow{
 				r.ID, r.AgentID, r.EnvironmentID, r.GrantorID, r.InstanceID, r.PrincipalUserID, r.PrincipalSaID, r.ParentID,
 				r.Depth, r.DelegationDepth, r.MaxChildren, r.MinAttestation, r.State, r.GrantorKind, r.Basis, r.TaskRef,
-				r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt,
+				r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt, nil, nil,
 			})
 			if err != nil {
 				return err
@@ -453,6 +465,7 @@ func insertGrant(ctx context.Context, q *dbq.Queries, org ids.OrgID, g domain.Gr
 			OrgID: org, ID: g.ID.UUID(), AgentID: g.AgentID, InstanceID: optUUID(g.InstanceID), PrincipalUserID: user,
 			PrincipalSaID: sa, EnvironmentID: g.EnvironmentID, ParentID: parent, Depth: int16(g.Depth), //nolint:gosec // 0..4
 			CurrentRevision: 1, GrantorKind: string(g.Grantor.Kind), GrantorID: g.Grantor.ID, Basis: g.Basis,
+			CeilingID: optUUID(g.Ceiling), AutomationExecutionID: optUUID(g.Execution),
 		}); err != nil {
 			return err
 		}
@@ -468,10 +481,13 @@ func insertGrant(ctx context.Context, q *dbq.Queries, org ids.OrgID, g domain.Gr
 func actorString(ev audit.Event) string { return ev.Actor.Type + ":" + ev.Actor.ID }
 
 // Issue implements app.Repository.
-func (s *Store) Issue(ctx context.Context, org ids.OrgID, g domain.Grant, ev audit.Event) error {
+func (s *Store) Issue(ctx context.Context, org ids.OrgID, g *domain.Grant, ev audit.Event) error {
 	return s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		if err := insertGrant(ctx, q, org, g, false, actorString(ev)); err != nil {
+		if err := s.promoted(ctx, tx, org, g, ev); err != nil {
+			return err
+		}
+		if err := insertGrant(ctx, q, org, *g, false, actorString(ev)); err != nil {
 			return err
 		}
 		if err := q.InsertGrantLineageSelf(ctx, org, g.ID.UUID()); err != nil {
@@ -482,8 +498,39 @@ func (s *Store) Issue(ctx context.Context, org ids.OrgID, g domain.Grant, ev aud
 	})
 }
 
+// promoted runs the promotion gate on a new, widened or delegated grant in
+// its transaction: its listed operations (nil when it lists none) in its
+// environment (D39, D93). A grant standing on a provisional promotion ends
+// with it: its expiry, and the audit record's, is capped at the one the
+// gate read from the same rows (D80).
+func (s *Store) promoted(ctx context.Context, tx db.TenantTx, org ids.OrgID, g *domain.Grant, ev audit.Event) error {
+	if s.Promotions == nil { // without a gate a production grant is refused (D114)
+		if prod, err := s.ProductionInTx(ctx, tx, org, g.EnvironmentID); err != nil || !prod {
+			return err
+		}
+		return app.ErrNoGate
+	}
+	var ops domain.Ops
+	if g.Bounds.Operations != nil {
+		ops = *g.Bounds.Operations
+	}
+	until, err := s.Promotions.Check(ctx, tx.Pgx(), org, g.AgentID, g.EnvironmentID, ops)
+	if err != nil {
+		return err
+	}
+	if app.CapExpiry(g, until) {
+		if _, ok := ev.Details["expires_at"]; ok {
+			ev.Details["expires_at"] = g.ExpiresAt.UTC().Format(time.RFC3339)
+		}
+		if _, ok := ev.Details["provisional_until"]; !ok && ev.Details != nil {
+			ev.Details["provisional_until"] = until.UTC().Format(time.RFC3339)
+		}
+	}
+	return nil
+}
+
 // Delegate implements app.Repository.
-func (s *Store) Delegate(ctx context.Context, org ids.OrgID, child domain.Grant, parentRevision int, childRun ids.UUID, f app.Fanout, ev audit.Event) error {
+func (s *Store) Delegate(ctx context.Context, org ids.OrgID, child *domain.Grant, parentRevision int, childRun ids.UUID, f app.Fanout, ev audit.Event) error {
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		if _, err := q.ShareContainment(ctx, org); err != nil {
@@ -514,7 +561,10 @@ func (s *Store) Delegate(ctx context.Context, org ids.OrgID, child domain.Grant,
 		if err := db.ExpectOneRow(q.IncrementGrantChildren(ctx, org, parent, int32(f.MaxTotal))); err != nil { //nolint:gosec // 100
 			return fmt.Errorf("%w: the parent grant has delegated the most a grant may", domain.ErrOutside)
 		}
-		if err := insertGrant(ctx, q, org, child, false, actorString(ev)); err != nil {
+		if err := s.promoted(ctx, tx, org, child, ev); err != nil { // the child run's agent and operations (D93 V1)
+			return err
+		}
+		if err := insertGrant(ctx, q, org, *child, false, actorString(ev)); err != nil {
 			return err
 		}
 		if err := q.InsertGrantLineageFromParent(ctx, child.ID.UUID(), org, parent); err != nil {
@@ -538,7 +588,7 @@ func (s *Store) Delegate(ctx context.Context, org ids.OrgID, child domain.Grant,
 
 // Revise implements app.Repository: the containment epoch first, then the
 // conditional revision advance, and the access request it answers.
-func (s *Store) Revise(ctx context.Context, org ids.OrgID, next domain.Grant, widens bool, accessRequest ids.UUID, ev audit.Event) error {
+func (s *Store) Revise(ctx context.Context, org ids.OrgID, next *domain.Grant, widens bool, accessRequest ids.UUID, ev audit.Event) error {
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		if err := db.ExpectOneRow(q.RaiseContainmentEpoch(ctx, org)); err != nil {
@@ -549,7 +599,12 @@ func (s *Store) Revise(ctx context.Context, org ids.OrgID, next domain.Grant, wi
 		})); err != nil {
 			return app.ErrConflict
 		}
-		if err := insertGrant(ctx, q, org, next, widens, actorString(ev)); err != nil {
+		if widens {
+			if err := s.promoted(ctx, tx, org, next, ev); err != nil {
+				return err
+			}
+		}
+		if err := insertGrant(ctx, q, org, *next, widens, actorString(ev)); err != nil {
 			return err
 		}
 		if !accessRequest.IsZero() {
@@ -574,34 +629,8 @@ func (s *Store) Revise(ctx context.Context, org ids.OrgID, next domain.Grant, wi
 func (s *Store) Revoke(ctx context.Context, org ids.OrgID, id domain.GrantID, ev audit.Event) ([]domain.GrantID, error) {
 	var out []domain.GrantID
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
-		if err := db.ExpectOneRow(q.RaiseContainmentEpoch(ctx, org)); err != nil {
-			return fmt.Errorf("grants: containment epoch: %w", err)
-		}
-		if _, err := q.GetGrant(ctx, org, id.UUID()); db.IsNoRows(err) {
-			return app.ErrNotFound
-		} else if err != nil {
-			return err
-		}
-		reason := ev.Details["reason"]
-		if reason == "" {
-			reason = "revoked"
-		}
-		revoked, err := q.RevokeGrantTree(ctx, &reason, org, id.UUID())
-		if err != nil {
-			return err
-		}
-		for _, r := range revoked {
-			g, err := domain.ParseGrantID(r.String())
-			if err != nil {
-				return err
-			}
-			out = append(out, g)
-		}
-		if ev.Details != nil {
-			ev.Details["revoked"] = strconv.Itoa(len(out))
-		}
-		_, err = audit.Record(ctx, tx, ev)
+		var err error
+		out, err = revokeTx(ctx, tx, org, id, ev)
 		return err
 	})
 	return out, err

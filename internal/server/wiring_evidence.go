@@ -15,6 +15,7 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/riverqueue/river"
 
+	"github.com/katocxl/pantherclaw/internal/billing"
 	"github.com/katocxl/pantherclaw/internal/evidence/adapters/evidencerpc"
 	"github.com/katocxl/pantherclaw/internal/evidence/anchor"
 	"github.com/katocxl/pantherclaw/internal/evidence/anchoring"
@@ -44,7 +45,7 @@ func mountEvidenceKeys(mux *http.ServeMux, d apiDeps) {
 // registerEvidenceWorkers adds the checkpoint and daily verification jobs
 // (G0 M7 design decision 8, HR-194) and returns their schedules.
 func registerEvidenceWorkers(reg *jobs.Registry, cfg *Config, pool *db.Pool, keyReg *keys.Registry,
-	notify checkpoints.Notifier, log *slog.Logger,
+	notify checkpoints.Notifier, autos *automationsCore, bill *billing.Service, log *slog.Logger,
 ) ([]*river.PeriodicJob, error) {
 	svc := &checkpoints.Service{
 		Pool: pool, Keys: keyReg, LogOrigin: cfg.logOrigin(), Cosign: cfg.Evidence.MLDSACosign, Notify: notify, Log: log,
@@ -52,7 +53,7 @@ func registerEvidenceWorkers(reg *jobs.Registry, cfg *Config, pool *db.Pool, key
 	if err := checkpoints.Register(reg, svc); err != nil {
 		return nil, err
 	}
-	if err := packbuild.Register(reg, newPackBuilder(cfg, pool, keyReg, log)); err != nil {
+	if err := packbuild.Register(reg, newPackBuilder(cfg, pool, keyReg, autos, bill, log)); err != nil {
 		return nil, err
 	}
 	periodic := append(checkpoints.PeriodicJobs(cfg.checkpointInterval()), packbuild.PeriodicJobs()...)
@@ -155,9 +156,16 @@ func registerEvidence(rs *connect.Server, d apiDeps) (*evapp.Service, error) {
 // evidence.mldsa_cosign is on. Payload captures plug in when capture
 // (migration 00073) is in; until then a pack that asks for them records the
 // gap.
-func newPackBuilder(cfg *Config, pool *db.Pool, keyReg *keys.Registry, log *slog.Logger) *packbuild.Service {
-	return &packbuild.Service{
+func newPackBuilder(cfg *Config, pool *db.Pool, keyReg *keys.Registry, autos *automationsCore, bill *billing.Service,
+	log *slog.Logger,
+) *packbuild.Service {
+	s := &packbuild.Service{
 		Pool: pool, Keys: keyReg, LogOrigin: cfg.logOrigin(), Cosign: cfg.Evidence.MLDSACosign,
 		Explorer: &txapp.Explorer{Pool: pool}, Bundles: evapp.New(pool, cfg.logOrigin()), Log: log,
 	}
+	if autos != nil && automationPackExecutions != nil {
+		s.Executions = automationPackExecutions(autos, pool, bill, log)
+	}
+	probeM11("packbuild", s)
+	return s
 }

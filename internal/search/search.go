@@ -24,20 +24,32 @@ const PermSearch = td.PermSearchRead
 
 // entityPerm is the permission that reads each entity's rows.
 var entityPerm = map[Entity]td.Permission{
-	EntityTransactions: td.PermEvidenceRead,
-	EntityRuns:         td.PermRunRead,
-	EntityAgents:       td.PermAgentRead,
-	EntityGrants:       td.PermGrantRead,
-	EntityGrantChanges: td.PermGrantRead,
-	EntityConnections:  td.PermConnectionRead,
-	EntityApprovals:    td.PermApprovalRead,
-	EntityAudit:        td.PermAuditRead,
-	EntityOperations:   td.PermPackageRead,
+	EntityTransactions:   td.PermEvidenceRead,
+	EntityRuns:           td.PermRunRead,
+	EntityAgents:         td.PermAgentRead,
+	EntityGrants:         td.PermGrantRead,
+	EntityGrantChanges:   td.PermGrantRead,
+	EntityConnections:    td.PermConnectionRead,
+	EntityApprovals:      td.PermApprovalRead,
+	EntityAudit:          td.PermAuditRead,
+	EntityOperations:     td.PermPackageRead,
+	EntityAlerts:         td.PermIncidentRead,
+	EntityIncidents:      td.PermIncidentRead,
+	EntityCases:          td.PermCaseRead,
+	EntityFindings:       td.PermPostureRead,
+	EntityPolicyVersions: td.PermPolicyRead,
+	EntityPackages:       td.PermPackageRead,
+	EntityGateways:       td.PermGatewayRead,
+	EntityAutomations:    td.PermAutomationRead,
+	EntityExecutions:     td.PermAutomationRead,
 }
 
 // orgLevel lists the entities that live at the org rather than at an
 // agent's place.
-var orgLevel = map[Entity]bool{EntityConnections: true, EntityAudit: true, EntityOperations: true}
+var orgLevel = map[Entity]bool{
+	EntityConnections: true, EntityAudit: true, EntityOperations: true, EntityPolicyVersions: true, EntityPackages: true,
+	EntityGateways: true, EntityAutomations: true, EntityExecutions: true,
+}
 
 // EmptyReason says why a result has no items (F627).
 type EmptyReason string
@@ -109,6 +121,11 @@ type Service struct {
 	// Exposure answers who_can_write and widest_exposure; nil: those
 	// queries are not available (D49).
 	Exposure ExposureReader
+	// Cases opens cases from results (D48, Team); nil: not available.
+	Cases CaseOpener
+	// Editions gates the Team built-in incident_correlation (D47); nil
+	// refuses it.
+	Editions Editions
 }
 
 func (s *Service) now() time.Time {
@@ -144,6 +161,13 @@ func (s *Service) Search(ctx context.Context, q Query, pr page.Request) (Result,
 
 // run executes a validated query in tx.
 func (s *Service) run(ctx context.Context, c tenancy.Caller, tx db.TenantTx, q Query, pr page.Request) (Result, error) {
+	return s.runAlso(ctx, c, tx, q, pr, "")
+}
+
+// runAlso is run whose scope is narrowed to where c also holds also (none:
+// no narrowing): an export reads only rows the viewer may both read and
+// export (D48).
+func (s *Service) runAlso(ctx context.Context, c tenancy.Caller, tx db.TenantTx, q Query, pr page.Request, also td.Permission) (Result, error) {
 	if pr.Size <= 0 || pr.Size > page.Max {
 		pr.Size = page.Default
 	}
@@ -152,6 +176,9 @@ func (s *Service) run(ctx context.Context, c tenancy.Caller, tx db.TenantTx, q Q
 	var sc Scope
 	if orgLevel[q.Entity] {
 		sc = orgScope(c, perm)
+		if also != "" && !c.Can(also, td.OrgPath(c.Org)) {
+			sc = Scope{Permission: perm, Restricted: true}
+		}
 	} else {
 		var err error
 		if sc, err = AgentScope(ctx, c, dq, perm); err != nil {
@@ -166,6 +193,13 @@ func (s *Service) run(ctx context.Context, c tenancy.Caller, tx db.TenantTx, q Q
 				return Result{}, err
 			}
 			sc = sc.intersect(ev)
+		}
+		if also != "" {
+			ex, err := AgentScope(ctx, c, dq, also)
+			if err != nil {
+				return Result{}, err
+			}
+			sc = sc.intersect(ex)
 		}
 	}
 	asOf := s.now()

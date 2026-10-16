@@ -35,6 +35,11 @@ const (
 	RoleReleaseApprover RoleName = "release_approver"
 	// G0 M10 SOAR requests (D4, HR-251).
 	RoleSOARIntegration RoleName = "soar_integration"
+	// G0 M11 part 2 governed automations and fleet governance (D12).
+	RoleAutomationAuthor    RoleName = "automation_author"
+	RoleAutomationPublisher RoleName = "automation_publisher"
+	RoleAutomationOperator  RoleName = "automation_operator"
+	RoleFleetManager        RoleName = "fleet_manager"
 )
 
 // Role is a named set of permissions and the scope types it may be bound at.
@@ -94,7 +99,7 @@ func with(ps ...[]Permission) []Permission {
 var roles = []Role{
 	{
 		Name: RoleOrgAdmin, Title: "Org Admin", Scopes: orgScope,
-		Description: "Administers the organization: hierarchy, users, invitations, roles and service accounts; imports tool packages and registers the org's package-signing keys; asks for policy exceptions, which only policy publishers confirm. Sets the Agent Waitlist's escalation chains and settings. Reads evidence, coverage, detections, incidents, cases, exposure, posture, operations, search and integrations, and simulates policy versions over recorded decisions. Cannot approve actions or see approval requests, restore suspended agents, publish policies, activate packages, issue grants, change guardrails, manage gateways and connections, engage the kill switch, resolve unknown outcomes, export evidence packs, exclude routes from coverage, set retention or capture, or read restricted evidence.",
+		Description: "Administers the organization: hierarchy, users, invitations, roles and service accounts; imports tool packages and registers the org's package-signing keys; asks for policy exceptions, which only policy publishers confirm. Sets the Agent Waitlist's escalation chains and settings. Reads evidence, coverage, automations, detections, incidents, cases, exposure, posture, operations, search and integrations, and simulates policy versions over recorded decisions. Cannot approve actions or see approval requests, restore suspended agents, publish policies, activate packages, issue grants, change guardrails, manage gateways and connections, engage the kill switch, resolve unknown outcomes, export evidence packs, exclude routes from coverage, set retention or capture, or read restricted evidence.",
 		Permissions: with(basicReads, []Permission{
 			PermOrgUpdate, PermBusinessUnitManage, PermTeamManage, PermTeamMembersManage, PermEnvironmentManage,
 			PermUserRead, PermUserManage, PermInvitationRead, PermInvitationManage, PermRoleRead, PermRoleBind,
@@ -102,19 +107,19 @@ var roles = []Role{
 			PermWaitlistRead, PermWaitlistManage, PermIssuerRead, PermIssuerManage, PermFactRead, PermPackageImport,
 			PermPackageKeyManage, PermNotificationRead, PermNotificationManage, PermEvidenceRead, PermCoverageRead, PermRedteamRead,
 			PermPolicyExceptionRequest,
-			PermGitHubIdentityManage, PermGitHubIdentityProve, PermGitHubScanRun, PermPolicySimulate,
+			PermGitHubIdentityManage, PermGitHubIdentityProve, PermGitHubScanRun, PermPolicySimulate, PermAutomationRead,
 		}, authorityReads, boundaryReads, reflexReads),
 	},
 	{
 		Name: RoleSecurityAdmin, Title: "Security Admin", Scopes: orgScope,
-		Description: "Watches and contains: reads users, roles, audit and approval requests, disables compromised users and service accounts, revokes grants, responds to incidents, sets the Agent Waitlist's escalation chains and settings, restores suspended agents with a security key, resolves unknown outcomes, exports evidence packs, sets the change windows (human only), excludes routes from coverage and acknowledges its findings (human only), reassesses coverage, and manages detections, incidents, cases, posture findings, SIEM export and Shared Signals (human only).",
+		Description: "Watches and contains: reads users, roles, audit and approval requests, disables compromised users and service accounts, revokes grants, responds to incidents, sets the Agent Waitlist's escalation chains and settings, restores suspended agents with a security key, resolves unknown outcomes, exports evidence packs, sets the change windows (human only), excludes routes from coverage and acknowledges its findings (human only), reassesses coverage, and manages detections, incidents, cases, posture findings, SIEM export and Shared Signals, protected-change settings and compromised publishers (human only); reads automations.",
 		Permissions: with(basicReads, []Permission{
 			PermUserRead, PermUserManage, PermRoleRead, PermInvitationRead, PermServiceAccountRead,
 			PermServiceAccountManage, PermAuditRead, PermAgentRead, PermIncidentRespond, PermRunRead, PermRunManage,
 			PermWaitlistRead, PermWaitlistManage, PermApprovalRead, PermAgentRestore, PermIssuerRead, PermGrantRevoke,
 			PermFactRead, PermNotificationRead, PermNotificationManage, PermEvidenceRead, PermTransactionReconcile,
 			PermEvidenceExport, PermReleaseWindowManage, PermGitHubScanRun, PermCoverageRead, PermCoverageManage, PermCoverageReassess, PermRedteamRead,
-		}, authorityReads, boundaryReads, reflexReads, reflexManage),
+		}, authorityReads, boundaryReads, reflexReads, reflexManage, []Permission{PermAutomationRead, PermProtectedChangeManage, PermPublisherCompromise}),
 	},
 	{
 		Name: RoleAgentOwner, Title: "Agent Owner", Scopes: anyScope,
@@ -148,7 +153,7 @@ var roles = []Role{
 		Permissions: with(basicReads, []Permission{
 			PermAgentRead, PermIncidentRespond, PermRunRead, PermRunManage, PermGrantRead, PermGrantRevoke,
 			PermConnectionRead, PermContainmentRead, PermWaitlistRead, PermAgentRestore, PermEvidenceRead, PermCoverageRead, PermRedteamRead,
-		}, reflexReads, []Permission{PermIncidentManage, PermCaseManage, PermPostureManage}),
+		}, reflexReads, []Permission{PermIncidentManage, PermCaseManage, PermPostureManage, PermAutomationRead}),
 	},
 	{
 		Name: RoleAuditor, Title: "Auditor", Scopes: orgScope,
@@ -156,7 +161,7 @@ var roles = []Role{
 		Permissions: with(basicReads, []Permission{
 			PermUserRead, PermRoleRead, PermInvitationRead, PermServiceAccountRead, PermAuditRead,
 			PermAgentRead, PermEvidenceReadRestricted, PermRunRead, PermWaitlistRead, PermIssuerRead, PermFactRead,
-			PermNotificationRead, PermApprovalRead, PermEvidenceRead, PermEvidenceExport, PermCoverageRead, PermRedteamRead,
+			PermNotificationRead, PermApprovalRead, PermEvidenceRead, PermEvidenceExport, PermCoverageRead, PermRedteamRead, PermAutomationRead,
 		}, authorityReads, boundaryReads, reflexReads),
 	},
 	{
@@ -170,7 +175,7 @@ var roles = []Role{
 	{
 		Name: RoleViewer, Title: "Viewer", Scopes: anyScope,
 		Description: "Sees the hierarchy in scope, the operations view and incidents.",
-		Permissions: with(basicReads, []Permission{PermOperationsRead, PermIncidentRead}),
+		Permissions: with(basicReads, []Permission{PermOperationsRead, PermIncidentRead, PermAutomationRead}),
 	},
 	{
 		Name: RoleRunLauncher, Title: "Run Launcher", Scopes: anyScope,
@@ -237,6 +242,26 @@ var roles = []Role{
 		Name: RoleSOARIntegration, Title: "SOAR Integration", Scopes: orgScope, ServiceOnly: true,
 		Description: "For the service account of a SOAR or response tool: reads incidents and the kill switch's state and asks for narrow containment of a run, agent, grant or connection. Never engages the kill switch, lifts a control or restores anything (HR-251). Bound only to service accounts.",
 		Permissions: with(basicReads, []Permission{PermResponseRequest, PermIncidentRead, PermContainmentRead}),
+	},
+	{
+		Name: RoleAutomationAuthor, Title: "Automation Author", Scopes: anyScope,
+		Description: "Creates automations and authors their versions, manages inbound event sources and automation destinations, asks for a version to be enabled, and narrows, pauses, resumes, retires or revokes the authority of automations in scope (human only); opens the work queue. Cannot confirm an enabling: that needs an Automation Publisher.",
+		Permissions: with(basicReads, []Permission{PermAgentRead, PermAutomationRead, PermAutomationManage, PermAutomationEndpointsManage, PermOperationsRead}, authorityReads),
+	},
+	{
+		Name: RoleAutomationPublisher, Title: "Automation Publisher", Scopes: anyScope,
+		Description: "Confirms the enabling of an automation version and its issuance ceiling with a security key, and decides automation gates (human only); opens the work queue. Confirming also needs every permission the version's steps use where they act, such as grant.issue and run.start on its agents. Cannot author or change automations.",
+		Permissions: with(basicReads, []Permission{PermAgentRead, PermAutomationRead, PermAutomationPublish, PermAutomationApprove, PermOperationsRead}, authorityReads),
+	},
+	{
+		Name: RoleAutomationOperator, Title: "Automation Operator", Scopes: anyScope,
+		Description: "Starts manual executions of automations in scope and decides automation gates (human only); opens the work queue.",
+		Permissions: with(basicReads, []Permission{PermAgentRead, PermAutomationRead, PermAutomationRun, PermAutomationApprove, PermOperationsRead}),
+	},
+	{
+		Name: RoleFleetManager, Title: "Fleet Manager", Scopes: anyScope,
+		Description: "Promotes agents' operations for production after their readiness checks pass, and manages fleet cohorts and their grant baselines (human only).",
+		Permissions: with(basicReads, []Permission{PermAgentRead, PermAgentPromote, PermCohortManage}, authorityReads),
 	},
 }
 

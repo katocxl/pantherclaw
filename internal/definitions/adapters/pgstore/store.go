@@ -213,33 +213,52 @@ func (s *Store) State(ctx context.Context, org ids.OrgID, pkg, version string) (
 // (HR-002; G0 M4 part 2, design decision 8).
 func (s *Store) Transition(ctx context.Context, org ids.OrgID, pkg, version string, from, to domain.State, ev *audit.Event) error {
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
-		if to == domain.StateQuarantined || to == domain.StateRetired {
-			if err := db.ExpectOneRow(q.RaiseContainmentEpoch(ctx, org)); err != nil {
-				return fmt.Errorf("definitions: containment epoch: %w", err)
-			}
-		}
-		row, err := q.GetPackageVersionState(ctx, org, pkg, version)
-		if db.IsNoRows(err) {
-			return ErrNotFound
-		}
-		if err != nil {
-			return err
-		}
-		if err := db.ExpectOneRow(q.TransitionPackageVersion(ctx, dbq.TransitionPackageVersionParams{
-			ToState: string(to), OrgID: org, ID: row.ID, FromState: string(from),
-		})); err != nil {
-			return err
-		}
-		if err := pgwaitlist.CloseToolReview(ctx, tx, org, row.ID, string(to), actorOf(ev).Type+":"+actorOf(ev).ID); err != nil {
-			return err
-		}
-		return record(ctx, tx, ev)
+		return s.TransitionTx(ctx, tx, pkg, version, from, to, ev)
 	})
 	if errors.Is(err, db.ErrLostRace) {
 		return app.ErrConflict
 	}
 	return err
+}
+
+// StateTx is State in the caller's transaction (a protected activation's,
+// G0 M11 D42).
+func (s *Store) StateTx(ctx context.Context, tx db.TenantTx, pkg, version string) (domain.State, error) {
+	row, err := dbq.New(tx).GetPackageVersionState(ctx, tx.OrgID(), pkg, version)
+	if db.IsNoRows(err) {
+		return "", ErrNotFound
+	} else if err != nil {
+		return "", err
+	}
+	return domain.State(row.State), nil
+}
+
+// TransitionTx is Transition in the caller's transaction; a lost race is
+// db.ErrLostRace.
+func (s *Store) TransitionTx(ctx context.Context, tx db.TenantTx, pkg, version string, from, to domain.State, ev *audit.Event) error {
+	org := tx.OrgID()
+	q := dbq.New(tx)
+	if to == domain.StateQuarantined || to == domain.StateRetired {
+		if err := db.ExpectOneRow(q.RaiseContainmentEpoch(ctx, org)); err != nil {
+			return fmt.Errorf("definitions: containment epoch: %w", err)
+		}
+	}
+	row, err := q.GetPackageVersionState(ctx, org, pkg, version)
+	if db.IsNoRows(err) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if err := db.ExpectOneRow(q.TransitionPackageVersion(ctx, dbq.TransitionPackageVersionParams{
+		ToState: string(to), OrgID: org, ID: row.ID, FromState: string(from),
+	})); err != nil {
+		return err
+	}
+	if err := pgwaitlist.CloseToolReview(ctx, tx, org, row.ID, string(to), actorOf(ev).Type+":"+actorOf(ev).ID); err != nil {
+		return err
+	}
+	return record(ctx, tx, ev)
 }
 
 // Pinned returns the definition an ActionIR pins (package, version, digest)
@@ -372,6 +391,26 @@ func (s *Store) ActivePackages(ctx context.Context, org ids.OrgID) ([]*domain.Pa
 		return nil
 	})
 	return out, err
+}
+
+// ActivePackagesQ is ActivePackages through the caller's queries, inside
+// its transaction (the promotion gate reads them while a grant is issued,
+// G0 M11 part 2 D70). The returned packages are shared: callers must not
+// change them.
+func (s *Store) ActivePackagesQ(ctx context.Context, q *dbq.Queries, org ids.OrgID) ([]*domain.Package, error) {
+	versions, err := q.ListActiveVersions(ctx, org)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*domain.Package, 0, len(versions))
+	for _, v := range versions {
+		p, err := s.decoded(ctx, q, org, v)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, nil
 }
 
 // VersionInTx returns the decoded package of an imported version, by its

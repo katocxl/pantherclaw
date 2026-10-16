@@ -533,6 +533,9 @@ message CreateEvidencePackRequest {
     string agent_id = 3 [(buf.validate.field).string.uuid = true];
     // Every transaction of the org in a time range.
     PackTimeRange time_range = 4;
+    // One automation execution: its trigger, version, authority, steps and
+    // result, and every transaction of its runs (G0 M11 part 2 D30).
+    string automation_execution_id = 7 [(buf.validate.field).string.uuid = true];
   }
   // For a run or an agent: only the transactions created in this range.
   PackTimeRange within = 5;

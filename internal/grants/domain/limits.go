@@ -70,6 +70,11 @@ func parseCount(name, s string) (int64, error) {
 	return n, nil
 }
 
+// ValidateOnGrant checks limits a grant would carry, the way issuance
+// does (G0 M11 part 2 D119: automation versions are checked when they
+// are validated, not first at issuance).
+func (l Limits) ValidateOnGrant() error { return l.validate(true) }
+
 // validate checks the limits; onGrant says whether a grant declares them.
 func (l Limits) validate(onGrant bool) error {
 	if len(l.Budgets) > maxRules || len(l.Counters) > maxRules {

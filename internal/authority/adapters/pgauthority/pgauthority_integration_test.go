@@ -33,6 +33,7 @@ import (
 	gpg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	gapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
+	"github.com/katocxl/pantherclaw/internal/grants/grantstest"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
@@ -155,7 +156,7 @@ func newWorldWith(t testing.TB, edit func(string) string) *world {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	gs := &gpg.Store{Pool: p}
+	gs := &gpg.Store{Pool: p, Promotions: grantstest.OpenGate{}}
 	w.grants = &gapp.Service{Repo: gs, Subjects: gs, Defs: defs, Authz: allow{}, Clock: clock.System{}}
 
 	reg := keys.NewRegistry()

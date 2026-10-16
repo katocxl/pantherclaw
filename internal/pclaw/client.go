@@ -127,6 +127,7 @@ type clients struct {
 	m8gClients
 	m8pClients
 	m11RolloutClients
+	m11GovernClients
 }
 
 func (a *app) clients() (clients, error) {
@@ -165,6 +166,7 @@ func (a *app) clients() (clients, error) {
 		},
 		m8gClients:        m8gClients{github: pantherclawv1connect.NewGitHubServiceClient(c)},
 		m11RolloutClients: m11RolloutClients{rollouts: pantherclawv1connect.NewPolicyRolloutServiceClient(c)},
+		m11GovernClients:  governClients(c),
 	}, nil
 }
 
