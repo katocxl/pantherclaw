@@ -77,7 +77,7 @@ func templateSteps(d apiDeps) autoports.StepRegistry { //nolint:unused // merged
 // and scenario tests as the M11.1 gate reads them, policy drafts and
 // simulations in the driver's transaction, and evidence packs enqueued
 // like EvidenceService's. Fleet cohorts (COHORT_BASELINE) are govern's.
-func templateStepDeps(d apiDeps, deps *securitysteps.Deps) {
+func templateStepDeps(d apiDeps, deps *securitysteps.Deps) { //nolint:unused // with templateSteps
 	defs := &defspg.Store{Pool: d.pool}
 	facts := &factspg.Store{Pool: d.pool}
 	reads := securitysteps.NewIntakeReads(defs)
@@ -111,8 +111,9 @@ func templateStepDeps(d apiDeps, deps *securitysteps.Deps) {
 
 // routeCoverage is wait_coverage's view of coverage (D31): the trigger's
 // own route, read without a viewer.
-type routeCoverage struct{ svc *covapp.Service }
+type routeCoverage struct{ svc *covapp.Service } //nolint:unused // with templateSteps
 
+//nolint:unused // with templateSteps
 func (c routeCoverage) RouteState(ctx context.Context, tx pgx.Tx, org ids.OrgID, agent, connection ids.UUID, operation string) (string, ids.UUID, error) {
 	return c.svc.RouteStateForAutomationTx(ctx, tx, org, agent, connection, operation)
 }

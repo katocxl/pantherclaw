@@ -83,7 +83,7 @@ func caller(ctx context.Context, p td.Permission, human bool) (tenancy.Caller, e
 
 func templateOf(t templates.Template) *pantherclawv1.AutomationTemplate {
 	out := &pantherclawv1.AutomationTemplate{
-		Id: t.ID, Title: t.Title, Summary: t.Summary, Kind: string(t.Kind), Edition: strings.ToUpper(string(t.Edition)),
+		Id: t.ID, Title: t.Title, Summary: t.Summary, Kind: t.Kind, Edition: strings.ToUpper(string(t.Edition)),
 	}
 	for _, p := range t.Params {
 		out.Params = append(out.Params, &pantherclawv1.AutomationTemplateParam{
@@ -162,7 +162,7 @@ func (h *TemplateHandler) CreateFromTemplate(ctx context.Context, req *panthercl
 	if purpose == "" {
 		purpose = t.Summary
 	}
-	automation, version, err := h.Drafts.CreateDraft(ctx, Draft{Name: req.GetName(), Purpose: purpose, Kind: string(t.Kind), Owner: owner, Definition: doc})
+	automation, version, err := h.Drafts.CreateDraft(ctx, Draft{Name: req.GetName(), Purpose: purpose, Kind: t.Kind, Owner: owner, Definition: doc})
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +173,7 @@ func (h *TemplateHandler) CreateFromTemplate(ctx context.Context, req *panthercl
 		}
 	}
 	return &pantherclawv1.CreateFromTemplateResponse{
-		AutomationId: automation.String(), VersionId: version.String(), Tests: int32(n), //nolint:gosec // G115: a handful
+		AutomationId: automation.String(), VersionId: version.String(), Tests: int32(n),
 	}, nil
 }
 
@@ -245,7 +245,7 @@ func (h *ProposalHandler) ListProposals(ctx context.Context, req *pantherclawv1.
 			return err
 		}
 		for i, r := range rows {
-			if int32(i) == p.MaxRows-1 { //nolint:gosec // G115: ≤ 101
+			if int32(i) == p.MaxRows-1 {
 				out.NextPageToken = rows[i-1].ID.String()
 				break
 			}

@@ -754,7 +754,7 @@ func (f fakeLaunchClient) ClaimLaunch(context.Context, *pantherclawv1.ClaimLaunc
 // oneFailedRestSkipped reports whether results itemize n calls of which
 // one FAILED and none was sent.
 func oneFailedRestSkipped(results []callResult, n int) bool {
-	if len(results) != n && !(n > runnerMaxCalls && len(results) == 1) {
+	if len(results) != n && (n <= runnerMaxCalls || len(results) != 1) {
 		return false
 	}
 	failed := 0
