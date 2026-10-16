@@ -132,6 +132,47 @@ func (q *Queries) DecideProtectedChange(ctx context.Context, arg DecideProtected
 	return i, err
 }
 
+const exposedAutomationConfirmations = `-- name: ExposedAutomationConfirmations :many
+SELECT DISTINCT ON (r.subject_id) r.subject_id::text AS item_id,
+       ('automation ' || coalesce(a.name, r.subject_id::text) || ' ' || lower(r.kind) || ' ' || lower(r.state))::text AS label,
+       c.confirmed_at AS at
+FROM pc.change_confirmations c
+JOIN pc.change_requests r ON r.org_id = c.org_id AND r.id = c.request_id
+LEFT JOIN pc.automations a ON a.org_id = r.org_id AND a.id = r.subject_id
+WHERE c.org_id = $1 AND c.user_id = $2 AND r.domain = 'automation'
+  AND c.confirmed_at >= $3::timestamptz
+ORDER BY r.subject_id, c.confirmed_at DESC
+LIMIT 1000
+`
+
+type ExposedAutomationConfirmationsRow struct {
+	ItemID string
+	Label  string
+	At     time.Time
+}
+
+// The automations whose enabling or rollout the person confirmed since a
+// time (one item per automation, its latest confirmation).
+func (q *Queries) ExposedAutomationConfirmations(ctx context.Context, orgID ids.OrgID, userID ids.UUID, since time.Time) ([]ExposedAutomationConfirmationsRow, error) {
+	rows, err := q.db.Query(ctx, exposedAutomationConfirmations, orgID, userID, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExposedAutomationConfirmationsRow{}
+	for rows.Next() {
+		var i ExposedAutomationConfirmationsRow
+		if err := rows.Scan(&i.ItemID, &i.Label, &i.At); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exposedGrants = `-- name: ExposedGrants :many
 SELECT id::text AS item_id, ('grant (' || state || ')')::text AS label, created_at AS at
 FROM pc.grants
@@ -893,15 +934,18 @@ func (q *Queries) OverdueEmergencyChanges(ctx context.Context, orgID ids.OrgID) 
 }
 
 const pendingPolicyChangeRequestsBy = `-- name: PendingPolicyChangeRequestsBy :many
-SELECT id FROM pc.policy_change_requests
-WHERE org_id = $1 AND requested_by = $2::text AND state = 'PENDING'
-FOR UPDATE
+SELECT r.id FROM pc.policy_change_requests r
+WHERE r.org_id = $1 AND r.state = 'PENDING'
+  AND (r.requested_by = $2::text
+       OR EXISTS (SELECT 1 FROM pc.policy_change_confirmations c
+                  WHERE c.org_id = r.org_id AND c.request_id = r.id AND c.principal_id = $3::uuid))
+FOR UPDATE OF r
 `
 
-// A person's pending M11.1 policy change requests (voided when they are
-// marked compromised).
-func (q *Queries) PendingPolicyChangeRequestsBy(ctx context.Context, orgID ids.OrgID, principal string) ([]ids.UUID, error) {
-	rows, err := q.db.Query(ctx, pendingPolicyChangeRequestsBy, orgID, principal)
+// The pending M11.1 policy change requests a person asked for or
+// confirmed (voided when they are marked compromised, D43).
+func (q *Queries) PendingPolicyChangeRequestsBy(ctx context.Context, orgID ids.OrgID, principal string, userID ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, pendingPolicyChangeRequestsBy, orgID, principal, userID)
 	if err != nil {
 		return nil, err
 	}

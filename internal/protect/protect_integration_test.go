@@ -398,3 +398,11 @@ func TestPublishers_MarkBlocksFilesAndReviews(t *testing.T) {
 		t.Fatalf("list without the edition = %v", err)
 	}
 }
+
+func (r *requests) Pending(_ context.Context, _ db.TenantTx, id ids.UUID) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, open := r.opened[id]
+	_, voided := r.voided[id]
+	return open && !voided, nil
+}

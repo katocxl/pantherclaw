@@ -201,11 +201,14 @@ SELECT DISTINCT user_id FROM pc.compromised_publishers
 WHERE org_id = sqlc.arg(org_id) AND state = 'ACTIVE' AND user_id = ANY (sqlc.arg(user_ids)::uuid[]);
 
 -- name: PendingPolicyChangeRequestsBy :many
--- A person's pending M11.1 policy change requests (voided when they are
--- marked compromised).
-SELECT id FROM pc.policy_change_requests
-WHERE org_id = sqlc.arg(org_id) AND requested_by = sqlc.arg(principal)::text AND state = 'PENDING'
-FOR UPDATE;
+-- The pending M11.1 policy change requests a person asked for or
+-- confirmed (voided when they are marked compromised, D43).
+SELECT r.id FROM pc.policy_change_requests r
+WHERE r.org_id = sqlc.arg(org_id) AND r.state = 'PENDING'
+  AND (r.requested_by = sqlc.arg(principal)::text
+       OR EXISTS (SELECT 1 FROM pc.policy_change_confirmations c
+                  WHERE c.org_id = r.org_id AND c.request_id = r.id AND c.principal_id = sqlc.arg(user_id)::uuid))
+FOR UPDATE OF r;
 
 -- name: PolicyRolloutConfirmedBy :one
 -- Whether the person created the rollout or confirmed a request of it
@@ -229,3 +232,17 @@ JOIN pc.policy_versions p ON p.org_id = v.org_id AND p.published_at < v.publishe
 WHERE v.org_id = sqlc.arg(org_id) AND v.id = sqlc.arg(id)
 ORDER BY p.published_at DESC
 LIMIT 1;
+
+-- name: ExposedAutomationConfirmations :many
+-- The automations whose enabling or rollout the person confirmed since a
+-- time (one item per automation, its latest confirmation).
+SELECT DISTINCT ON (r.subject_id) r.subject_id::text AS item_id,
+       ('automation ' || coalesce(a.name, r.subject_id::text) || ' ' || lower(r.kind) || ' ' || lower(r.state))::text AS label,
+       c.confirmed_at AS at
+FROM pc.change_confirmations c
+JOIN pc.change_requests r ON r.org_id = c.org_id AND r.id = c.request_id
+LEFT JOIN pc.automations a ON a.org_id = r.org_id AND a.id = r.subject_id
+WHERE c.org_id = sqlc.arg(org_id) AND c.user_id = sqlc.arg(user_id) AND r.domain = 'automation'
+  AND c.confirmed_at >= sqlc.arg(since)::timestamptz
+ORDER BY r.subject_id, c.confirmed_at DESC
+LIMIT 1000;

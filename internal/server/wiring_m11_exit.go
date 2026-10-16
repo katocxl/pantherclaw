@@ -45,10 +45,10 @@ func wireM11Cross(d apiDeps, prom *promotions.Service) {
 	probeM11("promotions", prom)
 }
 
-// wireM11Worker gives a worker-only process's core what the API wires in
-// a combined one (D109 E1): grants and runs services whose store and
-// service run govern's promotion gate, so automation issuance from the
-// jobs is gated, and protect's compromised-publisher check.
+// wireM11Worker gives a worker-only process's core the grants and runs services
+// the API attaches in a combined one (D109 E1): their store and service
+// run govern's promotion gate, so automation issuance from the jobs is
+// gated. Protect wires its compromised-publisher check in every role (D110).
 func wireM11Worker(core *automationsCore, pool *db.Pool) {
 	if core == nil || core.svc == nil {
 		return
@@ -56,8 +56,5 @@ func wireM11Worker(core *automationsCore, pool *db.Pool) {
 	if core.grants == nil {
 		gstore, grants := newGrants(pool)
 		core.attach(pool, grants, runsapp.New(pool).WithGrants(gstore))
-	}
-	if core.svc.Compromise == nil {
-		core.svc.Compromise = &protect.Publishers{Pool: pool}
 	}
 }

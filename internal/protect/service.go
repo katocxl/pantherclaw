@@ -230,6 +230,13 @@ func (s *Service) ApplyEmergency(ctx context.Context, request ids.UUID, su stepu
 			Surface(row.Surface) == SurfaceSettings {
 			return ErrState
 		}
+		// The change request must still be pending: a declined or expired
+		// change is never applied in an emergency (D72 P2).
+		if ok, err := s.Gate.Requests.Pending(ctx, tx, request); err != nil {
+			return err
+		} else if !ok {
+			return ErrState
+		}
 		if err := s.Gate.run(ctx, tx, row); err != nil {
 			var ve *VoidError
 			if !errors.As(err, &ve) {

@@ -674,7 +674,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	registerM11Protect(rs, d)
+	registerM11Protect(rs, d, autos)
 	registerAutomationTemplates(rs, d, autos)
 	mux := http.NewServeMux()
 	edges.mount(mux)

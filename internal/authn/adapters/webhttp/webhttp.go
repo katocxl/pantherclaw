@@ -113,6 +113,7 @@ type Handler struct {
 	// when not mounted.
 	promotions Promotions
 	// protect is the protected-change step-up pages (G0 M11 D42, D43); nil
+	// when not mounted.
 	protect Protect
 }
 

@@ -291,8 +291,8 @@ func (s *Service) ListExclusions(ctx context.Context, connection *ids.UUID, size
 }
 
 // ProtectedExclusionState is the state a protected exclusion's re-run must
-// still find (a protect.State): the connection's coverage binding and the
-// agent.
+// still find (a protect.State): the connection's coverage binding, its
+// revision and state, and the agent.
 func (s *Service) ProtectedExclusionState(ctx context.Context, tx db.TenantTx, payload []byte) ([]byte, error) {
 	var r ExclusionRequest
 	if err := json.Unmarshal(payload, &r); err != nil {
@@ -302,6 +302,13 @@ func (s *Service) ProtectedExclusionState(ctx context.Context, tx db.TenantTx, p
 	state := "none"
 	if b, err := q.CoverageBinding(ctx, tx.OrgID(), r.Connection); err == nil {
 		state = b.State
+	} else if !db.IsNoRows(err) {
+		return nil, err
+	}
+	// The connection itself, by revision: a change to it voids the request
+	// (D90 L1).
+	if conn, err := q.GetConnection(ctx, tx.OrgID(), r.Connection); err == nil {
+		state += "/" + strconv.Itoa(int(conn.Revision)) + "/" + conn.State
 	} else if !db.IsNoRows(err) {
 		return nil, err
 	}

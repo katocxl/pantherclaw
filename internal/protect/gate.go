@@ -57,6 +57,8 @@ type Request struct {
 type Requests interface {
 	Open(ctx context.Context, tx db.TenantTx, r Request) (ids.UUID, error)
 	Void(ctx context.Context, tx db.TenantTx, id ids.UUID, reason string) error
+	// Pending reports whether the request is still PENDING and unexpired.
+	Pending(ctx context.Context, tx db.TenantTx, id ids.UUID) (bool, error)
 }
 
 // Checker reports whether a person is marked compromised (D11's
