@@ -21,6 +21,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
+	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
@@ -69,6 +71,9 @@ type Service struct {
 	pool      *db.Pool
 	notify    Notifier
 	publicURL string
+	// pauser pauses every automation when the kill switch engages (G0 M11
+	// part 2 D14, HR-283); nil while automations are not wired.
+	pauser autoports.Pauser
 }
 
 // New returns the kill-switch use cases. publicURL is the server's public
@@ -217,7 +222,9 @@ func record(ctx context.Context, tx db.TenantTx, c tenancy.Caller, name string, 
 // raises the epoch (the row's trigger sends NOTIFY), records who, when and
 // why, writes security.kill_switch_engaged and notifies the org. The record
 // states what else the kill switch did for the org's connections: nothing
-// is revoked at a provider in M6, and no automations exist to pause.
+// is revoked at a provider in M6; every active automation is paused
+// (KILL_SWITCH) and its executions are cancelled by the engine at their
+// next boundary.
 func (s *Service) Engage(ctx context.Context, su StepUp, reason string) (State, error) {
 	if !reasonOK(reason) {
 		return State{}, ErrReason
@@ -249,9 +256,17 @@ func (s *Service) Engage(ctx context.Context, su StepUp, reason string) (State, 
 		if err != nil {
 			return err
 		}
+		paused := "none_exist"
+		if s.pauser != nil {
+			pausedIDs, err := s.pauser.Pause(ctx, tx.Pgx(), c.Org, autodomain.PauseSelector{All: true}, autodomain.PauseKillSwitch)
+			if err != nil {
+				return err
+			}
+			paused = itoa(int64(len(pausedIDs)))
+		}
 		if err := record(ctx, tx, c, "security.kill_switch_engaged", withReason(map[string]string{
 			"epoch": itoa(r.Epoch), "key_id": su.Credential.String(), "connections": itoa(conns),
-			"provider_revocation": "not_supported", "automations_paused": "none_exist",
+			"provider_revocation": "not_supported", "automations_paused": paused,
 		}, reason)); err != nil {
 			return err
 		}
@@ -262,4 +277,12 @@ func (s *Service) Engage(ctx context.Context, su StepUp, reason string) (State, 
 		return err
 	})
 	return out, err
+}
+
+// WithPauser pauses every automation of the org in the transaction that
+// engages the kill switch (G0 M11 part 2 D14, HR-283). Restore resumes
+// none of them.
+func (s *Service) WithPauser(p autoports.Pauser) *Service {
+	s.pauser = p
+	return s
 }
