@@ -17,6 +17,7 @@ import (
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/triggerstest"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
+	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -24,6 +25,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // propFixture is an org with an automation whose executions propose.
@@ -243,16 +245,17 @@ func TestHR286_PolicyDraftStaysADraft(t *testing.T) {
 }
 
 // TestReview_PacksAndCountsReadTheDatabase: the digest counts run on every
-// section, the digest pack is recorded for an owner who may export (and
-// refused for one who may not), and the intake and unused-grant reads run.
+// section for all agents and for declared ones, and the unused-grant and
+// intake reads run.
 func TestReview_PacksAndCountsReadTheDatabase(t *testing.T) {
 	p := newPropFixture(t)
-	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Second)
 	p.f.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
-		for _, sec := range digestSections {
-			if _, err := (DigestCounts{}).Counts(ctx, tx.Pgx(), p.f.Org, sec, now.Add(-time.Hour), now); err != nil {
-				t.Fatalf("section %s: %v", sec, err)
+		for _, agents := range [][]ids.UUID{nil, {ids.NewV7(), ids.NewV7()}} {
+			for _, sec := range digestSections {
+				if _, err := (DigestCounts{}).Counts(ctx, tx.Pgx(), p.f.Org, sec, now.Add(-time.Hour), now, agents); err != nil {
+					t.Fatalf("section %s (%v): %v", sec, agents, err)
+				}
 			}
 		}
 		unused, err := NewUnusedGrants().Unused(ctx, tx.Pgx(), p.f.Org, now.Add(-7*24*time.Hour), 10)
@@ -261,35 +264,6 @@ func TestReview_PacksAndCountsReadTheDatabase(t *testing.T) {
 		}
 		return nil
 	})
-
-	var enqueued []ids.UUID
-	packs := NewDigestPacks(func(_ context.Context, _ db.TenantTx, _ ids.OrgID, id ids.UUID) error {
-		enqueued = append(enqueued, id)
-		return nil
-	}, triggerstest.Team)
-	dp := DigestPack{Org: p.f.Org, Automation: p.a.ID, Execution: ids.NewV7(), Creator: p.f.User, From: now.Add(-24 * time.Hour), To: now}
-	err := p.f.Pool.InTenantTx(ctx, p.f.Org, func(ctx context.Context, tx db.TenantTx) error {
-		_, err := packs.Create(ctx, tx.Pgx(), dp)
-		return err
-	})
-	if r, ok := refusal(err); !ok || r != ReasonOwnerNotAllowed {
-		t.Fatalf("owner without evidence.export: %v", err)
-	}
-	p.f.Exec(t, "INSERT INTO pc.role_bindings (org_id, id, role, user_id, scope_type, created_by) VALUES ($1, $2, 'auditor', $3, 'ORG', 'test')",
-		p.f.Org, ids.NewV7(), p.f.User)
-	var pack ids.UUID
-	p.f.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
-		var err error
-		pack, err = packs.Create(ctx, tx.Pgx(), dp)
-		return err
-	})
-	if len(enqueued) != 1 || enqueued[0] != pack {
-		t.Fatalf("enqueued %v, pack %s", enqueued, pack)
-	}
-	if n := p.f.Count(t, "SELECT count(*) FROM pc.evidence_packs WHERE org_id = $1 AND id = $2 AND created_by = $3 AND state = 'BUILDING' AND scope_kind = 'time_range'",
-		pack, p.f.User); n != 1 {
-		t.Fatal("pack not recorded")
-	}
 
 	// The intake reads of a discovered agent.
 	agent := ids.NewV7()
@@ -321,4 +295,59 @@ func TestReview_PacksAndCountsReadTheDatabase(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestHR286_DigestPackIsTheAutomations: a build_digest step's pack is
+// created by the automation's service account for the automation, within
+// the declared agents, and audited with the automation as actor; a
+// person's pack is unchanged (created by the person, no automation) (D85).
+func TestHR286_DigestPackIsTheAutomations(t *testing.T) {
+	p := newPropFixture(t)
+	var enqueued []ids.UUID
+	svc := evapp.New(p.f.Pool, "https://log.test").WithPacks(func(_ context.Context, _ db.TenantTx, _ ids.OrgID, id ids.UUID) error {
+		enqueued = append(enqueued, id)
+		return nil
+	}, triggerstest.Team)
+	agents := []ids.UUID{ids.NewV7(), ids.NewV7()}
+	reg := reviewSteps(Deps{Review: ReviewDeps{Digests: NewDigestCounts(), Packs: NewDigestPacks(svc)}})
+	step := reg[autodomain.KindBuildDigest].(*buildDigest)
+	step.scope = func(*autodomain.BuildDigestWith) ([]ids.UUID, bool, bool) { return agents, false, true }
+	sc := p.execution(t, "digest")
+	sc.Def = &autodomain.Definition{Authority: autodomain.Authority{Platform: []autodomain.PlatformScope{
+		{Step: autodomain.KindBuildDigest, Scopes: []string{autodomain.ScopeTimeRange}},
+	}}}
+	sc.With = &autodomain.BuildDigestWith{Scope: autodomain.ScopeTimeRange, Days: 7, Sections: digestSections}
+	var r autodomain.StepResult
+	p.f.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		r, err = step.Run(ctx, tx.Pgx(), sc)
+		return err
+	})
+	if r.State != autodomain.StepDone || r.Output[OutPack] == "" || r.Output[OutPack] == OutPackNone {
+		t.Fatalf("digest: %+v", r)
+	}
+	pack, _ := ids.ParseUUID(r.Output[OutPack])
+	if len(enqueued) != 1 || enqueued[0] != pack {
+		t.Fatalf("enqueued %v, pack %s", enqueued, pack)
+	}
+	if n := p.f.Count(t, `SELECT count(*) FROM pc.evidence_packs WHERE org_id = $1 AND id = $2 AND created_by = $3 AND automation_id = $4
+		AND automation_agents @> $5::uuid[] AND cardinality(automation_agents) = 2 AND state = 'BUILDING' AND scope_kind = 'time_range'`,
+		pack, p.a.ServiceAccount, p.a.ID, agents); n != 1 {
+		t.Fatal("the automation's pack is not recorded as the automation's")
+	}
+	if n := p.f.Count(t, "SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.evidence.pack_created' AND actor_type = 'automation' AND actor_id = $2",
+		p.a.ID.String()); n != 1 {
+		t.Fatalf("audit events: %d", n)
+	}
+
+	// A person's pack: created by the person, no automation.
+	from, to := time.Now().Add(-time.Hour), time.Now()
+	mine, err := svc.CreateEvidencePack(p.f.As(td.KindUser, td.RoleAuditor), evapp.PackRequest{Kind: "time_range", From: &from, To: &to})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := p.f.Count(t, "SELECT count(*) FROM pc.evidence_packs WHERE org_id = $1 AND id = $2 AND created_by = $3 AND automation_id IS NULL AND automation_agents IS NULL",
+		mine.ID, p.f.User); n != 1 {
+		t.Fatal("a person's pack changed")
+	}
 }

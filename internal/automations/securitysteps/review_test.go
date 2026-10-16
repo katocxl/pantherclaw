@@ -18,6 +18,7 @@ import (
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/engine"
 	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
+	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
@@ -41,10 +42,13 @@ type reviewFakes struct {
 	simID     ids.UUID
 	status    SimulationStatus
 	counts    map[string]map[string]int64
-	caseFrom  time.Time
-	caseTo    time.Time
-	packs     []DigestPack
+	countedIn [][]ids.UUID
+	cs        CaseScope
+	packs     []evapp.AutomationPack
 	packID    ids.UUID
+	// declared is the build_digest evidence scope the tests declare
+	// (digestScope reads none until core adds the field); all with nil.
+	declared []ids.UUID
 }
 
 func (f *reviewFakes) touch() {
@@ -81,29 +85,33 @@ func (f *reviewFakes) Status(context.Context, pgx.Tx, ids.OrgID, ids.UUID) (Simu
 	return f.status, nil
 }
 
-func (f *reviewFakes) Counts(_ context.Context, _ pgx.Tx, _ ids.OrgID, section string, _, _ time.Time) (map[string]int64, error) {
+func (f *reviewFakes) Counts(_ context.Context, _ pgx.Tx, _ ids.OrgID, section string, _, _ time.Time, agents []ids.UUID) (map[string]int64, error) {
 	f.touch()
+	f.countedIn = append(f.countedIn, agents)
 	return f.counts[section], nil
 }
 
-func (f *reviewFakes) CaseWindow(context.Context, pgx.Tx, ids.OrgID, ids.UUID) (time.Time, time.Time, error) {
+func (f *reviewFakes) Case(context.Context, pgx.Tx, ids.OrgID, ids.UUID, int) (CaseScope, error) {
 	f.touch()
-	return f.caseFrom, f.caseTo, nil
+	return f.cs, nil
 }
 
-func (f *reviewFakes) Create(_ context.Context, _ pgx.Tx, p DigestPack) (ids.UUID, error) {
+func (f *reviewFakes) CreateForAutomationTx(_ context.Context, _ pgx.Tx, in evapp.AutomationPack) (ids.UUID, error) {
 	f.touch()
-	f.packs = append(f.packs, p)
+	f.packs = append(f.packs, in)
 	return f.packID, nil
 }
 
 func newReview(t *testing.T) (*reviewFakes, *recProposals, autoports.StepRegistry) {
 	t.Helper()
-	f := &reviewFakes{t: t, draftID: ids.NewV7(), simID: ids.NewV7(), packID: ids.NewV7(), pubID: ids.NewV7()}
+	f := &reviewFakes{t: t, draftID: ids.NewV7(), simID: ids.NewV7(), packID: ids.NewV7(), pubID: ids.NewV7(), declared: []ids.UUID{ids.NewV7()}}
 	p := &recProposals{t: t}
 	reg := reviewSteps(Deps{Grants: noGrants{t}, Review: ReviewDeps{
 		Unused: f, Drafts: f, Simulations: f, Digests: f, Packs: f, Proposals: p,
 	}})
+	reg[autodomain.KindBuildDigest].(*buildDigest).scope = func(*autodomain.BuildDigestWith) ([]ids.UUID, bool, bool) {
+		return f.declared, f.declared == nil, true
+	}
 	return f, p, reg
 }
 
@@ -189,6 +197,9 @@ func TestReview_PreviewWritesNothing(t *testing.T) {
 func TestReview_UnwiredIsUnsupported(t *testing.T) {
 	ctx := context.Background()
 	reg := reviewSteps(Deps{})
+	reg[autodomain.KindBuildDigest].(*buildDigest).scope = func(*autodomain.BuildDigestWith) ([]ids.UUID, bool, bool) {
+		return nil, true, true
+	}
 	for _, kind := range reviewKinds {
 		sc := stepCtx(kind, "s", reviewWith(kind), []string{reviewScope(kind)})
 		if kind == autodomain.KindSimulateRestriction {
@@ -329,8 +340,9 @@ func TestReview_SimulateRestriction(t *testing.T) {
 	mustState(t, r, err, autodomain.StepFailed, ReasonBadWith)
 }
 
-// TestReview_BuildDigest builds a report of counts and links and a pack of
-// the window as the owner; its output carries what deliver reads.
+// TestReview_BuildDigest builds a report of counts and links within the
+// declared agents and a pack the automation's service account creates;
+// its output carries what deliver reads (D85).
 func TestReview_BuildDigest(t *testing.T) {
 	ctx := context.Background()
 	f, _, reg := newReview(t)
@@ -341,15 +353,27 @@ func TestReview_BuildDigest(t *testing.T) {
 	}
 	w := &autodomain.BuildDigestWith{Scope: autodomain.ScopeTimeRange, Days: 7, Sections: []string{SectionDecisions, SectionHolds}, Title: "Weekly"}
 	sc := stepCtx(autodomain.KindBuildDigest, "digest", w, []string{autodomain.ScopeTimeRange})
+	sc.Execution.ServiceAccount = ids.NewV7()
 	r, err := s.Run(ctx, nil, sc)
 	mustState(t, r, err, autodomain.StepDone, "")
 	if r.Output[OutPack] != f.packID.String() || !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(r.Output[OutReportDigest]) ||
-		r.Output["decisions_total"] != "7" || r.Output["holds_total"] != "1" || r.Effect != autodomain.EffectChanged || !hasRef(r, RefPack, f.packID) {
+		r.Output["decisions_total"] != "7" || r.Output["holds_total"] != "1" || r.Output["agents"] != "1" ||
+		r.Effect != autodomain.EffectChanged || !hasRef(r, RefPack, f.packID) {
 		t.Fatalf("digest: %+v", r)
 	}
-	if len(f.packs) != 1 || f.packs[0].Creator != sc.Execution.Owner || f.packs[0].To.Sub(f.packs[0].From) != 7*24*time.Hour ||
-		!f.packs[0].To.Equal(sc.Now) {
-		t.Fatalf("pack: %+v", f.packs)
+	if len(f.packs) != 1 {
+		t.Fatalf("packs: %+v", f.packs)
+	}
+	pk := f.packs[0]
+	if pk.ServiceAccount != sc.Execution.ServiceAccount || pk.Automation != sc.Execution.Automation || pk.Execution != sc.Execution.ID ||
+		!slices.Equal(pk.Agents, f.declared) || pk.Request.Kind != "time_range" || pk.Request.From == nil || pk.Request.To == nil ||
+		pk.Request.To.Sub(*pk.Request.From) != 7*24*time.Hour || !pk.Request.To.Equal(sc.Now) {
+		t.Fatalf("pack: %+v", pk)
+	}
+	for _, in := range f.countedIn {
+		if !slices.Equal(in, f.declared) {
+			t.Fatalf("counted outside the declared agents: %v", in)
+		}
 	}
 	// The same counts make the same report.
 	r2, err := s.Run(ctx, nil, sc)
@@ -357,17 +381,34 @@ func TestReview_BuildDigest(t *testing.T) {
 	if r2.Output[OutReportDigest] != r.Output[OutReportDigest] {
 		t.Fatal("report digest is not deterministic")
 	}
+	// All agents: no agent list on the pack or the counts.
+	f.declared, f.countedIn = nil, nil
+	r, err = s.Run(ctx, nil, sc)
+	mustState(t, r, err, autodomain.StepDone, "")
+	if r.Output["agents"] != "all" || f.packs[2].Agents != nil || f.countedIn[0] != nil {
+		t.Fatalf("all agents: %+v, %+v", r.Output, f.packs[2])
+	}
 
-	// The trigger's case: its window, its link.
-	cse := ids.NewV7()
-	f.caseFrom, f.caseTo = sc.Now.Add(-48*time.Hour), sc.Now.Add(-time.Hour)
+	// The trigger's case: a pack of its linked transactions, its link.
+	cse, txn := ids.NewV7(), ids.NewV7()
+	f.cs = CaseScope{From: sc.Now.Add(-48 * time.Hour), To: sc.Now.Add(-time.Hour), Transactions: []ids.UUID{txn}}
 	cw := &autodomain.BuildDigestWith{Scope: autodomain.ScopeTriggerCase, Sections: []string{SectionOpenItems}}
 	csc := stepCtx(autodomain.KindBuildDigest, "digest", cw, []string{autodomain.ScopeTriggerCase},
 		reflexdomain.Subject{Type: reflexdomain.SubjectCase, ID: cse.String()})
+	csc.Execution.ServiceAccount = ids.NewV7()
 	r, err = s.Run(ctx, nil, csc)
 	mustState(t, r, err, autodomain.StepDone, "")
-	if r.Output[OutCase] != cse.String() || !hasRef(r, RefCase, cse) || !f.packs[2].From.Equal(f.caseFrom) {
-		t.Fatalf("case digest: %+v, %+v", r, f.packs[2])
+	pk = f.packs[3]
+	if r.Output[OutCase] != cse.String() || !hasRef(r, RefCase, cse) || r.Output["transactions"] != "1" ||
+		pk.Request.Kind != "transactions" || !slices.Equal(pk.Request.Transactions, []ids.UUID{txn}) || pk.Request.From != nil {
+		t.Fatalf("case digest: %+v, %+v", r, pk)
+	}
+	// A case that links no transaction: the report only, no pack.
+	f.cs.Transactions = nil
+	r, err = s.Run(ctx, nil, csc)
+	mustState(t, r, err, autodomain.StepDone, "")
+	if r.Output[OutPack] != OutPackNone || len(f.packs) != 4 || r.Output[OutReportDigest] == "" || r.Effect != autodomain.EffectNone {
+		t.Fatalf("case without transactions: %+v", r)
 	}
 	// No case among the trigger's subjects.
 	csc.Execution.Trigger.Subjects = nil
@@ -376,7 +417,7 @@ func TestReview_BuildDigest(t *testing.T) {
 	r, err = s.Preview(ctx, nil, csc)
 	mustState(t, r, err, autodomain.StepFailed, ReasonNoSubject)
 
-	// Bad sections, days and a missing owner.
+	// Bad sections and days.
 	for _, bad := range []*autodomain.BuildDigestWith{
 		{Scope: autodomain.ScopeTimeRange, Days: 7},
 		{Scope: autodomain.ScopeTimeRange, Days: 7, Sections: []string{"payloads"}},
@@ -388,10 +429,27 @@ func TestReview_BuildDigest(t *testing.T) {
 		r, err = s.Run(ctx, nil, sc)
 		mustState(t, r, err, autodomain.StepFailed, ReasonBadWith)
 	}
+	// An empty or oversized agent list is no declared scope.
 	sc.With = w
-	sc.Execution.Owner = ids.UUID{}
+	f.declared = []ids.UUID{}
 	r, err = s.Run(ctx, nil, sc)
-	mustState(t, r, err, autodomain.StepFailed, ReasonNoOwner)
+	mustState(t, r, err, autodomain.StepFailed, ReasonBadWith)
+}
+
+// TestReview_DigestNeedsADeclaredScope: until core adds the evidence
+// field, digestScope declares nothing, so the step and its preview are
+// refused WITH_INVALID and nothing is read or written.
+func TestReview_DigestNeedsADeclaredScope(t *testing.T) {
+	f, _, _ := newReview(t)
+	reg := reviewSteps(Deps{Review: ReviewDeps{Digests: f, Packs: f}})
+	sc := stepCtx(autodomain.KindBuildDigest, "d", reviewWith(autodomain.KindBuildDigest), []string{autodomain.ScopeTimeRange})
+	r, err := reg[autodomain.KindBuildDigest].Run(context.Background(), nil, sc)
+	mustState(t, r, err, autodomain.StepFailed, ReasonBadWith)
+	r, err = reg[autodomain.KindBuildDigest].Preview(context.Background(), nil, sc)
+	mustState(t, r, err, autodomain.StepFailed, ReasonBadWith)
+	if f.calls != 0 {
+		t.Fatalf("calls: %d", f.calls)
+	}
 }
 
 // TestReview_DigestReportHoldsNoContent: the report is counts and links;

@@ -38,16 +38,13 @@ import (
 	"github.com/katocxl/pantherclaw/internal/policy/simulation"
 	"github.com/katocxl/pantherclaw/internal/policy/simulation/pgsimulation"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
-	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
-	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // Review reasons, stable codes.
 const (
-	ReasonNoDraft         = "DRAFT_MISSING"
-	ReasonSimulation      = "SIMULATION_FAILED"
-	ReasonCaseNotFound    = "CASE_NOT_FOUND"
-	ReasonOwnerNotAllowed = "OWNER_CANNOT_EXPORT"
+	ReasonNoDraft      = "DRAFT_MISSING"
+	ReasonSimulation   = "SIMULATION_FAILED"
+	ReasonCaseNotFound = "CASE_NOT_FOUND"
 )
 
 // Bounds of the review kinds (D31).
@@ -148,26 +145,28 @@ type PolicySimulations interface {
 // state, decision or severity over a window. It never reads payloads or
 // parameter values.
 type DigestSource interface {
-	Counts(ctx context.Context, tx pgx.Tx, org ids.OrgID, section string, from, to time.Time) (map[string]int64, error)
-	// CaseWindow is a case's life: created to closed (or now).
-	CaseWindow(ctx context.Context, tx pgx.Tx, org ids.OrgID, c ids.UUID) (time.Time, time.Time, error)
+	// Counts counts one section over [from, to) within agents (nil: the
+	// whole org).
+	Counts(ctx context.Context, tx pgx.Tx, org ids.OrgID, section string, from, to time.Time, agents []ids.UUID) (map[string]int64, error)
+	// Case is a case's life (created to closed, or now) and its linked
+	// transactions, at most limit of them.
+	Case(ctx context.Context, tx pgx.Tx, org ids.OrgID, c ids.UUID, limit int) (CaseScope, error)
 }
 
-// DigestPack asks for the evidence pack of a digest's window.
-type DigestPack struct {
-	Org        ids.OrgID
-	Automation ids.UUID
-	Execution  ids.UUID
-	// Creator is the person the pack is built as (evidence.export is
-	// human only): the automation's owner.
-	Creator  ids.UUID
-	From, To time.Time
+// CaseScope is what a TRIGGER_CASE digest covers.
+type CaseScope struct {
+	From, To     time.Time
+	Transactions []ids.UUID
+	// Truncated: the case links more transactions than the limit.
+	Truncated bool
 }
 
-// DigestPacks records a time_range evidence pack and enqueues its build
-// in the caller's transaction.
+// DigestPacks records an automation's evidence pack and enqueues its
+// build in the caller's transaction ((*evapp.Service).CreateForAutomationTx,
+// D85): created by the automation's service account, built with
+// evidence.read only, within the declared agents.
 type DigestPacks interface {
-	Create(ctx context.Context, tx pgx.Tx, p DigestPack) (ids.UUID, error)
+	CreateForAutomationTx(ctx context.Context, tx pgx.Tx, in evapp.AutomationPack) (ids.UUID, error)
 }
 
 // ReviewDeps are the least-privilege and digest kinds' ties (D31).
@@ -447,19 +446,38 @@ func (s *simulateRestriction) Preview(_ context.Context, _ pgx.Tx, sc autodomain
 	return shadowed(map[string]string{"step": w.Step, "would": "SIMULATE"})
 }
 
-// buildDigest builds a digest of a time range or of the trigger's case: a
-// report of counts and links (no payloads or parameter values) and an
-// evidence pack of the window, built as the automation's owner. The
-// deliver step sends pack_id and report_digest on.
-type buildDigest struct{ d ReviewDeps }
+// buildDigest builds a digest of a time range or of the trigger's case,
+// within the evidence scope the version declares (D85): a report of counts
+// and links (no payloads or parameter values) and an evidence pack the
+// automation's service account creates, built with evidence.read only
+// within the declared agents. The deliver step sends pack_id and
+// report_digest on.
+type buildDigest struct {
+	d ReviewDeps
+	// scope reads the declared evidence scope (digestScope; tests replace
+	// it until core adds the field).
+	scope func(*autodomain.BuildDigestWith) ([]ids.UUID, bool, bool)
+}
 
 func (*buildDigest) Kind() string { return autodomain.KindBuildDigest }
+
+// digestScope returns the evidence scope a build_digest declares: the
+// agents of `evidence: {agents: [...]}`, or all for `evidence: {all: true}`
+// (exactly one is set). It reads w.Evidence once core adds the field to
+// BuildDigestWith (D85); until then no scope is declared, so the step is
+// refused (WITH_INVALID).
+func digestScope(_ *autodomain.BuildDigestWith) (agents []ids.UUID, all, ok bool) {
+	return nil, false, false
+}
 
 // digestPlan is a checked build_digest.
 type digestPlan struct {
 	w    *autodomain.BuildDigestWith
 	days int
 	cse  ids.UUID
+	// agents are the declared agents; nil with all.
+	agents []ids.UUID
+	all    bool
 }
 
 func (s *buildDigest) plan(sc autodomain.StepContext) (digestPlan, string) {
@@ -475,6 +493,14 @@ func (s *buildDigest) plan(sc autodomain.StepContext) (digestPlan, string) {
 		seen[x] = true
 	}
 	p := digestPlan{w: w}
+	scope := s.scope
+	if scope == nil {
+		scope = digestScope
+	}
+	if p.agents, p.all, ok = scope(w); !ok || p.all != (p.agents == nil) ||
+		(!p.all && (len(p.agents) == 0 || len(p.agents) > evapp.MaxAutomationPackAgents)) {
+		return digestPlan{}, ReasonBadWith
+	}
 	switch w.Scope {
 	case autodomain.ScopeTimeRange:
 		p.days = w.Days
@@ -505,6 +531,10 @@ func (s *buildDigest) plan(sc autodomain.StepContext) (digestPlan, string) {
 // DigestFormat names the digest report document.
 const DigestFormat = "pantherclaw.automation_digest.v1"
 
+// OutPackNone is the pack output of a case digest whose case links no
+// transaction: the report only.
+const OutPackNone = "none"
+
 // digestLink is a report's link: a kind and an id, never content.
 type digestLink struct {
 	Kind string `json:"kind"`
@@ -522,6 +552,7 @@ type digestReport struct {
 	Scope      string                      `json:"scope"`
 	From       string                      `json:"from"`
 	To         string                      `json:"to"`
+	Agents     []string                    `json:"agents,omitzero"` // the declared agents; absent: all
 	Sections   map[string]map[string]int64 `json:"sections"`
 	Links      []digestLink                `json:"links"`
 }
@@ -536,6 +567,9 @@ func DigestReportDigest(report any) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
+// digestInclude is what a digest pack holds.
+var digestInclude = pack.Include{Receipts: true, Versions: true, Approvals: true, Containment: true}
+
 func (s *buildDigest) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
 	p, reason := s.plan(sc)
 	if reason != "" {
@@ -544,26 +578,37 @@ func (s *buildDigest) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepCont
 	if s.d.Digests == nil || s.d.Packs == nil {
 		return unwired()
 	}
-	if sc.Execution.Owner.IsZero() {
-		return failed(ReasonNoOwner)
+	if sc.Execution.ServiceAccount.IsZero() {
+		return autodomain.StepResult{}, fmt.Errorf("securitysteps: execution %s has no service account", sc.Execution.ID)
 	}
 	to := sc.Now.UTC().Truncate(time.Second)
 	from := to.Add(-time.Duration(p.days) * 24 * time.Hour)
+	req := evapp.PackRequest{Kind: pack.ScopeTimeRange, Include: digestInclude}
+	out := map[string]string{"scope": p.w.Scope}
 	if !p.cse.IsZero() {
-		var err error
-		if from, to, err = s.d.Digests.CaseWindow(ctx, tx, sc.Org, p.cse); err != nil {
+		cs, err := s.d.Digests.Case(ctx, tx, sc.Org, p.cse, evapp.MaxPackTransactions)
+		if err != nil {
 			return refusalOr(err)
 		}
-		// A long case's digest covers its last MaxDigestDays.
-		to = to.UTC().Truncate(time.Second).Add(time.Second)
-		from = from.UTC().Truncate(time.Second)
+		// The report counts the case's life, at most its last MaxDigestDays.
+		to = cs.To.UTC().Truncate(time.Second).Add(time.Second)
+		from = cs.From.UTC().Truncate(time.Second)
 		if earliest := to.Add(-MaxDigestDays * 24 * time.Hour); from.Before(earliest) {
 			from = earliest
 		}
 		if !to.After(from) {
 			to = from.Add(time.Second)
 		}
+		// The pack holds the case's linked transactions.
+		req = evapp.PackRequest{Kind: pack.ScopeTransactions, Transactions: cs.Transactions, Include: digestInclude}
+		out["transactions"] = strconv.Itoa(len(cs.Transactions))
+		if cs.Truncated {
+			out["truncated"] = "true"
+		}
+	} else {
+		req.From, req.To = &from, &to
 	}
+	out["from"], out["to"] = rfc(from), rfc(to)
 	report := digestReport{
 		Format: DigestFormat, Title: p.w.Title, Org: sc.Org.String(), Automation: sc.Execution.Automation.String(),
 		Execution: sc.Execution.ID.String(), Scope: p.w.Scope, From: rfc(from), To: rfc(to),
@@ -572,9 +617,17 @@ func (s *buildDigest) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepCont
 	if report.Title == "" {
 		report.Title = "Automation digest"
 	}
-	out := map[string]string{"scope": p.w.Scope, "from": rfc(from), "to": rfc(to)}
+	if p.all {
+		out["agents"] = "all"
+	} else {
+		out["agents"] = strconv.Itoa(len(p.agents))
+		for _, a := range p.agents {
+			report.Agents = append(report.Agents, a.String())
+		}
+		slices.Sort(report.Agents)
+	}
 	for _, sec := range p.w.Sections {
-		c, err := s.d.Digests.Counts(ctx, tx, sc.Org, sec, from, to)
+		c, err := s.d.Digests.Counts(ctx, tx, sc.Org, sec, from, to, p.agents)
 		if err != nil {
 			return autodomain.StepResult{}, err
 		}
@@ -585,15 +638,21 @@ func (s *buildDigest) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepCont
 		}
 		out[sec+"_total"] = strconv.FormatInt(total, 10)
 	}
-	packID, err := s.d.Packs.Create(ctx, tx, DigestPack{
-		Org: sc.Org, Automation: sc.Execution.Automation, Execution: sc.Execution.ID, Creator: sc.Execution.Owner, From: from, To: to,
-	})
-	if err != nil {
-		return refusalOr(err)
+	var refs []reflexdomain.EvidenceRef
+	out[OutPack] = OutPackNone
+	if req.Kind == pack.ScopeTimeRange || len(req.Transactions) > 0 {
+		packID, err := s.d.Packs.CreateForAutomationTx(ctx, tx, evapp.AutomationPack{
+			Org: sc.Org, Automation: sc.Execution.Automation, Execution: sc.Execution.ID,
+			ServiceAccount: sc.Execution.ServiceAccount, Agents: p.agents, Request: req,
+		})
+		if err != nil {
+			return refusalOr(err)
+		}
+		out[OutPack] = packID.String()
+		report.Links = append(report.Links, digestLink{Kind: RefPack, ID: packID.String()})
+		refs = append(refs, ref(RefPack, packID))
 	}
-	report.Links = append(report.Links, digestLink{Kind: RefPack, ID: packID.String()},
-		digestLink{Kind: string(reflexdomain.SubjectAutomationExecution), ID: sc.Execution.ID.String()})
-	refs := []reflexdomain.EvidenceRef{ref(RefPack, packID)}
+	report.Links = append(report.Links, digestLink{Kind: string(reflexdomain.SubjectAutomationExecution), ID: sc.Execution.ID.String()})
 	if !p.cse.IsZero() {
 		report.Links = append(report.Links, digestLink{Kind: RefCase, ID: p.cse.String()})
 		refs = append(refs, ref(RefCase, p.cse))
@@ -603,8 +662,12 @@ func (s *buildDigest) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepCont
 	if err != nil {
 		return autodomain.StepResult{}, err
 	}
-	out[OutPack], out[OutReportDigest] = packID.String(), dg
-	return autodomain.StepResult{State: autodomain.StepDone, Effect: autodomain.EffectChanged, Output: out, Refs: refs}, nil
+	out[OutReportDigest] = dg
+	effect := autodomain.EffectChanged
+	if out[OutPack] == OutPackNone {
+		effect = autodomain.EffectNone
+	}
+	return autodomain.StepResult{State: autodomain.StepDone, Effect: effect, Output: out, Refs: refs}, nil
 }
 
 func (s *buildDigest) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
@@ -878,36 +941,50 @@ func (s *SimulationStore) Status(ctx context.Context, tx pgx.Tx, org ids.OrgID, 
 }
 
 // DigestCounts implements DigestSource with grouped counts over the org's
-// own tables (RLS-bound): decisions by decision, effects by effect state,
-// holds by approval state, alerts by severity (test signals left out), and
-// the open items now.
+// own tables (RLS-bound), within the declared agents: decisions by
+// decision, effects by effect state, holds by approval state, alerts by
+// severity (test signals left out; an alert counts when one of its agent
+// subjects is declared), and the open items now.
 type DigestCounts struct{}
 
 // NewDigestCounts returns the digest counts.
 func NewDigestCounts() DigestCounts { return DigestCounts{} }
 
-// digestQueries are the grouped counts by section; windowed ones take
-// ($1 org, $2 from, $3 to), open_items only $1.
+// digestQueries are the grouped counts by section. Windowed ones take ($1
+// org, $2 from, $3 to, $4 agents), open_items ($1 org, $2 agents); NULL
+// agents is the whole org.
 var digestQueries = map[string]struct {
 	sql      string
 	windowed bool
 }{
-	SectionDecisions: {`SELECT decision, count(*) FROM pc.transactions
-WHERE org_id = $1 AND created_at >= $2 AND created_at < $3 GROUP BY decision`, true},
-	SectionEffects: {`SELECT effect_state, count(*) FROM pc.transactions
-WHERE org_id = $1 AND created_at >= $2 AND created_at < $3 AND effect_state IS NOT NULL GROUP BY effect_state`, true},
+	SectionDecisions: {`SELECT t.decision, count(*) FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = $1 AND t.created_at >= $2 AND t.created_at < $3
+  AND ($4::uuid[] IS NULL OR r.agent_id = ANY ($4::uuid[])) GROUP BY t.decision`, true},
+	SectionEffects: {`SELECT t.effect_state, count(*) FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = $1 AND t.created_at >= $2 AND t.created_at < $3 AND t.effect_state IS NOT NULL
+  AND ($4::uuid[] IS NULL OR r.agent_id = ANY ($4::uuid[])) GROUP BY t.effect_state`, true},
 	SectionHolds: {`SELECT state, count(*) FROM pc.approval_requests
-WHERE org_id = $1 AND created_at >= $2 AND created_at < $3 GROUP BY state`, true},
+WHERE org_id = $1 AND created_at >= $2 AND created_at < $3
+  AND ($4::uuid[] IS NULL OR agent_id = ANY ($4::uuid[])) GROUP BY state`, true},
 	SectionAlerts: {`SELECT severity, count(*) FROM pc.alerts
-WHERE org_id = $1 AND created_at >= $2 AND created_at < $3 AND NOT test GROUP BY severity`, true},
-	SectionOpenItems: {`SELECT 'cases', count(*) FROM pc.cases WHERE org_id = $1 AND state <> 'CLOSED'
+WHERE org_id = $1 AND created_at >= $2 AND created_at < $3 AND NOT test
+  AND ($4::uuid[] IS NULL OR EXISTS (SELECT 1 FROM jsonb_array_elements(subjects) s
+       WHERE s->>'type' = 'agent' AND s->>'id' = ANY ($4::uuid[]::text[]))) GROUP BY severity`, true},
+	SectionOpenItems: {`SELECT 'cases', count(*) FROM pc.cases c WHERE c.org_id = $1 AND c.state <> 'CLOSED'
+  AND ($2::uuid[] IS NULL OR EXISTS (SELECT 1 FROM pc.case_agents(c.org_id, c.id) a(agent_id) WHERE a.agent_id = ANY ($2::uuid[])))
 UNION ALL SELECT 'alerts', count(*) FROM pc.alerts WHERE org_id = $1 AND state IN ('OPEN', 'ACKNOWLEDGED') AND NOT test
+  AND ($2::uuid[] IS NULL OR EXISTS (SELECT 1 FROM jsonb_array_elements(subjects) s
+       WHERE s->>'type' = 'agent' AND s->>'id' = ANY ($2::uuid[]::text[])))
 UNION ALL SELECT 'approvals', count(*) FROM pc.approval_requests WHERE org_id = $1 AND state IN ('PENDING', 'EVIDENCE_REQUESTED')
-UNION ALL SELECT 'proposals', count(*) FROM pc.automation_proposals WHERE org_id = $1 AND state = 'PROPOSED'`, false},
+  AND ($2::uuid[] IS NULL OR agent_id = ANY ($2::uuid[]))
+UNION ALL SELECT 'proposals', count(*) FROM pc.automation_proposals WHERE org_id = $1 AND state = 'PROPOSED'
+  AND ($2::uuid[] IS NULL OR (subject_type = 'agent' AND subject_id = ANY ($2::uuid[])))`, false},
 }
 
 // Counts implements DigestSource.
-func (DigestCounts) Counts(ctx context.Context, tx pgx.Tx, org ids.OrgID, section string, from, to time.Time) (map[string]int64, error) {
+func (DigestCounts) Counts(ctx context.Context, tx pgx.Tx, org ids.OrgID, section string, from, to time.Time, agents []ids.UUID) (map[string]int64, error) {
 	dq, ok := digestQueries[section]
 	if !ok {
 		return nil, fmt.Errorf("securitysteps: unknown digest section %q", section)
@@ -916,6 +993,7 @@ func (DigestCounts) Counts(ctx context.Context, tx pgx.Tx, org ids.OrgID, sectio
 	if dq.windowed {
 		args = append(args, from, to)
 	}
+	args = append(args, agents)
 	rows, err := tx.Query(ctx, dq.sql, args...)
 	if err != nil {
 		return nil, err
@@ -933,101 +1011,51 @@ func (DigestCounts) Counts(ctx context.Context, tx pgx.Tx, org ids.OrgID, sectio
 	return out, rows.Err()
 }
 
-// CaseWindow implements DigestSource.
-func (DigestCounts) CaseWindow(ctx context.Context, tx pgx.Tx, org ids.OrgID, c ids.UUID) (time.Time, time.Time, error) {
-	r, err := dbq.New(tx).GetCase(ctx, org, c)
+// caseTransactionRef is a case LINK entry's ref kind of a transaction.
+const caseTransactionRef = "transaction"
+
+// Case implements DigestSource: the case's life and the transactions its
+// standing LINK entries name, in link order.
+func (DigestCounts) Case(ctx context.Context, tx pgx.Tx, org ids.OrgID, c ids.UUID, limit int) (CaseScope, error) {
+	q := dbq.New(tx)
+	r, err := q.GetCase(ctx, org, c)
 	if db.IsNoRows(err) {
-		return time.Time{}, time.Time{}, pcerr.New(pcerr.NotFound, ReasonCaseNotFound, "case not found")
+		return CaseScope{}, pcerr.New(pcerr.NotFound, ReasonCaseNotFound, "case not found")
 	} else if err != nil {
-		return time.Time{}, time.Time{}, err
+		return CaseScope{}, err
 	}
-	to := time.Now()
+	out := CaseScope{From: r.CreatedAt, To: time.Now()}
 	if r.ClosedAt != nil {
-		to = *r.ClosedAt
+		out.To = *r.ClosedAt
 	}
-	return r.CreatedAt, to, nil
+	links, err := q.CaseLinks(ctx, org, c)
+	if err != nil {
+		return CaseScope{}, err
+	}
+	seen := map[ids.UUID]bool{}
+	for _, l := range links {
+		if l.RefKind == nil || *l.RefKind != caseTransactionRef || l.RefID == nil {
+			continue
+		}
+		id, ok := parseID(*l.RefID)
+		if !ok || seen[id] {
+			continue
+		}
+		if len(out.Transactions) == limit {
+			out.Truncated = true
+			break
+		}
+		seen[id] = true
+		out.Transactions = append(out.Transactions, id)
+	}
+	return out, nil
 }
 
-// PackStore implements DigestPacks as evidence app CreateEvidencePack
-// records a pack (Team edition, evidence.export, one transaction with the
-// audit event and the build job), for the automation's owner: the pack is
-// built from the owner's evidence.read when its job runs, and the owner
-// must hold evidence.export now (human only).
-type PackStore struct {
-	enqueue  evapp.PackEnqueuer
-	editions evapp.Editions
-}
-
-// NewDigestPacks returns the digest pack store; enqueue is the pack build
-// enqueuer evidence app WithPacks takes.
-func NewDigestPacks(enqueue evapp.PackEnqueuer, editions evapp.Editions) *PackStore {
-	return &PackStore{enqueue: enqueue, editions: editions}
-}
-
-// digestInclude is what a digest pack holds.
-var digestInclude = pack.Include{Receipts: true, Versions: true, Approvals: true, Containment: true}
-
-// Create implements DigestPacks.
-func (s *PackStore) Create(ctx context.Context, tx pgx.Tx, p DigestPack) (ids.UUID, error) {
-	if s.enqueue == nil || s.editions == nil {
-		return ids.UUID{}, evapp.ErrPacksUnwired
+// NewDigestPacks returns the digest packs: evidence app's
+// CreateForAutomationTx (D85). A nil service leaves Packs unwired.
+func NewDigestPacks(packs *evapp.Service) DigestPacks {
+	if packs == nil {
+		return nil
 	}
-	ents, err := s.editions.Current(ctx)
-	if err != nil {
-		return ids.UUID{}, err
-	}
-	if !ents.Edition.Paid() {
-		return ids.UUID{}, evapp.ErrPacksEdition
-	}
-	if !p.To.After(p.From) || p.To.Sub(p.From) > evapp.MaxPackRange {
-		return ids.UUID{}, evapp.ErrBadPackScope
-	}
-	ttx, err := db.AdoptTenantTx(ctx, tx, p.Org)
-	if err != nil {
-		return ids.UUID{}, err
-	}
-	q := dbq.New(ttx)
-	state, err := q.PackCreatorState(ctx, p.Org, p.Creator)
-	if db.IsNoRows(err) || (err == nil && state != "ACTIVE") {
-		return ids.UUID{}, pcerr.New(pcerr.FailedPrecondition, ReasonOwnerNotAllowed, "the automation's owner is not an active person")
-	} else if err != nil {
-		return ids.UUID{}, err
-	}
-	bindings, err := tenancy.Bindings(ctx, q, p.Org, td.PrincipalRef{Kind: td.KindUser, ID: p.Creator})
-	if err != nil {
-		return ids.UUID{}, err
-	}
-	owner := td.Subject{Org: p.Org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: p.Creator}, Bindings: bindings}
-	if !owner.CanAnywhere(td.PermEvidenceExport) {
-		return ids.UUID{}, pcerr.New(pcerr.PermissionDenied, ReasonOwnerNotAllowed, "the automation's owner does not hold evidence.export")
-	}
-	scope := pack.Scope{Kind: pack.ScopeTimeRange, From: p.From.UTC().Format(time.RFC3339Nano), To: p.To.UTC().Format(time.RFC3339Nano)}
-	scopeJSON, err := pack.Canonical(scope)
-	if err != nil {
-		return ids.UUID{}, err
-	}
-	includeJSON, err := pack.Canonical(digestInclude)
-	if err != nil {
-		return ids.UUID{}, err
-	}
-	id := ids.NewV7()
-	if err := q.InsertEvidencePack(ctx, dbq.InsertEvidencePackParams{
-		OrgID: p.Org, ID: id, CreatedBy: p.Creator, ScopeKind: pack.ScopeTimeRange, Scope: scopeJSON, Include: includeJSON,
-	}); err != nil {
-		return ids.UUID{}, err
-	}
-	if _, err := audit.Record(ctx, ttx, audit.Event{
-		Name: "evidence.pack_created", Actor: evdomain.Actor{Type: string(reflexdomain.SubjectAutomation), ID: p.Automation.String()},
-		Outcome: audit.Success, Object: &audit.Object{Type: "evidence_pack", ID: id.String()},
-		Details: map[string]string{
-			"scope": pack.ScopeTimeRange, "include": "receipts,versions,approvals,containment",
-			"built_as": p.Creator.String(), "execution_id": p.Execution.String(),
-		},
-	}); err != nil {
-		return ids.UUID{}, err
-	}
-	if err := s.enqueue(ctx, ttx, p.Org, id); err != nil {
-		return ids.UUID{}, err
-	}
-	return id, nil
+	return packs
 }

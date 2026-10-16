@@ -14,6 +14,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/automations/templates/templatesrpc"
 	covapp "github.com/katocxl/pantherclaw/internal/coverage/app"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
+	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/packbuild"
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
@@ -96,13 +97,16 @@ func templateStepDeps(d apiDeps, deps *securitysteps.Deps) {
 		return // the kinds that need it refuse with UNSUPPORTED_CAPABILITY
 	}
 	deps.Review.Simulations = securitysteps.NewPolicySimulations(insert, d.billing)
-	deps.Review.Packs = securitysteps.NewDigestPacks(func(ctx context.Context, tx db.TenantTx, org ids.OrgID, pack ids.UUID) error {
-		args, err := packbuild.NewBuildArgs(org, pack)
-		if err != nil {
-			return err
-		}
-		return jobs.InsertTx(ctx, insert, tx, args, nil)
-	}, d.billing)
+	// Digest packs are the automation's own, within its declared agents
+	// (D85).
+	deps.Review.Packs = securitysteps.NewDigestPacks(evapp.New(d.pool, d.logOrigin).WithPacks(
+		func(ctx context.Context, tx db.TenantTx, org ids.OrgID, pack ids.UUID) error {
+			args, err := packbuild.NewBuildArgs(org, pack)
+			if err != nil {
+				return err
+			}
+			return jobs.InsertTx(ctx, insert, tx, args, nil)
+		}, d.billing))
 }
 
 // routeCoverage is wait_coverage's view of coverage (D31): the trigger's
