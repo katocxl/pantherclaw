@@ -315,6 +315,12 @@ func (m *Machine) poll(ctx context.Context, tx pgx.Tx, x *Exec, spec autodomain.
 		return m.record(x, a, refused(ReasonUnsupported))
 	}
 	if x.Mode == autodomain.ModeLive {
+		// A waiting execution is revalidated at every poll too: the kill
+		// switch or a lost authority stops it at its next boundary (D14,
+		// HR-273, HR-283), not only before its next effectful step.
+		if r, err := m.revalidate(ctx, tx, x); err != nil || r != "" {
+			return m.authorityLost(ctx, tx, x, r, err)
+		}
 		if q, err := m.Hooks.Quarantined(ctx, tx, x); err != nil {
 			return err
 		} else if q {

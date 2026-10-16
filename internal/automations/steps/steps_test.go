@@ -10,8 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 
@@ -121,5 +123,27 @@ func TestHR279_TheServerNeverDispatchesAToolCall(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// D89: a notice's text stays readable on the execution page: the body in
+// parts of at most 512 bytes, never cut inside a character.
+func TestHR158_NoticeTextIsKeptInTheStepOutput(t *testing.T) {
+	body := strings.Repeat("é", 700) // 1400 bytes
+	out := map[string]string{}
+	messageOutput(out, autodomain.NotifyMessage{Title: "Refund done", Body: body})
+	got := ""
+	for i := 1; ; i++ {
+		part, ok := out["body_"+strconv.Itoa(i)]
+		if !ok {
+			break
+		}
+		if len(part) > MaxOutputPart || !utf8.ValidString(part) {
+			t.Fatalf("part %d: %d bytes, valid %v", i, len(part), utf8.ValidString(part))
+		}
+		got += part
+	}
+	if got != body || out["title"] != "Refund done" || !(autodomain.StepResult{Output: out}).Valid() {
+		t.Fatalf("output %d keys, body %d bytes", len(out), len(got))
 	}
 }

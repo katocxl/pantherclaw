@@ -651,7 +651,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	registerReflexCore(rs, d)
 	autos = registerAutomationsCore(rs, d, grants, runs)
-	registerAutomationsEngine(rs, d, workload)
+	registerAutomationsEngine(rs, d, workload, autos)
 	automationTriggers, err := registerAutomationTriggers(rs, d)
 	if err != nil {
 		return nil, err

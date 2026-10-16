@@ -363,3 +363,7 @@ FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 WHERE t.org_id = sqlc.arg(org_id) AND r.automation_execution_id = sqlc.arg(execution_id)
     AND t.decision IN ('ALLOW', 'ALLOW_WITH_OBLIGATIONS');
+
+-- name: PendingExecutionDeliveries :many
+SELECT id FROM pc.automation_deliveries
+WHERE org_id = sqlc.arg(org_id) AND execution_id = sqlc.arg(execution_id) AND state = 'PENDING';

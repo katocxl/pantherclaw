@@ -31,6 +31,7 @@ type LaunchIssue struct {
 	Automation     ids.UUID
 	Version        ids.UUID
 	Execution      ids.UUID
+	Trigger        ids.UUID
 	Ceiling        ids.UUID
 	ServiceAccount ids.UUID
 	Agent          ids.UUID
@@ -41,13 +42,18 @@ type LaunchIssue struct {
 	Bounds         gdomain.Bounds
 	Requirements   []gdomain.Requirement
 	Limits         gdomain.Limits
-	DryRun         bool
+	// Live is false for SHADOW and TEST executions, which never issue (D54).
+	Live   bool
+	DryRun bool
 }
 
 // LaunchStart is the run a launch starts under its grant (D10
 // AutomationStart).
 type LaunchStart struct {
 	Org            ids.OrgID
+	Automation     ids.UUID
+	Version        ids.UUID
+	Trigger        ids.UUID
 	Execution      ids.UUID
 	ServiceAccount ids.UUID
 	Agent          ids.UUID
@@ -62,8 +68,14 @@ type LaunchStart struct {
 // GrantRevoke asks for grants of an execution to be revoked (D9
 // AutomationRevoke).
 type GrantRevoke struct {
-	Org       ids.OrgID
-	Execution ids.UUID
+	Org            ids.OrgID
+	Automation     ids.UUID
+	Execution      ids.UUID
+	Trigger        ids.UUID
+	Ceiling        ids.UUID
+	ServiceAccount ids.UUID
+	// Agents are the ceiling's agents (CEILING_AGENTS).
+	Agents []ids.UUID
 	// Grant narrows EXECUTION to one grant of the execution, and names the
 	// trigger's grant for TRIGGER_GRANT.
 	Grant  *ids.UUID
@@ -89,7 +101,7 @@ type Grants interface {
 // Runs starts and ends runs for automations (runs/app, core-B).
 type Runs interface {
 	StartForAutomation(ctx context.Context, tx pgx.Tx, in LaunchStart) (ids.UUID, error)
-	EndForAutomation(ctx context.Context, tx pgx.Tx, org ids.OrgID, execution, run ids.UUID, reason string) error
+	EndForAutomation(ctx context.Context, tx pgx.Tx, org ids.OrgID, execution, serviceAccount, run ids.UUID, reason string) error
 }
 
 // GateRequest asks people to approve one gate (D25, HR-281).

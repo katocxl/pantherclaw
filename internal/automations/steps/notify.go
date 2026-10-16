@@ -27,7 +27,8 @@ func (*revokeGrant) Kind() string { return autodomain.KindRevokeGrant }
 
 func (s *revokeGrant) revoke(sc autodomain.StepContext) (GrantRevoke, string) {
 	w, ok := sc.With.(*autodomain.RevokeGrantWith)
-	if !ok || len([]rune(w.Reason)) > 1000 {
+	if !ok || len(w.Reason) > 256 {
+		// A revocation reason is 1..256 bytes (grants).
 		return GrantRevoke{}, ReasonBadWith
 	}
 	switch w.Scope {
@@ -38,7 +39,11 @@ func (s *revokeGrant) revoke(sc autodomain.StepContext) (GrantRevoke, string) {
 	if !inScope(sc.Def, autodomain.KindRevokeGrant, w.Scope) {
 		return GrantRevoke{}, ReasonOutsideScope
 	}
-	in := GrantRevoke{Org: sc.Org, Execution: sc.Execution.ID, Scope: w.Scope, Reason: w.Reason}
+	reason := w.Reason
+	if reason == "" {
+		reason = "automation step " + sc.Spec.ID
+	}
+	in := revokeOf(sc, w.Scope, nil, reason)
 	if w.Scope == autodomain.RevokeTriggerGrant {
 		for _, sub := range sc.Execution.Trigger.Subjects {
 			if sub.Type == reflexdomain.SubjectGrant {
@@ -141,6 +146,7 @@ func (s *notify) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) 
 		return autodomain.StepResult{State: autodomain.StepFailed, Reason: reason, Effect: autodomain.EffectNone}, err
 	}
 	out := map[string]string{}
+	messageOutput(out, w.Message)
 	var refs []reflexdomain.EvidenceRef
 	if len(w.To) > 0 {
 		if s.d.Notifier == nil || s.d.Recipients == nil {
@@ -208,6 +214,7 @@ func (s *notify) Preview(ctx context.Context, tx pgx.Tx, sc autodomain.StepConte
 		}, nil
 	}
 	out := map[string]string{"shadow": "true"}
+	messageOutput(out, w.Message)
 	if s.d.Notifier != nil && sc.Mode == autodomain.ModeShadow && !sc.Execution.Owner.IsZero() {
 		id, err := s.d.Notifier.Notify(ctx, tx, Notice{
 			Org: sc.Org, Automation: sc.Execution.Automation, Execution: sc.Execution.ID, StepID: sc.Spec.ID,
@@ -322,4 +329,23 @@ func (s *deliver) Preview(ctx context.Context, tx pgx.Tx, sc autodomain.StepCont
 		}, nil
 	}
 	return shadowed(map[string]string{"shadow": "true"})
+}
+
+// MaxOutputPart is the size of one output value (D11).
+const MaxOutputPart = autodomain.MaxOutputValue
+
+// messageOutput keeps a notice's text in the step's output for the
+// execution page (D89, HR-158): notices themselves carry ids only. The
+// body is cut into parts of at most 512 bytes, never inside a character.
+func messageOutput(out map[string]string, m autodomain.NotifyMessage) {
+	out["title"] = m.Title
+	body, n := m.Body, 1
+	for body != "" {
+		cut := min(len(body), MaxOutputPart)
+		for cut < len(body) && !utf8.RuneStart(body[cut]) {
+			cut--
+		}
+		out["body_"+strconv.Itoa(n)] = body[:cut]
+		body, n = body[cut:], n+1
+	}
 }

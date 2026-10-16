@@ -6,14 +6,17 @@ package pgengine
 import (
 	"context"
 	"strconv"
+	"time"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/katocxl/pantherclaw/internal/automations/automationctx"
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/engine"
 	"github.com/katocxl/pantherclaw/internal/automations/steps"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -57,10 +60,10 @@ func manager(ctx context.Context) (tenancy.Caller, error) {
 }
 
 // CancelExecution stops an active execution (automation.manage, a person,
-// D28, HR-283): the request is recorded, the execution is advanced at once
-// to its boundary, and the effect its cleanup recorded is returned. An
-// unknown outcome of an irreversible operation still ends it in
-// NEEDS_RECONCILIATION (D84 E1).
+// D28, HR-283). In one transaction the request is recorded and the
+// execution is advanced to its boundary, so the effect its cleanup records
+// is returned verified. An unknown outcome of an irreversible operation
+// still ends it in NEEDS_RECONCILIATION (D84 E1).
 func (e *Engine) CancelExecution(ctx context.Context, id ids.UUID, note string) (Summary, CancelEffect, error) {
 	c, err := manager(ctx)
 	if err != nil {
@@ -69,10 +72,12 @@ func (e *Engine) CancelExecution(ctx context.Context, id ids.UUID, note string) 
 	if utf8.RuneCountInString(note) > 500 {
 		return Summary{}, CancelEffect{}, ErrCancelReason
 	}
-	if err := e.requestCancel(ctx, c, []ids.UUID{id}, note); err != nil {
-		return Summary{}, CancelEffect{}, err
-	}
-	eff, err := e.settleCancels(ctx, c.Org, []ids.UUID{id})
+	var eff CancelEffect
+	err = e.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		eff, err = e.CancelTx(ctx, tx, []ids.UUID{id}, c.Principal.String(), autodomain.ReasonCancelledByUser, c.Actor(), note)
+		return err
+	})
 	if err != nil {
 		return Summary{}, eff, err
 	}
@@ -90,76 +95,102 @@ func (e *Engine) CancelActiveExecutions(ctx context.Context, automation ids.UUID
 	if utf8.RuneCountInString(note) > 500 {
 		return CancelEffect{}, ErrCancelReason
 	}
-	var active []ids.UUID
-	if err := e.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+	var eff CancelEffect
+	err = e.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		var err error
-		active, err = dbq.New(tx).ActiveAutomationExecutions(ctx, c.Org, automation)
+		eff, err = e.CancelAutomationTx(ctx, tx, automation, c.Principal.String(), autodomain.ReasonCancelledByUser, c.Actor(), note)
 		return err
-	}, db.ReadOnly()); err != nil {
+	})
+	return eff, err
+}
+
+// CancelAutomationTx cancels an automation's active executions in the
+// caller's transaction: core's pause with cancel_active, retirement and
+// RevokeAuthority (D28) call it inside their own change.
+func (e *Engine) CancelAutomationTx(ctx context.Context, tx db.TenantTx, automation ids.UUID, by, reason string,
+	actor evdomain.Actor, note string,
+) (CancelEffect, error) {
+	active, err := dbq.New(tx).ActiveAutomationExecutions(ctx, tx.OrgID(), automation)
+	if err != nil {
 		return CancelEffect{}, err
 	}
 	if len(active) > maxCancelBatch {
 		active = active[:maxCancelBatch]
 	}
-	if err := e.requestCancel(ctx, c, active, note); err != nil {
-		return CancelEffect{}, err
-	}
-	return e.settleCancels(ctx, c.Org, active)
+	return e.CancelTx(ctx, tx, active, by, reason, actor, note)
 }
 
-// requestCancel records the cancellations in one transaction, audited.
-func (e *Engine) requestCancel(ctx context.Context, c tenancy.Caller, executions []ids.UUID, note string) error {
-	return e.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
-		for _, id := range executions {
-			row, err := q.GetAutomationExecution(ctx, c.Org, id)
-			if db.IsNoRows(err) {
-				return ErrNotFound
-			} else if err != nil {
-				return err
-			}
-			if _, err := q.RequestAutomationExecutionCancel(ctx, dbq.RequestAutomationExecutionCancelParams{
-				RequestedBy: nonEmpty(c.Principal.String()), Reason: nonEmpty(autodomain.ReasonCancelledByUser), OrgID: c.Org, ID: id,
-			}); err != nil {
-				return err
-			}
-			details := map[string]string{"automation": row.AutomationID.String(), "execution": id.String()}
-			if note != "" {
-				details["note_chars"] = strconv.Itoa(utf8.RuneCountInString(note))
-			}
-			if _, err := audit.Record(ctx, tx, audit.Event{
-				Name: "automation.execution_cancel_requested", Actor: c.Actor(), Outcome: audit.Success,
-				ReasonCode: autodomain.ReasonCancelledByUser, Object: &audit.Object{Type: "automation_execution", ID: id.String()},
-				Details: details,
-			}); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-}
-
-// settleCancels advances each execution to its boundary and reads back
-// what its cleanup did.
-func (e *Engine) settleCancels(ctx context.Context, org ids.OrgID, executions []ids.UUID) (CancelEffect, error) {
+// CancelTx records the cancellation of each execution, audited, and
+// advances it to its boundary in tx (HR-283): its cleanup revokes its
+// grants, ends its runs and cancels its launches, gates and deliveries;
+// the effect is read back from what the cleanup recorded.
+func (e *Engine) CancelTx(ctx context.Context, tx db.TenantTx, executions []ids.UUID, by, reason string,
+	actor evdomain.Actor, note string,
+) (CancelEffect, error) {
 	var eff CancelEffect
+	org := tx.OrgID()
+	q := dbq.New(tx)
+	now, err := q.DBNow(ctx)
+	if err != nil {
+		return eff, err
+	}
 	for _, id := range executions {
-		if err := e.Advance(ctx, org, id); err != nil {
+		row, err := q.GetAutomationExecution(ctx, org, id)
+		if db.IsNoRows(err) {
+			return eff, ErrNotFound
+		} else if err != nil {
 			return eff, err
 		}
-		s, err := e.summary(ctx, org, id)
+		if !autodomain.ExecutionState(row.State).Active() {
+			// Already ended: this call affects nothing.
+			continue
+		}
+		n, err := q.RequestAutomationExecutionCancel(ctx, dbq.RequestAutomationExecutionCancelParams{
+			RequestedBy: nonEmpty(by), Reason: nonEmpty(reason), OrgID: org, ID: id,
+		})
 		if err != nil {
 			return eff, err
 		}
-		if autodomain.ExecutionState(s.Row.State).Active() {
+		details := map[string]string{"automation": row.AutomationID.String(), "execution": id.String()}
+		if note != "" {
+			details["note_chars"] = strconv.Itoa(utf8.RuneCountInString(note))
+		}
+		if n == 1 {
+			if _, err := audit.Record(ctx, tx, audit.Event{
+				Name: "automation.execution_cancel_requested", Actor: actor, Outcome: audit.Success, ReasonCode: reason,
+				Object: &audit.Object{Type: "automation_execution", ID: id.String()}, Details: details,
+			}); err != nil {
+				return eff, err
+			}
+		}
+		x, err := e.load(ctx, q, org, id)
+		if err != nil {
+			return eff, err
+		}
+		if x.Active() {
+			m := *e.Machine
+			m.Now = func() time.Time { return now }
+			before := x.State
+			actx := automationctx.With(ctx, refOf(x))
+			if _, err := m.Advance(actx, tx.Pgx(), x); err != nil {
+				return eff, err
+			}
+			if err := e.audit(actx, tx, x, before); err != nil {
+				return eff, err
+			}
+			if err := e.save(ctx, q, x); err != nil {
+				return eff, err
+			}
+		}
+		if x.Active() {
 			eff.StillActive = append(eff.StillActive, id)
 			continue
 		}
 		eff.Executions = append(eff.Executions, id)
-		if s.Result == nil {
+		if x.Result == nil {
 			continue
 		}
-		for _, r := range s.Result.Cleanup {
+		for _, r := range x.Result.Cleanup {
 			switch r.Kind {
 			case steps.RefGrant:
 				eff.Grants = append(eff.Grants, r.ID)
@@ -196,12 +227,12 @@ func (e *Engine) summary(ctx context.Context, org ids.OrgID, id ids.UUID) (Summa
 // GrantRevoker revokes an execution's grants (core's
 // RevokeForAutomationTx with scope EXECUTION, D9).
 type GrantRevoker interface {
-	RevokeExecutionGrants(ctx context.Context, tx pgx.Tx, org ids.OrgID, execution ids.UUID, reason string) ([]ids.UUID, error)
+	RevokeExecutionGrants(ctx context.Context, tx pgx.Tx, x *engine.Exec, reason string) ([]ids.UUID, error)
 }
 
 // RunEnder ends an execution's runs (core's EndForAutomationTx, D10).
 type RunEnder interface {
-	EndExecutionRuns(ctx context.Context, tx pgx.Tx, org ids.OrgID, execution ids.UUID, reason string) ([]ids.UUID, error)
+	EndExecutionRuns(ctx context.Context, tx pgx.Tx, x *engine.Exec, reason string) ([]ids.UUID, error)
 }
 
 // GateCloser ends an execution's open gates (approvals, D25).
@@ -218,6 +249,13 @@ type Cleanup struct {
 	Grants GrantRevoker
 	Runs   RunEnder
 	Gates  GateCloser
+	// Deliveries cancels pending webhooks (triggers' Deliverer.Cancel, D89).
+	Deliveries DeliveryCanceler
+}
+
+// DeliveryCanceler cancels a pending delivery (PENDING → FAILED).
+type DeliveryCanceler interface {
+	Cancel(ctx context.Context, tx pgx.Tx, id ids.UUID) error
 }
 
 // Cleanup implements Cleaner.
@@ -253,8 +291,23 @@ func (c Cleanup) Cleanup(ctx context.Context, tx pgx.Tx, x *engine.Exec) ([]refl
 			refs = append(refs, reflexdomain.EvidenceRef{Kind: steps.RefApprovalRequest, ID: g})
 		}
 	}
+	if c.Deliveries != nil {
+		pending, err := q.PendingExecutionDeliveries(ctx, x.Org, x.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, d := range pending {
+			if err := c.Deliveries.Cancel(ctx, tx, d); err != nil {
+				if notPending(err) {
+					continue
+				}
+				return nil, err
+			}
+			refs = append(refs, reflexdomain.EvidenceRef{Kind: steps.RefDelivery, ID: d})
+		}
+	}
 	if c.Grants != nil {
-		revoked, err := c.Grants.RevokeExecutionGrants(ctx, tx, x.Org, x.ID, reason)
+		revoked, err := c.Grants.RevokeExecutionGrants(ctx, tx, x, reason)
 		if err != nil {
 			return nil, err
 		}
@@ -263,7 +316,7 @@ func (c Cleanup) Cleanup(ctx context.Context, tx pgx.Tx, x *engine.Exec) ([]refl
 		}
 	}
 	if c.Runs != nil {
-		ended, err := c.Runs.EndExecutionRuns(ctx, tx, x.Org, x.ID, reason)
+		ended, err := c.Runs.EndExecutionRuns(ctx, tx, x, reason)
 		if err != nil {
 			return nil, err
 		}
@@ -273,3 +326,7 @@ func (c Cleanup) Cleanup(ctx context.Context, tx pgx.Tx, x *engine.Exec) ([]refl
 	}
 	return refs, nil
 }
+
+// notPending reports a delivery that left PENDING meanwhile (delivered or
+// failed by its sender): there is nothing left to cancel.
+func notPending(err error) bool { return pcerr.ReasonOf(err) == "DELIVERY_NOT_PENDING" }
