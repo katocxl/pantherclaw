@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/protect"
+	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 	rapp "github.com/katocxl/pantherclaw/internal/releases/app"
 	"github.com/katocxl/pantherclaw/internal/releases/domain"
@@ -125,6 +127,24 @@ func (e *hr) row(id ids.UUID) dbq.PcProtectedChange {
 		e.t.Fatal(err)
 	}
 	return out
+}
+
+// reviewFailure returns the state and summary of an emergency change's
+// latest protected_change.review_expired failure ("" when there is none).
+func (e *hr) reviewFailure(change ids.UUID) (state, summary string) {
+	e.t.Helper()
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		err := tx.QueryRow(ctx, `SELECT state, summary FROM pc.operational_failures WHERE org_id = $1
+			AND kind = 'protected_change.review_expired' AND dedupe_key = $2 ORDER BY id DESC LIMIT 1`,
+			e.org, "protected_change.review_expired:"+change.String()).Scan(&state, &summary)
+		if db.IsNoRows(err) {
+			return nil
+		}
+		return err
+	}); err != nil {
+		e.t.Fatal(err)
+	}
+	return state, summary
 }
 
 // frozen is a prod window with a freeze running now.
@@ -331,6 +351,9 @@ func TestHR292_AnExpiredEmergencyReviewKeepsTheChangeAndCanBeReopened(t *testing
 		again.ReviewRequestID == nil || *again.ReviewRequestID == first || again.State != protect.StateEmergency {
 		t.Fatalf("new review = %v %+v", err, again)
 	}
+	if state, _ := e.reviewFailure(c.ID); state != "RESOLVED" {
+		t.Fatalf("the review_expired failure is %s after a new review, want RESOLVED", state)
+	}
 	review, err := e.changes.Get(carol.page, *again.ReviewRequestID)
 	if err != nil || review.ExpiresAt.Sub(review.CreatedAt) != 72*time.Hour || review.State != changes.StatePending {
 		t.Fatalf("new review request %v %+v", err, review)
@@ -349,6 +372,105 @@ func TestHR292_AnExpiredEmergencyReviewKeepsTheChangeAndCanBeReopened(t *testing
 	if got := e.row(c.ID); got.ReviewState == nil || *got.ReviewState != protect.ReviewReviewed ||
 		got.ReviewedBy == nil || *got.ReviewedBy != carol.id {
 		t.Fatalf("reviewed %+v", got)
+	}
+}
+
+// TestHR292_ADeclinedOrVoidedEmergencyReviewIsReopened (D116 U2, U3): an
+// emergency review that is declined or voided ends like one that expired.
+// The change stays applied with review state REVIEW_EXPIRED, the reason is
+// on the emergency publisher's protected_change.review_expired failure,
+// and a new review can be opened. Opening it, and the review reaching
+// REVIEWED, resolve the failure.
+func TestHR292_ADeclinedOrVoidedEmergencyReviewIsReopened(t *testing.T) {
+	for _, end := range []string{changes.StateDeclined, changes.StateVoided} {
+		t.Run(end, func(t *testing.T) {
+			e := newHR(t)
+			alice, bob, carol := e.person("alice", td.RoleSecurityAdmin), e.person("bob", td.RoleSecurityAdmin), e.person("carol", td.RoleSecurityAdmin)
+			w := e.frozen(alice)
+			e.protectRules(alice)
+			_, err := e.windows.Retire(alice.cli, w.ID, "emergency release")
+			var held *protect.PendingError
+			if !errors.As(err, &held) {
+				t.Fatalf("retire = %v", err)
+			}
+			c, err := e.svc.ApplyEmergency(bob.page, held.Request, e.stepUp(bob))
+			if err != nil {
+				t.Fatal(err)
+			}
+			first := *c.ReviewRequestID
+			if end == changes.StateDeclined {
+				if _, err := e.changes.Decline(carol.page, first, "not reviewing this"); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				by := tapp.Caller{Subject: td.Subject{Org: e.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: carol.id}}}
+				if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+					_, err := e.changes.Void(ctx, tx, by, protect.DomainProtected, c.ID, "TEST")
+					return err
+				}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if r, _ := e.changes.Get(carol.page, first); r.State != end {
+				t.Fatalf("review request is %s, want %s", r.State, end)
+			}
+			got := e.row(c.ID)
+			if got.State != protect.StateEmergency || got.ReviewState == nil || *got.ReviewState != protect.ReviewExpired {
+				t.Fatalf("after the review was %s: %+v", end, got)
+			}
+			reason := map[string]string{changes.StateDeclined: "review_declined", changes.StateVoided: "review_voided"}[end]
+			state, summary := e.reviewFailure(c.ID)
+			if state != "ASSIGNED" || !strings.Contains(summary, reason) {
+				t.Fatalf("failure %s %q, want ASSIGNED with %s", state, summary, reason)
+			}
+			again, err := e.svc.OpenEmergencyReview(carol.page, c.ID)
+			if err != nil || again.ReviewState == nil || *again.ReviewState != protect.ReviewDue {
+				t.Fatalf("new review = %v %+v", err, again)
+			}
+			if state, _ := e.reviewFailure(c.ID); state != "RESOLVED" {
+				t.Fatalf("failure is %s after a new review", state)
+			}
+			if _, err := e.confirm(carol, *again.ReviewRequestID); err != nil {
+				t.Fatal(err)
+			}
+			if got := e.row(c.ID); got.ReviewState == nil || *got.ReviewState != protect.ReviewReviewed {
+				t.Fatalf("reviewed %+v", got)
+			}
+		})
+	}
+}
+
+// TestHR292_ReviewingResolvesTheOpenReviewFailure (D116 U3): a review that
+// reaches REVIEWED resolves an open protected_change.review_expired
+// failure of its change, for example one a person reported again by hand.
+func TestHR292_ReviewingResolvesTheOpenReviewFailure(t *testing.T) {
+	e := newHR(t)
+	alice, bob, carol := e.person("alice", td.RoleSecurityAdmin), e.person("bob", td.RoleSecurityAdmin), e.person("carol", td.RoleSecurityAdmin)
+	w := e.frozen(alice)
+	e.protectRules(alice)
+	_, err := e.windows.Retire(alice.cli, w.ID, "emergency release")
+	var held *protect.PendingError
+	if !errors.As(err, &held) {
+		t.Fatalf("retire = %v", err)
+	}
+	c, err := e.svc.ApplyEmergency(bob.page, held.Request, e.stepUp(bob))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		_, _, err := (&failures.Sink{}).ReportTx(ctx, tx, reflexdomain.Failure{
+			Org: e.org, Kind: protect.KindReviewExpired, Summary: "open", NextStep: "review it",
+			DedupeKey: "protected_change.review_expired:" + c.ID.String(),
+		})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.confirm(carol, *c.ReviewRequestID); err != nil {
+		t.Fatal(err)
+	}
+	if state, _ := e.reviewFailure(c.ID); state != "RESOLVED" {
+		t.Fatalf("failure is %s after the review, want RESOLVED", state)
 	}
 }
 

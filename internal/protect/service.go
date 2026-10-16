@@ -354,6 +354,10 @@ func (s *Service) OpenEmergencyReview(ctx context.Context, id ids.UUID) (dbq.PcP
 		} else if err != nil {
 			return err
 		}
+		if err := s.Gate.resolveReviewFailure(ctx, tx, row.ID, "A new review was opened: change request "+review.String()+".",
+			c.Actor()); err != nil {
+			return err
+		}
 		return record(ctx, tx, c, "protected_change.review_reopened", row.ID, map[string]string{
 			"category": row.Category, "subject": row.Subject, "applied_by": uuidString(row.Publisher),
 			"review_request": review.String(),
