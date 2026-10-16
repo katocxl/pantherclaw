@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	autoapp "github.com/katocxl/pantherclaw/internal/automations/app"
 	"github.com/katocxl/pantherclaw/internal/automations/assurance"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
@@ -20,6 +22,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/exposure/exposuretest"
 	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
+	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -221,11 +224,14 @@ func TestT127_TestsAndSimulationAreInert(t *testing.T) {
 
 // issuer is grants' issuance with core's ceiling checks, as the
 // simulation worker has it (D94 S5).
-func issuer(o *exposuretest.Org) *grantsapp.Service {
+func issuer(o *exposuretest.Org, gate ...grantsapp.PromotionGate) *grantsapp.Service {
 	gstore := &grantspg.Store{Pool: o.P}
 	grants := &grantsapp.Service{
 		Repo: gstore, Subjects: gstore, Defs: &defspg.Store{Pool: o.P}, Authz: grantsapp.SubjectAuthorizer{},
 		Clock: clock.System{}, Store: gstore,
+	}
+	if len(gate) > 0 {
+		grants.Promotion = gate[0]
 	}
 	grants.Ceilings = &autoapp.Service{
 		Pool: o.P, Clock: clock.System{}, Changes: changes.New(o.P, "https://pc.example.test"), Grants: grants,
@@ -257,6 +263,42 @@ func TestSimulationResumesAfterAFailedAttempt(t *testing.T) {
 		got, err := svc.GetSimulation(admin(o), sims[i])
 		if err != nil || got.State != want {
 			t.Errorf("simulation %d: %+v %v", i, got, err)
+		}
+	}
+}
+
+// notPromoted is a promotion gate that refuses every operation.
+type notPromoted struct{}
+
+func (notPromoted) Check(context.Context, pgx.Tx, ids.OrgID, ids.UUID, ids.UUID, gdomain.Ops) error {
+	return grantsapp.ErrNotPromoted
+}
+
+// D107 A1: the preview runs real issuance's promotion gate, so a launch
+// the gate refuses previews REFUSED:NOT_PROMOTED, never ALLOWED.
+func TestPreviewRefusedNotPromoted(t *testing.T) {
+	o := exposuretest.New(t)
+	a := o.Automation(t, "refunds", []ids.UUID{o.Other}, "payments.refund.get") // reads: no per-grant budget needed
+	o.Claim(t, o.Other) // a claimed agent may hold grants
+	v := draft(t, o, a)
+	ctx := admin(o)
+	for name, svc := range map[string]*assurance.Service{
+		"gated":   {Pool: o.P, Ents: edition(billing.Team), Issuer: issuer(o, notPromoted{})},
+		"ungated": {Pool: o.P, Ents: edition(billing.Team), Issuer: issuer(o)},
+	} {
+		sim := ids.NewV7()
+		o.Exec(t, `INSERT INTO pc.automation_simulations (org_id, id, version_id, from_at, to_at, requested_by)
+			VALUES ($1, $2, $3, now() - interval '1 day', now(), $4)`, o.Org, sim, v, o.User)
+		if err := svc.RunSimulation(context.Background(), o.Org, sim); err != nil {
+			t.Fatal(err)
+		}
+		got, err := svc.GetSimulation(ctx, sim)
+		if err != nil || got.Results == nil {
+			t.Fatalf("%s: %+v %v", name, got, err)
+		}
+		p := got.Results.LaunchPreview["launch"]
+		if gated := p == "REFUSED:NOT_PROMOTED"; gated != (name == "gated") {
+			t.Errorf("%s preview: %q", name, p)
 		}
 	}
 }

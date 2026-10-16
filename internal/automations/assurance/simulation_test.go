@@ -12,6 +12,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/automations/assurance"
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/reflex/feed"
 )
 
@@ -164,5 +165,49 @@ func TestReplayThresholdSlidingWindow(t *testing.T) {
 	r := assurance.Replay(context.Background(), d, h, from, from.Add(time.Hour))
 	if len(r.Days) != 1 || r.Days[0].WouldFire != 2 {
 		t.Fatalf("days %+v, missing %v", r.Days, r.Missing)
+	}
+}
+
+// D107 A4: a threshold sample lists the agents of every event its window
+// counts; over 64 it lists none and no reader sees it.
+func TestThresholdSampleAgents(t *testing.T) {
+	doc := strings.Replace(sample, `  inbound:
+    source: 0192f000-0000-7000-8000-000000000002
+    type: ticket.created
+    params:
+      ticket:
+        from: /ticket/id
+        type: string
+        pattern: "T-[0-9]{1,10}"
+`, `  threshold:
+    on: run.ended
+    over: 10m
+    at_least: 3
+`, 1)
+	doc = strings.Replace(doc, `task_ref: "ticket {{params.ticket}}"`, `task_ref: "burst"`, 1)
+	d, err := autodomain.Parse([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	from := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	events := func(n int) assurance.History {
+		var h assurance.History
+		for i := range n {
+			h.Events = append(h.Events, feed.Event{
+				ID: ids.NewV7(), Kind: "audit.run.ended", OccurredAt: from.Add(time.Duration(i) * time.Second),
+				Subjects: []reflexdomain.Subject{{Type: reflexdomain.SubjectAgent, ID: ids.NewV7().String()}},
+			})
+		}
+		return h
+	}
+	r := assurance.Replay(context.Background(), d, events(3), from, from.Add(time.Hour))
+	if len(r.Samples) != 1 || len(r.Samples[0].Agents) != 4 { // three events' agents and the launch's
+		t.Fatalf("samples %+v", r.Samples)
+	}
+	h := events(70)
+	d.When.Threshold.AtLeast = 70
+	r = assurance.Replay(context.Background(), d, h, from, from.Add(time.Hour))
+	if len(r.Samples) != 1 || len(r.Samples[0].Agents) != 1 || r.Samples[0].Agents[0] != assurance.AgentsOverflow {
+		t.Fatalf("overflow samples %+v", r.Samples)
 	}
 }
