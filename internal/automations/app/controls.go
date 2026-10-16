@@ -290,12 +290,19 @@ func (s *Service) ResumeAutomation(ctx context.Context, automation ids.UUID) (Au
 	var replayed int
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		killed, err := lockKillSwitch(ctx, q, c.Org)
+		if err != nil {
+			return err
+		}
 		a, err := loadAutomation(ctx, q, c.Org, automation, true)
 		if err != nil {
 			return err
 		}
 		if a.State != string(autodomain.StatePaused) || a.EnabledVersionID == nil {
 			return ErrState
+		}
+		if killed {
+			return ErrKillSwitch
 		}
 		if err := s.revalidate(ctx, tx, q, a); err != nil {
 			return err
@@ -334,12 +341,19 @@ func (s *Service) ResumePaused(ctx context.Context, ptx pgx.Tx, org ids.OrgID, a
 		return false, err
 	}
 	q := dbq.New(tx)
+	killed, err := lockKillSwitch(ctx, q, org)
+	if err != nil {
+		return false, err
+	}
 	a, err := loadAutomation(ctx, q, org, automation, true)
 	if err != nil {
 		return false, err
 	}
 	if a.State != string(autodomain.StatePaused) || a.EnabledVersionID == nil || deref2(a.PauseReason) != string(reason) {
 		return false, nil
+	}
+	if killed {
+		return false, ErrKillSwitch
 	}
 	if err := s.revalidate(ctx, tx, q, a); err != nil {
 		return false, err
@@ -359,6 +373,18 @@ func (s *Service) ResumePaused(ctx context.Context, ptx pgx.Tx, org ids.OrgID, a
 	return true, record(ctx, tx, systemActor, "automation.resumed", a.ID, map[string]string{
 		"was": string(reason), "replayed": itoa(replayed),
 	})
+}
+
+// lockKillSwitch locks the org's containment row and reports whether the
+// kill switch is engaged. Every path that makes an automation ACTIVE takes
+// it before the automation row, the order Engage takes them in, so a
+// resume never reads the switch from before an engage it races (D102 C1,
+// D118).
+func lockKillSwitch(ctx context.Context, q *dbq.Queries, org ids.OrgID) (bool, error) {
+	if err := q.InsertContainment(ctx, org); err != nil {
+		return false, err
+	}
+	return q.LockKillSwitch(ctx, org)
 }
 
 func deref2(s *string) string {

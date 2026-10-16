@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	autoapp "github.com/katocxl/pantherclaw/internal/automations/app"
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
@@ -229,5 +230,65 @@ func TestD115_ResumePausedOnlyForItsReason(t *testing.T) {
 	}
 	if ok, err := resume(autodomain.PauseCoverageRecovery); ok || err != nil {
 		t.Errorf("resumed twice: %v %v", ok, err)
+	}
+}
+
+// TestD118_EngageDuringResumeEndsPaused: the kill switch engaged while a
+// resume holds its locks waits for it, then pauses the resumed automation
+// (HR-283). Before D118 the engage skipped the still-PAUSED row and the
+// resume committed ACTIVE under an engaged switch.
+func TestD118_EngageDuringResumeEndsPaused(t *testing.T) {
+	e := newEnv(t)
+	a, _ := e.enabled("refunds", autodomain.RolloutShadow, 5)
+	if _, _, err := e.svc.PauseAutomation(e.alice.cli, a.ID, false, "stop"); err != nil {
+		t.Fatal(err)
+	}
+	engaged := make(chan error, 1)
+	err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		if ok, err := e.svc.ResumePaused(ctx, tx.Pgx(), e.org, a.ID, autodomain.PauseUser); err != nil || !ok {
+			t.Fatalf("resume: %v %v", ok, err)
+		}
+		bg := context.WithoutCancel(ctx) // the engage outlives this transaction
+		go func() {
+			engaged <- e.pool.InTenantTx(bg, e.org, func(ctx context.Context, other db.TenantTx) error {
+				if _, err := other.Exec(ctx, `UPDATE pc.org_containment SET kill_switch = true, epoch = epoch + 1,
+					engaged_by = 'user:test', engaged_at = now(), engage_reason = 'test' WHERE org_id = $1`, e.org); err != nil {
+					return err
+				}
+				_, err := e.svc.Pause(ctx, other.Pgx(), e.org, autodomain.PauseSelector{All: true}, autodomain.PauseKillSwitch)
+				return err
+			})
+		}()
+		// Commit once the engage waits on the resume's lock, or has
+		// finished without waiting (the race this guards against).
+		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+			if len(engaged) > 0 {
+				break
+			}
+			var waiting int
+			if err := e.pool.InTenantTx(ctx, e.org, func(ctx context.Context, other db.TenantTx) error {
+				return other.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity
+					WHERE datname = current_database() AND wait_event_type = 'Lock'`).Scan(&waiting)
+			}); err != nil {
+				return err
+			}
+			if waiting > 0 {
+				break
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := <-engaged; err != nil {
+		t.Fatalf("engage: %v", err)
+	}
+	got, err := e.svc.GetAutomation(e.alice.cli, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State != autodomain.StatePaused || got.PauseReason != autodomain.PauseKillSwitch {
+		t.Errorf("after the race: %s %s", got.State, got.PauseReason)
 	}
 }
