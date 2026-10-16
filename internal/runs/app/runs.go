@@ -52,6 +52,9 @@ const (
 	SourceLauncher     = "launcher"
 	SourceSubjectToken = "subject_token"
 	SourceParentRun    = "parent_run"
+	// SourceAutomation: the principal an automation version declares, which
+	// a confirmer consented to (G0 M11 part 2 D10).
+	SourceAutomation = "automation"
 )
 
 // Errors.
@@ -161,6 +164,8 @@ type Service struct {
 	clk      clock.Clock
 	subjects SubjectVerifier
 	grants   Grants
+	// automationRuns counts automation runs against their daily cap.
+	automationRuns AutomationRuns
 }
 
 // New returns the run use cases.
@@ -724,6 +729,11 @@ func (s *Service) bindGrant(ctx context.Context, tx db.TenantTx, org ids.OrgID, 
 	}
 	if !g.IsRoot() {
 		return ErrGrantDelegated
+	}
+	// A grant an automation issued binds only to the run StartForAutomationTx
+	// starts for its execution (G0 M11 part 2 D56).
+	if !g.Ceiling.IsZero() && (p.AutomationExecutionID == nil || *p.AutomationExecutionID != g.Execution) {
+		return ErrGrantMismatch
 	}
 	now, err := q.DBNow(ctx)
 	if err != nil {

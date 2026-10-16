@@ -17,10 +17,8 @@ import (
 const sample = `
 apiVersion: automations.pantherclaw.dev/v1
 kind: Automation
-name: refund-tickets
 purpose: Refund small tickets from Support.
 work_kind: AGENT_WORK
-owner: 0192f000-0000-7000-8000-000000000001
 review_by: "2026-12-01"
 when:
   inbound:
@@ -104,7 +102,7 @@ func TestParseRefusesUnknownAndLooseInput(t *testing.T) {
 		"wrong kind":         strings.Replace(sample, "kind: Automation", "kind: Workflow", 1),
 		"anchor":             strings.Replace(sample, "purpose: Refund", "purpose: &a Refund", 1),
 		"bad duration":       strings.Replace(sample, "ttl: 1h", "ttl: forever", 1),
-		"bad uuid":           strings.Replace(sample, "owner: 0192f000-0000-7000-8000-000000000001", "owner: alice", 1),
+		"bad uuid":           strings.Replace(sample, "source: 0192f000-0000-7000-8000-000000000002", "source: alice", 1),
 	} {
 		if _, err := autodomain.Parse([]byte(doc)); !errors.Is(err, autodomain.ErrInvalid) {
 			t.Errorf("%s: %v, want ErrInvalid", name, err)

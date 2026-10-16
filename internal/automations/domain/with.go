@@ -220,10 +220,18 @@ type SimulateRestrictionWith struct {
 	Days int    `json:"days,omitzero"` // ≤ 30
 }
 
-// BuildDigestWith builds a report and evidence pack.
+// BuildDigestWith builds a report and evidence pack as the automation's
+// identity (D85).
 type BuildDigestWith struct {
-	Scope    string   `json:"scope"`          // TIME_RANGE | TRIGGER_CASE
-	Days     int      `json:"days,omitzero"`  // ≤ 31 for TIME_RANGE
-	Sections []string `json:"sections"`       // ⊆ decisions, effects, holds, alerts, open_items
-	Title    string   `json:"title,omitzero"` // templatable
+	Scope string `json:"scope"`         // TIME_RANGE | TRIGGER_CASE
+	Days  int    `json:"days,omitzero"` // ≤ 31 for TIME_RANGE
+	// Evidence is whose evidence the pack may hold: listed agents or the
+	// whole org. Confirmers hold evidence.read and evidence.export there.
+	Evidence DigestEvidence `json:"evidence"`
+	Sections []string       `json:"sections"`       // ⊆ decisions, effects, holds, alerts, open_items
+	Title    string         `json:"title,omitzero"` // templatable
 }
+
+// DigestEvidence is a build_digest step's evidence scope: {agents: [ids]}
+// or {all: true}, exactly one (D85).
+type DigestEvidence = AgentScope

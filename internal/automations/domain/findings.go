@@ -74,6 +74,9 @@ type OperationInfo struct {
 type ValidationEnv interface {
 	// Now is the validation time (review dates are checked against it).
 	Now() time.Time
+	// Owner is the automation's current owner, from its row (D68); zero
+	// when it has none.
+	Owner() ids.UUID
 	// OwnerActivePerson reports whether the user is an active person of
 	// the org.
 	OwnerActivePerson(ctx context.Context, user ids.UUID) (bool, error)

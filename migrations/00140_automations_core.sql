@@ -33,7 +33,7 @@
 CREATE TABLE pc.automations (
     org_id             uuid        NOT NULL REFERENCES pc.orgs (id),
     id                 uuid        NOT NULL,
-    name               text        NOT NULL CHECK (name ~ '^[a-z][a-z0-9-]{0,62}$'),
+    name               text        NOT NULL CHECK (name ~ '^[a-z]([a-z0-9-]{0,50}[a-z0-9])?$'),
     purpose            text        NOT NULL CHECK (char_length(btrim(purpose)) BETWEEN 1 AND 2000),
     kind               text        NOT NULL CHECK (kind IN ('AGENT_WORK', 'SECURITY_WORK')),
     owner_user_id      uuid        NOT NULL,
@@ -175,10 +175,19 @@ BEGIN
     IF NOT allowed THEN
         RAISE EXCEPTION 'a version cannot move from % to %', OLD.state, NEW.state USING ERRCODE = 'check_violation';
     END IF;
-    IF OLD.state IN ('PUBLISHED', 'SUPERSEDED', 'RETIRED')
-            AND (NEW.summary IS DISTINCT FROM OLD.summary OR NEW.findings IS DISTINCT FROM OLD.findings
-                 OR NEW.published_at IS DISTINCT FROM OLD.published_at) THEN
-        RAISE EXCEPTION 'a published version never changes' USING ERRCODE = 'check_violation';
+    -- Once a version leaves authoring every column is frozen; only its state
+    -- moves on (PUBLISHED to SUPERSEDED or RETIRED, SUPERSEDED to RETIRED).
+    IF OLD.state IN ('PUBLISHED', 'SUPERSEDED', 'RETIRED') THEN
+        IF (NEW.org_id, NEW.definition, NEW.digest, NEW.summary, NEW.findings, NEW.tested_run_id, NEW.validated_at,
+                NEW.tested_at, NEW.published_at, NEW.change_request_id)
+                IS DISTINCT FROM (OLD.org_id, OLD.definition, OLD.digest, OLD.summary, OLD.findings, OLD.tested_run_id,
+                OLD.validated_at, OLD.tested_at, OLD.published_at, OLD.change_request_id) THEN
+            RAISE EXCEPTION 'a version never changes once it leaves authoring' USING ERRCODE = 'check_violation';
+        END IF;
+        IF NEW.state = OLD.state THEN
+            NEW.updated_at := OLD.updated_at;
+            RETURN NEW;
+        END IF;
     END IF;
     IF NEW.state = 'PUBLISHED' AND OLD.state IS DISTINCT FROM 'PUBLISHED' THEN
         NEW.published_at := now();
@@ -194,7 +203,8 @@ CREATE TRIGGER automation_versions_guard BEFORE INSERT OR UPDATE ON pc.automatio
 -- The generic M11 BINDING ceremony (D6): a request to apply content of a
 -- domain's kind to a subject, confirmed by `required` distinct people with
 -- distinct security keys; one PENDING per (domain, kind, subject). It
--- expires 24 hours after creation at the latest.
+-- expires 24 hours after creation at the latest (72 for a protected
+-- EMERGENCY_REVIEW, D74).
 CREATE TABLE pc.change_requests (
     org_id         uuid        NOT NULL REFERENCES pc.orgs (id),
     id             uuid        NOT NULL,
@@ -214,7 +224,9 @@ CREATE TABLE pc.change_requests (
     decided_reason text        CHECK (char_length(decided_reason) BETWEEN 1 AND 500),
     PRIMARY KEY (org_id, id),
     UNIQUE (org_id, binding),
-    CHECK (expires_at > created_at AND expires_at <= created_at + interval '24 hours'),
+    -- 24 hours at most; a protected emergency review may wait 72 (D74).
+    CHECK (expires_at > created_at AND expires_at <= created_at + CASE
+        WHEN domain = 'protected' AND kind = 'EMERGENCY_REVIEW' THEN interval '72 hours' ELSE interval '24 hours' END),
     CHECK ((state = 'PENDING') = (decided_at IS NULL))
 );
 CREATE UNIQUE INDEX change_requests_one_pending ON pc.change_requests (org_id, domain, kind, subject_id)
@@ -268,9 +280,12 @@ CREATE TABLE pc.change_confirmations (
 ALTER TABLE pc.automation_versions ADD CONSTRAINT automation_versions_change_request_fk
     FOREIGN KEY (org_id, change_request_id) REFERENCES pc.change_requests (org_id, id);
 
--- Issuance ceilings (D5, D9): the ceiling of an enabled version, approved
--- by the people who confirmed it; one ACTIVE per automation. Only ACTIVE
--- issues; every other state is final.
+-- Issuance ceilings (D5, D9, D54): the authority of an enabled version,
+-- created by every ENABLE or ROLLOUT apply (SHADOW too) and approved by the
+-- people who confirmed it; its ceiling (in the version) may list no agents
+-- when the version launches nothing. One ACTIVE per automation. Only
+-- ACTIVE issues, and only for a COHORT or FULL rollout; every other state
+-- is final.
 CREATE TABLE pc.automation_ceilings (
     org_id            uuid        NOT NULL REFERENCES pc.orgs (id),
     id                uuid        NOT NULL,
@@ -473,6 +488,36 @@ ALTER TABLE pc.grants VALIDATE CONSTRAINT grants_root_grantor;
 ALTER TABLE pc.grants VALIDATE CONSTRAINT grants_ceiling;
 -- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.grants VALIDATE CONSTRAINT grants_automation_execution;
+-- A grant under a ceiling is issued by the execution identity of that
+-- ceiling's automation, and nothing else (D56).
+-- +goose StatementBegin
+CREATE FUNCTION pc.grant_ceiling_grantor_guard() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pc, pg_temp
+AS $$
+BEGIN
+    IF NEW.ceiling_id IS NULL THEN
+        IF TG_OP = 'UPDATE' AND OLD.ceiling_id IS NOT NULL THEN
+            RAISE EXCEPTION 'a grant''s ceiling never changes' USING ERRCODE = 'check_violation';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF TG_OP = 'UPDATE' AND (NEW.ceiling_id IS DISTINCT FROM OLD.ceiling_id OR NEW.grantor_id IS DISTINCT FROM OLD.grantor_id
+            OR NEW.automation_execution_id IS DISTINCT FROM OLD.automation_execution_id) THEN
+        RAISE EXCEPTION 'a grant''s ceiling, grantor and execution never change' USING ERRCODE = 'check_violation';
+    END IF;
+    IF NOT EXISTS (
+            SELECT 1 FROM pc.automation_ceilings c
+            JOIN pc.automations a ON a.org_id = c.org_id AND a.id = c.automation_id
+            WHERE c.org_id = NEW.org_id AND c.id = NEW.ceiling_id AND a.service_account_id = NEW.grantor_id) THEN
+        RAISE EXCEPTION 'CEILING_GRANTOR: a ceiling grant is issued by its automation''s identity' USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER grants_ceiling_grantor_guard BEFORE INSERT OR UPDATE ON pc.grants
+    FOR EACH ROW EXECUTE FUNCTION pc.grant_ceiling_grantor_guard();
 -- squawk-ignore require-concurrent-index-creation
 CREATE INDEX grants_ceiling ON pc.grants (org_id, ceiling_id) WHERE ceiling_id IS NOT NULL;
 -- squawk-ignore require-concurrent-index-creation
@@ -569,6 +614,8 @@ ALTER TABLE pc.runs
 
 DROP INDEX pc.grants_automation_execution;
 DROP INDEX pc.grants_ceiling;
+DROP TRIGGER grants_ceiling_grantor_guard ON pc.grants;
+DROP FUNCTION pc.grant_ceiling_grantor_guard();
 ALTER TABLE pc.grants
     DROP CONSTRAINT grants_automation_execution,
     DROP CONSTRAINT grants_ceiling,
