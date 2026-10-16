@@ -47,7 +47,7 @@ const ReasonCeiling = "ISSUANCE_CEILING"
 type Ceiling struct {
 	ID         ids.UUID
 	Automation ids.UUID
-	// Agents are the ceiling's agents (a cohort resolved to its members).
+	// Agents are the ceiling's explicit agent list (D55).
 	Agents          []ids.UUID
 	Bounds          gdomain.Bounds
 	DelegationDepth int
@@ -70,7 +70,13 @@ func ceilings(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 		}
 		label, reasons := Conditional, []string{ReasonCeiling}
 		expires := ptr(ce.ReviewBy)
-		auto := ptr(ce.Automation)
+		auto := []ids.UUID{ce.Automation}
+		// Containment previews reach the ceiling view too (D73 A4).
+		add := func(r Right) {
+			if r, ok := in.restrict(r); ok {
+				b.add(r)
+			}
+		}
 		agents := slices.Clone(ce.Agents)
 		slices.SortFunc(agents, func(a, b ids.UUID) int { return cmp.Compare(a.String(), b.String()) })
 		for _, agent := range slices.Compact(agents) {
@@ -85,8 +91,8 @@ func ceilings(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 						l = Uncertain
 					}
 					for _, v := range []Verb{VerbRead, VerbUpdate} {
-						b.add(Right{
-							View: IssuanceCeiling, Label: l, Agent: ptr(agent), Connection: ptr(c.ID), Automation: auto,
+						add(Right{
+							View: IssuanceCeiling, Label: l, Agent: ptr(agent), Connection: ptr(c.ID), Automations: auto,
 							ResourceGroup: "connection:" + c.Name, Verb: v, Coverage: CoverageUnknown,
 							Reasons: append(slices.Clone(baseReasons), ReasonPackageUnknown), ExpiresAt: expires,
 						})
@@ -106,15 +112,15 @@ func ceilings(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 						cov = CoverageUnknown
 					}
 					for _, cl := range Classify(op, *c) {
-						b.add(Right{
-							View: IssuanceCeiling, Label: base, Agent: ptr(agent), Connection: ptr(c.ID), Automation: auto,
+						add(Right{
+							View: IssuanceCeiling, Label: base, Agent: ptr(agent), Connection: ptr(c.ID), Automations: auto,
 							Operation: op.Name, ResourceGroup: Group(op, *c), Verb: cl.Verb, Basis: cl.Explain(),
 							Irreversible: op.Reversibility == defs.Irreversible, Coverage: cov, Reasons: rs, ExpiresAt: expires,
 						})
 					}
 					if ce.DelegationDepth > 0 {
-						b.add(Right{
-							View: IssuanceCeiling, Label: base, Agent: ptr(agent), Connection: ptr(c.ID), Automation: auto,
+						add(Right{
+							View: IssuanceCeiling, Label: base, Agent: ptr(agent), Connection: ptr(c.ID), Automations: auto,
 							ResourceGroup: Group(op, *c), Verb: VerbDelegate, Basis: BasisDelegation, Coverage: cov,
 							Reasons: append(rs, ReasonDelegable), Depth: ce.DelegationDepth, ExpiresAt: expires,
 						})
@@ -125,6 +131,14 @@ func ceilings(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 	}
 }
 
+// IssuedGrant is a grant an automation issued under its ceiling (D37a):
+// what the authority graph's issued edges and an automation's active grant
+// count read, since an effective right keeps one grant per path.
+type IssuedGrant struct {
+	Automation, Grant, Agent ids.UUID
+	ExpiresAt                time.Time
+}
+
 // AutomationKeys are an automation's ranking keys (D37): the ceiling's
 // keys, ranked as an agent's are, plus its current execution reach shown
 // beside them and never used to rank (F754).
@@ -132,8 +146,8 @@ type AutomationKeys struct {
 	Ceiling RankKeys
 	// Agents is how many ceiling agents the ceiling reaches through.
 	Agents int
-	// CurrentRights counts the current effective rights of grants it
-	// issued; ActiveGrants how many grants they come from.
+	// CurrentRights counts the current effective rights it holds a grant
+	// behind; ActiveGrants how many active grants it issued.
 	CurrentRights int
 	ActiveGrants  int
 }
@@ -146,14 +160,14 @@ type RankedAutomation struct {
 
 // RankAutomations orders automations by their issuance ceiling's
 // consequence, then scope, usability and enforceability (HR-289): never by
-// activity. Rights must already be filtered by the viewer's permissions.
-func RankAutomations(rights []Right, irreversible map[string]bool) []RankedAutomation {
+// activity. Rights and issued grants must already be filtered by the
+// viewer's permissions (an automation is ranked on what the viewer sees).
+func RankAutomations(rights []Right, issued []IssuedGrant, now time.Time) []RankedAutomation {
 	type acc struct {
 		keys   AutomationKeys
 		groups map[string]bool
 		conns  map[string]bool
 		agents map[string]bool
-		grants map[string]bool
 		seen   bool
 	}
 	by := map[ids.UUID]*acc{}
@@ -161,36 +175,38 @@ func RankAutomations(rights []Right, irreversible map[string]bool) []RankedAutom
 		x, ok := by[a]
 		if !ok {
 			x = &acc{
-				groups: map[string]bool{}, conns: map[string]bool{}, agents: map[string]bool{}, grants: map[string]bool{},
+				groups: map[string]bool{}, conns: map[string]bool{}, agents: map[string]bool{},
 				keys: AutomationKeys{Ceiling: RankKeys{Consequence: VerbRead, Usability: Expired, Enforceability: CoverageEnforced, Owned: true}},
 			}
 			by[a] = x
 		}
 		return x
 	}
+	for _, g := range issued {
+		if now.Before(g.ExpiresAt) {
+			get(g.Automation).keys.ActiveGrants++
+		}
+	}
 	for _, r := range rights {
-		if r.Automation == nil || !r.Label.Current() {
+		if len(r.Automations) == 0 || !r.Label.Current() {
 			continue
 		}
-		a := get(*r.Automation)
-		//exhaustive:ignore // only the effective and ceiling views carry an automation's reach
-		switch r.View {
-		case Effective:
-			a.keys.CurrentRights++
-			if r.Grant != nil {
-				a.grants[r.Grant.String()] = true
+		if r.View == Effective {
+			for _, a := range r.Automations {
+				get(a).keys.CurrentRights++
 			}
 			continue
-		case IssuanceCeiling:
-		default:
+		}
+		if r.View != IssuanceCeiling {
 			continue
 		}
+		a := get(r.Automations[0])
 		k := &a.keys.Ceiling
 		if !a.seen || r.Verb.Consequence() > k.Consequence.Consequence() {
 			k.Consequence = r.Verb
 		}
 		a.seen = true
-		k.Irreversible = k.Irreversible || r.Irreversible || irreversible[r.Operation]
+		k.Irreversible = k.Irreversible || r.Irreversible
 		a.groups[r.ResourceGroup] = true
 		if r.Connection != nil {
 			a.conns[r.Connection.String()] = true
@@ -209,7 +225,7 @@ func RankAutomations(rights []Right, irreversible map[string]bool) []RankedAutom
 	out := make([]RankedAutomation, 0, len(by))
 	for id, a := range by {
 		a.keys.Ceiling.ResourceGroups, a.keys.Ceiling.Connections = len(a.groups), len(a.conns)
-		a.keys.Agents, a.keys.ActiveGrants = len(a.agents), len(a.grants)
+		a.keys.Agents = len(a.agents)
 		out = append(out, RankedAutomation{Automation: id, Keys: a.keys})
 	}
 	slices.SortFunc(out, func(a, b RankedAutomation) int {
@@ -239,29 +255,35 @@ const (
 )
 
 // AutomationEdges are the authority graph's automation edges: an
-// automation issued each grant behind its execution reach, and, only when
-// the ceiling is asked for, the reach its ceiling allows. Ceiling edges are
-// POSSIBLE: potential reach, never counted as held (D37a).
-func AutomationEdges(rights []Right, ceiling bool) []Edge {
+// automation issued each of its grants, and, only when the ceiling is
+// asked for, the reach its ceiling allows. Ceiling edges are POSSIBLE:
+// potential reach, kept under their own kind and never counted as held
+// (D37a).
+func AutomationEdges(rights []Right, issued []IssuedGrant, ceiling bool, now time.Time) []Edge {
 	var out []Edge
+	for _, g := range issued {
+		st, exp := EdgeActive, g.ExpiresAt
+		if !now.Before(g.ExpiresAt) {
+			st = EdgeExpired
+		}
+		out = append(out, Edge{
+			From: Node{Type: NodeAutomation, ID: g.Automation.String()}, To: Node{Type: "grant", ID: g.Grant.String()},
+			Context: []Node{{Type: "agent", ID: g.Agent.String()}}, Kind: EdgeIssued, State: st, Basis: "RULE_MATCH",
+			ExpiresAt: &exp, Provenance: string(Effective),
+		})
+	}
+	if !ceiling {
+		return out
+	}
 	for _, r := range rights {
-		if r.Automation == nil {
+		if r.View != IssuanceCeiling || len(r.Automations) == 0 {
 			continue
 		}
-		auto := Node{Type: NodeAutomation, ID: r.Automation.String()}
-		switch {
-		case r.View == Effective && r.Grant != nil:
-			out = append(out, Edge{
-				From: auto, To: Node{Type: "grant", ID: r.Grant.String()}, Context: []Node{ownerNode(r)}, Kind: EdgeIssued,
-				State: stateOf(r), Basis: "RULE_MATCH", ExpiresAt: r.ExpiresAt, Provenance: string(Effective),
-			})
-		case ceiling && r.View == IssuanceCeiling:
-			out = append(out, Edge{
-				From: auto, To: Node{Type: "resource", ID: r.ResourceGroup}, Context: []Node{ownerNode(r)}, Kind: EdgeCeiling,
-				Verb: r.Verb, Operation: r.Operation, State: EdgePossible, Coverage: r.Coverage, Basis: "RULE_MATCH",
-				ExpiresAt: r.ExpiresAt, Provenance: string(IssuanceCeiling),
-			})
-		}
+		out = append(out, Edge{
+			From: Node{Type: NodeAutomation, ID: r.Automations[0].String()}, To: Node{Type: "resource", ID: r.ResourceGroup},
+			Context: []Node{ownerNode(r)}, Kind: EdgeCeiling, Verb: r.Verb, Operation: r.Operation, State: EdgePossible,
+			Coverage: r.Coverage, Basis: "RULE_MATCH", ExpiresAt: r.ExpiresAt, Provenance: string(IssuanceCeiling),
+		})
 	}
 	return out
 }

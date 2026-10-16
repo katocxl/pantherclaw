@@ -627,6 +627,83 @@ func (q *Queries) OpsOpenAlerts(ctx context.Context, arg OpsOpenAlertsParams) ([
 	return items, nil
 }
 
+const opsOpenAutomationFailures = `-- name: OpsOpenAutomationFailures :many
+SELECT f.id, f.kind, f.summary, f.next_step, f.scope, f.owner_type, f.owner_id, f.deadline, f.state, f.count,
+       f.first_seen, f.last_seen,
+       coalesce((SELECT array_agg(DISTINCT s ->> 'id') FROM jsonb_array_elements(f.scope) s
+                 WHERE s ->> 'type' = 'agent'), '{}')::text[] AS agents
+FROM pc.operational_failures f
+WHERE f.org_id = $1 AND f.state <> 'RESOLVED' AND f.kind LIKE 'automation.%'
+  AND ($2::boolean OR (f.owner_type = 'user' AND f.owner_id = $3::text))
+ORDER BY f.id DESC
+LIMIT $4
+`
+
+type OpsOpenAutomationFailuresParams struct {
+	OrgID     ids.OrgID
+	AllOwners bool
+	OwnerID   string
+	MaxRows   int32
+}
+
+type OpsOpenAutomationFailuresRow struct {
+	ID        ids.UUID
+	Kind      string
+	Summary   string
+	NextStep  string
+	Scope     []byte
+	OwnerType *string
+	OwnerID   *string
+	Deadline  time.Time
+	State     string
+	Count     int32
+	FirstSeen time.Time
+	LastSeen  time.Time
+	Agents    []string
+}
+
+// Open owned failures automations raised (G0 M11 D38, D73 A3): every one
+// for a caller with automation.read at the org, else those the caller
+// owns.
+func (q *Queries) OpsOpenAutomationFailures(ctx context.Context, arg OpsOpenAutomationFailuresParams) ([]OpsOpenAutomationFailuresRow, error) {
+	rows, err := q.db.Query(ctx, opsOpenAutomationFailures,
+		arg.OrgID,
+		arg.AllOwners,
+		arg.OwnerID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []OpsOpenAutomationFailuresRow{}
+	for rows.Next() {
+		var i OpsOpenAutomationFailuresRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.Summary,
+			&i.NextStep,
+			&i.Scope,
+			&i.OwnerType,
+			&i.OwnerID,
+			&i.Deadline,
+			&i.State,
+			&i.Count,
+			&i.FirstSeen,
+			&i.LastSeen,
+			&i.Agents,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const opsOpenFailures = `-- name: OpsOpenFailures :many
 SELECT f.id, f.kind, f.summary, f.next_step, f.scope, f.owner_type, f.owner_id, f.deadline, f.state, f.count,
        f.first_seen, f.last_seen,
@@ -634,6 +711,8 @@ SELECT f.id, f.kind, f.summary, f.next_step, f.scope, f.owner_type, f.owner_id, 
                  WHERE s ->> 'type' = 'agent'), '{}')::text[] AS agents
 FROM pc.operational_failures f
 WHERE f.org_id = $1 AND f.state <> 'RESOLVED'
+  -- Automation exceptions are their own source (OpsOpenAutomationFailures).
+  AND f.kind NOT LIKE 'automation.%'
   AND ($2::boolean
        OR (EXISTS (SELECT 1 FROM jsonb_array_elements(f.scope) s WHERE s ->> 'type' = 'agent')
            AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(f.scope) s

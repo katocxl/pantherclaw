@@ -13,12 +13,12 @@
 --   the current digests is what makes a version TESTED (HR-287).
 -- * automation_simulations: a historical simulation over at most 30 days
 --   (D35). It writes nothing but its own row (HR-288).
--- * exposure_rights gains automation_id and the ISSUANCE_CEILING view
+-- * exposure_rights gains automation_ids and the ISSUANCE_CEILING view
 --   (D37a): an automation's potential reach, its ceiling's bounds through
 --   each ceiling agent, kept apart from held reach. A ceiling right always
 --   names its automation and never a grant; it is never USABLE (an
---   execution must issue it first). Effective rights of grants an
---   automation issued carry the automation too.
+--   execution must issue it first). An effective right lists every
+--   automation that issued a grant behind its path (one right per path).
 
 -- +goose Up
 CREATE TABLE pc.automation_test_cases (
@@ -140,27 +140,25 @@ GRANT SELECT ON pc.automation_test_cases, pc.automation_test_runs, pc.automation
 -- pruned within days; goose runs each migration in one transaction.
 -- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.exposure_rights
-    ADD COLUMN automation_id uuid,
+    ADD COLUMN automation_ids uuid[] NOT NULL DEFAULT '{}',
     DROP CONSTRAINT exposure_rights_reach_view_check,
     ADD CONSTRAINT exposure_rights_reach_view_check
         CHECK (reach_view IN ('OBSERVED', 'EFFECTIVE', 'CREDENTIAL', 'ISSUANCE_CEILING')),
     ADD CONSTRAINT exposure_rights_ceiling CHECK (reach_view <> 'ISSUANCE_CEILING'
-        OR (automation_id IS NOT NULL AND grant_id IS NULL AND agent_id IS NOT NULL
+        OR (cardinality(automation_ids) = 1 AND grant_id IS NULL AND agent_id IS NOT NULL
             AND label IN ('CONDITIONAL', 'UNCERTAIN'))),
-    ADD CONSTRAINT exposure_rights_automation CHECK (automation_id IS NULL OR reach_view IN ('EFFECTIVE', 'ISSUANCE_CEILING'));
--- squawk-ignore require-concurrent-index-creation
-CREATE INDEX exposure_rights_automation ON pc.exposure_rights (org_id, snapshot_id, automation_id)
-    WHERE automation_id IS NOT NULL;
+    ADD CONSTRAINT exposure_rights_automation CHECK (cardinality(automation_ids) <= 64
+        AND array_position(automation_ids, NULL) IS NULL
+        AND (cardinality(automation_ids) = 0 OR reach_view IN ('EFFECTIVE', 'ISSUANCE_CEILING')));
 
 -- +goose Down
-DROP INDEX pc.exposure_rights_automation;
 DELETE FROM pc.exposure_rights WHERE reach_view = 'ISSUANCE_CEILING';
 ALTER TABLE pc.exposure_rights
     DROP CONSTRAINT exposure_rights_automation,
     DROP CONSTRAINT exposure_rights_ceiling,
     DROP CONSTRAINT exposure_rights_reach_view_check,
     ADD CONSTRAINT exposure_rights_reach_view_check CHECK (reach_view IN ('OBSERVED', 'EFFECTIVE', 'CREDENTIAL')),
-    DROP COLUMN automation_id;
+    DROP COLUMN automation_ids;
 
 DROP TABLE pc.automation_simulations;
 DROP TABLE pc.automation_test_runs;

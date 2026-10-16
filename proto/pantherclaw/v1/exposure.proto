@@ -146,10 +146,11 @@ message ExposureRight {
   google.protobuf.Timestamp expire_time = 14;
   google.protobuf.Timestamp observe_time = 15;
   int32 observations = 16;
-  // automation_id names the automation the right belongs to: the issuer of
-  // its grant (EFFECTIVE, Team) or the ceiling's holder (ISSUANCE_CEILING,
-  // Business). Empty for a caller without automation.read.
-  string automation_id = 17;
+  // automation_ids name the automations the right belongs to: every
+  // automation that issued a grant behind an EFFECTIVE right's path (Team),
+  // or an ISSUANCE_CEILING right's one holder (Business). Empty for a
+  // caller without automation.read.
+  repeated string automation_ids = 17;
 }
 
 message GetExposureRequest {

@@ -87,9 +87,37 @@ func (r *reader) rankAutomations(ctx context.Context, ents Entitlements, rights 
 		in = domain.HeldReach(rights)
 		out.Note = NoteCeilingEdition
 	}
-	out.Automations = domain.RankAutomations(in, nil)
+	issued, err := r.issued(ctx)
+	if err != nil {
+		return RankedAutomations{}, err
+	}
+	now, err := r.q.DBNow(ctx)
+	if err != nil {
+		return RankedAutomations{}, err
+	}
+	out.Automations = domain.RankAutomations(in, issued, now)
 	if limit > 0 && len(out.Automations) > limit {
 		out.Automations = out.Automations[:limit]
+	}
+	return out, nil
+}
+
+// issued lists the active automation-issued grants of agents the caller
+// may see (D73 A6: nothing outside the viewer's scope reaches a count).
+func (r *reader) issued(ctx context.Context) ([]domain.IssuedGrant, error) {
+	rows, err := r.q.ExposureIssuedGrants(ctx, r.c.Org)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.IssuedGrant, 0, len(rows))
+	for _, g := range rows {
+		ok, err := r.view.Agent(ctx, g.AgentID)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			out = append(out, domain.IssuedGrant{Automation: g.AutomationID, Grant: g.ID, Agent: g.AgentID, ExpiresAt: g.ExpiresAt})
+		}
 	}
 	return out, nil
 }

@@ -112,7 +112,7 @@ func rightPB(r domain.Right) *pb.ExposureRight {
 		Operation: r.Operation, ResourceGroup: r.ResourceGroup, Verb: verbs[r.Verb], Coverage: string(r.Coverage), Reasons: r.Reasons,
 		Basis: r.Basis, Irreversible: r.Irreversible, DelegationDepth: int32(r.Depth), ExpireTime: ts(r.ExpiresAt), //nolint:gosec // G115: depth ≤ 4
 		ObserveTime: ts(r.ObservedAt), Observations: int32(min(r.Observations, 1<<30)), //nolint:gosec // G115: bounded
-		AutomationId: str(r.Automation),
+		AutomationIds: idStrings(r.Automations),
 	}
 }
 
@@ -369,4 +369,12 @@ func (g *Graphs) ListGraphEdges(ctx context.Context, req *pb.ListGraphEdgesReque
 		out.Edges = append(out.Edges, edgePB(e))
 	}
 	return out, nil
+}
+
+func idStrings(us []ids.UUID) []string {
+	out := make([]string, 0, len(us))
+	for _, u := range us {
+		out = append(out, u.String())
+	}
+	return out
 }

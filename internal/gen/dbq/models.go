@@ -1463,7 +1463,7 @@ type PcExposureRight struct {
 	Observations  int32
 	Basis         string
 	Irreversible  bool
-	AutomationID  *ids.UUID
+	AutomationIds []ids.UUID
 }
 
 type PcExposureSnapshot struct {

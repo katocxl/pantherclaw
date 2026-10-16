@@ -37,8 +37,9 @@ var kindOrder = map[ItemKind]int{
 }
 
 // AutomationFailurePrefix starts every owned failure kind an automation
-// raises (D38): those queue as automation exceptions, the rest as
-// protection failures.
+// raises (D38): those queue as automation exceptions, read with
+// automation.read or by their owner (D73 A3); the rest are protection
+// failures, read with incident.read.
 const AutomationFailurePrefix = "automation."
 
 func failureKind(kind string) ItemKind {
@@ -193,8 +194,10 @@ func workQueue(ctx context.Context, v *viewer, x external) (Queue, error) {
 	// Whole only when the viewer holds every kind's read permission across
 	// the org (D69 M3); a source not reported is listed in Pending.
 	out.Whole = v.whole(td.PermOperationsRead) && v.whole(td.PermIncidentRead) && v.whole(td.PermApprovalRead) &&
-		v.whole(td.PermGrantRead) && v.whole(td.PermContainmentRead) && v.whole(td.PermPostureRead)
-	for _, step := range []func(context.Context, *builder) error{incidentItems, failureItems, decisionItems, expansionItems} {
+		v.whole(td.PermGrantRead) && v.whole(td.PermContainmentRead) && v.whole(td.PermPostureRead) && v.whole(td.PermAutomationRead)
+	for _, step := range []func(context.Context, *builder) error{
+		incidentItems, failureItems, automationItems, decisionItems, expansionItems,
+	} {
 		if err := step(ctx, b); err != nil {
 			return Queue{}, err
 		}
@@ -318,6 +321,42 @@ func failureItems(ctx context.Context, b *builder) error {
 		return err
 	}
 	for _, r := range cut(b, "owned failures", fs) {
+		sev := "MEDIUM"
+		if b.now.After(r.Deadline) {
+			sev = "HIGH"
+		}
+		target := "failure:" + r.ID.String()
+		acts, err := v.actions(ctx, r.Agents, Action{"assign", td.PermIncidentManage, target},
+			Action{"resolve", td.PermIncidentManage, target})
+		if err != nil {
+			return err
+		}
+		d := r.Deadline.UTC()
+		b.out.Items = append(b.out.Items, Item{
+			Kind: KindProtectionFailure, ID: r.ID.String(), Title: r.Summary, Severity: sev, State: r.State,
+			Since: r.FirstSeen, Deadline: &d, Agents: r.Agents, Actions: acts,
+		})
+	}
+	return nil
+}
+
+// automationItems queues open automation exceptions (D38, D73 A3): every
+// one for a caller with automation.read at the org, else the ones routed
+// to the caller. Assigning and resolving them stay incident.manage
+// actions, offered only to holders.
+func automationItems(ctx context.Context, b *builder) error {
+	v := b.v
+	all := v.c.Can(td.PermAutomationRead, td.OrgPath(v.c.Org))
+	if !all {
+		b.out.Pending = append(b.out.Pending, "automation exceptions: only those routed to you")
+	}
+	fs, err := v.q.OpsOpenAutomationFailures(ctx, dbq.OpsOpenAutomationFailuresParams{
+		OrgID: v.c.Org, AllOwners: all, OwnerID: v.c.Principal.ID.String(), MaxRows: maxRows + 1,
+	})
+	if err != nil {
+		return err
+	}
+	for _, r := range cut(b, "automation exceptions", fs) {
 		sev := "MEDIUM"
 		if b.now.After(r.Deadline) {
 			sev = "HIGH"

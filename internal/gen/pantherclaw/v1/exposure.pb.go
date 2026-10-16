@@ -432,10 +432,11 @@ type ExposureRight struct {
 	ExpireTime      *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
 	ObserveTime     *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=observe_time,json=observeTime,proto3" json:"observe_time,omitempty"`
 	Observations    int32                  `protobuf:"varint,16,opt,name=observations,proto3" json:"observations,omitempty"`
-	// automation_id names the automation the right belongs to: the issuer of
-	// its grant (EFFECTIVE, Team) or the ceiling's holder (ISSUANCE_CEILING,
-	// Business). Empty for a caller without automation.read.
-	AutomationId  string `protobuf:"bytes,17,opt,name=automation_id,json=automationId,proto3" json:"automation_id,omitempty"`
+	// automation_ids name the automations the right belongs to: every
+	// automation that issued a grant behind an EFFECTIVE right's path (Team),
+	// or an ISSUANCE_CEILING right's one holder (Business). Empty for a
+	// caller without automation.read.
+	AutomationIds []string `protobuf:"bytes,17,rep,name=automation_ids,json=automationIds,proto3" json:"automation_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -582,11 +583,11 @@ func (x *ExposureRight) GetObservations() int32 {
 	return 0
 }
 
-func (x *ExposureRight) GetAutomationId() string {
+func (x *ExposureRight) GetAutomationIds() []string {
 	if x != nil {
-		return x.AutomationId
+		return x.AutomationIds
 	}
-	return ""
+	return nil
 }
 
 type GetExposureRequest struct {
@@ -2576,7 +2577,7 @@ const file_pantherclaw_v1_exposure_proto_rawDesc = "" +
 	"changeTime\x12\x1c\n" +
 	"\ttruncated\x18\x05 \x01(\bR\ttruncated\x12\x12\n" +
 	"\x04gaps\x18\x06 \x03(\tR\x04gaps\x12\x14\n" +
-	"\x05cause\x18\a \x01(\tR\x05cause\"\xa8\x05\n" +
+	"\x05cause\x18\a \x01(\tR\x05cause\"\xaa\x05\n" +
 	"\rExposureRight\x120\n" +
 	"\x04view\x18\x01 \x01(\x0e2\x1c.pantherclaw.v1.ExposureViewR\x04view\x123\n" +
 	"\x05label\x18\x02 \x01(\x0e2\x1d.pantherclaw.v1.ExposureLabelR\x05label\x12\x19\n" +
@@ -2595,8 +2596,8 @@ const file_pantherclaw_v1_exposure_proto_rawDesc = "" +
 	"\vexpire_time\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"expireTime\x12=\n" +
 	"\fobserve_time\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\vobserveTime\x12\"\n" +
-	"\fobservations\x18\x10 \x01(\x05R\fobservations\x12#\n" +
-	"\rautomation_id\x18\x11 \x01(\tR\fautomationId\"\xbb\x03\n" +
+	"\fobservations\x18\x10 \x01(\x05R\fobservations\x12%\n" +
+	"\x0eautomation_ids\x18\x11 \x03(\tR\rautomationIds\"\xbb\x03\n" +
 	"\x12GetExposureRequest\x126\n" +
 	"\bagent_id\x18\x01 \x01(\tB\x1b\xbaH\x18r\x16\x18$2\x12^([0-9a-f-]{36})?$R\aagentId\x12@\n" +
 	"\rconnection_id\x18\x02 \x01(\tB\x1b\xbaH\x18r\x16\x18$2\x12^([0-9a-f-]{36})?$R\fconnectionId\x12:\n" +

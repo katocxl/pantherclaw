@@ -45,11 +45,11 @@ func TestHR289_AutomationExecutionReachAndCeilingStaySeparate(t *testing.T) {
 	for _, r := range rec.Rights {
 		byView[r.View]++
 		switch {
-		case r.View == domain.IssuanceCeiling && (r.Automation == nil || r.Grant != nil || r.Label != domain.Conditional):
+		case r.View == domain.IssuanceCeiling && (len(r.Automations) != 1 || r.Grant != nil || r.Label != domain.Conditional):
 			t.Errorf("ceiling right %+v", r)
-		case r.View == domain.IssuanceCeiling && *r.Automation == gone.ID:
+		case r.View == domain.IssuanceCeiling && r.HasAutomation(gone.ID):
 			t.Errorf("a VOID ceiling has reach: %+v", r)
-		case r.View == domain.Effective && r.Grant != nil && *r.Grant == issued && (r.Automation == nil || *r.Automation != busy.ID):
+		case r.View == domain.Effective && r.Grant != nil && *r.Grant == issued && !r.HasAutomation(busy.ID):
 			t.Errorf("an automation-issued grant's right does not name its automation: %+v", r)
 		}
 	}
@@ -112,5 +112,25 @@ func TestHR289_AutomationExecutionReachAndCeilingStaySeparate(t *testing.T) {
 		domain.GraphFilter{}, false, false, domain.DefaultLimits)
 	if err != nil || g.Graph.Current[domain.EdgeCeiling] == 0 {
 		t.Fatalf("automation graph with the ceiling: %+v %v", g.Graph.Current, err)
+	}
+
+	// D73 A6: a caller scoped to the team of one ceiling agent ranks the
+	// automations on what it sees: the wide ceiling through that agent only.
+	team := o.Claim(t, o.Other)
+	scoped := tenancy.WithCaller(context.Background(), tenancy.Caller{Subject: td.Subject{
+		Org: o.Org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: o.User},
+		Bindings: []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeTeam, ID: team}}},
+	}})
+	_, _, autos, err = svc.RankWithAutomations(scoped, 0, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range autos.Automations {
+		if a.Keys.Agents > 1 {
+			t.Errorf("a scoped caller ranks %s through %d ceiling agents", a.Automation, a.Keys.Agents)
+		}
+	}
+	if len(autos.Automations) != 2 {
+		t.Errorf("scoped ranking: %+v", autos.Automations)
 	}
 }

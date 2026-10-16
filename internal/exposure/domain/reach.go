@@ -149,20 +149,27 @@ type Right struct {
 	Basis string
 	// Irreversible flags an operation whose definition is irreversible.
 	Irreversible bool
-	// Automation is the automation the right belongs to: the issuer of its
-	// grant (EFFECTIVE) or the ceiling's holder (ISSUANCE_CEILING).
-	Automation *ids.UUID
+	// Automations are the automations the right belongs to (D37a, D73):
+	// on an EFFECTIVE right, every automation that issued one of the grants
+	// behind the path (the path stays one right, sorted ids); on an
+	// ISSUANCE_CEILING right, the ceiling's one holder.
+	Automations []ids.UUID
 }
 
-// Key identifies a right within a view. An automation's rights keep their
-// own key, so its reach never merges into another holder's (D37).
+// Key identifies a right within a view. A ceiling right also names its
+// automation: each automation's ceiling stays its own (D37a).
 func (r Right) Key() string {
 	k := string(r.View) + "|" + r.PathKey()
-	if r.Automation != nil {
-		k += "|automation:" + r.Automation.String()
+	if r.View == IssuanceCeiling {
+		for _, a := range r.Automations {
+			k += "|automation:" + a.String()
+		}
 	}
 	return k
 }
+
+// HasAutomation reports whether the right belongs to automation a.
+func (r Right) HasAutomation(a ids.UUID) bool { return slices.Contains(r.Automations, a) }
 
 // PathKey identifies the path a right travels, whatever the view: the agent
 // (or "*"), the connection, the operation or resource group and the verb.
@@ -448,7 +455,7 @@ func effective(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 				}
 				for _, v := range []Verb{VerbRead, VerbUpdate} {
 					addEff(Right{
-						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID), Automation: g.Automation,
+						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID), Automations: automations(g.Automation),
 						ResourceGroup: "connection:" + c.Name, Verb: v, Coverage: CoverageUnknown,
 						Reasons: append(slices.Clone(baseReasons), ReasonPackageUnknown), ExpiresAt: expires,
 					})
@@ -473,14 +480,14 @@ func effective(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 				for _, cl := range Classify(op, *c) {
 					v := cl.Verb
 					addEff(Right{
-						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID), Automation: g.Automation,
+						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID), Automations: automations(g.Automation),
 						Operation: op.Name, ResourceGroup: Group(op, *c), Verb: v, Basis: cl.Explain(), Irreversible: op.Reversibility == defs.Irreversible, Coverage: cov, Reasons: rs,
 						ExpiresAt: expires,
 					})
 				}
 				if g.DelegationDepth > 0 {
 					addEff(Right{
-						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID), Automation: g.Automation,
+						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID), Automations: automations(g.Automation),
 						ResourceGroup: Group(op, *c), Verb: VerbDelegate, Basis: BasisDelegation, Coverage: cov,
 						Reasons: append(slices.Clone(rs), ReasonDelegable), Depth: g.DelegationDepth, ExpiresAt: expires,
 					})
@@ -742,11 +749,30 @@ func (b *builder) add(r Right) {
 	}
 	cur.Depth = max(cur.Depth, r.Depth)
 	cur.Irreversible = cur.Irreversible || r.Irreversible
+	cur.Automations = mergeIDs(cur.Automations, r.Automations)
 	cur.Observations += r.Observations
 	if r.ObservedAt != nil && (cur.ObservedAt == nil || r.ObservedAt.After(*cur.ObservedAt)) {
 		cur.ObservedAt = r.ObservedAt
 	}
 	cur.Reasons = sortedUnique(append(cur.Reasons, r.Reasons...))
+}
+
+// automations is a grant's automation as a set.
+func automations(a *ids.UUID) []ids.UUID {
+	if a == nil {
+		return nil
+	}
+	return []ids.UUID{*a}
+}
+
+// mergeIDs is the sorted union of two id sets.
+func mergeIDs(a, b []ids.UUID) []ids.UUID {
+	if len(b) == 0 {
+		return a
+	}
+	out := append(slices.Clone(a), b...)
+	slices.SortFunc(out, func(x, y ids.UUID) int { return cmp.Compare(x.String(), y.String()) })
+	return slices.Compact(out)
 }
 
 func sortedUnique(s []string) []string {

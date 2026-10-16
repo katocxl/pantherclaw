@@ -196,7 +196,7 @@ func (r *reader) current(ctx context.Context, f domain.Filter) (View, error) {
 	out := v.Rights[:0]
 	for _, x := range v.Rights {
 		if !autoRead {
-			x.Automation = nil
+			x.Automations = nil
 		}
 		if x.View == domain.Effective && x.Label.Current() && x.ExpiresAt != nil && !x.ExpiresAt.After(now) {
 			x.Label = domain.Expired
@@ -397,7 +397,14 @@ func (s *Service) Graph(ctx context.Context, mode domain.Mode, scope GraphScope,
 			cut = v.Snapshot.Truncated
 			rights := scoped(v.Rights, scope, agents)
 			held := domain.HeldReach(rights)
-			autoEdges := domain.AutomationEdges(rights, scope.IncludeCeiling)
+			var issued []domain.IssuedGrant
+			if r.automationRead() {
+				if issued, err = r.issued(ctx); err != nil {
+					return err
+				}
+				issued = scopedIssued(issued, scope, agents)
+			}
+			autoEdges := domain.AutomationEdges(rights, issued, scope.IncludeCeiling, now)
 			if mode == domain.ModeAuthority {
 				edges = append(domain.AuthorityEdges(held), autoEdges...)
 			} else {
@@ -520,7 +527,7 @@ func scoped(rights []domain.Right, s GraphScope, agents []ids.UUID) []domain.Rig
 				out = append(out, x)
 			}
 		case s.Type == domain.NodeAutomation:
-			if x.Automation != nil && x.Automation.String() == s.ID {
+			if slices.ContainsFunc(x.Automations, func(a ids.UUID) bool { return a.String() == s.ID }) {
 				out = append(out, x)
 			}
 		case x.Agent != nil && slices.Contains(agents, *x.Agent):
@@ -593,4 +600,22 @@ func (r *reader) changes(ctx context.Context, vis Visible, start, end time.Time)
 		})
 	}
 	return domain.ChangeEdges(cs), len(rows) == maxActivity, nil
+}
+
+// scopedIssued keeps the issued grants a graph scope covers: an
+// automation's own, or those of the scope's agents.
+func scopedIssued(gs []domain.IssuedGrant, s GraphScope, agents []ids.UUID) []domain.IssuedGrant {
+	var out []domain.IssuedGrant
+	for _, g := range gs {
+		switch {
+		case s.Type == domain.NodeAutomation:
+			if g.Automation.String() == s.ID {
+				out = append(out, g)
+			}
+		case s.Type == "resource":
+		case slices.Contains(agents, g.Agent):
+			out = append(out, g)
+		}
+	}
+	return out
 }

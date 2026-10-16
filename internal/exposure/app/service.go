@@ -114,7 +114,7 @@ type row struct {
 	Observations  int        `json:"observations"`
 	Basis         string     `json:"basis"`
 	Irreversible  bool       `json:"irreversible"`
-	Automation    *string    `json:"automation_id"`
+	Automations   []string   `json:"automation_ids"`
 }
 
 func rowOf(seq int, r domain.Right) row {
@@ -133,7 +133,7 @@ func rowOf(seq int, r domain.Right) row {
 		Seq: seq, View: string(r.View), Label: string(r.Label), Agent: str(r.Agent), Connection: str(r.Connection), Grant: str(r.Grant),
 		Operation: op, ResourceGroup: r.ResourceGroup, Verb: string(r.Verb), Coverage: string(r.Coverage), Reasons: reasons,
 		Depth: r.Depth, ExpiresAt: r.ExpiresAt, ObservedAt: r.ObservedAt, Observations: r.Observations,
-		Basis: r.Basis, Irreversible: r.Irreversible, Automation: str(r.Automation),
+		Basis: r.Basis, Irreversible: r.Irreversible, Automations: idStrings(r.Automations),
 	}
 }
 
@@ -143,7 +143,7 @@ func RightOf(x dbq.PcExposureRight) domain.Right {
 		View: domain.View(x.ReachView), Label: domain.Label(x.Label), Agent: x.AgentID, Connection: x.ConnectionID,
 		Grant: x.GrantID, ResourceGroup: x.ResourceGroup, Verb: domain.Verb(x.Verb), Coverage: domain.Coverage(x.Coverage),
 		Reasons: x.Reasons, Depth: int(x.Depth), ExpiresAt: x.ExpiresAt, ObservedAt: x.ObservedAt,
-		Observations: int(x.Observations), Basis: x.Basis, Irreversible: x.Irreversible, Automation: x.AutomationID,
+		Observations: int(x.Observations), Basis: x.Basis, Irreversible: x.Irreversible, Automations: x.AutomationIds,
 	}
 	if x.Operation != nil {
 		r.Operation = *x.Operation
@@ -283,4 +283,16 @@ func str(u *ids.UUID) *string {
 	}
 	s := u.String()
 	return &s
+}
+
+// maxRowAutomations is how many automations a stored right names (the
+// column's bound); a path that many automations reach is never usual.
+const maxRowAutomations = 64
+
+func idStrings(us []ids.UUID) []string {
+	out := make([]string, 0, min(len(us), maxRowAutomations))
+	for _, u := range us[:min(len(us), maxRowAutomations)] {
+		out = append(out, u.String())
+	}
+	return out
 }

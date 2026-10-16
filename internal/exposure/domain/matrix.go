@@ -263,7 +263,7 @@ func (f Filter) Match(r Right) bool {
 		return false // the issuance ceiling only when asked for (D37a)
 	case f.Current && !r.Label.Current():
 		return false
-	case f.Automation != nil && (r.Automation == nil || *r.Automation != *f.Automation):
+	case f.Automation != nil && !r.HasAutomation(*f.Automation):
 		return false
 	}
 	return true

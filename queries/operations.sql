@@ -59,6 +59,8 @@ SELECT f.id, f.kind, f.summary, f.next_step, f.scope, f.owner_type, f.owner_id, 
                  WHERE s ->> 'type' = 'agent'), '{}')::text[] AS agents
 FROM pc.operational_failures f
 WHERE f.org_id = sqlc.arg(org_id) AND f.state <> 'RESOLVED'
+  -- Automation exceptions are their own source (OpsOpenAutomationFailures).
+  AND f.kind NOT LIKE 'automation.%'
   AND (sqlc.arg(all_agents)::boolean
        OR (EXISTS (SELECT 1 FROM jsonb_array_elements(f.scope) s WHERE s ->> 'type' = 'agent')
            AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(f.scope) s
@@ -191,3 +193,17 @@ WHERE m.org_id = sqlc.arg(org_id) AND m.metric = ANY (sqlc.arg(metrics)::text[])
   AND m.bucket >= sqlc.arg(range_start)::timestamptz AND m.bucket < sqlc.arg(range_end)::timestamptz
 ORDER BY m.metric, m.dimension, m.bucket
 LIMIT 20000;
+
+-- name: OpsOpenAutomationFailures :many
+-- Open owned failures automations raised (G0 M11 D38, D73 A3): every one
+-- for a caller with automation.read at the org, else those the caller
+-- owns.
+SELECT f.id, f.kind, f.summary, f.next_step, f.scope, f.owner_type, f.owner_id, f.deadline, f.state, f.count,
+       f.first_seen, f.last_seen,
+       coalesce((SELECT array_agg(DISTINCT s ->> 'id') FROM jsonb_array_elements(f.scope) s
+                 WHERE s ->> 'type' = 'agent'), '{}')::text[] AS agents
+FROM pc.operational_failures f
+WHERE f.org_id = sqlc.arg(org_id) AND f.state <> 'RESOLVED' AND f.kind LIKE 'automation.%'
+  AND (sqlc.arg(all_owners)::boolean OR (f.owner_type = 'user' AND f.owner_id = sqlc.arg(owner_id)::text))
+ORDER BY f.id DESC
+LIMIT sqlc.arg(max_rows);

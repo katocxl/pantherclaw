@@ -371,6 +371,51 @@ func (q *Queries) ExposureGrants(ctx context.Context, orgID ids.OrgID) ([]Exposu
 	return items, nil
 }
 
+const exposureIssuedGrants = `-- name: ExposureIssuedGrants :many
+SELECT g.id, g.agent_id, c.automation_id, r.expires_at
+FROM pc.grants g
+JOIN pc.automation_ceilings c ON c.org_id = g.org_id AND c.id = g.ceiling_id
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+WHERE g.org_id = $1 AND g.state = 'ACTIVE'
+ORDER BY g.id
+LIMIT 10000
+`
+
+type ExposureIssuedGrantsRow struct {
+	ID           ids.UUID
+	AgentID      ids.UUID
+	AutomationID ids.UUID
+	ExpiresAt    time.Time
+}
+
+// ExposureIssuedGrants lists the active grants the org's automations
+// issued under their ceilings, with the agent and expiry (D37a issued
+// edges and active-grant counts).
+func (q *Queries) ExposureIssuedGrants(ctx context.Context, orgID ids.OrgID) ([]ExposureIssuedGrantsRow, error) {
+	rows, err := q.db.Query(ctx, exposureIssuedGrants, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExposureIssuedGrantsRow{}
+	for rows.Next() {
+		var i ExposureIssuedGrantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.AutomationID,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exposureOutsideRoutes = `-- name: ExposureOutsideRoutes :many
 SELECT agent_id, connection_id, kind, operation FROM pc.coverage_routes
 WHERE org_id = $1 AND kind <> 'channel'
@@ -728,14 +773,14 @@ func (q *Queries) IncidentAgents(ctx context.Context, orgID ids.OrgID, incidentI
 
 const insertExposureRights = `-- name: InsertExposureRights :exec
 INSERT INTO pc.exposure_rights (org_id, snapshot_id, seq, reach_view, label, agent_id, connection_id, grant_id, operation,
-    resource_group, verb, coverage, reasons, depth, expires_at, observed_at, observations, basis, irreversible, automation_id)
+    resource_group, verb, coverage, reasons, depth, expires_at, observed_at, observations, basis, irreversible, automation_ids)
 SELECT $1, $2, x.seq, x.reach_view, x.label, x.agent_id, x.connection_id, x.grant_id,
     x.operation, x.resource_group, x.verb, x.coverage, COALESCE(x.reasons, '{}'), x.depth, x.expires_at, x.observed_at,
-    x.observations, x.basis, x.irreversible, x.automation_id
+    x.observations, x.basis, x.irreversible, COALESCE(x.automation_ids, '{}')
 FROM jsonb_to_recordset($3::jsonb) AS x(seq integer, reach_view text, label text, agent_id uuid,
     connection_id uuid, grant_id uuid, operation text, resource_group text, verb text, coverage text, reasons text[],
     depth smallint, expires_at timestamptz, observed_at timestamptz, observations integer, basis text, irreversible boolean,
-    automation_id uuid)
+    automation_ids uuid[])
 `
 
 // InsertExposureRights inserts a batch of a snapshot's rights, given as a
@@ -824,7 +869,7 @@ func (q *Queries) LatestExposureSnapshot(ctx context.Context, orgID ids.OrgID) (
 }
 
 const listExposureRights = `-- name: ListExposureRights :many
-SELECT org_id, snapshot_id, seq, reach_view, label, agent_id, connection_id, grant_id, operation, resource_group, verb, coverage, reasons, depth, expires_at, observed_at, observations, basis, irreversible, automation_id FROM pc.exposure_rights
+SELECT org_id, snapshot_id, seq, reach_view, label, agent_id, connection_id, grant_id, operation, resource_group, verb, coverage, reasons, depth, expires_at, observed_at, observations, basis, irreversible, automation_ids FROM pc.exposure_rights
 WHERE org_id = $1 AND snapshot_id = $2 AND seq > $3
   AND ($4::uuid IS NULL OR agent_id = $4)
   AND ($5::uuid IS NULL OR connection_id = $5)
@@ -879,7 +924,7 @@ func (q *Queries) ListExposureRights(ctx context.Context, arg ListExposureRights
 			&i.Observations,
 			&i.Basis,
 			&i.Irreversible,
-			&i.AutomationID,
+			&i.AutomationIds,
 		); err != nil {
 			return nil, err
 		}

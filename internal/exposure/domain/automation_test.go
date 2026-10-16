@@ -41,7 +41,7 @@ func TestAutomationCeilingAndExecutionReachStaySeparate(t *testing.T) {
 		switch {
 		case r.View == domain.IssuanceCeiling:
 			ceiling = append(ceiling, r)
-		case r.View == domain.Effective && r.Automation != nil:
+		case r.View == domain.Effective && len(r.Automations) > 0:
 			execution = append(execution, r)
 		}
 	}
@@ -49,7 +49,7 @@ func TestAutomationCeilingAndExecutionReachStaySeparate(t *testing.T) {
 		t.Fatalf("ceiling %d, execution %d rights; want both", len(ceiling), len(execution))
 	}
 	for _, r := range ceiling {
-		if r.Label != domain.Conditional || *r.Automation != auto || r.Grant != nil || *r.Agent != w.other {
+		if r.Label != domain.Conditional || !slices.Equal(r.Automations, []ids.UUID{auto}) || r.Grant != nil || *r.Agent != w.other {
 			t.Errorf("ceiling right %+v", r)
 		}
 		if r.Operation != "" && r.Operation != "payments.refund.create" {
@@ -57,7 +57,7 @@ func TestAutomationCeilingAndExecutionReachStaySeparate(t *testing.T) {
 		}
 	}
 	for _, r := range execution {
-		if *r.Grant != issued || *r.Automation != auto {
+		if *r.Grant != issued || !r.HasAutomation(auto) {
 			t.Errorf("execution right %+v", r)
 		}
 	}
@@ -100,7 +100,8 @@ func TestAutomationRankingByCeilingNotActivity(t *testing.T) {
 		ID: ids.NewV7(), Automation: idle, Agents: []ids.UUID{w.agent, w.other}, Bounds: gdomain.Bounds{Operations: &all},
 		ReviewBy: now.Add(time.Hour), Active: true,
 	})
-	ranked := domain.RankAutomations(domain.Compute(w.in).Rights, nil)
+	issued := []domain.IssuedGrant{{Automation: busy, Grant: w.in.Grants[1].ID, Agent: w.other, ExpiresAt: now.Add(time.Hour)}}
+	ranked := domain.RankAutomations(domain.Compute(w.in).Rights, issued, now)
 	if len(ranked) != 2 || ranked[0].Automation != idle || ranked[1].Automation != busy {
 		t.Fatalf("ranking %+v; want the idle wide ceiling first", ranked)
 	}
@@ -139,6 +140,73 @@ func TestHR289_ReadersNeverCountTheCeilingUnlessAsked(t *testing.T) {
 	for _, r := range slices.Concat(d.BeforeRights, d.AfterRights, d.Removed) {
 		if r.View.Potential() {
 			t.Fatalf("reduction preview carries a ceiling right %+v", r)
+		}
+	}
+}
+
+// A person's grant and an automation's grant on the same path make one
+// EFFECTIVE right carrying the automation (D73 A1): M10 counts, ranks and
+// previews see one right per path, as before.
+func TestAutomationGrantSharesThePath(t *testing.T) {
+	w, auto, _ := automationWorld()
+	refunds := gdomain.Ops{"payments.refund.*"}
+	w.in.Grants = append(w.in.Grants, domain.Grant{
+		ID: ids.NewV7(), Agent: w.other, Bounds: gdomain.Bounds{Operations: &refunds},
+		NotBefore: now.Add(-time.Minute), ExpiresAt: now.Add(time.Hour),
+	})
+	rights := domain.Compute(w.in).Rights
+	seen := map[string]int{}
+	for _, r := range rights {
+		if r.View == domain.Effective {
+			seen[r.PathKey()]++
+		}
+	}
+	for k, n := range seen {
+		if n != 1 {
+			t.Errorf("path %s has %d effective rights", k, n)
+		}
+	}
+	r, ok := find(rights, domain.Effective, &w.other, "payments.refund.create", domain.VerbTransfer)
+	if !ok || !r.HasAutomation(auto) {
+		t.Fatalf("shared path right %+v %v", r, ok)
+	}
+	w.in.Ceilings = nil
+	w.in.Grants = w.in.Grants[:1]
+	before := len(domain.Compute(w.in).Rights)
+	w.in.Grants = append(w.in.Grants, domain.Grant{
+		ID: ids.NewV7(), Agent: w.other, Bounds: gdomain.Bounds{Operations: &refunds},
+		NotBefore: now.Add(-time.Minute), ExpiresAt: now.Add(time.Hour),
+	})
+	person := len(domain.Compute(w.in).Rights)
+	w.in.Grants[1].Automation = &auto
+	if got := len(domain.Compute(w.in).Rights); got != person || person <= before {
+		t.Errorf("an automation grant changed the right count: %d (person %d, none %d)", got, person, before)
+	}
+}
+
+// Containment previews reach the ceiling view (D73 A4): a ceiling agent
+// held for writes keeps CONDITIONAL reach with the contained reason, a
+// denied one has none.
+func TestAutomationCeilingThroughContainment(t *testing.T) {
+	w, _, _ := automationWorld()
+	w.in.Grants = w.in.Grants[:1]
+	w.in.Restrictions = []domain.Restriction{{Agent: &w.other, Hold: true}}
+	n := 0
+	for _, r := range domain.Compute(w.in).Rights {
+		if r.View == domain.IssuanceCeiling && r.Verb != domain.VerbRead {
+			n++
+			if !slices.Contains(r.Reasons, domain.ReasonContainedHold) {
+				t.Errorf("held ceiling right without the reason: %+v", r)
+			}
+		}
+	}
+	if n == 0 {
+		t.Fatal("no ceiling write rights")
+	}
+	w.in.Restrictions = []domain.Restriction{{Agent: &w.other}}
+	for _, r := range domain.Compute(w.in).Rights {
+		if r.View == domain.IssuanceCeiling {
+			t.Fatalf("a denied ceiling agent keeps ceiling reach: %+v", r)
 		}
 	}
 }
