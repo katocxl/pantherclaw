@@ -87,7 +87,7 @@ func scenario() []assurance.Case {
 		{Name: "dup", Kind: assurance.CaseDuplicate, Trigger: ticket,
 			Stubs: map[string][]assurance.StubResult{"launch": ok, "wait": ok}, Expect: assurance.Expect{State: "SUCCEEDED"}},
 		{Name: "unknown", Kind: assurance.CaseUnknown, Trigger: ticket,
-			Stubs: map[string][]assurance.StubResult{"launch": ok, "wait": {{State: "UNKNOWN", Output: map[string]string{"irreversible": "true"}}}},
+			Stubs:  map[string][]assurance.StubResult{"launch": ok, "wait": {{State: "UNKNOWN", Output: map[string]string{"irreversible": "true"}}}},
 			Expect: assurance.Expect{State: "NEEDS_RECONCILIATION"}},
 	}
 }
