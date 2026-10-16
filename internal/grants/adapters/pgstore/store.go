@@ -38,6 +38,10 @@ import (
 // Store implements app.Repository and app.Subjects.
 type Store struct {
 	Pool *db.Pool
+	// Promotions is the production promotion gate Issue and a widening
+	// Revise call in their transaction (G0 M11 part 2 D9, D39, HR-290);
+	// nil checks nothing.
+	Promotions app.PromotionGate
 	// refusals deduplicates refusal audits (G0 M10 D74).
 	refusals audit.Once
 }
@@ -471,6 +475,9 @@ func actorString(ev audit.Event) string { return ev.Actor.Type + ":" + ev.Actor.
 func (s *Store) Issue(ctx context.Context, org ids.OrgID, g domain.Grant, ev audit.Event) error {
 	return s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		if err := s.promoted(ctx, tx, org, g); err != nil {
+			return err
+		}
 		if err := insertGrant(ctx, q, org, g, false, actorString(ev)); err != nil {
 			return err
 		}
@@ -480,6 +487,19 @@ func (s *Store) Issue(ctx context.Context, org ids.OrgID, g domain.Grant, ev aud
 		_, err := audit.Record(ctx, tx, ev)
 		return err
 	})
+}
+
+// promoted runs the promotion gate on a new or widened grant: its listed
+// operations (nil when it lists none) in its environment.
+func (s *Store) promoted(ctx context.Context, tx db.TenantTx, org ids.OrgID, g domain.Grant) error {
+	if s.Promotions == nil {
+		return nil
+	}
+	var ops domain.Ops
+	if g.Bounds.Operations != nil {
+		ops = *g.Bounds.Operations
+	}
+	return s.Promotions.Check(ctx, tx.Pgx(), org, g.AgentID, g.EnvironmentID, ops)
 }
 
 // Delegate implements app.Repository.
@@ -548,6 +568,11 @@ func (s *Store) Revise(ctx context.Context, org ids.OrgID, next domain.Grant, wi
 			NextRevision: int32(next.Revision), OrgID: org, ID: next.ID.UUID(), PrevRevision: int32(next.Revision - 1), //nolint:gosec // small
 		})); err != nil {
 			return app.ErrConflict
+		}
+		if widens {
+			if err := s.promoted(ctx, tx, org, next); err != nil {
+				return err
+			}
 		}
 		if err := insertGrant(ctx, q, org, next, widens, actorString(ev)); err != nil {
 			return err

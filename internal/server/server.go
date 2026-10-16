@@ -577,7 +577,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	identity := iapp.New(pool, reg, d.publicURL, clock.System{}).WithAttestors(attestors)
 	pantherclawv1connect.RegisterIdentityServiceHandler(rs, identityrpc.NewIdentity(identity, d.clusters))
-	gstore := &grantspg.Store{Pool: pool}
+	gstore := &grantspg.Store{Pool: pool, Promotions: promotionGate}
 	grants := &grantsapp.Service{
 		Repo: gstore, Subjects: gstore, Defs: &defspg.Store{Pool: pool}, Authz: grantsapp.SubjectAuthorizer{},
 		Clock: clock.System{}, Listing: gstore, Refusals: gstore,

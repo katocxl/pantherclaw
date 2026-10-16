@@ -41,7 +41,7 @@ import (
 // Permissions. agent.promote is human only (D12); reads need agent.read
 // where the agent lives.
 const (
-	PermPromote = td.Permission("agent.promote")
+	PermPromote = td.PermAgentPromote
 	PermRead    = td.PermAgentRead
 )
 
@@ -121,24 +121,22 @@ func person(ctx context.Context) (tapp.Caller, error) {
 	return c, nil
 }
 
-// freshStepUp reads the caller's browser session step-up and checks it
-// (siem/stepup): a person, their own ACTIVE key, at most 5 minutes old by
-// the database clock. It returns the key.
-func freshStepUp(ctx context.Context, tx db.TenantTx, c tapp.Caller) (ids.UUID, error) {
-	if c.Credential != tapp.CredBrowserSession || c.Session.IsZero() {
+// freshStepUp checks the step-up the promotions page passes from its
+// browser session (siem/stepup, D53): a person, their own ACTIVE key, at
+// most 5 minutes old by the database clock. It returns the key. Without
+// one (every API call) it refuses STEP_UP_REQUIRED.
+func freshStepUp(ctx context.Context, tx db.TenantTx, c tapp.Caller, su *stepup.StepUp) (ids.UUID, error) {
+	if su == nil {
 		return ids.UUID{}, stepup.ErrStepUp
 	}
-	row, err := dbq.New(tx).SessionStepUp(ctx, c.Org, c.Session, c.Principal.ID)
-	if db.IsNoRows(err) {
-		return ids.UUID{}, stepup.ErrStepUp
-	} else if err != nil {
+	now, err := dbq.New(tx).DBNow(ctx)
+	if err != nil {
 		return ids.UUID{}, err
 	}
-	su := stepup.StepUp{Credential: row.CredentialID, At: row.StepUpAt}
-	if err := stepup.Check(ctx, tx, c, su, row.DbNow); err != nil {
+	if err := stepup.Check(ctx, tx, c, *su, now); err != nil {
 		return ids.UUID{}, err
 	}
-	return row.CredentialID, nil
+	return su.Credential, nil
 }
 
 // agentAt reads an agent and checks p where it lives; an agent the caller
@@ -164,10 +162,11 @@ func agentAt(ctx context.Context, q *dbq.Queries, c tapp.Caller, id ids.UUID, p 
 }
 
 // PromoteAgent promotes an agent for each operation whose checks pass, in
-// the agent's own PRODUCTION environment (agent.promote, human, fresh
-// step-up). Operations that fail a check are reported, not promoted; an
-// operation already promoted is reported as such.
-func (s *Service) PromoteAgent(ctx context.Context, in PromoteInput) (Result, error) {
+// the agent's own PRODUCTION environment (agent.promote, human, and the
+// fresh step-up su the promotions page passes from its session, D53; nil
+// refuses STEP_UP_REQUIRED). Operations that fail a check are reported,
+// not promoted; an operation already promoted is reported as such.
+func (s *Service) PromoteAgent(ctx context.Context, in PromoteInput, su *stepup.StepUp) (Result, error) {
 	c, err := person(ctx)
 	if err != nil {
 		return Result{}, err
@@ -192,7 +191,7 @@ func (s *Service) PromoteAgent(ctx context.Context, in PromoteInput) (Result, er
 		if row.EnvironmentKind != production {
 			return ErrNotProduction
 		}
-		cred, err := freshStepUp(ctx, tx, c)
+		cred, err := freshStepUp(ctx, tx, c, su)
 		if err != nil {
 			return err
 		}

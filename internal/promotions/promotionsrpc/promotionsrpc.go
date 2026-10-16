@@ -128,9 +128,12 @@ func (h *Handler) PromoteAgent(ctx context.Context, r *pantherclawv1.PromoteAgen
 	if err != nil {
 		return nil, err
 	}
+	// A step-up exists only on a browser session, so the API passes none
+	// and is refused STEP_UP_REQUIRED; people promote on the promotions
+	// page (D53).
 	res, err := h.svc.PromoteAgent(ctx, promotions.PromoteInput{
 		Agent: agent, Environment: env, Operations: r.GetOperations(), FailureBehavior: behaviorOf(r.GetFailureBehavior()),
-	})
+	}, nil)
 	if err != nil {
 		return nil, err
 	}

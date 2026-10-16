@@ -42,7 +42,7 @@ import (
 // Permissions: cohort.manage (human only, D12) for every change, agent.read
 // for reads.
 const (
-	PermManage = td.Permission("cohort.manage")
+	PermManage = td.PermCohortManage
 	PermRead   = td.PermAgentRead
 )
 
@@ -204,7 +204,7 @@ func (s *Service) team(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if !e.Edition.Paid() {
+	if !e.Cohorts() {
 		return ErrEdition
 	}
 	return nil

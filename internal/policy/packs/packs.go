@@ -207,7 +207,7 @@ func (s *Service) team(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if !e.Edition.Paid() {
+	if !e.ReferencePacks() {
 		return ErrEdition
 	}
 	return nil

@@ -9,6 +9,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/cohorts"
 	"github.com/katocxl/pantherclaw/internal/cohorts/cohortsrpc"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	policyapp "github.com/katocxl/pantherclaw/internal/policy/app"
 	"github.com/katocxl/pantherclaw/internal/policy/packs"
 	"github.com/katocxl/pantherclaw/internal/policy/packs/packsrpc"
@@ -17,12 +18,17 @@ import (
 )
 
 // registerM11Govern serves the production promotion gate's PromotionService,
-// fleet cohorts and the reference packs (G0 M11 part 2, D39–D41), as
-// pc_app. Cohorts and packs need the Team edition (without a licence the
-// server is Community: refused). Packs draft through the policy versions
-// API, so a pack's draft passes the same checks and publish gate as any.
+// its promotions page, fleet cohorts and the reference packs (G0 M11 part
+// 2, D39–D41, D53), as pc_app. Cohorts and packs need the Team edition
+// (without a licence the server is Community: refused). Packs draft
+// through the policy versions API, so a pack's draft passes the same
+// checks and publish gate as any.
 func registerM11Govern(rs *connect.Server, d apiDeps) {
-	pantherclawv1connect.RegisterPromotionServiceHandler(rs, promotionsrpc.New(&promotions.Service{Pool: d.pool}))
+	prom := &promotions.Service{Pool: d.pool}
+	pantherclawv1connect.RegisterPromotionServiceHandler(rs, promotionsrpc.New(prom))
+	if d.web != nil {
+		d.web.WithPromotions(prom) // the only way to promote: a step-up is a browser session's (D53)
+	}
 	cs := &cohorts.Service{Pool: d.pool}
 	ps := &packs.Service{Pool: d.pool}
 	if d.billing != nil {
@@ -36,3 +42,7 @@ func registerM11Govern(rs *connect.Server, d apiDeps) {
 	pantherclawv1connect.RegisterCohortServiceHandler(rs, cohortsrpc.New(cs))
 	pantherclawv1connect.RegisterPackServiceHandler(rs, packsrpc.New(ps))
 }
+
+// promotionGate is the production promotion gate the grants store calls
+// when it issues a grant or stores a widening revision (D9, D39, HR-290).
+var promotionGate grantsapp.PromotionGate = promotions.Gate{}

@@ -14,6 +14,7 @@ import (
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 
+	gapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 )
 
@@ -21,9 +22,12 @@ import (
 // for an operation the agent is not promoted for (D9, D39).
 const ReasonNotPromoted = "NOT_PROMOTED"
 
-// Gate is the promotion gate grants call on every new or widened grant,
-// person- or automation-issued, in the issuing transaction (HR-290).
+// Gate implements grants' PromotionGate: grants call it on every new or
+// widened grant, person- or automation-issued, in the issuing transaction
+// (HR-290). Its refusals wrap gapp.ErrNotPromoted.
 type Gate struct{}
+
+var _ gapp.PromotionGate = Gate{}
 
 // Check refuses NOT_PROMOTED unless env is not a PRODUCTION environment,
 // or ops is an explicit list each of whose entries an ACTIVE promotion of
@@ -54,5 +58,5 @@ func (Gate) Check(ctx context.Context, tx pgx.Tx, org ids.OrgID, agent, env ids.
 }
 
 func notPromoted(msg string) error {
-	return pcerr.New(pcerr.FailedPrecondition, ReasonNotPromoted, clip(msg))
+	return pcerr.Wrap(gapp.ErrNotPromoted, pcerr.FailedPrecondition, ReasonNotPromoted, clip(msg))
 }
