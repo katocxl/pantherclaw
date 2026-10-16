@@ -318,8 +318,8 @@ type Query struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// "transactions", "runs", "agents", "grants", "grant_changes",
 	// "connections", "approvals", "audit", "operations", "alerts",
-	// "incidents", "cases", "findings", "policy_versions", "packages" or
-	// "gateways".
+	// "incidents", "cases", "findings", "policy_versions", "packages",
+	// "gateways" or "automations".
 	Entity        string         `protobuf:"bytes,1,opt,name=entity,proto3" json:"entity,omitempty"`
 	Filters       *SearchFilters `protobuf:"bytes,2,opt,name=filters,proto3" json:"filters,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -3164,10 +3164,10 @@ const file_pantherclaw_v1_search_proto_rawDesc = "" +
 	"\x1d_principal_service_account_idB\x15\n" +
 	"\x13_used_connection_idB\v\n" +
 	"\t_alert_idB\x0e\n" +
-	"\f_incident_id\"\x8a\x02\n" +
-	"\x05Query\x12\xc7\x01\n" +
-	"\x06entity\x18\x01 \x01(\tB\xae\x01\xbaH\xaa\x01r\xa7\x01R\ftransactionsR\x04runsR\x06agentsR\x06grantsR\rgrant_changesR\vconnectionsR\tapprovalsR\x05auditR\n" +
-	"operationsR\x06alertsR\tincidentsR\x05casesR\bfindingsR\x0fpolicy_versionsR\bpackagesR\bgatewaysR\x06entity\x127\n" +
+	"\f_incident_id\"\x97\x02\n" +
+	"\x05Query\x12\xd4\x01\n" +
+	"\x06entity\x18\x01 \x01(\tB\xbb\x01\xbaH\xb7\x01r\xb4\x01R\ftransactionsR\x04runsR\x06agentsR\x06grantsR\rgrant_changesR\vconnectionsR\tapprovalsR\x05auditR\n" +
+	"operationsR\x06alertsR\tincidentsR\x05casesR\bfindingsR\x0fpolicy_versionsR\bpackagesR\bgatewaysR\vautomationsR\x06entity\x127\n" +
 	"\afilters\x18\x02 \x01(\v2\x1d.pantherclaw.v1.SearchFiltersR\afilters\"\x90\x06\n" +
 	"\rBuiltinParams\x124\n" +
 	"\x0etransaction_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\rtransactionId\x88\x01\x01\x12(\n" +
@@ -3313,10 +3313,10 @@ const file_pantherclaw_v1_search_proto_rawDesc = "" +
 	"\x18UpdateSavedQueryResponse\x120\n" +
 	"\x05query\x18\x01 \x01(\v2\x1a.pantherclaw.v1.SavedQueryR\x05query\"I\n" +
 	"\x15GetSavedQueryResponse\x120\n" +
-	"\x05query\x18\x01 \x01(\v2\x1a.pantherclaw.v1.SavedQueryR\x05query\"\x9d\x02\n" +
+	"\x05query\x18\x01 \x01(\v2\x1a.pantherclaw.v1.SavedQueryR\x05query\"\xaa\x02\n" +
 	"\vFindRequest\x12\x1d\n" +
-	"\x04text\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x02\x18dR\x04text\x12\xcd\x01\n" +
-	"\x05kinds\x18\x02 \x03(\tB\xb6\x01\xbaH\xb2\x01\x92\x01\xae\x01\x10\x10\"\xa9\x01r\xa6\x01R\x06agentsR\vconnectionsR\x05casesR\tincidentsR\x06alertsR\bpackagesR\bgatewaysR\x10service_accountsR\x06peopleR\x04runsR\ftransactionsR\x06grantsR\tapprovalsR\bfindingsR\x0fpolicy_versionsR\x05auditR\x05kinds\x12\x1f\n" +
+	"\x04text\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x02\x18dR\x04text\x12\xda\x01\n" +
+	"\x05kinds\x18\x02 \x03(\tB\xc3\x01\xbaH\xbf\x01\x92\x01\xbb\x01\x10\x11\"\xb6\x01r\xb3\x01R\x06agentsR\vconnectionsR\x05casesR\tincidentsR\x06alertsR\bpackagesR\bgatewaysR\x10service_accountsR\x06peopleR\x04runsR\ftransactionsR\x06grantsR\tapprovalsR\bfindingsR\x0fpolicy_versionsR\x05auditR\vautomationsR\x05kinds\x12\x1f\n" +
 	"\x05limit\x18\x03 \x01(\x05B\t\xbaH\x06\x1a\x04\x18\n" +
 	"(\x00R\x05limit\"\xc6\x01\n" +
 	"\tFindMatch\x12\x12\n" +

@@ -11,7 +11,7 @@
 
 -- +goose Up
 -- squawk: these tables hold one row per agent, connection, case, incident,
--- alert, package, gateway, service account or person of an org, so building
+-- alert, package, gateway, service account, automation or person of an org, so building
 -- each index locks the table briefly; goose runs each migration in one
 -- transaction (.squawk.toml), so CONCURRENTLY is not possible.
 -- squawk-ignore require-concurrent-index-creation
@@ -34,8 +34,11 @@ CREATE INDEX service_accounts_find_name ON pc.service_accounts (org_id, lower(na
 CREATE INDEX users_find_display_name ON pc.users (org_id, lower(display_name) text_pattern_ops);
 -- squawk-ignore require-concurrent-index-creation
 CREATE INDEX users_find_email ON pc.users (org_id, lower(email) text_pattern_ops);
+-- squawk-ignore require-concurrent-index-creation
+CREATE INDEX automations_find_name ON pc.automations (org_id, lower(name) text_pattern_ops);
 
 -- +goose Down
+DROP INDEX pc.automations_find_name;
 DROP INDEX pc.users_find_email;
 DROP INDEX pc.users_find_display_name;
 DROP INDEX pc.service_accounts_find_name;

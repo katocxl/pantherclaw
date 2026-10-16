@@ -142,8 +142,8 @@ message SearchFilters {
 message Query {
   // "transactions", "runs", "agents", "grants", "grant_changes",
   // "connections", "approvals", "audit", "operations", "alerts",
-  // "incidents", "cases", "findings", "policy_versions", "packages" or
-  // "gateways".
+  // "incidents", "cases", "findings", "policy_versions", "packages",
+  // "gateways" or "automations".
   string entity = 1 [(buf.validate.field).string = {
     in: [
       "transactions",
@@ -161,7 +161,8 @@ message Query {
       "findings",
       "policy_versions",
       "packages",
-      "gateways"
+      "gateways",
+      "automations"
     ]
   }];
   SearchFilters filters = 2;
@@ -428,7 +429,7 @@ message FindRequest {
   }];
   // The kinds to match; none: every kind.
   repeated string kinds = 2 [(buf.validate.field).repeated = {
-    max_items: 16
+    max_items: 17
     items: {
       string: {
         in: [
@@ -447,7 +448,8 @@ message FindRequest {
           "approvals",
           "findings",
           "policy_versions",
-          "audit"
+          "audit",
+          "automations"
         ]
       }
     }

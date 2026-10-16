@@ -43,13 +43,14 @@ const (
 	EntityPolicyVersions Entity = "policy_versions"
 	EntityPackages       Entity = "packages"
 	EntityGateways       Entity = "gateways"
+	EntityAutomations    Entity = "automations"
 )
 
 // entities lists the entities a structured query may name.
 var entities = []Entity{
 	EntityTransactions, EntityRuns, EntityAgents, EntityGrants, EntityGrantChanges, EntityConnections,
 	EntityApprovals, EntityAudit, EntityOperations, EntityAlerts, EntityIncidents, EntityCases, EntityFindings,
-	EntityPolicyVersions, EntityPackages, EntityGateways,
+	EntityPolicyVersions, EntityPackages, EntityGateways, EntityAutomations,
 }
 
 // Filters are the typed filters of a structured query. Each entity accepts
@@ -147,6 +148,8 @@ var allowedFilters = map[Entity][]field{
 	EntityPolicyVersions: {fID, fStates, fRange},
 	EntityPackages:       {fID, fStates, fRange},
 	EntityGateways:       {fID, fStates, fRange},
+	// An automation's kinds are AGENT_WORK and SECURITY_WORK.
+	EntityAutomations: {fID, fStates, fKinds, fRange},
 }
 
 // used lists the filters f sets.

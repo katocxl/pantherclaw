@@ -171,3 +171,12 @@ WHERE e.org_id = sqlc.arg(org_id)
   AND e.id BETWEEN sqlc.arg(id_lo)::uuid AND sqlc.arg(id_hi)::uuid
 ORDER BY e.id DESC
 LIMIT sqlc.arg(page_limit);
+
+-- name: FindAutomations :many
+SELECT a.id, a.name::text AS label, a.state, a.created_at AS at, count(*) OVER () AS total
+FROM pc.automations a
+WHERE a.org_id = sqlc.arg(org_id)
+  AND ((sqlc.narg(id_lo)::uuid IS NOT NULL AND a.id BETWEEN sqlc.narg(id_lo)::uuid AND sqlc.narg(id_hi)::uuid)
+       OR (sqlc.arg(contains)::text <> '' AND lower(a.name) LIKE sqlc.arg(contains)::text ESCAPE '\'))
+ORDER BY lower(a.name) = sqlc.arg(lowered)::text DESC, starts_with(lower(a.name), sqlc.arg(lowered)::text) DESC, a.name, a.id
+LIMIT sqlc.arg(page_limit);

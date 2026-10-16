@@ -40,13 +40,14 @@ var entityPerm = map[Entity]td.Permission{
 	EntityPolicyVersions: td.PermPolicyRead,
 	EntityPackages:       td.PermPackageRead,
 	EntityGateways:       td.PermGatewayRead,
+	EntityAutomations:    td.PermAutomationRead,
 }
 
 // orgLevel lists the entities that live at the org rather than at an
 // agent's place.
 var orgLevel = map[Entity]bool{
 	EntityConnections: true, EntityAudit: true, EntityOperations: true, EntityPolicyVersions: true, EntityPackages: true,
-	EntityGateways: true,
+	EntityGateways: true, EntityAutomations: true,
 }
 
 // EmptyReason says why a result has no items (F627).

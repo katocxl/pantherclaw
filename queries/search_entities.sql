@@ -253,3 +253,30 @@ SELECT count(*) FROM (
       AND (sqlc.narg(end_time)::timestamptz IS NULL OR g.created_at < sqlc.narg(end_time)::timestamptz)
     LIMIT 10001
 ) x;
+
+-- Automations (G0 M11 part 2 D44): org-level under automation.read.
+-- name: SearchAutomations :many
+SELECT a.id, a.name, a.kind, a.state, a.rollout, a.owner_user_id, a.service_account_id, a.enabled_version_id,
+       a.pause_reason, a.created_at
+FROM pc.automations a
+WHERE a.org_id = sqlc.arg(org_id)
+  AND (sqlc.narg(before)::uuid IS NULL OR a.id < sqlc.narg(before)::uuid)
+  AND (sqlc.narg(id)::uuid IS NULL OR a.id = sqlc.narg(id)::uuid)
+  AND (cardinality(sqlc.arg(states)::text[]) = 0 OR a.state = ANY (sqlc.arg(states)::text[]))
+  AND (cardinality(sqlc.arg(kinds)::text[]) = 0 OR a.kind = ANY (sqlc.arg(kinds)::text[]))
+  AND (sqlc.narg(start_time)::timestamptz IS NULL OR a.created_at >= sqlc.narg(start_time)::timestamptz)
+  AND (sqlc.narg(end_time)::timestamptz IS NULL OR a.created_at < sqlc.narg(end_time)::timestamptz)
+ORDER BY a.id DESC
+LIMIT sqlc.arg(page_limit);
+
+-- name: CountAutomations :one
+SELECT count(*) FROM (
+    SELECT 1 FROM pc.automations a
+    WHERE a.org_id = sqlc.arg(org_id)
+      AND (sqlc.narg(id)::uuid IS NULL OR a.id = sqlc.narg(id)::uuid)
+      AND (cardinality(sqlc.arg(states)::text[]) = 0 OR a.state = ANY (sqlc.arg(states)::text[]))
+      AND (cardinality(sqlc.arg(kinds)::text[]) = 0 OR a.kind = ANY (sqlc.arg(kinds)::text[]))
+      AND (sqlc.narg(start_time)::timestamptz IS NULL OR a.created_at >= sqlc.narg(start_time)::timestamptz)
+      AND (sqlc.narg(end_time)::timestamptz IS NULL OR a.created_at < sqlc.narg(end_time)::timestamptz)
+    LIMIT 10001
+) x;

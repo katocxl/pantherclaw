@@ -116,6 +116,7 @@ var entityWords = map[string]Entity{
 	"policies": EntityPolicyVersions, "policy": EntityPolicyVersions,
 	"package": EntityPackages, "packages": EntityPackages,
 	"gateway": EntityGateways, "gateways": EntityGateways,
+	"automation": EntityAutomations, "automations": EntityAutomations,
 }
 
 // multiEntity are entity phrases of more than one word, longest first.

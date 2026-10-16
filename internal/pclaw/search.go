@@ -93,7 +93,7 @@ func searchCommands() map[string]command {
 	return map[string]command{
 		"find": searchRPC("search find TEXT [--kind KIND]... [--limit N]", 1, func(fs *flag.FlagSet) searchCall {
 			var kinds list
-			fs.Var(&kinds, "kind", "a kind to match (agents, connections, cases, incidents, alerts, packages, gateways, service_accounts, people, runs, transactions, grants, approvals, findings, policy_versions, audit); repeatable")
+			fs.Var(&kinds, "kind", "a kind to match (agents, connections, cases, incidents, alerts, packages, gateways, service_accounts, people, runs, transactions, grants, approvals, findings, policy_versions, audit, automations); repeatable")
 			limit := fs.Int("limit", 0, "matches per kind (default 5, at most 10)")
 			return func(ctx context.Context, c pantherclawv1connect.SearchServiceClient, a []string) (proto.Message, error) {
 				return c.Find(ctx, &pantherclawv1.FindRequest{Text: a[0], Kinds: kinds, Limit: int32(*limit)}) //nolint:gosec // G115: validated by the server

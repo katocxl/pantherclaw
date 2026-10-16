@@ -380,3 +380,45 @@ func TestT130_CorrelationStaysInTheViewersScope(t *testing.T) {
 		t.Fatalf("community: %v", err)
 	}
 }
+
+// TestHR295_AutomationsNeedAutomationReadAcrossTheOrg (D44, D45):
+// automations are org-level records: a viewer with automation.read at the
+// org searches and finds them; one holding it only for a team gets an
+// omission, never a match or a count.
+func TestHR295_AutomationsNeedAutomationReadAcrossTheOrg(t *testing.T) {
+	f := newM11Fx(t)
+	sa, auto := ids.NewV7(), ids.NewV7()
+	// The identity and the automation reference each other (deferred keys).
+	if err := f.p.InTenantTx(context.Background(), f.fx.org, func(ctx context.Context, tx db.TenantTx) error {
+		if _, err := tx.Exec(ctx, `INSERT INTO pc.service_accounts (org_id, id, name, created_by, automation_id)
+			VALUES ($1, $2, 'nightly-triage-sa', 'test', $3)`, f.fx.org, sa, auto); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `INSERT INTO pc.automations (org_id, id, name, purpose, kind, owner_user_id, service_account_id, created_by)
+		VALUES ($1, $2, 'nightly-triage', 'Triage alerts nightly', 'SECURITY_WORK', $3, $4, $3)`, f.fx.org, auto, f.user, sa)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if r := f.search(f.auditor, Query{Entity: EntityAutomations, Filters: Filters{Kinds: []string{"SECURITY_WORK"}}}); r.Count != 1 ||
+		r.Items[0].Fields["name"] != "nightly-triage" || r.Items[0].Evidence[0] != "automation:"+auto.String() {
+		t.Fatalf("auditor: %+v", r)
+	}
+	if r := f.search(f.responder, Query{Entity: EntityAutomations}); r.Empty != EmptyRestricted || r.Count != 0 {
+		t.Fatalf("team responder: %+v", r)
+	}
+	org, err := f.s.Find(as(f.auditor), FindRequest{Text: "triage", Kinds: []FindKind{FindAutomations}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if k, _ := kindOf(org, FindAutomations); k.Count != 1 || k.Matches[0].ID != auto.String() {
+		t.Fatalf("auditor find: %+v", org)
+	}
+	team, err := f.s.Find(as(f.responder), FindRequest{Text: "triage"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := kindOf(team, FindAutomations); ok || !hasOmission(team.Omissions, omissionRestricted, "automations: outside your permissions") {
+		t.Fatalf("team find: %+v", team)
+	}
+}

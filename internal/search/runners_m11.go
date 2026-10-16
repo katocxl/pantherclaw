@@ -254,3 +254,34 @@ func countGateways(ctx context.Context, _ *Service, c tenancy.Caller, tx db.Tena
 	})
 	return int(n), err
 }
+
+func init() { runners[EntityAutomations] = runner{pageAutomations, countAutomations} }
+
+func pageAutomations(ctx context.Context, _ *Service, c tenancy.Caller, tx db.TenantTx, _ Scope, f Filters, pr page.Request) ([]Item, string, error) {
+	rows, err := dbq.New(tx).SearchAutomations(ctx, dbq.SearchAutomationsParams{
+		OrgID: c.Org, Before: before(pr), ID: f.ID, States: list(f.States), Kinds: list(f.Kinds),
+		StartTime: f.Start, EndTime: f.End, PageLimit: pr.Limit(),
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	rows, next := page.Finish(pr, rows, func(r dbq.SearchAutomationsRow) ids.UUID { return r.ID })
+	items := make([]Item, 0, len(rows))
+	for _, r := range rows {
+		items = append(items, Item{
+			Entity: EntityAutomations, ID: r.ID.String(), Time: r.CreatedAt, Label: r.State,
+			Fields: fields("name", r.Name, "kind", r.Kind, "state", r.State, "rollout", str(r.Rollout),
+				"owner", r.OwnerUserID.String(), "service_account", r.ServiceAccountID.String(),
+				"enabled_version", idStr(r.EnabledVersionID), "pause_reason", str(r.PauseReason)),
+			Evidence: []string{"automation:" + r.ID.String(), "service_account:" + r.ServiceAccountID.String()},
+		})
+	}
+	return items, next, nil
+}
+
+func countAutomations(ctx context.Context, _ *Service, c tenancy.Caller, tx db.TenantTx, _ Scope, f Filters) (int, error) {
+	n, err := dbq.New(tx).CountAutomations(ctx, dbq.CountAutomationsParams{
+		OrgID: c.Org, ID: f.ID, States: list(f.States), Kinds: list(f.Kinds), StartTime: f.Start, EndTime: f.End,
+	})
+	return int(n), err
+}

@@ -69,6 +69,42 @@ func (q *Queries) CountAlerts(ctx context.Context, arg CountAlertsParams) (int64
 	return count, err
 }
 
+const countAutomations = `-- name: CountAutomations :one
+SELECT count(*) FROM (
+    SELECT 1 FROM pc.automations a
+    WHERE a.org_id = $1
+      AND ($2::uuid IS NULL OR a.id = $2::uuid)
+      AND (cardinality($3::text[]) = 0 OR a.state = ANY ($3::text[]))
+      AND (cardinality($4::text[]) = 0 OR a.kind = ANY ($4::text[]))
+      AND ($5::timestamptz IS NULL OR a.created_at >= $5::timestamptz)
+      AND ($6::timestamptz IS NULL OR a.created_at < $6::timestamptz)
+    LIMIT 10001
+) x
+`
+
+type CountAutomationsParams struct {
+	OrgID     ids.OrgID
+	ID        *ids.UUID
+	States    []string
+	Kinds     []string
+	StartTime *time.Time
+	EndTime   *time.Time
+}
+
+func (q *Queries) CountAutomations(ctx context.Context, arg CountAutomationsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAutomations,
+		arg.OrgID,
+		arg.ID,
+		arg.States,
+		arg.Kinds,
+		arg.StartTime,
+		arg.EndTime,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countCases = `-- name: CountCases :one
 SELECT count(*) FROM (
     SELECT 1 FROM pc.cases c
@@ -436,6 +472,86 @@ func (q *Queries) SearchAlerts(ctx context.Context, arg SearchAlertsParams) ([]S
 			&i.Test,
 			&i.CreatedAt,
 			&i.Agents,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchAutomations = `-- name: SearchAutomations :many
+SELECT a.id, a.name, a.kind, a.state, a.rollout, a.owner_user_id, a.service_account_id, a.enabled_version_id,
+       a.pause_reason, a.created_at
+FROM pc.automations a
+WHERE a.org_id = $1
+  AND ($2::uuid IS NULL OR a.id < $2::uuid)
+  AND ($3::uuid IS NULL OR a.id = $3::uuid)
+  AND (cardinality($4::text[]) = 0 OR a.state = ANY ($4::text[]))
+  AND (cardinality($5::text[]) = 0 OR a.kind = ANY ($5::text[]))
+  AND ($6::timestamptz IS NULL OR a.created_at >= $6::timestamptz)
+  AND ($7::timestamptz IS NULL OR a.created_at < $7::timestamptz)
+ORDER BY a.id DESC
+LIMIT $8
+`
+
+type SearchAutomationsParams struct {
+	OrgID     ids.OrgID
+	Before    *ids.UUID
+	ID        *ids.UUID
+	States    []string
+	Kinds     []string
+	StartTime *time.Time
+	EndTime   *time.Time
+	PageLimit int32
+}
+
+type SearchAutomationsRow struct {
+	ID               ids.UUID
+	Name             string
+	Kind             string
+	State            string
+	Rollout          *string
+	OwnerUserID      ids.UUID
+	ServiceAccountID ids.UUID
+	EnabledVersionID *ids.UUID
+	PauseReason      *string
+	CreatedAt        time.Time
+}
+
+// Automations (G0 M11 part 2 D44): org-level under automation.read.
+func (q *Queries) SearchAutomations(ctx context.Context, arg SearchAutomationsParams) ([]SearchAutomationsRow, error) {
+	rows, err := q.db.Query(ctx, searchAutomations,
+		arg.OrgID,
+		arg.Before,
+		arg.ID,
+		arg.States,
+		arg.Kinds,
+		arg.StartTime,
+		arg.EndTime,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchAutomationsRow{}
+	for rows.Next() {
+		var i SearchAutomationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Kind,
+			&i.State,
+			&i.Rollout,
+			&i.OwnerUserID,
+			&i.ServiceAccountID,
+			&i.EnabledVersionID,
+			&i.PauseReason,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
