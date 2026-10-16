@@ -149,9 +149,10 @@ func (ceilings) Reserve(context.Context, db.TenantTx, gapp.AutomationIssue, map[
 	return nil
 }
 
-// TestHR290_AutomationIssuanceIsGatedAndCapped (D80, D93): automation
-// issuance runs the same gate in the engine's transaction: an unpromoted
-// production agent is refused NOT_PROMOTED, and a grant under a
+// TestHR290_AutomationIssuanceIsGatedAndCapped (D80, D93, D105, D112):
+// automation issuance, and a preview's dry run, run the same gate in the
+// engine's transaction, and refuse a production grant without one: an
+// unpromoted production agent is refused NOT_PROMOTED, and a grant under a
 // provisional promotion is capped at its expiry.
 func TestHR290_AutomationIssuanceIsGatedAndCapped(t *testing.T) {
 	w := newWorld(t)
@@ -172,33 +173,39 @@ func TestHR290_AutomationIssuanceIsGatedAndCapped(t *testing.T) {
 			Bounds: gdomain.Bounds{Operations: &ops}, TTL: 24 * time.Hour, Limits: lim,
 		}},
 	}
-	issueFor := func(agent ids.UUID) (gdomain.Grant, error) {
+	// live false is a SHADOW or TEST execution's preview (previewCeiling's
+	// dry run, D84), which runs every check of a live one.
+	issueAs := func(agent ids.UUID, live bool) (gdomain.Grant, error) {
 		var g gdomain.Grant
 		err := w.pool.InTenantTx(context.Background(), w.org, func(ctx context.Context, tx db.TenantTx) error {
 			var err error
 			g, err = svc.IssueForAutomationTx(ctx, tx, gapp.AutomationIssue{
 				Org: w.org, Automation: ids.NewV7(), Version: ids.NewV7(), Execution: ids.NewV7(), Ceiling: ceiling,
 				ServiceAccount: sa, AgentID: agent, Principal: principal, TaskRef: "ticket T-1",
-				Bounds: gdomain.Bounds{Operations: &gdomain.Ops{refund}}, Limits: lim, Live: true, DryRun: true,
+				Bounds: gdomain.Bounds{Operations: &gdomain.Ops{refund}}, Limits: lim, Live: live, DryRun: true,
 			})
 			return err
 		})
 		return g, err
 	}
-	issue := func() (gdomain.Grant, error) { return issueFor(w.agent) }
+	issue := func() (gdomain.Grant, error) { return issueAs(w.agent, true) }
 
-	// Without a gate a production grant is refused, a development one not
-	// (D105).
+	// Without a gate a production grant is refused, live or previewed, a
+	// development one not (D105, D112).
 	svc.Promotions = nil
-	_, err = issue()
-	notPromoted(t, "automation issuance with no gate wired", err)
-	if _, err := issueFor(w.devAgent); err != nil {
-		t.Fatalf("a development grant with no gate wired: %v", err)
+	for _, live := range []bool{true, false} {
+		_, err = issueAs(w.agent, live)
+		notPromoted(t, fmt.Sprintf("automation issuance (live %v) with no gate wired", live), err)
+		if _, err := issueAs(w.devAgent, live); err != nil {
+			t.Fatalf("a development grant (live %v) with no gate wired: %v", live, err)
+		}
 	}
 	svc.Promotions = gate
 
 	_, err = issue()
 	notPromoted(t, "automation issuance for an unpromoted production agent", err)
+	_, err = issueAs(w.agent, false)
+	notPromoted(t, "a preview's dry run for an unpromoted production agent", err)
 
 	pr := promotiontest.PromoteNew(t, w.scope, refund)
 	g, err := issue()
