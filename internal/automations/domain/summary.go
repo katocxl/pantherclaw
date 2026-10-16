@@ -180,7 +180,7 @@ func stepText(_ *Definition, s StepSpec, names Names) string {
 	case *WaitEffectWith:
 		t = "wait until " + x.Operation + " is confirmed in the run of " + x.Step
 	case *GateWith:
-		t = fmt.Sprintf("wait for %d approval(s) with a security key, at most %s", max(x.MinApprovals, 1), human(x.Deadline.D()))
+		t = fmt.Sprintf("wait for %d approval(s) with a security key, at most %s", x.Approvals(), human(x.Deadline.D()))
 	case *RevokeGrantWith:
 		t = "revoke grants (" + strings.ToLower(x.Scope) + ")"
 	case *NotifyWith:

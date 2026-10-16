@@ -56,6 +56,8 @@ func (s *Service) SweepOrg(ctx context.Context, org ids.OrgID) (SweptCeilings, e
 			if ferr := s.sweepFailed(ctx, org, c); ferr != nil {
 				errs = append(errs, ferr)
 			}
+		} else if err := s.sweepRecovered(ctx, org, c); err != nil {
+			errs = append(errs, fmt.Errorf("ceiling %s: %w", c.ID, err))
 		}
 	}
 	return out, errors.Join(errs...)
@@ -107,9 +109,23 @@ func (s *Service) sweepFailed(ctx context.Context, org ids.OrgID, c dbq.ActiveAu
 		}
 		return s.failure(ctx, tx, a, FailureSweep,
 			"The scheduled check of automation "+a.Name+"'s authority failed; it is retried every 5 minutes.",
-			"If this stays open, ask an administrator to look at the server's logs.", "sweep:"+c.ID.String())
+			"If this stays open, ask an administrator to look at the server's logs.", sweepKey(c.ID))
 	})
 }
+
+// sweepRecovered resolves the ceiling's open sweep_failed once a check
+// succeeds again (D102 L6).
+func (s *Service) sweepRecovered(ctx context.Context, org ids.OrgID, c dbq.ActiveAutomationCeilingsRow) error {
+	return s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := dbq.New(tx).ResolveAutomationFailure(ctx, dbq.ResolveAutomationFailureParams{
+			Resolution: "The next scheduled check of the authority succeeded.", OrgID: org, Kind: FailureSweep,
+			DedupeKey: sweepKey(c.ID),
+		})
+		return err
+	})
+}
+
+func sweepKey(ceiling ids.UUID) string { return "sweep:" + ceiling.String() }
 
 // reviewDue reports automation.review_due 7 days and 1 day before the
 // review date, once per window (the failure's dedupe key).

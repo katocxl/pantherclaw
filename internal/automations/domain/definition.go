@@ -245,6 +245,33 @@ func (s AgentScope) Valid() bool { return (len(s.Agents) > 0) != s.All }
 // Covers reports whether the scope includes the agent.
 func (s AgentScope) Covers(agent RefID) bool { return s.All || slices.Contains(s.Agents, agent) }
 
+// Within reports whether s names no agent prev does not: absent is
+// narrowest, and all is wider than any list (D102 L4).
+func (s *AgentScope) Within(prev *AgentScope) bool {
+	switch {
+	case s == nil:
+		return true
+	case prev == nil:
+		return false
+	case prev.All:
+		return true
+	case s.All:
+		return false
+	}
+	for _, a := range s.Agents {
+		if !slices.Contains(prev.Agents, a) {
+			return false
+		}
+	}
+	return true
+}
+
+// NotWiderThan reports whether a grants nothing prev did not: its ceiling
+// is not wider and its revocable scope is within prev's (D91, D102 L4).
+func (a Authority) NotWiderThan(prev Authority) bool {
+	return a.Ceiling.NotWiderThan(prev.Ceiling) && a.Revocable.Within(prev.Revocable)
+}
+
 // PrincipalSelf is the automation's own execution identity.
 const PrincipalSelf = "self"
 

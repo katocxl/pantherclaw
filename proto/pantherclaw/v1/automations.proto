@@ -433,6 +433,9 @@ message AutomationControlEffect {
   repeated string launches_cancelled = 3;
   repeated string deliveries_cancelled = 4;
   repeated string executions_affected = 5;
+  // Deliveries already handed to a receiver whose cancellation could not be
+  // confirmed (D97, D102): they may still arrive.
+  repeated string deliveries_not_verified = 6;
 }
 
 message PauseAutomationRequest {

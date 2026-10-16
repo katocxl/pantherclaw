@@ -1406,6 +1406,36 @@ func (q *Queries) ReserveAutomationBudget(ctx context.Context, arg ReserveAutoma
 	return reserved, err
 }
 
+const resolveAutomationFailure = `-- name: ResolveAutomationFailure :execrows
+UPDATE pc.operational_failures
+SET state = 'RESOLVED', resolved_at = now(), resolution = $1::text
+WHERE org_id = $2 AND kind = $3::text AND dedupe_key = $4::text
+  AND state <> 'RESOLVED'
+`
+
+type ResolveAutomationFailureParams struct {
+	Resolution string
+	OrgID      ids.OrgID
+	Kind       string
+	DedupeKey  string
+}
+
+// Resolves an open owned failure the automations core raised, by its kind
+// and dedupe key, once its cause is gone (D102 L6: the next successful
+// ceiling check resolves automation.sweep_failed).
+func (q *Queries) ResolveAutomationFailure(ctx context.Context, arg ResolveAutomationFailureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, resolveAutomationFailure,
+		arg.Resolution,
+		arg.OrgID,
+		arg.Kind,
+		arg.DedupeKey,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const resumeAutomation = `-- name: ResumeAutomation :execrows
 UPDATE pc.automations SET state = 'ACTIVE', pause_reason = NULL, paused_at = NULL
 WHERE org_id = $1 AND id = $2 AND state = 'PAUSED'
