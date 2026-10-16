@@ -67,6 +67,7 @@ func (inv *Inventory) SubmitGitHubScan(ctx context.Context, org ids.OrgID, gatew
 		}
 		w := discoverer{
 			by: "gateway:" + gateway.String(), actor: domain.System, source: "github_scan",
+			ledger:  evdomain.Actor{Type: "gateway", ID: gateway.String()},
 			trusted: map[string]string{"gateway": gateway.String(), "scan": scan.String()},
 		}
 		for _, f := range findings {
@@ -101,7 +102,7 @@ func (inv *Inventory) SubmitGitHubScan(ctx context.Context, org ids.OrgID, gatew
 				res.Dropped++
 				continue
 			}
-			if err := insertFinding(ctx, q, org, w, f, obs, observed, reopen); err != nil {
+			if err := insertFinding(ctx, tx, q, org, w, f, obs, observed, reopen); err != nil {
 				return err
 			}
 			open++

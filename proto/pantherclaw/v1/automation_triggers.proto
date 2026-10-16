@@ -1,0 +1,507 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// TriggerService starts automations and manages what may start them (G0
+// M11 part 2 D16–D23, D53, D59; F2; HR-275..278; Team).
+//
+// Every occurrence that could start an automation — a schedule, a platform
+// event, a condition or threshold, a person's start, a signed inbound
+// event — is one trigger record, accepted or refused. Trigger data reaches
+// a definition only as its declared, typed, bounded parameters (HR-276);
+// one execution starts per dedupe key (HR-277); loops, depth, hourly caps
+// and paused automations are refused or queued as declared (HR-278).
+//
+// Inbound event sources and automation destinations are created PENDING
+// and show their Standard Webhooks secret once. Activating them, rotating
+// their secrets and starting a version that requires a step-up need a
+// fresh security-key step-up of a browser session: over the API those
+// calls answer STEP_UP_REQUIRED, and the confirm page (confirm_url) makes
+// them (D53). Every change is made by a person.
+service TriggerService {
+  // PreviewSchedule lists a schedule's next occurrences in its zone, with
+  // what daylight saving does to each.
+  // permission: automation.read
+  rpc PreviewSchedule(PreviewScheduleRequest) returns (PreviewScheduleResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // StartExecution starts an automation whose enabled version has a manual
+  // trigger. A version that requires a step-up answers STEP_UP_REQUIRED
+  // here; start it on its page.
+  // permission: automation.run
+  rpc StartExecution(StartExecutionRequest) returns (StartExecutionResponse);
+  // RetryExecution starts a failed, partially completed or cancelled
+  // execution of the enabled version again with its parameters (a new
+  // manual trigger), unless an irreversible effect is unknown.
+  // permission: automation.run
+  rpc RetryExecution(RetryExecutionRequest) returns (RetryExecutionResponse);
+  // GetTrigger returns one trigger record.
+  // permission: automation.read
+  rpc GetTrigger(GetTriggerRequest) returns (GetTriggerResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListTriggers lists an automation's trigger records, newest first.
+  // permission: automation.read
+  rpc ListTriggers(ListTriggersRequest) returns (ListTriggersResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // CreateEventSource creates a PENDING inbound event source and returns
+  // its signing secret once.
+  // permission: automation.endpoints.manage
+  rpc CreateEventSource(CreateEventSourceRequest) returns (CreateEventSourceResponse);
+  // ActivateEventSource activates a source; it needs a step-up, so over
+  // the API it answers STEP_UP_REQUIRED (use confirm_url).
+  // permission: automation.endpoints.manage
+  rpc ActivateEventSource(ActivateEventSourceRequest) returns (ActivateEventSourceResponse);
+  // RotateEventSourceSecret replaces a source's secret; it needs a
+  // step-up, so over the API it answers STEP_UP_REQUIRED.
+  // permission: automation.endpoints.manage
+  rpc RotateEventSourceSecret(RotateEventSourceSecretRequest) returns (RotateEventSourceSecretResponse);
+  // DisableEventSource disables a source for good.
+  // permission: automation.endpoints.manage
+  rpc DisableEventSource(DisableEventSourceRequest) returns (DisableEventSourceResponse);
+  // GetEventSource returns one source.
+  // permission: automation.read
+  rpc GetEventSource(GetEventSourceRequest) returns (GetEventSourceResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListEventSources lists the org's sources.
+  // permission: automation.read
+  rpc ListEventSources(ListEventSourcesRequest) returns (ListEventSourcesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // CreateAutomationDestination creates a PENDING destination and returns
+  // its signing secret once.
+  // permission: automation.endpoints.manage
+  rpc CreateAutomationDestination(CreateAutomationDestinationRequest) returns (CreateAutomationDestinationResponse);
+  // ActivateAutomationDestination activates a destination; it needs a
+  // step-up, so over the API it answers STEP_UP_REQUIRED.
+  // permission: automation.endpoints.manage
+  rpc ActivateAutomationDestination(ActivateAutomationDestinationRequest) returns (ActivateAutomationDestinationResponse);
+  // RotateAutomationDestinationSecret replaces a destination's signing
+  // secret; it needs a step-up, so over the API it answers
+  // STEP_UP_REQUIRED.
+  // permission: automation.endpoints.manage
+  rpc RotateAutomationDestinationSecret(RotateAutomationDestinationSecretRequest) returns (RotateAutomationDestinationSecretResponse);
+  // SetAutomationDestinationState pauses, resumes or disables a
+  // destination.
+  // permission: automation.endpoints.manage
+  rpc SetAutomationDestinationState(SetAutomationDestinationStateRequest) returns (SetAutomationDestinationStateResponse);
+  // GetAutomationDestination returns one destination.
+  // permission: automation.read
+  rpc GetAutomationDestination(GetAutomationDestinationRequest) returns (GetAutomationDestinationResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListAutomationDestinations lists the org's destinations.
+  // permission: automation.read
+  rpc ListAutomationDestinations(ListAutomationDestinationsRequest) returns (ListAutomationDestinationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+message PreviewScheduleRequest {
+  // Five fields: minute hour day-of-month month day-of-week.
+  string cron = 1 [(buf.validate.field).string = {
+    min_len: 9
+    max_len: 100
+  }];
+  // IANA time zone, for example "Europe/London".
+  string timezone = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+  }];
+  // "SKIP" (default) or "SHIFT": what a time inside a spring-forward gap
+  // does.
+  string dst_gap = 3 [(buf.validate.field).string = {
+    in: [
+      "",
+      "SKIP",
+      "SHIFT"
+    ]
+  }];
+  // Occurrences after this time; now when unset.
+  google.protobuf.Timestamp from = 4;
+  // How many, 1 to 50 (default 10).
+  int32 count = 5 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 50
+  }];
+}
+
+// ScheduleOccurrence is one previewed occurrence.
+message ScheduleOccurrence {
+  // The wall-clock time the schedule names, in its zone (YYYY-MM-DDTHH:MM).
+  string local = 1;
+  // When it fires; unset when a daylight-saving gap skips it.
+  google.protobuf.Timestamp utc = 2;
+  // "NONE", "DST_SKIPPED", "DST_SHIFTED" or "DST_REPEATED_ONCE".
+  string note = 3;
+}
+
+message PreviewScheduleResponse {
+  // The occurrences, in order.
+  repeated ScheduleOccurrence occurrences = 1;
+  // Set when the day fields intersect: a stepped day field (*/n) meets a
+  // restricted one, so a day must match both (as in Vixie cron).
+  string days_note = 2;
+}
+
+// Trigger is one trigger record.
+message Trigger {
+  // Trigger id.
+  string id = 1;
+  // The automation and the version it was matched against.
+  string automation_id = 2;
+  // Version id.
+  string version_id = 3;
+  // "SCHEDULE", "EVENT", "INBOUND", "CONDITION", "THRESHOLD" or "MANUAL".
+  string kind = 4;
+  // "LIVE", "SHADOW" or "TEST".
+  string mode = 5;
+  // What it came from (schedule occurrence, event, source, person).
+  string source_ref = 6;
+  // How it is known to be authentic: "SCHEDULER", "PLATFORM_FEED",
+  // "SIGNED_SOURCE", "USER_STEP_UP" or "USER_SESSION".
+  string authenticity = 7;
+  // The authenticity's detail (source id and secret generation; user and
+  // credential; feed entry; occurrence).
+  map<string, string> authenticity_detail = 8;
+  // The typed parameters, as text.
+  map<string, string> params = 9;
+  // "ACCEPTED", "SHADOW", "QUEUED", "DISCARDED", "EXPIRED",
+  // "REFUSED_DUPLICATE", "REFUSED_LOOP", "REFUSED_LIMIT",
+  // "REFUSED_CONCURRENCY", "REFUSED_INVALID", "REFUSED_CONDITION" or
+  // "REFUSED_WINDOW".
+  string state = 10;
+  // Why, as a stable code (for example DUPLICATE, ANCESTRY, HOURLY_CAP).
+  string reason = 11;
+  // The execution it started, when accepted.
+  string execution_id = 12;
+  // The first trigger of its chain.
+  string root_trigger_id = 13;
+  // The automations upstream of it.
+  repeated string ancestry = 14;
+  // Its depth in the chain (0: nothing automated caused it).
+  int32 depth = 15;
+  // The execution it retries, for a retry.
+  string retried_from = 16;
+  // When the occurrence happened.
+  google.protobuf.Timestamp occur_time = 17;
+  // When it was received.
+  google.protobuf.Timestamp receive_time = 18;
+}
+
+message StartExecutionRequest {
+  // The automation.
+  string automation_id = 1 [(buf.validate.field).string.uuid = true];
+  // Values of the manual trigger's declared parameters, as text.
+  map<string, string> params = 2 [(buf.validate.field).map = {
+    max_pairs: 16
+    keys: {
+      string: {
+        min_len: 1
+        max_len: 63
+      }
+    }
+    values: {
+      string: {max_len: 256}
+    }
+  }];
+  // One start per key: a repeat with the same key is a duplicate.
+  string idempotency_key = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+}
+
+message StartExecutionResponse {
+  // The trigger record (ACCEPTED with its execution, or why not).
+  Trigger trigger = 1;
+}
+
+message RetryExecutionRequest {
+  // The execution to retry.
+  string execution_id = 1 [(buf.validate.field).string.uuid = true];
+  // One retry per key.
+  string idempotency_key = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+}
+
+message RetryExecutionResponse {
+  // The new trigger record.
+  Trigger trigger = 1;
+}
+
+message GetTriggerRequest {
+  // Trigger id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetTriggerResponse {
+  // The trigger.
+  Trigger trigger = 1;
+}
+
+message ListTriggersRequest {
+  // The automation.
+  string automation_id = 1 [(buf.validate.field).string.uuid = true];
+  // Only this state, when set.
+  string state = 2 [(buf.validate.field).string.max_len = 32];
+  // At most this many (default 50, at most 200).
+  int32 page_size = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // From a previous response.
+  string page_token = 4 [(buf.validate.field).string.max_len = 128];
+}
+
+message ListTriggersResponse {
+  // Newest first.
+  repeated Trigger triggers = 1;
+  // Set when there are more.
+  string next_page_token = 2;
+}
+
+// EventSource is an inbound event source.
+message EventSource {
+  // Source id.
+  string id = 1;
+  // Name.
+  string name = 2;
+  // What it is for.
+  string description = 3;
+  // The event types it may send.
+  repeated string types = 4;
+  // Requests a minute it may send.
+  int32 rate_per_minute = 5;
+  // "PENDING", "ACTIVE" or "DISABLED".
+  string state = 6;
+  // Who created it.
+  string created_by = 7;
+  // When.
+  google.protobuf.Timestamp create_time = 8;
+  // Who activated it with a security key; empty while PENDING.
+  string activated_by = 9;
+  // When.
+  google.protobuf.Timestamp activate_time = 10;
+  // Where events are posted: POST with Standard Webhooks headers.
+  string endpoint_url = 11;
+  // The page where a person activates it or rotates its secret.
+  string confirm_url = 12;
+  // When the previous secret stops verifying, during a rotation.
+  google.protobuf.Timestamp rotation_end_time = 13;
+}
+
+message CreateEventSourceRequest {
+  // Lowercase letters, digits and dashes.
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 63
+    pattern: "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+  }];
+  // What it is for.
+  string description = 2 [(buf.validate.field).string.max_len = 500];
+  // The event types it may send (lowercase, at most 100 characters).
+  repeated string types = 3 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 20
+    unique: true
+    items: {
+      string: {
+        min_len: 1
+        max_len: 100
+        pattern: "^[a-z][a-z0-9_.-]{0,99}$"
+      }
+    }
+  }];
+  // Requests a minute, 1 to 600 (default 60).
+  int32 rate_per_minute = 4 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 600
+  }];
+}
+
+message CreateEventSourceResponse {
+  // The PENDING source.
+  EventSource source = 1;
+  // Its signing secret ("whsec_…"), shown once.
+  string signing_secret = 2;
+}
+
+message ActivateEventSourceRequest {
+  // Source id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message ActivateEventSourceResponse {
+  // The source.
+  EventSource source = 1;
+}
+
+message RotateEventSourceSecretRequest {
+  // Source id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message RotateEventSourceSecretResponse {
+  // The new secret, shown once; the previous one verifies for 24 hours.
+  string signing_secret = 1;
+}
+
+message DisableEventSourceRequest {
+  // Source id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message DisableEventSourceResponse {
+  // The source.
+  EventSource source = 1;
+}
+
+message GetEventSourceRequest {
+  // Source id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetEventSourceResponse {
+  // The source.
+  EventSource source = 1;
+}
+
+message ListEventSourcesRequest {}
+
+message ListEventSourcesResponse {
+  // By name.
+  repeated EventSource sources = 1;
+}
+
+// AutomationDestination is where automation steps deliver webhooks.
+message AutomationDestination {
+  // Destination id.
+  string id = 1;
+  // Name.
+  string name = 2;
+  // The https URL.
+  string url = 3;
+  // True when the URL may be a private or loopback address.
+  bool internal = 4;
+  // What it receives: LAUNCH, DIGEST, NOTICE.
+  repeated string purposes = 5;
+  // "PENDING", "ACTIVE", "PAUSED" or "DISABLED".
+  string state = 6;
+  // Who created it.
+  string created_by = 7;
+  // When.
+  google.protobuf.Timestamp create_time = 8;
+  // Who activated it with a security key; empty while PENDING.
+  string activated_by = 9;
+  // When.
+  google.protobuf.Timestamp activate_time = 10;
+  // The page where a person activates it or rotates its secret.
+  string confirm_url = 11;
+  // When the previous secret stops signing, during a rotation.
+  google.protobuf.Timestamp rotation_end_time = 12;
+}
+
+message CreateAutomationDestinationRequest {
+  // Lowercase letters, digits and dashes.
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 63
+    pattern: "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+  }];
+  // The https URL.
+  string url = 2 [(buf.validate.field).string = {
+    min_len: 9
+    max_len: 2048
+    prefix: "https://"
+  }];
+  // Allow a private or loopback address (never a metadata service).
+  bool internal = 3;
+  // What it receives.
+  repeated string purposes = 4 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 3
+    unique: true
+    items: {
+      string: {
+        in: [
+          "LAUNCH",
+          "DIGEST",
+          "NOTICE"
+        ]
+      }
+    }
+  }];
+}
+
+message CreateAutomationDestinationResponse {
+  // The PENDING destination.
+  AutomationDestination destination = 1;
+  // Its signing secret ("whsec_…"), shown once.
+  string signing_secret = 2;
+}
+
+message ActivateAutomationDestinationRequest {
+  // Destination id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message ActivateAutomationDestinationResponse {
+  // The destination.
+  AutomationDestination destination = 1;
+}
+
+message RotateAutomationDestinationSecretRequest {
+  // Destination id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message RotateAutomationDestinationSecretResponse {
+  // The new secret, shown once; the previous one also signs for 24 hours.
+  string signing_secret = 1;
+}
+
+message SetAutomationDestinationStateRequest {
+  // Destination id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // "PAUSED", "ACTIVE" (resume) or "DISABLED" (final).
+  string state = 2 [(buf.validate.field).string = {
+    in: [
+      "PAUSED",
+      "ACTIVE",
+      "DISABLED"
+    ]
+  }];
+}
+
+message SetAutomationDestinationStateResponse {
+  // The destination.
+  AutomationDestination destination = 1;
+}
+
+message GetAutomationDestinationRequest {
+  // Destination id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetAutomationDestinationResponse {
+  // The destination.
+  AutomationDestination destination = 1;
+}
+
+message ListAutomationDestinationsRequest {}
+
+message ListAutomationDestinationsResponse {
+  // By name.
+  repeated AutomationDestination destinations = 1;
+}

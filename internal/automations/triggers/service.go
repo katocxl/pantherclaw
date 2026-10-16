@@ -29,6 +29,7 @@ import (
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -67,6 +68,8 @@ const (
 	ReasonParams         = "PARAMS"
 	ReasonLoop           = "ANCESTRY"
 	ReasonDepth          = "DEPTH"
+	ReasonWidth          = "ANCESTRY_WIDTH"
+	ReasonParamsSize     = "PARAMS_SIZE"
 	ReasonWindow         = "OUTSIDE_WINDOW"
 	ReasonDuplicate      = "DUPLICATE"
 	ReasonCondition      = "IF_FALSE"
@@ -108,6 +111,12 @@ type Editions interface {
 	Current(ctx context.Context) (billing.Entitlements, error)
 }
 
+// Operations returns the org's active definition of an exact operation
+// (nil when there is none).
+type Operations interface {
+	Active(ctx context.Context, org ids.OrgID, op string) (*defs.Definition, error)
+}
+
 // Deps are the service's collaborators. Ports left nil are "not
 // available": a nil Starter refuses every start (ENGINE_UNAVAILABLE), a
 // nil Pauser leaves a looping automation running but still refuses its
@@ -120,6 +129,10 @@ type Deps struct {
 	Failures   reflexports.FailureSink
 	Editions   Editions
 	Executions ExecutionLookup
+	// Operations reads operation definitions (irreversible ceiling
+	// operations force a manual step-up, D87 P3); nil: every ceiling
+	// operation counts as irreversible.
+	Operations Operations
 	Clock      clock.Clock
 	Log        *slog.Logger
 }
@@ -293,10 +306,15 @@ func (s *Service) decide(ctx context.Context, q *dbq.Queries, org ids.OrgID, c C
 	case c.ParamErr != nil:
 		return StateRefusedInvalid, ReasonParams
 	case lin.Loop(a.ID):
-		if slices.Contains(lin.Ancestry, a.ID) {
+		switch {
+		case slices.Contains(lin.Ancestry, a.ID):
 			return StateRefusedLoop, ReasonLoop
+		case len(lin.Ancestry) > autodomain.MaxAncestry:
+			return StateRefusedLoop, ReasonWidth
 		}
 		return StateRefusedLoop, ReasonDepth
+	case paramsTooLarge(ref.Params):
+		return StateRefusedInvalid, ReasonParamsSize
 	case !inWindow(def, c.OccurredAt):
 		return StateRefusedWindow, ReasonWindow
 	}
@@ -320,6 +338,11 @@ func (s *Service) decide(ctx context.Context, q *dbq.Queries, org ids.OrgID, c C
 		return s.pausedPolicy(ctx, q, org, c)
 	}
 	if a.State != autodomain.StateActive {
+		return StateRefusedInvalid, ReasonNotActive
+	}
+	// The cap is counted under the automation's lock, so concurrent triggers
+	// never overrun it (D87 L4).
+	if _, err := q.LockAutomation(ctx, org, a.ID); err != nil {
 		return StateRefusedInvalid, ReasonNotActive
 	}
 	n, err := q.CountStartedTriggersSince(ctx, org, a.ID, now.Add(-time.Hour))
@@ -393,9 +416,18 @@ func (s *Service) claim(ctx context.Context, q *dbq.Queries, org ids.OrgID, auto
 func (s *Service) insert(ctx context.Context, q *dbq.Queries, org ids.OrgID, id ids.UUID, c Candidate,
 	ref autodomain.TriggerRef, lin Lineage, state State, reason string, queuedUntil *time.Time,
 ) error {
-	params, err := json.Marshal(nonNilMap(ref.Params), json.Deterministic(true))
+	stored := ref.Params
+	if reason == ReasonParamsSize {
+		stored = nil // refused for its size: nothing of it is kept
+	}
+	params, err := json.Marshal(nonNilMap(stored), json.Deterministic(true))
 	if err != nil {
 		return err
+	}
+	// A refused chain wider than the bound keeps its first ancestors.
+	ancestry := nonNilSlice(lin.Ancestry)
+	if len(ancestry) > autodomain.MaxAncestry {
+		ancestry = ancestry[:autodomain.MaxAncestry]
 	}
 	detail, err := json.Marshal(nonNilMap(c.Detail), json.Deterministic(true))
 	if err != nil {
@@ -421,7 +453,7 @@ func (s *Service) insert(ctx context.Context, q *dbq.Queries, org ids.OrgID, id 
 		OrgID: org, ID: id, AutomationID: c.Automation.ID, VersionID: c.Automation.Version, Kind: string(c.Kind),
 		Mode: string(ref.Mode), SourceRef: truncate(src, 256), Authenticity: string(c.Authenticity),
 		AuthenticityDetail: detail, Params: params, Subjects: subjects, Evidence: evidence, RootTriggerID: lin.Root,
-		Ancestry: nonNilSlice(lin.Ancestry), Depth: int32(lin.Depth), //nolint:gosec // depth is 0..4
+		Ancestry: ancestry, Depth: int32(min(lin.Depth, autodomain.MaxDepth)), //nolint:gosec // depth is 0..4
 		State: string(state), Reason: r,
 		RetriedFrom: c.RetriedFrom, QueuedUntil: queuedUntil, OccurredAt: c.OccurredAt,
 	})
@@ -645,4 +677,14 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n]
+}
+
+// MaxParamsBytes is the stored parameters' bound (00141 CHECK).
+const MaxParamsBytes = 4096
+
+// paramsTooLarge reports parameters whose stored form exceeds the bound
+// (D87 L3): the trigger is refused, never failed at insert.
+func paramsTooLarge(p map[string]autodomain.Value) bool {
+	b, err := json.Marshal(nonNilMap(p), json.Deterministic(true))
+	return err != nil || len(b) > MaxParamsBytes
 }

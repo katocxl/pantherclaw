@@ -127,8 +127,9 @@ VALUES ($1, $2, $3, $4, 1, $5::uuid[],
         $6, $7)
 ON CONFLICT (org_id, automation_id, group_key, minute) DO UPDATE
 SET count = t.count + 1,
-    ancestry = (SELECT coalesce(array_agg(DISTINCT x), '{}') FROM (
-                    SELECT x FROM unnest(t.ancestry || EXCLUDED.ancestry) AS x LIMIT 8) u),
+    -- The distinct union, one past the bound so a too-wide chain is seen.
+    ancestry = (SELECT coalesce(array_agg(x), '{}') FROM (
+                    SELECT DISTINCT x FROM unnest(t.ancestry || EXCLUDED.ancestry) AS x LIMIT 9) u),
     depth = greatest(t.depth, EXCLUDED.depth),
     root_trigger_id = coalesce(t.root_trigger_id, EXCLUDED.root_trigger_id)
 `
@@ -154,31 +155,6 @@ func (q *Queries) AddThresholdCount(ctx context.Context, arg AddThresholdCountPa
 		arg.RootTriggerID,
 	)
 	return err
-}
-
-const advanceAutomationAgentCursor = `-- name: AdvanceAutomationAgentCursor :execrows
-UPDATE pc.automation_feed_cursors SET agent_change_at = $1, agent_change_id = $2
-WHERE org_id = $3 AND agent_change_id IS NOT DISTINCT FROM $4
-`
-
-type AdvanceAutomationAgentCursorParams struct {
-	At         *time.Time
-	ID         *ids.UUID
-	OrgID      ids.OrgID
-	ExpectedID *ids.UUID
-}
-
-func (q *Queries) AdvanceAutomationAgentCursor(ctx context.Context, arg AdvanceAutomationAgentCursorParams) (int64, error) {
-	result, err := q.db.Exec(ctx, advanceAutomationAgentCursor,
-		arg.At,
-		arg.ID,
-		arg.OrgID,
-		arg.ExpectedID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const advanceAutomationFeedCursor = `-- name: AdvanceAutomationFeedCursor :execrows
@@ -220,62 +196,6 @@ func (q *Queries) AdvanceAutomationSchedule(ctx context.Context, arg AdvanceAuto
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const agentDiscoveriesAfter = `-- name: AgentDiscoveriesAfter :many
-SELECT c.id, c.agent_id, c.created_at, c.actor FROM pc.agent_changes c
-WHERE c.org_id = $1 AND c.kind = 'agent.discovered'
-  AND ($2::timestamptz IS NULL OR (c.created_at, c.id) > ($2::timestamptz, $3::uuid))
-  AND c.created_at >= $4
-ORDER BY c.created_at, c.id
-LIMIT $5
-`
-
-type AgentDiscoveriesAfterParams struct {
-	OrgID     ids.OrgID
-	AfterAt   *time.Time
-	AfterID   ids.UUID
-	NotBefore time.Time
-	MaxRows   int32
-}
-
-type AgentDiscoveriesAfterRow struct {
-	ID        ids.UUID
-	AgentID   ids.UUID
-	CreatedAt time.Time
-	Actor     string
-}
-
-// agent.discovered is recorded in pc.agent_changes, not the ledger (D18).
-func (q *Queries) AgentDiscoveriesAfter(ctx context.Context, arg AgentDiscoveriesAfterParams) ([]AgentDiscoveriesAfterRow, error) {
-	rows, err := q.db.Query(ctx, agentDiscoveriesAfter,
-		arg.OrgID,
-		arg.AfterAt,
-		arg.AfterID,
-		arg.NotBefore,
-		arg.MaxRows,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []AgentDiscoveriesAfterRow{}
-	for rows.Next() {
-		var i AgentDiscoveriesAfterRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.AgentID,
-			&i.CreatedAt,
-			&i.Actor,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const attachTriggerExecution = `-- name: AttachTriggerExecution :execrows
@@ -342,6 +262,20 @@ func (q *Queries) AutomationVersionDefinition(ctx context.Context, orgID ids.Org
 	var i AutomationVersionDefinitionRow
 	err := row.Scan(&i.AutomationID, &i.Definition, &i.State)
 	return i, err
+}
+
+const cancelAutomationDelivery = `-- name: CancelAutomationDelivery :execrows
+UPDATE pc.automation_deliveries SET state = 'FAILED', body = NULL, last_error = $1
+WHERE org_id = $2 AND id = $3 AND state = 'PENDING'
+`
+
+// The engine's cleanup cancels a delivery that has not been sent (D89).
+func (q *Queries) CancelAutomationDelivery(ctx context.Context, code *string, orgID ids.OrgID, iD ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelAutomationDelivery, code, orgID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const caseStatesOfLedgerEntries = `-- name: CaseStatesOfLedgerEntries :many
@@ -508,11 +442,11 @@ func (q *Queries) CountRefusalsSince(ctx context.Context, arg CountRefusalsSince
 
 const countStartedTriggersSince = `-- name: CountStartedTriggersSince :one
 SELECT count(*)::int AS n FROM pc.automation_triggers
-WHERE org_id = $1 AND automation_id = $2 AND state IN ('ACCEPTED', 'SHADOW')
+WHERE org_id = $1 AND automation_id = $2 AND state = 'ACCEPTED'
   AND received_at >= $3
 `
 
-// Triggers that started work in the last hour (D23 per-hour cap).
+// Accepted (LIVE) triggers in the last hour (D23 per-hour cap, D87 L4).
 func (q *Queries) CountStartedTriggersSince(ctx context.Context, orgID ids.OrgID, automationID ids.UUID, since time.Time) (int32, error) {
 	row := q.db.QueryRow(ctx, countStartedTriggersSince, orgID, automationID, since)
 	var n int32
@@ -530,6 +464,20 @@ func (q *Queries) CountThresholdGroups(ctx context.Context, orgID ids.OrgID, aut
 	var n int32
 	err := row.Scan(&n)
 	return n, err
+}
+
+const dedupeClaim = `-- name: DedupeClaim :one
+SELECT d.trigger_id FROM pc.automation_dedupe d
+WHERE d.org_id = $1 AND d.automation_id = $2 AND d.key = $3
+  AND d.expires_at > now()
+`
+
+// The trigger holding a live key (a repeated manual start returns it).
+func (q *Queries) DedupeClaim(ctx context.Context, orgID ids.OrgID, automationID ids.UUID, key string) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, dedupeClaim, orgID, automationID, key)
+	var trigger_id ids.UUID
+	err := row.Scan(&trigger_id)
+	return trigger_id, err
 }
 
 const dedupeKeyHeld = `-- name: DedupeKeyHeld :one
@@ -570,12 +518,17 @@ func (q *Queries) DisableEventSource(ctx context.Context, disabledBy *ids.UUID, 
 }
 
 const discardQueuedTriggers = `-- name: DiscardQueuedTriggers :execrows
-UPDATE pc.automation_triggers SET state = 'DISCARDED', reason = $1
-WHERE org_id = $2 AND automation_id = $3 AND state = 'QUEUED'
+WITH x AS (
+    UPDATE pc.automation_triggers t SET state = 'DISCARDED', reason = $2, queued_until = NULL
+    WHERE t.org_id = $1 AND t.automation_id = $3 AND t.state = 'QUEUED'
+    RETURNING t.id
+)
+DELETE FROM pc.automation_dedupe d USING x WHERE d.org_id = $1 AND d.trigger_id = x.id
 `
 
-func (q *Queries) DiscardQueuedTriggers(ctx context.Context, reason *string, orgID ids.OrgID, automationID ids.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, discardQueuedTriggers, reason, orgID, automationID)
+// Discarded queued triggers give their dedupe keys back (D87 P5).
+func (q *Queries) DiscardQueuedTriggers(ctx context.Context, orgID ids.OrgID, reason *string, automationID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, discardQueuedTriggers, orgID, reason, automationID)
 	if err != nil {
 		return 0, err
 	}
@@ -627,35 +580,34 @@ const ensureAutomationFeedCursor = `-- name: EnsureAutomationFeedCursor :one
 WITH ins AS (
     INSERT INTO pc.automation_feed_cursors (org_id, seq) VALUES ($1, $2)
     ON CONFLICT (org_id) DO NOTHING
-    RETURNING seq, agent_change_at, agent_change_id
+    RETURNING seq
 )
-SELECT seq, agent_change_at, agent_change_id FROM ins
+SELECT seq FROM ins
 UNION ALL
-SELECT c.seq, c.agent_change_at, c.agent_change_id FROM pc.automation_feed_cursors c WHERE c.org_id = $1
+SELECT c.seq FROM pc.automation_feed_cursors c WHERE c.org_id = $1
 LIMIT 1
 `
 
-type EnsureAutomationFeedCursorRow struct {
-	Seq           int64
-	AgentChangeAt *time.Time
-	AgentChangeID *ids.UUID
-}
-
 // A new cursor starts at the feed's head: nothing recorded before it
 // triggers anything.
-func (q *Queries) EnsureAutomationFeedCursor(ctx context.Context, orgID ids.OrgID, head int64) (EnsureAutomationFeedCursorRow, error) {
+func (q *Queries) EnsureAutomationFeedCursor(ctx context.Context, orgID ids.OrgID, head int64) (int64, error) {
 	row := q.db.QueryRow(ctx, ensureAutomationFeedCursor, orgID, head)
-	var i EnsureAutomationFeedCursorRow
-	err := row.Scan(&i.Seq, &i.AgentChangeAt, &i.AgentChangeID)
-	return i, err
+	var seq int64
+	err := row.Scan(&seq)
+	return seq, err
 }
 
 const expireQueuedTriggers = `-- name: ExpireQueuedTriggers :execrows
-UPDATE pc.automation_triggers SET state = 'EXPIRED', reason = 'QUEUE_TTL'
-WHERE org_id = $1 AND state = 'QUEUED' AND queued_until IS NOT NULL AND queued_until <= now()
+WITH x AS (
+    UPDATE pc.automation_triggers t SET state = 'EXPIRED', reason = 'QUEUE_TTL', queued_until = NULL
+    WHERE t.org_id = $1 AND t.state = 'QUEUED' AND t.queued_until IS NOT NULL AND t.queued_until <= now()
+    RETURNING t.id
+)
+DELETE FROM pc.automation_dedupe d USING x WHERE d.org_id = $1 AND d.trigger_id = x.id
 `
 
-// Queued triggers past their time to live (paused_triggers EXPIRE, D23).
+// Queued triggers past their time to live (paused_triggers EXPIRE, D23)
+// expire and give their dedupe keys back: nothing ran (D87 P5).
 func (q *Queries) ExpireQueuedTriggers(ctx context.Context, orgID ids.OrgID) (int64, error) {
 	result, err := q.db.Exec(ctx, expireQueuedTriggers, orgID)
 	if err != nil {
@@ -1142,23 +1094,19 @@ func (q *Queries) InsertEventSource(ctx context.Context, arg InsertEventSourcePa
 	return err
 }
 
-const latestAgentChange = `-- name: LatestAgentChange :one
-SELECT c.created_at, c.id FROM pc.agent_changes c
-WHERE c.org_id = $1 AND c.kind = 'agent.discovered'
-ORDER BY c.created_at DESC, c.id DESC
-LIMIT 1
+const leaseAutomationDelivery = `-- name: LeaseAutomationDelivery :execrows
+UPDATE pc.automation_deliveries SET next_attempt_at = now() + interval '2 minutes'
+WHERE org_id = $1 AND id = $2 AND state = 'PENDING'
 `
 
-type LatestAgentChangeRow struct {
-	CreatedAt time.Time
-	ID        ids.UUID
-}
-
-func (q *Queries) LatestAgentChange(ctx context.Context, orgID ids.OrgID) (LatestAgentChangeRow, error) {
-	row := q.db.QueryRow(ctx, latestAgentChange, orgID)
-	var i LatestAgentChangeRow
-	err := row.Scan(&i.CreatedAt, &i.ID)
-	return i, err
+// Takes a delivery for one send (D87 L11): no other sender picks it up
+// before the lease ends, even if this one never records the outcome.
+func (q *Queries) LeaseAutomationDelivery(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, leaseAutomationDelivery, orgID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listAutomationDestinations = `-- name: ListAutomationDestinations :many
@@ -2101,13 +2049,14 @@ func (q *Queries) SetTriggerState(ctx context.Context, arg SetTriggerStateParams
 }
 
 const thresholdGroupWindow = `-- name: ThresholdGroupWindow :one
-SELECT coalesce(sum(count), 0)::int AS total, max(depth)::int AS depth,
-       (SELECT coalesce(array_agg(DISTINCT x), '{}') FROM (
-            SELECT unnest(c.ancestry) AS x FROM pc.automation_threshold_counts c
+SELECT coalesce(sum(count), 0)::int AS total, coalesce(max(depth), 0)::int AS depth,
+       (SELECT coalesce(array_agg(x), '{}') FROM (
+            SELECT DISTINCT unnest(c.ancestry) AS x FROM pc.automation_threshold_counts c
             WHERE c.org_id = $1 AND c.automation_id = $2
               AND c.group_key = $3 AND c.minute >= $4
-            LIMIT 64) u)::uuid[] AS ancestry,
-       (array_agg(root_trigger_id ORDER BY minute) FILTER (WHERE root_trigger_id IS NOT NULL))[1]::uuid AS root_trigger_id
+            LIMIT 9) u)::uuid[] AS ancestry,
+       coalesce((array_agg(root_trigger_id ORDER BY minute) FILTER (WHERE root_trigger_id IS NOT NULL))[1],
+                '00000000-0000-0000-0000-000000000000')::uuid AS root_trigger_id
 FROM pc.automation_threshold_counts
 WHERE org_id = $1 AND automation_id = $2 AND group_key = $3
   AND minute >= $4

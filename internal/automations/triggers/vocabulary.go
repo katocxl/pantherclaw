@@ -26,10 +26,9 @@ import (
 //	incident.opened    reflex.incident whose state is OPEN (opened or
 //	                   reopened)
 //	case.closed        reflex.case whose case entry moves the case to CLOSED
-//	agent.discovered   pc.agent_changes kind agent.discovered (not a
-//	                   ledger entry; read with its own cursor)
+//	agent.discovered   audit.agent.discovered (D18a)
 //	approval.expired   audit.approval.expired
-//	automation.finished audit.automation.finished
+//	automation.finished audit.automation.execution_finished (the engine, D24)
 const (
 	VocabActionDecided      = "action.decided"
 	VocabActionHeld         = "action.held"
@@ -56,8 +55,6 @@ const (
 	kindAlert        = "reflex.alert"
 	kindIncident     = "reflex.incident"
 	kindCase         = "reflex.case"
-	// KindAgentChange is the pseudo-kind of an agent discovery event.
-	KindAgentChange = "agent.change"
 )
 
 var vocabulary = []string{
@@ -115,11 +112,11 @@ func Means(name string, e feed.Event, f Facts) bool {
 	case VocabCaseClosed:
 		return e.Kind == kindCase && f.CaseClosed
 	case VocabAgentDiscovered:
-		return e.Kind == KindAgentChange
+		return e.Kind == "audit.agent.discovered"
 	case VocabApprovalExpired:
 		return e.Kind == "audit.approval.expired"
 	case VocabAutomationFinished:
-		return e.Kind == "audit.automation.finished"
+		return e.Kind == "audit.automation.execution_finished"
 	}
 	return false
 }

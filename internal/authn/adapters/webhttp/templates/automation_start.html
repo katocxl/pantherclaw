@@ -1,0 +1,17 @@
+{{template "head" .}}
+<h1>Start automation: {{.Name}}</h1>
+<p class="note">This starts one execution of the automation's enabled version with the values below. It runs only within the authority its publishers approved{{if .StepUp}}, and starting it needs your security key{{end}}.</p>
+<form id="start-form" data-path="/automations/{{.ID}}/start" data-step-up="{{if .StepUp}}true{{else}}false{{end}}">
+{{range .Params}}
+<p><label>{{.Name}} <small>({{.Type}}{{if .Required}}, required{{end}})</small>
+{{if .Values}}<select name="{{.Name}}">{{if not .Required}}<option value=""></option>{{end}}{{range .Values}}<option value="{{.}}">{{.}}</option>{{end}}</select>
+{{else}}<input type="text" name="{{.Name}}" maxlength="256"{{if .Required}} required{{end}}>{{end}}
+</label></p>
+{{end}}
+<p><label>Idempotency key <small>(starting twice with the same key starts once)</small>
+<input type="text" name="idempotency_key" id="idempotency-key" maxlength="128" required></label></p>
+<p><button type="submit" class="danger">{{if .StepUp}}Start with your security key{{else}}Start{{end}}</button></p>
+</form>
+<p id="status" role="status"></p>
+<script src="/static/automation_endpoints.js"></script>
+{{template "foot" .}}
