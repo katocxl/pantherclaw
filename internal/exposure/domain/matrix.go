@@ -239,6 +239,11 @@ type Filter struct {
 	View          View
 	// Current leaves out EXPIRED rights.
 	Current bool
+	// Automation keeps one automation's rights (D37a).
+	Automation *ids.UUID
+	// WithCeiling keeps the issuance-ceiling view beside the others (an
+	// automation ranking or an automation graph that asked for it).
+	WithCeiling bool
 }
 
 // Match reports whether r passes the filter.
@@ -254,9 +259,11 @@ func (f Filter) Match(r Right) bool {
 		return false
 	case f.View != "" && r.View != f.View:
 		return false
-	case f.View == "" && r.View.Potential():
+	case f.View == "" && r.View.Potential() && !f.WithCeiling:
 		return false // the issuance ceiling only when asked for (D37a)
 	case f.Current && !r.Label.Current():
+		return false
+	case f.Automation != nil && (r.Automation == nil || *r.Automation != *f.Automation):
 		return false
 	}
 	return true

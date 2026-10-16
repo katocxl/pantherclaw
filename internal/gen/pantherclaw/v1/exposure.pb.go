@@ -33,6 +33,10 @@ const (
 	ExposureView_EXPOSURE_VIEW_OBSERVED    ExposureView = 1
 	ExposureView_EXPOSURE_VIEW_EFFECTIVE   ExposureView = 2
 	ExposureView_EXPOSURE_VIEW_CREDENTIAL  ExposureView = 3
+	// What an automation's ACTIVE issuance ceiling lets it issue (G0 M11
+	// D37a; Business): potential reach, never held authority. Reads return it
+	// only when asked for by this view.
+	ExposureView_EXPOSURE_VIEW_ISSUANCE_CEILING ExposureView = 4
 )
 
 // Enum value maps for ExposureView.
@@ -42,12 +46,14 @@ var (
 		1: "EXPOSURE_VIEW_OBSERVED",
 		2: "EXPOSURE_VIEW_EFFECTIVE",
 		3: "EXPOSURE_VIEW_CREDENTIAL",
+		4: "EXPOSURE_VIEW_ISSUANCE_CEILING",
 	}
 	ExposureView_value = map[string]int32{
-		"EXPOSURE_VIEW_UNSPECIFIED": 0,
-		"EXPOSURE_VIEW_OBSERVED":    1,
-		"EXPOSURE_VIEW_EFFECTIVE":   2,
-		"EXPOSURE_VIEW_CREDENTIAL":  3,
+		"EXPOSURE_VIEW_UNSPECIFIED":      0,
+		"EXPOSURE_VIEW_OBSERVED":         1,
+		"EXPOSURE_VIEW_EFFECTIVE":        2,
+		"EXPOSURE_VIEW_CREDENTIAL":       3,
+		"EXPOSURE_VIEW_ISSUANCE_CEILING": 4,
 	}
 )
 
@@ -426,8 +432,12 @@ type ExposureRight struct {
 	ExpireTime      *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
 	ObserveTime     *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=observe_time,json=observeTime,proto3" json:"observe_time,omitempty"`
 	Observations    int32                  `protobuf:"varint,16,opt,name=observations,proto3" json:"observations,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// automation_id names the automation the right belongs to: the issuer of
+	// its grant (EFFECTIVE, Team) or the ceiling's holder (ISSUANCE_CEILING,
+	// Business). Empty for a caller without automation.read.
+	AutomationId  string `protobuf:"bytes,17,opt,name=automation_id,json=automationId,proto3" json:"automation_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ExposureRight) Reset() {
@@ -572,6 +582,13 @@ func (x *ExposureRight) GetObservations() int32 {
 	return 0
 }
 
+func (x *ExposureRight) GetAutomationId() string {
+	if x != nil {
+		return x.AutomationId
+	}
+	return ""
+}
+
 type GetExposureRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AgentId       string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
@@ -579,9 +596,12 @@ type GetExposureRequest struct {
 	View          ExposureView           `protobuf:"varint,3,opt,name=view,proto3,enum=pantherclaw.v1.ExposureView" json:"view,omitempty"`
 	ResourceGroup string                 `protobuf:"bytes,4,opt,name=resource_group,json=resourceGroup,proto3" json:"resource_group,omitempty"`
 	// current_only leaves out EXPIRED rights.
-	CurrentOnly   bool   `protobuf:"varint,5,opt,name=current_only,json=currentOnly,proto3" json:"current_only,omitempty"`
-	PageSize      int32  `protobuf:"varint,6,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string `protobuf:"bytes,7,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	CurrentOnly bool   `protobuf:"varint,5,opt,name=current_only,json=currentOnly,proto3" json:"current_only,omitempty"`
+	PageSize    int32  `protobuf:"varint,6,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken   string `protobuf:"bytes,7,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// automation_id keeps one automation's rights (its execution reach, and
+	// its ceiling with the ISSUANCE_CEILING view); needs automation.read.
+	AutomationId  string `protobuf:"bytes,8,opt,name=automation_id,json=automationId,proto3" json:"automation_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -661,6 +681,13 @@ func (x *GetExposureRequest) GetPageSize() int32 {
 func (x *GetExposureRequest) GetPageToken() string {
 	if x != nil {
 		return x.PageToken
+	}
+	return ""
+}
+
+func (x *GetExposureRequest) GetAutomationId() string {
+	if x != nil {
+		return x.AutomationId
 	}
 	return ""
 }
@@ -1134,10 +1161,13 @@ func (x *RankedAgent) GetKeys() *RankKeys {
 }
 
 type RankExposureRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Limit         int32                  `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Limit int32                  `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
+	// include_automations also ranks automations (G0 M11 D37a, F025, F754);
+	// needs automation.read.
+	IncludeAutomations bool `protobuf:"varint,2,opt,name=include_automations,json=includeAutomations,proto3" json:"include_automations,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *RankExposureRequest) Reset() {
@@ -1177,18 +1207,111 @@ func (x *RankExposureRequest) GetLimit() int32 {
 	return 0
 }
 
-type RankExposureResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Snapshot      *ExposureSnapshot      `protobuf:"bytes,1,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
-	Agents        []*RankedAgent         `protobuf:"bytes,2,rep,name=agents,proto3" json:"agents,omitempty"`
-	Restricted    bool                   `protobuf:"varint,3,opt,name=restricted,proto3" json:"restricted,omitempty"`
+func (x *RankExposureRequest) GetIncludeAutomations() bool {
+	if x != nil {
+		return x.IncludeAutomations
+	}
+	return false
+}
+
+// RankedAutomation is one automation, ranked by its issuance ceiling,
+// never by how much it ran (F754).
+type RankedAutomation struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	AutomationId string                 `protobuf:"bytes,1,opt,name=automation_id,json=automationId,proto3" json:"automation_id,omitempty"`
+	// ceiling_keys are the ceiling's keys (Business; empty below it).
+	CeilingKeys *RankKeys `protobuf:"bytes,2,opt,name=ceiling_keys,json=ceilingKeys,proto3" json:"ceiling_keys,omitempty"`
+	// ceiling_agents counts the ceiling agents it reaches through.
+	CeilingAgents int32 `protobuf:"varint,3,opt,name=ceiling_agents,json=ceilingAgents,proto3" json:"ceiling_agents,omitempty"`
+	// current_rights and active_grants are its execution reach (Team):
+	// shown beside the ceiling, never used to rank.
+	CurrentRights int32 `protobuf:"varint,4,opt,name=current_rights,json=currentRights,proto3" json:"current_rights,omitempty"`
+	ActiveGrants  int32 `protobuf:"varint,5,opt,name=active_grants,json=activeGrants,proto3" json:"active_grants,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
+func (x *RankedAutomation) Reset() {
+	*x = RankedAutomation{}
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RankedAutomation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RankedAutomation) ProtoMessage() {}
+
+func (x *RankedAutomation) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RankedAutomation.ProtoReflect.Descriptor instead.
+func (*RankedAutomation) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *RankedAutomation) GetAutomationId() string {
+	if x != nil {
+		return x.AutomationId
+	}
+	return ""
+}
+
+func (x *RankedAutomation) GetCeilingKeys() *RankKeys {
+	if x != nil {
+		return x.CeilingKeys
+	}
+	return nil
+}
+
+func (x *RankedAutomation) GetCeilingAgents() int32 {
+	if x != nil {
+		return x.CeilingAgents
+	}
+	return 0
+}
+
+func (x *RankedAutomation) GetCurrentRights() int32 {
+	if x != nil {
+		return x.CurrentRights
+	}
+	return 0
+}
+
+func (x *RankedAutomation) GetActiveGrants() int32 {
+	if x != nil {
+		return x.ActiveGrants
+	}
+	return 0
+}
+
+type RankExposureResponse struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Snapshot    *ExposureSnapshot      `protobuf:"bytes,1,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
+	Agents      []*RankedAgent         `protobuf:"bytes,2,rep,name=agents,proto3" json:"agents,omitempty"`
+	Restricted  bool                   `protobuf:"varint,3,opt,name=restricted,proto3" json:"restricted,omitempty"`
+	Automations []*RankedAutomation    `protobuf:"bytes,4,rep,name=automations,proto3" json:"automations,omitempty"`
+	// automations_note says why automations are left out or not ranked by
+	// their ceiling (permission or edition).
+	AutomationsNote string `protobuf:"bytes,5,opt,name=automations_note,json=automationsNote,proto3" json:"automations_note,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
 func (x *RankExposureResponse) Reset() {
 	*x = RankExposureResponse{}
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1200,7 +1323,7 @@ func (x *RankExposureResponse) String() string {
 func (*RankExposureResponse) ProtoMessage() {}
 
 func (x *RankExposureResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1213,7 +1336,7 @@ func (x *RankExposureResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RankExposureResponse.ProtoReflect.Descriptor instead.
 func (*RankExposureResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{10}
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *RankExposureResponse) GetSnapshot() *ExposureSnapshot {
@@ -1237,6 +1360,20 @@ func (x *RankExposureResponse) GetRestricted() bool {
 	return false
 }
 
+func (x *RankExposureResponse) GetAutomations() []*RankedAutomation {
+	if x != nil {
+		return x.Automations
+	}
+	return nil
+}
+
+func (x *RankExposureResponse) GetAutomationsNote() string {
+	if x != nil {
+		return x.AutomationsNote
+	}
+	return ""
+}
+
 type CredentialWorkload struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AgentId       string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
@@ -1249,7 +1386,7 @@ type CredentialWorkload struct {
 
 func (x *CredentialWorkload) Reset() {
 	*x = CredentialWorkload{}
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1261,7 +1398,7 @@ func (x *CredentialWorkload) String() string {
 func (*CredentialWorkload) ProtoMessage() {}
 
 func (x *CredentialWorkload) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1274,7 +1411,7 @@ func (x *CredentialWorkload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CredentialWorkload.ProtoReflect.Descriptor instead.
 func (*CredentialWorkload) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{11}
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CredentialWorkload) GetAgentId() string {
@@ -1314,7 +1451,7 @@ type ListCredentialDependentsRequest struct {
 
 func (x *ListCredentialDependentsRequest) Reset() {
 	*x = ListCredentialDependentsRequest{}
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1326,7 +1463,7 @@ func (x *ListCredentialDependentsRequest) String() string {
 func (*ListCredentialDependentsRequest) ProtoMessage() {}
 
 func (x *ListCredentialDependentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1339,7 +1476,7 @@ func (x *ListCredentialDependentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCredentialDependentsRequest.ProtoReflect.Descriptor instead.
 func (*ListCredentialDependentsRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{12}
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ListCredentialDependentsRequest) GetConnectionId() string {
@@ -1359,7 +1496,7 @@ type ListCredentialDependentsResponse struct {
 
 func (x *ListCredentialDependentsResponse) Reset() {
 	*x = ListCredentialDependentsResponse{}
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1371,7 +1508,7 @@ func (x *ListCredentialDependentsResponse) String() string {
 func (*ListCredentialDependentsResponse) ProtoMessage() {}
 
 func (x *ListCredentialDependentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1384,7 +1521,7 @@ func (x *ListCredentialDependentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCredentialDependentsResponse.ProtoReflect.Descriptor instead.
 func (*ListCredentialDependentsResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{13}
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ListCredentialDependentsResponse) GetSnapshot() *ExposureSnapshot {
@@ -1412,7 +1549,7 @@ type ReductionSubject struct {
 
 func (x *ReductionSubject) Reset() {
 	*x = ReductionSubject{}
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1424,7 +1561,7 @@ func (x *ReductionSubject) String() string {
 func (*ReductionSubject) ProtoMessage() {}
 
 func (x *ReductionSubject) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1437,7 +1574,7 @@ func (x *ReductionSubject) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReductionSubject.ProtoReflect.Descriptor instead.
 func (*ReductionSubject) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{14}
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ReductionSubject) GetType() string {
@@ -1469,7 +1606,7 @@ type PreviewReductionRequest struct {
 
 func (x *PreviewReductionRequest) Reset() {
 	*x = PreviewReductionRequest{}
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1481,7 +1618,7 @@ func (x *PreviewReductionRequest) String() string {
 func (*PreviewReductionRequest) ProtoMessage() {}
 
 func (x *PreviewReductionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1494,7 +1631,7 @@ func (x *PreviewReductionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewReductionRequest.ProtoReflect.Descriptor instead.
 func (*PreviewReductionRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{15}
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *PreviewReductionRequest) GetKind() string {
@@ -1538,7 +1675,7 @@ type ReachCount struct {
 
 func (x *ReachCount) Reset() {
 	*x = ReachCount{}
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[16]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1550,7 +1687,7 @@ func (x *ReachCount) String() string {
 func (*ReachCount) ProtoMessage() {}
 
 func (x *ReachCount) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[16]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1563,7 +1700,7 @@ func (x *ReachCount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReachCount.ProtoReflect.Descriptor instead.
 func (*ReachCount) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{16}
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ReachCount) GetView() ExposureView {
@@ -1616,7 +1753,7 @@ type PreviewReductionResponse struct {
 
 func (x *PreviewReductionResponse) Reset() {
 	*x = PreviewReductionResponse{}
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[17]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1628,7 +1765,7 @@ func (x *PreviewReductionResponse) String() string {
 func (*PreviewReductionResponse) ProtoMessage() {}
 
 func (x *PreviewReductionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[17]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1641,7 +1778,7 @@ func (x *PreviewReductionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewReductionResponse.ProtoReflect.Descriptor instead.
 func (*PreviewReductionResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{17}
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *PreviewReductionResponse) GetBefore() []*ReachCount {
@@ -1710,7 +1847,7 @@ type GraphNode struct {
 
 func (x *GraphNode) Reset() {
 	*x = GraphNode{}
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[18]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1722,7 +1859,7 @@ func (x *GraphNode) String() string {
 func (*GraphNode) ProtoMessage() {}
 
 func (x *GraphNode) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[18]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1735,7 +1872,7 @@ func (x *GraphNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GraphNode.ProtoReflect.Descriptor instead.
 func (*GraphNode) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{18}
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GraphNode) GetType() string {
@@ -1780,7 +1917,7 @@ type GraphEdge struct {
 
 func (x *GraphEdge) Reset() {
 	*x = GraphEdge{}
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[19]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1792,7 +1929,7 @@ func (x *GraphEdge) String() string {
 func (*GraphEdge) ProtoMessage() {}
 
 func (x *GraphEdge) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[19]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1805,7 +1942,7 @@ func (x *GraphEdge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GraphEdge.ProtoReflect.Descriptor instead.
 func (*GraphEdge) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{19}
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GraphEdge) GetFrom() *GraphNode {
@@ -1930,7 +2067,9 @@ func (x *GraphEdge) GetCount() int32 {
 // GraphScope is where a graph starts (F293).
 type GraphScope struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// type: run (a task), agent, incident or resource (a resource group).
+	// type: run (a task), agent, incident, resource (a resource group) or
+	// automation (its issued grants and, when asked, its ceiling; authority
+	// and exposure modes, needs automation.read).
 	Type          string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
 	Id            string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1939,7 +2078,7 @@ type GraphScope struct {
 
 func (x *GraphScope) Reset() {
 	*x = GraphScope{}
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1951,7 +2090,7 @@ func (x *GraphScope) String() string {
 func (*GraphScope) ProtoMessage() {}
 
 func (x *GraphScope) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1964,7 +2103,7 @@ func (x *GraphScope) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GraphScope.ProtoReflect.Descriptor instead.
 func (*GraphScope) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{20}
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GraphScope) GetType() string {
@@ -1998,7 +2137,7 @@ type GraphFilter struct {
 
 func (x *GraphFilter) Reset() {
 	*x = GraphFilter{}
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2010,7 +2149,7 @@ func (x *GraphFilter) String() string {
 func (*GraphFilter) ProtoMessage() {}
 
 func (x *GraphFilter) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2023,7 +2162,7 @@ func (x *GraphFilter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GraphFilter.ProtoReflect.Descriptor instead.
 func (*GraphFilter) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{21}
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GraphFilter) GetStartTime() *timestamppb.Timestamp {
@@ -2088,14 +2227,17 @@ type GetGraphRequest struct {
 	Scope  *GraphScope            `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
 	Filter *GraphFilter           `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"`
 	// collapse merges repeated edges; gaps are never merged away.
-	Collapse      bool `protobuf:"varint,4,opt,name=collapse,proto3" json:"collapse,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Collapse bool `protobuf:"varint,4,opt,name=collapse,proto3" json:"collapse,omitempty"`
+	// include_ceiling adds automations' issuance-ceiling edges to authority
+	// and exposure graphs (D37a; Business, automation.read).
+	IncludeCeiling bool `protobuf:"varint,5,opt,name=include_ceiling,json=includeCeiling,proto3" json:"include_ceiling,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GetGraphRequest) Reset() {
 	*x = GetGraphRequest{}
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[22]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2107,7 +2249,7 @@ func (x *GetGraphRequest) String() string {
 func (*GetGraphRequest) ProtoMessage() {}
 
 func (x *GetGraphRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[22]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2120,7 +2262,7 @@ func (x *GetGraphRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGraphRequest.ProtoReflect.Descriptor instead.
 func (*GetGraphRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{22}
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *GetGraphRequest) GetMode() GraphMode {
@@ -2151,6 +2293,13 @@ func (x *GetGraphRequest) GetCollapse() bool {
 	return false
 }
 
+func (x *GetGraphRequest) GetIncludeCeiling() bool {
+	if x != nil {
+		return x.IncludeCeiling
+	}
+	return false
+}
+
 type GetGraphResponse struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Mode      GraphMode              `protobuf:"varint,1,opt,name=mode,proto3,enum=pantherclaw.v1.GraphMode" json:"mode,omitempty"`
@@ -2170,7 +2319,7 @@ type GetGraphResponse struct {
 
 func (x *GetGraphResponse) Reset() {
 	*x = GetGraphResponse{}
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[23]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2182,7 +2331,7 @@ func (x *GetGraphResponse) String() string {
 func (*GetGraphResponse) ProtoMessage() {}
 
 func (x *GetGraphResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[23]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2195,7 +2344,7 @@ func (x *GetGraphResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGraphResponse.ProtoReflect.Descriptor instead.
 func (*GetGraphResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{23}
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *GetGraphResponse) GetMode() GraphMode {
@@ -2255,20 +2404,21 @@ func (x *GetGraphResponse) GetSnapshot() *ExposureSnapshot {
 }
 
 type ListGraphEdgesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Mode          GraphMode              `protobuf:"varint,1,opt,name=mode,proto3,enum=pantherclaw.v1.GraphMode" json:"mode,omitempty"`
-	Scope         *GraphScope            `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
-	Filter        *GraphFilter           `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"`
-	Collapse      bool                   `protobuf:"varint,4,opt,name=collapse,proto3" json:"collapse,omitempty"`
-	PageSize      int32                  `protobuf:"varint,5,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string                 `protobuf:"bytes,6,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Mode           GraphMode              `protobuf:"varint,1,opt,name=mode,proto3,enum=pantherclaw.v1.GraphMode" json:"mode,omitempty"`
+	Scope          *GraphScope            `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
+	Filter         *GraphFilter           `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"`
+	Collapse       bool                   `protobuf:"varint,4,opt,name=collapse,proto3" json:"collapse,omitempty"`
+	PageSize       int32                  `protobuf:"varint,5,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken      string                 `protobuf:"bytes,6,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	IncludeCeiling bool                   `protobuf:"varint,7,opt,name=include_ceiling,json=includeCeiling,proto3" json:"include_ceiling,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ListGraphEdgesRequest) Reset() {
 	*x = ListGraphEdgesRequest{}
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2280,7 +2430,7 @@ func (x *ListGraphEdgesRequest) String() string {
 func (*ListGraphEdgesRequest) ProtoMessage() {}
 
 func (x *ListGraphEdgesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2293,7 +2443,7 @@ func (x *ListGraphEdgesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGraphEdgesRequest.ProtoReflect.Descriptor instead.
 func (*ListGraphEdgesRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{24}
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ListGraphEdgesRequest) GetMode() GraphMode {
@@ -2338,6 +2488,13 @@ func (x *ListGraphEdgesRequest) GetPageToken() string {
 	return ""
 }
 
+func (x *ListGraphEdgesRequest) GetIncludeCeiling() bool {
+	if x != nil {
+		return x.IncludeCeiling
+	}
+	return false
+}
+
 type ListGraphEdgesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Edges         []*GraphEdge           `protobuf:"bytes,1,rep,name=edges,proto3" json:"edges,omitempty"`
@@ -2350,7 +2507,7 @@ type ListGraphEdgesResponse struct {
 
 func (x *ListGraphEdgesResponse) Reset() {
 	*x = ListGraphEdgesResponse{}
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2362,7 +2519,7 @@ func (x *ListGraphEdgesResponse) String() string {
 func (*ListGraphEdgesResponse) ProtoMessage() {}
 
 func (x *ListGraphEdgesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_exposure_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2375,7 +2532,7 @@ func (x *ListGraphEdgesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGraphEdgesResponse.ProtoReflect.Descriptor instead.
 func (*ListGraphEdgesResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{25}
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListGraphEdgesResponse) GetEdges() []*GraphEdge {
@@ -2419,7 +2576,7 @@ const file_pantherclaw_v1_exposure_proto_rawDesc = "" +
 	"changeTime\x12\x1c\n" +
 	"\ttruncated\x18\x05 \x01(\bR\ttruncated\x12\x12\n" +
 	"\x04gaps\x18\x06 \x03(\tR\x04gaps\x12\x14\n" +
-	"\x05cause\x18\a \x01(\tR\x05cause\"\x83\x05\n" +
+	"\x05cause\x18\a \x01(\tR\x05cause\"\xa8\x05\n" +
 	"\rExposureRight\x120\n" +
 	"\x04view\x18\x01 \x01(\x0e2\x1c.pantherclaw.v1.ExposureViewR\x04view\x123\n" +
 	"\x05label\x18\x02 \x01(\x0e2\x1d.pantherclaw.v1.ExposureLabelR\x05label\x12\x19\n" +
@@ -2438,7 +2595,8 @@ const file_pantherclaw_v1_exposure_proto_rawDesc = "" +
 	"\vexpire_time\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"expireTime\x12=\n" +
 	"\fobserve_time\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\vobserveTime\x12\"\n" +
-	"\fobservations\x18\x10 \x01(\x05R\fobservations\"\xf9\x02\n" +
+	"\fobservations\x18\x10 \x01(\x05R\fobservations\x12#\n" +
+	"\rautomation_id\x18\x11 \x01(\tR\fautomationId\"\xbb\x03\n" +
 	"\x12GetExposureRequest\x126\n" +
 	"\bagent_id\x18\x01 \x01(\tB\x1b\xbaH\x18r\x16\x18$2\x12^([0-9a-f-]{36})?$R\aagentId\x12@\n" +
 	"\rconnection_id\x18\x02 \x01(\tB\x1b\xbaH\x18r\x16\x18$2\x12^([0-9a-f-]{36})?$R\fconnectionId\x12:\n" +
@@ -2448,7 +2606,8 @@ const file_pantherclaw_v1_exposure_proto_rawDesc = "" +
 	"\tpage_size\x18\x06 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x120\n" +
 	"\n" +
-	"page_token\x18\a \x01(\tB\x11\xbaH\x0er\f\x18\x102\b^[0-9]*$R\tpageToken\"\xd2\x01\n" +
+	"page_token\x18\a \x01(\tB\x11\xbaH\x0er\f\x18\x102\b^[0-9]*$R\tpageToken\x12@\n" +
+	"\rautomation_id\x18\b \x01(\tB\x1b\xbaH\x18r\x16\x18$2\x12^([0-9a-f-]{36})?$R\fautomationId\"\xd2\x01\n" +
 	"\x13GetExposureResponse\x12<\n" +
 	"\bsnapshot\x18\x01 \x01(\v2 .pantherclaw.v1.ExposureSnapshotR\bsnapshot\x125\n" +
 	"\x06rights\x18\x02 \x03(\v2\x1d.pantherclaw.v1.ExposureRightR\x06rights\x12\x1e\n" +
@@ -2489,16 +2648,25 @@ const file_pantherclaw_v1_exposure_proto_rawDesc = "" +
 	"\vunrevocable\x18\t \x01(\x05R\vunrevocable\"V\n" +
 	"\vRankedAgent\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12,\n" +
-	"\x04keys\x18\x02 \x01(\v2\x18.pantherclaw.v1.RankKeysR\x04keys\"7\n" +
+	"\x04keys\x18\x02 \x01(\v2\x18.pantherclaw.v1.RankKeysR\x04keys\"h\n" +
 	"\x13RankExposureRequest\x12 \n" +
 	"\x05limit\x18\x01 \x01(\x05B\n" +
-	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\x05limit\"\xa9\x01\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\x05limit\x12/\n" +
+	"\x13include_automations\x18\x02 \x01(\bR\x12includeAutomations\"\xe7\x01\n" +
+	"\x10RankedAutomation\x12#\n" +
+	"\rautomation_id\x18\x01 \x01(\tR\fautomationId\x12;\n" +
+	"\fceiling_keys\x18\x02 \x01(\v2\x18.pantherclaw.v1.RankKeysR\vceilingKeys\x12%\n" +
+	"\x0eceiling_agents\x18\x03 \x01(\x05R\rceilingAgents\x12%\n" +
+	"\x0ecurrent_rights\x18\x04 \x01(\x05R\rcurrentRights\x12#\n" +
+	"\ractive_grants\x18\x05 \x01(\x05R\factiveGrants\"\x98\x02\n" +
 	"\x14RankExposureResponse\x12<\n" +
 	"\bsnapshot\x18\x01 \x01(\v2 .pantherclaw.v1.ExposureSnapshotR\bsnapshot\x123\n" +
 	"\x06agents\x18\x02 \x03(\v2\x1b.pantherclaw.v1.RankedAgentR\x06agents\x12\x1e\n" +
 	"\n" +
 	"restricted\x18\x03 \x01(\bR\n" +
-	"restricted\"\xbb\x01\n" +
+	"restricted\x12B\n" +
+	"\vautomations\x18\x04 \x03(\v2 .pantherclaw.v1.RankedAutomationR\vautomations\x12)\n" +
+	"\x10automations_note\x18\x05 \x01(\tR\x0fautomationsNote\"\xbb\x01\n" +
 	"\x12CredentialWorkload\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x122\n" +
 	"\x05views\x18\x02 \x03(\x0e2\x1c.pantherclaw.v1.ExposureViewR\x05views\x12\x16\n" +
@@ -2561,10 +2729,11 @@ const file_pantherclaw_v1_exposure_proto_rawDesc = "" +
 	"\n" +
 	"provenance\x18\x10 \x01(\tR\n" +
 	"provenance\x12\x14\n" +
-	"\x05count\x18\x11 \x01(\x05R\x05count\"c\n" +
+	"\x05count\x18\x11 \x01(\x05R\x05count\"o\n" +
 	"\n" +
-	"GraphScope\x129\n" +
-	"\x04type\x18\x01 \x01(\tB%\xbaH\"r R\x03runR\x05agentR\bincidentR\bresourceR\x04type\x12\x1a\n" +
+	"GraphScope\x12E\n" +
+	"\x04type\x18\x01 \x01(\tB1\xbaH.r,R\x03runR\x05agentR\bincidentR\bresourceR\n" +
+	"automationR\x04type\x12\x1a\n" +
 	"\x02id\x18\x02 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xc8\x01R\x02id\"\x98\x03\n" +
 	"\vGraphFilter\x129\n" +
@@ -2580,13 +2749,14 @@ const file_pantherclaw_v1_exposure_proto_rawDesc = "" +
 	"\"\x04r\x02\x18 R\tdecisions\x12*\n" +
 	"\boutcomes\x18\a \x03(\tB\x0e\xbaH\v\x92\x01\b\x10\n" +
 	"\"\x04r\x02\x18 R\boutcomes\x124\n" +
-	"\rprincipal_ids\x18\b \x03(\tB\x0f\xbaH\f\x92\x01\t\x102\"\x05r\x03\xb0\x01\x01R\fprincipalIds\"\xd7\x01\n" +
+	"\rprincipal_ids\x18\b \x03(\tB\x0f\xbaH\f\x92\x01\t\x102\"\x05r\x03\xb0\x01\x01R\fprincipalIds\"\x80\x02\n" +
 	"\x0fGetGraphRequest\x129\n" +
 	"\x04mode\x18\x01 \x01(\x0e2\x19.pantherclaw.v1.GraphModeB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04mode\x128\n" +
 	"\x05scope\x18\x02 \x01(\v2\x1a.pantherclaw.v1.GraphScopeB\x06\xbaH\x03\xc8\x01\x01R\x05scope\x123\n" +
 	"\x06filter\x18\x03 \x01(\v2\x1b.pantherclaw.v1.GraphFilterR\x06filter\x12\x1a\n" +
-	"\bcollapse\x18\x04 \x01(\bR\bcollapse\"\xd5\x03\n" +
+	"\bcollapse\x18\x04 \x01(\bR\bcollapse\x12'\n" +
+	"\x0finclude_ceiling\x18\x05 \x01(\bR\x0eincludeCeiling\"\xd5\x03\n" +
 	"\x10GetGraphResponse\x12-\n" +
 	"\x04mode\x18\x01 \x01(\x0e2\x19.pantherclaw.v1.GraphModeR\x04mode\x12/\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x19.pantherclaw.v1.GraphNodeR\x05nodes\x12/\n" +
@@ -2600,7 +2770,7 @@ const file_pantherclaw_v1_exposure_proto_rawDesc = "" +
 	"\bsnapshot\x18\b \x01(\v2 .pantherclaw.v1.ExposureSnapshotR\bsnapshot\x1a:\n" +
 	"\fCurrentEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x05R\x05value:\x028\x01\"\xb8\x02\n" +
+	"\x05value\x18\x02 \x01(\x05R\x05value:\x028\x01\"\xe1\x02\n" +
 	"\x15ListGraphEdgesRequest\x129\n" +
 	"\x04mode\x18\x01 \x01(\x0e2\x19.pantherclaw.v1.GraphModeB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04mode\x128\n" +
@@ -2610,19 +2780,21 @@ const file_pantherclaw_v1_exposure_proto_rawDesc = "" +
 	"\tpage_size\x18\x05 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x120\n" +
 	"\n" +
-	"page_token\x18\x06 \x01(\tB\x11\xbaH\x0er\f\x18\x102\b^[0-9]*$R\tpageToken\"\xaf\x01\n" +
+	"page_token\x18\x06 \x01(\tB\x11\xbaH\x0er\f\x18\x102\b^[0-9]*$R\tpageToken\x12'\n" +
+	"\x0finclude_ceiling\x18\a \x01(\bR\x0eincludeCeiling\"\xaf\x01\n" +
 	"\x16ListGraphEdgesResponse\x12/\n" +
 	"\x05edges\x18\x01 \x03(\v2\x19.pantherclaw.v1.GraphEdgeR\x05edges\x12\x1c\n" +
 	"\ttruncated\x18\x02 \x01(\bR\ttruncated\x12\x1e\n" +
 	"\n" +
 	"restricted\x18\x03 \x01(\bR\n" +
 	"restricted\x12&\n" +
-	"\x0fnext_page_token\x18\x04 \x01(\tR\rnextPageToken*\x84\x01\n" +
+	"\x0fnext_page_token\x18\x04 \x01(\tR\rnextPageToken*\xa8\x01\n" +
 	"\fExposureView\x12\x1d\n" +
 	"\x19EXPOSURE_VIEW_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16EXPOSURE_VIEW_OBSERVED\x10\x01\x12\x1b\n" +
 	"\x17EXPOSURE_VIEW_EFFECTIVE\x10\x02\x12\x1c\n" +
-	"\x18EXPOSURE_VIEW_CREDENTIAL\x10\x03*\xa4\x01\n" +
+	"\x18EXPOSURE_VIEW_CREDENTIAL\x10\x03\x12\"\n" +
+	"\x1eEXPOSURE_VIEW_ISSUANCE_CEILING\x10\x04*\xa4\x01\n" +
 	"\rExposureLabel\x12\x1e\n" +
 	"\x1aEXPOSURE_LABEL_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15EXPOSURE_LABEL_USABLE\x10\x01\x12\x1e\n" +
@@ -2674,7 +2846,7 @@ func file_pantherclaw_v1_exposure_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_exposure_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_pantherclaw_v1_exposure_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_pantherclaw_v1_exposure_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_pantherclaw_v1_exposure_proto_goTypes = []any{
 	(ExposureView)(0),                        // 0: pantherclaw.v1.ExposureView
 	(ExposureLabel)(0),                       // 1: pantherclaw.v1.ExposureLabel
@@ -2691,33 +2863,34 @@ var file_pantherclaw_v1_exposure_proto_goTypes = []any{
 	(*RankKeys)(nil),                         // 12: pantherclaw.v1.RankKeys
 	(*RankedAgent)(nil),                      // 13: pantherclaw.v1.RankedAgent
 	(*RankExposureRequest)(nil),              // 14: pantherclaw.v1.RankExposureRequest
-	(*RankExposureResponse)(nil),             // 15: pantherclaw.v1.RankExposureResponse
-	(*CredentialWorkload)(nil),               // 16: pantherclaw.v1.CredentialWorkload
-	(*ListCredentialDependentsRequest)(nil),  // 17: pantherclaw.v1.ListCredentialDependentsRequest
-	(*ListCredentialDependentsResponse)(nil), // 18: pantherclaw.v1.ListCredentialDependentsResponse
-	(*ReductionSubject)(nil),                 // 19: pantherclaw.v1.ReductionSubject
-	(*PreviewReductionRequest)(nil),          // 20: pantherclaw.v1.PreviewReductionRequest
-	(*ReachCount)(nil),                       // 21: pantherclaw.v1.ReachCount
-	(*PreviewReductionResponse)(nil),         // 22: pantherclaw.v1.PreviewReductionResponse
-	(*GraphNode)(nil),                        // 23: pantherclaw.v1.GraphNode
-	(*GraphEdge)(nil),                        // 24: pantherclaw.v1.GraphEdge
-	(*GraphScope)(nil),                       // 25: pantherclaw.v1.GraphScope
-	(*GraphFilter)(nil),                      // 26: pantherclaw.v1.GraphFilter
-	(*GetGraphRequest)(nil),                  // 27: pantherclaw.v1.GetGraphRequest
-	(*GetGraphResponse)(nil),                 // 28: pantherclaw.v1.GetGraphResponse
-	(*ListGraphEdgesRequest)(nil),            // 29: pantherclaw.v1.ListGraphEdgesRequest
-	(*ListGraphEdgesResponse)(nil),           // 30: pantherclaw.v1.ListGraphEdgesResponse
-	nil,                                      // 31: pantherclaw.v1.GetGraphResponse.CurrentEntry
-	(*timestamppb.Timestamp)(nil),            // 32: google.protobuf.Timestamp
+	(*RankedAutomation)(nil),                 // 15: pantherclaw.v1.RankedAutomation
+	(*RankExposureResponse)(nil),             // 16: pantherclaw.v1.RankExposureResponse
+	(*CredentialWorkload)(nil),               // 17: pantherclaw.v1.CredentialWorkload
+	(*ListCredentialDependentsRequest)(nil),  // 18: pantherclaw.v1.ListCredentialDependentsRequest
+	(*ListCredentialDependentsResponse)(nil), // 19: pantherclaw.v1.ListCredentialDependentsResponse
+	(*ReductionSubject)(nil),                 // 20: pantherclaw.v1.ReductionSubject
+	(*PreviewReductionRequest)(nil),          // 21: pantherclaw.v1.PreviewReductionRequest
+	(*ReachCount)(nil),                       // 22: pantherclaw.v1.ReachCount
+	(*PreviewReductionResponse)(nil),         // 23: pantherclaw.v1.PreviewReductionResponse
+	(*GraphNode)(nil),                        // 24: pantherclaw.v1.GraphNode
+	(*GraphEdge)(nil),                        // 25: pantherclaw.v1.GraphEdge
+	(*GraphScope)(nil),                       // 26: pantherclaw.v1.GraphScope
+	(*GraphFilter)(nil),                      // 27: pantherclaw.v1.GraphFilter
+	(*GetGraphRequest)(nil),                  // 28: pantherclaw.v1.GetGraphRequest
+	(*GetGraphResponse)(nil),                 // 29: pantherclaw.v1.GetGraphResponse
+	(*ListGraphEdgesRequest)(nil),            // 30: pantherclaw.v1.ListGraphEdgesRequest
+	(*ListGraphEdgesResponse)(nil),           // 31: pantherclaw.v1.ListGraphEdgesResponse
+	nil,                                      // 32: pantherclaw.v1.GetGraphResponse.CurrentEntry
+	(*timestamppb.Timestamp)(nil),            // 33: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_exposure_proto_depIdxs = []int32{
-	32, // 0: pantherclaw.v1.ExposureSnapshot.compute_time:type_name -> google.protobuf.Timestamp
-	32, // 1: pantherclaw.v1.ExposureSnapshot.change_time:type_name -> google.protobuf.Timestamp
+	33, // 0: pantherclaw.v1.ExposureSnapshot.compute_time:type_name -> google.protobuf.Timestamp
+	33, // 1: pantherclaw.v1.ExposureSnapshot.change_time:type_name -> google.protobuf.Timestamp
 	0,  // 2: pantherclaw.v1.ExposureRight.view:type_name -> pantherclaw.v1.ExposureView
 	1,  // 3: pantherclaw.v1.ExposureRight.label:type_name -> pantherclaw.v1.ExposureLabel
 	2,  // 4: pantherclaw.v1.ExposureRight.verb:type_name -> pantherclaw.v1.ExposureVerb
-	32, // 5: pantherclaw.v1.ExposureRight.expire_time:type_name -> google.protobuf.Timestamp
-	32, // 6: pantherclaw.v1.ExposureRight.observe_time:type_name -> google.protobuf.Timestamp
+	33, // 5: pantherclaw.v1.ExposureRight.expire_time:type_name -> google.protobuf.Timestamp
+	33, // 6: pantherclaw.v1.ExposureRight.observe_time:type_name -> google.protobuf.Timestamp
 	0,  // 7: pantherclaw.v1.GetExposureRequest.view:type_name -> pantherclaw.v1.ExposureView
 	5,  // 8: pantherclaw.v1.GetExposureResponse.snapshot:type_name -> pantherclaw.v1.ExposureSnapshot
 	6,  // 9: pantherclaw.v1.GetExposureResponse.rights:type_name -> pantherclaw.v1.ExposureRight
@@ -2729,60 +2902,62 @@ var file_pantherclaw_v1_exposure_proto_depIdxs = []int32{
 	2,  // 15: pantherclaw.v1.RankKeys.consequence:type_name -> pantherclaw.v1.ExposureVerb
 	1,  // 16: pantherclaw.v1.RankKeys.usability:type_name -> pantherclaw.v1.ExposureLabel
 	12, // 17: pantherclaw.v1.RankedAgent.keys:type_name -> pantherclaw.v1.RankKeys
-	5,  // 18: pantherclaw.v1.RankExposureResponse.snapshot:type_name -> pantherclaw.v1.ExposureSnapshot
-	13, // 19: pantherclaw.v1.RankExposureResponse.agents:type_name -> pantherclaw.v1.RankedAgent
-	0,  // 20: pantherclaw.v1.CredentialWorkload.views:type_name -> pantherclaw.v1.ExposureView
-	32, // 21: pantherclaw.v1.CredentialWorkload.last_use_time:type_name -> google.protobuf.Timestamp
-	5,  // 22: pantherclaw.v1.ListCredentialDependentsResponse.snapshot:type_name -> pantherclaw.v1.ExposureSnapshot
-	16, // 23: pantherclaw.v1.ListCredentialDependentsResponse.workloads:type_name -> pantherclaw.v1.CredentialWorkload
-	19, // 24: pantherclaw.v1.PreviewReductionRequest.subjects:type_name -> pantherclaw.v1.ReductionSubject
-	0,  // 25: pantherclaw.v1.ReachCount.view:type_name -> pantherclaw.v1.ExposureView
-	21, // 26: pantherclaw.v1.PreviewReductionResponse.before:type_name -> pantherclaw.v1.ReachCount
-	21, // 27: pantherclaw.v1.PreviewReductionResponse.after:type_name -> pantherclaw.v1.ReachCount
-	6,  // 28: pantherclaw.v1.PreviewReductionResponse.removed:type_name -> pantherclaw.v1.ExposureRight
-	6,  // 29: pantherclaw.v1.PreviewReductionResponse.weakened:type_name -> pantherclaw.v1.ExposureRight
-	6,  // 30: pantherclaw.v1.PreviewReductionResponse.remaining:type_name -> pantherclaw.v1.ExposureRight
-	6,  // 31: pantherclaw.v1.PreviewReductionResponse.disruption:type_name -> pantherclaw.v1.ExposureRight
-	23, // 32: pantherclaw.v1.GraphEdge.from:type_name -> pantherclaw.v1.GraphNode
-	23, // 33: pantherclaw.v1.GraphEdge.to:type_name -> pantherclaw.v1.GraphNode
-	2,  // 34: pantherclaw.v1.GraphEdge.verb:type_name -> pantherclaw.v1.ExposureVerb
-	4,  // 35: pantherclaw.v1.GraphEdge.state:type_name -> pantherclaw.v1.GraphEdgeState
-	32, // 36: pantherclaw.v1.GraphEdge.time:type_name -> google.protobuf.Timestamp
-	32, // 37: pantherclaw.v1.GraphEdge.expire_time:type_name -> google.protobuf.Timestamp
-	32, // 38: pantherclaw.v1.GraphFilter.start_time:type_name -> google.protobuf.Timestamp
-	32, // 39: pantherclaw.v1.GraphFilter.end_time:type_name -> google.protobuf.Timestamp
-	3,  // 40: pantherclaw.v1.GetGraphRequest.mode:type_name -> pantherclaw.v1.GraphMode
-	25, // 41: pantherclaw.v1.GetGraphRequest.scope:type_name -> pantherclaw.v1.GraphScope
-	26, // 42: pantherclaw.v1.GetGraphRequest.filter:type_name -> pantherclaw.v1.GraphFilter
-	3,  // 43: pantherclaw.v1.GetGraphResponse.mode:type_name -> pantherclaw.v1.GraphMode
-	23, // 44: pantherclaw.v1.GetGraphResponse.nodes:type_name -> pantherclaw.v1.GraphNode
-	24, // 45: pantherclaw.v1.GetGraphResponse.edges:type_name -> pantherclaw.v1.GraphEdge
-	31, // 46: pantherclaw.v1.GetGraphResponse.current:type_name -> pantherclaw.v1.GetGraphResponse.CurrentEntry
-	32, // 47: pantherclaw.v1.GetGraphResponse.as_of:type_name -> google.protobuf.Timestamp
-	5,  // 48: pantherclaw.v1.GetGraphResponse.snapshot:type_name -> pantherclaw.v1.ExposureSnapshot
-	3,  // 49: pantherclaw.v1.ListGraphEdgesRequest.mode:type_name -> pantherclaw.v1.GraphMode
-	25, // 50: pantherclaw.v1.ListGraphEdgesRequest.scope:type_name -> pantherclaw.v1.GraphScope
-	26, // 51: pantherclaw.v1.ListGraphEdgesRequest.filter:type_name -> pantherclaw.v1.GraphFilter
-	24, // 52: pantherclaw.v1.ListGraphEdgesResponse.edges:type_name -> pantherclaw.v1.GraphEdge
-	7,  // 53: pantherclaw.v1.ExposureService.GetExposure:input_type -> pantherclaw.v1.GetExposureRequest
-	10, // 54: pantherclaw.v1.ExposureService.GetReachMatrix:input_type -> pantherclaw.v1.GetReachMatrixRequest
-	14, // 55: pantherclaw.v1.ExposureService.RankExposure:input_type -> pantherclaw.v1.RankExposureRequest
-	17, // 56: pantherclaw.v1.ExposureService.ListCredentialDependents:input_type -> pantherclaw.v1.ListCredentialDependentsRequest
-	20, // 57: pantherclaw.v1.ExposureService.PreviewReduction:input_type -> pantherclaw.v1.PreviewReductionRequest
-	27, // 58: pantherclaw.v1.GraphService.GetGraph:input_type -> pantherclaw.v1.GetGraphRequest
-	29, // 59: pantherclaw.v1.GraphService.ListGraphEdges:input_type -> pantherclaw.v1.ListGraphEdgesRequest
-	8,  // 60: pantherclaw.v1.ExposureService.GetExposure:output_type -> pantherclaw.v1.GetExposureResponse
-	11, // 61: pantherclaw.v1.ExposureService.GetReachMatrix:output_type -> pantherclaw.v1.GetReachMatrixResponse
-	15, // 62: pantherclaw.v1.ExposureService.RankExposure:output_type -> pantherclaw.v1.RankExposureResponse
-	18, // 63: pantherclaw.v1.ExposureService.ListCredentialDependents:output_type -> pantherclaw.v1.ListCredentialDependentsResponse
-	22, // 64: pantherclaw.v1.ExposureService.PreviewReduction:output_type -> pantherclaw.v1.PreviewReductionResponse
-	28, // 65: pantherclaw.v1.GraphService.GetGraph:output_type -> pantherclaw.v1.GetGraphResponse
-	30, // 66: pantherclaw.v1.GraphService.ListGraphEdges:output_type -> pantherclaw.v1.ListGraphEdgesResponse
-	60, // [60:67] is the sub-list for method output_type
-	53, // [53:60] is the sub-list for method input_type
-	53, // [53:53] is the sub-list for extension type_name
-	53, // [53:53] is the sub-list for extension extendee
-	0,  // [0:53] is the sub-list for field type_name
+	12, // 18: pantherclaw.v1.RankedAutomation.ceiling_keys:type_name -> pantherclaw.v1.RankKeys
+	5,  // 19: pantherclaw.v1.RankExposureResponse.snapshot:type_name -> pantherclaw.v1.ExposureSnapshot
+	13, // 20: pantherclaw.v1.RankExposureResponse.agents:type_name -> pantherclaw.v1.RankedAgent
+	15, // 21: pantherclaw.v1.RankExposureResponse.automations:type_name -> pantherclaw.v1.RankedAutomation
+	0,  // 22: pantherclaw.v1.CredentialWorkload.views:type_name -> pantherclaw.v1.ExposureView
+	33, // 23: pantherclaw.v1.CredentialWorkload.last_use_time:type_name -> google.protobuf.Timestamp
+	5,  // 24: pantherclaw.v1.ListCredentialDependentsResponse.snapshot:type_name -> pantherclaw.v1.ExposureSnapshot
+	17, // 25: pantherclaw.v1.ListCredentialDependentsResponse.workloads:type_name -> pantherclaw.v1.CredentialWorkload
+	20, // 26: pantherclaw.v1.PreviewReductionRequest.subjects:type_name -> pantherclaw.v1.ReductionSubject
+	0,  // 27: pantherclaw.v1.ReachCount.view:type_name -> pantherclaw.v1.ExposureView
+	22, // 28: pantherclaw.v1.PreviewReductionResponse.before:type_name -> pantherclaw.v1.ReachCount
+	22, // 29: pantherclaw.v1.PreviewReductionResponse.after:type_name -> pantherclaw.v1.ReachCount
+	6,  // 30: pantherclaw.v1.PreviewReductionResponse.removed:type_name -> pantherclaw.v1.ExposureRight
+	6,  // 31: pantherclaw.v1.PreviewReductionResponse.weakened:type_name -> pantherclaw.v1.ExposureRight
+	6,  // 32: pantherclaw.v1.PreviewReductionResponse.remaining:type_name -> pantherclaw.v1.ExposureRight
+	6,  // 33: pantherclaw.v1.PreviewReductionResponse.disruption:type_name -> pantherclaw.v1.ExposureRight
+	24, // 34: pantherclaw.v1.GraphEdge.from:type_name -> pantherclaw.v1.GraphNode
+	24, // 35: pantherclaw.v1.GraphEdge.to:type_name -> pantherclaw.v1.GraphNode
+	2,  // 36: pantherclaw.v1.GraphEdge.verb:type_name -> pantherclaw.v1.ExposureVerb
+	4,  // 37: pantherclaw.v1.GraphEdge.state:type_name -> pantherclaw.v1.GraphEdgeState
+	33, // 38: pantherclaw.v1.GraphEdge.time:type_name -> google.protobuf.Timestamp
+	33, // 39: pantherclaw.v1.GraphEdge.expire_time:type_name -> google.protobuf.Timestamp
+	33, // 40: pantherclaw.v1.GraphFilter.start_time:type_name -> google.protobuf.Timestamp
+	33, // 41: pantherclaw.v1.GraphFilter.end_time:type_name -> google.protobuf.Timestamp
+	3,  // 42: pantherclaw.v1.GetGraphRequest.mode:type_name -> pantherclaw.v1.GraphMode
+	26, // 43: pantherclaw.v1.GetGraphRequest.scope:type_name -> pantherclaw.v1.GraphScope
+	27, // 44: pantherclaw.v1.GetGraphRequest.filter:type_name -> pantherclaw.v1.GraphFilter
+	3,  // 45: pantherclaw.v1.GetGraphResponse.mode:type_name -> pantherclaw.v1.GraphMode
+	24, // 46: pantherclaw.v1.GetGraphResponse.nodes:type_name -> pantherclaw.v1.GraphNode
+	25, // 47: pantherclaw.v1.GetGraphResponse.edges:type_name -> pantherclaw.v1.GraphEdge
+	32, // 48: pantherclaw.v1.GetGraphResponse.current:type_name -> pantherclaw.v1.GetGraphResponse.CurrentEntry
+	33, // 49: pantherclaw.v1.GetGraphResponse.as_of:type_name -> google.protobuf.Timestamp
+	5,  // 50: pantherclaw.v1.GetGraphResponse.snapshot:type_name -> pantherclaw.v1.ExposureSnapshot
+	3,  // 51: pantherclaw.v1.ListGraphEdgesRequest.mode:type_name -> pantherclaw.v1.GraphMode
+	26, // 52: pantherclaw.v1.ListGraphEdgesRequest.scope:type_name -> pantherclaw.v1.GraphScope
+	27, // 53: pantherclaw.v1.ListGraphEdgesRequest.filter:type_name -> pantherclaw.v1.GraphFilter
+	25, // 54: pantherclaw.v1.ListGraphEdgesResponse.edges:type_name -> pantherclaw.v1.GraphEdge
+	7,  // 55: pantherclaw.v1.ExposureService.GetExposure:input_type -> pantherclaw.v1.GetExposureRequest
+	10, // 56: pantherclaw.v1.ExposureService.GetReachMatrix:input_type -> pantherclaw.v1.GetReachMatrixRequest
+	14, // 57: pantherclaw.v1.ExposureService.RankExposure:input_type -> pantherclaw.v1.RankExposureRequest
+	18, // 58: pantherclaw.v1.ExposureService.ListCredentialDependents:input_type -> pantherclaw.v1.ListCredentialDependentsRequest
+	21, // 59: pantherclaw.v1.ExposureService.PreviewReduction:input_type -> pantherclaw.v1.PreviewReductionRequest
+	28, // 60: pantherclaw.v1.GraphService.GetGraph:input_type -> pantherclaw.v1.GetGraphRequest
+	30, // 61: pantherclaw.v1.GraphService.ListGraphEdges:input_type -> pantherclaw.v1.ListGraphEdgesRequest
+	8,  // 62: pantherclaw.v1.ExposureService.GetExposure:output_type -> pantherclaw.v1.GetExposureResponse
+	11, // 63: pantherclaw.v1.ExposureService.GetReachMatrix:output_type -> pantherclaw.v1.GetReachMatrixResponse
+	16, // 64: pantherclaw.v1.ExposureService.RankExposure:output_type -> pantherclaw.v1.RankExposureResponse
+	19, // 65: pantherclaw.v1.ExposureService.ListCredentialDependents:output_type -> pantherclaw.v1.ListCredentialDependentsResponse
+	23, // 66: pantherclaw.v1.ExposureService.PreviewReduction:output_type -> pantherclaw.v1.PreviewReductionResponse
+	29, // 67: pantherclaw.v1.GraphService.GetGraph:output_type -> pantherclaw.v1.GetGraphResponse
+	31, // 68: pantherclaw.v1.GraphService.ListGraphEdges:output_type -> pantherclaw.v1.ListGraphEdgesResponse
+	62, // [62:69] is the sub-list for method output_type
+	55, // [55:62] is the sub-list for method input_type
+	55, // [55:55] is the sub-list for extension type_name
+	55, // [55:55] is the sub-list for extension extendee
+	0,  // [0:55] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_exposure_proto_init() }
@@ -2796,7 +2971,7 @@ func file_pantherclaw_v1_exposure_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_exposure_proto_rawDesc), len(file_pantherclaw_v1_exposure_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   27,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

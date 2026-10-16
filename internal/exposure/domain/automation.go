@@ -226,3 +226,42 @@ func RankAutomations(rights []Right, irreversible map[string]bool) []RankedAutom
 	})
 	return out
 }
+
+// Graph vocabulary for automations (D37a).
+const (
+	// EdgeIssued: automation -> a grant it issued under its ceiling.
+	EdgeIssued = "issued"
+	// EdgeCeiling: automation -> a resource group its ceiling lets it
+	// issue reach to, through a ceiling agent (in Context).
+	EdgeCeiling = "ceiling"
+	// NodeAutomation is the automation node type.
+	NodeAutomation = "automation"
+)
+
+// AutomationEdges are the authority graph's automation edges: an
+// automation issued each grant behind its execution reach, and, only when
+// the ceiling is asked for, the reach its ceiling allows. Ceiling edges are
+// POSSIBLE: potential reach, never counted as held (D37a).
+func AutomationEdges(rights []Right, ceiling bool) []Edge {
+	var out []Edge
+	for _, r := range rights {
+		if r.Automation == nil {
+			continue
+		}
+		auto := Node{Type: NodeAutomation, ID: r.Automation.String()}
+		switch {
+		case r.View == Effective && r.Grant != nil:
+			out = append(out, Edge{
+				From: auto, To: Node{Type: "grant", ID: r.Grant.String()}, Context: []Node{ownerNode(r)}, Kind: EdgeIssued,
+				State: stateOf(r), Basis: "RULE_MATCH", ExpiresAt: r.ExpiresAt, Provenance: string(Effective),
+			})
+		case ceiling && r.View == IssuanceCeiling:
+			out = append(out, Edge{
+				From: auto, To: Node{Type: "resource", ID: r.ResourceGroup}, Context: []Node{ownerNode(r)}, Kind: EdgeCeiling,
+				Verb: r.Verb, Operation: r.Operation, State: EdgePossible, Coverage: r.Coverage, Basis: "RULE_MATCH",
+				ExpiresAt: r.ExpiresAt, Provenance: string(IssuanceCeiling),
+			})
+		}
+	}
+	return out
+}

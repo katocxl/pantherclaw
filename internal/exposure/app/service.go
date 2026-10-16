@@ -60,7 +60,7 @@ func Recompute(ctx context.Context, tx db.TenantTx, cause string, feedSeq int64)
 	if len(rights) > MaxRights {
 		rights, truncated = rights[:MaxRights], true
 	}
-	gaps := res.Gaps
+	gaps := slices.Concat(res.Gaps, l.CeilingGaps)
 	if len(gaps) > 64 {
 		gaps = append(gaps[:63], "MORE_GAPS")
 	}
@@ -114,6 +114,7 @@ type row struct {
 	Observations  int        `json:"observations"`
 	Basis         string     `json:"basis"`
 	Irreversible  bool       `json:"irreversible"`
+	Automation    *string    `json:"automation_id"`
 }
 
 func rowOf(seq int, r domain.Right) row {
@@ -132,7 +133,7 @@ func rowOf(seq int, r domain.Right) row {
 		Seq: seq, View: string(r.View), Label: string(r.Label), Agent: str(r.Agent), Connection: str(r.Connection), Grant: str(r.Grant),
 		Operation: op, ResourceGroup: r.ResourceGroup, Verb: string(r.Verb), Coverage: string(r.Coverage), Reasons: reasons,
 		Depth: r.Depth, ExpiresAt: r.ExpiresAt, ObservedAt: r.ObservedAt, Observations: r.Observations,
-		Basis: r.Basis, Irreversible: r.Irreversible,
+		Basis: r.Basis, Irreversible: r.Irreversible, Automation: str(r.Automation),
 	}
 }
 
@@ -142,7 +143,7 @@ func RightOf(x dbq.PcExposureRight) domain.Right {
 		View: domain.View(x.ReachView), Label: domain.Label(x.Label), Agent: x.AgentID, Connection: x.ConnectionID,
 		Grant: x.GrantID, ResourceGroup: x.ResourceGroup, Verb: domain.Verb(x.Verb), Coverage: domain.Coverage(x.Coverage),
 		Reasons: x.Reasons, Depth: int(x.Depth), ExpiresAt: x.ExpiresAt, ObservedAt: x.ObservedAt,
-		Observations: int(x.Observations), Basis: x.Basis, Irreversible: x.Irreversible,
+		Observations: int(x.Observations), Basis: x.Basis, Irreversible: x.Irreversible, Automation: x.AutomationID,
 	}
 	if x.Operation != nil {
 		r.Operation = *x.Operation

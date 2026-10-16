@@ -41,7 +41,7 @@ func New(svc *app.Service) (*Handler, *Graphs) { return &Handler{svc: svc}, &Gra
 var (
 	views = map[domain.View]pb.ExposureView{
 		domain.Observed: pb.ExposureView_EXPOSURE_VIEW_OBSERVED, domain.Effective: pb.ExposureView_EXPOSURE_VIEW_EFFECTIVE,
-		domain.Credential: pb.ExposureView_EXPOSURE_VIEW_CREDENTIAL,
+		domain.Credential: pb.ExposureView_EXPOSURE_VIEW_CREDENTIAL, domain.IssuanceCeiling: pb.ExposureView_EXPOSURE_VIEW_ISSUANCE_CEILING,
 	}
 	labels = map[domain.Label]pb.ExposureLabel{
 		domain.Usable: pb.ExposureLabel_EXPOSURE_LABEL_USABLE, domain.Conditional: pb.ExposureLabel_EXPOSURE_LABEL_CONDITIONAL,
@@ -112,6 +112,7 @@ func rightPB(r domain.Right) *pb.ExposureRight {
 		Operation: r.Operation, ResourceGroup: r.ResourceGroup, Verb: verbs[r.Verb], Coverage: string(r.Coverage), Reasons: r.Reasons,
 		Basis: r.Basis, Irreversible: r.Irreversible, DelegationDepth: int32(r.Depth), ExpireTime: ts(r.ExpiresAt), //nolint:gosec // G115: depth ≤ 4
 		ObserveTime: ts(r.ObservedAt), Observations: int32(min(r.Observations, 1<<30)), //nolint:gosec // G115: bounded
+		AutomationId: str(r.Automation),
 	}
 }
 
@@ -160,6 +161,7 @@ func (h *Handler) GetExposure(ctx context.Context, req *pb.GetExposureRequest) (
 	f := domain.Filter{
 		Agent: optID(req.GetAgentId()), Connection: optID(req.GetConnectionId()), View: viewOf(req.GetView()),
 		ResourceGroup: req.GetResourceGroup(), Current: req.GetCurrentOnly(),
+		Automation: optID(req.GetAutomationId()),
 	}
 	v, err := h.svc.Exposure(ctx, f)
 	if err != nil {
@@ -191,20 +193,34 @@ func (h *Handler) GetReachMatrix(ctx context.Context, req *pb.GetReachMatrixRequ
 	return out, nil
 }
 
+func keysPB(k domain.RankKeys) *pb.RankKeys {
+	return &pb.RankKeys{
+		Consequence: verbs[k.Consequence], Irreversible: k.Irreversible, ResourceGroups: int32(k.ResourceGroups), //nolint:gosec // G115: bounded by a snapshot
+		Connections: int32(k.Connections), Usability: labels[k.Usability], Enforceability: string(k.Enforceability), //nolint:gosec // G115: bounded by a snapshot
+		Owned: k.Owned, Revocable: int32(k.Revocable), Unrevocable: int32(k.Unrevocable), //nolint:gosec // G115: bounded by a snapshot
+	}
+}
+
 // RankExposure implements ExposureServiceHandler.
 func (h *Handler) RankExposure(ctx context.Context, req *pb.RankExposureRequest) (*pb.RankExposureResponse, error) {
-	v, ranked, err := h.svc.Rank(ctx, int(req.GetLimit()))
+	v, ranked, autos, err := h.svc.RankWithAutomations(ctx, int(req.GetLimit()), req.GetIncludeAutomations())
 	if err != nil {
 		return nil, err
 	}
 	out := &pb.RankExposureResponse{Snapshot: snapshotPB(v.Snapshot), Restricted: v.Restricted}
 	for _, r := range ranked {
-		k := r.Keys
-		out.Agents = append(out.Agents, &pb.RankedAgent{AgentId: str(r.Agent), Keys: &pb.RankKeys{
-			Consequence: verbs[k.Consequence], Irreversible: k.Irreversible, ResourceGroups: int32(k.ResourceGroups), //nolint:gosec // G115: bounded by a snapshot
-			Connections: int32(k.Connections), Usability: labels[k.Usability], Enforceability: string(k.Enforceability), //nolint:gosec // G115: bounded by a snapshot
-			Owned: k.Owned, Revocable: int32(k.Revocable), Unrevocable: int32(k.Unrevocable), //nolint:gosec // G115: bounded by a snapshot
-		}})
+		out.Agents = append(out.Agents, &pb.RankedAgent{AgentId: str(r.Agent), Keys: keysPB(r.Keys)})
+	}
+	out.AutomationsNote = autos.Note
+	for _, a := range autos.Automations {
+		x := &pb.RankedAutomation{
+			AutomationId: a.Automation.String(), CeilingAgents: int32(a.Keys.Agents), //nolint:gosec // G115: bounded by a snapshot
+			CurrentRights: int32(a.Keys.CurrentRights), ActiveGrants: int32(a.Keys.ActiveGrants), //nolint:gosec // G115: bounded by a snapshot
+		}
+		if autos.ByCeiling {
+			x.CeilingKeys = keysPB(a.Keys.Ceiling)
+		}
+		out.Automations = append(out.Automations, x)
 	}
 	return out, nil
 }
@@ -304,17 +320,17 @@ func edgePB(e domain.Edge) *pb.GraphEdge {
 	}
 }
 
-func (g *Graphs) build(ctx context.Context, mode pb.GraphMode, scope *pb.GraphScope, f *pb.GraphFilter, collapse, table bool) (app.GraphResult, error) {
+func (g *Graphs) build(ctx context.Context, mode pb.GraphMode, scope *pb.GraphScope, f *pb.GraphFilter, collapse, table, ceiling bool) (app.GraphResult, error) {
 	m, ok := modes[mode]
 	if !ok {
 		return app.GraphResult{}, app.ErrScope
 	}
-	return g.svc.Graph(ctx, m, app.GraphScope{Type: scope.GetType(), ID: scope.GetId()}, filterOf(f), collapse, table, domain.DefaultLimits)
+	return g.svc.Graph(ctx, m, app.GraphScope{Type: scope.GetType(), ID: scope.GetId(), IncludeCeiling: ceiling}, filterOf(f), collapse, table, domain.DefaultLimits)
 }
 
 // GetGraph implements GraphServiceHandler.
 func (g *Graphs) GetGraph(ctx context.Context, req *pb.GetGraphRequest) (*pb.GetGraphResponse, error) {
-	r, err := g.build(ctx, req.GetMode(), req.GetScope(), req.GetFilter(), req.GetCollapse(), false)
+	r, err := g.build(ctx, req.GetMode(), req.GetScope(), req.GetFilter(), req.GetCollapse(), false, req.GetIncludeCeiling())
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +359,7 @@ func (g *Graphs) ListGraphEdges(ctx context.Context, req *pb.ListGraphEdgesReque
 	if err != nil {
 		return nil, err
 	}
-	r, err := g.build(ctx, req.GetMode(), req.GetScope(), req.GetFilter(), req.GetCollapse(), true)
+	r, err := g.build(ctx, req.GetMode(), req.GetScope(), req.GetFilter(), req.GetCollapse(), true, req.GetIncludeCeiling())
 	if err != nil {
 		return nil, err
 	}

@@ -107,6 +107,8 @@ type Service struct {
 type scopeViewer struct {
 	scope *tapp.AgentScope
 	org   bool
+	// automations: the caller holds automation.read somewhere (D37a).
+	automations bool
 }
 
 func (v scopeViewer) Agent(ctx context.Context, a ids.UUID) (bool, error) {
@@ -137,6 +139,8 @@ func (v scopeViewer) visible(ctx context.Context) (domain.Visible, *error) {
 			return ok
 		case domain.CredentialHolder:
 			return v.org
+		case domain.NodeAutomation:
+			return v.automations
 		}
 		return true
 	}, &failed
@@ -169,6 +173,7 @@ func (s *Service) read(ctx context.Context, edition bool, fn func(context.Contex
 		q := dbq.New(tx)
 		return fn(ctx, &reader{c: c, tx: tx, q: q, view: scopeViewer{
 			scope: tapp.NewAgentScope(c, q, td.PermExposureRead), org: c.Can(td.PermExposureRead, td.OrgPath(c.Org)),
+			automations: c.CanAnywhere(td.PermAutomationRead),
 		}})
 	}, db.ReadOnly())
 }
@@ -176,7 +181,7 @@ func (s *Service) read(ctx context.Context, edition bool, fn func(context.Contex
 // current reads the snapshot. A grant whose window ended since the
 // computation is EXPIRED at read time (L6): time passing is no feed event.
 func (r *reader) current(ctx context.Context, f domain.Filter) (View, error) {
-	v, err := Current(ctx, r.tx, r.view, domain.Filter{Agent: f.Agent, Connection: f.Connection})
+	v, err := Current(ctx, r.tx, r.view, domain.Filter{Agent: f.Agent, Connection: f.Connection, WithCeiling: true})
 	if errors.Is(err, ErrNoSnapshot) {
 		return v, ErrNotComputed
 	} else if err != nil {
@@ -186,8 +191,13 @@ func (r *reader) current(ctx context.Context, f domain.Filter) (View, error) {
 	if err != nil {
 		return v, err
 	}
+	// Without automation.read, rights never name their automation (D37a).
+	autoRead := r.automationRead()
 	out := v.Rights[:0]
 	for _, x := range v.Rights {
+		if !autoRead {
+			x.Automation = nil
+		}
 		if x.View == domain.Effective && x.Label.Current() && x.ExpiresAt != nil && !x.ExpiresAt.After(now) {
 			x.Label = domain.Expired
 			x.Reasons = append(slices.Clone(x.Reasons), domain.ReasonGrantExpired)
@@ -204,10 +214,15 @@ func (r *reader) requireOrg() error {
 	return r.c.Require(td.PermExposureRead, td.OrgPath(r.c.Org))
 }
 
-// Exposure lists the current rights the caller may see.
+// Exposure lists the current rights the caller may see. An automation
+// filter or the issuance-ceiling view needs automation.read, the ceiling
+// Business (D37a).
 func (s *Service) Exposure(ctx context.Context, f domain.Filter) (View, error) {
 	var out View
 	err := s.read(ctx, true, func(ctx context.Context, r *reader) error {
+		if err := r.automationFilter(ctx, s.Ents, f); err != nil {
+			return err
+		}
 		var err error
 		out, err = r.current(ctx, f)
 		return err
@@ -226,12 +241,26 @@ func (s *Service) Matrix(ctx context.Context, f domain.Filter) (View, domain.Mat
 
 // Rank ranks the visible agents (F257).
 func (s *Service) Rank(ctx context.Context, limit int) (View, []domain.Ranked, error) {
+	v, out, _, err := s.RankWithAutomations(ctx, limit, false)
+	return v, out, err
+}
+
+// RankWithAutomations ranks the visible agents and, when asked, the
+// automations behind the visible rights (D37a): by their issuance ceiling
+// on Business, never by activity; automations need automation.read.
+func (s *Service) RankWithAutomations(ctx context.Context, limit int, automations bool) (View, []domain.Ranked, RankedAutomations, error) {
 	var v View
 	var out []domain.Ranked
+	var autos RankedAutomations
 	err := s.read(ctx, true, func(ctx context.Context, r *reader) error {
 		var err error
-		if v, err = r.current(ctx, domain.Filter{}); err != nil {
+		if v, err = r.current(ctx, domain.Filter{WithCeiling: automations}); err != nil {
 			return err
+		}
+		if automations {
+			if autos, err = r.rankAutomations(ctx, s.Ents, v.Rights, limit); err != nil {
+				return err
+			}
 		}
 		agents, err := r.q.ExposureAgents(ctx, r.c.Org)
 		if err != nil {
@@ -253,7 +282,7 @@ func (s *Service) Rank(ctx context.Context, limit int) (View, []domain.Ranked, e
 		}
 		return nil
 	})
-	return v, out, err
+	return v, out, autos, err
 }
 
 // Dependents lists the workloads of a connection's credential (F430); the
@@ -299,8 +328,11 @@ func (s *Service) PreviewReduction(ctx context.Context, c reflexdomain.Reduction
 
 // GraphScope is where a graph starts.
 type GraphScope struct {
-	Type string // run, agent, incident, resource
+	Type string // run, agent, incident, resource, automation
 	ID   string
+	// IncludeCeiling adds automations' issuance-ceiling edges to authority
+	// and exposure graphs (D37a; Business, automation.read).
+	IncludeCeiling bool
 }
 
 // GraphResult is a built graph with what it was read from.
@@ -343,7 +375,18 @@ func (s *Service) Graph(ctx context.Context, mode domain.Mode, scope GraphScope,
 		fresh := FreshLive
 		switch mode {
 		case domain.ModeAuthority, domain.ModeExposure:
-			v, err := r.current(ctx, domain.Filter{})
+			af := domain.Filter{WithCeiling: scope.IncludeCeiling}
+			if scope.Type == domain.NodeAutomation {
+				id, err := ids.ParseUUID(scope.ID)
+				if err != nil {
+					return ErrScope
+				}
+				af.Automation = &id
+			}
+			if err := r.automationFilter(ctx, s.Ents, af); err != nil {
+				return err
+			}
+			v, err := r.current(ctx, af)
 			if err != nil {
 				return err
 			}
@@ -353,13 +396,22 @@ func (s *Service) Graph(ctx context.Context, mode domain.Mode, scope GraphScope,
 			}
 			cut = v.Snapshot.Truncated
 			rights := scoped(v.Rights, scope, agents)
+			held := domain.HeldReach(rights)
+			autoEdges := domain.AutomationEdges(rights, scope.IncludeCeiling)
 			if mode == domain.ModeAuthority {
-				edges = domain.AuthorityEdges(rights)
+				edges = append(domain.AuthorityEdges(held), autoEdges...)
 			} else {
-				edges = domain.ExposureEdges(rights)
+				// The exposure graph shows what is reached: the ceiling, not
+				// which grants an automation issued.
+				edges = domain.ExposureEdges(held)
+				for _, e := range autoEdges {
+					if e.Kind == domain.EdgeCeiling {
+						edges = append(edges, e)
+					}
+				}
 			}
 		case domain.ModeActivity, domain.ModeCausal, domain.ModeChange:
-			if scope.Type == "resource" {
+			if scope.Type == "resource" || scope.Type == domain.NodeAutomation {
 				return ErrScope
 			}
 			vis, err := VisibleAgents(ctx, r.c, r.q, td.PermExposureRead)
@@ -413,7 +465,7 @@ func (s *Service) Graph(ctx context.Context, mode domain.Mode, scope GraphScope,
 // see is not found, the same as an unknown one (L11).
 func (r *reader) scopeAgents(ctx context.Context, s GraphScope) ([]ids.UUID, *ids.UUID, error) {
 	switch s.Type {
-	case "resource":
+	case "resource", domain.NodeAutomation:
 		return nil, nil, nil
 	case "agent":
 		id, err := ids.ParseUUID(s.ID)
@@ -465,6 +517,10 @@ func scoped(rights []domain.Right, s GraphScope, agents []ids.UUID) []domain.Rig
 		switch {
 		case s.Type == "resource":
 			if x.ResourceGroup == s.ID {
+				out = append(out, x)
+			}
+		case s.Type == domain.NodeAutomation:
+			if x.Automation != nil && x.Automation.String() == s.ID {
 				out = append(out, x)
 			}
 		case x.Agent != nil && slices.Contains(agents, *x.Agent):

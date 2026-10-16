@@ -86,6 +86,10 @@ enum ExposureView {
   EXPOSURE_VIEW_OBSERVED = 1;
   EXPOSURE_VIEW_EFFECTIVE = 2;
   EXPOSURE_VIEW_CREDENTIAL = 3;
+  // What an automation's ACTIVE issuance ceiling lets it issue (G0 M11
+  // D37a; Business): potential reach, never held authority. Reads return it
+  // only when asked for by this view.
+  EXPOSURE_VIEW_ISSUANCE_CEILING = 4;
 }
 
 enum ExposureLabel {
@@ -142,6 +146,10 @@ message ExposureRight {
   google.protobuf.Timestamp expire_time = 14;
   google.protobuf.Timestamp observe_time = 15;
   int32 observations = 16;
+  // automation_id names the automation the right belongs to: the issuer of
+  // its grant (EFFECTIVE, Team) or the ceiling's holder (ISSUANCE_CEILING,
+  // Business). Empty for a caller without automation.read.
+  string automation_id = 17;
 }
 
 message GetExposureRequest {
@@ -164,6 +172,12 @@ message GetExposureRequest {
   string page_token = 7 [(buf.validate.field).string = {
     max_len: 16
     pattern: "^[0-9]*$"
+  }];
+  // automation_id keeps one automation's rights (its execution reach, and
+  // its ceiling with the ISSUANCE_CEILING view); needs automation.read.
+  string automation_id = 8 [(buf.validate.field).string = {
+    max_len: 36
+    pattern: "^([0-9a-f-]{36})?$"
   }];
 }
 
@@ -231,12 +245,33 @@ message RankExposureRequest {
     gte: 0
     lte: 200
   }];
+  // include_automations also ranks automations (G0 M11 D37a, F025, F754);
+  // needs automation.read.
+  bool include_automations = 2;
+}
+
+// RankedAutomation is one automation, ranked by its issuance ceiling,
+// never by how much it ran (F754).
+message RankedAutomation {
+  string automation_id = 1;
+  // ceiling_keys are the ceiling's keys (Business; empty below it).
+  RankKeys ceiling_keys = 2;
+  // ceiling_agents counts the ceiling agents it reaches through.
+  int32 ceiling_agents = 3;
+  // current_rights and active_grants are its execution reach (Team):
+  // shown beside the ceiling, never used to rank.
+  int32 current_rights = 4;
+  int32 active_grants = 5;
 }
 
 message RankExposureResponse {
   ExposureSnapshot snapshot = 1;
   repeated RankedAgent agents = 2;
   bool restricted = 3;
+  repeated RankedAutomation automations = 4;
+  // automations_note says why automations are left out or not ranked by
+  // their ceiling (permission or edition).
+  string automations_note = 5;
 }
 
 message CredentialWorkload {
@@ -355,9 +390,11 @@ message GraphEdge {
 
 // GraphScope is where a graph starts (F293).
 message GraphScope {
-  // type: run (a task), agent, incident or resource (a resource group).
+  // type: run (a task), agent, incident, resource (a resource group) or
+  // automation (its issued grants and, when asked, its ceiling; authority
+  // and exposure modes, needs automation.read).
   string type = 1 [(buf.validate.field).string = {
-    in: ["run", "agent", "incident", "resource"]
+    in: ["run", "agent", "incident", "resource", "automation"]
   }];
   string id = 2 [(buf.validate.field).string = {
     min_len: 1
@@ -416,6 +453,9 @@ message GetGraphRequest {
   GraphFilter filter = 3;
   // collapse merges repeated edges; gaps are never merged away.
   bool collapse = 4;
+  // include_ceiling adds automations' issuance-ceiling edges to authority
+  // and exposure graphs (D37a; Business, automation.read).
+  bool include_ceiling = 5;
 }
 
 message GetGraphResponse {
@@ -448,6 +488,7 @@ message ListGraphEdgesRequest {
     max_len: 16
     pattern: "^[0-9]*$"
   }];
+  bool include_ceiling = 7;
 }
 
 message ListGraphEdgesResponse {

@@ -8,9 +8,12 @@
 -- ones, those whose window ended and those revoked in the last 30 days
 -- (EXPIRED reach is kept as history, D31).
 -- name: ExposureGrants :many
-SELECT g.id, g.agent_id, g.created_at, r.bounds, r.not_before, r.expires_at, r.delegation_depth, (g.state = 'REVOKED')::boolean AS revoked
+SELECT g.id, g.agent_id, g.created_at, r.bounds, r.not_before, r.expires_at, r.delegation_depth, (g.state = 'REVOKED')::boolean AS revoked,
+    ce.automation_id AS automation_id
 FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+-- An automation-issued grant names its ceiling's automation (D37a).
+LEFT JOIN pc.automation_ceilings ce ON ce.org_id = g.org_id AND ce.id = g.ceiling_id
 WHERE g.org_id = sqlc.arg(org_id)
   AND ((g.state = 'ACTIVE' AND r.expires_at > now() - interval '30 days')
        OR (g.state = 'REVOKED' AND g.revoked_at > now() - interval '30 days'))
@@ -95,13 +98,14 @@ RETURNING computed_at;
 -- JSON array of rows (COPY is not allowed under row-level security).
 -- name: InsertExposureRights :exec
 INSERT INTO pc.exposure_rights (org_id, snapshot_id, seq, reach_view, label, agent_id, connection_id, grant_id, operation,
-    resource_group, verb, coverage, reasons, depth, expires_at, observed_at, observations, basis, irreversible)
+    resource_group, verb, coverage, reasons, depth, expires_at, observed_at, observations, basis, irreversible, automation_id)
 SELECT sqlc.arg(org_id), sqlc.arg(snapshot_id), x.seq, x.reach_view, x.label, x.agent_id, x.connection_id, x.grant_id,
     x.operation, x.resource_group, x.verb, x.coverage, COALESCE(x.reasons, '{}'), x.depth, x.expires_at, x.observed_at,
-    x.observations, x.basis, x.irreversible
+    x.observations, x.basis, x.irreversible, x.automation_id
 FROM jsonb_to_recordset(sqlc.arg(rows)::jsonb) AS x(seq integer, reach_view text, label text, agent_id uuid,
     connection_id uuid, grant_id uuid, operation text, resource_group text, verb text, coverage text, reasons text[],
-    depth smallint, expires_at timestamptz, observed_at timestamptz, observations integer, basis text, irreversible boolean);
+    depth smallint, expires_at timestamptz, observed_at timestamptz, observations integer, basis text, irreversible boolean,
+    automation_id uuid);
 
 -- LatestExposureSnapshot is the org's current snapshot, with whether a
 -- change was recorded after it was computed.
@@ -203,3 +207,13 @@ SELECT DISTINCT (s ->> 'id')::text AS agent_id
 FROM pc.alerts a, jsonb_array_elements(a.subjects) s
 WHERE a.org_id = sqlc.arg(org_id) AND a.incident_id = sqlc.arg(incident_id) AND s ->> 'type' = 'agent'
 ORDER BY 1;
+
+-- ExposureCeilings lists the org's ACTIVE issuance ceilings before their
+-- review date, with the version that defines their bounds and agents
+-- (D37a). Any other ceiling can issue nothing and has no reach.
+-- name: ExposureCeilings :many
+SELECT c.id, c.automation_id, c.review_by, v.definition
+FROM pc.automation_ceilings c
+JOIN pc.automation_versions v ON v.org_id = c.org_id AND v.id = c.version_id
+WHERE c.org_id = sqlc.arg(org_id) AND c.state = 'ACTIVE' AND c.review_by > now()
+ORDER BY c.id;
