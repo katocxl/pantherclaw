@@ -54,7 +54,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	githubapp "github.com/katocxl/pantherclaw/internal/github/app"
 	"github.com/katocxl/pantherclaw/internal/grants/adapters/grantsrpc"
-	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/identityrpc"
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/issuerkeys"
@@ -416,6 +415,9 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if evidenceJobs, err = registerM10OpsJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
 			return err
 		}
+		if evidenceJobs, err = registerM11GovernJobs(evidenceJobs, jreg, pool, log); err != nil {
+			return err
+		}
 		if evidenceJobs, err = registerM10EdgesJobs(evidenceJobs, jreg, pool, kp, bill, m5, cfg.Auth.PublicURL, log); err != nil {
 			return err
 		}
@@ -590,11 +592,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	identity := iapp.New(pool, reg, d.publicURL, clock.System{}).WithAttestors(attestors)
 	pantherclawv1connect.RegisterIdentityServiceHandler(rs, identityrpc.NewIdentity(identity, d.clusters))
-	gstore := &grantspg.Store{Pool: pool}
-	grants := &grantsapp.Service{
-		Repo: gstore, Subjects: gstore, Defs: &defspg.Store{Pool: pool}, Authz: grantsapp.SubjectAuthorizer{},
-		Clock: clock.System{}, Listing: gstore, Refusals: gstore,
-	}
+	gstore, grants := newGrants(pool)
 	runs := runsapp.New(pool).WithGrants(gstore)
 	if len(d.subjects) > 0 {
 		runs.WithSubjects(d.subjects)
@@ -647,6 +645,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		return nil, err
 	}
 	registerReflexCore(rs, d)
+	registerM11Govern(rs, d)
 	autos = registerAutomationsCore(rs, d, grants, runs)
 	registerAutomationsEngine(rs, d)
 	automationTriggers, err := registerAutomationTriggers(rs, d)

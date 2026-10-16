@@ -253,12 +253,12 @@ func (s *Service) IssueForAutomationTx(ctx context.Context, tx db.TenantTx, in A
 		return domain.Grant{}, apiError(err)
 	}
 	// (7) the promotion gate for production environments (D39).
-	if s.Promotion != nil {
+	if s.Promotions != nil {
 		var ops domain.Ops
 		if g.Bounds.Operations != nil {
 			ops = *g.Bounds.Operations
 		}
-		if err := s.Promotion.Check(ctx, tx.Pgx(), in.Org, agent.ID, agent.EnvironmentID, ops); err != nil {
+		if err := s.Promotions.Check(ctx, tx.Pgx(), in.Org, agent.ID, agent.EnvironmentID, ops); err != nil {
 			return domain.Grant{}, err
 		}
 	}

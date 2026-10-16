@@ -374,6 +374,26 @@ func (s *Store) ActivePackages(ctx context.Context, org ids.OrgID) ([]*domain.Pa
 	return out, err
 }
 
+// ActivePackagesQ is ActivePackages through the caller's queries, inside
+// its transaction (the promotion gate reads them while a grant is issued,
+// G0 M11 part 2 D70). The returned packages are shared: callers must not
+// change them.
+func (s *Store) ActivePackagesQ(ctx context.Context, q *dbq.Queries, org ids.OrgID) ([]*domain.Package, error) {
+	versions, err := q.ListActiveVersions(ctx, org)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*domain.Package, 0, len(versions))
+	for _, v := range versions {
+		p, err := s.decoded(ctx, q, org, v)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
 // VersionInTx returns the decoded package of an imported version, by its
 // id, inside the caller's transaction (the Authority's one-snapshot read).
 // The returned package is shared: callers must not change it.

@@ -27,7 +27,10 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 	"github.com/katocxl/pantherclaw/internal/pclaw"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/policy/policytest"
+	"github.com/katocxl/pantherclaw/internal/promotions/promotiontest"
 )
 
 // refundOf sends a refund of charge for amount as a workload, in run. It
@@ -149,6 +152,24 @@ func TestE2E_M4_GrantsDelegationRevocationAndCounters(t *testing.T) {
 	  "params": {"payments.refund.create": {"amount": {"max": {"USD": "100.00"}}}}}`)
 	limits := doc("limits.json", `{"budgets": [{"id": "task", "grouping": "task", "operations": ["payments.refund.create"],
 	  "currency": "USD", "limit": "500.00", "period": "none"}]}`)
+	// The environment is a PRODUCTION one, so the grant needs the agent
+	// promoted for refunds first (G0 M11 part 2 D39, HR-290): the checks
+	// run for real, as a fleet manager with a fresh step-up of their key. A
+	// new agent has no traffic yet, so the promotion is provisional (D80).
+	if code, _, e := alice.pclaw(t, "grant", "issue", agent, "--principal", "user:"+aliceID, "--expires", "24h", "--bounds-file", bounds); code == 0 ||
+		!strings.Contains(e, "NOT_PROMOTED") {
+		t.Fatalf("a production grant before the promotion: %d %s", code, e)
+	}
+	pool := s.db.AppPool(t)
+	org := ids.MustParse[ids.Org](s.org)
+	var conn ids.UUID
+	if err := pool.InTenantTx(context.Background(), org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, "SELECT id FROM pc.connections WHERE name = 'payments'").Scan(&conn)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	promotiontest.PromoteNew(t, promotiontest.Scope{Pool: pool, Org: org, Agent: mustUUID(t, agent), Env: mustUUID(t, env), Connection: conn, Publish: policytest.Publish},
+		"payments.refund.create")
 	grant := field(t, must("grant", "issue", agent, "--principal", "user:"+aliceID, "--expires", "24h", "--bounds-file", bounds,
 		"--limits-file", limits, "--delegation-depth", "1", "--max-children", "2", "--task", "refunds"), "id")
 	run := field(t, must("run", "start", agent, "--instance", inst[1], "--grant", grant, "--task", "refunds"), "id")

@@ -1,0 +1,26 @@
+{{template "head" .}}
+<h1>Production promotion</h1>
+<p>Agent <code>{{.Agent}}</code> in environment <code>{{.Environment}}</code>. A new or widened grant in a production environment covers only the operations the agent is promoted for; grants already issued keep working until they expire.</p>
+<p class="note">Readiness is per operation: each check below is about that operation only.</p>
+{{range .Readiness}}
+<h2><code>{{.Operation}}</code>{{if .Promotion}}: promoted{{else if .Ready}}: ready{{else}}: not ready{{end}}</h2>
+{{with .Promotion}}<p>Promoted by <code>{{.PromotedBy}}</code> at {{.PromotedAt.UTC.Format "2006-01-02 15:04:05 UTC"}}; failure behavior <code>{{.FailureBehavior}}</code>.</p>{{end}}
+<ul>
+{{range .Checks}}<li>{{if .Passed}}✓{{else}}✗{{end}} <strong>{{.Name}}</strong>: <span class="untrusted">{{.Detail}}</span></li>
+{{end}}</ul>
+{{if and $.CanPromote (not .Promotion)}}<p><label><input type="checkbox" class="operation" value="{{.Operation}}"> Promote <code>{{.Operation}}</code></label></p>{{end}}
+{{else}}
+<p>No operation is known for this agent here: name one with <code>?operation=</code>.</p>
+{{end}}
+{{if .CanPromote}}
+<h2>Promote</h2>
+<p><label>When PantherClaw cannot decide:
+<select id="failure-behavior">{{range .FailureBehaviors}}<option value="{{.}}">{{.}}</option>{{end}}</select></label></p>
+<p class="note">Only operations whose checks all pass are promoted; the others are reported. Promoting needs your security key.</p>
+<p><button type="button" class="danger" id="promote" data-path="/agents/{{.Agent}}/promote" data-environment="{{.Environment}}">Promote with your security key</button></p>
+{{else}}
+<p class="note">You cannot promote: that needs agent.promote and a security key.</p>
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/promotions.js"></script>
+{{template "foot" .}}

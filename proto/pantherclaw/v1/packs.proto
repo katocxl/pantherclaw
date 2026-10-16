@@ -1,0 +1,110 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+
+// PackService serves the reference workflow packs (G0 M11 part 2, D41;
+// F762, F764, F767, HR-291): coding-to-production (GitHub) and
+// read-only-diagnostics (shell). A pack is a policy template with its
+// allow, hold and deny scenario tests, a grant baseline per agent and,
+// optionally, the automation template that launches its agents.
+//
+// ApplyPack only drafts: it stores the published policy with the pack's
+// rules and tests as a new DRAFT policy version, which then goes through
+// validation, tests and the publish gate like any draft. Nothing is
+// published, issued or promoted. Needs the Team edition.
+service PackService {
+  // permission: policy.read
+  rpc ListPacks(ListPacksRequest) returns (ListPacksResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // permission: policy.read
+  rpc GetPack(GetPackRequest) returns (GetPackResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ApplyPack renders a pack for an environment and agents (or a cohort's)
+  // and stores the result as a DRAFT policy version.
+  // permission: policy.author
+  rpc ApplyPack(ApplyPackRequest) returns (ApplyPackResponse);
+}
+
+message Pack {
+  string name = 1;
+  string summary = 2;
+  // template is the policy template it applies (pclaw template show).
+  string template = 3;
+  // covers lists what the pack protects.
+  repeated string covers = 4;
+  // parameters are what ApplyPack needs besides the environment and the
+  // agents: repos, default_branch, workspace, time_zone.
+  repeated string parameters = 5;
+  int32 baseline_ttl_seconds = 6;
+  // automation_template, when set, names the automation template that
+  // launches the pack's agents.
+  string automation_template = 7;
+}
+
+message ListPacksRequest {}
+
+message ListPacksResponse {
+  repeated Pack packs = 1;
+}
+
+message GetPackRequest {
+  string name = 1 [(buf.validate.field).string.pattern = "^[a-z][a-z0-9-]{0,63}$"];
+}
+
+message GetPackResponse {
+  Pack pack = 1;
+}
+
+message ApplyPackRequest {
+  string name = 1 [(buf.validate.field).string.pattern = "^[a-z][a-z0-9-]{0,63}$"];
+  string environment_id = 2 [(buf.validate.field).string.uuid = true];
+  // agent_ids or cohort_id (a fleet cohort), not both; at most 50 agents.
+  repeated string agent_ids = 3 [(buf.validate.field).repeated = {
+    max_items: 50
+    items: {
+      string: {uuid: true}
+    }
+  }];
+  string cohort_id = 4 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  map<string, string> parameters = 5 [(buf.validate.field).map = {
+    max_pairs: 8
+    keys: {
+      string: {pattern: "^[a-z][a-z_]{0,31}$"}
+    }
+    values: {
+      string: {max_len: 4096}
+    }
+  }];
+}
+
+// PackBaseline is the grant a person may issue an agent from the pack.
+message PackBaseline {
+  string agent_id = 1;
+  string task_ref = 2;
+  // bounds and limits are grant bounds and limits v1, JSON.
+  bytes bounds = 3;
+  bytes limits = 4;
+  int32 ttl_seconds = 5;
+}
+
+message ApplyPackResponse {
+  // policy_version_id is the DRAFT version the pack made.
+  string policy_version_id = 1;
+  int32 policy_version = 2;
+  repeated string added = 3;
+  repeated string replaced = 4;
+  repeated string unchanged = 5;
+  // skipped are per-agent rules left out because no agent was named.
+  repeated string skipped = 6;
+  repeated PackBaseline baselines = 7;
+}

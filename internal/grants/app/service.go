@@ -75,9 +75,10 @@ type Service struct {
 	// Ceilings checks automation ceilings and daily caps (the automations
 	// app). Without it nothing is issued under a ceiling.
 	Ceilings Ceilings
-	// Promotion is the production promotion gate (D39); nil checks nothing
-	// until it is wired.
-	Promotion PromotionGate
+	// Promotions is the production promotion gate (G0 M11 part 2 D9, D39):
+	// the store runs it in Issue's and a widening Revise's transaction, and
+	// automation issuance calls it in its own. nil checks nothing.
+	Promotions PromotionGate
 }
 
 // IssueRequest asks for a new root grant.
@@ -127,6 +128,9 @@ func (s *Service) Issue(ctx context.Context, req IssueRequest) (domain.Grant, er
 	}
 	if g.NotBefore.IsZero() {
 		g.NotBefore = now.Add(-domain.IssueSkew)
+	}
+	if err := s.capExpiry(ctx, c.Org, &g); err != nil { // a provisional promotion bounds the grant (D80)
+		return domain.Grant{}, err
 	}
 	envs, err := s.Repo.Envelopes(ctx, c.Org, scopesFor(agent, g.EnvironmentID, g.Principal))
 	if err != nil {
@@ -199,6 +203,9 @@ func (s *Service) Revise(ctx context.Context, req ReviseRequest) (domain.Grant, 
 	next.Delegation, next.MinAttestation = req.Delegation, req.MinAttestation
 	if !req.ExpiresAt.IsZero() {
 		next.ExpiresAt = req.ExpiresAt
+	}
+	if err := s.capExpiry(ctx, c.Org, &next); err != nil { // D80
+		return domain.Grant{}, domain.Revision{}, err
 	}
 	rev, err := domain.CompareRevision(cur, next)
 	if err != nil {
@@ -459,7 +466,7 @@ func (s *Service) refuse(ctx context.Context, c tapp.Caller, op string, agent, g
 // nothing. The gate itself decides whether the environment is a
 // production one.
 func (s *Service) checkPromotion(ctx context.Context, org ids.OrgID, agent Agent, b domain.Bounds) error {
-	if s.Promotion == nil {
+	if s.Promotions == nil {
 		return nil
 	}
 	if s.Store == nil {
@@ -470,6 +477,6 @@ func (s *Service) checkPromotion(ctx context.Context, org ids.OrgID, agent Agent
 		ops = *b.Operations
 	}
 	return s.Store.ReadTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		return s.Promotion.Check(ctx, tx.Pgx(), org, agent.ID, agent.EnvironmentID, ops)
+		return s.Promotions.Check(ctx, tx.Pgx(), org, agent.ID, agent.EnvironmentID, ops)
 	})
 }
