@@ -72,7 +72,7 @@ type WaitEffectWith struct {
 	Step      string   `json:"step"`
 	Operation string   `json:"operation"`
 	States    []string `json:"states,omitzero"` // default [CONFIRMED]
-	Min       int      `json:"min,omitzero"`    // 1..100, default 1
+	Min       int      `json:"min,omitzero"`    // 1..100
 }
 
 // GateWith asks people for an approval bound to this execution, step and
@@ -80,7 +80,7 @@ type WaitEffectWith struct {
 type GateWith struct {
 	Approvers    GateApprovers `json:"approvers"`
 	Exclude      []string      `json:"exclude,omitzero"`       // OWNER | CONFIRMERS | PRINCIPAL; default [OWNER]
-	MinApprovals int           `json:"min_approvals,omitzero"` // 1..2, default 1
+	MinApprovals int           `json:"min_approvals,omitzero"` // 1..2
 	Deadline     Duration      `json:"deadline"`               // ≤ 72h
 	Summary      string        `json:"summary,omitzero"`       // templatable
 }
@@ -220,10 +220,18 @@ type SimulateRestrictionWith struct {
 	Days int    `json:"days,omitzero"` // ≤ 30
 }
 
-// BuildDigestWith builds a report and evidence pack.
+// BuildDigestWith builds a report and evidence pack as the automation's
+// identity (D85).
 type BuildDigestWith struct {
-	Scope    string   `json:"scope"`          // TIME_RANGE | TRIGGER_CASE
-	Days     int      `json:"days,omitzero"`  // ≤ 31 for TIME_RANGE
-	Sections []string `json:"sections"`       // ⊆ decisions, effects, holds, alerts, open_items
-	Title    string   `json:"title,omitzero"` // templatable
+	Scope string `json:"scope"`         // TIME_RANGE | TRIGGER_CASE
+	Days  int    `json:"days,omitzero"` // ≤ 31 for TIME_RANGE
+	// Evidence is whose evidence the pack may hold: listed agents or the
+	// whole org. Confirmers hold evidence.read and evidence.export there.
+	Evidence DigestEvidence `json:"evidence"`
+	Sections []string       `json:"sections"`       // ⊆ decisions, effects, holds, alerts, open_items
+	Title    string         `json:"title,omitzero"` // templatable
 }
+
+// DigestEvidence is a build_digest step's evidence scope: {agents: [ids]}
+// or {all: true}, exactly one (D85).
+type DigestEvidence = AgentScope

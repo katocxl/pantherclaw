@@ -88,6 +88,11 @@ service AutomationService {
   // the ceiling and disables the identity. Final.
   // permission: automation.manage
   rpc RetireAutomation(RetireAutomationRequest) returns (RetireAutomationResponse);
+  // SetAutomationOwner makes another active person the owner. Pending
+  // enabling requests are voided: they were asked for under the previous
+  // owner.
+  // permission: automation.manage
+  rpc SetAutomationOwner(SetAutomationOwnerRequest) returns (SetAutomationOwnerResponse);
   // RevokeAuthority revokes the ceiling and every grant issued under it,
   // ends their runs and pauses the automation (AUTHORITY_REVOKED).
   // permission: automation.manage
@@ -460,6 +465,15 @@ message RetireAutomationRequest {
 message RetireAutomationResponse {
   Automation automation = 1;
   AutomationControlEffect effect = 2;
+}
+
+message SetAutomationOwnerRequest {
+  string automation_id = 1 [(buf.validate.field).string.uuid = true];
+  string owner_user_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+message SetAutomationOwnerResponse {
+  Automation automation = 1;
 }
 
 message RevokeAuthorityRequest {

@@ -29,7 +29,7 @@ SELECT kind FROM pc.environments WHERE org_id = sqlc.arg(org_id) AND id = sqlc.a
 -- D80). Locked FOR SHARE so a concurrent revocation or expiry waits for
 -- the issuing transaction (D71 G7).
 -- name: PromotedOperations :many
-SELECT operation, expires_at FROM pc.agent_promotions
+SELECT operation, state, expires_at FROM pc.agent_promotions
 WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id) AND environment_id = sqlc.arg(environment_id)
   AND (state = 'ACTIVE' OR (state = 'PROVISIONAL' AND expires_at > now()))
 ORDER BY operation

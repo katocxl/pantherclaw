@@ -1,0 +1,38 @@
+{{template "head" .}}
+<h1>Change: {{.Domain}} {{.Kind}}</h1>
+<p>State: <strong>{{.State}}</strong>{{with .DecidedReason}} ({{.}}){{end}}. Requested by <code>{{.RequestedBy}}</code> at {{.CreatedAt.UTC.Format "2006-01-02 15:04:05 UTC"}}; {{if eq .State "PENDING"}}expires {{.ExpiresAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{else}}{{with .DecidedAt}}ended {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}{{end}}.</p>
+<dl>
+<dt>Change</dt><dd><code>{{.ID}}</code></dd>
+<dt>Subject</dt><dd><code>{{.Subject}}</code></dd>
+<dt>Content digest</dt><dd><code>{{.Digest}}</code></dd>
+<dt>Confirmations</dt><dd>{{len .Confirmations}} of {{.Required}}</dd>
+</dl>
+{{if .Confirmations}}
+<table>
+<thead><tr><th>Confirmed by</th><th>Security key</th><th>At</th></tr></thead>
+<tbody>
+{{range .Confirmations}}<tr><td><code>{{.User}}</code></td><td><code>{{.Credential}}</code></td><td>{{.At.UTC.Format "2006-01-02 15:04:05 UTC"}}</td></tr>
+{{end}}</tbody>
+</table>
+{{end}}
+<h2>What it changes</h2>
+<p class="alert">{{.SummaryLabel}}</p>
+<pre class="untrusted">{{range .Summary}}{{.Text}}
+{{end}}</pre>
+{{if .MixedScript}}<p class="alert">The summary mixes writing systems in a word: look for look-alike characters before you confirm.</p>{{end}}
+{{if .MayConfirm}}
+<h2>Confirm</h2>
+<p class="note">Your security key signs this change request: its domain and kind, the organization, its subject, the digest of exactly what it applies and exactly the summary above. Each confirmation must come from a different person with a different key.</p>
+<p><button type="button" class="danger" id="confirm" data-id="{{.ID}}">Confirm with your security key</button></p>
+{{else}}{{if eq .State "PENDING"}}
+<p class="note">You cannot confirm this change here: that needs a browser session, a security key, and that you have not confirmed it already.</p>
+{{end}}{{end}}
+{{if .MayDecline}}
+<h2>Decline</h2>
+<p><label for="decline-reason">Reason</label></p>
+<p><textarea id="decline-reason" rows="3" cols="72" maxlength="{{.MaxReason}}" spellcheck="true"></textarea></p>
+<p><button type="button" id="decline" data-id="{{.ID}}">Decline</button></p>
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/changes.js"></script>
+{{template "foot" .}}

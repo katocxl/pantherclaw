@@ -10,11 +10,13 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
+	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
 
 // Definition document v1 (D2).
@@ -41,14 +43,13 @@ func invalid(format string, args ...any) error {
 
 // Definition is one automation version's document (D2). Every field is
 // part of the reviewed digest. The work kind is `work_kind` because `kind`
-// names the document type.
+// names the document type. The automation's name and owner live on its
+// row, not here (D68), so changing the owner never changes a digest.
 type Definition struct {
 	APIVersion string   `json:"apiVersion"`
 	Kind       string   `json:"kind"`
-	Name       string   `json:"name"`
 	Purpose    string   `json:"purpose"`
 	WorkKind   WorkKind `json:"work_kind"`
-	Owner      RefID    `json:"owner"`
 	// ReviewBy is a date (YYYY-MM-DD, UTC); required when the version has a
 	// ceiling or an effectful platform scope.
 	ReviewBy  Date           `json:"review_by,omitzero"`
@@ -226,7 +227,23 @@ type Authority struct {
 	Ceiling      *Ceiling        `json:"ceiling,omitzero"`
 	Platform     []PlatformScope `json:"platform,omitzero"`
 	Destinations []RefID         `json:"destinations,omitzero"`
+	// Revocable is whose grants revoke_grant (TRIGGER_GRANT,
+	// CEILING_AGENTS) and contain (REVOKE_GRANT) may revoke (D65).
+	Revocable *AgentScope `json:"revocable,omitzero"`
 }
+
+// AgentScope names agents by id, or every agent of the org: exactly one
+// of the two (D65 authority.revocable, D85 build_digest evidence).
+type AgentScope struct {
+	Agents []RefID `json:"agents,omitzero"`
+	All    bool    `json:"all,omitzero"`
+}
+
+// Valid reports whether exactly one of Agents and All is set.
+func (s AgentScope) Valid() bool { return (len(s.Agents) > 0) != s.All }
+
+// Covers reports whether the scope includes the agent.
+func (s AgentScope) Covers(agent RefID) bool { return s.All || slices.Contains(s.Agents, agent) }
 
 // PrincipalSelf is the automation's own execution identity.
 const PrincipalSelf = "self"
@@ -251,10 +268,11 @@ type PlatformScope struct {
 	Scopes []string `json:"scopes,omitzero"`
 }
 
-// Ceiling bounds every grant an execution may issue (D2, F1, D9).
+// Ceiling bounds every grant an execution may issue (D2, F1, D9). Its
+// agents are always an explicit list (D55): a fleet cohort only narrows a
+// COHORT rollout, never the ceiling.
 type Ceiling struct {
 	Agents       []RefID               `json:"agents,omitzero"`
-	Cohort       *RefID                `json:"cohort,omitzero"`
 	Bounds       gdomain.Bounds        `json:"bounds"`
 	Requirements []gdomain.Requirement `json:"requirements,omitzero"`
 	PerGrant     PerGrant              `json:"per_grant"`
@@ -539,3 +557,58 @@ func (d Date) IsZero() bool { return d.t.IsZero() }
 // End is the first instant after the date (UTC): a review date holds
 // through its whole day.
 func (d Date) End() time.Time { return d.t.UTC().AddDate(0, 0, 1) }
+
+// NotWiderThan reports whether c grants nothing prev did not (D91): agents
+// and bounds inside prev's, requirements, minimum attestation and every
+// per-grant limit kept or tightened, and every cap no higher.
+func (c *Ceiling) NotWiderThan(prev *Ceiling) bool {
+	if c == nil || prev == nil {
+		return c == nil
+	}
+	for _, a := range c.Agents {
+		if !slices.Contains(prev.Agents, a) {
+			return false
+		}
+	}
+	if c.Bounds.Within(prev.Bounds) != nil {
+		return false
+	}
+	for _, r := range prev.Requirements {
+		if !slices.ContainsFunc(c.Requirements, func(x gdomain.Requirement) bool { return reflectEqualJSON(x, r) }) {
+			return false
+		}
+	}
+	if c.PerGrant.TTL > prev.PerGrant.TTL || c.PerGrant.MinAttestation < prev.PerGrant.MinAttestation {
+		return false
+	}
+	if len(c.PerGrant.Limits.Budgets) != len(prev.PerGrant.Limits.Budgets) ||
+		len(c.PerGrant.Limits.Counters) != len(prev.PerGrant.Limits.Counters) {
+		return false
+	}
+	if _, err := gdomain.NarrowLimits(prev.PerGrant.Limits, c.PerGrant.Limits); err != nil {
+		return false
+	}
+	if c.PerDay.Grants > prev.PerDay.Grants || c.PerDay.Runs > prev.PerDay.Runs ||
+		c.ConcurrencyOrDefault() > prev.ConcurrencyOrDefault() ||
+		c.Delegation.Depth > prev.Delegation.Depth || c.Delegation.MaxChildren > prev.Delegation.MaxChildren {
+		return false
+	}
+	for _, m := range c.PerDay.Budget {
+		i := slices.IndexFunc(prev.PerDay.Budget, func(p Money) bool { return p.Currency == m.Currency })
+		if i < 0 {
+			return false
+		}
+		cur, err1 := money.Parse(m.Amount)
+		was, err2 := money.Parse(prev.PerDay.Budget[i].Amount)
+		if err1 != nil || err2 != nil || cur.Cmp(was) > 0 {
+			return false
+		}
+	}
+	return true // a currency without a daily budget is never spent
+}
+
+func reflectEqualJSON(a, b any) bool {
+	x, err1 := json.Marshal(a, json.Deterministic(true))
+	y, err2 := json.Marshal(b, json.Deterministic(true))
+	return err1 == nil && err2 == nil && bytes.Equal(x, y)
+}

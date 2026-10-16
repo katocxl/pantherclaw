@@ -308,7 +308,7 @@ func (q *Queries) ListAgentPromotions(ctx context.Context, arg ListAgentPromotio
 }
 
 const promotedOperations = `-- name: PromotedOperations :many
-SELECT operation, expires_at FROM pc.agent_promotions
+SELECT operation, state, expires_at FROM pc.agent_promotions
 WHERE org_id = $1 AND agent_id = $2 AND environment_id = $3
   AND (state = 'ACTIVE' OR (state = 'PROVISIONAL' AND expires_at > now()))
 ORDER BY operation
@@ -317,6 +317,7 @@ FOR SHARE
 
 type PromotedOperationsRow struct {
 	Operation string
+	State     string
 	ExpiresAt *time.Time
 }
 
@@ -333,7 +334,7 @@ func (q *Queries) PromotedOperations(ctx context.Context, orgID ids.OrgID, agent
 	items := []PromotedOperationsRow{}
 	for rows.Next() {
 		var i PromotedOperationsRow
-		if err := rows.Scan(&i.Operation, &i.ExpiresAt); err != nil {
+		if err := rows.Scan(&i.Operation, &i.State, &i.ExpiresAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

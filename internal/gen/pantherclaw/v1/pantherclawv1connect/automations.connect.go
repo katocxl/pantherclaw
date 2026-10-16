@@ -69,6 +69,9 @@ const (
 	// AutomationServiceRetireAutomationProcedure is the procedure name of the AutomationService's
 	// RetireAutomation RPC.
 	AutomationServiceRetireAutomationProcedure = "/pantherclaw.v1.AutomationService/RetireAutomation"
+	// AutomationServiceSetAutomationOwnerProcedure is the procedure name of the AutomationService's
+	// SetAutomationOwner RPC.
+	AutomationServiceSetAutomationOwnerProcedure = "/pantherclaw.v1.AutomationService/SetAutomationOwner"
 	// AutomationServiceRevokeAuthorityProcedure is the procedure name of the AutomationService's
 	// RevokeAuthority RPC.
 	AutomationServiceRevokeAuthorityProcedure = "/pantherclaw.v1.AutomationService/RevokeAuthority"
@@ -178,6 +181,13 @@ var (
 			Procedure:  AutomationServiceRetireAutomationProcedure,
 		}
 	})
+	automationServiceSetAutomationOwnerSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_automations_proto.Services().ByName("AutomationService").Methods().ByName("SetAutomationOwner"),
+			Procedure:  AutomationServiceSetAutomationOwnerProcedure,
+		}
+	})
 	automationServiceRevokeAuthoritySpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType: connect.StreamTypeUnary,
@@ -244,6 +254,11 @@ type AutomationServiceClient interface {
 	// the ceiling and disables the identity. Final.
 	// permission: automation.manage
 	RetireAutomation(context.Context, *v1.RetireAutomationRequest) (*v1.RetireAutomationResponse, error)
+	// SetAutomationOwner makes another active person the owner. Pending
+	// enabling requests are voided: they were asked for under the previous
+	// owner.
+	// permission: automation.manage
+	SetAutomationOwner(context.Context, *v1.SetAutomationOwnerRequest) (*v1.SetAutomationOwnerResponse, error)
 	// RevokeAuthority revokes the ceiling and every grant issued under it,
 	// ends their runs and pauses the automation (AUTHORITY_REVOKED).
 	// permission: automation.manage
@@ -313,6 +328,11 @@ type AutomationServiceHandler interface {
 	// the ceiling and disables the identity. Final.
 	// permission: automation.manage
 	RetireAutomation(context.Context, *v1.RetireAutomationRequest) (*v1.RetireAutomationResponse, error)
+	// SetAutomationOwner makes another active person the owner. Pending
+	// enabling requests are voided: they were asked for under the previous
+	// owner.
+	// permission: automation.manage
+	SetAutomationOwner(context.Context, *v1.SetAutomationOwnerRequest) (*v1.SetAutomationOwnerResponse, error)
 	// RevokeAuthority revokes the ceiling and every grant issued under it,
 	// ends their runs and pauses the automation (AUTHORITY_REVOKED).
 	// permission: automation.manage
@@ -338,6 +358,7 @@ func RegisterAutomationServiceHandler(server *connect.Server, svc AutomationServ
 		connect.Method{Spec: automationServicePauseAutomationSpec(), Handler: adapter.pauseAutomation},
 		connect.Method{Spec: automationServiceResumeAutomationSpec(), Handler: adapter.resumeAutomation},
 		connect.Method{Spec: automationServiceRetireAutomationSpec(), Handler: adapter.retireAutomation},
+		connect.Method{Spec: automationServiceSetAutomationOwnerSpec(), Handler: adapter.setAutomationOwner},
 		connect.Method{Spec: automationServiceRevokeAuthoritySpec(), Handler: adapter.revokeAuthority},
 	)
 }
@@ -399,6 +420,10 @@ func (UnimplementedAutomationServiceHandler) ResumeAutomation(context.Context, *
 
 func (UnimplementedAutomationServiceHandler) RetireAutomation(context.Context, *v1.RetireAutomationRequest) (*v1.RetireAutomationResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.AutomationService.RetireAutomation is not implemented")
+}
+
+func (UnimplementedAutomationServiceHandler) SetAutomationOwner(context.Context, *v1.SetAutomationOwnerRequest) (*v1.SetAutomationOwnerResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.AutomationService.SetAutomationOwner is not implemented")
 }
 
 func (UnimplementedAutomationServiceHandler) RevokeAuthority(context.Context, *v1.RevokeAuthorityRequest) (*v1.RevokeAuthorityResponse, error) {
@@ -516,6 +541,14 @@ func (c *automationServiceClient) ResumeAutomation(ctx context.Context, req *v1.
 func (c *automationServiceClient) RetireAutomation(ctx context.Context, req *v1.RetireAutomationRequest) (*v1.RetireAutomationResponse, error) {
 	var res v1.RetireAutomationResponse
 	if err := c.client.CallUnary(ctx, automationServiceRetireAutomationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *automationServiceClient) SetAutomationOwner(ctx context.Context, req *v1.SetAutomationOwnerRequest) (*v1.SetAutomationOwnerResponse, error) {
+	var res v1.SetAutomationOwnerResponse
+	if err := c.client.CallUnary(ctx, automationServiceSetAutomationOwnerSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -693,6 +726,18 @@ func (h automationServiceHandler) retireAutomation(ctx context.Context, _ connec
 		return err
 	}
 	res, err := h.svc.RetireAutomation(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h automationServiceHandler) setAutomationOwner(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetAutomationOwnerRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetAutomationOwner(ctx, &req)
 	if err != nil {
 		return err
 	}

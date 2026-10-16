@@ -50,6 +50,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/facts/adapters/factsrpc"
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	factsapp "github.com/katocxl/pantherclaw/internal/facts/app"
+	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	githubapp "github.com/katocxl/pantherclaw/internal/github/app"
 	"github.com/katocxl/pantherclaw/internal/grants/adapters/grantsrpc"
@@ -256,6 +257,9 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	m6.scans = agentsrpc.NewGatewayScans(aapp.NewInventory(pool, bill))
 
 	g, ctx := errgroup.WithContext(ctx)
+	// autos is the one M11 part 2 core of this process: the API and the
+	// jobs share it, so every port set on it reaches both (D91 K6).
+	autos := newAutomationsCore(pool, bill, cfg.Auth.PublicURL)
 	if cfg.Role == RoleAPI || cfg.Role == RoleAll {
 		tokens, err := token.New(reg, cfg.Auth.PublicURL, token.Audience)
 		if err != nil {
@@ -332,6 +336,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			kp:           kp,
 			freshness:    freshnessOf(cfg),
 			m10ops:       m10OpsDeps{authn: authn, tokens: tokens},
+			autos:        autos,
 		})
 		if err != nil {
 			return err
@@ -425,6 +430,9 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			return err
 		}
 		evidenceJobs = append(evidenceJobs, reflexJobs...)
+		if evidenceJobs, err = registerAutomationsCoreJobs(evidenceJobs, jreg, autos, log); err != nil {
+			return err
+		}
 		if err := registerSimulationJobs(jreg, pool, kp, bill, log); err != nil {
 			return err
 		}
@@ -553,6 +561,8 @@ type apiDeps struct {
 	freshness coverage.Freshness
 	// M10 ops: the live stream's bearer authentication.
 	m10ops m10OpsDeps
+	// autos is the process's M11 part 2 core (nil: apiHandler builds one).
+	autos *automationsCore
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
@@ -571,7 +581,13 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	pantherclawv1connect.RegisterTenancyServiceHandler(rs, tenancyrpc.NewTenancy(tapp.NewHierarchy(pool, d.billing)))
 	pantherclawv1connect.RegisterAccessServiceHandler(rs, tenancyrpc.NewAccess(tapp.NewAccess(pool, log)))
 	pantherclawv1connect.RegisterServiceAccountServiceHandler(rs, tenancyrpc.NewServiceAccounts(tapp.NewServiceAccounts(pool, d.apiKeyEnv)))
-	pantherclawv1connect.RegisterAgentServiceHandler(rs, d.m5p2.agents(agentsrpc.NewAgents(aapp.NewInventory(pool, d.billing))))
+	// autos is the M11 part 2 core, set below once grants and runs exist;
+	// ListAgents reads it only while serving.
+	var autos *automationsCore
+	pantherclawv1connect.RegisterAgentServiceHandler(rs, d.m5p2.agents(agentsrpc.NewAgents(aapp.NewInventory(pool, d.billing)).
+		WithAutomations(func(ctx context.Context) ([]*pantherclawv1.AutomationIdentity, string, error) {
+			return autos.identities(ctx)
+		})))
 	pantherclawv1connect.RegisterWaitlistServiceHandler(rs, d.m5p2.waitlist())
 	attestors, err := newAttestors(d.clusters)
 	if err != nil {
@@ -632,7 +648,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	registerReflexCore(rs, d)
 	registerM11Govern(rs, d)
-	registerAutomationsCore(rs, d)
+	autos = registerAutomationsCore(rs, d, grants, runs)
 	mux := http.NewServeMux()
 	edges.mount(mux)
 	rpc.Mount(mux, rs)

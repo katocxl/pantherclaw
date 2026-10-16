@@ -245,18 +245,18 @@ var roles = []Role{
 	},
 	{
 		Name: RoleAutomationAuthor, Title: "Automation Author", Scopes: anyScope,
-		Description: "Creates automations and authors their versions, manages inbound event sources and automation destinations, asks for a version to be enabled, and narrows, pauses, resumes, retires or revokes the authority of automations in scope (human only). Cannot confirm an enabling: that needs an Automation Publisher.",
-		Permissions: with(basicReads, []Permission{PermAgentRead, PermAutomationRead, PermAutomationManage, PermAutomationEndpointsManage}, authorityReads),
+		Description: "Creates automations and authors their versions, manages inbound event sources and automation destinations, asks for a version to be enabled, and narrows, pauses, resumes, retires or revokes the authority of automations in scope (human only); opens the work queue. Cannot confirm an enabling: that needs an Automation Publisher.",
+		Permissions: with(basicReads, []Permission{PermAgentRead, PermAutomationRead, PermAutomationManage, PermAutomationEndpointsManage, PermOperationsRead}, authorityReads),
 	},
 	{
 		Name: RoleAutomationPublisher, Title: "Automation Publisher", Scopes: anyScope,
-		Description: "Confirms the enabling of an automation version and its issuance ceiling with a security key, and decides automation gates (human only). Confirming also needs every permission the version's steps use where they act, such as grant.issue and run.start on its agents. Cannot author or change automations.",
-		Permissions: with(basicReads, []Permission{PermAgentRead, PermAutomationRead, PermAutomationPublish, PermAutomationApprove}, authorityReads),
+		Description: "Confirms the enabling of an automation version and its issuance ceiling with a security key, and decides automation gates (human only); opens the work queue. Confirming also needs every permission the version's steps use where they act, such as grant.issue and run.start on its agents. Cannot author or change automations.",
+		Permissions: with(basicReads, []Permission{PermAgentRead, PermAutomationRead, PermAutomationPublish, PermAutomationApprove, PermOperationsRead}, authorityReads),
 	},
 	{
 		Name: RoleAutomationOperator, Title: "Automation Operator", Scopes: anyScope,
-		Description: "Starts manual executions of automations in scope and decides automation gates (human only).",
-		Permissions: with(basicReads, []Permission{PermAgentRead, PermAutomationRead, PermAutomationRun, PermAutomationApprove}),
+		Description: "Starts manual executions of automations in scope and decides automation gates (human only); opens the work queue.",
+		Permissions: with(basicReads, []Permission{PermAgentRead, PermAutomationRead, PermAutomationRun, PermAutomationApprove, PermOperationsRead}),
 	},
 	{
 		Name: RoleFleetManager, Title: "Fleet Manager", Scopes: anyScope,

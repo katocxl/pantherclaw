@@ -127,15 +127,18 @@ type Repository interface {
 	// unexpired at now, and all ever created.
 	ChildCounts(ctx context.Context, org ids.OrgID, id domain.GrantID, now time.Time) (active, total int, err error)
 
-	Issue(ctx context.Context, org ids.OrgID, g domain.Grant, ev audit.Event) error
+	// Issue, Delegate and a widening Revise run the promotion gate in their
+	// transaction and may shorten the grant's expiry to a provisional
+	// promotion's (D80, D93); they write the stored expiry back to it.
+	Issue(ctx context.Context, org ids.OrgID, g *domain.Grant, ev audit.Event) error
 	// Delegate inserts child and binds it to childRun, conditional on the
 	// parent's revision being parentRevision and still active, the fan-out
 	// limits, and the child run having no grant yet.
-	Delegate(ctx context.Context, org ids.OrgID, child domain.Grant, parentRevision int, childRun ids.UUID, f Fanout, ev audit.Event) error
+	Delegate(ctx context.Context, org ids.OrgID, child *domain.Grant, parentRevision int, childRun ids.UUID, f Fanout, ev audit.Event) error
 	// Revise stores next, conditional on the current revision being
 	// next.Revision-1; widens is recorded on the revision. A non-zero
 	// accessRequest is closed as answered, or ErrAccessRequestNotOpen.
-	Revise(ctx context.Context, org ids.OrgID, next domain.Grant, widens bool, accessRequest ids.UUID, ev audit.Event) error
+	Revise(ctx context.Context, org ids.OrgID, next *domain.Grant, widens bool, accessRequest ids.UUID, ev audit.Event) error
 	// Revoke revokes the grant and every descendant in one transaction and
 	// returns the ids it revoked.
 	Revoke(ctx context.Context, org ids.OrgID, id domain.GrantID, ev audit.Event) ([]domain.GrantID, error)

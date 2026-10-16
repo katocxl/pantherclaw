@@ -96,7 +96,7 @@ func newOrg(t *testing.T, p *db.Pool) *world {
 		VALUES ($1, $2, 'payments', 'http', $3, 'pc.mock-payments', 'https://payments.example.test', 'none', 'enforce', 'test', 'test')`, w.org, w.conn, gw)
 	w.importPayments()
 	// As the server wires them (newPromotionGate, registerM11Govern).
-	gate := promotions.Gate{Packages: &defpg.Store{Pool: p}, Pool: p}
+	gate := promotions.Gate{Packages: &defpg.Store{Pool: p}}
 	gs := &gpg.Store{Pool: p, Promotions: gate}
 	w.grants = &gapp.Service{Repo: gs, Subjects: gs, Defs: &defpg.Store{Pool: p}, Authz: gapp.SubjectAuthorizer{}, Clock: clock.System{}, Promotions: gate}
 	w.svc = &promotions.Service{Pool: p, Packages: &defpg.Store{Pool: p}}
