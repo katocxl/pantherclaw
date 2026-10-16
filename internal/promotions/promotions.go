@@ -248,7 +248,7 @@ func (s *Service) PromoteAgent(ctx context.Context, in PromoteInput, su *stepup.
 				Object: &audit.Object{Type: "agent", ID: in.Agent.String()},
 				Details: map[string]string{
 					"promotion": ins.ID.String(), "environment": in.Environment.String(), "operation": r.Operation,
-					"failure_behavior": in.FailureBehavior, "credential": cred.String(),
+					"failure_behavior": in.FailureBehavior, "security_key": cred.String(),
 				},
 			}); err != nil {
 				return err
