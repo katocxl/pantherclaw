@@ -372,6 +372,304 @@ func (q *Queries) EndAutomationLaunch(ctx context.Context, state string, orgID i
 	return result.RowsAffected(), nil
 }
 
+const executionDeliveries = `-- name: ExecutionDeliveries :many
+SELECT d.id, d.destination_id, d.kind, d.state, d.attempts, d.delivered_at
+FROM pc.automation_deliveries d
+WHERE d.org_id = $1 AND d.execution_id = $2 ORDER BY d.created_at
+`
+
+type ExecutionDeliveriesRow struct {
+	ID            ids.UUID
+	DestinationID ids.UUID
+	Kind          string
+	State         string
+	Attempts      int32
+	DeliveredAt   *time.Time
+}
+
+func (q *Queries) ExecutionDeliveries(ctx context.Context, orgID ids.OrgID, executionID ids.UUID) ([]ExecutionDeliveriesRow, error) {
+	rows, err := q.db.Query(ctx, executionDeliveries, orgID, executionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExecutionDeliveriesRow{}
+	for rows.Next() {
+		var i ExecutionDeliveriesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DestinationID,
+			&i.Kind,
+			&i.State,
+			&i.Attempts,
+			&i.DeliveredAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const executionGates = `-- name: ExecutionGates :many
+SELECT r.id, r.step_id, r.state, r.deadline_at, r.requirements,
+       (SELECT count(DISTINCT x.user_id) FROM pc.approval_responses x WHERE x.org_id = r.org_id AND x.request_id = r.id
+            AND x.kind = 'APPROVE' AND x.voided_at IS NULL)::int AS approvals
+FROM pc.approval_requests r
+WHERE r.org_id = $1 AND r.execution_id = $2 AND r.subject_kind = 'AUTOMATION_GATE'
+ORDER BY r.created_at
+`
+
+type ExecutionGatesRow struct {
+	ID           ids.UUID
+	StepID       *string
+	State        string
+	DeadlineAt   time.Time
+	Requirements []byte
+	Approvals    int32
+}
+
+func (q *Queries) ExecutionGates(ctx context.Context, orgID ids.OrgID, executionID *ids.UUID) ([]ExecutionGatesRow, error) {
+	rows, err := q.db.Query(ctx, executionGates, orgID, executionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExecutionGatesRow{}
+	for rows.Next() {
+		var i ExecutionGatesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.StepID,
+			&i.State,
+			&i.DeadlineAt,
+			&i.Requirements,
+			&i.Approvals,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const executionGrants = `-- name: ExecutionGrants :many
+SELECT g.id, g.agent_id, g.state, v.expires_at, v.limits,
+       coalesce((SELECT jsonb_object_agg(a.rule || ' ' || coalesce(a.currency, ''), a.total)
+                 FROM (SELECT b.rule, b.currency, sum(b.spent)::text AS total FROM pc.budget_accounts b
+                       WHERE b.org_id = g.org_id AND b.owner_kind = 'grant' AND b.owner_id = g.id
+                       GROUP BY b.rule, b.currency) a), '{}')::jsonb AS spent
+FROM pc.grants g
+JOIN pc.grant_revisions v ON v.org_id = g.org_id AND v.grant_id = g.id AND v.revision = g.current_revision
+WHERE g.org_id = $1 AND g.automation_execution_id = $2
+ORDER BY g.created_at
+`
+
+type ExecutionGrantsRow struct {
+	ID        ids.UUID
+	AgentID   ids.UUID
+	State     string
+	ExpiresAt time.Time
+	Limits    []byte
+	Spent     []byte
+}
+
+// The grants an execution issued, with their current revision's expiry
+// and limits and what their budget accounts spent.
+func (q *Queries) ExecutionGrants(ctx context.Context, orgID ids.OrgID, executionID *ids.UUID) ([]ExecutionGrantsRow, error) {
+	rows, err := q.db.Query(ctx, executionGrants, orgID, executionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExecutionGrantsRow{}
+	for rows.Next() {
+		var i ExecutionGrantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.State,
+			&i.ExpiresAt,
+			&i.Limits,
+			&i.Spent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const executionLaunches = `-- name: ExecutionLaunches :many
+SELECT org_id, id, execution_id, attempt_id, agent_id, instance_id, run_id, grant_id, task_ref, delivery, destination_id, delivery_id, state, claimed_instance_id, claimed_at, claim_deadline, completed_at, outcome, report, calls, run_params, created_at, ended_at FROM pc.automation_launches
+WHERE org_id = $1 AND execution_id = $2 ORDER BY created_at
+`
+
+func (q *Queries) ExecutionLaunches(ctx context.Context, orgID ids.OrgID, executionID ids.UUID) ([]PcAutomationLaunch, error) {
+	rows, err := q.db.Query(ctx, executionLaunches, orgID, executionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcAutomationLaunch{}
+	for rows.Next() {
+		var i PcAutomationLaunch
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.ExecutionID,
+			&i.AttemptID,
+			&i.AgentID,
+			&i.InstanceID,
+			&i.RunID,
+			&i.GrantID,
+			&i.TaskRef,
+			&i.Delivery,
+			&i.DestinationID,
+			&i.DeliveryID,
+			&i.State,
+			&i.ClaimedInstanceID,
+			&i.ClaimedAt,
+			&i.ClaimDeadline,
+			&i.CompletedAt,
+			&i.Outcome,
+			&i.Report,
+			&i.Calls,
+			&i.RunParams,
+			&i.CreatedAt,
+			&i.EndedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const executionOfGrant = `-- name: ExecutionOfGrant :one
+SELECT automation_execution_id::uuid AS execution_id FROM pc.grants
+WHERE org_id = $1 AND id = $2 AND automation_execution_id IS NOT NULL
+`
+
+func (q *Queries) ExecutionOfGrant(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, executionOfGrant, orgID, iD)
+	var execution_id ids.UUID
+	err := row.Scan(&execution_id)
+	return execution_id, err
+}
+
+const executionOfRun = `-- name: ExecutionOfRun :one
+SELECT automation_execution_id::uuid AS execution_id FROM pc.runs
+WHERE org_id = $1 AND id = $2 AND automation_execution_id IS NOT NULL
+`
+
+func (q *Queries) ExecutionOfRun(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, executionOfRun, orgID, iD)
+	var execution_id ids.UUID
+	err := row.Scan(&execution_id)
+	return execution_id, err
+}
+
+const executionOfTransaction = `-- name: ExecutionOfTransaction :one
+SELECT r.automation_execution_id::uuid AS execution_id FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = $1 AND t.id = $2 AND r.automation_execution_id IS NOT NULL
+`
+
+func (q *Queries) ExecutionOfTransaction(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, executionOfTransaction, orgID, iD)
+	var execution_id ids.UUID
+	err := row.Scan(&execution_id)
+	return execution_id, err
+}
+
+const executionRuns = `-- name: ExecutionRuns :many
+SELECT r.id, r.agent_id, r.instance_id, r.expires_at,
+       (CASE WHEN r.state = 'ACTIVE' AND r.expires_at <= now() THEN 'EXPIRED' ELSE r.state END)::text AS effective_state,
+       (SELECT count(*) FROM pc.transactions t WHERE t.org_id = r.org_id AND t.run_id = r.id)::int AS transactions,
+       (SELECT count(*) FROM pc.transactions t WHERE t.org_id = r.org_id AND t.run_id = r.id
+            AND t.effect_state IN ('UNKNOWN', 'CONFLICTING', 'UNVERIFIABLE'))::int AS unknown
+FROM pc.runs r
+WHERE r.org_id = $1 AND r.automation_execution_id = $2
+ORDER BY r.created_at
+`
+
+type ExecutionRunsRow struct {
+	ID             ids.UUID
+	AgentID        ids.UUID
+	InstanceID     *ids.UUID
+	ExpiresAt      time.Time
+	EffectiveState string
+	Transactions   int32
+	Unknown        int32
+}
+
+func (q *Queries) ExecutionRuns(ctx context.Context, orgID ids.OrgID, executionID *ids.UUID) ([]ExecutionRunsRow, error) {
+	rows, err := q.db.Query(ctx, executionRuns, orgID, executionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExecutionRunsRow{}
+	for rows.Next() {
+		var i ExecutionRunsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.InstanceID,
+			&i.ExpiresAt,
+			&i.EffectiveState,
+			&i.Transactions,
+			&i.Unknown,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const executionTrigger = `-- name: ExecutionTrigger :one
+
+SELECT t.kind, t.authenticity, t.authenticity_detail, t.source_ref
+FROM pc.automation_triggers t WHERE t.org_id = $1 AND t.id = $2
+`
+
+type ExecutionTriggerRow struct {
+	Kind               string
+	Authenticity       string
+	AuthenticityDetail []byte
+	SourceRef          string
+}
+
+// Inspector (D29).
+func (q *Queries) ExecutionTrigger(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ExecutionTriggerRow, error) {
+	row := q.db.QueryRow(ctx, executionTrigger, orgID, iD)
+	var i ExecutionTriggerRow
+	err := row.Scan(
+		&i.Kind,
+		&i.Authenticity,
+		&i.AuthenticityDetail,
+		&i.SourceRef,
+	)
+	return i, err
+}
+
 const expireAutomationLaunch = `-- name: ExpireAutomationLaunch :execrows
 UPDATE pc.automation_launches SET state = 'EXPIRED'
 WHERE org_id = $1 AND id = $2 AND state = 'PENDING' AND now() >= claim_deadline

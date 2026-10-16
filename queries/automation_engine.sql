@@ -273,3 +273,62 @@ RETURNING l.id, l.execution_id, l.run_id, l.task_ref, l.calls, l.run_params,
 UPDATE pc.automation_launches SET state = 'COMPLETED', outcome = sqlc.arg(outcome), report = sqlc.arg(report)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'CLAIMED' AND claimed_instance_id = sqlc.arg(instance_id)
 RETURNING execution_id, run_id;
+
+-- Inspector (D29).
+
+-- name: ExecutionTrigger :one
+SELECT t.kind, t.authenticity, t.authenticity_detail, t.source_ref
+FROM pc.automation_triggers t WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(id);
+
+-- name: ExecutionGrants :many
+-- The grants an execution issued, with their current revision's expiry
+-- and limits and what their budget accounts spent.
+SELECT g.id, g.agent_id, g.state, v.expires_at, v.limits,
+       coalesce((SELECT jsonb_object_agg(a.rule || ' ' || coalesce(a.currency, ''), a.total)
+                 FROM (SELECT b.rule, b.currency, sum(b.spent)::text AS total FROM pc.budget_accounts b
+                       WHERE b.org_id = g.org_id AND b.owner_kind = 'grant' AND b.owner_id = g.id
+                       GROUP BY b.rule, b.currency) a), '{}')::jsonb AS spent
+FROM pc.grants g
+JOIN pc.grant_revisions v ON v.org_id = g.org_id AND v.grant_id = g.id AND v.revision = g.current_revision
+WHERE g.org_id = sqlc.arg(org_id) AND g.automation_execution_id = sqlc.arg(execution_id)
+ORDER BY g.created_at;
+
+-- name: ExecutionRuns :many
+SELECT r.id, r.agent_id, r.instance_id, r.expires_at,
+       (CASE WHEN r.state = 'ACTIVE' AND r.expires_at <= now() THEN 'EXPIRED' ELSE r.state END)::text AS effective_state,
+       (SELECT count(*) FROM pc.transactions t WHERE t.org_id = r.org_id AND t.run_id = r.id)::int AS transactions,
+       (SELECT count(*) FROM pc.transactions t WHERE t.org_id = r.org_id AND t.run_id = r.id
+            AND t.effect_state IN ('UNKNOWN', 'CONFLICTING', 'UNVERIFIABLE'))::int AS unknown
+FROM pc.runs r
+WHERE r.org_id = sqlc.arg(org_id) AND r.automation_execution_id = sqlc.arg(execution_id)
+ORDER BY r.created_at;
+
+-- name: ExecutionLaunches :many
+SELECT * FROM pc.automation_launches
+WHERE org_id = sqlc.arg(org_id) AND execution_id = sqlc.arg(execution_id) ORDER BY created_at;
+
+-- name: ExecutionGates :many
+SELECT r.id, r.step_id, r.state, r.deadline_at, r.requirements,
+       (SELECT count(DISTINCT x.user_id) FROM pc.approval_responses x WHERE x.org_id = r.org_id AND x.request_id = r.id
+            AND x.kind = 'APPROVE' AND x.voided_at IS NULL)::int AS approvals
+FROM pc.approval_requests r
+WHERE r.org_id = sqlc.arg(org_id) AND r.execution_id = sqlc.arg(execution_id) AND r.subject_kind = 'AUTOMATION_GATE'
+ORDER BY r.created_at;
+
+-- name: ExecutionDeliveries :many
+SELECT d.id, d.destination_id, d.kind, d.state, d.attempts, d.delivered_at
+FROM pc.automation_deliveries d
+WHERE d.org_id = sqlc.arg(org_id) AND d.execution_id = sqlc.arg(execution_id) ORDER BY d.created_at;
+
+-- name: ExecutionOfRun :one
+SELECT automation_execution_id::uuid AS execution_id FROM pc.runs
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND automation_execution_id IS NOT NULL;
+
+-- name: ExecutionOfGrant :one
+SELECT automation_execution_id::uuid AS execution_id FROM pc.grants
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND automation_execution_id IS NOT NULL;
+
+-- name: ExecutionOfTransaction :one
+SELECT r.automation_execution_id::uuid AS execution_id FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(id) AND r.automation_execution_id IS NOT NULL;
