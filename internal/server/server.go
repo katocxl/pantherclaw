@@ -260,12 +260,8 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	g, ctx := errgroup.WithContext(ctx)
 	// autos is the one M11 part 2 core of this process: the API and the
 	// jobs share it, so every port set on it reaches both (D91 K6).
-	autos := newAutomationsCore(pool, bill, cfg.Auth.PublicURL)
-	// protect sets its ports on that core here, so the jobs have them too:
-	// the expiry sweep closes protected changes and their reviews (D98), and
-	// the ceiling sweep counts no approver marked compromised (D43).
-	m11protect := newM11Protect(pool, bill)
-	protectCore(m11protect, autos)
+	// protect sets its ports on it in every role (D110 P1).
+	autos, m11protect := newM11Core(pool, bill, cfg.Auth.PublicURL)
 	if cfg.Role == RoleAPI || cfg.Role == RoleAll {
 		tokens, err := token.New(reg, cfg.Auth.PublicURL, token.Audience)
 		if err != nil {

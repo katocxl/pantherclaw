@@ -39,6 +39,17 @@ type m11Protect struct {
 	publishers *protect.Publishers
 }
 
+// newM11Core builds the process's one M11 part 2 core and connects protect
+// to it, in every role (D91 K6, D110 P1): the API's change ceremony and
+// the jobs' expiry sweep carry protect's change kinds (their Closed
+// included), and both refuse people marked compromised.
+func newM11Core(pool *db.Pool, bill *billing.Service, publicURL string) (*automationsCore, m11Protect) {
+	core := newAutomationsCore(pool, bill, publicURL)
+	p := newM11Protect(pool, bill)
+	protectCore(p, core)
+	return core, p
+}
+
 // newM11Protect builds the Gate and the publishers. protectCore connects
 // them to the process's core change ceremony (the Gate's Requests); without
 // it a category cannot be turned on (PROTECTED_CHANGES_UNAVAILABLE).

@@ -1286,8 +1286,12 @@ type ListExposedResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The mark.
 	Compromise *PublisherCompromise `protobuf:"bytes,1,opt,name=compromise,proto3" json:"compromise,omitempty"`
-	// What the person published since its time.
-	Items         []*ExposedItem `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
+	// What the person published since its time, at most 1000 items per
+	// source.
+	Items []*ExposedItem `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
+	// True when a source has more than it lists (1000 items): the list is
+	// not everything and the mark cannot be cleared (EXPOSURE_TRUNCATED).
+	Truncated     bool `protobuf:"varint,3,opt,name=truncated,proto3" json:"truncated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1334,6 +1338,13 @@ func (x *ListExposedResponse) GetItems() []*ExposedItem {
 		return x.Items
 	}
 	return nil
+}
+
+func (x *ListExposedResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
 }
 
 // ReviewExposedRequest decides on one item.
@@ -1658,12 +1669,13 @@ const file_pantherclaw_v1_protected_changes_proto_rawDesc = "" +
 	"\x17ListCompromisesResponse\x12E\n" +
 	"\vcompromises\x18\x01 \x03(\v2#.pantherclaw.v1.PublisherCompromiseR\vcompromises\"C\n" +
 	"\x12ListExposedRequest\x12-\n" +
-	"\rcompromise_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fcompromiseId\"\x8d\x01\n" +
+	"\rcompromise_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fcompromiseId\"\xab\x01\n" +
 	"\x13ListExposedResponse\x12C\n" +
 	"\n" +
 	"compromise\x18\x01 \x01(\v2#.pantherclaw.v1.PublisherCompromiseR\n" +
 	"compromise\x121\n" +
-	"\x05items\x18\x02 \x03(\v2\x1b.pantherclaw.v1.ExposedItemR\x05items\"\xcc\x02\n" +
+	"\x05items\x18\x02 \x03(\v2\x1b.pantherclaw.v1.ExposedItemR\x05items\x12\x1c\n" +
+	"\ttruncated\x18\x03 \x01(\bR\ttruncated\"\xcc\x02\n" +
 	"\x14ReviewExposedRequest\x12-\n" +
 	"\rcompromise_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fcompromiseId\x12\x8e\x01\n" +
 	"\x04kind\x18\x02 \x01(\tBz\xbaHwruR\x0ePOLICY_VERSIONR\rPOLICY_CHANGER\x0fPACKAGE_VERSIONR\vPACKAGE_KEYR\x12AUTOMATION_VERSIONR\x10PROTECTED_CHANGER\tPROMOTIONR\x05GRANTR\x04kind\x12#\n" +

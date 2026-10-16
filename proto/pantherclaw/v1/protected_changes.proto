@@ -337,8 +337,12 @@ message ListExposedRequest {
 message ListExposedResponse {
   // The mark.
   PublisherCompromise compromise = 1;
-  // What the person published since its time.
+  // What the person published since its time, at most 1000 items per
+  // source.
   repeated ExposedItem items = 2;
+  // True when a source has more than it lists (1000 items): the list is
+  // not everything and the mark cannot be cleared (EXPOSURE_TRUNCATED).
+  bool truncated = 3;
 }
 
 // ReviewExposedRequest decides on one item.

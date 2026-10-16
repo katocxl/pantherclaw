@@ -158,7 +158,7 @@ func (h *Publishers) ListExposed(ctx context.Context, req *pb.ListExposedRequest
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.ListExposedResponse{Compromise: CompromiseOf(cp.PcCompromisedPublisher)}
+	out := &pb.ListExposedResponse{Compromise: CompromiseOf(cp.PcCompromisedPublisher), Truncated: cp.Truncated}
 	for _, i := range cp.Items {
 		out.Items = append(out.Items, ItemOf(i))
 	}

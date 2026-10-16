@@ -60,9 +60,13 @@ var (
 	ErrAlreadyMarked      = pcerr.New(pcerr.AlreadyExists, "PUBLISHER_ALREADY_MARKED", "this person is already marked compromised")
 	ErrSelfReview         = pcerr.New(pcerr.PermissionDenied, "SAME_PERSON",
 		"the compromised person cannot review or clear their own items")
-	ErrNotExposed  = pcerr.New(pcerr.NotFound, "ITEM_NOT_EXPOSED", "the item is not on this compromise's exposure list")
-	ErrReviewed    = pcerr.New(pcerr.AlreadyExists, "ITEM_REVIEWED", "the item was already reviewed")
-	ErrUnreviewed  = pcerr.New(pcerr.FailedPrecondition, "EXPOSURE_UNREVIEWED", "every exposed item must be reviewed first")
+	ErrNotExposed = pcerr.New(pcerr.NotFound, "ITEM_NOT_EXPOSED", "the item is not on this compromise's exposure list")
+	ErrReviewed   = pcerr.New(pcerr.AlreadyExists, "ITEM_REVIEWED", "the item was already reviewed")
+	ErrUnreviewed = pcerr.New(pcerr.FailedPrecondition, "EXPOSURE_UNREVIEWED", "every exposed item must be reviewed first")
+	// ErrExposureTruncated: a source listed more than ExposureCap items, so
+	// the exposure is not known in full and the mark is not cleared (D110 P5).
+	ErrExposureTruncated = pcerr.New(pcerr.FailedPrecondition, "EXPOSURE_TRUNCATED",
+		"the exposure list is truncated: a source has more items than it lists, so the mark cannot be cleared")
 	ErrNoRollback  = pcerr.New(pcerr.Unimplemented, "ROLLBACK_UNAVAILABLE", "this kind of item cannot be rolled back here")
 	ErrCompromiseQ = pcerr.New(pcerr.InvalidArgument, "COMPROMISE_INVALID",
 		"a person, a time not in the future and a reason of 1 to 500 characters are required")
@@ -124,6 +128,9 @@ type Item struct {
 type Compromise struct {
 	dbq.PcCompromisedPublisher
 	Items []Item
+	// Truncated: a source listed more than ExposureCap items, so Items is
+	// not everything and the mark cannot be cleared (D110 P5).
+	Truncated bool
 }
 
 func (p *Publishers) caller(ctx context.Context) (tenancy.Caller, error) {
@@ -262,7 +269,7 @@ func (p *Publishers) load(ctx context.Context, tx db.TenantTx, id ids.UUID) (Com
 	} else if err != nil {
 		return Compromise{}, err
 	}
-	items, err := p.exposed(ctx, tx, row.UserID, row.Since)
+	items, truncated, err := p.exposed(ctx, tx, row.UserID, row.Since)
 	if err != nil {
 		return Compromise{}, err
 	}
@@ -277,73 +284,85 @@ func (p *Publishers) load(ctx context.Context, tx db.TenantTx, id ids.UUID) (Com
 			}
 		}
 	}
-	return Compromise{PcCompromisedPublisher: row, Items: items}, nil
+	return Compromise{PcCompromisedPublisher: row, Items: items, Truncated: truncated}, nil
 }
+
+// ExposureCap is how many items one exposure source lists. Its query reads
+// one more, so a source past the cap marks the list truncated, and a
+// truncated list is never cleared (D110 P5, EXPOSURE_TRUNCATED).
+const ExposureCap = 1000
 
 // exposed lists what user published since a time (D43): policy versions
 // they published, policy change requests they confirmed, package versions
 // they activated (audit trail), org package keys they registered (revoke
 // them COMPROMISED, F596), protected changes they published or reviewed,
-// grants they issued, and every ExposureSource's items.
-func (p *Publishers) exposed(ctx context.Context, tx db.TenantTx, user ids.UUID, since time.Time) ([]Item, error) {
+// grants they issued, and every ExposureSource's items. truncated reports
+// a source past ExposureCap.
+func (p *Publishers) exposed(ctx context.Context, tx db.TenantTx, user ids.UUID, since time.Time) (out []Item, truncated bool, err error) {
 	q := dbq.New(tx)
 	org := tx.OrgID()
 	principal := td.PrincipalRef{Kind: td.KindUser, ID: user}.String()
-	var out []Item
+	capped := func(n int) int {
+		if n > ExposureCap {
+			truncated = true
+			return ExposureCap
+		}
+		return n
+	}
 	add := func(kind, id, label string, at time.Time) {
 		out = append(out, Item{Kind: kind, ID: id, Label: label, At: at})
 	}
 	pv, err := q.ExposedPolicyVersions(ctx, org, principal, since)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	for _, r := range pv {
+	for _, r := range pv[:capped(len(pv))] {
 		add(ItemPolicyVersion, r.ItemID, r.Label, deref(r.At))
 	}
 	pc, err := q.ExposedPolicyChanges(ctx, org, user, since)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	for _, r := range pc {
+	for _, r := range pc[:capped(len(pc))] {
 		add(ItemPolicyChange, r.ItemID, r.Label, r.At)
 	}
 	pa, err := q.ExposedPackageActivations(ctx, org, user.String(), since)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	for _, r := range pa {
+	for _, r := range pa[:capped(len(pa))] {
 		add(ItemPackageVersion, r.ItemID, r.Label, r.At)
 	}
 	pk, err := q.ExposedPackageKeys(ctx, org, principal, since)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	for _, r := range pk {
+	for _, r := range pk[:capped(len(pk))] {
 		add(ItemPackageKey, r.ItemID, r.Label, r.At)
 	}
 	ch, err := q.ExposedProtectedChanges(ctx, org, since, user)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	for _, r := range ch {
+	for _, r := range ch[:capped(len(ch))] {
 		add(ItemProtectedChange, r.ItemID, r.Label, r.At)
 	}
 	gs, err := q.ExposedGrants(ctx, org, user, since)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	for _, r := range gs {
+	for _, r := range gs[:capped(len(gs))] {
 		add(ItemGrant, r.ItemID, r.Label, r.At)
 	}
 	for _, kind := range slices.Sorted(maps.Keys(p.Sources)) {
 		more, err := p.Sources[kind](ctx, tx, user, since)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		out = append(out, more...)
+		out = append(out, more[:capped(len(more))]...)
 	}
 	slices.SortStableFunc(out, func(a, b Item) int { return a.At.Compare(b.At) })
-	return out, nil
+	return out, truncated, nil
 }
 
 // ReviewExposed records an independent KEEP or ROLLBACK decision on one
@@ -471,6 +490,8 @@ func (p *Publishers) ClearCompromise(ctx context.Context, id ids.UUID) (ids.UUID
 			return ErrCompromiseState
 		case cp.UserID == c.Principal.ID:
 			return ErrSelfReview
+		case cp.Truncated:
+			return ErrExposureTruncated
 		case slices.ContainsFunc(cp.Items, func(i Item) bool { return i.Review == nil }):
 			return ErrUnreviewed
 		}
@@ -527,6 +548,9 @@ func (p *Publishers) ApplyClear(ctx context.Context, tx db.TenantTx, request ids
 	cp, err := p.load(ctx, tx, row.ID)
 	if err != nil {
 		return err
+	}
+	if cp.Truncated {
+		return ErrExposureTruncated
 	}
 	if slices.ContainsFunc(cp.Items, func(i Item) bool { return i.Review == nil }) {
 		return ErrUnreviewed

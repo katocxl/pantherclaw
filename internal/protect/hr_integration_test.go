@@ -8,6 +8,7 @@ package protect_test
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -427,6 +428,51 @@ func TestHR293_ACompromisedPublisherIsStoppedListedAndClearedByTwo(t *testing.T)
 	}
 	if got, _ := e.pub.Get(bob.cli, mark.ID); got.State != protect.CompromiseCleared {
 		t.Fatalf("mark is %s after two confirmations", got.State)
+	}
+}
+
+// TestHR293_ATruncatedExposureIsNeverCleared (D110 P5): when any exposure
+// source has more than ExposureCap items, the list says it is truncated,
+// a clearing is refused (EXPOSURE_TRUNCATED), and a clearing asked while
+// the list was complete does not apply once it is not.
+func TestHR293_ATruncatedExposureIsNeverCleared(t *testing.T) {
+	e := newHR(t)
+	alice, bob, carol := e.person("alice", td.RoleSecurityAdmin), e.person("bob", td.RoleSecurityAdmin), e.person("carol", td.RoleSecurityAdmin)
+	mallory := e.person("mallory", td.RoleSecurityAdmin)
+	n := 0
+	e.pub.Sources = map[string]protect.ExposureSource{
+		"TEST_ITEM": func(context.Context, db.TenantTx, ids.UUID, time.Time) ([]protect.Item, error) {
+			out := make([]protect.Item, n)
+			for i := range out {
+				out[i] = protect.Item{Kind: "TEST_ITEM", ID: strconv.Itoa(i), Label: "item", At: time.Now()}
+			}
+			return out, nil
+		},
+	}
+	mark, err := e.pub.MarkCompromised(bob.page, mallory.id, time.Now().Add(-time.Hour), "phished", e.stepUp(bob))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := e.pub.ClearCompromise(bob.cli, mark.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n = protect.ExposureCap + 1
+	cp, err := e.pub.Get(alice.cli, mark.ID)
+	if err != nil || !cp.Truncated || len(cp.Items) != protect.ExposureCap {
+		t.Fatalf("exposure %v truncated %v with %d items", err, cp.Truncated, len(cp.Items))
+	}
+	if _, err := e.confirm(alice, req); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.confirm(carol, req); !errors.Is(err, protect.ErrExposureTruncated) {
+		t.Fatalf("clearing a truncated exposure = %v, want EXPOSURE_TRUNCATED", err)
+	}
+	if got, _ := e.pub.Get(bob.cli, mark.ID); got.State != protect.CompromiseActive {
+		t.Fatalf("mark is %s", got.State)
+	}
+	if _, err := e.pub.ClearCompromise(bob.cli, mark.ID); !errors.Is(err, protect.ErrExposureTruncated) {
+		t.Fatalf("clear = %v, want EXPOSURE_TRUNCATED", err)
 	}
 }
 

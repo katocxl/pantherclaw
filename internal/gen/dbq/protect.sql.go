@@ -184,7 +184,7 @@ LEFT JOIN pc.automations a ON a.org_id = r.org_id AND a.id = r.subject_id
 WHERE c.org_id = $1 AND c.user_id = $2 AND r.domain = 'automation'
   AND c.confirmed_at >= $3::timestamptz
 ORDER BY r.subject_id, c.confirmed_at DESC
-LIMIT 1000
+LIMIT 1001
 `
 
 type ExposedAutomationConfirmationsRow struct {
@@ -220,7 +220,7 @@ SELECT id::text AS item_id, ('grant (' || state || ')')::text AS label, created_
 FROM pc.grants
 WHERE org_id = $1 AND grantor_kind = 'user' AND grantor_id = $2 AND created_at >= $3
 ORDER BY created_at
-LIMIT 1000
+LIMIT 1001
 `
 
 type ExposedGrantsRow struct {
@@ -257,7 +257,7 @@ WHERE org_id = $1 AND kind = 'audit.package.transitioned' AND actor_type = 'user
   AND actor_id = $2 AND occurred_at >= $3
   AND convert_from(body, 'UTF8')::jsonb #>> '{details,to}' = 'ACTIVE'
 ORDER BY occurred_at
-LIMIT 1000
+LIMIT 1001
 `
 
 type ExposedPackageActivationsRow struct {
@@ -292,7 +292,7 @@ SELECT kid AS item_id, ('package-signing key ' || name || ' (' || state || ')'):
 FROM pc.package_signing_keys
 WHERE org_id = $1 AND created_by = $2 AND created_at >= $3
 ORDER BY created_at
-LIMIT 1000
+LIMIT 1001
 `
 
 type ExposedPackageKeysRow struct {
@@ -327,7 +327,7 @@ FROM pc.policy_change_confirmations c
 JOIN pc.policy_change_requests r ON r.org_id = c.org_id AND r.id = c.request_id
 WHERE c.org_id = $1 AND c.principal_id = $2 AND c.created_at >= $3
 ORDER BY c.created_at
-LIMIT 1000
+LIMIT 1001
 `
 
 type ExposedPolicyChangesRow struct {
@@ -362,7 +362,7 @@ SELECT id::text AS item_id, ('policy version ' || version::text)::text AS label,
 FROM pc.policy_versions
 WHERE org_id = $1 AND published_by = $2::text AND published_at >= $3::timestamptz
 ORDER BY published_at
-LIMIT 1000
+LIMIT 1001
 `
 
 type ExposedPolicyVersionsRow struct {
@@ -399,7 +399,7 @@ FROM pc.protected_changes
 WHERE org_id = $1 AND state IN ('APPLIED', 'EMERGENCY') AND decided_at >= $2::timestamptz
   AND (publisher = $3::uuid OR reviewed_by = $3::uuid)
 ORDER BY decided_at
-LIMIT 1000
+LIMIT 1001
 `
 
 type ExposedProtectedChangesRow struct {
