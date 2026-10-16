@@ -248,6 +248,31 @@ func (q *Queries) AutomationAgentNames(ctx context.Context, orgID ids.OrgID, ids
 	return items, nil
 }
 
+const automationCeilingIDs = `-- name: AutomationCeilingIDs :many
+SELECT id FROM pc.automation_ceilings WHERE org_id = $1 AND automation_id = $2
+`
+
+// Every authority row of an automation, whatever its state.
+func (q *Queries) AutomationCeilingIDs(ctx context.Context, orgID ids.OrgID, automationID ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, automationCeilingIDs, orgID, automationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const ceilingsApprovedBy = `-- name: CeilingsApprovedBy :many
 SELECT c.id, c.automation_id FROM pc.automation_ceilings c
 WHERE c.org_id = $1 AND c.state = 'ACTIVE' AND $2::uuid = ANY (c.approved_by)
@@ -1261,6 +1286,33 @@ func (q *Queries) NextAutomationVersionNumber(ctx context.Context, orgID ids.Org
 	return number, err
 }
 
+const openAutomationFailureKeys = `-- name: OpenAutomationFailureKeys :many
+SELECT dedupe_key FROM pc.operational_failures
+WHERE org_id = $1 AND kind = $2::text AND state <> 'RESOLVED'
+`
+
+// The dedupe keys of the org's open owned failures of one kind (the sweep
+// resolves only what is open, D106 D2).
+func (q *Queries) OpenAutomationFailureKeys(ctx context.Context, orgID ids.OrgID, kind string) ([]string, error) {
+	rows, err := q.db.Query(ctx, openAutomationFailureKeys, orgID, kind)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var dedupe_key string
+		if err := rows.Scan(&dedupe_key); err != nil {
+			return nil, err
+		}
+		items = append(items, dedupe_key)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const pauseActiveAutomations = `-- name: PauseActiveAutomations :many
 UPDATE pc.automations SET state = 'PAUSED', pause_reason = $1, paused_at = now()
 WHERE org_id = $2 AND state = 'ACTIVE'
@@ -1404,36 +1456,6 @@ func (q *Queries) ReserveAutomationBudget(ctx context.Context, arg ReserveAutoma
 	var reserved money.Decimal
 	err := row.Scan(&reserved)
 	return reserved, err
-}
-
-const resolveAutomationFailure = `-- name: ResolveAutomationFailure :execrows
-UPDATE pc.operational_failures
-SET state = 'RESOLVED', resolved_at = now(), resolution = $1::text
-WHERE org_id = $2 AND kind = $3::text AND dedupe_key = $4::text
-  AND state <> 'RESOLVED'
-`
-
-type ResolveAutomationFailureParams struct {
-	Resolution string
-	OrgID      ids.OrgID
-	Kind       string
-	DedupeKey  string
-}
-
-// Resolves an open owned failure the automations core raised, by its kind
-// and dedupe key, once its cause is gone (D102 L6: the next successful
-// ceiling check resolves automation.sweep_failed).
-func (q *Queries) ResolveAutomationFailure(ctx context.Context, arg ResolveAutomationFailureParams) (int64, error) {
-	result, err := q.db.Exec(ctx, resolveAutomationFailure,
-		arg.Resolution,
-		arg.OrgID,
-		arg.Kind,
-		arg.DedupeKey,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const resumeAutomation = `-- name: ResumeAutomation :execrows

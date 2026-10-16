@@ -351,11 +351,12 @@ WHERE r.org_id = sqlc.arg(org_id) AND r.launcher_sa_id = sqlc.arg(service_accoun
 -- Engage does, so the two serialize (D91 K5).
 SELECT kill_switch FROM pc.org_containment WHERE org_id = sqlc.arg(org_id) FOR UPDATE;
 
--- name: ResolveAutomationFailure :execrows
--- Resolves an open owned failure the automations core raised, by its kind
--- and dedupe key, once its cause is gone (D102 L6: the next successful
--- ceiling check resolves automation.sweep_failed).
-UPDATE pc.operational_failures
-SET state = 'RESOLVED', resolved_at = now(), resolution = sqlc.arg(resolution)::text
-WHERE org_id = sqlc.arg(org_id) AND kind = sqlc.arg(kind)::text AND dedupe_key = sqlc.arg(dedupe_key)::text
-  AND state <> 'RESOLVED';
+-- name: OpenAutomationFailureKeys :many
+-- The dedupe keys of the org's open owned failures of one kind (the sweep
+-- resolves only what is open, D106 D2).
+SELECT dedupe_key FROM pc.operational_failures
+WHERE org_id = sqlc.arg(org_id) AND kind = sqlc.arg(kind)::text AND state <> 'RESOLVED';
+
+-- name: AutomationCeilingIDs :many
+-- Every authority row of an automation, whatever its state.
+SELECT id FROM pc.automation_ceilings WHERE org_id = sqlc.arg(org_id) AND automation_id = sqlc.arg(automation_id);
