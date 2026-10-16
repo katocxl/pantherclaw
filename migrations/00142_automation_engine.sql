@@ -354,6 +354,30 @@ ALTER TABLE pc.runs ADD CONSTRAINT runs_automation_execution_fk
 -- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.runs VALIDATE CONSTRAINT runs_automation_execution_fk;
 
+-- A run that names an execution is launched by that execution's own
+-- service account, and keeps naming it (D64, HR-270).
+-- +goose StatementBegin
+CREATE FUNCTION pc.run_automation_execution_guard() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pc, pg_temp
+AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' AND NEW.automation_execution_id IS DISTINCT FROM OLD.automation_execution_id THEN
+        RAISE EXCEPTION 'a run''s execution never changes' USING ERRCODE = 'check_violation';
+    END IF;
+    IF NEW.automation_execution_id IS NOT NULL AND NEW.launcher_sa_id IS DISTINCT FROM (
+            SELECT e.service_account_id FROM pc.automation_executions e
+            WHERE e.org_id = NEW.org_id AND e.id = NEW.automation_execution_id) THEN
+        RAISE EXCEPTION 'AUTOMATION_IDENTITY: a run of an execution is launched by its service account'
+            USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER runs_automation_execution_guard BEFORE INSERT OR UPDATE ON pc.runs
+    FOR EACH ROW EXECUTE FUNCTION pc.run_automation_execution_guard();
+
 -- Gates are approval requests (D25, D25a, D62). The new columns are
 -- nullable without defaults (no rewrite); the CHECKs are added NOT VALID
 -- and validated, and existing rows already satisfy them.
@@ -499,6 +523,8 @@ ALTER TABLE pc.approval_requests
         AND (permit_id IS NULL OR state = 'CONSUMED')
         AND (state <> 'CONSUMED' OR subject_kind = 'RESTORATION' OR permit_id IS NOT NULL));
 
+DROP TRIGGER runs_automation_execution_guard ON pc.runs;
+DROP FUNCTION pc.run_automation_execution_guard();
 ALTER TABLE pc.runs DROP CONSTRAINT runs_automation_execution_fk;
 ALTER TABLE pc.grants DROP CONSTRAINT grants_automation_execution_fk;
 

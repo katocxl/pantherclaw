@@ -53,6 +53,8 @@ func (h hooks) Revalidate(ctx context.Context, tx pgx.Tx, x *engine.Exec) (strin
 		if r := pausedReason(s.PauseReason); r != "" {
 			return r, nil
 		}
+	case autodomain.StateDraft, autodomain.StateRetired:
+		return autodomain.ReasonAuthorityChanged, nil
 	default:
 		return autodomain.ReasonAuthorityChanged, nil
 	}

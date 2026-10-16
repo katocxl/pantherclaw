@@ -4,7 +4,7 @@
 // Package engine runs governed-automation executions (G0 M11 part 2 D24,
 // D27): one accepted trigger worked through a version's steps by the
 // closed step catalog, with retries only for retry-safe kinds, the
-// declared failure behaviour and compensation, and a final state that
+// declared failure behavior and compensation, and a final state that
 // claims success only on evidence (HR-280, HR-282).
 //
 // The Machine is the single implementation of the execution rules. The
@@ -78,7 +78,7 @@ type Exec struct {
 	DeadlineAt   time.Time
 	WakeAt       time.Time
 	// CancelReason is set by CancelExecution or the kill switch; the
-	// Machine honours it at the next boundary (HR-283).
+	// Machine honors it at the next boundary (HR-283).
 	CancelReason string
 	Transitions  int
 

@@ -59,7 +59,7 @@ type Hooks interface {
 	Escalate(ctx context.Context, tx pgx.Tx, x *Exec, kind, step, reason string) error
 	// Cleanup runs at every terminal state of a LIVE execution: still
 	// active grants it issued are revoked, its runs ended, pending
-	// launches and deliveries cancelled (D24). It returns the refs of what
+	// launches and deliveries canceled (D24). It returns the refs of what
 	// it did.
 	Cleanup(ctx context.Context, tx pgx.Tx, x *Exec) ([]reflexdomain.EvidenceRef, error)
 	// Reconciled reports whether every unknown outcome of an execution in
@@ -345,8 +345,10 @@ func (m *Machine) poll(ctx context.Context, tx pgx.Tx, x *Exec, spec autodomain.
 					return err
 				}
 			} else {
-				res = autodomain.StepResult{State: autodomain.StepFailed, Reason: ReasonTimeout, Effect: a.Effect,
-					Output: res.Output, Refs: res.Refs}
+				res = autodomain.StepResult{
+					State: autodomain.StepFailed, Reason: ReasonTimeout, Effect: a.Effect,
+					Output: res.Output, Refs: res.Refs,
+				}
 			}
 		}
 	}
@@ -408,8 +410,7 @@ func (m *Machine) record(x *Exec, a *Attempt, r autodomain.StepResult) error {
 	}
 	a.Refused = r.State == autodomain.StepFailed && a.Effect == autodomain.EffectNone && r.Reason != ""
 	now := m.Now()
-	switch r.State {
-	case autodomain.StepWaiting, autodomain.StepRunning:
+	if r.State == autodomain.StepWaiting || r.State == autodomain.StepRunning {
 		a.State = autodomain.StepWaiting
 		at := r.WakeAt
 		if at.IsZero() || !at.After(now) {
@@ -422,10 +423,9 @@ func (m *Machine) record(x *Exec, a *Attempt, r autodomain.StepResult) error {
 		}
 		a.WakeAt = minTime(at, x.DeadlineAt)
 		return m.wait(x, a.WakeAt)
-	default:
-		a.EndedAt, a.WakeAt = now, time.Time{}
-		return nil
 	}
+	a.EndedAt, a.WakeAt = now, time.Time{}
+	return nil
 }
 
 // retryAt is when a failed attempt is tried again, if it may be (HR-280):
@@ -484,11 +484,11 @@ func (m *Machine) failed(ctx context.Context, tx pgx.Tx, x *Exec, spec autodomai
 		x.Current++
 		return nil
 	}
-	behaviour := spec.OnFailure
-	if behaviour == "" && x.Def.IfFails != nil {
-		behaviour = x.Def.IfFails.Default
+	behavior := spec.OnFailure
+	if behavior == "" && x.Def.IfFails != nil {
+		behavior = x.Def.IfFails.Default
 	}
-	switch behaviour {
+	switch behavior {
 	case autodomain.OnFailureContinue:
 		x.Current++
 		return nil
@@ -498,8 +498,8 @@ func (m *Machine) failed(ctx context.Context, tx pgx.Tx, x *Exec, spec autodomai
 		}
 	case autodomain.OnFailureStop:
 	default:
-		if behaviour != "" {
-			return fmt.Errorf("engine: unknown on_failure %q", behaviour)
+		if behavior != "" {
+			return fmt.Errorf("engine: unknown on_failure %q", behavior)
 		}
 	}
 	if a.Reason == autodomain.ReasonLaunchNotClaimed {
@@ -523,7 +523,7 @@ func (m *Machine) stop(ctx context.Context, tx pgx.Tx, x *Exec, reason string) e
 
 // finish computes the final state (D27, HR-282), cleans up and records
 // the result.
-func (m *Machine) finish(ctx context.Context, tx pgx.Tx, x *Exec, reason string, cancelled bool) error {
+func (m *Machine) finish(ctx context.Context, tx pgx.Tx, x *Exec, reason string, canceled bool) error {
 	for _, a := range x.Attempts {
 		if !a.Terminal() {
 			a.State, a.Reason, a.EndedAt, a.WakeAt, a.Dirty = autodomain.StepFailed, cmpOr(reason, ReasonTimeout), m.Now(), time.Time{}, true
@@ -537,7 +537,7 @@ func (m *Machine) finish(ctx context.Context, tx pgx.Tx, x *Exec, reason string,
 		res.State, res.Reason = autodomain.ExecSucceeded, ""
 	case len(res.Changed) > 0:
 		res.State, res.Reason = autodomain.ExecPartiallyCompleted, cmpOr(reason, ReasonFinishNotMet)
-	case cancelled:
+	case canceled:
 		res.State, res.Reason = autodomain.ExecCancelled, reason
 	default:
 		res.State, res.Reason = autodomain.ExecFailed, cmpOr(reason, ReasonFinishNotMet)
@@ -608,8 +608,10 @@ func unknownIrreversible(x *Exec) bool {
 
 // account itemizes the steps and the finish conditions (HR-282).
 func (m *Machine) account(x *Exec) Result {
-	res := Result{Changed: []string{}, Unchanged: []string{}, Unknown: []string{}, Finish: []FinishStatus{},
-		Unresolved: []Unresolved{}}
+	res := Result{
+		Changed: []string{}, Unchanged: []string{}, Unknown: []string{}, Finish: []FinishStatus{},
+		Unresolved: []Unresolved{},
+	}
 	for _, a := range x.Latest() {
 		if a.Compensation {
 			if a.State == autodomain.StepDone {

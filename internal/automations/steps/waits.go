@@ -14,17 +14,17 @@ import (
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/engine"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 )
 
 // launchOf is the run and launch a wait refers to.
-func launchOf(sc autodomain.StepContext, step string) (dbq.GetAutomationLaunchRow, bool, error) {
+func launchOf(sc autodomain.StepContext, step string) (ids.UUID, bool) {
 	o, ok := stepOutput(sc, step)
 	if !ok {
-		return dbq.GetAutomationLaunchRow{}, false, nil
+		return ids.UUID{}, false
 	}
-	id, ok := parseID(o[OutLaunch])
-	return dbq.GetAutomationLaunchRow{ID: id}, ok, nil
+	return parseID(o[OutLaunch])
 }
 
 // waitRun waits until a launch_run step's run ends or its launch completes
@@ -42,11 +42,11 @@ func (*waitRun) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) 
 	if !ok {
 		return failed(ReasonBadWith)
 	}
-	l, ok, _ := launchOf(sc, w.Step)
+	l, ok := launchOf(sc, w.Step)
 	if !ok {
 		return failed(ReasonBadWith)
 	}
-	launch, err := q(tx).GetAutomationLaunch(ctx, sc.Org, l.ID)
+	launch, err := q(tx).GetAutomationLaunch(ctx, sc.Org, l)
 	if err != nil {
 		return autodomain.StepResult{}, err
 	}
@@ -56,8 +56,10 @@ func (*waitRun) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) 
 	}
 	ended := r.EffectiveState != "ACTIVE"
 	if !ended && launch.State != "COMPLETED" {
-		return autodomain.StepResult{State: autodomain.StepWaiting, Effect: autodomain.EffectNone,
-			WakeAt: sc.Now.Add(engine.PollInterval)}, nil
+		return autodomain.StepResult{
+			State: autodomain.StepWaiting, Effect: autodomain.EffectNone,
+			WakeAt: sc.Now.Add(engine.PollInterval),
+		}, nil
 	}
 	c, err := q(tx).RunTransactionCounts(ctx, sc.Org, launch.RunID)
 	if err != nil {
@@ -69,8 +71,10 @@ func (*waitRun) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) 
 	if launch.Outcome != nil {
 		out["launch_outcome"] = *launch.Outcome
 	}
-	return autodomain.StepResult{State: autodomain.StepDone, Effect: autodomain.EffectNone, Output: out,
-		Refs: []reflexdomain.EvidenceRef{ref(reflexdomain.EvidenceRun, launch.RunID)}}, nil
+	return autodomain.StepResult{
+		State: autodomain.StepDone, Effect: autodomain.EffectNone, Output: out,
+		Refs: []reflexdomain.EvidenceRef{ref(reflexdomain.EvidenceRun, launch.RunID)},
+	}, nil
 }
 
 func (s *waitRun) Preview(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
@@ -126,11 +130,11 @@ func (*waitEffect) check(ctx context.Context, tx pgx.Tx, sc autodomain.StepConte
 	if want < 1 || want > 100 {
 		return failed(ReasonBadWith)
 	}
-	l, ok, _ := launchOf(sc, w.Step)
+	l, ok := launchOf(sc, w.Step)
 	if !ok {
 		return failed(ReasonBadWith)
 	}
-	launch, err := q(tx).GetAutomationLaunch(ctx, sc.Org, l.ID)
+	launch, err := q(tx).GetAutomationLaunch(ctx, sc.Org, l)
 	if err != nil {
 		return autodomain.StepResult{}, err
 	}
@@ -163,8 +167,10 @@ func (*waitEffect) check(ctx context.Context, tx pgx.Tx, sc autodomain.StepConte
 		return autodomain.StepResult{}, err
 	}
 	if !timedOut && (r.EffectiveState == "ACTIVE" || c.Pending > 0) {
-		return autodomain.StepResult{State: autodomain.StepWaiting, Effect: autodomain.EffectNone, Output: out,
-			WakeAt: sc.Now.Add(engine.PollInterval)}, nil
+		return autodomain.StepResult{
+			State: autodomain.StepWaiting, Effect: autodomain.EffectNone, Output: out,
+			WakeAt: sc.Now.Add(engine.PollInterval),
+		}, nil
 	}
 	if c.Unknown > 0 || c.Pending > 0 {
 		irreversible, err := qq.OperationIrreversible(ctx, sc.Org, w.Operation)
@@ -172,8 +178,10 @@ func (*waitEffect) check(ctx context.Context, tx pgx.Tx, sc autodomain.StepConte
 			return autodomain.StepResult{}, err
 		}
 		out[engine.OutputIrreversible] = strconv.FormatBool(irreversible)
-		return autodomain.StepResult{State: autodomain.StepUnknown, Effect: autodomain.EffectUnknown, Output: out,
-			Reason: engine.ReasonEffectUnknown, Refs: []reflexdomain.EvidenceRef{ref(reflexdomain.EvidenceRun, launch.RunID)}}, nil
+		return autodomain.StepResult{
+			State: autodomain.StepUnknown, Effect: autodomain.EffectUnknown, Output: out,
+			Reason: engine.ReasonEffectUnknown, Refs: []reflexdomain.EvidenceRef{ref(reflexdomain.EvidenceRun, launch.RunID)},
+		}, nil
 	}
 	reason := ReasonNoEffect
 	if timedOut {
@@ -214,8 +222,10 @@ func (*wait) Run(_ context.Context, _ pgx.Tx, sc autodomain.StepContext) (autodo
 		return failed(ReasonBadWith)
 	}
 	until := sc.Now.Add(w.Duration.D())
-	return autodomain.StepResult{State: autodomain.StepWaiting, Effect: autodomain.EffectNone,
-		Output: map[string]string{OutUntil: rfc(until)}, WakeAt: until}, nil
+	return autodomain.StepResult{
+		State: autodomain.StepWaiting, Effect: autodomain.EffectNone,
+		Output: map[string]string{OutUntil: rfc(until)}, WakeAt: until,
+	}, nil
 }
 
 func (*wait) Poll(_ context.Context, _ pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
@@ -224,8 +234,10 @@ func (*wait) Poll(_ context.Context, _ pgx.Tx, sc autodomain.StepContext) (autod
 		return failed(ReasonBadWith)
 	}
 	if sc.Now.Before(until) {
-		return autodomain.StepResult{State: autodomain.StepWaiting, Effect: autodomain.EffectNone, Output: own(sc),
-			WakeAt: until}, nil
+		return autodomain.StepResult{
+			State: autodomain.StepWaiting, Effect: autodomain.EffectNone, Output: own(sc),
+			WakeAt: until,
+		}, nil
 	}
 	return autodomain.StepResult{State: autodomain.StepDone, Effect: autodomain.EffectNone, Output: own(sc)}, nil
 }

@@ -12,7 +12,7 @@ import (
 
 // automationEngineProcedures are ExecutionService's and
 // AutomationLaunchService's procedures (G0 M11 part 2 D26, D28, D29):
-// reads are automation.read, cancelling is automation.manage (human
+// reads are automation.read, stopping executions is automation.manage (human
 // only); the launch procedures are workload-authenticated by PAP/1 in
 // their handler, like WorkloadService.
 var automationEngineProcedures = map[string]td.Permission{

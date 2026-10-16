@@ -67,7 +67,7 @@ func (s *gate) request(sc autodomain.StepContext) (GateRequest, bool) {
 			return GateRequest{}, false
 		}
 	}
-	slices.SortFunc(out, func(a, b ids.UUID) int { return compareUUID(a, b) })
+	slices.SortFunc(out, compareUUID)
 	out = slices.Compact(out)
 	users := make([]ids.UUID, 0, len(w.Approvers.Users))
 	for _, u := range w.Approvers.Users {
@@ -126,8 +126,10 @@ func (s *gate) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (a
 	}
 	return autodomain.StepResult{
 		State: autodomain.StepWaiting, Effect: autodomain.EffectNone,
-		Output: map[string]string{OutRequest: id.String(), "eligible": strconv.Itoa(eligible),
-			"deadline": rfc(sc.Now.Add(in.Deadline))},
+		Output: map[string]string{
+			OutRequest: id.String(), "eligible": strconv.Itoa(eligible),
+			"deadline": rfc(sc.Now.Add(in.Deadline)),
+		},
 		WakeAt: sc.Now.Add(engine.PollInterval),
 	}, nil
 }
@@ -152,17 +154,25 @@ func (s *gate) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (
 		out["approvals"] = strconv.Itoa(len(st.Approvers))
 		return autodomain.StepResult{State: autodomain.StepDone, Effect: autodomain.EffectNone, Output: out, Refs: refs}, nil
 	case "DECLINED":
-		return autodomain.StepResult{State: autodomain.StepFailed, Reason: autodomain.ReasonGateDeclined,
-			Effect: autodomain.EffectNone, Output: o, Refs: refs}, nil
+		return autodomain.StepResult{
+			State: autodomain.StepFailed, Reason: autodomain.ReasonGateDeclined,
+			Effect: autodomain.EffectNone, Output: o, Refs: refs,
+		}, nil
 	case "EXPIRED":
-		return autodomain.StepResult{State: autodomain.StepFailed, Reason: autodomain.ReasonGateExpired,
-			Effect: autodomain.EffectNone, Output: o, Refs: refs}, nil
+		return autodomain.StepResult{
+			State: autodomain.StepFailed, Reason: autodomain.ReasonGateExpired,
+			Effect: autodomain.EffectNone, Output: o, Refs: refs,
+		}, nil
 	case "INVALIDATED", "SUPERSEDED":
-		return autodomain.StepResult{State: autodomain.StepFailed, Reason: ReasonGateEnded,
-			Effect: autodomain.EffectNone, Output: o, Refs: refs}, nil
+		return autodomain.StepResult{
+			State: autodomain.StepFailed, Reason: ReasonGateEnded,
+			Effect: autodomain.EffectNone, Output: o, Refs: refs,
+		}, nil
 	}
-	return autodomain.StepResult{State: autodomain.StepWaiting, Effect: autodomain.EffectNone, Output: o,
-		WakeAt: sc.Now.Add(engine.PollInterval)}, nil
+	return autodomain.StepResult{
+		State: autodomain.StepWaiting, Effect: autodomain.EffectNone, Output: o,
+		WakeAt: sc.Now.Add(engine.PollInterval),
+	}, nil
 }
 
 // Preview counts who could decide the gate and asks nobody (HR-288).

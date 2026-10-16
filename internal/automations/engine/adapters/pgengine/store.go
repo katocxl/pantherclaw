@@ -31,20 +31,20 @@ type definitions struct {
 
 const maxCachedDefinitions = 512
 
-func (d *definitions) get(ctx context.Context, q *dbq.Queries, org ids.OrgID, version ids.UUID) (*autodomain.Definition, dbq.PcAutomationVersion, error) {
+func (d *definitions) get(ctx context.Context, q *dbq.Queries, org ids.OrgID, version ids.UUID) (*autodomain.Definition, error) {
 	v, err := q.GetAutomationVersion(ctx, org, version)
 	if err != nil {
-		return nil, v, err
+		return nil, err
 	}
 	d.mu.Lock()
 	def, ok := d.m[version]
 	d.mu.Unlock()
 	if ok {
-		return def, v, nil
+		return def, nil
 	}
 	def, err = autodomain.Parse(v.Definition)
 	if err != nil {
-		return nil, v, fmt.Errorf("pgengine: version %s: %w", version, err)
+		return nil, fmt.Errorf("pgengine: version %s: %w", version, err)
 	}
 	d.mu.Lock()
 	if d.m == nil || len(d.m) >= maxCachedDefinitions {
@@ -52,7 +52,7 @@ func (d *definitions) get(ctx context.Context, q *dbq.Queries, org ids.OrgID, ve
 	}
 	d.m[version] = def
 	d.mu.Unlock()
-	return def, v, nil
+	return def, nil
 }
 
 // load reads an execution FOR UPDATE with its definition and attempts.
@@ -67,7 +67,7 @@ func (e *Engine) load(ctx context.Context, q *dbq.Queries, org ids.OrgID, id ids
 // build maps a stored execution to the Machine's model.
 func (e *Engine) build(ctx context.Context, q *dbq.Queries, row dbq.PcAutomationExecution) (*engine.Exec, error) {
 	org := row.OrgID
-	def, _, err := e.defs.get(ctx, q, org, row.VersionID)
+	def, err := e.defs.get(ctx, q, org, row.VersionID)
 	if err != nil {
 		return nil, err
 	}

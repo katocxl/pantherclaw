@@ -4,10 +4,9 @@
 package engine
 
 import (
+	"encoding/json/jsontext"
 	"errors"
 	"testing"
-
-	"encoding/json/jsontext"
 
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 )

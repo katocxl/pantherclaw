@@ -129,8 +129,10 @@ func (s *launchRun) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContex
 		return autodomain.StepResult{State: autodomain.StepFailed, Reason: reason, Effect: autodomain.EffectNone}, err
 	}
 	if p.outside {
-		return autodomain.StepResult{State: autodomain.StepSkipped, Reason: autodomain.ReasonOutsideCohort,
-			Effect: autodomain.EffectNone}, nil
+		return autodomain.StepResult{
+			State: autodomain.StepSkipped, Reason: autodomain.ReasonOutsideCohort,
+			Effect: autodomain.EffectNone,
+		}, nil
 	}
 	if p.w.Delivery == autodomain.DeliveryWebhook && (p.w.Destination == nil || s.d.Deliverer == nil ||
 		!slices.Contains(sc.Def.Authority.Destinations, *p.w.Destination)) {
@@ -153,8 +155,10 @@ func (s *launchRun) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContex
 			}); rerr != nil {
 				return autodomain.StepResult{}, rerr
 			}
-			return autodomain.StepResult{State: autodomain.StepFailed, Reason: r, Effect: autodomain.EffectChanged,
-				Output: map[string]string{OutGrant: grant.String()}}, nil
+			return autodomain.StepResult{
+				State: autodomain.StepFailed, Reason: r, Effect: autodomain.EffectChanged,
+				Output: map[string]string{OutGrant: grant.String()},
+			}, nil
 		}
 		return autodomain.StepResult{}, err
 	}
@@ -201,8 +205,10 @@ func (s *launchRun) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContex
 		})
 		if err != nil {
 			if r, ok := refusal(err); ok {
-				return autodomain.StepResult{State: autodomain.StepFailed, Reason: r, Effect: autodomain.EffectChanged,
-					Output: out}, nil
+				return autodomain.StepResult{
+					State: autodomain.StepFailed, Reason: r, Effect: autodomain.EffectChanged,
+					Output: out,
+				}, nil
 			}
 			return autodomain.StepResult{}, err
 		}
@@ -241,8 +247,10 @@ type StoredCall struct {
 func callsOf(cs []autodomain.RunnerCall) []StoredCall {
 	out := make([]StoredCall, 0, len(cs))
 	for _, c := range cs {
-		out = append(out, StoredCall{Connection: c.Connection.String(), Face: c.Face, Tool: c.Tool, Method: c.Method,
-			Path: c.Path, Input: c.Input})
+		out = append(out, StoredCall{
+			Connection: c.Connection.String(), Face: c.Face, Tool: c.Tool, Method: c.Method,
+			Path: c.Path, Input: c.Input,
+		})
 	}
 	return out
 }
@@ -278,12 +286,16 @@ func (s *launchRun) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepConte
 	case "CLAIMED", "COMPLETED":
 		out := clone(o)
 		out[engine.OutputRunBound] = "true"
-		return autodomain.StepResult{State: autodomain.StepDone, Effect: autodomain.EffectChanged, Output: out,
-			Refs: []reflexdomain.EvidenceRef{run, ref(RefGrant, l.GrantID), ref(RefLaunch, launch)}}, nil
+		return autodomain.StepResult{
+			State: autodomain.StepDone, Effect: autodomain.EffectChanged, Output: out,
+			Refs: []reflexdomain.EvidenceRef{run, ref(RefGrant, l.GrantID), ref(RefLaunch, launch)},
+		}, nil
 	case "PENDING":
 		if !l.ClaimDue {
-			return autodomain.StepResult{State: autodomain.StepWaiting, Effect: autodomain.EffectChanged, Output: o,
-				WakeAt: minTime(l.ClaimDeadline, sc.Now.Add(engine.PollInterval))}, nil
+			return autodomain.StepResult{
+				State: autodomain.StepWaiting, Effect: autodomain.EffectChanged, Output: o,
+				WakeAt: minTime(l.ClaimDeadline, sc.Now.Add(engine.PollInterval)),
+			}, nil
 		}
 		if _, err := q(tx).EndAutomationLaunch(ctx, "EXPIRED", sc.Org, launch); err != nil {
 			return autodomain.StepResult{}, err
@@ -302,8 +314,10 @@ func (s *launchRun) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepConte
 			return autodomain.StepResult{}, err
 		}
 	}
-	return autodomain.StepResult{State: autodomain.StepFailed, Reason: autodomain.ReasonLaunchNotClaimed,
-		Effect: autodomain.EffectChanged, Output: o, Refs: []reflexdomain.EvidenceRef{run}}, nil
+	return autodomain.StepResult{
+		State: autodomain.StepFailed, Reason: autodomain.ReasonLaunchNotClaimed,
+		Effect: autodomain.EffectChanged, Output: o, Refs: []reflexdomain.EvidenceRef{run},
+	}, nil
 }
 
 // Preview implements autoports.Step: the issuance and the run start as

@@ -84,13 +84,6 @@ func New(pool *db.Pool, steps autoports.StepRegistry, log *slog.Logger) (*Engine
 	return e, nil
 }
 
-func (e *Engine) log() *slog.Logger {
-	if e.Log == nil {
-		return slog.Default()
-	}
-	return e.Log
-}
-
 // The engine's audit actor: the automation's own service account (D8).
 func actorOf(x *engine.Exec) evdomain.Actor {
 	return evdomain.Actor{Type: "service_account", ID: x.View.ServiceAccount.String()}
@@ -124,7 +117,7 @@ func (e *Engine) Start(ctx context.Context, tx pgx.Tx, t autodomain.TriggerRef) 
 	case mode == autodomain.ModeTest:
 		return ids.UUID{}, fmt.Errorf("pgengine: TEST executions run only in Simulate")
 	}
-	def, _, err := e.defs.get(ctx, q, t.Org, t.Version)
+	def, err := e.defs.get(ctx, q, t.Org, t.Version)
 	if err != nil {
 		return ids.UUID{}, err
 	}

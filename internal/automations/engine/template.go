@@ -39,7 +39,7 @@ func render(spec autodomain.StepSpec, params map[string]autodomain.Value, output
 	}
 	var doc any
 	if err := json.Unmarshal(spec.With, &doc); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrTemplate, err)
+		return nil, fmt.Errorf("%w: %w", ErrTemplate, err)
 	}
 	r := renderer{patterns: kind.Templatable, params: params, outputs: outputs}
 	doc, err := r.walk("", doc)
@@ -48,7 +48,7 @@ func render(spec autodomain.StepSpec, params map[string]autodomain.Value, output
 	}
 	raw, err := json.Marshal(doc, json.Deterministic(true))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrTemplate, err)
+		return nil, fmt.Errorf("%w: %w", ErrTemplate, err)
 	}
 	return kind.DecodeWith(raw)
 }

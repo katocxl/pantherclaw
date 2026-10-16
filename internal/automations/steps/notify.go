@@ -78,8 +78,10 @@ func (s *revokeGrant) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepCont
 	if len(revoked) > 0 {
 		effect = autodomain.EffectChanged
 	}
-	return autodomain.StepResult{State: autodomain.StepDone, Effect: effect, Refs: refs,
-		Output: map[string]string{"revoked": strconv.Itoa(len(revoked))}}, nil
+	return autodomain.StepResult{
+		State: autodomain.StepDone, Effect: effect, Refs: refs,
+		Output: map[string]string{"revoked": strconv.Itoa(len(revoked))},
+	}, nil
 }
 
 func (s *revokeGrant) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
@@ -89,8 +91,10 @@ func (s *revokeGrant) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepCon
 func (s *revokeGrant) Preview(_ context.Context, _ pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
 	in, reason := s.revoke(sc)
 	if reason != "" {
-		return autodomain.StepResult{State: autodomain.StepFailed, Reason: reason,
-			Output: map[string]string{"shadow": "true", "decision": "REFUSED"}}, nil
+		return autodomain.StepResult{
+			State: autodomain.StepFailed, Reason: reason,
+			Output: map[string]string{"shadow": "true", "decision": "REFUSED"},
+		}, nil
 	}
 	return shadowed(map[string]string{"shadow": "true", "scope": in.Scope})
 }
@@ -186,12 +190,14 @@ func (s *notify) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext)
 	return s.Run(ctx, tx, sc)
 }
 
-// Preview tells the owner only, labelled as a shadow (HR-288).
+// Preview tells the owner only, marked as a shadow (HR-288).
 func (s *notify) Preview(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
 	w, reason := s.check(sc)
 	if reason != "" {
-		return autodomain.StepResult{State: autodomain.StepFailed, Reason: reason,
-			Output: map[string]string{"shadow": "true", "decision": "REFUSED"}}, nil
+		return autodomain.StepResult{
+			State: autodomain.StepFailed, Reason: reason,
+			Output: map[string]string{"shadow": "true", "decision": "REFUSED"},
+		}, nil
 	}
 	out := map[string]string{"shadow": "true"}
 	if s.d.Notifier != nil && sc.Mode == autodomain.ModeShadow && !sc.Execution.Owner.IsZero() {
@@ -253,8 +259,10 @@ func (s *deliver) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext)
 		}
 		return autodomain.StepResult{}, err
 	}
-	return autodomain.StepResult{State: autodomain.StepWaiting, Effect: autodomain.EffectChanged,
-		Output: map[string]string{OutDelivery: id.String()}, WakeAt: sc.Now.Add(engine.PollInterval)}, nil
+	return autodomain.StepResult{
+		State: autodomain.StepWaiting, Effect: autodomain.EffectChanged,
+		Output: map[string]string{OutDelivery: id.String()}, WakeAt: sc.Now.Add(engine.PollInterval),
+	}, nil
 }
 
 func (s *deliver) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
@@ -275,19 +283,25 @@ func (s *deliver) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext
 	case autodomain.DeliveryDelivered:
 		return autodomain.StepResult{State: autodomain.StepDone, Effect: autodomain.EffectChanged, Output: o, Refs: refs}, nil
 	case autodomain.DeliveryFailed:
-		return autodomain.StepResult{State: autodomain.StepFailed, Reason: ReasonDelivery, Effect: autodomain.EffectUnknown,
-			Output: o, Refs: refs}, nil
+		return autodomain.StepResult{
+			State: autodomain.StepFailed, Reason: ReasonDelivery, Effect: autodomain.EffectUnknown,
+			Output: o, Refs: refs,
+		}, nil
 	case autodomain.DeliveryPending:
 	}
-	return autodomain.StepResult{State: autodomain.StepWaiting, Effect: autodomain.EffectChanged, Output: o,
-		WakeAt: sc.Now.Add(engine.PollInterval)}, nil
+	return autodomain.StepResult{
+		State: autodomain.StepWaiting, Effect: autodomain.EffectChanged, Output: o,
+		WakeAt: sc.Now.Add(engine.PollInterval),
+	}, nil
 }
 
 func (s *deliver) Preview(_ context.Context, _ pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
 	_, _, reason := s.check(sc)
 	if reason != "" && reason != ReasonBadWith {
-		return autodomain.StepResult{State: autodomain.StepFailed, Reason: reason,
-			Output: map[string]string{"shadow": "true", "decision": "REFUSED"}}, nil
+		return autodomain.StepResult{
+			State: autodomain.StepFailed, Reason: reason,
+			Output: map[string]string{"shadow": "true", "decision": "REFUSED"},
+		}, nil
 	}
 	return shadowed(map[string]string{"shadow": "true"})
 }

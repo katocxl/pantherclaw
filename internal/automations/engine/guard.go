@@ -80,6 +80,8 @@ func guardVars(t autodomain.TriggerRef, outputs map[string]map[string]string) ma
 			params[k] = v.Int
 		case autodomain.ParamBool:
 			params[k] = v.Bool
+		case autodomain.ParamString, autodomain.ParamDecimal, autodomain.ParamEnum, autodomain.ParamUUID:
+			params[k] = v.Text()
 		default:
 			params[k] = v.Text()
 		}

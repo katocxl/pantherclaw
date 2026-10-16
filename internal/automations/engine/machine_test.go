@@ -95,8 +95,10 @@ var (
 	evRun   = []reflexdomain.EvidenceRef{{Kind: reflexdomain.EvidenceRun, ID: ids.NewV7()}}
 	evTx    = []reflexdomain.EvidenceRef{{Kind: reflexdomain.EvidenceTransaction, ID: ids.NewV7()}}
 	done    = autodomain.StepResult{State: autodomain.StepDone, Effect: autodomain.EffectNone}
-	changed = autodomain.StepResult{State: autodomain.StepDone, Effect: autodomain.EffectChanged,
-		Output: map[string]string{"run_id": "r"}}
+	changed = autodomain.StepResult{
+		State: autodomain.StepDone, Effect: autodomain.EffectChanged,
+		Output: map[string]string{"run_id": "r"},
+	}
 	ended     = autodomain.StepResult{State: autodomain.StepDone, Effect: autodomain.EffectNone, Refs: evRun}
 	confirmed = autodomain.StepResult{State: autodomain.StepDone, Effect: autodomain.EffectNone, Refs: evTx}
 	waiting   = autodomain.StepResult{State: autodomain.StepWaiting}
@@ -178,8 +180,10 @@ func TestHR280_UnknownIrreversibleNeedsReconciliation(t *testing.T) {
 	comp := "if_fails:\n  compensate:\n    - id: undo\n      step: revoke_grant\n      with:\n        scope: EXECUTION\n"
 	s := simulate(t, def(t, "", comp), engine.Stubs{
 		"launch": {changed}, "wait": {ended},
-		"effect": {{State: autodomain.StepUnknown, Effect: autodomain.EffectUnknown,
-			Output: map[string]string{engine.OutputIrreversible: "true"}}},
+		"effect": {{
+			State: autodomain.StepUnknown, Effect: autodomain.EffectUnknown,
+			Output: map[string]string{engine.OutputIrreversible: "true"},
+		}},
 	})
 	if s.State != autodomain.ExecNeedsReconciliation {
 		t.Fatalf("state %s, want NEEDS_RECONCILIATION", s.State)
@@ -218,8 +222,10 @@ func TestHR280_RetrySafeKindRetriesWithinAttempts(t *testing.T) {
 // HR-280: a launch never retries once its run bound.
 func TestHR280_LaunchNeverRetriesAfterBind(t *testing.T) {
 	retry := "retry:\n      max_attempts: 3"
-	bound := autodomain.StepResult{State: autodomain.StepFailed, Reason: "RUN_FAILED",
-		Output: map[string]string{engine.OutputRunBound: "true"}, Effect: autodomain.EffectChanged}
+	bound := autodomain.StepResult{
+		State: autodomain.StepFailed, Reason: "RUN_FAILED",
+		Output: map[string]string{engine.OutputRunBound: "true"}, Effect: autodomain.EffectChanged,
+	}
 	s := simulate(t, def(t, retry, ""), engine.Stubs{"launch": {bound, changed}})
 	if n := len(s.Attempts); n != 1 || s.State != autodomain.ExecPartiallyCompleted {
 		t.Fatalf("%d attempts, state %s", n, s.State)

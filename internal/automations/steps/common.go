@@ -66,8 +66,7 @@ func refusal(err error) (string, bool) {
 	if !errors.As(err, &e) {
 		return "", false
 	}
-	switch e.Code() {
-	case pcerr.Internal, pcerr.Unavailable:
+	if c := e.Code(); c == pcerr.Internal || c == pcerr.Unavailable {
 		return "", false
 	}
 	if r := e.Reason(); reasonPattern.MatchString(r) {

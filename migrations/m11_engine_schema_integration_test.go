@@ -39,8 +39,10 @@ const (
 
 func newM11EngineFixture(t *testing.T, d *dbtest.DB) m11EngineFixture {
 	t.Helper()
-	f := m11EngineFixture{m5p2Fixture: newM5p2Fixture(t, newM5Fixture(t, d.AppPool(t))),
-		automation: m5ID(), sa: m5ID(), version: m5ID(), execution: m5ID(), trigger: m5ID()}
+	f := m11EngineFixture{
+		m5p2Fixture: newM5p2Fixture(t, newM5Fixture(t, d.AppPool(t))),
+		automation:  m5ID(), sa: m5ID(), version: m5ID(), execution: m5ID(), trigger: m5ID(),
+	}
 	err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
 		for _, s := range []struct {
 			sql  string
@@ -190,4 +192,24 @@ func TestHR281_GatesAreAutomationRequestsWithoutAnAgent(t *testing.T) {
 		subject_type, subject_id, agent_id, requested_by, requested_by_automation, deadline_at)
 		VALUES ($1, $2, 'RESTORATION', 'approval_request', $3, $4, $5, $6, now() + interval '1 hour')`,
 		f.org, m5ID(), m5ID(), f.agent, &by, f.automation)
+}
+
+// TestM11Engine_RunsOfAnExecutionAreLaunchedByItsAccount (00142, D64): a
+// run naming an execution is launched by that execution's service account
+// and never changes execution.
+func TestM11Engine_RunsOfAnExecutionAreLaunchedByItsAccount(t *testing.T) {
+	d := dbtest.New(t)
+	f := newM11EngineFixture(t, d)
+	env := m5ID()
+	f.mustExec(t, "INSERT INTO pc.environments (org_id, id, slug, name, kind) VALUES ($1, $2, 'auto', 'Auto', 'DEVELOPMENT')", f.org, env)
+	other := m5ID()
+	f.mustExec(t, "INSERT INTO pc.service_accounts (org_id, id, name, created_by) VALUES ($1, $2, 'ci', 'test')", f.org, other)
+	const run = `INSERT INTO pc.runs (org_id, id, agent_id, environment_id, launcher_sa_id, principal_sa_id,
+		principal_source, automation_execution_id, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $5, 'automation', $6, now() + interval '1 hour')`
+	f.want(t, m5Check, "a run of an execution launched by another account", run, f.org, m5ID(), f.agent, env, other, f.execution)
+	id := m5ID()
+	f.mustExec(t, run, f.org, id, f.agent, env, f.sa, f.execution)
+	f.want(t, m5Denied, "re-assigning a run's execution",
+		"UPDATE pc.runs SET automation_execution_id = NULL WHERE id = $1", id)
 }
