@@ -142,7 +142,7 @@ definition:
         limits:
           $when: {param: budget_per_run, set: true}
           budgets:
-            - id: per-run
+            - id: per_run
               grouping: task
               operations: ["${operation}"]
               currency: "${budget_currency}"
@@ -197,7 +197,7 @@ definition:
     deadline: 7d
 
 tests:
-  - name: the request is approved and its effect confirmed
+  - name: the_request_is_approved_and_its_effect_confirmed
     kind: NORMAL
     trigger:
       params: {ref: R-200}
@@ -213,7 +213,7 @@ tests:
         wait: DONE
         confirm: DONE
   - $when: {param: gate, in: ["true"]}
-    name: the approver declines
+    name: the_approver_declines
     kind: DENIED
     trigger:
       params: {ref: R-201}
@@ -224,7 +224,7 @@ tests:
       reason: GATE_DECLINED
       steps: {approve: FAILED}
   - $when: {param: gate, in: ["false"]}
-    name: the ceiling refuses the launch
+    name: the_ceiling_refuses_the_launch
     kind: DENIED
     trigger:
       params: {ref: R-201}
@@ -234,7 +234,7 @@ tests:
       state: FAILED
       reason: USAGE_EXCEEDED
       steps: {launch: FAILED}
-  - name: the effect is not confirmed in time
+  - name: the_effect_is_not_confirmed_in_time
     kind: TIMEOUT
     trigger:
       params: {ref: R-202}
@@ -246,7 +246,7 @@ tests:
       state: PARTIALLY_COMPLETED
       reason: TIMEOUT
       steps: {confirm: FAILED}
-  - name: the same request twice starts one execution
+  - name: the_same_request_twice_starts_one_execution
     kind: DUPLICATE
     trigger:
       params: {ref: R-203}
@@ -256,7 +256,7 @@ tests:
       confirm: [{state: DONE, refs: [receipt]}]
     expect:
       state: SUCCEEDED
-  - name: the run fails after it acted
+  - name: the_run_fails_after_it_acted
     kind: PARTIAL
     trigger:
       params: {ref: R-204}
@@ -267,7 +267,7 @@ tests:
       state: PARTIALLY_COMPLETED
       reason: STEP_FAILED
       steps: {wait: FAILED}
-  - name: the irreversible effect is unknown
+  - name: the_irreversible_effect_is_unknown
     kind: UNKNOWN
     trigger:
       params: {ref: R-205}

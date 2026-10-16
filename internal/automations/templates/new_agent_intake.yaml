@@ -96,7 +96,7 @@ definition:
     deadline: 7d
 
 tests:
-  - name: the agent is claimed
+  - name: the_agent_is_claimed
     kind: NORMAL
     trigger:
       params: {agent: 0192f000-0000-7000-8000-0000000000f1}
@@ -108,7 +108,7 @@ tests:
     expect:
       state: SUCCEEDED
       steps: {propose: DONE, routes: DONE, baseline: DONE, safe_tests: DONE, tell: DONE, claim: DONE}
-  - name: the route inspection is refused
+  - name: the_route_inspection_is_refused
     kind: DENIED
     trigger:
       params: {agent: 0192f000-0000-7000-8000-0000000000f2}
@@ -118,7 +118,7 @@ tests:
       state: FAILED
       reason: AUTHORITY_CHANGED
       steps: {propose: DONE, routes: FAILED}
-  - name: nobody claims the agent in time
+  - name: nobody_claims_the_agent_in_time
     kind: TIMEOUT
     trigger:
       params: {agent: 0192f000-0000-7000-8000-0000000000f3}
@@ -129,7 +129,7 @@ tests:
       state: FAILED
       reason: TIMEOUT
       steps: {baseline: DONE, claim: FAILED}
-  - name: the same discovery twice starts one execution
+  - name: the_same_discovery_twice_starts_one_execution
     kind: DUPLICATE
     trigger:
       params: {agent: 0192f000-0000-7000-8000-0000000000f4}

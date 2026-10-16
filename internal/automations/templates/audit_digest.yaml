@@ -127,7 +127,7 @@ definition:
     deadline: 1d
 
 tests:
-  - name: the digest is delivered
+  - name: the_digest_is_delivered
     kind: NORMAL
     trigger:
       params:
@@ -139,7 +139,7 @@ tests:
     expect:
       state: SUCCEEDED
       steps: {digest: DONE, send: DONE}
-  - name: the digest is refused
+  - name: the_digest_is_refused
     kind: DENIED
     trigger:
       params:
@@ -151,7 +151,7 @@ tests:
       state: FAILED
       reason: AUTHORITY_CHANGED
       steps: {digest: FAILED}
-  - name: the delivery is not confirmed in time
+  - name: the_delivery_is_not_confirmed_in_time
     kind: TIMEOUT
     trigger:
       params:
@@ -164,7 +164,7 @@ tests:
       state: PARTIALLY_COMPLETED
       reason: TIMEOUT
       steps: {digest: DONE, send: FAILED}
-  - name: the same trigger twice starts one execution
+  - name: the_same_trigger_twice_starts_one_execution
     kind: DUPLICATE
     trigger:
       params:
