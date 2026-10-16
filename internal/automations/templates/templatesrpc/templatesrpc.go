@@ -180,7 +180,7 @@ func (h *TemplateHandler) CreateFromTemplate(ctx context.Context, req *panthercl
 		return nil, err
 	}
 	return &pantherclawv1.CreateFromTemplateResponse{
-		AutomationId: automation.String(), VersionId: version.String(), Tests: int32(n),
+		AutomationId: automation.String(), VersionId: version.String(), Tests: int32(n), //nolint:gosec // G115: a template has a few cases
 	}, nil
 }
 

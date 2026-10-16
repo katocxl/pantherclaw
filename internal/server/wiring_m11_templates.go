@@ -15,19 +15,14 @@ import (
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/automations/securitysteps"
-	"github.com/katocxl/pantherclaw/internal/automations/steps"
 	"github.com/katocxl/pantherclaw/internal/automations/templates"
 	"github.com/katocxl/pantherclaw/internal/automations/templates/templatesrpc"
-	"github.com/katocxl/pantherclaw/internal/billing"
 	covapp "github.com/katocxl/pantherclaw/internal/coverage/app"
-	coverage "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/packbuild"
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
-	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
-	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
@@ -120,24 +115,12 @@ func (a automationDrafts) CreateDraftTx(ctx context.Context, tx db.TenantTx, d t
 	return auto.ID, v.ID, err
 }
 
-// securityInputs are what the security-work steps (D31) are built from,
-// the same in the API and the worker (D108): the process's one core, the
-// engine's generic step ports and the configured services.
-type securityInputs struct {
-	core      *automationsCore
-	pool      *db.Pool
-	bill      *billing.Service
-	log       *slog.Logger
-	steps     steps.Deps
-	notify    *napp.Service
-	cel       celenv.Limits
-	freshness coverage.Freshness
-	logOrigin string
-}
+func init() { automationSecuritySteps = securitySteps }
 
-// securitySteps are the security-work step kinds the engine's registry
-// merges with its generic kinds (D11).
-func securitySteps(in securityInputs) autoports.StepRegistry { //nolint:unused // set as the engine's hook (D108)
+// securitySteps are the security-work step kinds (D31) the engine's
+// registry merges with its generic kinds (D11), built from the same
+// inputs in the API and the worker (D108).
+func securitySteps(in securityStepDeps) autoports.StepRegistry {
 	return securitysteps.All(securityPorts(in))
 }
 
@@ -146,66 +129,65 @@ func securitySteps(in securityInputs) autoports.StepRegistry { //nolint:unused /
 // (D108, HR-284): contain needs its escalation's failure sink and case
 // opener, remind and escalate need the approvals router, simulations and
 // digest packs a licence and the job queue.
-func securityPorts(in securityInputs) securitysteps.Deps {
+func securityPorts(in securityStepDeps) securitysteps.Deps {
 	deps := securitysteps.Deps{
-		Grants:   in.steps.Grants,
+		Grants:   in.Steps.Grants,
 		Actions:  securitysteps.Actions{},
-		Cases:    m10CaseOpener(in.bill),
+		Cases:    m10CaseOpener(in.Bill),
 		Failures: edgesFailures(),
-		Coverage: routeCoverage{svc: &covapp.Service{Pool: in.pool, Freshness: in.freshness, Verifier: covapp.ConnectionTests{}}},
+		Coverage: routeCoverage{svc: &covapp.Service{Pool: in.Pool, Freshness: in.Freshness, Verifier: covapp.ConnectionTests{}}},
 		Owners:   securitysteps.StoreOwners{},
 	}
-	if in.core != nil && in.core.svc != nil {
-		deps.Pauser = in.core.svc
+	if in.Core != nil && in.Core.svc != nil {
+		deps.Pauser = in.Core.svc
 	}
 	var notify rapp.Notifier
-	if in.notify != nil {
-		notify = in.notify
-		deps.Approvals = securitysteps.StoreApprovals{Nudger: &wapp.Router{Pool: in.pool, Notify: in.notify}}
+	if in.Notify != nil {
+		notify = in.Notify
+		deps.Approvals = securitysteps.StoreApprovals{Nudger: &wapp.Router{Pool: in.Pool, Notify: in.Notify}}
 	}
-	deps.Container = m10Container(in.pool, in.bill, notify)
+	deps.Container = m10Container(in.Pool, in.Bill, notify)
 
-	defs := &defspg.Store{Pool: in.pool}
-	facts := &factspg.Store{Pool: in.pool}
+	defs := &defspg.Store{Pool: in.Pool}
+	facts := &factspg.Store{Pool: in.Pool}
 	reads := securitysteps.NewIntakeReads(defs)
 	deps.Intake = securitysteps.IntakeDeps{
 		Agents: reads, Candidates: reads, Routes: reads, Operations: reads,
-		Tests:     securitysteps.NewScenarioTests(scenario.New(defs, facts, in.cel, policyapp.DefaultBudget)),
+		Tests:     securitysteps.NewScenarioTests(scenario.New(defs, facts, in.CEL, policyapp.DefaultBudget)),
 		Proposals: securitysteps.TableProposals{},
 	}
 	deps.Review = securitysteps.ReviewDeps{
-		Unused: securitysteps.NewUnusedGrants(), Drafts: securitysteps.NewPolicyDrafts(facts, defs, in.cel),
+		Unused: securitysteps.NewUnusedGrants(), Drafts: securitysteps.NewPolicyDrafts(facts, defs, in.CEL),
 		Digests: securitysteps.NewDigestCounts(), Proposals: securitysteps.TableProposals{},
 	}
-	if in.bill == nil {
+	if in.Bill == nil {
 		return deps // Community: no simulations or packs
 	}
-	insert, err := jobs.NewClient(in.pool, nil, jobs.Config{Logger: in.log}) // insert-only: enqueue in the step's transaction
+	insert, err := jobs.NewClient(in.Pool, nil, jobs.Config{Logger: in.Log}) // insert-only: enqueue in the step's transaction
 	if err != nil {
-		if in.log != nil {
-			in.log.Warn("automation.security_steps_queue_unavailable", slog.String("error", err.Error()))
+		if in.Log != nil {
+			in.Log.Warn("automation.security_steps_queue_unavailable", slog.String("error", err.Error()))
 		}
 		return deps
 	}
-	deps.Review.Simulations = securitysteps.NewPolicySimulations(insert, in.bill)
+	deps.Review.Simulations = securitysteps.NewPolicySimulations(insert, in.Bill)
 	// Digest packs are the automation's own, within its declared agents
 	// (D85).
-	deps.Review.Packs = securitysteps.NewDigestPacks(evapp.New(in.pool, in.logOrigin).WithPacks(
+	deps.Review.Packs = securitysteps.NewDigestPacks(evapp.New(in.Pool, in.LogOrigin).WithPacks(
 		func(ctx context.Context, tx db.TenantTx, org ids.OrgID, pack ids.UUID) error {
 			args, err := packbuild.NewBuildArgs(org, pack)
 			if err != nil {
 				return err
 			}
 			return jobs.InsertTx(ctx, insert, tx, args, nil)
-		}, in.bill))
+		}, in.Bill))
 	return deps
 }
 
 // routeCoverage is wait_coverage's view of coverage (D31): the trigger's
 // own route, read without a viewer.
-type routeCoverage struct{ svc *covapp.Service } //nolint:unused // with securitySteps
+type routeCoverage struct{ svc *covapp.Service }
 
-//nolint:unused // with securitySteps
 func (c routeCoverage) RouteState(ctx context.Context, tx pgx.Tx, org ids.OrgID, agent, connection ids.UUID, operation string) (string, ids.UUID, error) {
 	return c.svc.RouteStateForAutomationTx(ctx, tx, org, agent, connection, operation)
 }

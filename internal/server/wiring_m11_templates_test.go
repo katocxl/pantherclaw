@@ -4,11 +4,20 @@
 package server
 
 import (
+	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/automations/assurance"
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
+	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/automations/templates"
+	"github.com/katocxl/pantherclaw/internal/billing"
+	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
+	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/jobs"
+	runsapp "github.com/katocxl/pantherclaw/internal/runs/app"
 )
 
 // TestTemplateHandler_PortsAreCoreAndAssurance: CreateFromTemplate creates
@@ -55,4 +64,71 @@ func TestTemplateTestsAreAssuranceCases(t *testing.T) {
 			}
 		}
 	}
+}
+
+// securityPending are the security-step ports another stream still owes:
+// core's resume of what a step paused, govern's fleet cohorts
+// (COHORT_BASELINE). Until then those steps fail DEPENDENCY_UNAVAILABLE.
+// The list is exact, so a new gap and a filled one both fail the test.
+var securityPending = []string{"Intake.Cohorts", "Resumer"}
+
+// TestSecurityStepsAreFullyWired (D108): in both process roles the driver
+// builds the security steps from the process's core and the server's
+// config, and every step's port is set but the pending ones.
+func TestSecurityStepsAreFullyWired(t *testing.T) {
+	roles := map[string]func(core *automationsCore){
+		RoleAll: func(core *automationsCore) { core.attach(&db.Pool{}, &grantsapp.Service{}, runsapp.New(&db.Pool{})) },
+		RoleWorker: func(core *automationsCore) {
+			if _, err := registerAutomationsCoreJobs(nil, jobs.NewRegistry(), core, nil); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	for role, attach := range roles {
+		t.Run(role, func(t *testing.T) {
+			var got []securityStepDeps
+			prev := automationSecuritySteps
+			automationSecuritySteps = func(d securityStepDeps) autoports.StepRegistry {
+				got = append(got, d)
+				return securitySteps(d)
+			}
+			t.Cleanup(func() { automationSecuritySteps = prev })
+			core := newAutomationsCore(&db.Pool{}, nil, "")
+			if role == RoleAll {
+				attach(core)
+			}
+			if _, err := registerAutomationEngineJobs(nil, jobs.NewRegistry(), core, &Config{}, nil, &billing.Service{}, &napp.Service{}, nil); err != nil {
+				t.Fatal(err)
+			}
+			if role == RoleWorker {
+				attach(core)
+			}
+			if len(got) == 0 {
+				t.Fatal("the driver built no security steps")
+			}
+			if missing := nilPorts(reflect.ValueOf(securityPorts(got[0])), ""); !slices.Equal(missing, securityPending) {
+				t.Fatalf("unset ports %v, want exactly %v", missing, securityPending)
+			}
+		})
+	}
+}
+
+// nilPorts lists the nil interface and pointer fields of a Deps, nested
+// dependency structs included, sorted.
+func nilPorts(v reflect.Value, prefix string) []string {
+	var out []string
+	for i := range v.NumField() {
+		f, name := v.Field(i), prefix+v.Type().Field(i).Name
+		switch f.Kind() {
+		case reflect.Interface, reflect.Pointer:
+			if f.IsNil() {
+				out = append(out, name)
+			}
+		case reflect.Struct:
+			out = append(out, nilPorts(f, name+".")...)
+		default:
+		}
+	}
+	slices.Sort(out)
+	return out
 }
