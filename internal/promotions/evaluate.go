@@ -17,6 +17,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // identityStates are the agent states at or after VERIFIED that can work.
@@ -31,13 +32,17 @@ type subject struct {
 	bundle *pdomain.Bundle
 	// snapshots are the agent's current coverage snapshots.
 	snapshots []dbq.PcCoverageSnapshot
+	// catalog is what the org's connections reach, with consequences.
+	catalog catalog
+	// windows counts the org's change windows.
+	windows int32
 }
 
 const maxSnapshots = 1000
 
 // load reads what every operation's checks need.
-func load(ctx context.Context, q *dbq.Queries, org ids.OrgID, row dbq.PromotionSubjectRow, env ids.UUID) (*subject, error) {
-	s := &subject{org: org, row: row, env: env}
+func load(ctx context.Context, q *dbq.Queries, org ids.OrgID, row dbq.PromotionSubjectRow, env ids.UUID, c catalog) (*subject, error) {
+	s := &subject{org: org, row: row, env: env, catalog: c}
 	pub, err := q.GetPublishedPolicy(ctx, org)
 	switch {
 	case db.IsNoRows(err):
@@ -54,6 +59,9 @@ func load(ctx context.Context, q *dbq.Queries, org ids.OrgID, row dbq.PromotionS
 	if s.snapshots, err = q.ListCurrentCoverageSnapshotsPage(ctx, dbq.ListCurrentCoverageSnapshotsPageParams{
 		OrgID: org, AgentID: &agent, MaxRows: maxSnapshots,
 	}); err != nil {
+		return nil, err
+	}
+	if s.windows, err = q.PromotionChangeWindows(ctx, org); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -114,7 +122,7 @@ func (s *subject) tests(op string) Check {
 	}
 	var n int
 	for _, tc := range s.bundle.Tests {
-		if matches(op, tc.Action.Operation) && (tc.Action.Environment == "" || tc.Action.Environment == s.env.String()) {
+		if tc.Action.Operation == op && (tc.Action.Environment == "" || tc.Action.Environment == s.env.String()) {
 			n++
 		}
 	}
@@ -125,23 +133,37 @@ func (s *subject) tests(op string) Check {
 	return Check{Name: CheckTests, Passed: true, Detail: fmt.Sprintf("%d scenario test(s) in the published policy", n)}
 }
 
-// approvals: every approval requirement the published policy puts on the
-// operation in this environment has at least one eligible approver: an
-// active person holding the role where the agent lives, not one of its
-// owners when the requirement is independent.
+// approvals: every hold the action can meet has at least one eligible
+// approver (D71 G10). Holds come from the published policy's approval
+// rules on the operation, and on each consequence its active packages'
+// consequence rules predict for it (as the Authority applies them), in
+// this environment. An eligible approver is an active person holding the
+// role where the agent lives, not one of its owners when the requirement
+// is independent (code reviewers and release approvers always are). A
+// release-window hold (window: true, or a release approver) counts only
+// inside a change window, so the org needs one.
 func (s *subject) approvals(ctx context.Context, q *dbq.Queries, op string) (Check, error) {
 	if s.bundle == nil {
 		return Check{Name: CheckApprovals, Passed: true, Detail: "no policy is published, so nothing is held for approval"}, nil
 	}
+	reached := append([]string{op}, s.catalog.consequences[op]...)
 	var rules, missing []string
 	for _, r := range s.bundle.Rules {
 		if r.Kind != pdomain.RequireApproval || r.Approval == nil || !s.inEnv(r.Environments) ||
-			!slices.ContainsFunc(r.Operations, func(p string) bool { return overlaps(p, op) }) {
+			!slices.ContainsFunc(r.Operations, func(p string) bool {
+				return slices.ContainsFunc(reached, func(o string) bool { return matches(p, o) })
+			}) {
 			continue
 		}
 		rules = append(rules, r.ID)
+		role := r.Approval.Role
+		independent := r.Approval.Independent || role == string(td.RoleCodeReviewer) || role == string(td.RoleReleaseApprover)
+		if (r.Approval.Window || role == string(td.RoleReleaseApprover)) && s.windows == 0 {
+			missing = append(missing, r.ID+" (a release window: no change window exists)")
+			continue
+		}
 		people, err := q.DeciderCandidates(ctx, dbq.DeciderCandidatesParams{
-			OrgID: s.org, Roles: []string{r.Approval.Role}, BusinessUnitID: s.row.BusinessUnitID, TeamID: s.row.TeamID,
+			OrgID: s.org, Roles: []string{role}, BusinessUnitID: s.row.BusinessUnitID, TeamID: s.row.TeamID,
 			EnvironmentID: s.row.EnvironmentID, Lim: 50,
 		})
 		if err != nil {
@@ -150,17 +172,17 @@ func (s *subject) approvals(ctx context.Context, q *dbq.Queries, op string) (Che
 		eligible := slices.ContainsFunc(people, func(p dbq.DeciderCandidatesRow) bool {
 			owner := (s.row.OwnerUserID != nil && *s.row.OwnerUserID == p.UserID) ||
 				(s.row.BackupOwnerUserID != nil && *s.row.BackupOwnerUserID == p.UserID)
-			return !r.Approval.Independent || !owner
+			return !independent || !owner
 		})
 		if !eligible {
-			missing = append(missing, r.ID+" (role "+r.Approval.Role+")")
+			missing = append(missing, r.ID+" (role "+role+")")
 		}
 	}
 	switch {
 	case len(missing) > 0:
 		return Check{Name: CheckApprovals, Detail: clip("no eligible approver for " + strings.Join(missing, ", "))}, nil
 	case len(rules) == 0:
-		return Check{Name: CheckApprovals, Passed: true, Detail: "the published policy holds nothing of it for approval"}, nil
+		return Check{Name: CheckApprovals, Passed: true, Detail: "the published policy holds nothing of it or its consequences for approval"}, nil
 	}
 	return Check{Name: CheckApprovals, Passed: true, Detail: clip("an eligible approver for " + strings.Join(rules, ", "))}, nil
 }
@@ -172,7 +194,7 @@ func (s *subject) coverage(ctx context.Context, q *dbq.Queries, op string, now t
 	var n int
 	var bad []string
 	for _, row := range s.snapshots {
-		if !matches(op, row.Operation) {
+		if row.Operation != op {
 			continue
 		}
 		n++

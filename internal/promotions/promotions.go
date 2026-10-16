@@ -81,6 +81,9 @@ type Service struct {
 	Pool *db.Pool
 	// Compromise, when set, refuses a compromised person (nil: none is).
 	Compromise CompromiseChecker
+	// Packages names the operations a prefix covers and the consequences
+	// an operation reaches (nil: none, so prefixes are refused).
+	Packages Packages
 }
 
 // Promotion is one stored promotion.
@@ -208,11 +211,19 @@ func (s *Service) PromoteAgent(ctx context.Context, in PromoteInput, su *stepup.
 		if err != nil {
 			return err
 		}
-		sub, err := load(ctx, q, c.Org, row, in.Environment)
+		cat, err := loadCatalog(ctx, q, s.Packages, c.Org)
 		if err != nil {
 			return err
 		}
-		if out.Readiness, err = sub.evaluate(ctx, q, ops, in.FailureBehavior, now); err != nil {
+		exact, empty := cat.expand(ops)
+		if len(empty) > 0 {
+			return noKnown(empty)
+		}
+		sub, err := load(ctx, q, c.Org, row, in.Environment, cat)
+		if err != nil {
+			return err
+		}
+		if out.Readiness, err = sub.evaluate(ctx, q, exact, in.FailureBehavior, now); err != nil {
 			return err
 		}
 		for i, r := range out.Readiness {
@@ -252,6 +263,15 @@ func (s *Service) PromoteAgent(ctx context.Context, in PromoteInput, su *stepup.
 				},
 			}); err != nil {
 				return err
+			}
+		}
+		if !c.Can(td.PermPolicyRead, td.OrgPath(c.Org)) {
+			redact(out.Readiness)
+			for i := range out.Promoted {
+				out.Promoted[i] = redactPromotion(out.Promoted[i])
+			}
+			for i := range out.Already {
+				out.Already[i] = redactPromotion(out.Already[i])
 			}
 		}
 		return nil
@@ -333,7 +353,11 @@ func (s *Service) GetReadiness(ctx context.Context, agent, env ids.UUID, operati
 		if row.EnvironmentID == nil || *row.EnvironmentID != env {
 			return ErrEnvironment
 		}
-		sub, err := load(ctx, q, c.Org, row, env)
+		cat, err := loadCatalog(ctx, q, s.Packages, c.Org)
+		if err != nil {
+			return err
+		}
+		sub, err := load(ctx, q, c.Org, row, env, cat)
 		if err != nil {
 			return err
 		}
@@ -348,6 +372,7 @@ func (s *Service) GetReadiness(ctx context.Context, agent, env ids.UUID, operati
 				return err
 			}
 		}
+		ops, _ = cat.expand(ops)
 		now, err := q.DBNow(ctx)
 		if err != nil {
 			return err
@@ -365,6 +390,9 @@ func (s *Service) GetReadiness(ctx context.Context, agent, env ids.UUID, operati
 					}
 				}
 			}
+		}
+		if !c.Can(td.PermPolicyRead, td.OrgPath(c.Org)) {
+			redact(out)
 		}
 		return nil
 	}, db.ReadOnly())
@@ -456,7 +484,11 @@ func (s *Service) ListPromotions(ctx context.Context, f Filter, after *ids.UUID,
 				seen[r.AgentID] = ok
 			}
 			if ok {
-				out = append(out, promotionOf(r))
+				p := promotionOf(r)
+				if !c.Can(td.PermPolicyRead, td.OrgPath(c.Org)) {
+					p = redactPromotion(p)
+				}
+				out = append(out, p)
 			}
 		}
 		return nil
@@ -465,3 +497,46 @@ func (s *Service) ListPromotions(ctx context.Context, f Filter, after *ids.UUID,
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// noKnown refuses prefixes no operation is known under (D70).
+func noKnown(prefixes []string) error {
+	return pcerr.New(pcerr.InvalidArgument, "NO_KNOWN_OPERATION",
+		"no operation the org's connections serve is known under "+strings.Join(prefixes, ", ")+"; name operations")
+}
+
+// redacted are the details a reader without policy.read sees: no rule ids,
+// approver roles or owner ids (D71 G9).
+var redacted = map[string][2]string{
+	CheckOwner:     {"the agent has no active owner", "the agent's owner is active"},
+	CheckTests:     {"the published policy has no scenario test of it here", "the published policy tests it"},
+	CheckApprovals: {"a hold on it has no eligible approver", "every hold on it has an eligible approver"},
+}
+
+// redact replaces the details that name policy rules, roles or people.
+func redact(rs []Readiness) {
+	for i := range rs {
+		redactChecks(rs[i].Checks)
+		if p := rs[i].Promotion; p != nil {
+			cp := redactPromotion(*p)
+			rs[i].Promotion = &cp
+		}
+	}
+}
+
+// redactPromotion is p with its stored checks redacted.
+func redactPromotion(p Promotion) Promotion {
+	p.Checks = slices.Clone(p.Checks)
+	redactChecks(p.Checks)
+	return p
+}
+
+func redactChecks(cs []Check) {
+	for j, c := range cs {
+		if d, ok := redacted[c.Name]; ok {
+			cs[j].Detail = d[0]
+			if c.Passed {
+				cs[j].Detail = d[1]
+			}
+		}
+	}
+}

@@ -104,22 +104,6 @@ func prefixOf(p string) (string, bool) {
 	return "", false
 }
 
-// covers reports whether pattern p matches everything q matches: an equal
-// entry, or a prefix that covers q (the gate's rule, D39).
-func covers(p, q string) bool {
-	pre, ok := prefixOf(p)
-	if !ok {
-		return p == q
-	}
-	if qpre, qok := prefixOf(q); qok {
-		return strings.HasPrefix(qpre, pre)
-	}
-	return strings.HasPrefix(q, pre)
-}
-
-// overlaps reports whether two patterns match a common operation.
-func overlaps(p, q string) bool { return covers(p, q) || covers(q, p) }
-
 // matches reports whether pattern p matches the exact operation op.
 func matches(p, op string) bool {
 	if pre, ok := prefixOf(p); ok {
@@ -128,20 +112,10 @@ func matches(p, op string) bool {
 	return p == op
 }
 
-// uncovered returns the entries of ops no promoted pattern covers.
-func uncovered(ops, promoted []string) []string {
-	var out []string
-	for _, op := range ops {
-		if !slices.ContainsFunc(promoted, func(p string) bool { return covers(p, op) }) {
-			out = append(out, op)
-		}
-	}
-	return out
-}
-
+// clip cuts a detail to maxDetail bytes on a character boundary.
 func clip(s string) string {
 	if len(s) <= maxDetail {
 		return s
 	}
-	return s[:maxDetail-3] + "..."
+	return strings.ToValidUTF8(s[:maxDetail-3], "") + "..."
 }

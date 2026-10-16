@@ -24,12 +24,15 @@ WHERE a.org_id = sqlc.arg(org_id) AND a.id = sqlc.arg(id);
 -- name: PromotionEnvironmentKind :one
 SELECT kind FROM pc.environments WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 
--- The operations an agent is promoted for in an environment now.
+-- The operations an agent is promoted for in an environment now, locked
+-- FOR SHARE so a concurrent revocation waits for the issuing transaction
+-- (D71 G7).
 -- name: ActivePromotedOperations :many
 SELECT operation FROM pc.agent_promotions
 WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id) AND environment_id = sqlc.arg(environment_id)
   AND state = 'ACTIVE'
-ORDER BY operation;
+ORDER BY operation
+FOR SHARE;
 
 -- name: ActiveAgentPromotion :one
 SELECT * FROM pc.agent_promotions
@@ -73,3 +76,13 @@ WHERE g.org_id = sqlc.arg(org_id) AND g.agent_id = sqlc.arg(agent_id) AND g.envi
   AND g.state = 'ACTIVE' AND r.expires_at > now()
 ORDER BY g.id
 LIMIT 200;
+
+-- The packages the org's ACTIVE connections serve: a prefix expands to the
+-- operations their active definitions declare (D70).
+-- name: PromotionConnectionPackages :many
+SELECT DISTINCT package FROM pc.connections WHERE org_id = sqlc.arg(org_id) AND state = 'ACTIVE' ORDER BY package;
+
+-- How many change windows the org has: a hold that counts only inside a
+-- window can be answered only when one exists (D71 G10).
+-- name: PromotionChangeWindows :one
+SELECT count(*)::integer FROM pc.change_windows WHERE org_id = sqlc.arg(org_id);

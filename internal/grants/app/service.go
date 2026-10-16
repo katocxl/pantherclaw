@@ -68,6 +68,10 @@ type Service struct {
 	Listing Listing
 	// Refusals audits refused grant changes (optional; G0 M10 D59 H1).
 	Refusals RefusalRecorder
+	// Promotions is the production promotion gate (G0 M11 part 2 D9, D39):
+	// the store runs it in Issue's and a widening Revise's transaction, and
+	// automation issuance calls it in its own. nil checks nothing.
+	Promotions PromotionGate
 }
 
 // IssueRequest asks for a new root grant.

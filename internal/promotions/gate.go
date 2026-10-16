@@ -5,6 +5,7 @@ package promotions
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -24,16 +25,22 @@ const ReasonNotPromoted = "NOT_PROMOTED"
 
 // Gate implements grants' PromotionGate: grants call it on every new or
 // widened grant, person- or automation-issued, in the issuing transaction
-// (HR-290). Its refusals wrap gapp.ErrNotPromoted.
-type Gate struct{}
+// (HR-290). Its refusals wrap gapp.ErrNotPromoted. Packages names the
+// operations a grant prefix covers (nil: none, so a prefix is refused).
+type Gate struct {
+	Packages Packages
+}
 
 var _ gapp.PromotionGate = Gate{}
 
 // Check refuses NOT_PROMOTED unless env is not a PRODUCTION environment,
-// or ops is an explicit list each of whose entries an ACTIVE promotion of
-// the agent in env covers (an equal entry or a covering prefix). nil ops
-// (every operation) is never promoted.
-func (Gate) Check(ctx context.Context, tx pgx.Tx, org ids.OrgID, agent, env ids.UUID, ops gdomain.Ops) error {
+// or ops is an explicit list whose every exact operation has an ACTIVE
+// promotion of the agent in env, and whose every prefix such as
+// payments.* has one for each operation currently known under it, at
+// least one (D70). nil ops (every operation) is never promoted. The
+// promotions are read FOR SHARE, so a revocation waits for the grant
+// (D71 G7).
+func (g Gate) Check(ctx context.Context, tx pgx.Tx, org ids.OrgID, agent, env ids.UUID, ops gdomain.Ops) error {
 	q := dbq.New(tx)
 	kind, err := q.PromotionEnvironmentKind(ctx, org, env)
 	if db.IsNoRows(err) {
@@ -51,7 +58,22 @@ func (Gate) Check(ctx context.Context, tx pgx.Tx, org ids.OrgID, agent, env ids.
 	if err != nil {
 		return err
 	}
-	if missing := uncovered(ops, promoted); len(missing) > 0 {
+	exact := []string(ops)
+	var empty []string
+	if slices.ContainsFunc(exact, func(op string) bool { _, ok := prefixOf(op); return ok }) {
+		c, err := loadCatalog(ctx, q, g.Packages, org)
+		if err != nil {
+			return err
+		}
+		exact, empty = c.expand(exact)
+	}
+	missing := slices.Clone(empty)
+	for _, op := range exact {
+		if !slices.Contains(promoted, op) {
+			missing = append(missing, op)
+		}
+	}
+	if len(missing) > 0 {
 		return notPromoted("the agent is not promoted in this production environment for " + strings.Join(missing, ", "))
 	}
 	return nil

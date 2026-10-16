@@ -7,22 +7,33 @@ package promotions_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	defpg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
+	defapp "github.com/katocxl/pantherclaw/internal/definitions/app"
+	defdomain "github.com/katocxl/pantherclaw/internal/definitions/domain"
+	"github.com/katocxl/pantherclaw/internal/definitions/trust"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	gpg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	gapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
+	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/rootkey"
+	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
+	"github.com/katocxl/pantherclaw/internal/policy/policytest"
 	"github.com/katocxl/pantherclaw/internal/promotions"
 	"github.com/katocxl/pantherclaw/internal/promotions/promotiontest"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
@@ -81,9 +92,12 @@ func newOrg(t *testing.T, p *db.Pool) *world {
 	w.exec("INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'edge', 'test')", w.org, gw)
 	w.exec(`INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, access_mode, default_mode, created_by, updated_by)
 		VALUES ($1, $2, 'payments', 'http', $3, 'pc.mock-payments', 'https://payments.example.test', 'none', 'enforce', 'test', 'test')`, w.org, w.conn, gw)
-	gs := &gpg.Store{Pool: p, Promotions: promotions.Gate{}}
-	w.grants = &gapp.Service{Repo: gs, Subjects: gs, Defs: &defpg.Store{Pool: p}, Authz: gapp.SubjectAuthorizer{}, Clock: clock.System{}}
-	w.svc = &promotions.Service{Pool: p}
+	w.importPayments()
+	// As the server wires them (newPromotionGate, registerM11Govern).
+	gate := promotions.Gate{Packages: &defpg.Store{Pool: p}}
+	gs := &gpg.Store{Pool: p, Promotions: gate}
+	w.grants = &gapp.Service{Repo: gs, Subjects: gs, Defs: &defpg.Store{Pool: p}, Authz: gapp.SubjectAuthorizer{}, Clock: clock.System{}, Promotions: gate}
+	w.svc = &promotions.Service{Pool: p, Packages: &defpg.Store{Pool: p}}
 	w.issuer = w.as(w.alice, td.RoleGrantIssuer)
 	w.scope = promotiontest.Scope{Pool: p, Org: w.org, Agent: w.agent, Env: w.prod, Connection: w.conn}
 	w.devScope = promotiontest.Scope{Pool: p, Org: w.org, Agent: w.devAgent, Env: w.dev, Connection: w.conn}
@@ -303,5 +317,83 @@ func TestHR290_IdentityOwnerAndApproversAreChecked(t *testing.T) {
 	w.exec("UPDATE pc.users SET state = 'DISABLED' WHERE id = $1", w.alice)
 	if f := failed(); !slices.Contains(f, promotions.CheckOwner) {
 		t.Errorf("inactive owner: %v", f)
+	}
+}
+
+// importPayments imports and activates the mock-payments package the
+// world's connection serves, signed with a test root.
+func (w *world) importPayments() {
+	w.t.Helper()
+	raw, err := os.ReadFile("../../packages/mock-payments/package.yaml")
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	priv, kid, err := rootkey.Generate(rootkey.PurposePackages)
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	signer, _ := jws.NewSigner(kid, priv)
+	sum := sha256.Sum256(raw)
+	doc, err := trust.Sign(trust.Targets{Version: 1, Expires: "2027-04-08T00:00:00Z", Targets: map[string]trust.Target{
+		trust.Key("pc.mock-payments", "1.0.0"): {Length: int64(len(raw)), Hashes: map[string]string{"sha256": hex.EncodeToString(sum[:])}},
+	}}, signer)
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	im := &defapp.Importer{Roots: trust.Roots{kid: signer.Public()}, Repo: &defpg.Store{Pool: w.pool},
+		Clock: clock.NewFake(time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC))}
+	ctx := context.Background()
+	if _, err := im.Import(ctx, w.org, "pc.mock-payments", "1.0.0", doc, raw, nil); err != nil {
+		w.t.Fatal(err)
+	}
+	if err := im.Transition(ctx, w.org, "pc.mock-payments", "1.0.0", defdomain.StateActive, nil); err != nil {
+		w.t.Fatal(err)
+	}
+}
+
+// TestHR290_ApprovalsCoverReleaseWindowHoldsAndReadersWithoutPolicyRead
+// (D71 G9, G10): a release approver's hold needs both an eligible approver
+// and a change window to count in; a reader without policy.read sees the
+// checks without rule ids, roles or owner ids.
+func TestHR290_ApprovalsCoverReleaseWindowHoldsAndReadersWithoutPolicyRead(t *testing.T) {
+	w := newWorld(t)
+	policytest.Publish(context.Background(), t, w.pool, w.org, &pdomain.Bundle{ID: "prod", Version: 1, Rules: []pdomain.Rule{{
+		ID: "release-gate", Kind: pdomain.RequireApproval, Summary: "a release approver approves refunds", Operations: []string{refund},
+		When: "true", Reason: "RELEASE_APPROVAL", Approval: &pdomain.ApprovalRequirement{Role: string(td.RoleReleaseApprover), Count: 1},
+	}}})
+	promotiontest.Record(t, w.scope, refund)
+	p := promotiontest.NewPromoter(t, w.scope)
+	approvals := func(ctx context.Context) promotions.Check {
+		t.Helper()
+		rs, err := w.svc.GetReadiness(ctx, w.agent, w.prod, []string{refund}, promotions.FailClosed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rs[0].Checks[3]
+	}
+	if c := approvals(p.Ctx); c.Passed || !strings.Contains(c.Detail, "release-gate") {
+		t.Fatalf("no approver and no window: %+v", c)
+	}
+	approver := ids.NewV7()
+	w.exec("INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', 'rita')", w.org, approver)
+	w.exec(`INSERT INTO pc.role_bindings (org_id, id, user_id, role, scope_type, created_by) VALUES ($1, $2, $3, 'release_approver', 'ORG', 'test')`,
+		w.org, ids.NewV7(), approver)
+	if c := approvals(p.Ctx); c.Passed || !strings.Contains(c.Detail, "change window") {
+		t.Fatalf("an approver but no change window: %+v", c)
+	}
+	w.exec(`INSERT INTO pc.change_windows (org_id, id, environment, time_zone, revision, created_by) VALUES ($1, $2, 'production', 'UTC', 1, 'test')`,
+		w.org, ids.NewV7())
+	if c := approvals(p.Ctx); !c.Passed {
+		t.Fatalf("an approver and a window: %+v", c)
+	}
+	reader := w.as(ids.NewV7(), td.RoleResponder)
+	rs, err := w.svc.GetReadiness(reader, w.agent, w.prod, []string{refund}, promotions.FailClosed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range rs[0].Checks {
+		if strings.Contains(c.Detail, "release-gate") || strings.Contains(c.Detail, "release_approver") || strings.Contains(c.Detail, w.alice.String()) {
+			t.Errorf("%s shows %q to a reader without policy.read", c.Name, c.Detail)
+		}
 	}
 }

@@ -5,8 +5,10 @@
 -- decisions D39 and D40; F333, F334, F600, F601, HR-290, HR-291).
 --
 -- A promotion says an agent may receive new or widened grants for one
--- operation (an exact name or a prefix such as payments.*) in one
--- PRODUCTION environment. It is made by a person holding agent.promote
+-- exact operation in one PRODUCTION environment (a prefix such as
+-- payments.* is expanded to the operations known under it and stored as
+-- one row each, D70; the operation grammar is the grants domain's). It is
+-- made by a person holding agent.promote
 -- with a fresh security-key step-up, once the operation's checks pass
 -- (owner, identity, published tests, eligible approvers, coverage,
 -- declared failure behaviour); the checks it passed are kept with it. At
@@ -32,7 +34,7 @@ CREATE TABLE pc.agent_promotions (
     agent_id         uuid        NOT NULL,
     environment_id   uuid        NOT NULL,
     operation        text        NOT NULL CHECK (char_length(operation) BETWEEN 1 AND 128
-                                                 AND operation ~ '^[a-z][a-z0-9_]*(\.[a-z0-9_]+){0,6}(\.\*)?$'),
+                                                 AND operation ~ '^[a-z][a-z0-9_]*(\.[a-z0-9_]+){1,7}$'),
     state            text        NOT NULL CHECK (state IN ('ACTIVE', 'REVOKED')),
     -- The per-operation checks the promotion passed: [{name, passed, detail}].
     checks           jsonb       NOT NULL CHECK (jsonb_typeof(checks) = 'array' AND octet_length(checks::text) <= 16384),

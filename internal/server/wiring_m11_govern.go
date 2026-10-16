@@ -8,8 +8,10 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/cohorts"
 	"github.com/katocxl/pantherclaw/internal/cohorts/cohortsrpc"
+	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	policyapp "github.com/katocxl/pantherclaw/internal/policy/app"
 	"github.com/katocxl/pantherclaw/internal/policy/packs"
 	"github.com/katocxl/pantherclaw/internal/policy/packs/packsrpc"
@@ -24,7 +26,7 @@ import (
 // through the policy versions API, so a pack's draft passes the same
 // checks and publish gate as any.
 func registerM11Govern(rs *connect.Server, d apiDeps) {
-	prom := &promotions.Service{Pool: d.pool}
+	prom := &promotions.Service{Pool: d.pool, Packages: &defspg.Store{Pool: d.pool}}
 	pantherclawv1connect.RegisterPromotionServiceHandler(rs, promotionsrpc.New(prom))
 	if d.web != nil {
 		d.web.WithPromotions(prom) // the only way to promote: a step-up is a browser session's (D53)
@@ -43,6 +45,9 @@ func registerM11Govern(rs *connect.Server, d apiDeps) {
 	pantherclawv1connect.RegisterPackServiceHandler(rs, packsrpc.New(ps))
 }
 
-// promotionGate is the production promotion gate the grants store calls
-// when it issues a grant or stores a widening revision (D9, D39, HR-290).
-var promotionGate grantsapp.PromotionGate = promotions.Gate{}
+// newPromotionGate is the production promotion gate grants call when they
+// issue a grant or store a widening revision, and the automation issuer
+// when it issues one (D9, D39, D70, HR-290).
+func newPromotionGate(pool *db.Pool) grantsapp.PromotionGate {
+	return promotions.Gate{Packages: &defspg.Store{Pool: pool}}
+}

@@ -59,9 +59,12 @@ SELECT operation FROM pc.agent_promotions
 WHERE org_id = $1 AND agent_id = $2 AND environment_id = $3
   AND state = 'ACTIVE'
 ORDER BY operation
+FOR SHARE
 `
 
-// The operations an agent is promoted for in an environment now.
+// The operations an agent is promoted for in an environment now, locked
+// FOR SHARE so a concurrent revocation waits for the issuing transaction
+// (D71 G7).
 func (q *Queries) ActivePromotedOperations(ctx context.Context, orgID ids.OrgID, agentID ids.UUID, environmentID ids.UUID) ([]string, error) {
 	rows, err := q.db.Query(ctx, activePromotedOperations, orgID, agentID, environmentID)
 	if err != nil {
@@ -248,6 +251,45 @@ func (q *Queries) ListAgentPromotions(ctx context.Context, arg ListAgentPromotio
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const promotionChangeWindows = `-- name: PromotionChangeWindows :one
+SELECT count(*)::integer FROM pc.change_windows WHERE org_id = $1
+`
+
+// How many change windows the org has: a hold that counts only inside a
+// window can be answered only when one exists (D71 G10).
+func (q *Queries) PromotionChangeWindows(ctx context.Context, orgID ids.OrgID) (int32, error) {
+	row := q.db.QueryRow(ctx, promotionChangeWindows, orgID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const promotionConnectionPackages = `-- name: PromotionConnectionPackages :many
+SELECT DISTINCT package FROM pc.connections WHERE org_id = $1 AND state = 'ACTIVE' ORDER BY package
+`
+
+// The packages the org's ACTIVE connections serve: a prefix expands to the
+// operations their active definitions declare (D70).
+func (q *Queries) PromotionConnectionPackages(ctx context.Context, orgID ids.OrgID) ([]string, error) {
+	rows, err := q.db.Query(ctx, promotionConnectionPackages, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var package_ string
+		if err := rows.Scan(&package_); err != nil {
+			return nil, err
+		}
+		items = append(items, package_)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

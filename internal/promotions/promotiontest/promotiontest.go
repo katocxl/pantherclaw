@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	defpg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -153,19 +154,32 @@ func (p Promoter) StepUp() *stepup.StepUp {
 	return &stepup.StepUp{Credential: p.Key, At: time.Now()}
 }
 
-// Promote records what the checks read for the exact operations of ops
-// (Record; a prefix such as payments.* needs Record of the operations it
-// covers first) and promotes the agent for ops, FAIL_CLOSED, through
-// PromoteAgent; it fails the test unless every operation's checks passed
-// and it was promoted.
+// Promote records what the checks read for each exact operation of ops
+// and of every operation a prefix in ops covers (Record) and promotes the
+// agent for ops, FAIL_CLOSED, through PromoteAgent; it fails the test
+// unless every operation's checks passed and it was promoted.
 func Promote(t testing.TB, s Scope, ops ...string) []promotions.Promotion {
 	t.Helper()
-	exact := slices.DeleteFunc(slices.Clone(ops), func(op string) bool { return strings.HasSuffix(op, ".*") })
+	pk := &defpg.Store{Pool: s.Pool}
+	var exact []string
+	for _, op := range ops {
+		if !strings.HasSuffix(op, ".*") {
+			exact = append(exact, op)
+			continue
+		}
+		if err := s.Pool.InTenantTx(context.Background(), s.Org, func(ctx context.Context, tx db.TenantTx) error {
+			known, err := promotions.KnownUnder(ctx, tx, pk, op)
+			exact = append(exact, known...)
+			return err
+		}); err != nil {
+			t.Fatalf("promotiontest: %v", err)
+		}
+	}
 	if len(exact) > 0 {
 		Record(t, s, exact...)
 	}
 	p := NewPromoter(t, s)
-	res, err := (&promotions.Service{Pool: s.Pool}).PromoteAgent(p.Ctx, promotions.PromoteInput{
+	res, err := (&promotions.Service{Pool: s.Pool, Packages: pk}).PromoteAgent(p.Ctx, promotions.PromoteInput{
 		Agent: s.Agent, Environment: s.Env, Operations: ops, FailureBehavior: promotions.FailClosed,
 	}, p.StepUp())
 	if err != nil {

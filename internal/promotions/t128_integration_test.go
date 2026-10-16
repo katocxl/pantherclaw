@@ -8,12 +8,14 @@ package promotions_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/promotions"
 	"github.com/katocxl/pantherclaw/internal/promotions/promotionsrpc"
@@ -93,5 +95,39 @@ func TestT128_ACompromisedPersonCannotPromote(t *testing.T) {
 	}, p.StepUp())
 	if !errors.Is(err, promotions.ErrCompromised) {
 		t.Fatalf("a compromised promoter: %v", err)
+	}
+}
+
+// TestT128_APrefixIsOnlyAsPromotedAsEveryOperationUnderIt (D70): promoting
+// payments.refund.* stores one exact row per known operation under it,
+// each checked on its own; a grant prefix passes only when every known
+// operation under it is promoted, and a prefix nothing is known under
+// cannot be promoted at all.
+func TestT128_APrefixIsOnlyAsPromotedAsEveryOperationUnderIt(t *testing.T) {
+	w := newWorld(t)
+	ps := promotiontest.Promote(t, w.scope, "payments.refund.*")
+	var stored []string
+	for _, p := range ps {
+		stored = append(stored, p.Operation)
+	}
+	if want := []string{"payments.refund.create", "payments.refund.get", "payments.refund.list", "payments.refund.recent"}; !slices.Equal(stored, want) {
+		t.Fatalf("stored %v, want exact rows %v", stored, want)
+	}
+	if _, err := w.issue(w.agent, `{"operations": ["payments.refund.*"]}`); err != nil {
+		t.Fatalf("a grant prefix whose operations are all promoted: %v", err)
+	}
+	_, err := w.issue(w.agent, `{"operations": ["payments.*"]}`)
+	notPromoted(t, "payments.* with payments.account.read unpromoted", err)
+	p := promotiontest.NewPromoter(t, w.scope)
+	if _, err := w.svc.RevokePromotion(p.Ctx, ps[1].ID, "narrow"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = w.issue(w.agent, `{"operations": ["payments.refund.*"]}`)
+	notPromoted(t, "a grant prefix with one operation under it revoked", err)
+	_, err = w.svc.PromoteAgent(p.Ctx, promotions.PromoteInput{
+		Agent: w.agent, Environment: w.prod, Operations: []string{"github.*"}, FailureBehavior: promotions.FailClosed,
+	}, p.StepUp())
+	if pcerr.CodeOf(err) != pcerr.InvalidArgument {
+		t.Fatalf("a prefix nothing is known under: %v", err)
 	}
 }

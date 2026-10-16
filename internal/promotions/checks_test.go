@@ -8,26 +8,26 @@ import (
 	"testing"
 )
 
-// TestUncoveredNeedsAnEqualOrCoveringEntry: an operation is promoted by
-// the same entry or a prefix covering it; a narrower prefix never covers
-// a wider one, and nothing covers an operation of another family.
-func TestUncoveredNeedsAnEqualOrCoveringEntry(t *testing.T) {
-	promoted := []string{"payments.refund.create", "github.pull.*"}
+// TestPrefixesExpandToKnownOperations (D70): a prefix becomes every known
+// operation under it, never a wider or sibling family; a prefix nothing is
+// known under is reported.
+func TestPrefixesExpandToKnownOperations(t *testing.T) {
+	c := catalog{ops: []string{"github.pull.merge", "github.pull.read", "github.pullx.merge", "payments.refund.create"}}
 	for _, tc := range []struct {
-		ops  []string
-		want []string
+		ops, exact, empty []string
 	}{
-		{[]string{"payments.refund.create"}, nil},
-		{[]string{"github.pull.merge", "github.pull.*"}, nil},
-		{[]string{"github.pull.review.*"}, nil},
-		{[]string{"github.*"}, []string{"github.*"}},
-		{[]string{"payments.refund.*"}, []string{"payments.refund.*"}},
-		{[]string{"payments.refund.create", "payments.charge.create"}, []string{"payments.charge.create"}},
-		{[]string{"github.pullx.merge"}, []string{"github.pullx.merge"}},
+		{[]string{"github.pull.*"}, []string{"github.pull.merge", "github.pull.read"}, nil},
+		{[]string{"github.*", "payments.refund.create"}, []string{"github.pull.merge", "github.pull.read", "github.pullx.merge", "payments.refund.create"}, nil},
+		{[]string{"payments.charge.*", "payments.refund.create"}, []string{"payments.refund.create"}, []string{"payments.charge.*"}},
+		{[]string{"shell.command.run"}, []string{"shell.command.run"}, nil},
 	} {
-		if got := uncovered(tc.ops, promoted); !slices.Equal(got, tc.want) {
-			t.Errorf("uncovered(%v) = %v, want %v", tc.ops, got, tc.want)
+		exact, empty := c.expand(tc.ops)
+		if !slices.Equal(exact, tc.exact) || !slices.Equal(empty, tc.empty) {
+			t.Errorf("expand(%v) = %v, %v; want %v, %v", tc.ops, exact, empty, tc.exact, tc.empty)
 		}
+	}
+	if got := (catalog{}).under("github.*"); got != nil {
+		t.Errorf("an empty catalog expands to %v", got)
 	}
 }
 
