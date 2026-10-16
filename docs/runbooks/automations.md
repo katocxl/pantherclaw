@@ -14,6 +14,20 @@ An automation is a versioned definition that starts work on a schedule, a platfo
 | `fleet_manager` (people only) | `agent.promote`, `cohort.manage`, `agent.read` and basic reads | Promote agents for production operations; manage cohorts |
 | `security_admin` | adds `publisher.compromise`, `protected_change.manage`, `automation.read` | Mark a publisher compromised; manage protected changes |
 
+**Roles a confirmer needs per template.** Every confirmer holds `automation.publish` (`automation_publisher`) and also every permission the version's steps need at every scope they touch; one person may hold several roles. Bind these explicitly before you request enabling (D67).
+
+| Template | Step permissions the confirmer also needs | Roles that carry them (examples) |
+|---|---|---|
+| `bounded_task_launch` | `grant.issue` and `run.start` at each ceiling agent's path | `grant_issuer` and `run_launcher` (or `agent_owner`) at those agents' scope |
+| `approved_business_workflow` | as `bounded_task_launch`; gate deciders need `automation.approve` | as above; deciders `automation_publisher` or `automation_operator` |
+| `grant_lifecycle` | `grant.revoke` at each `revocable` agent's path (org scope for `all`) | `grant_issuer`, `responder` or `security_admin` |
+| `approval_routing` | none beyond `automation.publish` | `automation_publisher` |
+| `new_agent_intake` | `agent.read` and coverage read at the agent's path | `automation_publisher` plus `developer` or `auditor` |
+| `coverage_recovery` | `automation.publish` at org scope (pause and resume launches); coverage read | `automation_publisher` bound at the org, plus coverage read |
+| `scoped_incident_containment` (Business) | `incident.respond` and `case.manage` at the org; `grant.revoke` per `revocable` | `security_admin` or `responder` at the org |
+| `least_privilege_review` | the M11.1 policy draft and simulate permissions at the org | `policy_author` at the org |
+| `audit_digest` | `evidence.export` at the org | `security_admin` or `auditor` |
+
 `org_admin` gets only `automation.read`: administering the org never implies publishing or approving. No role holds both `automation.manage` and `automation.publish`, so the author of a version and its confirmers are normally different people; a person who holds both roles may confirm their own request, which is one of the confirmations, not all of them when two are required.
 
 ## 1. Create, validate and test a version
@@ -24,6 +38,8 @@ An automation is a versioned definition that starts work on a schedule, a platfo
 4. Set its tests and run them. The required kinds are NORMAL, DENIED, TIMEOUT and DUPLICATE, plus PARTIAL or UNKNOWN when the ceiling has an irreversible operation. A passing run makes the version TESTED (HR-287).
 5. Optional but recommended: run a historical simulation (up to 30 days) and read the forecasts: executions, gates and grants per day, maximum budget per day, and what was UNEVALUABLE. In Business, read the blast-radius preview.
 
+**Schedules.** Preview a schedule (`PreviewSchedule`) before enabling: it shows local and UTC times and notes DST gaps (skipped or shifted) and repeats (fired once). When a day field is stepped (for example `*/2`), day-of-month and day-of-week combine as in Vixie cron, and the preview says so; `SUN` closing a range (`MON-SUN`, `FRI-SUN`) means day 7.
+
 ## 2. Enable it: the security-key ceremony
 
 1. `RequestEnable` the version with a rollout: SHADOW (needs VALIDATED or TESTED), COHORT or FULL (need TESTED).
@@ -31,9 +47,9 @@ An automation is a versioned definition that starts work on a schedule, a platfo
 3. How many: SHADOW needs one. COHORT and FULL need two distinct people with distinct keys when the org has at least two eligible people, else one (R-35).
 4. On the last confirmation the version is published, the ceiling becomes ACTIVE with the confirmers as approvers, and the automation becomes ACTIVE. Every enable and rollout, SHADOW included, records a fresh authority row with its confirmers and review date; nothing is ever issued in shadow.
 5. Widen in steps: SHADOW → COHORT → FULL. Each widening is a ROLLOUT change request with the same ceremony; FULL needs a verified cohort stage (at least one SUCCEEDED live execution with completion evidence, and no authority failures or open reconciliations). Narrowing (`NarrowRollout`) takes one person.
-6. Any change to the definition or the ceiling is a new version and a new ceremony. Review dates: the owner is told 7 days and 1 day before `review_by`; at `review_by` the ceiling expires and the automation pauses (CEILING_EXPIRED). Enable a new version to continue.
+6. Any change to the definition or the ceiling is a new version and a new ceremony. Review dates: the owner is told 7 days and 1 day before `review_by`; at `review_by` the ceiling expires and the automation pauses (CEILING_EXPIRED). To continue, enable a new version, then Resume: enabling never un-pauses an automation, and only Resume (with its revalidation) does.
 
-If an approver later loses a permission or is marked compromised, the next execution fails CEILING_VOID, the ceiling is voided, the automation pauses and the owner gets an owned failure. Re-enable a version with current approvers.
+If an approver later loses a permission or is marked compromised, the ceiling is voided, the automation pauses (CEILING_VOID) and the owner gets an owned failure. This happens at the next issuance, or within 5 minutes through the ceiling sweep, which checks every ACTIVE ceiling's approvers and review date per org. To recover, enable a new version with current approvers, then Resume.
 
 ## 3. Pause, resume, cancel, retire, revoke authority
 
@@ -75,14 +91,14 @@ Destinations receive launches (LAUNCH), digests (DIGEST) and notices (NOTICE). T
 If a person who confirms changes may be compromised:
 1. A holder of `publisher.compromise` marks them compromised on the web page with a step-up and a `since` time. At once they can no longer confirm, approve, publish, activate or promote; their pending change requests are voided; automations whose ceiling they approved are paused (COMPROMISED_PUBLISHER); open policy rollouts they confirmed are halted (HR-293).
 2. Read `ListExposed`: policy versions, package activations, org package keys (revoke them, see [key-rotation.md](key-rotation.md)), automation versions, protected changes, promotions and grants since `since`.
-3. Another person reviews each item KEEP or ROLLBACK. For a paused automation: KEEP and re-enable it through a new ceremony by other confirmers, or retire it.
+3. Another person reviews each item KEEP or ROLLBACK. For a paused automation: KEEP it by enabling a new version through a ceremony with other confirmers and then resuming it, or retire it.
 4. Clearing the mark is a change request that two other people confirm, and only once every item is reviewed.
 
 ## 8. Troubleshooting
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
-| Execution FAILED `CEILING_VOID` | An approver lost a permission or was marked compromised | Enable a new version with current approvers |
+| Execution FAILED `CEILING_VOID` | An approver lost a permission or was marked compromised | Enable a new version with current approvers, then Resume |
 | Execution FAILED `USAGE_EXCEEDED` | Per-day grant, run or budget cap reached | Wait for the next day, or enable a version with a larger ceiling |
 | Execution FAILED `NOT_PROMOTED` | A production grant lists operations the agent is not promoted for | Promote the agent for those operations (`PromoteAgent`: a `fleet_manager` with `agent.promote` and a step-up) |
 | Execution FAILED `LAUNCH_NOT_CLAIMED` | No runner or agent claimed the launch in time | Check that the agent's workload (or `pclaw automation runner`) is running and enrolled |

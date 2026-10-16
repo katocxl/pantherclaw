@@ -83,7 +83,7 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 
 | ID | Abuse case | Adv. | Entry | Consequence | Mitigations | MS |
 |---|---|---|---|---|---|---|
-| T-001 | Agent enlarges its own scope via task text or self-issued grant | A1 | TB1 | Unauthorized effects | Grants from trusted sources only; HR-022, HR-023, HR-161; no agent grant issuance | M4 |
+| T-001 | Agent enlarges its own scope via task text or self-issued grant | A1 | TB1 | Unauthorized effects | Grants from trusted sources only; HR-022, HR-023, HR-161; no agent grant issuance; automations issue only inside a ceiling people approved (HR-271, HR-272) | M4 |
 | T-002 | Self-approval: agent uses a PantherClaw API key / connection to PantherClaw; developer approves own action | A1, A5 | TB4, TB2 | Bypass of human gate | HR-032, HR-036, HR-077; `pclaw scan` flags `pck_` keys; secret scanning pattern | M5 |
 | T-003 | Tenant escape (RLS gaps, pooled connection leaks, FK/unique existence oracles, sweeper context) | A8 | TB5/TB7 | Data leak / cross-tenant actions | HR-050..057; cross-tenant suite per table | M1 |
 | T-004 | Rogue instance admitted under a real agent's name | A4, A1 | Enrollment | Inherited authority | HR-094; no name-based inheritance (F034) | M3 |
@@ -113,7 +113,7 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 | T-028 | MCP elicitation/sampling phishing users or injecting prompts | A3 | TB2→TB1 | Secret disclosure | HR-082 | M6 |
 | T-029 | Evidence tampering; insider re-signing a rewritten chain | A7 | TB5 | Lost accountability | HR-055, HR-110..112, HR-194..196, HR-198 | M7 |
 | T-030 | SaaS operator forges approvals in the DB | A7 | TB5 | Unapproved execution | HR-038 | M6 |
-| T-031 | Revocation/kill-switch bypass (stale gateway) or abuse (DoS engage, silent lift) | A1, A7 | TB3 | Uncontained agent / outage | HR-002, HR-010, HR-113 | M6 |
+| T-031 | Revocation/kill-switch bypass (stale gateway) or abuse (DoS engage, silent lift) | A1, A7 | TB3 | Uncontained agent / outage | HR-002, HR-010, HR-113; engage also pauses automations (HR-283) | M6 |
 | T-032 | Token/proof replay, alg confusion, token substitution | A4, A9 | TB1 | Impersonation | HR-090, HR-091, HR-095 | M2/M3 |
 | T-033 | Local workload key theft from desktop key store | A1, malware | Host | Impersonation from elsewhere | HR-092; hardware keys preferred | M3 |
 | T-034 | Licence-key forgery or check removal | A12 | Code | Revenue loss | Offline Ed25519 root (HR-063); legal (BSL) | M1 |
@@ -130,7 +130,7 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 | T-039 | Sandbox escape / DNS exfil / forged probe results | A1 | Sandbox | False ENFORCED claim | HR-121, HR-122, HR-213, HR-215, HR-218 | M9 |
 | T-040 | CI/supply-chain compromise (deps, actions, release hijack) | A10 | TB10 | Malicious release | HR-130..132 | M0 |
 | T-041 | Log injection / sensitive data in logs or traces | A1 | Logging | Leak, forged audit lines | SB-4 redaction types, JSON encoding, field caps | M1 |
-| T-042 | Permission-unsafe search/graph/count inference | A5, A8 | TB4/TB7 | Hidden record disclosure | Permission filters before aggregation (HR-247, HR-254, HR-257, HR-258); tests (F300, F320) | M10 |
+| T-042 | Permission-unsafe search/graph/count inference | A5, A8 | TB4/TB7 | Hidden record disclosure | Permission filters before aggregation (HR-247, HR-254, HR-257, HR-258, HR-295); tests (F300, F320) | M10 |
 | T-043 | Customer admin abuses platform admin to read payloads or approve | A7 | TB4 | Privacy breach | Admin ≠ approver ≠ evidence reader (F583); audited restricted access | M2/M5 |
 | T-044 | Trusted-issuer mis-scoping: an entry bound by names or broad claims (any repository of an owner, any namespace), or silently widened, lets unintended workloads attest as an agent | A5, A7 | Attestation configuration | Impersonation, rogue admission | HR-140, HR-141 | M3 |
 | T-045 | Issuer key source abuse: a tenant-supplied issuer or key URL used for SSRF, a poisoned or stale key cache, unknown-`kid` refetch amplification | A8, A9 | Attestation | Internal network access, forged attestation, outage | HR-142, HR-071 | M3 |
