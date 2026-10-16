@@ -6,6 +6,7 @@ package assurance
 import (
 	"context"
 	"errors"
+	"slices"
 
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -103,12 +104,8 @@ func (s *Service) previewIssuance(ctx context.Context, org ids.OrgID, v dbq.Assu
 
 // fatal reports an error that is no refusal: the job retries.
 func fatal(err error) bool {
-	switch pcerr.CodeOf(err) {
-	case pcerr.Internal, pcerr.Unavailable, pcerr.Canceled, pcerr.DeadlineExceeded, pcerr.Aborted:
-		return true
-	default:
-		return false
-	}
+	return slices.Contains([]pcerr.Code{pcerr.Internal, pcerr.Unavailable, pcerr.Canceled, pcerr.DeadlineExceeded, pcerr.Aborted},
+		pcerr.CodeOf(err))
 }
 
 // launchIssue is the grant a launch_run asks for, as the step plans it

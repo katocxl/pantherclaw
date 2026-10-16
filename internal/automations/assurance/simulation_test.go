@@ -207,7 +207,8 @@ func TestThresholdSampleAgents(t *testing.T) {
 	h := events(70)
 	d.When.Threshold.AtLeast = 70
 	r = assurance.Replay(context.Background(), d, h, from, from.Add(time.Hour))
-	if len(r.Samples) != 1 || len(r.Samples[0].Agents) != 1 || r.Samples[0].Agents[0] != assurance.AgentsOverflow {
+	if len(r.Samples) != 1 || len(r.Samples[0].Agents) != 1 || r.Samples[0].Agents[0] != assurance.AgentsOverflow ||
+		r.Samples[0].Note != assurance.NoteTooManyAgents {
 		t.Fatalf("overflow samples %+v", r.Samples)
 	}
 }

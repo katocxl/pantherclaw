@@ -5,7 +5,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 
 	"connectrpc.com/connect/v2"
@@ -18,6 +17,7 @@ import (
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 )
@@ -63,7 +63,8 @@ func registerAutomationAssurance(rs *connect.Server, d apiDeps, core *automation
 // jobs attached it; before that every preview fails and the job retries.
 type coreIssuer struct{ core *automationsCore }
 
-var errNoIssuer = errors.New("server: the automations core has no grants service attached")
+// errNoIssuer is Unavailable, so the simulation job retries (D111 F1).
+var errNoIssuer = pcerr.New(pcerr.Unavailable, "ISSUER_UNAVAILABLE", "the automations core has no grants service attached yet")
 
 func (c coreIssuer) IssueForAutomationTx(ctx context.Context, tx db.TenantTx, in grantsapp.AutomationIssue) (gdomain.Grant, error) {
 	if c.core == nil || c.core.grants == nil {

@@ -278,8 +278,10 @@ func (notPromoted) Check(context.Context, pgx.Tx, ids.OrgID, ids.UUID, ids.UUID,
 // the gate refuses previews REFUSED:NOT_PROMOTED, never ALLOWED.
 func TestPreviewRefusedNotPromoted(t *testing.T) {
 	o := exposuretest.New(t)
-	a := o.Automation(t, "refunds", []ids.UUID{o.Other}, "payments.refund.get") // reads: no per-grant budget needed
-	o.Claim(t, o.Other) // a claimed agent may hold grants
+	// A read needs no per-grant budget, and a claimed agent may hold
+	// grants: nothing but the promotion gate refuses this launch.
+	a := o.Automation(t, "refunds", []ids.UUID{o.Other}, "payments.refund.get")
+	o.Claim(t, o.Other)
 	v := draft(t, o, a)
 	ctx := admin(o)
 	for name, svc := range map[string]*assurance.Service{
