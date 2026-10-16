@@ -9,8 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/engine"
+	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
@@ -275,5 +278,119 @@ func TestSimulate_DeadlineFails(t *testing.T) {
 	s := simulate(t, d, engine.Stubs{"launch": {done}, "wait": {waiting}})
 	if s.State != autodomain.ExecFailed || s.Reason != autodomain.ReasonDeadline || s.Elapsed != 24*time.Hour {
 		t.Fatalf("state %s %s after %s", s.State, s.Reason, s.Elapsed)
+	}
+}
+
+// expiring waits until asked for its final state, then reports an unknown
+// outcome of an irreversible operation (a run with UNKNOWN refunds).
+type expiring struct{ kind string }
+
+func (e expiring) Kind() string { return e.kind }
+func (expiring) Run(context.Context, pgx.Tx, autodomain.StepContext) (autodomain.StepResult, error) {
+	return waiting, nil
+}
+
+func (expiring) Poll(context.Context, pgx.Tx, autodomain.StepContext) (autodomain.StepResult, error) {
+	return waiting, nil
+}
+
+func (expiring) Preview(context.Context, pgx.Tx, autodomain.StepContext) (autodomain.StepResult, error) {
+	return waiting, nil
+}
+
+func (expiring) Expire(context.Context, pgx.Tx, autodomain.StepContext) (autodomain.StepResult, error) {
+	return autodomain.StepResult{
+		State: autodomain.StepUnknown, Effect: autodomain.EffectUnknown,
+		Output: map[string]string{engine.OutputIrreversible: "true"},
+	}, nil
+}
+
+type passing struct{ kind string }
+
+func (p passing) Kind() string { return p.kind }
+func (passing) Run(context.Context, pgx.Tx, autodomain.StepContext) (autodomain.StepResult, error) {
+	return changed, nil
+}
+
+func (passing) Poll(context.Context, pgx.Tx, autodomain.StepContext) (autodomain.StepResult, error) {
+	return changed, nil
+}
+
+func (passing) Preview(context.Context, pgx.Tx, autodomain.StepContext) (autodomain.StepResult, error) {
+	return changed, nil
+}
+
+// liveExec runs def LIVE with a step registry until it waits.
+func liveExec(t *testing.T, d *autodomain.Definition, reg autoports.StepRegistry, clk *clock.Fake) (*engine.Machine, *engine.Exec) {
+	t.Helper()
+	m, err := engine.NewMachine(reg, engine.NopHooks{}, clk.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr := trigger()
+	x := &engine.Exec{
+		ID: ids.NewV7(), Org: tr.Org, Mode: autodomain.ModeLive, Def: d, State: autodomain.ExecPending,
+		DeadlineAt: clk.Now().Add(d.Limits.DeadlineOrDefault()),
+		View:       autodomain.ExecutionView{Trigger: tr, Mode: autodomain.ModeLive},
+	}
+	for range 5 {
+		if _, err := m.Advance(context.Background(), nil, x); err != nil {
+			t.Fatal(err)
+		}
+		if x.State == autodomain.ExecWaiting {
+			break
+		}
+	}
+	if x.State != autodomain.ExecWaiting {
+		t.Fatalf("state %s, want WAITING", x.State)
+	}
+	return m, x
+}
+
+// HR-280 (D84 E1): the execution deadline, a cancel or the kill switch
+// during a wait asks the step for its final state; an unknown irreversible
+// outcome ends in NEEDS_RECONCILIATION, never as a plain failure or cancellation.
+func TestHR280_EndingDuringAWaitKeepsUnknownIrreversibleOutcomes(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		end    func(*engine.Exec, *clock.Fake)
+		reason string
+	}{
+		{"deadline during wait_effect", func(x *engine.Exec, clk *clock.Fake) { clk.Set(x.DeadlineAt) }, autodomain.ReasonDeadline},
+		{
+			"cancel during wait_run", func(x *engine.Exec, _ *clock.Fake) { x.CancelReason = autodomain.ReasonCancelledByUser },
+			autodomain.ReasonCancelledByUser,
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			d := def(t, "", "")
+			d.Do[1].Timeout, d.Do[2].Timeout = 0, 0
+			reg := autoports.StepRegistry{
+				autodomain.KindLaunchRun: passing{autodomain.KindLaunchRun}, autodomain.KindWaitRun: expiring{autodomain.KindWaitRun},
+				autodomain.KindWaitEffect: expiring{autodomain.KindWaitEffect},
+			}
+			clk := clock.NewFake(t0)
+			m, x := liveExec(t, d, reg, clk)
+			c.end(x, clk)
+			if _, err := m.Advance(context.Background(), nil, x); err != nil {
+				t.Fatal(err)
+			}
+			if x.State != autodomain.ExecNeedsReconciliation || x.Reason != c.reason {
+				t.Fatalf("state %s %s, want NEEDS_RECONCILIATION %s", x.State, x.Reason, c.reason)
+			}
+		})
+	}
+}
+
+// HR-282 (D84 E5): a step's effect is the strongest of its attempts: a
+// retried launch whose first attempt issued a grant changed something.
+func TestHR282_EarlierAttemptsEffectsCount(t *testing.T) {
+	retry := "retry:\n      max_attempts: 2"
+	s := simulate(t, def(t, retry, ""), engine.Stubs{"launch": {
+		{State: autodomain.StepFailed, Reason: "RUN_FAILED", Effect: autodomain.EffectChanged},
+		{State: autodomain.StepFailed, Reason: "USAGE_EXCEEDED"},
+	}})
+	if s.State != autodomain.ExecPartiallyCompleted || len(s.Result.Changed) != 1 {
+		t.Fatalf("state %s, changed %v", s.State, s.Result.Changed)
 	}
 }

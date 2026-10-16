@@ -383,3 +383,14 @@ func minTime(a, b time.Time) time.Time {
 	}
 	return a
 }
+
+// Expire implements engine.Expirer (D84 E1): when the execution ends while
+// the launch waits, its run's unknown irreversible outcomes make the step
+// UNKNOWN; otherwise it fails, having issued a grant (CHANGED).
+func (*launchRun) Expire(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
+	launch, ok := parseID(own(sc)[OutLaunch])
+	if !ok {
+		return autodomain.StepResult{State: autodomain.StepFailed, Effect: autodomain.EffectUnknown}, nil
+	}
+	return expireLaunch(ctx, tx, sc, launch, autodomain.EffectChanged)
+}

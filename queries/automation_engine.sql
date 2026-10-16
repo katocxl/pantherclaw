@@ -169,7 +169,7 @@ WHERE org_id = sqlc.arg(org_id) AND execution_id = sqlc.arg(execution_id) AND st
 SELECT count(*) FILTER (WHERE t.effect_state = ANY(sqlc.arg(states)::text[]))::int AS matched,
        count(*) FILTER (WHERE t.effect_state IN ('UNKNOWN', 'CONFLICTING', 'UNVERIFIABLE', 'PROPAGATION_PENDING'))::int AS unknown,
        count(*) FILTER (WHERE t.effect_state = 'NONE_CONFIRMED')::int AS none_confirmed,
-       count(*) FILTER (WHERE t.effect_state IS NULL AND t.decision = 'ALLOW')::int AS pending,
+       count(*) FILTER (WHERE t.effect_state IS NULL AND t.decision IN ('ALLOW', 'ALLOW_WITH_OBLIGATIONS'))::int AS pending,
        count(*)::int AS total
 FROM pc.transactions t
 WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id) AND t.operation = sqlc.arg(operation);
@@ -188,13 +188,28 @@ FROM pc.transactions t
 WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id);
 
 -- name: OperationIrreversible :one
--- Whether the pinned definition of an operation declares it irreversible.
-SELECT EXISTS (
+-- Whether an operation counts as irreversible: its pinned definition says
+-- so, or no pinned definition describes it (HR-280, D84 E6).
+SELECT (NOT EXISTS (
     SELECT 1 FROM pc.package_pins p
     JOIN pc.action_definitions d ON d.org_id = p.org_id AND d.version_id = p.version_id
     WHERE p.org_id = sqlc.arg(org_id) AND d.operation = sqlc.arg(operation)
-        AND convert_from(d.canonical, 'UTF8')::jsonb ->> 'reversibility' = 'irreversible'
-)::bool;
+        AND convert_from(d.canonical, 'UTF8')::jsonb ->> 'reversibility' IN ('reversible', 'compensatable')
+))::bool AS irreversible;
+
+-- name: RunUnknownIrreversible :one
+-- How many of a run's allowed transactions have no known outcome yet
+-- (UNKNOWN, CONFLICTING, UNVERIFIABLE, PROPAGATION_PENDING or not yet
+-- recorded) on an operation that counts as irreversible (D84 E1, E6).
+SELECT count(*)::int FROM pc.transactions t
+WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id)
+    AND t.decision IN ('ALLOW', 'ALLOW_WITH_OBLIGATIONS')
+    AND (t.effect_state IS NULL OR t.effect_state IN ('UNKNOWN', 'CONFLICTING', 'UNVERIFIABLE', 'PROPAGATION_PENDING'))
+    AND NOT EXISTS (
+        SELECT 1 FROM pc.package_pins p
+        JOIN pc.action_definitions d ON d.org_id = p.org_id AND d.version_id = p.version_id
+        WHERE p.org_id = t.org_id AND d.operation = t.operation
+            AND convert_from(d.canonical, 'UTF8')::jsonb ->> 'reversibility' IN ('reversible', 'compensatable'));
 
 -- name: AutomationExecutionInfo :one
 -- What a retry needs to know (D59, D75): the execution and whether a step
