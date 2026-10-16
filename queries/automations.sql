@@ -57,10 +57,11 @@ UPDATE pc.automations SET owner_user_id = sqlc.arg(owner_user_id), purpose = sql
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state <> 'RETIRED';
 
 -- name: EnableAutomation :execrows
--- Applies an ENABLE or ROLLOUT change request (D7).
+-- Applies an ENABLE or ROLLOUT change request (D7). A paused automation
+-- stays paused (its pause has its own reason; Resume revalidates).
 UPDATE pc.automations
-SET state = 'ACTIVE', enabled_version_id = sqlc.arg(version_id), rollout = sqlc.arg(rollout),
-    cohort_agents = sqlc.narg(cohort_agents)::uuid[], pause_reason = NULL, paused_at = NULL
+SET state = CASE WHEN state = 'PAUSED' THEN 'PAUSED' ELSE 'ACTIVE' END, enabled_version_id = sqlc.arg(version_id),
+    rollout = sqlc.arg(rollout), cohort_agents = sqlc.narg(cohort_agents)::uuid[]
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('DRAFT', 'ACTIVE', 'PAUSED');
 
 -- name: NarrowAutomationRollout :execrows

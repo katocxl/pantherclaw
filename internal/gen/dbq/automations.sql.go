@@ -299,8 +299,8 @@ func (q *Queries) DueAutomationCeilings(ctx context.Context, orgID ids.OrgID, ma
 
 const enableAutomation = `-- name: EnableAutomation :execrows
 UPDATE pc.automations
-SET state = 'ACTIVE', enabled_version_id = $1, rollout = $2,
-    cohort_agents = $3::uuid[], pause_reason = NULL, paused_at = NULL
+SET state = CASE WHEN state = 'PAUSED' THEN 'PAUSED' ELSE 'ACTIVE' END, enabled_version_id = $1,
+    rollout = $2, cohort_agents = $3::uuid[]
 WHERE org_id = $4 AND id = $5 AND state IN ('DRAFT', 'ACTIVE', 'PAUSED')
 `
 
@@ -312,7 +312,8 @@ type EnableAutomationParams struct {
 	ID           ids.UUID
 }
 
-// Applies an ENABLE or ROLLOUT change request (D7).
+// Applies an ENABLE or ROLLOUT change request (D7). A paused automation
+// stays paused (its pause has its own reason; Resume revalidates).
 func (q *Queries) EnableAutomation(ctx context.Context, arg EnableAutomationParams) (int64, error) {
 	result, err := q.db.Exec(ctx, enableAutomation,
 		arg.VersionID,
