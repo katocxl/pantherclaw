@@ -137,7 +137,7 @@ func TestAutomationSecurityStepsGetTheConfig(t *testing.T) {
 	}
 }
 
-// D97 N1, D105 N3: the cleanup recognises triggers' exported Cancel errors
+// D97 N1, D105 N3: the cleanup recognizes triggers' exported Cancel errors
 // (errors.Is, no copied reason), so a delivery that may have been sent is
 // never reported canceled.
 func TestAutomationCleanupClassifiesDeliveryErrors(t *testing.T) {
