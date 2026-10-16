@@ -217,7 +217,7 @@ func ReachOf(rights []domain.Right) reflexdomain.Reach {
 	var r reflexdomain.Reach
 	groups := map[string]bool{}
 	for _, x := range rights {
-		if x.View == domain.Observed || !x.Label.Current() {
+		if x.View == domain.Observed || x.View == domain.IssuanceCeiling || !x.Label.Current() {
 			continue
 		}
 		groups[x.ResourceGroup] = true

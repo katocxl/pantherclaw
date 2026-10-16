@@ -79,10 +79,11 @@ type Diff struct {
 	BeforeRights, AfterRights []Right
 }
 
-// Preview computes before and after for a change.
+// Preview computes before and after for a change, on held reach only: an
+// automation's issuance ceiling is not what a reduction takes away (D37a).
 func Preview(in Inputs, c Change) Diff {
-	before := Compute(in).Rights
-	after := Compute(c.Apply(in)).Rights
+	before := HeldReach(Compute(in).Rights)
+	after := HeldReach(Compute(c.Apply(in)).Rights)
 	return Compare(before, after, c)
 }
 

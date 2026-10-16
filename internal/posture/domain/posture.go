@@ -184,6 +184,9 @@ func sensitive(v exposure.Verb) bool {
 // Derive lists the candidates an exposure snapshot shows, sorted.
 func Derive(in Inputs) []Candidate {
 	d := deriver{by: map[string]*Candidate{}}
+	// An automation's issuance ceiling is potential reach, never a finding
+	// about held authority (G0 M11 D37a).
+	in.Rights = exposure.HeldReach(in.Rights)
 	owned := map[ids.UUID]bool{}
 	for _, a := range in.Agents {
 		owned[a.ID] = a.Owned
@@ -469,7 +472,7 @@ func (s Snapshot) reachable(paths []string) bool {
 		set[p] = true
 	}
 	for _, r := range s.Rights {
-		if r.View != exposure.Observed && r.Label.Current() && set[r.PathKey()] {
+		if r.View != exposure.Observed && !r.View.Potential() && r.Label.Current() && set[r.PathKey()] {
 			return true
 		}
 	}

@@ -75,7 +75,7 @@ func TestHR258_MetricsNeverReadAMissingSourceAsZero(t *testing.T) {
 	if p := point(operations.MetricDecisionsDenied, last); p.State != operations.Collected || p.Value != 2 || p.Drill == nil || p.Drill.Query == nil {
 		t.Fatalf("denied: %+v", p)
 	}
-	if p := point(operations.MetricAutomationOutcomes, last); p.State != operations.NotCollected {
+	if p := point(operations.MetricAutomationOutcomes, last); p.State != operations.Collected || p.Value != 0 {
 		t.Fatalf("automation outcomes: %+v", p)
 	}
 	if p := point(operations.MetricExposureUsable, last); p.State != operations.NotCollected {
@@ -119,7 +119,7 @@ func TestHR258_EachMetricNeedsItsSourcePermission(t *testing.T) {
 	for _, s := range m.Series {
 		want := operations.PointRestricted
 		if s.Metric == operations.MetricAutomationOutcomes {
-			want = operations.NotCollected
+			want = operations.Collected
 		}
 		if s.Dimension != "" {
 			t.Fatalf("%s leaks a dimension %q", s.Metric, s.Dimension)

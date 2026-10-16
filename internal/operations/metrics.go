@@ -190,6 +190,11 @@ func sampleHour(ctx context.Context, q *dbq.Queries, org ids.OrgID, bucket time.
 		return nil, err
 	}
 	out = append(out, sample{metric: MetricEffectsConfirmed, value: float64(n), collected: true})
+	autos, err := automationOutcomes(ctx, q, org, bucket, end)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, autos...)
 	if !current {
 		return out, nil
 	}
@@ -236,8 +241,6 @@ func sampleHour(ctx context.Context, q *dbq.Queries, org ids.OrgID, bucket time.
 			out = append(out, sample{metric: MetricExposureUsable, value: 0, collected: true})
 		}
 	}
-	// No automations exist yet (M11): their outcomes are not collected.
-	out = append(out, sample{metric: MetricAutomationOutcomes})
 	return out, nil
 }
 
@@ -433,7 +436,7 @@ var metricPerm = map[string]td.Permission{
 	MetricBypassRoutes:          td.PermCoverageRead,
 	MetricBypassOldestHours:     td.PermCoverageRead,
 	MetricExposureUsable:        td.PermExposureRead,
-	MetricAutomationOutcomes:    td.PermOperationsRead,
+	MetricAutomationOutcomes:    td.PermAutomationRead,
 }
 
 // splitByPermission splits metrics into those the viewer may read at the
@@ -450,4 +453,42 @@ func splitByPermission(c tenancy.Caller, metrics []string) (readable, hidden []s
 		readable = []string{}
 	}
 	return readable, hidden
+}
+
+// Automation outcome dimensions (G0 M11 D38): "<automation>/<outcome>",
+// and "/interventions" for automation exceptions resolved org-wide.
+const (
+	OutcomeCompleted     = "completed_with_evidence"
+	OutcomePartial       = "partial"
+	OutcomeFailed        = "failed"
+	OutcomeReconcile     = "needs_reconciliation"
+	OutcomeInterventions = "interventions"
+	OutcomeRefused       = "triggers_refused"
+)
+
+// automationOutcomes samples an hour's automation outcomes, one point per
+// automation and outcome; an hour with none is a collected zero, never
+// "not collected" (HR-258). Routine success is counted, never notified.
+func automationOutcomes(ctx context.Context, q *dbq.Queries, org ids.OrgID, bucket, end time.Time) ([]sample, error) {
+	rows, err := q.MetricAutomationOutcomes(ctx, org, bucket, end)
+	if err != nil {
+		return nil, err
+	}
+	var out []sample
+	for _, r := range rows {
+		out = append(out, sample{
+			metric: MetricAutomationOutcomes, dimension: r.AutomationID.String() + "/" + r.Outcome, value: float64(r.N), collected: true,
+		})
+	}
+	resolved, err := q.MetricAutomationResolved(ctx, org, bucket, end)
+	if err != nil {
+		return nil, err
+	}
+	if resolved > 0 {
+		out = append(out, sample{metric: MetricAutomationOutcomes, dimension: "/" + OutcomeInterventions, value: float64(resolved), collected: true})
+	}
+	if len(out) == 0 {
+		out = append(out, sample{metric: MetricAutomationOutcomes, value: 0, collected: true})
+	}
+	return out, nil
 }

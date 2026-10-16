@@ -164,7 +164,9 @@ func Rank(rights []Right, agents []AgentInfo, irreversible map[string]bool) []Ra
 	}
 	by := map[string]*acc{}
 	for _, r := range rights {
-		if r.View == Observed || !r.Label.Current() {
+		// An issuance ceiling is an automation's potential reach (D37), never
+		// an agent's current reach.
+		if r.View == Observed || r.View == IssuanceCeiling || !r.Label.Current() {
 			continue
 		}
 		k := agentKey(r.Agent)
@@ -237,6 +239,11 @@ type Filter struct {
 	View          View
 	// Current leaves out EXPIRED rights.
 	Current bool
+	// Automation keeps one automation's rights (D37a).
+	Automation *ids.UUID
+	// WithCeiling keeps the issuance-ceiling view beside the others (an
+	// automation ranking or an automation graph that asked for it).
+	WithCeiling bool
 }
 
 // Match reports whether r passes the filter.
@@ -252,7 +259,11 @@ func (f Filter) Match(r Right) bool {
 		return false
 	case f.View != "" && r.View != f.View:
 		return false
+	case f.View == "" && r.View.Potential() && !f.WithCeiling:
+		return false // the issuance ceiling only when asked for (D37a)
 	case f.Current && !r.Label.Current():
+		return false
+	case f.Automation != nil && !r.HasAutomation(*f.Automation):
 		return false
 	}
 	return true
