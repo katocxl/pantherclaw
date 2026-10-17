@@ -43,9 +43,9 @@ The point gets an access token from the OAuth token endpoint with `private_key_j
 }
 ```
 
-For MCP traffic use `"protocol": "mcp"` and action `tools/call`; `initialize`, `tools/list` and `ping` answer true with no action recorded. The URL must sit under the connection's base URL. Bodies: requests at most 128 KiB, the forwarded body at most 64 KiB. Each point is rate limited (default 50 requests per second per server instance).
+For MCP traffic use `"protocol": "mcp"` and action `tools/call`; `initialize`, `tools/list` and `ping` answer true with no action recorded. The URL must sit under the connection's base URL. Bodies: requests at most 128 KiB, the forwarded body at most 64 KiB. Each point is rate limited (default 50 requests per second per server instance). Other MCP requests through a point (GET, DELETE) are refused. JSON-RPC bodies are parsed strictly (only `jsonrpc`, `method`, `params` and `id`). `properties.method` must match `^[A-Z]{3,7}$` and equal `action.name` (for MCP the action is `tools/call`). Each proof decides at most one evaluation: a batch item that would reuse a proof (for example through a shared top-level subject) answers `decision: false` with `PROOF_ALREADY_USED`.
 
-The reference point `sdk/go/pep` (Apache-2.0) does all of this as an `http.Handler` reverse proxy. Use it or copy its behaviour.
+The reference point `sdk/go/pep` (Apache-2.0) does all of this as an `http.Handler` reverse proxy; `sdk/go/pep/cmd/pep` wraps it in a small command (listen address, upstream, evaluation URL, key file). Use it or copy its behaviour.
 
 ## 4. Reading the answer
 
@@ -69,3 +69,5 @@ An ALLOW for a budget-consuming action is committed at once as a delegated execu
 | `decision: false`, proof code | The proof does not match the URL, method or body, or was replayed | Make the point forward the exact request bytes the agent signed |
 | `decision: false`, name-only subject | The subject has no PAP/1 token and proof | Forward the agent's PAP/1 headers |
 | 429 | The per-point rate limit | Spread load or raise the limit in server config |
+| `PROOF_ALREADY_USED` | A batch reused one proof for several evaluations | Send one proof per evaluation |
+| The point cannot evaluate after create | It is still PENDING | Confirm it on the page whose URL `create` printed |

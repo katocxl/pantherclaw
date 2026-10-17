@@ -16,10 +16,10 @@
 
 What the gateway does on every call:
 - **Test key only.** Each definition carries the credential pattern `^(sk|rk)_test_[A-Za-z0-9]{16,}$`, checked on the opened credential before any byte is sent; a mismatch is `CREDENTIAL_PATTERN` and Stripe receives nothing.
-- **Live-mode answers.** If any Stripe answer or verifier read reports `livemode: true`, the gateway records the security audit event `security.stripe_livemode`, the admins are notified, and the connection's circuit opens until an admin closes it.
+- **Live-mode answers.** If any Stripe answer, fact read or verifier read reports `livemode: true`, the gateway trips the connection's circuit with reason `stripe_livemode`: the server quarantines the connection, records the security audit event `security.stripe_livemode` and notifies the admins. It stays quarantined until an admin restores it.
 - **Form bodies rebuilt from the decision.** Stripe takes `application/x-www-form-urlencoded`; the gateway rebuilds the body from ActionIR (sorted keys, strict bracket syntax) and sends amounts in minor units (`usd` 2 decimals, `jpy` 0; other currencies outside the fixed table are refused).
 - **Pinned API version** `Stripe-Version: 2026-09-30.endive`.
-- **Idempotency.** `Idempotency-Key: pc-<transaction>` and `metadata[pantherclaw_key]` with the same value on every write (HR-304). A retry of the same transaction replays; a lost answer becomes UNKNOWN, is never retried, and is correlated through that metadata key (HR-305).
+- **Idempotency.** `Idempotency-Key: pc-<transaction>` on every write, and `metadata[pantherclaw_key]` with the same value on every write except `stripe.payment_intent.cancel` (Stripe's cancel takes no metadata; its verifier reads the intent directly) (HR-304). A retry of the same transaction replays; a lost answer becomes UNKNOWN, is never retried, and is correlated through that metadata key (HR-305). Amounts are converted with `minor_money`, which accepts the currency code in any case.
 - **Refundable amount.** A refund needs the fact `stripe.payment.refundable`, read by the gateway at most 60 s earlier. The refund amount must be at most the fact's `remaining` amount, compared as money in the same currency (`CURRENCY_MISMATCH` otherwise), and a payment with `livemode: true` is refused. The target must name exactly one of a payment intent (`pi_…`) or a charge (`ch_…`); both or neither is refused.
 - **Recently changed payees.** Before a transfer the gateway reads `stripe.account.payout_details_changed` through the Events API (`account.external_account.*` events on the connected account within 7 days). It is not a prerequisite: it feeds the `payee_changed_recently` consequence, which fires when the payee changed bank details recently **or** the events cannot be read (UNAVAILABLE), and the treasury template then requires a second independent approver (HR-306). The transfer description is a `content` parameter with disclosure limits.
 
@@ -27,7 +27,7 @@ What the gateway does on every call:
 
 In the Stripe Dashboard, in **test mode**:
 1. Developers → API keys → **Create restricted key**.
-2. Permissions: **write** on Refunds, PaymentIntents and Transfers; **read** on Charges, Balance, Connected accounts and Events. Nothing else.
+2. Permissions: **write** on Refunds, PaymentIntents and Transfers; **read** on Charges, PaymentIntents, Connected accounts, Events and Balance. Nothing else.
 3. Copy the `rk_test_…` value into a file outside the repository (for example `~/.pantherclaw/stripe-test.key`). Never paste it into chat or a ticket.
 
 For transfers you also need a connected account (Connect, test mode) to act as the destination.
@@ -73,7 +73,7 @@ Check the printed transactions in the Stripe Dashboard (test mode) and with `pcl
 | Symptom | Cause | Action |
 |---|---|---|
 | `CANNOT_AUTHORIZE` `CREDENTIAL_PATTERN` | The sealed key is not a test key | Seal an `rk_test_…` key; live keys are never accepted |
-| Connection circuit open after `security.stripe_livemode` | Stripe answered with a live-mode object | Treat it as a security event: check which key is sealed and what Stripe account it belongs to, seal a test key, then close the circuit |
+| Connection quarantined with reason `stripe_livemode` | Stripe answered with a live-mode object | Treat it as a security event: check which key is sealed and what Stripe account it belongs to, seal a test key, then restore the connection |
 | Refund `CANNOT_AUTHORIZE`, fact stale or missing | The refundable read failed or is older than 60 s | Check the key's Charges read permission and the gateway's reach to Stripe |
 | `CURRENCY_MISMATCH` | The refund currency differs from the payment's | Refund in the payment's currency |
 | Transfer held with `payee_changed_recently` or an UNAVAILABLE fact | The payee changed bank details within 7 days, or Events cannot be read | Confirm the payee out of band before a second approver approves; grant Events read |

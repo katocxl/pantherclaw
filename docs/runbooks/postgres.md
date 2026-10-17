@@ -58,7 +58,9 @@ pclaw connection create shopdb --kind postgres --gateway <gateway id> --package 
 pclaw seal --connection <connection id> --from-file db-password.txt --fingerprint <broker key fingerprint>
 ```
 
-The password is a sealed static credential; delete the file afterwards. The gateway applies the same dial-time egress checks as for HTTP connections; private addresses are reachable only with `internal`.
+The password is a sealed static credential with no header binding; only the gateway's Postgres client opens it, inside a dispatch. Delete the file afterwards. The gateway applies the same dial-time egress checks as for HTTP connections; private addresses are reachable only with `internal`.
+
+**Confirm the manifest.** The new connection's manifest is only proposed, and the connection cannot dispatch until an Org Admin confirms it: open the confirmation page the create command prints, check the tables, columns, classes, limits and `internal`, and confirm with your security key. Later updates that narrow the manifest apply at once; a widening (a new table or column, a lowered class, a raised limit, `internal` turned on) stays proposed until confirmed on the same page, and the current manifest keeps serving meanwhile.
 
 ## 4. Test the connection
 
@@ -78,7 +80,7 @@ The test connects with the sealed credential and fails (and the connection canno
 
 Filters are a list of at most 20 predicates `{column, op, value | values}` with ops `eq ne lt le gt ge in is_null not_null prefix`. The SDK and hook faces refuse Postgres connections (`use_gateway_face`). Answers are `{"columns": [...], "rows": [[...]], "truncated": bool, "redacted": n}`. Every value is cut to 4096 characters in SQL (flagged `truncated_values`), and sorting uses the real column type.
 
-Aggregate measures are limited by column (HR-312): `count` on anything; `min` and `max` only on numeric, date and timestamptz columns of class public or internal; `sum` and `avg` only on numeric columns; nothing on pii, secret or text columns. Groups smaller than `min_group_size` are left out.
+Aggregate measures are limited by column (HR-312): `count` on any non-secret column (it returns a number, never a value); `min` and `max` only on numeric, date and timestamptz columns of class public or internal; `sum` and `avg` only on numeric columns; no other measure on pii, secret or text columns. Groups smaller than `min_group_size` are left out.
 
 Every query runs under `REPEATABLE READ READ ONLY` with the statement timeout, a 1 s lock timeout and an idle timeout, then `ROLLBACK`. A query over the time limit is FAILED and does not hang.
 
@@ -110,3 +112,6 @@ pantherclaw-server dev seed --postgres <file with the DSN>
 | `SCOPE_UNSUPPORTED` | The table has no matching `scope_key`, or the route cannot enforce scope | Add the scope key to the manifest (step-up) or use the gateway face |
 | `truncated: true` | The row cap was reached | Narrow the filter; raising `max_rows` is a widening change |
 | FAILED after the timeout | The query exceeded `statement_timeout_ms` | Add a filter or an index |
+| The connection cannot dispatch after create or a widening update | The manifest (or the widening) is still proposed | Confirm it on the confirmation page with a security key |
+| `TARGET_MISMATCH` on `describe_tables` | The `pg_database` target is not the connection's database | Use the connection's database name |
+| `KIND_CONFIG_MISSING` | The gateway has no Postgres configuration for the connection | Check the connection on the server; reload the gateway configuration |

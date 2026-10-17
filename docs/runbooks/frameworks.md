@@ -44,19 +44,19 @@ The refusal text is `PantherClaw refused this call: <code> (transaction <id>)` (
 | Code | When |
 |---|---|
 | the answer's own code (for example `GRANT_AMOUNT_EXCEEDED`, `unknown_tool`, `use_gateway_face`), else `denied` | deny |
-| `hold_declined` | a hold that ended declined or expired |
+| `hold_declined` | a hold that ended declined or expired (a `duplicate_action` code is reported as is) |
 | `hold_timeout` | a hold whose wait ran out or failed |
 | `cannot_decide` | any other cannot-decide |
 | `dispatch_required` | allow with `send` and no `on_dispatch` handler |
 | `wrapper_error` | an exception inside the wrapper |
-| `undecided_args` | the model's input has keys outside the tool's argument schema (D69) |
+| `undecided_args` | the model's input has keys outside the tool's argument schema, does not survive a JSON round trip (TypeScript), or sets an injected argument the framework does not overwrite (D69, D79, D81) |
 | `duplicate_action` | an identical call that shared a held call's action id, after the other one ran (D68) |
 
 Pass `raise_on_refusal=True` to raise instead of returning the refusal. Unmapped tools are refused unless `observe_unmapped=True`.
 
-**What is decided (D69).** The wrapper first validates the model's input through the tool's own argument schema, into exactly the arguments the function will receive, and sends that for the decision. Aliases are normalised to field names; any other key is refused (`undecided_args`). Arguments the framework injects from trusted code (LangChain `InjectedToolArg`, LangGraph injected state) are not part of the decision.
+**What is decided (D69).** The wrapper first validates the model's input through the tool's own argument schema, into exactly the arguments the function will receive, and sends that for the decision. Aliases are normalised to field names; any other key is refused (`undecided_args`). Only injected arguments the framework itself overwrites at call time (LangGraph `InjectedState`, `InjectedStore`, `InjectedToolCallId`, the runtime) are left out of the decision; a model-supplied value for a generic `InjectedToolArg`, or for any injected key the framework does not overwrite, is refused (D81). The LangChain wrapper runs the parsed copy and never re-parses the raw input; a CrewAI tool without a schema decides on and receives exactly the same input. In TypeScript the decision is made on the JSON form of the parsed input.
 
-**Action ids (D68, HR-329).** An identical call (same tool, server and arguments, in the same wrapper instance) reuses the action id only while the earlier call is unresolved: in flight or held, so a held call resumes rather than starting over. Once the earlier call reaches a final outcome (it ran, or was denied, could not be decided or timed out), the next identical call is a new decision with a new id. Two identical calls made while the first is held share its id: after approval one runs and the other is refused `duplicate_action`, so one approval never runs a tool twice. Changed arguments are always a new decision. The wrapped tool's original function is not reachable through the wrapper object; do not keep another reference to it in the agent.
+**Action ids (D68, HR-329).** An identical call (same tool, server and arguments, in the same wrapper instance) reuses the action id only while the earlier call is unresolved: in flight or held, so a held call resumes rather than starting over. Once the earlier call reaches a final outcome (it ran, or was denied, could not be decided or timed out), the next identical call is a new decision with a new id. Two identical calls made while the first is held share its id: after approval one runs and the other is refused `duplicate_action`, so one approval never runs a tool twice. Changed arguments are always a new decision. The wrapped tool's original function is not reachable through the wrapper's public attributes or the framework's invocation paths; do not keep another reference to it in the agent.
 
 ## 4. MCP servers
 

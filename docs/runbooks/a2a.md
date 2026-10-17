@@ -8,7 +8,7 @@ PantherClaw mediates A2A calls through the gateway: the requesting agent talks t
 
 ## 1. Create the connection
 
-You need the peer's agent card URL (`https://…/.well-known/agent-card.json`). Creating the connection pins the card, so do it with a security-key step-up:
+You need the peer's agent card URL (`https://…/.well-known/agent-card.json`). Creating the connection fetches the card and stores the pin as proposed; the connection cannot dispatch until an Org Admin opens the confirmation page it prints, checks the card, interface and skills, and confirms with a security key:
 
 ```bash
 pclaw connection create helpdesk-agent --kind a2a --gateway <gateway id> --package pc.a2a \
@@ -29,7 +29,7 @@ pclaw connection create helpdesk-agent --kind a2a --gateway <gateway id> --packa
 
 If the remote agent needs its own credential (bearer or API key per its card's security scheme), seal it with `pclaw seal --connection <id>`.
 
-The gateway re-reads the card every 10 minutes and on load. If its digest changes, the connection is **quarantined** (HR-322). Review the new card, then re-pin it with a step-up; `pclaw connection restore` alone does not accept a changed card.
+The gateway re-reads the card every 10 minutes and on configuration load. If its digest changes, or its signatures no longer verify, the gateway refuses the connection at once (`A2A_CARD_DRIFT`, nothing sent) and reports drift; the server **quarantines** the connection (reason `a2a_card_drift`) (HR-322). Review the new card and re-pin it: the re-pin is proposed until confirmed on the confirmation page with a security key, the old pin serving meanwhile, and the confirmed re-pin lifts the quarantine. `pclaw connection restore` alone does not accept a changed card.
 
 ## 2. What agents can call
 
@@ -45,9 +45,9 @@ Refused: file, raw, url and data parts (`A2A_PART_UNSUPPORTED`); push-notificati
 
 ## 3. Enrolled peers: the peer side
 
-For an enrolled peer, the requester's grant must allow delegation (otherwise DENY `DELEGATION_NOT_ALLOWED`). When the message is dispatched, PantherClaw creates (or reuses for the same requester run, connection and context) a child run for the peer agent. The run lasts at most 60 minutes and never beyond the requester's run, and its grant is the intersection of the requester's grant and `peer_scope`, with shared budgets and the requester's represented principal. Revoking the requester's run or grant revokes it.
+For an enrolled peer, the requester's grant must allow delegation, checked when the call is decided (otherwise DENY `DELEGATION_NOT_ALLOWED`: no delegation, depth or fan-out caps reached, or organization caps). When the message is dispatched, PantherClaw creates (or reuses for the same requester run, connection and context) a child run for the peer agent. The run lasts at most 60 minutes and never beyond the requester's run, and its grant is the intersection of the requester's grant and `peer_scope`, with shared budgets and the requester's represented principal. Revoking the requester's run or grant revokes it. The run and grant are created through the same services as any child run and delegation, with the same checks.
 
-The request reaches the peer with a PAP/1 action token (header `PAP-Action`) carrying the child run id. In the peer agent, use the receiver helper before acting:
+The request reaches the peer with a PAP/1 action token (header `PAP-Action`) carrying the child run id in its `pc_peer_run` claim; the run id is never put in message metadata. In the peer agent, use the receiver helper before acting:
 
 - Go: `sdk/go/a2a`
 - Python: `pantherclaw.a2a.peer_run(headers, verifier)`
@@ -65,8 +65,9 @@ People with `a2a.peer_run.read` (Org Admin, Security Admin, Auditor) can list pe
 
 | Symptom | Cause | Action |
 |---|---|---|
-| Connection quarantined | The card's digest changed | Review the card; re-pin with a step-up if expected |
+| Connection quarantined, calls refused `A2A_CARD_DRIFT` | The card's digest changed or its signatures no longer verify | Review the card; re-pin it and confirm the re-pin on the confirmation page if expected |
 | `DELEGATION_NOT_ALLOWED` | The requester's grant does not allow delegation to the peer | Issue the grant with delegation (depth and fan-out) |
 | `A2A_PART_UNSUPPORTED` | The agent sent a non-text part | Send text only |
 | The peer refuses the message | No or invalid action token (a direct call that skipped the gateway) | Route the requester through the gateway connection |
 | The peer's action denied above a limit | The requester's limits carried over | Expected; widen the requester's grant if appropriate |
+| Connection cannot dispatch after create | The pin is still proposed | Confirm it on the confirmation page with a security key |
