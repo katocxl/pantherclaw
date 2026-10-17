@@ -252,8 +252,10 @@ func TestHR318_SubjectsAndRequestsThatDoNotMatchAreRefused(t *testing.T) {
 // before any connection is read or anything decided.
 func TestHR321_RequestsAreCapped(t *testing.T) {
 	org := ids.New[ids.Org]()
-	c := tapp.Caller{Subject: td.Subject{Org: org, Principal: td.PrincipalRef{Kind: td.KindServiceAccount, ID: ids.NewV7()},
-		Bindings: []td.Binding{{Role: td.RoleEnforcementPoint, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}}}, Credential: tapp.CredAccessToken}
+	c := tapp.Caller{Subject: td.Subject{
+		Org: org, Principal: td.PrincipalRef{Kind: td.KindServiceAccount, ID: ids.NewV7()},
+		Bindings: []td.Binding{{Role: td.RoleEnforcementPoint, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}},
+	}, Credential: tapp.CredAccessToken}
 	e := newAuthZENEndpoint(nil, fakeAuthn{bearer: "good", caller: c}, failDecider{t}, "https://pc.example.test", celenv.Limits{}, clock.NewFake(time.Now()), nil)
 	pt := point{Org: org, ID: ids.NewV7(), Rate: 3}
 	e.pointOf = func(context.Context, tapp.Caller) (point, error) { return pt, nil }
@@ -311,8 +313,10 @@ func TestHR321_OnePointsWindowIsNeverResetByOthers(t *testing.T) {
 // proof twice gets PROOF_ALREADY_USED for the second (D82).
 func TestHR318_OneProofDecidesAtMostOneEvaluation(t *testing.T) {
 	org := ids.New[ids.Org]()
-	c := tapp.Caller{Subject: td.Subject{Org: org, Principal: td.PrincipalRef{Kind: td.KindServiceAccount, ID: ids.NewV7()},
-		Bindings: []td.Binding{{Role: td.RoleEnforcementPoint, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}}}, Credential: tapp.CredAccessToken}
+	c := tapp.Caller{Subject: td.Subject{
+		Org: org, Principal: td.PrincipalRef{Kind: td.KindServiceAccount, ID: ids.NewV7()},
+		Bindings: []td.Binding{{Role: td.RoleEnforcementPoint, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}},
+	}, Credential: tapp.CredAccessToken}
 	e := newAuthZENEndpoint(nil, fakeAuthn{bearer: "good", caller: c}, failDecider{t}, "https://pc.example.test", celenv.Limits{}, nil, nil)
 	e.pointOf = func(context.Context, tapp.Caller) (point, error) {
 		return point{Org: org, ID: ids.NewV7(), Rate: 50}, nil
