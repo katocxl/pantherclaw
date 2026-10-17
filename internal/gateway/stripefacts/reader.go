@@ -198,7 +198,7 @@ func refundable(ctx context.Context, get Getter, target string) (map[string]any,
 			return nil, err
 		}
 		if ch["id"] != target {
-			return nil, errors.New("Stripe answered another charge")
+			return nil, errors.New("the answer is about another charge")
 		}
 	}
 	id, _ := ch["id"].(string)
