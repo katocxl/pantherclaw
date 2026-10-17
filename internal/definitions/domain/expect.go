@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
+	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
 
 // Expected returns what an extended verifier must observe for an action on
@@ -52,6 +53,10 @@ func referenceText(ref string, target actionir.Target, vals Values) (string, boo
 			return FormatMoney(v.Money), true
 		case "currency":
 			return string(v.Money.Currency), true
+		case "minor":
+			// What a target reports in integer minor units (G0 M14 D8).
+			n, err := money.ToMinor(v.Money)
+			return n, err == nil
 		}
 	case TypeInteger:
 		return strconv.FormatInt(v.Int, 10), part == ""
@@ -61,9 +66,9 @@ func referenceText(ref string, target actionir.Target, vals Values) (string, boo
 		return strconv.FormatBool(v.Bool), part == ""
 	case TypeEnum, TypeIdentifier:
 		return v.Str, part == ""
-	case TypeIdentifierList, TypeText, TypeCommand, TypeContent, TypePath:
-		// Lists have no single value; text, commands, content and paths are never
-		// compared with what a target reports.
+	case TypeIdentifierList, TypeText, TypeCommand, TypeContent, TypePath, TypeQueryFilter:
+		// Lists and filters have no single value; text, commands, content
+		// and paths are never compared with what a target reports.
 	}
 	return "", false
 }

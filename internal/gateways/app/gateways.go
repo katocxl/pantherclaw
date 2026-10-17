@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
+	"github.com/katocxl/pantherclaw/internal/connections/ports"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gateways/ca"
@@ -62,6 +63,8 @@ type Service struct {
 	auth          authCache
 	// hosted are the PantherClaw-hosted gateways (hosting.go).
 	hosted map[ids.UUID]bool
+	// kinds load the M14 kinds' configurations (kinds_m14.go).
+	kinds *ports.KindConfigs
 }
 
 // New returns the gateway use cases. gatewayAPIURL is the URL of the

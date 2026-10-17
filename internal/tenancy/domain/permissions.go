@@ -237,7 +237,7 @@ var catalog = append([]Permission{
 	PermCoverageRead, PermCoverageManage, PermCoverageReassess,
 	PermSandboxRun,
 	PermRedteamRun, PermRedteamRead,
-}, slices.Concat(reflexCatalog, automationsCatalog)...)
+}, slices.Concat(reflexCatalog, automationsCatalog, m14Catalog)...)
 
 // humanOnly permissions can never be exercised by a service account or an
 // API key, whatever their bindings say (ARCHITECTURE §10: "pck_ keys never

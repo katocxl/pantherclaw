@@ -113,6 +113,13 @@ enum ConnectionKind {
   // A third-party stdio MCP server a customer-hosted gateway runs in a
   // container (G0 M9; HR-084): no base URL, no credential of its own.
   CONNECTION_KIND_MCP_CONTAINER = 9;
+  // A Postgres database the gateway queries with structured, read-only
+  // queries built from the reviewed manifest (G0 M14 D15); pantherclaw_held
+  // only.
+  CONNECTION_KIND_POSTGRES = 10;
+  // A peer agent reached over the A2A protocol, its agent card pinned
+  // (G0 M14 D30); pantherclaw_held only.
+  CONNECTION_KIND_A2A = 11;
 }
 
 // ConnectionState is whether actions may use a connection.
@@ -220,6 +227,201 @@ message Connection {
   // Whether the connection is simulated (G0 M12, HR-221): it points only at a
   // simulator, and only range agents' runs may use it.
   bool simulated = 30;
+  // postgres is a postgres connection's configuration and manifest.
+  PostgresConfig postgres = 31;
+  // a2a is an a2a connection's configuration and pinned card.
+  A2AConfig a2a = 32;
+}
+
+// PostgresConfig is a postgres connection (G0 M14 D15): where the database
+// is and the reviewed manifest of what the gateway may read. Its password
+// is the connection's sealed static credential. Identifiers are lower-case
+// and never quoted. A widening change of the manifest (a new table or
+// column, a class lowered, a limit raised) needs a step-up.
+message PostgresConfig {
+  // Database host name or address.
+  string host = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 253
+    pattern: "^[A-Za-z0-9]([A-Za-z0-9.:-]{0,251}[A-Za-z0-9])?$"
+  }];
+  // Port (default 5432).
+  int32 port = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 65535
+  }];
+  // Database name.
+  string database = 3 [(buf.validate.field).string.pattern = "^[a-z_][a-z0-9_]{0,62}$"];
+  // Role the gateway logs in as.
+  string user = 4 [(buf.validate.field).string.pattern = "^[a-z_][a-z0-9_]{0,62}$"];
+  // "verify-full" (required), or "require" only with internal and a pinned
+  // CA.
+  string sslmode = 5 [(buf.validate.field).string = {
+    in: [
+      "verify-full",
+      "require"
+    ]
+  }];
+  // Optional pinned CA certificate (PEM).
+  string ca_pem = 6 [(buf.validate.field).string.max_len = 16384];
+  // Allows a private address; set only with a step-up.
+  bool internal = 7;
+  // Tables the gateway may read.
+  repeated PostgresTable tables = 8 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 64
+  }];
+  // Row cap per query (default 200, at most 1000).
+  int32 max_rows = 9 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 1000
+  }];
+  // Statement timeout in milliseconds (default 5000, at most 30000).
+  int32 statement_timeout_ms = 10 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 30000
+  }];
+  // Answer cap in bytes (default 1 MiB, at most 4 MiB).
+  int32 max_result_bytes = 11 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 4194304
+  }];
+  // Smallest group an aggregate returns (default 5, at least 2).
+  int32 min_group_size = 12 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 1000000
+  }];
+}
+
+// PostgresTable is one table of a postgres manifest.
+message PostgresTable {
+  // Schema.
+  string schema = 1 [(buf.validate.field).string.pattern = "^[a-z_][a-z0-9_]{0,62}$"];
+  // Table name.
+  string name = 2 [(buf.validate.field).string.pattern = "^[a-z_][a-z0-9_]{0,62}$"];
+  // The record scope key this table answers to (D20); empty for none.
+  string scope_key = 3 [(buf.validate.field).string.pattern = "^([a-z_][a-z0-9_]{0,62})?$"];
+  // The column a record scope filters on; set together with scope_key.
+  string scope_column = 4 [(buf.validate.field).string.pattern = "^([a-z_][a-z0-9_]{0,62})?$"];
+  // Row cap for this table; zero takes the connection's.
+  int32 max_rows = 5 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 1000
+  }];
+  // Columns the gateway may read.
+  repeated PostgresColumn columns = 6 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 128
+  }];
+}
+
+// PostgresColumn is one column of a manifest table.
+message PostgresColumn {
+  // Column name.
+  string name = 1 [(buf.validate.field).string.pattern = "^[a-z_][a-z0-9_]{0,62}$"];
+  // Type: text, int, bigint, numeric, bool, date, timestamptz or uuid.
+  string type = 2 [(buf.validate.field).string = {
+    in: [
+      "text",
+      "int",
+      "bigint",
+      "numeric",
+      "bool",
+      "date",
+      "timestamptz",
+      "uuid"
+    ]
+  }];
+  // Data class: public, internal, pii or secret.
+  string class = 3 [(buf.validate.field).string = {
+    in: [
+      "public",
+      "internal",
+      "pii",
+      "secret"
+    ]
+  }];
+}
+
+// A2AConfig is an a2a connection (G0 M14 D30): the peer agent's pinned
+// agent card and the interface the gateway calls. Creating it and
+// refreshing the pin need a step-up; a card whose digest changes is drift
+// and quarantines the connection until it is pinned again (HR-322).
+message A2AConfig {
+  // Where the agent card is read (https; loopback only in development).
+  string card_url = 1 [(buf.validate.field).string = {
+    min_len: 9
+    max_len: 2048
+  }];
+  // The card as fetched when it was pinned (JSON).
+  bytes pinned_card = 2 [(buf.validate.field).bytes.max_len = 262144];
+  // SHA-256 of the card's JCS form; set by the server.
+  bytes card_digest = 3 [(buf.validate.field).bytes = {
+    max_len: 32
+  }];
+  // The interface the gateway calls: one the card declares.
+  A2AInterface interface = 4;
+  // Optional pinned JWKS: when the card carries signatures, one must
+  // verify with a key from it.
+  bytes card_keys = 5 [(buf.validate.field).bytes.max_len = 65536];
+  // Skill ids agents may use, a subset of the card's.
+  repeated string skills = 6 [(buf.validate.field).repeated = {
+    max_items: 64
+    unique: true
+    items: {
+      string: {
+        min_len: 1
+        max_len: 128
+      }
+    }
+  }];
+  // An enrolled agent of this org that the peer endpoint belongs to; its
+  // runs for requests through this connection are delegated (D33).
+  string peer_agent_id = 7 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  // The bounds and limits the peer may use for requests from this route;
+  // required with peer_agent_id.
+  A2APeerScope peer_scope = 8;
+  // Answer cap in bytes (default 1 MiB, at most 8 MiB).
+  int32 max_answer_bytes = 9 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 8388608
+  }];
+  // Longest a relayed stream may run, in seconds (default 300, at most
+  // 3600).
+  int32 max_stream_seconds = 10 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 3600
+  }];
+}
+
+// A2AInterface is one interface of an agent card.
+message A2AInterface {
+  // "JSONRPC" or "HTTP+JSON"; gRPC is refused.
+  string protocol = 1 [(buf.validate.field).string = {
+    in: [
+      "JSONRPC",
+      "HTTP+JSON"
+    ]
+  }];
+  // Its URL.
+  string url = 2 [(buf.validate.field).string = {
+    min_len: 9
+    max_len: 2048
+  }];
+}
+
+// A2APeerScope bounds what a peer agent may do for a requester (D33).
+message A2APeerScope {
+  // Bounds (grant bounds v1, JSON).
+  bytes bounds = 1 [(buf.validate.field).bytes = {
+    min_len: 2
+    max_len: 65536
+  }];
+  // Limits (grant limits v1, JSON); empty for none.
+  bytes limits = 2 [(buf.validate.field).bytes.max_len = 65536];
 }
 
 // ConnectionRoute is one route's explicit mode.
@@ -342,6 +544,10 @@ message CreateConnectionRequest {
   // literal on loopback or a private network as the base URL; mcp_container
   // is refused. Fixed for the connection's life.
   bool simulated = 21;
+  // postgres is required for, and only for, a postgres connection.
+  PostgresConfig postgres = 22;
+  // a2a is required for, and only for, an a2a connection.
+  A2AConfig a2a = 23;
 }
 
 // CreateConnectionResponse returns the connection.
@@ -453,6 +659,12 @@ message UpdateConnectionRequest {
   // connector replaces an mcp_container connection's spec (weakens; moving
   // one to another gateway needs it).
   ConnectorSpec connector = 19;
+  // postgres replaces a postgres connection's configuration (a widening
+  // manifest change weakens).
+  PostgresConfig postgres = 20;
+  // a2a replaces an a2a connection's configuration, or pins its card again
+  // (weakens).
+  A2AConfig a2a = 21;
 }
 
 // UpdateConnectionResponse returns the connection.

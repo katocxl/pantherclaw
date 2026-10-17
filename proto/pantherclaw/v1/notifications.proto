@@ -61,6 +61,39 @@ enum ChannelKind {
   CHANNEL_KIND_SLACK = 3;
   // An HTTPS endpoint, signed per Standard Webhooks.
   CHANNEL_KIND_WEBHOOK = 4;
+  // A Slack bot posting approval cards to one channel and updating them in
+  // place (G0 M14 D22, Team edition): minimal data and a link button only,
+  // never a decision in Slack.
+  CHANNEL_KIND_SLACK_APP = 5;
+}
+
+// SlackDataLevel is how much a Slack approval card shows (G0 M14 D23).
+enum SlackDataLevel {
+  SLACK_DATA_LEVEL_UNSPECIFIED = 0;
+  // Request kind label, consequence level, expiry and a short request id.
+  SLACK_DATA_LEVEL_MINIMAL = 1;
+  // Adds the approval template's title, the agent's display name and the
+  // environment.
+  SLACK_DATA_LEVEL_SUMMARY = 2;
+}
+
+// SlackAppConfig is a slack_app channel's configuration (G0 M14 D22). The
+// bot token is input only: it is stored encrypted and never returned.
+message SlackAppConfig {
+  // Slack channel id the cards are posted to.
+  string channel_id = 1 [(buf.validate.field).string.pattern = "^[CG][A-Z0-9]{8,12}$"];
+  // How much a card shows (default MINIMAL).
+  SlackDataLevel data_level = 2 [(buf.validate.field).enum.defined_only = true];
+  // The workspace id, from auth.test; read-only.
+  string team_id = 3 [(buf.validate.field).string = {
+    max_len: 32
+    pattern: "^(T[A-Z0-9]{4,30})?$"
+  }];
+  // The bot token (xoxb-...); input only, never returned.
+  string bot_token = 4 [(buf.validate.field).string = {
+    max_len: 256
+    pattern: "^(xoxb-[A-Za-z0-9-]{20,250})?$"
+  }];
 }
 
 // NotificationSeverity orders notifications.
@@ -126,6 +159,8 @@ message Channel {
   google.protobuf.Timestamp create_time = 16;
   // Last change.
   google.protobuf.Timestamp update_time = 17;
+  // slack_app channels: the configuration, without the bot token.
+  SlackAppConfig slack_app = 18;
 }
 
 // DeliveryState is the state of one delivery.
@@ -209,6 +244,9 @@ message CreateChannelRequest {
   // Webhook channels: the https endpoint. Slack channels: the incoming
   // webhook URL (https://hooks.slack.com/services/...), stored encrypted.
   string url = 6 [(buf.validate.field).string.max_len = 2048];
+  // slack_app channels: the configuration, with the bot token. Required
+  // for, and only for, a slack_app channel.
+  SlackAppConfig slack_app = 7;
 }
 
 // CreateChannelResponse returns the channel and, for a webhook channel, the
