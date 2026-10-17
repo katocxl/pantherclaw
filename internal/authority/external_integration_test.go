@@ -8,11 +8,16 @@ package authority_test
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
+	"connectrpc.com/connect/v2"
+
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	"github.com/katocxl/pantherclaw/internal/authority"
+	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -137,4 +142,61 @@ func TestHR320_NothingIsDispatchedWhenWhoAskedIsNotRecorded(t *testing.T) {
 	if b := f.rawBudgetRow(t); b.Reserved.String() != "0" || b.Spent.String() != "0" {
 		t.Fatalf("budget after expiry: reserved %s spent %s", b.Reserved, b.Spent)
 	}
+}
+
+// TestHR320_TheGatewayPathRefusesAuthZEN: a gateway can neither have an
+// authzen action decided nor BeginDispatch or record an authzen permit the
+// external path issued; only that path commits it (D61, D65, D82 M2).
+func TestHR320_TheGatewayPathRefusesAuthZEN(t *testing.T) {
+	f := setup(t, "1000", 0, time.Minute)
+	f.exec(t, "UPDATE pc.connections SET access_mode = 'agent_held' WHERE org_id = $1 AND id = $2", f.gw.Org, f.conn)
+	ctx := authority.WithGateway(context.Background(), f.gw)
+	h := authority.NewHandler(f.svc)
+	act := f.authzenAction(t, "15.00", ids.NewV7())
+	ar, err := h.Authorize(ctx, &pantherclawv1.AuthorizeRequest{ActionIr: act.Canonical})
+	if err != nil || ar.GetDecision() != pantherclawv1.Decision_DECISION_CANNOT_AUTHORIZE || ar.GetPermit() != "" ||
+		len(ar.GetReasons()) == 0 || ar.GetReasons()[0].GetCode() != authority.ReasonChannelNotAllowed {
+		t.Fatalf("gateway authorize: %v %v", ar, err)
+	}
+	// An authzen permit, issued but not committed (who asked was not recorded).
+	res, err := f.svc.Decide(context.Background(), authority.ExternalRequest{
+		Gateway: f.gw, Action: f.authzenAction(t, "15.00", ids.NewV7()), Credentials: f.creds(t, f.wl, f.wl.token),
+		Decided: func(context.Context, ids.UUID) error { return errors.New("not recorded") },
+	})
+	if err != nil || res.Allowed {
+		t.Fatalf("decide: %+v %v", res, err)
+	}
+	permit := f.str(t, "SELECT id::text FROM pc.permits WHERE org_id = $1 AND transaction_id = $2", res.TransactionID)
+	epoch := f.str(t, "SELECT epoch::text FROM pc.permits WHERE org_id = $1 AND transaction_id = $2", res.TransactionID)
+	_, err = h.BeginDispatch(ctx, &pantherclawv1.BeginDispatchRequest{PermitId: permit, Epoch: mustInt(t, epoch)})
+	if connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("gateway BeginDispatch of an authzen permit: %v", err)
+	}
+	_, err = h.RecordExecution(ctx, &pantherclawv1.RecordExecutionRequest{PermitId: permit, Outcome: pantherclawv1.Outcome_OUTCOME_DELEGATED})
+	if connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("gateway RecordExecution of an authzen permit: %v", err)
+	}
+	if n := f.count(t, "SELECT count(*) FROM pc.permits WHERE org_id = $1 AND state = 'ISSUED'"); n != 1 {
+		t.Fatalf("issued permits: %d", n)
+	}
+}
+
+func (f fixture) str(t *testing.T, sql string, arg any) string {
+	t.Helper()
+	var s string
+	if err := f.pool.InTenantTx(context.Background(), f.gw.Org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, sql, f.gw.Org, arg).Scan(&s)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+func mustInt(t *testing.T, s string) int64 {
+	t.Helper()
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
 }
