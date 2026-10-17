@@ -1,0 +1,399 @@
+{
+  "format": "pantherclaw.conformance/v1",
+  "group": "wrappers",
+  "description": "How a framework wrapper (LangChain/LangGraph, OpenAI Agents SDK, CrewAI, Vercel AI SDK, MCP TypeScript SDK) decides each call of a wrapped tool through the /sdk face: only allow lets the tool run, a hold is waited on and the identical call resubmitted, an identical retry of a held call reuses its action id, and every other outcome returns a refusal to the model (or raises, with raise_on_refusal) without running the tool. The fake gateway answers each /sdk request with the case's next answer, rewritten for the PC-Action-Id it received: action_id and every occurrence of the file's action_id in the decoded action_ir are replaced, and action_hash becomes the SHA-256 of the rewritten action_ir when it was the SHA-256 of the original.",
+  "source": "the framework wrappers' contract (M14 PN-016.3, HR-328, HR-329) over the /sdk face answers of sdk_face.json (internal/gateway/sdk), internal/actionir for hashes, internal/authority/finalize for the action token and internal/gen protojson for the waits",
+  "connection": "payments",
+  "tool": "create_refund",
+  "sdk_tool": "mcp__payments__create_refund",
+  "path": "/sdk/payments",
+  "action_id": "01920000-0000-7000-8000-000000000004",
+  "answers": {
+    "allow": {
+      "status": 200,
+      "body": "{\"decision\":\"allow\",\"reason\":\"PantherClaw allowed this call.\",\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"action_hash\":\"8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3\",\"action_ir\":\"eyJhY3Rpb25faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDQiLCJhZ2VudF9pbnN0YW5jZSI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNSIsImNoYW5uZWwiOiJzZGsiLCJjb25uZWN0aW9uIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA3IiwiZGVkdXBlX2tleSI6InNoYTI1NjozZTU4MDc0YTVlNWRjNjE2OGFhOWJiYWFkYWZmZmRkZDJmOTFjMmVmYWFlZTAwM2U1MTRkZGYyN2ZkOTljZjEwIiwiZGVmaW5pdGlvbiI6eyJkaWdlc3QiOiJzaGEyNTY6NTNiM2VmZmM1ZDZmYzExMDcwODIwZmVmZDE0ODA2YjAxY2RkNjQ4NWQwZTJhMjEzNmZmMTU5MjUwMzFmYWM0MyIsInBhY2thZ2UiOiJwYy5tb2NrLXBheW1lbnRzIiwidmVyc2lvbiI6IjEuMC4wIn0sImRlc3RpbmF0aW9ucyI6W10sImVudiI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIm9wZXJhdGlvbiI6InBheW1lbnRzLnJlZnVuZC5jcmVhdGUiLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJwYXJhbXMiOnsiYW1vdW50Ijp7ImN1cnJlbmN5IjoiVVNEIiwidmFsdWUiOiIzMC4wMCJ9LCJyZWFzb24iOiJkdXBsaWNhdGUifSwicm91dGUiOiJwYXltZW50cy1yZWZ1bmQiLCJydW5faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCJ0YXJnZXQiOnsiaWQiOiJjaF8xIiwidHlwZSI6InBheW1lbnRzLmNoYXJnZSJ9LCJ2IjoxfQ\",\"transaction_id\":\"01920000-0000-7000-8000-000000000009\",\"mode\":\"enforce\",\"coverage\":\"PARTIAL\"}"
+    },
+    "deny": {
+      "status": 200,
+      "body": "{\"decision\":\"deny\",\"reason\":\"PantherClaw denied this call.\",\"error_class\":\"policy_denied\",\"code\":\"GRANT_AMOUNT_EXCEEDED\",\"reasons\":[\"GRANT_AMOUNT_EXCEEDED\"],\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"action_hash\":\"8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3\",\"action_ir\":\"eyJhY3Rpb25faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDQiLCJhZ2VudF9pbnN0YW5jZSI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNSIsImNoYW5uZWwiOiJzZGsiLCJjb25uZWN0aW9uIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA3IiwiZGVkdXBlX2tleSI6InNoYTI1NjozZTU4MDc0YTVlNWRjNjE2OGFhOWJiYWFkYWZmZmRkZDJmOTFjMmVmYWFlZTAwM2U1MTRkZGYyN2ZkOTljZjEwIiwiZGVmaW5pdGlvbiI6eyJkaWdlc3QiOiJzaGEyNTY6NTNiM2VmZmM1ZDZmYzExMDcwODIwZmVmZDE0ODA2YjAxY2RkNjQ4NWQwZTJhMjEzNmZmMTU5MjUwMzFmYWM0MyIsInBhY2thZ2UiOiJwYy5tb2NrLXBheW1lbnRzIiwidmVyc2lvbiI6IjEuMC4wIn0sImRlc3RpbmF0aW9ucyI6W10sImVudiI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIm9wZXJhdGlvbiI6InBheW1lbnRzLnJlZnVuZC5jcmVhdGUiLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJwYXJhbXMiOnsiYW1vdW50Ijp7ImN1cnJlbmN5IjoiVVNEIiwidmFsdWUiOiIzMC4wMCJ9LCJyZWFzb24iOiJkdXBsaWNhdGUifSwicm91dGUiOiJwYXltZW50cy1yZWZ1bmQiLCJydW5faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCJ0YXJnZXQiOnsiaWQiOiJjaF8xIiwidHlwZSI6InBheW1lbnRzLmNoYXJnZSJ9LCJ2IjoxfQ\",\"transaction_id\":\"01920000-0000-7000-8000-000000000009\",\"mode\":\"enforce\",\"coverage\":\"PARTIAL\"}"
+    },
+    "gateway_error": {
+      "status": 502,
+      "body": ""
+    },
+    "hold": {
+      "status": 200,
+      "body": "{\"decision\":\"hold\",\"reason\":\"\",\"error_class\":\"held\",\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"action_hash\":\"8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3\",\"action_ir\":\"eyJhY3Rpb25faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDQiLCJhZ2VudF9pbnN0YW5jZSI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNSIsImNoYW5uZWwiOiJzZGsiLCJjb25uZWN0aW9uIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA3IiwiZGVkdXBlX2tleSI6InNoYTI1NjozZTU4MDc0YTVlNWRjNjE2OGFhOWJiYWFkYWZmZmRkZDJmOTFjMmVmYWFlZTAwM2U1MTRkZGYyN2ZkOTljZjEwIiwiZGVmaW5pdGlvbiI6eyJkaWdlc3QiOiJzaGEyNTY6NTNiM2VmZmM1ZDZmYzExMDcwODIwZmVmZDE0ODA2YjAxY2RkNjQ4NWQwZTJhMjEzNmZmMTU5MjUwMzFmYWM0MyIsInBhY2thZ2UiOiJwYy5tb2NrLXBheW1lbnRzIiwidmVyc2lvbiI6IjEuMC4wIn0sImRlc3RpbmF0aW9ucyI6W10sImVudiI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIm9wZXJhdGlvbiI6InBheW1lbnRzLnJlZnVuZC5jcmVhdGUiLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJwYXJhbXMiOnsiYW1vdW50Ijp7ImN1cnJlbmN5IjoiVVNEIiwidmFsdWUiOiIzMC4wMCJ9LCJyZWFzb24iOiJkdXBsaWNhdGUifSwicm91dGUiOiJwYXltZW50cy1yZWZ1bmQiLCJydW5faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCJ0YXJnZXQiOnsiaWQiOiJjaF8xIiwidHlwZSI6InBheW1lbnRzLmNoYXJnZSJ9LCJ2IjoxfQ\",\"transaction_id\":\"01920000-0000-7000-8000-000000000009\",\"mode\":\"enforce\",\"coverage\":\"PARTIAL\",\"wait\":{\"handle\":\"01920000-0000-7000-8000-000000000009\",\"state\":\"PENDING\",\"retry_after_seconds\":1,\"deadline\":\"2099-12-31T00:00:00Z\",\"approval_request_id\":\"01920000-0000-7000-8000-00000000000a\"}}"
+    },
+    "monitor": {
+      "status": 200,
+      "body": "{\"decision\":\"allow\",\"reason\":\"\",\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"action_hash\":\"8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3\",\"action_ir\":\"eyJhY3Rpb25faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDQiLCJhZ2VudF9pbnN0YW5jZSI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNSIsImNoYW5uZWwiOiJzZGsiLCJjb25uZWN0aW9uIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA3IiwiZGVkdXBlX2tleSI6InNoYTI1NjozZTU4MDc0YTVlNWRjNjE2OGFhOWJiYWFkYWZmZmRkZDJmOTFjMmVmYWFlZTAwM2U1MTRkZGYyN2ZkOTljZjEwIiwiZGVmaW5pdGlvbiI6eyJkaWdlc3QiOiJzaGEyNTY6NTNiM2VmZmM1ZDZmYzExMDcwODIwZmVmZDE0ODA2YjAxY2RkNjQ4NWQwZTJhMjEzNmZmMTU5MjUwMzFmYWM0MyIsInBhY2thZ2UiOiJwYy5tb2NrLXBheW1lbnRzIiwidmVyc2lvbiI6IjEuMC4wIn0sImRlc3RpbmF0aW9ucyI6W10sImVudiI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIm9wZXJhdGlvbiI6InBheW1lbnRzLnJlZnVuZC5jcmVhdGUiLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJwYXJhbXMiOnsiYW1vdW50Ijp7ImN1cnJlbmN5IjoiVVNEIiwidmFsdWUiOiIzMC4wMCJ9LCJyZWFzb24iOiJkdXBsaWNhdGUifSwicm91dGUiOiJwYXltZW50cy1yZWZ1bmQiLCJydW5faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCJ0YXJnZXQiOnsiaWQiOiJjaF8xIiwidHlwZSI6InBheW1lbnRzLmNoYXJnZSJ9LCJ2IjoxfQ\",\"transaction_id\":\"01920000-0000-7000-8000-000000000009\",\"mode\":\"monitor\",\"coverage\":\"PARTIAL\"}"
+    },
+    "send": {
+      "status": 200,
+      "body": "{\"decision\":\"allow\",\"reason\":\"PantherClaw allowed this call.\",\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"action_hash\":\"8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3\",\"action_ir\":\"eyJhY3Rpb25faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDQiLCJhZ2VudF9pbnN0YW5jZSI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNSIsImNoYW5uZWwiOiJzZGsiLCJjb25uZWN0aW9uIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA3IiwiZGVkdXBlX2tleSI6InNoYTI1NjozZTU4MDc0YTVlNWRjNjE2OGFhOWJiYWFkYWZmZmRkZDJmOTFjMmVmYWFlZTAwM2U1MTRkZGYyN2ZkOTljZjEwIiwiZGVmaW5pdGlvbiI6eyJkaWdlc3QiOiJzaGEyNTY6NTNiM2VmZmM1ZDZmYzExMDcwODIwZmVmZDE0ODA2YjAxY2RkNjQ4NWQwZTJhMjEzNmZmMTU5MjUwMzFmYWM0MyIsInBhY2thZ2UiOiJwYy5tb2NrLXBheW1lbnRzIiwidmVyc2lvbiI6IjEuMC4wIn0sImRlc3RpbmF0aW9ucyI6W10sImVudiI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIm9wZXJhdGlvbiI6InBheW1lbnRzLnJlZnVuZC5jcmVhdGUiLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJwYXJhbXMiOnsiYW1vdW50Ijp7ImN1cnJlbmN5IjoiVVNEIiwidmFsdWUiOiIzMC4wMCJ9LCJyZWFzb24iOiJkdXBsaWNhdGUifSwicm91dGUiOiJwYXltZW50cy1yZWZ1bmQiLCJydW5faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCJ0YXJnZXQiOnsiaWQiOiJjaF8xIiwidHlwZSI6InBheW1lbnRzLmNoYXJnZSJ9LCJ2IjoxfQ\",\"transaction_id\":\"01920000-0000-7000-8000-000000000009\",\"mode\":\"enforce\",\"coverage\":\"PARTIAL\",\"dispatch\":{\"method\":\"POST\",\"url\":\"https://payments.example.test/v1/refunds\",\"headers\":{\"Content-Type\":\"application/json\",\"PAP-Action\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzczOC05OTdhLTUzMDNkNTkxMjM1MSIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjYwLCJwYXAiOnsidiI6MSwidHhuIjoiMDBkYzZhY2YtYWMwMC03Njk3LWEyYjQtMTllMmMyMTQ4MmRhIiwiYWN0IjoiNmEyM2E2NzE1ZGFmY2YzMTJjZjg4MGFmMGU3OWFkNDE3ODQ3MGFiNmM0MThlMDAxZjA5ZjI4YzFhMDVlYmFmYSIsImJoIjoiMmIzZDUzZGY3YmMwODg0NTgyZDhjNDJjY2M2Zjc0ZTU3MzM1N2EwNDUzMzIzMDQ1MDg4YWQzYWQ0ZDU5ZDU1OCIsIm9wIjoicGF5bWVudHMucmVmdW5kLmNyZWF0ZSIsInRhcmdldCI6eyJ0eXBlIjoicGF5bWVudHMuY2hhcmdlIiwiaWQiOiJjaF8xIn19fQ.X0ieCGuBzYwCJYbXAKCHru92LVdtzSgL-f9uFzh9cGuA5rXr-xXY_rnLoqYbY9a0XFJaFa_VUvq4Wj4BTzV0DQ\"},\"body\":\"eyJhbW91bnQiOiIzMC4wMCIsImNoYXJnZSI6ImNoXzEiLCJjdXJyZW5jeSI6IlVTRCIsInJlYXNvbiI6ImR1cGxpY2F0ZSJ9\",\"action_token\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzczOC05OTdhLTUzMDNkNTkxMjM1MSIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjYwLCJwYXAiOnsidiI6MSwidHhuIjoiMDBkYzZhY2YtYWMwMC03Njk3LWEyYjQtMTllMmMyMTQ4MmRhIiwiYWN0IjoiNmEyM2E2NzE1ZGFmY2YzMTJjZjg4MGFmMGU3OWFkNDE3ODQ3MGFiNmM0MThlMDAxZjA5ZjI4YzFhMDVlYmFmYSIsImJoIjoiMmIzZDUzZGY3YmMwODg0NTgyZDhjNDJjY2M2Zjc0ZTU3MzM1N2EwNDUzMzIzMDQ1MDg4YWQzYWQ0ZDU5ZDU1OCIsIm9wIjoicGF5bWVudHMucmVmdW5kLmNyZWF0ZSIsInRhcmdldCI6eyJ0eXBlIjoicGF5bWVudHMuY2hhcmdlIiwiaWQiOiJjaF8xIn19fQ.X0ieCGuBzYwCJYbXAKCHru92LVdtzSgL-f9uFzh9cGuA5rXr-xXY_rnLoqYbY9a0XFJaFa_VUvq4Wj4BTzV0DQ\"}}"
+    },
+    "tampered": {
+      "status": 200,
+      "body": "{\"decision\":\"allow\",\"reason\":\"PantherClaw allowed this call.\",\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"action_hash\":\"8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3\",\"action_ir\":\"eyJhY3Rpb25faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDQiLCJhZ2VudF9pbnN0YW5jZSI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNSIsImNoYW5uZWwiOiJzZGsiLCJjb25uZWN0aW9uIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA3IiwiZGVkdXBlX2tleSI6InNoYTI1NjozZTU4MDc0YTVlNWRjNjE2OGFhOWJiYWFkYWZmZmRkZDJmOTFjMmVmYWFlZTAwM2U1MTRkZGYyN2ZkOTljZjEwIiwiZGVmaW5pdGlvbiI6eyJkaWdlc3QiOiJzaGEyNTY6NTNiM2VmZmM1ZDZmYzExMDcwODIwZmVmZDE0ODA2YjAxY2RkNjQ4NWQwZTJhMjEzNmZmMTU5MjUwMzFmYWM0MyIsInBhY2thZ2UiOiJwYy5tb2NrLXBheW1lbnRzIiwidmVyc2lvbiI6IjEuMC4wIn0sImRlc3RpbmF0aW9ucyI6W10sImVudiI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIm9wZXJhdGlvbiI6InBheW1lbnRzLnJlZnVuZC5jcmVhdGUiLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJwYXJhbXMiOnsiYW1vdW50Ijp7ImN1cnJlbmN5IjoiVVNEIiwidmFsdWUiOiIzMC4wMCJ9LCJyZWFzb24iOiJkdXBsaWNhdGUifSwicm91dGUiOiJwYXltZW50cy1yZWZ1bmQiLCJydW5faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCJ0YXJnZXQiOnsiaWQiOiJjaF8yIiwidHlwZSI6InBheW1lbnRzLmNoYXJnZSJ9LCJ2IjoxfQ\",\"transaction_id\":\"01920000-0000-7000-8000-000000000009\",\"mode\":\"enforce\",\"coverage\":\"PARTIAL\"}"
+    },
+    "unmapped": {
+      "status": 200,
+      "body": "{\"decision\":\"deny\",\"reason\":\"PantherClaw cannot decide this call: the connection's reviewed package does not map mcp__payments__create_refund\",\"error_class\":\"cannot_authorize\",\"code\":\"unknown_tool\",\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"mode\":\"enforce\",\"coverage\":\"PARTIAL\"}"
+    },
+    "use_gateway_face": {
+      "status": 200,
+      "body": "{\"decision\":\"deny\",\"reason\":\"PantherClaw holds this connection's credential: use the gateway's MCP or HTTP face.\",\"error_class\":\"cannot_authorize\",\"code\":\"use_gateway_face\",\"mode\":\"enforce\",\"coverage\":\"PARTIAL\"}"
+    }
+  },
+  "waits": {
+    "declined": {
+      "stream": "event: state\ndata: {\"handle\":\"01920000-0000-7000-8000-000000000009\",\"state\":\"DECLINED\",\"deadline\":\"2099-12-31T00:00:00Z\",\"approval_request_id\":\"01920000-0000-7000-8000-00000000000a\",\"retry_after_seconds\":1,\"code\":\"APPROVAL_DECLINED\"}\n\n",
+      "long_poll": "{\"wait\":{\"approvalRequestId\":\"01920000-0000-7000-8000-00000000000a\",\"code\":\"APPROVAL_DECLINED\",\"deadlineTime\":\"2099-12-31T00:00:00Z\",\"handle\":\"01920000-0000-7000-8000-000000000009\",\"retryAfterSeconds\":1,\"state\":\"WAIT_STATE_DECLINED\"}}"
+    },
+    "pending": {
+      "stream": "event: state\ndata: {\"handle\":\"01920000-0000-7000-8000-000000000009\",\"state\":\"PENDING\",\"deadline\":\"2099-12-31T00:00:00Z\",\"approval_request_id\":\"01920000-0000-7000-8000-00000000000a\",\"retry_after_seconds\":1}\n\n",
+      "long_poll": "{\"timedOut\":true,\"wait\":{\"approvalRequestId\":\"01920000-0000-7000-8000-00000000000a\",\"deadlineTime\":\"2099-12-31T00:00:00Z\",\"handle\":\"01920000-0000-7000-8000-000000000009\",\"retryAfterSeconds\":1,\"state\":\"WAIT_STATE_PENDING\"}}"
+    },
+    "ready": {
+      "stream": "event: state\ndata: {\"handle\":\"01920000-0000-7000-8000-000000000009\",\"state\":\"PENDING\",\"deadline\":\"2099-12-31T00:00:00Z\",\"approval_request_id\":\"01920000-0000-7000-8000-00000000000a\",\"retry_after_seconds\":1}\n\nevent: state\ndata: {\"handle\":\"01920000-0000-7000-8000-000000000009\",\"state\":\"READY\",\"deadline\":\"2099-12-31T00:00:00Z\",\"approval_request_id\":\"01920000-0000-7000-8000-00000000000a\",\"retry_after_seconds\":1}\n\n",
+      "long_poll": "{\"wait\":{\"approvalRequestId\":\"01920000-0000-7000-8000-00000000000a\",\"deadlineTime\":\"2099-12-31T00:00:00Z\",\"handle\":\"01920000-0000-7000-8000-000000000009\",\"retryAfterSeconds\":1,\"state\":\"WAIT_STATE_READY\"}}"
+    }
+  },
+  "cases": [
+    {
+      "name": "allowed: the tool runs",
+      "answers": [
+        "allow"
+      ],
+      "calls": [
+        {
+          "input": {
+            "amount": "30.00",
+            "charge": "ch_1",
+            "currency": "USD",
+            "reason": "duplicate"
+          },
+          "requests": 1,
+          "action_id": "new",
+          "ran": true
+        }
+      ]
+    },
+    {
+      "name": "a monitor route: recorded and run",
+      "answers": [
+        "monitor"
+      ],
+      "calls": [
+        {
+          "input": {
+            "amount": "30.00",
+            "charge": "ch_1",
+            "currency": "USD",
+            "reason": "duplicate"
+          },
+          "requests": 1,
+          "action_id": "new",
+          "ran": true
+        }
+      ]
+    },
+    {
+      "name": "held, then allowed: the identical call is resubmitted and runs",
+      "answers": [
+        "hold",
+        "allow"
+      ],
+      "wait": "ready",
+      "calls": [
+        {
+          "input": {
+            "amount": "30.00",
+            "charge": "ch_1",
+            "currency": "USD",
+            "reason": "duplicate"
+          },
+          "requests": 2,
+          "action_id": "new",
+          "ran": true
+        }
+      ]
+    },
+    {
+      "name": "held, then declined in PantherClaw",
+      "answers": [
+        "hold"
+      ],
+      "wait": "declined",
+      "calls": [
+        {
+          "input": {
+            "amount": "30.00",
+            "charge": "ch_1",
+            "currency": "USD",
+            "reason": "duplicate"
+          },
+          "requests": 1,
+          "action_id": "new",
+          "ran": false,
+          "code": "hold_declined",
+          "transaction": "01920000-0000-7000-8000-000000000009",
+          "refusal": "PantherClaw refused this call: hold_declined (transaction 01920000-0000-7000-8000-000000000009)"
+        }
+      ]
+    },
+    {
+      "name": "held past the wait, then retried identically: the retry reuses the action id",
+      "options": {
+        "wait": 1
+      },
+      "answers": [
+        "hold",
+        "allow"
+      ],
+      "wait": "pending",
+      "calls": [
+        {
+          "input": {
+            "amount": "30.00",
+            "charge": "ch_1",
+            "currency": "USD",
+            "reason": "duplicate"
+          },
+          "requests": 1,
+          "action_id": "new",
+          "ran": false,
+          "code": "hold_timeout",
+          "transaction": "01920000-0000-7000-8000-000000000009",
+          "refusal": "PantherClaw refused this call: hold_timeout (transaction 01920000-0000-7000-8000-000000000009)"
+        },
+        {
+          "input": {
+            "amount": "30.00",
+            "charge": "ch_1",
+            "currency": "USD",
+            "reason": "duplicate"
+          },
+          "requests": 1,
+          "action_id": "same",
+          "ran": true
+        }
+      ]
+    },
+    {
+      "name": "held past the wait, then called with changed input: a new decision",
+      "options": {
+        "wait": 1
+      },
+      "answers": [
+        "hold",
+        "allow"
+      ],
+      "wait": "pending",
+      "calls": [
+        {
+          "input": {
+            "amount": "30.00",
+            "charge": "ch_1",
+            "currency": "USD",
+            "reason": "duplicate"
+          },
+          "requests": 1,
+          "action_id": "new",
+          "ran": false,
+          "code": "hold_timeout",
+          "transaction": "01920000-0000-7000-8000-000000000009",
+          "refusal": "PantherClaw refused this call: hold_timeout (transaction 01920000-0000-7000-8000-000000000009)"
+        },
+        {
+          "input": {
+            "amount": "31.00",
+            "charge": "ch_1",
+            "currency": "USD",
+            "reason": "duplicate"
+          },
+          "requests": 1,
+          "action_id": "new",
+          "ran": true
+        }
+      ]
+    },
+    {
+      "name": "denied",
+      "answers": [
+        "deny"
+      ],
+      "calls": [
+        {
+          "input": {
+            "amount": "30.00",
+            "charge": "ch_1",
+            "currency": "USD",
+            "reason": "duplicate"
+          },
+          "requests": 1,
+          "action_id": "new",
+          "ran": false,
+          "code": "GRANT_AMOUNT_EXCEEDED",
+          "transaction": "01920000-0000-7000-8000-000000000009",
+          "refusal": "PantherClaw refused this call: GRANT_AMOUNT_EXCEEDED (transaction 01920000-0000-7000-8000-000000000009)"
+        }
+      ]
+    },
+    {
+      "name": "denied, raising",
+      "options": {
+        "raise_on_refusal": true
+      },
+      "answers": [
+        "deny"
+      ],
+      "calls": [
+        {
+          "input": {
+            "amount": "30.00",
+            "charge": "ch_1",
+            "currency": "USD",
+            "reason": "duplicate"
+          },
+          "requests": 1,
+          "action_id": "new",
+          "ran": false,
+          "code": "GRANT_AMOUNT_EXCEEDED",
+          "transaction": "01920000-0000-7000-8000-000000000009",
+          "refusal": "PantherClaw refused this call: GRANT_AMOUNT_EXCEEDED (transaction 01920000-0000-7000-8000-000000000009)",
+          "raises": true
+        }
+      ]
+    },
+    {
+      "name": "a gateway error: cannot decide",
+      "answers": [
+        "gateway_error"
+      ],
+      "calls": [
+        {
+          "input": {
+            "amount": "30.00",
+            "charge": "ch_1",
+            "currency": "USD",
+            "reason": "duplicate"
+          },
+          "requests": 1,
+          "action_id": "new",
+          "ran": false,
+          "code": "cannot_decide",
+          "refusal": "PantherClaw refused this call: cannot_decide"
+        }
+      ]
+    },
+    {
+      "name": "an answer whose action does not hash to its hash: cannot decide",
+      "answers": [
+        "tampered"
+      ],
+      "calls": [
+        {
+          "input": {
+            "amount": "30.00",
+            "charge": "ch_1",
+            "currency": "USD",
+            "reason": "duplicate"
+          },
+          "requests": 1,
+          "action_id": "new",
+          "ran": false,
+          "code": "cannot_decide",
+          "refusal": "PantherClaw refused this call: cannot_decide"
+        }
+      ]
+    },
+    {
+      "name": "a tool the package does not map is refused",
+      "answers": [
+        "unmapped"
+      ],
+      "calls": [
+        {
+          "input": {
+            "amount": "30.00",
+            "charge": "ch_1",
+            "currency": "USD",
+            "reason": "duplicate"
+          },
+          "requests": 1,
+          "action_id": "new",
+          "ran": false,
+          "code": "unknown_tool",
+          "refusal": "PantherClaw refused this call: unknown_tool"
+        }
+      ]
+    },
+    {
+      "name": "a tool the package does not map runs with observe_unmapped",
+      "options": {
+        "observe_unmapped": true
+      },
+      "answers": [
+        "unmapped"
+      ],
+      "calls": [
+        {
+          "input": {
+            "amount": "30.00",
+            "charge": "ch_1",
+            "currency": "USD",
+            "reason": "duplicate"
+          },
+          "requests": 1,
+          "action_id": "new",
+          "ran": true
+        }
+      ]
+    },
+    {
+      "name": "a connection whose credential PantherClaw holds",
+      "answers": [
+        "use_gateway_face"
+      ],
+      "calls": [
+        {
+          "input": {
+            "amount": "30.00",
+            "charge": "ch_1",
+            "currency": "USD",
+            "reason": "duplicate"
+          },
+          "requests": 1,
+          "action_id": "new",
+          "ran": false,
+          "code": "use_gateway_face",
+          "refusal": "PantherClaw refused this call: use_gateway_face"
+        }
+      ]
+    },
+    {
+      "name": "an allow with a request to send and no on_dispatch handler",
+      "answers": [
+        "send"
+      ],
+      "calls": [
+        {
+          "input": {
+            "amount": "30.00",
+            "charge": "ch_1",
+            "currency": "USD",
+            "reason": "duplicate"
+          },
+          "requests": 1,
+          "action_id": "new",
+          "ran": false,
+          "code": "dispatch_required",
+          "transaction": "01920000-0000-7000-8000-000000000009",
+          "refusal": "PantherClaw refused this call: dispatch_required (transaction 01920000-0000-7000-8000-000000000009)"
+        }
+      ]
+    }
+  ]
+}
