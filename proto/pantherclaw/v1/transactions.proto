@@ -157,6 +157,11 @@ message Transaction {
   int32 evaluations = 15;
   // When it was first evaluated.
   google.protobuf.Timestamp create_time = 16;
+  // How it was decided: "authzen" for a decision an external enforcement
+  // point asked for (G0 M14 D28), empty otherwise.
+  string decided_via = 17;
+  // The enforcement point that asked, for decided_via authzen.
+  string enforcement_point_id = 18;
 }
 
 // ListTransactionsRequest pages through transactions, newest first.

@@ -4,6 +4,7 @@
 package dispatch
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"log/slog"
@@ -72,8 +73,11 @@ func (e *Engine) delegateSDK(ctx context.Context, r Result, conn *control.Connec
 		return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeRequest, t)
 	}
 	headers := map[string]string{HeaderAction: bd.GetActionToken()}
+	for name, v := range out.Headers {
+		headers[name] = v
+	}
 	if out.Body != nil {
-		headers["Content-Type"] = "application/json"
+		headers["Content-Type"] = cmp.Or(out.ContentType, egress.JSONContentType)
 	}
 	if out.IdempotencyHeader != "" {
 		headers[out.IdempotencyHeader] = out.IdempotencyKey

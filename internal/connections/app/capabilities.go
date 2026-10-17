@@ -212,6 +212,12 @@ func declareKind(out *Capabilities, c Connection) {
 		out.Failure = append(out.Failure, "The agent's hook or SDK blocks every mapped call when PantherClaw cannot answer (HR-200).")
 		out.Limits = append(out.Limits, Limit{"COOPERATIVE", "Decisions bind only an agent that asks; coverage is PARTIAL at most."})
 		return
+	case KindPostgres, KindA2A:
+		// G0 M14 D4: defined, not yet served; nothing is dispatched.
+		out.Enforcement = Support{Unsupported, "This build cannot dispatch " + c.Kind + " connections yet: every action " +
+			"through it is refused (KIND_NOT_IMPLEMENTED)."}
+		out.Limits = append(out.Limits, Limit{"KIND_NOT_IMPLEMENTED", "No action can use this connection yet."})
+		return
 	case KindMCP:
 		out.Discovery.Detail += " The upstream server's tools are compared with their reviewed definitions; drift quarantines them (HR-081)."
 		out.Enforcement = Support{Partial, "The gateway calls the remote MCP server for the agent, but what the server " +

@@ -531,7 +531,7 @@ func dispatches(kind string, d *domain.Definition) bool {
 	case "mcp", "mcp_container":
 		return d.Dispatch != nil && d.Dispatch.MCP != nil
 	}
-	return false
+	return native(kind, d)
 }
 
 // tools are the connection's reviewed MCP tools, by name. A mapping

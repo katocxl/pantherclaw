@@ -2430,6 +2430,14 @@ type PcPolicyVersion struct {
 	ContentDigest []byte
 }
 
+type PcPostgresConnection struct {
+	OrgID        ids.OrgID
+	ConnectionID ids.UUID
+	Config       []byte
+	Digest       []byte
+	UpdatedAt    time.Time
+}
+
 type PcPostureFinding struct {
 	OrgID                ids.OrgID
 	ID                   ids.UUID
