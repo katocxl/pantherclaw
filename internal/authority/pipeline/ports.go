@@ -53,6 +53,11 @@ type Request struct {
 	// PayloadFindings are the credential-shaped values the gateway found in
 	// the action's payload (HR-225): they only ever add a requirement.
 	PayloadFindings []PayloadFinding
+	// External is set only by the in-process entry point that decides for
+	// an AuthZEN enforcement point (G0 M14 D28) and by the paths that
+	// replay its decisions: an action on the authzen channel is decided
+	// only then, never for a gateway (D61).
+	External bool
 }
 
 // PayloadFinding is one credential-shaped value in an action's payload: its
