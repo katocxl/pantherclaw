@@ -382,8 +382,8 @@ const APIVersion = "2026-09-30.endive"
 
 type callKey struct{}
 
-func withCall(ctx context.Context, live bool) context.Context {
-	return context.WithValue(ctx, callKey{}, call{live: live})
+func withCall(ctx context.Context, apiKey string, live bool) context.Context {
+	return context.WithValue(ctx, callKey{}, call{live: live, apiKey: apiKey})
 }
 
 func callOf(r interface{ Context() context.Context }) call {

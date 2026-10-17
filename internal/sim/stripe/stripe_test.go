@@ -507,3 +507,56 @@ func TestStatsRoute(t *testing.T) {
 		t.Fatalf("stats = %d %s", a.code, a.raw)
 	}
 }
+
+// TestLookupLists: payment intents and transfers created through the API
+// list newest first with their metadata, so a lost answer is found by the
+// pantherclaw_key the dispatch set.
+func TestLookupLists(t *testing.T) {
+	h := start(t, Faults{})
+	for i, k := range []string{"pc-l1", "pc-l2"} {
+		if a := h.post("/v1/payment_intents", url.Values{
+			"amount": {strconv.Itoa(100 + i)}, "currency": {"usd"}, "customer": {FixtureCustomer},
+			"payment_method": {FixturePaymentMethod}, "confirm": {"true"}, "metadata[pantherclaw_key]": {k},
+		}, k); a.code != http.StatusOK {
+			t.Fatal(a.raw)
+		}
+		if a := h.post("/v1/transfers", url.Values{
+			"amount": {"10"}, "currency": {"usd"}, "destination": {FixturePayee},
+			"metadata[pantherclaw_key]": {k},
+		}, k+"t"); a.code != http.StatusOK {
+			t.Fatal(a.raw)
+		}
+	}
+	h.post("/v1/transfers", url.Values{"amount": {"10"}, "currency": {"usd"}, "destination": {FixturePayee2}}, "pc-l3t")
+	pi := h.do(http.MethodGet, "/v1/payment_intents?customer="+FixtureCustomer+"&limit=1", nil, nil)
+	data, _ := pi.body["data"].([]any)
+	first, _ := data[0].(map[string]any)
+	md, _ := first["metadata"].(map[string]any)
+	if pi.code != http.StatusOK || len(data) != 1 || pi.body["has_more"] != true || md["pantherclaw_key"] != "pc-l2" {
+		t.Fatalf("intents = %d %s", pi.code, pi.raw)
+	}
+	next := h.do(http.MethodGet, "/v1/payment_intents?customer="+FixtureCustomer+"&starting_after="+first["id"].(string), nil, nil)
+	if d, _ := next.body["data"].([]any); len(d) != 1 || next.body["has_more"] != false {
+		t.Fatalf("next page = %s", next.raw)
+	}
+	tr := h.do(http.MethodGet, "/v1/transfers?destination="+FixturePayee, nil, nil)
+	if d, _ := tr.body["data"].([]any); tr.code != http.StatusOK || len(d) != 2 {
+		t.Fatalf("transfers = %d %s", tr.code, tr.raw)
+	}
+	if a := h.do(http.MethodGet, "/v1/transfers?status=paid", nil, nil); a.errCode() != "parameter_unknown" {
+		t.Fatalf("unknown filter = %s", a.raw)
+	}
+}
+
+// TestIdempotencyIsPerKey: an Idempotency-Key is scoped to the API key, so
+// the live-mode key never replays a test-mode answer.
+func TestIdempotencyIsPerKey(t *testing.T) {
+	h := start(t, Faults{})
+	h.s.WithRequire(Require{LivemodeKey: liveKey})
+	form := url.Values{"charge": {FixtureCharge}, "amount": {"100"}}
+	test := h.post("/v1/refunds", form, "pc-k1")
+	live := h.do(http.MethodPost, "/v1/refunds", form, map[string]string{"Idempotency-Key": "pc-k1", "Authorization": "Bearer " + liveKey})
+	if test.body["livemode"] != false || live.body["livemode"] != true || live.h.Get("Idempotent-Replayed") != "" || len(h.s.Refunds()) != 2 {
+		t.Fatalf("test %s / live %s", test.raw, live.raw)
+	}
+}

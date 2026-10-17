@@ -109,6 +109,8 @@ func New(f Faults, log *slog.Logger) *Server {
 
 // WithRequire makes the simulator require what r names, and returns it.
 func (s *Server) WithRequire(r Require) *Server {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.require = r
 	return s
 }
@@ -165,7 +167,10 @@ func (s *Server) Stats() Stats {
 // call is one authenticated request's context.
 type call struct {
 	live bool
-	now  time.Time
+	// apiKey is the key the request authenticated with: idempotency keys
+	// are scoped to it, as Stripe scopes them to an account and mode.
+	apiKey string
+	now    time.Time
 }
 
 // Handler returns the HTTP handler.
@@ -176,10 +181,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/refunds/{id}", s.getRefund)
 	mux.HandleFunc("GET /v1/charges/{id}", s.getCharge)
 	mux.HandleFunc("POST /v1/payment_intents", s.createIntent)
+	mux.HandleFunc("GET /v1/payment_intents", s.listIntents)
 	mux.HandleFunc("GET /v1/payment_intents/{id}", s.getIntent)
 	mux.HandleFunc("POST /v1/payment_intents/{id}/confirm", s.confirmIntent)
 	mux.HandleFunc("POST /v1/payment_intents/{id}/cancel", s.cancelIntent)
 	mux.HandleFunc("POST /v1/transfers", s.createTransfer)
+	mux.HandleFunc("GET /v1/transfers", s.listTransfers)
 	mux.HandleFunc("GET /v1/transfers/{id}", s.getTransfer)
 	mux.HandleFunc("GET /v1/account", s.getPlatform)
 	mux.HandleFunc("GET /v1/accounts/{id}", s.getAccount)
@@ -195,7 +202,7 @@ func (s *Server) Handler() http.Handler {
 		s.mu.Lock()
 		s.stats.Requests++
 		s.mu.Unlock()
-		live, err := s.authenticate(r)
+		apiKey, live, err := s.authenticate(r)
 		if err != nil {
 			s.mu.Lock()
 			s.stats.Unauthorized++
@@ -219,30 +226,33 @@ func (s *Server) Handler() http.Handler {
 			invalid("", "The simulator accepts Stripe-Account only on GET /v1/events.").write(w)
 			return
 		}
-		mux.ServeHTTP(w, r.WithContext(withCall(r.Context(), live)))
+		mux.ServeHTTP(w, r.WithContext(withCall(r.Context(), apiKey, live)))
 	}))
 }
 
-// authenticate checks the Bearer key and returns whether it is the
+// authenticate checks the Bearer key and returns it and whether it is the
 // live-mode key.
-func (s *Server) authenticate(r *http.Request) (bool, *apiError) {
+func (s *Server) authenticate(r *http.Request) (string, bool, *apiError) {
+	s.mu.Lock()
+	req := s.require
+	s.mu.Unlock()
 	h := r.Header.Get("Authorization")
 	if h == "" {
-		return false, &apiError{
+		return "", false, &apiError{
 			status: http.StatusUnauthorized, Type: "invalid_request_error",
 			Message: "You did not provide an API key. Provide it in the Authorization header as a Bearer token.",
 		}
 	}
 	key, ok := cutPrefix(h, "Bearer ")
-	if ok && s.require.LivemodeKey != "" && subtle.ConstantTimeCompare([]byte(key), []byte(s.require.LivemodeKey)) == 1 {
-		return true, nil
+	if ok && req.LivemodeKey != "" && subtle.ConstantTimeCompare([]byte(key), []byte(req.LivemodeKey)) == 1 {
+		return key, true, nil
 	}
-	if ok && testKey.MatchString(key) && (len(s.require.Keys) == 0 || slices.ContainsFunc(s.require.Keys, func(k string) bool {
+	if ok && testKey.MatchString(key) && (len(req.Keys) == 0 || slices.ContainsFunc(req.Keys, func(k string) bool {
 		return subtle.ConstantTimeCompare([]byte(key), []byte(k)) == 1
 	})) {
-		return false, nil
+		return key, false, nil
 	}
-	return false, &apiError{status: http.StatusUnauthorized, Type: "invalid_request_error", Message: "Invalid API Key provided."}
+	return "", false, &apiError{status: http.StatusUnauthorized, Type: "invalid_request_error", Message: "Invalid API Key provided."}
 }
 
 func cutPrefix(s, p string) (string, bool) {
@@ -345,7 +355,8 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request, route string, al
 	c := callOf(r)
 	s.mu.Lock()
 	c.now = s.now()
-	if prev, ok := s.idem[key]; key != "" && ok {
+	scoped := c.apiKey + " " + key // keys never contain a space
+	if prev, ok := s.idem[scoped]; key != "" && ok {
 		if prev.route != route || prev.digest != f.digest {
 			s.stats.IdempotencyErrors++
 			s.mu.Unlock()
@@ -370,7 +381,7 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request, route string, al
 	}
 	saved := status/100 == 2 || status == http.StatusPaymentRequired
 	if key != "" && saved {
-		s.idem[key] = idemEntry{route: route, digest: f.digest, status: status, body: body}
+		s.idem[scoped] = idemEntry{route: route, digest: f.digest, status: status, body: body}
 	}
 	lose := status/100 == 2 && chance(s.faults.LoseRate)
 	if lose {

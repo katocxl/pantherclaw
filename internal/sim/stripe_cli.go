@@ -29,10 +29,18 @@ func runStripe(ctx context.Context, args []string, stderr io.Writer) error {
 	bankChanged := fs.Bool("bank-changed-recently", false, "every connected account reports a bank-account change one day ago")
 	keyFile := fs.String("key-file", "", "file holding the only test key accepted (otherwise any sk_test_/rk_test_ key is)")
 	liveKey := fs.String("livemode-key", "", "a key that is accepted and makes every object answer livemode: true (guard tests)")
+	liveKeyFile := fs.String("livemode-key-file", "", "file holding the live-mode key (instead of --livemode-key)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	req := stripe.Require{LivemodeKey: *liveKey}
+	if *liveKeyFile != "" {
+		b, err := os.ReadFile(*liveKeyFile)
+		if err != nil {
+			return err
+		}
+		req.LivemodeKey = strings.TrimSpace(string(b))
+	}
 	if *keyFile != "" {
 		b, err := os.ReadFile(*keyFile)
 		if err != nil {

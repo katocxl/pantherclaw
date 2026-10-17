@@ -505,3 +505,58 @@ func pageAfter[T any](items []T, after string, limit int, id func(T) string) ([]
 func list(url string, data []any, more bool) map[string]any {
 	return map[string]any{"object": "list", "data": data, "has_more": more, "url": url}
 }
+
+// listIntents lists payment intents newest first, of one customer, created
+// at or after created[gte], continuing after starting_after (the payment
+// intent verifier's lookup after a lost answer).
+func (s *Server) listIntents(w http.ResponseWriter, r *http.Request) {
+	s.get(w, r, []string{"customer", "created[gte]", "limit", "starting_after"}, func(c call, f *form) (int, any) {
+		limit, since, perr := listParams(f)
+		if perr != nil {
+			return perr.status, perr
+		}
+		var items []*paymentIntent
+		for _, id := range slices.Backward(s.order) {
+			if p := s.intents[id]; p != nil && (f.get("customer") == "" || p.customer == f.get("customer")) && p.created.Unix() >= since {
+				items = append(items, p)
+			}
+		}
+		page, more, perr := pageAfter(items, f.get("starting_after"), limit, func(p *paymentIntent) string { return p.id })
+		if perr != nil {
+			return perr.status, perr
+		}
+		data := make([]any, len(page))
+		for i, p := range page {
+			data[i] = s.renderIntent(p, c, nil)
+		}
+		return http.StatusOK, list("/v1/payment_intents", data, more)
+	})
+}
+
+// listTransfers lists transfers newest first, to one destination or of one
+// transfer group, created at or after created[gte], continuing after
+// starting_after (the transfer verifier's lookup after a lost answer).
+func (s *Server) listTransfers(w http.ResponseWriter, r *http.Request) {
+	s.get(w, r, []string{"destination", "transfer_group", "created[gte]", "limit", "starting_after"}, func(c call, f *form) (int, any) {
+		limit, since, perr := listParams(f)
+		if perr != nil {
+			return perr.status, perr
+		}
+		var items []*transfer
+		for _, id := range slices.Backward(s.order) {
+			if t := s.transfers[id]; t != nil && (f.get("destination") == "" || t.destination == f.get("destination")) &&
+				(f.get("transfer_group") == "" || t.group == f.get("transfer_group")) && t.created.Unix() >= since {
+				items = append(items, t)
+			}
+		}
+		page, more, perr := pageAfter(items, f.get("starting_after"), limit, func(t *transfer) string { return t.id })
+		if perr != nil {
+			return perr.status, perr
+		}
+		data := make([]any, len(page))
+		for i, t := range page {
+			data[i] = s.renderTransfer(t, c)
+		}
+		return http.StatusOK, list("/v1/transfers", data, more)
+	})
+}

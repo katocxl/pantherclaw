@@ -37,7 +37,7 @@ Usage:
   pantherclaw-sim github --app-key FILE [--addr 127.0.0.1:9092] [--app-id 1] [--client-id ID] [--installation 1] [--account acme]
                          [--repos payments] [--mcp-addr ADDR --mcp-token-file FILE]
   pantherclaw-sim stripe [--addr 127.0.0.1:9093] [--latency 0s] [--decline-rate 0] [--lose-response-rate 0] [--settle-after 0s]
-                         [--fail-after-pending] [--bank-changed-recently] [--key-file FILE] [--livemode-key KEY]
+                         [--fail-after-pending] [--bank-changed-recently] [--key-file FILE] [--livemode-key KEY | --livemode-key-file FILE]
   pantherclaw-sim load --workload-file FILE [--token-file FILE] [--run ID] [--gateway URL] [--connection payments] [--rate 1000] [--duration 30s]
                        [--warmup 5s] [--max-in-flight 2048] [--amount 1.00 | --unique] [--facts-key-file FILE] [--out FILE]
   pantherclaw-sim canary [--host 127.0.0.1] [--dns-port 18453] [--https-port 18443] [--ssh-port 18422] [--query-addr 127.0.0.1:18433]
