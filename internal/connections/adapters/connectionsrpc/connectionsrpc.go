@@ -39,6 +39,7 @@ var (
 	kinds = map[pb.ConnectionKind]string{
 		pb.ConnectionKind_CONNECTION_KIND_HTTP: capp.KindHTTP, pb.ConnectionKind_CONNECTION_KIND_MCP: capp.KindMCP,
 		pb.ConnectionKind_CONNECTION_KIND_LOCAL: capp.KindLocal, pb.ConnectionKind_CONNECTION_KIND_MCP_CONTAINER: capp.KindMCPContainer,
+		pb.ConnectionKind_CONNECTION_KIND_POSTGRES: capp.KindPostgres, pb.ConnectionKind_CONNECTION_KIND_A2A: capp.KindA2A,
 	}
 	modes = map[pb.RouteMode]string{
 		pb.RouteMode_ROUTE_MODE_MONITOR: capp.ModeMonitor, pb.RouteMode_ROUTE_MODE_ENFORCE: capp.ModeEnforce,
@@ -133,12 +134,17 @@ func (h *Handler) CreateConnection(ctx context.Context, req *pb.CreateConnection
 	if err != nil {
 		return nil, err
 	}
+	peer, err := a2aIn(req.GetA2A())
+	if err != nil {
+		return nil, err
+	}
 	c, err := h.s.Create(ctx, capp.CreateInput{
 		Name: req.GetName(), Kind: kinds[req.GetKind()], Package: req.GetPackage(), BaseURL: req.GetBaseUrl(), Gateway: gw,
 		AllowedHosts: req.GetAllowedHosts(), DestinationClass: classes[req.GetDestinationClass()], AccessMode: access[req.GetAccessMode()],
 		CredentialHeader: req.GetCredentialHeader(), CredentialScheme: req.GetCredentialScheme(), DefaultMode: modes[req.GetDefaultMode()],
 		MaxResponseBytes: req.GetMaxResponseBytes(), TimeoutMs: req.GetTimeoutMs(), AgentHosts: req.GetAgentHosts(),
 		Connector: spec, Simulated: req.GetSimulated(),
+		Postgres: postgresIn(req.GetPostgres()), A2A: peer,
 	})
 	if err != nil {
 		return nil, err
@@ -197,6 +203,10 @@ func (h *Handler) UpdateConnection(ctx context.Context, req *pb.UpdateConnection
 	}
 	if in.Connector, err = specIn(req.GetConnector()); err != nil {
 		return nil, err
+	}
+	if req.GetPostgres() != nil || req.GetA2A() != nil {
+		// No connection of these kinds can exist yet (G0 M14 D4).
+		return nil, capp.ErrKindNotImplemented
 	}
 	if req.GatewayId != nil {
 		gw, err := parseID(req.GetGatewayId())

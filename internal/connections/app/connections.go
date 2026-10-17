@@ -97,7 +97,7 @@ var (
 // reservedNames are the gateway's own first path segments: a connection's
 // name is the first segment of its HTTP routes (/{connection}/…), so it
 // can never shadow them.
-var reservedNames = []string{"mcp", "hook", "sdk", "healthz", "readyz", "metrics"}
+var reservedNames = []string{"mcp", "hook", "sdk", "a2a", "healthz", "readyz", "metrics"}
 
 // Notifier queues a notification in the caller's transaction (M5).
 type Notifier interface {
@@ -151,6 +151,10 @@ type CreateInput struct {
 	// Simulated marks a connection that points only at a simulator (G0 M12,
 	// HR-221); fixed for its life.
 	Simulated bool
+	// Postgres is a postgres connection's configuration (G0 M14 D15).
+	Postgres *PostgresConfig
+	// A2A is an a2a connection's configuration (G0 M14 D30).
+	A2A *A2AConfig
 }
 
 // actor is who makes a change: a person holding the permission, or the
@@ -297,6 +301,10 @@ func servedRoutes(kind string, d *domain.Definition) []string {
 			serves = d.Dispatch != nil && d.Dispatch.MCP != nil && m.Channel != domain.ChannelHook
 		case KindLocal:
 			serves = m.Channel == domain.ChannelHook
+		case KindPostgres, KindA2A:
+			// No route is served until the gateway can dispatch the kind
+			// (G0 M14 D4: fail closed).
+			serves = false
 		}
 		if serves && !slices.Contains(out, m.Route) {
 			out = append(out, m.Route)
@@ -388,6 +396,9 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 	}
 	if in.Simulated && in.Kind == KindMCPContainer {
 		return Connection{}, ErrSimulatedConnector
+	}
+	if err := checkM14Kind(&in); err != nil {
+		return Connection{}, err
 	}
 	base, hosts, err := s.shape(in.Kind, in.BaseURL, in.AllowedHosts, in.AccessMode, in.CredentialHeader, in.CredentialScheme)
 	if err != nil {

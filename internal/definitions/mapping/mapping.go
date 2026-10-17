@@ -97,7 +97,7 @@ func New(pkg *domain.Package, limits celenv.Limits) (*Mapper, error) {
 				m.hook[mp.Tool] = c
 			case domain.ChannelHTTP:
 				m.http = append(m.http, c)
-			case domain.ChannelSDK:
+			case domain.ChannelSDK, domain.ChannelAuthZEN, domain.ChannelA2A:
 				// Never a mapping's channel: package validation refuses it.
 			}
 		}
