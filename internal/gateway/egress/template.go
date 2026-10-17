@@ -16,12 +16,14 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
+	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
 
 // ErrBuild reports a request that cannot be built safely; nothing is sent
@@ -40,6 +42,10 @@ type Request struct {
 	// IdempotencyKey, derived from the transaction (HR-008).
 	IdempotencyHeader string
 	IdempotencyKey    string
+	// ContentType is the body's media type: JSON, or a form (G0 M14 D8).
+	ContentType string
+	// Headers are the template's literal static headers (D8).
+	Headers map[string]string
 }
 
 // Build builds the outbound request of a definition's HTTP dispatch
@@ -91,10 +97,11 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 		!strings.HasPrefix(u.EscapedPath(), strings.TrimSuffix(base.EscapedPath(), "/")+"/") {
 		return Request{}, fmt.Errorf("%w: the built URL leaves the connection", ErrBuild)
 	}
+	var gc groupCount
 	if len(t.Query) > 0 {
 		q := url.Values{}
 		for name, ref := range t.Query {
-			v, err := r.queryValue(ref)
+			v, err := r.queryValue(ref, &gc)
 			if err != nil {
 				return Request{}, err
 			}
@@ -104,28 +111,82 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 		}
 		u.RawQuery = q.Encode()
 	}
-	out := Request{Method: t.Method, URL: u}
+	out := Request{Method: t.Method, URL: u, Headers: maps.Clone(t.Headers)}
 	if len(t.Body) > 0 {
-		obj := make(map[string]any, len(t.Body))
-		for field, ref := range t.Body {
-			v, err := r.value(ref)
-			if err != nil {
-				return Request{}, err
-			}
-			if v != nil {
-				obj[field] = v
-			}
+		obj, err := r.body(t.Body, transaction, &gc)
+		if err != nil {
+			return Request{}, err
 		}
-		if out.Body, err = json.Marshal(obj, json.Deterministic(true)); err != nil {
+		if t.Encoding == defs.EncodingForm {
+			out.ContentType = FormContentType
+			out.Body, err = EncodeForm(obj)
+		} else {
+			out.ContentType = JSONContentType
+			out.Body, err = json.Marshal(obj, json.Deterministic(true))
+		}
+		if err != nil {
 			return Request{}, fmt.Errorf("%w: %w", ErrBuild, err)
 		}
 		sum := sha256.Sum256(out.Body)
 		out.BodySHA256 = sum[:]
 	}
+	if gc.groups > 0 && gc.matched == 0 {
+		return Request{}, fmt.Errorf("%w: no part of the target id is sent", ErrBuild)
+	}
 	if t.IdempotencyHeader != "" {
 		out.IdempotencyHeader, out.IdempotencyKey = t.IdempotencyHeader, "pc-"+transaction
 	}
 	return out, nil
+}
+
+// groupCount counts the target-group references of a request's body and
+// query and how many the target id matched (G0 M14 D49, D71).
+type groupCount struct{ groups, matched int }
+
+// group resolves a target.id.<group> body or query value: nil when the id
+// left that alternative group unmatched, so the field is left out; an id
+// that does not match its pattern at all builds nothing.
+func (r refs) group(ref string, gc *groupCount) (any, error) {
+	gc.groups++
+	part, ok := r.d.Target.Part(r.a.Target.ID, strings.TrimPrefix(ref, "target.id."))
+	if !ok {
+		if !r.d.Target.MatchID(r.a.Target.ID) {
+			return nil, fmt.Errorf("%w: the target id does not match its pattern", ErrBuild)
+		}
+		return nil, nil
+	}
+	gc.matched++
+	return part, nil
+}
+
+// body resolves a body template's fields: a field referencing a target
+// group the id left unmatched is left out; when every target-group field of
+// the body and query is left out, nothing names the target and Build fails
+// (G0 M14 D49).
+func (r refs) body(fields map[string]string, transaction string, gc *groupCount) (map[string]any, error) {
+	obj := make(map[string]any, len(fields))
+	for field, ref := range fields {
+		var v any
+		var err error
+		switch {
+		case ref == defs.TransactionKey:
+			v = "pc-" + transaction // G0 M14 D50
+		case strings.HasPrefix(ref, "literal."):
+			v = strings.TrimPrefix(ref, "literal.") // G0 M14 D52
+		case strings.HasPrefix(ref, "target.id."):
+			if v, err = r.group(ref, gc); err != nil {
+				return nil, err
+			}
+		default:
+			if v, err = r.value(ref); err != nil {
+				return nil, err
+			}
+		}
+		if v != nil {
+			obj[field] = v
+		}
+	}
+	return obj, nil
 }
 
 // BuildMCP builds the upstream tools/call of a definition's MCP dispatch
@@ -212,8 +273,17 @@ func (r refs) rest(ref string) (string, error) {
 // queryValue is a reference substituted into one query parameter: nil for
 // an absent optional param, otherwise its text, which url.Values encodes.
 // Control characters are refused, as they are in a path (HR-073).
-func (r refs) queryValue(ref string) (*string, error) {
-	v, err := r.value(ref)
+func (r refs) queryValue(ref string, gc *groupCount) (*string, error) {
+	var v any
+	var err error
+	switch {
+	case strings.HasPrefix(ref, "literal."):
+		v = strings.TrimPrefix(ref, "literal.") // G0 M14 D71
+	case strings.HasPrefix(ref, "target.id."):
+		v, err = r.group(ref, gc) // G0 M14 D71
+	default:
+		v, err = r.value(ref)
+	}
 	if err != nil || v == nil {
 		return nil, err
 	}
@@ -272,6 +342,15 @@ func (r refs) value(ref string) (any, error) {
 			return defs.FormatMoney(v.Money), nil
 		case "currency":
 			return string(v.Money.Currency), nil
+		case "minor":
+			// Integer minor units by the currency's exponent; an amount
+			// finer than the minor unit, or a currency outside the list,
+			// is refused (G0 M14 D8, CURRENCY_UNSUPPORTED).
+			n, err := money.ToMinor(v.Money)
+			if err != nil {
+				return nil, fmt.Errorf("%w: params.%s in minor units: %w", ErrBuild, name, err)
+			}
+			return n, nil
 		}
 		return nil, fmt.Errorf("%w: reference %q", ErrBuild, ref)
 	case defs.TypeInteger:
@@ -284,7 +363,7 @@ func (r refs) value(ref string) (any, error) {
 		return v.List, nil
 	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath:
 		return v.Str, nil
-	case defs.TypeText:
+	case defs.TypeText, defs.TypeQueryFilter:
 	}
-	return nil, fmt.Errorf("%w: untrusted text is never sent from a template", ErrBuild)
+	return nil, fmt.Errorf("%w: untrusted text and query filters are never sent from a template", ErrBuild)
 }

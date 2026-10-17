@@ -388,7 +388,8 @@ func (p *Pipeline) connection(ctx context.Context, s *state, d *defs.Definition)
 	case c.Gateway.String() != s.req.Gateway:
 		return unknown()
 	}
-	if c.Package != s.a.Definition.Package || (c.Kind == "local") != (s.a.Channel == string(defs.ChannelHook)) || !dispatches(c.Kind, d) {
+	if c.Package != s.a.Definition.Package || (c.Kind == "local") != (s.a.Channel == string(defs.ChannelHook)) ||
+		(c.Kind == "a2a") != (s.a.Channel == string(defs.ChannelA2A)) || !dispatches(c.Kind, d) {
 		s.cl.add(StepScope, adomain.CannotAuthorize, ReasonRouteUnknown,
 			"route "+s.a.Route+" of "+d.Operation+" is not served by this connection", "")
 		return false
@@ -744,6 +745,10 @@ func (s *state) bindings() bool {
 		if b == nil {
 			continue
 		}
+		if b.Op == defs.BindLe {
+			ok = s.bindingAtMost(pr) && ok
+			continue
+		}
 		want, have := s.vals[b.Param], memberValue(s.facts[pr.Fact], b.Member)
 		param := want.Str
 		if want.Type == defs.TypeInteger {
@@ -767,6 +772,10 @@ func memberValue(f fdomain.Value, member string) string {
 			return v
 		case int64:
 			return strconv.FormatInt(v, 10)
+		case map[string]any:
+			if m, ok := memberMoney(v); ok {
+				return m.String()
+			}
 		}
 	}
 	return "(none)"

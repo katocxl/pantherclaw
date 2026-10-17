@@ -9,6 +9,7 @@
 -- slack_app (a Slack bot posting approval cards), whose bot token is
 -- sealed in secret like a Slack webhook URL.
 --
+-- A postgres connection has no base URL (its host is in its manifest).
 -- A grant's bounds are already a document (bytea, 00022), so the data
 -- scope a grant may carry (D11) needs no column.
 
@@ -21,6 +22,13 @@ ALTER TABLE pc.connections
         CHECK (kind IN ('http', 'mcp', 'local', 'mcp_container', 'postgres', 'a2a')) NOT VALID;
 -- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.connections VALIDATE CONSTRAINT connections_kind_check;
+-- A postgres connection has no base URL: its host is in its manifest (D64).
+ALTER TABLE pc.connections
+    DROP CONSTRAINT connections_base_url_kind,
+    ADD CONSTRAINT connections_base_url_kind
+        CHECK ((kind IN ('local', 'mcp_container', 'postgres')) = (base_url IS NULL)) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.connections VALIDATE CONSTRAINT connections_base_url_kind;
 
 ALTER TABLE pc.transactions
     DROP CONSTRAINT transactions_channel_check,
@@ -85,6 +93,9 @@ ALTER TABLE pc.coverage_routes
 ALTER TABLE pc.transactions
     DROP CONSTRAINT transactions_channel_check,
     ADD CONSTRAINT transactions_channel_check CHECK (channel IS NULL OR channel IN ('mcp', 'http', 'sdk', 'hook'));
+ALTER TABLE pc.connections
+    DROP CONSTRAINT connections_base_url_kind,
+    ADD CONSTRAINT connections_base_url_kind CHECK ((kind IN ('local', 'mcp_container')) = (base_url IS NULL));
 ALTER TABLE pc.connections
     DROP CONSTRAINT connections_kind_check,
     ADD CONSTRAINT connections_kind_check CHECK (kind IN ('http', 'mcp', 'local', 'mcp_container'));

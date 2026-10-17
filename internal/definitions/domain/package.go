@@ -66,7 +66,10 @@ type Mapping struct {
 	Tool    string  `json:"tool,omitzero"`
 	Method  string  `json:"method,omitzero"`
 	Path    string  `json:"path,omitzero"`
-	Route   string  `json:"route"`
+	// Encoding is how an http mapping's request body is read: json (the
+	// default) or form (application/x-www-form-urlencoded only, G0 M14 D8).
+	Encoding Encoding `json:"encoding,omitzero"`
+	Route    string   `json:"route"`
 	// Description and InputSchema are what MCP clients receive for an mcp
 	// mapping (HR-081); the MCP face lists only tools that have both.
 	Description string  `json:"description,omitzero"`
@@ -182,6 +185,9 @@ func (d *Definition) validateMapping(i int) error {
 	if m.Channel != ChannelMCP && (m.Description != "" || m.InputSchema != nil) {
 		return invalid("%s: description and input_schema belong to mcp mappings", at)
 	}
+	if m.Channel != ChannelHTTP && m.Encoding != EncodingDefault {
+		return invalid("%s: encoding belongs to http mappings", at)
+	}
 	switch m.Channel {
 	case ChannelMCP, ChannelHook:
 		if !toolRe.MatchString(m.Tool) || m.Method != "" || m.Path != "" {
@@ -215,15 +221,26 @@ func (d *Definition) validateMapping(i int) error {
 				return invalid("%s: path variable %s appears twice", at, v)
 			}
 		}
+		switch m.Encoding {
+		case EncodingDefault, EncodingJSON:
+		case EncodingForm:
+			if slices.Contains(bodiless, m.Method) {
+				return invalid("%s: %s has no body to read as a form", at, m.Method)
+			}
+		default:
+			return invalid("%s: encoding must be json or form", at)
+		}
 	case ChannelSDK:
 		return invalid("%s: the sdk channel maps through hook and mcp mappings and has none of its own", at)
 	case ChannelAuthZEN:
 		return invalid("%s: the authzen channel maps through http and mcp mappings and has none of its own", at)
 	case ChannelA2A:
-		// G0 M14 D9 adds a2a mappings; until then none is valid.
-		return invalid("%s: a2a mappings are not supported yet", at)
+		// Mapped by A2A method name, like an mcp tool (G0 M14 D9).
+		if m.Tool != "" || m.Path != "" || !slices.Contains(A2AMethods, m.Method) {
+			return invalid("%s: an a2a mapping names a method %v and no tool or path", at, A2AMethods)
+		}
 	default:
-		return invalid("%s: channel must be mcp, http or hook", at)
+		return invalid("%s: channel must be mcp, http, hook or a2a", at)
 	}
 	if !actionir.ValidRoute(m.Route) {
 		return invalid("%s: route %q", at, m.Route)
