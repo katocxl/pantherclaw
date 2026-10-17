@@ -63,8 +63,7 @@ func (n *Narrower) Narrow(ctx context.Context, org ids.OrgID, held, proposed []b
 	if err != nil {
 		return approvals.Simulation{}, errors.Join(apdomain.ErrNotNarrower, err)
 	}
-	// An authzen action is decided only on the external path (D61).
-	req := pipeline.Request{Org: org, Action: p, External: p.Action.Channel == "authzen"}
+	req := pipeline.Request{Org: org, Action: p}
 	instance, err := ids.ParseUUID(a.AgentInstance)
 	if err != nil {
 		return approvals.Simulation{}, err

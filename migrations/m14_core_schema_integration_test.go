@@ -19,6 +19,7 @@ import (
 var m14Checks = []struct{ table, constraint, value string }{
 	{"pc.connections", "connections_kind_check", "'postgres'"},
 	{"pc.connections", "connections_kind_check", "'a2a'"},
+	{"pc.connections", "connections_base_url_kind", "'postgres'"},
 	{"pc.transactions", "transactions_channel_check", "'authzen'"},
 	{"pc.transactions", "transactions_channel_check", "'a2a'"},
 	{"pc.coverage_routes", "coverage_routes_channel_check", "'authzen'"},

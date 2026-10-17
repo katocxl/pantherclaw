@@ -97,10 +97,11 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 		!strings.HasPrefix(u.EscapedPath(), strings.TrimSuffix(base.EscapedPath(), "/")+"/") {
 		return Request{}, fmt.Errorf("%w: the built URL leaves the connection", ErrBuild)
 	}
+	var gc groupCount
 	if len(t.Query) > 0 {
 		q := url.Values{}
 		for name, ref := range t.Query {
-			v, err := r.queryValue(ref)
+			v, err := r.queryValue(ref, &gc)
 			if err != nil {
 				return Request{}, err
 			}
@@ -112,7 +113,7 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 	}
 	out := Request{Method: t.Method, URL: u, Headers: maps.Clone(t.Headers)}
 	if len(t.Body) > 0 {
-		obj, err := r.body(t.Body, transaction)
+		obj, err := r.body(t.Body, transaction, &gc)
 		if err != nil {
 			return Request{}, err
 		}
@@ -129,19 +130,41 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 		sum := sha256.Sum256(out.Body)
 		out.BodySHA256 = sum[:]
 	}
+	if gc.groups > 0 && gc.matched == 0 {
+		return Request{}, fmt.Errorf("%w: no part of the target id is sent", ErrBuild)
+	}
 	if t.IdempotencyHeader != "" {
 		out.IdempotencyHeader, out.IdempotencyKey = t.IdempotencyHeader, "pc-"+transaction
 	}
 	return out, nil
 }
 
-// body resolves a body template's fields. A field referencing a named
-// target-id group that the id left unmatched (one of several alternative
-// groups) is left out; when every target-group field is left out, nothing
-// can name the target and the build fails (G0 M14 D49).
-func (r refs) body(fields map[string]string, transaction string) (map[string]any, error) {
+// groupCount counts the target-group references of a request's body and
+// query and how many the target id matched (G0 M14 D49, D71).
+type groupCount struct{ groups, matched int }
+
+// group resolves a target.id.<group> body or query value: nil when the id
+// left that alternative group unmatched, so the field is left out; an id
+// that does not match its pattern at all builds nothing.
+func (r refs) group(ref string, gc *groupCount) (any, error) {
+	gc.groups++
+	part, ok := r.d.Target.Part(r.a.Target.ID, strings.TrimPrefix(ref, "target.id."))
+	if !ok {
+		if !r.d.Target.MatchID(r.a.Target.ID) {
+			return nil, fmt.Errorf("%w: the target id does not match its pattern", ErrBuild)
+		}
+		return nil, nil
+	}
+	gc.matched++
+	return part, nil
+}
+
+// body resolves a body template's fields: a field referencing a target
+// group the id left unmatched is left out; when every target-group field of
+// the body and query is left out, nothing names the target and Build fails
+// (G0 M14 D49).
+func (r refs) body(fields map[string]string, transaction string, gc *groupCount) (map[string]any, error) {
 	obj := make(map[string]any, len(fields))
-	groups, matched := 0, 0
 	for field, ref := range fields {
 		var v any
 		var err error
@@ -151,16 +174,9 @@ func (r refs) body(fields map[string]string, transaction string) (map[string]any
 		case strings.HasPrefix(ref, "literal."):
 			v = strings.TrimPrefix(ref, "literal.") // G0 M14 D52
 		case strings.HasPrefix(ref, "target.id."):
-			groups++
-			part, ok := r.d.Target.Part(r.a.Target.ID, strings.TrimPrefix(ref, "target.id."))
-			if !ok {
-				if !r.d.Target.MatchID(r.a.Target.ID) {
-					return nil, fmt.Errorf("%w: the target id does not match its pattern", ErrBuild)
-				}
-				continue
+			if v, err = r.group(ref, gc); err != nil {
+				return nil, err
 			}
-			matched++
-			v = part
 		default:
 			if v, err = r.value(ref); err != nil {
 				return nil, err
@@ -169,9 +185,6 @@ func (r refs) body(fields map[string]string, transaction string) (map[string]any
 		if v != nil {
 			obj[field] = v
 		}
-	}
-	if groups > 0 && matched == 0 {
-		return nil, fmt.Errorf("%w: no part of the target id is sent", ErrBuild)
 	}
 	return obj, nil
 }
@@ -260,8 +273,17 @@ func (r refs) rest(ref string) (string, error) {
 // queryValue is a reference substituted into one query parameter: nil for
 // an absent optional param, otherwise its text, which url.Values encodes.
 // Control characters are refused, as they are in a path (HR-073).
-func (r refs) queryValue(ref string) (*string, error) {
-	v, err := r.value(ref)
+func (r refs) queryValue(ref string, gc *groupCount) (*string, error) {
+	var v any
+	var err error
+	switch {
+	case strings.HasPrefix(ref, "literal."):
+		v = strings.TrimPrefix(ref, "literal.") // G0 M14 D71
+	case strings.HasPrefix(ref, "target.id."):
+		v, err = r.group(ref, gc) // G0 M14 D71
+	default:
+		v, err = r.value(ref)
+	}
 	if err != nil || v == nil {
 		return nil, err
 	}

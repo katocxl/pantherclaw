@@ -45,6 +45,11 @@ type UpdateInput struct {
 	DefaultMode      *string
 	MaxResponseBytes *int32
 	TimeoutMs        *int32
+	// Postgres and A2A replace a postgres or a2a connection's configuration
+	// (G0 M14 D64), which weakens enforcement until the kind tells widening
+	// from narrowing.
+	Postgres *PostgresConfig `json:",omitzero"`
+	A2A      *A2AConfig      `json:",omitzero"`
 }
 
 // change is one changed field with its old and new values and whether it
@@ -330,6 +335,19 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			}
 			set("connector", connectorSummary(&cur), specView(spec), true)
 		}
+		var kc *kindConfig
+		if in.Postgres != nil || in.A2A != nil {
+			cfg, err := checkKindConfig(conn.Kind, conn.Simulated, in.Postgres, in.A2A)
+			if err != nil {
+				return err
+			}
+			store, ok := s.kinds.Get(conn.Kind)
+			if !ok {
+				return ErrKindNotImplemented
+			}
+			kc = &kindConfig{cfg: cfg, store: store}
+			set(conn.Kind, "current", "replaced", true)
+		}
 		write := func(ctx context.Context) error {
 			after, err := s.apply(ctx, tx, c, conn, p, changes, "connection.updated", limits)
 			if err != nil {
@@ -337,6 +355,11 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			}
 			if in.Connector != nil {
 				if _, err := putConnector(ctx, q, c, after, spec); err != nil {
+					return err
+				}
+			}
+			if kc != nil {
+				if err := kc.store.Save(ctx, tx, c.Org, after.ID, after.Revision, kc.cfg); err != nil {
 					return err
 				}
 			}
