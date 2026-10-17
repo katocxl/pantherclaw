@@ -58,7 +58,7 @@ pclaw connection create slack --kind http --gateway <gateway id> --package pc.sl
 pclaw seal --connection <connection id> --from-file agent-bot.token --fingerprint <broker key fingerprint>
 ```
 
-The token must match `^xoxb-[A-Za-z0-9-]{20,}$` or nothing is sent. Grant posts with a destination set of channel ids. Before each post the gateway reads whether the channel is externally shared (`slack.channel.external`, at most 300 s old); a post there is an `external_disclosure` consequence, which the internal-analysis and research-disclosure templates deny.
+The token must match `^xoxb-[A-Za-z0-9-]{20,}$` or nothing is sent. Every grant (or envelope) for posts must carry a destination bound listing the channel ids; without one, a post is DENIED `DESTINATION_SET_REQUIRED`. Before each post the gateway reads whether the channel is externally shared (`slack.channel.external`, at most 300 s old); a post there is an `external_disclosure` consequence, which the internal-analysis and research-disclosure templates deny.
 
 ## 5. Development
 

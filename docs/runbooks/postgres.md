@@ -74,7 +74,7 @@ The test connects with the sealed credential and fails (and the connection canno
 |---|---|---|---|
 | `postgres.rows.read` | `query_rows` | `POST /{conn}/v1/query` | target `schema.table`; `columns`, `filters` (`query_filter`), `order_by` (`col:asc|desc`), `limit` |
 | `postgres.rows.aggregate` | `aggregate_rows` | `POST /{conn}/v1/aggregate` | `group_by`, `measures` (`count|sum|avg|min|max` over a column or `*`), `filters`, `limit` |
-| `postgres.tables.read` | `describe_tables` | `GET /{conn}/v1/tables` | — (the tables and columns the agent may see) |
+| `postgres.tables.read` | `describe_tables` | `GET /{conn}/v1/tables` | target `pg_database` (the connection's database name); returns the tables and columns the agent may see |
 
 Filters are a list of at most 20 predicates `{column, op, value | values}` with ops `eq ne lt le gt ge in is_null not_null prefix`. The SDK and hook faces refuse Postgres connections (`use_gateway_face`). Answers are `{"columns": [...], "rows": [[...]], "truncated": bool, "redacted": n}`.
 

@@ -2,7 +2,7 @@
 
 **Milestone:** M14 ([G0 M14](../g0/M14.md) D12–D14, D48–D52; [ADR-0028](../adr/0028-business-connectors-and-data-scoping.md)). **Audience:** an Org Admin connecting Stripe, and the founder running the live test. Command flags below follow the brief; the M14 exit status records any change.
 
-`pc.stripe` 1.0.0 lets agents create and read refunds, payment intents and transfers in **Stripe test mode only**. Live mode is not supported in M14 (R-43): a live key or a live-mode object is refused before anything is sent (HR-301, HR-303).
+`pc.stripe` 1.0.0 lets agents create and read refunds, payment intents and transfers in **Stripe test mode only**. Live mode is not supported in M14 (R-43): every write is refused before sending unless the sealed key is a test key, a refund on a live-mode payment is refused, and any Stripe answer that reports live mode quarantines the connection (HR-301, HR-303).
 
 ## 1. What the package does
 
@@ -16,6 +16,7 @@
 
 What the gateway does on every call:
 - **Test key only.** Each definition carries the credential pattern `^(sk|rk)_test_[A-Za-z0-9]{16,}$`, checked on the opened credential before any byte is sent; a mismatch is `CREDENTIAL_PATTERN` and Stripe receives nothing.
+- **Live-mode answers.** If any Stripe answer or verifier read reports `livemode: true`, the gateway records the security audit event `security.stripe_livemode`, the admins are notified, and the connection's circuit opens until an admin closes it.
 - **Form bodies rebuilt from the decision.** Stripe takes `application/x-www-form-urlencoded`; the gateway rebuilds the body from ActionIR (sorted keys, strict bracket syntax) and sends amounts in minor units (`usd` 2 decimals, `jpy` 0; other currencies outside the fixed table are refused).
 - **Pinned API version** `Stripe-Version: 2026-09-30.endive`.
 - **Idempotency.** `Idempotency-Key: pc-<transaction>` and `metadata[pantherclaw_key]` with the same value on every write (HR-304). A retry of the same transaction replays; a lost answer becomes UNKNOWN, is never retried, and is correlated through that metadata key (HR-305).
@@ -72,6 +73,7 @@ Check the printed transactions in the Stripe Dashboard (test mode) and with `pcl
 | Symptom | Cause | Action |
 |---|---|---|
 | `CANNOT_AUTHORIZE` `CREDENTIAL_PATTERN` | The sealed key is not a test key | Seal an `rk_test_…` key; live keys are never accepted |
+| Connection circuit open after `security.stripe_livemode` | Stripe answered with a live-mode object | Treat it as a security event: check which key is sealed and what Stripe account it belongs to, seal a test key, then close the circuit |
 | Refund `CANNOT_AUTHORIZE`, fact stale or missing | The refundable read failed or is older than 60 s | Check the key's Charges read permission and the gateway's reach to Stripe |
 | `CURRENCY_MISMATCH` | The refund currency differs from the payment's | Refund in the payment's currency |
 | Transfer held with `payee_changed_recently` or an UNAVAILABLE fact | The payee changed bank details within 7 days, or Events cannot be read | Confirm the payee out of band before a second approver approves; grant Events read |

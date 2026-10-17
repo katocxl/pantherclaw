@@ -10,7 +10,7 @@ The wrappers put a PantherClaw decision in front of every tool call the framewor
 |---|---|---|
 | LangChain, LangGraph (Python) | `pantherclaw-langchain` (`integrations/langchain/python`) | `guard_tools(tools, client, connection, **opts)`; `PantherClawToolNode` for LangGraph |
 | OpenAI Agents SDK (Python) | `pantherclaw-openai-agents` (`integrations/openai-agents/python`) | `guard_tools(tools, …)`; `gateway_mcp_server(…)` |
-| CrewAI (Python 3.13) | `pantherclaw-crewai` (`integrations/crewai/python`) | `guard_tools(tools, …)` |
+| CrewAI | `pantherclaw-crewai` (`integrations/crewai/python`) | `guard_tools(tools, …)`; CI tests it against a stand-in for the CrewAI tool interface, and the real-CrewAI test runs on demand with `task sdk:crewai-real` (CrewAI's dependencies carry open advisories; founder decision F9) |
 | Vercel AI SDK (TypeScript) | `@pantherclaw/vercel-ai` (`integrations/vercel-ai/typescript`) | `guardTools(tools, {client, connection, onHold, wait})` |
 | MCP TypeScript SDK | `@pantherclaw/mcp` (`integrations/mcp/typescript`) | `gatewayFetch(client, connection)`; `guardClient(mcpClient, {client, connection, server})` |
 
