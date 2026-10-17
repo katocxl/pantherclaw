@@ -81,6 +81,7 @@ func (d *rangeDriver) forwardAllowed(r azRequest, actionToken string) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", "agent-"+ids.NewV7().String())
 	if actionToken != "" {
 		req.Header.Set("PAP-Action", actionToken)
 	}
