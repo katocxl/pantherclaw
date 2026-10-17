@@ -205,6 +205,9 @@ func (h *Handler) UpdateChannel(ctx context.Context, req *pantherclawv1.UpdateCh
 	if req.Paused != nil {
 		u.Paused = req.Paused
 	}
+	if req.SlackBotToken != nil {
+		u.SlackBotToken = req.SlackBotToken // G0 M14 D66: back to PENDING_ACTIVATION
+	}
 	c, err := h.s.UpdateChannel(ctx, id, u)
 	if err != nil {
 		return nil, err

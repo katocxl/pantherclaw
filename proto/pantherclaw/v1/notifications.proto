@@ -321,6 +321,12 @@ message UpdateChannelRequest {
   }];
   // Pause (true) or resume (false). Resuming clears the failure count.
   optional bool paused = 5;
+  // slack_app channels: a new bot token, input only; puts the channel back
+  // to PENDING_ACTIVATION.
+  optional string slack_bot_token = 6 [(buf.validate.field).string = {
+    max_len: 256
+    pattern: "^xoxb-[A-Za-z0-9-]{20,250}$"
+  }];
 }
 
 // UpdateChannelResponse returns the channel.
