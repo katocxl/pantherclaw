@@ -1,0 +1,674 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for Stripe in test mode (G0 M14, PN-017.2, F758).
+# DRAFT (stripe-1): it uses the core-A2 definition parts (form encoding,
+# minor units, static headers, credential_pattern, response fields and
+# scoping) and does not validate before they land; no compiled test loads
+# it yet.
+#
+# The connection is kind http, base https://api.stripe.com (the simulator,
+# pantherclaw-sim stripe, in development and tests), access mode
+# pantherclaw_held: the agent never holds the Stripe key. The credential is
+# a Stripe restricted test key; every definition carries the same
+# credential_pattern, so the gateway refuses to send anything with a live
+# key (or any other secret) before a byte leaves (HR-303; Stripe live mode
+# is unsupported, R-43). Every request is form-encoded, rebuilt from the
+# ActionIR only (HR-300), pins Stripe-Version 2026-09-30.endive (the newest
+# version older than the 7-day cooldown on 2026-10-17) and carries
+# Idempotency-Key pc-<transaction> on every write (HR-304). Amounts are
+# integers in the currency's minor units: mappings read them with
+# minor_money and dispatches send params.<money>.minor.
+#
+# The stripe.* facts named here are read by the gateway from Stripe before
+# it asks for a decision and reported as the connection's fact provider
+# (the pc.github pattern, HR-160):
+# - stripe.payment.refundable: GET /v1/payment_intents/{id} (expand
+#   latest_charge) or GET /v1/charges/{id}; members amount_refundable
+#   (amount - amount_refunded, minor units), currency and livemode. A
+#   livemode answer is refused (HR-305).
+# - stripe.account.payout_details_changed: GET /v1/events with header
+#   Stripe-Account: <acct>, type=account.external_account.* and
+#   created[gte] = now - 7 days (Stripe keeps events 30 days); members
+#   changed (bool) and last_changed. Any error or an unreadable answer
+#   leaves the fact unread, so the treasury template holds the transfer
+#   (HR-306).
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124),
+# so any change here needs the golden tests in internal/definitions to be
+# updated deliberately.
+format: 1
+name: pc.stripe
+version: 1.0.0
+publisher: pantherclaw
+summary: >-
+  Stripe refunds, payment intents and transfers in test mode only (Stripe
+  API version 2026-09-30.endive)
+
+definitions:
+  - operation: stripe.refund.create
+    summary: Refund part or all of a payment
+    access: write
+    target:
+      type: stripe.payment
+      # PENDING coordinator (Q2): an unmatched optional group resolving
+      # to nil so the dispatch sends payment_intent or charge by prefix.
+      id_pattern: '^(?:(?P<pi>pi_[A-Za-z0-9]{8,64})|(?P<ch>ch_[A-Za-z0-9]{8,64}))$'
+      account: none
+    params:
+      amount:
+        type: money
+        material: true
+        required: true
+        currencies: [USD, EUR, GBP, CAD, AUD, NZD, CHF, SEK, NOK, DKK, SGD, HKD, JPY, KRW]
+        max: "999999.99"
+      reason:
+        type: enum
+        material: true
+        values: [duplicate, fraudulent, requested_by_customer]
+    effects:
+      - kind: funds.transfer
+        description: Returns funds from the merchant to the customer
+    reversibility: irreversible
+    dedupe_key: [target.id, params.amount]
+    constraints:
+      - kind: amount_max
+        param: amount
+    prerequisites:
+      - fact: stripe.payment.refundable
+        max_age_seconds: 60
+        # PENDING coordinator (Q1): binds with op le.
+        binds: {member: amount_refundable, param: amount, reason: AMOUNT_NOT_REFUNDABLE}
+    retry:
+      safe: false
+      on_unknown: reconcile
+      target_idempotency: true
+    verifier:
+      operation: stripe.refund.read
+      establishes: refund.exists
+      within_seconds: 600
+      level: domain_effect
+      reference:
+        from_response: /id
+      # PENDING coordinator (Q3): correlate on metadata the dispatch sets.
+      lookup:
+        operation: stripe.refund.list
+        list:
+          items: /data
+          id: /id
+          correlate: /metadata/pantherclaw_key
+          more: /has_more
+          page_param: starting_after
+      expect:
+        - field: /amount
+          equals: params.amount.minor
+      states:
+        field: /status
+        confirmed: [succeeded]
+        pending: [pending, requires_action]
+        none: [failed, canceled]
+      limits: >-
+        Shows that Stripe reports this refund succeeded for this amount. It
+        does not show that the customer's bank has credited the money.
+    approval:
+      title: Refund {params.amount} on payment {target.id}
+      fields: [params.amount, params.reason, target.id, facts.stripe.payment.refundable]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    mappings:
+      - channel: http
+        method: POST
+        path: /v1/refunds
+        route: stripe-refund
+        encoding: form
+        extract:
+          target_id: 'has(input.payment_intent) ? input.payment_intent : input.charge'
+          # Stripe's refund takes no currency (it is the payment's); the
+          # gateway needs one to decide, so the agent sends it, and the
+          # refundable fact binds it to the payment's.
+          params:
+            amount: minor_money(int(input.amount), input.currency)
+            reason: input.?reason
+      - channel: mcp
+        tool: create_refund
+        route: stripe-refund
+        description: >-
+          Refund part or all of a Stripe payment (test mode). Name the payment
+          by its PaymentIntent (pi_...) or charge (ch_...). The amount is an
+          integer in the currency's smallest unit (1250 is 12.50 USD), and the
+          currency must be the payment's.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [payment, amount, currency]
+          properties:
+            payment:
+              type: string
+              description: The PaymentIntent or charge to refund
+              pattern: '^(pi|ch)_[A-Za-z0-9]{8,64}$'
+            amount:
+              type: integer
+              description: The amount in the currency's smallest unit
+              minimum: 1
+              maximum: 99999999
+            currency:
+              type: string
+              description: The payment's currency, lowercase (usd)
+              pattern: '^[a-z]{3}$'
+            reason:
+              type: string
+              enum: [duplicate, fraudulent, requested_by_customer]
+        extract:
+          target_id: input.payment
+          params:
+            amount: minor_money(input.amount, input.currency)
+            reason: input.?reason
+    dispatch:
+      credential_pattern: '^(sk|rk)_test_[A-Za-z0-9]{16,}$'
+      http:
+        method: POST
+        path: /v1/refunds
+        encoding: form
+        headers:
+          Stripe-Version: 2026-09-30.endive
+        body:
+          payment_intent: target.id.pi
+          charge: target.id.ch
+          amount: params.amount.minor
+          reason: params.reason
+          metadata[pantherclaw_key]: transaction.key
+        idempotency_header: Idempotency-Key
+
+  - operation: stripe.refund.read
+    summary: Read one refund
+    access: read
+    scoping: [classes]
+    target:
+      type: stripe.refund
+      id_pattern: '^re_[A-Za-z0-9]{8,64}$'
+      account: none
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    response:
+      format: json
+      fields: []
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    mappings:
+      - channel: http
+        method: GET
+        path: /v1/refunds/{refund}
+        route: stripe-refund-read
+        extract:
+          target_id: path.refund
+          params: {}
+    dispatch:
+      credential_pattern: '^(sk|rk)_test_[A-Za-z0-9]{16,}$'
+      http:
+        method: GET
+        path: /v1/refunds/{target.id}
+        headers:
+          Stripe-Version: 2026-09-30.endive
+
+  # Internal read (no mappings): the refund verifier's lookup after an
+  # unknown outcome.
+  - operation: stripe.refund.list
+    summary: List the refunds of one payment
+    access: read
+    target:
+      type: stripe.payment
+      id_pattern: '^(?:(?P<pi>pi_[A-Za-z0-9]{8,64})|(?P<ch>ch_[A-Za-z0-9]{8,64}))$'
+      account: none
+    params:
+      starting_after:
+        type: identifier
+        pattern: '^re_[A-Za-z0-9]{8,64}$'
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    dispatch:
+      credential_pattern: '^(sk|rk)_test_[A-Za-z0-9]{16,}$'
+      http:
+        method: GET
+        path: /v1/refunds
+        headers:
+          Stripe-Version: 2026-09-30.endive
+        query:
+          payment_intent: target.id.pi
+          charge: target.id.ch
+          starting_after: params.starting_after
+
+  - operation: stripe.payment_intent.read
+    summary: Read one payment intent with its latest charge
+    access: read
+    scoping: [classes]
+    target:
+      type: stripe.payment_intent
+      id_pattern: '^pi_[A-Za-z0-9]{8,64}$'
+      account: none
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    response:
+      format: json
+      fields:
+        - {path: latest_charge.billing_details.*, class: pii}
+        - {path: latest_charge.receipt_email, class: pii}
+        - {path: latest_charge.shipping.*, class: pii}
+        - {path: shipping.*, class: pii}
+        - {path: receipt_email, class: pii}
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    mappings:
+      - channel: http
+        method: GET
+        path: /v1/payment_intents/{intent}
+        route: stripe-payment-intent-read
+        extract:
+          target_id: path.intent
+          params: {}
+    dispatch:
+      credential_pattern: '^(sk|rk)_test_[A-Za-z0-9]{16,}$'
+      http:
+        method: GET
+        path: /v1/payment_intents/{target.id}
+        headers:
+          Stripe-Version: 2026-09-30.endive
+        query:
+          expand[]: latest_charge
+
+  - operation: stripe.balance.read
+    summary: Read the account's balance
+    access: read
+    scoping: [classes]
+    target:
+      type: pc.connection
+      id_pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      account: none
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    response:
+      format: json
+      fields: []
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    mappings:
+      - channel: http
+        method: GET
+        path: /v1/balance
+        route: stripe-balance-read
+        extract:
+          target_id: connection.id
+          params: {}
+      - channel: mcp
+        tool: retrieve_balance
+        route: stripe-balance-read
+        description: Read the Stripe account's available and pending balance (test mode).
+        input_schema:
+          type: object
+          additionalProperties: false
+          properties: {}
+        extract:
+          target_id: connection.id
+          params: {}
+    dispatch:
+      credential_pattern: '^(sk|rk)_test_[A-Za-z0-9]{16,}$'
+      http:
+        method: GET
+        path: /v1/balance
+        headers:
+          Stripe-Version: 2026-09-30.endive
+
+  - operation: stripe.payment_intent.create
+    summary: Charge a customer's saved card off-session
+    access: write
+    target:
+      type: stripe.customer
+      id_pattern: '^cus_[A-Za-z0-9]{8,64}$'
+      account: none
+    params:
+      amount:
+        type: money
+        material: true
+        required: true
+        currencies: [USD, EUR, GBP, CAD, AUD, NZD, CHF, SEK, NOK, DKK, SGD, HKD, JPY, KRW]
+        max: "999999.99"
+      payment_method:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^pm_[A-Za-z0-9_]{4,64}$'
+    effects:
+      - kind: funds.transfer
+        description: Charges the customer's payment method
+    reversibility: irreversible
+    dedupe_key: [target.id, params.amount, params.payment_method]
+    constraints:
+      - kind: amount_max
+        param: amount
+    retry:
+      safe: false
+      on_unknown: reconcile
+      target_idempotency: true
+    verifier:
+      operation: stripe.payment_intent.read
+      establishes: payment_intent.succeeded
+      within_seconds: 600
+      level: domain_effect
+      reference:
+        from_response: /id
+      expect:
+        - field: /amount
+          equals: params.amount.minor
+        - field: /customer
+          equals: target.id
+      states:
+        field: /status
+        confirmed: [succeeded]
+        pending: [processing]
+        none: [requires_payment_method, requires_action, canceled]
+      limits: >-
+        Shows that Stripe reports this payment intent succeeded for this
+        customer and amount. It does not show that the funds have settled
+        to the account's bank.
+    approval:
+      title: Charge {params.amount} to customer {target.id}
+      fields: [params.amount, params.payment_method, target.id]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    mappings:
+      - channel: http
+        method: POST
+        path: /v1/payment_intents
+        route: stripe-payment-intent-create
+        encoding: form
+        extract:
+          target_id: input.customer
+          params:
+            amount: minor_money(int(input.amount), input.currency)
+            payment_method: input.payment_method
+    dispatch:
+      credential_pattern: '^(sk|rk)_test_[A-Za-z0-9]{16,}$'
+      http:
+        method: POST
+        path: /v1/payment_intents
+        encoding: form
+        headers:
+          Stripe-Version: 2026-09-30.endive
+        body:
+          customer: target.id
+          amount: params.amount.minor
+          currency: params.amount.currency
+          payment_method: params.payment_method
+          # PENDING coordinator: literal body values (confirm=true,
+          # off_session=true, payment_method_types[]=card); D8 allows
+          # literals only in headers.
+          confirm: literal.true
+          off_session: literal.true
+          payment_method_types[]: literal.card
+          metadata[pantherclaw_key]: transaction.key
+        idempotency_header: Idempotency-Key
+
+  - operation: stripe.payment_intent.cancel
+    summary: Cancel a payment intent that has not been charged
+    access: write
+    target:
+      type: stripe.payment_intent
+      id_pattern: '^pi_[A-Za-z0-9]{8,64}$'
+      account: none
+    params: {}
+    effects:
+      - kind: funds.authorization.cancel
+        description: Cancels a payment that has not been charged
+    reversibility: irreversible
+    retry:
+      safe: true
+      on_unknown: reconcile
+      target_idempotency: true
+    verifier:
+      operation: stripe.payment_intent.read
+      establishes: payment_intent.canceled
+      within_seconds: 300
+      level: domain_effect
+      states:
+        field: /status
+        confirmed: [canceled]
+        none: [succeeded, processing]
+      limits: Shows that Stripe reports this payment intent canceled.
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    mappings:
+      - channel: http
+        method: POST
+        path: /v1/payment_intents/{intent}/cancel
+        route: stripe-payment-intent-cancel
+        encoding: form
+        extract:
+          target_id: path.intent
+          params: {}
+    dispatch:
+      credential_pattern: '^(sk|rk)_test_[A-Za-z0-9]{16,}$'
+      http:
+        method: POST
+        path: /v1/payment_intents/{target.id}/cancel
+        encoding: form
+        headers:
+          Stripe-Version: 2026-09-30.endive
+        idempotency_header: Idempotency-Key
+
+  - operation: stripe.transfer.create
+    summary: Send funds to a connected account
+    access: write
+    target:
+      type: stripe.account
+      id_pattern: '^acct_[A-Za-z0-9]{8,64}$'
+      account: none
+    params:
+      amount:
+        type: money
+        material: true
+        required: true
+        currencies: [USD, EUR, GBP, CAD, AUD, NZD, CHF, SEK, NOK, DKK, SGD, HKD, JPY, KRW]
+        max: "999999.99"
+      transfer_group:
+        type: identifier
+        material: true
+        pattern: '^[A-Za-z0-9_-]{1,64}$'
+      description:
+        type: text
+        disclosure: true
+        max_bytes: 500
+    effects:
+      - kind: funds.transfer
+        description: Moves funds from the platform's balance to the connected account
+    reversibility: irreversible
+    dedupe_key: [target.id, params.amount, params.transfer_group]
+    constraints:
+      - kind: amount_max
+        param: amount
+      - kind: destination_set
+    prerequisites:
+      - fact: stripe.account.payout_details_changed
+        max_age_seconds: 300
+    retry:
+      safe: false
+      on_unknown: reconcile
+      target_idempotency: true
+    verifier:
+      operation: stripe.transfer.read
+      establishes: transfer.exists
+      within_seconds: 600
+      level: domain_effect
+      reference:
+        from_response: /id
+      expect:
+        - field: /amount
+          equals: params.amount.minor
+        - field: /destination
+          equals: target.id
+      states:
+        field: /reversed
+        confirmed: ["false"]
+        none: ["true"]
+      limits: >-
+        Shows that Stripe reports this transfer to this connected account for
+        this amount and not reversed. It does not show a payout to the
+        account's bank.
+    approval:
+      title: Transfer {params.amount} to {target.id}
+      fields: [params.amount, params.transfer_group, target.id, facts.stripe.account.payout_details_changed]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    mappings:
+      - channel: http
+        method: POST
+        path: /v1/transfers
+        route: stripe-transfer-create
+        encoding: form
+        extract:
+          target_id: input.destination
+          params:
+            amount: minor_money(int(input.amount), input.currency)
+            transfer_group: input.?transfer_group
+            description: input.?description
+          destinations:
+            - {kind: external, id: input.destination}
+    dispatch:
+      credential_pattern: '^(sk|rk)_test_[A-Za-z0-9]{16,}$'
+      http:
+        method: POST
+        path: /v1/transfers
+        encoding: form
+        headers:
+          Stripe-Version: 2026-09-30.endive
+        body:
+          destination: target.id
+          amount: params.amount.minor
+          currency: params.amount.currency
+          transfer_group: params.transfer_group
+          description: params.description
+          metadata[pantherclaw_key]: transaction.key
+        idempotency_header: Idempotency-Key
+
+  - operation: stripe.transfer.read
+    summary: Read one transfer
+    access: read
+    scoping: [classes]
+    target:
+      type: stripe.transfer
+      id_pattern: '^tr_[A-Za-z0-9]{8,64}$'
+      account: none
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    response:
+      format: json
+      fields: []
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    mappings:
+      - channel: http
+        method: GET
+        path: /v1/transfers/{transfer}
+        route: stripe-transfer-read
+        extract:
+          target_id: path.transfer
+          params: {}
+    dispatch:
+      credential_pattern: '^(sk|rk)_test_[A-Za-z0-9]{16,}$'
+      http:
+        method: GET
+        path: /v1/transfers/{target.id}
+        headers:
+          Stripe-Version: 2026-09-30.endive
+
+  # The connection test's read: harmless, no params, no mappings.
+  - operation: stripe.account.read
+    summary: Read the Stripe account (the connection test)
+    access: read
+    test: true
+    target:
+      type: pc.connection
+      id_pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      account: none
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    dispatch:
+      credential_pattern: '^(sk|rk)_test_[A-Za-z0-9]{16,}$'
+      http:
+        method: GET
+        path: /v1/account
+        headers:
+          Stripe-Version: 2026-09-30.endive
+
+# A transfer to a payee whose bank details changed within 7 days is the
+# classic payout-redirection fraud: the treasury template holds it for a
+# second approver (HR-306). An unread fact is "Consequence unknown": held.
+consequences:
+  - id: payee-changed-recently
+    operation: stripe.transfer.create
+    when: facts.stripe_account_payout_details_changed.changed == true
+    requires_facts: [stripe.account.payout_details_changed]
+    consequence:
+      operation: stripe.payee.changed_recently
+      effect: payee_changed_recently
+      target: '{target.id}'
+      description: >-
+        The connected account's bank details were added or changed within
+        the last 7 days.
+    valid_until: 2027-10-17
