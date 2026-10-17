@@ -49,10 +49,14 @@ func TestM14_SuccessCheck(t *testing.T) {
 // one without a sender, or an unknown kind, is not implemented and fails
 // closed, while the built-in kinds need none (G0 M14 D75).
 func TestM14_KindSenders(t *testing.T) {
-	for _, k := range []string{"postgres", "a2a", "smtp", ""} {
+	for _, k := range []string{"a2a", "smtp", ""} {
 		if !kindNotImplemented(k) {
 			t.Errorf("%q is implemented without a sender", k)
 		}
+	}
+	// postgres registers its sender in postgres_config.go (D75).
+	if kindNotImplemented("postgres") {
+		t.Error("postgres has no sender")
 	}
 	for _, k := range builtinKinds {
 		if kindNotImplemented(k) {

@@ -40,10 +40,14 @@ func TestM14Data_PostgresConfigurationRoundTrip(t *testing.T) {
 			{"INSERT INTO pc.orgs (id, name) VALUES ($1, 'data')", []any{org}},
 			{"INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'edge', 'test')", []any{org, gw}},
 			{"INSERT INTO pc.tool_packages (org_id, id, name) VALUES ($1, $2, $3)", []any{org, pkg, pcpostgres.Name}},
-			{`INSERT INTO pc.package_versions (org_id, id, package_id, version, file_digest, raw, state) VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE')`,
-				[]any{org, ver, pkg, pcpostgres.Version, manifest.FileDigest(raw), raw}},
-			{"INSERT INTO pc.package_pins (org_id, package_id, version_id, version, digest) VALUES ($1, $2, $3, $4, $5)",
-				[]any{org, pkg, ver, pcpostgres.Version, manifest.FileDigest(raw)}},
+			{
+				`INSERT INTO pc.package_versions (org_id, id, package_id, version, file_digest, raw, state) VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE')`,
+				[]any{org, ver, pkg, pcpostgres.Version, manifest.FileDigest(raw), raw},
+			},
+			{
+				"INSERT INTO pc.package_pins (org_id, package_id, version_id, version, digest) VALUES ($1, $2, $3, $4, $5)",
+				[]any{org, pkg, ver, pcpostgres.Version, manifest.FileDigest(raw)},
+			},
 		} {
 			if _, err := tx.Exec(ctx, s.sql, s.args...); err != nil {
 				return err
