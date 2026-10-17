@@ -259,11 +259,12 @@ type Store interface {
 	// its claim: accepted and delegated commit (claim SUCCEEDED), failed
 	// releases (claim RELEASED), unknown keeps both held (HR-003, F115).
 	// Delegated is refused (ErrNotCooperative) unless the transaction's
-	// channel is hook or sdk. It records the attempt with its access mode
-	// and, in the same transaction, the execution receipt sign.Execution
-	// returns at the database time and, for an accepted or delegated write
-	// whose effect its definition cannot verify, an UNVERIFIABLE effect
-	// receipt signed with sign.Receipts (HR-191).
+	// channel and access mode are Delegable (hook, sdk; authzen through an
+	// agent_held or target_enforced connection). It records the attempt
+	// with its access mode and, in the same transaction, the execution
+	// receipt sign.Execution returns at the database time and, for an
+	// accepted or delegated write whose effect its definition cannot verify,
+	// an UNVERIFIABLE effect receipt signed with sign.Receipts (HR-191).
 	RecordExecution(ctx context.Context, org ids.OrgID, gatewayID string, e Execution, sign Signing) (string, error)
 	// Sweep releases expired ISSUED permits (and their claims) and marks
 	// stale DISPATCHING ones UNKNOWN, never releasing them (HR-003). Each

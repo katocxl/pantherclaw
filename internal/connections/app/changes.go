@@ -45,6 +45,11 @@ type UpdateInput struct {
 	DefaultMode      *string
 	MaxResponseBytes *int32
 	TimeoutMs        *int32
+	// Postgres and A2A replace a postgres or a2a connection's configuration
+	// (G0 M14 D64), which weakens enforcement until the kind tells widening
+	// from narrowing.
+	Postgres *PostgresConfig `json:",omitzero"`
+	A2A      *A2AConfig      `json:",omitzero"`
 }
 
 // change is one changed field with its old and new values and whether it
@@ -330,7 +335,45 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			}
 			set("connector", connectorSummary(&cur), specView(spec), true)
 		}
+		var kc *kindConfig
+		if in.Postgres != nil || in.A2A != nil {
+			cfg, err := checkKindConfig(conn.Kind, conn.Simulated, in.Postgres, in.A2A)
+			if err != nil {
+				return err
+			}
+			store, ok := s.kinds.Get(conn.Kind)
+			if !ok {
+				return ErrKindNotImplemented
+			}
+			kc = &kindConfig{cfg: cfg, store: store}
+			set(conn.Kind, "current", "replaced", true)
+		}
 		write := func(ctx context.Context) error {
+			if kc != nil {
+				// Saved at the revision the update makes, in its transaction; an
+				// implied base URL (an a2a interface URL) goes with it (D85).
+				derived, err := kc.store.Save(ctx, tx, c.Org, conn.ID, conn.Revision+1, kc.cfg)
+				if err != nil {
+					return err
+				}
+				if derived != "" && derived != deref(p.BaseUrl) {
+					norm, ep, err := checkBaseURL(derived, s.own)
+					if err != nil {
+						return err
+					}
+					hosts, err := checkAllowedHosts(nil, ep, norm, s.own)
+					if err != nil {
+						return err
+					}
+					if conn.Simulated {
+						if err := checkSimulated(&norm, hosts); err != nil {
+							return err
+						}
+					}
+					p.BaseUrl, p.AllowedHosts = &norm, hosts
+					changes = append(changes, change{field: "base_url", from: deref(conn.BaseUrl), to: norm, weakens: true})
+				}
+			}
 			after, err := s.apply(ctx, tx, c, conn, p, changes, "connection.updated", limits)
 			if err != nil {
 				return err

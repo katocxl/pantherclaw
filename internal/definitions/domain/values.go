@@ -27,6 +27,7 @@ type Value struct {
 	Str     string        // enum, identifier, text, command, path
 	Bool    bool          // boolean
 	List    []string      // identifier_list
+	Filter  []Predicate   // query_filter
 }
 
 // Values are the typed parameters of one action, by name.
@@ -83,6 +84,8 @@ func (p ParamSpec) decode(name string, raw jsontext.Value) (Value, error) {
 		if err = json.Unmarshal(raw, &v.List); err == nil {
 			err = p.list(v.List)
 		}
+	case TypeQueryFilter:
+		v.Filter, err = decodeFilter(raw)
 	case TypeEnum, TypeIdentifier, TypeText, TypeCommand, TypeContent, TypePath:
 		if err = json.Unmarshal(raw, &v.Str); err == nil {
 			err = p.str(v.Str)
@@ -158,7 +161,7 @@ func (p ParamSpec) str(s string) error {
 		}
 		return nil
 	case TypeText, TypeCommand, TypeContent:
-	case TypeMoney, TypeDecimal, TypeInteger, TypeIdentifierList, TypeBoolean:
+	case TypeMoney, TypeDecimal, TypeInteger, TypeIdentifierList, TypeBoolean, TypeQueryFilter:
 		return fmt.Errorf("not a string type")
 	}
 	if limit := limitOr(p.MaxLength, maxParamText); len(s) > limit {
@@ -229,6 +232,8 @@ func (v Value) wire() any {
 		return v.Bool
 	case TypeIdentifierList:
 		return v.List
+	case TypeQueryFilter:
+		return v.Filter
 	case TypeEnum, TypeIdentifier, TypeText, TypeCommand, TypeContent, TypePath:
 		return v.Str
 	}

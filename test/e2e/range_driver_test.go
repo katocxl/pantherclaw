@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -95,10 +96,12 @@ func newRangeDriver(t *testing.T) *rangeDriver {
 
 // Capabilities are what this driver can run.
 func (d *rangeDriver) Capabilities() map[app.Capability]bool {
-	return map[app.Capability]bool{
+	caps := map[app.Capability]bool{
 		app.CapGitHub: true, app.CapPayments: true, app.CapMCP: true, app.CapPerson: true, app.CapSecondOrg: true,
 		app.CapHarness: true, app.CapSandbox: d.extra.available(),
 	}
+	maps.Copy(caps, stripeCapabilities())
+	return caps
 }
 
 func requires(s domain.Scenario, what string) bool { return slices.Contains(s.Requires, what) }
@@ -120,6 +123,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	case "RT-036":
 		o.access, o.actionTokens = capp.AccessTargetEnforced, true
 	}
+	o.stripe = needsStripe(sc)
 	var p idp
 	if requires(sc, "person") || sc.ID == "RT-009" {
 		p = inProcessIdP(t)
@@ -144,6 +148,9 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	}
 	if o.github {
 		d.setupGitHub()
+	}
+	if o.stripe {
+		d.setupStripe()
 	}
 	if requires(sc, "second_org") {
 		d.other = start(t, options{budget: "1000.00"})
@@ -420,7 +427,7 @@ func (d *rangeDriver) callHTTP(conn string, w callWith, act ids.UUID) (domain.Ob
 		return domain.Observation{}, nil, err
 	}
 	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", contentType(conn))
 	}
 	req.Header.Set(gateway.HeaderRunID, d.runHeader())
 	req.Header.Set(gateway.HeaderActionID, act.String())

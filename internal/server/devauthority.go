@@ -10,6 +10,7 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"slices"
 	"time"
@@ -144,6 +145,11 @@ type devGrantTerms struct {
 	// release_approver (inside a change window, HR-207), and a task merges
 	// once (G0 M8, §43).
 	GitHub bool
+	// Stripe also allows the pc.stripe operations: refunds, charges and
+	// transfers up to 100.00 USD each, one refund per task (G0 M14 D14).
+	Stripe bool
+	// StripePayee is the connected account the grant may transfer to.
+	StripePayee string
 }
 
 // seedGrant issues a root grant to the seeded agent for its owner: refunds
@@ -159,12 +165,25 @@ func seedGrant(ctx context.Context, pool *db.Pool, org ids.OrgID, w devWorkload,
 	if t.GitHub {
 		ops = append(ops, githubOperations...)
 	}
-	bounds, err := json.Marshal(map[string]any{
-		"operations": ops,
-		"params": map[string]any{"payments.refund.create": map[string]any{
-			"amount": map[string]any{"max": map[string]string{string(t.MaxPerAction.Currency): t.MaxPerAction.Amount.String()}},
-		}},
-	})
+	params := map[string]any{"payments.refund.create": map[string]any{
+		"amount": map[string]any{"max": map[string]string{string(t.MaxPerAction.Currency): t.MaxPerAction.Amount.String()}},
+	}}
+	var stripeBudget map[string]any
+	var stripeDests []string
+	if t.Stripe {
+		var stripeOps []string
+		var stripeParams map[string]any
+		stripeOps, stripeParams, stripeBudget, stripeDests = stripeGrant(t.StripePayee)
+		ops = append(ops, stripeOps...)
+		maps.Copy(params, stripeParams)
+	}
+	doc := map[string]any{"operations": ops, "params": params}
+	if stripeDests != nil {
+		// Transfers go only to the seeded payee; actions without a
+		// destination are not limited by it.
+		doc["destinations"] = map[string]any{"ids": stripeDests}
+	}
+	bounds, err := json.Marshal(doc)
 	if err != nil {
 		return gdomain.Grant{}, err
 	}
@@ -180,6 +199,9 @@ func seedGrant(ctx context.Context, pool *db.Pool, org ids.OrgID, w devWorkload,
 		budgets = append(budgets, map[string]any{
 			"id": "merges", "grouping": "task", "operations": []string{"github.pull.merge"}, "max_count": "1", "period": "none",
 		})
+	}
+	if stripeBudget != nil {
+		budgets = append(budgets, stripeBudget)
 	}
 	limits, err := json.Marshal(map[string]any{"budgets": budgets})
 	if err != nil {
@@ -213,10 +235,13 @@ func seedGrant(ctx context.Context, pool *db.Pool, org ids.OrgID, w devWorkload,
 			},
 		}
 	}
+	if t.Stripe {
+		g.Requirements = append(g.Requirements, stripeRequirement())
+	}
 	defsStore := &defspg.Store{Pool: pool}
 	active := map[string]*defs.Definition{}
-	for _, op := range append([]string{"payments.refund.create", shellOperation}, githubOperations...) {
-		if (op == shellOperation && !t.Shell) || (slices.Contains(githubOperations, op) && !t.GitHub) {
+	for _, op := range append(append([]string{"payments.refund.create", shellOperation}, githubOperations...), stripeOperations...) {
+		if (op == shellOperation && !t.Shell) || (slices.Contains(githubOperations, op) && !t.GitHub) || (slices.Contains(stripeOperations, op) && !t.Stripe) {
 			continue
 		}
 		d, err := defsStore.Active(ctx, org, op)

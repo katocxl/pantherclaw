@@ -116,6 +116,9 @@ type Deps struct {
 	// ReportCircuit tells the server a connection's circuit opened
 	// (HR-078); nil reports nothing.
 	ReportCircuit dispatch.Reporter
+	// ReportCircuitReason tells the server a connection's circuit opened for
+	// a reason (stripe_livemode, G0 M14 D76).
+	ReportCircuitReason dispatch.ReasonReporter
 	// ReportDrift tells the server an upstream MCP tool drifted (HR-081);
 	// nil reports nothing.
 	ReportDrift DriftReporter
@@ -165,6 +168,10 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 		Containment: k, Configuration: store, Run: []func(context.Context) error{ctl.Run, k.Run, store.Run},
 		ReportCircuit: func(ctx context.Context, conn string, unknown, total int32) error {
 			_, err := ctl.Gateway.ReportCircuit(ctx, &pb.ReportCircuitRequest{ConnectionId: conn, UnknownCount: unknown, TotalCount: total})
+			return err
+		},
+		ReportCircuitReason: func(ctx context.Context, conn, reason string) error {
+			_, err := ctl.Gateway.ReportCircuit(ctx, &pb.ReportCircuitRequest{ConnectionId: conn, Reason: reason})
 			return err
 		},
 		ReportDrift: func(ctx context.Context, conn string, d dispatch.Drift) error {
@@ -225,7 +232,7 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 	}
 	o := dispatch.Options{
 		Org: d.Org, GatewayID: d.GatewayID, Authority: d.Authority, JWKSURL: d.JWKSURL, JWKSClient: d.JWKSClient,
-		Containment: d.Containment, AllowedPrefixes: prefixes, ReportCircuit: d.ReportCircuit, Log: log,
+		Containment: d.Containment, AllowedPrefixes: prefixes, ReportCircuit: d.ReportCircuit, ReportCircuitReason: d.ReportCircuitReason, Log: log,
 		Approvers:   proof.NewPinned(cfg.Approvals.ApproverKeysFile, d.Org),
 		ReportFacts: d.ReportFacts, FactTimeout: cfg.GitHub.FactTimeout.D(), ReportRevocation: d.ReportRevocation,
 		GitHubAPIURL: cfg.GitHub.APIURL,

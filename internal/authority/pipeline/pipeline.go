@@ -388,7 +388,8 @@ func (p *Pipeline) connection(ctx context.Context, s *state, d *defs.Definition)
 	case c.Gateway.String() != s.req.Gateway:
 		return unknown()
 	}
-	if c.Package != s.a.Definition.Package || (c.Kind == "local") != (s.a.Channel == string(defs.ChannelHook)) || !dispatches(c.Kind, d) {
+	if c.Package != s.a.Definition.Package || (c.Kind == "local") != (s.a.Channel == string(defs.ChannelHook)) ||
+		(c.Kind == "a2a") != (s.a.Channel == string(defs.ChannelA2A)) || !dispatches(c.Kind, d) {
 		s.cl.add(StepScope, adomain.CannotAuthorize, ReasonRouteUnknown,
 			"route "+s.a.Route+" of "+d.Operation+" is not served by this connection", "")
 		return false
@@ -403,8 +404,13 @@ func (p *Pipeline) connection(ctx context.Context, s *state, d *defs.Definition)
 
 // gatewayChannels are the channels a gateway serves, whose actions always
 // name their connection (PAP-1 §6): the sdk channel too, since the /sdk
-// face is its only mapper (HR-201) and always names the connection.
-var gatewayChannels = []string{string(defs.ChannelHTTP), string(defs.ChannelMCP), string(defs.ChannelHook), string(defs.ChannelSDK)}
+// face is its only mapper (HR-201) and always names the connection. An
+// authzen action names the connection its enforcement point fronts, and an
+// a2a action the peer agent's connection (G0 M14 D27, D31).
+var gatewayChannels = []string{
+	string(defs.ChannelHTTP), string(defs.ChannelMCP), string(defs.ChannelHook), string(defs.ChannelSDK),
+	string(defs.ChannelAuthZEN), string(defs.ChannelA2A),
+}
 
 // dispatches reports whether a connection of this kind serves the
 // definition: an HTTP or MCP connection (an MCP server over HTTP, or a
@@ -419,6 +425,10 @@ func dispatches(kind string, d *defs.Definition) bool {
 		return d.Dispatch != nil && d.Dispatch.MCP != nil
 	case "local":
 		return true
+	case "postgres", "a2a":
+		// Defined, not yet served (G0 M14 D4): no definition dispatches
+		// through them, so the route is unknown (fail closed).
+		return false
 	}
 	return false
 }
@@ -735,6 +745,10 @@ func (s *state) bindings() bool {
 		if b == nil {
 			continue
 		}
+		if b.Op == defs.BindLe {
+			ok = s.bindingAtMost(pr) && ok
+			continue
+		}
 		want, have := s.vals[b.Param], memberValue(s.facts[pr.Fact], b.Member)
 		param := want.Str
 		if want.Type == defs.TypeInteger {
@@ -758,6 +772,10 @@ func memberValue(f fdomain.Value, member string) string {
 			return v
 		case int64:
 			return strconv.FormatInt(v, 10)
+		case map[string]any:
+			if m, ok := memberMoney(v); ok {
+				return m.String()
+			}
 		}
 	}
 	return "(none)"

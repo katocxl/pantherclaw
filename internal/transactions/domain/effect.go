@@ -145,8 +145,11 @@ const (
 const CoveragePartial = "PARTIAL"
 
 // Cooperative reports whether a transaction's channel is a cooperative one
-// (the hook, the SDK), whose agent performs the allowed action itself.
-func Cooperative(channel string) bool { return channel == "hook" || channel == "sdk" }
+// (the hook, the SDK, an AuthZEN enforcement point: G0 M14 D4), whose agent
+// or enforcement point performs the allowed action itself.
+func Cooperative(channel string) bool {
+	return channel == "hook" || channel == "sdk" || channel == "authzen"
+}
 
 // UnverifiableReason says why the effect of an accepted or delegated
 // outcome of definition d is UNVERIFIABLE, or "" when it is not: a
