@@ -83,7 +83,7 @@ func TestAuthZENJSONRPC(t *testing.T) {
 	if _, m, err := jsonRPC([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)); err != nil || m != "tools/list" {
 		t.Fatalf("tools/list: %q %v", m, err)
 	}
-	for _, bad := range []string{`[{"jsonrpc":"2.0","method":"ping"}]`, `{"method":"ping"}`, `{"jsonrpc":"2.0","method":"tools/call","params":{}}`} {
+	for _, bad := range []string{`{"jsonrpc":"2.0","id":1,"method":"ping","extra":true}`, `[{"jsonrpc":"2.0","method":"ping"}]`, `{"method":"ping"}`, `{"jsonrpc":"2.0","method":"tools/call","params":{}}`} {
 		if _, _, err := jsonRPC([]byte(bad)); err == nil {
 			t.Errorf("%s: accepted", bad)
 		}
@@ -219,22 +219,26 @@ func TestHR318_SubjectsAndRequestsThatDoNotMatchAreRefused(t *testing.T) {
 	post := &azAction{Name: "POST"}
 	held := *conn
 	held.AccessMode = "pantherclaw_held"
+	mcpConn := *conn
+	mcpConn.Kind = "mcp"
 	for name, tc := range map[string]struct {
 		ev   azEvaluation
 		conn *boundConnection
 		code string
 	}{
-		"a name-only subject":    {azEvaluation{Subject: &azEntity{Type: "user", ID: agent.String()}, Resource: resource(nil), Action: post}, conn, codeSubject},
-		"no properties":          {azEvaluation{Subject: &azEntity{Type: authzenSubjectType, ID: agent.String()}, Resource: resource(nil), Action: post}, conn, codeSubject},
-		"no proof":               {azEvaluation{Subject: subject("", map[string]any{"pap_token": tok, "pap_run_id": "r"}), Resource: resource(nil), Action: post}, conn, codeCredentials},
-		"another agent":          {azEvaluation{Subject: subject(ids.NewV7().String(), good), Resource: resource(nil), Action: post}, conn, codeAgent},
-		"a token naming nobody":  {azEvaluation{Subject: subject("", map[string]any{"pap_token": "a.e30.b", "pap_proof": "p", "pap_run_id": ids.NewV7().String()}), Resource: resource(nil), Action: post}, conn, codeCredentials},
-		"outside the base URL":   {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"url": "https://pay.example.test/other"}), Action: post}, conn, codeURL},
-		"another host":           {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"url": "https://evil.test/api/v1"}), Action: post}, conn, codeURL},
-		"another protocol":       {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"protocol": "mcp"}), Action: post}, conn, codeProtocol},
-		"another action":         {azEvaluation{Subject: subject("", good), Resource: resource(nil), Action: &azAction{Name: "DELETE"}}, conn, codeAction},
-		"a body over 64 KiB":     {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"body_b64": base64.StdEncoding.EncodeToString(make([]byte, authzenMaxForwarded+1))}), Action: post}, conn, codeBody},
-		"a pantherclaw_held one": {azEvaluation{Subject: subject("", good), Resource: resource(nil), Action: post}, &held, codeBindable},
+		"a name-only subject":      {azEvaluation{Subject: &azEntity{Type: "user", ID: agent.String()}, Resource: resource(nil), Action: post}, conn, codeSubject},
+		"no properties":            {azEvaluation{Subject: &azEntity{Type: authzenSubjectType, ID: agent.String()}, Resource: resource(nil), Action: post}, conn, codeSubject},
+		"no proof":                 {azEvaluation{Subject: subject("", map[string]any{"pap_token": tok, "pap_run_id": "r"}), Resource: resource(nil), Action: post}, conn, codeCredentials},
+		"another agent":            {azEvaluation{Subject: subject(ids.NewV7().String(), good), Resource: resource(nil), Action: post}, conn, codeAgent},
+		"a token naming nobody":    {azEvaluation{Subject: subject("", map[string]any{"pap_token": "a.e30.b", "pap_proof": "p", "pap_run_id": ids.NewV7().String()}), Resource: resource(nil), Action: post}, conn, codeCredentials},
+		"outside the base URL":     {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"url": "https://pay.example.test/other"}), Action: post}, conn, codeURL},
+		"another host":             {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"url": "https://evil.test/api/v1"}), Action: post}, conn, codeURL},
+		"another protocol":         {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"protocol": "mcp"}), Action: post}, conn, codeProtocol},
+		"another action":           {azEvaluation{Subject: subject("", good), Resource: resource(nil), Action: &azAction{Name: "DELETE"}}, conn, codeAction},
+		"a body over 64 KiB":       {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"body_b64": base64.StdEncoding.EncodeToString(make([]byte, authzenMaxForwarded+1))}), Action: post}, conn, codeBody},
+		"a pantherclaw_held one":   {azEvaluation{Subject: subject("", good), Resource: resource(nil), Action: post}, &held, codeBindable},
+		"a method that is not one": {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"method": "post"}), Action: &azAction{Name: "post"}}, conn, codeResource},
+		"an MCP GET":               {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"protocol": "mcp", "method": "GET"}), Action: &azAction{Name: "GET"}}, &mcpConn, codeMethod},
 	} {
 		res, err := e.evaluate(context.Background(), p, tc.conn, tc.ev)
 		if err != nil || res.Decision || res.Context.PantherClaw.Code != tc.code || res.Context.PantherClaw.Outcome != authority.ExternalCannotAuthorize {
@@ -275,5 +279,56 @@ func TestHR321_RequestsAreCapped(t *testing.T) {
 	}
 	if st := do(authzenEvaluationPath, `{}`); st != http.StatusTooManyRequests {
 		t.Fatalf("past the rate: %d", st)
+	}
+}
+
+// TestHR321_OnePointsWindowIsNeverResetByOthers: the rate windows are a
+// bounded least-recently-used list; many other points neither reset nor
+// share a point's window (D82).
+func TestHR321_OnePointsWindowIsNeverResetByOthers(t *testing.T) {
+	clk := clock.NewFake(time.Now())
+	l := newPointRates(clk)
+	l.max = 3
+	a := ids.NewV7()
+	if !l.allow(a, 2, 2) {
+		t.Fatal("a's window")
+	}
+	for range 2 {
+		l.allow(ids.NewV7(), 1, 1)
+	}
+	if l.allow(a, 2, 1) {
+		t.Fatal("a's window was reset by other points")
+	}
+	for range 3 {
+		l.allow(ids.NewV7(), 1, 1)
+	}
+	if l.order.Len() != 3 {
+		t.Fatalf("%d windows kept, want 3", l.order.Len())
+	}
+}
+
+// TestHR318_OneProofDecidesAtMostOneEvaluation: a batch that uses one
+// proof twice gets PROOF_ALREADY_USED for the second (D82).
+func TestHR318_OneProofDecidesAtMostOneEvaluation(t *testing.T) {
+	org := ids.New[ids.Org]()
+	c := tapp.Caller{Subject: td.Subject{Org: org, Principal: td.PrincipalRef{Kind: td.KindServiceAccount, ID: ids.NewV7()},
+		Bindings: []td.Binding{{Role: td.RoleEnforcementPoint, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}}}, Credential: tapp.CredAccessToken}
+	e := newAuthZENEndpoint(nil, fakeAuthn{bearer: "good", caller: c}, failDecider{t}, "https://pc.example.test", celenv.Limits{}, nil, nil)
+	e.pointOf = func(context.Context, tapp.Caller) (point, error) {
+		return point{Org: org, ID: ids.NewV7(), Rate: 50}, nil
+	}
+	mux := http.NewServeMux()
+	e.mount(mux)
+	sub := `{"type":"pantherclaw_workload","properties":{"pap_token":"t","pap_proof":"same","pap_run_id":"r"}}`
+	req := httptest.NewRequest(http.MethodPost, authzenEvaluationsPath, strings.NewReader(`{"evaluations":[{"subject":`+sub+`},{"subject":`+sub+`}]}`))
+	req.Header.Set("Authorization", "Bearer good")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	var out struct {
+		Evaluations []authzenResponse `json:"evaluations"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil || len(out.Evaluations) != 2 ||
+		out.Evaluations[0].Context.PantherClaw.Code == codeProofUsed || out.Evaluations[1].Context.PantherClaw.Code != codeProofUsed {
+		t.Fatalf("%d %s", w.Code, w.Body)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -237,7 +238,7 @@ func (e *authzenEndpoint) evaluate(ctx context.Context, p point, conn *boundConn
 		return refusal(codeResource), nil
 	}
 	var res azResource
-	if json.Unmarshal(ev.Resource.Properties, &res) != nil || res.Method == "" || res.URL == "" || len(res.URL) > 4096 {
+	if json.Unmarshal(ev.Resource.Properties, &res) != nil || !methodRe.MatchString(res.Method) || res.URL == "" || len(res.URL) > 4096 {
 		return refusal(codeResource), nil //nolint:nilerr // a decision, not a failure
 	}
 	switch {
@@ -294,8 +295,13 @@ func (e *authzenEndpoint) evaluate(ctx context.Context, p point, conn *boundConn
 		}
 		mapped, err = mapper.HTTP(ctx, tc, res.Method, rest, target.RawQuery, body)
 	case "mcp":
+		// MCP over HTTP is POST only here: a GET (the SSE stream) or a
+		// DELETE (ending a session) decides nothing and is refused (D82).
+		if res.Method != http.MethodPost {
+			return refusal(codeMethod), nil
+		}
 		call, method, perr := jsonRPC(body)
-		if perr != nil || res.Method != http.MethodPost {
+		if perr != nil {
 			return refusal(codeAmbiguous), nil //nolint:nilerr // a decision, not a failure
 		}
 		if ev.Action.Name != method {
@@ -463,8 +469,10 @@ func jsonRPC(body []byte) (toolCall, string, error) {
 		JSONRPC string         `json:"jsonrpc"`
 		Method  string         `json:"method"`
 		Params  jsontext.Value `json:"params,omitempty"`
+		ID      jsontext.Value `json:"id,omitempty"`
 	}
-	if err := json.Unmarshal(body, &m); err != nil || m.JSONRPC != "2.0" || m.Method == "" {
+	// Strict: a member the server would not read is ambiguous (D82).
+	if err := json.Unmarshal(body, &m, json.RejectUnknownMembers(true)); err != nil || m.JSONRPC != "2.0" || m.Method == "" {
 		return toolCall{}, "", errAuthZENRequest
 	}
 	var tc toolCall
@@ -521,4 +529,22 @@ func (c *mapperCache) get(raw []byte) (*mapping.Mapper, error) {
 // named reports whether an evaluation names a connection.
 func named(ev azEvaluation) bool {
 	return ev.Resource != nil && ev.Resource.Type == authzenResourceType && ev.Resource.ID != "" && len(ev.Resource.ID) <= 63
+}
+
+// methodRe is an HTTP method as a request names it (D82).
+var methodRe = regexp.MustCompile(`^[A-Z]{3,7}$`)
+
+// codeProofUsed: a batch used one proof for more than one evaluation.
+const codeProofUsed = "PROOF_ALREADY_USED"
+
+// proofOf is the PAP/1 proof an evaluation's subject carries, or "".
+func proofOf(ev azEvaluation) string {
+	if ev.Subject == nil || !jsonObject(ev.Subject.Properties) {
+		return ""
+	}
+	var sub azSubject
+	if json.Unmarshal(ev.Subject.Properties, &sub) != nil {
+		return ""
+	}
+	return sub.Proof
 }

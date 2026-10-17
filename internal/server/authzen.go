@@ -4,6 +4,7 @@
 package server
 
 import (
+	"container/list"
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
@@ -243,8 +244,17 @@ func (e *authzenEndpoint) serve(w http.ResponseWriter, r *http.Request, batch bo
 		return
 	}
 	var out []authzenResponse
+	// One proof decides at most one evaluation (D82).
+	seen := map[string]bool{}
 	for i, ev := range evals {
-		res, err := e.evaluate(ctx, p, conns[i], ev)
+		var res authzenResponse
+		var err error
+		if proof := proofOf(ev); proof != "" && seen[proof] {
+			res = refusal(codeProofUsed)
+		} else {
+			seen[proof] = proof != ""
+			res, err = e.evaluate(ctx, p, conns[i], ev)
+		}
 		if err != nil {
 			e.log.ErrorContext(ctx, "authzen.decision_unavailable", slog.String("enforcement_point_id", p.ID.String()), pclog.Err(err))
 			res = authzenDenied(authority.ExternalCannotAuthorize, "AUTHORITY_UNAVAILABLE", "PantherClaw could not decide; try again.")
@@ -266,19 +276,28 @@ func (e *authzenEndpoint) serve(w http.ResponseWriter, r *http.Request, batch bo
 func isCtl(r rune) bool { return r < 0x20 || r == 0x7f }
 
 // pointRates limits each point's evaluations a second on this instance
-// (HR-321): a fixed one-second window per point, bounded in memory.
+// (HR-321): a one-second window per point, its points kept in a bounded
+// least-recently-used list, so one point's window never resets
+// another's (D82).
 type pointRates struct {
-	mu     sync.Mutex
-	clock  clock.Clock
-	start  time.Time
-	counts map[ids.UUID]int
+	mu    sync.Mutex
+	clock clock.Clock
+	max   int
+	order *list.List // of *pointWindow, most recent first
+	by    map[ids.UUID]*list.Element
+}
+
+type pointWindow struct {
+	point ids.UUID
+	start time.Time
+	count int
 }
 
 func newPointRates(clk clock.Clock) *pointRates {
 	if clk == nil {
 		clk = clock.System{}
 	}
-	return &pointRates{clock: clk, counts: map[ids.UUID]int{}}
+	return &pointRates{clock: clk, max: 10_000, order: list.New(), by: map[ids.UUID]*list.Element{}}
 }
 
 // allow records n evaluations for a point and reports whether they fit.
@@ -286,13 +305,26 @@ func (l *pointRates) allow(p ids.UUID, rate, n int) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.clock.Now()
-	if now.Sub(l.start) >= time.Second || len(l.counts) >= 10_000 {
-		l.start, l.counts = now, map[ids.UUID]int{}
+	el, ok := l.by[p]
+	if ok {
+		l.order.MoveToFront(el)
+	} else {
+		el = l.order.PushFront(&pointWindow{point: p, start: now})
+		l.by[p] = el
+		if l.order.Len() > l.max {
+			old := l.order.Back()
+			l.order.Remove(old)
+			delete(l.by, old.Value.(*pointWindow).point)
+		}
 	}
-	if l.counts[p]+n > rate {
+	w := el.Value.(*pointWindow)
+	if now.Sub(w.start) >= time.Second {
+		w.start, w.count = now, 0
+	}
+	if w.count+n > rate {
 		return false
 	}
-	l.counts[p] += n
+	w.count += n
 	return true
 }
 
