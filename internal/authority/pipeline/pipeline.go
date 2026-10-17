@@ -82,6 +82,11 @@ type Pipeline struct {
 	// published policy's own limits apply otherwise); zero means
 	// celenv.DefaultLimits. The server sets them from its configuration.
 	Limits celenv.Limits
+	// Peer checks a call through an a2a connection against the requester's
+	// grant (G0 M14 D89; internal/authority/peer.go): a non-empty reason
+	// is DENY DELEGATION_NOT_ALLOWED. Unset, other kinds are unaffected
+	// and an a2a call is CANNOT_AUTHORIZE (fail closed).
+	Peer PeerCheck
 }
 
 // IdentitySummary is the identity part of a decision receipt (ids only).
@@ -425,10 +430,13 @@ func dispatches(kind string, d *defs.Definition) bool {
 		return d.Dispatch != nil && d.Dispatch.MCP != nil
 	case "local":
 		return true
-	case "postgres", "a2a":
-		// Defined, not yet served (G0 M14 D4): no definition dispatches
-		// through them, so the route is unknown (fail closed).
-		return false
+	case "a2a":
+		// A peer agent's methods (G0 M14 D9, D64); the gateway dispatches
+		// them only through a registered sender (D75).
+		return d.Dispatch != nil && d.Dispatch.A2A != nil
+	case "postgres":
+		// Structured reads (D9, D64), likewise only through a sender.
+		return d.Dispatch != nil && d.Dispatch.SQL != nil
 	}
 	return false
 }
@@ -813,7 +821,7 @@ func (p *Pipeline) boundaries(ctx context.Context, s *state) {
 	}
 	p.policyRules(ctx, s)
 	s.disclosure()
-	s.boundariesM14() // G0 M14 D11, D78 (scope.go)
+	p.boundariesM14(ctx, s) // G0 M14 D11, D78, D89 (scope.go)
 	p.consequenceBoundaries(ctx, s)
 	p.budgets(ctx, s)
 	p.repeats(ctx, s)

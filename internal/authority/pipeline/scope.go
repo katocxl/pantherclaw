@@ -4,6 +4,7 @@
 package pipeline
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -26,17 +27,42 @@ const (
 	// requires a target or destination set that no grant or guardrail binds.
 	ReasonTargetSetRequired      = "TARGET_SET_REQUIRED"
 	ReasonDestinationSetRequired = "DESTINATION_SET_REQUIRED"
+	// ReasonDelegationNotAllowed: the requester's grant does not let this
+	// call go to the peer agent (D89, D33).
+	ReasonDelegationNotAllowed = "DELEGATION_NOT_ALLOWED"
+	// ReasonPeerCheckUnavailable: a call through an a2a connection with no
+	// peer check wired (fail closed).
+	ReasonPeerCheckUnavailable = "PEER_CHECK_UNAVAILABLE"
 )
 
 // ScopeRule names the source of data scope obligations on receipts: the
 // intersection of the grant chain (envelopes included) and the policy.
 const ScopeRule = "pantherclaw.data-scope"
 
-// boundariesM14 runs the M14 checks of step 7: required sets (D78) and data
-// scope (D11).
-func (s *state) boundariesM14() {
+// boundariesM14 runs the M14 checks of step 7: peer calls (D89), required
+// sets (D78) and data scope (D11).
+func (p *Pipeline) boundariesM14(ctx context.Context, s *state) {
+	p.peerCheck(ctx, s)
 	s.requiredSets()
 	s.dataScope()
+}
+
+// peerCheck asks the peer port about a call through an a2a connection.
+func (p *Pipeline) peerCheck(ctx context.Context, s *state) {
+	if s.conn == nil || s.conn.Kind != "a2a" {
+		return
+	}
+	leaf, ok := s.chain.Leaf()
+	switch {
+	case !ok:
+		return // no grant: step 3 already refused
+	case p.Peer == nil:
+		s.cl.add(StepBoundaries, adomain.CannotAuthorize, ReasonPeerCheckUnavailable, "calls to peer agents cannot be checked", "")
+		return
+	}
+	if reason := p.Peer(ctx, s.req.Org, *s.conn, leaf); reason != "" {
+		s.cl.add(StepBoundaries, adomain.Deny, ReasonDelegationNotAllowed, reason, "grant "+leaf.ID.String())
+	}
 }
 
 // requiredSets denies an action whose definition requires a target or
