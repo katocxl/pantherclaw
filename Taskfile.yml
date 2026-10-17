@@ -216,6 +216,10 @@ tasks:
       # The integrations' tests run inside the real Agent SDKs (dev-only: pnpm-lock.yaml, uv.lock); on Windows the Python ones use the TypeScript one's CLI.
       - cd integrations/claude-agent-sdk/typescript && COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install --frozen-lockfile && node --test "test/**/*.test.ts"
       - cd integrations/claude-agent-sdk/python && {{.PYTHON}} -m unittest discover -s tests
+      # The Python framework wrappers run every wrappers.json case inside the real frameworks (dev-only, uv.lock); CrewAI only on 3.13.
+      - cd integrations/langchain/python && {{.PYTHON}} -m unittest discover -s tests
+      - cd integrations/openai-agents/python && {{.PYTHON}} -m unittest discover -s tests
+      - cd integrations/crewai/python && {{.PYTHON}} -m unittest discover -s tests
 
   license:check:
     desc: Verify SPDX + copyright headers on every source file

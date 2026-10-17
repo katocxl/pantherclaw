@@ -34,7 +34,7 @@ const (
 )
 
 // apachePrefixes are repository-relative directories licensed Apache-2.0 (see NOTICE).
-var apachePrefixes = []string{"sdk/", "integrations/claude-code/", "integrations/claude-agent-sdk/", "docs/protocol/"}
+var apachePrefixes = []string{"sdk/", "integrations/", "docs/protocol/"}
 
 // skipDirs are never scanned.
 var skipDirs = map[string]bool{
