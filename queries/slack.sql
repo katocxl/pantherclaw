@@ -1,0 +1,78 @@
+-- SPDX-License-Identifier: BUSL-1.1
+-- Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+--
+-- Slack approval cards (G0 M14 D22, D23; 00152).
+
+-- name: InsertSlackAppChannel :exec
+INSERT INTO pc.slack_app_channels (org_id, channel_record_id, slack_channel, data_level)
+VALUES (sqlc.arg(org_id), sqlc.arg(channel_record_id), sqlc.arg(slack_channel), sqlc.arg(data_level));
+
+-- name: GetSlackAppChannel :one
+SELECT a.*, c.secret, c.state AS channel_state, c.name AS channel_name
+FROM pc.slack_app_channels a
+JOIN pc.notification_channels c ON c.org_id = a.org_id AND c.id = a.channel_record_id
+WHERE a.org_id = sqlc.arg(org_id) AND a.channel_record_id = sqlc.arg(channel_record_id);
+
+-- name: LockSlackAppChannel :one
+SELECT a.*, c.secret, c.state AS channel_state, c.name AS channel_name
+FROM pc.slack_app_channels a
+JOIN pc.notification_channels c ON c.org_id = a.org_id AND c.id = a.channel_record_id
+WHERE a.org_id = sqlc.arg(org_id) AND a.channel_record_id = sqlc.arg(channel_record_id)
+FOR UPDATE OF a, c;
+
+-- name: ListSlackAppChannels :many
+SELECT * FROM pc.slack_app_channels
+WHERE org_id = sqlc.arg(org_id) AND channel_record_id = ANY (sqlc.arg(channel_record_ids)::uuid[]);
+
+-- name: ActivateSlackAppChannel :execrows
+-- Activates a PENDING configuration with the person and key of a fresh
+-- step-up and the workspace Slack's auth.test reported (HR-315).
+UPDATE pc.slack_app_channels
+SET state = 'ACTIVE', team_id = sqlc.arg(team_id), bot_id = sqlc.arg(bot_id),
+    activated_by = sqlc.arg(activated_by), activated_credential = sqlc.arg(activated_credential)
+WHERE org_id = sqlc.arg(org_id) AND channel_record_id = sqlc.arg(channel_record_id) AND state = 'PENDING';
+
+-- name: RecordSlackTokenReplaced :execrows
+-- Records who replaced an active channel's bot token, with which key; the
+-- workspace must stay the same.
+UPDATE pc.slack_app_channels
+SET token_replaced_by = sqlc.arg(token_replaced_by), token_replaced_credential = sqlc.arg(token_replaced_credential),
+    bot_id = sqlc.arg(bot_id)
+WHERE org_id = sqlc.arg(org_id) AND channel_record_id = sqlc.arg(channel_record_id) AND state = 'ACTIVE'
+  AND team_id = sqlc.arg(team_id);
+
+-- name: SetChannelSecret :execrows
+-- Replaces a slack_app channel's encrypted bot token.
+UPDATE pc.notification_channels SET secret = sqlc.arg(secret), updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND kind = 'slack_app' AND state <> 'DISABLED';
+
+-- name: GetSlackCard :one
+SELECT * FROM pc.slack_cards
+WHERE org_id = sqlc.arg(org_id) AND request_id = sqlc.arg(request_id) AND channel_record_id = sqlc.arg(channel_record_id);
+
+-- name: InsertSlackCard :execrows
+INSERT INTO pc.slack_cards (org_id, request_id, channel_record_id, slack_channel, ts, state)
+VALUES (sqlc.arg(org_id), sqlc.arg(request_id), sqlc.arg(channel_record_id), sqlc.arg(slack_channel), sqlc.arg(ts), sqlc.arg(state))
+ON CONFLICT (org_id, request_id, channel_record_id) DO NOTHING;
+
+-- name: SetSlackCardState :exec
+UPDATE pc.slack_cards SET state = sqlc.arg(state), updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND request_id = sqlc.arg(request_id) AND channel_record_id = sqlc.arg(channel_record_id);
+
+-- name: AddSlackCardEscalation :one
+UPDATE pc.slack_cards SET escalations = least(escalations + 1, 100), updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND request_id = sqlc.arg(request_id) AND channel_record_id = sqlc.arg(channel_record_id)
+RETURNING escalations;
+
+-- name: SlackCardFacts :one
+-- What a card may show about a request (D23): its kind, the definition's
+-- reversibility, its state and deadline, the approval template's title,
+-- the agent's name and its environment's name. Nothing else is read.
+SELECT r.id, r.subject_kind, r.state, r.deadline_at,
+       coalesce(r.display -> 'consequence' ->> 'reversibility', '')::text AS reversibility,
+       coalesce(r.display ->> 'title', '')::text AS title,
+       coalesce(a.name, '')::text AS agent_name, coalesce(e.name, '')::text AS environment_name
+FROM pc.approval_requests r
+LEFT JOIN pc.agents a ON a.org_id = r.org_id AND a.id = r.agent_id
+LEFT JOIN pc.environments e ON e.org_id = a.org_id AND e.id = a.environment_id
+WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(id);
