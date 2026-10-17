@@ -87,8 +87,12 @@ func TestIntExternalDecideDelegates(t *testing.T) {
 		Gateway: f.gw, Action: f.authzenAction(t, "20.00", ids.NewV7()), Credentials: f.creds(t, f.wl, f.wl.token),
 		Decided: func(context.Context, ids.UUID) error { return boom },
 	})
-	if !errors.Is(err, boom) || res.Allowed {
+	if err != nil || res.Allowed || res.Outcome != authority.ExternalCannotAuthorize || res.Code != authority.CodeDecidedVia {
 		t.Fatalf("decided failed: %+v %v", res, err)
+	}
+	f.settle(t)
+	if b := f.budgetRow(t); b.Spent.String() != "30" {
+		t.Fatalf("a refused record spent: %s", b.Spent)
 	}
 	if n := f.count(t, `SELECT count(*) FROM pc.execution_attempts WHERE org_id = $1`); n != 1 {
 		t.Fatalf("attempts after a refused record: %d", n)

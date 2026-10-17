@@ -53,6 +53,9 @@ const (
 	// CodeNotRecorded: committed, but the delegated outcome could not be
 	// recorded.
 	CodeNotRecorded = "NOT_RECORDED"
+	// CodeDecidedVia: who asked for the decision could not be recorded, so
+	// nothing is committed (D65).
+	CodeDecidedVia = "DECIDED_VIA_NOT_RECORDED"
 )
 
 // ExternalRequest is one decision an enforcement point asks for.
@@ -72,8 +75,8 @@ type ExternalRequest struct {
 	// TargetEnforced: the connection's target checks an action token.
 	TargetEnforced bool
 	// Decided runs once the decision has a transaction, before anything is
-	// committed; an error refuses the action (it records how the decision
-	// was asked for, D28).
+	// committed; an error refuses the action with CodeDecidedVia (it
+	// records how the decision was asked for, D28, D65).
 	Decided func(ctx context.Context, txn ids.UUID) error
 }
 
@@ -120,7 +123,7 @@ func (s *Service) Decide(ctx context.Context, req ExternalRequest) (ExternalResu
 		return refuse(domain.CannotAuthorize, []domain.Reason{{Code: domain.ReasonAmbiguousInput, Decisive: true}}), nil
 	}
 	if org, err := p.Action.OrgID(); err != nil || org != gw.Org {
-		return refuse(domain.Deny, []domain.Reason{{Code: domain.ReasonOrgMismatch, Decisive: true}}), nil
+		return refuse(domain.Deny, []domain.Reason{{Code: domain.ReasonOrgMismatch, Decisive: true}}), nil //nolint:nilerr // a decision, not a failure
 	}
 	id, o, ok, err := s.identify(ctx, gw, p, req.Credentials)
 	if err != nil {
@@ -145,8 +148,9 @@ func (s *Service) Decide(ctx context.Context, req ExternalRequest) (ExternalResu
 	if !res.TransactionID.IsZero() && req.Decided != nil {
 		if err := req.Decided(ctx, res.TransactionID); err != nil {
 			// Nothing is committed: a permit, if any, expires and its
-			// reservations are released.
-			return ExternalResult{}, err
+			// reservations are released (D65).
+			s.log.ErrorContext(ctx, "authzen.decided_via_not_recorded", slog.String("transaction_id", res.TransactionID.String()), pclog.Err(err))
+			return failed(out, CodeDecidedVia), nil
 		}
 	}
 	if res.Permit == "" {
@@ -225,6 +229,7 @@ func outcomeOf(d domain.Decision) string {
 		return ExternalHold
 	case domain.Deny:
 		return ExternalDeny
+	case domain.CannotAuthorize:
 	}
 	return ExternalCannotAuthorize
 }

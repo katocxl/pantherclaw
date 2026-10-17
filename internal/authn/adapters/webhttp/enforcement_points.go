@@ -103,7 +103,7 @@ func (p pointPages) activate(w http.ResponseWriter, r *http.Request, s authnapp.
 	if !ok {
 		return
 	}
-	pt, err := p.ep.Activate(callerContext(r, s), id, stepUpPtr(s))
+	pt, err := p.ep.Activate(callerContext(r, s), id, stepUpPtr(s)) //nolint:contextcheck // callerContext derives from the request's context
 	if err != nil {
 		for _, e := range pointErrors {
 			if errors.Is(err, e.err) {
