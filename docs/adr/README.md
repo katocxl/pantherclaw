@@ -5,7 +5,7 @@ Format: Context → Decision → Consequences → Alternatives considered. Statu
 | ADR | Title |
 |---|---|
 | [0001](0001-go-backend.md) | Go for all backend binaries |
-| [0002](0002-control-plane-and-gateway-split.md) | Modular-monolith control plane + separate gateway PEP |
+| [0002](0002-control-plane-and-gateway-split.md) | Modular-monolith control plane + separate gateway PEP; M14 note on target databases |
 | [0003](0003-postgres-rls-single-store.md) | PostgreSQL as the single authoritative store, RLS FORCEd |
 | [0004](0004-cel-policy-engine.md) | CEL rules with fixed Go composition; OPA restrict-only adapter |
 | [0005](0005-protobuf-connect-contracts.md) | Protobuf + buf + connect-go v2 as the single contract |
