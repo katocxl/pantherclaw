@@ -16,9 +16,11 @@ import (
 func Redacted(c Class) string { return "[redacted:" + string(c) + "]" }
 
 // Encoder builds the answer of a statement, {"columns":[…],"rows":[[…]],
-// "truncated":bool,"redacted":n} (D16), from rows scanned as text. It
-// stops at the statement's row limit and before the answer would exceed
-// the byte limit, and says so with truncated.
+// "truncated":bool,"truncated_values":bool,"redacted":n} (D16, D72), from
+// rows scanned as text. It stops at the statement's row limit and before
+// the answer would exceed the byte limit, and says so with truncated; a
+// value longer than MaxValueChars is cut to that length, and
+// truncated_values says so.
 type Encoder struct {
 	st        *Statement
 	maxBytes  int
@@ -27,12 +29,13 @@ type Encoder struct {
 	n         int
 	redacted  int
 	truncated bool
+	cut       bool
 	full      bool
 }
 
-// tail is the most the closing bytes take: `],"truncated":false,"redacted":`
-// plus a count and `}`.
-const tail = 64
+// tail is the most the closing bytes take:
+// `],"truncated":false,"truncated_values":false,"redacted":`, a count and `}`.
+const tail = 96
 
 // NewEncoder returns an encoder for the statement's answer, at most
 // maxBytes long.
@@ -68,7 +71,7 @@ func (e *Encoder) Add(row []*string) (bool, error) {
 		b.WriteByte(',')
 	}
 	b.WriteByte('[')
-	redacted, src := 0, 0
+	redacted, src, cut := 0, 0, false
 	for i, o := range e.st.Output {
 		if i > 0 {
 			b.WriteByte(',')
@@ -78,7 +81,13 @@ func (e *Encoder) Add(row []*string) (bool, error) {
 			redacted++
 			continue
 		}
-		if err := encodeValue(&b, o.Type, row[src]); err != nil {
+		v := row[src]
+		if v != nil {
+			if s, c := cutValue(*v); c {
+				v, cut = &s, true
+			}
+		}
+		if err := encodeValue(&b, o.Type, v); err != nil {
 			return false, fmt.Errorf("pgdispatch: column %s: %w", o.Name, err)
 		}
 		src++
@@ -91,6 +100,7 @@ func (e *Encoder) Add(row []*string) (bool, error) {
 	e.rows.Write(b.Bytes())
 	e.n++
 	e.redacted += redacted
+	e.cut = e.cut || cut
 	return true, nil
 }
 
@@ -100,11 +110,31 @@ func (e *Encoder) Rows() int       { return e.n }
 func (e *Encoder) Redactions() int { return e.redacted }
 func (e *Encoder) Truncated() bool { return e.truncated }
 
+// TruncatedValues reports whether a value was cut to MaxValueChars.
+func (e *Encoder) TruncatedValues() bool { return e.cut }
+
+// cutValue cuts a value to MaxValueChars characters.
+func cutValue(s string) (string, bool) {
+	if len(s) <= MaxValueChars {
+		return s, false
+	}
+	n := 0
+	for i := range s {
+		if n == MaxValueChars {
+			return s[:i], true
+		}
+		n++
+	}
+	return s, false
+}
+
 // Bytes returns the answer.
 func (e *Encoder) Bytes() []byte {
 	out := append(append([]byte{}, e.head...), e.rows.Bytes()...)
 	out = append(out, `],"truncated":`...)
 	out = strconv.AppendBool(out, e.truncated)
+	out = append(out, `,"truncated_values":`...)
+	out = strconv.AppendBool(out, e.cut)
 	out = append(out, `,"redacted":`...)
 	out = strconv.AppendInt(out, int64(e.redacted), 10)
 	return append(out, '}')
@@ -159,9 +189,9 @@ type DescribedTable struct {
 	Columns []DescribedColumn `json:"columns"`
 }
 
-// Describe returns the manifest's tables and the columns the agent may
-// read: columns outside its column bound, of a class it may not read, and
-// every secret column are left out.
+// Describe returns the manifest's tables within the agent's table bound and
+// the columns it may read: columns outside its column bound, of a class it
+// may not read, and every secret column are left out.
 func Describe(m Manifest, acc Access) ([]byte, error) {
 	n, err := m.Normalized()
 	if err != nil {
@@ -172,6 +202,9 @@ func Describe(m Manifest, acc Access) ([]byte, error) {
 	}{Tables: []DescribedTable{}}
 	for i := range n.Tables {
 		t := &n.Tables[i]
+		if !acc.table(t.Ref()) {
+			continue
+		}
 		d := DescribedTable{Table: t.Ref(), MaxRows: n.MaxRows, Columns: []DescribedColumn{}}
 		if t.MaxRows > 0 {
 			d.MaxRows = min(d.MaxRows, t.MaxRows)

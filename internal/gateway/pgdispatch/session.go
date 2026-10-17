@@ -25,9 +25,11 @@ func StartupParams() map[string]string {
 
 // LocalSettings are the SET LOCAL statements that follow BeginSQL. The
 // values are the manifest's validated integers, never agent input.
-// search_path is pg_catalog alone, so the built-in casts and operators the
-// statements use cannot be shadowed by objects in another schema, and
-// TimeZone is UTC, so timestamps read the same from every connection.
+// search_path is pg_catalog, then pg_temp (named last, so it is not
+// searched first), so the built-in types, casts and operators the
+// statements use cannot be shadowed by objects in another schema; TimeZone,
+// DateStyle and IntervalStyle are fixed, so values read the same from
+// every server.
 func LocalSettings(m Manifest) ([]string, error) {
 	n, err := m.Normalized()
 	if err != nil {
@@ -38,7 +40,9 @@ func LocalSettings(m Manifest) ([]string, error) {
 		"SET LOCAL statement_timeout = " + ms,
 		"SET LOCAL lock_timeout = " + strconv.Itoa(LockTimeoutMS),
 		"SET LOCAL idle_in_transaction_session_timeout = " + ms,
-		"SET LOCAL search_path = pg_catalog",
+		"SET LOCAL search_path = pg_catalog, pg_temp",
 		"SET LOCAL TimeZone = 'UTC'",
+		"SET LOCAL DateStyle = 'ISO, YMD'",
+		"SET LOCAL IntervalStyle = 'postgres'",
 	}, nil
 }

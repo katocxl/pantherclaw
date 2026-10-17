@@ -150,12 +150,18 @@ func ParseMeasure(s string) (Measure, error) {
 }
 
 // Access is what the agent may read, from the grant and the decision's
-// obligations: Columns is the decision's column bound (nil: every manifest
-// column), Classes the classes a data_classes obligation allows (nil: no
-// obligation, every class but secret). Secret is never readable.
+// obligations: Tables is the decision's table bound as schema.table ids
+// (nil: every manifest table), Columns its column bound (nil: every
+// manifest column), Classes the classes a data_classes obligation allows
+// (nil: no obligation, every class but secret). Secret is never readable.
 type Access struct {
+	Tables  []string
 	Columns []string
 	Classes []Class
+}
+
+func (a Access) table(ref string) bool {
+	return a.Tables == nil || slices.Contains(a.Tables, ref)
 }
 
 // Readable reports whether a column's values may reach the agent.
@@ -211,11 +217,17 @@ type Output struct {
 	Redacted Class // "" when the value is selected
 }
 
+// MaxValueChars is the most characters of one returned value (D72): every
+// selected value is cut in SQL to one character more, so one row never
+// holds more than that in memory, and the encoder cuts it to this length
+// and flags the answer's truncated_values.
+const MaxValueChars = 4096
+
 // Statement is one built query. Every value is in Args; SQL holds only
 // manifest identifiers, fixed keywords and $n placeholders. Every selected
-// column is cast to text, so a row scans into []*string. Limit is the row
-// count the answer may carry; the SQL asks for one more to report
-// truncation.
+// column is cast to text and cut to MaxValueChars+1 characters, so a row
+// scans into []*string. Limit is the row count the answer may carry; the
+// SQL asks for one more to report truncation.
 type Statement struct {
 	SQL    string
 	Args   []any
@@ -251,12 +263,25 @@ func newBuilder(m Manifest, ref string, acc Access) (*builder, error) {
 	if err != nil {
 		return nil, err
 	}
+	if !acc.table(t.Ref()) {
+		return nil, &Error{Code: CodeTableNotAllowed, Detail: fmt.Sprintf("table %s is outside the decision's tables", t.Ref())}
+	}
 	for _, c := range acc.Classes {
 		if !slices.Contains(classes, c) {
 			return nil, queryErr("unknown class %q", c)
 		}
 	}
 	return &builder{m: &n, t: t, acc: acc}, nil
+}
+
+// col is a column qualified by its table, so ORDER BY and GROUP BY bind
+// to the typed source column and never to a ::text output column of the
+// same name (D72).
+func (b *builder) col(c Column) string { return quote(b.t.Schema, b.t.Name, c.Name) }
+
+// selected is a value expression as the statement returns it.
+func selected(expr string) string {
+	return "left(" + expr + "::text, " + strconv.Itoa(MaxValueChars+1) + ")"
 }
 
 func (b *builder) arg(v any) string {
@@ -296,7 +321,7 @@ func (b *builder) filters(fs []Filter) error {
 		if err != nil {
 			return err
 		}
-		col, typ := quote(c.Name), sqlType[c.Type]
+		col, typ := b.col(c), sqlType[c.Type]
 		hasValue, hasValues := f.Value != nil, f.Values != nil
 		switch f.Op {
 		case OpEq, OpNe, OpLt, OpLe, OpGt, OpGe:
@@ -359,7 +384,7 @@ func (b *builder) scope(s *RecordScope) error {
 			return &Error{Code: CodeScopeUnsupported, Detail: "record scope: " + err.Error()}
 		}
 	}
-	b.where = append(b.where, fmt.Sprintf("%s = ANY(%s::text[]::%s[])", quote(c.Name), b.arg(append([]string{}, s.Values...)), sqlType[c.Type]))
+	b.where = append(b.where, fmt.Sprintf("%s = ANY(%s::text[]::%s[])", b.col(c), b.arg(append([]string{}, s.Values...)), sqlType[c.Type]))
 	return nil
 }
 
@@ -414,7 +439,7 @@ func BuildRows(m Manifest, q Rows) (*Statement, error) {
 		}
 		o := Output{Name: c.Name, Type: c.Type}
 		if b.acc.Readable(c) {
-			sel = append(sel, quote(c.Name)+"::text")
+			sel = append(sel, selected(b.col(c)))
 		} else {
 			o.Redacted = c.Class
 		}
@@ -435,7 +460,7 @@ func BuildRows(m Manifest, q Rows) (*Statement, error) {
 		if err != nil {
 			return nil, err
 		}
-		order = append(order, quote(c.Name)+map[bool]string{false: " ASC", true: " DESC"}[o.Desc])
+		order = append(order, b.col(c)+map[bool]string{false: " ASC", true: " DESC"}[o.Desc])
 	}
 	if st.Limit, err = b.limit(q.Limit, q.Clamp); err != nil {
 		return nil, err
@@ -471,8 +496,8 @@ func BuildAggregate(m Manifest, q Aggregate) (*Statement, error) {
 		if err != nil {
 			return nil, err
 		}
-		group = append(group, quote(c.Name))
-		sel = append(sel, quote(c.Name)+"::text")
+		group = append(group, b.col(c))
+		sel = append(sel, selected(b.col(c)))
 		st.Output = append(st.Output, Output{Name: c.Name, Type: c.Type})
 	}
 	for i, ms := range q.Measures {
@@ -483,7 +508,7 @@ func BuildAggregate(m Manifest, q Aggregate) (*Statement, error) {
 		if err != nil {
 			return nil, err
 		}
-		sel = append(sel, expr+"::text")
+		sel = append(sel, selected(expr))
 		st.Output = append(st.Output, Output{Name: ms.Label(), Type: typ})
 	}
 	if err := b.filters(q.Filters); err != nil {
@@ -511,7 +536,7 @@ func BuildAggregate(m Manifest, q Aggregate) (*Statement, error) {
 
 var (
 	numericTypes = []ColumnType{TypeInt, TypeBigint, TypeNumeric}
-	orderedTypes = []ColumnType{TypeText, TypeInt, TypeBigint, TypeNumeric, TypeDate, TypeTimestamptz}
+	boundTypes   = []ColumnType{TypeInt, TypeBigint, TypeNumeric, TypeDate, TypeTimestamptz}
 )
 
 func (b *builder) measure(ms Measure) (expr string, typ ColumnType, err error) {
@@ -528,10 +553,17 @@ func (b *builder) measure(ms Measure) (expr string, typ ColumnType, err error) {
 	if err != nil {
 		return "", "", err
 	}
-	col := quote(c.Name)
-	switch ms.Func {
-	case "count":
+	col := b.col(c)
+	if ms.Func == "count" {
 		return "count(" + col + ")", TypeBigint, nil
+	}
+	// sum, avg, min and max carry values of the column; min and max return
+	// one row's value outright. They apply only to public or internal
+	// columns (D72, HR-312).
+	if c.Class != ClassPublic && c.Class != ClassInternal {
+		return "", "", &Error{Code: CodeColumnNotAllowed, Detail: fmt.Sprintf("%s does not apply to %s columns such as %s", ms.Func, c.Class, c.Name)}
+	}
+	switch ms.Func {
 	case "sum", "avg":
 		if !slices.Contains(numericTypes, c.Type) {
 			return "", "", queryErr("%s applies to numeric columns only, not %s (%s)", ms.Func, c.Name, c.Type)
@@ -541,8 +573,8 @@ func (b *builder) measure(ms Measure) (expr string, typ ColumnType, err error) {
 		}
 		return ms.Func + "(" + col + ")", TypeNumeric, nil
 	default: // min, max
-		if !slices.Contains(orderedTypes, c.Type) {
-			return "", "", queryErr("%s does not apply to %s (%s)", ms.Func, c.Name, c.Type)
+		if !slices.Contains(boundTypes, c.Type) {
+			return "", "", queryErr("%s applies to numeric, date and timestamptz columns only, not %s (%s)", ms.Func, c.Name, c.Type)
 		}
 		return ms.Func + "(" + col + ")", c.Type, nil
 	}
@@ -586,11 +618,11 @@ func checkValue(c Column, v string) error {
 			return bad()
 		}
 	case TypeDate:
-		if t, err := time.Parse(time.DateOnly, v); err != nil || t.Format(time.DateOnly) != v {
+		if t, err := time.Parse(time.DateOnly, v); err != nil || t.Format(time.DateOnly) != v || t.Year() < 1 {
 			return bad()
 		}
 	case TypeTimestamptz:
-		if _, err := time.Parse(time.RFC3339Nano, v); err != nil {
+		if t, err := time.Parse(time.RFC3339Nano, v); err != nil || t.Year() < 1 {
 			return bad()
 		}
 	case TypeUUID:

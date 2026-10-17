@@ -109,6 +109,7 @@ const (
 	MaxStatementTimeout     = 30000
 	DefaultMaxResultBytes   = 1 << 20
 	MaxResultBytesLimit     = 4 << 20
+	MinResultBytes          = 1024
 	DefaultMinGroupSize     = 5
 	MinGroupSizeFloor       = 2
 	// LockTimeoutMS is the lock wait of every statement (D16).
@@ -156,8 +157,8 @@ func (m Manifest) validate() error {
 		return manifestErr("max_rows must be 1..%d", MaxRowsLimit)
 	case m.StatementTimeoutMS < 1 || m.StatementTimeoutMS > MaxStatementTimeout:
 		return manifestErr("statement_timeout_ms must be 1..%d", MaxStatementTimeout)
-	case m.MaxResultBytes < 1 || m.MaxResultBytes > MaxResultBytesLimit:
-		return manifestErr("max_result_bytes must be 1..%d", MaxResultBytesLimit)
+	case m.MaxResultBytes < MinResultBytes || m.MaxResultBytes > MaxResultBytesLimit:
+		return manifestErr("max_result_bytes must be %d..%d", MinResultBytes, MaxResultBytesLimit)
 	case m.MinGroupSize < MinGroupSizeFloor:
 		return manifestErr("min_group_size must be at least %d", MinGroupSizeFloor)
 	case len(m.Tables) == 0:
@@ -182,6 +183,11 @@ func (t *Table) validate() error {
 		return manifestErr("table %q.%q: schema and name must match %s", t.Schema, t.Name, identRe)
 	}
 	ref := t.Ref()
+	// The system catalogs are never targets: pg_stat_activity, for one,
+	// shows other sessions' queries to any role.
+	if t.Schema == "information_schema" || strings.HasPrefix(t.Schema, "pg_") {
+		return manifestErr("table %s: system schemas cannot be listed", ref)
+	}
 	switch {
 	case t.MaxRows < 0 || t.MaxRows > MaxRowsLimit:
 		return manifestErr("table %s: max_rows must be 0..%d", ref, MaxRowsLimit)

@@ -58,30 +58,34 @@ func TestManifest_Validation(t *testing.T) {
 		t.Fatalf("defaults not filled: %+v", n)
 	}
 	for name, mut := range map[string]func(*Manifest){
-		"no tables":            func(m *Manifest) { m.Tables = nil },
-		"max_rows too high":    func(m *Manifest) { m.MaxRows = 1001 },
-		"max_rows negative":    func(m *Manifest) { m.MaxRows = -1 },
-		"timeout too high":     func(m *Manifest) { m.StatementTimeoutMS = 30001 },
-		"result bytes too big": func(m *Manifest) { m.MaxResultBytes = 4<<20 + 1 },
-		"min group 1":          func(m *Manifest) { m.MinGroupSize = 1 },
-		"upper-case schema":    func(m *Manifest) { m.Tables[0].Schema = "Shop" },
-		"quoted name":          func(m *Manifest) { m.Tables[0].Name = `customers"` },
-		"dotted name":          func(m *Manifest) { m.Tables[0].Name = "a.b" },
-		"long name":            func(m *Manifest) { m.Tables[0].Name = strings.Repeat("a", 64) },
-		"digit first":          func(m *Manifest) { m.Tables[0].Columns[0].Name = "1id" },
-		"column with space":    func(m *Manifest) { m.Tables[0].Columns[0].Name = "id x" },
-		"jsonb column":         func(m *Manifest) { m.Tables[0].Columns[0].Type = "jsonb" },
-		"bytea column":         func(m *Manifest) { m.Tables[0].Columns[0].Type = "bytea" },
-		"array column":         func(m *Manifest) { m.Tables[0].Columns[0].Type = "text[]" },
-		"unknown class":        func(m *Manifest) { m.Tables[0].Columns[0].Class = "confidential" },
-		"duplicate column":     func(m *Manifest) { m.Tables[0].Columns[1].Name = "id" },
-		"duplicate table":      func(m *Manifest) { m.Tables[1].Name = "customers" },
-		"no columns":           func(m *Manifest) { m.Tables[2].Columns = nil },
-		"scope key alone":      func(m *Manifest) { m.Tables[0].ScopeColumn = "" },
-		"scope column alone":   func(m *Manifest) { m.Tables[2].ScopeColumn = "customer_id" },
-		"scope column unknown": func(m *Manifest) { m.Tables[0].ScopeColumn = "nope" },
-		"bad scope key":        func(m *Manifest) { m.Tables[0].ScopeKey = "Customer" },
-		"table max_rows":       func(m *Manifest) { m.Tables[0].MaxRows = 1001 },
+		"no tables":              func(m *Manifest) { m.Tables = nil },
+		"max_rows too high":      func(m *Manifest) { m.MaxRows = 1001 },
+		"max_rows negative":      func(m *Manifest) { m.MaxRows = -1 },
+		"timeout too high":       func(m *Manifest) { m.StatementTimeoutMS = 30001 },
+		"result bytes too big":   func(m *Manifest) { m.MaxResultBytes = 4<<20 + 1 },
+		"min group 1":            func(m *Manifest) { m.MinGroupSize = 1 },
+		"upper-case schema":      func(m *Manifest) { m.Tables[0].Schema = "Shop" },
+		"quoted name":            func(m *Manifest) { m.Tables[0].Name = `customers"` },
+		"dotted name":            func(m *Manifest) { m.Tables[0].Name = "a.b" },
+		"long name":              func(m *Manifest) { m.Tables[0].Name = strings.Repeat("a", 64) },
+		"digit first":            func(m *Manifest) { m.Tables[0].Columns[0].Name = "1id" },
+		"column with space":      func(m *Manifest) { m.Tables[0].Columns[0].Name = "id x" },
+		"jsonb column":           func(m *Manifest) { m.Tables[0].Columns[0].Type = "jsonb" },
+		"bytea column":           func(m *Manifest) { m.Tables[0].Columns[0].Type = "bytea" },
+		"array column":           func(m *Manifest) { m.Tables[0].Columns[0].Type = "text[]" },
+		"unknown class":          func(m *Manifest) { m.Tables[0].Columns[0].Class = "confidential" },
+		"duplicate column":       func(m *Manifest) { m.Tables[0].Columns[1].Name = "id" },
+		"duplicate table":        func(m *Manifest) { m.Tables[1].Name = "customers" },
+		"no columns":             func(m *Manifest) { m.Tables[2].Columns = nil },
+		"scope key alone":        func(m *Manifest) { m.Tables[0].ScopeColumn = "" },
+		"scope column alone":     func(m *Manifest) { m.Tables[2].ScopeColumn = "customer_id" },
+		"scope column unknown":   func(m *Manifest) { m.Tables[0].ScopeColumn = "nope" },
+		"bad scope key":          func(m *Manifest) { m.Tables[0].ScopeKey = "Customer" },
+		"table max_rows":         func(m *Manifest) { m.Tables[0].MaxRows = 1001 },
+		"result bytes too small": func(m *Manifest) { m.MaxResultBytes = MinResultBytes - 1 },
+		"pg_catalog schema":      func(m *Manifest) { m.Tables[0].Schema = "pg_catalog" },
+		"pg_toast schema":        func(m *Manifest) { m.Tables[0].Schema = "pg_toast" },
+		"information_schema":     func(m *Manifest) { m.Tables[0].Schema = "information_schema" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			m := shop()
@@ -123,10 +127,10 @@ func TestBuildRows_Golden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `SELECT "id"::text, "amount"::text, "status"::text FROM "shop"."orders"` +
-		` WHERE ("status" = $1::text::text) AND ("amount" >= $2::text::numeric) AND ("id" = ANY($3::text[]::bigint[]))` +
-		` AND ("placed" IS NOT NULL) AND ("status" LIKE $4::text ESCAPE E'\\')` +
-		` ORDER BY "placed" DESC, "id" ASC LIMIT 21`
+	want := orders(`SELECT left(O."id"::text, 4097), left(O."amount"::text, 4097), left(O."status"::text, 4097) FROM "shop"."orders"` +
+		` WHERE (O."status" = $1::text::text) AND (O."amount" >= $2::text::numeric) AND (O."id" = ANY($3::text[]::bigint[]))` +
+		` AND (O."placed" IS NOT NULL) AND (O."status" LIKE $4::text ESCAPE E'\\')` +
+		` ORDER BY O."placed" DESC, O."id" ASC LIMIT 21`)
 	if st.SQL != want {
 		t.Fatalf("SQL\n got %s\nwant %s", st.SQL, want)
 	}
@@ -138,6 +142,9 @@ func TestBuildRows_Golden(t *testing.T) {
 		t.Fatalf("limit %d selected %d", st.Limit, st.Selected())
 	}
 }
+
+// orders expands O. to the qualified prefix of shop.orders columns.
+func orders(s string) string { return strings.ReplaceAll(s, `O."`, `"shop"."orders"."`) }
 
 func mustJSON(v any) string {
 	b, err := json.Marshal(v)
@@ -178,10 +185,10 @@ func TestBuildRows_Limits(t *testing.T) {
 
 func itoa(n int) string { return strconv.Itoa(n) }
 
-// TestBuildRows_InjectionThroughIdentifiers: a table, column, sort key or
+// TestHR307_InjectionThroughIdentifiers: a table, column, sort key or
 // filter column that is not exactly a manifest identifier is refused, so
 // nothing an agent spells reaches the SQL text as an identifier (HR-307).
-func TestBuildRows_InjectionThroughIdentifiers(t *testing.T) {
+func TestHR307_InjectionThroughIdentifiers(t *testing.T) {
 	evil := []string{
 		`id"; DROP TABLE shop.customers; --`, `id::text`, `"id"`, `ID`, `id,ssn`, `id ssn`, `(select 1)`,
 		`id--`, `id/*`, `*`, `id\`, "id\x00", `ssn) OR (1=1`, `pg_sleep(10)`, `customers.id`, ``,
@@ -218,9 +225,9 @@ func TestBuildRows_InjectionThroughIdentifiers(t *testing.T) {
 	}
 }
 
-// TestBuildRows_InjectionThroughValues: values only ever travel as
+// TestHR307_InjectionThroughValues: values only ever travel as
 // parameters; the SQL text never contains them, whatever they hold.
-func TestBuildRows_InjectionThroughValues(t *testing.T) {
+func TestHR307_InjectionThroughValues(t *testing.T) {
 	values := []string{
 		`' OR '1'='1`, `paid'); DELETE FROM shop.orders; --`, `$1`, `\'x`, `%`, `_`, `\`, `E'\x41'`,
 		`'; COMMIT; UPDATE shop.orders SET status='x'; --`, `$$; DROP TABLE x; $$`, "a\nb", `"`, `;`,
@@ -248,7 +255,7 @@ func TestBuildRows_InjectionThroughValues(t *testing.T) {
 		"id":     {"1 OR 1=1", "1;", "0x10", "01", "1e3", "9223372036854775808", " 1", "1.0", "-0x1"},
 		"amount": {"1e5", "NaN", "Infinity", "1,5", ".5", "1.", "--1", "1 "},
 		"paid":   {"t", "TRUE", "yes", "1"},
-		"placed": {"2026-10-17", "now", "2026-10-17 10:00:00", "epoch"},
+		"placed": {"2026-10-17", "now", "2026-10-17 10:00:00", "epoch", "0000-01-01T00:00:00Z"},
 	} {
 		for _, v := range bad {
 			_, err := BuildRows(shop(), Rows{Table: "shop.orders", Columns: []string{"id"}, Filters: []Filter{{Column: col, Op: OpEq, Value: ptr(v)}}})
@@ -257,7 +264,7 @@ func TestBuildRows_InjectionThroughValues(t *testing.T) {
 	}
 	for col, bad := range map[string][]string{
 		"id":     {"A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11", "{a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11}", "a0eebc999c0b4ef8bb6d6bb9bd380a11"},
-		"opened": {"2026-13-01", "2026-02-30", "26-10-17", "today", "2026-10-17T00:00:00Z"},
+		"opened": {"2026-13-01", "2026-02-30", "26-10-17", "today", "2026-10-17T00:00:00Z", "0000-01-01"},
 	} {
 		for _, v := range bad {
 			_, err := BuildRows(shop(), Rows{Table: "support.tickets", Columns: []string{"id"}, Filters: []Filter{{Column: col, Op: OpEq, Value: ptr(v)}}})
@@ -270,17 +277,14 @@ func TestBuildRows_InjectionThroughValues(t *testing.T) {
 	}
 }
 
-// tokenRe matches what built SQL may consist of: keywords, quoted manifest
-// identifiers, placeholders with casts, operators and the fixed escape.
-var tokenRe = regexp.MustCompile(`^(::text|SELECT|FROM|WHERE|AND|ORDER|BY|ASC|DESC|LIMIT|GROUP|HAVING|IS|NOT|NULL|ANY|LIKE|ESCAPE|E'\\\\'|"[a-z_][a-z0-9_]*"(\."[a-z_][a-z0-9_]*")?(::text)?|\$[0-9]+::text(\[\])?(::[a-z]+(\[\])?)?|count\(\*\)|(count|sum|avg|min|max)\("[a-z_][a-z0-9_]*"\)(::text)?|[(),]|=|<>|<|<=|>|>=|[0-9]+)$`)
+// tokenRe matches what built SQL may consist of: keywords, functions,
+// quoted manifest identifiers, placeholders with casts, operators and the
+// fixed escape.
+var tokenRe = regexp.MustCompile(`^(::text|SELECT|FROM|WHERE|AND|ORDER|BY|ASC|DESC|LIMIT|GROUP|HAVING|IS|NOT|NULL|ANY|LIKE|ESCAPE|E'\\\\'|left|count|sum|avg|min|max|\*|"[a-z_][a-z0-9_]*"(\."[a-z_][a-z0-9_]*"){0,2}(::text)?|\$[0-9]+::text(\[\])?(::[a-z]+(\[\])?)?|[(),]|=|<>|<|<=|>|>=|[0-9]+)$`)
 
 func assertOnlyKnownTokens(t *testing.T, sql string) {
 	t.Helper()
 	s := strings.NewReplacer("(", " ( ", ")", " ) ", ",", " , ").Replace(sql)
-	s = strings.ReplaceAll(s, "count ( * ) ", "count(*) ")
-	for _, m := range []string{"count", "sum", "avg", "min", "max"} {
-		s = regexp.MustCompile(m+` \( ("[a-z_0-9]+") \) (::text)?`).ReplaceAllString(s, m+`($1)$2 `)
-	}
 	for tok := range strings.FieldsSeq(s) {
 		if !tokenRe.MatchString(tok) {
 			t.Fatalf("unexpected token %q in %s", tok, sql)
@@ -288,7 +292,7 @@ func assertOnlyKnownTokens(t *testing.T, sql string) {
 	}
 }
 
-func TestBuildRows_PrefixEscaping(t *testing.T) {
+func TestHR307_PrefixEscaping(t *testing.T) {
 	for in, want := range map[string]string{
 		"re":     "re%",
 		"50%":    `50\%%`,
@@ -339,10 +343,10 @@ func TestBuildRows_FilterShapes(t *testing.T) {
 	code(t, err, CodeQueryInvalid)
 }
 
-// TestBuildRows_Classes: a column whose class may not be read is never
+// TestHR311_Classes: a column whose class may not be read is never
 // selected and comes back as a placeholder; it may not be filtered,
 // sorted, grouped or measured either (D16, D20). Secret is never read.
-func TestBuildRows_Classes(t *testing.T) {
+func TestHR311_Classes(t *testing.T) {
 	st, err := BuildRows(shop(), Rows{Table: "shop.customers", Columns: []string{"id", "email", "ssn"}})
 	if err != nil {
 		t.Fatal(err)
@@ -394,9 +398,9 @@ func TestBuildRows_Classes(t *testing.T) {
 	code(t, err, CodeQueryInvalid)
 }
 
-// TestBuildRows_ColumnBound: the decision's column bound limits what the
+// TestHR311_ColumnBound: the decision's column bound limits what the
 // query may name anywhere.
-func TestBuildRows_ColumnBound(t *testing.T) {
+func TestHR311_ColumnBound(t *testing.T) {
 	acc := Access{Columns: []string{"id", "status"}}
 	if _, err := BuildRows(shop(), Rows{Table: "shop.orders", Columns: []string{"id", "status"}, Access: acc}); err != nil {
 		t.Fatal(err)
@@ -413,7 +417,7 @@ func TestBuildRows_ColumnBound(t *testing.T) {
 	}
 }
 
-func TestBuild_RecordScope(t *testing.T) {
+func TestHR310_RecordScope(t *testing.T) {
 	sc := &RecordScope{Key: "customer", Values: []string{"7", "9"}}
 	st, err := BuildRows(shop(), Rows{
 		Table: "shop.orders", Columns: []string{"id"}, Scope: sc,
@@ -422,13 +426,13 @@ func TestBuild_RecordScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `SELECT "id"::text FROM "shop"."orders" WHERE ("customer_id" = $1::text::bigint) AND ("customer_id" = ANY($2::text[]::bigint[])) LIMIT 51`
+	want := orders(`SELECT left(O."id"::text, 4097) FROM "shop"."orders" WHERE (O."customer_id" = $1::text::bigint) AND (O."customer_id" = ANY($2::text[]::bigint[])) LIMIT 51`)
 	if st.SQL != want {
 		t.Fatalf("SQL\n got %s\nwant %s", st.SQL, want)
 	}
 	// The scope applies even when the agent may not read the scope column.
 	st, err = BuildRows(shop(), Rows{Table: "shop.customers", Columns: []string{"tier"}, Scope: sc, Access: Access{Columns: []string{"tier"}}})
-	if err != nil || !strings.Contains(st.SQL, `("id" = ANY($1::text[]::bigint[]))`) {
+	if err != nil || !strings.Contains(st.SQL, `("shop"."customers"."id" = ANY($1::text[]::bigint[]))`) {
 		t.Fatalf("scope: %v %v", st, err)
 	}
 	// An empty scope matches nothing; it is still applied.
@@ -463,9 +467,10 @@ func TestBuildAggregate_Golden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `SELECT "status"::text, "paid"::text, count(*)::text, sum("amount")::text, avg("amount")::text, max("placed")::text, count("id")::text` +
-		` FROM "shop"."orders" WHERE ("paid" = $1::text::boolean) AND ("customer_id" = ANY($2::text[]::bigint[]))` +
-		` GROUP BY "status", "paid" HAVING count(*) >= 5 ORDER BY "status", "paid" LIMIT 11`
+	want := orders(`SELECT left(O."status"::text, 4097), left(O."paid"::text, 4097), left(count(*)::text, 4097),` +
+		` left(sum(O."amount")::text, 4097), left(avg(O."amount")::text, 4097), left(max(O."placed")::text, 4097), left(count(O."id")::text, 4097)` +
+		` FROM "shop"."orders" WHERE (O."paid" = $1::text::boolean) AND (O."customer_id" = ANY($2::text[]::bigint[]))` +
+		` GROUP BY O."status", O."paid" HAVING count(*) >= 5 ORDER BY O."status", O."paid" LIMIT 11`)
 	if st.SQL != want {
 		t.Fatalf("SQL\n got %s\nwant %s", st.SQL, want)
 	}
@@ -481,16 +486,16 @@ func TestBuildAggregate_Golden(t *testing.T) {
 	}
 }
 
-// TestBuildAggregate_SmallGroupsSuppressed: every aggregate, grouped or
+// TestHR312_SmallGroupsSuppressed: every aggregate, grouped or
 // not, drops groups below min_group_size in the database (HR-312).
-func TestBuildAggregate_SmallGroupsSuppressed(t *testing.T) {
+func TestHR312_SmallGroupsSuppressed(t *testing.T) {
 	m := shop()
 	m.MinGroupSize = 3
 	st, err := BuildAggregate(m, Aggregate{Table: "shop.orders", Measures: []Measure{{"sum", "amount"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.SQL != `SELECT sum("amount")::text FROM "shop"."orders" HAVING count(*) >= 3 LIMIT 51` {
+	if st.SQL != orders(`SELECT left(sum(O."amount")::text, 4097) FROM "shop"."orders" HAVING count(*) >= 3 LIMIT 51`) {
 		t.Fatalf("SQL %s", st.SQL)
 	}
 	for name, q := range map[string]Aggregate{
@@ -583,7 +588,7 @@ func TestEncoder(t *testing.T) {
 			t.Fatalf("row %d: more %v", i, more)
 		}
 	}
-	want := `{"columns":["id","name","ssn","tier"],"rows":[[1,"[redacted:pii]","[redacted:secret]","gold"],[2,"[redacted:pii]","[redacted:secret]",null]],"truncated":true,"redacted":4}`
+	want := `{"columns":["id","name","ssn","tier"],"rows":[[1,"[redacted:pii]","[redacted:secret]","gold"],[2,"[redacted:pii]","[redacted:secret]",null]],"truncated":true,"truncated_values":false,"redacted":4}`
 	if got := string(e.Bytes()); got != want {
 		t.Fatalf("answer\n got %s\nwant %s", got, want)
 	}
@@ -618,7 +623,7 @@ func TestEncoder_Types(t *testing.T) {
 	if _, err := e.Add([]*string{ptr("42"), ptr("10.50"), ptr("t"), ptr("2026-10-17 10:00:00+00"), ptr(`a"b</script>`)}); err != nil {
 		t.Fatal(err)
 	}
-	want := `{"columns":["id","amount","paid","placed","status"],"rows":[[42,"10.50",true,"2026-10-17 10:00:00+00","a\"b</script>"]],"truncated":false,"redacted":0}`
+	want := `{"columns":["id","amount","paid","placed","status"],"rows":[[42,"10.50",true,"2026-10-17 10:00:00+00","a\"b</script>"]],"truncated":false,"truncated_values":false,"redacted":0}`
 	if got := string(e.Bytes()); got != want {
 		t.Fatalf("answer\n got %s\nwant %s", got, want)
 	}
@@ -676,7 +681,7 @@ func TestDescribe(t *testing.T) {
 	}
 }
 
-func TestLocalSettings(t *testing.T) {
+func TestHR308_LocalSettings(t *testing.T) {
 	m := shop()
 	m.StatementTimeoutMS = 1500
 	got, err := LocalSettings(m)
@@ -687,8 +692,10 @@ func TestLocalSettings(t *testing.T) {
 		"SET LOCAL statement_timeout = 1500",
 		"SET LOCAL lock_timeout = 1000",
 		"SET LOCAL idle_in_transaction_session_timeout = 1500",
-		"SET LOCAL search_path = pg_catalog",
+		"SET LOCAL search_path = pg_catalog, pg_temp",
 		"SET LOCAL TimeZone = 'UTC'",
+		"SET LOCAL DateStyle = 'ISO, YMD'",
+		"SET LOCAL IntervalStyle = 'postgres'",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("settings %q", got)
@@ -723,4 +730,120 @@ func FuzzBuildRows(f *testing.F) {
 		}
 		assertOnlyKnownTokens(t, st.SQL)
 	})
+}
+
+// TestHR307_SortAndGroupBindTypedColumns: ORDER BY and GROUP BY name the
+// table-qualified source column, so they sort by its type rather than by
+// the ::text output column of the same name, and a column named like a
+// measure is never ambiguous (D72).
+func TestHR307_SortAndGroupBindTypedColumns(t *testing.T) {
+	st, err := BuildRows(shop(), Rows{Table: "shop.orders", Columns: []string{"id", "amount"}, OrderBy: []Order{{Column: "amount", Desc: true}, {Column: "id"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(st.SQL, orders(` ORDER BY O."amount" DESC, O."id" ASC LIMIT 51`)) {
+		t.Fatalf("SQL %s", st.SQL)
+	}
+	m := shop()
+	m.Tables[1].Columns = append(m.Tables[1].Columns, Column{Name: "sum", Type: TypeText, Class: ClassPublic})
+	st, err = BuildAggregate(m, Aggregate{Table: "shop.orders", GroupBy: []string{"sum"}, Measures: []Measure{{"sum", "amount"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(st.SQL, orders(` GROUP BY O."sum" HAVING count(*) >= 5 ORDER BY O."sum" LIMIT`)) {
+		t.Fatalf("SQL %s", st.SQL)
+	}
+	assertOnlyKnownTokens(t, st.SQL)
+}
+
+// TestHR312_MeasuresNeverReturnRowValues: min and max return one row's
+// value, and sum and avg carry values, so they apply only to public or
+// internal columns, min and max only to numeric, date and timestamptz
+// ones (D72).
+func TestHR312_MeasuresNeverReturnRowValues(t *testing.T) {
+	m := shop()
+	m.Tables[1].Columns = append(m.Tables[1].Columns, Column{Name: "salary", Type: TypeNumeric, Class: ClassPII})
+	for _, ms := range []Measure{{"min", "amount"}, {"max", "placed"}, {"min", "customer_id"}, {"sum", "amount"}, {"avg", "id"}, {"count", "salary"}} {
+		if _, err := BuildAggregate(m, Aggregate{Table: "shop.orders", Measures: []Measure{ms}}); err != nil {
+			t.Errorf("%s: %v", ms.Label(), err)
+		}
+	}
+	for _, ms := range []Measure{{"min", "salary"}, {"max", "salary"}, {"sum", "salary"}, {"avg", "salary"}} {
+		_, err := BuildAggregate(m, Aggregate{Table: "shop.orders", Measures: []Measure{ms}})
+		if CodeOf(err) != CodeColumnNotAllowed {
+			t.Errorf("%s: %v", ms.Label(), err)
+		}
+	}
+	for _, ms := range []Measure{{"min", "email"}, {"max", "name"}, {"min", "ssn"}} {
+		_, err := BuildAggregate(m, Aggregate{Table: "shop.customers", Measures: []Measure{ms}})
+		if CodeOf(err) != CodeColumnNotAllowed {
+			t.Errorf("%s: %v", ms.Label(), err)
+		}
+	}
+	for _, ms := range []Measure{{"min", "status"}, {"max", "tier"}, {"max", "paid"}} {
+		table := "shop.orders"
+		if ms.Column == "tier" {
+			table = "shop.customers"
+		}
+		_, err := BuildAggregate(m, Aggregate{Table: table, Measures: []Measure{ms}})
+		if CodeOf(err) != CodeQueryInvalid {
+			t.Errorf("%s: %v", ms.Label(), err)
+		}
+	}
+	_, err := BuildAggregate(m, Aggregate{Table: "support.tickets", Measures: []Measure{{"max", "id"}}})
+	code(t, err, CodeQueryInvalid)
+}
+
+// TestEncoder_CutsLongValues: a value longer than MaxValueChars (the SQL
+// asks for one more) is cut to that many characters and flagged (D72).
+func TestEncoder_CutsLongValues(t *testing.T) {
+	st, err := BuildRows(shop(), Rows{Table: "shop.orders", Columns: []string{"status", "id"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(st.SQL, "::text, 4097)") {
+		t.Fatalf("SQL does not cut values: %s", st.SQL)
+	}
+	e := NewEncoder(st, 1<<20)
+	long := strings.Repeat("é", MaxValueChars+1)
+	exact := strings.Repeat("a", MaxValueChars)
+	for _, v := range []string{exact, long} {
+		if _, err := e.Add([]*string{&v, ptr("1")}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var got struct {
+		Rows            [][]any `json:"rows"`
+		TruncatedValues bool    `json:"truncated_values"`
+	}
+	if err := json.Unmarshal(e.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.TruncatedValues || !e.TruncatedValues() || got.Rows[0][0] != exact || got.Rows[1][0] != strings.Repeat("é", MaxValueChars) {
+		t.Fatalf("cut %v, lengths %d %d", got.TruncatedValues, len(got.Rows[0][0].(string)), len(got.Rows[1][0].(string)))
+	}
+	e = NewEncoder(st, 1<<20)
+	if _, err := e.Add([]*string{&exact, ptr("1")}); err != nil || e.TruncatedValues() {
+		t.Fatalf("exact length flagged: %v", err)
+	}
+}
+
+// TestHR311_TableBound: the decision's table bound limits what the query
+// and the description reach.
+func TestHR311_TableBound(t *testing.T) {
+	acc := Access{Tables: []string{"shop.orders"}}
+	if _, err := BuildRows(shop(), Rows{Table: "shop.orders", Columns: []string{"id"}, Access: acc}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := BuildRows(shop(), Rows{Table: "shop.customers", Columns: []string{"id"}, Access: acc})
+	code(t, err, CodeTableNotAllowed)
+	_, err = BuildAggregate(shop(), Aggregate{Table: "support.tickets", Measures: []Measure{{"count", "*"}}, Access: acc})
+	code(t, err, CodeTableNotAllowed)
+	out, err := Describe(shop(), acc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), "customers") || strings.Contains(string(out), "tickets") || !strings.Contains(string(out), "shop.orders") {
+		t.Fatalf("describe %s", out)
+	}
 }
