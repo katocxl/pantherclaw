@@ -49,9 +49,8 @@ type pgEntry struct {
 	pool *pgtarget.Pool
 	db   string
 
-	mu       sync.Mutex
-	checked  time.Time
-	findings []string
+	mu      sync.Mutex
+	checked time.Time
 }
 
 // pgPools are the open pools of each engine, by connection id.
@@ -108,21 +107,21 @@ func (e *Engine) sendPostgres(ctx context.Context, r Result, conn *control.Conne
 		runCtx, cancel := context.WithTimeout(ctx, time.Duration(query.manifest.StatementTimeoutMS)*time.Millisecond+pgtarget.ConnectTimeout+5*time.Second)
 		defer cancel()
 		if findings, err := ent.check(runCtx); err != nil || len(findings) > 0 {
-			outcome, class, code := pgClassify(err)
+			class, code := pgClassify(err)
 			if err == nil {
-				outcome, class, code = pb.Outcome_OUTCOME_FAILED, EnforcementFailed, CodeRoleNotReadOnly
+				class, code = EnforcementFailed, CodeRoleNotReadOnly
 				e.log.ErrorContext(ctx, "security.postgres_role_not_read_only", slog.String("connection_id", conn.GetId()),
 					slog.Any("findings", findings))
 			}
-			e.breaker.record(ctx, conn, outcome)
-			return e.record(ctx, r, want, outcome, 0, nil, time.Since(start), class, code, t)
+			e.breaker.record(ctx, conn, pb.Outcome_OUTCOME_FAILED)
+			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, time.Since(start), class, code, t)
 		}
 		res, err = ent.pool.Run(runCtx, query.statement)
 		if err != nil {
-			outcome, class, code := pgClassify(err)
-			e.breaker.record(ctx, conn, outcome)
+			class, code := pgClassify(err)
+			e.breaker.record(ctx, conn, pb.Outcome_OUTCOME_FAILED)
 			e.log.WarnContext(ctx, "gateway.target_error", slog.String("transaction_id", want.Txn), pclog.Err(err))
-			return e.record(ctx, r, want, outcome, 0, nil, time.Since(start), class, code, t)
+			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, time.Since(start), class, code, t)
 		}
 		e.breaker.record(ctx, conn, pb.Outcome_OUTCOME_ACCEPTED)
 	}
@@ -133,17 +132,17 @@ func (e *Engine) sendPostgres(ctx context.Context, r Result, conn *control.Conne
 	return e.record(ctx, r, want, pb.Outcome_OUTCOME_ACCEPTED, 200, sum[:], elapsed, "", "", t)
 }
 
-// pgClassify is the outcome of a failed check or run: a timeout, an
-// address the egress checks refused, or another database error. All are
-// FAILED, since a read changes nothing.
-func pgClassify(err error) (pb.Outcome, Class, string) {
+// pgClassify is the class and code of a failed check or run: a timeout,
+// an address the egress checks refused, or another database error. Each
+// is FAILED, since a read changes nothing.
+func pgClassify(err error) (Class, string) {
 	switch {
 	case errors.Is(err, pgtarget.ErrTimeout), errors.Is(err, context.DeadlineExceeded):
-		return pb.Outcome_OUTCOME_FAILED, ToolFailed, CodeStatementTimeout
+		return ToolFailed, CodeStatementTimeout
 	case errors.Is(err, httpx.ErrDestinationDenied):
-		return pb.Outcome_OUTCOME_FAILED, EnforcementFailed, CodeEgressDenied
+		return EnforcementFailed, CodeEgressDenied
 	}
-	return pb.Outcome_OUTCOME_FAILED, ToolFailed, CodeTargetRefused
+	return ToolFailed, CodeTargetRefused
 }
 
 // pgPlan is a built query: a statement, or none for the description.

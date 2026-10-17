@@ -134,7 +134,7 @@ func New(t testing.TB) *Target {
 		if err != nil {
 			t.Fatalf("pgtargettest: connect: %v", err)
 		}
-		defer func() { _ = c.Close(context.Background()) }()
+		defer func() { _ = c.Close(ctx) }()
 		for _, s := range sqls {
 			if _, err := c.Exec(ctx, s); err != nil {
 				t.Fatalf("pgtargettest: %s: %v", s, err)
@@ -236,7 +236,7 @@ func proxy(t testing.TB, backend string) (int, string) {
 		t.Fatal(err)
 	}
 	conf := &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{{Certificate: [][]byte{leafDER}, PrivateKey: key}}}
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	l, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +248,7 @@ func proxy(t testing.TB, backend string) (int, string) {
 			if err != nil {
 				return
 			}
-			wg.Go(func() { relay(c, conf, backend) })
+			wg.Go(func() { relay(context.Background(), c, conf, backend) })
 		}
 	})
 	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
@@ -258,7 +258,7 @@ func proxy(t testing.TB, backend string) (int, string) {
 // sslRequest is the SSLRequest code.
 const sslRequest = 80877103
 
-func relay(c net.Conn, conf *tls.Config, backend string) {
+func relay(ctx context.Context, c net.Conn, conf *tls.Config, backend string) {
 	defer func() { _ = c.Close() }()
 	_ = c.SetDeadline(time.Now().Add(10 * time.Second))
 	var hdr [8]byte
@@ -269,11 +269,11 @@ func relay(c net.Conn, conf *tls.Config, backend string) {
 		return
 	}
 	tc := tls.Server(c, conf)
-	if err := tc.Handshake(); err != nil {
+	if err := tc.HandshakeContext(ctx); err != nil {
 		return
 	}
 	_ = c.SetDeadline(time.Time{})
-	b, err := net.Dial("tcp", backend)
+	b, err := (&net.Dialer{}).DialContext(ctx, "tcp", backend)
 	if err != nil {
 		return
 	}

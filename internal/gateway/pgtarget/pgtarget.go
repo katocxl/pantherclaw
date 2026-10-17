@@ -124,18 +124,12 @@ func tlsConfig(ep Endpoint, roots *x509.CertPool) (*tls.Config, error) {
 		}
 	case ep.SSLMode == SSLRequire && ep.Internal && pinned != nil:
 		// The chain must lead to the pinned CA; the name is not checked.
-		conf.InsecureSkipVerify = true //nolint:gosec // G402: the chain is verified against the pinned CA below
-		conf.VerifyPeerCertificate = func(raw [][]byte, _ [][]*x509.Certificate) error {
-			if len(raw) == 0 {
+		// VerifyConnection runs on resumed sessions too.
+		conf.InsecureSkipVerify = true
+		conf.VerifyConnection = func(cs tls.ConnectionState) error {
+			certs := cs.PeerCertificates
+			if len(certs) == 0 {
 				return ErrEndpoint
-			}
-			certs := make([]*x509.Certificate, len(raw))
-			for i, r := range raw {
-				c, err := x509.ParseCertificate(r)
-				if err != nil {
-					return err
-				}
-				certs[i] = c
 			}
 			inter := x509.NewCertPool()
 			for _, c := range certs[1:] {
@@ -219,7 +213,7 @@ func Open(ctx context.Context, c Config) (*Pool, error) {
 		return nil, err
 	}
 	cc := pc.ConnConfig
-	cc.Host, cc.Port, cc.Database, cc.User, cc.Password = ep.Host, uint16(ep.Port), ep.Database, ep.User, c.Password //nolint:gosec // G115: 1..65535
+	cc.Host, cc.Port, cc.Database, cc.User, cc.Password = ep.Host, uint16(ep.Port), ep.Database, ep.User, c.Password
 	cc.TLSConfig, cc.Fallbacks, cc.SSLNegotiation = tc, nil, "postgres"
 	cc.ConnectTimeout = ConnectTimeout
 	cc.DialFunc = dialer(ep.Internal, c.Allowed).DialContext
@@ -234,7 +228,7 @@ func Open(ctx context.Context, c Config) (*Pool, error) {
 	pc.MaxConns, pc.MinConns = MaxConns, 0
 	pc.MaxConnIdleTime, pc.MaxConnLifetime = 5*time.Minute, 30*time.Minute
 	pc.HealthCheckPeriod = time.Minute
-	pc.BeforeConnect, pc.AfterConnect, pc.BeforeAcquire, pc.AfterRelease = nil, nil, nil, nil
+	pc.BeforeConnect, pc.AfterConnect, pc.PrepareConn, pc.AfterRelease = nil, nil, nil, nil
 	p, err := pgxpool.NewWithConfig(ctx, pc)
 	if err != nil {
 		return nil, err

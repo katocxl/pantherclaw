@@ -5,6 +5,7 @@ package dispatch
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -104,7 +105,7 @@ func TestPgQuery_Operations(t *testing.T) {
 	if err != nil || plan.statement != nil {
 		t.Fatalf("describe %v %v", plan, err)
 	}
-	if _, err := call("describe_tables", `{"database":"other"}`); err != errDatabaseMismatch {
+	if _, err := call("describe_tables", `{"database":"other"}`); !errors.Is(err, errDatabaseMismatch) {
 		t.Fatalf("other database: %v", err)
 	}
 	for args, code := range map[string]string{
@@ -121,7 +122,7 @@ func TestPgQuery_Operations(t *testing.T) {
 	if _, err := call("aggregate_rows", `{"table":"shop.customers","measures":["max:email"]}`); pgdispatch.CodeOf(err) != pgdispatch.CodeColumnNotAllowed {
 		t.Errorf("max of pii: %v", err)
 	}
-	if _, err := pgQuery(nil, &defs.Definition{}, actionir.ActionIR{}); err != errNoPostgresConfig {
+	if _, err := pgQuery(nil, &defs.Definition{}, actionir.ActionIR{}); !errors.Is(err, errNoPostgresConfig) {
 		t.Errorf("no config: %v", err)
 	}
 }
