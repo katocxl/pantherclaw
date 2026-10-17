@@ -123,8 +123,8 @@ const (
 	inArgs // an MCP argument
 )
 
-// literalRe is a literal.<value> body value: printable ASCII without
-// braces (G0 M14 D52).
+// literalRe is a literal.<value> body or query value: printable ASCII
+// without braces (G0 M14 D52, D71).
 var literalRe = regexp.MustCompile(`^[\x20-\x7a\x7c\x7e]{1,64}$`)
 
 // TransactionKey is the reference to the action's idempotency value,
@@ -152,8 +152,8 @@ func (d *Definition) reference(at, ref string, where place) error {
 		return nil
 	}
 	if lit, ok := strings.CutPrefix(ref, "literal."); ok {
-		if where != inBody || !literalRe.MatchString(lit) {
-			return invalid("%s: a literal is a body value of 1..64 printable ASCII characters", at)
+		if (where != inBody && where != inQuery) || !literalRe.MatchString(lit) {
+			return invalid("%s: a literal is a body or query value of 1..64 printable ASCII characters", at)
 		}
 		return nil
 	}

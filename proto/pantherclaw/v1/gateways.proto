@@ -7,6 +7,7 @@ package pantherclaw.v1;
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/connections.proto";
 import "pantherclaw/v1/connectors.proto";
 import "pantherclaw/v1/gateway_facts.proto";
 import "pantherclaw/v1/github.proto";
@@ -512,6 +513,11 @@ message GatewayConnection {
   // Whether the connection is simulated (G0 M12, HR-221): the gateway sends
   // its traffic only after the simulator answers the handshake.
   bool simulated = 23;
+  // postgres is a postgres connection's configuration and manifest (G0 M14
+  // D64).
+  PostgresConfig postgres = 24;
+  // a2a is an a2a connection's configuration and pinned card (D64).
+  A2AConfig a2a = 25;
 }
 
 // RouteModeSetting is one route's mode.
@@ -616,6 +622,9 @@ message ReportCircuitRequest {
     gte: 0
     lte: 1000000
   }];
+  // Why the gateway opened the circuit; empty for the UNKNOWN-threshold
+  // breaker (G0 M14 D76).
+  string reason = 4 [(buf.validate.field).string.pattern = "^(stripe_livemode)?$"];
 }
 
 // ReportCircuitResponse says what the server did.

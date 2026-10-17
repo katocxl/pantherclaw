@@ -6,8 +6,11 @@ package app
 import (
 	"context"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
 // Configuration is what one gateway serves (G0 M6 design decision 19).
@@ -27,6 +30,9 @@ type Configuration struct {
 	// Connectors are the current specs of its connector connections (G0
 	// M9 track C); none for a PantherClaw-hosted gateway (HR-084).
 	Connectors []dbq.PcConnectorSpec
+	// KindConfigs are the M14 kinds' configurations of those connections,
+	// by connection id (*pb.PostgresConfig, *pb.A2AConfig; G0 M14 D64).
+	KindConfigs map[ids.UUID]proto.Message
 }
 
 // Configuration returns the calling gateway's configuration: its
@@ -53,6 +59,9 @@ func (s *Service) Configuration(ctx context.Context, id Identity, known int64) (
 			return err
 		}
 		out.Connections = s.withoutConnectors(id.Gateway, conns)
+		if out.KindConfigs, err = s.kindConfigs(ctx, tx, id.Org, out.Connections); err != nil {
+			return err
+		}
 		if !s.hosted[id.Gateway] {
 			if out.Connectors, err = q.GatewayConnectorSpecs(ctx, id.Org, id.Gateway); err != nil {
 				return err
