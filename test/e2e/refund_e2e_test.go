@@ -48,6 +48,7 @@ import (
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/server"
 	"github.com/katocxl/pantherclaw/internal/sim/payments"
+	"github.com/katocxl/pantherclaw/internal/sim/stripe"
 )
 
 func noEnv(string) (string, bool) { return "", false }
@@ -96,6 +97,9 @@ type stack struct {
 	// gh is the GitHub simulator, its address, the seeded connection
 	// "github" to it, and its App's private key (G0 M8, options.github).
 	gh *githubSim
+	// st is the Stripe simulator and the seeded connection "stripe" to it
+	// (G0 M14, options.stripe).
+	st *stripeSim
 }
 
 type options struct {
@@ -129,6 +133,13 @@ type options struct {
 	// claimTimeout is the server's coverage.claim_timeout; zero is its
 	// default (G0 M9).
 	claimTimeout time.Duration
+	// stripe also starts the Stripe simulator with stripeFaults and seeds
+	// pc.stripe and the connection "stripe" to it, held by the gateway with
+	// stripeKey sealed (the e2e test key when empty; dev seed --stripe-url,
+	// G0 M14).
+	stripe       bool
+	stripeFaults stripe.Faults
+	stripeKey    string
 }
 
 // freePorts are the ports freeAddr has handed out in this test binary.
@@ -242,6 +253,10 @@ func start(t *testing.T, o options) *stack {
 		}
 		args = append(args, "--github-url", s.gh.url)
 	}
+	if o.stripe {
+		s.st = startStripeSim(t, o.stripeFaults)
+		args = append(args, "--stripe-url", s.st.url)
+	}
 	var out, errb bytes.Buffer
 	if code := server.Run(context.Background(), args, &out, &errb, noEnv); code != 0 {
 		t.Fatalf("dev seed: %d %s", code, errb.String())
@@ -257,6 +272,9 @@ func start(t *testing.T, o options) *stack {
 			t.Fatalf("dev seed output %q", out.String())
 		}
 		s.gh.conn = mustUUID(t, g[1])
+	}
+	if o.stripe {
+		s.stripeSeeded(t, out.String())
 	}
 	s.pool = s.db.AppPool(t)
 
@@ -315,7 +333,7 @@ func start(t *testing.T, o options) *stack {
 		// GitHub the stack calls (github.api_url).
 		gc.GitHub.APIURL = s.gh.url
 	}
-	if o.access == "pantherclaw_held" || o.github {
+	if o.access == "pantherclaw_held" || o.github || o.stripe {
 		// The gateway's broker key, which only it can open credentials with
 		// (HR-061); it registers the public half when it starts.
 		gc.Broker.KEKFiles = []string{filepath.Join(dir, "gateway-kek")}
@@ -343,6 +361,13 @@ func start(t *testing.T, o options) *stack {
 	}
 	if o.github {
 		s.waitConfig(t, s.sealGitHubApp(t))
+	}
+	if o.stripe {
+		key := o.stripeKey
+		if key == "" {
+			key = stripeTestKey
+		}
+		s.waitConfig(t, s.sealStripeKey(t, key))
 	}
 	return s
 }
