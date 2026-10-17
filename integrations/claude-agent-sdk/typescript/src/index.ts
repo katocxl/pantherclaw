@@ -417,6 +417,8 @@ export class PantherClaw {
         return decision("deny", `PantherClaw holds this call for an approval by an eligible person (transaction ${w.handle}); once it is approved, make the same call again`);
       }
       default:
+        // A final outcome: an identical later call is a new decision (D68).
+        this.retries.delete(key);
         if (res.answer?.code === "unknown_tool" && this.o.observeUnmapped) return {};
         return decision("deny", res.why || "PantherClaw denied this call");
     }
@@ -478,7 +480,11 @@ export class PantherClaw {
       try {
         const held: Result = { outcome: "hold", why: "", answer: { decision: "hold", action_hash: h.hash, wait: h.wait } };
         const res = await withDeadline(this.o.client.resume(this.o.connection, h.call, h.actionId, held, this.o.waitMs), this.o.waitMs, options.signal);
-        if (res.outcome !== "allow") return { behavior: "deny", message: `${res.why || "PantherClaw did not allow this call"} (PantherClaw, PARTIAL)` };
+        if (res.outcome !== "allow") {
+          // Declined in PantherClaw is final (D68); a wait that ran out leaves the hold for an identical later call.
+          if (res.outcome === "deny") this.retries.delete(h.key);
+          return { behavior: "deny", message: `${res.why || "PantherClaw did not allow this call"} (PantherClaw, PARTIAL)` };
+        }
         if (res.send) {
           if (!this.o.onDispatch) return { behavior: "deny", message: "this connection's target accepts only PantherClaw's own request: pass onDispatch to send it" };
           this.o.onDispatch(h.call.tool_use_id, res.send);

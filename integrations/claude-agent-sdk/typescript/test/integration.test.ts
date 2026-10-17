@@ -307,3 +307,19 @@ test("TestHR200_with a governed shell, options() refuses what loads skills and t
   assert.ok(observed.options({ permissionMode: "default", settingSources: ["user", "project"], skills: "all", toolAliases: { Read: "Bash" } }).hooks,
     "an ungoverned shell is unchanged");
 });
+
+test("TestHR329_a held call's action id is reused only until a final outcome (M14 D68)", async (t) => {
+  // Held (denied, not asked: bypassPermissions), then the identical call resubmits the same action and is denied: final, so a third identical call is a new decision.
+  const ids: string[] = [];
+  const answers: Face[] = [(_c, id, res) => res.end(decided(id, "hold", { wait: { handle: "h", state: "PENDING" } })), deny, allow];
+  const g = await gateway(t, (c, id, res) => {
+    ids.push(id);
+    (answers[ids.length - 1] as Face)(c, id, res);
+  });
+  const p = integration(g.client);
+  p.options({ permissionMode: "bypassPermissions", settingSources: [] });
+  for (const id of ["toolu_a", "toolu_b", "toolu_c"]) await p.preToolUse(refund("bypassPermissions", id));
+  assert.equal(ids.length, 3);
+  assert.equal(ids[0], ids[1], "the identical call after a hold resubmits its action");
+  assert.notEqual(ids[1], ids[2], "after the deny the identical call is a new decision");
+});
