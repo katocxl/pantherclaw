@@ -384,6 +384,10 @@ const eventRetention = 30 * 24 * time.Hour
 // stripe.account.payout_details_changed fact (account.external_account.*
 // events within 7 days). type may end in ".*" as Stripe's does.
 func (s *Server) listEvents(w http.ResponseWriter, r *http.Request) {
+	if s.fault().EventsUnavailable {
+		(&apiError{status: http.StatusInternalServerError, Type: "api_error", Message: "Simulated events outage."}).write(w)
+		return
+	}
 	s.get(w, r, []string{"type", "types[]", "created[gte]", "limit", "starting_after"}, func(c call, f *form) (int, any) {
 		limit, since, perr := listParams(f)
 		if perr != nil {

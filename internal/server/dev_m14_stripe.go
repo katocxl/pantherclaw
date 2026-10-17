@@ -22,6 +22,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 	"github.com/katocxl/pantherclaw/internal/policy/rollout"
 	pcstripe "github.com/katocxl/pantherclaw/packages/pc-stripe"
@@ -179,4 +180,14 @@ func stripeGrant(payee string) (ops []string, params, budget map[string]any, des
 		map[string]any{
 			"id": devStripeBudgetID, "grouping": "task", "operations": []string{devStripeRefundOp}, "max_count": "1", "period": "none",
 		}, []string{payee}
+}
+
+// stripeRequirement holds a transfer whose payee's bank details changed
+// within 7 days, or could not be read (HR-306), for an approver: the
+// consequence stripe.payee.changed_recently is decided like a write.
+func stripeRequirement() gdomain.Requirement {
+	return gdomain.Requirement{
+		Operations: gdomain.Ops{"stripe.payee.changed_recently"}, Reason: "PAYEE_CHANGED_RECENTLY",
+		Approval: &pdomain.ApprovalRequirement{Role: "approver", Count: 1},
+	}
 }

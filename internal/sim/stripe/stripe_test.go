@@ -560,3 +560,14 @@ func TestIdempotencyIsPerKey(t *testing.T) {
 		t.Fatalf("test %s / live %s", test.raw, live.raw)
 	}
 }
+
+func TestEventsUnavailable(t *testing.T) {
+	h := start(t, Faults{EventsUnavailable: true})
+	if a := h.do(http.MethodGet, "/v1/events", nil, map[string]string{"Stripe-Account": FixturePayee}); a.code != http.StatusInternalServerError {
+		t.Fatalf("events = %d %s", a.code, a.raw)
+	}
+	a := h.post("/v1/refunds", url.Values{"charge": {FixtureCharge}, "amount": {"100"}, "metadata[pantherclaw_key]": {"pc-m1"}}, "pc-m1")
+	if r := h.s.Refunds(); a.code != http.StatusOK || len(r) != 1 || r[0].Metadata["pantherclaw_key"] != "pc-m1" {
+		t.Fatalf("refund metadata = %+v", r)
+	}
+}

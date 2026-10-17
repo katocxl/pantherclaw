@@ -60,6 +60,9 @@ type Faults struct {
 	// BankChangedRecently makes every connected account report an
 	// account.external_account.updated event one day ago.
 	BankChangedRecently bool
+	// EventsUnavailable makes the events listing answer 500, so a bank-change
+	// read fails (the fact is unavailable).
+	EventsUnavailable bool
 }
 
 // Require is what a request must carry.

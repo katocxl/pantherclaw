@@ -248,60 +248,219 @@ func TestE2E_M14_StripeRefunds(t *testing.T) {
 			t.Fatalf("codes %v, refunds %d: want exactly one", codes, len(s.st.sim.Refunds()))
 		}
 	})
+}
 
-	t.Run("a lost answer is UNKNOWN, never retried, and reconciled from Stripe", func(t *testing.T) {
-		s := start(t, options{
-			budget: "1000.00", stripe: true, stripeFaults: stripe.Faults{LoseRate: 1, HangFor: time.Minute},
-			timeout: 1500 * time.Millisecond,
-		})
-		code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment, "2000", "usd")
-		if code != http.StatusGatewayTimeout || r.Outcome != "UNKNOWN" {
-			t.Fatalf("lost answer: %d %+v", code, r)
-		}
-		s.st.sim.SetFaults(stripe.Faults{})
-		s.eventually(t, "OCCURRED", "SELECT state FROM pc.reconciliation_tasks WHERE transaction_id = $1", r.TransactionID)
-		if via := s.row(t, "SELECT resolved_via FROM pc.reconciliation_tasks WHERE transaction_id = $1", r.TransactionID); via != "verifier" && via != "target_log" {
-			t.Fatalf("resolved via %q, want evidence", via)
-		}
-		if s.st.writes.Load() != 1 || len(s.st.sim.Refunds()) != 1 {
-			t.Fatalf("writes %d, refunds %d: the gateway retried", s.st.writes.Load(), len(s.st.sim.Refunds()))
-		}
-	})
+// stripeWrite is a request that reaches one pc.stripe write through the
+// gateway's HTTP face.
+type stripeWrite struct {
+	path string
+	form url.Values
+}
 
-	t.Run("a live key is refused before anything reaches Stripe", func(t *testing.T) {
-		s := start(t, options{budget: "1000.00", stripe: true, stripeKey: stripeLiveKey})
-		code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment, "1000", "usd")
+// stripeWrites are the requests for every pc.stripe write.
+func stripeWrites() map[string]stripeWrite {
+	return map[string]stripeWrite{
+		"stripe.refund.create": {"/v1/refunds", refundForm(stripe.FixturePayment, "1000", "usd")},
+		"stripe.payment_intent.create": {"/v1/payment_intents", url.Values{
+			"customer": {stripe.FixtureCustomer}, "amount": {"1000"}, "currency": {"usd"}, "payment_method": {stripe.FixturePaymentMethod},
+		}},
+		"stripe.payment_intent.cancel": {"/v1/payment_intents/" + stripe.FixturePayment + "/cancel", url.Values{}},
+		"stripe.transfer.create": {"/v1/transfers", url.Values{
+			"destination": {stripe.FixturePayee}, "amount": {"1000"}, "currency": {"usd"},
+		}},
+	}
+}
+
+// TestHR303_LiveKeyRefusedBeforeSend: with a live key sealed, every
+// pc.stripe write is refused and nothing reaches Stripe, not even a fact
+// read (HR-301, HR-303).
+func TestHR303_LiveKeyRefusedBeforeSend(t *testing.T) {
+	s := start(t, options{budget: "1000.00", stripe: true, stripeKey: stripeLiveKey})
+	for op, w := range stripeWrites() {
+		code, r, body := s.stripeCall(t, http.MethodPost, w.path, w.form, ids.NewV7())
 		if code == http.StatusOK || r.Outcome == "ACCEPTED" {
-			t.Fatalf("a refund with a live key: %d %+v", code, r)
+			t.Errorf("%s with a live key: %d %s", op, code, body)
 		}
-		if st := s.st.sim.Stats(); st.Requests != 0 {
-			t.Fatalf("Stripe saw %d requests with a live key", st.Requests)
-		}
-	})
+	}
+	if st := s.st.sim.Stats(); st.Requests != 0 {
+		t.Fatalf("Stripe saw %d requests with a live key", st.Requests)
+	}
+}
 
-	t.Run("a refundable fact that cannot be read fresh is CANNOT_AUTHORIZE", func(t *testing.T) {
-		// Stripe answers slower than the gateway's fact timeout (2 s): no
-		// fresh refundable fact, so nothing is decided or sent.
-		s := start(t, options{budget: "1000.00", stripe: true})
-		s.st.sim.SetFaults(stripe.Faults{Latency: 3 * time.Second})
-		code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment, "1000", "usd")
-		if code == http.StatusOK || r.Decision != "CANNOT_AUTHORIZE" || s.st.writes.Load() != 0 {
-			t.Fatalf("stale fact: %d %+v (writes %d)", code, r, s.st.writes.Load())
-		}
-	})
+// TestHR303_RefundableFactLivemodeRefused: a refundable fact read in live
+// mode is never a fact: the refund is CANNOT_AUTHORIZE and nothing is
+// written.
+func TestHR303_RefundableFactLivemodeRefused(t *testing.T) {
+	s := start(t, options{budget: "1000.00", stripe: true, stripeKey: stripeLivemodeKey})
+	code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment, "1000", "usd")
+	if code == http.StatusOK || r.Decision != "CANNOT_AUTHORIZE" || s.st.writes.Load() != 0 {
+		t.Fatalf("a live-mode fact: %d %+v (writes %d)", code, r, s.st.writes.Load())
+	}
+}
 
-	t.Run("a refund above what is left on the payment is CANNOT_AUTHORIZE", func(t *testing.T) {
-		s := start(t, options{budget: "1000.00", stripe: true})
-		// 50.00 USD paid; 60.00 cannot be refunded whatever the grant says.
-		code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment2, "6000", "usd")
-		if code == http.StatusOK || r.Decision != "CANNOT_AUTHORIZE" || !strings.Contains(strings.Join(r.Reasons, " "), "AMOUNT_NOT_REFUNDABLE") ||
-			s.st.writes.Load() != 0 {
-			t.Fatalf("over the refundable: %d %+v", code, r)
+// TestHR303_LivemodeAnswerQuarantines: a Stripe answer in live mode
+// quarantines the connection (stripe_livemode), records
+// security.stripe_livemode and tells the admins; nothing is sent through it
+// until a person restores it.
+func TestHR303_LivemodeAnswerQuarantines(t *testing.T) {
+	s := start(t, options{budget: "1000.00", stripe: true, stripeKey: stripeLivemodeKey})
+	if code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment, "1000", "usd"); code == http.StatusOK {
+		t.Fatalf("refund: %d %+v", code, r)
+	}
+	s.eventually(t, "QUARANTINED stripe_livemode", "SELECT state || ' ' || coalesce(quarantine_reason, '') FROM pc.connections WHERE id = $1", s.st.conn)
+	if got := s.row(t, "SELECT count(*)::text FROM pc.audit_events WHERE name = 'security.stripe_livemode'"); got == "0" {
+		t.Fatal("no security.stripe_livemode audit event")
+	}
+	if got := s.row(t, "SELECT count(*)::text FROM pc.notifications WHERE type = 'connection.quarantined'"); got == "0" {
+		t.Fatal("the admins were not told")
+	}
+	before := s.st.sim.Stats().Requests
+	if code, _ := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment, "1000", "usd"); code == http.StatusOK || s.st.sim.Stats().Requests != before {
+		t.Fatalf("a quarantined connection sent: %d", code)
+	}
+}
+
+// TestHR304_IdempotencyKeyIsTheTransaction: a refund carries
+// Idempotency-Key and metadata[pantherclaw_key] pc-<transaction>; the
+// agent's retry of the same action refunds nothing more.
+func TestHR304_IdempotencyKeyIsTheTransaction(t *testing.T) {
+	s := start(t, options{budget: "1000.00", stripe: true})
+	act := ids.NewV7()
+	code, r := s.stripeRefund(t, act, stripe.FixturePayment, "1500", "usd")
+	if code != http.StatusOK {
+		t.Fatalf("refund: %d %+v", code, r)
+	}
+	refunds := s.st.sim.Refunds()
+	if len(refunds) != 1 || refunds[0].Key != "pc-"+r.TransactionID || refunds[0].Metadata["pantherclaw_key"] != "pc-"+r.TransactionID {
+		t.Fatalf("refunds %+v, want key and metadata pc-%s", refunds, r.TransactionID)
+	}
+	if code, again := s.stripeRefund(t, act, stripe.FixturePayment, "1500", "usd"); code == http.StatusOK && again.TransactionID != r.TransactionID {
+		t.Fatalf("the retry made transaction %s", again.TransactionID)
+	}
+	if n := len(s.st.sim.Refunds()); n != 1 {
+		t.Fatalf("%d refunds after the retry", n)
+	}
+}
+
+// TestHR305_RefundAboveRemainingIsRefused: what is left on the payment
+// bounds the refund, in its currency, whatever the grant says.
+func TestHR305_RefundAboveRemainingIsRefused(t *testing.T) {
+	s := start(t, options{budget: "1000.00", stripe: true})
+	// 50.00 USD paid; 60.00 cannot be refunded.
+	code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment2, "6000", "usd")
+	if code == http.StatusOK || r.Decision != "CANNOT_AUTHORIZE" || !strings.Contains(strings.Join(r.Reasons, " "), "AMOUNT_NOT_REFUNDABLE") {
+		t.Fatalf("over the remaining: %d %+v", code, r)
+	}
+	code, r = s.stripeRefund(t, ids.NewV7(), stripe.FixturePaymentEUR, "1000", "usd")
+	if code == http.StatusOK || r.Decision != "CANNOT_AUTHORIZE" || !strings.Contains(strings.Join(r.Reasons, " "), "CURRENCY_MISMATCH") {
+		t.Fatalf("another currency: %d %+v", code, r)
+	}
+	if s.st.writes.Load() != 0 {
+		t.Fatalf("%d writes at Stripe", s.st.writes.Load())
+	}
+}
+
+// TestHR305_BothOrNeitherPaymentIsRefused: a refund naming both a payment
+// intent and a charge, or neither, is refused, never guessed.
+func TestHR305_BothOrNeitherPaymentIsRefused(t *testing.T) {
+	s := start(t, options{budget: "1000.00", stripe: true})
+	for name, form := range map[string]url.Values{
+		"both":    {"payment_intent": {stripe.FixturePayment}, "charge": {stripe.FixtureCharge}, "amount": {"1000"}, "currency": {"usd"}},
+		"neither": {"amount": {"1000"}, "currency": {"usd"}},
+	} {
+		if code, _, body := s.stripeCall(t, http.MethodPost, "/v1/refunds", form, ids.NewV7()); code == http.StatusOK {
+			t.Errorf("%s: %d %s", name, code, body)
 		}
-		// A refund in another currency than the payment's.
-		code, r = s.stripeRefund(t, ids.NewV7(), stripe.FixturePaymentEUR, "1000", "usd")
-		if code == http.StatusOK || r.Decision != "CANNOT_AUTHORIZE" || s.st.writes.Load() != 0 {
-			t.Fatalf("another currency: %d %+v", code, r)
-		}
+	}
+	if n := s.st.sim.Stats().Requests; n != 0 {
+		t.Fatalf("Stripe saw %d requests", n)
+	}
+}
+
+// TestHR305_StaleRefundableFactIsCannotAuthorize: Stripe answers slower
+// than the gateway's fact timeout, so there is no fresh refundable fact:
+// nothing is decided or sent.
+func TestHR305_StaleRefundableFactIsCannotAuthorize(t *testing.T) {
+	s := start(t, options{budget: "1000.00", stripe: true})
+	s.st.sim.SetFaults(stripe.Faults{Latency: 3 * time.Second})
+	code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment, "1000", "usd")
+	if code == http.StatusOK || r.Decision != "CANNOT_AUTHORIZE" || s.st.writes.Load() != 0 {
+		t.Fatalf("no fresh fact: %d %+v (writes %d)", code, r, s.st.writes.Load())
+	}
+}
+
+// TestHR305_LostAnswerIsReconciledNeverRetried: the refund happened but its
+// answer was lost: UNKNOWN, never retried, and reconciled from Stripe
+// through metadata[pantherclaw_key].
+func TestHR305_LostAnswerIsReconciledNeverRetried(t *testing.T) {
+	s := start(t, options{
+		budget: "1000.00", stripe: true, stripeFaults: stripe.Faults{LoseRate: 1, HangFor: time.Minute},
+		timeout: 1500 * time.Millisecond,
 	})
+	code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment, "2000", "usd")
+	if code != http.StatusGatewayTimeout || r.Outcome != "UNKNOWN" {
+		t.Fatalf("lost answer: %d %+v", code, r)
+	}
+	s.st.sim.SetFaults(stripe.Faults{})
+	s.eventually(t, "OCCURRED", "SELECT state FROM pc.reconciliation_tasks WHERE transaction_id = $1", r.TransactionID)
+	if via := s.row(t, "SELECT resolved_via FROM pc.reconciliation_tasks WHERE transaction_id = $1", r.TransactionID); via != "verifier" && via != "target_log" {
+		t.Fatalf("resolved via %q, want evidence", via)
+	}
+	if s.st.writes.Load() != 1 || len(s.st.sim.Refunds()) != 1 {
+		t.Fatalf("writes %d, refunds %d: the gateway retried", s.st.writes.Load(), len(s.st.sim.Refunds()))
+	}
+}
+
+// TestHR306_PayeeChangedRecentlyHoldsTheTransfer: a transfer to a payee
+// whose bank details changed within 7 days, or could not be read, is held
+// for an approver; to a quiet payee it goes through.
+func TestHR306_PayeeChangedRecentlyHoldsTheTransfer(t *testing.T) {
+	s := start(t, options{budget: "1000.00", stripe: true})
+	transfer := func() (int, reply) {
+		code, r, _ := s.stripeCall(t, http.MethodPost, "/v1/transfers", stripeWrites()["stripe.transfer.create"].form, ids.NewV7())
+		return code, r
+	}
+	if code, r := transfer(); code != http.StatusOK || r.Outcome != "ACCEPTED" {
+		t.Fatalf("to a quiet payee: %d %+v", code, r)
+	}
+	s.st.sim.ChangeBank(stripe.FixturePayee, time.Now().Add(-time.Hour))
+	if code, r := transfer(); code != http.StatusForbidden || r.Decision != "REQUIRE_APPROVAL" ||
+		!strings.Contains(strings.Join(r.Reasons, " "), "PAYEE_CHANGED_RECENTLY") {
+		t.Fatalf("to a payee whose bank changed: %d %+v", code, r)
+	}
+	s.st.sim.SetFaults(stripe.Faults{EventsUnavailable: true})
+	if code, r := transfer(); code != http.StatusForbidden || r.Decision != "REQUIRE_APPROVAL" {
+		t.Fatalf("with the bank change unreadable: %d %+v", code, r)
+	}
+	if n := len(s.st.sim.Transfers()); n != 1 {
+		t.Fatalf("%d transfers, want only the first", n)
+	}
+}
+
+// TestT141_LiveKeySwappedIntoTheConnection: an admin who swaps a live key
+// into a working test connection stops it: the next refund sends nothing.
+func TestT141_LiveKeySwappedIntoTheConnection(t *testing.T) {
+	s := start(t, options{budget: "1000.00", stripe: true})
+	if code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment, "1000", "usd"); code != http.StatusOK {
+		t.Fatalf("with the test key: %d %+v", code, r)
+	}
+	s.waitConfig(t, s.sealStripeKey(t, stripeLiveKey))
+	before := s.st.sim.Stats().Requests
+	if code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment2, "1000", "usd"); code == http.StatusOK {
+		t.Fatalf("with the swapped live key: %d %+v", code, r)
+	}
+	if after := s.st.sim.Stats().Requests; after != before {
+		t.Fatalf("Stripe saw %d requests after the swap", after-before)
+	}
+}
+
+// TestT142_TransferOutsideTheDestinationSetIsDenied: a transfer to a
+// connected account the grant does not name is denied with nothing sent.
+func TestT142_TransferOutsideTheDestinationSetIsDenied(t *testing.T) {
+	s := start(t, options{budget: "1000.00", stripe: true})
+	form := url.Values{"destination": {stripe.FixturePayee2}, "amount": {"1000"}, "currency": {"usd"}}
+	code, r, _ := s.stripeCall(t, http.MethodPost, "/v1/transfers", form, ids.NewV7())
+	if code != http.StatusForbidden || r.Decision != "DENY" || s.st.writes.Load() != 0 {
+		t.Fatalf("outside the destination set: %d %+v", code, r)
+	}
 }

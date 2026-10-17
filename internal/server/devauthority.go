@@ -235,6 +235,9 @@ func seedGrant(ctx context.Context, pool *db.Pool, org ids.OrgID, w devWorkload,
 			},
 		}
 	}
+	if t.Stripe {
+		g.Requirements = append(g.Requirements, stripeRequirement())
+	}
 	defsStore := &defspg.Store{Pool: pool}
 	active := map[string]*defs.Definition{}
 	for _, op := range append(append([]string{"payments.refund.create", shellOperation}, githubOperations...), stripeOperations...) {

@@ -161,9 +161,11 @@ type Refund struct {
 	ID, Charge, PaymentIntent, Currency, Reason string
 	Amount                                      int64
 	// Key is the idempotency key it was created with (pc-<transaction>).
-	Key     string
-	Created time.Time
-	Status  string
+	Key string
+	// Metadata is the metadata it was created with.
+	Metadata map[string]string
+	Created  time.Time
+	Status   string
 }
 
 // PaymentIntent is a payment intent created through the API as tests see it.
@@ -188,7 +190,7 @@ func (s *Server) Refunds() []Refund {
 		if r, ok := s.refunds[id]; ok {
 			out = append(out, Refund{
 				ID: r.id, Charge: r.charge, PaymentIntent: r.intent, Currency: r.currency, Reason: r.reason,
-				Amount: r.amount, Key: r.key, Created: r.created, Status: r.status(now),
+				Amount: r.amount, Key: r.key, Created: r.created, Status: r.status(now), Metadata: meta(r.metadata),
 			})
 		}
 	}
