@@ -571,3 +571,10 @@ func TestEventsUnavailable(t *testing.T) {
 		t.Fatalf("refund metadata = %+v", r)
 	}
 }
+
+func TestAnswerLivemode(t *testing.T) {
+	h := start(t, Faults{AnswerLivemode: true})
+	if a := h.do(http.MethodGet, "/v1/charges/"+FixtureCharge, nil, nil); a.code != http.StatusOK || a.body["livemode"] != true {
+		t.Fatalf("charge = %s", a.raw)
+	}
+}

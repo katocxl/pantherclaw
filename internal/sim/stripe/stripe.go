@@ -63,6 +63,9 @@ type Faults struct {
 	// EventsUnavailable makes the events listing answer 500, so a bank-change
 	// read fails (the fact is unavailable).
 	EventsUnavailable bool
+	// AnswerLivemode makes every object answer "livemode": true, whatever
+	// the key (the live-mode guard tests, D54).
+	AnswerLivemode bool
 }
 
 // Require is what a request must carry.
@@ -229,7 +232,7 @@ func (s *Server) Handler() http.Handler {
 			invalid("", "The simulator accepts Stripe-Account only on GET /v1/events.").write(w)
 			return
 		}
-		mux.ServeHTTP(w, r.WithContext(withCall(r.Context(), apiKey, live)))
+		mux.ServeHTTP(w, r.WithContext(withCall(r.Context(), apiKey, live || s.fault().AnswerLivemode)))
 	}))
 }
 

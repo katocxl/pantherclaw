@@ -298,26 +298,51 @@ func TestHR303_RefundableFactLivemodeRefused(t *testing.T) {
 	}
 }
 
-// TestHR303_LivemodeAnswerQuarantines: a Stripe answer in live mode
-// quarantines the connection (stripe_livemode), records
-// security.stripe_livemode and tells the admins; nothing is sent through it
-// until a person restores it.
+// TestHR303_LivemodeAnswerQuarantines: a Stripe answer in live mode, seen
+// by a fact read, a dispatch or a verifier read, quarantines the connection
+// (stripe_livemode), records security.stripe_livemode and tells the
+// admins; nothing is sent through it until a person restores it.
 func TestHR303_LivemodeAnswerQuarantines(t *testing.T) {
-	s := start(t, options{budget: "1000.00", stripe: true, stripeKey: stripeLivemodeKey})
-	if code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment, "1000", "usd"); code == http.StatusOK {
-		t.Fatalf("refund: %d %+v", code, r)
+	quarantined := func(t *testing.T, s *stack) {
+		t.Helper()
+		s.eventually(t, "QUARANTINED stripe_livemode", "SELECT state || ' ' || coalesce(quarantine_reason, '') FROM pc.connections WHERE id = $1", s.st.conn)
+		if got := s.row(t, "SELECT count(*)::text FROM pc.ledger_entries WHERE kind = 'audit.security.stripe_livemode'"); got == "0" {
+			t.Fatal("no security.stripe_livemode audit event")
+		}
+		if got := s.row(t, "SELECT count(*)::text FROM pc.notifications WHERE type = 'security.connection_quarantined'"); got == "0" {
+			t.Fatal("the admins were not told")
+		}
+		s.st.sim.SetFaults(stripe.Faults{})
+		before := s.st.sim.Stats().Requests
+		if code, _ := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment2, "1000", "usd"); code == http.StatusOK || s.st.sim.Stats().Requests != before {
+			t.Fatalf("a quarantined connection sent: %d", code)
+		}
 	}
-	s.eventually(t, "QUARANTINED stripe_livemode", "SELECT state || ' ' || coalesce(quarantine_reason, '') FROM pc.connections WHERE id = $1", s.st.conn)
-	if got := s.row(t, "SELECT count(*)::text FROM pc.ledger_entries WHERE kind = 'audit.security.stripe_livemode'"); got == "0" {
-		t.Fatal("no security.stripe_livemode audit event")
-	}
-	if got := s.row(t, "SELECT count(*)::text FROM pc.notifications WHERE type = 'security.connection_quarantined'"); got == "0" {
-		t.Fatal("the admins were not told")
-	}
-	before := s.st.sim.Stats().Requests
-	if code, _ := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment, "1000", "usd"); code == http.StatusOK || s.st.sim.Stats().Requests != before {
-		t.Fatalf("a quarantined connection sent: %d", code)
-	}
+	t.Run("fact read", func(t *testing.T) {
+		s := start(t, options{budget: "1000.00", stripe: true, stripeKey: stripeLivemodeKey})
+		if code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment, "1000", "usd"); code == http.StatusOK || s.st.writes.Load() != 0 {
+			t.Fatalf("refund: %d %+v", code, r)
+		}
+		quarantined(t, s)
+	})
+	t.Run("dispatch answer", func(t *testing.T) {
+		// A payment intent reads no fact: Stripe's answer to the write is the
+		// first live-mode answer.
+		s := start(t, options{budget: "1000.00", stripe: true})
+		s.st.sim.SetFaults(stripe.Faults{AnswerLivemode: true})
+		w := stripeWrites()["stripe.payment_intent.create"]
+		s.stripeCall(t, http.MethodPost, w.path, w.form, ids.NewV7())
+		quarantined(t, s)
+	})
+	t.Run("verifier read", func(t *testing.T) {
+		s := start(t, options{budget: "1000.00", stripe: true, stripeFaults: stripe.Faults{SettleAfter: time.Hour}})
+		code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment, "1000", "usd")
+		if code != http.StatusOK {
+			t.Fatalf("refund: %d %+v", code, r)
+		}
+		s.st.sim.SetFaults(stripe.Faults{SettleAfter: time.Hour, AnswerLivemode: true})
+		quarantined(t, s)
+	})
 }
 
 // TestHR304_IdempotencyKeyIsTheTransaction: a refund carries
