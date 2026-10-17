@@ -338,7 +338,7 @@ definitions:
           starting_after: params.starting_after
 
   - operation: stripe.payment_intent.read
-    summary: Read one payment intent with its latest charge
+    summary: Read one payment intent
     access: read
     scoping: [classes]
     target:
@@ -382,8 +382,6 @@ definitions:
         path: /v1/payment_intents/{target.id}
         headers:
           Stripe-Version: 2026-09-30.endive
-        query:
-          expand[]: literal.latest_charge
 
   - operation: stripe.balance.read
     summary: Read the account's balance
