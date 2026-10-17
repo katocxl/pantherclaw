@@ -55,8 +55,10 @@ func (m *minter) token(t *testing.T, body []byte, op, peerRun string) string {
 	now := time.Now().Unix()
 	claims := map[string]any{
 		"iss": issuer, "aud": audience, "jti": hex.EncodeToString(sum[:8]) + op + peerRun, "iat": now, "exp": now + 30,
-		"pap": map[string]any{"v": 1, "txn": "t", "act": "a", "bh": hex.EncodeToString(sum[:]), "op": op,
-			"target": map[string]string{"type": "a2a.agent", "id": "peer"}},
+		"pap": map[string]any{
+			"v": 1, "txn": "t", "act": "a", "bh": hex.EncodeToString(sum[:]), "op": op,
+			"target": map[string]string{"type": "a2a.agent", "id": "peer"},
+		},
 	}
 	if peerRun != "" {
 		claims["pc_peer_run"] = peerRun
