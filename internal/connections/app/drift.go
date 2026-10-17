@@ -83,6 +83,9 @@ func (s *Service) ReportDriftDescribed(ctx context.Context, org ids.OrgID, gatew
 		return false, ErrDrift
 	}
 	c := actor{Org: org, By: "gateway:" + gateway.String(), Audit: evdomain.Actor{Type: "gateway", ID: gateway.String()}}
+	if tool == ToolA2ACard {
+		return s.reportCardDrift(ctx, c, gateway, id, expected, observed) // G0 M14 D86
+	}
 	quarantined := false
 	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		quarantined = false
