@@ -6,6 +6,7 @@ package celenv
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 
 	"cel.dev/cel-go/cel"
@@ -216,7 +217,13 @@ func moneyLibrary() []cel.EnvOption {
 		// negative count, is an error.
 		cel.Function("minor_money", cel.Overload("minor_money_int_string", []*cel.Type{cel.IntType, cel.StringType}, MoneyType,
 			cel.BinaryBinding(func(n, c ref.Val) ref.Val {
-				m, err := money.FromMinor(int64(n.(types.Int)), money.Currency(strings.ToUpper(string(c.(types.String)))))
+				// Three ASCII letters only, so no confusable (such as U+017F, the long s)
+				// is folded into a code (HR-102, D85).
+				code := string(c.(types.String))
+				if !currencyCodeRe.MatchString(code) {
+					return types.NewErr("minor_money: a currency is three letters")
+				}
+				m, err := money.FromMinor(int64(n.(types.Int)), money.Currency(strings.ToUpper(code)))
 				if err != nil {
 					return errVal(err)
 				}
@@ -234,3 +241,7 @@ func moneyLibrary() []cel.EnvOption {
 		cel.Function(operators.Subtract, overloads("subtract", sameResult)...),
 	}
 }
+
+// currencyCodeRe is a currency code as minor_money takes it: three ASCII
+// letters in any case.
+var currencyCodeRe = regexp.MustCompile(`^[A-Za-z]{3}$`)
