@@ -240,10 +240,9 @@ export function guardClient(mcp: McpClient, options: GuardOptions): GuardedClien
     raw: unknown,
     signal?: AbortSignal,
   ): Promise<{ refusal: PantherClawRefusal | null; send?: Outbound; id: string; txn: string; args?: Record<string, unknown> }> => {
-    // The client refuses a call without a tool name or with an input that is not an object (cannot_decide).
-    if (typeof name !== "string" || name === "" || typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-      return { refusal: new PantherClawRefusal("cannot_decide"), id: "", txn: "" };
-    }
+    // Arguments that are not an object are a fault in the wrapper's caller (wrapper_error, D69 cases); a call without a tool name cannot be decided.
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new Error("the tool arguments are not an object");
+    if (typeof name !== "string" || name === "") return { refusal: new PantherClawRefusal("cannot_decide"), id: "", txn: "" };
     // A copy: the decision and the call use exactly these arguments (D69).
     const args = JSON.parse(JSON.stringify(raw)) as Record<string, unknown>;
     const fit = await fits(name, args);

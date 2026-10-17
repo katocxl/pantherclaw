@@ -183,6 +183,8 @@ class Guard {
     if (options?.toolCallId) this.refused.delete(options.toolCallId);
     let d: Awaited<ReturnType<Guard["decide"]>>;
     try {
+      // A model's input is a JSON object; anything else is a fault in the wrapper's caller (D69 cases).
+      if (typeof input !== "object" || input === null || Array.isArray(input)) throw new Error("the tool input is not an object");
       const parsed = await parse(schema, input);
       d = parsed === undefined ? { refusal: new PantherClawRefusal("undecided_args"), id: "", txn: "" } : await this.decide(name, parsed, options);
     } catch {

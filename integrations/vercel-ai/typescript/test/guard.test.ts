@@ -257,12 +257,12 @@ test("TestHR328_tools PantherClaw cannot govern are refused when wrapped", async
   assert.equal(ran.length, 1);
 });
 
-test("TestHR328_an input the tool's schema refuses is refused without a request (D69)", async (t) => {
+test("TestHR328_an input that is not an object is refused without a request (wrapper_error)", async (t) => {
   const g = await gateway(t, allow);
   const ran: unknown[] = [];
   const tools = guardTools(appTools(ran), { client: g.client, connection: "payments" });
   const exec = tools.create_refund?.execute as (i: unknown, o: unknown) => Promise<unknown>;
-  assert.equal(await exec("30.00", { toolCallId: "x", messages: [] }), "PantherClaw refused this call: undecided_args");
+  assert.equal(await exec("30.00", { toolCallId: "x", messages: [] }), "PantherClaw refused this call: wrapper_error");
   assert.equal(g.calls.length, 0);
   assert.deepEqual(ran, []);
 });
