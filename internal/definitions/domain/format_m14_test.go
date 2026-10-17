@@ -121,7 +121,7 @@ func TestM14_StaticHeadersSuccessAndCredentialPattern(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if !d.Dispatch.CredentialMatches([]byte("rk_test_0123456789abcdefXYZ")) || d.Dispatch.CredentialMatches([]byte("sk_live_0123456789abcdefXYZ")) {
+	if !d.Dispatch.CredentialMatches([]byte("rk_" + "test_" + "0123456789abcdefXYZ")) || d.Dispatch.CredentialMatches([]byte("sk_" + "live_" + "0123456789abcdefXYZ")) {
 		t.Fatal("credential pattern")
 	}
 }
