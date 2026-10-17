@@ -28,11 +28,11 @@ func testFace(t *testing.T) (*Handler, *control.Connection, *int) {
 	conn := &control.Connection{GatewayConnection: &pb.GatewayConnection{Id: "c-1", Name: "peer", Kind: "a2a"}}
 	cfg := &control.Config{ByName: map[string]*control.Connection{"peer": conn}, ByID: map[string]*control.Connection{"c-1": conn}}
 	peerOf := func(c *control.Connection) (Peer, bool) {
-		return Peer{Card: []byte(`{"name":"p","supportedInterfaces":[{"url":"https://p","protocolBinding":"JSONRPC"}]}`), Binding: wire.BindingJSONRPC}, c == conn
+		return Peer{Card: []byte(`{"name":"p","supportedInterfaces":[{"url":"https://p","protocolBinding":"JSONRPC"}]}`), Binding: wire.BindingJSONRPC, Skills: []string{"refunds", "echo"}}, c == conn
 	}
 	h := New(nil, fixedConfig{cfg}, peerOf, "https://gw.example", nil)
 	sent := 0
-	h.send = func(call) dispatch.Result {
+	h.send = func(call, dispatch.A2ASink) dispatch.Result {
 		sent++
 		return dispatch.Result{Class: dispatch.CannotAuthorize, Code: "test"}
 	}
@@ -121,7 +121,8 @@ func TestRequestsRefusedBeforeAuthentication(t *testing.T) {
 }
 
 func sendCall(h *Handler, conn *control.Connection) call {
-	return call{conn: conn, in: dispatch.Inbound{Run: run}, binding: wire.BindingJSONRPC, method: wire.MethodSendMessage}
+	peer, _ := h.peerOf(conn)
+	return call{conn: conn, peer: peer, in: dispatch.Inbound{Run: run}, binding: wire.BindingJSONRPC, method: wire.MethodSendMessage}
 }
 
 // TestHR323_OnlyTextPartsAndOwnedIDsAreRelayed: a message is rebuilt from
@@ -135,33 +136,35 @@ func TestHR323_OnlyTextPartsAndOwnedIDsAreRelayed(t *testing.T) {
 	other := owner{conn: conn.GetId(), run: "0190f3b4-7c2e-7aaa-8bbb-000000000002"}
 	h.owned.record(other, "task-9", "ctx-9")
 	msg := func(extra string) string {
-		return `{"message":{"messageId":"m1","role":"ROLE_USER","parts":[{"text":"refund ch_1"}]` + extra + `}}`
+		return `{"message":{"messageId":"m1","role":"ROLE_USER","parts":[{"text":"refund ch_1"}],"metadata":{"skill":"refunds"}` + extra + `}}`
 	}
 	for name, c2 := range map[string]struct {
 		params, reason string
 	}{
-		"data part":       {`{"message":{"messageId":"m1","role":"ROLE_USER","parts":[{"data":{"a":1}}]}}`, CodePartNot},
-		"url part":        {`{"message":{"messageId":"m1","role":"ROLE_USER","parts":[{"url":"https://x","mediaType":"text/plain"}]}}`, CodePartNot},
-		"raw part":        {`{"message":{"messageId":"m1","role":"ROLE_USER","parts":[{"raw":"AAAA"}]}}`, CodePartNot},
-		"text and file":   {`{"message":{"messageId":"m1","role":"ROLE_USER","parts":[{"text":"x","filename":"a.pdf"}]}}`, CodePartNot},
-		"no parts":        {`{"message":{"messageId":"m1","role":"ROLE_USER","parts":[]}}`, CodeBadRequest},
-		"push config":     {`{"message":{"messageId":"m1","role":"ROLE_USER","parts":[{"text":"x"}]},"configuration":{"pushNotificationConfig":{"url":"https://evil"}}}`, CodePushNot},
-		"extensions":      {msg(`,"extensions":["urn:x"]`), CodeFieldNot},
-		"references":      {msg(`,"referenceTaskIds":["task-9"]`), CodeFieldNot},
-		"unknown field":   {msg(`,"sneaky":1`), CodeFieldNot},
-		"tenant":          {`{"tenant":"t","message":{"messageId":"m1","role":"ROLE_USER","parts":[{"text":"x"}]}}`, CodeFieldNot},
-		"agent role":      {`{"message":{"messageId":"m1","role":"ROLE_AGENT","parts":[{"text":"x"}]}}`, CodeBadRequest},
-		"other run task":  {msg(`,"taskId":"task-9"`), CodeTaskUnknown},
-		"other run ctx":   {msg(`,"contextId":"ctx-9"`), CodeTaskUnknown},
-		"unknown task":    {msg(`,"taskId":"task-404"`), CodeTaskUnknown},
-		"task in wrong c": {msg(`,"taskId":"task-1","contextId":"ctx-9"`), CodeTaskUnknown},
+		"data part":         {`{"message":{"messageId":"m1","role":"ROLE_USER","parts":[{"data":{"a":1}}]}}`, CodePartNot},
+		"url part":          {`{"message":{"messageId":"m1","role":"ROLE_USER","parts":[{"url":"https://x","mediaType":"text/plain"}]}}`, CodePartNot},
+		"raw part":          {`{"message":{"messageId":"m1","role":"ROLE_USER","parts":[{"raw":"AAAA"}]}}`, CodePartNot},
+		"text and file":     {`{"message":{"messageId":"m1","role":"ROLE_USER","parts":[{"text":"x","filename":"a.pdf"}]}}`, CodePartNot},
+		"no parts":          {`{"message":{"messageId":"m1","role":"ROLE_USER","parts":[]}}`, CodePartNot},
+		"two parts":         {`{"message":{"messageId":"m1","role":"ROLE_USER","parts":[{"text":"a"},{"text":"b"}]}}`, CodePartNot},
+		"skill not allowed": {`{"message":{"messageId":"m1","role":"ROLE_USER","parts":[{"text":"a"}],"metadata":{"skill":"transfers"}}}`, CodeSkillNot},
+		"push config":       {`{"message":{"messageId":"m1","role":"ROLE_USER","parts":[{"text":"x"}]},"configuration":{"pushNotificationConfig":{"url":"https://evil"}}}`, CodePushNot},
+		"extensions":        {msg(`,"extensions":["urn:x"]`), CodeFieldNot},
+		"references":        {msg(`,"referenceTaskIds":["task-9"]`), CodeFieldNot},
+		"unknown field":     {msg(`,"sneaky":1`), CodeFieldNot},
+		"tenant":            {`{"tenant":"t","message":{"messageId":"m1","role":"ROLE_USER","parts":[{"text":"x"}]}}`, CodeFieldNot},
+		"agent role":        {`{"message":{"messageId":"m1","role":"ROLE_AGENT","parts":[{"text":"x"}]}}`, CodeBadRequest},
+		"other run task":    {msg(`,"taskId":"task-9"`), CodeTaskUnknown},
+		"other run ctx":     {msg(`,"contextId":"ctx-9"`), CodeTaskUnknown},
+		"unknown task":      {msg(`,"taskId":"task-404"`), CodeTaskUnknown},
+		"task in wrong c":   {msg(`,"taskId":"task-1","contextId":"ctx-9"`), CodeTaskUnknown},
 	} {
 		if _, ferr := h.readSend(c, jsontext.Value(c2.params)); ferr == nil || ferr.reason != c2.reason {
 			t.Errorf("%s: %+v, want %s", name, ferr, c2.reason)
 		}
 	}
 	req, ferr := h.readSend(c, jsontext.Value(`{"message":{"messageId":"m2","role":"ROLE_USER","taskId":"task-1",`+
-		`"parts":[{"text":"a","mediaType":"text/plain","metadata":{"x":1}},{"text":"b"}],"metadata":{"https://pantherclaw.dev/a2a/peer-run/v1":"forged"}},`+
+		`"parts":[{"text":"a","mediaType":"text/plain","metadata":{"x":1}}],"metadata":{"skill":"refunds","https://pantherclaw.dev/a2a/peer-run/v1":"forged"}},`+
 		`"metadata":{"forged":true}}`))
 	if ferr != nil {
 		t.Fatalf("owned task: %+v", ferr)
@@ -170,7 +173,7 @@ func TestHR323_OnlyTextPartsAndOwnedIDsAreRelayed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"message":{"messageId":"m2","contextId":"ctx-1","taskId":"task-1","role":"ROLE_USER","parts":[{"text":"a"},{"text":"b"}]}}`
+	want := `{"message":{"messageId":"m2","contextId":"ctx-1","taskId":"task-1","role":"ROLE_USER","parts":[{"text":"a"}]}}`
 	if string(out) != want {
 		t.Fatalf("rebuilt request:\n got %s\nwant %s", out, want)
 	}

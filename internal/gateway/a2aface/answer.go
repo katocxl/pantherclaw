@@ -206,10 +206,3 @@ func (h *Handler) result(c call, body []byte) ([]byte, bool) {
 	}
 	return nil, false
 }
-
-// dispatch decides and sends a call. The a2a mapping channel and dispatch
-// template arrive with core A2 (G0 M14 D9); until then nothing is sent
-// (fail closed, D4).
-func (h *Handler) dispatch(call) dispatch.Result {
-	return dispatch.Result{Class: dispatch.CannotAuthorize, Code: dispatch.CodeKindNotImplemented, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
-}

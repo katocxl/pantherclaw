@@ -28,6 +28,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	wire "github.com/katocxl/pantherclaw/internal/a2a"
@@ -44,7 +45,7 @@ const (
 	// maxDepth bounds JSON nesting in a request (HR-100).
 	maxDepth = 32
 	// maxParts bounds the parts of one message.
-	maxParts = 64
+	maxParts = 1
 )
 
 // prefix is the face's first path segment.
@@ -63,6 +64,7 @@ const (
 	CodePartNot       = "A2A_PART_UNSUPPORTED"
 	CodeFieldNot      = "A2A_FIELD_UNSUPPORTED"
 	CodeTaskUnknown   = "A2A_TASK_UNKNOWN"
+	CodeSkillNot      = "A2A_SKILL_NOT_ALLOWED"
 	CodeBadRequest    = "A2A_REQUEST_INVALID"
 	CodeVersion       = "VERSION_NOT_SUPPORTED"
 	reasonHeld        = "PANTHERCLAW_HELD"
@@ -98,8 +100,9 @@ type Handler struct {
 	origin    string
 	log       *slog.Logger
 	owned     *owned
-	// send decides and sends one call (dispatch.go); tests replace it.
-	send func(c call) dispatch.Result
+	// send decides and sends one call (answer.go), relaying a stream to
+	// sink; tests replace it.
+	send func(c call, sink dispatch.A2ASink) dispatch.Result
 }
 
 // New returns the A2A face. publicURL is the gateway's base URL: proofs
@@ -148,6 +151,9 @@ type call struct {
 	send *wire.SendMessageRequest
 	// list is ListTasks' request.
 	list *wire.ListTasksRequest
+	// mapParams is what the package maps: the checked request params, or
+	// the task or context a path and query name.
+	mapParams []byte
 }
 
 func (c call) owner() owner { return owner{conn: c.conn.GetId(), run: c.in.Run} }
@@ -241,8 +247,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, c, ferr)
 		return
 	}
-	res := h.send(c)
-	h.answer(w, c, res)
+	if wire.Streaming(c.method) {
+		h.stream(w, c)
+		return
+	}
+	h.answer(w, c, h.send(c, nil))
 }
 
 // version is the A2A version a request names (header, or query parameter).
@@ -402,7 +411,7 @@ func (h *Handler) read(c *call, params jsontext.Value) *faceError {
 		if ferr != nil {
 			return ferr
 		}
-		c.send = req
+		c.send, c.mapParams = req, params
 	case wire.MethodGetTask, wire.MethodCancelTask, wire.MethodSubscribeToTask:
 		if c.binding == wire.BindingJSONRPC {
 			var p struct {
@@ -427,6 +436,7 @@ func (h *Handler) read(c *call, params jsontext.Value) *faceError {
 		if _, ok := h.owned.task(c.owner(), c.taskID); !ok {
 			return taskUnknown()
 		}
+		c.mapParams, _ = json.Marshal(map[string]string{"id": c.taskID})
 	case wire.MethodListTasks:
 		p := wire.ListTasksRequest{}
 		if c.binding == wire.BindingJSONRPC {
@@ -453,6 +463,7 @@ func (h *Handler) read(c *call, params jsontext.Value) *faceError {
 			return taskUnknown()
 		}
 		c.list = &p
+		c.mapParams, _ = json.Marshal(map[string]string{"contextId": p.ContextID})
 	default:
 		return &faceError{status: http.StatusNotFound, rpc: wire.CodeMethodNotFound, reason: CodeBadRequest, message: "Method not found: " + c.method}
 	}
@@ -482,7 +493,7 @@ func (h *Handler) readSend(c call, params jsontext.Value) (*wire.SendMessageRequ
 		return nil, &faceError{status: http.StatusForbidden, rpc: wire.CodePushNotSupported, reason: CodePushNot, message: "push notifications are not supported through PantherClaw"}
 	}
 	if len(probe.Message.Parts) == 0 || len(probe.Message.Parts) > maxParts {
-		return nil, invalidParams(CodeBadRequest, "a message has 1 to 64 parts")
+		return nil, invalidParams(CodePartNot, "a message is one text part")
 	}
 	for _, raw := range probe.Message.Parts {
 		var p struct {
@@ -512,6 +523,10 @@ func (h *Handler) readSend(c call, params jsontext.Value) (*wire.SendMessageRequ
 		return nil, invalidParams(CodeBadRequest, "messageId is required")
 	case len(m.Extensions) > 0 || len(m.ReferenceTaskIDs) > 0:
 		return nil, invalidParams(CodeFieldNot, "extensions and referenceTaskIds are not relayed")
+	}
+	if skill, _ := m.Metadata["skill"].(string); len(c.peer.Skills) > 0 && !slices.Contains(c.peer.Skills, skill) {
+		// Only the skills the connection allows (D30), whatever a grant says.
+		return nil, &faceError{status: http.StatusForbidden, rpc: codeRefused, reason: CodeSkillNot, message: "the connection does not allow this skill"}
 	}
 	w := c.owner()
 	if m.TaskID != "" {
