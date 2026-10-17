@@ -1,0 +1,337 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for read-only queries of a PostgreSQL database
+# reached through a postgres connection (G0 M14, PN-017.4, F759). The agent
+# never writes SQL: it names a table of the connection's manifest, the
+# columns it wants, and typed filters, and the gateway builds one
+# parameterised statement from the ActionIR alone (HR-307), runs it in a
+# read-only transaction with a statement timeout that is always rolled back
+# (HR-308), and caps the answer at the manifest's row and byte limits. The
+# connection's role is checked before any dispatch: a superuser, a member
+# of pg_write_all_data, or a role that can write any manifest table fails
+# the connection test (HR-309). Aggregates never return a group smaller
+# than the manifest's min_group_size (HR-312).
+#
+# The gateway serves the package itself on the MCP face (/mcp/{connection},
+# tools query_rows, aggregate_rows, describe_tables) and on the HTTP face
+# (POST /{connection}/v1/query, POST /{connection}/v1/aggregate,
+# GET /{connection}/v1/tables); there is no upstream server. Both faces map
+# to the same actions, so they reach the same decision (F099). The SDK and
+# hook faces refuse postgres connections.
+#
+# Every definition can enforce record scope (a mandatory predicate on the
+# table's scope column) and data classes (values of a class the agent may
+# not read are withheld, and secret columns are never returned).
+format: 1
+name: pc.postgres
+version: 1.0.0
+publisher: pantherclaw
+summary: Read-only PostgreSQL queries over an allow-listed manifest
+
+definitions:
+  - operation: postgres.rows.read
+    summary: Read rows of one allow-listed table
+    access: read
+    target:
+      type: pg_table
+      id_pattern: '^[a-z_][a-z0-9_]{0,62}\.[a-z_][a-z0-9_]{0,62}$'
+      account: none
+    params:
+      columns:
+        type: identifier_list
+        material: true
+        required: true
+        max_items: 64
+        pattern: '^[a-z_][a-z0-9_]{0,62}$'
+      filters:
+        type: query_filter
+      order_by:
+        type: identifier_list
+        material: true
+        max_items: 8
+        pattern: '^[a-z_][a-z0-9_]{0,62}:(asc|desc)$'
+      limit:
+        type: integer
+        material: true
+        unit: rows
+        min: "1"
+        max: "1000"
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    constraints:
+      - kind: allowed_values
+        param: columns
+      - kind: count_max
+        param: limit
+        clamp: true
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: declared
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    response:
+      format: rows
+    scoping: [records, classes]
+    mappings:
+      - channel: http
+        method: POST
+        path: /v1/query
+        route: postgres-rows-read
+        extract:
+          target_id: input.table
+          params:
+            columns: input.columns
+            filters: input.?filters
+            order_by: input.?order_by
+            limit: input.?limit
+      - channel: mcp
+        tool: query_rows
+        route: postgres-rows-read
+        description: >-
+          Read rows of one table the connection allows. Name the table as
+          schema.table and the columns you need; filter with typed
+          predicates. Values of columns you may not read come back as
+          [redacted:<class>], and at most the connection's row limit is
+          returned (truncated says when more rows matched).
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [table, columns]
+          properties:
+            table:
+              type: string
+              description: The table, as schema.table
+              pattern: '^[a-z_][a-z0-9_]{0,62}\.[a-z_][a-z0-9_]{0,62}$'
+            columns:
+              type: array
+              description: The columns to read
+              minItems: 1
+              maxItems: 64
+              items:
+                type: string
+                pattern: '^[a-z_][a-z0-9_]{0,62}$'
+            filters:
+              type: array
+              description: Predicates, all of which a row must match
+              maxItems: 20
+              items:
+                type: object
+                additionalProperties: false
+                required: [column, op]
+                properties:
+                  column:
+                    type: string
+                    pattern: '^[a-z_][a-z0-9_]{0,62}$'
+                  op:
+                    type: string
+                    enum: [eq, ne, lt, le, gt, ge, in, is_null, not_null, prefix]
+                  value:
+                    type: [string, number, boolean]
+                  values:
+                    type: array
+                    maxItems: 100
+                    items:
+                      type: [string, number, boolean]
+            order_by:
+              type: array
+              description: Sort keys, such as placed:desc
+              maxItems: 8
+              items:
+                type: string
+                pattern: '^[a-z_][a-z0-9_]{0,62}:(asc|desc)$'
+            limit:
+              type: integer
+              description: The most rows to return
+              minimum: 1
+              maximum: 1000
+        extract:
+          target_id: input.table
+          params:
+            columns: input.columns
+            filters: input.?filters
+            order_by: input.?order_by
+            limit: input.?limit
+    dispatch:
+      sql:
+        operation: rows
+
+  - operation: postgres.rows.aggregate
+    summary: Count, sum, average or bound rows of one allow-listed table
+    access: read
+    target:
+      type: pg_table
+      id_pattern: '^[a-z_][a-z0-9_]{0,62}\.[a-z_][a-z0-9_]{0,62}$'
+      account: none
+    params:
+      group_by:
+        type: identifier_list
+        material: true
+        max_items: 8
+        pattern: '^[a-z_][a-z0-9_]{0,62}$'
+      measures:
+        type: identifier_list
+        material: true
+        required: true
+        max_items: 16
+        pattern: '^(count|sum|avg|min|max):([a-z_][a-z0-9_]{0,62}|\*)$'
+      filters:
+        type: query_filter
+      limit:
+        type: integer
+        material: true
+        unit: items
+        min: "1"
+        max: "1000"
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    constraints:
+      - kind: allowed_values
+        param: group_by
+      - kind: count_max
+        param: limit
+        clamp: true
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: declared
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    response:
+      format: rows
+    scoping: [records, classes]
+    mappings:
+      - channel: http
+        method: POST
+        path: /v1/aggregate
+        route: postgres-rows-aggregate
+        extract:
+          target_id: input.table
+          params:
+            group_by: input.?group_by
+            measures: input.measures
+            filters: input.?filters
+            limit: input.?limit
+      - channel: mcp
+        tool: aggregate_rows
+        route: postgres-rows-aggregate
+        description: >-
+          Aggregate rows of one table the connection allows: count:*,
+          count:<column>, sum, avg, min or max of a column, optionally per
+          group. Groups with fewer rows than the connection's minimum
+          group size are never returned.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [table, measures]
+          properties:
+            table:
+              type: string
+              description: The table, as schema.table
+              pattern: '^[a-z_][a-z0-9_]{0,62}\.[a-z_][a-z0-9_]{0,62}$'
+            group_by:
+              type: array
+              description: The columns to group by
+              maxItems: 8
+              items:
+                type: string
+                pattern: '^[a-z_][a-z0-9_]{0,62}$'
+            measures:
+              type: array
+              description: Measures such as count:* or sum:amount
+              minItems: 1
+              maxItems: 16
+              items:
+                type: string
+                pattern: '^(count|sum|avg|min|max):([a-z_][a-z0-9_]{0,62}|\*)$'
+            filters:
+              type: array
+              description: Predicates, all of which a row must match
+              maxItems: 20
+              items:
+                type: object
+                additionalProperties: false
+                required: [column, op]
+                properties:
+                  column:
+                    type: string
+                    pattern: '^[a-z_][a-z0-9_]{0,62}$'
+                  op:
+                    type: string
+                    enum: [eq, ne, lt, le, gt, ge, in, is_null, not_null, prefix]
+                  value:
+                    type: [string, number, boolean]
+                  values:
+                    type: array
+                    maxItems: 100
+                    items:
+                      type: [string, number, boolean]
+            limit:
+              type: integer
+              description: The most groups to return
+              minimum: 1
+              maximum: 1000
+        extract:
+          target_id: input.table
+          params:
+            group_by: input.?group_by
+            measures: input.measures
+            filters: input.?filters
+            limit: input.?limit
+    dispatch:
+      sql:
+        operation: aggregate
+
+  - operation: postgres.tables.read
+    summary: List the allow-listed tables and the columns the agent may read
+    access: read
+    target:
+      type: pg_manifest
+      id_pattern: '^manifest$'
+      account: none
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: declared
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    response:
+      format: json
+    scoping: [classes]
+    mappings:
+      - channel: http
+        method: GET
+        path: /v1/tables
+        route: postgres-tables-read
+        extract:
+          target_id: "'manifest'"
+          params: {}
+      - channel: mcp
+        tool: describe_tables
+        route: postgres-tables-read
+        description: >-
+          List the tables this connection allows and, for each, the columns
+          you may read with their type and data class.
+        input_schema:
+          type: object
+          additionalProperties: false
+          properties: {}
+        extract:
+          target_id: "'manifest'"
+          params: {}
+    dispatch:
+      sql:
+        operation: tables
