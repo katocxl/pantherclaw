@@ -149,9 +149,15 @@ func (e *Engine) stripeGetter(ctx context.Context, conn *control.Connection, def
 	if err != nil {
 		return nil, nil, err
 	}
-	if def.Dispatch == nil || def.Dispatch.CredentialPattern == "" || !def.Dispatch.CredentialMatches(plain) {
+	// A fact read sends the key too: it must match the definition's pattern,
+	// and a definition without one reads no stripe.* fact (HR-301, HR-303).
+	if def.Dispatch == nil || def.Dispatch.CredentialPattern == "" {
 		clear(plain)
-		return nil, nil, errCredentialPattern
+		return nil, nil, ErrCredentialPattern
+	}
+	if err := CheckCredentialPattern(def, conn.Credential.GetKind(), plain); err != nil {
+		clear(plain)
+		return nil, nil, err
 	}
 	base := strings.TrimSuffix(conn.GetBaseUrl(), "/")
 	get := func(ctx context.Context, path, account string) (egress.Response, error) {
