@@ -49,4 +49,6 @@ Each SDK runs these files in its own test suite:
 - TypeScript: `sdk/typescript`;
 - Python: `sdk/python`.
 
-`task sdk:check` runs all three (it is not part of `task check`).
+The framework wrappers run `wrappers.json`: in Python `integrations/langchain/python`, `integrations/openai-agents/python` and `integrations/crewai/python`.
+
+`task sdk:check` runs all of them (it is not part of `task check`).
