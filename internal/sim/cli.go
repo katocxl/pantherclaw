@@ -36,6 +36,8 @@ Usage:
                       [--stdio] [--upstream URL] [--misbehave]
   pantherclaw-sim github --app-key FILE [--addr 127.0.0.1:9092] [--app-id 1] [--client-id ID] [--installation 1] [--account acme]
                          [--repos payments] [--mcp-addr ADDR --mcp-token-file FILE]
+  pantherclaw-sim slack [--addr 127.0.0.1:9095] [--token-file FILE] [--channels LIST] [--external-shared LIST] [--not-in-channel LIST]
+                        [--rate-limit 0] [--invalid-auth] [--channel-not-found]
   pantherclaw-sim load --workload-file FILE [--token-file FILE] [--run ID] [--gateway URL] [--connection payments] [--rate 1000] [--duration 30s]
                        [--warmup 5s] [--max-in-flight 2048] [--amount 1.00 | --unique] [--facts-key-file FILE] [--out FILE]
   pantherclaw-sim canary [--host 127.0.0.1] [--dns-port 18453] [--https-port 18443] [--ssh-port 18422] [--query-addr 127.0.0.1:18433]
@@ -59,6 +61,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = runMCP(ctx, args[1:], stderr)
 	case "github":
 		err = runGitHub(ctx, args[1:], stderr)
+	case "slack":
+		err = runSlack(ctx, args[1:], stderr)
 	case "load":
 		err = runLoad(ctx, args[1:], stdout, stderr)
 	case "canary":
