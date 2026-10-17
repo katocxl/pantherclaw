@@ -128,7 +128,8 @@ test("TestHR328_guardClient refuses on deny, cannot_decide, unmapped and a reque
     deny: [(_c, id, res) => res.end(decided(id, "deny", { code: "amount_over_limit", transaction_id: "txn_1" })), "PantherClaw refused this call: amount_over_limit (transaction txn_1)"],
     "a gateway error": [(_c, _id, res) => res.writeHead(502).end(), "PantherClaw refused this call: cannot_decide"],
     unmapped: [unmapped, "PantherClaw refused this call: unknown_tool"],
-    "a request to send": [(_c, id, res) => res.end(decided(id, "allow", { dispatch: send })), "PantherClaw refused this call: use_gateway_face"],
+    "a request to send": [(_c, id, res) => res.end(decided(id, "allow", { dispatch: send })), "PantherClaw refused this call: dispatch_required"],
+    "use_gateway_face": [(_c, _id, res) => res.end(JSON.stringify({ decision: "deny", code: "use_gateway_face", coverage: "PARTIAL", mode: "enforce" })), "PantherClaw refused this call: use_gateway_face"],
   };
   for (const [name, [face, want]] of Object.entries(faces)) {
     const g = await gateway(t, face);
@@ -141,10 +142,27 @@ test("TestHR328_guardClient refuses on deny, cannot_decide, unmapped and a reque
   const d = await gateway(t, deny);
   const ran: unknown[] = [];
   const raising = guardClient(await heldServer(ran), { client: d.client, connection: "payments", raiseOnRefusal: true });
-  await assert.rejects(() => raising.callTool(refund), (e: unknown) => e instanceof PantherClawRefusal && e.code === "policy_denied");
+  await assert.rejects(() => raising.callTool(refund), (e: unknown) => e instanceof PantherClawRefusal && e.code === "denied");
+  // biome-ignore lint/suspicious/noExplicitAny: a client that throws instead of answering
+  const broken = { authorize: () => Promise.reject(new Error("boom")) } as any;
+  assert.equal(textOf(await guardClient(await heldServer(ran), { client: broken, connection: "payments" }).callTool(refund)), "PantherClaw refused this call: wrapper_error");
   const u = await gateway(t, unmapped);
   await guardClient(await heldServer(ran), { client: u.client, connection: "payments", observeUnmapped: true }).callTool(refund);
   assert.equal(ran.length, 1, "observeUnmapped lets only an unmapped tool through");
+  // With onDispatch, an allow carrying a request to send goes to it and never to the server (D53).
+  const sd = await gateway(t, (_c, id, res) => res.end(decided(id, "allow", { dispatch: send })));
+  const sent: string[] = [];
+  const out = await guardClient(await heldServer(ran), {
+    client: sd.client,
+    connection: "payments",
+    onDispatch: (callId, o) => {
+      sent.push(`${callId.slice(0, 3)} ${o.url}`);
+      return { content: [{ type: "text", text: "sent" }] };
+    },
+  }).callTool(refund);
+  assert.equal(textOf(out as never), "sent");
+  assert.deepEqual(sent, ["pc- https://payments.example/mcp"]);
+  assert.equal(ran.length, 1, "the server's own tool is not called");
 });
 
 test("TestHR329_guardClient waits on a hold and resubmits the same action; an identical retry reuses it", async (t) => {
@@ -161,12 +179,16 @@ test("TestHR329_guardClient waits on a hold and resubmits the same action; an id
   assert.equal(actionIds[0], actionIds[1], "the resubmission carries the held action's id");
 
   const held: string[] = [];
-  const h = await gateway(t, (_c, id, res) => {
-    held.push(id);
-    res.end(decided(id, "hold", { wait: { handle: "h", state: "PENDING" } }));
-  });
-  const r = guardClient(await heldServer(ran), { client: h.client, connection: "payments", onHold: "refuse" });
-  assert.equal(textOf(await r.callTool(refund)), "PantherClaw refused this call: held (transaction h)");
+  const h = await gateway(
+    t,
+    (_c, id, res) => {
+      held.push(id);
+      res.end(decided(id, "hold", { transaction_id: "txn_h", wait: { handle: "h", state: "PENDING" } }));
+    },
+    { waitStates: ["PENDING"], block: 5000 },
+  );
+  const r = guardClient(await heldServer(ran), { client: h.client, connection: "payments", wait: 0.2 });
+  assert.equal(textOf(await r.callTool(refund)), "PantherClaw refused this call: hold_timeout (transaction txn_h)");
   await r.callTool({ name: "create_refund", arguments: { charge: "ch_1", amount: "30.00" } });
   await r.callTool({ name: "create_refund", arguments: { amount: "31.00", charge: "ch_1" } });
   assert.equal(held[0], held[1]);
@@ -174,11 +196,13 @@ test("TestHR329_guardClient waits on a hold and resubmits the same action; an id
   assert.equal(ran.length, 1);
 });
 
-test("TestHR329_a hold whose wait ends never calls the server", async (t) => {
+test("TestHR329_a hold whose wait ends, or that is declined, never calls the server", async (t) => {
   const g = await gateway(t, (_c, id, res) => res.end(decided(id, "hold", { wait: { handle: "h", state: "PENDING" } })), { waitStates: ["PENDING"], block: 5000 });
   const ran: unknown[] = [];
   const c = guardClient(await heldServer(ran), { client: g.client, connection: "payments", wait: 0.3 });
-  assert.equal(textOf(await c.callTool(refund)), "PantherClaw refused this call: cannot_decide");
+  assert.equal(textOf(await c.callTool(refund)), "PantherClaw refused this call: hold_timeout");
+  const d = await gateway(t, (_c, id, res) => res.end(decided(id, "hold", { wait: { handle: "h", state: "PENDING" } })), { waitStates: ["DECLINED"] });
+  assert.equal(textOf(await guardClient(await heldServer(ran), { client: d.client, connection: "payments", wait: 5 }).callTool(refund)), "PantherClaw refused this call: hold_declined");
   assert.deepEqual(ran, []);
 });
 

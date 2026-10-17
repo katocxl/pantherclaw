@@ -47,10 +47,11 @@ export type ToolSet = Record<string, Tool>;
 /**
  * Sends an allowed call's outbound request on a target-enforced connection,
  * whose target accepts only that exact request with its action token
- * (HR-201), and returns the tool's output. It runs instead of the tool's
- * own execute, whose request the target would refuse.
+ * (HR-201), and returns the tool's output (D53). It runs instead of the
+ * tool's own execute, which would send a second request the action token
+ * does not bind.
  */
-export type DispatchHandler = (send: Outbound, input: Record<string, unknown>, options: ToolExecutionOptions) => unknown;
+export type DispatchHandler = (callId: string, send: Outbound) => unknown;
 
 export interface GuardOptions {
   /** The PantherClaw client: key file, gateway and run. */
@@ -58,19 +59,20 @@ export interface GuardOptions {
   /** The connection that governs these tools; its package maps each tool by its name. */
   connection: string;
   /**
-   * A hold: "wait" (default) waits in PantherClaw for up to `wait` seconds
-   * and runs the tool only on its later allow; "refuse" returns a refusal
-   * at once, and an identical later call resubmits the same action.
+   * A hold: "wait" (the only choice, and the default) waits in PantherClaw
+   * for up to `wait` seconds and runs the tool only on its later allow.
+   * When the wait ends first, the call is refused, and an identical later
+   * call resubmits the same action.
    */
-  onHold?: "wait" | "refuse";
+  onHold?: "wait";
   /** How long a hold is waited on, in seconds (default 300, HR-174). */
   wait?: number;
   /** Let a tool the connection's package does not map run (default false: refused). */
   observeUnmapped?: boolean;
   /** Throw a PantherClawRefusal from execute instead of returning the refusal to the model (default false). */
   raiseOnRefusal?: boolean;
-  /** Handlers for tools on a target-enforced connection, by tool name (see DispatchHandler). Without one such an allow is refused. */
-  onDispatch?: Record<string, DispatchHandler>;
+  /** Sends an allowed call's request on a target-enforced connection (see DispatchHandler). Without it such an allow is refused. */
+  onDispatch?: DispatchHandler;
 }
 
 /** Why PantherClaw refused a call: its code and transaction. */
@@ -85,21 +87,20 @@ export class PantherClawRefusal extends Error {
   }
 }
 
-/** The refusal a result is, or null for an allow. */
-function refusal(res: Result, observeUnmapped: boolean): PantherClawRefusal | null {
-  const a = res.answer;
-  const txn = a?.transaction_id ?? a?.wait?.handle ?? "";
-  switch (res.outcome) {
-    case "allow":
-      return null;
-    case "hold":
-      return new PantherClawRefusal("held", txn);
-    case "deny":
-      if (a?.code === "unknown_tool" && observeUnmapped) return null;
-      return new PantherClawRefusal(a?.code || a?.error_class || "denied", txn);
-    default:
-      return new PantherClawRefusal(a?.code || "cannot_decide", txn);
+/**
+ * The refusal a call's final result is (D47), or null when the tool runs:
+ * `first` is the first answer, `res` the final one, `resumed` whether a
+ * hold was waited on.
+ */
+function refusal(first: Result, res: Result, resumed: boolean, observeUnmapped: boolean): PantherClawRefusal | null {
+  const txn = res.answer?.transaction_id || first.answer?.transaction_id || "";
+  if (res.outcome === "allow") return null;
+  if (resumed) return new PantherClawRefusal(res.outcome === "deny" ? "hold_declined" : "hold_timeout", txn);
+  if (res.outcome === "deny") {
+    if (res.answer?.code === "unknown_tool" && observeUnmapped) return null;
+    return new PantherClawRefusal(res.answer?.code || "denied", txn);
   }
+  return new PantherClawRefusal("cannot_decide", txn);
 }
 
 /**
@@ -136,14 +137,13 @@ class Guard {
 
   constructor(options: GuardOptions) {
     this.o = { onHold: "wait", wait: 300, observeUnmapped: false, raiseOnRefusal: false, ...options };
-    if (this.o.onHold !== "wait" && this.o.onHold !== "refuse") throw new Error('PantherClaw: onHold is "wait" or "refuse"');
+    if (this.o.onHold !== "wait") throw new Error('PantherClaw: onHold is "wait"');
     if (!(this.o.wait > 0)) throw new Error("PantherClaw: wait is a number of seconds above 0");
   }
 
   wrap(name: string, t: Tool): Tool {
     const run = t.execute as NonNullable<Tool["execute"]>;
-    const handler = this.o.onDispatch?.[name];
-    const wrapped: Tool = { ...t, execute: (input: unknown, options: ToolExecutionOptions) => this.execute(name, run, handler, input, options) };
+    const wrapped: Tool = { ...t, execute: (input: unknown, options: ToolExecutionOptions) => this.execute(name, run, input, options) };
     if (typeof t.toModelOutput === "function") {
       const own = t.toModelOutput;
       wrapped.toModelOutput = (o: { toolCallId?: string }) => {
@@ -154,18 +154,19 @@ class Guard {
     return wrapped;
   }
 
-  private async execute(name: string, run: NonNullable<Tool["execute"]>, handler: DispatchHandler | undefined, input: unknown, options: ToolExecutionOptions): Promise<unknown> {
+  private async execute(name: string, run: NonNullable<Tool["execute"]>, input: unknown, options: ToolExecutionOptions): Promise<unknown> {
     let r: PantherClawRefusal | null;
     let send: Outbound | undefined;
+    let id = "";
     try {
-      ({ refusal: r, send } = await this.decide(name, input, options));
-    } catch (e) {
-      r = new PantherClawRefusal("cannot_decide");
+      ({ refusal: r, send, id } = await this.decide(name, input, options));
+    } catch {
+      r = new PantherClawRefusal("wrapper_error");
     }
     if (r) return this.refuse(r, options);
     if (send) {
-      if (!handler) return this.refuse(new PantherClawRefusal("dispatch_handler_required"), options);
-      return handler(send, input as Record<string, unknown>, options);
+      if (!this.o.onDispatch) return this.refuse(new PantherClawRefusal("dispatch_required"), options);
+      return this.o.onDispatch(id, send);
     }
     return run(input, options);
   }
@@ -179,23 +180,27 @@ class Guard {
     return r.message;
   }
 
-  private async decide(name: string, input: unknown, options: ToolExecutionOptions): Promise<{ refusal: PantherClawRefusal | null; send?: Outbound }> {
-    if (typeof input !== "object" || input === null || Array.isArray(input)) return { refusal: new PantherClawRefusal("input_not_object") };
+  private async decide(name: string, input: unknown, options: ToolExecutionOptions): Promise<{ refusal: PantherClawRefusal | null; send?: Outbound; id: string }> {
+    // The client refuses a call whose input is not an object (cannot_decide).
+    if (typeof input !== "object" || input === null || Array.isArray(input)) return { refusal: new PantherClawRefusal("cannot_decide"), id: "" };
     const server = this.o.connection;
     const call: ToolCall = { tool: `mcp__${server}__${name}`, server, input: input as Record<string, unknown>, tool_use_id: callId(options?.toolCallId) };
     const key = JSON.stringify([name, canonicalize(JSON.stringify(input))]);
     this.prune();
     const actionId = this.retries.get(key)?.actionId ?? newActionId();
     const waitMs = this.o.wait * 1000;
-    let res = await this.o.client.authorize(server, call, actionId);
-    if (res.outcome === "hold") {
+    const first = await this.o.client.authorize(server, call, actionId);
+    let res = first;
+    if (first.outcome === "hold") {
       this.retries.set(key, { actionId, expires: Date.now() + waitMs });
       if (this.retries.size > MAX_RETRIES) this.retries.delete(this.retries.keys().next().value as string);
-      if (this.o.onHold === "wait") res = await withSignal(this.o.client.resume(server, call, actionId, res, waitMs), options?.abortSignal);
+      res = await withSignal(this.o.client.resume(server, call, actionId, first, waitMs), options?.abortSignal);
+      // The wait has used up its time: an identical later call may still resubmit the held action.
+      if (res.outcome !== "allow") this.retries.set(key, { actionId, expires: Date.now() + waitMs });
     }
-    const r = refusal(res, this.o.observeUnmapped);
+    const r = refusal(first, res, first.outcome === "hold", this.o.observeUnmapped);
     if (res.outcome === "allow") this.retries.delete(key);
-    return { refusal: r, send: r ? undefined : res.send };
+    return { refusal: r, send: r ? undefined : res.send, id: call.tool_use_id };
   }
 
   /** Forgets retry ids past their wait. */

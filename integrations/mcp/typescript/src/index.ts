@@ -24,6 +24,7 @@ import {
   HEADER_NONCE,
   HEADER_PROOF,
   newActionId,
+  type Outbound,
   type Result,
   retry,
   signProof,
@@ -110,17 +111,26 @@ export interface GuardOptions {
   /** The MCP server's name; a connection governs the one server named after it, so it is the connection's name (the default). */
   server?: string;
   /**
-   * A hold: "wait" (default) waits in PantherClaw for up to `wait` seconds
-   * and calls the tool only on its later allow; "refuse" returns a refusal
-   * at once, and an identical later call resubmits the same action.
+   * A hold: "wait" (the only choice, and the default) waits in PantherClaw
+   * for up to `wait` seconds and calls the tool only on its later allow.
+   * When the wait ends first, the call is refused, and an identical later
+   * call resubmits the same action.
    */
-  onHold?: "wait" | "refuse";
+  onHold?: "wait";
   /** How long a hold is waited on, in seconds (default 300, HR-174). */
   wait?: number;
   /** Let a tool the connection's package does not map be called (default false: refused). */
   observeUnmapped?: boolean;
   /** Throw a PantherClawRefusal from callTool instead of returning the refusal as an error result (default false). */
   raiseOnRefusal?: boolean;
+  /**
+   * Sends an allowed call's request on a target-enforced connection, whose
+   * server accepts only that exact request with its action token (HR-201),
+   * and returns the call's result (D53). It runs instead of the client's
+   * own callTool, which would send a request the token does not bind.
+   * Without it such an allow is refused.
+   */
+  onDispatch?: (callId: string, send: Outbound) => unknown;
 }
 
 /** Why PantherClaw refused a call: its code and transaction. */
@@ -148,28 +158,27 @@ export interface GuardedClient {
   close(): Promise<void>;
 }
 
-/** The refusal a result is, or null for an allow. */
-function refusal(res: Result, observeUnmapped: boolean): PantherClawRefusal | null {
-  const a = res.answer;
-  const txn = a?.transaction_id ?? a?.wait?.handle ?? "";
-  switch (res.outcome) {
-    case "allow":
-      return null;
-    case "hold":
-      return new PantherClawRefusal("held", txn);
-    case "deny":
-      if (a?.code === "unknown_tool" && observeUnmapped) return null;
-      return new PantherClawRefusal(a?.code || a?.error_class || "denied", txn);
-    default:
-      return new PantherClawRefusal(a?.code || "cannot_decide", txn);
+/**
+ * The refusal a call's final result is (D47), or null when the tool is
+ * called: `first` is the first answer, `res` the final one, `resumed`
+ * whether a hold was waited on.
+ */
+function refusal(first: Result, res: Result, resumed: boolean, observeUnmapped: boolean): PantherClawRefusal | null {
+  const txn = res.answer?.transaction_id || first.answer?.transaction_id || "";
+  if (res.outcome === "allow") return null;
+  if (resumed) return new PantherClawRefusal(res.outcome === "deny" ? "hold_declined" : "hold_timeout", txn);
+  if (res.outcome === "deny") {
+    if (res.answer?.code === "unknown_tool" && observeUnmapped) return null;
+    return new PantherClawRefusal(res.answer?.code || "denied", txn);
   }
+  return new PantherClawRefusal("cannot_decide", txn);
 }
 
 /**
- * Wraps an MCP client of an agent_held server so that PantherClaw decides
- * every callTool before the server sees it. An allow carrying a request to
- * send (a target-enforced connection) is refused: the server would refuse
- * the client's own request; use gatewayFetch for such a connection.
+ * Wraps an MCP client of an agent_held or target-enforced server so that
+ * PantherClaw decides every callTool before the server sees it. An allow
+ * carrying a request to send (a target-enforced connection) goes to
+ * onDispatch, never to the client's own callTool.
  */
 export function guardClient(mcp: McpClient, options: GuardOptions): GuardedClient {
   if (!mcp || typeof mcp.callTool !== "function") throw new Error("PantherClaw: an MCP client is required");
@@ -177,7 +186,7 @@ export function guardClient(mcp: McpClient, options: GuardOptions): GuardedClien
   const o = { onHold: "wait" as const, wait: 300, observeUnmapped: false, raiseOnRefusal: false, server: options.connection, ...options };
   if (!CONNECTION_NAME.test(o.connection)) throw new Error(`PantherClaw: no connection can be named ${o.connection}`);
   if (o.server !== o.connection) throw new Error(`PantherClaw: the connection ${o.connection} governs the MCP server named after it, not ${o.server}`);
-  if (o.onHold !== "wait" && o.onHold !== "refuse") throw new Error('PantherClaw: onHold is "wait" or "refuse"');
+  if (o.onHold !== "wait") throw new Error('PantherClaw: onHold is "wait"');
   if (!(o.wait > 0)) throw new Error("PantherClaw: wait is a number of seconds above 0");
   const callTool = mcp.callTool.bind(mcp);
   const listTools = mcp.listTools.bind(mcp);
@@ -185,38 +194,46 @@ export function guardClient(mcp: McpClient, options: GuardOptions): GuardedClien
   /** Action ids of held calls by their content, so an identical later call resubmits the same action (PAP/1 §8). */
   const retries = new Map<string, { actionId: string; expires: number }>();
 
-  const decide = async (name: string, args: unknown, signal?: AbortSignal): Promise<PantherClawRefusal | null> => {
-    if (typeof name !== "string" || name === "") return new PantherClawRefusal("tool_name_required");
-    if (typeof args !== "object" || args === null || Array.isArray(args)) return new PantherClawRefusal("input_not_object");
+  const decide = async (name: unknown, args: unknown, signal?: AbortSignal): Promise<{ refusal: PantherClawRefusal | null; send?: Outbound; id: string }> => {
+    // The client refuses a call without a tool name or with an input that is not an object (cannot_decide).
+    if (typeof name !== "string" || name === "" || typeof args !== "object" || args === null || Array.isArray(args)) {
+      return { refusal: new PantherClawRefusal("cannot_decide"), id: "" };
+    }
     const call: ToolCall = { tool: `mcp__${o.server}__${name}`, server: o.server, input: args as Record<string, unknown>, tool_use_id: `pc-${randomBytes(16).toString("hex")}` };
     const key = JSON.stringify([name, canonicalize(JSON.stringify(args))]);
     const now = Date.now();
     for (const [k, r] of retries) if (r.expires < now) retries.delete(k);
     const actionId = retries.get(key)?.actionId ?? newActionId();
-    let res = await o.client.authorize(o.connection, call, actionId);
-    if (res.outcome === "hold") {
+    const first = await o.client.authorize(o.connection, call, actionId);
+    let res = first;
+    if (first.outcome === "hold") {
       retries.set(key, { actionId, expires: now + o.wait * 1000 });
       if (retries.size > MAX_RETRIES) retries.delete(retries.keys().next().value as string);
-      if (o.onHold === "wait") res = await withSignal(o.client.resume(o.connection, call, actionId, res, o.wait * 1000), signal);
+      res = await withSignal(o.client.resume(o.connection, call, actionId, first, o.wait * 1000), signal);
+      // The wait has used up its time: an identical later call may still resubmit the held action.
+      if (res.outcome !== "allow") retries.set(key, { actionId, expires: Date.now() + o.wait * 1000 });
     }
     if (res.outcome === "allow") retries.delete(key);
-    const r = refusal(res, o.observeUnmapped);
-    if (!r && res.send) return new PantherClawRefusal("use_gateway_face");
-    return r;
+    const r = refusal(first, res, first.outcome === "hold", o.observeUnmapped);
+    return { refusal: r, send: r ? undefined : res.send, id: call.tool_use_id };
   };
 
   return {
     async callTool(params, resultSchema, opts) {
       let r: PantherClawRefusal | null;
+      let send: Outbound | undefined;
+      let id = "";
       try {
-        r = await decide(params?.name, params?.arguments ?? {}, opts?.signal);
+        ({ refusal: r, send, id } = await decide(params?.name, params?.arguments ?? {}, opts?.signal));
       } catch {
-        r = new PantherClawRefusal("cannot_decide");
+        r = new PantherClawRefusal("wrapper_error");
       }
+      if (!r && send && !o.onDispatch) r = new PantherClawRefusal("dispatch_required");
       if (r) {
         if (o.raiseOnRefusal) throw r;
         return { content: [{ type: "text", text: r.message }], isError: true };
       }
+      if (send && o.onDispatch) return o.onDispatch(id, send);
       return callTool(params, resultSchema, opts);
     },
     listTools: (params, opts) => listTools(params, opts),
