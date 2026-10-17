@@ -108,8 +108,10 @@ func (s *Server) seed() {
 		{FixturePayment2, FixtureCharge2, "usd", 5000},
 		{FixturePaymentEUR, FixtureChargeEUR, "eur", 20000},
 	} {
-		s.intents[p.intent] = &paymentIntent{id: p.intent, customer: FixtureCustomer, method: FixturePaymentMethod,
-			currency: p.currency, amount: p.amount, created: at, confirmed: at, charge: p.charge}
+		s.intents[p.intent] = &paymentIntent{
+			id: p.intent, customer: FixtureCustomer, method: FixturePaymentMethod,
+			currency: p.currency, amount: p.amount, created: at, confirmed: at, charge: p.charge,
+		}
 		s.charges[p.charge] = &charge{id: p.charge, intent: p.intent, customer: FixtureCustomer, currency: p.currency, amount: p.amount, created: at}
 	}
 	for _, id := range []string{FixturePayee, FixturePayee2} {
@@ -124,8 +126,10 @@ func (s *Server) AddPayment(amount int64, currency string) (intentID, chargeID s
 	defer s.mu.Unlock()
 	now := s.now()
 	intentID, chargeID = newID("pi_"), newID("ch_")
-	s.intents[intentID] = &paymentIntent{id: intentID, customer: FixtureCustomer, method: FixturePaymentMethod,
-		currency: currency, amount: amount, created: now, confirmed: now, charge: chargeID}
+	s.intents[intentID] = &paymentIntent{
+		id: intentID, customer: FixtureCustomer, method: FixturePaymentMethod,
+		currency: currency, amount: amount, created: now, confirmed: now, charge: chargeID,
+	}
 	s.charges[chargeID] = &charge{id: chargeID, intent: intentID, customer: FixtureCustomer, currency: currency, amount: amount, created: now}
 	return intentID, chargeID
 }
@@ -182,8 +186,10 @@ func (s *Server) Refunds() []Refund {
 	var out []Refund
 	for _, id := range s.order {
 		if r, ok := s.refunds[id]; ok {
-			out = append(out, Refund{ID: r.id, Charge: r.charge, PaymentIntent: r.intent, Currency: r.currency, Reason: r.reason,
-				Amount: r.amount, Key: r.key, Created: r.created, Status: r.status(now)})
+			out = append(out, Refund{
+				ID: r.id, Charge: r.charge, PaymentIntent: r.intent, Currency: r.currency, Reason: r.reason,
+				Amount: r.amount, Key: r.key, Created: r.created, Status: r.status(now),
+			})
 		}
 	}
 	return out
@@ -198,8 +204,10 @@ func (s *Server) PaymentIntents() []PaymentIntent {
 	var out []PaymentIntent
 	for _, id := range s.order {
 		if p, ok := s.intents[id]; ok {
-			out = append(out, PaymentIntent{ID: p.id, Customer: p.customer, PaymentMethod: p.method, Currency: p.currency,
-				Key: p.key, Status: p.status(now), Amount: p.amount})
+			out = append(out, PaymentIntent{
+				ID: p.id, Customer: p.customer, PaymentMethod: p.method, Currency: p.currency,
+				Key: p.key, Status: p.status(now), Amount: p.amount,
+			})
 		}
 	}
 	return out

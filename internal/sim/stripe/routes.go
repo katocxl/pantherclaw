@@ -57,9 +57,11 @@ func (s *Server) createRefund(w http.ResponseWriter, r *http.Request) {
 					return http.StatusBadRequest, noSuch("payment_intent", "payment_intent", piID)
 				}
 				if p.status(c.now) != "succeeded" || p.charge == "" {
-					return http.StatusBadRequest, &apiError{status: http.StatusBadRequest, Type: "invalid_request_error",
+					return http.StatusBadRequest, &apiError{
+						status: http.StatusBadRequest, Type: "invalid_request_error",
 						Code: "payment_intent_unexpected_state", Param: "payment_intent",
-						Message: "This PaymentIntent does not have a successful charge to refund."}
+						Message: "This PaymentIntent does not have a successful charge to refund.",
+					}
 				}
 				chID = p.charge
 			}
@@ -69,8 +71,10 @@ func (s *Server) createRefund(w http.ResponseWriter, r *http.Request) {
 			}
 			left := ch.amount - s.refunded(ch.id, c.now)
 			if left <= 0 {
-				return http.StatusBadRequest, &apiError{status: http.StatusBadRequest, Type: "invalid_request_error",
-					Code: "charge_already_refunded", Message: "Charge " + ch.id + " has already been refunded."}
+				return http.StatusBadRequest, &apiError{
+					status: http.StatusBadRequest, Type: "invalid_request_error",
+					Code: "charge_already_refunded", Message: "Charge " + ch.id + " has already been refunded.",
+				}
 			}
 			amount, given, perr := f.amount("amount", false)
 			if perr != nil {
@@ -80,10 +84,12 @@ func (s *Server) createRefund(w http.ResponseWriter, r *http.Request) {
 				amount = left
 			}
 			if amount > left {
-				return http.StatusBadRequest, &apiError{status: http.StatusBadRequest, Type: "invalid_request_error",
+				return http.StatusBadRequest, &apiError{
+					status: http.StatusBadRequest, Type: "invalid_request_error",
 					Code: "amount_too_large", Param: "amount",
 					Message: "Refund amount (" + strconv.FormatInt(amount, 10) + ") is greater than unrefunded amount on charge (" +
-						strconv.FormatInt(left, 10) + ")"}
+						strconv.FormatInt(left, 10) + ")",
+				}
 			}
 			reason := f.get("reason")
 			if reason != "" && !slices.Contains(reasons, reason) {
@@ -91,8 +97,10 @@ func (s *Server) createRefund(w http.ResponseWriter, r *http.Request) {
 			}
 			if chance(s.faults.DeclineRate) {
 				s.stats.Declines++
-				return http.StatusPaymentRequired, &apiError{status: http.StatusPaymentRequired, Type: "card_error",
-					Code: "card_declined", Decline: "generic_decline", Message: "Your card was declined."}
+				return http.StatusPaymentRequired, &apiError{
+					status: http.StatusPaymentRequired, Type: "card_error",
+					Code: "card_declined", Decline: "generic_decline", Message: "Your card was declined.",
+				}
 			}
 			ref := &refund{
 				id: newID("re_"), charge: ch.id, intent: ch.intent, currency: ch.currency, reason: reason,
@@ -219,8 +227,10 @@ func (s *Server) confirm(p *paymentIntent, c call, f *form) (int, any) {
 	if p.method == TestCardDeclined || chance(s.faults.DeclineRate) {
 		p.declined = true
 		s.stats.Declines++
-		return http.StatusPaymentRequired, &apiError{status: http.StatusPaymentRequired, Type: "card_error", Code: "card_declined",
-			Decline: "generic_decline", Message: "Your card was declined.", Intent: s.renderIntent(p, c, nil)}
+		return http.StatusPaymentRequired, &apiError{
+			status: http.StatusPaymentRequired, Type: "card_error", Code: "card_declined",
+			Decline: "generic_decline", Message: "Your card was declined.", Intent: s.renderIntent(p, c, nil),
+		}
 	}
 	p.declined, p.confirmed = false, c.now
 	ch := &charge{id: newID("ch_"), intent: p.id, customer: p.customer, currency: p.currency, amount: p.amount, created: c.now}
@@ -240,8 +250,10 @@ func (s *Server) getIntent(w http.ResponseWriter, r *http.Request) {
 }
 
 func unexpectedState(p *paymentIntent, now time.Time, action string) *apiError {
-	return &apiError{status: http.StatusBadRequest, Type: "invalid_request_error", Code: "payment_intent_unexpected_state",
-		Message: "You cannot " + action + " this PaymentIntent because it has a status of " + p.status(now) + "."}
+	return &apiError{
+		status: http.StatusBadRequest, Type: "invalid_request_error", Code: "payment_intent_unexpected_state",
+		Message: "You cannot " + action + " this PaymentIntent because it has a status of " + p.status(now) + ".",
+	}
 }
 
 // confirmIntent confirms a payment intent that requires confirmation, or
@@ -321,8 +333,10 @@ func (s *Server) createTransfer(w http.ResponseWriter, r *http.Request) {
 				return http.StatusBadRequest, invalid("description", "Invalid description: at most 500 characters.")
 			}
 			if s.available(currency, c.now) < amount {
-				return http.StatusBadRequest, &apiError{status: http.StatusBadRequest, Type: "invalid_request_error",
-					Code: "balance_insufficient", Message: "You have insufficient available funds in your Stripe account."}
+				return http.StatusBadRequest, &apiError{
+					status: http.StatusBadRequest, Type: "invalid_request_error",
+					Code: "balance_insufficient", Message: "You have insufficient available funds in your Stripe account.",
+				}
 			}
 			t := &transfer{
 				id: newID("tr_"), destination: dest, currency: currency, group: f.get("transfer_group"),
@@ -400,13 +414,17 @@ func (s *Server) listEvents(w http.ResponseWriter, r *http.Request) {
 		if acct := r.Header.Get("Stripe-Account"); acct != "" {
 			a := s.accounts[acct]
 			if !accountID.MatchString(acct) || a == nil {
-				return http.StatusForbidden, &apiError{status: http.StatusForbidden, Type: "invalid_request_error",
-					Code: "account_invalid", Message: "The provided key does not have access to account '" + acct + "'."}
+				return http.StatusForbidden, &apiError{
+					status: http.StatusForbidden, Type: "invalid_request_error",
+					Code: "account_invalid", Message: "The provided key does not have access to account '" + acct + "'.",
+				}
 			}
 			changes := slices.Clone(a.bankChanges)
 			if s.faults.BankChangedRecently {
-				changes = append(changes, bankChange{event: "evt_SimBank" + strings.TrimPrefix(acct, "acct_"),
-					kind: "account.external_account.updated", at: c.now.Add(-24 * time.Hour)})
+				changes = append(changes, bankChange{
+					event: "evt_SimBank" + strings.TrimPrefix(acct, "acct_"),
+					kind:  "account.external_account.updated", at: c.now.Add(-24 * time.Hour),
+				})
 			}
 			slices.SortStableFunc(changes, func(x, y bankChange) int { return y.at.Compare(x.at) })
 			for _, b := range changes {
@@ -421,7 +439,8 @@ func (s *Server) listEvents(w http.ResponseWriter, r *http.Request) {
 		page, more, perr := pageAfter(items, f.get("starting_after"), limit, func(e struct {
 			acct string
 			b    bankChange
-		}) string {
+		},
+		) string {
 			return e.b.event
 		})
 		if perr != nil {

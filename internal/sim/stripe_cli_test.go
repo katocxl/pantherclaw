@@ -21,8 +21,10 @@ func TestStripeStopsOnCancel(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 	var out, errb bytes.Buffer
-	args := []string{"stripe", "--addr", "127.0.0.1:0", "--key-file", keyFile, "--settle-after", "1s", "--fail-after-pending",
-		"--bank-changed-recently", "--livemode-key", "sk_live_simulatedLiveKey000000"}
+	args := []string{
+		"stripe", "--addr", "127.0.0.1:0", "--key-file", keyFile, "--settle-after", "1s", "--fail-after-pending",
+		"--bank-changed-recently", "--livemode-key", "sk_live_simulatedLiveKey000000",
+	}
 	if code := Run(ctx, args, &out, &errb); code != 0 {
 		t.Fatalf("stripe: %d %s", code, errb.String())
 	}

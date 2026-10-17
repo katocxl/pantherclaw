@@ -228,8 +228,10 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) authenticate(r *http.Request) (bool, *apiError) {
 	h := r.Header.Get("Authorization")
 	if h == "" {
-		return false, &apiError{status: http.StatusUnauthorized, Type: "invalid_request_error",
-			Message: "You did not provide an API key. Provide it in the Authorization header as a Bearer token."}
+		return false, &apiError{
+			status: http.StatusUnauthorized, Type: "invalid_request_error",
+			Message: "You did not provide an API key. Provide it in the Authorization header as a Bearer token.",
+		}
 	}
 	key, ok := cutPrefix(h, "Bearer ")
 	if ok && s.require.LivemodeKey != "" && subtle.ConstantTimeCompare([]byte(key), []byte(s.require.LivemodeKey)) == 1 {
@@ -276,13 +278,17 @@ func invalid(param, msg string) *apiError {
 }
 
 func missing(param string) *apiError {
-	return &apiError{status: http.StatusBadRequest, Type: "invalid_request_error", Code: "parameter_missing", Param: param,
-		Message: "Missing required param: " + param + "."}
+	return &apiError{
+		status: http.StatusBadRequest, Type: "invalid_request_error", Code: "parameter_missing", Param: param,
+		Message: "Missing required param: " + param + ".",
+	}
 }
 
 func unknownParam(param string) *apiError {
-	return &apiError{status: http.StatusBadRequest, Type: "invalid_request_error", Code: "parameter_unknown", Param: param,
-		Message: "Received unknown parameter: " + param}
+	return &apiError{
+		status: http.StatusBadRequest, Type: "invalid_request_error", Code: "parameter_unknown", Param: param,
+		Message: "Received unknown parameter: " + param,
+	}
 }
 
 func noSuch(kind, param, id string) *apiError {
@@ -290,8 +296,10 @@ func noSuch(kind, param, id string) *apiError {
 	if param != "" {
 		status = http.StatusBadRequest
 	}
-	return &apiError{status: status, Type: "invalid_request_error", Code: "resource_missing", Param: param,
-		Message: "No such " + kind + ": '" + id + "'"}
+	return &apiError{
+		status: status, Type: "invalid_request_error", Code: "resource_missing", Param: param,
+		Message: "No such " + kind + ": '" + id + "'",
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -322,7 +330,8 @@ var idemKey = regexp.MustCompile(`^[\x21-\x7e]{1,255}$`)
 // saves the result of a request that started executing). A lost answer
 // (LoseRate) hangs after the effect and drops the connection.
 func (s *Server) create(w http.ResponseWriter, r *http.Request, route string, allowed []string,
-	do func(c call, f *form) (int, any)) {
+	do func(c call, f *form) (int, any),
+) {
 	key := r.Header.Get("Idempotency-Key")
 	if key != "" && !idemKey.MatchString(key) {
 		invalid("", "Invalid Idempotency-Key header.").write(w)
@@ -340,8 +349,10 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request, route string, al
 		if prev.route != route || prev.digest != f.digest {
 			s.stats.IdempotencyErrors++
 			s.mu.Unlock()
-			(&apiError{status: http.StatusBadRequest, Type: "idempotency_error",
-				Message: "Keys for idempotent requests can only be used with the same parameters they were first used with."}).write(w)
+			(&apiError{
+				status: http.StatusBadRequest, Type: "idempotency_error",
+				Message: "Keys for idempotent requests can only be used with the same parameters they were first used with.",
+			}).write(w)
 			return
 		}
 		s.stats.Replays++

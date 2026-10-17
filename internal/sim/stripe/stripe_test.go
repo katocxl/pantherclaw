@@ -199,8 +199,10 @@ func TestFormStrictness(t *testing.T) {
 // rest, never more than is left.
 func TestRefunds(t *testing.T) {
 	h := start(t, Faults{})
-	a := h.post("/v1/refunds", url.Values{"payment_intent": {FixturePayment}, "amount": {"5000"}, "reason": {"duplicate"},
-		"metadata[order]": {"42"}}, "pc-txn-1")
+	a := h.post("/v1/refunds", url.Values{
+		"payment_intent": {FixturePayment}, "amount": {"5000"}, "reason": {"duplicate"},
+		"metadata[order]": {"42"},
+	}, "pc-txn-1")
 	if a.code != http.StatusOK || a.str("object") != "refund" || a.str("status") != "succeeded" || a.num("amount") != 5000 ||
 		a.str("charge") != FixtureCharge || a.str("currency") != "usd" || a.body["livemode"] != false {
 		t.Fatalf("refund = %d %s", a.code, a.raw)
@@ -351,8 +353,10 @@ func TestFaults(t *testing.T) {
 // intent cancels.
 func TestPaymentIntents(t *testing.T) {
 	h := start(t, Faults{SettleAfter: time.Minute})
-	form := url.Values{"amount": {"2500"}, "currency": {"usd"}, "customer": {FixtureCustomer}, "payment_method": {FixturePaymentMethod},
-		"confirm": {"true"}, "off_session": {"true"}, "payment_method_types[]": {"card"}}
+	form := url.Values{
+		"amount": {"2500"}, "currency": {"usd"}, "customer": {FixtureCustomer}, "payment_method": {FixturePaymentMethod},
+		"confirm": {"true"}, "off_session": {"true"}, "payment_method_types[]": {"card"},
+	}
 	a := h.post("/v1/payment_intents", form, "pc-p1")
 	if a.code != http.StatusOK || a.str("status") != "processing" || a.str("object") != "payment_intent" || a.str("latest_charge") == "" {
 		t.Fatalf("create = %d %s", a.code, a.raw)
@@ -366,8 +370,10 @@ func TestPaymentIntents(t *testing.T) {
 	if c := h.post("/v1/payment_intents/"+a.str("id")+"/cancel", url.Values{}, "pc-p2"); c.errCode() != "payment_intent_unexpected_state" {
 		t.Fatalf("cancel succeeded = %s", c.raw)
 	}
-	declined := url.Values{"amount": {"2500"}, "currency": {"usd"}, "customer": {FixtureCustomer}, "payment_method": {TestCardDeclined},
-		"confirm": {"true"}, "off_session": {"true"}}
+	declined := url.Values{
+		"amount": {"2500"}, "currency": {"usd"}, "customer": {FixtureCustomer}, "payment_method": {TestCardDeclined},
+		"confirm": {"true"}, "off_session": {"true"},
+	}
 	d := h.post("/v1/payment_intents", declined, "pc-p3")
 	e, _ := d.body["error"].(map[string]any)
 	pi, _ := e["payment_intent"].(map[string]any)
@@ -404,8 +410,10 @@ func TestPaymentIntents(t *testing.T) {
 // TestTransfers: to a connected account, from the available balance.
 func TestTransfers(t *testing.T) {
 	h := start(t, Faults{})
-	a := h.post("/v1/transfers", url.Values{"amount": {"12345"}, "currency": {"usd"}, "destination": {FixturePayee},
-		"transfer_group": {"order_42"}, "description": {"Invoice 42"}}, "pc-t1")
+	a := h.post("/v1/transfers", url.Values{
+		"amount": {"12345"}, "currency": {"usd"}, "destination": {FixturePayee},
+		"transfer_group": {"order_42"}, "description": {"Invoice 42"},
+	}, "pc-t1")
 	if a.code != http.StatusOK || a.str("object") != "transfer" || a.str("destination") != FixturePayee || a.body["reversed"] != false ||
 		a.num("amount") != 12345 {
 		t.Fatalf("transfer = %d %s", a.code, a.raw)
