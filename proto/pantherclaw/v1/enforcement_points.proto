@@ -1,0 +1,167 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// EnforcementPointService registers the third-party policy enforcement
+// points that ask the AuthZEN decision endpoint for decisions (G0 M14
+// D26-D29; PN-023, ADR-0019; HR-317). An enforcement point is a service
+// account, its subject, bound to the connections it fronts: only
+// agent_held and target_enforced connections, never a pantherclaw_held
+// one. It decides nothing itself; it forwards each agent's PAP/1
+// credentials, which PantherClaw verifies.
+//
+// Every change is made by a person holding enforcement_point.manage, and
+// is audited. A point is created PENDING; a person activates it on its
+// confirm page, with a security-key step-up, which binds the connections
+// it proposed. Narrowing its connections applies at once; widening is
+// proposed and confirmed the same way, while the point keeps its current
+// connections. Disabling is final.
+service EnforcementPointService {
+  // CreateEnforcementPoint creates a PENDING point proposing its
+  // connections; a person activates it at confirm_url.
+  // permission: enforcement_point.manage
+  rpc CreateEnforcementPoint(CreateEnforcementPointRequest) returns (CreateEnforcementPointResponse);
+  // ActivateEnforcementPoint confirms a point's proposed connections; it
+  // needs a step-up, so over the API it answers STEP_UP_REQUIRED (use
+  // confirm_url).
+  // permission: enforcement_point.manage
+  rpc ActivateEnforcementPoint(ActivateEnforcementPointRequest) returns (ActivateEnforcementPointResponse);
+  // UpdateEnforcementPointConnections replaces a point's connections: a
+  // set within the current one applies at once, any other is proposed and
+  // waits for a confirmation at confirm_url.
+  // permission: enforcement_point.manage
+  rpc UpdateEnforcementPointConnections(UpdateEnforcementPointConnectionsRequest) returns (UpdateEnforcementPointConnectionsResponse);
+  // DisableEnforcementPoint disables a point for good.
+  // permission: enforcement_point.manage
+  rpc DisableEnforcementPoint(DisableEnforcementPointRequest) returns (DisableEnforcementPointResponse);
+  // GetEnforcementPoint returns one point.
+  // permission: enforcement_point.manage
+  rpc GetEnforcementPoint(GetEnforcementPointRequest) returns (GetEnforcementPointResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListEnforcementPoints lists the org's points by name (at most 100).
+  // permission: enforcement_point.manage
+  rpc ListEnforcementPoints(ListEnforcementPointsRequest) returns (ListEnforcementPointsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// EnforcementPoint is a registered enforcement point.
+message EnforcementPoint {
+  // Point id.
+  string id = 1;
+  // Name.
+  string name = 2;
+  // What it is for.
+  string description = 3;
+  // The service account it authenticates as.
+  string service_account_id = 4;
+  // The connections it is bound to.
+  repeated string connection_ids = 5;
+  // The connections proposed and not yet confirmed; empty when none.
+  repeated string proposed_connection_ids = 6;
+  // Evaluations a second it may ask for, on each server instance.
+  int32 rate_per_second = 7;
+  // "PENDING", "ACTIVE" or "DISABLED".
+  string state = 8;
+  // Who created it.
+  string created_by = 9;
+  // When.
+  google.protobuf.Timestamp create_time = 10;
+  // Who activated it with a security key; empty while PENDING.
+  string activated_by = 11;
+  // When.
+  google.protobuf.Timestamp activate_time = 12;
+  // When it was disabled; unset unless DISABLED.
+  google.protobuf.Timestamp disable_time = 13;
+  // The page where a person confirms its proposed connections.
+  string confirm_url = 14;
+}
+
+message CreateEnforcementPointRequest {
+  // Lowercase letters, digits and dashes.
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 63
+    pattern: "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+  }];
+  // What it is for.
+  string description = 2 [(buf.validate.field).string.max_len = 500];
+  // The service account it authenticates as; it must hold the
+  // Enforcement Point role to ask for decisions.
+  string service_account_id = 3 [(buf.validate.field).string.uuid = true];
+  // The connections it fronts.
+  repeated string connection_ids = 4 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 50
+    unique: true
+    items: {
+      string: {uuid: true}
+    }
+  }];
+  // Evaluations a second, 1 to 1000 (default 50).
+  int32 rate_per_second = 5 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 1000
+  }];
+}
+
+message CreateEnforcementPointResponse {
+  EnforcementPoint point = 1;
+}
+
+message ActivateEnforcementPointRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message ActivateEnforcementPointResponse {
+  EnforcementPoint point = 1;
+}
+
+message UpdateEnforcementPointConnectionsRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // The connections it should front.
+  repeated string connection_ids = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 50
+    unique: true
+    items: {
+      string: {uuid: true}
+    }
+  }];
+}
+
+message UpdateEnforcementPointConnectionsResponse {
+  EnforcementPoint point = 1;
+  // Whether the change waits for a confirmation at the point's
+  // confirm_url (it widens the point).
+  bool confirmation_required = 2;
+}
+
+message DisableEnforcementPointRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message DisableEnforcementPointResponse {
+  EnforcementPoint point = 1;
+}
+
+message GetEnforcementPointRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetEnforcementPointResponse {
+  EnforcementPoint point = 1;
+}
+
+message ListEnforcementPointsRequest {}
+
+message ListEnforcementPointsResponse {
+  repeated EnforcementPoint points = 1;
+}
