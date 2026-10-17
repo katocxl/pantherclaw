@@ -545,7 +545,7 @@ jobs:
         with:
           enable-cache: false
       - name: SDK, Agent SDK integration and framework wrapper tests (Python 3.13 and 3.14)
-        # CrewAI installs on 3.13 only (its uv.lock marker): on 3.14 the CrewAI wrapper's tests replay the vectors through its decision core alone.
+        # No committed lock contains CrewAI (M14 D60): its wrapper's tests run on a stand-in for CrewAI's tool interface; task sdk:crewai-real runs them in the real CrewAI, locally.
         run: |
           for py in 3.13 3.14; do
             (cd sdk/python && PYTHONPATH=src uv run --locked --python "$py" python -m unittest discover -s tests)

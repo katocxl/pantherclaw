@@ -13,12 +13,6 @@ dependencies = ["pantherclaw"]
 [project.optional-dependencies]
 crewai = ["crewai>=1.15.27,<2"]
 
-[dependency-groups]
-# The real framework, for the tests only: never shipped or installed with
-# the package; uv.lock pins the version tested. CrewAI supports Python 3.13,
-# not 3.14: there the tests run the decision core alone.
-dev = ["crewai==1.15.27; python_version < '3.14'"]
-
 [build-system]
 requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
@@ -29,6 +23,12 @@ packages = ["src/pantherclaw_crewai"]
 [tool.uv]
 # DEPENDENCY_POLICY: nothing uploaded in the last 7 days is locked (the cooldown).
 exclude-newer = "7 days"
+# No committed lock contains CrewAI (M14 D60): it requires chromadb, every release of
+# which carries open advisories. This uv-only override keeps the `crewai` extra
+# out of uv.lock (the published extra is unchanged); the tests use a stand-in for
+# the CrewAI tool interface, and `task sdk:crewai-real` runs them against the real
+# CrewAI in a throwaway environment.
+override-dependencies = ["crewai; python_version < '0'"]
 
 [tool.uv.sources]
 # The core client from this repository, until it is published.

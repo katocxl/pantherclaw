@@ -216,10 +216,21 @@ tasks:
       # The integrations' tests run inside the real Agent SDKs (dev-only: pnpm-lock.yaml, uv.lock); on Windows the Python ones use the TypeScript one's CLI.
       - cd integrations/claude-agent-sdk/typescript && COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install --frozen-lockfile && node --test "test/**/*.test.ts"
       - cd integrations/claude-agent-sdk/python && {{.PYTHON}} -m unittest discover -s tests
-      # The Python framework wrappers run every wrappers.json case inside the real frameworks (dev-only, uv.lock); CrewAI only on 3.13.
+      # The Python framework wrappers run every wrappers.json case inside the real frameworks (dev-only, uv.lock); CrewAI on a stand-in (task sdk:crewai-real runs the real one).
       - cd integrations/langchain/python && {{.PYTHON}} -m unittest discover -s tests
       - cd integrations/openai-agents/python && {{.PYTHON}} -m unittest discover -s tests
       - cd integrations/crewai/python && {{.PYTHON}} -m unittest discover -s tests
+
+  sdk:crewai-real:
+    desc: The CrewAI wrapper's tests inside the real CrewAI (Python 3.13), in a throwaway environment outside every committed lock (M14 D60; local only while CrewAI's chromadb has open advisories)
+    vars:
+      CREWAI: '{{.CREWAI | default "1.15.27"}}'
+    dir: integrations/crewai/python
+    cmds:
+      - >-
+        uv run --isolated --no-project --python 3.13 --exclude-newer "7 days"
+        --with crewai=={{.CREWAI}} --with-editable ../../../sdk/python --with-editable .
+        python -m unittest discover -s tests
 
   license:check:
     desc: Verify SPDX + copyright headers on every source file
