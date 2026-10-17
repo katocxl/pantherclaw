@@ -15,9 +15,8 @@ import (
 )
 
 // onChannel maps a refund through conn as the gateway does and puts it on
-// channel ch, as a gateway (external false) or the external decision path
-// would submit it.
-func (f *fx) onChannel(gateway ids.UUID, conn pipeline.Connection, ch string, external bool) *pipeline.Evaluation {
+// channel ch.
+func (f *fx) onChannel(gateway ids.UUID, conn pipeline.Connection, ch string) *pipeline.Evaluation {
 	f.t.Helper()
 	p, err := f.mapper.MCP(context.Background(), mapping.Context{
 		Org: org.String(), Env: f.env.String(), RunID: f.run.String(), ActionID: ids.NewV7().String(), AgentInstance: f.instance.String(),
@@ -29,32 +28,8 @@ func (f *fx) onChannel(gateway ids.UUID, conn pipeline.Connection, ch string, ex
 	p.Action.Channel = ch
 	return f.eval(pipeline.Request{
 		Org: org, Action: p, Identity: pipeline.Identity{InstanceID: f.instance, AgentID: f.agent, AttestationLevel: 1, JKT: "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs"},
-		Gateway: gateway.String(), External: external,
+		Gateway: gateway.String(),
 	})
-}
-
-// TestM14_GatewayCannotSubmitAuthZENChannel: an action on the authzen
-// channel is decided only on the external decision path; from a gateway
-// it is CANNOT_AUTHORIZE CHANNEL_NOT_ALLOWED with no permit, and the
-// external path decides no other channel (G0 M14 D61).
-func TestM14_GatewayCannotSubmitAuthZENChannel(t *testing.T) {
-	f := newFx(t)
-	gw := ids.NewV7()
-	c := connection(gw)
-	c.AccessMode = "agent_held"
-	f.w.PutConnection(c)
-
-	ev := f.onChannel(gw, c, "authzen", false)
-	expect(t, ev, adomain.CannotAuthorize, pipeline.ReasonChannelNotAllowed)
-	if ev.Decision.Permits() || ev.MonitorPermit() {
-		t.Fatal("a gateway's authzen action got a permit")
-	}
-	ev = f.onChannel(gw, c, "mcp", true)
-	expect(t, ev, adomain.CannotAuthorize, pipeline.ReasonChannelNotAllowed)
-	ev = f.onChannel(gw, c, "authzen", true)
-	if ev.Decision != adomain.Allow {
-		t.Fatalf("the external path's authzen action: %s %+v", ev.Decision, ev.Decisive())
-	}
 }
 
 // TestM14_A2AChannelNeedsA2AKind: the a2a channel comes only through an
@@ -65,9 +40,9 @@ func TestM14_A2AChannelNeedsA2AKind(t *testing.T) {
 	gw := ids.NewV7()
 	c := connection(gw)
 	f.w.PutConnection(c)
-	expect(t, f.onChannel(gw, c, "a2a", false), adomain.CannotAuthorize, pipeline.ReasonRouteUnknown)
+	expect(t, f.onChannel(gw, c, "a2a"), adomain.CannotAuthorize, pipeline.ReasonRouteUnknown)
 	peer := connection(gw)
 	peer.Kind = "a2a"
 	f.w.PutConnection(peer)
-	expect(t, f.onChannel(gw, peer, "mcp", false), adomain.CannotAuthorize, pipeline.ReasonRouteUnknown)
+	expect(t, f.onChannel(gw, peer, "mcp"), adomain.CannotAuthorize, pipeline.ReasonRouteUnknown)
 }

@@ -90,10 +90,7 @@ func (r *Reader) Request() (pipeline.Request, error) {
 	if err != nil {
 		return pipeline.Request{}, err
 	}
-	// An authzen action was decided only on the external path (D61).
-	req := pipeline.Request{
-		Org: r.org, Action: act, Identity: id, Gateway: r.rec.Request.Gateway, External: act.Action.Channel == "authzen",
-	}
+	req := pipeline.Request{Org: r.org, Action: act, Identity: id, Gateway: r.rec.Request.Gateway}
 	for _, f := range r.rec.Request.PayloadFindings {
 		req.PayloadFindings = append(req.PayloadFindings, pipeline.PayloadFinding{Kind: f.Kind, Location: f.Location})
 	}

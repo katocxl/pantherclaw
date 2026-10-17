@@ -809,3 +809,20 @@ func (s *Store) notifyUnknown(ctx context.Context, tx db.TenantTx, org ids.OrgID
 	})
 	return err
 }
+
+// PermitChannel is the channel of a permit's transaction, for the gateway
+// that holds it (G0 M14 D65); empty for a transaction without one.
+func (s *Store) PermitChannel(ctx context.Context, org ids.OrgID, gateway string, permit ids.UUID) (string, error) {
+	var ch string
+	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		pc, err := dbq.New(tx).ExecutionContext(ctx, org, permit, gateway)
+		if err != nil {
+			return err
+		}
+		if pc.Channel != nil {
+			ch = *pc.Channel
+		}
+		return nil
+	})
+	return ch, err
+}

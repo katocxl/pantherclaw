@@ -19,10 +19,18 @@ func TestM14_AuthZENDelegatedRefusedOnHeldConnection(t *testing.T) {
 		channel, access string
 		want            bool
 	}{
-		{"hook", "none", true}, {"sdk", "agent_held", true}, {"sdk", "target_enforced", true},
-		{"authzen", "agent_held", true}, {"authzen", "target_enforced", true},
-		{"authzen", "pantherclaw_held", false}, {"authzen", "none", false}, {"authzen", "", false},
-		{"http", "agent_held", false}, {"mcp", "agent_held", false}, {"a2a", "pantherclaw_held", false}, {"", "", false},
+		{"hook", "none", true},
+		{"sdk", "agent_held", true},
+		{"sdk", "target_enforced", true},
+		{"authzen", "agent_held", true},
+		{"authzen", "target_enforced", true},
+		{"authzen", "pantherclaw_held", false},
+		{"authzen", "none", false},
+		{"authzen", "", false},
+		{"http", "agent_held", false},
+		{"mcp", "agent_held", false},
+		{"a2a", "pantherclaw_held", false},
+		{"", "", false},
 	} {
 		if finalize.Delegable(c.channel, c.access) != c.want {
 			t.Errorf("%q through %q: %v", c.channel, c.access, !c.want)
