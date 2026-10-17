@@ -4,9 +4,12 @@
 package dispatch
 
 import (
+	"context"
 	"testing"
 
+	"github.com/katocxl/pantherclaw/internal/actionir"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
+	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 )
 
@@ -39,5 +42,28 @@ func TestM14_SuccessCheck(t *testing.T) {
 	}
 	if got := sanitizeCode(string(make([]byte, 100)) + "x"); len(got) > 64 {
 		t.Errorf("long code %q", got)
+	}
+}
+
+// TestM14_KindSenders: a kind is dispatched only by a registered sender;
+// one without a sender, or an unknown kind, is not implemented and fails
+// closed, while the built-in kinds need none (G0 M14 D75).
+func TestM14_KindSenders(t *testing.T) {
+	for _, k := range []string{"postgres", "a2a", "smtp", ""} {
+		if !kindNotImplemented(k) {
+			t.Errorf("%q is implemented without a sender", k)
+		}
+	}
+	for _, k := range builtinKinds {
+		if kindNotImplemented(k) {
+			t.Errorf("built-in %q is not implemented", k)
+		}
+	}
+	kindSenders["test-kind"] = func(*Engine, context.Context, Result, *control.Connection, *defs.Definition, actionir.Parsed, permitWant, *timer) Result {
+		return Result{}
+	}
+	defer delete(kindSenders, "test-kind")
+	if kindNotImplemented("test-kind") {
+		t.Fatal("a registered kind is not implemented")
 	}
 }

@@ -485,10 +485,13 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 		return e.sendMCP(ctx, r, conn, def, bound, want, t)
 	case "local":
 		return e.delegate(ctx, r, want, t)
-	case "postgres", "a2a":
-		return r.fail(EnforcementFailed, CodeKindNotImplemented)
+	case "http":
+		return e.send(ctx, r, conn, def, bound, want, t)
 	}
-	return e.send(ctx, r, conn, def, bound, want, t)
+	if send, ok := kindSenders[conn.GetKind()]; ok {
+		return send(e, ctx, r, conn, def, bound, want, t) // G0 M14 D75
+	}
+	return r.fail(EnforcementFailed, CodeKindNotImplemented)
 }
 
 // delegate commits and records a cooperative channel's permitted action
