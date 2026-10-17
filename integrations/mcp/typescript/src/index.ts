@@ -191,51 +191,105 @@ export function guardClient(mcp: McpClient, options: GuardOptions): GuardedClien
   const callTool = mcp.callTool.bind(mcp);
   const listTools = mcp.listTools.bind(mcp);
   const close = mcp.close.bind(mcp);
-  /** Action ids of held calls by their content, so an identical later call resubmits the same action (PAP/1 §8). */
+  /**
+   * Action ids of unresolved calls by their content (D68): a call in flight
+   * (expires never) or held past its wait. An identical call meanwhile
+   * resubmits the same action (PAP/1 §8); a final outcome forgets it.
+   */
   const retries = new Map<string, { actionId: string; expires: number }>();
+  /** The argument names each of the server's tools declares, from its tool list. */
+  let declared: Map<string, Set<string>> | undefined;
 
-  const decide = async (name: unknown, args: unknown, signal?: AbortSignal): Promise<{ refusal: PantherClawRefusal | null; send?: Outbound; id: string; txn: string }> => {
+  const relist = async (): Promise<Map<string, Set<string>>> => {
+    const m = new Map<string, Set<string>>();
+    let cursor: string | undefined;
+    for (let page = 0; page < 100; page++) {
+      const r = (await listTools(cursor ? { cursor } : undefined)) as { tools?: { name: string; inputSchema?: { properties?: object } }[]; nextCursor?: string };
+      for (const t of r.tools ?? []) m.set(t.name, new Set(Object.keys(t.inputSchema?.properties ?? {})));
+      cursor = r.nextCursor;
+      if (!cursor) break;
+    }
+    declared = m;
+    return m;
+  };
+
+  /**
+   * Whether every argument is one the tool's input schema declares (D69):
+   * the server runs the tool on its schema's arguments, so an argument
+   * outside it would be decided but never run. "unknown" when the server
+   * does not list the tool. The list is read again once before a refusal.
+   */
+  const fits = async (name: string, args: Record<string, unknown>): Promise<"yes" | "no" | "unknown"> => {
+    for (const fresh of [false, true]) {
+      const m = fresh || !declared ? await relist() : declared;
+      const props = m.get(name);
+      if (props && Object.keys(args).every((k) => props.has(k))) return "yes";
+      if (fresh || !declared) return props ? "no" : "unknown";
+    }
+    return "unknown";
+  };
+
+  const decide = async (
+    name: unknown,
+    raw: unknown,
+    signal?: AbortSignal,
+  ): Promise<{ refusal: PantherClawRefusal | null; send?: Outbound; id: string; txn: string; args?: Record<string, unknown> }> => {
     // The client refuses a call without a tool name or with an input that is not an object (cannot_decide).
-    if (typeof name !== "string" || name === "" || typeof args !== "object" || args === null || Array.isArray(args)) {
+    if (typeof name !== "string" || name === "" || typeof raw !== "object" || raw === null || Array.isArray(raw)) {
       return { refusal: new PantherClawRefusal("cannot_decide"), id: "", txn: "" };
     }
-    const call: ToolCall = { tool: `mcp__${o.server}__${name}`, server: o.server, input: args as Record<string, unknown>, tool_use_id: `pc-${randomBytes(16).toString("hex")}` };
+    // A copy: the decision and the call use exactly these arguments (D69).
+    const args = JSON.parse(JSON.stringify(raw)) as Record<string, unknown>;
+    const fit = await fits(name, args);
+    if (fit !== "yes") return { refusal: new PantherClawRefusal(fit === "no" ? "undecided_args" : "cannot_decide"), id: "", txn: "" };
+    const call: ToolCall = { tool: `mcp__${o.server}__${name}`, server: o.server, input: args, tool_use_id: `pc-${randomBytes(16).toString("hex")}` };
     const key = JSON.stringify([name, canonicalize(JSON.stringify(args))]);
     const now = Date.now();
     for (const [k, r] of retries) if (r.expires < now) retries.delete(k);
     const actionId = retries.get(key)?.actionId ?? newActionId();
-    const first = await o.client.authorize(o.connection, call, actionId);
-    let res = first;
-    if (first.outcome === "hold") {
-      retries.set(key, { actionId, expires: now + o.wait * 1000 });
-      if (retries.size > MAX_RETRIES) retries.delete(retries.keys().next().value as string);
-      res = await withSignal(o.client.resume(o.connection, call, actionId, first, o.wait * 1000), signal);
-      // The wait has used up its time: an identical later call may still resubmit the held action.
-      if (res.outcome !== "allow") retries.set(key, { actionId, expires: Date.now() + o.wait * 1000 });
+    retries.set(key, { actionId, expires: Number.POSITIVE_INFINITY });
+    if (retries.size > MAX_RETRIES) retries.delete(retries.keys().next().value as string);
+    let unresolved = false;
+    try {
+      const first = await o.client.authorize(o.connection, call, actionId);
+      let res = first;
+      if (first.outcome === "hold") {
+        try {
+          res = await withSignal(o.client.resume(o.connection, call, actionId, first, o.wait * 1000), signal);
+        } catch {
+          // The wait was aborted: the hold ran out for this call (D47).
+          res = { outcome: "cannot_decide", why: "the wait was aborted" };
+        }
+        // Held past the wait: the action is still unresolved in PantherClaw, so an identical later call resubmits it.
+        unresolved = res.outcome === "cannot_decide";
+      }
+      const r = refusal(first, res, first.outcome === "hold", o.observeUnmapped);
+      return { refusal: r, send: r ? undefined : res.send, id: call.tool_use_id, txn: res.answer?.transaction_id ?? "", args };
+    } finally {
+      const e = retries.get(key);
+      if (e?.actionId === actionId) {
+        if (unresolved) e.expires = Date.now() + o.wait * 1000;
+        else retries.delete(key);
+      }
     }
-    if (res.outcome === "allow") retries.delete(key);
-    const r = refusal(first, res, first.outcome === "hold", o.observeUnmapped);
-    return { refusal: r, send: r ? undefined : res.send, id: call.tool_use_id, txn: res.answer?.transaction_id ?? "" };
   };
 
   return {
     async callTool(params, resultSchema, opts) {
-      let r: PantherClawRefusal | null;
-      let send: Outbound | undefined;
-      let id = "";
-      let txn = "";
+      let d: Awaited<ReturnType<typeof decide>>;
       try {
-        ({ refusal: r, send, id, txn } = await decide(params?.name, params?.arguments ?? {}, opts?.signal));
+        d = await decide(params?.name, params?.arguments ?? {}, opts?.signal);
       } catch {
-        r = new PantherClawRefusal("wrapper_error");
+        d = { refusal: new PantherClawRefusal("wrapper_error"), id: "", txn: "" };
       }
-      if (!r && send && !o.onDispatch) r = new PantherClawRefusal("dispatch_required", txn);
+      let r = d.refusal;
+      if (!r && d.send && !o.onDispatch) r = new PantherClawRefusal("dispatch_required", d.txn);
       if (r) {
         if (o.raiseOnRefusal) throw r;
         return { content: [{ type: "text", text: r.message }], isError: true };
       }
-      if (send && o.onDispatch) return o.onDispatch(id, send);
-      return callTool(params, resultSchema, opts);
+      if (d.send && o.onDispatch) return o.onDispatch(d.id, d.send);
+      return callTool({ ...params, name: params.name, arguments: d.args }, resultSchema, opts);
     },
     listTools: (params, opts) => listTools(params, opts),
     close: () => close(),

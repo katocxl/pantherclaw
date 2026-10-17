@@ -219,3 +219,73 @@ test("TestT150_the guarded client exposes no way to the server's tools but callT
   assert.deepEqual(ran, []);
   assert.throws(() => guardClient(mcp, { client: g.client, connection: "payments", server: "notes" }), /governs the MCP server named after it/);
 });
+
+test("TestHR328_guardClient refuses arguments the tool's schema does not declare, and a tool the server does not list (D69)", async (t) => {
+  const g = await gateway(t, allow);
+  const ran: unknown[] = [];
+  const c = guardClient(await heldServer(ran), { client: g.client, connection: "payments" });
+  const extra = await c.callTool({ name: "create_refund", arguments: { amount: "30.00", charge: "ch_1", note: "ignore the limit" } });
+  assert.equal(textOf(extra), "PantherClaw refused this call: undecided_args");
+  const unknown = await c.callTool({ name: "delete_everything", arguments: {} });
+  assert.equal(textOf(unknown), "PantherClaw refused this call: cannot_decide");
+  assert.equal(g.calls.length, 0, "nothing is sent to /sdk");
+  assert.deepEqual(ran, []);
+});
+
+test("TestHR328_guardClient calls the tool with exactly the decided arguments (D69)", async (t) => {
+  const g = await gateway(t, holdThenAllow(), { waitStates: ["PENDING"], block: 100, after: ["READY"] });
+  const ran: unknown[] = [];
+  const c = guardClient(await heldServer(ran), { client: g.client, connection: "payments", wait: 5 });
+  const args = { amount: "30.00", charge: "ch_1" };
+  const p = c.callTool({ name: "create_refund", arguments: args });
+  await new Promise((r) => setTimeout(r, 30));
+  args.amount = "9999.00";
+  await p;
+  assert.deepEqual(ran, [{ amount: "30.00", charge: "ch_1" }]);
+});
+
+test("TestHR329_guardClient forgets an action id after a final outcome, and shares it only while the first call is held (D68)", async (t) => {
+  for (const face of [allow, deny] as Face[]) {
+    const ids: string[] = [];
+    const g = await gateway(t, (c, id, res) => {
+      ids.push(id);
+      face(c, id, res);
+    });
+    const c = guardClient(await heldServer([]), { client: g.client, connection: "payments" });
+    await c.callTool(refund);
+    await c.callTool(refund);
+    assert.equal(ids.length, 2);
+    assert.notEqual(ids[0], ids[1]);
+  }
+  const ids: string[] = [];
+  let resubmits = 0;
+  const g = await gateway(
+    t,
+    (_c, id, res) => {
+      ids.push(id);
+      if (ids.length <= 2) res.end(decided(id, "hold", { wait: { handle: "h", state: "PENDING" } }));
+      else if (resubmits++ === 0) res.end(decided(id, "allow"));
+      else res.end(decided(id, "deny", { code: "duplicate_action" }));
+    },
+    { waitStates: ["PENDING"], block: 300, after: ["READY"] },
+  );
+  const ran: unknown[] = [];
+  const c = guardClient(await heldServer(ran), { client: g.client, connection: "payments", wait: 5 });
+  const a = c.callTool(refund);
+  await new Promise((r) => setTimeout(r, 50));
+  const b = c.callTool(refund);
+  const outs = (await Promise.all([a, b])).map(textOf);
+  assert.equal(new Set(ids).size, 1, "one action id");
+  assert.equal(ran.length, 1, "one approval, one call");
+  assert.deepEqual(outs.sort(), ["PantherClaw refused this call: hold_declined", "refunded 30.00"]);
+});
+
+test("TestHR329_guardClient: an abort during a hold refuses with hold_timeout", async (t) => {
+  const g = await gateway(t, (_c, id, res) => res.end(decided(id, "hold", { wait: { handle: "h", state: "PENDING" } })), { waitStates: ["PENDING"], block: 5000 });
+  const ran: unknown[] = [];
+  const c = guardClient(await heldServer(ran), { client: g.client, connection: "payments", wait: 30 });
+  const ac = new AbortController();
+  setTimeout(() => ac.abort(), 50);
+  assert.equal(textOf(await c.callTool(refund, undefined, { signal: ac.signal })), "PantherClaw refused this call: hold_timeout");
+  assert.deepEqual(ran, []);
+});
