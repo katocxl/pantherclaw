@@ -409,9 +409,9 @@ internal/<module>/       {domain, app, adapters} — see §6
 internal/gateway/        mcp, httpproxy, sdk, dispatch, egress, broker, runtime
 migrations/  queries/    goose SQL, sqlc queries
 policies/templates/      built-in task templates (support, refund, diagnostics, release, analysis)
-packages/                signed tool packages (mock-payments, mock-crm, mock-git, github, stripe, slack, postgres)
+packages/                signed tool packages (mock-payments, pc-github, pc-shell; M14: pc-stripe, pc-postgres, pc-slack, pc-a2a)
 sdk/go | sdk/python | sdk/typescript   Apache-2.0 SDKs (separate modules/packages)
-integrations/claude-code Apache-2.0 plugin + hooks
+integrations/            Apache-2.0: claude-code plugin + hooks, claude-agent-sdk; M14: langchain, openai-agents, crewai (Python), vercel-ai, mcp (TypeScript)
 deploy/                  compose (profiles), helm, keycloak realm, cloudflared
 redteam/scenarios/       adversarial scenarios (YAML)
 test/                    invariants, race, tenancy, e2e, fuzz, load, conformance
@@ -474,6 +474,7 @@ docs/                    this guide and companions
 | M10 | `detection_rules`, `detection_state`, `alerts`, `incidents`, `cases`, `case_notes`, `findings`, `suppressions`, `containment_actions`, `export_destinations`, `saved_queries` |
 | M11 | `policy_tests`, `policy_simulations`, `policy_rollouts`, `exceptions`, `automations`, `automation_versions`, `schedules`, `triggers`, `executions`, `step_executions` |
 | M12 | `redteam_runs`, `redteam_results` |
+| M14 | `connections` gain kinds `postgres` (manifest of tables, columns and classes) and `a2a` (pinned agent card); channels `authzen` and `a2a` on `transactions` and the coverage tables; grant bounds gain data scope; `notification_channels` gain kind `slack_app`, with `slack_cards`; `enforcement_points` and `decided_via` on transactions and receipts; `a2a_peer_runs`. Migrations `00150`–`00154` (`00155`, `00156` reserved; [g0/M14.md](g0/M14.md)) |
 | M13 | `entitlements`, `usage_meters`, `support_access_grants`, `data_requests` |
 
 ---
@@ -646,12 +647,13 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - The OpenTelemetry exporter (founder decision 2026-10-10, G0 M1 deviation 4): until then spans are API-only and nothing is exported. Choose between the OTLP/HTTP exporter (it pulls in gRPC and grpc-gateway), a small OTLP/HTTP-protobuf exporter of our own, or export through logs; then wire the SDK, and decide on a pgx tracer and metrics (ARCHITECTURE §14).
 
 ### M14 — Framework SDKs & business connectors (delivered after M11, before M13)
-**PN:** PN-016.3, PN-017.2, PN-017.3, PN-017.4, PN-023 · **F:** F101 · **ADR:** 0017, 0019.
-- Framework wrappers on the core clients: Python (LangChain/LangGraph, OpenAI Agents SDK, CrewAI on py3.13), TypeScript (Vercel AI SDK, MCP TS), all on the conformance suite.
-- Connectors: Stripe test mode (refunds, idempotency keys), Slack (approval deep links, notifications), Postgres query (read-only, row limits, field filtering); data-scoping constraints where connectors support them.
-- AuthZEN decision endpoint for third-party enforcement points (PN-023, ADR-0019); routes decided this way are `PARTIAL`, and budget-consuming allows are recorded as dispatched with an unreported outcome.
+**HR:** HR-300..329 · **PN:** PN-016.3, PN-017.2, PN-017.3, PN-017.4, PN-023 · **F:** F101–F103, F164–F167, F172, F758, F759, F760 (part), F762, F763, F765, F766 · **ADR:** 0017, 0019 (implementation note), 0028, 0029 · **G0:** [g0/M14.md](g0/M14.md).
+- Framework wrappers on the core clients: Python (LangChain/LangGraph, OpenAI Agents SDK, CrewAI on py3.13), TypeScript (Vercel AI SDK, MCP TS), all on a wrapper conformance group; they fail closed and run on the gateway `/sdk` face ([runbook](runbooks/frameworks.md)).
+- Connectors: Stripe test mode only (refunds, payment intents, transfers; idempotency keys from the transaction; settlement-aware verification; live keys refused), Slack (approval cards with a link button only, updated in place, Team; `pc.slack` for agents with external-channel disclosure checks), Postgres query (structured reads and aggregates over an admin manifest, gateway-built parameterised SQL in a read-only transaction, row caps); data scoping (record scope, class redaction, `secret` never returned) on gateway-held reads, Team ([ADR-0028](adr/0028-business-connectors-and-data-scoping.md)).
+- AuthZEN decision endpoint for registered enforcement points (PN-023, ADR-0019): the point forwards the agent's PAP/1 proof, which PantherClaw verifies; routes decided this way are `PARTIAL`, and budget-consuming allows are committed as delegated executions.
+- Templates and packs that waited for these connectors: customer support, internal analysis, treasury payments, aggregate reporting, research and disclosure.
 - Refund scenario as the second-market demo on real Stripe test mode.
-- **Open for the M14 G0 brief: peer agent-to-agent calls** (OWASP ASI07). Only parent-to-child delegation is covered today: the child has its own identity, a narrowed grant and lineage. When one independent agent asks another to act, for example over the A2A protocol, the call can be mediated only as an ordinary HTTP connection with no A2A-aware meaning, and the receiving agent acts under its own grant, so the requester's principal and limits do not carry over (a confused-deputy path). The brief decides between mediating these calls (a route type, tool-package mapping, and the requester's identity and principal bound into the receiver's decision) and declaring them uncovered routes. Not needed for the v0.1.0 preview (founder decision 2026-10-14).
+- **Peer agent-to-agent calls** (OWASP ASI07; resolved by the M14 brief, founder decision F1, [ADR-0029](adr/0029-peer-agent-calls-a2a.md)): A2A is mediated by the gateway as a route type (pinned agent cards, `pc.a2a`, requests rebuilt from ActionIR, text parts only) and decided under the requester's grant. For a peer agent enrolled in the same organization, the requester's limits carry over: the peer acts in a child run under a delegated grant bounded by the requester's grant and the route's peer scope. External peers are governed outbound only and labelled `PARTIAL`.
 
 ### UI phase (after backend)
 Next.js console over generated Connect clients: seven surfaces (Operations, Agents, Policies, Approvals, Investigations, Connections, Automations) + universal search; accessibility and comprehension tests (F001–F014, F643–F651).
