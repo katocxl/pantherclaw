@@ -2676,7 +2676,10 @@ type ReportCircuitRequest struct {
 	// UNKNOWN outcomes in the window.
 	UnknownCount int32 `protobuf:"varint,2,opt,name=unknown_count,json=unknownCount,proto3" json:"unknown_count,omitempty"`
 	// All outcomes in the window.
-	TotalCount    int32 `protobuf:"varint,3,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	TotalCount int32 `protobuf:"varint,3,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	// Why the gateway opened the circuit; empty for the UNKNOWN-threshold
+	// breaker (G0 M14 D76).
+	Reason        string `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2730,6 +2733,13 @@ func (x *ReportCircuitRequest) GetTotalCount() int32 {
 		return x.TotalCount
 	}
 	return 0
+}
+
+func (x *ReportCircuitRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
 }
 
 // ReportCircuitResponse says what the server did.
@@ -3827,12 +3837,13 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\x15verifications_waiting\x18\b \x01(\bR\x14verificationsWaiting\"Q\n" +
 	"\x14ConnectionStateEntry\x12#\n" +
 	"\rconnection_id\x18\x01 \x01(\tR\fconnectionId\x12\x14\n" +
-	"\x05state\x18\x02 \x01(\tR\x05state\"\xa5\x01\n" +
+	"\x05state\x18\x02 \x01(\tR\x05state\"\xda\x01\n" +
 	"\x14ReportCircuitRequest\x12-\n" +
 	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x120\n" +
 	"\runknown_count\x18\x02 \x01(\x05B\v\xbaH\b\x1a\x06\x18\xc0\x84=(\x00R\funknownCount\x12,\n" +
 	"\vtotal_count\x18\x03 \x01(\x05B\v\xbaH\b\x1a\x06\x18\xc0\x84=(\x00R\n" +
-	"totalCount\"9\n" +
+	"totalCount\x123\n" +
+	"\x06reason\x18\x04 \x01(\tB\x1b\xbaH\x18r\x162\x14^(stripe_livemode)?$R\x06reason\"9\n" +
 	"\x15ReportCircuitResponse\x12 \n" +
 	"\vquarantined\x18\x01 \x01(\bR\vquarantined\"\x89\x04\n" +
 	"\x12ReportDriftRequest\x12-\n" +

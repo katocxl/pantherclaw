@@ -622,6 +622,9 @@ message ReportCircuitRequest {
     gte: 0
     lte: 1000000
   }];
+  // Why the gateway opened the circuit; empty for the UNKNOWN-threshold
+  // breaker (G0 M14 D76).
+  string reason = 4 [(buf.validate.field).string.pattern = "^(stripe_livemode)?$"];
 }
 
 // ReportCircuitResponse says what the server did.
