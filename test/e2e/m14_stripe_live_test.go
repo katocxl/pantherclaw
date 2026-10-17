@@ -112,6 +112,6 @@ func TestLive_Stripe(t *testing.T) {
 	t.Logf("transfer of 1.00 USD to %s: transaction %s", payee, transferred.TransactionID)
 
 	for _, txn := range []string{charged.TransactionID, refunded.TransactionID, transferred.TransactionID} {
-		s.eventually(t, "CONFIRMED", "SELECT effect_state FROM pc.transactions WHERE id = $1", txn)
+		s.eventually(t, "CONFIRMED", "SELECT coalesce(effect_state, '') FROM pc.transactions WHERE id = $1", txn)
 	}
 }

@@ -388,8 +388,9 @@ definitions:
     access: read
     scoping: [classes]
     target:
-      type: pc.connection
-      id_pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      # The connection's own balance: one fixed target.
+      type: stripe.balance
+      id_pattern: '^balance$'
       account: none
     params: {}
     effects:
@@ -412,7 +413,7 @@ definitions:
         path: /v1/balance
         route: stripe-balance-read
         extract:
-          target_id: connection.id
+          target_id: '"balance"'
           params: {}
       - channel: mcp
         tool: retrieve_balance
@@ -423,7 +424,7 @@ definitions:
           additionalProperties: false
           properties: {}
         extract:
-          target_id: connection.id
+          target_id: '"balance"'
           params: {}
     dispatch:
       credential_pattern: '^(sk|rk)_test_[A-Za-z0-9]{16,}$'
@@ -613,7 +614,7 @@ definitions:
       - kind: funds.transfer
         description: Moves funds from the platform's balance to the connected account
     reversibility: irreversible
-    dedupe_key: [target.id, params.amount, params.transfer_group]
+    dedupe_key: [target.id, params.amount]
     constraints:
       - kind: amount_max
         param: amount

@@ -210,7 +210,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 				"pclaw seal --connection %s --github-app ID --installation N --account LOGIN --from-file KEY.pem\n", c.ID, c.Name, *githubURL, c.ID)
 		}
 		if *stripeURL != "" {
-			if err := seedStripe(ctx, cfg, pool, org, gw, *stripeURL, stdout); err != nil {
+			if err := seedStripe(ctx, cfg, pool, org, gw, *stripeURL, hold, stdout); err != nil {
 				return err
 			}
 		}

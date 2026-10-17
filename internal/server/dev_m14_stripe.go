@@ -23,6 +23,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/money"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 	"github.com/katocxl/pantherclaw/internal/policy/rollout"
 	pcstripe "github.com/katocxl/pantherclaw/packages/pc-stripe"
@@ -40,8 +41,8 @@ const (
 	devStripeHoldOver  = "50.00"
 	devStripeCurrency  = "USD"
 	devStripeHoldRsn   = "STRIPE_REFUND_NEEDS_APPROVAL"
-	devStripePolicyID  = "dev-stripe-holds"
-	devStripeBudgetID  = "stripe-refunds"
+	devStripePolicyID  = "dev-holds"
+	devStripeBudgetID  = "stripe_refunds"
 	devStripeRefundOp  = "stripe.refund.create"
 	devStripeTargetTyp = "stripe.payment"
 )
@@ -70,7 +71,9 @@ func devStripePackage() devPackage {
 // seal): the gateway's broker key exists only once it has started, and
 // the gateway refuses any key that is not a test key before sending
 // (HR-303). DEVELOPMENT ONLY.
-func seedStripe(ctx context.Context, cfg *Config, pool *db.Pool, org ids.OrgID, gateway ids.UUID, targetURL string, stdout io.Writer) error {
+func seedStripe(ctx context.Context, cfg *Config, pool *db.Pool, org ids.OrgID, gateway ids.UUID, targetURL string, hold *money.Money,
+	stdout io.Writer,
+) error {
 	class := capp.ClassPublic
 	if u, err := url.Parse(targetURL); err == nil {
 		if a, isIP := httpx.HostAddr(u.Hostname()); isIP && (a.IsPrivate() || a.IsLoopback()) {
@@ -88,7 +91,7 @@ func seedStripe(ctx context.Context, cfg *Config, pool *db.Pool, org ids.OrgID, 
 	if err := seedStripeFacts(ctx, pool, org, gateway, c.ID); err != nil {
 		return err
 	}
-	if _, err := seedStripeHoldPolicy(ctx, pool, org, cfg.CEL); err != nil {
+	if _, err := seedStripeHoldPolicy(ctx, pool, org, hold, cfg.CEL); err != nil {
 		return err
 	}
 	_, _ = fmt.Fprintf(stdout, "seeded stripe connection %s (%s) to %s, its facts read by the gateway, refunds over %s %s held (%s); "+
@@ -127,7 +130,7 @@ func seedStripeFacts(ctx context.Context, pool *db.Pool, org ids.OrgID, gateway,
 // devStripeHoldBundle holds Stripe refunds over devStripeHoldOver for one
 // approver. Its scenario tests hold a refund one cent over and allow one
 // at the limit.
-func devStripeHoldBundle() *pdomain.Bundle {
+func devStripeHoldBundle(base *pdomain.Bundle) *pdomain.Bundle {
 	refund := func(id, value string, expect pdomain.TestExpect) pdomain.TestCase {
 		return pdomain.TestCase{
 			ID: id, Summary: "a Stripe refund of " + value + " " + devStripeCurrency,
@@ -145,26 +148,38 @@ func devStripeHoldBundle() *pdomain.Bundle {
 			Expect: expect,
 		}
 	}
-	return &pdomain.Bundle{ID: devStripePolicyID, Version: 1, Rules: []pdomain.Rule{{
+	b := &pdomain.Bundle{ID: devStripePolicyID, Version: 1}
+	if base != nil {
+		// The org's one policy: the Stripe rules are its next version.
+		b = base
+		b.Version++
+	}
+	b.Rules = append(b.Rules, pdomain.Rule{
 		ID: "approve-large-stripe-refunds", Kind: pdomain.RequireApproval,
 		Summary:    "Stripe refunds over " + devStripeHoldOver + " " + devStripeCurrency + " need an approver",
 		Operations: []string{devStripeRefundOp},
 		When:       fmt.Sprintf("action.params.amount > money(%q, %q)", devStripeHoldOver, devStripeCurrency),
 		Reason:     devStripeHoldRsn, Approval: &pdomain.ApprovalRequirement{Role: "approver", Count: 1},
-	}}, Tests: []pdomain.TestCase{
-		refund("over-the-limit-is-held", "50.01", pdomain.TestExpect{
+	})
+	b.Tests = append(b.Tests,
+		refund("stripe-over-the-limit-is-held", "50.01", pdomain.TestExpect{
 			Decision: "REQUIRE_APPROVAL", Reason: devStripeHoldRsn, Rule: "approve-large-stripe-refunds",
 		}),
-		refund("at-the-limit-is-allowed", devStripeHoldOver, pdomain.TestExpect{Decision: "ALLOW", Reason: "GRANT_COVERS"}),
-	}}
+		refund("stripe-at-the-limit-is-allowed", devStripeHoldOver, pdomain.TestExpect{Decision: "ALLOW", Reason: "GRANT_COVERS"}),
+	)
+	return b
 }
 
 // seedStripeHoldPolicy publishes devStripeHoldBundle through the publish
 // gate like any version.
-func seedStripeHoldPolicy(ctx context.Context, pool *db.Pool, org ids.OrgID, limits celenv.Limits) (ids.UUID, error) {
+func seedStripeHoldPolicy(ctx context.Context, pool *db.Pool, org ids.OrgID, hold *money.Money, limits celenv.Limits) (ids.UUID, error) {
+	var base *pdomain.Bundle
+	if hold != nil {
+		base = devHoldBundle(*hold)
+	}
 	v := newPolicyVersions(pool, nil, "", limits)
 	rollout.Connect(v, &rollout.Service{Pool: pool})
-	id, err := v.Seed(ctx, org, devStripeHoldBundle(), devSeedActor)
+	id, err := v.Seed(ctx, org, devStripeHoldBundle(base), devSeedActor)
 	if err != nil {
 		return ids.UUID{}, fmt.Errorf("dev seed: stripe hold policy: %w", err)
 	}

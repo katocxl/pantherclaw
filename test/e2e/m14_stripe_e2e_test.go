@@ -7,18 +7,21 @@ package e2e
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/authn/webauthntest"
 	credapp "github.com/katocxl/pantherclaw/internal/credentials/app"
 	creddomain "github.com/katocxl/pantherclaw/internal/credentials/domain"
 	"github.com/katocxl/pantherclaw/internal/gateway"
@@ -173,7 +176,7 @@ func refundForm(payment, amount, currency string) url.Values {
 // simulator (D14).
 func TestE2E_M14_StripeRefunds(t *testing.T) {
 	t.Run("allowed refund settles to CONFIRMED with the transaction's idempotency key", func(t *testing.T) {
-		s := start(t, options{budget: "1000.00", stripe: true, stripeFaults: stripe.Faults{SettleAfter: 4 * time.Second}})
+		s := start(t, options{budget: "1000.00", stripe: true, stripeFaults: stripe.Faults{SettleAfter: 10 * time.Second}})
 		code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment, "3000", "usd")
 		if code != http.StatusOK || r.Outcome != "ACCEPTED" || r.Receipt == "" {
 			t.Fatalf("refund: %d %+v", code, r)
@@ -183,11 +186,8 @@ func TestE2E_M14_StripeRefunds(t *testing.T) {
 			t.Fatalf("refunds at Stripe %+v, want one of 3000 keyed pc-%s", refunds, r.TransactionID)
 		}
 		// Pending while Stripe settles, then confirmed by the verifier.
-		s.eventually(t, "CONFIRMED", "SELECT effect_state FROM pc.transactions WHERE id = $1", r.TransactionID)
-		if got := s.row(t, "SELECT count(*)::text FROM pc.effect_receipts WHERE transaction_id = $1 AND state = 'PROPAGATION_PENDING'",
-			r.TransactionID); got == "0" {
-			t.Fatal("no pending effect receipt before the refund settled")
-		}
+		s.eventually(t, "PROPAGATION_PENDING", "SELECT coalesce(effect_state, '') FROM pc.transactions WHERE id = $1", r.TransactionID)
+		s.eventually(t, "CONFIRMED", "SELECT coalesce(effect_state, '') FROM pc.transactions WHERE id = $1", r.TransactionID)
 		if s.st.writes.Load() != 1 {
 			t.Fatalf("%d writes at Stripe, want 1", s.st.writes.Load())
 		}
@@ -196,13 +196,17 @@ func TestE2E_M14_StripeRefunds(t *testing.T) {
 	t.Run("a refund over 50 is held, approved and dispatched once", func(t *testing.T) {
 		p := inProcessIdP(t)
 		s := start(t, options{budget: "1000.00", people: &p, stripe: true})
+		// The gateway admin who sealed the key has a stand-in key, not a
+		// real one; it is removed, so the export holds the approver's only.
+		s.db.AdminExec(t, `UPDATE pc.webauthn_credentials SET state = 'REMOVED', state_reason = 'ADMIN_REMOVED', changed_at = now()
+			WHERE org_id = $1 AND name = 'key'`, s.org)
 		_, b, key := approver(t, s, &m2Stack{url: s.apiURL, cfg: s.serverCfg, idp: p})
 		act := ids.NewV7()
 		code, held := s.stripeRefund(t, act, stripe.FixturePayment, "7500", "usd")
 		if code != http.StatusForbidden || held.ErrorClass != "held" || held.Decision != "REQUIRE_APPROVAL" || s.st.writes.Load() != 0 {
 			t.Fatalf("hold: %d %+v", code, held)
 		}
-		s.approve(t, b, key, held.TransactionID)
+		s.approveStripe(t, b, key, held.TransactionID)
 		code, done := s.stripeRefund(t, act, stripe.FixturePayment, "7500", "usd")
 		if code != http.StatusOK || done.Outcome != "ACCEPTED" || done.TransactionID != held.TransactionID || s.st.writes.Load() != 1 {
 			t.Fatalf("resubmission: %d %+v (writes %d)", code, done, s.st.writes.Load())
@@ -441,8 +445,13 @@ func TestHR305_LostAnswerIsReconciledNeverRetried(t *testing.T) {
 // for an approver; to a quiet payee it goes through.
 func TestHR306_PayeeChangedRecentlyHoldsTheTransfer(t *testing.T) {
 	s := start(t, options{budget: "1000.00", stripe: true})
+	// Each transfer is of another amount: a recent success on the same
+	// dedupe key would park the next (HR-007).
+	amount := 1000
 	transfer := func() (int, reply) {
-		code, r, _ := s.stripeCall(t, http.MethodPost, "/v1/transfers", stripeWrites()["stripe.transfer.create"].form, ids.NewV7())
+		amount += 100
+		form := url.Values{"destination": {stripe.FixturePayee}, "amount": {strconv.Itoa(amount)}, "currency": {"usd"}}
+		code, r, _ := s.stripeCall(t, http.MethodPost, "/v1/transfers", form, ids.NewV7())
 		return code, r
 	}
 	if code, r := transfer(); code != http.StatusOK || r.Outcome != "ACCEPTED" {
@@ -487,5 +496,28 @@ func TestT142_TransferOutsideTheDestinationSetIsDenied(t *testing.T) {
 	code, r, _ := s.stripeCall(t, http.MethodPost, "/v1/transfers", form, ids.NewV7())
 	if code != http.StatusForbidden || r.Decision != "DENY" || s.st.writes.Load() != 0 {
 		t.Fatalf("outside the destination set: %d %+v", code, r)
+	}
+}
+
+// approveStripe has the approver approve a held Stripe action on its page
+// with their security key.
+func (s *stack) approveStripe(t *testing.T, b *browser, key *webauthntest.Authenticator, txn string) {
+	t.Helper()
+	path := "/approvals/" + s.requestOf(t, txn) + "?org=" + s.org.String()
+	if code, page := b.page(t, path); code != http.StatusOK || !strings.Contains(page, "stripe.refund.create") {
+		t.Fatalf("approval page: %d", code)
+	}
+	base, _, _ := strings.Cut(path, "?")
+	code, body := b.post(t, base+"/approve-options", map[string]any{})
+	if code != http.StatusOK {
+		t.Fatalf("approve options: %d %v", code, body)
+	}
+	resp, err := key.Assert(body["options"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, body = b.post(t, base+"/approve", map[string]any{"ceremony": body["ceremony"], "response": jsontext.Value(resp)}); code != http.StatusOK ||
+		string(body["state"]) != `"APPROVED"` {
+		t.Fatalf("approve: %d %v", code, body)
 	}
 }
