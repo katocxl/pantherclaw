@@ -247,7 +247,7 @@ definitions:
 consequences:
   - id: external-channel-disclosure
     operation: slack.message.post
-    when: facts.slack_channel_external.external
+    when: facts.slack_channel_external.external == true
     requires_facts: [slack.channel.external]
     consequence:
       operation: slack.message.disclose

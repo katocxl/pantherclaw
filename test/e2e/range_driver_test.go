@@ -98,6 +98,7 @@ func (d *rangeDriver) Capabilities() map[app.Capability]bool {
 	return map[app.Capability]bool{
 		app.CapGitHub: true, app.CapPayments: true, app.CapMCP: true, app.CapPerson: true, app.CapSecondOrg: true,
 		app.CapHarness: true, app.CapSandbox: d.extra.available(),
+		capSlackPost: true,
 	}
 }
 
@@ -121,11 +122,12 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 		o.access, o.actionTokens = capp.AccessTargetEnforced, true
 	}
 	var p idp
-	if requires(sc, "person") || sc.ID == "RT-009" {
+	if requires(sc, "person") || sc.ID == "RT-009" || slackScenario(sc) {
 		p = inProcessIdP(t)
 		o.people = &p
 	}
 	o.github = requires(sc, "github") || requires(sc, "sandbox")
+	o.slack = slackScenario(sc)
 	if sc.ID == "RT-011" {
 		o.github = true
 	}
@@ -149,6 +151,9 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 		d.other = start(t, options{budget: "1000.00"})
 	}
 	d.setupPayments()
+	if o.slack {
+		d.setupSlack()
+	}
 	if requires(sc, "mcp") {
 		d.setupMCPUpstream()
 	}
