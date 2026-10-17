@@ -2,8 +2,8 @@ apiVersion: pantherclaw.range/v1
 id: RT-047
 title: An enforcement point cannot ask for decisions as an agent it cannot prove to be
 category: boundary
-suite: coding-agent
-tier: community
+suite: platform
+tier: business
 attacker: A9
 threats: [T-147]
 rules: [HR-317, HR-318]

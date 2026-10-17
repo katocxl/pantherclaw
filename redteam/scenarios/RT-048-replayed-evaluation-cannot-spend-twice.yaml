@@ -2,8 +2,8 @@ apiVersion: pantherclaw.range/v1
 id: RT-048
 title: An enforcement point replaying an evaluation cannot spend a budget twice
 category: boundary
-suite: coding-agent
-tier: community
+suite: platform
+tier: business
 attacker: A9
 threats: [T-147]
 rules: [HR-318, HR-319]
