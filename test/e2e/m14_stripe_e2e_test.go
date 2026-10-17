@@ -308,10 +308,10 @@ func TestHR303_LivemodeAnswerQuarantines(t *testing.T) {
 		t.Fatalf("refund: %d %+v", code, r)
 	}
 	s.eventually(t, "QUARANTINED stripe_livemode", "SELECT state || ' ' || coalesce(quarantine_reason, '') FROM pc.connections WHERE id = $1", s.st.conn)
-	if got := s.row(t, "SELECT count(*)::text FROM pc.audit_events WHERE name = 'security.stripe_livemode'"); got == "0" {
+	if got := s.row(t, "SELECT count(*)::text FROM pc.ledger_entries WHERE kind = 'audit.security.stripe_livemode'"); got == "0" {
 		t.Fatal("no security.stripe_livemode audit event")
 	}
-	if got := s.row(t, "SELECT count(*)::text FROM pc.notifications WHERE type = 'connection.quarantined'"); got == "0" {
+	if got := s.row(t, "SELECT count(*)::text FROM pc.notifications WHERE type = 'security.connection_quarantined'"); got == "0" {
 		t.Fatal("the admins were not told")
 	}
 	before := s.st.sim.Stats().Requests
