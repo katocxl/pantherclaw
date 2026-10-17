@@ -35,7 +35,7 @@ func (e *Engine) simulatorRefusal(ctx context.Context, conn *control.Connection)
 	switch conn.GetKind() {
 	case "local":
 		return "" // no target to send to
-	case "http", "mcp":
+	case "http", "mcp", "a2a":
 		ce, err := e.entry(conn)
 		if err != nil {
 			return CodeSimulatorUnverified

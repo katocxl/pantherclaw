@@ -115,26 +115,27 @@ var _ ports.KindConfig = (*Adapter)(nil)
 // Save pins the card and stores the configuration (a validated
 // *capp.A2AConfig) of the connection just written in tx. The connection's
 // simulated flag picks the egress client, and its writer is the pin's.
-func (a *Adapter) Save(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn ids.UUID, _ int32, cfg any) error {
+func (a *Adapter) Save(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn ids.UUID, _ int32, cfg any) (string, error) {
 	in, ok := cfg.(*capp.A2AConfig)
 	if !ok || in == nil {
-		return ErrShape
+		return "", ErrShape
 	}
 	q := dbq.New(tx)
 	w, err := q.GetA2AConnectionWriter(ctx, org, conn)
 	if err != nil {
-		return err
+		return "", err
 	}
 	pinned, err := a.Pinner.Pin(ctx, ToProto(in), w.Simulated)
 	if err != nil {
-		return err
+		return "", err
 	}
+	// The interface URL is the connection's base URL (D85).
 	if _, err := Load(ctx, q, org, conn); errors.Is(err, ErrNotFound) {
-		return Insert(ctx, q, org, conn, pinned, w.UpdatedBy)
+		return in.Interface.URL, Insert(ctx, q, org, conn, pinned, w.UpdatedBy)
 	} else if err != nil {
-		return err
+		return "", err
 	}
-	return Replace(ctx, q, org, conn, pinned, w.UpdatedBy)
+	return in.Interface.URL, Replace(ctx, q, org, conn, pinned, w.UpdatedBy)
 }
 
 // Load returns the configuration a gateway serves (*pb.A2AConfig).

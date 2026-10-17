@@ -48,8 +48,9 @@ const (
 	// CodeA2AStream: the stream broke off, ran over its cap or time, or
 	// carried an event that is not one.
 	CodeA2AStream = "a2a_stream_cut"
-	// CodeA2ANotPinned: the connection carries no pinned interface.
-	CodeA2ANotPinned = "a2a_not_pinned"
+	// CodeKindConfigMissing: the connection carries no pinned a2a
+	// configuration (D85).
+	CodeKindConfigMissing = "kind_config_missing"
 )
 
 // Limits of A2A dispatch.
@@ -311,10 +312,13 @@ func (e *Engine) sendA2A(ctx context.Context, r Result, conn *control.Connection
 	t *timer,
 ) Result {
 	peer, pinned := a2aPeerOf(conn)
-	out, buildErr := buildA2A(def, a.Action, want.Txn, peer)
 	if !pinned {
-		buildErr = errors.New(CodeA2ANotPinned)
-	} else if e.A2ACardDrifted(conn) {
+		// No pinned configuration: nothing to call, nothing begun (D85).
+		r.Decision = pb.Decision_DECISION_CANNOT_AUTHORIZE
+		return r.fail(CannotAuthorize, CodeKindConfigMissing)
+	}
+	out, buildErr := buildA2A(def, a.Action, want.Txn, peer)
+	if e.A2ACardDrifted(conn) {
 		buildErr = errors.New(CodeA2ACardDrift)
 	}
 	begin := &pb.BeginDispatchRequest{PermitId: want.PermitID, Epoch: want.Epoch}
@@ -348,9 +352,9 @@ func (e *Engine) sendA2A(ctx context.Context, r Result, conn *control.Connection
 	var secret []byte
 	if conn.Credential != nil && conn.GetAccessMode() == "pantherclaw_held" {
 		plain, err := e.openStatic(ctx, conn)
-		if err == nil && !def.Dispatch.CredentialMatches(plain) {
-			clear(plain)
-			err = errCredentialPattern
+		if err == nil {
+			// Checked before any byte is sent (D85, HR-301).
+			err = CheckCredentialPattern(def, conn.Credential.GetKind(), plain)
 		}
 		if err == nil {
 			err = placeCredential(conn, req, plain)

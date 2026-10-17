@@ -280,6 +280,7 @@ func (g *Gateway) Run(ctx context.Context) error {
 		eg.Go(func() error { return f(ctx) })
 	}
 	eg.Go(func() error { return g.watchDrift(ctx) })
+	eg.Go(func() error { return g.watchA2ACards(ctx) })
 	eg.Go(func() error { return g.watchVerifications(ctx) })
 	eg.Go(func() error { <-ctx.Done(); return nil })
 	return eg.Wait()
