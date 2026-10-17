@@ -265,3 +265,118 @@ test("TestHR328_a non-object input is refused without a request", async (t) => {
   assert.equal(g.calls.length, 0);
   assert.deepEqual(ran, []);
 });
+
+test("TestHR329_after a final outcome an identical call is a new decision (D68)", async (t) => {
+  for (const face of [allow, deny] as Face[]) {
+    const actionIds: string[] = [];
+    const g = await gateway(t, (c, id, res) => {
+      actionIds.push(id);
+      face(c, id, res);
+    });
+    const tools = guardTools(appTools([]), { client: g.client, connection: "payments" });
+    const exec = tools.create_refund?.execute as (i: unknown, o: unknown) => Promise<unknown>;
+    await exec({ amount: "30.00", charge: "ch_1" }, { toolCallId: "a", messages: [] });
+    await exec({ amount: "30.00", charge: "ch_1" }, { toolCallId: "b", messages: [] });
+    assert.equal(actionIds.length, 2);
+    assert.notEqual(actionIds[0], actionIds[1]);
+  }
+});
+
+test("TestHR329_an identical call while the first is held shares its action id, and one approval runs the tool once (D68)", async (t) => {
+  const actionIds: string[] = [];
+  let resubmits = 0;
+  const g = await gateway(
+    t,
+    (_c, id, res) => {
+      actionIds.push(id);
+      if (actionIds.length <= 2) res.end(decided(id, "hold", { wait: { handle: "h", state: "PENDING" } }));
+      // The engine answers the stored decision for a FINAL action: the second resubmission is a duplicate.
+      else if (resubmits++ === 0) res.end(decided(id, "allow"));
+      else res.end(decided(id, "deny", { code: "duplicate_action" }));
+    },
+    { waitStates: ["PENDING"], block: 300, after: ["READY"] },
+  );
+  const ran: unknown[] = [];
+  const tools = guardTools(appTools(ran), { client: g.client, connection: "payments", wait: 5 });
+  const exec = tools.create_refund?.execute as (i: unknown, o: unknown) => Promise<unknown>;
+  const a = exec({ amount: "30.00", charge: "ch_1" }, { toolCallId: "a", messages: [] });
+  await new Promise((r) => setTimeout(r, 50));
+  const b = exec({ amount: "30.00", charge: "ch_1" }, { toolCallId: "b", messages: [] });
+  const outs = await Promise.all([a, b]);
+  assert.equal(new Set(actionIds).size, 1, "one action id");
+  assert.equal(ran.length, 1, "one approval, one run");
+  assert.equal(outs.filter((o) => o === "PantherClaw refused this call: hold_declined").length, 1);
+});
+
+test("TestHR328_the tool runs on the input that was decided, even if the caller's object changes during the hold (D69)", async (t) => {
+  const g = await gateway(t, holdThenAllow(), { waitStates: ["PENDING"], block: 100, after: ["READY"] });
+  const ran: unknown[] = [];
+  const tools = guardTools(appTools(ran), { client: g.client, connection: "payments", wait: 5 });
+  const input = { amount: "30.00", charge: "ch_1" };
+  const p = (tools.create_refund?.execute as (i: unknown, o: unknown) => Promise<unknown>)(input, { toolCallId: "a", messages: [] });
+  await new Promise((r) => setTimeout(r, 30));
+  input.amount = "9999.00";
+  await p;
+  assert.deepEqual(ran, [{ amount: "30.00", charge: "ch_1" }]);
+  assert.deepEqual(g.calls[1]?.input, { amount: "30.00", charge: "ch_1" }, "the resubmission too");
+});
+
+test("TestHR329_an abort during a hold refuses with hold_timeout", async (t) => {
+  const g = await gateway(t, (_c, id, res) => res.end(decided(id, "hold", { wait: { handle: "h", state: "PENDING" } })), { waitStates: ["PENDING"], block: 5000 });
+  const ran: unknown[] = [];
+  const tools = guardTools(appTools(ran), { client: g.client, connection: "payments", wait: 30 });
+  const ac = new AbortController();
+  setTimeout(() => ac.abort(), 50);
+  const out = await (tools.create_refund?.execute as (i: unknown, o: unknown) => Promise<unknown>)({ amount: "1", charge: "c" }, { toolCallId: "a", messages: [], abortSignal: ac.signal });
+  assert.equal(out, "PantherClaw refused this call: hold_timeout");
+  assert.deepEqual(ran, []);
+});
+
+test("TestHR328_toModelOutput reads an allowed call's own output after an earlier refusal with the same call id", async (t) => {
+  let n = 0;
+  const g = await gateway(t, (c, id, res) => (n++ === 0 ? deny(c, id, res) : allow(c, id, res)));
+  const tools = guardTools(
+    {
+      create_refund: tool({
+        inputSchema: refundSchema,
+        execute: async () => ({ refunded: true }),
+        toModelOutput: () => ({ type: "text", value: "own" }),
+      }),
+    },
+    { client: g.client, connection: "payments" },
+  );
+  const t1 = tools.create_refund as { execute: (i: unknown, o: unknown) => Promise<unknown>; toModelOutput: (o: unknown) => unknown };
+  await t1.execute({ amount: "1", charge: "c" }, { toolCallId: "same", messages: [] });
+  assert.deepEqual(t1.toModelOutput({ toolCallId: "same", output: "x" }), { type: "text", value: "PantherClaw refused this call: denied" });
+  await t1.execute({ amount: "2", charge: "c" }, { toolCallId: "same", messages: [] });
+  assert.deepEqual(t1.toModelOutput({ toolCallId: "same", output: { refunded: true } }), { type: "text", value: "own" });
+});
+
+test("TestHR328_a streaming tool stays a stream and streams only after an allow", async (t) => {
+  const streaming = (ran: unknown[]): ToolSet => ({
+    create_refund: {
+      inputSchema: refundSchema,
+      execute: async function* (input: unknown) {
+        ran.push(input);
+        yield "partial";
+        yield "done";
+      },
+    },
+  });
+  const collect = async (it: unknown) => {
+    const out: unknown[] = [];
+    for await (const v of it as AsyncIterable<unknown>) out.push(v);
+    return out;
+  };
+  const a = await gateway(t, allow);
+  const ran: unknown[] = [];
+  const ok = guardTools(streaming(ran), { client: a.client, connection: "payments" }).create_refund?.execute as (i: unknown, o: unknown) => unknown;
+  assert.deepEqual(await collect(ok({ amount: "1", charge: "c" }, { toolCallId: "a", messages: [] })), ["partial", "done"]);
+  const d = await gateway(t, deny);
+  const no = guardTools(streaming(ran), { client: d.client, connection: "payments" }).create_refund?.execute as (i: unknown, o: unknown) => unknown;
+  assert.deepEqual(await collect(no({ amount: "1", charge: "c" }, { toolCallId: "b", messages: [] })), ["PantherClaw refused this call: denied"]);
+  assert.equal(ran.length, 1);
+  // Inside the real AI SDK, the last value is the tool's output.
+  const out = await runAgent(guardTools(streaming(ran), { client: a.client, connection: "payments" }));
+  assert.deepEqual(out, ["done"]);
+});

@@ -130,7 +130,11 @@ export function guardTools<T extends ToolSet>(tools: T, options: GuardOptions): 
 
 class Guard {
   private readonly o: Required<Omit<GuardOptions, "onDispatch">> & Pick<GuardOptions, "onDispatch">;
-  /** Action ids of held calls by their content, so an identical later call resubmits the same action (PAP/1 §8). */
+  /**
+   * Action ids of unresolved calls by their content (D68): a call in flight
+   * (expires never) or held past its wait. An identical call meanwhile
+   * resubmits the same action (PAP/1 §8); a final outcome forgets it.
+   */
   private readonly retries = new Map<string, { actionId: string; expires: number }>();
   /** Tool call ids refused, so a tool's toModelOutput never reads a refusal as its output. */
   private readonly refused = new Map<string, string>();
@@ -143,7 +147,19 @@ class Guard {
 
   wrap(name: string, t: Tool): Tool {
     const run = t.execute as NonNullable<Tool["execute"]>;
-    const wrapped: Tool = { ...t, execute: (input: unknown, options: ToolExecutionOptions) => this.execute(name, run, input, options) };
+    // A streaming tool (an async generator) stays one: the guard decides, then yields the tool's own values.
+    const execute =
+      run.constructor?.name === "AsyncGeneratorFunction"
+        ? async function* (this: Guard, input: unknown, options: ToolExecutionOptions) {
+            const v = await this.guarded(name, input, options);
+            if (v.run === undefined) yield v.out;
+            else yield* run(v.run, options) as AsyncIterable<unknown>;
+          }.bind(this)
+        : async (input: unknown, options: ToolExecutionOptions) => {
+            const v = await this.guarded(name, input, options);
+            return v.run === undefined ? v.out : run(v.run, options);
+          };
+    const wrapped: Tool = { ...t, execute };
     if (typeof t.toModelOutput === "function") {
       const own = t.toModelOutput;
       wrapped.toModelOutput = (o: { toolCallId?: string }) => {
@@ -154,22 +170,25 @@ class Guard {
     return wrapped;
   }
 
-  private async execute(name: string, run: NonNullable<Tool["execute"]>, input: unknown, options: ToolExecutionOptions): Promise<unknown> {
-    let r: PantherClawRefusal | null;
-    let send: Outbound | undefined;
-    let id = "";
-    let txn = "";
+  /**
+   * Decides a call: `run` is the decided input to run the tool on (D69: a
+   * copy taken when it was decided, so what runs is what was decided), or
+   * else `out` is the call's output (a refusal, or the dispatch handler's).
+   */
+  private async guarded(name: string, input: unknown, options: ToolExecutionOptions): Promise<{ run?: Record<string, unknown>; out?: unknown }> {
+    if (options?.toolCallId) this.refused.delete(options.toolCallId);
+    let d: Awaited<ReturnType<Guard["decide"]>>;
     try {
-      ({ refusal: r, send, id, txn } = await this.decide(name, input, options));
+      d = await this.decide(name, input, options);
     } catch {
-      r = new PantherClawRefusal("wrapper_error");
+      d = { refusal: new PantherClawRefusal("wrapper_error"), id: "", txn: "" };
     }
-    if (r) return this.refuse(r, options);
-    if (send) {
-      if (!this.o.onDispatch) return this.refuse(new PantherClawRefusal("dispatch_required", txn), options);
-      return this.o.onDispatch(id, send);
+    if (d.refusal) return { out: this.refuse(d.refusal, options) };
+    if (d.send) {
+      if (!this.o.onDispatch) return { out: this.refuse(new PantherClawRefusal("dispatch_required", d.txn), options) };
+      return { out: await this.o.onDispatch(d.id, d.send) };
     }
-    return run(input, options);
+    return { run: d.input };
   }
 
   private refuse(r: PantherClawRefusal, options: ToolExecutionOptions): string {
@@ -181,27 +200,46 @@ class Guard {
     return r.message;
   }
 
-  private async decide(name: string, input: unknown, options: ToolExecutionOptions): Promise<{ refusal: PantherClawRefusal | null; send?: Outbound; id: string; txn: string }> {
+  private async decide(
+    name: string,
+    raw: unknown,
+    options: ToolExecutionOptions,
+  ): Promise<{ refusal: PantherClawRefusal | null; send?: Outbound; id: string; txn: string; input?: Record<string, unknown> }> {
     // The client refuses a call whose input is not an object (cannot_decide).
-    if (typeof input !== "object" || input === null || Array.isArray(input)) return { refusal: new PantherClawRefusal("cannot_decide"), id: "", txn: "" };
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return { refusal: new PantherClawRefusal("cannot_decide"), id: "", txn: "" };
+    // Exactly the input the AI SDK validated against the tool's schema and hands execute (D69), copied: the decision and the run use this copy.
+    const input = JSON.parse(JSON.stringify(raw)) as Record<string, unknown>;
     const server = this.o.connection;
-    const call: ToolCall = { tool: `mcp__${server}__${name}`, server, input: input as Record<string, unknown>, tool_use_id: callId(options?.toolCallId) };
+    const call: ToolCall = { tool: `mcp__${server}__${name}`, server, input, tool_use_id: callId(options?.toolCallId) };
     const key = JSON.stringify([name, canonicalize(JSON.stringify(input))]);
     this.prune();
     const actionId = this.retries.get(key)?.actionId ?? newActionId();
     const waitMs = this.o.wait * 1000;
-    const first = await this.o.client.authorize(server, call, actionId);
-    let res = first;
-    if (first.outcome === "hold") {
-      this.retries.set(key, { actionId, expires: Date.now() + waitMs });
-      if (this.retries.size > MAX_RETRIES) this.retries.delete(this.retries.keys().next().value as string);
-      res = await withSignal(this.o.client.resume(server, call, actionId, first, waitMs), options?.abortSignal);
-      // The wait has used up its time: an identical later call may still resubmit the held action.
-      if (res.outcome !== "allow") this.retries.set(key, { actionId, expires: Date.now() + waitMs });
+    this.retries.set(key, { actionId, expires: Number.POSITIVE_INFINITY });
+    if (this.retries.size > MAX_RETRIES) this.retries.delete(this.retries.keys().next().value as string);
+    let unresolved = false;
+    try {
+      const first = await this.o.client.authorize(server, call, actionId);
+      let res = first;
+      if (first.outcome === "hold") {
+        try {
+          res = await withSignal(this.o.client.resume(server, call, actionId, first, waitMs), options?.abortSignal);
+        } catch {
+          // The wait was aborted: the hold ran out for this call (D47).
+          res = { outcome: "cannot_decide", why: "the wait was aborted" };
+        }
+        // Held past the wait: the action is still unresolved in PantherClaw, so an identical later call resubmits it.
+        unresolved = res.outcome === "cannot_decide";
+      }
+      const r = refusal(first, res, first.outcome === "hold", this.o.observeUnmapped);
+      return { refusal: r, send: r ? undefined : res.send, id: call.tool_use_id, txn: res.answer?.transaction_id ?? "", input };
+    } finally {
+      const e = this.retries.get(key);
+      if (e?.actionId === actionId) {
+        if (unresolved) e.expires = Date.now() + waitMs;
+        else this.retries.delete(key);
+      }
     }
-    const r = refusal(first, res, first.outcome === "hold", this.o.observeUnmapped);
-    if (res.outcome === "allow") this.retries.delete(key);
-    return { refusal: r, send: r ? undefined : res.send, id: call.tool_use_id, txn: res.answer?.transaction_id ?? "" };
   }
 
   /** Forgets retry ids past their wait. */
