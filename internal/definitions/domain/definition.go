@@ -133,6 +133,11 @@ type ConstraintSpec struct {
 	Kind  ConstraintKind `json:"kind"`
 	Param string         `json:"param,omitzero"`
 	Clamp bool           `json:"clamp,omitzero"`
+	// Required, on target_set and destination_set only, makes a grant or
+	// guardrail that binds the set a condition of every action (G0 M14
+	// D78): without one the action is DENIED, TARGET_SET_REQUIRED or
+	// DESTINATION_SET_REQUIRED.
+	Required bool `json:"required,omitzero"`
 }
 
 // Prerequisite names a trusted fact that must be present and fresh (F381).
@@ -380,6 +385,9 @@ func anchored(name, p string) error {
 
 func (d *Definition) validateConstraint(c ConstraintSpec) error {
 	op := d.Operation
+	if c.Required && c.Kind != ConstraintTargetSet && c.Kind != ConstraintDestinationSet {
+		return invalid("%s: only target_set and destination_set can be required (G0 M14 D78)", op)
+	}
 	var want []ParamType
 	switch c.Kind {
 	case ConstraintAmountMax:

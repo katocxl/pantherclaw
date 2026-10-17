@@ -3,7 +3,11 @@
 
 package server
 
-import "github.com/katocxl/pantherclaw/internal/connections/ports"
+import (
+	"github.com/katocxl/pantherclaw/internal/connections/ports"
+	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
+	policyapp "github.com/katocxl/pantherclaw/internal/policy/app"
+)
 
 // m14Core is what the M14 streams' wiring builds on (G0 M14 D64): the
 // stores of the postgres and a2a configurations, which the data and a2a
@@ -22,4 +26,21 @@ func wireM14Core(m6 *m6Services) *m14Core {
 		m6.gateways.WithKindConfigs(c.kinds)
 	}
 	return c
+}
+
+// wireM14Grants gates data scope in issued and revised grants by the
+// licence (G0 M14 D11); a nil edition source refuses them.
+func wireM14Grants(grants *grantsapp.Service, d apiDeps) {
+	if grants != nil && d.billing != nil {
+		grants.Editions = d.billing
+	}
+}
+
+func init() {
+	// Publishing a data scope rule needs the Team edition (D11).
+	policyGateExtensions = append(policyGateExtensions, func(d apiDeps, v *policyapp.Versions) {
+		if d.billing != nil {
+			v.Editions = d.billing
+		}
+	})
 }
