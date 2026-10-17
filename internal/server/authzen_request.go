@@ -12,6 +12,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -160,11 +161,14 @@ var errNotBound = errors.New("authzen: connection not bound to the enforcement p
 // evaluation without a usable resource gets none and is denied.
 func (e *authzenEndpoint) connections(ctx context.Context, p point, evals []azEvaluation) ([]*boundConnection, error) {
 	out := make([]*boundConnection, len(evals))
+	if !slices.ContainsFunc(evals, named) {
+		return out, nil
+	}
 	byName := map[string]*boundConnection{}
 	err := e.pool.InTenantTx(ctx, p.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		for i, ev := range evals {
-			if ev.Resource == nil || ev.Resource.Type != authzenResourceType || ev.Resource.ID == "" || len(ev.Resource.ID) > 63 {
+			if !named(ev) {
 				continue
 			}
 			name := ev.Resource.ID
@@ -275,10 +279,6 @@ func (e *authzenEndpoint) evaluate(ctx context.Context, p point, conn *boundConn
 	htu := (&url.URL{Scheme: target.Scheme, Host: target.Host, Path: target.Path, RawPath: target.RawPath}).String()
 	creds := &authority.Credentials{Token: sub.Token, Proof: sub.Proof, BodySHA256: sum, Method: res.Method, URL: htu}
 	gw := authority.Gateway{ID: conn.GatewayID.String(), Org: p.Org}
-	mapper, err := e.mappers.get(conn.PackageRaw)
-	if err != nil {
-		return authzenResponse{}, err
-	}
 	tc := mapping.Context{
 		Org: p.Org.String(), Env: env, RunID: run.String(), ActionID: action.String(), AgentInstance: instance, Connection: conn.ID.String(),
 	}
@@ -287,6 +287,10 @@ func (e *authzenEndpoint) evaluate(ctx context.Context, p point, conn *boundConn
 	case "http":
 		if ev.Action.Name != res.Method {
 			return refusal(codeAction), nil
+		}
+		mapper, merr := e.mappers.get(conn.PackageRaw)
+		if merr != nil {
+			return authzenResponse{}, merr
 		}
 		mapped, err = mapper.HTTP(ctx, tc, res.Method, rest, target.RawQuery, body)
 	case "mcp":
@@ -303,6 +307,10 @@ func (e *authzenEndpoint) evaluate(ctx context.Context, p point, conn *boundConn
 			// consumed (HR-021).
 			return e.verifyOnly(ctx, gw, creds, run)
 		case "tools/call":
+			mapper, merr := e.mappers.get(conn.PackageRaw)
+			if merr != nil {
+				return authzenResponse{}, merr
+			}
 			mapped, err = mapper.MCP(ctx, tc, call.Name, call.Arguments)
 		default:
 			return refusal(codeMethod), nil
@@ -508,4 +516,9 @@ func (c *mapperCache) get(raw []byte) (*mapping.Mapper, error) {
 	c.byRaw[key] = m
 	c.mu.Unlock()
 	return m, nil
+}
+
+// named reports whether an evaluation names a connection.
+func named(ev azEvaluation) bool {
+	return ev.Resource != nil && ev.Resource.Type == authzenResourceType && ev.Resource.ID != "" && len(ev.Resource.ID) <= 63
 }

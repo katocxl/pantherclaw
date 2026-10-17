@@ -58,12 +58,12 @@ func sameSet(a, b []ids.UUID) bool {
 	return slices.Equal(as, bs)
 }
 
-// TestIntEnforcementPointLifecycle: a person creates a PENDING point
+// TestHR317_EnforcementPointLifecycle: a person creates a PENDING point
 // proposing agent_held and target_enforced connections (never a
 // pantherclaw_held one); only a fresh step-up activates it and binds them;
 // narrowing applies at once, widening waits for a confirmation while the
 // point keeps its connections; disabling is final (G0 M14 D29).
-func TestIntEnforcementPointLifecycle(t *testing.T) {
+func TestHR317_EnforcementPointLifecycle(t *testing.T) {
 	f := newFixture(t)
 	admin := f.As(td.KindUser, td.RoleOrgAdmin)
 	if _, err := f.svc.Create(admin, enforcementpoints.NewPoint{
@@ -137,11 +137,11 @@ func TestIntEnforcementPointLifecycle(t *testing.T) {
 	}
 }
 
-// TestIntEnforcementPointsArePeopleOnly: enforcement_point.manage is
+// TestHR317_EnforcementPointsArePeopleOnly: enforcement_point.manage is
 // bindable to service accounts through Org Admin, so every change refuses
 // a caller who is not a person, even holding it (G0 M14 D62); reading
 // needs the permission.
-func TestIntEnforcementPointsArePeopleOnly(t *testing.T) {
+func TestHR317_EnforcementPointsArePeopleOnly(t *testing.T) {
 	f := newFixture(t)
 	admin := f.As(td.KindUser, td.RoleOrgAdmin)
 	p, err := f.svc.Create(admin, enforcementpoints.NewPoint{Name: "edge-pep", ServiceAccount: f.sa, Connections: []ids.UUID{f.held}})

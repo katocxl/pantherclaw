@@ -6,6 +6,7 @@ package server
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
+	"github.com/katocxl/pantherclaw/internal/authority"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -130,11 +132,11 @@ func (f fakeAuthn) Authenticate(_ context.Context, bearer string) (tapp.Caller, 
 	return f.caller, nil
 }
 
-// TestAuthZENRefusesCallersThatAreNotEnforcementPoints: no bearer, a bad
+// TestHR317_OnlyActiveEnforcementPointsAreAnswered: no bearer, a bad
 // one, a person, an API key and a service account without
 // authzen.evaluate all get 401 with WWW-Authenticate, before any body is
 // read (D26). The metadata needs no credential.
-func TestAuthZENRefusesCallersThatAreNotEnforcementPoints(t *testing.T) {
+func TestHR317_OnlyActiveEnforcementPointsAreAnswered(t *testing.T) {
 	org := ids.New[ids.Org]()
 	sa := td.PrincipalRef{Kind: td.KindServiceAccount, ID: ids.NewV7()}
 	evaluator := []td.Binding{{Role: td.RoleEnforcementPoint, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}}
@@ -172,5 +174,106 @@ func TestAuthZENRefusesCallersThatAreNotEnforcementPoints(t *testing.T) {
 		md.AccessEvaluationsEndpoint != "https://pc.example.test/access/v1/evaluations" || len(md.Capabilities) != 1 ||
 		md.Capabilities[0] != AuthZENCapability {
 		t.Fatalf("metadata: %d %s", w.Code, w.Body)
+	}
+}
+
+// failDecider fails the test if anything reaches the Authority.
+type failDecider struct{ t *testing.T }
+
+func (d failDecider) Decide(context.Context, authority.ExternalRequest) (authority.ExternalResult, error) {
+	d.t.Fatal("decided")
+	return authority.ExternalResult{}, nil
+}
+
+func (d failDecider) Verify(context.Context, authority.Gateway, *authority.Credentials, ids.UUID) (authority.Verified, error) {
+	d.t.Fatal("verified")
+	return authority.Verified{}, nil
+}
+
+// TestHR318_SubjectsAndRequestsThatDoNotMatchAreRefused: an evaluation
+// whose subject only names an agent, lacks the PAP/1 credentials, names
+// another agent than its token, or whose request is outside the
+// connection's base URL, of another protocol, with another action, or
+// over 64 KiB, is decision false before anything is decided; so is one
+// about a connection that is no longer agent_held or target_enforced.
+func TestHR318_SubjectsAndRequestsThatDoNotMatchAreRefused(t *testing.T) {
+	org, agent, inst := ids.New[ids.Org](), ids.NewV7(), ids.NewV7()
+	claims, _ := json.Marshal(map[string]any{"sub": "pc:org/" + org.String() + "/agent/" + agent.String() + "/inst/" + inst.String(), "pap": map[string]string{"env": "e"}})
+	tok := "x." + base64.RawURLEncoding.EncodeToString(claims) + ".y"
+	base := "https://pay.example.test/api"
+	conn := &boundConnection{ID: ids.NewV7(), Name: "payments", Kind: "http", AccessMode: "agent_held", State: "ACTIVE", BaseUrl: &base}
+	e := newAuthZENEndpoint(nil, nil, failDecider{t}, "https://pc.example.test", celenv.Limits{}, nil, nil)
+	p := point{Org: org, ID: ids.NewV7(), Rate: 50}
+	props := func(v map[string]any) jsontext.Value { b, _ := json.Marshal(v); return b }
+	subject := func(id string, v map[string]any) *azEntity {
+		return &azEntity{Type: authzenSubjectType, ID: id, Properties: props(v)}
+	}
+	good := map[string]any{"pap_token": tok, "pap_proof": "proof", "pap_run_id": ids.NewV7().String()}
+	resource := func(v map[string]any) *azEntity {
+		r := map[string]any{"protocol": "http", "method": "POST", "url": base + "/v1/refunds"}
+		for k, x := range v {
+			r[k] = x
+		}
+		return &azEntity{Type: authzenResourceType, ID: "payments", Properties: props(r)}
+	}
+	post := &azAction{Name: "POST"}
+	held := *conn
+	held.AccessMode = "pantherclaw_held"
+	for name, tc := range map[string]struct {
+		ev   azEvaluation
+		conn *boundConnection
+		code string
+	}{
+		"a name-only subject":    {azEvaluation{Subject: &azEntity{Type: "user", ID: agent.String()}, Resource: resource(nil), Action: post}, conn, codeSubject},
+		"no properties":          {azEvaluation{Subject: &azEntity{Type: authzenSubjectType, ID: agent.String()}, Resource: resource(nil), Action: post}, conn, codeSubject},
+		"no proof":               {azEvaluation{Subject: subject("", map[string]any{"pap_token": tok, "pap_run_id": "r"}), Resource: resource(nil), Action: post}, conn, codeCredentials},
+		"another agent":          {azEvaluation{Subject: subject(ids.NewV7().String(), good), Resource: resource(nil), Action: post}, conn, codeAgent},
+		"a token naming nobody":  {azEvaluation{Subject: subject("", map[string]any{"pap_token": "a.e30.b", "pap_proof": "p", "pap_run_id": ids.NewV7().String()}), Resource: resource(nil), Action: post}, conn, codeCredentials},
+		"outside the base URL":   {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"url": "https://pay.example.test/other"}), Action: post}, conn, codeURL},
+		"another host":           {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"url": "https://evil.test/api/v1"}), Action: post}, conn, codeURL},
+		"another protocol":       {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"protocol": "mcp"}), Action: post}, conn, codeProtocol},
+		"another action":         {azEvaluation{Subject: subject("", good), Resource: resource(nil), Action: &azAction{Name: "DELETE"}}, conn, codeAction},
+		"a body over 64 KiB":     {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"body_b64": base64.StdEncoding.EncodeToString(make([]byte, authzenMaxForwarded+1))}), Action: post}, conn, codeBody},
+		"a pantherclaw_held one": {azEvaluation{Subject: subject("", good), Resource: resource(nil), Action: post}, &held, codeBindable},
+	} {
+		res, err := e.evaluate(context.Background(), p, tc.conn, tc.ev)
+		if err != nil || res.Decision || res.Context.PantherClaw.Code != tc.code || res.Context.PantherClaw.Outcome != authority.ExternalCannotAuthorize {
+			t.Errorf("%s: %+v %v, want %s", name, res, err, tc.code)
+		}
+	}
+}
+
+// TestHR321_RequestsAreCapped: a body over 128 KiB is 413, a batch of more
+// than 10 evaluations 400, and a point past its rate a second 429, all
+// before any connection is read or anything decided.
+func TestHR321_RequestsAreCapped(t *testing.T) {
+	org := ids.New[ids.Org]()
+	c := tapp.Caller{Subject: td.Subject{Org: org, Principal: td.PrincipalRef{Kind: td.KindServiceAccount, ID: ids.NewV7()},
+		Bindings: []td.Binding{{Role: td.RoleEnforcementPoint, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}}}, Credential: tapp.CredAccessToken}
+	e := newAuthZENEndpoint(nil, fakeAuthn{bearer: "good", caller: c}, failDecider{t}, "https://pc.example.test", celenv.Limits{}, clock.NewFake(time.Now()), nil)
+	pt := point{Org: org, ID: ids.NewV7(), Rate: 3}
+	e.pointOf = func(context.Context, tapp.Caller) (point, error) { return pt, nil }
+	mux := http.NewServeMux()
+	e.mount(mux)
+	do := func(path, body string) int {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer good")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		return w.Code
+	}
+	if st := do(authzenEvaluationPath, `{"x":"`+strings.Repeat("a", authzenMaxBody)+`"}`); st != http.StatusRequestEntityTooLarge {
+		t.Fatalf("a body over 128 KiB: %d", st)
+	}
+	if st := do(authzenEvaluationsPath, `{"evaluations":[`+strings.Repeat(`{},`, authzenMaxBatch)+`{}]}`); st != http.StatusBadRequest {
+		t.Fatalf("a batch of 11: %d", st)
+	}
+	// Three evaluations a second: a batch of three fits (each is refused
+	// for lacking a resource, never decided), a fourth does not.
+	if st := do(authzenEvaluationsPath, `{"evaluations":[{},{},{}]}`); st != http.StatusOK {
+		t.Fatalf("within the rate: %d", st)
+	}
+	if st := do(authzenEvaluationPath, `{}`); st != http.StatusTooManyRequests {
+		t.Fatalf("past the rate: %d", st)
 	}
 }

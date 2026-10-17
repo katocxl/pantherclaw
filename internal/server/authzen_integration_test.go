@@ -20,12 +20,12 @@ import (
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
-// TestIntAuthZENServesOnlyConfirmedConnections: a widening is not served
+// TestHR317_OnlyConfirmedConnectionsAreServed: a widening is not served
 // until a person confirms it; until then a request naming the proposed
 // connection is refused as not bound, while the current one keeps
 // serving (G0 M14 D67, HR-317). Who asked is recorded once per
 // transaction (D65).
-func TestIntAuthZENServesOnlyConfirmedConnections(t *testing.T) {
+func TestHR317_OnlyConfirmedConnectionsAreServed(t *testing.T) {
 	f := triggerstest.New(t)
 	sa, gw, a, b := ids.NewV7(), ids.NewV7(), ids.NewV7(), ids.NewV7()
 	f.Exec(t, "INSERT INTO pc.service_accounts (org_id, id, name, created_by) VALUES ($1, $2, 'pep', 'test')", f.Org, sa)

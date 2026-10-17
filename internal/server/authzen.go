@@ -83,7 +83,9 @@ type authzenEndpoint struct {
 	publicURL string
 	mappers   *mapperCache
 	rates     *pointRates
-	log       *slog.Logger
+	// pointOf finds the caller's ACTIVE point (activePoint; tests replace it).
+	pointOf func(ctx context.Context, c tapp.Caller) (point, error)
+	log     *slog.Logger
 }
 
 func newAuthZENEndpoint(pool *db.Pool, authn authzenAuthenticator, decider authzenDecider, publicURL string, limits celenv.Limits,
@@ -92,10 +94,12 @@ func newAuthZENEndpoint(pool *db.Pool, authn authzenAuthenticator, decider authz
 	if log == nil {
 		log = pclog.Discard()
 	}
-	return &authzenEndpoint{
+	e := &authzenEndpoint{
 		pool: pool, authn: authn, decider: decider, publicURL: strings.TrimRight(publicURL, "/"),
 		mappers: newMapperCache(limits), rates: newPointRates(clk), log: log,
 	}
+	e.pointOf = e.activePoint
+	return e
 }
 
 // mount installs the endpoint on mux.
@@ -175,8 +179,13 @@ func (e *authzenEndpoint) authenticate(ctx context.Context, r *http.Request) (po
 		c.Require(td.PermAuthZENEvaluate, td.OrgPath(c.Org)) != nil {
 		return point{}, errNotPoint
 	}
+	return e.pointOf(ctx, c)
+}
+
+// activePoint is the ACTIVE point whose subject is the caller (D26).
+func (e *authzenEndpoint) activePoint(ctx context.Context, c tapp.Caller) (point, error) {
 	var p point
-	err = e.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+	err := e.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		row, err := dbq.New(tx).ActiveEnforcementPointOf(ctx, c.Org, c.Principal.ID)
 		if db.IsNoRows(err) {
 			return errNotPoint

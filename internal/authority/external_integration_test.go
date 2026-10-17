@@ -33,11 +33,11 @@ func (f fixture) authzenAction(t *testing.T, amount string, act ids.UUID) action
 	return out
 }
 
-// TestIntExternalDecideDelegates: an enforcement point's allowed action is
+// TestHR319_ExternalDecisionsCommitDelegated: an enforcement point's allowed action is
 // decided, committed and recorded DELEGATED in one call (G0 M14 D28): its
 // reservation is spent, never released, and the same action id never gets
 // a second permit. Only actions of the authzen channel are decided here.
-func TestIntExternalDecideDelegates(t *testing.T) {
+func TestHR319_ExternalDecisionsCommitDelegated(t *testing.T) {
 	f := setup(t, "1000", 0, 5*time.Second)
 	f.exec(t, "UPDATE pc.connections SET access_mode = 'agent_held' WHERE org_id = $1 AND id = $2", f.gw.Org, f.conn)
 	ctx := context.Background()
@@ -109,3 +109,32 @@ func TestIntExternalDecideDelegates(t *testing.T) {
 
 // authzenActionOn returns p unchanged: the identical action, resubmitted.
 func (f fixture) authzenActionOn(_ *testing.T, p actionir.Parsed) actionir.Parsed { return p }
+
+// TestHR320_NothingIsDispatchedWhenWhoAskedIsNotRecorded: who asked for an
+// authzen decision is recorded after the decision and before BeginDispatch;
+// when that fails the answer is false CANNOT_AUTHORIZE, no attempt is
+// recorded, and the permit expires and releases its reservation (D65).
+func TestHR320_NothingIsDispatchedWhenWhoAskedIsNotRecorded(t *testing.T) {
+	f := setup(t, "1000", 0, time.Microsecond)
+	f.exec(t, "UPDATE pc.connections SET access_mode = 'agent_held' WHERE org_id = $1 AND id = $2", f.gw.Org, f.conn)
+	res, err := f.svc.Decide(context.Background(), authority.ExternalRequest{
+		Gateway: f.gw, Action: f.authzenAction(t, "40.00", ids.NewV7()), Credentials: f.creds(t, f.wl, f.wl.token),
+		Decided: func(context.Context, ids.UUID) error { return errors.New("the record failed") },
+	})
+	if err != nil || res.Allowed || res.Outcome != authority.ExternalCannotAuthorize || res.Code != authority.CodeDecidedVia ||
+		res.ActionToken != "" || res.TransactionID.IsZero() {
+		t.Fatalf("decide: %+v %v", res, err)
+	}
+	if n := f.count(t, `SELECT count(*) FROM pc.execution_attempts WHERE org_id = $1`); n != 0 {
+		t.Fatalf("attempts: %d", n)
+	}
+	if n := f.count(t, `SELECT count(*) FROM pc.permits WHERE org_id = $1 AND state = 'ISSUED'`); n != 1 {
+		t.Fatalf("issued permits: %d", n)
+	}
+	if r, err := f.svc.SweepOrg(context.Background(), f.gw.Org, time.Hour); err != nil || r.Released != 1 {
+		t.Fatalf("sweep: %+v %v", r, err)
+	}
+	if b := f.rawBudgetRow(t); b.Reserved.String() != "0" || b.Spent.String() != "0" {
+		t.Fatalf("budget after expiry: reserved %s spent %s", b.Reserved, b.Spent)
+	}
+}
