@@ -31,6 +31,8 @@ def _wrap(tool: Any, guard: Guard) -> Any:
     if not isinstance(tool, FunctionTool):
         raise TypeError(f"PantherClaw: guard_tools takes FunctionTools (function_tool), not {type(tool).__name__}")
     invoke, name = tool.on_invoke_tool, tool.name
+    # The arguments the function receives are the JSON object's members its schema declares (M14 D69).
+    parameters = set((tool.params_json_schema or {}).get("properties") or {})
 
     # The wrapped tool's invoker lives only in this closure: the guarded tool
     # has no attribute that reaches it, and its __wrapped__ raises.
@@ -39,7 +41,7 @@ def _wrap(tool: Any, guard: Guard) -> Any:
             args = json.loads(raw) if raw else {}
         except ValueError:
             args = None
-        v = await guard.adecide(name, args, getattr(ctx, "tool_call_id", None)) if isinstance(args, dict) else Verdict(code="wrapper_error")
+        v = await guard.adecide(name, args, getattr(ctx, "tool_call_id", None), parameters=parameters) if isinstance(args, dict) else Verdict(code="wrapper_error")
 
         async def run() -> Any:
             return await invoke(ctx, raw)

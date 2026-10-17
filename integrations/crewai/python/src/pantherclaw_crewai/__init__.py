@@ -18,7 +18,7 @@ from typing import Any
 
 from pantherclaw.client import Client, Outbound
 
-from ._guard import Guard, PantherClawRefused, refusal
+from ._guard import Guard, PantherClawRefused, Verdict, refusal
 
 __all__ = ["PantherClawRefused", "guard_tools", "refusal"]
 
@@ -27,6 +27,21 @@ def _never_cache(_args: Any = None, _result: Any = None) -> bool:
     # A cached result would answer a later call without a decision, and a
     # cached refusal would outlive its approval.
     return False
+
+
+def _fields(schema: Any) -> tuple[set[str], set[str]]:
+    """A schema's field names, and the aliases they also accept."""
+    fields = getattr(schema, "model_fields", None) or {}
+    aliases = {a for f in fields.values() for a in (getattr(f, "alias", None), getattr(f, "validation_alias", None)) if isinstance(a, str)}
+    return set(fields), aliases
+
+
+def _jsonable(value: Any) -> Any:
+    try:
+        from pydantic_core import to_jsonable_python
+    except ImportError:
+        return value
+    return to_jsonable_python(value)
 
 
 def _wrap(tool: Any, guard: Guard) -> Any:
@@ -40,18 +55,54 @@ def _wrap(tool: Any, guard: Guard) -> Any:
 
     # The wrapped tool lives only in this closure: the guarded tool has no
     # attribute that reaches it.
+    def decided(args: tuple[Any, ...], kwargs: dict[str, Any]) -> tuple[dict[str, Any] | None, set[str] | None, str]:
+        """What PantherClaw decides (M14 D69): the arguments validated through
+        the tool's own schema into exactly what its function receives, or a
+        refusal code (positional arguments, keys outside the schema after
+        alias normalisation, input the schema refuses)."""
+        if args:
+            return None, None, "wrapper_error"
+        fields, aliases = _fields(tool.args_schema)
+        if not fields:
+            return kwargs, None, ""
+        if any(k not in fields and k not in aliases for k in kwargs):
+            return None, None, "undecided_args"
+        try:
+            validated = tool.args_schema.model_validate(kwargs).model_dump()
+            return {k: _jsonable(v) for k, v in validated.items()}, fields, ""
+        except Exception:  # noqa: BLE001 - input the schema refuses is never run undecided
+            return None, None, "wrapper_error"
+
+    def undeclared(args: tuple[Any, ...], kwargs: dict[str, Any]) -> bool:
+        fields, aliases = _fields(tool.args_schema)
+        return not args and bool(fields) and any(k not in fields and k not in aliases for k in kwargs)
+
     class PantherClawTool(BaseTool):
+        # CrewAI's run and arun drop keys outside the schema before _run sees
+        # them: a call carrying any is refused here (undecided_args, M14 D69).
+        def run(self, *args: Any, **kwargs: Any) -> Any:
+            if undeclared(args, kwargs):
+                return guard.finish(Verdict(code="undecided_args"), lambda: None)
+            return super().run(*args, **kwargs)
+
+        async def arun(self, *args: Any, **kwargs: Any) -> Any:
+            if undeclared(args, kwargs):
+                return guard.finish(Verdict(code="undecided_args"), lambda: None)
+            return await super().arun(*args, **kwargs)
+
         def _run(self, *args: Any, **kwargs: Any) -> Any:
-            v = guard.decide(name, kwargs if not args else None)
-            return guard.finish(v, lambda: tool.run(**kwargs))
+            call, parameters, code = decided(args, kwargs)
+            v = Verdict(code=code) if code else guard.decide(name, call, parameters=parameters)
+            return guard.finish(v, lambda: tool.run(**call))
 
         async def _arun(self, *args: Any, **kwargs: Any) -> Any:
-            v = await guard.adecide(name, kwargs if not args else None)
+            call, parameters, code = decided(args, kwargs)
+            v = Verdict(code=code) if code else await guard.adecide(name, call, parameters=parameters)
 
             async def run() -> Any:
                 if sync_only:
-                    return await asyncio.to_thread(tool.run, **kwargs)
-                return await tool.arun(**kwargs)
+                    return await asyncio.to_thread(tool.run, **call)
+                return await tool.arun(**call)
 
             return await guard.afinish(v, run)
 

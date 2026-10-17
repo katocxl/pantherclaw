@@ -27,6 +27,13 @@ from pantherclaw_openai_agents._guard import Guard
 
 REFUND = {"amount": "30.00", "charge": "ch_1", "currency": "USD", "reason": "duplicate"}
 _ids = itertools.count(1)
+# The cases about when an identical call reuses an action id (HR-329, M14 D68).
+RETRY_CASES = (
+    "held past the wait, then retried identically: the retry reuses the action id",
+    "held past the wait, then called with changed input: a new decision",
+    "allowed, then the identical call again: a new decision",
+    "two identical calls at once while held: one runs, the other is a duplicate",
+)
 
 
 def refund_tool(fn: Callable[..., str]) -> FunctionTool:
@@ -38,7 +45,7 @@ def refund_tool(fn: Callable[..., str]) -> FunctionTool:
     return create_refund
 
 
-def invoke(tool: FunctionTool, args: dict[str, Any]) -> Any:
+def invoke(tool: FunctionTool, args: Any) -> Any:
     raw = json.dumps(args)
     ctx = ToolContext(context=None, tool_name=tool.name, tool_call_id=f"call_{next(_ids)}", tool_arguments=raw)
     return asyncio.run(tool.on_invoke_tool(ctx, raw))
@@ -82,6 +89,9 @@ class OpenAIAgentsTest(unittest.TestCase):
 
     def test_T150_every_wrapper_case_replays_through_an_agent_run(self) -> None:
         replay(self, runner_adapter, PantherClawRefused)
+
+    def test_HR329_an_identical_call_reuses_the_action_id_only_while_the_earlier_one_is_unresolved(self) -> None:
+        replay(self, direct_adapter, PantherClawRefused, only=RETRY_CASES)
 
     def test_HR328_the_call_id_is_the_models(self) -> None:
         g = Gateway(["allow"])

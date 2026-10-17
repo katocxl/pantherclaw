@@ -23,15 +23,45 @@ from ._guard import ON_HOLD, Guard, PantherClawRefused, Verdict, refusal
 __all__ = ["ON_HOLD", "PantherClawRefused", "PantherClawToolNode", "guard_tools", "refusal"]
 
 
-def _model_args(tool: Any, args: dict[str, Any]) -> dict[str, Any]:
-    """The arguments the model gave: the tool call schema's, without the ones
-    the framework injects (state, store, the call id)."""
-    schema = tool.tool_call_schema
+def _fields(schema: Any) -> tuple[set[str], set[str]]:
+    """A schema's field names, and the aliases they also accept."""
+    if schema is None:
+        return set(), set()
     if isinstance(schema, dict):
-        names = set((schema.get("properties") or {}).keys())
-    else:
-        names = set(getattr(schema, "model_fields", None) or getattr(schema, "__fields__", {}))
-    return {k: v for k, v in args.items() if k in names}
+        return set((schema.get("properties") or {}).keys()), set()
+    fields = getattr(schema, "model_fields", None) or getattr(schema, "__fields__", {})
+    aliases = {a for f in fields.values() for a in (getattr(f, "alias", None), getattr(f, "validation_alias", None)) if isinstance(a, str)}
+    return set(fields), aliases
+
+
+def _decided(tool: Any, tool_input: dict[str, Any], tool_call_id: str | None) -> tuple[dict[str, Any], set[str]] | str:
+    """What PantherClaw decides (M14 D69): the input validated through the
+    tool's own schema into exactly what its function receives, restricted to
+    the arguments the model gives (the tool call schema's). Arguments the tool
+    declares injected (InjectedToolArg, LangGraph's injected state, store and
+    runtime, the call id) pass undecided; any other key outside the schema,
+    after alias normalisation, is refused: "undecided_args"."""
+    from pydantic_core import to_jsonable_python
+
+    model, model_aliases = _fields(tool.tool_call_schema)
+    full, full_aliases = _fields(tool.get_input_schema())
+    injected = (full - model) | set(getattr(tool, "_injected_args_keys", ()))
+    if any(k not in model and k not in model_aliases and k not in injected and k not in full_aliases for k in tool_input):
+        return "undecided_args"
+    # The tool's own parsing, as BaseTool.run does before it calls the function.
+    parsed = tool._parse_input(tool_input, tool_call_id)
+    if not isinstance(parsed, dict):
+        return "wrapper_error"
+    return {k: to_jsonable_python(v) for k, v in parsed.items() if k in model}, model
+
+
+def _propagate() -> tuple[type[BaseException], ...]:
+    """LangGraph's exceptions that pause a run (an interrupt): never a refusal."""
+    try:
+        from langgraph.errors import GraphBubbleUp
+    except ImportError:
+        return ()
+    return (GraphBubbleUp,)
 
 
 def _interrupt(value: dict[str, Any]) -> Any:
@@ -54,10 +84,18 @@ def _wrap(tool: Any, guard: Guard) -> Any:
             return ToolMessage(content=text, tool_call_id=tool_call_id, name=name, status="success" if v.send is not None else "error")
         return content
 
-    def verdict(tool_input: Any, tool_call_id: str | None) -> tuple[Verdict, dict[str, Any]]:
+    propagate = _propagate()
+
+    def decide_args(tool_input: Any, tool_call_id: str | None) -> tuple[Verdict, dict[str, Any], set[str]]:
         if not isinstance(tool_input, dict):
-            return Verdict(code="wrapper_error"), {}
-        return Verdict(), _model_args(tool, tool_input)
+            return Verdict(code="wrapper_error"), {}, set()
+        try:
+            out = _decided(tool, tool_input, tool_call_id)
+        except Exception:  # noqa: BLE001 - input the tool's schema refuses, or a failure here: never run undecided
+            return Verdict(code="wrapper_error"), {}, set()
+        if isinstance(out, str):
+            return Verdict(code=out), {}, set()
+        return Verdict(), out[0], out[1]
 
     # The wrapped tool lives only in this closure: the guarded tool has no
     # attribute that reaches it.
@@ -69,16 +107,16 @@ def _wrap(tool: Any, guard: Guard) -> Any:
             return tool.get_input_schema(config)
 
         def run(self, tool_input: Any, *args: Any, tool_call_id: str | None = None, **kwargs: Any) -> Any:
-            v, model_args = verdict(tool_input, tool_call_id)
+            v, decided, parameters = decide_args(tool_input, tool_call_id)
             if not v.code:
-                v = guard.decide(name, model_args, tool_call_id, interrupt)
+                v = guard.decide(name, decided, tool_call_id, interrupt, parameters, propagate)
             out = guard.finish(v, lambda: tool.run(tool_input, *args, tool_call_id=tool_call_id, **kwargs))
             return out if v.run else message(out, tool_call_id, v)
 
         async def arun(self, tool_input: Any, *args: Any, tool_call_id: str | None = None, **kwargs: Any) -> Any:
-            v, model_args = verdict(tool_input, tool_call_id)
+            v, decided, parameters = decide_args(tool_input, tool_call_id)
             if not v.code:
-                v = await guard.adecide(name, model_args, tool_call_id, interrupt)
+                v = await guard.adecide(name, decided, tool_call_id, interrupt, parameters, propagate)
 
             async def run() -> Any:
                 return await tool.arun(tool_input, *args, tool_call_id=tool_call_id, **kwargs)

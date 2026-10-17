@@ -39,6 +39,13 @@ from pantherclaw.client import Client  # noqa: E402
 from pantherclaw_crewai import PantherClawRefused, guard_tools  # noqa: E402
 
 REFUND = {"amount": "30.00", "charge": "ch_1", "currency": "USD", "reason": "duplicate"}
+# The cases about when an identical call reuses an action id (HR-329, M14 D68).
+RETRY_CASES = (
+    "held past the wait, then retried identically: the retry reuses the action id",
+    "held past the wait, then called with changed input: a new decision",
+    "allowed, then the identical call again: a new decision",
+    "two identical calls at once while held: one runs, the other is a duplicate",
+)
 
 
 def refund_tool(fn: Callable[..., str]) -> BaseTool:
@@ -52,18 +59,18 @@ def refund_tool(fn: Callable[..., str]) -> BaseTool:
 
 def run_adapter(client: Client, connection: str, opts: dict[str, Any], fn: Callable[..., str]) -> Callable[[dict[str, Any]], str]:
     (guarded,) = guard_tools([refund_tool(fn)], client, connection, **opts)
-    return lambda args: guarded.run(**args)
+    return lambda args: guarded.run(**args) if isinstance(args, dict) else guarded.run(args)
 
 
 def arun_adapter(client: Client, connection: str, opts: dict[str, Any], fn: Callable[..., str]) -> Callable[[dict[str, Any]], str]:
     (guarded,) = guard_tools([refund_tool(fn)], client, connection, **opts)
-    return lambda args: asyncio.run(guarded.arun(**args))
+    return lambda args: asyncio.run(guarded.arun(**args) if isinstance(args, dict) else guarded.arun(args))
 
 
 def structured_adapter(client: Client, connection: str, opts: dict[str, Any], fn: Callable[..., str]) -> Callable[[dict[str, Any]], str]:
     """How a crew calls a tool: the func of the structured tool CrewAI builds from it."""
     (guarded,) = guard_tools([refund_tool(fn)], client, connection, **opts)
-    return lambda args: guarded.to_structured_tool().func(**args)
+    return lambda args: guarded.to_structured_tool().func(**args) if isinstance(args, dict) else guarded.to_structured_tool().func(args)
 
 
 class CrewAIToolTest(unittest.TestCase):
@@ -75,6 +82,9 @@ class CrewAIToolTest(unittest.TestCase):
 
     def test_T150_every_wrapper_case_replays_through_the_structured_tool_a_crew_calls(self) -> None:
         replay(self, structured_adapter, PantherClawRefused)
+
+    def test_HR329_an_identical_call_reuses_the_action_id_only_while_the_earlier_one_is_unresolved(self) -> None:
+        replay(self, run_adapter, PantherClawRefused, only=RETRY_CASES)
 
     def test_HR328_results_are_never_cached(self) -> None:
         g = Gateway(["deny", "allow"])
@@ -153,7 +163,8 @@ if REAL:
 class RealCrewAITest(unittest.TestCase):
     def test_T150_every_wrapper_case_replays_through_a_crew(self) -> None:
         # A crew retries a tool that raised, so raise_on_refusal is replayed through run and arun.
-        replay(self, crew_adapter, PantherClawRefused, raising=False)
+        # A crew drops keys outside the schema before the tool and only passes objects.
+        replay(self, crew_adapter, PantherClawRefused, raising=False, objects_only=True, drops_unknown=True)
 
     def test_HR328_a_crew_waits_on_a_hold(self) -> None:
         g = Gateway(["hold", "allow"], "ready")
