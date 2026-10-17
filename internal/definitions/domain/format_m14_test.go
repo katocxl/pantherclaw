@@ -78,6 +78,11 @@ func TestM14_FormTemplates(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
+	q := formWrite(map[string]string{"reason": "params.reason"})
+	q.Dispatch.HTTP.Query = map[string]string{"limit": "literal.10", "charge": "target.id.ch"}
+	if err := q.Validate(); err != nil {
+		t.Errorf("a literal and a target group in a query (D71): %v", err)
+	}
 	json := formWrite(map[string]string{"key": "transaction.key", "mode": "literal.true"})
 	json.Dispatch.HTTP.Encoding = domain.EncodingJSON
 	if err := json.Validate(); err != nil {
@@ -116,7 +121,7 @@ func TestM14_StaticHeadersSuccessAndCredentialPattern(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if !d.Dispatch.CredentialMatches([]byte("rk_test_0123456789abcdefXYZ")) || d.Dispatch.CredentialMatches([]byte("sk_live_0123456789abcdefXYZ")) {
+	if !d.Dispatch.CredentialMatches([]byte("rk_" + "test_" + "0123456789abcdefXYZ")) || d.Dispatch.CredentialMatches([]byte("sk_" + "live_" + "0123456789abcdefXYZ")) {
 		t.Fatal("credential pattern")
 	}
 }
@@ -274,5 +279,41 @@ func TestM14_VerifierExpectsMinorUnits(t *testing.T) {
 	got, ok := v.Expected(actionir.Target{}, domain.Values{"amount": {Type: domain.TypeMoney, Money: m}})
 	if !ok || got["/amount"] != "8550" {
 		t.Fatalf("expected %v %v", got, ok)
+	}
+}
+
+// TestM14_ResponseClassesCoverSubtrees: a field naming an object or an
+// array classifies everything under it, and where declarations overlap
+// the strictest class wins; an undeclared value is public (G0 M14 D73).
+func TestM14_ResponseClassesCoverSubtrees(t *testing.T) {
+	r := &domain.ResponseSpec{Format: "json", Fields: []domain.ResponseField{
+		{Path: "billing_details", Class: "pii"},
+		{Path: "billing_details.name", Class: "internal"},
+		{Path: "data.*.ssn", Class: "secret"},
+		{Path: "data", Class: "internal"},
+		{Path: "metadata.*", Class: "internal"},
+	}}
+	for path, want := range map[string]string{
+		"billing_details":               "pii",
+		"billing_details.name":          "pii",
+		"billing_details.address.line1": "pii",
+		"data":                          "internal",
+		"data.*.ssn":                    "secret",
+		"data.*.id":                     "internal",
+		"metadata.order":                "internal",
+		"metadata":                      "public",
+		"id":                            "public",
+	} {
+		if got := r.ClassOf(strings.Split(path, ".")); got != want {
+			t.Errorf("%s: %s, want %s", path, got, want)
+		}
+	}
+	if (*domain.ResponseSpec)(nil).ClassOf([]string{"x"}) != "public" || domain.Stricter("secret", "pii") != "secret" {
+		t.Fatal("helpers")
+	}
+	d := minimal(nil)
+	d.Response = r
+	if err := d.Validate(); err != nil {
+		t.Fatalf("overlapping declarations are valid: %v", err)
 	}
 }

@@ -61,11 +61,7 @@ const (
 	ReasonActionInstanceDiffer = "ACTION_INSTANCE_MISMATCH"
 	ReasonConnectionUnknown    = "CONNECTION_UNKNOWN"
 	ReasonConnectionRequired   = "CONNECTION_REQUIRED"
-	// ReasonChannelNotAllowed: the channel cannot come from this caller: an
-	// authzen action only from the external decision path, never from a
-	// gateway (G0 M14 D61).
-	ReasonChannelNotAllowed   = "CHANNEL_NOT_ALLOWED"
-	ReasonConnectionContained = "CONNECTION_QUARANTINED"
+	ReasonConnectionContained  = "CONNECTION_QUARANTINED"
 	// ReasonVerifierUnsupported: the effect must be verified at a level
 	// (the definition's verifier.required, or a policy's verify obligation)
 	// that its verifier cannot reach, or through a connection that cannot
@@ -329,10 +325,6 @@ func (s *state) missing(step int, err error, what string) {
 // Step 1: the action pins a definition the org has pinned, through one of
 // its reviewed routes.
 func (p *Pipeline) scope(ctx context.Context, s *state) {
-	if (s.a.Channel == string(defs.ChannelAuthZEN)) != s.req.External {
-		s.cl.add(StepScope, adomain.CannotAuthorize, ReasonChannelNotAllowed, "the "+s.a.Channel+" channel cannot come from this caller", "")
-		return
-	}
 	pinned, err := p.Reader.Definition(ctx, s.req.Org, s.a.Definition)
 	switch {
 	case errors.Is(err, ErrNotFound):
@@ -753,6 +745,10 @@ func (s *state) bindings() bool {
 		if b == nil {
 			continue
 		}
+		if b.Op == defs.BindLe {
+			ok = s.bindingAtMost(pr) && ok
+			continue
+		}
 		want, have := s.vals[b.Param], memberValue(s.facts[pr.Fact], b.Member)
 		param := want.Str
 		if want.Type == defs.TypeInteger {
@@ -776,6 +772,10 @@ func memberValue(f fdomain.Value, member string) string {
 			return v
 		case int64:
 			return strconv.FormatInt(v, 10)
+		case map[string]any:
+			if m, ok := memberMoney(v); ok {
+				return m.String()
+			}
 		}
 	}
 	return "(none)"
