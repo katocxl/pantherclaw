@@ -684,6 +684,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	mux := http.NewServeMux()
 	edges.mount(mux)
 	automationTriggers.mount(mux)
+	mountM14A2A(mux, d)
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)
 	d.oauth.Mount(mux)

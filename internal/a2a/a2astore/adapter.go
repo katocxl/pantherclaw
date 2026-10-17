@@ -112,7 +112,7 @@ type Adapter struct {
 
 var _ ports.KindConfig = (*Adapter)(nil)
 
-// Save pins the card and stores the configuration (a validated
+// Save pins the card and proposes the configuration (a validated
 // *capp.A2AConfig) of the connection just written in tx. The connection's
 // simulated flag picks the egress client, and its writer is the pin's.
 func (a *Adapter) Save(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn ids.UUID, _ int32, cfg any) (string, error) {
@@ -129,18 +129,22 @@ func (a *Adapter) Save(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn 
 	if err != nil {
 		return "", err
 	}
-	// The interface URL is the connection's base URL (D85).
-	if _, err := Load(ctx, q, org, conn); errors.Is(err, ErrNotFound) {
-		return in.Interface.URL, Insert(ctx, q, org, conn, pinned, w.UpdatedBy)
-	} else if err != nil {
+	// A proposal: it serves once an Org Admin confirms it (D85). The
+	// interface URL is the connection's base URL.
+	if _, err := Propose(ctx, q, org, conn, pinned, w.UpdatedBy); err != nil {
 		return "", err
 	}
-	return in.Interface.URL, Replace(ctx, q, org, conn, pinned, w.UpdatedBy)
+	return in.Interface.URL, nil
 }
 
 // Load returns the configuration a gateway serves (*pb.A2AConfig).
 func (a *Adapter) Load(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn ids.UUID) (proto.Message, error) {
-	p, err := Load(ctx, dbq.New(tx), org, conn)
+	p, err := Get(ctx, dbq.New(tx), org, conn, StateActive)
+	if errors.Is(err, ErrNotFound) {
+		// Nothing confirmed yet: the gateway gets no configuration and
+		// refuses the connection (KIND_CONFIG_MISSING).
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}

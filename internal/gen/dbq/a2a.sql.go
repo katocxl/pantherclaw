@@ -15,58 +15,34 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
-const getA2AConnection = `-- name: GetA2AConnection :one
-SELECT card_url, binding, interface_url, pinned_card, card_digest, card_keys, skills, peer_agent_id, peer_bounds,
-       peer_limits, max_answer_bytes, max_stream_seconds, pinned_by, pinned_at, drifted_at, observed_digest
-FROM pc.a2a_connections
-WHERE org_id = $1 AND connection_id = $2
+const activateA2APin = `-- name: ActivateA2APin :execrows
+UPDATE pc.a2a_pins
+SET state = 'ACTIVE', confirmed_by = $1, confirmed_credential = $2
+WHERE org_id = $3 AND id = $4 AND state = 'PROPOSED'
 `
 
-type GetA2AConnectionRow struct {
-	CardUrl          string
-	Binding          string
-	InterfaceUrl     string
-	PinnedCard       []byte
-	CardDigest       []byte
-	CardKeys         []byte
-	Skills           []string
-	PeerAgentID      *ids.UUID
-	PeerBounds       []byte
-	PeerLimits       []byte
-	MaxAnswerBytes   int32
-	MaxStreamSeconds int32
-	PinnedBy         string
-	PinnedAt         time.Time
-	DriftedAt        *time.Time
-	ObservedDigest   []byte
+type ActivateA2APinParams struct {
+	ConfirmedBy         *ids.UUID
+	ConfirmedCredential *ids.UUID
+	OrgID               ids.OrgID
+	ID                  ids.UUID
 }
 
-func (q *Queries) GetA2AConnection(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) (GetA2AConnectionRow, error) {
-	row := q.db.QueryRow(ctx, getA2AConnection, orgID, connectionID)
-	var i GetA2AConnectionRow
-	err := row.Scan(
-		&i.CardUrl,
-		&i.Binding,
-		&i.InterfaceUrl,
-		&i.PinnedCard,
-		&i.CardDigest,
-		&i.CardKeys,
-		&i.Skills,
-		&i.PeerAgentID,
-		&i.PeerBounds,
-		&i.PeerLimits,
-		&i.MaxAnswerBytes,
-		&i.MaxStreamSeconds,
-		&i.PinnedBy,
-		&i.PinnedAt,
-		&i.DriftedAt,
-		&i.ObservedDigest,
+func (q *Queries) ActivateA2APin(ctx context.Context, arg ActivateA2APinParams) (int64, error) {
+	result, err := q.db.Exec(ctx, activateA2APin,
+		arg.ConfirmedBy,
+		arg.ConfirmedCredential,
+		arg.OrgID,
+		arg.ID,
 	)
-	return i, err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getA2AConnectionWriter = `-- name: GetA2AConnectionWriter :one
-SELECT simulated, updated_by, revision
+SELECT simulated, updated_by, revision, gateway_id, name
 FROM pc.connections
 WHERE org_id = $1 AND id = $2 AND kind = 'a2a'
 `
@@ -75,12 +51,20 @@ type GetA2AConnectionWriterRow struct {
 	Simulated bool
 	UpdatedBy string
 	Revision  int32
+	GatewayID ids.UUID
+	Name      string
 }
 
 func (q *Queries) GetA2AConnectionWriter(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (GetA2AConnectionWriterRow, error) {
 	row := q.db.QueryRow(ctx, getA2AConnectionWriter, orgID, iD)
 	var i GetA2AConnectionWriterRow
-	err := row.Scan(&i.Simulated, &i.UpdatedBy, &i.Revision)
+	err := row.Scan(
+		&i.Simulated,
+		&i.UpdatedBy,
+		&i.Revision,
+		&i.GatewayID,
+		&i.Name,
+	)
 	return i, err
 }
 
@@ -116,61 +100,42 @@ func (q *Queries) GetA2APeerRun(ctx context.Context, arg GetA2APeerRunParams) (G
 	return i, err
 }
 
-const insertA2AConnection = `-- name: InsertA2AConnection :exec
-
-INSERT INTO pc.a2a_connections (org_id, connection_id, card_url, binding, interface_url, pinned_card, card_digest,
-                                card_keys, skills, peer_agent_id, peer_bounds, peer_limits, max_answer_bytes,
-                                max_stream_seconds, pinned_by)
-VALUES ($1, $2, $3, $4, $5,
-        $6, $7, $8, $9, $10,
-        $11, $12, $13, $14,
-        $15)
+const getA2APin = `-- name: GetA2APin :one
+SELECT org_id, id, connection_id, state, card_url, binding, interface_url, pinned_card, card_digest, card_keys, skills, peer_agent_id, peer_bounds, peer_limits, max_answer_bytes, max_stream_seconds, proposed_by, proposed_at, confirmed_by, confirmed_credential, confirmed_at, decided_at, drifted_at, observed_digest
+FROM pc.a2a_pins
+WHERE org_id = $1 AND connection_id = $2 AND state = $3
 `
 
-type InsertA2AConnectionParams struct {
-	OrgID            ids.OrgID
-	ConnectionID     ids.UUID
-	CardUrl          string
-	Binding          string
-	InterfaceUrl     string
-	PinnedCard       []byte
-	CardDigest       []byte
-	CardKeys         []byte
-	Skills           []string
-	PeerAgentID      *ids.UUID
-	PeerBounds       []byte
-	PeerLimits       []byte
-	MaxAnswerBytes   int32
-	MaxStreamSeconds int32
-	PinnedBy         string
-}
-
-// SPDX-License-Identifier: BUSL-1.1
-// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
-//
-// A2A connections and peer runs (G0 M14 D30, D33, D64). A pin is written
-// with the connection, in its transaction; a refresh replaces it and clears
-// recorded drift. A peer run is created once per (requester run,
-// connection, context) and reused after.
-func (q *Queries) InsertA2AConnection(ctx context.Context, arg InsertA2AConnectionParams) error {
-	_, err := q.db.Exec(ctx, insertA2AConnection,
-		arg.OrgID,
-		arg.ConnectionID,
-		arg.CardUrl,
-		arg.Binding,
-		arg.InterfaceUrl,
-		arg.PinnedCard,
-		arg.CardDigest,
-		arg.CardKeys,
-		arg.Skills,
-		arg.PeerAgentID,
-		arg.PeerBounds,
-		arg.PeerLimits,
-		arg.MaxAnswerBytes,
-		arg.MaxStreamSeconds,
-		arg.PinnedBy,
+func (q *Queries) GetA2APin(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID, state string) (PcA2aPin, error) {
+	row := q.db.QueryRow(ctx, getA2APin, orgID, connectionID, state)
+	var i PcA2aPin
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.ConnectionID,
+		&i.State,
+		&i.CardUrl,
+		&i.Binding,
+		&i.InterfaceUrl,
+		&i.PinnedCard,
+		&i.CardDigest,
+		&i.CardKeys,
+		&i.Skills,
+		&i.PeerAgentID,
+		&i.PeerBounds,
+		&i.PeerLimits,
+		&i.MaxAnswerBytes,
+		&i.MaxStreamSeconds,
+		&i.ProposedBy,
+		&i.ProposedAt,
+		&i.ConfirmedBy,
+		&i.ConfirmedCredential,
+		&i.ConfirmedAt,
+		&i.DecidedAt,
+		&i.DriftedAt,
+		&i.ObservedDigest,
 	)
-	return err
+	return i, err
 }
 
 const insertA2APeerRun = `-- name: InsertA2APeerRun :execrows
@@ -202,6 +167,57 @@ func (q *Queries) InsertA2APeerRun(ctx context.Context, arg InsertA2APeerRunPara
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const insertA2APin = `-- name: InsertA2APin :exec
+INSERT INTO pc.a2a_pins (org_id, id, connection_id, card_url, binding, interface_url, pinned_card, card_digest,
+                         card_keys, skills, peer_agent_id, peer_bounds, peer_limits, max_answer_bytes,
+                         max_stream_seconds, proposed_by)
+VALUES ($1, $2, $3, $4, $5,
+        $6, $7, $8, $9, $10,
+        $11, $12, $13, $14,
+        $15, $16)
+`
+
+type InsertA2APinParams struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	ConnectionID     ids.UUID
+	CardUrl          string
+	Binding          string
+	InterfaceUrl     string
+	PinnedCard       []byte
+	CardDigest       []byte
+	CardKeys         []byte
+	Skills           []string
+	PeerAgentID      *ids.UUID
+	PeerBounds       []byte
+	PeerLimits       []byte
+	MaxAnswerBytes   int32
+	MaxStreamSeconds int32
+	ProposedBy       string
+}
+
+func (q *Queries) InsertA2APin(ctx context.Context, arg InsertA2APinParams) error {
+	_, err := q.db.Exec(ctx, insertA2APin,
+		arg.OrgID,
+		arg.ID,
+		arg.ConnectionID,
+		arg.CardUrl,
+		arg.Binding,
+		arg.InterfaceUrl,
+		arg.PinnedCard,
+		arg.CardDigest,
+		arg.CardKeys,
+		arg.Skills,
+		arg.PeerAgentID,
+		arg.PeerBounds,
+		arg.PeerLimits,
+		arg.MaxAnswerBytes,
+		arg.MaxStreamSeconds,
+		arg.ProposedBy,
+	)
+	return err
 }
 
 const listA2APeerRuns = `-- name: ListA2APeerRuns :many
@@ -246,10 +262,49 @@ func (q *Queries) ListA2APeerRuns(ctx context.Context, orgID ids.OrgID, connecti
 	return items, nil
 }
 
+const lockA2AProposal = `-- name: LockA2AProposal :one
+SELECT org_id, id, connection_id, state, card_url, binding, interface_url, pinned_card, card_digest, card_keys, skills, peer_agent_id, peer_bounds, peer_limits, max_answer_bytes, max_stream_seconds, proposed_by, proposed_at, confirmed_by, confirmed_credential, confirmed_at, decided_at, drifted_at, observed_digest
+FROM pc.a2a_pins
+WHERE org_id = $1 AND connection_id = $2 AND id = $3 AND state = 'PROPOSED'
+FOR UPDATE
+`
+
+func (q *Queries) LockA2AProposal(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID, iD ids.UUID) (PcA2aPin, error) {
+	row := q.db.QueryRow(ctx, lockA2AProposal, orgID, connectionID, iD)
+	var i PcA2aPin
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.ConnectionID,
+		&i.State,
+		&i.CardUrl,
+		&i.Binding,
+		&i.InterfaceUrl,
+		&i.PinnedCard,
+		&i.CardDigest,
+		&i.CardKeys,
+		&i.Skills,
+		&i.PeerAgentID,
+		&i.PeerBounds,
+		&i.PeerLimits,
+		&i.MaxAnswerBytes,
+		&i.MaxStreamSeconds,
+		&i.ProposedBy,
+		&i.ProposedAt,
+		&i.ConfirmedBy,
+		&i.ConfirmedCredential,
+		&i.ConfirmedAt,
+		&i.DecidedAt,
+		&i.DriftedAt,
+		&i.ObservedDigest,
+	)
+	return i, err
+}
+
 const markA2ADrift = `-- name: MarkA2ADrift :execrows
-UPDATE pc.a2a_connections SET drifted_at = now(), observed_digest = $1
-WHERE org_id = $2 AND connection_id = $3 AND card_digest = $4
-  AND drifted_at IS NULL
+UPDATE pc.a2a_pins SET drifted_at = now(), observed_digest = $1
+WHERE org_id = $2 AND connection_id = $3 AND state = 'ACTIVE'
+  AND card_digest = $4 AND drifted_at IS NULL
 `
 
 type MarkA2ADriftParams struct {
@@ -272,53 +327,34 @@ func (q *Queries) MarkA2ADrift(ctx context.Context, arg MarkA2ADriftParams) (int
 	return result.RowsAffected(), nil
 }
 
-const updateA2AConnection = `-- name: UpdateA2AConnection :execrows
-UPDATE pc.a2a_connections
-SET card_url = $1, binding = $2, interface_url = $3,
-    pinned_card = $4, card_digest = $5, card_keys = $6,
-    skills = $7, peer_agent_id = $8, peer_bounds = $9,
-    peer_limits = $10, max_answer_bytes = $11,
-    max_stream_seconds = $12, pinned_by = $13, pinned_at = now(),
-    drifted_at = NULL, observed_digest = NULL
-WHERE org_id = $14 AND connection_id = $15
+const supersedeA2APin = `-- name: SupersedeA2APin :execrows
+UPDATE pc.a2a_pins SET state = 'SUPERSEDED'
+WHERE org_id = $1 AND connection_id = $2 AND state = 'ACTIVE'
 `
 
-type UpdateA2AConnectionParams struct {
-	CardUrl          string
-	Binding          string
-	InterfaceUrl     string
-	PinnedCard       []byte
-	CardDigest       []byte
-	CardKeys         []byte
-	Skills           []string
-	PeerAgentID      *ids.UUID
-	PeerBounds       []byte
-	PeerLimits       []byte
-	MaxAnswerBytes   int32
-	MaxStreamSeconds int32
-	PinnedBy         string
-	OrgID            ids.OrgID
-	ConnectionID     ids.UUID
+func (q *Queries) SupersedeA2APin(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, supersedeA2APin, orgID, connectionID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
-func (q *Queries) UpdateA2AConnection(ctx context.Context, arg UpdateA2AConnectionParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateA2AConnection,
-		arg.CardUrl,
-		arg.Binding,
-		arg.InterfaceUrl,
-		arg.PinnedCard,
-		arg.CardDigest,
-		arg.CardKeys,
-		arg.Skills,
-		arg.PeerAgentID,
-		arg.PeerBounds,
-		arg.PeerLimits,
-		arg.MaxAnswerBytes,
-		arg.MaxStreamSeconds,
-		arg.PinnedBy,
-		arg.OrgID,
-		arg.ConnectionID,
-	)
+const voidA2AProposals = `-- name: VoidA2AProposals :execrows
+
+UPDATE pc.a2a_pins SET state = 'VOIDED'
+WHERE org_id = $1 AND connection_id = $2 AND state = 'PROPOSED'
+`
+
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+//
+// A2A pins and peer runs (G0 M14 D30, D33, D64, D85). A pin is proposed
+// with the connection, in its transaction, and serves once confirmed; a
+// newer proposal voids an older one. A peer run is created once per
+// (requester run, connection, context) and reused after.
+func (q *Queries) VoidA2AProposals(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, voidA2AProposals, orgID, connectionID)
 	if err != nil {
 		return 0, err
 	}
