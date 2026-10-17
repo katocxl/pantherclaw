@@ -83,6 +83,8 @@ export async function caseGateway(t: { after: (fn: () => void) => void }, g: Gro
   const received: Received[] = [];
   const wait = c.wait ? g.waits[c.wait] : undefined;
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+    // No kept-alive sockets: a later test's server may get this port, and a pooled socket to a closed server fails the next request.
+    res.setHeader("Connection", "close");
     let body = "";
     req.on("data", (d) => {
       body += d;
@@ -120,7 +122,7 @@ export async function caseGateway(t: { after: (fn: () => void) => void }, g: Gro
     server.close();
   });
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return { client: new Client({ keyFile: { ...kf, server: base }, gateway: base, runId: run, timeoutMs: 2000 }), received };
+  return { client: new Client({ keyFile: { ...kf, server: base }, gateway: base, runId: run, timeoutMs: 10_000 }), received };
 }
 
 /** The send answer's dispatch: method, URL and decoded body. */

@@ -7,11 +7,16 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { jsonSchema } from "ai";
 import type { Outbound } from "../../../../sdk/typescript/src/index.ts";
 import { guardTools, PantherClawRefusal } from "../src/index.ts";
 import { type Case, caseGateway, dispatchOf, type Group, load } from "./conformance.ts";
 
 const g: Group = await load();
+
+/** The tool's input schema: every member the cases send, as strings (the group's tool takes string arguments). */
+const declared = [...new Set(g.cases.flatMap((c) => c.calls.flatMap((x) => Object.keys(x.input))))];
+const inputSchema = jsonSchema({ type: "object", properties: Object.fromEntries(declared.map((k) => [k, { type: "string" }])) });
 
 /** Held-call cases are HR-329's (resume and action id reuse); the rest HR-328's. */
 const id = (c: Case) => (c.answers.includes("hold") ? "TestHR329" : "TestHR328");
@@ -25,6 +30,7 @@ for (const [n, c] of g.cases.entries()) {
     const tools = guardTools(
       {
         [g.tool]: {
+          inputSchema,
           execute: async (input: unknown) => {
             ran.push(input);
             return "ran";
@@ -68,13 +74,16 @@ for (const [n, c] of g.cases.entries()) {
         assert.equal(r.path, g.path, at);
         assert.deepEqual(r.body, { tool: g.sdk_tool, server: g.connection, input: call.input, tool_use_id: toolCallId }, at);
       }
-      const ids = new Set(reqs.map((r) => r.actionId));
-      assert.equal(ids.size, 1, `${at}: one action id`);
-      const [actionId] = ids as Set<string>;
-      if (call.action_id === "same") assert.equal(actionId, previous, `${at}: the held call's action id`);
-      else assert.ok(!seen.has(actionId as string), `${at}: a new action id`);
-      seen.add(actionId as string);
-      previous = actionId as string;
+      // A call refused before any request (undecided_args) has no action id to check.
+      if (call.requests > 0) {
+        const ids = new Set(reqs.map((r) => r.actionId));
+        assert.equal(ids.size, 1, `${at}: one action id`);
+        const [actionId] = ids as Set<string>;
+        if (call.action_id === "same") assert.equal(actionId, previous, `${at}: the held call's action id`);
+        else assert.ok(!seen.has(actionId as string), `${at}: a new action id`);
+        seen.add(actionId as string);
+        previous = actionId as string;
+      }
       if (call.ran) {
         assert.equal(thrown, undefined, at);
         assert.deepEqual(ran.slice(ranBefore), [call.input], `${at}: ran`);

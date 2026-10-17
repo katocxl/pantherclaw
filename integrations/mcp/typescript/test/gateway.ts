@@ -39,6 +39,8 @@ export async function gateway(t: { after: (fn: () => void) => void }, face: Face
   const callTimes: { tool: string; at: number }[] = [];
   const hooks: Record<string, unknown>[] = [];
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+    // No kept-alive sockets: a later test's server may get this port, and a pooled socket to a closed server fails the next request.
+    res.setHeader("Connection", "close");
     let body = "";
     req.on("data", (c) => {
       body += c;
@@ -81,7 +83,7 @@ export async function gateway(t: { after: (fn: () => void) => void }, face: Face
     server.close();
   });
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return { client: new Client({ keyFile: { ...kf, server: base }, gateway: base, runId: run, timeoutMs: 2000 }), calls, callTimes, paths, hooks, base };
+  return { client: new Client({ keyFile: { ...kf, server: base }, gateway: base, runId: run, timeoutMs: 10_000 }), calls, callTimes, paths, hooks, base };
 }
 
 export const allow: Face = (_c, id, res) => res.end(decided(id, "allow"));

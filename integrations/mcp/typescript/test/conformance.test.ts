@@ -79,13 +79,16 @@ for (const c of g.cases) {
         assert.deepEqual({ ...r.body, tool_use_id: "" }, { tool: g.sdk_tool, server: g.connection, input: call.input, tool_use_id: "" }, at);
         assert.match(r.body.tool_use_id, /^pc-[0-9a-f]{32}$/, at);
       }
-      const ids = new Set(reqs.map((r) => r.actionId));
-      assert.equal(ids.size, 1, `${at}: one action id`);
-      const [actionId] = ids as Set<string>;
-      if (call.action_id === "same") assert.equal(actionId, previous, `${at}: the held call's action id`);
-      else assert.ok(!seen.has(actionId as string), `${at}: a new action id`);
-      seen.add(actionId as string);
-      previous = actionId as string;
+      // A call refused before any request (undecided_args) has no action id to check.
+      if (call.requests > 0) {
+        const ids = new Set(reqs.map((r) => r.actionId));
+        assert.equal(ids.size, 1, `${at}: one action id`);
+        const [actionId] = ids as Set<string>;
+        if (call.action_id === "same") assert.equal(actionId, previous, `${at}: the held call's action id`);
+        else assert.ok(!seen.has(actionId as string), `${at}: a new action id`);
+        seen.add(actionId as string);
+        previous = actionId as string;
+      }
       if (call.ran) {
         assert.equal(thrown, undefined, at);
         assert.deepEqual(ran.slice(ranBefore), [call.input], `${at}: ran`);
