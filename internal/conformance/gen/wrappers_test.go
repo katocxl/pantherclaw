@@ -87,10 +87,13 @@ type WrapperFile struct {
 	Path       string `json:"path"`
 	// ActionID is the action id the answers were made for (rewritten by
 	// the fake gateway, see the description).
-	ActionID string                   `json:"action_id"`
-	Answers  map[string]WrapperAnswer `json:"answers"`
-	Waits    map[string]WrapperWait   `json:"waits"`
-	Cases    []WrapperCase            `json:"cases"`
+	ActionID string `json:"action_id"`
+	// Codes are the refusal codes (M14 D47) and when each applies; a deny
+	// answer's own code is used verbatim.
+	Codes   map[string]string        `json:"codes"`
+	Answers map[string]WrapperAnswer `json:"answers"`
+	Waits   map[string]WrapperWait   `json:"waits"`
+	Cases   []WrapperCase            `json:"cases"`
 }
 
 // refusal is the text a refused call returns to the model.
@@ -122,6 +125,15 @@ func buildWrappers(t *testing.T) any {
 				"becomes the SHA-256 of the rewritten action_ir when it was the SHA-256 of the original."),
 		Connection: "payments", Tool: "create_refund", SDKTool: "mcp__payments__create_refund", Path: "/sdk/payments",
 		ActionID: actionID,
+		Codes: map[string]string{
+			"<code>":            "a deny answer with a code: that code, verbatim (GRANT_AMOUNT_EXCEEDED, unknown_tool, use_gateway_face, …)",
+			"denied":            "a deny answer without a code",
+			"hold_declined":     "a hold that ended in PantherClaw without an allow (declined, expired): the client's resume answered deny",
+			"hold_timeout":      "a hold not allowed within the wait: the client's resume answered cannot_decide",
+			"cannot_decide":     "any other cannot_decide answer of the client (a gateway error, an answer that fails its checks)",
+			"dispatch_required": "an allow carrying a request to send, with no on_dispatch handler",
+			"wrapper_error":     "an exception inside the wrapper",
+		},
 	}
 	base := faceAnswer{ActionID: actionID, ActionHash: hash, ActionIR: ir, TransactionID: txnID, Mode: "enforce", Coverage: "PARTIAL"}
 	held := &faceWait{

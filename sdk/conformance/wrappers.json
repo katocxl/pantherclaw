@@ -8,6 +8,15 @@
   "sdk_tool": "mcp__payments__create_refund",
   "path": "/sdk/payments",
   "action_id": "01920000-0000-7000-8000-000000000004",
+  "codes": {
+    "<code>": "a deny answer with a code: that code, verbatim (GRANT_AMOUNT_EXCEEDED, unknown_tool, use_gateway_face, …)",
+    "cannot_decide": "any other cannot_decide answer of the client (a gateway error, an answer that fails its checks)",
+    "denied": "a deny answer without a code",
+    "dispatch_required": "an allow carrying a request to send, with no on_dispatch handler",
+    "hold_declined": "a hold that ended in PantherClaw without an allow (declined, expired): the client's resume answered deny",
+    "hold_timeout": "a hold not allowed within the wait: the client's resume answered cannot_decide",
+    "wrapper_error": "an exception inside the wrapper"
+  },
   "answers": {
     "allow": {
       "status": 200,
