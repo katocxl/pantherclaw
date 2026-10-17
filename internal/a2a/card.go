@@ -24,7 +24,7 @@ const (
 	// MaxCardBytes caps an agent card (D30).
 	MaxCardBytes = 256 << 10
 	// MaxKeysBytes caps a pinned JWKS (D30).
-	MaxKeysBytes = 64 << 10
+	MaxKeysBytes  = 64 << 10
 	maxSignatures = 8
 	maxCardKeys   = 16
 )
