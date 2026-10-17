@@ -110,7 +110,6 @@ definitions:
             columns:
               type: array
               description: The columns to read
-              minItems: 1
               maxItems: 64
               items:
                 type: string
@@ -131,12 +130,14 @@ definitions:
                     type: string
                     enum: [eq, ne, lt, le, gt, ge, in, is_null, not_null, prefix]
                   value:
-                    type: [string, number, boolean]
+                    type: string
+                    maxLength: 256
                   values:
                     type: array
                     maxItems: 100
                     items:
-                      type: [string, number, boolean]
+                      type: string
+                      maxLength: 256
             order_by:
               type: array
               description: Sort keys, such as placed:desc
@@ -246,7 +247,6 @@ definitions:
             measures:
               type: array
               description: Measures such as count:* or sum:amount
-              minItems: 1
               maxItems: 16
               items:
                 type: string
@@ -267,12 +267,14 @@ definitions:
                     type: string
                     enum: [eq, ne, lt, le, gt, ge, in, is_null, not_null, prefix]
                   value:
-                    type: [string, number, boolean]
+                    type: string
+                    maxLength: 256
                   values:
                     type: array
                     maxItems: 100
                     items:
-                      type: [string, number, boolean]
+                      type: string
+                      maxLength: 256
             limit:
               type: integer
               description: The most groups to return
