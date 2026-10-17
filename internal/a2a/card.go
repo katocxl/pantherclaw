@@ -89,7 +89,7 @@ func ParseCard(raw []byte) (*AgentCard, error) {
 	}
 	var c AgentCard
 	if err := json.Unmarshal(raw, &c); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrCardInvalid, err)
+		return nil, fmt.Errorf("%w: %w", ErrCardInvalid, err)
 	}
 	if c.Name == "" || len(c.SupportedInterfaces) == 0 || len(c.Signatures) > maxSignatures {
 		return nil, fmt.Errorf("%w: name, interfaces or signatures", ErrCardInvalid)
@@ -102,7 +102,7 @@ func ParseCard(raw []byte) (*AgentCard, error) {
 func Digest(raw []byte) ([32]byte, error) {
 	v := jsontext.Value(slices.Clone(raw))
 	if err := v.Canonicalize(); err != nil {
-		return [32]byte{}, fmt.Errorf("%w: %v", ErrCardInvalid, err)
+		return [32]byte{}, fmt.Errorf("%w: %w", ErrCardInvalid, err)
 	}
 	return sha256.Sum256(v), nil
 }
@@ -118,11 +118,11 @@ func SigningPayload(raw []byte) ([]byte, error) {
 	pruned, _ := prune(m)
 	b, err := json.Marshal(pruned, json.Deterministic(true))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrCardInvalid, err)
+		return nil, fmt.Errorf("%w: %w", ErrCardInvalid, err)
 	}
 	v := jsontext.Value(b)
 	if err := v.Canonicalize(); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrCardInvalid, err)
+		return nil, fmt.Errorf("%w: %w", ErrCardInvalid, err)
 	}
 	return v, nil
 }

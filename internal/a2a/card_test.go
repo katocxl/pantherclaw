@@ -248,8 +248,12 @@ func TestRoute(t *testing.T) {
 		}
 	}
 	for _, bad := range [][2]string{
-		{http.MethodGet, "/message:send"}, {http.MethodDelete, "/tasks/t"}, {http.MethodPost, "/tasks/t:delete"},
-		{http.MethodGet, "/tasks/"}, {http.MethodGet, "/tasks/a%2fb"}, {http.MethodPost, "/other"},
+		{http.MethodGet, "/message:send"},
+		{http.MethodDelete, "/tasks/t"},
+		{http.MethodPost, "/tasks/t:delete"},
+		{http.MethodGet, "/tasks/"},
+		{http.MethodGet, "/tasks/a%2fb"},
+		{http.MethodPost, "/other"},
 	} {
 		if m, _, ok := Route(bad[0], bad[1]); ok {
 			t.Errorf("%s %s routed to %s", bad[0], bad[1], m)

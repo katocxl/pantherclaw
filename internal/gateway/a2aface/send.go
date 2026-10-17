@@ -65,11 +65,12 @@ func (h *Handler) stream(w http.ResponseWriter, c call) {
 			// Another task's events never reach this run.
 			return errEvent
 		}
-		if ev.Task != nil {
+		switch {
+		case ev.Task != nil:
 			h.owned.record(o, ev.Task.ID, ev.Task.ContextID)
-		} else if ev.Message != nil && ev.Message.ContextID != "" {
+		case ev.Message != nil && ev.Message.ContextID != "":
 			h.owned.record(o, "", ev.Message.ContextID)
-		} else if id != "" {
+		case id != "":
 			if _, ok := h.owned.task(o, id); !ok {
 				return errEvent
 			}

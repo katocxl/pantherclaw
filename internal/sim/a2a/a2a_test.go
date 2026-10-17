@@ -30,7 +30,35 @@ func start(t *testing.T, o Options, f Faults) (*Server, *httptest.Server) {
 	return s, ts
 }
 
-func post(t *testing.T, url, token string, body any) (*http.Response, []byte) {
+// answer is what a test reads of a response, its body read and closed.
+type answer struct {
+	StatusCode int
+	Header     http.Header
+}
+
+var client = &http.Client{Timeout: 10 * time.Second}
+
+func get(t *testing.T, url string) (answer, []byte) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return do(t, req)
+}
+
+func do(t *testing.T, req *http.Request) (answer, []byte) {
+	t.Helper()
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	out, _ := io.ReadAll(resp.Body)
+	return answer{StatusCode: resp.StatusCode, Header: resp.Header}, out
+}
+
+func post(t *testing.T, url, token string, body any) (answer, []byte) {
 	t.Helper()
 	b, err := json.Marshal(body)
 	if err != nil {
@@ -45,13 +73,7 @@ func post(t *testing.T, url, token string, body any) (*http.Response, []byte) {
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	out, _ := io.ReadAll(resp.Body)
-	return resp, out
+	return do(t, req)
 }
 
 func rpc(method string, params any) wire.RPCRequest {
@@ -82,16 +104,11 @@ func TestCardSignedAndDrift(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, ts := start(t, Options{SigningKey: k, KeyID: "peer-1"}, Faults{})
-	get := func() []byte {
-		resp, err := http.Get(ts.URL + wire.CardPath) //nolint:noctx // test
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer resp.Body.Close()
-		b, _ := io.ReadAll(resp.Body)
+	card := func() []byte {
+		_, b := get(t, ts.URL+wire.CardPath)
 		return b
 	}
-	raw := get()
+	raw := card()
 	jwks, err := wire.PublicJWKS(map[string]crypto.PublicKey{"peer-1": k.Public()})
 	if err != nil {
 		t.Fatal(err)
@@ -105,7 +122,7 @@ func TestCardSignedAndDrift(t *testing.T) {
 		t.Fatalf("pin: %v", err)
 	}
 	s.SetFaults(Faults{Description: "Now handles transfers too"})
-	drifted := get()
+	drifted := card()
 	d2, err := wire.Digest(drifted)
 	if err != nil || d2 == digest {
 		t.Fatalf("drifted card has the pinned digest (%v)", err)
@@ -173,20 +190,12 @@ func TestRESTSendCompletesAndLists(t *testing.T) {
 		!strings.Contains(*sent.Task.Artifacts[0].Parts[0].Text, "SIMULATED") {
 		t.Fatalf("task: %s", b)
 	}
-	r, err := http.Get(ts.URL + RESTPath + "/tasks?contextId=" + sent.Task.ContextID) //nolint:noctx // test
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer r.Body.Close()
+	_, lb := get(t, ts.URL+RESTPath+"/tasks?contextId="+sent.Task.ContextID)
 	var list wire.ListTasksResponse
-	if err := json.UnmarshalRead(r.Body, &list); err != nil || len(list.Tasks) != 1 {
+	if err := json.Unmarshal(lb, &list); err != nil || len(list.Tasks) != 1 {
 		t.Fatalf("list: %v %+v", err, list)
 	}
-	r2, err := http.Get(ts.URL + RESTPath + "/tasks/nope") //nolint:noctx // test
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer r2.Body.Close()
+	r2, _ := get(t, ts.URL+RESTPath+"/tasks/nope")
 	if r2.StatusCode != http.StatusNotFound {
 		t.Fatalf("unknown task: %d", r2.StatusCode)
 	}
@@ -252,12 +261,7 @@ func TestRequireActionAndVersion(t *testing.T) {
 	}
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.URL+JSONRPCPath, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"GetTask","params":{"id":"x"}}`))
 	req.Header.Set(wire.HeaderVersion, "0.3")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	out, _ := io.ReadAll(resp.Body)
+	_, out := do(t, req)
 	if a := decodeRPC(t, out); a.Error == nil || a.Error.Code != wire.CodeVersionNotSupported {
 		t.Fatalf("version 0.3: %s", out)
 	}

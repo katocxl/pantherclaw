@@ -122,6 +122,8 @@ func refusal(res dispatch.Result) *faceError {
 		e.status, e.reason = http.StatusBadGateway, reasonFailed
 	case dispatch.Uncertain:
 		e.status, e.reason = http.StatusGatewayTimeout, reasonFailed
+	case dispatch.PolicyDenied, dispatch.CannotAuthorize:
+		// 403, as set.
 	}
 	return e
 }

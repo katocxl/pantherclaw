@@ -287,7 +287,7 @@ func (s *Server) jsonrpc(w http.ResponseWriter, r *http.Request) {
 	}
 	c := call{method: req.Method, binding: wire.BindingJSONRPC, params: req.Params, body: body, r: r}
 	if wire.Streaming(c.method) {
-		s.stream(w, c, func(ev wire.StreamResponse) any {
+		s.stream(r.Context(), w, c, func(ev wire.StreamResponse) any {
 			return wire.RPCResponse{JSONRPC: "2.0", ID: id, Result: ev}
 		}, func(e *callError) { writeRPC(w, id, nil, e) })
 		return
@@ -340,7 +340,7 @@ func (s *Server) rest(w http.ResponseWriter, r *http.Request) {
 	}
 	c := call{method: method, binding: wire.BindingHTTPJSON, params: body, taskID: taskID, query: q, body: body, r: r}
 	if wire.Streaming(method) {
-		s.stream(w, c, func(ev wire.StreamResponse) any { return ev }, func(e *callError) { writeREST(w, nil, e) })
+		s.stream(r.Context(), w, c, func(ev wire.StreamResponse) any { return ev }, func(e *callError) { writeREST(w, nil, e) })
 		return
 	}
 	res, cerr := s.do(c)
@@ -424,7 +424,7 @@ func (s *Server) do(c call) (any, *callError) {
 		} else {
 			p.ContextID, p.Status = c.query["contextId"], c.query["status"]
 			if n, err := strconv.Atoi(c.query["pageSize"]); err == nil {
-				p.PageSize = int32(min(max(n, 0), 100)) //nolint:gosec // G115: clamped to 0..100
+				p.PageSize = int32(min(max(n, 0), 100))
 			}
 		}
 		return s.list(p), nil
@@ -602,7 +602,7 @@ func (s *Server) cancel(id string) (any, *callError) {
 
 // stream answers SendStreamingMessage and SubscribeToTask with server-sent
 // events: the task, its status changes, its artifact and its final status.
-func (s *Server) stream(w http.ResponseWriter, c call, wrap func(wire.StreamResponse) any, fail func(*callError)) {
+func (s *Server) stream(ctx context.Context, w http.ResponseWriter, c call, wrap func(wire.StreamResponse) any, fail func(*callError)) {
 	var id string
 	switch c.method {
 	case wire.MethodSendStreamingMessage:
@@ -639,7 +639,6 @@ func (s *Server) stream(w http.ResponseWriter, c call, wrap func(wire.StreamResp
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
-	ctx := c.r.Context()
 	t := s.snapshot(id)
 	if t == nil {
 		return

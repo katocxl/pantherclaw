@@ -209,8 +209,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if v := version(r); v != "" && v != wire.Version {
-		h.fail(w, c, &faceError{status: http.StatusBadRequest, rpc: wire.CodeVersionNotSupported, reason: CodeVersion,
-			message: "A2A version not supported", facts: map[string]any{"supported": []string{wire.Version}}})
+		h.fail(w, c, &faceError{
+			status: http.StatusBadRequest, rpc: wire.CodeVersionNotSupported, reason: CodeVersion,
+			message: "A2A version not supported", facts: map[string]any{"supported": []string{wire.Version}},
+		})
 		return
 	}
 	var params jsontext.Value
@@ -365,8 +367,10 @@ func (h *Handler) refusePAP(w http.ResponseWriter, c call, code pap.Code, nonce 
 		w.Header().Set(dispatch.HeaderNonce, nonce)
 	}
 	w.Header().Set(dispatch.HeaderError, string(code))
-	h.fail(w, c, &faceError{status: http.StatusUnauthorized, rpc: codeAuthenticate, reason: reasonAuthn, message: "PAP/1: " + string(code),
-		facts: map[string]any{"error_class": string(dispatch.AuthenticationFailed), "error": string(code)}})
+	h.fail(w, c, &faceError{
+		status: http.StatusUnauthorized, rpc: codeAuthenticate, reason: reasonAuthn, message: "PAP/1: " + string(code),
+		facts: map[string]any{"error_class": string(dispatch.AuthenticationFailed), "error": string(code)},
+	})
 }
 
 // card serves the pinned card as the agent sees it at the gateway, to a

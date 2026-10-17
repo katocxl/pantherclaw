@@ -27,14 +27,14 @@ var ErrDrift = errors.New("a2a: agent card changed since it was pinned")
 func FetchCard(ctx context.Context, client *http.Client, url string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrFetch, err)
+		return nil, fmt.Errorf("%w: %w", ErrFetch, err)
 	}
 	req.Header.Set("Accept", "application/json")
 	c := *client
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	resp, err := c.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrFetch, err)
+		return nil, fmt.Errorf("%w: %w", ErrFetch, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
@@ -45,7 +45,7 @@ func FetchCard(ctx context.Context, client *http.Client, url string) ([]byte, er
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, MaxCardBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrFetch, err)
+		return nil, fmt.Errorf("%w: %w", ErrFetch, err)
 	}
 	if len(raw) > MaxCardBytes {
 		return nil, fmt.Errorf("%w: too large", ErrFetch)
@@ -91,14 +91,14 @@ func Pin(ctx context.Context, client *http.Client, p PinRequest) (Pinned, error)
 // Recheck reads the card again and compares it with the pinned digest: a
 // different document is drift (HR-322), as is one whose signatures no
 // longer verify. The observed digest is returned for the drift report.
-func Recheck(ctx context.Context, client *http.Client, cardURL string, pinned []byte, keys []byte) ([32]byte, error) {
+func Recheck(ctx context.Context, client *http.Client, cardURL string, pinned, keys []byte) ([32]byte, error) {
 	raw, err := FetchCard(ctx, client, cardURL)
 	if err != nil {
 		return [32]byte{}, err
 	}
 	d, err := Digest(raw)
 	if err != nil {
-		return [32]byte{}, fmt.Errorf("%w: %v", ErrDrift, err)
+		return [32]byte{}, fmt.Errorf("%w: %w", ErrDrift, err)
 	}
 	if len(pinned) != len(d) || subtle.ConstantTimeCompare(pinned, d[:]) != 1 {
 		return d, ErrDrift
@@ -108,7 +108,7 @@ func Recheck(ctx context.Context, client *http.Client, cardURL string, pinned []
 		return d, err
 	}
 	if err := VerifySignatures(raw, k); err != nil {
-		return d, fmt.Errorf("%w: %v", ErrDrift, err)
+		return d, fmt.Errorf("%w: %w", ErrDrift, err)
 	}
 	return d, nil
 }
