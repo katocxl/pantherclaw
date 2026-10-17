@@ -6,13 +6,17 @@
 package app_test
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
+	capp "github.com/katocxl/pantherclaw/internal/connections/app"
 	"github.com/katocxl/pantherclaw/internal/credentials/app"
 	"github.com/katocxl/pantherclaw/internal/credentials/domain"
+	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 )
 
 // TestHR204_AGitHubAppCredentialKeepsItsKind: the kind is stored, listed
@@ -133,5 +137,42 @@ func TestHR203_AGitHubAppCredentialRecordsItsInstallation(t *testing.T) {
 	}
 	if len(recorded) != 3 || recorded[0] != e.conn.ID {
 		t.Fatalf("the hook ran for %v", recorded)
+	}
+}
+
+// TestM14_APatternNeedsAStaticCredential: on a connection whose package
+// names a credential pattern, a GitHub App credential is refused when it
+// is sealed (the gateway would refuse every dispatch with it), while a
+// static one is stored (G0 M14 D85, HR-301).
+func TestM14_APatternNeedsAStaticCredential(t *testing.T) {
+	e := newEnv(t)
+	raw := bytes.Replace(mockpayments.Package, []byte("    dispatch:\n      http:\n        method: POST\n        path: /v1/refunds\n"),
+		[]byte("    dispatch:\n      credential_pattern: '^sk_[a-z_]+$'\n      http:\n        method: POST\n        path: /v1/refunds\n"), 1)
+	if bytes.Equal(raw, mockpayments.Package) {
+		t.Fatal("the package was not changed")
+	}
+	raw = bytes.Replace(raw, []byte("name: pc.mock-payments\n"), []byte("name: test.patterned\n"), 1)
+	pkg, ver := ids.NewV7(), ids.NewV7()
+	e.exec(t, "INSERT INTO pc.tool_packages (org_id, id, name) VALUES ($1, $2, 'test.patterned')", e.org, pkg)
+	e.exec(t, `INSERT INTO pc.package_versions (org_id, id, package_id, version, file_digest, raw, state)
+		VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE')`, e.org, ver, pkg, mockpayments.Version, manifest.FileDigest(raw), raw)
+	e.exec(t, "INSERT INTO pc.package_pins (org_id, package_id, version_id, version, digest) VALUES ($1, $2, $3, $4, $5)",
+		e.org, pkg, ver, mockpayments.Version, manifest.FileDigest(raw))
+	c, err := e.conns.Create(e.sealer, capp.CreateInput{
+		Name: "patterned", Kind: capp.KindHTTP, Package: "test.patterned", BaseURL: "https://payments.example.test", Gateway: e.gateway,
+		AccessMode: capp.AccessHeld, CredentialHeader: "Authorization", CredentialScheme: "Bearer",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.conn = c
+	_, in := e.seal(t, `{"v":1}`)
+	in.Kind, in.GitHub = domain.KindGitHubApp, &domain.Installation{AppClientID: "Iv23liApp", ID: 7, Account: "acme"}
+	if _, err := e.svc.PutCredential(e.sealer, in); !is(err, app.ErrPatternNeedsStatic) {
+		t.Fatalf("a GitHub App under a pattern: %v", err)
+	}
+	_, in = e.seal(t, "sk_live_static")
+	if _, err := e.svc.PutCredential(e.sealer, in); err != nil {
+		t.Fatalf("a static credential: %v", err)
 	}
 }

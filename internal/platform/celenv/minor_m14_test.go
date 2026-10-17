@@ -32,7 +32,7 @@ func TestMinorMoney(t *testing.T) {
 			t.Errorf("%s = %v, %v (want %s)", src, v, err, want)
 		}
 	}
-	for _, src := range []string{`minor_money(1500, "KWD")`, `minor_money(-1, "USD")`, `minor_money(1, "xyz")`} {
+	for _, src := range []string{`minor_money(1500, "KWD")`, `minor_money(-1, "USD")`, `minor_money(1, "xyz")`, "minor_money(100, \"uſd\")", `minor_money(100, "usdx")`, `minor_money(100, "US")`} {
 		p, err := e.Compile(src, nil)
 		if err != nil {
 			t.Fatalf("%s: %v", src, err)

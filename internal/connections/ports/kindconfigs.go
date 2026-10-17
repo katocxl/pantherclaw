@@ -21,8 +21,11 @@ import (
 // connection, and loads it for the gateway's configuration.
 type KindConfig interface {
 	// Save stores a validated configuration (the connections app's
-	// *PostgresConfig or *A2AConfig) at the connection's revision.
-	Save(ctx context.Context, tx db.TenantTx, org ids.OrgID, connection ids.UUID, revision int32, cfg any) error
+	// *PostgresConfig or *A2AConfig) at the connection's revision. It may
+	// return the base URL the configuration implies (an a2a interface
+	// URL), which an update writes with the configuration (G0 M14 D85);
+	// empty keeps the connection's.
+	Save(ctx context.Context, tx db.TenantTx, org ids.OrgID, connection ids.UUID, revision int32, cfg any) (baseURL string, err error)
 	// Load returns the connection's current configuration as the gateway
 	// gets it (*pb.PostgresConfig or *pb.A2AConfig).
 	Load(ctx context.Context, tx db.TenantTx, org ids.OrgID, connection ids.UUID) (proto.Message, error)
