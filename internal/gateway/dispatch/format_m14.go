@@ -9,6 +9,7 @@ import (
 	"errors"
 	"strings"
 
+	credentials "github.com/katocxl/pantherclaw/internal/credentials/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 )
@@ -23,8 +24,25 @@ const (
 	CodeAnswerFailed = "target_answer_failed"
 )
 
-// errCredentialPattern refuses a credential the pattern does not match.
-var errCredentialPattern = errors.New("dispatch: the credential does not match the definition's pattern")
+// ErrCredentialPattern refuses a credential the definition's pattern
+// does not match (HR-301).
+var ErrCredentialPattern = errors.New("dispatch: the credential does not match the definition's pattern")
+
+// CheckCredentialPattern checks an opened credential against def's
+// credential pattern before any byte is sent (G0 M14 D8, D85, HR-301):
+// every dispatch path that opens a credential calls it, kind senders
+// included. A pattern is for a static credential, so a credential of
+// another kind (kind, as sealed: a GitHub App) is refused under one. A
+// definition without a pattern (or none at all) accepts any credential.
+func CheckCredentialPattern(def *defs.Definition, kind string, credential []byte) error {
+	if def == nil || def.Dispatch == nil || def.Dispatch.CredentialPattern == "" {
+		return nil
+	}
+	if kind == credentials.KindGitHubApp || !def.Dispatch.CredentialMatches(credential) {
+		return ErrCredentialPattern
+	}
+	return nil
+}
 
 // checkSuccess applies a definition's success check to a 2xx answer (D8):
 // the answer must be a JSON object whose top-level field is the boolean

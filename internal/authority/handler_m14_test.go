@@ -69,3 +69,12 @@ func TestM14_GatewayCannotSubmitAuthZENChannel(t *testing.T) {
 		t.Fatalf("an mcp action was refused: %v", out)
 	}
 }
+
+// TestM14_GatewayPermitFailsClosedWithoutChannels: a store that cannot say
+// a permit's channel lets no gateway begin or record it (D85).
+func TestM14_GatewayPermitFailsClosedWithoutChannels(t *testing.T) {
+	h := NewHandler(&Service{decider: &finalize.Authority{Store: struct{ finalize.Store }{}}})
+	if err := h.gatewayPermit(context.Background(), Gateway{ID: "gw", Org: ids.New[ids.Org]()}, ids.NewV7()); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("no PermitChannels: %v", err)
+	}
+}

@@ -463,8 +463,12 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 		}
 		if kc != nil {
 			// The kind's configuration, in the same transaction (D64).
-			if err := kc.store.Save(ctx, tx, c.Org, conn.ID, conn.Revision, kc.cfg); err != nil {
+			derived, err := kc.store.Save(ctx, tx, c.Org, conn.ID, conn.Revision, kc.cfg)
+			if err != nil {
 				return err
+			}
+			if derived != "" && derived != deref(conn.BaseUrl) {
+				return ErrShape // create already took the interface URL as base URL
 			}
 		}
 		var connector string

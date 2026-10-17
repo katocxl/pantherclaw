@@ -52,7 +52,9 @@ func refusedChannel(raw []byte) *pantherclawv1.AuthorizeResponse {
 func (h *Handler) gatewayPermit(ctx context.Context, gw Gateway, permit ids.UUID) error {
 	pc, ok := h.svc.decider.Store.(PermitChannels)
 	if !ok {
-		return nil
+		// A store that cannot say the channel cannot let a gateway dispatch
+		// (fail closed, D85).
+		return connect.NewError(connect.CodeFailedPrecondition, "the Authority cannot check this permit's channel")
 	}
 	ch, err := pc.PermitChannel(ctx, gw.Org, gw.ID, permit)
 	if err != nil {

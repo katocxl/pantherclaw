@@ -69,9 +69,12 @@ type fakeKind struct {
 	load  proto.Message
 }
 
-func (f *fakeKind) Save(_ context.Context, _ db.TenantTx, _ ids.OrgID, _ ids.UUID, rev int32, cfg any) error {
+func (f *fakeKind) Save(_ context.Context, _ db.TenantTx, _ ids.OrgID, _ ids.UUID, rev int32, cfg any) (string, error) {
 	f.saved, f.revs = append(f.saved, cfg), append(f.revs, rev)
-	return nil
+	if a, ok := cfg.(*app.A2AConfig); ok {
+		return a.Interface.URL, nil // the interface URL is the base URL (D85)
+	}
+	return "", nil
 }
 
 func (f *fakeKind) Load(context.Context, db.TenantTx, ids.OrgID, ids.UUID) (proto.Message, error) {
@@ -129,12 +132,16 @@ func TestM14_KindConfigsAreSavedWithTheConnection(t *testing.T) {
 	}
 	next := a2aConfig()
 	next.Skills = []string{"reports"}
+	next.Interface.URL = "https://agents.example.test/peer/a2a"
 	u, err := e.svc.Update(e.admin, app.UpdateInput{ID: p.ID, Revision: p.Revision, A2A: &next})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(peerStore.saved) != 2 || peerStore.revs[1] != u.Revision || u.Revision != p.Revision+1 {
 		t.Fatalf("update saved %v at %v (connection %d)", len(peerStore.saved), peerStore.revs, u.Revision)
+	}
+	if u.BaseUrl == nil || *u.BaseUrl != "https://agents.example.test/peer/a2a" || !slices.Equal(u.AllowedHosts, []string{"agents.example.test"}) {
+		t.Fatalf("an interface change moves the base URL (D85): %v %v", u.BaseUrl, u.AllowedHosts)
 	}
 	if _, err := e.svc.Update(e.admin, app.UpdateInput{ID: u.ID, Revision: u.Revision, Postgres: &pg}); !is(err, app.ErrShape) {
 		t.Fatalf("a postgres configuration on an a2a connection: %v", err)
