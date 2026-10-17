@@ -124,9 +124,12 @@ class Gateway:
 Adapter = Callable[[Client, str, dict[str, Any], Callable[..., str]], Callable[[dict[str, Any]], str]]
 
 
-def options(case: dict[str, Any]) -> dict[str, Any]:
+def options(case: dict[str, Any], sent: list[tuple[str, Any]]) -> dict[str, Any]:
+    """The wrapper's keyword arguments for a case; an on_dispatch handler records into ``sent``."""
     o = case.get("options") or {}
     out: dict[str, Any] = {}
+    if o.get("on_dispatch"):
+        out["on_dispatch"] = lambda call_id, outbound: sent.append((call_id, outbound)) or "dispatched"
     if "wait" in o:
         out["wait"] = float(o["wait"])
     if o.get("observe_unmapped"):
@@ -153,10 +156,12 @@ def replay(t: unittest.TestCase, adapter: Adapter, refused: type[Exception], rai
                     ran.append(kwargs)
                     return "refunded"
 
-                call = adapter(g.client, V["connection"], options(case), fn)
+                sent: list[tuple[str, Any]] = []
+                call = adapter(g.client, V["connection"], options(case, sent), fn)
+                dispatch = json.loads(V["answers"]["send"]["body"])["dispatch"]
                 previous = ""
                 for i, c in enumerate(case["calls"]):
-                    before, n = len(ran), len(g.requests)
+                    before, n, dispatched = len(ran), len(g.requests), len(sent)
                     try:
                         out, raised = call(json.loads(json.dumps(c["input"]))), None
                     except refused as e:
@@ -176,6 +181,14 @@ def replay(t: unittest.TestCase, adapter: Adapter, refused: type[Exception], rai
                         t.assertEqual(out, "refunded", f"call {i}")
                         continue
                     t.assertEqual(ran[before:], [], f"call {i}: the tool did not run")
+                    if c.get("dispatched"):
+                        t.assertIsNone(raised, f"call {i}")
+                        ((call_id, o),) = sent[dispatched:]
+                        t.assertEqual(call_id, reqs[-1][1]["tool_use_id"], f"call {i}: the handler got the call's id")
+                        t.assertEqual((o.method, o.url, o.body), (dispatch["method"], dispatch["url"], pap.from_b64url(dispatch["body"])))
+                        t.assertEqual(out, "dispatched", f"call {i}: the handler's result")
+                        continue
+                    t.assertEqual(sent[dispatched:], [], f"call {i}: nothing dispatched")
                     if c.get("raises"):
                         t.assertIsNotNone(raised, f"call {i}: raised")
                         t.assertEqual((getattr(raised, "code", ""), str(raised)), (c["code"], c["refusal"]), f"call {i}")

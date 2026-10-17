@@ -44,6 +44,9 @@ type WrapperOptions struct {
 	RaiseOnRefusal  bool `json:"raise_on_refusal,omitzero"`
 	// Wait is how long a hold is waited on, in seconds.
 	Wait int `json:"wait,omitzero"`
+	// OnDispatch: the wrapper has an on_dispatch handler, which returns
+	// "dispatched" (M14 D53).
+	OnDispatch bool `json:"on_dispatch,omitzero"`
 }
 
 // WrapperCall is one call of the wrapped tool and what it must come to.
@@ -61,6 +64,10 @@ type WrapperCall struct {
 	Transaction string `json:"transaction,omitzero"`
 	Refusal     string `json:"refusal,omitzero"`
 	Raises      bool   `json:"raises,omitzero"`
+	// Dispatched: the tool did not run; the on_dispatch handler was called
+	// once with the call's id and the request to send (sdk_face.json's
+	// send), and the tool returned its result, "dispatched".
+	Dispatched bool `json:"dispatched,omitzero"`
 }
 
 // WrapperCase is a sequence of calls of one wrapped tool, in one wrapper
@@ -238,6 +245,11 @@ func buildWrappers(t *testing.T) any {
 		{
 			Name: "an allow with a request to send and no on_dispatch handler", Answers: []string{"send"},
 			Calls: []WrapperCall{refused(in, 1, "new", "dispatch_required", txnID)},
+		},
+		{
+			Name:    "an allow with a request to send and an on_dispatch handler: the handler sends it, the tool does not run",
+			Options: WrapperOptions{OnDispatch: true}, Answers: []string{"send"},
+			Calls: []WrapperCall{{Input: in, Requests: 1, ActionID: "new", Dispatched: true}},
 		},
 	}
 	return f

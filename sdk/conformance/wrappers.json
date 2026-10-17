@@ -403,6 +403,29 @@
           "refusal": "PantherClaw refused this call: dispatch_required (transaction 01920000-0000-7000-8000-000000000009)"
         }
       ]
+    },
+    {
+      "name": "an allow with a request to send and an on_dispatch handler: the handler sends it, the tool does not run",
+      "options": {
+        "on_dispatch": true
+      },
+      "answers": [
+        "send"
+      ],
+      "calls": [
+        {
+          "input": {
+            "amount": "30.00",
+            "charge": "ch_1",
+            "currency": "USD",
+            "reason": "duplicate"
+          },
+          "requests": 1,
+          "action_id": "new",
+          "ran": false,
+          "dispatched": true
+        }
+      ]
     }
   ]
 }
