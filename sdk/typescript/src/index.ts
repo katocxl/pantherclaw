@@ -4,6 +4,7 @@
 // @pantherclaw/sdk: the PantherClaw Authority Protocol (PAP/1) for
 // TypeScript. See docs/protocol/PAP-1.md in the PantherClaw repository.
 
+export { PEER_OPERATION, PEER_TARGET_TYPE, type PeerHeaders, PeerRunMissing, peerRun } from "./a2a.ts";
 export { ActionError, type ParsedAction, parseAction } from "./action.ts";
 export { checkProof, type ProofRequest } from "./check.ts";
 export {
