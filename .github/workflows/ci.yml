@@ -90,6 +90,8 @@ jobs:
               - 'sdk/typescript/**'
               - 'integrations/claude-code/**'
               - 'integrations/claude-agent-sdk/typescript/**'
+              - 'integrations/vercel-ai/typescript/**'
+              - 'integrations/mcp/typescript/**'
 
   go-static:
     name: go / format, headers, lint
@@ -574,6 +576,13 @@ jobs:
         run: |
           corepack pnpm install --frozen-lockfile
           node --test "test/**/*.test.ts"
+      - name: Framework wrapper tests, wrappers.json included (Vercel AI SDK, MCP TypeScript SDK)
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+        run: |
+          for d in vercel-ai mcp; do
+            (cd "integrations/$d/typescript" && corepack pnpm install --frozen-lockfile && node --test "test/**/*.test.ts")
+          done
 
   ci-ok:
     name: ci-ok
