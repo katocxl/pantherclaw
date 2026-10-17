@@ -6,6 +6,7 @@ package celenv
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"cel.dev/cel-go/cel"
 	"cel.dev/cel-go/common/operators"
@@ -209,11 +210,13 @@ func moneyLibrary() []cel.EnvOption {
 				return Money{m}
 			}))),
 		// minor_money(8550, "USD") is 85.50 USD: an amount an API sends
-		// in integer minor units (G0 M14 D8). A currency outside the
-		// minor-unit list, or a negative count, is an error.
+		// in integer minor units (G0 M14 D8). Such APIs write currencies in
+		// lower case, so the code is taken in any case and is upper case in
+		// the money (D73). A currency outside the minor-unit list, or a
+		// negative count, is an error.
 		cel.Function("minor_money", cel.Overload("minor_money_int_string", []*cel.Type{cel.IntType, cel.StringType}, MoneyType,
 			cel.BinaryBinding(func(n, c ref.Val) ref.Val {
-				m, err := money.FromMinor(int64(n.(types.Int)), money.Currency(c.(types.String)))
+				m, err := money.FromMinor(int64(n.(types.Int)), money.Currency(strings.ToUpper(string(c.(types.String)))))
 				if err != nil {
 					return errVal(err)
 				}
