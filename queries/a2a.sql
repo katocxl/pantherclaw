@@ -50,16 +50,19 @@ FROM pc.connections
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND kind = 'a2a';
 
 -- name: GetA2APeerRun :one
-SELECT child_run_id, child_grant_id, created_at
-FROM pc.a2a_peer_runs
-WHERE org_id = sqlc.arg(org_id) AND requester_run_id = sqlc.arg(requester_run_id)
-  AND connection_id = sqlc.arg(connection_id) AND context_id = sqlc.arg(context_id);
+SELECT p.child_run_id, p.child_grant_id, p.created_at
+FROM pc.a2a_peer_runs p
+JOIN pc.runs r ON r.org_id = p.org_id AND r.id = p.child_run_id
+WHERE p.org_id = sqlc.arg(org_id) AND p.requester_run_id = sqlc.arg(requester_run_id)
+  AND p.connection_id = sqlc.arg(connection_id) AND p.context_id = sqlc.arg(context_id)
+  AND r.state = 'ACTIVE' AND r.expires_at > now()
+ORDER BY p.created_at DESC
+LIMIT 1;
 
--- name: InsertA2APeerRun :execrows
+-- name: InsertA2APeerRun :exec
 INSERT INTO pc.a2a_peer_runs (org_id, requester_run_id, connection_id, context_id, child_run_id, child_grant_id)
 VALUES (sqlc.arg(org_id), sqlc.arg(requester_run_id), sqlc.arg(connection_id), sqlc.arg(context_id),
-        sqlc.arg(child_run_id), sqlc.arg(child_grant_id))
-ON CONFLICT (org_id, requester_run_id, connection_id, context_id) DO NOTHING;
+        sqlc.arg(child_run_id), sqlc.arg(child_grant_id));
 
 -- name: ListA2APeerRuns :many
 SELECT requester_run_id, context_id, child_run_id, child_grant_id, created_at
@@ -67,3 +70,6 @@ FROM pc.a2a_peer_runs
 WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
 ORDER BY created_at DESC, child_run_id DESC
 LIMIT 200;
+
+-- name: TransactionRun :one
+SELECT run_id FROM pc.transactions WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);

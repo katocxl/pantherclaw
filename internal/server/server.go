@@ -239,7 +239,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		return err
 	}
 	m14core := wireM14Core(m6)
-	wireM14A2A(m14core)
+	wireM14A2A(m14core, authorityStore, pool)
 	_ = m14core // the M14 streams' wiring registers its kinds here (G0 M14 D64)
 	// Sealing a GitHub App credential schedules an org scan, and a daily one
 	// follows, so coverage reads its installation's permissions (F048).

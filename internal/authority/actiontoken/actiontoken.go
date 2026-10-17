@@ -44,15 +44,22 @@ type Token struct {
 	// comes first: a connection test's token ends with its lease. A
 	// dispatch's token leaves it unset.
 	NotAfter time.Time
+	// PeerAudience, when set, is the audience instead of Audience: the
+	// interface URL of a peer agent a2a connection (G0 M14 D33, D89).
+	PeerAudience string
+	// PeerRun is the child run delegated to the peer agent, carried as the
+	// claim pc_peer_run (D77); nil for any other dispatch.
+	PeerRun *ids.UUID
 }
 
 type claims struct {
-	Iss string `json:"iss"`
-	Aud string `json:"aud"`
-	Jti string `json:"jti"`
-	Iat int64  `json:"iat"`
-	Exp int64  `json:"exp"`
-	Pap pap    `json:"pap"`
+	Iss     string `json:"iss"`
+	Aud     string `json:"aud"`
+	Jti     string `json:"jti"`
+	Iat     int64  `json:"iat"`
+	Exp     int64  `json:"exp"`
+	Pap     pap    `json:"pap"`
+	PeerRun string `json:"pc_peer_run,omitempty"`
 }
 
 type pap struct {
@@ -77,8 +84,16 @@ func Mint(s Signer, t Token) (string, ids.UUID, error) {
 	if !t.NotAfter.IsZero() && t.NotAfter.Before(exp) {
 		exp = t.NotAfter
 	}
+	aud := t.Audience.String()
+	if t.PeerAudience != "" {
+		aud = t.PeerAudience
+	}
+	var peer string
+	if t.PeerRun != nil {
+		peer = t.PeerRun.String()
+	}
 	b, err := json.Marshal(claims{
-		Iss: t.Issuer, Aud: t.Audience.String(), Jti: jti.String(), Iat: t.Now.Unix(), Exp: exp.Unix(),
+		Iss: t.Issuer, Aud: aud, PeerRun: peer, Jti: jti.String(), Iat: t.Now.Unix(), Exp: exp.Unix(),
 		Pap: pap{
 			V: 1, Txn: t.Transaction.String(), Act: hex.EncodeToString(t.Act), BH: hex.EncodeToString(t.BodySHA256),
 			Op: t.Operation, Target: target{Type: t.TargetType, ID: t.TargetID},

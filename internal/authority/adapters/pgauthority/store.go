@@ -54,7 +54,14 @@ type Store struct {
 	// or counter row (ADR-0015): past it, Finalize returns finalize.ErrBusy.
 	// Zero keeps the pool's lock timeout.
 	LockTimeout time.Duration
+	// Peer, when set, delegates a peer agent's run at BeginDispatch, in its
+	// transaction (G0 M14 D33, D89): it returns the child run and the
+	// audience of the action token, or nil for a dispatch to no peer.
+	Peer PeerDelegation
 }
+
+// PeerDelegation delegates to a peer agent in BeginDispatch's transaction.
+type PeerDelegation func(ctx context.Context, tx db.TenantTx, org ids.OrgID, d finalize.Dispatching) (run *ids.UUID, audience string, err error)
 
 var _ finalize.Store = (*Store)(nil)
 
@@ -509,7 +516,7 @@ func (s *Store) BeginDispatch(ctx context.Context, org ids.OrgID, gatewayID stri
 		q := dbq.New(tx)
 		_, err := q.BeginDispatch(ctx, dbq.BeginDispatchParams{OrgID: org, ID: permit, GatewayID: gatewayID, Epoch: epoch})
 		if err == nil {
-			return dispatching(ctx, q, org, permit, out, mint)
+			return s.dispatching(ctx, tx, q, org, permit, out, mint)
 		}
 		if !db.IsNoRows(err) {
 			return err
@@ -545,7 +552,7 @@ func (s *Store) BeginDispatch(ctx context.Context, org ids.OrgID, gatewayID stri
 // DISPATCHING and lets mint issue its action token over what the permit
 // bound: a monitor permit the requested action, any other the effective
 // one.
-func dispatching(ctx context.Context, q *dbq.Queries, org ids.OrgID, permit ids.UUID, out finalize.Outbound,
+func (s *Store) dispatching(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, permit ids.UUID, out finalize.Outbound,
 	mint func(finalize.Dispatching) (*ids.UUID, error),
 ) error {
 	p, err := q.DispatchingPermit(ctx, org, permit)
@@ -563,6 +570,11 @@ func dispatching(ctx context.Context, q *dbq.Queries, org ids.OrgID, permit ids.
 	}
 	if p.Mode == pipeline.ModeMonitor || len(p.EffectiveHash) == 0 {
 		d.EffectiveHash = p.ActionHash
+	}
+	if s.Peer != nil {
+		if d.PeerRun, d.PeerAudience, err = s.Peer(ctx, tx, org, d); err != nil {
+			return err
+		}
 	}
 	jti, err := mint(d)
 	if err != nil {

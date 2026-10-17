@@ -69,10 +69,14 @@ func (q *Queries) GetA2AConnectionWriter(ctx context.Context, orgID ids.OrgID, i
 }
 
 const getA2APeerRun = `-- name: GetA2APeerRun :one
-SELECT child_run_id, child_grant_id, created_at
-FROM pc.a2a_peer_runs
-WHERE org_id = $1 AND requester_run_id = $2
-  AND connection_id = $3 AND context_id = $4
+SELECT p.child_run_id, p.child_grant_id, p.created_at
+FROM pc.a2a_peer_runs p
+JOIN pc.runs r ON r.org_id = p.org_id AND r.id = p.child_run_id
+WHERE p.org_id = $1 AND p.requester_run_id = $2
+  AND p.connection_id = $3 AND p.context_id = $4
+  AND r.state = 'ACTIVE' AND r.expires_at > now()
+ORDER BY p.created_at DESC
+LIMIT 1
 `
 
 type GetA2APeerRunParams struct {
@@ -138,11 +142,10 @@ func (q *Queries) GetA2APin(ctx context.Context, orgID ids.OrgID, connectionID i
 	return i, err
 }
 
-const insertA2APeerRun = `-- name: InsertA2APeerRun :execrows
+const insertA2APeerRun = `-- name: InsertA2APeerRun :exec
 INSERT INTO pc.a2a_peer_runs (org_id, requester_run_id, connection_id, context_id, child_run_id, child_grant_id)
 VALUES ($1, $2, $3, $4,
         $5, $6)
-ON CONFLICT (org_id, requester_run_id, connection_id, context_id) DO NOTHING
 `
 
 type InsertA2APeerRunParams struct {
@@ -154,8 +157,8 @@ type InsertA2APeerRunParams struct {
 	ChildGrantID   ids.UUID
 }
 
-func (q *Queries) InsertA2APeerRun(ctx context.Context, arg InsertA2APeerRunParams) (int64, error) {
-	result, err := q.db.Exec(ctx, insertA2APeerRun,
+func (q *Queries) InsertA2APeerRun(ctx context.Context, arg InsertA2APeerRunParams) error {
+	_, err := q.db.Exec(ctx, insertA2APeerRun,
 		arg.OrgID,
 		arg.RequesterRunID,
 		arg.ConnectionID,
@@ -163,10 +166,7 @@ func (q *Queries) InsertA2APeerRun(ctx context.Context, arg InsertA2APeerRunPara
 		arg.ChildRunID,
 		arg.ChildGrantID,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	return err
 }
 
 const insertA2APin = `-- name: InsertA2APin :exec
@@ -338,6 +338,17 @@ func (q *Queries) SupersedeA2APin(ctx context.Context, orgID ids.OrgID, connecti
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const transactionRun = `-- name: TransactionRun :one
+SELECT run_id FROM pc.transactions WHERE org_id = $1 AND id = $2
+`
+
+func (q *Queries) TransactionRun(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, transactionRun, orgID, iD)
+	var run_id ids.UUID
+	err := row.Scan(&run_id)
+	return run_id, err
 }
 
 const voidA2AProposals = `-- name: VoidA2AProposals :execrows

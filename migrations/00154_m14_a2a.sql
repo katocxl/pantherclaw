@@ -17,9 +17,11 @@
 -- drifted_at and observed_digest record it on the ACTIVE pin.
 --
 -- pc.a2a_peer_runs links a requester's run, the connection and the A2A
--- context to the child run (and its delegated grant) the Authority created
--- for the peer agent at BeginDispatch, so the next message in the same
--- context reuses it. An empty context_id is a message that named none.
+-- context to the child runs (and their delegated grants) the Authority
+-- created for the peer agent at BeginDispatch: the next message reuses
+-- the newest one while it is active, and a new one replaces it once it
+-- ended. context_id is empty while peer runs are kept per requester run
+-- and connection (D33).
 
 -- +goose Up
 CREATE TABLE pc.a2a_pins (
@@ -123,14 +125,14 @@ CREATE TABLE pc.a2a_peer_runs (
     child_run_id     uuid        NOT NULL,
     child_grant_id   uuid        NOT NULL,
     created_at       timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (org_id, requester_run_id, connection_id, context_id),
-    UNIQUE (org_id, child_run_id),
+    PRIMARY KEY (org_id, child_run_id),
     FOREIGN KEY (org_id, requester_run_id) REFERENCES pc.runs (org_id, id),
     FOREIGN KEY (org_id, connection_id) REFERENCES pc.connections (org_id, id),
     FOREIGN KEY (org_id, child_run_id) REFERENCES pc.runs (org_id, id),
     FOREIGN KEY (org_id, child_grant_id) REFERENCES pc.grants (org_id, id),
     CHECK (child_run_id <> requester_run_id)
 );
+CREATE INDEX a2a_peer_runs_requester ON pc.a2a_peer_runs (org_id, requester_run_id, connection_id, context_id, created_at DESC);
 CREATE INDEX a2a_peer_runs_connection ON pc.a2a_peer_runs (org_id, connection_id, created_at DESC);
 
 -- +goose StatementBegin

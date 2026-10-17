@@ -184,7 +184,8 @@ type PeerRun struct {
 	Created    time.Time
 }
 
-// GetPeerRun returns the peer run of (requester run, connection, context).
+// GetPeerRun returns the newest active peer run of (requester run,
+// connection, context).
 func GetPeerRun(ctx context.Context, q *dbq.Queries, org ids.OrgID, requester, conn ids.UUID, contextID string) (PeerRun, bool, error) {
 	r, err := q.GetA2APeerRun(ctx, dbq.GetA2APeerRunParams{OrgID: org, RequesterRunID: requester, ConnectionID: conn, ContextID: contextID})
 	if db.IsNoRows(err) {
@@ -196,11 +197,10 @@ func GetPeerRun(ctx context.Context, q *dbq.Queries, org ids.OrgID, requester, c
 	return PeerRun{Run: r.ChildRunID, Grant: r.ChildGrantID, Created: r.CreatedAt}, true, nil
 }
 
-// InsertPeerRun records a peer run; false when one already exists for the
-// key (a concurrent BeginDispatch won), and the caller reads that one.
-func InsertPeerRun(ctx context.Context, q *dbq.Queries, org ids.OrgID, requester, conn ids.UUID, contextID string, p PeerRun) (bool, error) {
-	n, err := q.InsertA2APeerRun(ctx, dbq.InsertA2APeerRunParams{
+// InsertPeerRun records a peer run. The caller holds the requester run's
+// row lock, so no other BeginDispatch creates one for the same key meanwhile.
+func InsertPeerRun(ctx context.Context, q *dbq.Queries, org ids.OrgID, requester, conn ids.UUID, contextID string, p PeerRun) error {
+	return q.InsertA2APeerRun(ctx, dbq.InsertA2APeerRunParams{
 		OrgID: org, RequesterRunID: requester, ConnectionID: conn, ContextID: contextID, ChildRunID: p.Run, ChildGrantID: p.Grant,
 	})
-	return n == 1, err
 }
