@@ -545,8 +545,9 @@ definitions:
       - kind: funds.authorization.cancel
         description: Cancels a payment that has not been charged
     reversibility: irreversible
+    dedupe_key: [target.id]
     retry:
-      safe: true
+      safe: false
       on_unknown: reconcile
       target_idempotency: true
     verifier:
@@ -559,6 +560,9 @@ definitions:
         confirmed: [canceled]
         none: [succeeded, processing]
       limits: Shows that Stripe reports this payment intent canceled.
+    approval:
+      title: Cancel payment intent {target.id}
+      fields: [target.id]
     assurance:
       basis: documented
       reviewed_by: [pantherclaw-maintainers]
@@ -650,7 +654,7 @@ definitions:
         account's bank.
     approval:
       title: Transfer {params.amount} to {target.id}
-      fields: [params.amount, params.transfer_group, target.id, facts.stripe.account.payout_details_changed]
+      fields: [params.amount, params.transfer_group, target.id]
     assurance:
       basis: documented
       reviewed_by: [pantherclaw-maintainers]
@@ -685,6 +689,34 @@ definitions:
           description: params.description
           metadata[pantherclaw_key]: transaction.key
         idempotency_header: Idempotency-Key
+
+  # The consequence a transfer has when the payee's bank details changed
+  # recently (HR-306): a virtual write with no mapping and no dispatch,
+  # decided by the treasury template (a second approver). No agent can
+  # call it.
+  - operation: stripe.payee.changed_recently
+    summary: Funds sent to a payee whose bank details changed within 7 days
+    access: write
+    target:
+      type: stripe.account
+      id_pattern: '^acct_[A-Za-z0-9]{8,64}$'
+      account: none
+    params: {}
+    effects:
+      - kind: funds.payee_changed_recently
+        description: The transferred funds can be paid out to bank details changed within 7 days
+    reversibility: irreversible
+    dedupe_key: [target.id]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Send funds to {target.id}, whose bank details changed within 7 days
+      fields: [target.id]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
 
   - operation: stripe.transfer.read
     summary: Read one transfer
@@ -763,7 +795,7 @@ consequences:
     requires_facts: [stripe.account.payout_details_changed]
     consequence:
       operation: stripe.payee.changed_recently
-      effect: payee_changed_recently
+      effect: funds.payee_changed_recently
       target: '{target.id}'
       description: >-
         The connected account's bank details were added or changed within
