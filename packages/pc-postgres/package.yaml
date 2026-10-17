@@ -293,8 +293,8 @@ definitions:
     summary: List the allow-listed tables and the columns the agent may read
     access: read
     target:
-      type: pg_manifest
-      id_pattern: '^manifest$'
+      type: pg_database
+      id_pattern: '^[a-z_][a-z0-9_]{0,62}$'
       account: none
     params: {}
     effects:
@@ -317,20 +317,26 @@ definitions:
         path: /v1/tables
         route: postgres-tables-read
         extract:
-          target_id: "'manifest'"
+          target_id: query.database
           params: {}
       - channel: mcp
         tool: describe_tables
         route: postgres-tables-read
         description: >-
           List the tables this connection allows and, for each, the columns
-          you may read with their type and data class.
+          you may read with their type and data class. Name the connection's
+          database.
         input_schema:
           type: object
           additionalProperties: false
-          properties: {}
+          required: [database]
+          properties:
+            database:
+              type: string
+              description: The connection's database name
+              pattern: '^[a-z_][a-z0-9_]{0,62}$'
         extract:
-          target_id: "'manifest'"
+          target_id: input.database
           params: {}
     dispatch:
       sql:
