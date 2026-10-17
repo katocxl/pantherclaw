@@ -22,6 +22,7 @@ type fakeSlack struct {
 	err      error
 	state    string
 	stepUps  []stepup.StepUp
+	versions []string
 	previews int
 }
 
@@ -35,8 +36,8 @@ func (f *fakeSlack) GetChannel(_ context.Context, id ids.UUID) (napp.ChannelView
 	return f.view(id), nil, nil
 }
 
-func (f *fakeSlack) ActivateSlackApp(_ context.Context, id ids.UUID, su stepup.StepUp) (napp.ChannelView, error) {
-	f.stepUps = append(f.stepUps, su)
+func (f *fakeSlack) ActivateSlackApp(_ context.Context, id ids.UUID, version string, su stepup.StepUp) (napp.ChannelView, error) {
+	f.stepUps, f.versions = append(f.stepUps, su), append(f.versions, version)
 	return f.view(id), f.err
 }
 
@@ -44,7 +45,7 @@ func (f *fakeSlack) PreviewSlackApp(context.Context, ids.UUID) (napp.SlackPrevie
 	f.previews++
 	return napp.SlackPreview{SlackWorkspace: napp.SlackWorkspace{
 		TeamID: "T0SIMULATED", TeamName: "<script>alert(1)</script>", BotID: "B0SIMULATED", BotName: "pantherclaw", ChannelName: "approvals",
-	}}, nil
+	}, Version: "v7"}, nil
 }
 
 // TestHR315_TheSlackChannelPageCarriesTheSessionsStepUp (D22, D66): the
@@ -72,13 +73,19 @@ func TestHR315_TheSlackChannelPageCarriesTheSessionsStepUp(t *testing.T) {
 		t.Fatalf("page: %d %s", resp.StatusCode, resp.Body)
 	}
 	want := stepup.StepUp{Credential: responderKey, At: steppedUpAt}
-	if resp := do(t, mux, postAs(path, "org-admin", `{}`)); resp.StatusCode != http.StatusOK || len(f.stepUps) != 1 || f.stepUps[0] != want {
+	if resp := do(t, mux, postAs(path, "org-admin", `{"version":"v7"}`)); resp.StatusCode != http.StatusOK || len(f.stepUps) != 1 || f.stepUps[0] != want {
 		t.Fatalf("activate: %d %s %+v", resp.StatusCode, resp.Body, f.stepUps)
+	}
+	if !strings.Contains(resp.Body, `data-version="v7"`) || f.versions[0] != "v7" {
+		t.Fatalf("version: %v", f.versions)
+	}
+	if resp := do(t, mux, postAs(path, "org-admin", `{}`)); resp.StatusCode != http.StatusBadRequest || len(f.stepUps) != 1 {
+		t.Fatalf("no version: %d", resp.StatusCode)
 	}
 	if resp := do(t, mux, postAs(path, "org-admin", `{"bot_token":"xoxb-new"}`)); resp.StatusCode != http.StatusBadRequest || len(f.stepUps) != 1 {
 		t.Fatalf("a token on the page: %d %s", resp.StatusCode, resp.Body)
 	}
-	noCSRF := postAs(path, "org-admin", `{}`)
+	noCSRF := postAs(path, "org-admin", `{"version":"v7"}`)
 	noCSRF.Header.Del(webhttp.CSRFHeader)
 	if resp := do(t, mux, noCSRF); resp.StatusCode != http.StatusForbidden || len(f.stepUps) != 1 {
 		t.Fatalf("without the CSRF header: %d", resp.StatusCode)
@@ -90,7 +97,7 @@ func TestHR315_TheSlackChannelPageCarriesTheSessionsStepUp(t *testing.T) {
 		stepup.ErrStepUp: "step_up_required", napp.ErrSlackShared: "slack_channel_shared", napp.ErrSlackEdition: "edition_required",
 	} {
 		f.err = err
-		if resp := do(t, mux, postAs(path, "org-admin", `{}`)); !strings.Contains(resp.Body, `"error":"`+code+`"`) {
+		if resp := do(t, mux, postAs(path, "org-admin", `{"version":"v7"}`)); !strings.Contains(resp.Body, `"error":"`+code+`"`) {
 			t.Fatalf("%v: %d %s", err, resp.StatusCode, resp.Body)
 		}
 	}

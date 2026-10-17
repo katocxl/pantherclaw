@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -43,6 +44,9 @@ var (
 	ErrSlackChannelRefuse = pcerr.New(pcerr.FailedPrecondition, "SLACK_CHANNEL_REFUSED", "the Slack channel does not exist, is archived, or the bot is not a member")
 	ErrSlackShared        = pcerr.New(pcerr.FailedPrecondition, "SLACK_CHANNEL_SHARED", "the Slack channel is shared outside the workspace; approval cards go only to internal channels")
 	ErrSlackUnavailable   = pcerr.New(pcerr.Unavailable, "SLACK_UNAVAILABLE", "Slack could not be reached; try again")
+	ErrSlackOrgAdmin      = pcerr.New(pcerr.PermissionDenied, "ORG_ADMIN_REQUIRED", "only an Org Admin activates a Slack app channel")
+	ErrSlackChanged       = pcerr.New(pcerr.FailedPrecondition, "SLACK_CHANNEL_CHANGED", "the channel changed since the page was shown; reload it and check again")
+	ErrSlackWorkspace     = pcerr.New(pcerr.FailedPrecondition, "SLACK_WORKSPACE_CHANGED", "the bot token belongs to another Slack workspace; create a new channel for it")
 )
 
 // SlackAppView is a slack_app channel's configuration, without its token.
@@ -140,9 +144,9 @@ func slackCheckError(err error) error {
 // stored token and Slack channel, shown before a person confirms.
 type SlackPreview struct {
 	SlackWorkspace
-	// Version is the token version checked (its replacement time): a
-	// confirmation activates only the token that was shown.
-	Version *time.Time
+	// Version is the configuration version shown (D88): a confirmation
+	// activates only the token and channel that were checked.
+	Version string
 }
 
 // pendingSlackApp reads a PENDING_ACTIVATION slack_app channel and opens its
@@ -188,7 +192,10 @@ func (s *Service) PreviewSlackApp(ctx context.Context, id ids.UUID) (SlackPrevie
 	if err != nil {
 		return SlackPreview{}, slackCheckError(err)
 	}
-	return SlackPreview{SlackWorkspace: w, Version: cfg.TokenReplacedAt}, nil
+	if cfg.TeamID != nil && w.TeamID != *cfg.TeamID {
+		return SlackPreview{}, ErrSlackWorkspace
+	}
+	return SlackPreview{SlackWorkspace: w, Version: slackVersion(cfg)}, nil
 }
 
 // ActivateSlackApp activates a PENDING_ACTIVATION slack_app channel
@@ -197,11 +204,14 @@ func (s *Service) PreviewSlackApp(ctx context.Context, id ids.UUID) (SlackPrevie
 // Slack confirms the stored token and an internal channel the bot is in
 // again, and the token is still the one checked. The workspace and bot ids
 // are recorded; the person and key are audited.
-func (s *Service) ActivateSlackApp(ctx context.Context, id ids.UUID, su stepup.StepUp) (ChannelView, error) {
+func (s *Service) ActivateSlackApp(ctx context.Context, id ids.UUID, version string, su stepup.StepUp) (ChannelView, error) {
 	if err := s.requireSlackApprovals(ctx); err != nil {
 		return ChannelView{}, err
 	}
 	if err := s.inOrg(ctx, td.PermNotificationManage, func(ctx context.Context, c tapp.Caller, _ *dbq.Queries, tx db.TenantTx) error {
+		if !orgAdmin(c) {
+			return ErrSlackOrgAdmin
+		}
 		return stepup.Check(ctx, tx, c, su, s.clock.Now())
 	}, db.ReadOnly()); err != nil {
 		return ChannelView{}, err
@@ -210,9 +220,15 @@ func (s *Service) ActivateSlackApp(ctx context.Context, id ids.UUID, su stepup.S
 	if err != nil {
 		return ChannelView{}, err
 	}
+	if version != slackVersion(cfg) {
+		return ChannelView{}, ErrSlackChanged
+	}
 	w, err := s.checkSlack(ctx, token, cfg.SlackChannel)
 	if err != nil {
 		return ChannelView{}, slackCheckError(err)
+	}
+	if cfg.TeamID != nil && w.TeamID != *cfg.TeamID {
+		return ChannelView{}, ErrSlackWorkspace
 	}
 	var out ChannelView
 	err = s.inOrg(ctx, td.PermNotificationManage, func(ctx context.Context, c tapp.Caller, q *dbq.Queries, tx db.TenantTx) error {
@@ -221,7 +237,7 @@ func (s *Service) ActivateSlackApp(ctx context.Context, id ids.UUID, su stepup.S
 		}
 		n, err := q.ActivateSlackAppChannel(ctx, dbq.ActivateSlackAppChannelParams{
 			TeamID: &w.TeamID, BotID: &w.BotID, ActivatedBy: &c.Principal.ID, ActivatedCredential: &su.Credential,
-			OrgID: c.Org, ChannelRecordID: id, TokenReplacedAt: cfg.TokenReplacedAt,
+			OrgID: c.Org, ChannelRecordID: id, SeenUpdatedAt: cfg.UpdatedAt,
 		})
 		if err != nil {
 			return err
@@ -291,4 +307,22 @@ func (s *Service) slackChannelUpdate(ctx context.Context, tx db.TenantTx, q *dbq
 		return s.replaceSlackToken(ctx, tx, q, c, id, *u.SlackBotToken)
 	}
 	return nil
+}
+
+// slackVersion is a configuration's version as the confirm page shows it:
+// it changes with every token replacement and every return to
+// PENDING_ACTIVATION.
+func slackVersion(cfg dbq.GetSlackAppChannelRow) string {
+	return strconv.FormatInt(cfg.UpdatedAt.UnixMicro(), 10)
+}
+
+// orgAdmin reports whether the caller holds Org Admin at org scope (D66:
+// only an Org Admin activates a slack_app channel).
+func orgAdmin(c tapp.Caller) bool {
+	for _, b := range c.Bindings {
+		if b.Role == td.RoleOrgAdmin && b.Scope.Type == td.ScopeOrg {
+			return true
+		}
+	}
+	return false
 }

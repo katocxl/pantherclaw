@@ -22,6 +22,7 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"regexp"
 	"slices"
@@ -74,6 +75,9 @@ type Faults struct {
 	// ChannelNotFound answers every channel method with channel_not_found
 	// (a deleted channel).
 	ChannelNotFound bool `json:"channel_not_found,omitzero"`
+	// DropAnswer posts the next DropAnswer messages and then closes the
+	// connection without answering (a lost answer, D88).
+	DropAnswer int `json:"drop_answer,omitzero"`
 }
 
 // Require is what a request must carry.
@@ -107,13 +111,15 @@ type Server struct {
 	channels map[string]Channel
 	messages []Message
 	calls    Calls
+	tokens   []string
+	team     string
 	now      func() time.Time
 	seq      int
 }
 
 // New returns a simulator with the given channels.
 func New(channels []Channel, f Faults, log *slog.Logger) *Server {
-	s := &Server{faults: f, log: log, channels: map[string]Channel{}, calls: Calls{}, now: time.Now}
+	s := &Server{faults: f, log: log, channels: map[string]Channel{}, calls: Calls{}, now: time.Now, team: TeamID}
 	for _, c := range channels {
 		s.channels[c.ID] = c
 	}
@@ -138,6 +144,21 @@ func (s *Server) SetChannel(c Channel) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.channels[c.ID] = c
+}
+
+// SetTeam changes the workspace auth.test reports (a token of another
+// workspace).
+func (s *Server) SetTeam(team string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.team = team
+}
+
+// Tokens returns the bot token of every authorized request, in order.
+func (s *Server) Tokens() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.tokens)
 }
 
 // Messages returns a copy of every message, in posting order.
@@ -204,6 +225,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, method string) {
 		writeJSON(w, http.StatusOK, fail("not_authed"))
 		return
 	}
+	s.tokens = append(s.tokens, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
 	if s.faults.InvalidAuth {
 		writeJSON(w, http.StatusOK, fail("invalid_auth"))
 		return
@@ -217,7 +239,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, method string) {
 	case "auth.test":
 		writeJSON(w, http.StatusOK, map[string]any{
 			"ok": true, "url": "https://simulated.slack.test/", "team": "Simulated", "user": "pantherclaw",
-			"team_id": TeamID, "user_id": UserID, "bot_id": BotID,
+			"team_id": s.team, "user_id": UserID, "bot_id": BotID,
 		})
 	case "conversations.info":
 		c, code := s.channel(in.str("channel"))
@@ -230,6 +252,12 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, method string) {
 			"is_member": c.Member, "is_ext_shared": c.ExtShared, "is_shared": c.Shared || c.ExtShared, "is_archived": false,
 		}})
 	case "chat.postMessage":
+		if s.faults.DropAnswer > 0 {
+			s.faults.DropAnswer--
+			s.post(httptest.NewRecorder(), in)
+			drop(w)
+			return
+		}
 		s.post(w, in)
 	case "chat.update":
 		s.update(w, in)
@@ -351,4 +379,15 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_ = json.MarshalWrite(w, v)
+}
+
+// drop closes the connection without an answer.
+func drop(w http.ResponseWriter) {
+	if hj, ok := w.(http.Hijacker); ok {
+		if conn, _, err := hj.Hijack(); err == nil {
+			_ = conn.Close()
+			return
+		}
+	}
+	panic(http.ErrAbortHandler)
 }

@@ -12,11 +12,17 @@
 -- WebAuthn step-up (activated_by, activated_credential) on its page. A new
 -- bot token (UpdateChannel) puts it back to PENDING_ACTIVATION and clears
 -- the activation, so every token is confirmed with a key before it posts
--- (G0 M14 D66).
+-- (G0 M14 D66). The reconciler (D88) also returns it to PENDING_ACTIVATION
+-- when Slack reports the channel shared outside the workspace
+-- (shared_externally_at). The workspace never changes once known: a token
+-- of another workspace is a new channel.
 --
--- slack_cards keeps one card per approval request and slack_app channel:
--- the Slack message ts chat.update needs, whether the card is OPEN or
--- CLOSED, and how many escalation replies it has. A card is decided
+-- slack_cards keeps at most one card per approval request and slack_app
+-- channel (D88): a delivery claims the row (POSTING) before it posts, so a
+-- retry never posts twice; the Slack message ts chat.update needs is stored
+-- once Slack answers (OPEN, CLOSED), and a post whose answer was lost is
+-- UNKNOWN and never reposted (the approval page is authoritative, F167).
+-- It counts the escalation replies too. A card is decided
 -- nothing by: Slack has no inbound endpoint in PantherClaw (HR-313), and
 -- card state never reaches an authorization decision (HR-039).
 
@@ -35,6 +41,7 @@ CREATE TABLE pc.slack_app_channels (
     activated_at              timestamptz,
     token_replaced_by         text        CHECK (token_replaced_by IS NULL OR char_length(token_replaced_by) BETWEEN 1 AND 128),
     token_replaced_at         timestamptz,
+    shared_externally_at      timestamptz,
     updated_at                timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (org_id, channel_record_id),
     FOREIGN KEY (org_id, channel_record_id) REFERENCES pc.notification_channels (org_id, id),
@@ -50,8 +57,9 @@ CREATE TABLE pc.slack_app_channels (
 -- configuration is inserted PENDING_ACTIVATION; it becomes ACTIVE only with
 -- a person and a key (activated_at is the database's time), and it returns
 -- to PENDING_ACTIVATION only with a new bot token, which clears the
--- activation. An active configuration keeps its activation, workspace and
--- bot (HR-315, D66).
+-- activation, or when Slack reports it shared outside the workspace. An
+-- active configuration keeps its activation, workspace and bot; the
+-- workspace never changes once known (HR-315, D66, D88).
 -- +goose StatementBegin
 CREATE FUNCTION pc.slack_app_channel_guard() RETURNS trigger
 LANGUAGE plpgsql
@@ -69,6 +77,9 @@ BEGIN
             OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
         RAISE EXCEPTION 'a slack_app channel''s Slack channel and data level never change' USING ERRCODE = 'check_violation';
     END IF;
+    IF OLD.team_id IS NOT NULL AND NEW.team_id IS DISTINCT FROM OLD.team_id THEN
+        RAISE EXCEPTION 'a slack_app channel stays in its Slack workspace' USING ERRCODE = 'check_violation';
+    END IF;
     IF OLD.state = 'PENDING_ACTIVATION' AND NEW.state = 'ACTIVE' THEN
         IF NEW.activated_by IS NULL OR NEW.activated_credential IS NULL THEN
             RAISE EXCEPTION 'a slack_app channel is activated by a person with a key' USING ERRCODE = 'check_violation';
@@ -78,12 +89,14 @@ BEGIN
         IF NEW.activated_by IS DISTINCT FROM OLD.activated_by OR NEW.activated_credential IS DISTINCT FROM OLD.activated_credential
                 OR NEW.activated_at IS DISTINCT FROM OLD.activated_at OR NEW.team_id IS DISTINCT FROM OLD.team_id
                 OR NEW.bot_id IS DISTINCT FROM OLD.bot_id OR NEW.token_replaced_at IS DISTINCT FROM OLD.token_replaced_at
-                OR NEW.token_replaced_by IS DISTINCT FROM OLD.token_replaced_by THEN
+                OR NEW.token_replaced_by IS DISTINCT FROM OLD.token_replaced_by
+                OR NEW.shared_externally_at IS DISTINCT FROM OLD.shared_externally_at THEN
             RAISE EXCEPTION 'an active slack_app channel keeps its activation' USING ERRCODE = 'check_violation';
         END IF;
     ELSIF NEW.state = 'PENDING_ACTIVATION' THEN
-        IF OLD.state = 'ACTIVE' AND (NEW.token_replaced_at IS NOT DISTINCT FROM OLD.token_replaced_at OR NEW.token_replaced_by IS NULL) THEN
-            RAISE EXCEPTION 'a slack_app channel returns to PENDING_ACTIVATION only with a new bot token' USING ERRCODE = 'check_violation';
+        IF OLD.state = 'ACTIVE' AND NEW.shared_externally_at IS NOT DISTINCT FROM OLD.shared_externally_at
+                AND (NEW.token_replaced_at IS NOT DISTINCT FROM OLD.token_replaced_at OR NEW.token_replaced_by IS NULL) THEN
+            RAISE EXCEPTION 'a slack_app channel returns to PENDING_ACTIVATION only with a new bot token or when shared externally' USING ERRCODE = 'check_violation';
         END IF;
         NEW.activated_by := NULL;
         NEW.activated_credential := NULL;
@@ -102,16 +115,19 @@ CREATE TABLE pc.slack_cards (
     request_id        uuid        NOT NULL,
     channel_record_id uuid        NOT NULL,
     slack_channel     text        NOT NULL CHECK (slack_channel ~ '^[CG][A-Z0-9]{8,12}$'),
-    ts                text        NOT NULL CHECK (ts ~ '^[0-9]{10}\.[0-9]{6}$'),
-    state             text        NOT NULL DEFAULT 'OPEN' CHECK (state IN ('OPEN', 'CLOSED')),
+    ts                text        CHECK (ts IS NULL OR ts ~ '^[0-9]{10}\.[0-9]{6}$'),
+    state             text        NOT NULL DEFAULT 'POSTING' CHECK (state IN ('POSTING', 'OPEN', 'CLOSED', 'UNKNOWN')),
     escalations       integer     NOT NULL DEFAULT 0 CHECK (escalations BETWEEN 0 AND 100),
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (org_id, request_id, channel_record_id),
     FOREIGN KEY (org_id, request_id) REFERENCES pc.approval_requests (org_id, id),
-    FOREIGN KEY (org_id, channel_record_id) REFERENCES pc.slack_app_channels (org_id, channel_record_id)
+    FOREIGN KEY (org_id, channel_record_id) REFERENCES pc.slack_app_channels (org_id, channel_record_id),
+    CHECK ((ts IS NOT NULL) = (state IN ('OPEN', 'CLOSED')))
 );
 CREATE INDEX slack_cards_channel ON pc.slack_cards (org_id, channel_record_id);
+-- The reconciler's batch: open cards, oldest first.
+CREATE INDEX slack_cards_open ON pc.slack_cards (org_id, updated_at) WHERE state = 'OPEN';
 
 -- +goose StatementBegin
 DO $$
@@ -132,8 +148,10 @@ $$;
 
 GRANT SELECT, INSERT ON pc.slack_app_channels, pc.slack_cards TO pc_app;
 GRANT UPDATE (state, team_id, bot_id, activated_by, activated_credential, activated_at, token_replaced_by, token_replaced_at,
-    updated_at) ON pc.slack_app_channels TO pc_app;
+    shared_externally_at, updated_at) ON pc.slack_app_channels TO pc_app;
 GRANT UPDATE (ts, state, escalations, updated_at) ON pc.slack_cards TO pc_app;
+-- A claim whose post Slack refused (nothing was posted) is released.
+GRANT DELETE ON pc.slack_cards TO pc_app;
 GRANT SELECT ON pc.slack_app_channels, pc.slack_cards TO pc_audit_ro;
 
 -- +goose Down

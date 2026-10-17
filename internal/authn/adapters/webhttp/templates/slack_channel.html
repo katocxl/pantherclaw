@@ -17,7 +17,7 @@
 <dt>Channel</dt><dd class="untrusted">#{{.ChannelName}}: internal to the workspace, with the bot in it</dd>
 </dl>
 <p class="note">If this is the workspace and channel you expect, activate it: PantherClaw then posts approval cards there. Activating needs your security key; Slack is asked again first.</p>
-<p><button type="button" class="danger" id="activate" data-path="{{$.ActionPath}}">Activate with your security key</button></p>
+<p><button type="button" class="danger" id="activate" data-path="{{$.ActionPath}}" data-version="{{.Version}}">Activate with your security key</button></p>
 {{else}}
 <p class="note">{{.Problem}}</p>
 {{end}}

@@ -45,6 +45,9 @@ const messages = {
   slack_channel_refused: "The Slack channel does not exist, is archived, or the bot is not in it.",
   slack_channel_shared: "The Slack channel is shared outside your workspace; cards go only to internal channels.",
   slack_unavailable: "Slack could not be reached. Try again.",
+  org_admin_required: "Only an Org Admin activates a Slack approval channel.",
+  changed: "The channel changed since this page was shown. Reload it and check again.",
+  slack_workspace_changed: "The bot token belongs to another Slack workspace. Create a new channel for it.",
 };
 function explain(e) { return messages[e.code] || ("Something went wrong (" + e.message + ")."); }
 
@@ -104,4 +107,4 @@ async function confirm(path, body, done) {
 }
 
 const activateButton = document.getElementById("activate");
-if (activateButton) { activateButton.addEventListener("click", () => confirm(activateButton.dataset.path, {}, "Activated.")); }
+if (activateButton) { activateButton.addEventListener("click", () => confirm(activateButton.dataset.path, { version: activateButton.dataset.version }, "Activated.")); }

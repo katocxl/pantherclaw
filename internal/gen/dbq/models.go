@@ -2922,6 +2922,7 @@ type PcSlackAppChannel struct {
 	ActivatedAt         *time.Time
 	TokenReplacedBy     *string
 	TokenReplacedAt     *time.Time
+	SharedExternallyAt  *time.Time
 	UpdatedAt           time.Time
 }
 
@@ -2930,7 +2931,7 @@ type PcSlackCard struct {
 	RequestID       ids.UUID
 	ChannelRecordID ids.UUID
 	SlackChannel    string
-	Ts              string
+	Ts              *string
 	State           string
 	Escalations     int32
 	CreatedAt       time.Time

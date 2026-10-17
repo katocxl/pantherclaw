@@ -16,8 +16,8 @@ func facts(level string) domain.CardFacts {
 	return domain.CardFacts{
 		Level: level, Kind: "ACTION", Consequence: "irreversible", State: "PENDING",
 		ExpiresAt: time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC), RequestID: "0199f0aa-1111-7222-8333-444455556666",
-		Link:  "https://pc.example/approvals/0199f0aa-1111-7222-8333-444455556666?org=0199f0aa-0000-7000-8000-000000000001",
-		Title: "Refund a payment", Agent: "billing-bot\u202e<@U123>", Environment: "production",
+		Link:      "https://pc.example/approvals/0199f0aa-1111-7222-8333-444455556666?org=0199f0aa-0000-7000-8000-000000000001",
+		Operation: "payments.refund.create", Agent: "billing-bot\u202e<@U123>", Environment: "production",
 	}
 }
 
@@ -72,24 +72,24 @@ func TestHR313_CardOnlyLinksToTheApprovalPage(t *testing.T) {
 }
 
 // TestHR314_CardDataByLevel: MINIMAL shows the kind, the consequence, the
-// expiry and a short reference; SUMMARY adds the template title, the agent
+// expiry and a short reference; SUMMARY adds the operation id, the agent
 // and the environment, cleaned; neither shows the full id or anything
 // else (D23).
 func TestHR314_CardDataByLevel(t *testing.T) {
 	// The full id appears only inside the deep link.
 	minimal := strings.ReplaceAll(render(t, domain.OpenCard(facts(domain.SlackMinimal))), facts("").Link, "LINK")
-	for _, want := range []string{"Approval needed", "Agent action", "Irreversible", "2026-10-17 12:00 UTC", "Reference: 0199f0aa"} {
+	for _, want := range []string{"Approval needed", "Agent action", "Irreversible", "2026-10-17 12:00 UTC", "Reference: 55556666"} {
 		if !strings.Contains(minimal, want) {
 			t.Fatalf("minimal lacks %q: %s", want, minimal)
 		}
 	}
-	for _, no := range []string{"Refund a payment", "billing-bot", "production", "0199f0aa-1111", "mrkdwn"} {
+	for _, no := range []string{"payments.refund.create", "billing-bot", "production", "0199f0aa-1111", "mrkdwn"} {
 		if strings.Contains(minimal, no) {
 			t.Fatalf("minimal shows %q: %s", no, minimal)
 		}
 	}
 	summary := render(t, domain.OpenCard(facts(domain.SlackSummary)))
-	for _, want := range []string{"Approval: Refund a payment", "Agent: billing-bot<@U123>", "Environment: production"} {
+	for _, want := range []string{"Operation: payments.refund.create", "Agent: billing-bot<@U123>", "Environment: production"} {
 		if !strings.Contains(summary, strings.ReplaceAll(strings.ReplaceAll(want, "<", `<`), ">", `>`)) && !strings.Contains(summary, want) {
 			t.Fatalf("summary lacks %q: %s", want, summary)
 		}

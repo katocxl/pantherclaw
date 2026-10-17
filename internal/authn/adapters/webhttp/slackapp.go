@@ -35,7 +35,7 @@ import (
 // SlackChannels is the slack_app use-case set (notifications app.Service).
 type SlackChannels interface {
 	GetChannel(ctx context.Context, id ids.UUID) (napp.ChannelView, []napp.DeliveryView, error)
-	ActivateSlackApp(ctx context.Context, id ids.UUID, su stepup.StepUp) (napp.ChannelView, error)
+	ActivateSlackApp(ctx context.Context, id ids.UUID, version string, su stepup.StepUp) (napp.ChannelView, error)
 	PreviewSlackApp(ctx context.Context, id ids.UUID) (napp.SlackPreview, error)
 }
 
@@ -110,8 +110,11 @@ func (h *Handler) slackChannelPage(w http.ResponseWriter, r *http.Request, s aut
 	h.renderAny(w, http.StatusOK, "slack_channel.html", v)
 }
 
-// slackConfirmRequest is the POST body: an empty object.
-type slackConfirmRequest struct{}
+// slackConfirmRequest is the POST body: the configuration version the page
+// showed (D88).
+type slackConfirmRequest struct {
+	Version string `json:"version"`
+}
 
 // slackErrors maps the use cases' errors to the page's codes.
 var slackErrors = []struct {
@@ -128,6 +131,9 @@ var slackErrors = []struct {
 	{napp.ErrSlackChannelRefuse, http.StatusConflict, "slack_channel_refused"},
 	{napp.ErrSlackShared, http.StatusConflict, "slack_channel_shared"},
 	{napp.ErrSlackUnavailable, http.StatusServiceUnavailable, "slack_unavailable"},
+	{napp.ErrSlackOrgAdmin, http.StatusForbidden, "org_admin_required"},
+	{napp.ErrSlackChanged, http.StatusConflict, "changed"},
+	{napp.ErrSlackWorkspace, http.StatusConflict, "slack_workspace_changed"},
 }
 
 func (h *Handler) confirmSlackChannel(w http.ResponseWriter, r *http.Request, s authnapp.BrowserSession) {
@@ -137,11 +143,11 @@ func (h *Handler) confirmSlackChannel(w http.ResponseWriter, r *http.Request, s 
 	}
 	b, err := io.ReadAll(r.Body)
 	var req slackConfirmRequest
-	if err != nil || (len(b) > 0 && json.Unmarshal(b, &req, json.RejectUnknownMembers(true)) != nil) {
+	if err != nil || json.Unmarshal(b, &req, json.RejectUnknownMembers(true)) != nil || req.Version == "" {
 		h.jsonError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
-	c, err := h.slackChannels.ActivateSlackApp(callerContext(r, s), id, stepUpOfSession(s)) //nolint:contextcheck // callerContext derives from r.Context()
+	c, err := h.slackChannels.ActivateSlackApp(callerContext(r, s), id, req.Version, stepUpOfSession(s)) //nolint:contextcheck // callerContext derives from r.Context()
 	if err != nil {
 		for _, e := range slackErrors {
 			if errors.Is(err, e.err) {
@@ -171,6 +177,7 @@ func slackProblem(err error) string {
 		{napp.ErrSlackShared, "The Slack channel is shared outside the workspace; approval cards go only to internal channels."},
 		{napp.ErrSlackEdition, "Slack approval cards need the Team edition or above."},
 		{napp.ErrSlackState, "The channel changed. Reload the page."},
+		{napp.ErrSlackWorkspace, "The bot token belongs to another Slack workspace. Create a new channel for it."},
 	} {
 		if errors.Is(err, p.err) {
 			return p.text

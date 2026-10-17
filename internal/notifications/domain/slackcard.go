@@ -66,8 +66,9 @@ const (
 
 // CardFacts are the facts a card shows, read by the server when it is sent.
 // Kind, Consequence and State are fixed vocabulary; the summary strings are
-// configuration (the approval template's title, the agent's and the
-// environment's names) and are cleaned before use.
+// the operation id and configuration (the agent's and the environment's
+// names), cleaned before use. A card never shows the rendered approval
+// title: it holds parameter values such as amounts (D88 H1).
 type CardFacts struct {
 	// Level is SlackMinimal or SlackSummary.
 	Level string
@@ -80,13 +81,14 @@ type CardFacts struct {
 	// State is the request's state.
 	State     string
 	ExpiresAt time.Time
-	// RequestID is the request's id; the card shows its first 8 characters.
+	// RequestID is the request's id; the card shows its last 8 characters
+	// (random in a UUIDv7, where the first ones are a timestamp).
 	RequestID string
 	// Link is the approval page's deep link.
 	Link      string
 	Simulated bool
 	// Summary level only.
-	Title, Agent, Environment string
+	Operation, Agent, Environment string
 }
 
 // SlackCard is a chat.postMessage or chat.update body without channel and
@@ -179,7 +181,7 @@ func label(m map[string]string, k, fallback string) string {
 // short is the card's request reference.
 func short(id string) string {
 	if len(id) > shortID {
-		return id[:shortID]
+		return id[len(id)-shortID:]
 	}
 	return id
 }
@@ -202,7 +204,7 @@ func (f CardFacts) fields(open bool) []BlockText {
 	}
 	out = append(out, plain("Reference: "+short(f.RequestID)))
 	if f.Level == SlackSummary {
-		for _, kv := range [][2]string{{"Approval", f.Title}, {"Agent", f.Agent}, {"Environment", f.Environment}} {
+		for _, kv := range [][2]string{{"Operation", f.Operation}, {"Agent", f.Agent}, {"Environment", f.Environment}} {
 			if v := CardValue(kv[1]); v != "" {
 				out = append(out, plain(kv[0]+": "+v))
 			}

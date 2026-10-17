@@ -160,3 +160,26 @@ func TestSlackSim_HandshakeAndTestEndpoints(t *testing.T) {
 	}
 	_ = resp.Body.Close()
 }
+
+func TestSlackSim_DropAnswerTokensAndTeam(t *testing.T) {
+	s, ts := newSim(t)
+	s.SetFaults(slack.Faults{DropAnswer: 1})
+	b, _ := json.Marshal(map[string]any{"channel": "C0APPROVAL1", "text": "lost"})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/chat.postMessage", strings.NewReader(string(b)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	if resp, err := ts.Client().Do(req); err == nil {
+		_ = resp.Body.Close()
+		t.Fatal("an answer came back")
+	}
+	if ms := s.Messages(); len(ms) != 1 || ms[0].Text != "lost" {
+		t.Fatalf("the post was not made: %+v", ms)
+	}
+	s.SetTeam("T0OTHERTEAM")
+	if _, _, a := call(t, ts, token, "auth.test", map[string]any{}); a.TeamID != "T0OTHERTEAM" {
+		t.Fatalf("team: %+v", a)
+	}
+	if tk := s.Tokens(); len(tk) != 2 || tk[0] != token {
+		t.Fatalf("tokens: %v", tk)
+	}
+}
