@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
+	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -326,11 +327,10 @@ func validCA(s string) bool {
 	return n > 0 && strings.TrimSpace(string(rest)) == ""
 }
 
-// publicAddr reports whether a is a public unicast address.
-func publicAddr(a netip.Addr) bool {
-	a = a.Unmap()
-	return a.IsGlobalUnicast() && !a.IsPrivate()
-}
+// publicAddr reports whether a is a public address: one the egress
+// classifier lets clients reach without an allowed prefix (HR-071), so
+// configuration time and dial time agree (G0 M14 D61).
+func publicAddr(a netip.Addr) bool { return !httpx.DeniedAddr(a, nil) }
 
 // checkM14Kind checks a new connection's M14 configuration: a postgres or
 // a2a connection carries its own configuration and is held by PantherClaw;
