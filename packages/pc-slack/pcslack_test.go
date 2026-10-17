@@ -7,10 +7,13 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
+	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	pcslack "github.com/katocxl/pantherclaw/packages/pc-slack"
 )
@@ -117,5 +120,45 @@ func TestHR316_SlackTextIsDisclosedContentAndExternalChannelsAreAConsequence(t *
 	}
 	if !found {
 		t.Fatal("no external_disclosure consequence")
+	}
+}
+
+// TestHR316_ASharedChannelPredictsExternalDisclosure: the consequence rule
+// evaluates: a shared channel predicts slack.message.disclose on the
+// channel, an internal one does not, and an unread fact makes the
+// consequence unknown, never "internal" (HR-160).
+func TestHR316_ASharedChannelPredictsExternalDisclosure(t *testing.T) {
+	p := decode(t)
+	on, _ := p.Definition("slack.message.post")
+	var rules []consequences.Rule
+	for _, r := range p.Consequences {
+		if r.Operation == on.Operation {
+			d, _ := p.Definition(r.Consequence.Operation)
+			rules = append(rules, consequences.Rule{ConsequenceRule: r, Definition: d})
+		}
+	}
+	now := time.Now()
+	fact := func(members map[string]any) map[string]fdomain.Fact {
+		return map[string]fdomain.Fact{"slack.channel.external": {
+			Name: "slack.channel.external", SubjectType: "slack_channel", SubjectID: "C0EXTERNAL1",
+			Value: fdomain.Value{Type: fdomain.TypeObject, Object: members}, ObservedAt: now.Add(-time.Second),
+		}}
+	}
+	ev := consequences.NewEvaluator(celenv.DefaultLimits)
+	for name, c := range map[string]struct {
+		members map[string]any
+		want    consequences.State
+	}{
+		"shared":   {map[string]any{"external": true, "ext_shared": true, "shared": true}, consequences.Predicted},
+		"internal": {map[string]any{"external": false, "ext_shared": false, "shared": false}, consequences.NotTriggered},
+		"unread":   {map[string]any{"unread": "Slack refused the read"}, consequences.Unknown},
+	} {
+		out := ev.Evaluate(context.Background(), rules, consequences.Input{On: on, TargetID: "C0EXTERNAL1", Facts: fact(c.members), Now: now})
+		if len(out) != 1 || out[0].Err != nil || out[0].State != c.want {
+			t.Fatalf("%s: %+v", name, out)
+		}
+		if c.want == consequences.Predicted && (out[0].Operation != "slack.message.disclose" || out[0].Target.ID != "C0EXTERNAL1") {
+			t.Fatalf("%s: %+v", name, out[0])
+		}
 	}
 }
