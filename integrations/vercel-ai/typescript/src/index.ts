@@ -158,14 +158,15 @@ class Guard {
     let r: PantherClawRefusal | null;
     let send: Outbound | undefined;
     let id = "";
+    let txn = "";
     try {
-      ({ refusal: r, send, id } = await this.decide(name, input, options));
+      ({ refusal: r, send, id, txn } = await this.decide(name, input, options));
     } catch {
       r = new PantherClawRefusal("wrapper_error");
     }
     if (r) return this.refuse(r, options);
     if (send) {
-      if (!this.o.onDispatch) return this.refuse(new PantherClawRefusal("dispatch_required"), options);
+      if (!this.o.onDispatch) return this.refuse(new PantherClawRefusal("dispatch_required", txn), options);
       return this.o.onDispatch(id, send);
     }
     return run(input, options);
@@ -180,9 +181,9 @@ class Guard {
     return r.message;
   }
 
-  private async decide(name: string, input: unknown, options: ToolExecutionOptions): Promise<{ refusal: PantherClawRefusal | null; send?: Outbound; id: string }> {
+  private async decide(name: string, input: unknown, options: ToolExecutionOptions): Promise<{ refusal: PantherClawRefusal | null; send?: Outbound; id: string; txn: string }> {
     // The client refuses a call whose input is not an object (cannot_decide).
-    if (typeof input !== "object" || input === null || Array.isArray(input)) return { refusal: new PantherClawRefusal("cannot_decide"), id: "" };
+    if (typeof input !== "object" || input === null || Array.isArray(input)) return { refusal: new PantherClawRefusal("cannot_decide"), id: "", txn: "" };
     const server = this.o.connection;
     const call: ToolCall = { tool: `mcp__${server}__${name}`, server, input: input as Record<string, unknown>, tool_use_id: callId(options?.toolCallId) };
     const key = JSON.stringify([name, canonicalize(JSON.stringify(input))]);
@@ -200,7 +201,7 @@ class Guard {
     }
     const r = refusal(first, res, first.outcome === "hold", this.o.observeUnmapped);
     if (res.outcome === "allow") this.retries.delete(key);
-    return { refusal: r, send: r ? undefined : res.send, id: call.tool_use_id };
+    return { refusal: r, send: r ? undefined : res.send, id: call.tool_use_id, txn: res.answer?.transaction_id ?? "" };
   }
 
   /** Forgets retry ids past their wait. */

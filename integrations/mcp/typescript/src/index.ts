@@ -194,10 +194,10 @@ export function guardClient(mcp: McpClient, options: GuardOptions): GuardedClien
   /** Action ids of held calls by their content, so an identical later call resubmits the same action (PAP/1 §8). */
   const retries = new Map<string, { actionId: string; expires: number }>();
 
-  const decide = async (name: unknown, args: unknown, signal?: AbortSignal): Promise<{ refusal: PantherClawRefusal | null; send?: Outbound; id: string }> => {
+  const decide = async (name: unknown, args: unknown, signal?: AbortSignal): Promise<{ refusal: PantherClawRefusal | null; send?: Outbound; id: string; txn: string }> => {
     // The client refuses a call without a tool name or with an input that is not an object (cannot_decide).
     if (typeof name !== "string" || name === "" || typeof args !== "object" || args === null || Array.isArray(args)) {
-      return { refusal: new PantherClawRefusal("cannot_decide"), id: "" };
+      return { refusal: new PantherClawRefusal("cannot_decide"), id: "", txn: "" };
     }
     const call: ToolCall = { tool: `mcp__${o.server}__${name}`, server: o.server, input: args as Record<string, unknown>, tool_use_id: `pc-${randomBytes(16).toString("hex")}` };
     const key = JSON.stringify([name, canonicalize(JSON.stringify(args))]);
@@ -215,7 +215,7 @@ export function guardClient(mcp: McpClient, options: GuardOptions): GuardedClien
     }
     if (res.outcome === "allow") retries.delete(key);
     const r = refusal(first, res, first.outcome === "hold", o.observeUnmapped);
-    return { refusal: r, send: r ? undefined : res.send, id: call.tool_use_id };
+    return { refusal: r, send: r ? undefined : res.send, id: call.tool_use_id, txn: res.answer?.transaction_id ?? "" };
   };
 
   return {
@@ -223,12 +223,13 @@ export function guardClient(mcp: McpClient, options: GuardOptions): GuardedClien
       let r: PantherClawRefusal | null;
       let send: Outbound | undefined;
       let id = "";
+      let txn = "";
       try {
-        ({ refusal: r, send, id } = await decide(params?.name, params?.arguments ?? {}, opts?.signal));
+        ({ refusal: r, send, id, txn } = await decide(params?.name, params?.arguments ?? {}, opts?.signal));
       } catch {
         r = new PantherClawRefusal("wrapper_error");
       }
-      if (!r && send && !o.onDispatch) r = new PantherClawRefusal("dispatch_required");
+      if (!r && send && !o.onDispatch) r = new PantherClawRefusal("dispatch_required", txn);
       if (r) {
         if (o.raiseOnRefusal) throw r;
         return { content: [{ type: "text", text: r.message }], isError: true };
