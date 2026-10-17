@@ -435,9 +435,7 @@ definitions:
           amount: params.amount.minor
           currency: params.amount.currency
           payment_method: params.payment_method
-          # PENDING coordinator: literal body values (confirm=true,
-          # off_session=true, payment_method_types[]=card); D8 allows
-          # literals only in headers.
+          # D52: literal body values.
           confirm: literal.true
           off_session: literal.true
           payment_method_types[]: literal.card
