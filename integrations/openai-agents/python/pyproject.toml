@@ -14,7 +14,7 @@ dependencies = ["pantherclaw"]
 agents = ["openai-agents>=0.23.1,<0.24"]
 
 [dependency-groups]
-# The real frameworks, for the tests only: never shipped or installed with
+# The real framework, for the tests only: never shipped or installed with
 # the package; uv.lock pins the versions tested.
 dev = ["openai-agents==0.23.1"]
 

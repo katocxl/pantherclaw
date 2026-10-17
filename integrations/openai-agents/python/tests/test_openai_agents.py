@@ -19,10 +19,11 @@ from agents.testing import ScriptedModel
 from agents.testing.model import assistant_message, function_call
 from agents.exceptions import UserError
 from agents.tool_context import ToolContext
-from conformance import Gateway, replay, same_copies
+from conformance import Gateway, core_adapter, replay, same_copies
 
 from pantherclaw.client import Client
 from pantherclaw_openai_agents import PantherClawRefused, gateway_mcp_server, guard_tools
+from pantherclaw_openai_agents._guard import Guard
 
 REFUND = {"amount": "30.00", "charge": "ch_1", "currency": "USD", "reason": "duplicate"}
 _ids = itertools.count(1)
@@ -73,10 +74,13 @@ def runner_adapter(client: Client, connection: str, opts: dict[str, Any], fn: Ca
 
 
 class OpenAIAgentsTest(unittest.TestCase):
+    def test_HR328_every_wrapper_case_replays_through_the_decision_core(self) -> None:
+        replay(self, core_adapter(Guard), PantherClawRefused)
+
     def test_HR328_every_wrapper_case_replays_through_the_tool_invoker(self) -> None:
         replay(self, direct_adapter, PantherClawRefused)
 
-    def test_HR328_every_wrapper_case_replays_through_an_agent_run(self) -> None:
+    def test_T150_every_wrapper_case_replays_through_an_agent_run(self) -> None:
         replay(self, runner_adapter, PantherClawRefused)
 
     def test_HR328_the_call_id_is_the_models(self) -> None:

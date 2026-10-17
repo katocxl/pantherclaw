@@ -13,7 +13,7 @@ from collections.abc import Callable
 from typing import Annotated, Any, TypedDict
 
 import conformance  # noqa: F401 - puts the repository sources on the path
-from conformance import Gateway, replay, same_copies
+from conformance import Gateway, core_adapter, replay, same_copies
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 from langchain_core.tools import BaseTool, InjectedToolCallId, StructuredTool, tool
@@ -23,6 +23,7 @@ from langgraph.types import Command
 
 from pantherclaw.client import Client
 from pantherclaw_langchain import PantherClawRefused, PantherClawToolNode, guard_tools
+from pantherclaw_langchain._guard import Guard
 
 REFUND = {"amount": "30.00", "charge": "ch_1", "currency": "USD", "reason": "duplicate"}
 
@@ -93,13 +94,16 @@ def graph_adapter(client: Client, connection: str, opts: dict[str, Any], fn: Cal
 
 
 class LangChainTest(unittest.TestCase):
+    def test_HR328_every_wrapper_case_replays_through_the_decision_core(self) -> None:
+        replay(self, core_adapter(Guard), PantherClawRefused)
+
     def test_HR328_every_wrapper_case_replays_through_invoke(self) -> None:
         replay(self, sync_adapter, PantherClawRefused)
 
     def test_HR328_every_wrapper_case_replays_through_ainvoke(self) -> None:
         replay(self, async_adapter, PantherClawRefused)
 
-    def test_HR328_every_wrapper_case_replays_through_a_langgraph_tool_node(self) -> None:
+    def test_T150_every_wrapper_case_replays_through_a_langgraph_tool_node(self) -> None:
         replay(self, graph_adapter, PantherClawRefused)
 
     def test_HR329_the_wrapped_tool_is_not_an_attribute_of_the_guarded_one(self) -> None:

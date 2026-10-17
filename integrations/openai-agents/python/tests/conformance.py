@@ -136,10 +136,14 @@ def options(case: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def replay(t: unittest.TestCase, adapter: Adapter, refused: type[Exception]) -> None:
-    """Replays every case of wrappers.json through a wrapper (HR-328, HR-329)."""
+def replay(t: unittest.TestCase, adapter: Adapter, refused: type[Exception], raising: bool = True) -> None:
+    """Replays every case of wrappers.json through a wrapper (HR-328, HR-329);
+    without ``raising``, the cases that raise are left to another adapter (a
+    framework that retries a tool which raised, as CrewAI does)."""
     t.assertEqual(V["group"], "wrappers")
     for case in V["cases"]:
+        if not raising and any(c.get("raises") for c in case["calls"]):
+            continue
         with t.subTest(case=case["name"]):
             g = Gateway(case["answers"], case.get("wait", ""))
             try:
@@ -187,3 +191,13 @@ def same_copies(t: unittest.TestCase, relative: str) -> None:
     copies = {d: (ROOT / "integrations" / d / "python" / relative.format(pkg=p)).read_bytes()
               for d, p in (("langchain", "pantherclaw_langchain"), ("openai-agents", "pantherclaw_openai_agents"), ("crewai", "pantherclaw_crewai"))}
     t.assertEqual(len(set(copies.values())), 1, f"{relative} differs between the wrappers: keep every copy identical")
+
+
+def core_adapter(guard: type) -> Adapter:
+    """The decision core alone (the package's _guard.Guard), without the framework."""
+
+    def adapter(client: Client, connection: str, opts: dict[str, Any], fn: Callable[..., str]) -> Callable[[dict[str, Any]], str]:
+        g = guard(client, connection, **opts)
+        return lambda args: g.finish(g.decide("create_refund", args, None), lambda: fn(**args))
+
+    return adapter
