@@ -140,6 +140,11 @@ type options struct {
 	stripe       bool
 	stripeFaults stripe.Faults
 	stripeKey    string
+	// stripeAt, with stripe, is the Stripe to call instead of the
+	// simulator, and stripePayee the payee the grant names (task
+	// test:stripe-live).
+	stripeAt    *stripeSim
+	stripePayee string
 }
 
 // freePorts are the ports freeAddr has handed out in this test binary.
@@ -254,8 +259,14 @@ func start(t *testing.T, o options) *stack {
 		args = append(args, "--github-url", s.gh.url)
 	}
 	if o.stripe {
-		s.st = startStripeSim(t, o.stripeFaults)
+		s.st = o.stripeAt
+		if s.st == nil {
+			s.st = startStripeSim(t, o.stripeFaults)
+		}
 		args = append(args, "--stripe-url", s.st.url)
+		if o.stripePayee != "" {
+			args = append(args, "--stripe-payee", o.stripePayee)
+		}
 	}
 	var out, errb bytes.Buffer
 	if code := server.Run(context.Background(), args, &out, &errb, noEnv); code != 0 {

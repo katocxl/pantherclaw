@@ -53,7 +53,7 @@ type breaker struct {
 	report Reporter
 	// reportReason reports a circuit a reason opened; nil reports nothing.
 	reportReason ReasonReporter
-	log    *slog.Logger
+	log          *slog.Logger
 
 	mu       sync.Mutex
 	circuits map[string]*circuit
