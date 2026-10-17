@@ -77,16 +77,12 @@ func (c *ClientCredentials) Token(ctx context.Context) (string, error) {
 		"client_assertion_type": {"urn:ietf:params:oauth:client-assertion-type:jwt-bearer"},
 		"client_assertion":      {assertion},
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.TokenURL, strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.TokenURL, strings.NewReader(form.Encode())) //nolint:gosec // G704: the operator configures the token endpoint
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	hc := c.HTTPClient
-	if hc == nil {
-		hc = http.DefaultClient
-	}
-	resp, err := hc.Do(req)
+	resp, err := noRedirects(c.HTTPClient).Do(req) //nolint:gosec // G704: the operator configures the token endpoint
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", ErrToken, err)
 	}
@@ -116,11 +112,16 @@ func (c *ClientCredentials) assertion(now time.Time) (string, error) {
 	if _, err := rand.Read(jti); err != nil {
 		return "", err
 	}
-	header, _ := json.Marshal(map[string]string{"alg": alg, "typ": "JWT", "kid": kid})
-	claims, _ := json.Marshal(map[string]any{
-		"iss": c.ClientID, "sub": c.ClientID, "aud": c.TokenURL, "jti": b64(jti),
-		"iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix(),
+	header, err := json.Marshal(jwtHeader{Alg: alg, Typ: "JWT", Kid: kid})
+	if err != nil {
+		return "", err
+	}
+	claims, err := json.Marshal(assertionClaims{
+		Iss: c.ClientID, Sub: c.ClientID, Aud: c.TokenURL, JTI: b64(jti), Iat: now.Unix(), Exp: now.Add(5 * time.Minute).Unix(),
 	})
+	if err != nil {
+		return "", err
+	}
 	input := b64(header) + "." + b64(claims)
 	sig, err := sign(c.Key, []byte(input))
 	if err != nil {
@@ -170,4 +171,32 @@ func sign(k crypto.Signer, input []byte) ([]byte, error) {
 	r.FillBytes(out[:32])
 	s.FillBytes(out[32:])
 	return out, nil
+}
+
+type jwtHeader struct {
+	Alg string `json:"alg"`
+	Typ string `json:"typ"`
+	Kid string `json:"kid"`
+}
+
+type assertionClaims struct {
+	Iss string `json:"iss"`
+	Sub string `json:"sub"`
+	Aud string `json:"aud"`
+	JTI string `json:"jti"`
+	Iat int64  `json:"iat"`
+	Exp int64  `json:"exp"`
+}
+
+// noRedirects copies hc (nil: a client with a 10 second timeout) so that
+// it never follows a redirect, which would send the assertion, the token
+// or the agent's credentials elsewhere.
+func noRedirects(hc *http.Client) *http.Client {
+	out := &http.Client{Timeout: 10 * time.Second}
+	if hc != nil {
+		copied := *hc
+		out = &copied
+	}
+	out.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return out
 }

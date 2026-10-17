@@ -81,19 +81,25 @@ func setup(t *testing.T, protocol string, decide func(map[string]any) (int, stri
 	return p, u, s
 }
 
-func send(t *testing.T, url, body string, hdr map[string]string) (*http.Response, string) {
+// answer is what the enforcement point answered.
+type answer struct {
+	StatusCode int
+	Header     http.Header
+}
+
+func send(t *testing.T, url, body string, hdr map[string]string) (answer, string) {
 	t.Helper()
-	req, _ := http.NewRequest(http.MethodPost, url, strings.NewReader(body))
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, url, strings.NewReader(body))
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := (&http.Client{}).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(resp.Body)
-	return resp, string(b)
+	return answer{StatusCode: resp.StatusCode, Header: resp.Header}, string(b)
 }
 
 var agent = map[string]string{
@@ -111,12 +117,12 @@ func TestPEPForwardsOnlyAllowedRequests(t *testing.T) {
 	allow := true
 	p, u, s := setup(t, "http", func(map[string]any) (int, string) {
 		if allow {
-			return 200, `{"decision":true,"context":{"pantherclaw":{"outcome":"allow","transaction_id":"tx1","coverage":"PARTIAL","action_token":"at.k.n","nonce":"n1"}}}`
+			return http.StatusOK, `{"decision":true,"context":{"pantherclaw":{"outcome":"allow","transaction_id":"tx1","coverage":"PARTIAL","action_token":"at.k.n","nonce":"n1"}}}`
 		}
-		return 200, `{"decision":false,"context":{"pantherclaw":{"outcome":"hold","code":"APPROVAL_REQUIRED","transaction_id":"tx2","coverage":"PARTIAL","wait":{"handle":"tx2"}},"reason_user":{"en":"needs an approval"}}}`
+		return http.StatusOK, `{"decision":false,"context":{"pantherclaw":{"outcome":"hold","code":"APPROVAL_REQUIRED","transaction_id":"tx2","coverage":"PARTIAL","wait":{"handle":"tx2"}},"reason_user":{"en":"needs an approval"}}}`
 	})
 	resp, body := send(t, s.URL+"/v1/refunds?x=1", `{"amount":"5"}`, agent)
-	if resp.StatusCode != 200 || body != `{"id":"re_1"}` || resp.Header.Get(pep.HeaderTransaction) != "tx1" || resp.Header.Get(pep.HeaderNonce) != "n1" {
+	if resp.StatusCode != http.StatusOK || body != `{"id":"re_1"}` || resp.Header.Get(pep.HeaderTransaction) != "tx1" || resp.Header.Get(pep.HeaderNonce) != "n1" {
 		t.Fatalf("allowed: %d %s", resp.StatusCode, body)
 	}
 	got := u.reqs[0]
@@ -169,7 +175,7 @@ func TestPEPFailsClosed(t *testing.T) {
 // JSON-RPC method.
 func TestPEPMCPNamesTheJSONRPCMethod(t *testing.T) {
 	p, _, s := setup(t, "mcp", func(map[string]any) (int, string) {
-		return 200, `{"decision":true,"context":{"pantherclaw":{"outcome":"allow","coverage":"PARTIAL"}}}`
+		return http.StatusOK, `{"decision":true,"context":{"pantherclaw":{"outcome":"allow","coverage":"PARTIAL"}}}`
 	})
 	send(t, s.URL+"/mcp", `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"create_refund"}}`, agent)
 	if p.got[0]["action"].(map[string]any)["name"] != "tools/call" || p.got[0]["resource"].(map[string]any)["properties"].(map[string]any)["protocol"] != "mcp" {
@@ -201,7 +207,7 @@ func TestClientCredentialsAssertion(t *testing.T) {
 			_ = r.ParseForm()
 			a := strings.Split(r.PostForm.Get("client_assertion"), ".")
 			if len(a) != 3 || r.PostForm.Get("grant_type") != "client_credentials" || r.PostForm.Get("client_id") != "sa_1" {
-				w.WriteHeader(400)
+				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
 			h, _ := base64.RawURLEncoding.DecodeString(a[0])
@@ -213,7 +219,7 @@ func TestClientCredentialsAssertion(t *testing.T) {
 			_ = json.Unmarshal(c, &cl)
 			if hdr["alg"] != tc.alg || hdr["kid"] == "" || cl["iss"] != "sa_1" || cl["sub"] != "sa_1" || cl["aud"] != srvURL+"/oauth2/token" ||
 				!tc.verify([]byte(a[0]+"."+a[1]), sig) {
-				w.WriteHeader(401)
+				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
 			_, _ = io.WriteString(w, `{"access_token":"tok","token_type":"Bearer","expires_in":300}`)

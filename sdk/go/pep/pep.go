@@ -29,7 +29,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
-	"time"
 )
 
 // Header names.
@@ -109,10 +108,7 @@ func New(cfg Config) (*Handler, error) {
 	if err != nil || server.Host == "" {
 		return nil, errors.New("pep: Server must be a URL")
 	}
-	client := cfg.HTTPClient
-	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
-	}
+	client := noRedirects(cfg.HTTPClient)
 	rp := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(up)
@@ -160,11 +156,15 @@ type refusal struct {
 	WaitDeadline  string `json:"wait_deadline,omitempty"`
 }
 
-func reply(w http.ResponseWriter, status int, v any) {
+func reply(w http.ResponseWriter, status int, v refusal) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
+	b, err := json.Marshal(v)
+	if err != nil {
+		status, b = http.StatusInternalServerError, []byte(`{"decision":false,"outcome":"cannot_authorize"}`)
+	}
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	_, _ = w.Write(b)
 }
 
 // ServeHTTP asks about one request and forwards it only if allowed.

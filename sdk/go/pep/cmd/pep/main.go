@@ -53,7 +53,9 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
-	ln, err := net.Listen("tcp", *listen)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", *listen)
 	if err != nil {
 		return err
 	}
@@ -69,11 +71,9 @@ func run(args []string) error {
 		return err
 	}
 	srv := &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
 	go func() {
 		<-ctx.Done()
-		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(sctx)
 	}()
