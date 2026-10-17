@@ -333,7 +333,7 @@ func (s *Server) renderCharge(ch *charge, c call) map[string]any {
 
 func (s *Server) renderIntent(p *paymentIntent, c call, expand []string) map[string]any {
 	st := p.status(c.now)
-	var latest any = nullable(p.charge)
+	latest := nullable(p.charge)
 	if ch := s.charges[p.charge]; ch != nil && slices.Contains(expand, "latest_charge") {
 		latest = s.renderCharge(ch, c)
 	}

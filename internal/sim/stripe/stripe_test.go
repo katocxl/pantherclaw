@@ -163,7 +163,7 @@ func TestFormStrictness(t *testing.T) {
 		strings.NewReader(`{"charge":"`+FixtureCharge+`"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+key)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
