@@ -1,6 +1,6 @@
 # Postgres query connector and data scoping
 
-**Milestone:** M14 ([G0 M14](../g0/M14.md) D11, D15–D21; [ADR-0028](../adr/0028-business-connectors-and-data-scoping.md)). **Audience:** an Org Admin connecting a database, and the people who write grants and policies for reads. Command flags below follow the brief; the M14 exit status records any change.
+**Milestone:** M14 ([G0 M14](../g0/M14.md) D11, D15–D21; [ADR-0028](../adr/0028-business-connectors-and-data-scoping.md)). **Audience:** a Gateway Admin (`connection.manage`) connecting a database, and the people who write grants and policies for reads. Command flags below follow the brief; the M14 exit status records any change.
 
 `pc.postgres` 1.0.0 gives agents **structured, read-only** access to tables an administrator lists. Agents never send SQL: the gateway builds parameterised SQL from the decided request and the connection's manifest (HR-307), runs it in a read-only transaction that always rolls back (HR-308), and applies the data scope of the decision (HR-310..312). Joins, views and JSON columns are not supported (R-44).
 
@@ -60,7 +60,7 @@ pclaw seal --connection <connection id> --from-file db-password.txt --fingerprin
 
 The password is a sealed static credential with no header binding; only the gateway's Postgres client opens it, inside a dispatch. Delete the file afterwards. The gateway applies the same dial-time egress checks as for HTTP connections; private addresses are reachable only with `internal`.
 
-**Confirm the manifest.** The new connection's manifest is only proposed, and the connection cannot dispatch until an Org Admin confirms it: open the confirmation page the create command prints, check the tables, columns, classes, limits and `internal`, and confirm with your security key. Later updates that narrow the manifest apply at once; a widening (a new table or column, a lowered class, a raised limit, `internal` turned on) stays proposed until confirmed on the same page, and the current manifest keeps serving meanwhile.
+**Confirm the manifest.** The new connection's manifest is only proposed, and the connection cannot dispatch until a person holding `connection.manage` (Gateway Admin) confirms it (Org Admin does not hold that permission): open the confirmation page the create command prints, check the tables, columns, classes, limits and `internal`, and confirm with your security key. Later updates that narrow the manifest apply at once; a widening (a new table or column, a lowered class, a raised limit, `internal` turned on) stays proposed until confirmed on the same page, and the current manifest keeps serving meanwhile.
 
 ## 4. Test the connection
 

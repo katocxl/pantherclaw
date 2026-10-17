@@ -66,7 +66,7 @@ The token must match `^xoxb-[A-Za-z0-9-]{20,}$` or nothing is sent. Every grant 
 
 ## 5. Development
 
-`pantherclaw-sim slack` serves the four methods with a Bearer check, flags for externally shared and not-in-channel channels, and faults (429, `invalid_auth`, `channel_not_found`); `GET /__sim/messages` lists what was posted. A loopback base URL is accepted only in dev and tests. `TestE2E_M14_SlackApprovalCards` and range scenarios RT-045 (forged approval through Slack) and RT-046 (exfiltration) run against it.
+`pantherclaw-sim slack` serves the four methods with a Bearer check, flags for externally shared and not-in-channel channels, and faults (429, `invalid_auth`, `channel_not_found`); `GET /__sim/messages` lists what was posted. A loopback base URL is accepted only in dev and tests. The card lifecycle is tested in Team integration tests with the simulator and the real approvals service; `TestE2E_M14_SlackApprovalCards` (Community) checks the edition refusal, that no Slack inbound route exists, and `pc.slack` posts. Range scenario RT-045 forges approvals through Slack with the simulator changes `reaction`, `reply` and `interaction_post` (a forged `block_actions` payload to every plausible interaction path) and expects the request to stay PENDING; RT-046 covers exfiltration.
 
 ## 6. Troubleshooting
 

@@ -1,6 +1,6 @@
 # Peer agents over A2A
 
-**Milestone:** M14 ([G0 M14](../g0/M14.md) D30–D33; [ADR-0029](../adr/0029-peer-agent-calls-a2a.md)). **Audience:** an Org Admin connecting agents that talk to other agents over the A2A protocol (1.0.0), and owners of agents that receive such calls. Command flags below follow the brief; the M14 exit status records any change.
+**Milestone:** M14 ([G0 M14](../g0/M14.md) D30–D33; [ADR-0029](../adr/0029-peer-agent-calls-a2a.md)). **Audience:** a Gateway Admin (`connection.manage`) connecting agents that talk to other agents over the A2A protocol (1.0.0), and owners of agents that receive such calls. Command flags below follow the brief; the M14 exit status records any change.
 
 PantherClaw mediates A2A calls through the gateway: the requesting agent talks to `/a2a/{connection}` on the gateway, each call is decided under the requester's grant, and the gateway rebuilds what is sent. There are two kinds of peer:
 - **Enrolled peer** (an agent of your organization, named on the connection): the peer works in a **child run of the requester's run** with a delegated grant no wider than the requester's grant and the connection's peer scope (HR-324..326). The requester's limits carry over.
@@ -8,7 +8,7 @@ PantherClaw mediates A2A calls through the gateway: the requesting agent talks t
 
 ## 1. Create the connection
 
-You need the peer's agent card URL (`https://…/.well-known/agent-card.json`). Creating the connection fetches the card and stores the pin as proposed; the connection cannot dispatch until an Org Admin opens the confirmation page it prints, checks the card, interface and skills, and confirms with a security key:
+You need the peer's agent card URL (`https://…/.well-known/agent-card.json`). Creating the connection fetches the card and stores the pin as proposed; the connection cannot dispatch until a person holding `connection.manage` (Gateway Admin) (Org Admin does not hold that permission) opens the confirmation page it prints, checks the card, interface and skills, and confirms with a security key; the page re-reads the card and refuses if its digest is no longer the proposed one:
 
 ```bash
 pclaw connection create helpdesk-agent --kind a2a --gateway <gateway id> --package pc.a2a \
