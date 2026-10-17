@@ -38,6 +38,8 @@ const (
 	HeaderRunID    = "PAP-Run-Id"
 	HeaderActionID = "PC-Action-Id"
 	HeaderAction   = "PAP-Action"
+	// HeaderNonce passes PantherClaw's current nonce to the agent.
+	HeaderNonce = "PAP-Nonce"
 	// HeaderTransaction and HeaderOutcome tell the agent what PantherClaw
 	// decided.
 	HeaderTransaction = "PC-Transaction-Id"
@@ -140,6 +142,7 @@ type Decision struct {
 				Deadline string `json:"deadline,omitempty"`
 			} `json:"wait,omitempty"`
 			ActionToken string `json:"action_token,omitempty"`
+			Nonce       string `json:"nonce,omitempty"`
 		} `json:"pantherclaw"`
 		ReasonUser map[string]string `json:"reason_user,omitempty"`
 	} `json:"context"`
@@ -185,6 +188,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(HeaderTransaction, pc.TransactionID)
 	}
 	w.Header().Set(HeaderOutcome, pc.Outcome)
+	if pc.Nonce != "" {
+		// The agent signs its next proof with it (PAP/1).
+		w.Header().Set(HeaderNonce, pc.Nonce)
+	}
 	if !d.Decision {
 		out := refusal{Outcome: pc.Outcome, Code: pc.Code, Reason: d.Context.ReasonUser["en"], TransactionID: pc.TransactionID, ActionID: pc.ActionID}
 		if pc.Wait != nil {

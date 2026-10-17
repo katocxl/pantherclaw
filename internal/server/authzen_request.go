@@ -338,7 +338,7 @@ func (e *authzenEndpoint) evaluate(ctx context.Context, p point, conn *boundConn
 	}
 	facts := authzenFacts{
 		Outcome: out.Outcome, Code: out.Code, Receipt: out.Receipt, Coverage: "PARTIAL", ActionToken: out.ActionToken,
-		ActionID: action.String(),
+		ActionID: action.String(), Nonce: out.Nonce,
 	}
 	if !out.TransactionID.IsZero() {
 		facts.TransactionID = out.TransactionID.String()

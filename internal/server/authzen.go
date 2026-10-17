@@ -317,6 +317,9 @@ type authzenFacts struct {
 	Coverage      string       `json:"coverage"`
 	Wait          *authzenWait `json:"wait,omitempty"`
 	ActionToken   string       `json:"action_token,omitempty"`
+	// Nonce is the org's current PAP/1 nonce, for the enforcement point to
+	// pass to the agent as PAP-Nonce.
+	Nonce string `json:"nonce,omitempty"`
 }
 
 type authzenWait struct {

@@ -111,12 +111,12 @@ func TestPEPForwardsOnlyAllowedRequests(t *testing.T) {
 	allow := true
 	p, u, s := setup(t, "http", func(map[string]any) (int, string) {
 		if allow {
-			return 200, `{"decision":true,"context":{"pantherclaw":{"outcome":"allow","transaction_id":"tx1","coverage":"PARTIAL","action_token":"at.k.n"}}}`
+			return 200, `{"decision":true,"context":{"pantherclaw":{"outcome":"allow","transaction_id":"tx1","coverage":"PARTIAL","action_token":"at.k.n","nonce":"n1"}}}`
 		}
 		return 200, `{"decision":false,"context":{"pantherclaw":{"outcome":"hold","code":"APPROVAL_REQUIRED","transaction_id":"tx2","coverage":"PARTIAL","wait":{"handle":"tx2"}},"reason_user":{"en":"needs an approval"}}}`
 	})
 	resp, body := send(t, s.URL+"/v1/refunds?x=1", `{"amount":"5"}`, agent)
-	if resp.StatusCode != 200 || body != `{"id":"re_1"}` || resp.Header.Get(pep.HeaderTransaction) != "tx1" {
+	if resp.StatusCode != 200 || body != `{"id":"re_1"}` || resp.Header.Get(pep.HeaderTransaction) != "tx1" || resp.Header.Get(pep.HeaderNonce) != "n1" {
 		t.Fatalf("allowed: %d %s", resp.StatusCode, body)
 	}
 	got := u.reqs[0]
