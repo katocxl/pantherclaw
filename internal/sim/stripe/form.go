@@ -155,6 +155,7 @@ func (f *form) currency() (string, *apiError) {
 	if !ok {
 		return "", missing("currency")
 	}
+	c = strings.ToLower(c) // Stripe reads currency codes without regard to case
 	if !slices.Contains(currencies, c) {
 		return "", invalid("currency", "Invalid currency: "+c)
 	}

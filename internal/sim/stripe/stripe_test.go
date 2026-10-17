@@ -385,12 +385,12 @@ func TestPaymentIntents(t *testing.T) {
 		t.Fatalf("confirm = %s", c.raw)
 	}
 	for name, f := range map[string]url.Values{
-		"other method":   {"amount": {"1"}, "currency": {"usd"}, "customer": {FixtureCustomer}, "payment_method": {"pm_someoneElse"}, "confirm": {"true"}},
-		"no customer":    {"amount": {"1"}, "currency": {"usd"}, "customer": {"cus_nope0000"}},
-		"currency":       {"amount": {"1"}, "currency": {"xyz"}, "customer": {FixtureCustomer}},
-		"upper currency": {"amount": {"1"}, "currency": {"USD"}, "customer": {FixtureCustomer}},
-		"off session":    {"amount": {"1"}, "currency": {"usd"}, "customer": {FixtureCustomer}, "off_session": {"true"}},
-		"types":          {"amount": {"1"}, "currency": {"usd"}, "customer": {FixtureCustomer}, "payment_method_types[]": {"sepa_debit"}},
+		"other method":  {"amount": {"1"}, "currency": {"usd"}, "customer": {FixtureCustomer}, "payment_method": {"pm_someoneElse"}, "confirm": {"true"}},
+		"no customer":   {"amount": {"1"}, "currency": {"usd"}, "customer": {"cus_nope0000"}},
+		"currency":      {"amount": {"1"}, "currency": {"xyz"}, "customer": {FixtureCustomer}},
+		"long currency": {"amount": {"1"}, "currency": {"usdd"}, "customer": {FixtureCustomer}},
+		"off session":   {"amount": {"1"}, "currency": {"usd"}, "customer": {FixtureCustomer}, "off_session": {"true"}},
+		"types":         {"amount": {"1"}, "currency": {"usd"}, "customer": {FixtureCustomer}, "payment_method_types[]": {"sepa_debit"}},
 	} {
 		if a := h.post("/v1/payment_intents", f, ""); a.code != http.StatusBadRequest {
 			t.Errorf("%s: %d %s", name, a.code, a.raw)
