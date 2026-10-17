@@ -332,7 +332,7 @@ class LangChainTest(unittest.TestCase):
         self.assertEqual(len(g.requests), 3)
 
     def test_HR328_an_interrupted_hold_denied_when_the_graph_resumes_is_refused(self) -> None:
-        # The resumed node resubmits the identical call; PantherClaw's answer (here a deny) decides it.
+        # The resumed node resubmits the identical call; a deny then is hold_declined (M14 D79).
         g = Gateway(["hold", "hold", "deny"])
         self.addCleanup(g.close)
         ran: list[Any] = []
@@ -342,7 +342,7 @@ class LangChainTest(unittest.TestCase):
         app.invoke({"messages": [HumanMessage("refund ch_1")]}, cfg)
         out = app.invoke(Command(resume="go"), cfg)
         self.assertEqual(out["messages"][-1].content,
-                         "PantherClaw refused this call: GRANT_AMOUNT_EXCEEDED (transaction 01920000-0000-7000-8000-000000000009)")
+                         "PantherClaw refused this call: hold_declined (transaction 01920000-0000-7000-8000-000000000009)")
         self.assertEqual(ran, [])
 
     def test_the_options_are_checked(self) -> None:

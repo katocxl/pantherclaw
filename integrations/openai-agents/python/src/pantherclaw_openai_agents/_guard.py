@@ -183,15 +183,21 @@ class Guard:
             self._connection, f"mcp__{self._connection}__{c.tool}", c.args, c.call_id, c.action_id, first, server=self._connection,
             deadline=self._wait, cancelled=cancelled.is_set if cancelled else None,
         )
-        if res.outcome == "allow" or res.answer.get("decision") == "deny":
-            # An allow, or the gateway's own deny of the resubmission (for example duplicate_action): final.
+        if res.outcome == "allow":
             return self._conclude(c, res)
         txn = _transaction(res.answer) or _transaction(first.answer)
         if res.outcome == "deny":
-            self._forget(c)
-            return Verdict(code="hold_declined", transaction=txn)
+            return self._held_denied(c, res, txn)
         # Still held in PantherClaw as far as the wrapper knows: an identical retry keeps the action id.
         return Verdict(code="hold_timeout", transaction=txn)
+
+    def _held_denied(self, c: _Call, res: Result, txn: str) -> Verdict:
+        """A resumed hold that ended in a deny (M14 D79): hold_declined, except
+        duplicate_action (another call ran the action), reported verbatim."""
+        self._forget(c)
+        if res.answer.get("code") == "duplicate_action":
+            return Verdict(code="duplicate_action", transaction=txn)
+        return Verdict(code="hold_declined", transaction=txn)
 
     def _conclude(self, c: _Call, res: Result) -> Verdict:
         """The Verdict of an answer that is not a hold: final, so the call's
@@ -230,6 +236,8 @@ class Guard:
         """After an interrupt resumed: the identical call resubmitted, a
         Verdict unless it is still held."""
         res = self._authorize(c, first_hash=str(held.answer.get("action_hash", "")))
+        if res.outcome == "deny":
+            return self._held_denied(c, res, _transaction(res.answer) or _transaction(held.answer)), res
         if res.outcome != "hold":
             return self._conclude(c, res), res
         self._held(c, res)
