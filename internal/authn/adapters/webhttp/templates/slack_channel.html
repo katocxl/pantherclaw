@@ -1,0 +1,26 @@
+{{template "head" .}}
+<h1>Slack approval channel: {{.Name}}</h1>
+<p>State: <strong>{{if .Pending}}Waiting for activation{{else}}Active{{end}}</strong>{{with .Slack.ActivatedAt}}; activated {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}{{with .Slack.TokenReplacedAt}}; bot token replaced {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}.</p>
+<dl>
+<dt>Channel</dt><dd><code>{{.ID}}</code></dd>
+<dt>Slack channel</dt><dd><code>{{.Slack.ChannelID}}</code>{{with .Slack.TeamID}} in workspace <code>{{.}}</code>{{end}}</dd>
+<dt>Cards show</dt><dd>{{if .Summary}}The request's kind, consequence, expiry and short reference, plus the approval's title, the agent's name and the environment.{{else}}The request's kind, consequence, expiry and short reference only.{{end}} Never amounts, parameters, the principal or who decided.</dd>
+<dt>Decisions</dt><dd>Cards only link to the approval page. Nothing done in Slack — a button, a reaction or a reply — decides anything.</dd>
+</dl>
+{{if .CanManage}}
+{{if .Pending}}
+<h2>Activate</h2>
+<p class="note">PantherClaw checks the bot token with Slack and that the channel exists, is internal to your workspace and has the bot in it. Then it posts approval cards there. Activating needs your security key.</p>
+<p><button type="button" class="danger" id="activate" data-path="{{.ActionPath}}">Activate with your security key</button></p>
+{{else}}
+<h2>Replace the bot token</h2>
+<p class="note">The new token must belong to the same Slack workspace. Replacing it needs your security key; the old token is not kept.</p>
+<p><label for="token">New bot token</label> <input type="password" id="token" autocomplete="off" spellcheck="false"></p>
+<p><button type="button" class="danger" id="replace" data-path="{{.ActionPath}}">Replace with your security key</button></p>
+{{end}}
+{{else}}
+<p class="note">Activating this channel or replacing its token needs notification.manage and a security key.</p>
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/slack_channel.js"></script>
+{{template "foot" .}}

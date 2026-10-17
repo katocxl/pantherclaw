@@ -43,3 +43,12 @@ func (c *Config) devSlack(n *napp.Service) error {
 	loopback := []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8"), netip.MustParsePrefix("::1/128")}
 	return n.SetSlackAPI(c.Dev.SlackAPIURL, httpx.NewEgressClient(httpx.EgressConfig{Timeout: napp.RequestTimeout, AllowedPrefixes: loopback}))
 }
+
+// registerSlackChannels adds the Slack approval channel page, where a
+// person activates a slack_app channel or replaces its bot token with a
+// security key (HR-315); without security keys nothing activates one.
+func registerSlackChannels(d apiDeps) {
+	if d.web != nil && d.m5 != nil && d.m5.notifications != nil && d.m5.webauthn != nil {
+		d.web.WithSlackChannels(d.m5.notifications)
+	}
+}
