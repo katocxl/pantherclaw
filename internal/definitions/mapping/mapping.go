@@ -16,6 +16,8 @@ package mapping
 
 import (
 	"context"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"maps"
@@ -49,6 +51,8 @@ type Mapper struct {
 	pkg  *domain.Package
 	mcp  map[string]*compiled
 	hook map[string]*compiled
+	// a2a maps A2A methods (G0 M14 D9).
+	a2a  map[string]*compiled
 	http []*compiled
 }
 
@@ -82,7 +86,7 @@ func New(pkg *domain.Package, limits celenv.Limits) (*Mapper, error) {
 	if err != nil {
 		return nil, err
 	}
-	m := &Mapper{pkg: pkg, mcp: map[string]*compiled{}, hook: map[string]*compiled{}}
+	m := &Mapper{pkg: pkg, mcp: map[string]*compiled{}, hook: map[string]*compiled{}, a2a: map[string]*compiled{}}
 	for i := range pkg.Definitions {
 		d := &pkg.Definitions[i]
 		for _, mp := range d.Mappings {
@@ -97,7 +101,9 @@ func New(pkg *domain.Package, limits celenv.Limits) (*Mapper, error) {
 				m.hook[mp.Tool] = c
 			case domain.ChannelHTTP:
 				m.http = append(m.http, c)
-			case domain.ChannelSDK, domain.ChannelAuthZEN, domain.ChannelA2A:
+			case domain.ChannelA2A:
+				m.a2a[mp.Method] = c
+			case domain.ChannelSDK, domain.ChannelAuthZEN:
 				// Never a mapping's channel: package validation refuses it.
 			}
 		}
@@ -118,6 +124,8 @@ func paramType(t domain.ParamType) *types.Type {
 		return cel.BoolType
 	case domain.TypeIdentifierList:
 		return cel.ListType(cel.StringType)
+	case domain.TypeQueryFilter:
+		return cel.ListType(cel.DynType)
 	case domain.TypeEnum, domain.TypeIdentifier, domain.TypeText, domain.TypeCommand, domain.TypeContent, domain.TypePath:
 		return cel.StringType
 	}
@@ -220,6 +228,12 @@ func (m *Mapper) SDK(ctx context.Context, tc Context, tool string, input []byte)
 	return m.byName(ctx, tc, m.mcp, tool, input, domain.ChannelSDK)
 }
 
+// A2A maps a peer agent call by A2A method name and JSON params (G0 M14
+// D9), as an MCP tool call is mapped by name.
+func (m *Mapper) A2A(ctx context.Context, tc Context, method string, params []byte) (actionir.Parsed, error) {
+	return m.byName(ctx, tc, m.a2a, method, params, domain.ChannelA2A)
+}
+
 // Tool is an MCP tool the package maps, with the operation it maps to.
 type Tool struct {
 	Tool      string `json:"tool"`
@@ -250,9 +264,17 @@ func (m *Mapper) byName(ctx context.Context, tc Context, by map[string]*compiled
 	return m.run(ctx, tc, c, channel, map[string]any{"input": input, "path": map[string]any{}, "query": map[string]any{}})
 }
 
-// HTTP maps a request by method, raw (escaped) path, raw query and body.
-// More than one matching route is ambiguous.
+// HTTP maps a request by method, raw (escaped) path, raw query and body,
+// with no content type: a form mapping refuses it.
 func (m *Mapper) HTTP(ctx context.Context, tc Context, method, rawPath, rawQuery string, body []byte) (actionir.Parsed, error) {
+	return m.HTTPRequest(ctx, tc, method, rawPath, rawQuery, "", body)
+}
+
+// HTTPRequest maps a request by method, raw (escaped) path, raw query,
+// content type and body. The matching route's encoding says how the body
+// is read: JSON, or a strict form (G0 M14 D8, HR-300). More than one
+// matching route is ambiguous.
+func (m *Mapper) HTTPRequest(ctx context.Context, tc Context, method, rawPath, rawQuery, contentType string, body []byte) (actionir.Parsed, error) {
 	var match *compiled
 	var vars map[string]any
 	for _, c := range m.http {
@@ -273,7 +295,12 @@ func (m *Mapper) HTTP(ctx context.Context, tc Context, method, rawPath, rawQuery
 	if err != nil {
 		return actionir.Parsed{}, err
 	}
-	input, err := DecodeInput(body)
+	var input map[string]any
+	if match.m.Encoding == domain.EncodingForm {
+		input, err = DecodeForm(contentType, body)
+	} else {
+		input, err = DecodeInput(body)
+	}
 	if err != nil {
 		return actionir.Parsed{}, err
 	}
@@ -420,6 +447,12 @@ func evalParam(ctx context.Context, p *celenv.Program, t domain.ParamType, vars 
 		out.Str = string(s)
 	case domain.TypeIdentifierList:
 		out.List, ok = stringList(v)
+	case domain.TypeQueryFilter:
+		var err error
+		if out.Filter, err = queryFilter(v); err != nil {
+			return domain.Value{}, false, err
+		}
+		ok = true
 	}
 	if !ok {
 		return domain.Value{}, false, fmt.Errorf("got %s, want %s", v.Type().TypeName(), t)
@@ -437,3 +470,53 @@ func stringList(v ref.Val) ([]string, bool) {
 }
 
 var reflectStrings = reflect.TypeOf([]string(nil))
+
+// queryFilter converts an extracted list of predicates to its typed form:
+// the CEL value becomes plain JSON and is decoded as strictly as an
+// action's params are (G0 M14 D9).
+func queryFilter(v ref.Val) ([]domain.Predicate, error) {
+	raw, err := json.Marshal(native(v.Value()))
+	if err != nil {
+		return nil, err
+	}
+	spec := domain.ParamSpec{Type: domain.TypeQueryFilter}
+	vals, err := (&domain.Definition{Params: map[string]domain.ParamSpec{"f": spec}}).DecodeParams(
+		jsontext.Value(`{"f":` + string(raw) + `}`))
+	if err != nil {
+		return nil, err
+	}
+	return vals["f"].Filter, nil
+}
+
+// native unwraps CEL values into plain Go values for JSON.
+func native(v any) any {
+	switch x := v.(type) {
+	case ref.Val:
+		return native(x.Value())
+	case []ref.Val:
+		out := make([]any, len(x))
+		for i, e := range x {
+			out[i] = native(e)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, e := range x {
+			out[i] = native(e)
+		}
+		return out
+	case map[ref.Val]ref.Val:
+		out := make(map[string]any, len(x))
+		for k, e := range x {
+			out[fmt.Sprint(native(k))] = native(e)
+		}
+		return out
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, e := range x {
+			out[k] = native(e)
+		}
+		return out
+	}
+	return v
+}

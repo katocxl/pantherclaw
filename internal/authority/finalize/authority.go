@@ -559,12 +559,20 @@ var (
 		"only a cooperative channel (hook, sdk, authzen) reports delegated")
 )
 
-// Delegable reports whether a transaction on channel may report the outcome
-// delegated: the cooperative channels, where the agent or an external
-// enforcement point performs the action and the gateway sends nothing
-// (HR-186; authzen, G0 M14 D4).
-func Delegable(channel string) bool {
-	return channel == "hook" || channel == "sdk" || channel == "authzen"
+// Delegable reports whether a transaction on channel, through a connection
+// of accessMode, may report the outcome delegated: the cooperative
+// channels, where the agent or an external enforcement point performs the
+// action and the gateway sends nothing (HR-186). An enforcement point fronts
+// only a connection whose credential PantherClaw does not hold (G0 M14 D4,
+// D27, D61).
+func Delegable(channel, accessMode string) bool {
+	switch channel {
+	case "hook", "sdk":
+		return true
+	case "authzen":
+		return accessMode == AccessAgentHeld || accessMode == AccessTargetEnforced
+	}
+	return false
 }
 
 func (a *Authority) log(context.Context) *slog.Logger {

@@ -761,6 +761,11 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 	elapsed := time.Since(start)
 	t.lap("target")
 	outcome, class, code := classify(res.Status, err)
+	if res.Status != 0 {
+		if o, c, k := checkSuccess(def, outcome, res.Body); o != outcome {
+			outcome, class, code = o, c, k
+		}
+	}
 	e.breaker.record(ctx, conn, outcome)
 	if err != nil && res.Status == 0 {
 		e.log.WarnContext(ctx, "gateway.target_error", slog.String("transaction_id", want.Txn), slog.String("outcome", outcome.String()),
@@ -828,10 +833,18 @@ func targetRef(def *defs.Definition, body, secret []byte) string {
 func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *defs.Definition, target actionir.Target,
 	req *http.Request, c broker.Sender, purpose string,
 ) (secret []byte, release func(), access func() *pb.CredentialAccess, err error) {
+	if def.Dispatch != nil && def.Dispatch.CredentialPattern != "" && conn.Credential.GetKind() == credentials.KindGitHubApp {
+		return nil, nil, nil, errCredentialPattern // a pattern is for a static credential
+	}
 	if conn.Credential.GetKind() != credentials.KindGitHubApp {
 		plain, err := e.openStatic(ctx, conn)
 		if err != nil {
 			return nil, nil, nil, err
+		}
+		if !def.Dispatch.CredentialMatches(plain) {
+			// Checked before any byte is sent (G0 M14 D8, HR-301).
+			clear(plain)
+			return nil, nil, nil, errCredentialPattern
 		}
 		if err := placeCredential(conn, req, plain); err != nil {
 			clear(plain)
@@ -886,6 +899,9 @@ func (e *Engine) credentialFailed(ctx context.Context, r Result, conn *control.C
 		slog.String("connection_id", conn.GetId()), pclog.Err(err))
 	code := CodeCredential
 	var granted []func(*pb.RecordExecutionRequest)
+	if errors.Is(err, errCredentialPattern) {
+		code = CodeCredentialPattern
+	}
 	if sm := (*broker.ScopeMismatchError)(nil); errors.As(err, &sm) {
 		code = CodeScopeMismatch
 		granted = append(granted, func(req *pb.RecordExecutionRequest) { req.CredentialAccess = accessOf(sm.Access) })
