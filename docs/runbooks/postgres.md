@@ -25,9 +25,9 @@ The manifest is part of the connection's `PostgresConfig`. Only what it lists ex
 |---|---|---|
 | `host`, `port`, `database`, `user` | Where to connect | — |
 | `sslmode` | `verify-full` (required); `require` only with `internal` and a pinned CA | — |
-| `ca_pem` | Optional pinned CA | — |
+| `ca_pem` | Optional pinned CA | at most 16 KiB |
 | `internal` | Allows private addresses; setting it needs a step-up | false |
-| `tables[]` | `schema`, `name`, optional `scope_key` and `scope_column` (record scope), optional `max_rows`, `columns[]` of `{name, type, class}` | — |
+| `tables[]` | `schema`, `name`, optional `scope_key` and `scope_column` (record scope), optional `max_rows`, `columns[]` of `{name, type, class}` | 1 to 64 tables, 1 to 128 columns each |
 | `max_rows` | Row cap per query | 200, at most 1000 |
 | `statement_timeout_ms` | Query timeout | 5000, at most 30000 |
 | `max_result_bytes` | Answer cap | 1 MiB, at most 4 MiB |
@@ -76,7 +76,9 @@ The test connects with the sealed credential and fails (and the connection canno
 | `postgres.rows.aggregate` | `aggregate_rows` | `POST /{conn}/v1/aggregate` | `group_by`, `measures` (`count|sum|avg|min|max` over a column or `*`), `filters`, `limit` |
 | `postgres.tables.read` | `describe_tables` | `GET /{conn}/v1/tables` | target `pg_database` (the connection's database name); returns the tables and columns the agent may see |
 
-Filters are a list of at most 20 predicates `{column, op, value | values}` with ops `eq ne lt le gt ge in is_null not_null prefix`. The SDK and hook faces refuse Postgres connections (`use_gateway_face`). Answers are `{"columns": [...], "rows": [[...]], "truncated": bool, "redacted": n}`.
+Filters are a list of at most 20 predicates `{column, op, value | values}` with ops `eq ne lt le gt ge in is_null not_null prefix`. The SDK and hook faces refuse Postgres connections (`use_gateway_face`). Answers are `{"columns": [...], "rows": [[...]], "truncated": bool, "redacted": n}`. Every value is cut to 4096 characters in SQL (flagged `truncated_values`), and sorting uses the real column type.
+
+Aggregate measures are limited by column (HR-312): `count` on anything; `min` and `max` only on numeric, date and timestamptz columns of class public or internal; `sum` and `avg` only on numeric columns; nothing on pii, secret or text columns. Groups smaller than `min_group_size` are left out.
 
 Every query runs under `REPEATABLE READ READ ONLY` with the statement timeout, a 1 s lock timeout and an idle timeout, then `ROLLBACK`. A query over the time limit is FAILED and does not hang.
 

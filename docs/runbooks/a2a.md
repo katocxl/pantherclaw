@@ -21,11 +21,11 @@ pclaw connection create helpdesk-agent --kind a2a --gateway <gateway id> --packa
 |---|---|
 | `card_url` | HTTPS URL of the agent card (loopback only in dev) |
 | `interface` | One interface the card declares: `JSONRPC` or `HTTP+JSON` and its URL (gRPC is refused) |
-| `card_keys` | Optional pinned JWKS; if the card is signed, a signature must verify against it |
-| `skills` | The skill ids agents may use (a subset of the card's) |
+| `card_keys` | Optional pinned JWKS (at most 64 KiB); if the card is signed, a signature must verify against it (the pinned card itself is at most 256 KiB) |
+| `skills` | The skill ids agents may use (a subset of the card's; at most 64, each at most 128 characters) |
 | `peer_agent_id` | Optional: the enrolled agent of this organization that serves this endpoint |
 | `peer_scope` | Bounds and limits the peer may use for requests from this route (required with `peer_agent_id`) |
-| `max_answer_bytes`, `max_stream_seconds` | Defaults 1 MiB and 300 s |
+| `max_answer_bytes`, `max_stream_seconds` | Defaults 1 MiB and 300 s; at most 8 MiB and 3600 s |
 
 If the remote agent needs its own credential (bearer or API key per its card's security scheme), seal it with `pclaw seal --connection <id>`.
 
@@ -37,7 +37,7 @@ Agents point their A2A client at `https://<gateway>/a2a/<connection>/.well-known
 
 | Operation | A2A methods | Notes |
 |---|---|---|
-| `a2a.message.send` | `SendMessage`, `SendStreamingMessage` (`POST /message:send`, `/message:stream`) | irreversible request to another actor; `skill` from the allowed list; `text` under disclosure limits, at most 32 KiB |
+| `a2a.message.send` | `SendMessage`, `SendStreamingMessage` (`POST /message:send`, `/message:stream`) | irreversible request to another actor; `skill` from the allowed list; `text` (a `content` parameter) under disclosure limits, at most 32 KiB |
 | `a2a.task.read` | `GetTask`, `ListTasks`, `SubscribeToTask` | read |
 | `a2a.task.cancel` | `CancelTask` | write |
 

@@ -19,14 +19,18 @@ At api.slack.com/apps, **Create New App → From scratch** in your workspace:
 
 ## 2. Add the channel to PantherClaw
 
-Only an Org Admin can do this, with a security-key step-up (HR-315):
+Adding the channel takes two steps (HR-315). First, create it; it is stored PENDING_ACTIVATION, with the token sealed:
 
 ```bash
 pclaw channel create approvals-slack --kind slack_app --slack-channel <channel id, e.g. C0123456789> \
   --data-level minimal --bot-token-file slack-bot.token
 ```
 
-The server calls `auth.test` (records the team and bot) and `conversations.info` (the channel exists, the bot is a member, the channel is not externally shared), then seals the token. Delete the token file afterwards. The token is never logged and is sent only to `chat.postMessage`, `chat.update`, `auth.test` and `conversations.info` on `https://slack.com/api`. Replacing it needs a step-up.
+Delete the token file afterwards. While the channel is pending it receives nothing, routing skips it, and an update cannot unpause it.
+
+Then an Org Admin with `notification.manage` opens `https://<pantherclaw public url>/notifications/channels/<channel id>/confirm` in the browser and touches their security key. The page calls `auth.test` and `conversations.info`, shows the workspace, bot and channel it found (the channel must exist, the bot must be a member, and the channel must not be externally shared), and activates the channel on confirmation. Cards are posted only for approval requests created after activation; older pending requests get no card.
+
+The token is never logged and is sent only to `chat.postMessage`, `chat.update`, `auth.test` and `conversations.info` on `https://slack.com/api`. To replace it, update the channel with the new token file (never type a token into a web form); the channel goes back to PENDING_ACTIVATION and stops delivering until it is confirmed again on the same page.
 
 Subscribe the channel to escalation steps exactly like an email or webhook channel; there is no separate Slack routing.
 
@@ -47,7 +51,7 @@ Reactions, replies and anything posted to the server count for nothing. To appro
 
 | Operation | Call | Notes |
 |---|---|---|
-| `slack.message.post` | `chat.postMessage` (`channel`, `text`, optional `thread_ts`) | irreversible; text under disclosure limits, at most 4000 bytes; `ok: true` required |
+| `slack.message.post` | `chat.postMessage` (`channel`, `text`, optional `thread_ts`) | irreversible; `text` is a `content` parameter under disclosure limits, at most 4000 bytes; `ok: true` required |
 | `slack.channel.read` | `conversations.info` | read |
 
 Set up a second Slack app for the agent (scope `chat:write`, plus `channels:read`/`groups:read` for the external-channel fact), then:

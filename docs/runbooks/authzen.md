@@ -13,17 +13,19 @@ An **enforcement point** is your own proxy that asks PantherClaw for a decision 
 
 1. Create a service account for the point and register its `private_key_jwt` key as for any service account ([workload-identity runbook](workload-identity.md) covers keys).
 2. Bind it to the built-in role **Enforcement Point** (org scope only; only service accounts can hold `authzen.evaluate`).
-3. Create the point with a security-key step-up (you need `enforcement_point.manage`):
+3. As a person holding `enforcement_point.manage` (service accounts are refused), create the point:
 
 ```bash
 pclaw authzen point create edge-proxy --service-account <service account id> --connection <connection id> [--connection <id> ...]
 pclaw authzen point list
 pclaw authzen point get <point id>
-pclaw authzen point connections <point id> --add <connection id>     # widening needs a step-up
+pclaw authzen point connections <point id> --add <connection id>     # a widening prints a confirm URL
 pclaw authzen point disable <point id>
 ```
 
-Every change is audited. Disabling a point makes its next evaluation fail with 401.
+4. The new point is PENDING and `create` prints a confirm URL. Open it in the browser, check the service account and connections, and confirm with your security key; only then is the point ACTIVE and able to evaluate.
+
+Narrowing a point's connections applies at once. A widening is stored as proposed and prints a confirm URL; the point keeps serving its current connections until someone confirms the widening on that page with a security key. Disabling (a person only) applies at once with no step-up, and the point's next evaluation fails with 401. Every change is audited.
 
 ## 3. Wire the proxy
 
@@ -56,7 +58,7 @@ The reference point `sdk/go/pep` (Apache-2.0) does all of this as an `http.Handl
 
 Denials are HTTP 200 with `{"decision": false}`. A 401 means the token, the service account, its permission or the point is not valid or ACTIVE; a 403 means the connection is not bound to this point. `X-Request-ID` is echoed.
 
-An ALLOW for a budget-consuming action is committed at once as a delegated execution: the budget is spent and never released early (HR-319). If the point then fails to forward, the money or count stays spent; reconcile from the transaction id in the context. Transactions and receipts show `decided_via = authzen` and the point.
+An ALLOW for a budget-consuming action is committed at once as a delegated execution: the budget is spent and never released early (HR-319). If the point then fails to forward, the money or count stays spent; reconcile from the transaction id in the context. Each transaction records `decided_via = authzen` and the enforcement point before anything is committed; if that record cannot be written, nothing is dispatched, the reservation is released when the permit expires, and the answer is `decision: false` (CANNOT_AUTHORIZE). Channel `authzen` is decided only through these endpoints, never through a PantherClaw gateway.
 
 ## 5. Troubleshooting
 

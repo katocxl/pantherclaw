@@ -49,8 +49,14 @@ The refusal text is `PantherClaw refused this call: <code> (transaction <id>)` (
 | `cannot_decide` | any other cannot-decide |
 | `dispatch_required` | allow with `send` and no `on_dispatch` handler |
 | `wrapper_error` | an exception inside the wrapper |
+| `undecided_args` | the model's input has keys outside the tool's argument schema (D69) |
+| `duplicate_action` | an identical call that shared a held call's action id, after the other one ran (D68) |
 
-Pass `raise_on_refusal=True` to raise instead of returning the refusal. Unmapped tools are refused unless `observe_unmapped=True`. An identical retry (same tool, server and arguments, in the same wrapper instance) reuses the action id, so a held call resumes rather than starting over; changed arguments are a new decision (HR-329). The wrapped tool's original function is not reachable through the wrapper object; do not keep another reference to it in the agent.
+Pass `raise_on_refusal=True` to raise instead of returning the refusal. Unmapped tools are refused unless `observe_unmapped=True`.
+
+**What is decided (D69).** The wrapper first validates the model's input through the tool's own argument schema, into exactly the arguments the function will receive, and sends that for the decision. Aliases are normalised to field names; any other key is refused (`undecided_args`). Arguments the framework injects from trusted code (LangChain `InjectedToolArg`, LangGraph injected state) are not part of the decision.
+
+**Action ids (D68, HR-329).** An identical call (same tool, server and arguments, in the same wrapper instance) reuses the action id only while the earlier call is unresolved: in flight or held, so a held call resumes rather than starting over. Once the earlier call reaches a final outcome (it ran, or was denied, could not be decided or timed out), the next identical call is a new decision with a new id. Two identical calls made while the first is held share its id: after approval one runs and the other is refused `duplicate_action`, so one approval never runs a tool twice. Changed arguments are always a new decision. The wrapped tool's original function is not reachable through the wrapper object; do not keep another reference to it in the agent.
 
 ## 4. MCP servers
 
