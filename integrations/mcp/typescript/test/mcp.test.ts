@@ -277,15 +277,18 @@ test("TestHR329_guardClient forgets an action id after a final outcome, and shar
   const outs = (await Promise.all([a, b])).map(textOf);
   assert.equal(new Set(ids).size, 1, "one action id");
   assert.equal(ran.length, 1, "one approval, one call");
-  assert.deepEqual(outs.sort(), ["PantherClaw refused this call: hold_declined", "refunded 30.00"]);
+  assert.deepEqual(outs.sort(), ["PantherClaw refused this call: duplicate_action", "refunded 30.00"]);
 });
 
 test("TestHR329_guardClient: an abort during a hold refuses with hold_timeout", async (t) => {
-  const g = await gateway(t, (_c, id, res) => res.end(decided(id, "hold", { wait: { handle: "h", state: "PENDING" } })), { waitStates: ["PENDING"], block: 5000 });
+  const g = await gateway(t, (_c, id, res) => res.end(decided(id, "hold", { wait: { handle: "h", state: "PENDING" } })), { waitStates: ["PENDING"], block: 300, after: ["READY"] });
   const ran: unknown[] = [];
   const c = guardClient(await heldServer(ran), { client: g.client, connection: "payments", wait: 30 });
   const ac = new AbortController();
   setTimeout(() => ac.abort(), 50);
   assert.equal(textOf(await c.callTool(refund, undefined, { signal: ac.signal })), "PantherClaw refused this call: hold_timeout");
   assert.deepEqual(ran, []);
+  // The approval that arrives after the abort is not used up: nothing is resubmitted.
+  await new Promise((r) => setTimeout(r, 500));
+  assert.equal(g.calls.length, 1);
 });

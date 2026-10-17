@@ -34,6 +34,8 @@ import {
 
 /** The rule for a connection's name (migration 00041); a connection governs the one MCP server named after it. */
 const CONNECTION_NAME = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+/** How long the server's tool list is trusted before it is read again, in ms. */
+const LIST_TTL_MS = 60_000;
 /** How many held calls' action ids one guard remembers for an identical retry. */
 const MAX_RETRIES = 1024;
 
@@ -166,6 +168,8 @@ export interface GuardedClient {
 function refusal(first: Result, res: Result, resumed: boolean, observeUnmapped: boolean): PantherClawRefusal | null {
   const txn = res.answer?.transaction_id || first.answer?.transaction_id || "";
   if (res.outcome === "allow") return null;
+  // A resubmission the engine answers duplicate_action was approved and ran in an identical concurrent call (D68, D79).
+  if (resumed && res.answer?.code === "duplicate_action") return new PantherClawRefusal("duplicate_action", txn);
   if (resumed) return new PantherClawRefusal(res.outcome === "deny" ? "hold_declined" : "hold_timeout", txn);
   if (res.outcome === "deny") {
     if (res.answer?.code === "unknown_tool" && observeUnmapped) return null;
@@ -198,7 +202,7 @@ export function guardClient(mcp: McpClient, options: GuardOptions): GuardedClien
    */
   const retries = new Map<string, { actionId: string; expires: number }>();
   /** The argument names each of the server's tools declares, from its tool list. */
-  let declared: Map<string, Set<string>> | undefined;
+  let declared: { tools: Map<string, Set<string>>; at: number } | undefined;
 
   const relist = async (): Promise<Map<string, Set<string>>> => {
     const m = new Map<string, Set<string>>();
@@ -209,7 +213,7 @@ export function guardClient(mcp: McpClient, options: GuardOptions): GuardedClien
       cursor = r.nextCursor;
       if (!cursor) break;
     }
-    declared = m;
+    declared = { tools: m, at: Date.now() };
     return m;
   };
 
@@ -217,14 +221,16 @@ export function guardClient(mcp: McpClient, options: GuardOptions): GuardedClien
    * Whether every argument is one the tool's input schema declares (D69):
    * the server runs the tool on its schema's arguments, so an argument
    * outside it would be decided but never run. "unknown" when the server
-   * does not list the tool. The list is read again once before a refusal.
+   * does not list the tool. The list is read again when it is older than
+   * a minute, and once before a refusal.
    */
   const fits = async (name: string, args: Record<string, unknown>): Promise<"yes" | "no" | "unknown"> => {
-    for (const fresh of [false, true]) {
-      const m = fresh || !declared ? await relist() : declared;
+    const stale = !declared || Date.now() - declared.at > LIST_TTL_MS;
+    for (const fresh of [stale, true]) {
+      const m = fresh ? await relist() : (declared as { tools: Map<string, Set<string>> }).tools;
       const props = m.get(name);
       if (props && Object.keys(args).every((k) => props.has(k))) return "yes";
-      if (fresh || !declared) return props ? "no" : "unknown";
+      if (fresh) return props ? "no" : "unknown";
     }
     return "unknown";
   };
@@ -255,7 +261,7 @@ export function guardClient(mcp: McpClient, options: GuardOptions): GuardedClien
       let res = first;
       if (first.outcome === "hold") {
         try {
-          res = await withSignal(o.client.resume(o.connection, call, actionId, first, o.wait * 1000), signal);
+          res = await withSignal(o.client.resume(o.connection, call, actionId, first, o.wait * 1000, signal), signal);
         } catch {
           // The wait was aborted: the hold ran out for this call (D47).
           res = { outcome: "cannot_decide", why: "the wait was aborted" };
@@ -276,9 +282,11 @@ export function guardClient(mcp: McpClient, options: GuardOptions): GuardedClien
 
   return {
     async callTool(params, resultSchema, opts) {
+      // Read once: what is decided is what is called.
+      const name = params?.name;
       let d: Awaited<ReturnType<typeof decide>>;
       try {
-        d = await decide(params?.name, params?.arguments ?? {}, opts?.signal);
+        d = await decide(name, params?.arguments ?? {}, opts?.signal);
       } catch {
         d = { refusal: new PantherClawRefusal("wrapper_error"), id: "", txn: "" };
       }
@@ -289,7 +297,7 @@ export function guardClient(mcp: McpClient, options: GuardOptions): GuardedClien
         return { content: [{ type: "text", text: r.message }], isError: true };
       }
       if (d.send && o.onDispatch) return o.onDispatch(d.id, d.send);
-      return callTool({ ...params, name: params.name, arguments: d.args }, resultSchema, opts);
+      return callTool({ ...params, name, arguments: d.args }, resultSchema, opts);
     },
     listTools: (params, opts) => listTools(params, opts),
     close: () => close(),
