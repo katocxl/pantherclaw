@@ -1,0 +1,32 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 Joshua Kato -->
+
+# PantherClaw for the Vercel AI SDK, TypeScript (Apache-2.0)
+
+`@pantherclaw/vercel-ai` makes every tool call of an agent built on the Vercel AI SDK (`ai` 7.0.137 or later, below 8) go through PantherClaw before it runs (PN-016.3). It is built on the core client [`@pantherclaw/sdk`](../../../sdk/typescript). Every decision is **PARTIAL**: the application runs the tool with its own access, so PantherClaw decides and records but cannot stop code that calls the service without the tool (HR-024). For enforced routes, put the service behind PantherClaw's gateway or a target verifier.
+
+```ts
+import { generateText, stepCountIs } from "ai";
+import { Client, readKeyFile } from "@pantherclaw/sdk";
+import { guardTools } from "@pantherclaw/vercel-ai";
+
+const client = new Client({ keyFile: await readKeyFile("agent.key.json"), gateway: "https://gateway.example.com" });
+const tools = guardTools({ create_refund: refundTool }, { client, connection: "payments" });
+await generateText({ model, tools, prompt, stopWhen: stepCountIs(5) });
+```
+
+## How it decides
+
+`guardTools(tools, options)` returns a new ToolSet whose every `execute` asks the gateway's `/sdk/{connection}` face first, as the MCP tool `mcp__<connection>__<tool name>` with the input the model produced and the AI SDK's `toolCallId`: the connection's package maps each tool by its name. The original `execute` functions are reachable only through the guard, and the ToolSet you pass is not changed.
+
+- **allow** runs the tool. On a target-enforced connection the allow carries the exact request the target accepts: pass `onDispatch: { <tool name>: (send, input, options) => output }` to send it, or such an allow is refused (the tool's own request would be).
+- **hold**: with `onHold: "wait"` (default) the guard waits in PantherClaw (`wait` seconds, default 300) and runs the tool only on PantherClaw's later allow, resubmitting the identical call with the same action id. With `onHold: "refuse"` it returns the refusal at once; an identical later call (same tool, same input in any member order, same guard) resubmits the same action, so it runs once approved. Changed input is a new decision.
+- **deny**, a call PantherClaw cannot decide, an unreachable gateway, a wait that ends or any error return `PantherClaw refused this call: <code> (transaction <id>)` to the model as the tool's output, without running it (fail closed). With `raiseOnRefusal: true`, `execute` throws a `PantherClawRefusal` instead, which the AI SDK reports to the model as a tool error. A tool's own `toModelOutput` never reads a refusal: the model gets it as text.
+- A tool the package does not map is refused, unless `observeUnmapped: true`.
+
+`guardTools` refuses, when it wraps them, the tools PantherClaw cannot govern: a provider-executed tool (it runs at the model provider) and a tool without `execute` (your application would run it outside the AI SDK).
+
+## Status
+
+- The npm name is not reserved yet (Day-0 item 4), so the package is `private`. Until the core client is published, it imports `@pantherclaw/sdk` by its path in this repository.
+- The tests (`task sdk:check`, or `pnpm install --frozen-lockfile` then `node --test "test/**/*.test.ts"`) run the guarded tools inside the real AI SDK, version 7.0.137 (a dev-only install pinned in `pnpm-lock.yaml`), with `ai/test` mock language models calling them and a fake PantherClaw serving the `/sdk` face and the wait stream, offline. Moving to a later version means changing the pin and running them.
