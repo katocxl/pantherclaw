@@ -20,21 +20,23 @@ import (
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
-// The Slack approval channel page (G0 M14 D22, HR-315):
+// The Slack approval channel page (G0 M14 D22, D66; HR-315):
 // GET /notifications/channels/{id}/confirm shows a slack_app channel, its
-// Slack channel, data level and state. A person holding
-// notification.manage activates a PENDING one, or gives an ACTIVE one a
-// new bot token, with a POST on the same path right after a security-key
-// step-up on this browser session; PantherClaw then asks Slack (auth.test,
-// conversations.info) before anything is stored. Nothing else activates a
-// slack_app channel or replaces its token. GET never changes anything;
-// every POST carries the CSRF proof (HR-151).
+// Slack channel, data level and state; for a PENDING_ACTIVATION one and a
+// person holding notification.manage it asks Slack (auth.test,
+// conversations.info) and shows the workspace, bot and channel found. The
+// person activates it with a POST on the same path right after a
+// security-key step-up on this browser session; Slack is asked again before
+// anything is stored. Nothing else activates a slack_app channel, and no
+// bot token is ever typed into this page (a new one comes through
+// UpdateChannel). GET changes nothing; every POST carries the CSRF proof
+// (HR-151).
 
 // SlackChannels is the slack_app use-case set (notifications app.Service).
 type SlackChannels interface {
 	GetChannel(ctx context.Context, id ids.UUID) (napp.ChannelView, []napp.DeliveryView, error)
 	ActivateSlackApp(ctx context.Context, id ids.UUID, su stepup.StepUp) (napp.ChannelView, error)
-	ReplaceSlackToken(ctx context.Context, id ids.UUID, token string, su stepup.StepUp) (napp.ChannelView, error)
+	PreviewSlackApp(ctx context.Context, id ids.UUID) (napp.SlackPreview, error)
 }
 
 // WithSlackChannels adds the Slack approval channel page; call it before
@@ -61,6 +63,9 @@ type slackChannelView struct {
 	Pending    bool
 	Summary    bool
 	ActionPath string
+	// Found is what Slack reported; Problem, why it could not be checked.
+	Found   *napp.SlackPreview
+	Problem string
 }
 
 func (h *Handler) slackChannelPage(w http.ResponseWriter, r *http.Request, s authnapp.BrowserSession) {
@@ -88,20 +93,25 @@ func (h *Handler) slackChannelPage(w http.ResponseWriter, r *http.Request, s aut
 		h.fail(w, r, err)
 		return
 	}
-	h.renderAny(w, http.StatusOK, "slack_channel.html", slackChannelView{
+	v := slackChannelView{
 		page: page{Title: title, Session: s}, ChannelView: c, Slack: *c.SlackApp,
 		CanManage:  s.Human() && s.Can(td.PermNotificationManage, td.OrgPath(s.Org)),
 		Pending:    c.SlackApp.State == napp.SlackPending,
 		Summary:    c.SlackApp.DataLevel == domain.SlackSummary,
 		ActionPath: napp.SlackConfirmPath(c.ID),
-	})
+	}
+	if v.Pending && v.CanManage {
+		if p, err := h.slackChannels.PreviewSlackApp(callerContext(r, s), id); err == nil {
+			v.Found = &p
+		} else {
+			v.Problem = slackProblem(err)
+		}
+	}
+	h.renderAny(w, http.StatusOK, "slack_channel.html", v)
 }
 
-// slackConfirmRequest is the POST body: empty to activate, a bot token to
-// replace it.
-type slackConfirmRequest struct {
-	BotToken string `json:"bot_token"`
-}
+// slackConfirmRequest is the POST body: an empty object.
+type slackConfirmRequest struct{}
 
 // slackErrors maps the use cases' errors to the page's codes.
 var slackErrors = []struct {
@@ -117,9 +127,7 @@ var slackErrors = []struct {
 	{napp.ErrSlackTokenRefused, http.StatusConflict, "slack_token_refused"},
 	{napp.ErrSlackChannelRefuse, http.StatusConflict, "slack_channel_refused"},
 	{napp.ErrSlackShared, http.StatusConflict, "slack_channel_shared"},
-	{napp.ErrSlackWorkspace, http.StatusConflict, "slack_workspace_changed"},
 	{napp.ErrSlackUnavailable, http.StatusServiceUnavailable, "slack_unavailable"},
-	{napp.ErrInvalidChannel, http.StatusBadRequest, "invalid_token"},
 }
 
 func (h *Handler) confirmSlackChannel(w http.ResponseWriter, r *http.Request, s authnapp.BrowserSession) {
@@ -134,12 +142,7 @@ func (h *Handler) confirmSlackChannel(w http.ResponseWriter, r *http.Request, s 
 		return
 	}
 	ctx, su := callerContext(r, s), stepup.StepUp{Credential: s.StepUpCredential, At: s.StepUpAt}
-	var c napp.ChannelView
-	if req.BotToken == "" {
-		c, err = h.slackChannels.ActivateSlackApp(ctx, id, su)
-	} else {
-		c, err = h.slackChannels.ReplaceSlackToken(ctx, id, req.BotToken, su)
-	}
+	c, err := h.slackChannels.ActivateSlackApp(ctx, id, su)
 	if err != nil {
 		for _, e := range slackErrors {
 			if errors.Is(err, e.err) {
@@ -156,4 +159,23 @@ func (h *Handler) confirmSlackChannel(w http.ResponseWriter, r *http.Request, s 
 		return
 	}
 	h.writeJSON(w, http.StatusOK, map[string]string{"state": c.SlackApp.State})
+}
+
+// slackProblem is the page's reason Slack could not confirm the channel.
+func slackProblem(err error) string {
+	for _, p := range []struct {
+		err  error
+		text string
+	}{
+		{napp.ErrSlackTokenRefused, "Slack refused the bot token. Give the channel a new token (UpdateChannel)."},
+		{napp.ErrSlackChannelRefuse, "The Slack channel does not exist, is archived, or the bot is not in it."},
+		{napp.ErrSlackShared, "The Slack channel is shared outside the workspace; approval cards go only to internal channels."},
+		{napp.ErrSlackEdition, "Slack approval cards need the Team edition or above."},
+		{napp.ErrSlackState, "The channel changed. Reload the page."},
+	} {
+		if errors.Is(err, p.err) {
+			return p.text
+		}
+	}
+	return "Slack could not be reached. Reload the page to try again."
 }

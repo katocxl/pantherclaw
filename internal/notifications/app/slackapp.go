@@ -79,7 +79,9 @@ type slackAnswer struct {
 	Error  string `json:"error"`
 	TS     string `json:"ts"`
 	TeamID string `json:"team_id"`
+	Team   string `json:"team"`
 	BotID  string `json:"bot_id"`
+	User   string `json:"user"`
 	// Channel is an object in conversations.info answers and an id in
 	// chat answers.
 	Channel jsontext.Value `json:"channel"`
@@ -88,6 +90,7 @@ type slackAnswer struct {
 // slackChannel is a conversations.info channel.
 type slackChannel struct {
 	ID        string `json:"id"`
+	Name      string `json:"name"`
 	Member    bool   `json:"is_member"`
 	ExtShared bool   `json:"is_ext_shared"`
 	Shared    bool   `json:"is_shared"`
@@ -219,8 +222,11 @@ func (s *Service) slackUpdate(ctx context.Context, token, channel, ts string, c 
 	return out
 }
 
-// SlackWorkspace is what Slack reports when a slack_app channel is checked.
-type SlackWorkspace struct{ TeamID, BotID string }
+// SlackWorkspace is what Slack reports when a slack_app channel is checked:
+// ids, and names as Slack gives them (untrusted text, shown escaped).
+type SlackWorkspace struct {
+	TeamID, TeamName, BotID, BotName, ChannelName string
+}
 
 // Slack check errors (activation and token replacement).
 var (
@@ -245,7 +251,7 @@ func (s *Service) checkSlack(ctx context.Context, token, channel string) (SlackW
 	default:
 		return SlackWorkspace{}, ErrSlackDown
 	}
-	w := SlackWorkspace{TeamID: a.TeamID, BotID: a.BotID}
+	w := SlackWorkspace{TeamID: a.TeamID, TeamName: domain.CardValue(a.Team), BotID: a.BotID, BotName: domain.CardValue(a.User)}
 	a, out = s.slackCall(ctx, token, "conversations.info", nil, url.Values{"channel": {channel}})
 	var c slackChannel
 	switch {
@@ -261,6 +267,7 @@ func (s *Service) checkSlack(ctx context.Context, token, channel string) (SlackW
 	case !c.Member || c.Archived:
 		return SlackWorkspace{}, ErrSlackChannel
 	}
+	w.ChannelName = domain.CardValue(c.Name)
 	return w, nil
 }
 
@@ -341,6 +348,11 @@ func (s *Service) sendSlackApp(ctx context.Context, org ids.OrgID, d dbq.LoadDel
 	}
 	switch ev {
 	case domain.CardPost:
+		if card == nil && (cfg.ActivatedAt == nil || facts.CreatedAt.Before(*cfg.ActivatedAt)) {
+			// Cards only for requests made after the channel was activated
+			// with its current token (D66): no backfill.
+			return outcome{skip: true, code: "before_activation"}
+		}
 		if card != nil {
 			return s.slackRefresh(ctx, org, string(token), *card, f)
 		}

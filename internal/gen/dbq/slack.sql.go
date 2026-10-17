@@ -19,7 +19,8 @@ const activateSlackAppChannel = `-- name: ActivateSlackAppChannel :execrows
 UPDATE pc.slack_app_channels
 SET state = 'ACTIVE', team_id = $1, bot_id = $2,
     activated_by = $3, activated_credential = $4
-WHERE org_id = $5 AND channel_record_id = $6 AND state = 'PENDING'
+WHERE org_id = $5 AND channel_record_id = $6 AND state = 'PENDING_ACTIVATION'
+  AND token_replaced_at IS NOT DISTINCT FROM $7
 `
 
 type ActivateSlackAppChannelParams struct {
@@ -29,6 +30,7 @@ type ActivateSlackAppChannelParams struct {
 	ActivatedCredential *ids.UUID
 	OrgID               ids.OrgID
 	ChannelRecordID     ids.UUID
+	TokenReplacedAt     *time.Time
 }
 
 // Activates a PENDING configuration with the person and key of a fresh
@@ -41,6 +43,7 @@ func (q *Queries) ActivateSlackAppChannel(ctx context.Context, arg ActivateSlack
 		arg.ActivatedCredential,
 		arg.OrgID,
 		arg.ChannelRecordID,
+		arg.TokenReplacedAt,
 	)
 	if err != nil {
 		return 0, err
@@ -62,31 +65,30 @@ func (q *Queries) AddSlackCardEscalation(ctx context.Context, orgID ids.OrgID, r
 }
 
 const getSlackAppChannel = `-- name: GetSlackAppChannel :one
-SELECT a.org_id, a.channel_record_id, a.slack_channel, a.data_level, a.state, a.team_id, a.bot_id, a.created_at, a.activated_by, a.activated_credential, a.activated_at, a.token_replaced_by, a.token_replaced_credential, a.token_replaced_at, a.updated_at, c.secret, c.state AS channel_state, c.name AS channel_name
+SELECT a.org_id, a.channel_record_id, a.slack_channel, a.data_level, a.state, a.team_id, a.bot_id, a.created_at, a.activated_by, a.activated_credential, a.activated_at, a.token_replaced_by, a.token_replaced_at, a.updated_at, c.secret, c.state AS channel_state, c.name AS channel_name
 FROM pc.slack_app_channels a
 JOIN pc.notification_channels c ON c.org_id = a.org_id AND c.id = a.channel_record_id
 WHERE a.org_id = $1 AND a.channel_record_id = $2
 `
 
 type GetSlackAppChannelRow struct {
-	OrgID                   ids.OrgID
-	ChannelRecordID         ids.UUID
-	SlackChannel            string
-	DataLevel               string
-	State                   string
-	TeamID                  *string
-	BotID                   *string
-	CreatedAt               time.Time
-	ActivatedBy             *ids.UUID
-	ActivatedCredential     *ids.UUID
-	ActivatedAt             *time.Time
-	TokenReplacedBy         *ids.UUID
-	TokenReplacedCredential *ids.UUID
-	TokenReplacedAt         *time.Time
-	UpdatedAt               time.Time
-	Secret                  []byte
-	ChannelState            string
-	ChannelName             string
+	OrgID               ids.OrgID
+	ChannelRecordID     ids.UUID
+	SlackChannel        string
+	DataLevel           string
+	State               string
+	TeamID              *string
+	BotID               *string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	TokenReplacedBy     *string
+	TokenReplacedAt     *time.Time
+	UpdatedAt           time.Time
+	Secret              []byte
+	ChannelState        string
+	ChannelName         string
 }
 
 func (q *Queries) GetSlackAppChannel(ctx context.Context, orgID ids.OrgID, channelRecordID ids.UUID) (GetSlackAppChannelRow, error) {
@@ -105,7 +107,6 @@ func (q *Queries) GetSlackAppChannel(ctx context.Context, orgID ids.OrgID, chann
 		&i.ActivatedCredential,
 		&i.ActivatedAt,
 		&i.TokenReplacedBy,
-		&i.TokenReplacedCredential,
 		&i.TokenReplacedAt,
 		&i.UpdatedAt,
 		&i.Secret,
@@ -195,7 +196,7 @@ func (q *Queries) InsertSlackCard(ctx context.Context, arg InsertSlackCardParams
 }
 
 const listSlackAppChannels = `-- name: ListSlackAppChannels :many
-SELECT org_id, channel_record_id, slack_channel, data_level, state, team_id, bot_id, created_at, activated_by, activated_credential, activated_at, token_replaced_by, token_replaced_credential, token_replaced_at, updated_at FROM pc.slack_app_channels
+SELECT org_id, channel_record_id, slack_channel, data_level, state, team_id, bot_id, created_at, activated_by, activated_credential, activated_at, token_replaced_by, token_replaced_at, updated_at FROM pc.slack_app_channels
 WHERE org_id = $1 AND channel_record_id = ANY ($2::uuid[])
 `
 
@@ -221,7 +222,6 @@ func (q *Queries) ListSlackAppChannels(ctx context.Context, orgID ids.OrgID, cha
 			&i.ActivatedCredential,
 			&i.ActivatedAt,
 			&i.TokenReplacedBy,
-			&i.TokenReplacedCredential,
 			&i.TokenReplacedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -236,7 +236,7 @@ func (q *Queries) ListSlackAppChannels(ctx context.Context, orgID ids.OrgID, cha
 }
 
 const lockSlackAppChannel = `-- name: LockSlackAppChannel :one
-SELECT a.org_id, a.channel_record_id, a.slack_channel, a.data_level, a.state, a.team_id, a.bot_id, a.created_at, a.activated_by, a.activated_credential, a.activated_at, a.token_replaced_by, a.token_replaced_credential, a.token_replaced_at, a.updated_at, c.secret, c.state AS channel_state, c.name AS channel_name
+SELECT a.org_id, a.channel_record_id, a.slack_channel, a.data_level, a.state, a.team_id, a.bot_id, a.created_at, a.activated_by, a.activated_credential, a.activated_at, a.token_replaced_by, a.token_replaced_at, a.updated_at, c.secret, c.state AS channel_state, c.name AS channel_name
 FROM pc.slack_app_channels a
 JOIN pc.notification_channels c ON c.org_id = a.org_id AND c.id = a.channel_record_id
 WHERE a.org_id = $1 AND a.channel_record_id = $2
@@ -244,24 +244,23 @@ FOR UPDATE OF a, c
 `
 
 type LockSlackAppChannelRow struct {
-	OrgID                   ids.OrgID
-	ChannelRecordID         ids.UUID
-	SlackChannel            string
-	DataLevel               string
-	State                   string
-	TeamID                  *string
-	BotID                   *string
-	CreatedAt               time.Time
-	ActivatedBy             *ids.UUID
-	ActivatedCredential     *ids.UUID
-	ActivatedAt             *time.Time
-	TokenReplacedBy         *ids.UUID
-	TokenReplacedCredential *ids.UUID
-	TokenReplacedAt         *time.Time
-	UpdatedAt               time.Time
-	Secret                  []byte
-	ChannelState            string
-	ChannelName             string
+	OrgID               ids.OrgID
+	ChannelRecordID     ids.UUID
+	SlackChannel        string
+	DataLevel           string
+	State               string
+	TeamID              *string
+	BotID               *string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	TokenReplacedBy     *string
+	TokenReplacedAt     *time.Time
+	UpdatedAt           time.Time
+	Secret              []byte
+	ChannelState        string
+	ChannelName         string
 }
 
 func (q *Queries) LockSlackAppChannel(ctx context.Context, orgID ids.OrgID, channelRecordID ids.UUID) (LockSlackAppChannelRow, error) {
@@ -280,7 +279,6 @@ func (q *Queries) LockSlackAppChannel(ctx context.Context, orgID ids.OrgID, chan
 		&i.ActivatedCredential,
 		&i.ActivatedAt,
 		&i.TokenReplacedBy,
-		&i.TokenReplacedCredential,
 		&i.TokenReplacedAt,
 		&i.UpdatedAt,
 		&i.Secret,
@@ -290,34 +288,15 @@ func (q *Queries) LockSlackAppChannel(ctx context.Context, orgID ids.OrgID, chan
 	return i, err
 }
 
-const recordSlackTokenReplaced = `-- name: RecordSlackTokenReplaced :execrows
+const returnSlackAppToPending = `-- name: ReturnSlackAppToPending :execrows
 UPDATE pc.slack_app_channels
-SET token_replaced_by = $1, token_replaced_credential = $2,
-    bot_id = $3
-WHERE org_id = $4 AND channel_record_id = $5 AND state = 'ACTIVE'
-  AND team_id = $6
+SET state = 'PENDING_ACTIVATION', token_replaced_by = $1, token_replaced_at = now()
+WHERE org_id = $2 AND channel_record_id = $3
 `
 
-type RecordSlackTokenReplacedParams struct {
-	TokenReplacedBy         *ids.UUID
-	TokenReplacedCredential *ids.UUID
-	BotID                   *string
-	OrgID                   ids.OrgID
-	ChannelRecordID         ids.UUID
-	TeamID                  *string
-}
-
-// Records who replaced an active channel's bot token, with which key; the
-// workspace must stay the same.
-func (q *Queries) RecordSlackTokenReplaced(ctx context.Context, arg RecordSlackTokenReplacedParams) (int64, error) {
-	result, err := q.db.Exec(ctx, recordSlackTokenReplaced,
-		arg.TokenReplacedBy,
-		arg.TokenReplacedCredential,
-		arg.BotID,
-		arg.OrgID,
-		arg.ChannelRecordID,
-		arg.TeamID,
-	)
+// A new bot token: the channel waits for a new activation (D66).
+func (q *Queries) ReturnSlackAppToPending(ctx context.Context, tokenReplacedBy *string, orgID ids.OrgID, channelRecordID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, returnSlackAppToPending, tokenReplacedBy, orgID, channelRecordID)
 	if err != nil {
 		return 0, err
 	}
@@ -361,7 +340,7 @@ func (q *Queries) SetSlackCardState(ctx context.Context, arg SetSlackCardStatePa
 }
 
 const slackCardFacts = `-- name: SlackCardFacts :one
-SELECT r.id, r.subject_kind, r.state, r.deadline_at,
+SELECT r.id, r.subject_kind, r.state, r.deadline_at, r.created_at,
        coalesce(r.display -> 'consequence' ->> 'reversibility', '')::text AS reversibility,
        coalesce(r.display ->> 'title', '')::text AS title,
        coalesce(a.name, '')::text AS agent_name, coalesce(e.name, '')::text AS environment_name
@@ -376,6 +355,7 @@ type SlackCardFactsRow struct {
 	SubjectKind     string
 	State           string
 	DeadlineAt      time.Time
+	CreatedAt       time.Time
 	Reversibility   string
 	Title           string
 	AgentName       string
@@ -393,6 +373,7 @@ func (q *Queries) SlackCardFacts(ctx context.Context, orgID ids.OrgID, iD ids.UU
 		&i.SubjectKind,
 		&i.State,
 		&i.DeadlineAt,
+		&i.CreatedAt,
 		&i.Reversibility,
 		&i.Title,
 		&i.AgentName,

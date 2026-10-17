@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 //
-// Slack approval channel page (G0 M14 D22, HR-315). Activating a
-// slack_app channel or replacing its bot token first steps up with a
+// Slack approval channel page (G0 M14 D22, D66; HR-315). Activating a
+// slack_app channel first steps up with a
 // security key (WebAuthn, user verification), then sends a same-origin
 // JSON request with the PC-CSRF header (HR-151). The page runs under
 // Trusted Types: text is written with textContent only, and the action's
@@ -44,9 +44,7 @@ const messages = {
   slack_token_refused: "Slack refused the bot token.",
   slack_channel_refused: "The Slack channel does not exist, is archived, or the bot is not in it.",
   slack_channel_shared: "The Slack channel is shared outside your workspace; cards go only to internal channels.",
-  slack_workspace_changed: "The new token belongs to a different Slack workspace.",
   slack_unavailable: "Slack could not be reached. Try again.",
-  invalid_token: "That is not a bot token (xoxb-...).",
 };
 function explain(e) { return messages[e.code] || ("Something went wrong (" + e.message + ")."); }
 
@@ -107,12 +105,3 @@ async function confirm(path, body, done) {
 
 const activateButton = document.getElementById("activate");
 if (activateButton) { activateButton.addEventListener("click", () => confirm(activateButton.dataset.path, {}, "Activated.")); }
-const replaceButton = document.getElementById("replace");
-if (replaceButton) {
-  replaceButton.addEventListener("click", () => {
-    const input = document.getElementById("token");
-    const token = input ? input.value.trim() : "";
-    if (input) { input.value = ""; }
-    confirm(replaceButton.dataset.path, { bot_token: token }, "Bot token replaced.");
-  });
-}

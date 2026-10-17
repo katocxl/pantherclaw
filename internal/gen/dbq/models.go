@@ -2909,21 +2909,20 @@ type PcSiemDestination struct {
 }
 
 type PcSlackAppChannel struct {
-	OrgID                   ids.OrgID
-	ChannelRecordID         ids.UUID
-	SlackChannel            string
-	DataLevel               string
-	State                   string
-	TeamID                  *string
-	BotID                   *string
-	CreatedAt               time.Time
-	ActivatedBy             *ids.UUID
-	ActivatedCredential     *ids.UUID
-	ActivatedAt             *time.Time
-	TokenReplacedBy         *ids.UUID
-	TokenReplacedCredential *ids.UUID
-	TokenReplacedAt         *time.Time
-	UpdatedAt               time.Time
+	OrgID               ids.OrgID
+	ChannelRecordID     ids.UUID
+	SlackChannel        string
+	DataLevel           string
+	State               string
+	TeamID              *string
+	BotID               *string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	TokenReplacedBy     *string
+	TokenReplacedAt     *time.Time
+	UpdatedAt           time.Time
 }
 
 type PcSlackCard struct {

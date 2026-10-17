@@ -132,20 +132,63 @@ func (e *slackEnv) end(t *testing.T, request ids.UUID, state, reason string) {
 		e.org, request, state, reason)
 }
 
+// pendingDeliveries counts a channel's deliveries.
+func (e *slackEnv) deliveries(t *testing.T, channel ids.UUID) int {
+	t.Helper()
+	var n int
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, "SELECT count(*) FROM pc.deliveries WHERE channel_id = $1", channel).Scan(&n)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// enqueue enqueues an approval notice without delivering it.
+func (e *slackEnv) enqueue(t *testing.T, typ string, request ids.UUID, params map[string]string) {
+	t.Helper()
+	p := map[string]string{"operation": "payments.refund.create", "agent": ids.NewV7().String(), "request": request.String()}
+	for k, v := range params {
+		p[k] = v
+	}
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := e.svc.Enqueue(ctx, tx, napp.Message{Org: e.org, Type: typ, Params: p, Subject: &napp.Subject{Type: "approval_request", ID: request}})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+var deadline = map[string]string{"deadline": "2026-10-17T12:00:00Z"}
+
 // TestHR315_SlackAppNeedsAStepUpAndSlacksChecks: a slack_app channel is
-// stored PENDING and posts nothing; only a person with a fresh step-up of
-// their own key activates it, and only when auth.test and
-// conversations.info confirm the token and an internal channel the bot is
-// in. The token is replaced only the same way (D22).
+// stored PENDING_ACTIVATION and gets no deliveries; its page shows what
+// Slack reports, and only a person with a fresh step-up of their own key
+// activates it, when auth.test and conversations.info confirm the token
+// and an internal channel the bot is in. A new token through
+// UpdateChannel puts it back to PENDING_ACTIVATION, which stops its
+// deliveries until it is confirmed again; it cannot be resumed instead
+// (D22, D66).
 func TestHR315_SlackAppNeedsAStepUpAndSlacksChecks(t *testing.T) {
 	e := newSlackEnv(t)
 	c := e.channel(t, slackApproval)
 	if c.SlackApp == nil || c.SlackApp.State != napp.SlackPending || c.SlackApp.DataLevel != domain.SlackMinimal {
 		t.Fatalf("created: %+v", c.SlackApp)
 	}
-	d, err := e.notice(t, "approval.requested", e.request(t), map[string]string{"deadline": "2026-10-17T12:00:00Z"})
-	if err != nil || e.row(t, d).state != "SKIPPED" || e.row(t, d).lastError != "channel_pending" || len(e.sim.Messages()) != 0 {
-		t.Fatalf("pending channel delivered: %v %+v %v", err, e.row(t, d), e.sim.Messages())
+	e.enqueue(t, "approval.requested", e.request(t), deadline)
+	if n := e.deliveries(t, c.ID); n != 0 {
+		t.Fatalf("a pending channel got %d deliveries", n)
+	}
+	resume := false
+	if _, err := e.svc.UpdateChannel(e.admin(), c.ID, napp.ChannelUpdate{Paused: &resume}); !errors.Is(err, napp.ErrSlackState) {
+		t.Fatalf("resumed a pending channel: %v", err)
+	}
+	p, err := e.svc.PreviewSlackApp(e.admin(), c.ID)
+	if err != nil || p.TeamID != slack.TeamID || p.BotID != slack.BotID || p.ChannelName != "approvals" || p.TeamName != "Simulated" {
+		t.Fatalf("preview: %v %+v", err, p)
+	}
+	if _, err := e.svc.PreviewSlackApp(e.as(td.KindUser, e.carol, td.RoleViewer), c.ID); err == nil {
+		t.Fatal("a viewer previewed")
 	}
 	for name, su := range map[string]stepup.StepUp{
 		"none": {}, "stale": {Credential: e.key, At: time.Now().Add(-10 * time.Minute)}, "not hers": {Credential: ids.NewV7(), At: time.Now()},
@@ -157,20 +200,19 @@ func TestHR315_SlackAppNeedsAStepUpAndSlacksChecks(t *testing.T) {
 	if _, err := e.svc.ActivateSlackApp(e.as(td.KindUser, e.carol, td.RoleViewer), c.ID, e.fresh()); err == nil {
 		t.Fatal("a viewer activated")
 	}
-	if n := e.sim.Calls()["auth.test"]; n != 0 {
-		t.Fatalf("slack asked before the step-up: %d", n)
-	}
 	got, err := e.svc.ActivateSlackApp(e.admin(), c.ID, e.fresh())
-	if err != nil || got.SlackApp.State != napp.SlackActive || got.SlackApp.TeamID != slack.TeamID {
+	if err != nil || got.SlackApp.State != napp.SlackActive || got.SlackApp.TeamID != slack.TeamID || got.SlackApp.ActivatedAt == nil {
 		t.Fatalf("activate: %v %+v", err, got.SlackApp)
 	}
 	if _, err := e.svc.ActivateSlackApp(e.admin(), c.ID, e.fresh()); !errors.Is(err, napp.ErrSlackState) {
 		t.Fatalf("activated twice: %v", err)
 	}
 
-	// An externally shared channel, a revoked token and a missing channel
-	// are refused at activation.
+	// An externally shared channel and a missing channel are refused.
 	ext := e.channel(t, slackExternal)
+	if _, err := e.svc.PreviewSlackApp(e.admin(), ext.ID); !errors.Is(err, napp.ErrSlackShared) {
+		t.Fatalf("external preview: %v", err)
+	}
 	if _, err := e.svc.ActivateSlackApp(e.admin(), ext.ID, e.fresh()); !errors.Is(err, napp.ErrSlackShared) {
 		t.Fatalf("external: %v", err)
 	}
@@ -180,18 +222,43 @@ func TestHR315_SlackAppNeedsAStepUpAndSlacksChecks(t *testing.T) {
 	}
 	e.sim.SetFaults(slack.Faults{})
 
-	// Token replacement: a step-up, a token Slack accepts.
-	if _, err := e.svc.ReplaceSlackToken(e.admin(), c.ID, "xoxb-simulated-replacement-token", stepup.StepUp{}); !errors.Is(err, stepup.ErrStepUp) {
-		t.Fatalf("replace without step-up: %v", err)
+	// A new token: back to PENDING_ACTIVATION, queued deliveries stop, new
+	// notices are not routed, until it is confirmed again.
+	req := e.request(t)
+	e.enqueue(t, "approval.requested", req, deadline)
+	queued := e.delivery(t)
+	bad := "not-a-token"
+	if _, err := e.svc.UpdateChannel(e.admin(), c.ID, napp.ChannelUpdate{SlackBotToken: &bad}); !errors.Is(err, napp.ErrInvalidChannel) {
+		t.Fatalf("bad token: %v", err)
 	}
-	if _, err := e.svc.ReplaceSlackToken(e.admin(), c.ID, "xoxb-simulated-replacement-token", e.fresh()); !errors.Is(err, napp.ErrSlackTokenRefused) {
-		t.Fatalf("replace with a token Slack refuses: %v", err)
+	if _, err := e.svc.UpdateChannel(e.admin(), ext.ID, napp.ChannelUpdate{SlackBotToken: &bad}); err == nil {
+		t.Fatal("bad token accepted")
 	}
-	if got, err := e.svc.ReplaceSlackToken(e.admin(), c.ID, slackToken, e.fresh()); err != nil || got.SlackApp.TokenReplacedAt == nil {
-		t.Fatalf("replace: %v %+v", err, got.SlackApp)
+	fresh := "xoxb-simulated-replacement-token"
+	v, err := e.svc.UpdateChannel(e.admin(), c.ID, napp.ChannelUpdate{SlackBotToken: &fresh})
+	if err != nil || v.SlackApp.State != napp.SlackPending || v.SlackApp.ActivatedAt != nil || v.SlackApp.TokenReplacedAt == nil {
+		t.Fatalf("replace: %v %+v", err, v.SlackApp)
+	}
+	if err := e.svc.Deliver(context.Background(), e.org, queued); err != nil || e.row(t, queued).lastError != "channel_pending" || len(e.sim.Messages()) != 0 {
+		t.Fatalf("queued delivery after replacement: %v %+v", err, e.row(t, queued))
+	}
+	before := e.deliveries(t, c.ID)
+	e.enqueue(t, "approval.requested", e.request(t), deadline)
+	if n := e.deliveries(t, c.ID); n != before {
+		t.Fatalf("routed to a replaced channel: %d", n)
+	}
+	// The simulator accepts only the old token: the new one is refused.
+	if _, err := e.svc.ActivateSlackApp(e.admin(), c.ID, e.fresh()); !errors.Is(err, napp.ErrSlackTokenRefused) {
+		t.Fatalf("activate a refused token: %v", err)
+	}
+	if _, err := e.svc.UpdateChannel(e.admin(), c.ID, napp.ChannelUpdate{SlackBotToken: ptr(slackToken)}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := e.svc.ActivateSlackApp(e.admin(), c.ID, e.fresh()); err != nil || got.SlackApp.State != napp.SlackActive {
+		t.Fatalf("reactivate: %v %+v", err, got.SlackApp)
 	}
 
-	// Below the Team edition nothing is created or activated.
+	// Below the Team edition nothing is created, previewed or activated.
 	e.svc.SetEditions(edition(billingdomain.Community))
 	if _, _, err := e.svc.CreateChannel(e.admin(), napp.ChannelInput{
 		Name: "community", Kind: domain.KindSlackApp, EventTypes: []string{"approval.*"},
@@ -201,6 +268,23 @@ func TestHR315_SlackAppNeedsAStepUpAndSlacksChecks(t *testing.T) {
 	}
 	if _, err := e.svc.ActivateSlackApp(e.admin(), ext.ID, e.fresh()); !errors.Is(err, napp.ErrSlackEdition) {
 		t.Fatalf("community activate: %v", err)
+	}
+}
+
+func ptr(s string) *string { return &s }
+
+// TestT145_CardsOnlyAfterActivation: a request made before the channel was
+// activated gets no card, even if its notice is delivered later (D66).
+func TestT145_CardsOnlyAfterActivation(t *testing.T) {
+	e := newSlackEnv(t)
+	c := e.channel(t, slackApproval)
+	old := e.request(t)
+	if _, err := e.svc.ActivateSlackApp(e.admin(), c.ID, e.fresh()); err != nil {
+		t.Fatal(err)
+	}
+	d, err := e.notice(t, "approval.requested", old, deadline)
+	if err != nil || e.row(t, d).state != "SKIPPED" || e.row(t, d).lastError != "before_activation" || len(e.sim.Messages()) != 0 {
+		t.Fatalf("backfilled: %v %+v", err, e.row(t, d))
 	}
 }
 

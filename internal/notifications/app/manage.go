@@ -262,6 +262,9 @@ type ChannelUpdate struct {
 	EventTypes  []string
 	MinSeverity *domain.Severity
 	Paused      *bool
+	// SlackBotToken gives a slack_app channel a new bot token, which puts it
+	// back to PENDING_ACTIVATION until confirmed with a key (G0 M14 D66).
+	SlackBotToken *string
 }
 
 // UpdateChannel changes a channel (notification.manage). Its destination
@@ -274,6 +277,9 @@ func (s *Service) UpdateChannel(ctx context.Context, id ids.UUID, u ChannelUpdat
 		return ChannelView{}, ErrInvalidChannel
 	}
 	if u.MinSeverity != nil && !u.MinSeverity.Valid() {
+		return ChannelView{}, ErrInvalidChannel
+	}
+	if u.SlackBotToken != nil && !slackTokenPattern.MatchString(*u.SlackBotToken) {
 		return ChannelView{}, ErrInvalidChannel
 	}
 	var out ChannelView
@@ -296,6 +302,9 @@ func (s *Service) UpdateChannel(ctx context.Context, id ids.UUID, u ChannelUpdat
 		if n == 0 {
 			return ErrChannelNotFound
 		}
+		if err := s.slackChannelUpdate(ctx, tx, q, c, id, u); err != nil {
+			return err
+		}
 		details := map[string]string{}
 		if u.Paused != nil {
 			if _, err := q.SetChannelPaused(ctx, *u.Paused, c.Org, id); err != nil {
@@ -307,7 +316,9 @@ func (s *Service) UpdateChannel(ctx context.Context, id ids.UUID, u ChannelUpdat
 		if err != nil {
 			return err
 		}
-		out = channelView(row)
+		if out, err = s.withSlackApp(ctx, q, c.Org, channelView(row)); err != nil {
+			return err
+		}
 		return s.audit(ctx, tx, c, "notification.channel_updated", id, details)
 	})
 	return out, err

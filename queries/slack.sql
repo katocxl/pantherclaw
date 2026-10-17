@@ -30,16 +30,14 @@ WHERE org_id = sqlc.arg(org_id) AND channel_record_id = ANY (sqlc.arg(channel_re
 UPDATE pc.slack_app_channels
 SET state = 'ACTIVE', team_id = sqlc.arg(team_id), bot_id = sqlc.arg(bot_id),
     activated_by = sqlc.arg(activated_by), activated_credential = sqlc.arg(activated_credential)
-WHERE org_id = sqlc.arg(org_id) AND channel_record_id = sqlc.arg(channel_record_id) AND state = 'PENDING';
+WHERE org_id = sqlc.arg(org_id) AND channel_record_id = sqlc.arg(channel_record_id) AND state = 'PENDING_ACTIVATION'
+  AND token_replaced_at IS NOT DISTINCT FROM sqlc.narg(token_replaced_at);
 
--- name: RecordSlackTokenReplaced :execrows
--- Records who replaced an active channel's bot token, with which key; the
--- workspace must stay the same.
+-- name: ReturnSlackAppToPending :execrows
+-- A new bot token: the channel waits for a new activation (D66).
 UPDATE pc.slack_app_channels
-SET token_replaced_by = sqlc.arg(token_replaced_by), token_replaced_credential = sqlc.arg(token_replaced_credential),
-    bot_id = sqlc.arg(bot_id)
-WHERE org_id = sqlc.arg(org_id) AND channel_record_id = sqlc.arg(channel_record_id) AND state = 'ACTIVE'
-  AND team_id = sqlc.arg(team_id);
+SET state = 'PENDING_ACTIVATION', token_replaced_by = sqlc.arg(token_replaced_by), token_replaced_at = now()
+WHERE org_id = sqlc.arg(org_id) AND channel_record_id = sqlc.arg(channel_record_id);
 
 -- name: SetChannelSecret :execrows
 -- Replaces a slack_app channel's encrypted bot token.
@@ -68,7 +66,7 @@ RETURNING escalations;
 -- What a card may show about a request (D23): its kind, the definition's
 -- reversibility, its state and deadline, the approval template's title,
 -- the agent's name and its environment's name. Nothing else is read.
-SELECT r.id, r.subject_kind, r.state, r.deadline_at,
+SELECT r.id, r.subject_kind, r.state, r.deadline_at, r.created_at,
        coalesce(r.display -> 'consequence' ->> 'reversibility', '')::text AS reversibility,
        coalesce(r.display ->> 'title', '')::text AS title,
        coalesce(a.name, '')::text AS agent_name, coalesce(e.name, '')::text AS environment_name

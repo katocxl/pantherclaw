@@ -8,9 +8,11 @@
 -- channel id and the data level never change once stored (a different
 -- channel is a new notification channel), and the workspace and bot ids
 -- come from Slack's auth.test, never from the caller. A configuration is
--- inserted PENDING and becomes ACTIVE only with a person's fresh WebAuthn
--- step-up (activated_by, activated_credential); a token replacement is
--- recorded the same way (token_replaced_by, token_replaced_credential).
+-- inserted PENDING_ACTIVATION and becomes ACTIVE only with a person's fresh
+-- WebAuthn step-up (activated_by, activated_credential) on its page. A new
+-- bot token (UpdateChannel) puts it back to PENDING_ACTIVATION and clears
+-- the activation, so every token is confirmed with a key before it posts
+-- (G0 M14 D66).
 --
 -- slack_cards keeps one card per approval request and slack_app channel:
 -- the Slack message ts chat.update needs, whether the card is OPEN or
@@ -24,33 +26,32 @@ CREATE TABLE pc.slack_app_channels (
     channel_record_id         uuid        NOT NULL,
     slack_channel             text        NOT NULL CHECK (slack_channel ~ '^[CG][A-Z0-9]{8,12}$'),
     data_level                text        NOT NULL DEFAULT 'MINIMAL' CHECK (data_level IN ('MINIMAL', 'SUMMARY')),
-    state                     text        NOT NULL DEFAULT 'PENDING' CHECK (state IN ('PENDING', 'ACTIVE')),
+    state                     text        NOT NULL DEFAULT 'PENDING_ACTIVATION' CHECK (state IN ('PENDING_ACTIVATION', 'ACTIVE')),
     team_id                   text        CHECK (team_id IS NULL OR team_id ~ '^T[A-Z0-9]{4,30}$'),
     bot_id                    text        CHECK (bot_id IS NULL OR bot_id ~ '^B[A-Z0-9]{4,30}$'),
     created_at                timestamptz NOT NULL DEFAULT now(),
     activated_by              uuid,
     activated_credential      uuid,
     activated_at              timestamptz,
-    token_replaced_by         uuid,
-    token_replaced_credential uuid,
+    token_replaced_by         text        CHECK (token_replaced_by IS NULL OR char_length(token_replaced_by) BETWEEN 1 AND 128),
     token_replaced_at         timestamptz,
     updated_at                timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (org_id, channel_record_id),
     FOREIGN KEY (org_id, channel_record_id) REFERENCES pc.notification_channels (org_id, id),
     FOREIGN KEY (org_id, activated_by) REFERENCES pc.users (org_id, id),
     FOREIGN KEY (org_id, activated_credential) REFERENCES pc.webauthn_credentials (org_id, id),
-    FOREIGN KEY (org_id, token_replaced_by) REFERENCES pc.users (org_id, id),
-    FOREIGN KEY (org_id, token_replaced_credential) REFERENCES pc.webauthn_credentials (org_id, id),
     CHECK ((activated_at IS NULL) = (activated_by IS NULL) AND (activated_by IS NULL) = (activated_credential IS NULL)),
-    CHECK ((token_replaced_at IS NULL) = (token_replaced_by IS NULL)
-           AND (token_replaced_by IS NULL) = (token_replaced_credential IS NULL)),
+    CHECK ((token_replaced_at IS NULL) = (token_replaced_by IS NULL)),
     CHECK ((state = 'ACTIVE') = (activated_at IS NOT NULL)),
-    CHECK (state = 'PENDING' OR (team_id IS NOT NULL AND bot_id IS NOT NULL))
+    CHECK (state = 'PENDING_ACTIVATION' OR (team_id IS NOT NULL AND bot_id IS NOT NULL))
 );
 
--- The Slack channel, the data level and the creation never change; a
--- configuration is inserted PENDING, activated once with a person and a
--- key, and never returns to PENDING (HR-315).
+-- The Slack channel, the data level and the creation never change. A
+-- configuration is inserted PENDING_ACTIVATION; it becomes ACTIVE only with
+-- a person and a key (activated_at is the database's time), and it returns
+-- to PENDING_ACTIVATION only with a new bot token, which clears the
+-- activation. An active configuration keeps its activation, workspace and
+-- bot (HR-315, D66).
 -- +goose StatementBegin
 CREATE FUNCTION pc.slack_app_channel_guard() RETURNS trigger
 LANGUAGE plpgsql
@@ -58,8 +59,8 @@ SET search_path = pc, pg_temp
 AS $$
 BEGIN
     IF TG_OP = 'INSERT' THEN
-        IF NEW.state IS DISTINCT FROM 'PENDING' OR NEW.activated_by IS NOT NULL OR NEW.token_replaced_by IS NOT NULL THEN
-            RAISE EXCEPTION 'a slack_app channel is inserted PENDING' USING ERRCODE = 'check_violation';
+        IF NEW.state IS DISTINCT FROM 'PENDING_ACTIVATION' OR NEW.activated_by IS NOT NULL OR NEW.token_replaced_by IS NOT NULL THEN
+            RAISE EXCEPTION 'a slack_app channel is inserted PENDING_ACTIVATION' USING ERRCODE = 'check_violation';
         END IF;
         NEW.created_at := now();
         RETURN NEW;
@@ -68,21 +69,25 @@ BEGIN
             OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
         RAISE EXCEPTION 'a slack_app channel''s Slack channel and data level never change' USING ERRCODE = 'check_violation';
     END IF;
-    IF OLD.state = 'ACTIVE' AND NEW.state IS DISTINCT FROM 'ACTIVE' THEN
-        RAISE EXCEPTION 'an active slack_app channel cannot return to PENDING' USING ERRCODE = 'check_violation';
-    END IF;
-    IF OLD.activated_by IS NOT NULL AND (NEW.activated_by IS DISTINCT FROM OLD.activated_by
-            OR NEW.activated_credential IS DISTINCT FROM OLD.activated_credential
-            OR NEW.activated_at IS DISTINCT FROM OLD.activated_at) THEN
-        RAISE EXCEPTION 'a slack_app channel is activated once' USING ERRCODE = 'check_violation';
-    END IF;
-    IF OLD.activated_by IS NULL AND NEW.activated_by IS NOT NULL THEN
+    IF OLD.state = 'PENDING_ACTIVATION' AND NEW.state = 'ACTIVE' THEN
+        IF NEW.activated_by IS NULL OR NEW.activated_credential IS NULL THEN
+            RAISE EXCEPTION 'a slack_app channel is activated by a person with a key' USING ERRCODE = 'check_violation';
+        END IF;
         NEW.activated_at := now();
-    END IF;
-    IF NEW.token_replaced_by IS NOT NULL AND (NEW.token_replaced_by IS DISTINCT FROM OLD.token_replaced_by
-            OR NEW.token_replaced_credential IS DISTINCT FROM OLD.token_replaced_credential
-            OR NEW.token_replaced_at IS DISTINCT FROM OLD.token_replaced_at) THEN
-        NEW.token_replaced_at := now();
+    ELSIF OLD.state = 'ACTIVE' AND NEW.state = 'ACTIVE' THEN
+        IF NEW.activated_by IS DISTINCT FROM OLD.activated_by OR NEW.activated_credential IS DISTINCT FROM OLD.activated_credential
+                OR NEW.activated_at IS DISTINCT FROM OLD.activated_at OR NEW.team_id IS DISTINCT FROM OLD.team_id
+                OR NEW.bot_id IS DISTINCT FROM OLD.bot_id OR NEW.token_replaced_at IS DISTINCT FROM OLD.token_replaced_at
+                OR NEW.token_replaced_by IS DISTINCT FROM OLD.token_replaced_by THEN
+            RAISE EXCEPTION 'an active slack_app channel keeps its activation' USING ERRCODE = 'check_violation';
+        END IF;
+    ELSIF NEW.state = 'PENDING_ACTIVATION' THEN
+        IF OLD.state = 'ACTIVE' AND (NEW.token_replaced_at IS NOT DISTINCT FROM OLD.token_replaced_at OR NEW.token_replaced_by IS NULL) THEN
+            RAISE EXCEPTION 'a slack_app channel returns to PENDING_ACTIVATION only with a new bot token' USING ERRCODE = 'check_violation';
+        END IF;
+        NEW.activated_by := NULL;
+        NEW.activated_credential := NULL;
+        NEW.activated_at := NULL;
     END IF;
     NEW.updated_at := now();
     RETURN NEW;
@@ -126,8 +131,8 @@ $$;
 -- +goose StatementEnd
 
 GRANT SELECT, INSERT ON pc.slack_app_channels, pc.slack_cards TO pc_app;
-GRANT UPDATE (state, team_id, bot_id, activated_by, activated_credential, activated_at, token_replaced_by,
-    token_replaced_credential, token_replaced_at, updated_at) ON pc.slack_app_channels TO pc_app;
+GRANT UPDATE (state, team_id, bot_id, activated_by, activated_credential, activated_at, token_replaced_by, token_replaced_at,
+    updated_at) ON pc.slack_app_channels TO pc_app;
 GRANT UPDATE (ts, state, escalations, updated_at) ON pc.slack_cards TO pc_app;
 GRANT SELECT ON pc.slack_app_channels, pc.slack_cards TO pc_audit_ro;
 

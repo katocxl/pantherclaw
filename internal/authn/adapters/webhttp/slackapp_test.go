@@ -19,10 +19,10 @@ import (
 
 // fakeSlack records what the page passed.
 type fakeSlack struct {
-	err     error
-	state   string
-	stepUps []stepup.StepUp
-	tokens  []string
+	err      error
+	state    string
+	stepUps  []stepup.StepUp
+	previews int
 }
 
 func (f *fakeSlack) view(id ids.UUID) napp.ChannelView {
@@ -40,15 +40,18 @@ func (f *fakeSlack) ActivateSlackApp(_ context.Context, id ids.UUID, su stepup.S
 	return f.view(id), f.err
 }
 
-func (f *fakeSlack) ReplaceSlackToken(_ context.Context, id ids.UUID, token string, su stepup.StepUp) (napp.ChannelView, error) {
-	f.stepUps, f.tokens = append(f.stepUps, su), append(f.tokens, token)
-	return f.view(id), f.err
+func (f *fakeSlack) PreviewSlackApp(context.Context, ids.UUID) (napp.SlackPreview, error) {
+	f.previews++
+	return napp.SlackPreview{SlackWorkspace: napp.SlackWorkspace{
+		TeamID: "T0SIMULATED", TeamName: "<script>alert(1)</script>", BotID: "B0SIMULATED", BotName: "pantherclaw", ChannelName: "approvals",
+	}}, nil
 }
 
-// TestHR315_TheSlackChannelPageCarriesTheSessionsStepUp (D22): the page
-// shows the channel with one static script; activating and replacing the
-// token pass this session's own step-up to the use case, need the CSRF
-// proof and a strict body, and map a missing step-up to step_up_required.
+// TestHR315_TheSlackChannelPageCarriesTheSessionsStepUp (D22, D66): the
+// page shows what Slack reports for a waiting channel, escaped, with one
+// static script and no token field; activating passes this session's own
+// step-up to the use case, needs the CSRF proof and an empty strict body
+// (no token), and maps a missing step-up to step_up_required.
 func TestHR315_TheSlackChannelPageCarriesTheSessionsStepUp(t *testing.T) {
 	h, err := webhttp.New(&fakeBrowser{}, origin, nil, nil)
 	if err != nil {
@@ -61,33 +64,33 @@ func TestHR315_TheSlackChannelPageCarriesTheSessionsStepUp(t *testing.T) {
 	id := ids.NewV7()
 	path := napp.SlackConfirmPath(id)
 	r := httptest.NewRequest(http.MethodGet, origin+path, nil)
-	r.AddCookie(&http.Cookie{Name: "__Host-pc_session", Value: "responder"})
+	r.AddCookie(&http.Cookie{Name: "__Host-pc_session", Value: "org-admin"})
 	resp := do(t, mux, r)
-	if resp.StatusCode != http.StatusOK || !strings.Contains(resp.Body, "C0APPROVAL1") || strings.Count(resp.Body, "<script") != 1 ||
+	if resp.StatusCode != http.StatusOK || !strings.Contains(resp.Body, "C0APPROVAL1") || !strings.Contains(resp.Body, "#approvals") ||
+		f.previews != 1 || strings.Contains(resp.Body, "<script>alert") || strings.Contains(resp.Body, "<input") || strings.Count(resp.Body, "<script") != 1 ||
 		!strings.Contains(resp.Body, `<script src="/static/slack_channel.js"></script>`) {
 		t.Fatalf("page: %d %s", resp.StatusCode, resp.Body)
 	}
 	want := stepup.StepUp{Credential: responderKey, At: steppedUpAt}
-	if resp := do(t, mux, postAs(path, "responder", `{}`)); resp.StatusCode != http.StatusOK || len(f.stepUps) != 1 || f.stepUps[0] != want {
+	if resp := do(t, mux, postAs(path, "org-admin", `{}`)); resp.StatusCode != http.StatusOK || len(f.stepUps) != 1 || f.stepUps[0] != want {
 		t.Fatalf("activate: %d %s %+v", resp.StatusCode, resp.Body, f.stepUps)
 	}
-	if resp := do(t, mux, postAs(path, "responder", `{"bot_token":"xoxb-new"}`)); resp.StatusCode != http.StatusOK || len(f.tokens) != 1 ||
-		f.tokens[0] != "xoxb-new" || f.stepUps[1] != want {
-		t.Fatalf("replace: %d %s", resp.StatusCode, resp.Body)
+	if resp := do(t, mux, postAs(path, "org-admin", `{"bot_token":"xoxb-new"}`)); resp.StatusCode != http.StatusBadRequest || len(f.stepUps) != 1 {
+		t.Fatalf("a token on the page: %d %s", resp.StatusCode, resp.Body)
 	}
-	noCSRF := postAs(path, "responder", `{}`)
+	noCSRF := postAs(path, "org-admin", `{}`)
 	noCSRF.Header.Del(webhttp.CSRFHeader)
-	if resp := do(t, mux, noCSRF); resp.StatusCode != http.StatusForbidden || len(f.stepUps) != 2 {
+	if resp := do(t, mux, noCSRF); resp.StatusCode != http.StatusForbidden || len(f.stepUps) != 1 {
 		t.Fatalf("without the CSRF header: %d", resp.StatusCode)
 	}
-	if resp := do(t, mux, postAs(path, "responder", `{"activate":true}`)); resp.StatusCode != http.StatusBadRequest {
+	if resp := do(t, mux, postAs(path, "org-admin", `{"activate":true}`)); resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("unknown member: %d", resp.StatusCode)
 	}
 	for err, code := range map[error]string{
 		stepup.ErrStepUp: "step_up_required", napp.ErrSlackShared: "slack_channel_shared", napp.ErrSlackEdition: "edition_required",
 	} {
 		f.err = err
-		if resp := do(t, mux, postAs(path, "responder", `{}`)); !strings.Contains(resp.Body, `"error":"`+code+`"`) {
+		if resp := do(t, mux, postAs(path, "org-admin", `{}`)); !strings.Contains(resp.Body, `"error":"`+code+`"`) {
 			t.Fatalf("%v: %d %s", err, resp.StatusCode, resp.Body)
 		}
 	}
