@@ -313,7 +313,7 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 **Delivery status of the M14 rows (in progress since 2026-10-17; [g0/M14.md](g0/M14.md)).** The rows stay the planned scope; the exit status in the brief will say what the backend delivers. *In progress* (M14 build, founder go-ahead 2026-10-17), in this section and elsewhere:
 - PN-017.2 (F758): `pc.stripe` in test mode only, with refunds, payment intents and transfers (founder decision F5; [ADR-0028](adr/0028-business-connectors-and-data-scoping.md)).
 - PN-017.4 (F759): `pc.postgres`, structured row reads and aggregates over an admin-listed manifest (F3).
-- PN-017.3 (F164, F166): Slack approval cards with a link button only (F4; Team).
+- PN-017.3 (F164–F167): Slack approval cards with a link button only (F4; Team).
 - F760, in part: `pc.slack` for agents (F6). The rest of F756 stays post-1.0.
 - F101 (F101–F103): record and class scope on gateway-held reads (Team).
 - PN-016.3: the five framework wrappers on a wrapper conformance group.
