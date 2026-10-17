@@ -7,8 +7,8 @@ import (
 	"context"
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
-	"github.com/katocxl/pantherclaw/internal/policy/domain"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
+	"github.com/katocxl/pantherclaw/internal/policy/domain"
 )
 
 // ErrDataScopeEdition: a policy version with a data scope rule needs the
