@@ -187,6 +187,7 @@ func sameResult(t *cel.Type) *cel.Type { return t }
 // moneyLibrary declares the pc.Decimal and pc.Money functions:
 //
 //	decimal("85.50") pc.Decimal       money("85.50", "USD") pc.Money
+//	minor_money(8550, "USD") pc.Money
 //	m.amount() pc.Decimal             m.currency() string
 //	<, <=, >, >=, +, - on two decimals or two moneys of one currency
 func moneyLibrary() []cel.EnvOption {
@@ -202,6 +203,17 @@ func moneyLibrary() []cel.EnvOption {
 		cel.Function("money", cel.Overload("money_string_string", []*cel.Type{cel.StringType, cel.StringType}, MoneyType,
 			cel.BinaryBinding(func(a, c ref.Val) ref.Val {
 				m, err := money.ParseMoney(string(a.(types.String)), string(c.(types.String)))
+				if err != nil {
+					return errVal(err)
+				}
+				return Money{m}
+			}))),
+		// minor_money(8550, "USD") is 85.50 USD: an amount an API sends
+		// in integer minor units (G0 M14 D8). A currency outside the
+		// minor-unit list, or a negative count, is an error.
+		cel.Function("minor_money", cel.Overload("minor_money_int_string", []*cel.Type{cel.IntType, cel.StringType}, MoneyType,
+			cel.BinaryBinding(func(n, c ref.Val) ref.Val {
+				m, err := money.FromMinor(int64(n.(types.Int)), money.Currency(c.(types.String)))
 				if err != nil {
 					return errVal(err)
 				}

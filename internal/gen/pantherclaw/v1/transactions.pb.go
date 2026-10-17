@@ -599,9 +599,14 @@ type Transaction struct {
 	// Number of evaluations (a held action is evaluated again).
 	Evaluations int32 `protobuf:"varint,15,opt,name=evaluations,proto3" json:"evaluations,omitempty"`
 	// When it was first evaluated.
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// How it was decided: "authzen" for a decision an external enforcement
+	// point asked for (G0 M14 D28), empty otherwise.
+	DecidedVia string `protobuf:"bytes,17,opt,name=decided_via,json=decidedVia,proto3" json:"decided_via,omitempty"`
+	// The enforcement point that asked, for decided_via authzen.
+	EnforcementPointId string `protobuf:"bytes,18,opt,name=enforcement_point_id,json=enforcementPointId,proto3" json:"enforcement_point_id,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Transaction) Reset() {
@@ -730,6 +735,20 @@ func (x *Transaction) GetCreateTime() *timestamppb.Timestamp {
 		return x.CreateTime
 	}
 	return nil
+}
+
+func (x *Transaction) GetDecidedVia() string {
+	if x != nil {
+		return x.DecidedVia
+	}
+	return ""
+}
+
+func (x *Transaction) GetEnforcementPointId() string {
+	if x != nil {
+		return x.EnforcementPointId
+	}
+	return ""
 }
 
 // ListTransactionsRequest pages through transactions, newest first.
@@ -2612,7 +2631,7 @@ const file_pantherclaw_v1_transactions_proto_rawDesc = "" +
 	"\x0fcheckpoint_size\x18\x04 \x01(\x03R\x0echeckpointSize\x12#\n" +
 	"\ranchored_size\x18\x05 \x01(\x03R\fanchoredSize\x12;\n" +
 	"\vanchor_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"anchorTime\"\x9d\x05\n" +
+	"anchorTime\"\xf0\x05\n" +
 	"\vTransaction\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x19\n" +
@@ -2630,7 +2649,10 @@ const file_pantherclaw_v1_transactions_proto_rawDesc = "" +
 	"\amonitor\x18\x0e \x01(\bR\amonitor\x12 \n" +
 	"\vevaluations\x18\x0f \x01(\x05R\vevaluations\x12;\n" +
 	"\vcreate_time\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTimeJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eR\x06amountR\bcurrency\"\xa0\x05\n" +
+	"createTime\x12\x1f\n" +
+	"\vdecided_via\x18\x11 \x01(\tR\n" +
+	"decidedVia\x120\n" +
+	"\x14enforcement_point_id\x18\x12 \x01(\tR\x12enforcementPointIdJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eR\x06amountR\bcurrency\"\xa0\x05\n" +
 	"\x17ListTransactionsRequest\x12'\n" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x128\n" +

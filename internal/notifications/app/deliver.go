@@ -244,6 +244,9 @@ func (s *Service) send(ctx context.Context, org ids.OrgID, d dbq.LoadDeliveryRow
 		return s.post(ctx, string(secret), body, nil, true)
 	case domain.KindWebhook:
 		return s.sendWebhook(ctx, org, d, link)
+	case domain.KindSlackApp:
+		// G0 M14 D4: no slack_app delivery yet; never counts as delivered.
+		return outcome{code: "kind_not_implemented", permanent: true}
 	}
 	return outcome{code: "unknown_kind", permanent: true}
 }

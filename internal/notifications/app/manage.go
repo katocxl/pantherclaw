@@ -34,14 +34,17 @@ const (
 
 // API errors.
 var (
-	ErrChannelNotFound   = pcerr.New(pcerr.NotFound, "CHANNEL_NOT_FOUND", "notification channel not found")
-	ErrChannelNameTaken  = pcerr.New(pcerr.AlreadyExists, "CHANNEL_EXISTS", "a channel with this name exists")
-	ErrChannelLimit      = pcerr.New(pcerr.FailedPrecondition, "CHANNEL_LIMIT", "the Community edition allows 3 notification channels")
-	ErrInvalidChannel    = pcerr.New(pcerr.InvalidArgument, "INVALID_CHANNEL", "invalid channel settings")
-	ErrInvalidURL        = pcerr.New(pcerr.InvalidArgument, "INVALID_CHANNEL_URL", "the URL must be https, public and not PantherClaw itself (Slack: https://hooks.slack.com/services/...)")
-	ErrNotAWebhook       = pcerr.New(pcerr.FailedPrecondition, "NOT_A_WEBHOOK", "only webhook channels have a signing secret")
-	ErrNoUsableSecret    = pcerr.New(pcerr.Internal, "SECRET_UNAVAILABLE", "the channel secret could not be opened")
-	errEditionUnreadable = errors.New("notifications: edition unavailable")
+	ErrChannelNotFound  = pcerr.New(pcerr.NotFound, "CHANNEL_NOT_FOUND", "notification channel not found")
+	ErrChannelNameTaken = pcerr.New(pcerr.AlreadyExists, "CHANNEL_EXISTS", "a channel with this name exists")
+	ErrChannelLimit     = pcerr.New(pcerr.FailedPrecondition, "CHANNEL_LIMIT", "the Community edition allows 3 notification channels")
+	ErrInvalidChannel   = pcerr.New(pcerr.InvalidArgument, "INVALID_CHANNEL", "invalid channel settings")
+	ErrInvalidURL       = pcerr.New(pcerr.InvalidArgument, "INVALID_CHANNEL_URL", "the URL must be https, public and not PantherClaw itself (Slack: https://hooks.slack.com/services/...)")
+	ErrNotAWebhook      = pcerr.New(pcerr.FailedPrecondition, "NOT_A_WEBHOOK", "only webhook channels have a signing secret")
+	ErrNoUsableSecret   = pcerr.New(pcerr.Internal, "SECRET_UNAVAILABLE", "the channel secret could not be opened")
+	// ErrKindNotImplemented: slack_app channels are defined (G0 M14 D4) but
+	// this build cannot deliver them yet; nothing is created.
+	ErrKindNotImplemented = pcerr.New(pcerr.FailedPrecondition, "KIND_NOT_IMPLEMENTED", "this kind of channel is not available yet")
+	errEditionUnreadable  = errors.New("notifications: edition unavailable")
 )
 
 // Editions reports the deployment's edition (billing.Service).
@@ -137,11 +140,19 @@ type ChannelInput struct {
 	MinSeverity   domain.Severity
 	RecipientRole string
 	URL           string
+	// SlackApp is a slack_app channel's configuration (G0 M14 D22).
+	SlackApp *domain.SlackAppConfig
 }
 
 // CreateChannel adds a channel (notification.manage); the webhook signing
 // secret is returned once.
 func (s *Service) CreateChannel(ctx context.Context, in ChannelInput) (ChannelView, string, error) {
+	if (in.Kind == domain.KindSlackApp) != (in.SlackApp != nil) {
+		return ChannelView{}, "", ErrInvalidChannel
+	}
+	if in.Kind == domain.KindSlackApp {
+		return ChannelView{}, "", ErrKindNotImplemented
+	}
 	limit, err := s.channelLimit(ctx)
 	if err != nil {
 		return ChannelView{}, "", err

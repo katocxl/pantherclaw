@@ -90,6 +90,9 @@ func (s *Service) CreateChannelTx(ctx context.Context, tx db.TenantTx, in NewCha
 			return CreatedChannel{}, err
 		}
 		plain = []byte(in.URL)
+	case domain.KindSlackApp:
+		// G0 M14 D4: not delivered yet, so never created (fail closed).
+		return CreatedChannel{}, ErrKindNotImplemented
 	case domain.KindLog:
 		// nothing to store beyond the subscription
 	}
