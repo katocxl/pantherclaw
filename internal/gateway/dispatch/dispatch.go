@@ -836,18 +836,20 @@ func targetRef(def *defs.Definition, body, secret []byte) string {
 func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *defs.Definition, target actionir.Target,
 	req *http.Request, c broker.Sender, purpose string,
 ) (secret []byte, release func(), access func() *pb.CredentialAccess, err error) {
-	if def.Dispatch != nil && def.Dispatch.CredentialPattern != "" && conn.Credential.GetKind() == credentials.KindGitHubApp {
-		return nil, nil, nil, errCredentialPattern // a pattern is for a static credential
+	if conn.Credential.GetKind() == credentials.KindGitHubApp {
+		if err := CheckCredentialPattern(def, credentials.KindGitHubApp, nil); err != nil {
+			return nil, nil, nil, err // a pattern is for a static credential
+		}
 	}
 	if conn.Credential.GetKind() != credentials.KindGitHubApp {
 		plain, err := e.openStatic(ctx, conn)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		if !def.Dispatch.CredentialMatches(plain) {
+		if err := CheckCredentialPattern(def, conn.Credential.GetKind(), plain); err != nil {
 			// Checked before any byte is sent (G0 M14 D8, HR-301).
 			clear(plain)
-			return nil, nil, nil, errCredentialPattern
+			return nil, nil, nil, err
 		}
 		if err := placeCredential(conn, req, plain); err != nil {
 			clear(plain)
@@ -902,7 +904,7 @@ func (e *Engine) credentialFailed(ctx context.Context, r Result, conn *control.C
 		slog.String("connection_id", conn.GetId()), pclog.Err(err))
 	code := CodeCredential
 	var granted []func(*pb.RecordExecutionRequest)
-	if errors.Is(err, errCredentialPattern) {
+	if errors.Is(err, ErrCredentialPattern) {
 		code = CodeCredentialPattern
 	}
 	if sm := (*broker.ScopeMismatchError)(nil); errors.As(err, &sm) {
