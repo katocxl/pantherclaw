@@ -204,9 +204,9 @@ func (h *Handler) UpdateConnection(ctx context.Context, req *pb.UpdateConnection
 	if in.Connector, err = specIn(req.GetConnector()); err != nil {
 		return nil, err
 	}
-	if req.GetPostgres() != nil || req.GetA2A() != nil {
-		// No connection of these kinds can exist yet (G0 M14 D4).
-		return nil, capp.ErrKindNotImplemented
+	in.Postgres = postgresIn(req.GetPostgres())
+	if in.A2A, err = a2aIn(req.GetA2A()); err != nil {
+		return nil, err
 	}
 	if req.GatewayId != nil {
 		gw, err := parseID(req.GetGatewayId())

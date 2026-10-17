@@ -62,6 +62,12 @@ func (h *GatewayHandler) GetConfiguration(ctx context.Context, req *pb.GetConfig
 			AgentHosts: conn.AgentHosts, Connector: specs[conn.ID.String()],
 			Github: github[conn.ID.String()], Simulated: conn.Simulated,
 		})
+		switch cfg := c.KindConfigs[conn.ID].(type) {
+		case *pb.PostgresConfig:
+			out.Connections[len(out.Connections)-1].Postgres = cfg
+		case *pb.A2AConfig:
+			out.Connections[len(out.Connections)-1].A2A = cfg
+		}
 	}
 	for _, cr := range c.Credentials {
 		out.Credentials = append(out.Credentials, &pb.SealedCredential{

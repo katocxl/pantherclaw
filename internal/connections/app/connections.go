@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/connections/ports"
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -117,6 +118,9 @@ type Service struct {
 	// protect holds weakening changes for a distinct publisher when the org
 	// protects CUSTODY (WithProtect, G0 M11 D42); nil holds none.
 	protect *protect.Gate
+	// kinds store the M14 kinds' configurations (WithKindConfigs, G0 M14
+	// D64); nil has none, so those kinds cannot be created.
+	kinds *ports.KindConfigs
 }
 
 // New returns the connection use cases. publicURL and gatewayAPIURL are
@@ -301,10 +305,13 @@ func servedRoutes(kind string, d *domain.Definition) []string {
 			serves = d.Dispatch != nil && d.Dispatch.MCP != nil && m.Channel != domain.ChannelHook
 		case KindLocal:
 			serves = m.Channel == domain.ChannelHook
-		case KindPostgres, KindA2A:
-			// No route is served until the gateway can dispatch the kind
-			// (G0 M14 D4: fail closed).
-			serves = false
+		case KindA2A:
+			// A peer agent's methods (G0 M14 D9, D64).
+			serves = d.Dispatch != nil && d.Dispatch.A2A != nil && m.Channel == domain.ChannelA2A
+		case KindPostgres:
+			// Structured reads, served natively on the gateway's MCP and HTTP
+			// faces (D17, D64).
+			serves = d.Dispatch != nil && d.Dispatch.SQL != nil && (m.Channel == domain.ChannelMCP || m.Channel == domain.ChannelHTTP)
 		}
 		if serves && !slices.Contains(out, m.Route) {
 			out = append(out, m.Route)
@@ -397,14 +404,21 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 	if in.Simulated && in.Kind == KindMCPContainer {
 		return Connection{}, ErrSimulatedConnector
 	}
-	if err := checkM14Kind(&in); err != nil {
-		return Connection{}, err
-	}
-	base, hosts, err := s.shape(in.Kind, in.BaseURL, in.AllowedHosts, in.AccessMode, in.CredentialHeader, in.CredentialScheme)
+	kc, err := s.checkM14Kind(&in)
 	if err != nil {
 		return Connection{}, err
 	}
-	if in.Simulated {
+	var base *string
+	var hosts []string
+	if kc != nil {
+		base, hosts, err = s.m14Shape(in.Kind, in.Simulated, &in)
+	} else {
+		base, hosts, err = s.shape(in.Kind, in.BaseURL, in.AllowedHosts, in.AccessMode, in.CredentialHeader, in.CredentialScheme)
+	}
+	if err != nil {
+		return Connection{}, err
+	}
+	if in.Simulated && kc == nil {
 		if err := checkSimulated(base, hosts); err != nil {
 			return Connection{}, err
 		}
@@ -446,6 +460,12 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 			return ErrNameTaken
 		} else if err != nil {
 			return err
+		}
+		if kc != nil {
+			// The kind's configuration, in the same transaction (D64).
+			if err := kc.store.Save(ctx, tx, c.Org, conn.ID, conn.Revision, kc.cfg); err != nil {
+				return err
+			}
 		}
 		var connector string
 		if in.Connector != nil {

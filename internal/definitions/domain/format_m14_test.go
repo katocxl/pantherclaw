@@ -287,8 +287,11 @@ func TestM14_VerifierExpectsMinorUnits(t *testing.T) {
 // the strictest class wins; an undeclared value is public (G0 M14 D73).
 func TestM14_ResponseClassesCoverSubtrees(t *testing.T) {
 	r := &domain.ResponseSpec{Format: "json", Fields: []domain.ResponseField{
-		{Path: "billing_details", Class: "pii"}, {Path: "billing_details.name", Class: "internal"},
-		{Path: "data.*.ssn", Class: "secret"}, {Path: "data", Class: "internal"}, {Path: "metadata.*", Class: "internal"},
+		{Path: "billing_details", Class: "pii"},
+		{Path: "billing_details.name", Class: "internal"},
+		{Path: "data.*.ssn", Class: "secret"},
+		{Path: "data", Class: "internal"},
+		{Path: "metadata.*", Class: "internal"},
 	}}
 	for path, want := range map[string]string{
 		"billing_details":               "pii",

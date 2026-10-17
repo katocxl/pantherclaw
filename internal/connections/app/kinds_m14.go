@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/connections/ports"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -332,36 +333,105 @@ func validCA(s string) bool {
 // configuration time and dial time agree (G0 M14 D61).
 func publicAddr(a netip.Addr) bool { return !httpx.DeniedAddr(a, nil) }
 
+// WithKindConfigs sets the stores of the M14 kinds' configurations
+// (G0 M14 D64): a postgres or a2a connection can be created only when its
+// kind has one, and its configuration is saved in the same transaction.
+func (s *Service) WithKindConfigs(k *ports.KindConfigs) *Service {
+	s.kinds = k
+	return s
+}
+
+// kindConfig is a validated M14 configuration and the store it goes to.
+type kindConfig struct {
+	cfg   any
+	store ports.KindConfig
+}
+
 // checkM14Kind checks a new connection's M14 configuration: a postgres or
 // a2a connection carries its own configuration and is held by PantherClaw;
-// no other kind carries one. Until the gateway can dispatch the kind, a
-// valid one is refused with ErrKindNotImplemented and nothing is created
-// (G0 M14 D4: fail closed).
-func checkM14Kind(in *CreateInput) error {
-	switch in.Kind {
-	case KindPostgres:
-		if in.Postgres == nil || in.A2A != nil || in.AccessMode != AccessHeld {
-			return ErrShape
-		}
-		cfg, err := in.Postgres.Check()
-		if err != nil {
-			return err
-		}
-		in.Postgres = &cfg
-	case KindA2A:
-		if in.A2A == nil || in.Postgres != nil || in.AccessMode != AccessHeld {
-			return ErrShape
-		}
-		cfg, err := in.A2A.Check(in.Simulated)
-		if err != nil {
-			return err
-		}
-		in.A2A = &cfg
-	default:
+// no other kind carries one. A kind whose configuration store is not
+// registered is refused with ErrKindNotImplemented and nothing is created
+// (G0 M14 D4, D64: fail closed). It returns nil for the other kinds.
+func (s *Service) checkM14Kind(in *CreateInput) (*kindConfig, error) {
+	if in.Kind != KindPostgres && in.Kind != KindA2A {
 		if in.Postgres != nil || in.A2A != nil {
-			return ErrShape
+			return nil, ErrShape
 		}
-		return nil
+		return nil, nil
 	}
-	return ErrKindNotImplemented
+	cfg, err := checkKindConfig(in.Kind, in.Simulated, in.Postgres, in.A2A)
+	if err != nil {
+		return nil, err
+	}
+	if in.AccessMode != AccessHeld {
+		return nil, ErrShape
+	}
+	store, ok := s.kinds.Get(in.Kind)
+	if !ok {
+		return nil, ErrKindNotImplemented
+	}
+	return &kindConfig{cfg: cfg, store: store}, nil
+}
+
+// checkKindConfig validates the configuration a kind carries: exactly its
+// own, checked and with its defaults.
+func checkKindConfig(kind string, simulated bool, pg *PostgresConfig, peer *A2AConfig) (any, error) {
+	switch kind {
+	case KindPostgres:
+		if pg == nil || peer != nil {
+			return nil, ErrShape
+		}
+		cfg, err := pg.Check()
+		if err != nil {
+			return nil, err
+		}
+		return &cfg, nil
+	case KindA2A:
+		if peer == nil || pg != nil {
+			return nil, ErrShape
+		}
+		cfg, err := peer.Check(simulated)
+		if err != nil {
+			return nil, err
+		}
+		return &cfg, nil
+	}
+	return nil, ErrShape
+}
+
+// m14Shape is the base URL and hosts of an M14 kind (D64): a postgres
+// connection has none (its host is in its manifest, and its password
+// goes in no header); an a2a connection's base URL is its interface URL,
+// and its credential, when the card's security scheme needs one, goes in a
+// header like an http connection's.
+func (s *Service) m14Shape(kind string, simulated bool, in *CreateInput) (*string, []string, error) {
+	switch kind {
+	case KindPostgres:
+		if in.BaseURL != "" || len(in.AllowedHosts) > 0 || in.CredentialHeader != "" || in.CredentialScheme != "" || len(in.AgentHosts) > 0 {
+			return nil, nil, ErrShape
+		}
+		return nil, []string{}, nil
+	case KindA2A:
+		if in.BaseURL != "" && in.BaseURL != in.A2A.Interface.URL {
+			return nil, nil, ErrShape
+		}
+		if len(in.AgentHosts) > 0 || (in.CredentialScheme != "" && in.CredentialHeader == "") {
+			return nil, nil, ErrShape
+		}
+		norm, ep, err := checkBaseURL(in.A2A.Interface.URL, s.own)
+		if err != nil {
+			return nil, nil, err
+		}
+		hosts, err := checkAllowedHosts(in.AllowedHosts, ep, norm, s.own)
+		if err != nil {
+			return nil, nil, err
+		}
+		if simulated {
+			if err := checkSimulated(&norm, hosts); err != nil {
+				return nil, nil, err
+			}
+		}
+		return &norm, hosts, nil
+	}
+	return nil, nil, ErrShape
 }
