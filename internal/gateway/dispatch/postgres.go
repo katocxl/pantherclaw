@@ -38,6 +38,9 @@ const (
 	// CodeTargetMismatch: postgres.tables.read named a pg_database other than
 	// the connection's database (D79).
 	CodeTargetMismatch = "target_mismatch"
+	// CodeKindConfigMissing: the gateway has no postgres configuration for
+	// the connection (D85).
+	CodeKindConfigMissing = "kind_config_missing"
 )
 
 // roleRecheck is how long a passed role check holds before the pool checks
@@ -71,6 +74,11 @@ func (e *Engine) sendPostgres(ctx context.Context, r Result, conn *control.Conne
 	t *timer,
 ) Result {
 	pc := postgresOf(conn)
+	if pc == nil {
+		// The configuration never reached this gateway: nothing is committed
+		// or sent (D85).
+		return r.fail(CannotAuthorize, CodeKindConfigMissing)
+	}
 	query, buildErr := pgQuery(pc, def, a.Action)
 	// A postgres connection is pantherclaw_held only: no action token, and
 	// no HTTP request to bind.
@@ -265,8 +273,8 @@ func (e *Engine) pgPool(ctx context.Context, conn *control.Connection, def *defs
 		return nil, err
 	}
 	defer clear(plain)
-	if !def.Dispatch.CredentialMatches(plain) {
-		return nil, errCredentialPattern
+	if err := CheckCredentialPattern(def, conn.Credential.GetKind(), plain); err != nil {
+		return nil, err
 	}
 	p, err := pgtarget.Open(ctx, pgtarget.Config{
 		Endpoint: pgtarget.Endpoint{

@@ -83,7 +83,7 @@ func TestM14Data_PostgresConfigurationRoundTrip(t *testing.T) {
 		len(pc.GetTables()) != 3 || pc.GetTables()[0].GetColumns()[4].GetClass() != "secret" {
 		t.Fatalf("loaded %v", got)
 	}
-	if err := (postgresConfigs{}).Save(ctx, db.TenantTx{}, org, c.ID, 1, "not a configuration"); err == nil {
+	if _, err := (postgresConfigs{}).Save(ctx, db.TenantTx{}, org, c.ID, 1, "not a configuration"); err == nil {
 		t.Fatal("saved another type")
 	}
 }

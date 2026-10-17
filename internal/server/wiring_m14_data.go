@@ -35,17 +35,18 @@ type postgresConfigs struct{}
 var errPostgresConfigType = errors.New("server: a postgres configuration store got another configuration")
 
 // Save stores a validated configuration as its canonical JSON and digest.
-func (postgresConfigs) Save(ctx context.Context, tx db.TenantTx, org ids.OrgID, connection ids.UUID, _ int32, cfg any) error {
+// A postgres connection has no base URL.
+func (postgresConfigs) Save(ctx context.Context, tx db.TenantTx, org ids.OrgID, connection ids.UUID, _ int32, cfg any) (string, error) {
 	pc, ok := cfg.(*capp.PostgresConfig)
 	if !ok || pc == nil {
-		return errPostgresConfigType
+		return "", errPostgresConfigType
 	}
 	raw, err := json.Marshal(pc, json.Deterministic(true))
 	if err != nil {
-		return err
+		return "", err
 	}
 	sum := sha256.Sum256(raw)
-	return dbq.New(tx).UpsertPostgresConnection(ctx, dbq.UpsertPostgresConnectionParams{
+	return "", dbq.New(tx).UpsertPostgresConnection(ctx, dbq.UpsertPostgresConnectionParams{
 		OrgID: org, ConnectionID: connection, Config: raw, Digest: sum[:],
 	})
 }

@@ -170,13 +170,13 @@ func TestHR312_PostgresAggregateThroughTheGateway(t *testing.T) {
 }
 
 // TestHR307_PostgresWithoutConfigurationSendsNothing: a postgres
-// connection whose configuration did not reach the gateway fails closed:
-// the decision is recorded, nothing is sent.
+// connection whose configuration did not reach the gateway is refused
+// CANNOT_AUTHORIZE before anything is committed or sent (D85).
 func TestHR307_PostgresWithoutConfigurationSendsNothing(t *testing.T) {
 	tg := pgtargettest.New(t)
 	h := setup(t, withPostgres(t, tg, false), func(h *harness) { h.conn.Postgres = nil })
 	r := h.do(t, http.MethodPost, "/payments/v1/query", pgQuery, nil)
-	if r.refusal.Error != "request_not_built" || r.refusal.Outcome != "FAILED" {
+	if r.refusal.Error != "kind_config_missing" || r.refusal.ErrorClass != "cannot_authorize" || r.refusal.Outcome != "" || len(h.auth.snap().begins) != 0 {
 		t.Fatalf("%d %s", r.code, r.body)
 	}
 }
