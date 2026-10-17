@@ -456,6 +456,9 @@ func (e *Engine) readWith(ctx context.Context, conn *control.Connection, read *d
 	if err != nil {
 		return egress.Response{Status: res.Status}, false
 	}
+	if e.stripeAnswerLive(ctx, conn, res.Body, "verify") {
+		return egress.Response{Status: res.Status}, false
+	}
 	return res, true
 }
 

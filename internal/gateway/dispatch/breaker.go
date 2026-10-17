@@ -43,11 +43,16 @@ type circuit struct {
 	unknown, total int32
 	reported       bool
 	reporting      bool
+	// reason, when set, opened the circuit without the thresholds
+	// (stripe_livemode, G0 M14 D54).
+	reason string
 }
 
 type breaker struct {
 	now    func() time.Time
 	report Reporter
+	// reportReason reports a circuit a reason opened; nil reports nothing.
+	reportReason ReasonReporter
 	log    *slog.Logger
 
 	mu       sync.Mutex
@@ -122,11 +127,20 @@ func (b *breaker) reportLocked(ctx context.Context, id string, c *circuit) {
 		return
 	}
 	c.reporting = true
-	unknown, total := c.unknown, c.total
+	unknown, total, reason := c.unknown, c.total, c.reason
+	if reason != "" && b.reportReason == nil {
+		c.reporting = false
+		return
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), reportTimeout)
 		defer cancel()
-		err := b.report(ctx, id, unknown, total)
+		var err error
+		if reason != "" {
+			err = b.reportReason(ctx, id, reason)
+		} else {
+			err = b.report(ctx, id, unknown, total)
+		}
 		b.mu.Lock()
 		c.reporting, c.reported = false, err == nil
 		b.mu.Unlock()

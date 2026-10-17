@@ -172,6 +172,9 @@ type Options struct {
 	// ReportCircuit tells the server a connection's circuit opened
 	// (HR-078); nil reports nothing.
 	ReportCircuit Reporter
+	// ReportCircuitReason tells the server a connection's circuit opened
+	// for a reason, without the thresholds (G0 M14 D54); nil reports nothing.
+	ReportCircuitReason ReasonReporter
 	// OnDrift is told of each drifted upstream tool that a call's own check
 	// finds (CheckDrift returns what it finds instead); nil tells nothing.
 	OnDrift func(ctx context.Context, connection string, d Drift)
@@ -266,7 +269,7 @@ func New(o Options) (*Engine, error) {
 	}
 	return &Engine{
 		org: o.Org, authority: o.Authority, permits: newPermitVerifier(o.JWKSURL, o.JWKSClient, o.GatewayID, o.Org),
-		containment: o.Containment, broker: o.Broker, allowed: o.AllowedPrefixes, breaker: newBreaker(o.Now, o.ReportCircuit, o.Log),
+		containment: o.Containment, broker: o.Broker, allowed: o.AllowedPrefixes, breaker: newBreaker(o.Now, o.ReportCircuit, o.Log).withReason(o.ReportCircuitReason),
 		log: o.Log, onDrift: o.OnDrift, clients: map[string]clientEntry{}, drift: map[string]driftEntry{}, approvers: o.Approvers,
 		connectors:  o.Connectors,
 		reportFacts: o.ReportFacts, factTimeout: o.FactTimeout, revocations: o.ReportRevocation,
@@ -401,6 +404,9 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 			// for, so that observation cannot decide (#353 review).
 			return Result{Class: CannotAuthorize, Code: CodeFactsUnreported, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
 		}
+	}
+	if res, stop := e.stripeFacts(ctx, conn, c.Action.Action, t); stop {
+		return res
 	}
 	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{ActionIr: c.Action.Canonical, Workload: c.Workload, PayloadFindings: findings})
 	t.lap("authz")
@@ -759,6 +765,7 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 	start := time.Now()
 	res, err := p.client.Do(p.req)
 	elapsed := time.Since(start)
+	e.stripeAnswerLive(ctx, conn, res.Body, "dispatch")
 	t.lap("target")
 	outcome, class, code := classify(res.Status, err)
 	if res.Status != 0 {
