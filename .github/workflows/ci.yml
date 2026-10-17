@@ -487,13 +487,17 @@ jobs:
           # never linked into shipped artifacts; their extra licences cover
           # documentation (CC-BY), the DCO, MIT-0 and the PostgreSQL licence
           # (DEPENDENCY_POLICY, dev tools).
+          # cffi is MIT-0, brought by the Python SDK's cryptography (M14 D80).
+          # typing-extensions is PSF-2.0; the scanner mis-detects its licence text (M14 D80).
           allow-dependencies-licenses: >-
             pkg:golang/github.com/riverqueue/river/rivershared,
             pkg:golang/github.com/opencontainers/go-digest,
             pkg:golang/github.com/opencontainers/image-spec,
             pkg:golang/github.com/segmentio/asm,
             pkg:golang/github.com/fatih/structtag,
-            pkg:golang/github.com/pganalyze/pg_query_go/v6
+            pkg:golang/github.com/pganalyze/pg_query_go/v6,
+            pkg:pypi/cffi,
+            pkg:pypi/typing-extensions
 
   workflows:
     name: security / workflows (zizmor)
