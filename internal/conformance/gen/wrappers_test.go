@@ -164,8 +164,10 @@ func buildWrappers(t *testing.T) any {
 			a.Reason = "PantherClaw cannot decide this call: the connection's reviewed package does not map mcp__payments__create_refund"
 		}),
 		"use_gateway_face": body(func(a *faceAnswer) {
-			*a = faceAnswer{Decision: "deny", ErrorClass: "cannot_authorize", Code: "use_gateway_face", Mode: "enforce", Coverage: "PARTIAL",
-				Reason: "PantherClaw holds this connection's credential: use the gateway's MCP or HTTP face."}
+			*a = faceAnswer{
+				Decision: "deny", ErrorClass: "cannot_authorize", Code: "use_gateway_face", Mode: "enforce", Coverage: "PARTIAL",
+				Reason: "PantherClaw holds this connection's credential: use the gateway's MCP or HTTP face.",
+			}
 		}),
 		"send": body(func(a *faceAnswer) {
 			allow(a)
@@ -196,29 +198,47 @@ func buildWrappers(t *testing.T) any {
 	f.Cases = []WrapperCase{
 		{Name: "allowed: the tool runs", Answers: []string{"allow"}, Calls: []WrapperCall{ran(1, "new")}},
 		{Name: "a monitor route: recorded and run", Answers: []string{"monitor"}, Calls: []WrapperCall{ran(1, "new")}},
-		{Name: "held, then allowed: the identical call is resubmitted and runs", Answers: []string{"hold", "allow"}, Wait: "ready",
-			Calls: []WrapperCall{ran(2, "new")}},
-		{Name: "held, then declined in PantherClaw", Answers: []string{"hold"}, Wait: "declined",
-			Calls: []WrapperCall{refused(in, 1, "new", "hold_declined", txnID)}},
-		{Name: "held past the wait, then retried identically: the retry reuses the action id", Options: WrapperOptions{Wait: 1},
+		{
+			Name: "held, then allowed: the identical call is resubmitted and runs", Answers: []string{"hold", "allow"}, Wait: "ready",
+			Calls: []WrapperCall{ran(2, "new")},
+		},
+		{
+			Name: "held, then declined in PantherClaw", Answers: []string{"hold"}, Wait: "declined",
+			Calls: []WrapperCall{refused(in, 1, "new", "hold_declined", txnID)},
+		},
+		{
+			Name: "held past the wait, then retried identically: the retry reuses the action id", Options: WrapperOptions{Wait: 1},
 			Answers: []string{"hold", "allow"}, Wait: "pending",
-			Calls: []WrapperCall{refused(in, 1, "new", "hold_timeout", txnID), ran(1, "same")}},
-		{Name: "held past the wait, then called with changed input: a new decision", Options: WrapperOptions{Wait: 1},
+			Calls: []WrapperCall{refused(in, 1, "new", "hold_timeout", txnID), ran(1, "same")},
+		},
+		{
+			Name: "held past the wait, then called with changed input: a new decision", Options: WrapperOptions{Wait: 1},
 			Answers: []string{"hold", "allow"}, Wait: "pending",
-			Calls: []WrapperCall{refused(in, 1, "new", "hold_timeout", txnID), changed}},
+			Calls: []WrapperCall{refused(in, 1, "new", "hold_timeout", txnID), changed},
+		},
 		{Name: "denied", Answers: []string{"deny"}, Calls: []WrapperCall{refused(in, 1, "new", "GRANT_AMOUNT_EXCEEDED", txnID)}},
 		{Name: "denied, raising", Options: WrapperOptions{RaiseOnRefusal: true}, Answers: []string{"deny"}, Calls: []WrapperCall{raised}},
 		{Name: "a gateway error: cannot decide", Answers: []string{"gateway_error"}, Calls: []WrapperCall{refused(in, 1, "new", "cannot_decide", "")}},
-		{Name: "an answer whose action does not hash to its hash: cannot decide", Answers: []string{"tampered"},
-			Calls: []WrapperCall{refused(in, 1, "new", "cannot_decide", "")}},
-		{Name: "a tool the package does not map is refused", Answers: []string{"unmapped"},
-			Calls: []WrapperCall{refused(in, 1, "new", "unknown_tool", "")}},
-		{Name: "a tool the package does not map runs with observe_unmapped", Options: WrapperOptions{ObserveUnmapped: true},
-			Answers: []string{"unmapped"}, Calls: []WrapperCall{ran(1, "new")}},
-		{Name: "a connection whose credential PantherClaw holds", Answers: []string{"use_gateway_face"},
-			Calls: []WrapperCall{refused(in, 1, "new", "use_gateway_face", "")}},
-		{Name: "an allow with a request to send and no on_dispatch handler", Answers: []string{"send"},
-			Calls: []WrapperCall{refused(in, 1, "new", "dispatch_required", txnID)}},
+		{
+			Name: "an answer whose action does not hash to its hash: cannot decide", Answers: []string{"tampered"},
+			Calls: []WrapperCall{refused(in, 1, "new", "cannot_decide", "")},
+		},
+		{
+			Name: "a tool the package does not map is refused", Answers: []string{"unmapped"},
+			Calls: []WrapperCall{refused(in, 1, "new", "unknown_tool", "")},
+		},
+		{
+			Name: "a tool the package does not map runs with observe_unmapped", Options: WrapperOptions{ObserveUnmapped: true},
+			Answers: []string{"unmapped"}, Calls: []WrapperCall{ran(1, "new")},
+		},
+		{
+			Name: "a connection whose credential PantherClaw holds", Answers: []string{"use_gateway_face"},
+			Calls: []WrapperCall{refused(in, 1, "new", "use_gateway_face", "")},
+		},
+		{
+			Name: "an allow with a request to send and no on_dispatch handler", Answers: []string{"send"},
+			Calls: []WrapperCall{refused(in, 1, "new", "dispatch_required", txnID)},
+		},
 	}
 	return f
 }
