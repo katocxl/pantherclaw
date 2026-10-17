@@ -96,6 +96,8 @@ type Message struct {
 	// Blocks is the message's Block Kit blocks as sent (raw JSON).
 	Blocks  jsontext.Value `json:"blocks,omitzero"`
 	Updates int            `json:"updates"`
+	// Reactions are the emoji people added to the message in Slack.
+	Reactions []string `json:"reactions,omitzero"`
 }
 
 // Calls counts requests per method, refused ones included.
@@ -152,6 +154,20 @@ func (s *Server) SetTeam(team string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.team = team
+}
+
+// React adds a person's reaction to a message, as Slack would show it;
+// nothing is sent anywhere (a range scenario's forged approval, D91).
+func (s *Server) React(channel, ts, name string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.messages {
+		if m := &s.messages[i]; m.Channel == channel && m.TS == ts {
+			m.Reactions = append(m.Reactions, name)
+			return true
+		}
+	}
+	return false
 }
 
 // Tokens returns the bot token of every authorized request, in order.

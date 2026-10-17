@@ -6,6 +6,7 @@
 package e2e
 
 import (
+	"context"
 	"net/http/httptest"
 	"regexp"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/sim/slack"
+	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
@@ -67,9 +69,16 @@ func (s *slackSim) seeded(t *testing.T, out string) {
 // it.
 func (s *stack) sealFor(t *testing.T, conn ids.UUID, secret string) int64 {
 	t.Helper()
-	admin := s.person(t, "slack-gateway-admin", td.RoleGatewayAdmin)
+	// A gateway admin without a security key: an invalid test key would break
+	// the approver keys export of a scenario that also approves.
+	id := ids.NewV7()
+	s.exec(t, "INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', 'slack-gateway-admin')", s.org, id)
+	admin := tapp.WithCaller(context.Background(), tapp.Caller{Subject: td.Subject{
+		Org: s.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: id},
+		Bindings: []td.Binding{{Role: td.RoleGatewayAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: s.org.UUID()}}},
+	}, Credential: tapp.CredAccessToken})
 	svc := credapp.New(s.pool, nil)
-	k, err := svc.GetSealingKey(admin.ctx, conn)
+	k, err := svc.GetSealingKey(admin, conn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +90,7 @@ func (s *stack) sealFor(t *testing.T, conn ids.UUID, secret string) int64 {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.PutCredential(admin.ctx, credapp.PutInput{
+	if _, err := svc.PutCredential(admin, credapp.PutInput{
 		Connection: conn, BrokerKey: mustUUID(t, k.Binding.BrokerKey), Version: k.Binding.Version, Sealed: sealed,
 		AllowedHosts: k.Binding.AllowedHosts, Header: k.Binding.Header, Scheme: k.Binding.Scheme,
 	}); err != nil {

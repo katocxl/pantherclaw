@@ -98,7 +98,7 @@ func (d *rangeDriver) Capabilities() map[app.Capability]bool {
 	return map[app.Capability]bool{
 		app.CapGitHub: true, app.CapPayments: true, app.CapMCP: true, app.CapPerson: true, app.CapSecondOrg: true,
 		app.CapHarness: true, app.CapSandbox: d.extra.available(),
-		capSlackPost: true,
+		capSlackPost: true, capSlackInteraction: true,
 	}
 }
 
