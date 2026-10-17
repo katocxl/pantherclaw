@@ -11,11 +11,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/sim/stripe"
 )
 
 func TestStripeStopsOnCancel(t *testing.T) {
 	keyFile := filepath.Join(t.TempDir(), "key")
-	if err := os.WriteFile(keyFile, []byte("rk_test_0123456789abcdefABCDEF\n"), 0o600); err != nil {
+	if err := os.WriteFile(keyFile, []byte(stripe.FakeKey("rk", "test", "0123456789abcdefABCDEF")+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
@@ -23,7 +25,7 @@ func TestStripeStopsOnCancel(t *testing.T) {
 	var out, errb bytes.Buffer
 	args := []string{
 		"stripe", "--addr", "127.0.0.1:0", "--key-file", keyFile, "--settle-after", "1s", "--fail-after-pending",
-		"--bank-changed-recently", "--livemode-key", "sk_live_simulatedLiveKey000000",
+		"--bank-changed-recently", "--livemode-key", stripe.FakeKey("sk", "live", "simulatedLiveKey000000"),
 	}
 	if code := Run(ctx, args, &out, &errb); code != 0 {
 		t.Fatalf("stripe: %d %s", code, errb.String())

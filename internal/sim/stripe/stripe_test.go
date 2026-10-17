@@ -20,7 +20,10 @@ import (
 	"github.com/katocxl/pantherclaw/internal/sim/handshake"
 )
 
-const key = "rk_test_0123456789abcdefABCDEF"
+var (
+	key     = FakeKey("rk", "test", "0123456789abcdefABCDEF")
+	liveKey = FakeKey("sk", "live", "simulatedLiveKey000000")
+)
 
 // clock is a settable test clock.
 type clock struct {
@@ -123,12 +126,12 @@ func TestHandshake(t *testing.T) {
 // livemode: true.
 func TestKeys(t *testing.T) {
 	h := start(t, Faults{})
-	h.s.WithRequire(Require{LivemodeKey: "sk_live_simulatedLiveKey000000"})
+	h.s.WithRequire(Require{LivemodeKey: liveKey})
 	for name, auth := range map[string]string{
 		"none":      "",
-		"live":      "Bearer sk_live_0123456789abcdefABCDEF",
-		"publish":   "Bearer pk_test_0123456789abcdefABCDEF",
-		"short":     "Bearer sk_test_abc",
+		"live":      "Bearer " + FakeKey("sk", "live", "0123456789abcdefABCDEF"),
+		"publish":   "Bearer " + FakeKey("pk", "test", "0123456789abcdefABCDEF"),
+		"short":     "Bearer " + FakeKey("sk", "test", "abc"),
 		"basic":     "Basic " + key,
 		"no bearer": key,
 	} {
@@ -141,7 +144,7 @@ func TestKeys(t *testing.T) {
 	if a.code != http.StatusOK || a.body["livemode"] != false {
 		t.Fatalf("test key read = %d %s", a.code, a.raw)
 	}
-	a = h.do(http.MethodGet, "/v1/charges/"+FixtureCharge, nil, map[string]string{"Authorization": "Bearer sk_live_simulatedLiveKey000000"})
+	a = h.do(http.MethodGet, "/v1/charges/"+FixtureCharge, nil, map[string]string{"Authorization": "Bearer " + liveKey})
 	if a.code != http.StatusOK || a.body["livemode"] != true {
 		t.Fatalf("live-mode key read = %d %s", a.code, a.raw)
 	}
@@ -149,7 +152,7 @@ func TestKeys(t *testing.T) {
 		t.Fatalf("stats = %+v", st)
 	}
 	// With Keys set, only those keys are accepted.
-	h.s.WithRequire(Require{Keys: []string{"sk_test_onlyThisKeyIsAccepted00"}})
+	h.s.WithRequire(Require{Keys: []string{FakeKey("sk", "test", "onlyThisKeyIsAccepted00")}})
 	if a := h.do(http.MethodGet, "/v1/balance", nil, nil); a.code != http.StatusUnauthorized {
 		t.Fatalf("other test key = %d", a.code)
 	}
