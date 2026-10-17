@@ -420,6 +420,26 @@ class IntegrationTest(unittest.TestCase):
         self.assertEqual(self.run_hook(p, refund("default", "toolu_18")), "allow")
         self.assertEqual((sent[0][0], sent[0][1].body), ("toolu_18", face["send"]["body"].encode()))
 
+    def test_HR200_a_resumed_allow_without_on_dispatch_forgets_the_action_id(self) -> None:
+        # M14 D81: the allow is final even when it is denied for lack of on_dispatch; the identical call later is a new decision.
+        dispatch = json.loads(next(a for a in _vectors("sdk_face.json")["answers"] if "send" in a)["body"])["dispatch"]
+        aids: list[str] = []
+        answers = iter(["hold", "allow", "hold"])
+
+        def face(_call: dict[str, Any], aid: str) -> tuple[int, bytes]:
+            aids.append(aid)
+            d = next(answers)
+            return decided(aid, d, wait={"handle": "h", "state": "PENDING"}) if d == "hold" else decided(aid, d, dispatch=dispatch)
+
+        p = self.pc(self.gw(face))
+        opts = p.options(permission_mode="default", setting_sources=[], mcp_servers={"payments": {}})
+        hook = opts["hooks"]["PreToolUse"][-1].hooks[0]
+        self.assertEqual(decision(asyncio.run(hook(refund("default", "toolu_30"), "toolu_30", None))), "ask")
+        r = asyncio.run(opts["can_use_tool"]("mcp__payments__create_refund", {}, SimpleNamespace(tool_use_id="toolu_30")))
+        self.assertEqual(r.behavior, "deny")
+        asyncio.run(hook(refund("default", "toolu_31"), "toolu_31", None))
+        self.assertEqual((aids[0] == aids[1], aids[2] != aids[1]), (True, True))
+
     def test_T080_a_forged_answer_never_runs_the_tool(self) -> None:
         forged = answer("allow", action_hash=hashlib.sha256(b"another action").hexdigest(), action_ir=pap.b64url(b"{}"))
         self.assertEqual(self.run_hook(self.pc(self.gw(forged)), refund()), "deny")

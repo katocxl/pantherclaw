@@ -19,6 +19,7 @@ from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMes
 from langchain_core.tools import BaseTool, InjectedToolArg, InjectedToolCallId, StructuredTool, tool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
+from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -185,9 +186,25 @@ class LangChainTest(unittest.TestCase):
     def test_HR329_an_identical_call_reuses_the_action_id_only_while_the_earlier_one_is_unresolved(self) -> None:
         replay(self, sync_adapter, PantherClawRefused, only=RETRY_CASES)
 
-    def test_HR328_a_model_supplied_injected_tool_arg_passes_undecided_as_declared(self) -> None:
-        # M14 D69: an argument the tool declares injected is not decided; it is not the model's.
-        g = Gateway(["allow"])
+    def test_HR329_a_finished_call_never_forgets_a_later_calls_action_id(self) -> None:
+        # Two calls share an id in flight; after the first ends, a new identical call gets its own id,
+        # and the second ending must not forget the new one's.
+        g = Gateway([])
+        self.addCleanup(g.close)
+        guard = Guard(g.client, "payments")
+        a = guard._begin("create_refund", REFUND, None, None)
+        c = guard._begin("create_refund", REFUND, None, None)
+        self.assertEqual(a.action_id, c.action_id)
+        guard._forget(a)
+        b = guard._begin("create_refund", REFUND, None, None)
+        self.assertNotEqual(b.action_id, a.action_id)
+        guard._forget(c)
+        self.assertEqual(guard._begin("create_refund", REFUND, None, None).action_id, b.action_id)
+
+    def test_HR328_a_model_supplied_generic_injected_tool_arg_is_refused_undecided_args(self) -> None:
+        # M14 D81: only the injected arguments the framework overwrites pass undecided; a generic
+        # InjectedToolArg in the model's tool call would reach the function undecided.
+        g = Gateway(["allow", "allow"])
         self.addCleanup(g.close)
         seen: list[str] = []
 
@@ -199,7 +216,46 @@ class LangChainTest(unittest.TestCase):
 
         (guarded,) = guard_tools([create_refund], g.client, "payments")
         out = guarded.invoke({"type": "tool_call", "name": "create_refund", "args": {"charge": "ch_1", "account_id": "acct_9"}, "id": "c1"})
-        self.assertEqual((out.content, seen, g.requests[0][1]["input"]), ("refunded", ["acct_9"], {"charge": "ch_1"}))
+        self.assertEqual((out.content, seen, g.requests), ("PantherClaw refused this call: undecided_args", [], []))
+        # The application itself may pass it when it invokes the tool without a tool call.
+        self.assertEqual(guarded.invoke({"charge": "ch_1", "account_id": "acct_app"}), "refunded")
+        self.assertEqual((seen, g.requests[0][1]["input"]), (["acct_app"], {"charge": "ch_1"}))
+
+    def test_HR328_arguments_the_framework_overwrites_pass_undecided(self) -> None:
+        g = Gateway(["allow"])
+        self.addCleanup(g.close)
+        seen: list[Any] = []
+
+        @tool
+        def create_refund(charge: str, call: Annotated[str, InjectedToolCallId], state: Annotated[dict, InjectedState]) -> str:
+            """Refund a charge."""
+            seen.append((call, state))
+            return "refunded"
+
+        (guarded,) = guard_tools([create_refund], g.client, "payments")
+        args = {"charge": "ch_1", "state": {"messages": []}}
+        out = guarded.invoke({"type": "tool_call", "name": "create_refund", "args": args, "id": "c9"})
+        self.assertEqual((out.content, seen, g.requests[0][1]["input"]), ("refunded", [("c9", {"messages": []})], {"charge": "ch_1"}))
+
+    def test_HR328_the_tool_runs_with_the_parsed_values_under_their_alias(self) -> None:
+        # M14 D81: the tool runs with the decided, parsed values, never the caller's input again.
+        g = Gateway(["allow"])
+        self.addCleanup(g.close)
+        seen: list[str] = []
+
+        class Args(BaseModel):
+            from_: str = Field(alias="from")
+
+        def transfer(from_: str) -> str:
+            seen.append(from_)
+            return "moved"
+
+        t = StructuredTool(name="create_refund", description="Move.", func=transfer, args_schema=Args)
+        (guarded,) = guard_tools([t], g.client, "payments")
+        raw = {"from": "acct_1"}
+        out = guarded.invoke({"type": "tool_call", "name": "create_refund", "args": raw, "id": "c4"})
+        self.assertEqual((out.content, seen, raw), ("moved", ["acct_1"], {"from": "acct_1"}))
+        self.assertEqual(g.requests[0][1]["input"], {"from_": "acct_1"})
 
     def test_HR328_keys_outside_the_schema_are_refused_undecided_args(self) -> None:
         g = Gateway(["allow", "allow"])

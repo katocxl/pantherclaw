@@ -13,6 +13,8 @@ refusal to the model. Every decision is cooperative and labeled PARTIAL.
 
 from __future__ import annotations
 
+import copy
+import typing
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -34,25 +36,72 @@ def _fields(schema: Any) -> tuple[set[str], set[str]]:
     return set(fields), aliases
 
 
-def _decided(tool: Any, tool_input: dict[str, Any], tool_call_id: str | None) -> tuple[dict[str, Any], set[str]] | str:
-    """What PantherClaw decides (M14 D69): the input validated through the
-    tool's own schema into exactly what its function receives, restricted to
-    the arguments the model gives (the tool call schema's). Arguments the tool
-    declares injected (InjectedToolArg, LangGraph's injected state, store and
-    runtime, the call id) pass undecided; any other key outside the schema,
-    after alias normalisation, is refused: "undecided_args"."""
+def _overwritten(tool: Any) -> set[str]:
+    """The injected arguments the framework itself supplies at call time,
+    whatever the model sent: the call id (InjectedToolCallId), LangGraph's
+    injected state and store, and its runtime (a parameter named runtime)."""
+    from langchain_core.tools import InjectedToolCallId
+    from langchain_core.tools.base import _is_injected_arg_type, get_all_basemodel_annotations
+
+    kinds: list[type] = [InjectedToolCallId]
+    try:
+        from langgraph.prebuilt import InjectedState, InjectedStore
+
+        kinds += [InjectedState, InjectedStore]
+    except ImportError:
+        pass
+    hints: dict[str, Any] = {}
+    func = getattr(tool, "func", None) or getattr(tool, "coroutine", None)
+    if func is not None:
+        try:
+            hints.update(typing.get_type_hints(func, include_extras=True))
+        except Exception:  # noqa: BLE001, S110 - hints that do not resolve name nothing injected
+            pass
+    schema = tool.get_input_schema()
+    if not isinstance(schema, dict):
+        hints.update(get_all_basemodel_annotations(schema))
+    names = {k for k, v in hints.items() if any(_is_injected_arg_type(v, injected_type=kind) for kind in kinds)}
+    if "runtime" in hints or "runtime" in set(getattr(tool, "_injected_args_keys", ())):
+        names.add("runtime")
+    return names
+
+
+def _decided(tool: Any, tool_input: dict[str, Any], tool_call_id: str | None) -> tuple[dict[str, Any], dict[str, Any], set[str]] | str:
+    """What PantherClaw decides (M14 D69, D81): the input validated through
+    the tool's own schema into exactly what its function receives, restricted
+    to the arguments the model gives (the tool call schema's), and the parsed
+    input the tool then runs with. Only the injected arguments the framework
+    overwrites at call time pass undecided; in a tool call (the model's) any
+    other injected argument, such as a generic InjectedToolArg, and any key
+    outside the schema after alias normalisation is refused:
+    "undecided_args"."""
     from pydantic_core import to_jsonable_python
 
     model, model_aliases = _fields(tool.tool_call_schema)
     full, full_aliases = _fields(tool.get_input_schema())
     injected = (full - model) | set(getattr(tool, "_injected_args_keys", ()))
-    if any(k not in model and k not in model_aliases and k not in injected and k not in full_aliases for k in tool_input):
+    passing = _overwritten(tool) if tool_call_id is not None else injected
+    if any(k not in model and k not in model_aliases and k not in full_aliases and not (k in injected and k in passing)
+           for k in tool_input):
         return "undecided_args"
-    # The tool's own parsing, as BaseTool.run does before it calls the function.
-    parsed = tool._parse_input(tool_input, tool_call_id)
+    # The tool's own parsing, as BaseTool.run does before it calls the function,
+    # on a copy (it writes the call id into its input).
+    parsed = tool._parse_input(copy.deepcopy({k: v for k, v in tool_input.items() if k not in injected}) |
+                               {k: v for k, v in tool_input.items() if k in injected}, tool_call_id)
     if not isinstance(parsed, dict):
         return "wrapper_error"
-    return {k: to_jsonable_python(v) for k, v in parsed.items() if k in model}, model
+    decided = {k: to_jsonable_python(v) for k, v in parsed.items() if k in model}
+    # The tool runs with the decided values (each under the name its schema
+    # accepts) and the injected ones, never the caller's input again (D81).
+    run = {_alias(tool.args_schema, k): (copy.deepcopy(v) if k in model else v) for k, v in parsed.items()}
+    return decided, run, model
+
+
+def _alias(schema: Any, name: str) -> str:
+    """The key a schema's field is given under: its alias, when it has one."""
+    fields = getattr(schema, "model_fields", None) or {}
+    alias = getattr(fields.get(name), "alias", None)
+    return alias if isinstance(alias, str) and alias else name
 
 
 def _propagate() -> tuple[type[BaseException], ...]:
@@ -86,16 +135,16 @@ def _wrap(tool: Any, guard: Guard) -> Any:
 
     propagate = _propagate()
 
-    def decide_args(tool_input: Any, tool_call_id: str | None) -> tuple[Verdict, dict[str, Any], set[str]]:
+    def decide_args(tool_input: Any, tool_call_id: str | None) -> tuple[Verdict, dict[str, Any], Any, set[str]]:
         if not isinstance(tool_input, dict):
-            return Verdict(code="wrapper_error"), {}, set()
+            return Verdict(code="wrapper_error"), {}, tool_input, set()
         try:
             out = _decided(tool, tool_input, tool_call_id)
         except Exception:  # noqa: BLE001 - input the tool's schema refuses, or a failure here: never run undecided
-            return Verdict(code="wrapper_error"), {}, set()
+            return Verdict(code="wrapper_error"), {}, tool_input, set()
         if isinstance(out, str):
-            return Verdict(code=out), {}, set()
-        return Verdict(), out[0], out[1]
+            return Verdict(code=out), {}, tool_input, set()
+        return Verdict(), out[0], out[1], out[2]
 
     # The wrapped tool lives only in this closure: the guarded tool has no
     # attribute that reaches it.
@@ -107,19 +156,19 @@ def _wrap(tool: Any, guard: Guard) -> Any:
             return tool.get_input_schema(config)
 
         def run(self, tool_input: Any, *args: Any, tool_call_id: str | None = None, **kwargs: Any) -> Any:
-            v, decided, parameters = decide_args(tool_input, tool_call_id)
+            v, decided, run_input, parameters = decide_args(tool_input, tool_call_id)
             if not v.code:
                 v = guard.decide(name, decided, tool_call_id, interrupt, parameters, propagate)
-            out = guard.finish(v, lambda: tool.run(tool_input, *args, tool_call_id=tool_call_id, **kwargs))
+            out = guard.finish(v, lambda: tool.run(run_input, *args, tool_call_id=tool_call_id, **kwargs))
             return out if v.run else message(out, tool_call_id, v)
 
         async def arun(self, tool_input: Any, *args: Any, tool_call_id: str | None = None, **kwargs: Any) -> Any:
-            v, decided, parameters = decide_args(tool_input, tool_call_id)
+            v, decided, run_input, parameters = decide_args(tool_input, tool_call_id)
             if not v.code:
                 v = await guard.adecide(name, decided, tool_call_id, interrupt, parameters, propagate)
 
             async def run() -> Any:
-                return await tool.arun(tool_input, *args, tool_call_id=tool_call_id, **kwargs)
+                return await tool.arun(run_input, *args, tool_call_id=tool_call_id, **kwargs)
 
             out = await guard.afinish(v, run)
             return out if v.run else message(out, tool_call_id, v)

@@ -167,12 +167,15 @@ class Guard:
         return _Call(tool, args, use_id, action_id, key)
 
     def _forget(self, c: _Call) -> None:
+        """Forgets the call's action id, unless a later call with another id took the key."""
         with self._lock:
-            self._retries.pop(c.key, None)
+            if self._retries.get(c.key, ("", 0.0))[0] == c.action_id:
+                del self._retries[c.key]
 
     def _held(self, c: _Call, res: Result) -> None:
         with self._lock:
-            self._retries[c.key] = (c.action_id, _expires(res.answer, self._wait))
+            if self._retries.get(c.key, (c.action_id, 0.0))[0] == c.action_id:
+                self._retries[c.key] = (c.action_id, _expires(res.answer, self._wait))
 
     def _authorize(self, c: _Call, first_hash: str = "") -> Result:
         return self._client.authorize(self._connection, f"mcp__{self._connection}__{c.tool}", c.args, c.call_id, c.action_id,
