@@ -5,7 +5,6 @@ package authority
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"connectrpc.com/connect/v2"
@@ -25,11 +24,7 @@ type channelStore struct {
 }
 
 func (c channelStore) PermitChannel(_ context.Context, _ ids.OrgID, _ string, permit ids.UUID) (string, error) {
-	ch, ok := c.channels[permit]
-	if !ok {
-		return "", errors.New("no such permit")
-	}
-	return ch, nil
+	return c.channels[permit], nil
 }
 
 // TestM14_GatewayCannotSubmitAuthZENChannel: over the gateway RPC, an

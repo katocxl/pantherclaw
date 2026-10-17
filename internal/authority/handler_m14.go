@@ -22,7 +22,8 @@ const ReasonChannelNotAllowed = "CHANNEL_NOT_ALLOWED"
 const channelAuthZEN = "authzen"
 
 // PermitChannels reads the channel of a permit's transaction for the
-// gateway that holds it; the Authority's store implements it.
+// gateway that holds it, empty for a permit it does not hold (the call
+// itself then reports it); the Authority's store implements it.
 type PermitChannels interface {
 	PermitChannel(ctx context.Context, org ids.OrgID, gateway string, permit ids.UUID) (string, error)
 }
@@ -55,7 +56,7 @@ func (h *Handler) gatewayPermit(ctx context.Context, gw Gateway, permit ids.UUID
 	}
 	ch, err := pc.PermitChannel(ctx, gw.Org, gw.ID, permit)
 	if err != nil {
-		return nil // the call itself reports an unknown permit
+		return err
 	}
 	if ch == channelAuthZEN {
 		return connect.NewError(connect.CodePermissionDenied, "a gateway cannot dispatch an authzen decision")

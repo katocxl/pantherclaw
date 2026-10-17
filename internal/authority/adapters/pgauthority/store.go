@@ -816,7 +816,9 @@ func (s *Store) PermitChannel(ctx context.Context, org ids.OrgID, gateway string
 	var ch string
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		pc, err := dbq.New(tx).ExecutionContext(ctx, org, permit, gateway)
-		if err != nil {
+		if db.IsNoRows(err) {
+			return nil // not this gateway's permit: the call reports it
+		} else if err != nil {
 			return err
 		}
 		if pc.Channel != nil {
