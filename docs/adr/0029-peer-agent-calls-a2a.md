@@ -1,0 +1,18 @@
+# ADR-0029 — Peer agent calls: A2A mediation and peer delegation
+
+**Status:** Accepted (2026-10-17; G0 M14 founder decision F1, answered with the recommended option; the [G0 M14 brief](../g0/M14.md) was approved with the founder's go-ahead the same day). Resolves the open item in BUILD_GUIDE §8 M14 (OWASP ASI07).
+
+**Context.** PantherClaw covers parent-to-child delegation: a child run has its own identity, a narrowed grant and lineage. When one independent agent asks another to act, for example over the A2A protocol (1.0.0), the call could only be mediated as an ordinary HTTP connection with no A2A-aware meaning, and the receiving agent acted under its own grant. The requester's principal and limits did not carry over, so an agent could ask a better-provisioned peer to do what it may not (a confused deputy, OWASP ASI07). The choice was between mediating these calls and declaring them uncovered routes.
+
+**Decision.**
+1. **A2A is a route type** (HR-322, HR-323, HR-327). An `a2a` connection pins the remote agent's card by digest (a signed card must verify against pinned keys), one declared interface (JSON-RPC or HTTP+JSON; gRPC refused) and the allowed skills; creating and re-pinning need a step-up, and drift quarantines the connection. The gateway serves the pinned card and an A2A face at `/a2a/{connection}`, decides each method through `pc.a2a`, and rebuilds every outbound request from ActionIR: text parts only, task and context ids only for tasks the run created, no push notifications. Answers and streams are capped and treated as untrusted data.
+2. **Requests are decided under the requester's grant.** `a2a.message.send` is an irreversible request to another actor with disclosure limits; reading and cancelling tasks are separate operations; effects are verified through the task state.
+3. **For an enrolled peer, the requester's limits carry over** (HR-324..326). A connection may name an agent of the same organization as the peer, with a peer scope. Sending then needs the requester's grant to allow delegation. At `BeginDispatch` the Authority creates (or reuses per requester run, connection and context) a child run of the requester's run for the peer agent and a delegated grant bounded by the intersection of the requester's grant and the peer scope, with shared ancestor budgets and the requester's represented principal; it ends with the requester's run or grant. The outbound request carries an action token naming the child run; the peer's receiver helper (Go, Python, TypeScript) refuses messages without a valid token and runs under that child run, so the peer's own calls are decided within the requester's limits.
+4. **External peers are governed outbound only** (R-41). Without a named peer agent, PantherClaw decides, holds and receipts what is sent; what the remote agent then does is under its own authority, and the route is labelled `PARTIAL`.
+
+**Consequences.**
+- ASI07 is covered for peers inside the organization and partly covered for external peers; the OWASP mapping says which.
+- Delegation reuses the existing child-run and delegated-grant machinery, so revocation, budgets, lineage and evidence work unchanged.
+- The gateway gains a protocol face and a card-pinning loop; gRPC, non-text parts and push notifications are follow-ups.
+
+**Alternatives.** Declaring peer calls uncovered (leaves the confused deputy open); mediating A2A as plain HTTP (no meaning, no carry-over); trusting a requester identity asserted in message metadata (forgeable; the action token is verified instead); a shared grant between requester and peer without a child run (no separate identity, no lineage).

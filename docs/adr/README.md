@@ -22,7 +22,7 @@ Format: Context → Decision → Consequences → Alternatives considered. Statu
 | [0016](0016-human-and-service-authentication.md) | Human and service authentication for the control plane (M2) |
 | [0017](0017-coding-agents-first-and-proven-coverage.md) | Coding and DevOps agents first; v0.1.0 built around proven coverage (2026-10-09) |
 | [0018](0018-federated-workload-identity-and-represented-principals.md) | Federated workload identity and represented principals from the customer's IdP (M3) |
-| [0019](0019-standards-at-the-edges.md) | Standards at the edges: AuthZEN endpoint (M14) and Shared Signals receiver (M10) |
+| [0019](0019-standards-at-the-edges.md) | Standards at the edges: AuthZEN endpoint (M14) and Shared Signals receiver (M10); M14 implementation note 2026-10-17 |
 | [0020](0020-org-package-signing-keys.md) | Org package-signing keys for customer-written packages (M4 follow-up, Team edition) |
 | [0021](0021-github-app-custody-and-per-action-tokens.md) | GitHub App custody and per-action installation tokens (M8, proposed 2026-10-11) |
 | [0022](0022-containment-sandbox-edge.md) | Containment sandbox edge, per-session TLS interception and probe trust (M9, proposed 2026-10-11) |
@@ -30,3 +30,5 @@ Format: Context → Decision → Consequences → Alternatives considered. Statu
 | [0025](0025-policy-lifecycle-staged-enforcement.md) | Policy lifecycle: staged enforcement and change approval (M11.1, proposed 2026-10-15; ADR-0024 is reserved by the v0.1.0 preview) |
 | [0026](0026-reflex-detection-containment-and-signals.md) | Reflex: detection over the evidence ledger, containment controls in the decision path, Shared Signals receiver trust (M10, proposed 2026-10-15) |
 | [0027](0027-governed-automations.md) | Governed automations: execution identity, ceiling-bounded issuance, closed step catalogue, signed inbound events (M11 part 2, proposed 2026-10-15; amends G0 M4 decision 7) |
+| [0028](0028-business-connectors-and-data-scoping.md) | Business connectors and data scoping: Stripe test mode, structured Postgres, scope obligations, Slack bot cards (M14, accepted 2026-10-17) |
+| [0029](0029-peer-agent-calls-a2a.md) | Peer agent calls: A2A mediation and peer delegation (M14, accepted 2026-10-17; OWASP ASI07) |
