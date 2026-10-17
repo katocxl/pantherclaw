@@ -556,8 +556,16 @@ var (
 	// ErrNotCooperative refuses delegated on a channel where the gateway
 	// dispatches (HR-186).
 	ErrNotCooperative = pcerr.New(pcerr.FailedPrecondition, "OUTCOME_NOT_DELEGABLE",
-		"only a cooperative channel (hook, sdk) reports delegated")
+		"only a cooperative channel (hook, sdk, authzen) reports delegated")
 )
+
+// Delegable reports whether a transaction on channel may report the outcome
+// delegated: the cooperative channels, where the agent or an external
+// enforcement point performs the action and the gateway sends nothing
+// (HR-186; authzen, G0 M14 D4).
+func Delegable(channel string) bool {
+	return channel == "hook" || channel == "sdk" || channel == "authzen"
+}
 
 func (a *Authority) log(context.Context) *slog.Logger {
 	if a.Log == nil {

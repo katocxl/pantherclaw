@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"slices"
 	"sync"
 	"time"
 
@@ -144,8 +145,12 @@ func handshake(ctx context.Context, base *url.URL, cl Client) error {
 		return fmt.Errorf("%w: answer", ErrUnverified)
 	case a.Simulator != "pantherclaw-sim" || a.Nonce != nonce:
 		return fmt.Errorf("%w: answer", ErrUnverified)
-	case a.Kind != "payments" && a.Kind != "mcp" && a.Kind != "github":
+	case !slices.Contains(simKinds, a.Kind):
 		return fmt.Errorf("%w: kind", ErrUnverified)
 	}
 	return nil
 }
+
+// simKinds are the simulators a handshake may name: payments, mcp and
+// github, and the M14 simulators stripe, slack and a2a (G0 M14 D46).
+var simKinds = []string{"payments", "mcp", "github", "stripe", "slack", "a2a"}
