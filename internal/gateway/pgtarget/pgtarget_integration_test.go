@@ -241,7 +241,9 @@ func TestHR330_TransportAndEgress(t *testing.T) {
 		"prefer":                   func(c *pgtarget.Config) { c.Endpoint.SSLMode = "prefer" },
 		"require without internal": func(c *pgtarget.Config) { c.Endpoint.SSLMode = pgtarget.SSLRequire; c.Endpoint.Internal = false },
 		"require without CA":       func(c *pgtarget.Config) { c.Endpoint.SSLMode = pgtarget.SSLRequire; c.Endpoint.CAPEM = "" },
-		"bad CA":                   func(c *pgtarget.Config) { c.Endpoint.CAPEM = "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n" },
+		"bad CA": func(c *pgtarget.Config) {
+			c.Endpoint.CAPEM = "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n"
+		},
 	} {
 		c := tg.Config(false)
 		mut(&c)

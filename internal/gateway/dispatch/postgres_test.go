@@ -108,10 +108,10 @@ func TestPgQuery_Operations(t *testing.T) {
 		t.Fatalf("other database: %v", err)
 	}
 	for args, code := range map[string]string{
-		`{"table":"shop.secrets","columns":["id"]}`:                                              pgdispatch.CodeTableNotAllowed,
-		`{"table":"shop.customers","columns":["password"]}`:                                      pgdispatch.CodeColumnNotAllowed,
-		`{"table":"shop.customers","columns":["id"],"order_by":["ssn:asc"]}`:                     pgdispatch.CodeColumnNotAllowed,
-		`{"table":"shop.customers","columns":["id"],"filters":[{"column":"ssn","op":"is_null"}]}`: pgdispatch.CodeColumnNotAllowed,
+		`{"table":"shop.secrets","columns":["id"]}`:                                                   pgdispatch.CodeTableNotAllowed,
+		`{"table":"shop.customers","columns":["password"]}`:                                           pgdispatch.CodeColumnNotAllowed,
+		`{"table":"shop.customers","columns":["id"],"order_by":["ssn:asc"]}`:                          pgdispatch.CodeColumnNotAllowed,
+		`{"table":"shop.customers","columns":["id"],"filters":[{"column":"ssn","op":"is_null"}]}`:     pgdispatch.CodeColumnNotAllowed,
 		`{"table":"shop.orders","columns":["id"],"filters":[{"column":"id","op":"eq","value":"1;"}]}`: pgdispatch.CodeQueryInvalid,
 	} {
 		if _, err := call("query_rows", args); pgdispatch.CodeOf(err) != code {
