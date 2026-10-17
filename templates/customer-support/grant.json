@@ -1,0 +1,13 @@
+{
+  "bounds": {
+    "operations": ["stripe.refund.create", "stripe.refund.read", "stripe.payment_intent.read"],
+    "targets": {
+      "stripe.payment": {"prefixes": ["pi_", "ch_"]},
+      "stripe.refund": {"prefixes": ["re_"]},
+      "stripe.payment_intent": {"prefixes": ["pi_"]}
+    }
+  },
+  "limits": {
+    "budgets": [{"id": "weekly_refunds", "grouping": "task", "operations": ["stripe.refund.create"], "currency": "USD", "limit": "500.00", "period": "week"}]
+  }
+}

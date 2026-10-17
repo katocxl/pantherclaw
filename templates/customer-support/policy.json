@@ -1,0 +1,16 @@
+{
+  "rules": [
+    {
+      "id": "cs-refund-cap", "per": "org", "kind": "CONSTRAIN",
+      "summary": "no single support refund above 100.00 USD",
+      "operations": ["stripe.refund.create"], "when": "true", "reason": "REFUND_OVER_CAP",
+      "constraint": {"kind": "amount_max", "param": "amount", "max": "100.00", "currency": "USD"}
+    },
+    {
+      "id": "cs-refund-hold", "per": "org", "kind": "REQUIRE_APPROVAL",
+      "summary": "an independent approver approves every support refund above 50.00 USD",
+      "operations": ["stripe.refund.create"], "when": "action.params.amount > money('50.00', 'USD')", "reason": "REFUND_NEEDS_APPROVAL",
+      "approval": {"role": "approver", "count": 1, "independent": true}
+    }
+  ]
+}

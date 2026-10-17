@@ -1,0 +1,27 @@
+{
+  "name": "customer-support",
+  "summary": "Support agents refund Stripe payments in test mode: an approver releases refunds above 50.00 USD, refunds above 100.00 USD are refused, and the agent's grant refunds at most 500.00 USD a week.",
+  "task_ref": "template:customer-support",
+  "protects": [
+    "every refund above 50.00 USD waits for an independent approver",
+    "no refund above 100.00 USD is made, approved or not",
+    "the agent's grant refunds at most 500.00 USD a week (its budget)",
+    "a refund never exceeds what is left to refund on the payment, read from Stripe within the last 60 seconds",
+    "the agent's grant covers creating and reading refunds and reading payments only"
+  ],
+  "excludes": [
+    "ticket updates and replies to the customer: M14 has no write connector for the ticket system",
+    "refunds in currencies other than USD: the rules fail closed (CANNOT_AUTHORIZE) until you add rules for them",
+    "whether a refund is justified: the approver decides from the payment and the reason the agent gives",
+    "refunds made outside PantherClaw (the Stripe dashboard, another integration, a person with the API key) are not seen or limited",
+    "Stripe live mode: pc.stripe refuses live keys",
+    "the thresholds are examples: change them in a new policy version before relying on them"
+  ],
+  "placeholders": {},
+  "routes": [{"package": "pc.stripe", "route": "stripe-refund"}],
+  "grant": "creating refunds on Stripe payments, reading refunds and payments; 500.00 USD of refunds a week",
+  "requires": {
+    "packages": ["pc.stripe"],
+    "connections": ["a pc.stripe connection with a restricted test key in enforce mode, which also provides the fact stripe.payment.refundable"]
+  }
+}
