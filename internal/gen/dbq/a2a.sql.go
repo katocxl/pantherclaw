@@ -65,6 +65,25 @@ func (q *Queries) GetA2AConnection(ctx context.Context, orgID ids.OrgID, connect
 	return i, err
 }
 
+const getA2AConnectionWriter = `-- name: GetA2AConnectionWriter :one
+SELECT simulated, updated_by, revision
+FROM pc.connections
+WHERE org_id = $1 AND id = $2 AND kind = 'a2a'
+`
+
+type GetA2AConnectionWriterRow struct {
+	Simulated bool
+	UpdatedBy string
+	Revision  int32
+}
+
+func (q *Queries) GetA2AConnectionWriter(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (GetA2AConnectionWriterRow, error) {
+	row := q.db.QueryRow(ctx, getA2AConnectionWriter, orgID, iD)
+	var i GetA2AConnectionWriterRow
+	err := row.Scan(&i.Simulated, &i.UpdatedBy, &i.Revision)
+	return i, err
+}
+
 const getA2APeerRun = `-- name: GetA2APeerRun :one
 SELECT child_run_id, child_grant_id, created_at
 FROM pc.a2a_peer_runs

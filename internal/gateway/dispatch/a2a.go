@@ -65,12 +65,20 @@ type A2APeer struct {
 	MaxStreamSeconds int32
 }
 
-// a2aPeerOf returns the connection's pinned interface. The gateway
-// configuration carries it once the a2a configuration field lands (G0 M14
-// D64); until then no a2a connection is dispatched (fail closed).
+func init() { kindSenders["a2a"] = (*Engine).sendA2A } // G0 M14 D75
+
+// a2aPeerOf returns the connection's pinned interface from its gateway
+// configuration (G0 M14 D64); a connection without a pinned card is not
+// dispatched (fail closed).
 func a2aPeerOf(conn *control.Connection) (A2APeer, bool) {
-	_ = conn
-	return A2APeer{}, false
+	c := conn.GetA2A()
+	if c == nil || len(c.GetPinnedCard()) == 0 || len(c.GetCardDigest()) != 32 || c.GetInterface() == nil {
+		return A2APeer{}, false
+	}
+	return A2APeer{
+		Binding: c.GetInterface().GetProtocol(), URL: c.GetInterface().GetUrl(),
+		MaxAnswerBytes: c.GetMaxAnswerBytes(), MaxStreamSeconds: c.GetMaxStreamSeconds(),
+	}, true
 }
 
 // a2aStreamKey carries the face's event sink.
@@ -306,6 +314,8 @@ func (e *Engine) sendA2A(ctx context.Context, r Result, conn *control.Connection
 	out, buildErr := buildA2A(def, a.Action, want.Txn, peer)
 	if !pinned {
 		buildErr = errors.New(CodeA2ANotPinned)
+	} else if e.A2ACardDrifted(conn) {
+		buildErr = errors.New(CodeA2ACardDrift)
 	}
 	begin := &pb.BeginDispatchRequest{PermitId: want.PermitID, Epoch: want.Epoch}
 	if buildErr == nil {

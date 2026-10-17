@@ -65,6 +65,7 @@ const (
 	CodeFieldNot      = "A2A_FIELD_UNSUPPORTED"
 	CodeTaskUnknown   = "A2A_TASK_UNKNOWN"
 	CodeSkillNot      = "A2A_SKILL_NOT_ALLOWED"
+	CodeCardDrift     = "A2A_CARD_DRIFT"
 	CodeBadRequest    = "A2A_REQUEST_INVALID"
 	CodeVersion       = "VERSION_NOT_SUPPORTED"
 	reasonHeld        = "PANTHERCLAW_HELD"
@@ -192,6 +193,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.conn, c.peer = conn, peer
+	if h.engine != nil && h.engine.A2ACardDrifted(conn) {
+		// The peer's card changed since it was pinned: nothing is served or
+		// sent until it is pinned again (HR-322).
+		h.fail(w, c, &faceError{status: http.StatusForbidden, rpc: codeRefused, reason: CodeCardDrift, message: "the peer agent's card changed since it was pinned"})
+		return
+	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, MaxBody+1))
 	if err != nil || len(body) > MaxBody {
 		h.fail(w, c, badRequest(http.StatusRequestEntityTooLarge, "request too large"))

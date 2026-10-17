@@ -54,3 +54,8 @@ FROM pc.a2a_peer_runs
 WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
 ORDER BY created_at DESC, child_run_id DESC
 LIMIT 200;
+
+-- name: GetA2AConnectionWriter :one
+SELECT simulated, updated_by, revision
+FROM pc.connections
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND kind = 'a2a';

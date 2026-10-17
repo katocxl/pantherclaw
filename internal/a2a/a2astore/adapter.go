@@ -14,9 +14,12 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	wire "github.com/katocxl/pantherclaw/internal/a2a"
+	capp "github.com/katocxl/pantherclaw/internal/connections/app"
+	"github.com/katocxl/pantherclaw/internal/connections/ports"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -99,38 +102,61 @@ func pinError(err error) error {
 	return ErrCardInvalid
 }
 
-// Adapter is the a2a kind's configuration adapter (D64): the connection
-// service calls it in the transaction that creates or updates an a2a
-// connection, and the configuration service to load what a gateway gets.
+// Adapter is the a2a kind's configuration store (D64, ports.KindConfig):
+// the connection service calls Save in the transaction that creates or
+// updates an a2a connection, and the gateway configuration Load. Every
+// save reads the card anew and pins what it read.
 type Adapter struct {
 	Pinner *Pinner
 }
 
-// Create pins and stores a new connection's configuration.
-func (a *Adapter) Create(ctx context.Context, q *dbq.Queries, org ids.OrgID, conn ids.UUID, cfg *pb.A2AConfig, simulated bool, by string) (*pb.A2AConfig, error) {
-	pinned, err := a.Pinner.Pin(ctx, cfg, simulated)
-	if err != nil {
-		return nil, err
+var _ ports.KindConfig = (*Adapter)(nil)
+
+// Save pins the card and stores the configuration (a validated
+// *capp.A2AConfig) of the connection just written in tx. The connection's
+// simulated flag picks the egress client, and its writer is the pin's.
+func (a *Adapter) Save(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn ids.UUID, _ int32, cfg any) error {
+	in, ok := cfg.(*capp.A2AConfig)
+	if !ok || in == nil {
+		return ErrShape
 	}
-	return pinned, Insert(ctx, q, org, conn, pinned, by)
+	q := dbq.New(tx)
+	w, err := q.GetA2AConnectionWriter(ctx, org, conn)
+	if err != nil {
+		return err
+	}
+	pinned, err := a.Pinner.Pin(ctx, ToProto(in), w.Simulated)
+	if err != nil {
+		return err
+	}
+	if _, err := Load(ctx, q, org, conn); errors.Is(err, ErrNotFound) {
+		return Insert(ctx, q, org, conn, pinned, w.UpdatedBy)
+	} else if err != nil {
+		return err
+	}
+	return Replace(ctx, q, org, conn, pinned, w.UpdatedBy)
 }
 
-// Update pins the card again and replaces the configuration: every change
-// of an a2a connection reads the card anew (a refresh of the pin is an
-// update with the same configuration).
-func (a *Adapter) Update(ctx context.Context, q *dbq.Queries, org ids.OrgID, conn ids.UUID, cfg *pb.A2AConfig, simulated bool, by string) (*pb.A2AConfig, error) {
-	pinned, err := a.Pinner.Pin(ctx, cfg, simulated)
-	if err != nil {
-		return nil, err
-	}
-	return pinned, Replace(ctx, q, org, conn, pinned, by)
-}
-
-// Load returns the configuration a gateway serves.
-func (a *Adapter) Load(ctx context.Context, q *dbq.Queries, org ids.OrgID, conn ids.UUID) (*pb.A2AConfig, error) {
-	p, err := Load(ctx, q, org, conn)
+// Load returns the configuration a gateway serves (*pb.A2AConfig).
+func (a *Adapter) Load(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn ids.UUID) (proto.Message, error) {
+	p, err := Load(ctx, dbq.New(tx), org, conn)
 	if err != nil {
 		return nil, err
 	}
 	return p.Config, nil
+}
+
+// ToProto is a validated configuration as the gateway gets it, before the
+// card is pinned.
+func ToProto(c *capp.A2AConfig) *pb.A2AConfig {
+	out := &pb.A2AConfig{
+		CardUrl: c.CardURL, CardKeys: c.CardKeys, Skills: slices.Clone(c.Skills),
+		Interface:      &pb.A2AInterface{Protocol: c.Interface.Protocol, Url: c.Interface.URL},
+		MaxAnswerBytes: c.MaxAnswerBytes, MaxStreamSeconds: c.MaxStreamSeconds,
+	}
+	if c.PeerAgent != nil && c.PeerScope != nil {
+		out.PeerAgentId = c.PeerAgent.String()
+		out.PeerScope = &pb.A2APeerScope{Bounds: c.PeerScope.Bounds, Limits: c.PeerScope.Limits}
+	}
+	return out
 }
