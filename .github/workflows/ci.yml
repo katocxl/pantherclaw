@@ -88,6 +88,7 @@ jobs:
               - 'integrations/claude-agent-sdk/python/**'
             typescript:
               - 'sdk/typescript/**'
+              - 'sdk/conformance/**'
               - 'integrations/claude-code/**'
               - 'integrations/claude-agent-sdk/typescript/**'
               - 'integrations/vercel-ai/typescript/**'
