@@ -111,9 +111,9 @@ func seedPostgresConnection(ctx context.Context, cfg *Config, pool *db.Pool, org
 	if err != nil {
 		return fmt.Errorf("dev: postgres connection: %w", err)
 	}
-	_, _ = fmt.Fprintf(stdout, "seeded postgres connection %s (%s) to %s/%s as %s; seal the role's password with "+
-		"pclaw seal --connection %s --from-file PASSWORD.txt, then test it with pclaw connection test %s --kind read; "+
-		"agents call the gateway at /mcp/%s or /%s/v1/query\n",
-		c.ID, c.Name, pc.Host, pc.Database, pc.User, c.ID, c.ID, c.Name, c.Name)
+	_, _ = fmt.Fprintf(stdout, "seeded postgres connection %s (%s) to %s/%s as %s; confirm its manifest with your security key at "+
+		"%s/connections/%s/postgres/confirm, seal the role's password with pclaw seal --connection %s --from-file PASSWORD.txt, "+
+		"then test it with pclaw connection test %s --kind read; agents call the gateway at /mcp/%s or /%s/v1/query\n",
+		c.ID, c.Name, pc.Host, pc.Database, pc.User, cfg.Auth.PublicURL, c.ID, c.ID, c.ID, c.Name, c.Name)
 	return nil
 }

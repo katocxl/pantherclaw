@@ -691,6 +691,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if d.web != nil {
 		d.web.Mount(mux)
 	}
+	mountM14Data(mux, d)
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, "ok\n")

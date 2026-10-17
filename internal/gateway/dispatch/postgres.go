@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect/v2"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
@@ -253,7 +254,13 @@ func pgManifest(pc *pb.PostgresConfig) pgdispatch.Manifest {
 // opening it with the sealed password, which must match the definition's
 // credential pattern if it declares one.
 func (e *Engine) pgPool(ctx context.Context, conn *control.Connection, def *defs.Definition, pc *pb.PostgresConfig) (*pgEntry, error) {
-	key := fmt.Sprintf("%d/%s/%d", conn.GetRevision(), conn.Credential.GetId(), conn.Credential.GetVersion())
+	// A confirmed manifest changes the configuration, not the revision.
+	raw, err := proto.MarshalOptions{Deterministic: true}.Marshal(pc)
+	if err != nil {
+		return nil, err
+	}
+	sum := sha256.Sum256(raw)
+	key := fmt.Sprintf("%d/%s/%d/%x", conn.GetRevision(), conn.Credential.GetId(), conn.Credential.GetVersion(), sum)
 	pgPools.Lock()
 	defer pgPools.Unlock()
 	pools := pgPools.m[e]

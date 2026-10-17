@@ -2431,11 +2431,17 @@ type PcPolicyVersion struct {
 }
 
 type PcPostgresConnection struct {
-	OrgID        ids.OrgID
-	ConnectionID ids.UUID
-	Config       []byte
-	Digest       []byte
-	UpdatedAt    time.Time
+	OrgID               ids.OrgID
+	ConnectionID        ids.UUID
+	Config              []byte
+	Digest              []byte
+	Proposed            []byte
+	ProposedDigest      []byte
+	ProposedAt          *time.Time
+	ConfirmedBy         *ids.UUID
+	ConfirmedCredential *ids.UUID
+	ConfirmedAt         *time.Time
+	UpdatedAt           time.Time
 }
 
 type PcPostureFinding struct {
