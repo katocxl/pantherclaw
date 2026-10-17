@@ -307,3 +307,44 @@ test("TestHR200_with a governed shell, options() refuses what loads skills and t
   assert.ok(observed.options({ permissionMode: "default", settingSources: ["user", "project"], skills: "all", toolAliases: { Read: "Bash" } }).hooks,
     "an ungoverned shell is unchanged");
 });
+
+test("TestHR329_a held call's action id is reused only until a final outcome (M14 D68)", async (t) => {
+  // Held (denied, not asked: bypassPermissions), then the identical call resubmits the same action and is denied: final, so a third identical call is a new decision.
+  const ids: string[] = [];
+  const answers: Face[] = [(_c, id, res) => res.end(decided(id, "hold", { wait: { handle: "h", state: "PENDING" } })), deny, allow];
+  const g = await gateway(t, (c, id, res) => {
+    ids.push(id);
+    (answers[ids.length - 1] as Face)(c, id, res);
+  });
+  const p = integration(g.client);
+  p.options({ permissionMode: "bypassPermissions", settingSources: [] });
+  for (const id of ["toolu_a", "toolu_b", "toolu_c"]) await p.preToolUse(refund("bypassPermissions", id));
+  assert.equal(ids.length, 3);
+  assert.equal(ids[0], ids[1], "the identical call after a hold resubmits its action");
+  assert.notEqual(ids[1], ids[2], "after the deny the identical call is a new decision");
+});
+
+test("TestHR329_canUseTool forgets the held action once it is final, even when the allow cannot be sent (M14 D68)", async (t) => {
+  const face = (await load("sdk_face.json")).answers.find((a: { send?: unknown }) => a.send);
+  const dispatch = JSON.parse(face.body).dispatch;
+  for (const [name, final] of [
+    ["an allow with a request to send and no onDispatch", (_c, id, res) => res.end(decided(id, "allow", { dispatch }))],
+    ["an allow", allow],
+  ] as [string, Face][]) {
+    const ids: string[] = [];
+    const g = await gateway(t, (c, id, res) => {
+      ids.push(id);
+      if (ids.length === 1) res.end(decided(id, "hold", { wait: { handle: "h", state: "PENDING" } }));
+      else final(c, id, res);
+    });
+    const opts = integration(g.client).options({ permissionMode: "default", settingSources: [], mcpServers: { payments: {} } });
+    const hook = opts.hooks?.PreToolUse?.at(-1)?.hooks[0];
+    assert.ok(hook && opts.canUseTool);
+    assert.equal(decisionOf(await hook(refund("default", "toolu_31"))), "ask", name);
+    await opts.canUseTool("mcp__payments__create_refund", {}, { signal: signal(), toolUseID: "toolu_31" });
+    await hook(refund("default", "toolu_32"));
+    assert.equal(ids.length, 3, name);
+    assert.equal(ids[0], ids[1], `${name}: the resubmission`);
+    assert.notEqual(ids[2], ids[0], `${name}: a later identical call is a new decision`);
+  }
+});

@@ -419,6 +419,11 @@ var frameworks = map[string]string{
 	"github.com/mark3labs/mcp-go": "mcp-sdk", "github.com/tmc/langchaingo": "langchain",
 }
 
+// npmFrameworks maps npm package names too generic to read in the other
+// ecosystems' manifests to the framework they indicate: "ai" is the Vercel
+// AI SDK on npm only.
+var npmFrameworks = map[string]string{"ai": "vercel-ai"}
+
 var skipDirs = []string{".git", "node_modules", "vendor", ".venv", "venv", "__pycache__", "dist", "build", ".next", "target"}
 
 // projects walks dir for dependency manifests that use an agent framework.
@@ -473,6 +478,8 @@ func packageJSON(path string) []string {
 		if deps, ok := doc[section].(map[string]any); ok {
 			for name := range deps {
 				if f, ok := frameworks[name]; ok {
+					out = append(out, f)
+				} else if f, ok := npmFrameworks[name]; ok {
 					out = append(out, f)
 				}
 			}

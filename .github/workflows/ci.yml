@@ -85,11 +85,18 @@ jobs:
               - '.github/**'
             python:
               - 'sdk/python/**'
+              - 'sdk/conformance/**'
               - 'integrations/claude-agent-sdk/python/**'
+              - 'integrations/langchain/python/**'
+              - 'integrations/openai-agents/python/**'
+              - 'integrations/crewai/python/**'
             typescript:
               - 'sdk/typescript/**'
+              - 'sdk/conformance/**'
               - 'integrations/claude-code/**'
               - 'integrations/claude-agent-sdk/typescript/**'
+              - 'integrations/vercel-ai/typescript/**'
+              - 'integrations/mcp/typescript/**'
 
   go-static:
     name: go / format, headers, lint
@@ -539,11 +546,14 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: false
-      - name: SDK and Agent SDK integration tests (Python 3.13 and 3.14)
+      - name: SDK, Agent SDK integration and framework wrapper tests (Python 3.13 and 3.14)
+        # No committed lock contains CrewAI (M14 D60): its wrapper's tests run on a stand-in for CrewAI's tool interface; task sdk:crewai-real runs them in the real CrewAI, locally.
         run: |
           for py in 3.13 3.14; do
             (cd sdk/python && PYTHONPATH=src uv run --locked --python "$py" python -m unittest discover -s tests)
-            (cd integrations/claude-agent-sdk/python && uv run --locked --python "$py" python -m unittest discover -s tests)
+            for d in claude-agent-sdk langchain openai-agents crewai; do
+              (cd "integrations/$d/python" && uv run --locked --python "$py" python -m unittest discover -s tests)
+            done
           done
 
   typescript-sdk:
@@ -574,6 +584,13 @@ jobs:
         run: |
           corepack pnpm install --frozen-lockfile
           node --test "test/**/*.test.ts"
+      - name: Framework wrapper tests, wrappers.json included (Vercel AI SDK, MCP TypeScript SDK)
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+        run: |
+          for d in vercel-ai mcp; do
+            (cd "integrations/$d/typescript" && corepack pnpm install --frozen-lockfile && node --test "test/**/*.test.ts")
+          done
 
   ci-ok:
     name: ci-ok
