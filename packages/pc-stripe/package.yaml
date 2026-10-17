@@ -24,15 +24,19 @@
 # it asks for a decision and reported as the connection's fact provider
 # (the pc.github pattern, HR-160):
 # - stripe.payment.refundable: GET /v1/payment_intents/{id} (expand
-#   latest_charge) or GET /v1/charges/{id}; members amount_refundable
-#   (amount - amount_refunded, minor units), currency and livemode. A
-#   livemode answer is refused (HR-305).
+#   latest_charge) or GET /v1/charges/{id}; members remaining (Money:
+#   amount - amount_refunded in major units with the uppercase currency,
+#   by the D8 exponent table) and livemode. A livemode answer is refused
+#   (HR-303, D54); the le bind compares remaining with the amount, money
+#   with money, so a refund in another currency is CURRENCY_MISMATCH
+#   (D48, D71).
 # - stripe.account.payout_details_changed: GET /v1/events with header
 #   Stripe-Account: <acct>, type=account.external_account.* and
 #   created[gte] = now - 7 days (Stripe keeps events 30 days); members
-#   changed (bool) and last_changed. Any error or an unreadable answer
-#   leaves the fact unread, so the treasury template holds the transfer
-#   (HR-306).
+#   changed (bool) and last_changed. It is not a prerequisite: it feeds
+#   the payee_changed_recently consequence, and any error or unreadable
+#   answer leaves it unread, so the consequence is unknown and the
+#   transfer is held, never refused outright (HR-206, HR-306, D71).
 #
 # Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124),
 # so any change here needs the golden tests in internal/definitions to be
@@ -70,6 +74,9 @@ definitions:
       - kind: funds.transfer
         description: Returns funds from the merchant to the customer
     reversibility: irreversible
+    # One payment named by its pi_ id and then by its ch_ id gives two
+    # dedupe keys; the refundable fact (what is left on the payment) and
+    # Stripe itself still bound the total refunded.
     dedupe_key: [target.id, params.amount]
     constraints:
       - kind: amount_max
@@ -77,8 +84,9 @@ definitions:
     prerequisites:
       - fact: stripe.payment.refundable
         max_age_seconds: 60
-        # D48: the amount may not exceed what is left to refund.
-        binds: {member: amount_refundable, param: amount, op: le, reason: AMOUNT_NOT_REFUNDABLE}
+        # D48, D71: the amount may not exceed what is left to refund, in
+        # the payment's currency.
+        binds: {member: remaining, param: amount, op: le, reason: AMOUNT_NOT_REFUNDABLE}
     retry:
       safe: false
       on_unknown: reconcile
@@ -124,7 +132,12 @@ definitions:
         route: stripe-refund
         encoding: form
         extract:
-          target_id: 'has(input.payment_intent) ? input.payment_intent : input.charge'
+          # Exactly one of payment_intent and charge (D71): with both or
+          # neither the id is empty, fails the target pattern and the
+          # request is refused, never guessed.
+          target_id: >-
+            has(input.payment_intent) && !has(input.charge) ? input.payment_intent :
+            (has(input.charge) && !has(input.payment_intent) ? input.charge : '')
           # Stripe's refund takes no currency (it is the payment's); the
           # gateway needs one to decide, so the agent sends it, and the
           # refundable fact binds it to the payment's.
@@ -155,8 +168,8 @@ definitions:
               maximum: 99999999
             currency:
               type: string
-              description: The payment's currency, lowercase (usd)
-              pattern: '^[a-z]{3}$'
+              description: The payment's currency (USD)
+              enum: [USD, EUR, GBP, CAD, AUD, NZD, CHF, SEK, NOK, DKK, SGD, HKD, JPY, KRW]
             reason:
               type: string
               enum: [duplicate, fraudulent, requested_by_customer]
@@ -256,6 +269,74 @@ definitions:
           charge: target.id.ch
           starting_after: params.starting_after
 
+  # Internal reads (no mappings): the payment intent and transfer
+  # verifiers' lookups after an unknown outcome (D50, D71).
+  - operation: stripe.payment_intent.list
+    summary: List the payment intents of one customer
+    access: read
+    target:
+      type: stripe.customer
+      id_pattern: '^cus_[A-Za-z0-9]{8,64}$'
+      account: none
+    params:
+      starting_after:
+        type: identifier
+        pattern: '^pi_[A-Za-z0-9]{8,64}$'
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    dispatch:
+      credential_pattern: '^(sk|rk)_test_[A-Za-z0-9]{16,}$'
+      http:
+        method: GET
+        path: /v1/payment_intents
+        headers:
+          Stripe-Version: 2026-09-30.endive
+        query:
+          customer: target.id
+          starting_after: params.starting_after
+
+  - operation: stripe.transfer.list
+    summary: List the transfers to one connected account
+    access: read
+    target:
+      type: stripe.account
+      id_pattern: '^acct_[A-Za-z0-9]{8,64}$'
+      account: none
+    params:
+      starting_after:
+        type: identifier
+        pattern: '^tr_[A-Za-z0-9]{8,64}$'
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    dispatch:
+      credential_pattern: '^(sk|rk)_test_[A-Za-z0-9]{16,}$'
+      http:
+        method: GET
+        path: /v1/transfers
+        headers:
+          Stripe-Version: 2026-09-30.endive
+        query:
+          destination: target.id
+          starting_after: params.starting_after
+
   - operation: stripe.payment_intent.read
     summary: Read one payment intent with its latest charge
     access: read
@@ -275,10 +356,12 @@ definitions:
     response:
       format: json
       fields:
-        - {path: latest_charge.billing_details.*, class: pii}
+        # A path to an object classes its whole subtree (billing_details
+        # and shipping are objects, not arrays).
+        - {path: latest_charge.billing_details, class: pii}
         - {path: latest_charge.receipt_email, class: pii}
-        - {path: latest_charge.shipping.*, class: pii}
-        - {path: shipping.*, class: pii}
+        - {path: latest_charge.shipping, class: pii}
+        - {path: shipping, class: pii}
         - {path: receipt_email, class: pii}
     assurance:
       basis: documented
@@ -300,7 +383,7 @@ definitions:
         headers:
           Stripe-Version: 2026-09-30.endive
         query:
-          expand[]: latest_charge
+          expand[]: literal.latest_charge
 
   - operation: stripe.balance.read
     summary: Read the account's balance
@@ -390,6 +473,14 @@ definitions:
       level: domain_effect
       reference:
         from_response: /id
+      lookup:
+        operation: stripe.payment_intent.list
+        list:
+          items: /data
+          id: /id
+          correlate: /metadata/pantherclaw_key
+          more: /has_more
+          page_param: starting_after
       expect:
         - field: /amount
           equals: params.amount.minor
@@ -509,8 +600,11 @@ definitions:
         type: identifier
         material: true
         pattern: '^[A-Za-z0-9_-]{1,64}$'
+      # Sent to Stripe and shown to the connected account: content, never
+      # text (D70, HR-023), and a disclosure param (HR-079).
       description:
-        type: text
+        type: content
+        material: true
         disclosure: true
         max_bytes: 500
     effects:
@@ -522,9 +616,6 @@ definitions:
       - kind: amount_max
         param: amount
       - kind: destination_set
-    prerequisites:
-      - fact: stripe.account.payout_details_changed
-        max_age_seconds: 300
     retry:
       safe: false
       on_unknown: reconcile
@@ -536,6 +627,14 @@ definitions:
       level: domain_effect
       reference:
         from_response: /id
+      lookup:
+        operation: stripe.transfer.list
+        list:
+          items: /data
+          id: /id
+          correlate: /metadata/pantherclaw_key
+          more: /has_more
+          page_param: starting_after
       expect:
         - field: /amount
           equals: params.amount.minor
