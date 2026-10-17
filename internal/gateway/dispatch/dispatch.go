@@ -374,6 +374,9 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	if _, class, code := e.contained(conn); class != "" {
 		return Result{Class: class, Code: code}
 	}
+	if kindNotImplemented(conn.GetKind()) {
+		return Result{Class: CannotAuthorize, Code: CodeKindNotImplemented, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
+	}
 	if e.breaker.open(ctx, conn) {
 		return Result{Class: EnforcementFailed, Code: CodeCircuitOpen}
 	}
@@ -482,6 +485,8 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 		return e.sendMCP(ctx, r, conn, def, bound, want, t)
 	case "local":
 		return e.delegate(ctx, r, want, t)
+	case "postgres", "a2a":
+		return r.fail(EnforcementFailed, CodeKindNotImplemented)
 	}
 	return e.send(ctx, r, conn, def, bound, want, t)
 }
@@ -626,6 +631,9 @@ func (e *Engine) client(conn *control.Connection) (*egress.Client, error) {
 
 // entry returns the connection's clients, new for each revision.
 func (e *Engine) entry(conn *control.Connection) (clientEntry, error) {
+	if kindNotImplemented(conn.GetKind()) {
+		return clientEntry{}, errKindNotImplemented
+	}
 	if conn.GetKind() == "mcp_container" {
 		return e.connectorEntry(conn)
 	}

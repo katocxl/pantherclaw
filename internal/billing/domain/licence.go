@@ -288,3 +288,13 @@ func (e Entitlements) Cohorts() bool { return e.Edition.Paid() }
 // ReferencePacks reports whether the edition applies reference policy
 // packs (F762, F764, F767): Team and above.
 func (e Entitlements) ReferencePacks() bool { return e.Edition.Paid() }
+
+// SlackApprovals reports whether the edition offers Slack approval cards
+// (slack_app channels, G0 M14 D5, D22; F164–F167): Team and above.
+func (e Entitlements) SlackApprovals() bool { return e.Edition.Paid() }
+
+// DataScoping reports whether the edition lets grants and rules scope the
+// data a read returns (record scope and data classes, G0 M14 D5, D11;
+// F101–F103): Team and above. Scope already in force keeps being enforced
+// after a downgrade.
+func (e Entitlements) DataScoping() bool { return e.Edition.Paid() }
