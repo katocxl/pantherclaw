@@ -5,9 +5,9 @@ package gateway
 
 import (
 	"bufio"
-	"io"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
