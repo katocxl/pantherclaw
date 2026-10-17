@@ -439,7 +439,10 @@ func compareConstraint(id string, a, b *Constraint) []Change {
 			}
 		}
 		return one("constraint.max", maxText(a), maxText(b), d)
-	case AllowedValues, TargetSet, DestinationSet:
+	case AllowedValues, TargetSet, DestinationSet, RecordScope, DataClasses:
+		if a.Kind == RecordScope && a.Param != b.Param {
+			return one("constraint.param", a.Param, b.Param, Unknown)
+		}
 		if slices.Equal(a.Values, b.Values) {
 			return nil
 		}
