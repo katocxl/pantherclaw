@@ -596,7 +596,11 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		}
 		x := executed(pc, finalize.RecordedByGateway)
 		if o == finalize.Delegated {
-			if pc.Channel == nil || (*pc.Channel != "hook" && *pc.Channel != "sdk") {
+			access := ""
+			if pc.AccessMode != nil {
+				access = *pc.AccessMode
+			}
+			if pc.Channel == nil || !finalize.Delegable(*pc.Channel, access) {
 				return finalize.ErrNotCooperative
 			}
 			x.AccessMode = finalize.AccessAgentHeld // the agent performed it with its own access (HR-186)

@@ -387,7 +387,7 @@ func (w *World) RecordExecution(_ context.Context, _ ids.OrgID, gatewayID string
 		x.AccessMode = p.dispatch.AccessMode
 	}
 	if e.Outcome == finalize.Delegated {
-		if p.channel != "hook" && p.channel != "sdk" {
+		if !finalize.Delegable(p.channel, p.dispatch.AccessMode) {
 			return "", finalize.ErrNotCooperative
 		}
 		x.AccessMode = finalize.AccessAgentHeld

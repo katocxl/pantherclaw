@@ -61,7 +61,11 @@ const (
 	ReasonActionInstanceDiffer = "ACTION_INSTANCE_MISMATCH"
 	ReasonConnectionUnknown    = "CONNECTION_UNKNOWN"
 	ReasonConnectionRequired   = "CONNECTION_REQUIRED"
-	ReasonConnectionContained  = "CONNECTION_QUARANTINED"
+	// ReasonChannelNotAllowed: the channel cannot come from this caller: an
+	// authzen action only from the external decision path, never from a
+	// gateway (G0 M14 D61).
+	ReasonChannelNotAllowed   = "CHANNEL_NOT_ALLOWED"
+	ReasonConnectionContained = "CONNECTION_QUARANTINED"
 	// ReasonVerifierUnsupported: the effect must be verified at a level
 	// (the definition's verifier.required, or a policy's verify obligation)
 	// that its verifier cannot reach, or through a connection that cannot
@@ -325,6 +329,10 @@ func (s *state) missing(step int, err error, what string) {
 // Step 1: the action pins a definition the org has pinned, through one of
 // its reviewed routes.
 func (p *Pipeline) scope(ctx context.Context, s *state) {
+	if (s.a.Channel == string(defs.ChannelAuthZEN)) != s.req.External {
+		s.cl.add(StepScope, adomain.CannotAuthorize, ReasonChannelNotAllowed, "the "+s.a.Channel+" channel cannot come from this caller", "")
+		return
+	}
 	pinned, err := p.Reader.Definition(ctx, s.req.Org, s.a.Definition)
 	switch {
 	case errors.Is(err, ErrNotFound):
@@ -388,7 +396,8 @@ func (p *Pipeline) connection(ctx context.Context, s *state, d *defs.Definition)
 	case c.Gateway.String() != s.req.Gateway:
 		return unknown()
 	}
-	if c.Package != s.a.Definition.Package || (c.Kind == "local") != (s.a.Channel == string(defs.ChannelHook)) || !dispatches(c.Kind, d) {
+	if c.Package != s.a.Definition.Package || (c.Kind == "local") != (s.a.Channel == string(defs.ChannelHook)) ||
+		(c.Kind == "a2a") != (s.a.Channel == string(defs.ChannelA2A)) || !dispatches(c.Kind, d) {
 		s.cl.add(StepScope, adomain.CannotAuthorize, ReasonRouteUnknown,
 			"route "+s.a.Route+" of "+d.Operation+" is not served by this connection", "")
 		return false
@@ -403,8 +412,13 @@ func (p *Pipeline) connection(ctx context.Context, s *state, d *defs.Definition)
 
 // gatewayChannels are the channels a gateway serves, whose actions always
 // name their connection (PAP-1 §6): the sdk channel too, since the /sdk
-// face is its only mapper (HR-201) and always names the connection.
-var gatewayChannels = []string{string(defs.ChannelHTTP), string(defs.ChannelMCP), string(defs.ChannelHook), string(defs.ChannelSDK)}
+// face is its only mapper (HR-201) and always names the connection. An
+// authzen action names the connection its enforcement point fronts, and an
+// a2a action the peer agent's connection (G0 M14 D27, D31).
+var gatewayChannels = []string{
+	string(defs.ChannelHTTP), string(defs.ChannelMCP), string(defs.ChannelHook), string(defs.ChannelSDK),
+	string(defs.ChannelAuthZEN), string(defs.ChannelA2A),
+}
 
 // dispatches reports whether a connection of this kind serves the
 // definition: an HTTP or MCP connection (an MCP server over HTTP, or a
@@ -419,6 +433,10 @@ func dispatches(kind string, d *defs.Definition) bool {
 		return d.Dispatch != nil && d.Dispatch.MCP != nil
 	case "local":
 		return true
+	case "postgres", "a2a":
+		// Defined, not yet served (G0 M14 D4): no definition dispatches
+		// through them, so the route is unknown (fail closed).
+		return false
 	}
 	return false
 }

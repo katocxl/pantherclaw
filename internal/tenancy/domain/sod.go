@@ -3,7 +3,11 @@
 
 package domain
 
-import pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
+import (
+	"slices"
+
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
+)
 
 // Separation-of-duties primitives (F581–F583). Approval-time checks
 // (initiator ≠ approver, two distinct approvers) build on Distinct in M5.
@@ -31,7 +35,7 @@ func CheckBindable(role RoleName, k PrincipalKind, t ScopeType) (Role, error) {
 	if !t.Valid() || !r.BindableAt(t) {
 		return Role{}, ErrScopeNotAllowed
 	}
-	if k == KindUser && r.ServiceOnly {
+	if k == KindUser && (r.ServiceOnly || slices.ContainsFunc(r.Permissions, Permission.ServiceOnly)) {
 		return Role{}, ErrServiceOnlyRole
 	}
 	if k != KindUser && r.HumanOnly() {
