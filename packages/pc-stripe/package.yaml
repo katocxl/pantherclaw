@@ -51,8 +51,8 @@ definitions:
     access: write
     target:
       type: stripe.payment
-      # PENDING coordinator (Q2): an unmatched optional group resolving
-      # to nil so the dispatch sends payment_intent or charge by prefix.
+      # D49: an unmatched optional group resolves
+      # to nil, so the dispatch sends payment_intent or charge by prefix.
       id_pattern: '^(?:(?P<pi>pi_[A-Za-z0-9]{8,64})|(?P<ch>ch_[A-Za-z0-9]{8,64}))$'
       account: none
     params:
@@ -77,8 +77,8 @@ definitions:
     prerequisites:
       - fact: stripe.payment.refundable
         max_age_seconds: 60
-        # PENDING coordinator (Q1): binds with op le.
-        binds: {member: amount_refundable, param: amount, reason: AMOUNT_NOT_REFUNDABLE}
+        # D48: the amount may not exceed what is left to refund.
+        binds: {member: amount_refundable, param: amount, op: le, reason: AMOUNT_NOT_REFUNDABLE}
     retry:
       safe: false
       on_unknown: reconcile
@@ -90,7 +90,7 @@ definitions:
       level: domain_effect
       reference:
         from_response: /id
-      # PENDING coordinator (Q3): correlate on metadata the dispatch sets.
+      # D50: correlate on the metadata the dispatch sets (transaction.key).
       lookup:
         operation: stripe.refund.list
         list:
