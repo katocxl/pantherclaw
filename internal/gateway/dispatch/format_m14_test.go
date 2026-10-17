@@ -71,3 +71,25 @@ func TestM14_KindSenders(t *testing.T) {
 		t.Fatal("a registered kind is not implemented")
 	}
 }
+
+// TestM14_CheckCredentialPattern: the one helper every dispatch path calls
+// accepts any credential without a pattern, a static credential matching
+// it, and refuses a mismatch and any GitHub App credential under one
+// (G0 M14 D85, HR-301).
+func TestM14_CheckCredentialPattern(t *testing.T) {
+	d := &defs.Definition{Dispatch: &defs.Dispatch{CredentialPattern: `^key_[a-z]{4}$`}}
+	for _, c := range []struct {
+		def  *defs.Definition
+		kind string
+		cred string
+		ok   bool
+	}{
+		{nil, "static", "x", true}, {&defs.Definition{}, "static", "x", true}, {&defs.Definition{Dispatch: &defs.Dispatch{}}, "github_app", "", true},
+		{d, "static", "key_abcd", true}, {d, "", "key_abcd", true}, {d, "static", "key_abcde", false}, {d, "static", "", false},
+		{d, "github_app", "key_abcd", false},
+	} {
+		if err := CheckCredentialPattern(c.def, c.kind, []byte(c.cred)); (err == nil) != c.ok {
+			t.Errorf("%+v %s %q: %v", c.def, c.kind, c.cred, err)
+		}
+	}
+}

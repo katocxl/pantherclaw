@@ -102,6 +102,7 @@ var (
 	reservedHeaders = []string{
 		"authorization", "proxy-authorization", "cookie", "host", "content-length", "content-type",
 		"transfer-encoding", "connection", "te", "upgrade", "trailer", "keep-alive", "pap-action", "expect",
+		"accept-encoding", // the gateway reads answers as identity (HR-076, G0 M14 D85)
 	}
 )
 
@@ -346,7 +347,8 @@ func (d *Definition) validateHTTPDispatch(at string, h *HTTPDispatch) error {
 	for _, name := range slices.Sorted(maps.Keys(h.Headers)) {
 		lower := strings.ToLower(name)
 		if !headerRe.MatchString(name) || slices.Contains(reservedHeaders, lower) || lower == strings.ToLower(h.IdempotencyHeader) ||
-			strings.HasPrefix(lower, "pap-") || !staticHeaderRe.MatchString(h.Headers[name]) {
+			lower == "idempotency-key" || // a fixed key would replay one answer for every action (D85)
+			strings.HasPrefix(lower, "pap-") || strings.HasPrefix(lower, "pc-") || !staticHeaderRe.MatchString(h.Headers[name]) {
 			return invalid("%s.headers: %q must be an unreserved header with a literal value of 1..128 printable ASCII characters", at, name)
 		}
 	}

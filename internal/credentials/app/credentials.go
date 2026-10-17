@@ -292,6 +292,9 @@ func (s *Service) put(ctx context.Context, tx db.TenantTx, c tenancy.Caller, in 
 		if err != nil {
 			return err
 		}
+		if err := checkPattern(ctx, q, conn, in.Kind); err != nil {
+			return err
+		}
 		if err := live(q.LockGateway(ctx, c.Org, conn.GatewayID)); err != nil {
 			return err
 		}
