@@ -6,12 +6,15 @@
 package e2e
 
 import (
+	"bytes"
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"net/http"
 	"strings"
 	"testing"
 
+	capp "github.com/katocxl/pantherclaw/internal/connections/app"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -100,5 +103,57 @@ func TestT147_EnforcementPointAbuse(t *testing.T) {
 	}
 	if st, _ := p.post(t, "/access/v1/evaluations", map[string]any{"evaluations": many}, ""); st != http.StatusBadRequest {
 		t.Fatalf("a batch of 11: %d", st)
+	}
+}
+
+// TestHR320_TargetEnforcedDecisionsCarryTheActionToken: on a
+// target_enforced connection an allowed evaluation's context carries the
+// action token binding exactly the forwarded request; the target accepts
+// the request with it, once, and refuses it without (D28).
+func TestHR320_TargetEnforcedDecisionsCarryTheActionToken(t *testing.T) {
+	s := start(t, options{budget: "1000.00", access: capp.AccessTargetEnforced, actionTokens: true})
+	p := authzenPoint(t, s, "target_enforced", s.simURL)
+	refundableMore(t, s, "ch_te1")
+	body := []byte(`{"charge":"ch_te1","amount":"10.00","currency":"USD","reason":"duplicate"}`)
+	a := p.evaluate(t, p.evaluation(t, azRequest{Method: http.MethodPost, Path: "/v1/refunds", Body: body, Action: ids.NewV7()}))
+	tok := a.Context.PantherClaw.ActionToken
+	if !a.Decision || tok == "" || a.Context.PantherClaw.Coverage != "PARTIAL" {
+		t.Fatalf("decision: %+v", a.Context.PantherClaw)
+	}
+	send := func(token string) int {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, s.simURL+"/v1/refunds", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Idempotency-Key", "agent-te1")
+		if token != "" {
+			req.Header.Set("PAP-Action", token)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+	if st := send(""); st < 400 {
+		t.Fatalf("without the action token: %d", st)
+	}
+	if st := send(tok); st != http.StatusOK || s.sim.Stats().Refunds != 1 {
+		t.Fatalf("with it: %d, %d refunds", st, s.sim.Stats().Refunds)
+	}
+}
+
+// TestHR321_APointPastItsRateIsRefused: the endpoint answers 429 with
+// Retry-After once a point passes its evaluations a second.
+func TestHR321_APointPastItsRateIsRefused(t *testing.T) {
+	s := start(t, options{budget: "1000.00"})
+	p := authzenPoint(t, s, "agent_held", s.simURL)
+	s.db.AdminExec(t, "UPDATE pc.enforcement_points SET rate_per_second = 1 WHERE org_id = $1 AND id = $2", s.org, p.id)
+	codes := map[int]int{}
+	for range 3 {
+		st, _ := p.post(t, "/access/v1/evaluation", map[string]any{}, "")
+		codes[st]++
+	}
+	if codes[http.StatusTooManyRequests] == 0 {
+		t.Fatalf("statuses %v, want a 429", codes)
 	}
 }
