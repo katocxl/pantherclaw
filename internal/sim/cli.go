@@ -38,6 +38,8 @@ Usage:
                          [--repos payments] [--mcp-addr ADDR --mcp-token-file FILE]
   pantherclaw-sim load --workload-file FILE [--token-file FILE] [--run ID] [--gateway URL] [--connection payments] [--rate 1000] [--duration 30s]
                        [--warmup 5s] [--max-in-flight 2048] [--amount 1.00 | --unique] [--facts-key-file FILE] [--out FILE]
+  pantherclaw-sim a2a [--addr 127.0.0.1:9093] [--base-url URL] [--name NAME] [--token-file FILE] [--sign-key FILE [--jwks-out FILE]]
+                      [--latency 0s] [--complete-after 0s] [--stream-delay 0s] [--oversize 0] [--auth-required] [--fail] [--description TEXT]
   pantherclaw-sim canary [--host 127.0.0.1] [--dns-port 18453] [--https-port 18443] [--ssh-port 18422] [--query-addr 127.0.0.1:18433]
   pantherclaw-sim version
 `
@@ -61,6 +63,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = runGitHub(ctx, args[1:], stderr)
 	case "load":
 		err = runLoad(ctx, args[1:], stdout, stderr)
+	case "a2a":
+		err = runA2A(ctx, args[1:], stderr)
 	case "canary":
 		err = runCanary(ctx, args[1:], stderr)
 	default:
