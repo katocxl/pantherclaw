@@ -79,7 +79,9 @@ linters:
             - pkg: "github.com/katocxl/pantherclaw/internal/authority/pipeline/pipelinetest"
               desc: "test helpers only (D120)"
         gateway-has-no-database:
-          files: ["**/internal/gateway/**"]
+          # pgtarget reaches customer databases, which are targets, not
+          # PantherClaw's own database (G0 M14 D58); its own rule follows.
+          files: ["**/internal/gateway/**", "!**/internal/gateway/pgtarget/**"]
           deny:
             - pkg: "github.com/jackc/pgx"
               desc: "the gateway has no database access (ADR-0002)"
@@ -87,6 +89,24 @@ linters:
               desc: "the gateway has no database access (ADR-0002)"
             - pkg: "github.com/katocxl/pantherclaw/internal/platform/db"
               desc: "the gateway has no database access (ADR-0002)"
+        gateway-pgtarget:
+          # The target-database client may use pgx, its pool and pgconn
+          # only (G0 M14 D58).
+          files: ["**/internal/gateway/pgtarget/**"]
+          list-mode: lax
+          allow:
+            - "github.com/jackc/pgx/v5$"
+            - "github.com/jackc/pgx/v5/pgxpool"
+            - "github.com/jackc/pgx/v5/pgconn"
+          deny:
+            - pkg: "github.com/jackc/pgx"
+              desc: "pgtarget uses pgx, pgxpool and pgconn only (D58)"
+            - pkg: "database/sql"
+              desc: "pgtarget uses pgx, pgxpool and pgconn only (D58)"
+            - pkg: "github.com/katocxl/pantherclaw/internal/platform/db"
+              desc: "pgtarget never reaches PantherClaw's own database (ADR-0002, D58)"
+            - pkg: "github.com/katocxl/pantherclaw/internal/gen"
+              desc: "pgtarget stays free of the control-plane protos (D58)"
         domain-is-pure:
           files: ["**/internal/*/domain/**"]
           deny:
