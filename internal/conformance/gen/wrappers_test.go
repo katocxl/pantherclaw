@@ -209,7 +209,7 @@ func buildWrappers(t *testing.T) any {
 			a.Decision, a.ErrorClass, a.Reason = "deny", "policy_denied", "PantherClaw denied this call."
 		}),
 		"duplicate": body(func(a *faceAnswer) {
-			// A resubmission of an action already finalised: the stored decision, never a second permit (HR-005).
+			// A resubmission of an action already finalized: the stored decision, never a second permit (HR-005).
 			a.Decision, a.ErrorClass, a.Code = "deny", "cannot_authorize", "duplicate_action"
 			a.Reason = "PantherClaw denied this call: cannot_authorize (duplicate_action). Transaction " + txnID + "."
 		}),
