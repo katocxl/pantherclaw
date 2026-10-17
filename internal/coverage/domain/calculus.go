@@ -59,7 +59,8 @@ const (
 // settings: they can lower a state, never raise one on their own (HR-210,
 // F460).
 type Connection struct {
-	// Kind is "http", "mcp", "mcp_container" or "local". An "mcp"
+	// Kind is "http", "mcp", "mcp_container", "local", "postgres" or "a2a"
+	// (the last two held by the gateway, G0 M14 D4). An "mcp"
 	// connection fronts an opaque MCP server (HR-086); an "mcp_container"
 	// one runs it in a connector whose egress the edge can mediate.
 	Kind string

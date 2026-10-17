@@ -89,13 +89,15 @@ type Subject struct {
 func (s Subject) Human() bool { return s.Principal.Kind == KindUser }
 
 // eligible applies the subject-wide restrictions: human-only permissions
-// for non-humans, API key scopes, and gateway permissions (never held by
+// for non-humans, service-only permissions for humans, API key scopes, and gateway permissions (never held by
 // users or service accounts).
 func (s Subject) eligible(p Permission) bool {
 	switch {
 	case !p.Known():
 		return false
 	case p.HumanOnly() && !s.Human():
+		return false
+	case p.ServiceOnly() && s.Human():
 		return false
 	case s.Scopes != nil && !slices.Contains(s.Scopes, p):
 		return false

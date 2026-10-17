@@ -259,7 +259,7 @@ type Store interface {
 	// its claim: accepted and delegated commit (claim SUCCEEDED), failed
 	// releases (claim RELEASED), unknown keeps both held (HR-003, F115).
 	// Delegated is refused (ErrNotCooperative) unless the transaction's
-	// channel is hook or sdk. It records the attempt with its access mode
+	// channel is Delegable (hook, sdk, authzen). It records the attempt with its access mode
 	// and, in the same transaction, the execution receipt sign.Execution
 	// returns at the database time and, for an accepted or delegated write
 	// whose effect its definition cannot verify, an UNVERIFIABLE effect

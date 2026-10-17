@@ -163,3 +163,13 @@ func FuzzParse(f *testing.F) {
 		}
 	})
 }
+
+// TestM14_Channels: an action may come through the authzen and a2a
+// channels (G0 M14 D4).
+func TestM14_Channels(t *testing.T) {
+	for _, ch := range []string{"authzen", "a2a"} {
+		if _, err := Parse([]byte(strings.Replace(canonicalRefund, `"channel":"http"`, `"channel":"`+ch+`"`, 1))); err != nil {
+			t.Errorf("%s: %v", ch, err)
+		}
+	}
+}
