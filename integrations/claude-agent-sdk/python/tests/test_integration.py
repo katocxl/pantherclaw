@@ -233,6 +233,22 @@ class IntegrationTest(unittest.TestCase):
         self.assertEqual((r.behavior, r.updated_input), ("allow", {"amount": "30.00", "charge": "ch_1"}))
         self.assertEqual(len(g.calls), 2)
 
+    def test_HR200_an_identical_call_reuses_the_action_id_only_while_the_earlier_one_is_held(self) -> None:
+        # M14 D68: a held call's identical retry keeps its action id; after a final answer it is a new decision.
+        aids: list[str] = []
+        answers = iter(["hold", "hold", "deny", "allow", "hold"])
+
+        def face(_call: dict[str, Any], aid: str) -> tuple[int, bytes]:
+            aids.append(aid)
+            d = next(answers)
+            return decided(aid, d, wait={"handle": "h", "state": "PENDING"}) if d == "hold" else decided(aid, d)
+
+        p = self.pc(self.gw(face))
+        self.assertEqual([self.run_hook(p, refund("default")) for _ in range(4)], ["deny", "deny", "deny", "allow"])
+        self.assertEqual((aids[0] == aids[1] == aids[2], aids[2] != aids[3]), (True, True))
+        self.run_hook(p, refund("default"))
+        self.assertNotEqual(aids[4], aids[3], "an allowed call's identical retry is a new decision")
+
     def test_allow_rules_name_a_tool_by_itself_its_server_or_a_wildcard(self) -> None:
         for rule, tool, server in [("Bash", "Bash", ""), ("Bash(git push:*)", "Bash", ""), ("mcp__payments", "mcp__payments__x", "payments"),
                                    ("mcp__payments__*", "mcp__payments__x", "payments"), ("mcp__*", "mcp__payments__x", "payments"), ("*", "Write", "")]:
