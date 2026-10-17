@@ -82,6 +82,11 @@ type Definition struct {
 	// read with an HTTP GET dispatch template and no required params; at
 	// most one per package.
 	Test bool `json:"test,omitzero"`
+	// Response declares the answer's format and the data class of its
+	// fields, and Scoping what data scope the definition can enforce on
+	// it: records, classes or both, only for reads (G0 M14 D9, F101).
+	Response *ResponseSpec `json:"response,omitzero"`
+	Scoping  []string      `json:"scoping,omitzero"`
 
 	// Digest is "sha256:<hex>" of the canonical JSON of this definition,
 	// mappings included. It is what ActionIR pins (definition.digest) and
@@ -146,6 +151,10 @@ type FactBinding struct {
 	Member string `json:"member"`
 	Param  string `json:"param"`
 	Reason string `json:"reason"`
+	// Op compares the member and the param: eq (the default), or le, the
+	// param at most the member, for money of one currency or integers
+	// (G0 M14 D48).
+	Op string `json:"op,omitzero"`
 }
 
 // OnUnknown is what happens after an ambiguous outcome (F382).
@@ -326,7 +335,10 @@ func (d *Definition) Validate() error {
 			return err
 		}
 	}
-	return d.validateDispatch()
+	if err := d.validateDispatch(); err != nil {
+		return err
+	}
+	return d.validateResponse()
 }
 
 func (t TargetSpec) validate(op string) error {
@@ -531,7 +543,11 @@ func (d *Definition) validateBinding(p Prerequisite) error {
 	switch {
 	case !nameRe.MatchString(b.Member) || !reasonRe.MatchString(b.Reason):
 		return invalid("%s: prerequisite %s binds a member name with a reason code", d.Operation, p.Fact)
-	case !ok || !param.Material || !slices.Contains([]ParamType{TypeIdentifier, TypeEnum, TypeInteger}, param.Type):
+	case b.Op != "" && b.Op != BindEq && b.Op != BindLe:
+		return invalid("%s: prerequisite %s binds with op eq or le", d.Operation, p.Fact)
+	case b.Op == BindLe && (!ok || !param.Material || (param.Type != TypeMoney && param.Type != TypeInteger)):
+		return invalid("%s: prerequisite %s binds %q with le, which needs a material money or integer param", d.Operation, p.Fact, b.Param)
+	case b.Op != BindLe && (!ok || !param.Material || !slices.Contains([]ParamType{TypeIdentifier, TypeEnum, TypeInteger}, param.Type)):
 		return invalid("%s: prerequisite %s binds %q, which is not a material identifier, enum or integer param", d.Operation, p.Fact, b.Param)
 	}
 	return nil

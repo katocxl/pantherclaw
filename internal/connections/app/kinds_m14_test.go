@@ -49,14 +49,18 @@ func TestPostgresConfigCheck(t *testing.T) {
 		t.Fatalf("defaults: %+v", got)
 	}
 	bad := map[string]func(c *app.PostgresConfig){
-		"no host":                func(c *app.PostgresConfig) { c.Host = "" },
-		"quoted database":        func(c *app.PostgresConfig) { c.Database = `"Shop"` },
-		"upper-case user":        func(c *app.PostgresConfig) { c.User = "Reader" },
-		"sslmode disable":        func(c *app.PostgresConfig) { c.SSLMode = "disable" },
-		"sslmode empty":          func(c *app.PostgresConfig) { c.SSLMode = "" },
-		"require, public":        func(c *app.PostgresConfig) { c.SSLMode = app.SSLRequire },
-		"private, not internal":  func(c *app.PostgresConfig) { c.Host = "10.0.0.5" },
-		"loopback, not internal": func(c *app.PostgresConfig) { c.Host = "127.0.0.1" },
+		"no host":                    func(c *app.PostgresConfig) { c.Host = "" },
+		"quoted database":            func(c *app.PostgresConfig) { c.Database = `"Shop"` },
+		"upper-case user":            func(c *app.PostgresConfig) { c.User = "Reader" },
+		"sslmode disable":            func(c *app.PostgresConfig) { c.SSLMode = "disable" },
+		"sslmode empty":              func(c *app.PostgresConfig) { c.SSLMode = "" },
+		"require, public":            func(c *app.PostgresConfig) { c.SSLMode = app.SSLRequire },
+		"private, not internal":      func(c *app.PostgresConfig) { c.Host = "10.0.0.5" },
+		"loopback, not internal":     func(c *app.PostgresConfig) { c.Host = "127.0.0.1" },
+		"cgnat, not internal":        func(c *app.PostgresConfig) { c.Host = "100.64.0.9" },
+		"benchmarking, not internal": func(c *app.PostgresConfig) { c.Host = "198.18.0.1" },
+		"ietf range, not internal":   func(c *app.PostgresConfig) { c.Host = "192.0.0.8" },
+		"ula, not internal":          func(c *app.PostgresConfig) { c.Host = "fd00::5" },
 		"ca not a certificate": func(c *app.PostgresConfig) {
 			c.CAPEM = "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n"
 		},

@@ -1,0 +1,125 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Test package for the M14 definition format (G0 M14 D8, D9, D49, D50,
+# D52): a form-encoded refund in minor units whose target is a payment
+# intent or a charge, and a peer agent message mapped by A2A method.
+format: 1
+name: test.m14-format
+version: 1.0.0
+publisher: test
+summary: M14 definition format fixtures
+
+definitions:
+  - operation: shop.refund.create
+    summary: Refund a payment intent or a charge
+    access: write
+    target:
+      type: shop.payment
+      id_pattern: '^(?:(?P<pi>pi_[A-Za-z0-9]{8,64})|(?P<ch>ch_[A-Za-z0-9]{8,64}))$'
+      account: none
+    params:
+      amount:
+        type: money
+        material: true
+        required: true
+        currencies: [USD, JPY]
+      reason:
+        type: enum
+        material: true
+        values: [duplicate, fraudulent, requested_by_customer]
+    effects:
+      - kind: funds.transfer
+        description: Returns funds to the customer
+    reversibility: irreversible
+    dedupe_key: [target.id, params.amount]
+    retry:
+      safe: false
+      on_unknown: reconcile
+      target_idempotency: true
+    approval:
+      title: Refund {params.amount} on {target.id}
+      fields: [params.amount, target.id]
+    assurance:
+      basis: declared
+      reviewed_by: [tests]
+      valid_until: 2027-10-08
+    dispatch:
+      credential_pattern: '^(sk|rk)_test_[A-Za-z0-9]{16,}$'
+      http:
+        method: POST
+        path: /v1/refunds
+        encoding: form
+        idempotency_header: Idempotency-Key
+        headers:
+          Stripe-Version: 2026-09-30.endive
+        body:
+          amount: params.amount.minor
+          payment_intent: target.id.pi
+          charge: target.id.ch
+          reason: params.reason
+          metadata[pantherclaw_key]: transaction.key
+          expand[]: literal.charge
+    mappings:
+      - channel: http
+        method: POST
+        path: /v1/refunds
+        encoding: form
+        route: refund
+        extract:
+          target_id: 'has(input.payment_intent) ? input.payment_intent : input.charge'
+          params:
+            amount: minor_money(int(input.amount), input.currency)
+            reason: input.?reason
+      - channel: mcp
+        tool: create_refund
+        route: refund
+        extract:
+          target_id: input.payment
+          params:
+            amount: minor_money(input.amount, input.currency)
+            reason: input.?reason
+
+  - operation: peer.message.send
+    summary: Ask a peer agent to do something
+    access: write
+    target:
+      type: a2a.agent
+      id_pattern: '^[a-z0-9-]{1,63}$'
+      account: none
+    params:
+      skill:
+        type: enum
+        material: true
+        required: true
+        values: [refunds, reports]
+      context_id:
+        type: identifier
+        material: true
+    effects:
+      - kind: request.send
+        description: Sends a request to another agent
+    reversibility: irreversible
+    dedupe_key: [target.id, params.skill]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Ask {target.id}
+      fields: [target.id, params.skill]
+    assurance:
+      basis: declared
+      reviewed_by: [tests]
+      valid_until: 2027-10-08
+    dispatch:
+      a2a:
+        method: SendMessage
+    mappings:
+      - channel: a2a
+        method: SendMessage
+        route: peer-send
+        extract:
+          target_id: '"peer"'
+          params:
+            skill: input.message.metadata.skill
+            context_id: input.message.?contextId
