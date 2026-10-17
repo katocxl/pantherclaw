@@ -321,3 +321,26 @@ func (e *Engine) PostgresCheck(ctx context.Context, conn *control.Connection) ([
 	}
 	return findings, err
 }
+
+// postgresTest is a postgres connection's read test (D18): the HR-309 role
+// check instead of a read. It reports 200 when the role passes and 403
+// when it does not, with the digest of the findings; a check that could
+// not run reports nothing, and the test is tried again.
+func (e *Engine) postgresTest(ctx context.Context, conn *control.Connection, operation string) (Observation, error) {
+	if operation != "postgres.tables.read" {
+		return Observation{}, ErrNotReviewedRead
+	}
+	findings, err := e.PostgresCheck(ctx, conn)
+	if err != nil {
+		e.log.WarnContext(ctx, "gateway.postgres_test_inconclusive", slog.String("connection_id", conn.GetId()), pclog.Err(err))
+		return Observation{}, nil
+	}
+	status := 200
+	if len(findings) > 0 {
+		status = 403
+		e.log.ErrorContext(ctx, "security.postgres_role_not_read_only", slog.String("connection_id", conn.GetId()),
+			slog.Any("findings", findings))
+	}
+	sum := sha256.Sum256([]byte(strings.Join(findings, "\n")))
+	return Observation{HTTPStatus: status, Digest: sum[:]}, nil
+}
