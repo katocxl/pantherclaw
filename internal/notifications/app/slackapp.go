@@ -377,6 +377,7 @@ func (s *Service) sendSlackApp(ctx context.Context, org ids.OrgID, d dbq.LoadDel
 			return outcome{code: "store_failed"}
 		}
 		return out
+	case domain.CardTest, domain.CardNone:
 	}
 	return outcome{skip: true, code: "not_a_card"}
 }

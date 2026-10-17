@@ -53,7 +53,7 @@ func call(t *testing.T, ts *httptest.Server, tok, method string, body any) (int,
 	if tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := ts.Client().Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestSlackSim_Faults(t *testing.T) {
 
 func TestSlackSim_HandshakeAndTestEndpoints(t *testing.T) {
 	_, ts := newSim(t)
-	resp, err := http.Get(ts.URL + handshake.Path + "?nonce=0123456789abcdef0123456789abcdef")
+	resp, err := ts.Client().Get(ts.URL + handshake.Path + "?nonce=0123456789abcdef0123456789abcdef")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestSlackSim_HandshakeAndTestEndpoints(t *testing.T) {
 	if h.Kind != "slack" {
 		t.Fatalf("handshake: %+v", h)
 	}
-	resp, err = http.Post(ts.URL+"/__sim/faults", "application/json", strings.NewReader(`{"invalid_auth":true}`))
+	resp, err = ts.Client().Post(ts.URL+"/__sim/faults", "application/json", strings.NewReader(`{"invalid_auth":true}`))
 	if err != nil || resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("faults: %v %v", err, resp)
 	}
@@ -154,7 +154,7 @@ func TestSlackSim_HandshakeAndTestEndpoints(t *testing.T) {
 	if _, _, a := call(t, ts, token, "auth.test", map[string]any{}); a.Error != "invalid_auth" {
 		t.Fatalf("faults endpoint: %+v", a)
 	}
-	resp, err = http.Get(ts.URL + "/__sim/messages")
+	resp, err = ts.Client().Get(ts.URL + "/__sim/messages")
 	if err != nil || resp.StatusCode != http.StatusOK || resp.Header.Get("Simulated") != "true" {
 		t.Fatalf("messages: %v %v", err, resp)
 	}

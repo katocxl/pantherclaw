@@ -30,7 +30,7 @@ const devSlackChannelName = "slack-approvals"
 // security key, which also runs Slack's checks (HR-315), so point
 // dev.slack_api_url at pantherclaw-sim slack first.
 func seedSlackChannel(ctx context.Context, cfg *Config, pool *db.Pool, org ids.OrgID, slackChannel, tokenFile string, stdout io.Writer) error {
-	b, err := os.ReadFile(tokenFile)
+	b, err := os.ReadFile(tokenFile) //nolint:gosec // G304: operator-chosen token path
 	if err != nil {
 		return fmt.Errorf("dev seed: --slack-token-file: %w", err)
 	}

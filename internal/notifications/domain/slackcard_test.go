@@ -17,7 +17,7 @@ func facts(level string) domain.CardFacts {
 		Level: level, Kind: "ACTION", Consequence: "irreversible", State: "PENDING",
 		ExpiresAt: time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC), RequestID: "0199f0aa-1111-7222-8333-444455556666",
 		Link:  "https://pc.example/approvals/0199f0aa-1111-7222-8333-444455556666?org=0199f0aa-0000-7000-8000-000000000001",
-		Title: "Refund a payment", Agent: "billing-bot‮<@U123>", Environment: "production",
+		Title: "Refund a payment", Agent: "billing-bot\u202e<@U123>", Environment: "production",
 	}
 }
 
@@ -94,7 +94,7 @@ func TestHR314_CardDataByLevel(t *testing.T) {
 			t.Fatalf("summary lacks %q: %s", want, summary)
 		}
 	}
-	if strings.Contains(summary, "‮") || strings.Contains(summary, "mrkdwn") {
+	if strings.Contains(summary, "\u202e") || strings.Contains(summary, "mrkdwn") {
 		t.Fatalf("summary not cleaned or not plain text: %s", summary)
 	}
 	f := facts(domain.SlackSummary)

@@ -141,8 +141,7 @@ func (h *Handler) confirmSlackChannel(w http.ResponseWriter, r *http.Request, s 
 		h.jsonError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
-	ctx, su := callerContext(r, s), stepup.StepUp{Credential: s.StepUpCredential, At: s.StepUpAt}
-	c, err := h.slackChannels.ActivateSlackApp(ctx, id, su)
+	c, err := h.slackChannels.ActivateSlackApp(callerContext(r, s), id, stepUpOfSession(s)) //nolint:contextcheck // callerContext derives from r.Context()
 	if err != nil {
 		for _, e := range slackErrors {
 			if errors.Is(err, e.err) {
