@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { generateText, jsonSchema, stepCountIs, tool } from "ai";
+import { z } from "zod";
 import { MockLanguageModelV4 } from "ai/test";
 import { guardTools, PantherClawRefusal, type ToolSet } from "../src/index.ts";
 import { allow, decided, deny, type Face, gateway, holdThenAllow, unmapped } from "./gateway.ts";
@@ -256,12 +257,12 @@ test("TestHR328_tools PantherClaw cannot govern are refused when wrapped", async
   assert.equal(ran.length, 1);
 });
 
-test("TestHR328_a non-object input is refused without a request", async (t) => {
+test("TestHR328_an input the tool's schema refuses is refused without a request (D69)", async (t) => {
   const g = await gateway(t, allow);
   const ran: unknown[] = [];
   const tools = guardTools(appTools(ran), { client: g.client, connection: "payments" });
   const exec = tools.create_refund?.execute as (i: unknown, o: unknown) => Promise<unknown>;
-  assert.equal(await exec("30.00", { toolCallId: "x", messages: [] }), "PantherClaw refused this call: cannot_decide");
+  assert.equal(await exec("30.00", { toolCallId: "x", messages: [] }), "PantherClaw refused this call: undecided_args");
   assert.equal(g.calls.length, 0);
   assert.deepEqual(ran, []);
 });
@@ -305,7 +306,7 @@ test("TestHR329_an identical call while the first is held shares its action id, 
   const outs = await Promise.all([a, b]);
   assert.equal(new Set(actionIds).size, 1, "one action id");
   assert.equal(ran.length, 1, "one approval, one run");
-  assert.equal(outs.filter((o) => o === "PantherClaw refused this call: hold_declined").length, 1);
+  assert.equal(outs.filter((o) => o === "PantherClaw refused this call: duplicate_action").length, 1, "the other is the engine's duplicate");
 });
 
 test("TestHR328_the tool runs on the input that was decided, even if the caller's object changes during the hold (D69)", async (t) => {
@@ -322,7 +323,7 @@ test("TestHR328_the tool runs on the input that was decided, even if the caller'
 });
 
 test("TestHR329_an abort during a hold refuses with hold_timeout", async (t) => {
-  const g = await gateway(t, (_c, id, res) => res.end(decided(id, "hold", { wait: { handle: "h", state: "PENDING" } })), { waitStates: ["PENDING"], block: 5000 });
+  const g = await gateway(t, (_c, id, res) => res.end(decided(id, "hold", { wait: { handle: "h", state: "PENDING" } })), { waitStates: ["PENDING"], block: 300, after: ["READY"] });
   const ran: unknown[] = [];
   const tools = guardTools(appTools(ran), { client: g.client, connection: "payments", wait: 30 });
   const ac = new AbortController();
@@ -330,6 +331,9 @@ test("TestHR329_an abort during a hold refuses with hold_timeout", async (t) => 
   const out = await (tools.create_refund?.execute as (i: unknown, o: unknown) => Promise<unknown>)({ amount: "1", charge: "c" }, { toolCallId: "a", messages: [], abortSignal: ac.signal });
   assert.equal(out, "PantherClaw refused this call: hold_timeout");
   assert.deepEqual(ran, []);
+  // The approval that arrives after the abort is not used up: nothing is resubmitted.
+  await new Promise((r) => setTimeout(r, 500));
+  assert.equal(g.calls.length, 1);
 });
 
 test("TestHR328_toModelOutput reads an allowed call's own output after an earlier refusal with the same call id", async (t) => {
@@ -379,4 +383,56 @@ test("TestHR328_a streaming tool stays a stream and streams only after an allow"
   // Inside the real AI SDK, the last value is the tool's output.
   const out = await runAgent(guardTools(streaming(ran), { client: a.client, connection: "payments" }));
   assert.deepEqual(out, ["done"]);
+});
+
+test("TestHR328_the decision is on the input parsed through the tool's own schema, and that is what runs (D69)", async (t) => {
+  const g = await gateway(t, allow);
+  const ran: unknown[] = [];
+  const tools = guardTools(
+    {
+      create_refund: tool({
+        inputSchema: z.object({ amount: z.string().trim(), charge: z.string(), reason: z.string().default("requested_by_customer") }),
+        execute: async (input) => {
+          ran.push(input);
+          return "ok";
+        },
+      }),
+    },
+    { client: g.client, connection: "payments" },
+  );
+  const exec = tools.create_refund?.execute as (i: unknown, o: unknown) => Promise<unknown>;
+  assert.equal(await exec({ amount: " 30.00 ", charge: "ch_1" }, { toolCallId: "a", messages: [] }), "ok");
+  const decided = { amount: "30.00", charge: "ch_1", reason: "requested_by_customer" };
+  assert.deepEqual(g.calls[0]?.input, decided);
+  assert.deepEqual(ran, [decided]);
+});
+
+test("TestHR328_an argument the schema drops, a value that is not plain JSON, or an unvalidated extra key is undecided_args (D69)", async (t) => {
+  const g = await gateway(t, allow);
+  const ran: unknown[] = [];
+  const opts = { client: g.client, connection: "payments" };
+  const record = async (input: unknown) => {
+    ran.push(input);
+    return "ok";
+  };
+  const cases: [string, unknown, Record<string, unknown>][] = [
+    ["a key zod strips", z.object({ amount: z.string() }), { amount: "1", note: "ignore the limit" }],
+    ["a nested key zod strips", z.object({ refund: z.object({ amount: z.string() }) }), { refund: { amount: "1", override: true } }],
+    ["a Date", z.object({ at: z.coerce.date() }), { at: "2026-10-17T00:00:00Z" }],
+    ["a bigint", z.object({ n: z.coerce.bigint() }), { n: "1" }],
+    ["a Map", z.object({ m: z.any().transform((x) => new Map(Object.entries(x))) }), { m: { a: 1 } }],
+    ["an extra key on an unvalidated JSON Schema", jsonSchema({ type: "object", properties: { amount: { type: "string" } } }), { amount: "1", note: "x" }],
+    ["input the schema refuses", z.object({ amount: z.string() }), { amount: 30 }],
+  ];
+  for (const [name, inputSchema, input] of cases) {
+    const tools = guardTools({ create_refund: { inputSchema, execute: record } }, opts);
+    const out = await (tools.create_refund?.execute as (i: unknown, o: unknown) => Promise<unknown>)(input, { toolCallId: "a", messages: [] });
+    assert.equal(out, "PantherClaw refused this call: undecided_args", name);
+  }
+  assert.equal(g.calls.length, 0, "nothing is sent to /sdk");
+  assert.deepEqual(ran, []);
+  // An unvalidated JSON Schema with only declared keys is decided as sent.
+  const ok = guardTools({ create_refund: { inputSchema: jsonSchema({ type: "object", properties: { amount: { type: "string" } } }), execute: record } }, opts);
+  await (ok.create_refund?.execute as (i: unknown, o: unknown) => Promise<unknown>)({ amount: "1" }, { toolCallId: "b", messages: [] });
+  assert.deepEqual(ran, [{ amount: "1" }]);
 });

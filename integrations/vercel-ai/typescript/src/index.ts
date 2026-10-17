@@ -95,6 +95,8 @@ export class PantherClawRefusal extends Error {
 function refusal(first: Result, res: Result, resumed: boolean, observeUnmapped: boolean): PantherClawRefusal | null {
   const txn = res.answer?.transaction_id || first.answer?.transaction_id || "";
   if (res.outcome === "allow") return null;
+  // A resubmission the engine answers duplicate_action was approved and ran in an identical concurrent call (D68, D79).
+  if (resumed && res.answer?.code === "duplicate_action") return new PantherClawRefusal("duplicate_action", txn);
   if (resumed) return new PantherClawRefusal(res.outcome === "deny" ? "hold_declined" : "hold_timeout", txn);
   if (res.outcome === "deny") {
     if (res.answer?.code === "unknown_tool" && observeUnmapped) return null;
@@ -147,16 +149,17 @@ class Guard {
 
   wrap(name: string, t: Tool): Tool {
     const run = t.execute as NonNullable<Tool["execute"]>;
+    const schema = t.inputSchema;
     // A streaming tool (an async generator) stays one: the guard decides, then yields the tool's own values.
     const execute =
       run.constructor?.name === "AsyncGeneratorFunction"
         ? async function* (this: Guard, input: unknown, options: ToolExecutionOptions) {
-            const v = await this.guarded(name, input, options);
+            const v = await this.guarded(name, schema, input, options);
             if (v.run === undefined) yield v.out;
             else yield* run(v.run, options) as AsyncIterable<unknown>;
           }.bind(this)
         : async (input: unknown, options: ToolExecutionOptions) => {
-            const v = await this.guarded(name, input, options);
+            const v = await this.guarded(name, schema, input, options);
             return v.run === undefined ? v.out : run(v.run, options);
           };
     const wrapped: Tool = { ...t, execute };
@@ -171,15 +174,17 @@ class Guard {
   }
 
   /**
-   * Decides a call: `run` is the decided input to run the tool on (D69: a
-   * copy taken when it was decided, so what runs is what was decided), or
-   * else `out` is the call's output (a refusal, or the dispatch handler's).
+   * Decides a call: `run` is the decided input to run the tool on (D69: the
+   * input parsed through the tool's own schema, copied when it was decided,
+   * so what runs is what was decided), or else `out` is the call's output
+   * (a refusal, or the dispatch handler's).
    */
-  private async guarded(name: string, input: unknown, options: ToolExecutionOptions): Promise<{ run?: Record<string, unknown>; out?: unknown }> {
+  private async guarded(name: string, schema: unknown, input: unknown, options: ToolExecutionOptions): Promise<{ run?: Record<string, unknown>; out?: unknown }> {
     if (options?.toolCallId) this.refused.delete(options.toolCallId);
     let d: Awaited<ReturnType<Guard["decide"]>>;
     try {
-      d = await this.decide(name, input, options);
+      const parsed = await parse(schema, input);
+      d = parsed === undefined ? { refusal: new PantherClawRefusal("undecided_args"), id: "", txn: "" } : await this.decide(name, parsed, options);
     } catch {
       d = { refusal: new PantherClawRefusal("wrapper_error"), id: "", txn: "" };
     }
@@ -207,7 +212,7 @@ class Guard {
   ): Promise<{ refusal: PantherClawRefusal | null; send?: Outbound; id: string; txn: string; input?: Record<string, unknown> }> {
     // The client refuses a call whose input is not an object (cannot_decide).
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return { refusal: new PantherClawRefusal("cannot_decide"), id: "", txn: "" };
-    // Exactly the input the AI SDK validated against the tool's schema and hands execute (D69), copied: the decision and the run use this copy.
+    // The schema-parsed input (D69), copied: the decision and the run use this copy.
     const input = JSON.parse(JSON.stringify(raw)) as Record<string, unknown>;
     const server = this.o.connection;
     const call: ToolCall = { tool: `mcp__${server}__${name}`, server, input, tool_use_id: callId(options?.toolCallId) };
@@ -223,7 +228,7 @@ class Guard {
       let res = first;
       if (first.outcome === "hold") {
         try {
-          res = await withSignal(this.o.client.resume(server, call, actionId, first, waitMs), options?.abortSignal);
+          res = await withSignal(this.o.client.resume(server, call, actionId, first, waitMs, options?.abortSignal), options?.abortSignal);
         } catch {
           // The wait was aborted: the hold ran out for this call (D47).
           res = { outcome: "cannot_decide", why: "the wait was aborted" };
@@ -247,6 +252,62 @@ class Guard {
     const now = Date.now();
     for (const [k, r] of this.retries) if (r.expires < now) this.retries.delete(k);
   }
+}
+
+/**
+ * The input parsed through the tool's own input schema into exactly what
+ * execute receives (D69): a Standard Schema (zod and others), an AI SDK
+ * schema with its validate, or an AI SDK JSON Schema without one (its
+ * declared properties only). undefined when the input fails the schema, the
+ * schema drops a key the model sent, or the parsed value is not plain JSON
+ * (bigint, Date, Map, a class instance, an undefined member), so the
+ * decision would not be on what runs.
+ */
+async function parse(schema: unknown, input: unknown): Promise<Record<string, unknown> | undefined> {
+  let value: unknown;
+  for (let lazy = 0; typeof schema === "function" && lazy < 4; lazy++) schema = (schema as () => unknown)();
+  const s = schema as Record<PropertyKey, unknown> | null | undefined;
+  if (s == null) {
+    value = input;
+    if (typeof input === "object" && input !== null && Object.keys(input).length > 0) return undefined;
+  } else if (typeof s["~standard"] === "object" && s["~standard"] !== null) {
+    const r = (await (s["~standard"] as { validate: (v: unknown) => unknown }).validate(input)) as { value?: unknown; issues?: unknown };
+    if (r.issues) return undefined;
+    value = r.value;
+  } else if (s[Symbol.for("vercel.ai.schema")] === true) {
+    if (typeof s.validate === "function") {
+      const r = (await (s.validate as (v: unknown) => unknown)(input)) as { success: boolean; value?: unknown };
+      if (!r?.success) return undefined;
+      value = r.value;
+    } else {
+      // A JSON Schema the AI SDK does not validate: only its declared properties are decided.
+      const props = (s.jsonSchema as { properties?: object } | undefined)?.properties ?? {};
+      if (typeof input !== "object" || input === null || Object.keys(input).some((k) => !Object.hasOwn(props, k))) return undefined;
+      value = input;
+    }
+  } else {
+    return undefined;
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value) || !plainJSON(value) || dropsKeys(input, value)) return undefined;
+  return value as Record<string, unknown>;
+}
+
+/** Whether a value is plain JSON: null, booleans, finite numbers, strings, arrays and plain objects of them. */
+function plainJSON(v: unknown): boolean {
+  if (v === null || typeof v === "boolean" || typeof v === "string") return true;
+  if (typeof v === "number") return Number.isFinite(v);
+  if (Array.isArray(v)) return v.every(plainJSON);
+  if (typeof v !== "object") return false;
+  const proto = Object.getPrototypeOf(v);
+  if (proto !== Object.prototype && proto !== null) return false;
+  return Object.values(v as object).every((x) => x !== undefined && plainJSON(x));
+}
+
+/** Whether parsing dropped a member the model sent, at any depth. */
+function dropsKeys(raw: unknown, parsed: unknown): boolean {
+  if (Array.isArray(raw) && Array.isArray(parsed)) return raw.length === parsed.length && raw.some((x, i) => dropsKeys(x, parsed[i]));
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw) || typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return false;
+  return Object.keys(raw).some((k) => !Object.hasOwn(parsed, k) || dropsKeys((raw as Record<string, unknown>)[k], (parsed as Record<string, unknown>)[k]));
 }
 
 /** The AI SDK's id of a call, or a fresh one when it is missing or one the faces refuse. */
