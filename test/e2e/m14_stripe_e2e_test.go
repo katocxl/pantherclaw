@@ -92,7 +92,7 @@ func (s *stack) stripeSeeded(t *testing.T, out string) {
 // carries it.
 func (s *stack) sealStripeKey(t *testing.T, key string) int64 {
 	t.Helper()
-	admin := s.person(t, "stripe-admin", td.RoleGatewayAdmin)
+	admin := s.person(t, "stripe-admin-"+ids.NewV7().String()[24:], td.RoleGatewayAdmin)
 	svc := credapp.New(s.pool, nil)
 	k, err := svc.GetSealingKey(admin.ctx, s.st.conn)
 	if err != nil {

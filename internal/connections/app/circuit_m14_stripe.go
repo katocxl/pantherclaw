@@ -47,7 +47,7 @@ func (s *Service) OpenCircuitFor(ctx context.Context, org ids.OrgID, gateway, id
 			return err
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "security.stripe_livemode", Actor: c.Audit, Outcome: audit.Denied, ReasonCode: reason,
+			Name: "security.stripe_livemode", Actor: c.Audit, Outcome: audit.Denied, ReasonCode: "STRIPE_LIVEMODE",
 			Object:  &audit.Object{Type: "connection", ID: id.String()},
 			Details: map[string]string{"gateway": gateway.String(), "connection": conn.Name},
 		}); err != nil {
