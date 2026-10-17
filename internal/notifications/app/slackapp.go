@@ -6,6 +6,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"io"
@@ -74,18 +75,23 @@ func (s *Service) SetSlackAPI(base string, client *http.Client) error {
 
 // slackAnswer is the part of a Slack answer PantherClaw reads.
 type slackAnswer struct {
-	OK      bool   `json:"ok"`
-	Error   string `json:"error"`
-	TS      string `json:"ts"`
-	TeamID  string `json:"team_id"`
-	BotID   string `json:"bot_id"`
-	Channel *struct {
-		ID        string `json:"id"`
-		Member    bool   `json:"is_member"`
-		ExtShared bool   `json:"is_ext_shared"`
-		Shared    bool   `json:"is_shared"`
-		Archived  bool   `json:"is_archived"`
-	} `json:"channel"`
+	OK     bool   `json:"ok"`
+	Error  string `json:"error"`
+	TS     string `json:"ts"`
+	TeamID string `json:"team_id"`
+	BotID  string `json:"bot_id"`
+	// Channel is an object in conversations.info answers and an id in
+	// chat answers.
+	Channel jsontext.Value `json:"channel"`
+}
+
+// slackChannel is a conversations.info channel.
+type slackChannel struct {
+	ID        string `json:"id"`
+	Member    bool   `json:"is_member"`
+	ExtShared bool   `json:"is_ext_shared"`
+	Shared    bool   `json:"is_shared"`
+	Archived  bool   `json:"is_archived"`
 }
 
 // slackRevoked are Slack's errors for a token or channel that no longer
@@ -240,18 +246,19 @@ func (s *Service) checkSlack(ctx context.Context, token, channel string) (SlackW
 		return SlackWorkspace{}, ErrSlackDown
 	}
 	w := SlackWorkspace{TeamID: a.TeamID, BotID: a.BotID}
-	c, out := s.slackCall(ctx, token, "conversations.info", nil, url.Values{"channel": {channel}})
+	a, out = s.slackCall(ctx, token, "conversations.info", nil, url.Values{"channel": {channel}})
+	var c slackChannel
 	switch {
-	case out.ok && c.Channel != nil && c.Channel.ID == channel:
+	case out.ok && json.Unmarshal(a.Channel, &c) == nil && c.ID == channel:
 	case out.ok || out.gone || out.permanent:
 		return SlackWorkspace{}, ErrSlackChannel
 	default:
 		return SlackWorkspace{}, ErrSlackDown
 	}
 	switch {
-	case c.Channel.ExtShared || c.Channel.Shared:
+	case c.ExtShared || c.Shared:
 		return SlackWorkspace{}, ErrSlackExternal
-	case !c.Channel.Member || c.Channel.Archived:
+	case !c.Member || c.Archived:
 		return SlackWorkspace{}, ErrSlackChannel
 	}
 	return w, nil

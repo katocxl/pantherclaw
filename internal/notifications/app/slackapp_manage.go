@@ -198,7 +198,7 @@ func (s *Service) ActivateSlackApp(ctx context.Context, id ids.UUID, su stepup.S
 			return err
 		}
 		return s.audit(ctx, tx, c, "notification.slack_app_activated", id, map[string]string{
-			"slack_channel": cfg.SlackChannel, "team": w.TeamID, "credential": su.Credential.String(),
+			"slack_channel": cfg.SlackChannel, "team": w.TeamID, "security_key": su.Credential.String(),
 		})
 	})
 	return out, err
@@ -271,7 +271,7 @@ func (s *Service) ReplaceSlackToken(ctx context.Context, id ids.UUID, token stri
 		if out, err = s.withSlackApp(ctx, q, c.Org, channelView(row)); err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, c, "notification.slack_token_replaced", id, map[string]string{"credential": su.Credential.String()})
+		return s.audit(ctx, tx, c, "notification.slack_token_replaced", id, map[string]string{"security_key": su.Credential.String()})
 	})
 	return out, err
 }
