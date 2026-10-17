@@ -281,3 +281,36 @@ func TestM14_VerifierExpectsMinorUnits(t *testing.T) {
 		t.Fatalf("expected %v %v", got, ok)
 	}
 }
+
+// TestM14_ResponseClassesCoverSubtrees: a field naming an object or an
+// array classifies everything under it, and where declarations overlap
+// the strictest class wins; an undeclared value is public (G0 M14 D73).
+func TestM14_ResponseClassesCoverSubtrees(t *testing.T) {
+	r := &domain.ResponseSpec{Format: "json", Fields: []domain.ResponseField{
+		{Path: "billing_details", Class: "pii"}, {Path: "billing_details.name", Class: "internal"},
+		{Path: "data.*.ssn", Class: "secret"}, {Path: "data", Class: "internal"}, {Path: "metadata.*", Class: "internal"},
+	}}
+	for path, want := range map[string]string{
+		"billing_details":               "pii",
+		"billing_details.name":          "pii",
+		"billing_details.address.line1": "pii",
+		"data":                          "internal",
+		"data.*.ssn":                    "secret",
+		"data.*.id":                     "internal",
+		"metadata.order":                "internal",
+		"metadata":                      "public",
+		"id":                            "public",
+	} {
+		if got := r.ClassOf(strings.Split(path, ".")); got != want {
+			t.Errorf("%s: %s, want %s", path, got, want)
+		}
+	}
+	if (*domain.ResponseSpec)(nil).ClassOf([]string{"x"}) != "public" || domain.Stricter("secret", "pii") != "secret" {
+		t.Fatal("helpers")
+	}
+	d := minimal(nil)
+	d.Response = r
+	if err := d.Validate(); err != nil {
+		t.Fatalf("overlapping declarations are valid: %v", err)
+	}
+}

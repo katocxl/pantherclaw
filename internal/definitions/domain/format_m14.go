@@ -159,7 +159,9 @@ type ResponseSpec struct {
 }
 
 // ResponseField classifies one answer field: a dotted path into a JSON
-// answer (* for every item of an array), or a column of rows.
+// answer (* for every item of an array), or a column of rows. A path that
+// names an object or an array classifies its whole subtree; where several
+// fields cover one value, the strictest class wins (G0 M14 D73).
 type ResponseField struct {
 	Path  string `json:"path"`
 	Class string `json:"class"`
@@ -214,4 +216,44 @@ func (x *Dispatch) CredentialMatches(credential []byte) bool {
 	}
 	re := compiled(x.CredentialPattern)
 	return re != nil && re.Match(credential)
+}
+
+// classRank orders the data classes from the most open to the strictest.
+var classRank = map[string]int{"public": 0, "internal": 1, "pii": 2, "secret": 3}
+
+// Stricter is the stricter of two data classes.
+func Stricter(a, b string) string {
+	if classRank[b] > classRank[a] {
+		return b
+	}
+	return a
+}
+
+// ClassOf is the data class of the answer value at path (G0 M14 D73): the
+// strictest class of every declared field whose path is the value's path
+// or one of its ancestors, public when none is. A path segment is an
+// object member's name, or * for an array item; a declared * matches any
+// segment.
+func (r *ResponseSpec) ClassOf(path []string) string {
+	class := "public"
+	if r == nil {
+		return class
+	}
+	for _, f := range r.Fields {
+		segs := strings.Split(f.Path, ".")
+		if len(segs) > len(path) {
+			continue
+		}
+		covers := true
+		for i, s := range segs {
+			if s != "*" && s != path[i] {
+				covers = false
+				break
+			}
+		}
+		if covers {
+			class = Stricter(class, f.Class)
+		}
+	}
+	return class
 }
