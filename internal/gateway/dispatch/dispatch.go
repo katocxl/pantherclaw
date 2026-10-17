@@ -374,6 +374,9 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	if _, class, code := e.contained(conn); class != "" {
 		return Result{Class: class, Code: code}
 	}
+	if kindNotImplemented(conn.GetKind()) {
+		return Result{Class: CannotAuthorize, Code: CodeKindNotImplemented, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
+	}
 	if e.breaker.open(ctx, conn) {
 		return Result{Class: EnforcementFailed, Code: CodeCircuitOpen}
 	}
@@ -482,8 +485,13 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 		return e.sendMCP(ctx, r, conn, def, bound, want, t)
 	case "local":
 		return e.delegate(ctx, r, want, t)
+	case "http":
+		return e.send(ctx, r, conn, def, bound, want, t)
 	}
-	return e.send(ctx, r, conn, def, bound, want, t)
+	if send, ok := kindSenders[conn.GetKind()]; ok {
+		return send(e, ctx, r, conn, def, bound, want, t) // G0 M14 D75
+	}
+	return r.fail(EnforcementFailed, CodeKindNotImplemented)
 }
 
 // delegate commits and records a cooperative channel's permitted action
@@ -626,6 +634,9 @@ func (e *Engine) client(conn *control.Connection) (*egress.Client, error) {
 
 // entry returns the connection's clients, new for each revision.
 func (e *Engine) entry(conn *control.Connection) (clientEntry, error) {
+	if kindNotImplemented(conn.GetKind()) {
+		return clientEntry{}, errKindNotImplemented
+	}
 	if conn.GetKind() == "mcp_container" {
 		return e.connectorEntry(conn)
 	}
@@ -753,6 +764,11 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 	elapsed := time.Since(start)
 	t.lap("target")
 	outcome, class, code := classify(res.Status, err)
+	if res.Status != 0 {
+		if o, c, k := checkSuccess(def, outcome, res.Body); o != outcome {
+			outcome, class, code = o, c, k
+		}
+	}
 	e.breaker.record(ctx, conn, outcome)
 	if err != nil && res.Status == 0 {
 		e.log.WarnContext(ctx, "gateway.target_error", slog.String("transaction_id", want.Txn), slog.String("outcome", outcome.String()),
@@ -820,9 +836,19 @@ func targetRef(def *defs.Definition, body, secret []byte) string {
 func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *defs.Definition, target actionir.Target,
 	req *http.Request, c broker.Sender, purpose string,
 ) (secret []byte, release func(), access func() *pb.CredentialAccess, err error) {
+	if conn.Credential.GetKind() == credentials.KindGitHubApp {
+		if err := CheckCredentialPattern(def, credentials.KindGitHubApp, nil); err != nil {
+			return nil, nil, nil, err // a pattern is for a static credential
+		}
+	}
 	if conn.Credential.GetKind() != credentials.KindGitHubApp {
 		plain, err := e.openStatic(ctx, conn)
 		if err != nil {
+			return nil, nil, nil, err
+		}
+		if err := CheckCredentialPattern(def, conn.Credential.GetKind(), plain); err != nil {
+			// Checked before any byte is sent (G0 M14 D8, HR-301).
+			clear(plain)
 			return nil, nil, nil, err
 		}
 		if err := placeCredential(conn, req, plain); err != nil {
@@ -878,6 +904,9 @@ func (e *Engine) credentialFailed(ctx context.Context, r Result, conn *control.C
 		slog.String("connection_id", conn.GetId()), pclog.Err(err))
 	code := CodeCredential
 	var granted []func(*pb.RecordExecutionRequest)
+	if errors.Is(err, ErrCredentialPattern) {
+		code = CodeCredentialPattern
+	}
 	if sm := (*broker.ScopeMismatchError)(nil); errors.As(err, &sm) {
 		code = CodeScopeMismatch
 		granted = append(granted, func(req *pb.RecordExecutionRequest) { req.CredentialAccess = accessOf(sm.Access) })

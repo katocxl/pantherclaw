@@ -5,6 +5,7 @@ package egress
 
 import (
 	"bytes"
+	"cmp"
 	"compress/gzip"
 	"context"
 	"encoding/base64"
@@ -85,9 +86,14 @@ func (c *Client) HTTPRequest(ctx context.Context, r Request) (*http.Request, err
 		return nil, fmt.Errorf("%w: %w", ErrBuild, err)
 	}
 	if r.Body != nil {
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", cmp.Or(r.ContentType, JSONContentType))
 	}
 	req.Header.Set("Accept-Encoding", "identity")
+	for name, v := range r.Headers {
+		// Literal static headers of the reviewed template, never a
+		// reserved one (G0 M14 D8); the caller places the credential after.
+		req.Header.Set(name, v)
+	}
 	if r.IdempotencyHeader != "" {
 		req.Header.Set(r.IdempotencyHeader, r.IdempotencyKey)
 	}

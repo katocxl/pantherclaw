@@ -6,6 +6,8 @@ package celenv
 import (
 	"fmt"
 	"reflect"
+	"regexp"
+	"strings"
 
 	"cel.dev/cel-go/cel"
 	"cel.dev/cel-go/common/operators"
@@ -187,6 +189,7 @@ func sameResult(t *cel.Type) *cel.Type { return t }
 // moneyLibrary declares the pc.Decimal and pc.Money functions:
 //
 //	decimal("85.50") pc.Decimal       money("85.50", "USD") pc.Money
+//	minor_money(8550, "USD") pc.Money
 //	m.amount() pc.Decimal             m.currency() string
 //	<, <=, >, >=, +, - on two decimals or two moneys of one currency
 func moneyLibrary() []cel.EnvOption {
@@ -207,6 +210,25 @@ func moneyLibrary() []cel.EnvOption {
 				}
 				return Money{m}
 			}))),
+		// minor_money(8550, "USD") is 85.50 USD: an amount an API sends
+		// in integer minor units (G0 M14 D8). Such APIs write currencies in
+		// lower case, so the code is taken in any case and is upper case in
+		// the money (D73). A currency outside the minor-unit list, or a
+		// negative count, is an error.
+		cel.Function("minor_money", cel.Overload("minor_money_int_string", []*cel.Type{cel.IntType, cel.StringType}, MoneyType,
+			cel.BinaryBinding(func(n, c ref.Val) ref.Val {
+				// Three ASCII letters only, so no confusable (such as U+017F, the long s)
+				// is folded into a code (HR-102, D85).
+				code := string(c.(types.String))
+				if !currencyCodeRe.MatchString(code) {
+					return types.NewErr("minor_money: a currency is three letters")
+				}
+				m, err := money.FromMinor(int64(n.(types.Int)), money.Currency(strings.ToUpper(code)))
+				if err != nil {
+					return errVal(err)
+				}
+				return Money{m}
+			}))),
 		cel.Function("amount", cel.MemberOverload("pc_money_amount", []*cel.Type{MoneyType}, DecimalType,
 			cel.UnaryBinding(func(v ref.Val) ref.Val { return Decimal{v.(Money).M.Amount} }))),
 		cel.Function("currency", cel.MemberOverload("pc_money_currency", []*cel.Type{MoneyType}, cel.StringType,
@@ -219,3 +241,7 @@ func moneyLibrary() []cel.EnvOption {
 		cel.Function(operators.Subtract, overloads("subtract", sameResult)...),
 	}
 }
+
+// currencyCodeRe is a currency code as minor_money takes it: three ASCII
+// letters in any case.
+var currencyCodeRe = regexp.MustCompile(`^[A-Za-z]{3}$`)
