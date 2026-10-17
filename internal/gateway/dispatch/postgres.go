@@ -35,8 +35,9 @@ const (
 	CodeRoleNotReadOnly = "role_not_read_only"
 	// CodeStatementTimeout: the statement ran past its timeout.
 	CodeStatementTimeout = "statement_timeout"
-	// CodeDatabaseMismatch: postgres.tables.read named another database.
-	CodeDatabaseMismatch = "database_mismatch"
+	// CodeTargetMismatch: postgres.tables.read named a pg_database other than
+	// the connection's database (D79).
+	CodeTargetMismatch = "target_mismatch"
 )
 
 // roleRecheck is how long a passed role check holds before the pool checks
@@ -85,7 +86,7 @@ func (e *Engine) sendPostgres(ctx context.Context, r Result, conn *control.Conne
 		if c := pgdispatch.CodeOf(buildErr); c != "" {
 			code = strings.ToLower(c)
 		} else if errors.Is(buildErr, errDatabaseMismatch) {
-			code = CodeDatabaseMismatch
+			code = CodeTargetMismatch
 		}
 		e.log.WarnContext(ctx, "gateway.request_not_built", slog.String("transaction_id", want.Txn), pclog.Err(buildErr))
 		return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, code, t)

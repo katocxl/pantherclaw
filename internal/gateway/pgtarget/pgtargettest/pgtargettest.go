@@ -240,14 +240,38 @@ func proxy(t testing.TB, backend string) (int, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var wg sync.WaitGroup
-	t.Cleanup(func() { _ = l.Close(); wg.Wait() })
+	// Cleanup closes the client connections still open (a pool the test
+	// did not close), so no relay outlives the test.
+	var (
+		wg     sync.WaitGroup
+		mu     sync.Mutex
+		open   []net.Conn
+		closed bool
+	)
+	t.Cleanup(func() {
+		_ = l.Close()
+		mu.Lock()
+		closed = true
+		for _, c := range open {
+			_ = c.Close()
+		}
+		mu.Unlock()
+		wg.Wait()
+	})
 	wg.Go(func() {
 		for {
 			c, err := l.Accept()
 			if err != nil {
 				return
 			}
+			mu.Lock()
+			if closed {
+				mu.Unlock()
+				_ = c.Close()
+				return
+			}
+			open = append(open, c)
+			mu.Unlock()
 			wg.Go(func() { relay(context.Background(), c, conf, backend) })
 		}
 	})

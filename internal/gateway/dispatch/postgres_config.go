@@ -8,11 +8,9 @@ import (
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 )
 
+func init() { kindSenders["postgres"] = (*Engine).sendPostgres }
+
 // postgresOf is a postgres connection's configuration from the gateway's
 // configuration (G0 M14 D64), or nil without one: the dispatch then fails
-// closed. Until the configuration carries it, no connection has one.
-func postgresOf(*control.Connection) *pb.PostgresConfig { return nil }
-
-// sendPostgres is the dispatch of kind postgres; it joins the kind
-// registry with core's final A2 (G0 M14 D75).
-var _ = (*Engine).sendPostgres
+// closed.
+func postgresOf(conn *control.Connection) *pb.PostgresConfig { return conn.GetPostgres() }
