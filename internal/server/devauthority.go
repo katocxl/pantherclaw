@@ -144,6 +144,8 @@ type devGrantTerms struct {
 	// release_approver (inside a change window, HR-207), and a task merges
 	// once (G0 M8, §43).
 	GitHub bool
+	// Postgres also allows the pc.postgres reads (G0 M14 D21).
+	Postgres bool
 }
 
 // seedGrant issues a root grant to the seeded agent for its owner: refunds
@@ -158,6 +160,9 @@ func seedGrant(ctx context.Context, pool *db.Pool, org ids.OrgID, w devWorkload,
 	}
 	if t.GitHub {
 		ops = append(ops, githubOperations...)
+	}
+	if t.Postgres {
+		ops = append(ops, postgresOperations...)
 	}
 	bounds, err := json.Marshal(map[string]any{
 		"operations": ops,

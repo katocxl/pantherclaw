@@ -64,6 +64,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	workloadOut := fs.String("workload-out", "", "also seed an admitted PAP/1 workload with a grant and a run; write its key file here (0600, never overwritten)")
 	factsOut := fs.String("facts-key-out", "", "with --workload-out: write the API key of the development fact provider here (0600, never overwritten)")
 	holdOver := fs.String("hold-over", "50.00", "publish a policy holding refunds over this amount (grant currency) for an approver; empty for none")
+	postgresFile := fs.String("postgres", "", "with --gateway-out: also seed pc.postgres and the connection \"warehouse\" to the database a file names as one URL (G0 M14 D21)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -107,7 +108,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 			return fmt.Errorf("dev seed: %s already exists", out)
 		}
 	}
-	if (*targetURL != "" || *shell || *githubURL != "") && *gatewayOut == "" {
+	if (*targetURL != "" || *shell || *githubURL != "" || *postgresFile != "") && *gatewayOut == "" {
 		return errTargetNeedsGateway
 	}
 	if *access == "" {
@@ -163,6 +164,9 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	if *githubURL != "" {
 		pkgs = append(pkgs, devPackage{pcgithub.Name, pcgithub.Version, pcgithub.Package})
 	}
+	if *postgresFile != "" {
+		pkgs = append(pkgs, devPostgresPackage())
+	}
 	if err := seedPackages(ctx, pool, org, signer, pkgs...); err != nil {
 		return err
 	}
@@ -203,6 +207,11 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 			_, _ = fmt.Fprintf(stdout, "seeded github connection %s (%s) to %s, its facts read by the gateway; seal the GitHub App with "+
 				"pclaw seal --connection %s --github-app ID --installation N --account LOGIN --from-file KEY.pem\n", c.ID, c.Name, *githubURL, c.ID)
 		}
+		if *postgresFile != "" {
+			if err := seedPostgresConnection(ctx, cfg, pool, org, gw, *postgresFile, stdout); err != nil {
+				return err
+			}
+		}
 		if *shell {
 			c, err := seedShellConnection(ctx, cfg, pool, org, gw)
 			if err != nil {
@@ -219,7 +228,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	if err != nil {
 		return err
 	}
-	g, err := seedGrant(ctx, pool, org, w, devGrantTerms{MaxPerAction: maxPer, Limit: lim, MaxCount: *maxCount, Shell: *shell, GitHub: *githubURL != ""})
+	g, err := seedGrant(ctx, pool, org, w, devGrantTerms{MaxPerAction: maxPer, Limit: lim, MaxCount: *maxCount, Shell: *shell, GitHub: *githubURL != "", Postgres: *postgresFile != ""})
 	if err != nil {
 		return err
 	}
