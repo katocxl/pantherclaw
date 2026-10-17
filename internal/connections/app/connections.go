@@ -97,7 +97,7 @@ var (
 // reservedNames are the gateway's own first path segments: a connection's
 // name is the first segment of its HTTP routes (/{connection}/…), so it
 // can never shadow them.
-var reservedNames = []string{"mcp", "hook", "sdk", "healthz", "readyz", "metrics"}
+var reservedNames = []string{"mcp", "hook", "sdk", "a2a", "healthz", "readyz", "metrics"}
 
 // Notifier queues a notification in the caller's transaction (M5).
 type Notifier interface {
