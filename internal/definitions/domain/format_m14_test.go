@@ -78,6 +78,11 @@ func TestM14_FormTemplates(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
+	q := formWrite(map[string]string{"reason": "params.reason"})
+	q.Dispatch.HTTP.Query = map[string]string{"limit": "literal.10", "charge": "target.id.ch"}
+	if err := q.Validate(); err != nil {
+		t.Errorf("a literal and a target group in a query (D71): %v", err)
+	}
 	json := formWrite(map[string]string{"key": "transaction.key", "mode": "literal.true"})
 	json.Dispatch.HTTP.Encoding = domain.EncodingJSON
 	if err := json.Validate(); err != nil {

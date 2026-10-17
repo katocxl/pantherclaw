@@ -241,3 +241,34 @@ func TestM14_TemplateReferences(t *testing.T) {
 		t.Fatalf("an unmatched group in the path: %v", err)
 	}
 }
+
+// TestM14_QueryLiteralsAndOptionalGroups: query values may be literals,
+// and a target group the id left unmatched leaves its query parameter out;
+// when every target-group reference of body and query is left out the
+// build fails (G0 M14 D71).
+func TestM14_QueryLiteralsAndOptionalGroups(t *testing.T) {
+	d := &defs.Definition{
+		Operation: "shop.refund.list",
+		Target:    defs.TargetSpec{Type: "shop.payment", IDPattern: `^(?:(?P<pi>pi_[a-z0-9]+)|(?P<ch>ch_[a-z0-9]+))$`},
+		Dispatch: &defs.Dispatch{HTTP: &defs.HTTPDispatch{Method: "GET", Path: "/v1/refunds", Query: map[string]string{
+			"payment_intent": "target.id.pi", "charge": "target.id.ch", "limit": "literal.10",
+		}}},
+	}
+	a := actionir.ActionIR{Target: actionir.Target{Type: "shop.payment", ID: "pi_abc"}, Params: []byte(`{}`)}
+	r, err := Build("https://x.example.test", d, a, txn)
+	if err != nil || r.URL.RawQuery != "limit=10&payment_intent=pi_abc" {
+		t.Fatalf("built %v %v", r.URL, err)
+	}
+	only := *d
+	only.Dispatch = &defs.Dispatch{HTTP: &defs.HTTPDispatch{Method: "GET", Path: "/v1/refunds", Query: map[string]string{"charge": "target.id.ch"}}}
+	if _, err := Build("https://x.example.test", &only, a, txn); !errors.Is(err, ErrBuild) {
+		t.Fatalf("no target group matched: %v", err)
+	}
+	split := *d
+	split.Dispatch = &defs.Dispatch{HTTP: &defs.HTTPDispatch{
+		Method: "POST", Path: "/v1/refunds", Query: map[string]string{"charge": "target.id.ch"}, Body: map[string]string{"payment_intent": "target.id.pi"},
+	}}
+	if r, err := Build("https://x.example.test", &split, a, txn); err != nil || r.URL.RawQuery != "" || string(r.Body) != `{"payment_intent":"pi_abc"}` {
+		t.Fatalf("one group in the body, one in the query: %v %s %v", r.URL, r.Body, err)
+	}
+}
