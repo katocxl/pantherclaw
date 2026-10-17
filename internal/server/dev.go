@@ -64,6 +64,8 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	workloadOut := fs.String("workload-out", "", "also seed an admitted PAP/1 workload with a grant and a run; write its key file here (0600, never overwritten)")
 	factsOut := fs.String("facts-key-out", "", "with --workload-out: write the API key of the development fact provider here (0600, never overwritten)")
 	holdOver := fs.String("hold-over", "50.00", "publish a policy holding refunds over this amount (grant currency) for an approver; empty for none")
+	slackChannel := fs.String("slack-channel", "", "also seed a PENDING slack_app channel posting approval cards to this Slack channel id (with --slack-token-file; Team edition)")
+	slackToken := fs.String("slack-token-file", "", "with --slack-channel: the file holding the bot token (xoxb-...)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -165,6 +167,11 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	}
 	if err := seedPackages(ctx, pool, org, signer, pkgs...); err != nil {
 		return err
+	}
+	if *slackChannel != "" {
+		if err := seedSlackChannel(ctx, cfg, pool, org, *slackChannel, *slackToken, stdout); err != nil {
+			return err
+		}
 	}
 	_, _ = fmt.Fprintf(stdout, "seeded org %s (%q) with package %s@%s active\n", org, *name, mockpayments.Name, mockpayments.Version)
 	if hold != nil {

@@ -275,3 +275,8 @@ func (s *Service) ReplaceSlackToken(ctx context.Context, id ids.UUID, token stri
 	})
 	return out, err
 }
+
+// SlackConfirmPath is a slack_app channel's activation page.
+func SlackConfirmPath(id ids.UUID) string {
+	return "/notifications/channels/" + id.String() + "/confirm"
+}
