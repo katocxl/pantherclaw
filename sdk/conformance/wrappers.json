@@ -19,7 +19,7 @@
     "cannot_decide": "any other cannot_decide answer of the client (a gateway error, an answer that fails its checks)",
     "denied": "a deny answer without a code",
     "dispatch_required": "an allow carrying a request to send, with no on_dispatch handler",
-    "hold_declined": "a hold that ended in PantherClaw without an allow (declined, expired): the client's resume answered deny",
+    "hold_declined": "a hold that ended without an allow: declined or expired in PantherClaw, or its resubmission denied (except duplicate_action, reported verbatim; M14 D79)",
     "hold_timeout": "a hold not allowed within the wait: the client's resume answered cannot_decide",
     "undecided_args": "an argument outside the tool's schema (after alias normalisation), which PantherClaw would not decide (M14 D69)",
     "wrapper_error": "an exception inside the wrapper, or input that is not an object"
@@ -246,6 +246,31 @@
           "requests": 1,
           "action_id": "new",
           "ran": true
+        }
+      ]
+    },
+    {
+      "name": "held, then the resubmission denied: hold_declined",
+      "answers": [
+        "hold",
+        "deny"
+      ],
+      "wait": "ready",
+      "calls": [
+        {
+          "input": {
+            "amount": "30.00",
+            "charge": "ch_1",
+            "currency": "USD",
+            "reason": "duplicate"
+          },
+          "requests": 2,
+          "resumes": 1,
+          "action_id": "new",
+          "ran": false,
+          "code": "hold_declined",
+          "transaction": "01920000-0000-7000-8000-000000000009",
+          "refusal": "PantherClaw refused this call: hold_declined (transaction 01920000-0000-7000-8000-000000000009)"
         }
       ]
     },

@@ -151,8 +151,9 @@ func buildWrappers(t *testing.T) any {
 		Codes: map[string]string{
 			"<code>": "a deny answer with a code: that code, verbatim (GRANT_AMOUNT_EXCEEDED, unknown_tool, use_gateway_face, " +
 				"duplicate_action, …)",
-			"denied":            "a deny answer without a code",
-			"hold_declined":     "a hold that ended in PantherClaw without an allow (declined, expired): the client's resume answered deny",
+			"denied": "a deny answer without a code",
+			"hold_declined": "a hold that ended without an allow: declined or expired in PantherClaw, or its resubmission denied " +
+				"(except duplicate_action, reported verbatim; M14 D79)",
 			"hold_timeout":      "a hold not allowed within the wait: the client's resume answered cannot_decide",
 			"cannot_decide":     "any other cannot_decide answer of the client (a gateway error, an answer that fails its checks)",
 			"dispatch_required": "an allow carrying a request to send, with no on_dispatch handler",
@@ -253,6 +254,10 @@ func buildWrappers(t *testing.T) any {
 			Name: "held past the wait, then called with changed input: a new decision", Options: WrapperOptions{Wait: 1},
 			Answers: []string{"hold", "allow"}, Wait: "pending",
 			Calls: []WrapperCall{refused(in, 1, "new", "hold_timeout", txnID), changed},
+		},
+		{
+			Name: "held, then the resubmission denied: hold_declined", Answers: []string{"hold", "deny"}, Wait: "ready",
+			Calls: []WrapperCall{refused(in, 2, "new", "hold_declined", txnID)},
 		},
 		{
 			Name: "held, then a resubmission PantherClaw cannot decide: hold_timeout", Answers: []string{"hold", "gateway_error"}, Wait: "ready",
