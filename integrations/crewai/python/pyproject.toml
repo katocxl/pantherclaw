@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Joshua Kato
+
+[project]
+name = "pantherclaw-crewai"
+version = "0.0.0"
+description = "PantherClaw enforcement for CrewAI tools: every tool call decided before it runs, refused when PantherClaw cannot decide"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = ["pantherclaw"]
+
+[project.optional-dependencies]
+crewai = ["crewai>=1.15.27,<2"]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pantherclaw_crewai"]
+
+[tool.uv]
+# DEPENDENCY_POLICY: nothing uploaded in the last 7 days is locked (the cooldown).
+exclude-newer = "7 days"
+# No committed lock contains CrewAI (M14 D60): it requires chromadb, every release of
+# which carries open advisories. This uv-only override keeps the `crewai` extra
+# out of uv.lock (the published extra is unchanged); the tests use a stand-in for
+# the CrewAI tool interface, and `task sdk:crewai-real` runs them against the real
+# CrewAI in a throwaway environment.
+override-dependencies = ["crewai; python_version < '0'"]
+
+[tool.uv.sources]
+# The core client from this repository, until it is published.
+pantherclaw = { path = "../../../sdk/python", editable = true }

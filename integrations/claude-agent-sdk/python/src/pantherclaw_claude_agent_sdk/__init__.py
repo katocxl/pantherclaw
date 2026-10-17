@@ -354,9 +354,11 @@ class PantherClaw:
         return _decision("deny", res.why or "PantherClaw denied this command")
 
     def _answer(self, res: Result, data: dict[str, Any], h: _Held, builtin: bool) -> dict[str, Any]:
-        if res.outcome == "allow":
+        if res.outcome != "hold":
+            # A final answer: an identical call later is a new decision (M14 D68).
             with self._lock:
                 self._retries.pop(h.key, None)
+        if res.outcome == "allow":
             if res.send is not None:
                 if self._on_dispatch is None:
                     return _decision("deny", "this connection's target accepts only PantherClaw's own request: pass on_dispatch to send it")
@@ -442,6 +444,10 @@ class PantherClaw:
                 cancelled.set()
                 return PermissionResultDeny(message=f"the wait for PantherClaw's decision ended: {e or type(e).__name__}")
             if res.outcome != "allow":
+                if res.outcome == "deny":
+                    # The hold ended in PantherClaw: an identical call later is a new decision (M14 D68).
+                    with self._lock:
+                        self._retries.pop(h.key, None)
                 return PermissionResultDeny(message=f"{res.why or 'PantherClaw did not allow this call'} (PantherClaw, PARTIAL)")
             if res.send is not None:
                 if self._on_dispatch is None:
