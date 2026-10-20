@@ -151,13 +151,15 @@ func (q *Queries) DeferSlackCardClose(ctx context.Context, waitSeconds int32, or
 const failSlackCardClose = `-- name: FailSlackCardClose :one
 UPDATE pc.slack_cards
 SET close_attempts = close_attempts + 1, updated_at = now(),
+    close_after = now() + make_interval(secs => least(60 * power(2, close_attempts), 3600)::int),
     state = CASE WHEN close_attempts + 1 >= 5 THEN 'ORPHANED' ELSE state END
 WHERE org_id = $1 AND card_id = $2 AND state = 'OPEN'
 RETURNING state
 `
 
 // Counts a close Slack will not recover from; the fifth makes the card
-// ORPHANED (D104, D117).
+// ORPHANED (D104, D117). Each waits with the same backoff as a transient
+// failure, so five never land within minutes (D127).
 func (q *Queries) FailSlackCardClose(ctx context.Context, orgID ids.OrgID, cardID ids.UUID) (string, error) {
 	row := q.db.QueryRow(ctx, failSlackCardClose, orgID, cardID)
 	var state string
@@ -539,11 +541,15 @@ func (q *Queries) SetSlackCardPosted(ctx context.Context, arg SetSlackCardPosted
 }
 
 const setSlackCardState = `-- name: SetSlackCardState :exec
-UPDATE pc.slack_cards SET state = $1, updated_at = now()
+UPDATE pc.slack_cards SET state = $1, updated_at = now(),
+    close_attempts = CASE WHEN state = 'ORPHANED' THEN 0 ELSE close_attempts END,
+    close_retries = CASE WHEN state = 'ORPHANED' THEN 0 ELSE close_retries END,
+    close_after = CASE WHEN state = 'ORPHANED' THEN NULL ELSE close_after END
 WHERE org_id = $2 AND card_id = $3 AND state IN ('OPEN', 'CLOSED', 'ORPHANED')
 `
 
-// An ORPHANED card a later update reached is OPEN or CLOSED again (D117).
+// An ORPHANED card a later update reached is OPEN or CLOSED again, with
+// its failure counts reset (D117, D127).
 func (q *Queries) SetSlackCardState(ctx context.Context, state string, orgID ids.OrgID, cardID ids.UUID) error {
 	_, err := q.db.Exec(ctx, setSlackCardState, state, orgID, cardID)
 	return err

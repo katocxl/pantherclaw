@@ -118,6 +118,7 @@ type Server struct {
 	messages []Message
 	calls    Calls
 	tokens   []string
+	hook     func(method string)
 	team     string
 	now      func() time.Time
 	seq      int
@@ -172,6 +173,14 @@ func (s *Server) React(channel, ts, name string) bool {
 		}
 	}
 	return false
+}
+
+// SetHook runs fn before each Web API method is answered, outside the
+// simulator's lock (a test acts while Slack is answering).
+func (s *Server) SetHook(fn func(method string)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.hook = fn
 }
 
 // Delete removes a message, as a person deleting it in Slack would: a
@@ -236,6 +245,12 @@ func (s *Server) Handler() http.Handler {
 
 // api answers one Web API method.
 func (s *Server) api(w http.ResponseWriter, r *http.Request, method string) {
+	s.mu.Lock()
+	hook := s.hook
+	s.mu.Unlock()
+	if hook != nil {
+		hook(method)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls[method]++

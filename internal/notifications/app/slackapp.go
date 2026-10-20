@@ -398,7 +398,7 @@ func (s *Service) slackEscalate(ctx context.Context, org ids.OrgID, token string
 	if claimed == 0 {
 		// Another notice claimed this step: this one is the next step, tried
 		// again with the count it will then read (D117).
-		return outcome{code: "escalation_claimed"}
+		return outcome{code: "escalation_claimed", contended: true}
 	}
 	_, out := s.slackPost(ctx, token, stored.SlackChannel, *stored.Ts, domain.EscalationReply(int(stored.Escalations)+1))
 	if !out.ok && !slackRefused(out) {

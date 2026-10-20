@@ -106,9 +106,11 @@ WHERE org_id = sqlc.arg(org_id) AND card_id = sqlc.arg(card_id) AND state = 'OPE
 
 -- name: FailSlackCardClose :one
 -- Counts a close Slack will not recover from; the fifth makes the card
--- ORPHANED (D104, D117).
+-- ORPHANED (D104, D117). Each waits with the same backoff as a transient
+-- failure, so five never land within minutes (D127).
 UPDATE pc.slack_cards
 SET close_attempts = close_attempts + 1, updated_at = now(),
+    close_after = now() + make_interval(secs => least(60 * power(2, close_attempts), 3600)::int),
     state = CASE WHEN close_attempts + 1 >= 5 THEN 'ORPHANED' ELSE state END
 WHERE org_id = sqlc.arg(org_id) AND card_id = sqlc.arg(card_id) AND state = 'OPEN'
 RETURNING state;
@@ -134,8 +136,12 @@ UPDATE pc.slack_app_channels SET state = 'PENDING_ACTIVATION', shared_externally
 WHERE org_id = sqlc.arg(org_id) AND channel_record_id = sqlc.arg(channel_record_id) AND state = 'ACTIVE';
 
 -- name: SetSlackCardState :exec
--- An ORPHANED card a later update reached is OPEN or CLOSED again (D117).
-UPDATE pc.slack_cards SET state = sqlc.arg(state), updated_at = now()
+-- An ORPHANED card a later update reached is OPEN or CLOSED again, with
+-- its failure counts reset (D117, D127).
+UPDATE pc.slack_cards SET state = sqlc.arg(state), updated_at = now(),
+    close_attempts = CASE WHEN state = 'ORPHANED' THEN 0 ELSE close_attempts END,
+    close_retries = CASE WHEN state = 'ORPHANED' THEN 0 ELSE close_retries END,
+    close_after = CASE WHEN state = 'ORPHANED' THEN NULL ELSE close_after END
 WHERE org_id = sqlc.arg(org_id) AND card_id = sqlc.arg(card_id) AND state IN ('OPEN', 'CLOSED', 'ORPHANED');
 
 -- name: ClaimSlackEscalation :execrows

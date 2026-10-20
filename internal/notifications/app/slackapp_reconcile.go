@@ -50,11 +50,12 @@ const (
 )
 
 // slackPermanent are Slack's answers to a close that retrying cannot fix:
-// they count toward ORPHANED (D117).
+// they count toward ORPHANED (D117). An unusable token is not one of them:
+// a secret outage defers the card like a 429 (D127).
 var slackPermanent = map[string]bool{
 	"slack_invalid_auth": true, "slack_account_inactive": true, "slack_token_revoked": true, "slack_token_expired": true,
 	"slack_channel_not_found": true, "slack_not_in_channel": true, "slack_message_not_found": true,
-	"slack_cant_update_message": true, "slack_is_archived": true, "slack_refused": true, "secret_unavailable": true,
+	"slack_cant_update_message": true, "slack_is_archived": true, "slack_refused": true,
 }
 
 // SlackReconciled counts what one run did for one org.
@@ -99,12 +100,15 @@ func (s *Service) ReconcileSlack(ctx context.Context, org ids.OrgID) (SlackRecon
 		if time.Now().After(deadline) {
 			return out, nil
 		}
-		paused, err := s.recheckSlackChannel(ctx, org, c)
+		paused, limited, err := s.recheckSlackChannel(ctx, org, c)
 		if err != nil {
 			return out, err
 		}
 		if paused {
 			out.Paused++
+		}
+		if limited {
+			return out, nil
 		}
 	}
 	return out, nil
@@ -163,22 +167,36 @@ func (s *Service) closeSlackCard(ctx context.Context, org ids.OrgID, cardID, req
 // internal (conversations.info). A channel now shared outside the
 // workspace returns to PENDING_ACTIVATION, audited, and the org's admins
 // are told; any other failure is left to delivery health.
-func (s *Service) recheckSlackChannel(ctx context.Context, org ids.OrgID, c dbq.ActiveSlackAppChannelsRow) (bool, error) {
+func (s *Service) recheckSlackChannel(ctx context.Context, org ids.OrgID, c dbq.ActiveSlackAppChannelsRow) (paused, limited bool, err error) {
+	// checked marks the attempt, so a failing channel moves behind the
+	// others, and shows a failure in its delivery health (D127).
+	checked := func(code string) {
+		_ = s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+			q := dbq.New(tx)
+			if err := q.MarkSlackChannelChecked(ctx, org, c.ChannelRecordID); err != nil || code == "" {
+				return err
+			}
+			return q.NoteChannelFailureCode(ctx, &code, org, c.ChannelRecordID)
+		})
+	}
 	token, err := s.slackToken(ctx, org, c.ChannelRecordID, c.Secret)
 	if err != nil {
 		s.log.WarnContext(ctx, "notifications.slack_recheck_skipped", slog.String("org", org.String()), pclog.Err(err))
-		return false, nil // the delivery path reports an unusable token
+		checked("secret_unavailable")
+		return false, false, nil
 	}
 	a, out := s.slackCall(ctx, token, "conversations.info", nil, url.Values{"channel": {c.SlackChannel}})
-	if out.ok || slackRefused(out) {
-		_ = s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-			return dbq.New(tx).MarkSlackChannelChecked(ctx, org, c.ChannelRecordID)
-		})
+	switch {
+	case out.code == "rate_limited" || out.code == "slack_ratelimited":
+		return false, true, nil // Slack asked to wait: this channel is checked first next run
+	case !out.ok:
+		checked(out.code)
+		return false, false, nil
 	}
-	if !out.ok || !sharedChannel(a, c.SlackChannel) {
-		return false, nil
+	checked("")
+	if !sharedChannel(a, c.SlackChannel) {
+		return false, false, nil
 	}
-	paused := false
 	err = s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		n, err := q.MarkSlackSharedExternally(ctx, org, c.ChannelRecordID)
@@ -209,7 +227,7 @@ func (s *Service) recheckSlackChannel(ctx context.Context, org ids.OrgID, c dbq.
 		})
 		return err
 	})
-	return paused, err
+	return paused, false, err
 }
 
 // SlackReconcileOrgArgs runs the reconciler for one org (ids only, HR-056).

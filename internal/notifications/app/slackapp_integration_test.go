@@ -10,9 +10,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -739,6 +742,8 @@ func TestT145_TransientFailuresDoNotOrphan(t *testing.T) {
 		if r, err := s.svc.ReconcileSlack(context.Background(), s.org); err != nil || r.Closed != 0 {
 			t.Fatalf("run %d: %v %+v", i, err, r)
 		}
+		// Each counted failure waits with backoff too (D127): skip the wait.
+		s.d.AdminExec(t, "UPDATE pc.slack_cards SET close_after = now() - interval '1 second' WHERE request_id = $1", gone)
 	}
 	if st := s.cardState(t, gone); st != "ORPHANED" {
 		t.Fatalf("after five closes Slack refused: %s", st)
@@ -886,4 +891,178 @@ func TestT145_AReturnedTsWinsOverAnUnknownMark(t *testing.T) {
 	if st := s.cardState(t, req); st != domain.CardOpen {
 		t.Fatalf("card: %s", st)
 	}
+}
+
+// TestT145_ARevivedCardStartsAfresh: a notice that reaches an ORPHANED card
+// closes it and resets its failure counts, so a revived card that fails
+// again is orphaned again, never stuck at its count limit (D127).
+func TestT145_ARevivedCardStartsAfresh(t *testing.T) {
+	s := newSlackEnv(t, slackToken)
+	s.activate(t, s.channel(t, "approvals", slackApproval, ""))
+	req := s.hold(t, 2*time.Second)
+	_ = s.deliverAll(t)
+	time.Sleep(3 * time.Second)
+	if _, err := approvals.SweepOrg(context.Background(), s.pool, s.svc, s.org); err != nil {
+		t.Fatal(err)
+	}
+	// The expiry notice waits while Slack does not find the channel.
+	s.exec(t, "UPDATE pc.deliveries SET next_attempt_at = now() + interval '1 hour' WHERE state = 'PENDING' AND kind = 'slack_app'")
+	s.sim.SetFaults(slack.Faults{ChannelNotFound: true})
+	for range 5 {
+		if _, err := s.svc.ReconcileSlack(context.Background(), s.org); err != nil {
+			t.Fatal(err)
+		}
+		s.d.AdminExec(t, "UPDATE pc.slack_cards SET close_after = NULL WHERE request_id = $1", req)
+	}
+	if st := s.cardState(t, req); st != "ORPHANED" {
+		t.Fatalf("card: %s", st)
+	}
+	s.sim.SetFaults(slack.Faults{})
+	_ = s.deliverAll(t)
+	if got := s.str(t, "SELECT state || '/' || close_attempts || '/' || close_retries || '/' || (close_after IS NULL)::text FROM pc.slack_cards WHERE request_id = $1", req); got != "CLOSED/0/0/true" {
+		t.Fatalf("revived card: %s", got)
+	}
+	if m := s.card(t, req); !strings.Contains(m.Text, "Expired") {
+		t.Fatalf("card: %+v", m)
+	}
+	// A revived card that fails again counts from zero: back to ORPHANED
+	// after five, without hitting its count limit.
+	card := s.cardRow(t, req)
+	if err := s.pool.InTenantTx(context.Background(), s.org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		if err := q.SetSlackCardState(ctx, domain.CardOpen, s.org, card.CardID); err != nil {
+			return err
+		}
+		var st string
+		for range 5 {
+			var err error
+			if st, err = q.FailSlackCardClose(ctx, s.org, card.CardID); err != nil {
+				return err
+			}
+		}
+		if st != "ORPHANED" {
+			t.Errorf("re-orphaned: %s", st)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestT145_AStaleCloseDoesNotOutliveAReopen: a close that read the request
+// approved, while the request returns to PENDING as Slack applies it, is
+// followed by an update to what is now true: the card waits again (D127).
+func TestT145_AStaleCloseDoesNotOutliveAReopen(t *testing.T) {
+	s := newSlackEnv(t, slackToken)
+	s.activate(t, s.channel(t, "approvals", slackApproval, ""))
+	req := s.hold(t, time.Hour)
+	_ = s.deliverAll(t)
+	s.approve(t, req)
+	s.approver(t, "erin")
+	var once sync.Once
+	s.sim.SetHook(func(method string) {
+		if method != "chat.update" {
+			return
+		}
+		once.Do(func() {
+			s.d.AdminExec(t, "DELETE FROM pc.role_bindings WHERE org_id = $1 AND user_id = $2", s.org, s.dave.id)
+			if err := s.pool.InTenantTx(context.Background(), s.org, func(ctx context.Context, tx db.TenantTx) error {
+				return pgapprovals.Revalidate(ctx, tx, s.org, req)
+			}); err != nil {
+				t.Error(err)
+			}
+		})
+	})
+	_ = s.deliverAll(t)
+	s.sim.SetHook(nil)
+	if st := s.str(t, "SELECT state FROM pc.approval_requests WHERE id = $1", req); st != "PENDING" {
+		t.Fatalf("request: %s", st)
+	}
+	m := s.card(t, req)
+	if s.cardState(t, req) != domain.CardOpen || !strings.Contains(m.Text, "Approval needed") || m.Updates != 2 {
+		t.Fatalf("card after the race: %s %+v", s.cardState(t, req), m)
+	}
+}
+
+// TestT145_ConcurrentEscalationsPostDistinctSteps: two escalation notices
+// delivered at once post steps 1 and 2; the one that lost the claim is
+// retried, not counted as a channel failure (D127).
+func TestT145_ConcurrentEscalationsPostDistinctSteps(t *testing.T) {
+	s := newSlackEnv(t, slackToken)
+	c := s.activate(t, s.channel(t, "approvals", slackApproval, ""))
+	req := s.hold(t, time.Hour)
+	_ = s.deliverAll(t)
+	for range 2 {
+		if err := s.pool.InTenantTx(context.Background(), s.org, func(ctx context.Context, tx db.TenantTx) error {
+			_, err := s.svc.Enqueue(ctx, tx, napp.Message{
+				Org: s.org, Type: "approval.escalated", Subject: &napp.Subject{Type: "approval_request", ID: req},
+				Params: map[string]string{"operation": "payments.refund.create", "agent": s.agent.String(), "deadline": "2026-10-17T12:00:00Z", "request": req.String()},
+			})
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var pending []ids.UUID
+	for _, id := range strings.Split(s.str(t, "SELECT string_agg(id::text, ',') FROM pc.deliveries WHERE state = 'PENDING' AND kind = 'slack_app'"), ",") {
+		pending = append(pending, mustUUIDStr(t, id))
+	}
+	var wg sync.WaitGroup
+	for _, d := range pending {
+		wg.Go(func() { _ = s.svc.Deliver(context.Background(), s.org, d) })
+	}
+	wg.Wait()
+	_ = s.deliverAll(t) // the contended one, again
+	var steps []string
+	for _, m := range s.sim.Messages() {
+		if m.ThreadTS != "" {
+			steps = append(steps, m.Text)
+		}
+	}
+	slices.Sort(steps)
+	if !slices.Equal(steps, []string{"Escalated (step 1)", "Escalated (step 2)"}) {
+		t.Fatalf("replies: %v", steps)
+	}
+	if h := s.health(t, c.ID); h != "/0/true" {
+		t.Fatalf("delivery health: %s", h)
+	}
+}
+
+// TestT145_TheShareRecheckIsBoundedAndRotates: one run asks Slack about at
+// most 20 channels, the least recently checked first, so the next run
+// reaches the rest; a 429 ends the run's checks (D117, D127).
+func TestT145_TheShareRecheckIsBoundedAndRotates(t *testing.T) {
+	s := newSlackEnv(t, slackToken)
+	var channels []ids.UUID
+	for i := range 25 {
+		id := fmt.Sprintf("C0RECHECK%02d", i)
+		s.sim.SetChannel(slack.Channel{ID: id, Name: strings.ToLower(id), Member: true})
+		channels = append(channels, s.activate(t, s.channel(t, strings.ToLower(id), id, "")).ID)
+	}
+	info := func() int { return s.sim.Calls()["conversations.info"] }
+	before := info()
+	if _, err := s.svc.ReconcileSlack(context.Background(), s.org); err != nil {
+		t.Fatal(err)
+	}
+	if n := info() - before; n != 20 {
+		t.Fatalf("first run asked Slack %d times", n)
+	}
+	if n := s.str(t, "SELECT count(*)::text FROM pc.slack_app_channels WHERE last_checked_at IS NULL"); n != "5" {
+		t.Fatalf("%s channels unchecked after the first run", n)
+	}
+	if _, err := s.svc.ReconcileSlack(context.Background(), s.org); err != nil {
+		t.Fatal(err)
+	}
+	if n := s.str(t, "SELECT count(*)::text FROM pc.slack_app_channels WHERE last_checked_at IS NULL"); n != "0" {
+		t.Fatalf("%s channels never checked", n)
+	}
+	s.sim.SetFaults(slack.Faults{RateLimit: 1})
+	before = info()
+	if _, err := s.svc.ReconcileSlack(context.Background(), s.org); err != nil {
+		t.Fatal(err)
+	}
+	if n := info() - before; n != 1 {
+		t.Fatalf("a rate-limited run asked Slack %d times", n)
+	}
+	_ = channels
 }
