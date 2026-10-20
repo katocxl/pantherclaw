@@ -137,7 +137,7 @@ func (d *rangeDriver) stealAuthZEN(mode string, w callWith) (domain.Observation,
 	case "other_instance":
 		// The point names, as the subject, an agent other than the one
 		// whose credentials it forwards.
-		r.Agent = ids.NewV7().String()
+		r.Agent = otherAgent(d.t, d.s).String()
 		return azObserve(p.evaluate(d.t, p.evaluation(d.t, r))), nil
 	}
 	return domain.Observation{}, fmt.Errorf("agent.steal mode %q on face authzen", mode)

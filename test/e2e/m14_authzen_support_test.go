@@ -21,6 +21,8 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 
+	aapp "github.com/katocxl/pantherclaw/internal/agents/app"
+	adomain "github.com/katocxl/pantherclaw/internal/agents/domain"
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	"github.com/katocxl/pantherclaw/internal/authn/assertion"
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
@@ -248,4 +250,26 @@ func (p *azPoint) evaluate(t *testing.T, ev map[string]any) azAnswer {
 		p.nonce = n
 	}
 	return a
+}
+
+// otherAgent registers a second agent in the seeded agent's team and
+// environment, owned by its owner, and returns its id: a real agent the
+// point may falsely name (D113).
+func otherAgent(t *testing.T, s *stack) ids.UUID {
+	t.Helper()
+	var team, env, owner string
+	s.query(t, `SELECT team_id::text, environment_id::text, owner_user_id::text FROM pc.agents
+		WHERE team_id IS NOT NULL AND environment_id IS NOT NULL AND owner_user_id IS NOT NULL ORDER BY created_at LIMIT 1`, nil, &team, &env, &owner)
+	teamID, envID, ownerID := mustUUID(t, team), mustUUID(t, env), mustUUID(t, owner)
+	ctx := tapp.WithCaller(context.Background(), tapp.Caller{Subject: td.Subject{
+		Org: s.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: ownerID},
+		Bindings: []td.Binding{{Role: td.RoleAgentOwner, Scope: td.Scope{Type: td.ScopeTeam, ID: teamID}}},
+	}, Credential: tapp.CredAccessToken})
+	a, err := aapp.NewInventory(s.pool, unlimited{}).Create(ctx, adomain.Details{
+		Name: "another-agent", TeamID: teamID, EnvironmentID: envID, OwnerUserID: ownerID, Context: adomain.ContextService,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a.ID
 }
