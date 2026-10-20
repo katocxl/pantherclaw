@@ -1,12 +1,12 @@
 {
   "name": "research-disclosure",
-  "summary": "Research agents read allow-listed PostgreSQL tables, share drafts in named internal Slack channels and open pull requests on named repositories: public and internal columns only, nothing posted to channels shared outside the organization, and every pull request to a public destination held for an approver under the disclosure limits.",
+  "summary": "Research agents read allow-listed PostgreSQL tables, share drafts in named internal Slack channels and open pull requests on named repositories: public and internal columns only, nothing posted to channels shared outside the organization, and every pull request to a public destination held for an approver.",
   "template": "research-disclosure",
   "baseline_ttl_seconds": 28800,
   "covers": [
     "data classes: pii and secret columns are withheld, at most 100 rows a read",
     "internal sharing: posts only to the named Slack channels, never to a channel shared outside the organization",
-    "public disclosure: every pull request through a public destination waits for an independent approver, its body checked against the disclosure limits",
+    "public disclosure: every pull request through a public destination waits for an independent approver",
     "a grant baseline covering reads, posts to the named channels and pull requests on the named repositories only"
   ]
 }

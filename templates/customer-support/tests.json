@@ -82,7 +82,7 @@
       "summary": "the support agent reads its ticket's customer's orders, scoped to that customer and to public and internal columns",
       "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"columns": ["id", "customer_id", "amount", "status"], "limit": "50"}},
       "given": {"agent": "{{agent}}", "grant": {"constraints": [{"kind": "record_scope", "param": "customer", "values": ["{{customer}}"]}]}},
-      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "SUPPORT_READ_CLASSES"}
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "SUPPORT_READ_CUSTOMERS"}
     },
     {
       "id": "cs-rows-too-many", "per": "agent",
@@ -103,6 +103,13 @@
       "summary": "another agent's aggregate is not these rules'",
       "action": {"operation": "postgres.rows.aggregate", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"measures": ["count:*"], "limit": "10"}},
       "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "cs-rows-other-customer", "per": "agent",
+      "summary": "the support agent whose grant names another customer reads none of the named customers' rows, nor that customer's",
+      "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"columns": ["id", "customer_id", "amount"], "limit": "10"}},
+      "given": {"agent": "{{agent}}", "grant": {"constraints": [{"kind": "record_scope", "param": "customer", "values": ["{{other_customer}}"]}]}},
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "SUPPORT_READ_CUSTOMERS"}
     }
   ]
 }

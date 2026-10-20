@@ -4,6 +4,8 @@
 package pclaw
 
 import (
+	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"flag"
 	"io"
@@ -12,7 +14,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/katocxl/pantherclaw/internal/actionir"
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
+	polapp "github.com/katocxl/pantherclaw/internal/policy/app"
+	"github.com/katocxl/pantherclaw/internal/policy/domain"
 	"github.com/katocxl/pantherclaw/internal/policy/packs/render"
 	pcpostgres "github.com/katocxl/pantherclaw/packages/pc-postgres"
 	pcslack "github.com/katocxl/pantherclaw/packages/pc-slack"
@@ -134,6 +141,15 @@ func TestM14PayeesAreChecked(t *testing.T) {
 	if _, err := r.fill("{{payees}}", false); err == nil {
 		t.Error("{{payees}} filled outside a condition")
 	}
+	// D119 L5: outside tests, {{payee}} is a list item only, never the first value.
+	for _, s := range []string{"action.target.id == {{payee}}", "{{payee}}"} {
+		if _, err := r.fill(s, true); err == nil {
+			t.Errorf("%s filled in a rule", s)
+		}
+		if _, err := r.fill(s, false); err == nil {
+			t.Errorf("%s filled outside a list item", s)
+		}
+	}
 }
 
 // TestM14CustomersAreChecked (D106): customer-support needs --customer,
@@ -198,7 +214,7 @@ func TestM14AgentTemplatesNeedAgent(t *testing.T) {
 		"aggregate-reporting": nil,
 		"customer-support":    {"--customer", "cus-1001"},
 		"internal-analysis":   {"--slack-channel", "C0EXAMPLE01"},
-		"research-disclosure": {"--repos", "acme/research"},
+		"research-disclosure": {"--repos", "acme/research", "--slack-channel", "C0EXAMPLE01"},
 	}
 	for name, extra := range args {
 		info, err := readTemplateInfo(name)
@@ -237,5 +253,123 @@ func TestM14AgentTemplatesNeedAgent(t *testing.T) {
 		if _, err := renderTemplate(o); err == nil {
 			t.Errorf("%s rendered without an agent", name)
 		}
+	}
+}
+
+// m14Render renders an M14 template with the example values and the
+// template agent, and its policy as a bundle.
+func m14Render(t *testing.T, name string) (templateData, *domain.Bundle) {
+	t.Helper()
+	o := templateOptions{
+		name: name, environment: "production", timeZone: "UTC", agent: templateAgent, lists: exampleLists(),
+		repos: []string{"acme/research"}, defaults: map[string]string{"acme/research": "main"},
+	}
+	info, err := readTemplateInfo(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := info.Placeholders[kindRepository]; !ok {
+		o.repos, o.defaults = nil, map[string]string{}
+	}
+	d, err := renderTemplate(o)
+	if err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	return d, m11Rendered{rules: d.Rules}.bundle(t)
+}
+
+// TestM14GrantsCoverConsequences (D119 M1): every consequence operation an
+// M14 template's rules decide is in the template's grant, so a predicted
+// or unknown consequence is decided by those rules and not refused by the
+// grant (the scenario fixture's root grant adds them by itself).
+func TestM14GrantsCoverConsequences(t *testing.T) {
+	pkgs := m11Packages(t)
+	for _, name := range m14Templates {
+		d, b := m14Render(t, name)
+		info, err := readTemplateInfo(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		consequences := map[string]bool{}
+		for _, p := range info.Requires.Packages {
+			for _, c := range pkgs[p].Consequences {
+				consequences[c.Consequence.Operation] = true
+			}
+		}
+		var bounds struct {
+			Operations []string `json:"operations"`
+		}
+		if err := json.Unmarshal(d.Grant.Bounds, &bounds); err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range b.Rules {
+			for _, op := range r.Operations {
+				if consequences[op] && !slices.Contains(bounds.Operations, op) {
+					t.Errorf("%s: rule %s decides the consequence %s, which the grant does not cover", name, r.ID, op)
+				}
+			}
+		}
+	}
+}
+
+// m14Evaluate evaluates one operation of a template's policy with the
+// policy engine, for the template agent's run.
+func m14Evaluate(t *testing.T, b *domain.Bundle, pkg, op string, target actionir.Target, params string, c *polapp.Consequence) domain.Outcome {
+	t.Helper()
+	d := m11Definition(m11Packages(t), []string{pkg}, op)
+	compiled, err := (&polapp.Engine{Limits: celenv.DefaultLimits, Facts: m11Facts}).Compile(b, []*defs.Definition{d})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := actionir.ActionIR{Operation: op, Definition: actionir.Definition{Digest: d.Digest}, Target: target, Params: jsontext.Value(params)}
+	out, err := compiled.Evaluate(context.Background(), d, a, polapp.Input{
+		Budget: polapp.DefaultBudget, Consequence: c, Run: &polapp.Run{ID: "run-1", AgentID: templateAgent},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// TestM14TreasuryRequirements (D99, D119 L3/L4): every transfer asks for
+// two independent approvers; a predicted payee_changed_recently
+// consequence asks for the principal's security-key step-up and no other
+// approval; an unknown one is refused outright.
+func TestM14TreasuryRequirements(t *testing.T) {
+	_, b := m14Render(t, "treasury-payments")
+	payee := actionir.Target{Type: "stripe.account", ID: examplePayees[0]}
+	out := m14Evaluate(t, b, "pc.stripe", "stripe.transfer.create", payee, `{"amount":{"value":"100.00","currency":"USD"}}`, nil)
+	if out.Verdict != domain.VerdictRequireApproval || len(out.Required) != 1 || out.Required[0].Rule != "tr-transfer-approve" ||
+		out.Required[0].Approval == nil || out.Required[0].Approval.Count != 2 || !out.Required[0].Approval.Independent || out.Required[0].Approval.Role != "approver" {
+		t.Errorf("transfer: %v %+v", out.Verdict, out.Required)
+	}
+	out = m14Evaluate(t, b, "pc.stripe", "stripe.payee.changed_recently", payee, `{}`, &polapp.Consequence{Rule: "payee-changed-recently", State: "PREDICTED"})
+	if out.Verdict != domain.VerdictRequireStepUp || len(out.Required) != 1 || out.Required[0].Rule != "tr-payee-changed" ||
+		out.Required[0].StepUp == nil || out.Required[0].StepUp.Subject != "principal" || out.Required[0].StepUp.Method != "webauthn" {
+		t.Errorf("changed payee: %v %+v", out.Verdict, out.Required)
+	}
+	out = m14Evaluate(t, b, "pc.stripe", "stripe.payee.changed_recently", payee, `{}`, &polapp.Consequence{Rule: "payee-changed-recently", State: "UNKNOWN"})
+	if item, _ := out.Decisive(); out.Verdict != domain.VerdictDeny || item.Reason != "PAYEE_CHANGES_UNREAD" {
+		t.Errorf("unread payee: %v %+v", out.Verdict, item)
+	}
+}
+
+// TestM14SupportRecordScope (D106, D119 L1): customer-support's read
+// carries a record_scope obligation on key customer with exactly the
+// --customer values, never another customer.
+func TestM14SupportRecordScope(t *testing.T) {
+	_, b := m14Render(t, "customer-support")
+	out := m14Evaluate(t, b, "pc.postgres", "postgres.rows.read", actionir.Target{Type: "pg_table", ID: "shop.orders"}, `{"columns":["id"],"limit":"10"}`, nil)
+	var found bool
+	for _, o := range out.Obligations {
+		if o.Kind == domain.RecordScope {
+			found = true
+			if o.Param != "customer" || !slices.Equal(o.Values, exampleCustomers) || slices.Contains(o.Values, render.OtherCustomer) {
+				t.Errorf("record scope %+v, want customer %v", o, exampleCustomers)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("no record_scope obligation: %+v", out.Obligations)
 	}
 }

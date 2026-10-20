@@ -55,6 +55,13 @@
       "action": {"operation": "slack.message.post", "target": {"type": "slack_channel", "id": "{{other_slack_channel}}"}, "params": {"text": "hello"}},
       "given": {"facts": {"slack.channel.external": {"value": {"object": {"external": false, "ext_shared": false, "shared": false}}, "age_seconds": 10}}},
       "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "rs-post-unread", "per": "agent",
+      "summary": "a post to a named channel whose sharing cannot be read is refused: it may be external",
+      "action": {"operation": "slack.message.post", "target": {"type": "slack_channel", "id": "{{slack_channel}}"}, "params": {"text": "Weekly orders: 1204"}},
+      "given": {"agent": "{{agent}}"},
+      "expect": {"decision": "DENY", "reason": "EXTERNAL_DISCLOSURE", "rule": "rs-external--{{agent}}"}
     }
   ]
 }

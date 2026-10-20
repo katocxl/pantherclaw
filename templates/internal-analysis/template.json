@@ -5,7 +5,7 @@
   "requires_agent": true,
   "protects": [
     "the agent named with --agent (required) reads and aggregates only public and internal columns (pii and secret values are withheld), and reads at most 20 rows at a time",
-    "the agent named with --agent (required) posts only to the Slack channels named with --slack-channel; without --slack-channel it posts nowhere",
+    "the agent named with --agent (required) posts only to the Slack channels named with --slack-channel (required)",
     "the agent named with --agent (required) never posts to a channel shared with another workspace or organization, read from Slack within the last 5 minutes",
     "the agent's grant covers reads, aggregates and the table list on pc.postgres, and posts to the named channels only"
   ],
