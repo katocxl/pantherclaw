@@ -27,6 +27,10 @@ var (
 	ErrInvalidComp = pcerr.New(pcerr.InvalidArgument, "INVALID_COMP",
 		"a comp plan needs a plan, an edition, a reason and an end within a year")
 	ErrNoComp = pcerr.New(pcerr.FailedPrecondition, "NO_COMP_PLAN", "the organization has no comp plan in force")
+	// ErrCompNeedsHostedBilling: self-hosted servers take entitlements from
+	// the licence only (D85).
+	ErrCompNeedsHostedBilling = pcerr.New(pcerr.FailedPrecondition, "COMP_NEEDS_HOSTED_BILLING",
+		"complimentary plans are for hosted billing; self-hosted entitlements come from the licence")
 )
 
 // CompGrant is an operator's complimentary plan for one org (D12).
@@ -48,9 +52,13 @@ func cleanReason(r string) (string, bool) {
 
 // GrantComp gives org a complimentary plan until g.Until (HR-358): only
 // from the operator command line, with a reason, at most a year, recorded
-// in the org's evidence ledger and shown to the org. It works in every
-// billing mode.
+// in the org's evidence ledger and shown to the org. It overrides the
+// billing state, which billing events keep updating (D87), and needs
+// hosted billing: billing mode external (or off, which production refuses).
 func (s *Service) GrantComp(ctx context.Context, org ids.OrgID, g CompGrant) error {
+	if s.mode == ModeLicence {
+		return ErrCompNeedsHostedBilling
+	}
 	if g.Edition == "" {
 		g.Edition = g.PlanID
 	}
@@ -74,7 +82,7 @@ func (s *Service) GrantComp(ctx context.Context, org ids.OrgID, g CompGrant) err
 			return err
 		}
 		version, err := q.PutCompPlan(ctx, dbq.PutCompPlanParams{
-			OrgID: org, PlanID: g.PlanID, Edition: g.Edition, CompUntil: &until, CompReason: &reason,
+			OrgID: org, CompPlanID: &g.PlanID, CompEdition: &g.Edition, CompUntil: &until, CompReason: &reason,
 			CompBy: &g.Operator,
 		})
 		if err != nil {
@@ -93,8 +101,12 @@ func (s *Service) GrantComp(ctx context.Context, org ids.OrgID, g CompGrant) err
 }
 
 // RevokeComp ends org's comp plan now (D34: with a reason); the org's plan
-// then reads as LAPSED until billing reports one.
+// falls back to its billing state at once, or reads as LAPSED without one
+// (D87).
 func (s *Service) RevokeComp(ctx context.Context, org ids.OrgID, reason, operator string) error {
+	if s.mode == ModeLicence {
+		return ErrCompNeedsHostedBilling
+	}
 	reason, ok := cleanReason(reason)
 	if !ok || operator == "" || len(operator) > 200 {
 		return ErrInvalidComp

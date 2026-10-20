@@ -92,8 +92,8 @@ func isLowerAlnum(c byte) bool { return (c >= 'a' && c <= 'z') || (c >= '0' && c
 // ApplyPlan records the plan the billing extension reports for org
 // (HR-354, HR-355). It is idempotent by event id: a replayed event changes
 // nothing. An event strictly older than the newest one applied is recorded
-// and ignored; an equal timestamp applies. While an operator's comp plan is
-// in force, billing events are recorded and do not replace it. Every change
+// and ignored; an equal timestamp applies. An operator's comp plan overrides
+// the billing state without stopping it from updating (D87). Every change
 // is recorded in the org's evidence ledger.
 func (s *Service) ApplyPlan(ctx context.Context, org ids.OrgID, snap Snapshot) error {
 	if s.mode != ModeExternal {
@@ -135,18 +135,16 @@ func (s *Service) ApplyPlan(ctx context.Context, org ids.OrgID, snap Snapshot) e
 		planID, edition := snap.PlanID, snap.Edition
 		if planID == "" {
 			switch {
-			case found:
+			case found && cur.Source == string(SourceBilling):
 				planID, edition, limits, features = cur.PlanID, cur.Edition, cur.Limits, cur.Features
 			case edition == "":
 				return ErrInvalidSnapshot
 			}
 		}
+		// A comp override never stops billing events: they keep the
+		// billing state current under it (D87).
 		kind := "APPLIED"
-		switch {
-		case found && cur.Source == string(SourceComp) && cur.Status == string(StatusComp) &&
-			cur.CompUntil != nil && s.clock.Now().Before(*cur.CompUntil):
-			kind = "IGNORED_COMP"
-		case found && cur.LastEventAt != nil && at.Before(*cur.LastEventAt):
+		if found && cur.LastEventAt != nil && at.Before(*cur.LastEventAt) {
 			kind = "IGNORED_STALE"
 		}
 		n, err := q.InsertEntitlementEvent(ctx, dbq.InsertEntitlementEventParams{

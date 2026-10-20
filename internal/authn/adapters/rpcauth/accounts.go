@@ -14,6 +14,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/accounts"
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -79,9 +80,7 @@ func (o *options) accountCall(ctx context.Context, info *connect.CallInfo, spec 
 		return nil, errAuthRequired
 	}
 	c := s.Caller
-	if si, ok := info.TransportInfo.(interface{ RemoteAddr() string }); ok {
-		c.IP = si.RemoteAddr()
-	}
+	c.IP = httpx.ClientIPFrom(ctx) // the trusted-proxy-aware address (D85)
 	return accounts.WithCaller(audit.WithAuthKind(ctx, "account_session"), c), nil
 }
 
@@ -101,6 +100,6 @@ func (o *options) orgAccountCall(ctx context.Context, c tapp.Caller, perm td.Per
 	if !ok {
 		return nil, true, td.ErrPermissionDenied(perm)
 	}
-	ctx = accounts.WithCaller(ctx, accounts.Caller{Account: account, Session: c.Session})
+	ctx = accounts.WithCaller(ctx, accounts.Caller{Account: account, Session: c.Session, IP: httpx.ClientIPFrom(ctx)})
 	return tapp.WithCaller(ctx, c), true, nil
 }

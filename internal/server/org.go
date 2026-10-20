@@ -62,8 +62,8 @@ func cmdOrg(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 		return err
 	}
 	var ents tapp.Entitlements = billing.New(pool, roots, clock.System{}, newLogger(cfg, stderr))
-	if cfg.billingMode() != entitlements.ModeLicence {
-		// Hosted: plans are per org (G0 UI D9), so the licence's org limit
+	if cfg.billingMode() == entitlements.ModeExternal {
+		// Hosted billing: plans are per org (G0 UI D9, D85), so the licence's org limit
 		// does not apply.
 		ents = hostedOrgLimit{ents}
 	}

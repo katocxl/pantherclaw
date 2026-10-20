@@ -224,11 +224,23 @@ func (s *Service) For(ctx context.Context, org ids.OrgID) (billing.Entitlements,
 	return p.entitlements(), nil
 }
 
-// Plan returns org's effective plan. A comp plan past its end and a
-// canceled plan past its period end read as LAPSED.
+// Plan returns org's effective plan: development mode's, the licence's
+// (self-hosted: plan rows never override a licence, D85), or the hosted
+// org's — its comp plan while in force, else its billing state, a
+// canceled plan past its period end reading as LAPSED (D87).
 func (s *Service) Plan(ctx context.Context, org ids.OrgID) (Plan, error) {
-	if s.mode == ModeOff {
+	switch s.mode {
+	case ModeOff:
 		return Plan{Org: org, Edition: EditionDevelopment, Status: StatusDev, Source: SourceDev}, nil
+	case ModeLicence:
+		lic, err := s.licence.Current(ctx)
+		if err != nil {
+			return Plan{}, err
+		}
+		return Plan{Org: org, Edition: string(lic.Edition), Status: StatusActive, Source: SourceLicence, Limits: Limits{
+			MaxAgents: fromLicence(lic.Limits.MaxAgents),
+		}}, nil
+	case ModeExternal:
 	}
 	var row dbq.PcOrgEntitlement
 	found := true
@@ -244,26 +256,10 @@ func (s *Service) Plan(ctx context.Context, org ids.OrgID) (Plan, error) {
 	if err != nil {
 		return Plan{}, fmt.Errorf("entitlements: read plan: %w", err)
 	}
-	if found {
-		p, err := planFromRow(row)
-		if err != nil {
-			return Plan{}, err
-		}
-		// Self-hosted, only a comp plan in force overrides the licence.
-		if p = p.effective(s.clock.Now()); s.mode == ModeExternal || p.Status == StatusComp {
-			return p, nil
-		}
-	}
-	if s.mode == ModeExternal {
+	if !found {
 		return Plan{Org: org, Edition: string(billing.Community), Status: StatusNone, Source: SourceBilling}, nil
 	}
-	lic, err := s.licence.Current(ctx)
-	if err != nil {
-		return Plan{}, err
-	}
-	return Plan{Org: org, Edition: string(lic.Edition), Status: StatusActive, Source: SourceLicence, Limits: Limits{
-		MaxAgents: fromLicence(lic.Limits.MaxAgents),
-	}}, nil
+	return effectivePlan(row, s.clock.Now())
 }
 
 func fromLicence(n int) int {
@@ -273,33 +269,45 @@ func fromLicence(n int) int {
 	return n
 }
 
-// effective applies the dates: an ended comp plan or a canceled plan past
-// its period end is LAPSED.
-func (p Plan) effective(now time.Time) Plan {
-	switch {
-	case p.Status == StatusComp && p.CompUntil != nil && !now.Before(*p.CompUntil):
-		p.Status = StatusLapsed
-	case p.Status == StatusCanceled && (p.PeriodEnd == nil || !now.Before(*p.PeriodEnd)):
-		p.Status = StatusLapsed
-	}
-	return p
-}
-
-func planFromRow(r dbq.PcOrgEntitlement) (Plan, error) {
+// effectivePlan is a hosted org's plan at now (D87): the comp plan while it
+// is in force; otherwise the billing state (a canceled plan past its period
+// end reads as LAPSED); with no billing state, an ended comp plan reads as
+// LAPSED with its edition (enforcement never weakens, HR-357).
+func effectivePlan(r dbq.PcOrgEntitlement, now time.Time) (Plan, error) {
 	var l Limits
 	if len(r.Limits) > 0 {
 		if err := json.Unmarshal(r.Limits, &l); err != nil {
 			return Plan{}, fmt.Errorf("entitlements: limits of %s: %w", r.OrgID, err)
 		}
 	}
-	p := Plan{
-		Org: r.OrgID, PlanID: r.PlanID, Edition: r.Edition, Status: Status(r.Status), Source: Source(r.Source), Limits: l,
-		Features: r.Features, PeriodEnd: r.PeriodEnd, CompUntil: r.CompUntil, Version: r.Version, LastEventAt: r.LastEventAt,
-	}
+	comp := r.CompUntil != nil && r.CompAt != nil && r.CompPlanID != nil && r.CompEdition != nil
+	inForce := comp && now.Before(*r.CompUntil)
+	reason := ""
 	if r.CompReason != nil {
-		p.CompReason = *r.CompReason
+		reason = *r.CompReason
 	}
-	return p, nil
+	switch {
+	case inForce:
+		return Plan{
+			Org: r.OrgID, PlanID: *r.CompPlanID, Edition: *r.CompEdition, Status: StatusComp, Source: SourceComp,
+			CompUntil: r.CompUntil, CompReason: reason, Version: r.Version, LastEventAt: r.LastEventAt,
+		}, nil
+	case r.Source == string(SourceBilling):
+		p := Plan{
+			Org: r.OrgID, PlanID: r.PlanID, Edition: r.Edition, Status: Status(r.Status), Source: SourceBilling, Limits: l,
+			Features: r.Features, PeriodEnd: r.PeriodEnd, Version: r.Version, LastEventAt: r.LastEventAt,
+		}
+		if p.Status == StatusCanceled && (p.PeriodEnd == nil || !now.Before(*p.PeriodEnd)) {
+			p.Status = StatusLapsed
+		}
+		return p, nil
+	case comp:
+		return Plan{
+			Org: r.OrgID, PlanID: *r.CompPlanID, Edition: *r.CompEdition, Status: StatusLapsed, Source: SourceComp,
+			CompUntil: r.CompUntil, CompReason: reason, Version: r.Version,
+		}, nil
+	}
+	return Plan{Org: r.OrgID, Edition: string(billing.Community), Status: StatusNone, Source: SourceBilling, Version: r.Version}, nil
 }
 
 // entitlements turns a plan into what the gates read. The edition and

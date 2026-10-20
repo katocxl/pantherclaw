@@ -797,7 +797,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err := mountExtension(mux, d.ext, d.extDeps, d.web, d.clientIP); err != nil {
 		return nil, err
 	}
-	return workloadrpc.RawBody(mux, d.clientIP), nil
+	// The client address goes into every request's context for the account
+	// procedures' per-IP limits (G0 UI D85).
+	return httpx.ClientIPMiddleware(workloadrpc.RawBody(mux, d.clientIP), d.clientIP), nil
 }
 
 // attestTimeout bounds one call to an issuer or a cluster API server.

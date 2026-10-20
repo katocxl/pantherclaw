@@ -21,28 +21,31 @@ INSERT INTO pc.org_entitlements (org_id, plan_id, edition, limits, features, sta
 VALUES (sqlc.arg(org_id), sqlc.arg(plan_id), sqlc.arg(edition), sqlc.arg(limits), sqlc.arg(features), sqlc.arg(status),
         'BILLING', sqlc.narg(period_end), sqlc.arg(event_at))
 ON CONFLICT (org_id) DO UPDATE
+-- Only the billing state changes; a comp override stays (D87).
 SET plan_id = EXCLUDED.plan_id, edition = EXCLUDED.edition, limits = EXCLUDED.limits, features = EXCLUDED.features,
-    status = EXCLUDED.status, source = 'BILLING', period_end = EXCLUDED.period_end, comp_until = NULL, comp_reason = NULL,
-    comp_by = NULL, comp_at = NULL, version = pc.org_entitlements.version + 1, last_event_at = EXCLUDED.last_event_at,
-    updated_at = now()
+    status = EXCLUDED.status, source = 'BILLING', period_end = EXCLUDED.period_end,
+    version = pc.org_entitlements.version + 1, last_event_at = EXCLUDED.last_event_at, updated_at = now()
 RETURNING version;
 
 -- name: PutCompPlan :one
-INSERT INTO pc.org_entitlements (org_id, plan_id, edition, limits, features, status, source, comp_until, comp_reason,
-                                 comp_by, comp_at, last_event_at)
-VALUES (sqlc.arg(org_id), sqlc.arg(plan_id), sqlc.arg(edition), '{}', '{}', 'COMP', 'COMP', sqlc.arg(comp_until),
-        sqlc.arg(comp_reason), sqlc.arg(comp_by), now(), NULL)
+-- Sets the comp override; the billing state stays (D87). A new org row
+-- has no billing state yet.
+INSERT INTO pc.org_entitlements (org_id, edition, status, source, comp_plan_id, comp_edition, comp_until, comp_reason,
+                                 comp_by, comp_at)
+VALUES (sqlc.arg(org_id), 'community', 'NONE', 'NONE', sqlc.arg(comp_plan_id), sqlc.arg(comp_edition), sqlc.arg(comp_until),
+        sqlc.arg(comp_reason), sqlc.arg(comp_by), now())
 ON CONFLICT (org_id) DO UPDATE
-SET plan_id = EXCLUDED.plan_id, edition = EXCLUDED.edition, limits = '{}', features = '{}', status = 'COMP',
-    source = 'COMP', period_end = NULL, comp_until = EXCLUDED.comp_until, comp_reason = EXCLUDED.comp_reason,
-    comp_by = EXCLUDED.comp_by, comp_at = now(), version = pc.org_entitlements.version + 1, updated_at = now()
+SET comp_plan_id = EXCLUDED.comp_plan_id, comp_edition = EXCLUDED.comp_edition, comp_until = EXCLUDED.comp_until,
+    comp_reason = EXCLUDED.comp_reason, comp_by = EXCLUDED.comp_by, comp_at = now(),
+    version = pc.org_entitlements.version + 1, updated_at = now()
 RETURNING version;
 
 -- name: RevokeCompPlan :one
+-- Ends a comp override in force now; the effective plan falls back to the
+-- billing state at once (D87).
 UPDATE pc.org_entitlements
-SET status = 'LAPSED', comp_until = LEAST(comp_until, now()), comp_reason = sqlc.arg(comp_reason),
-    version = version + 1, updated_at = now()
-WHERE org_id = sqlc.arg(org_id) AND source = 'COMP' AND status = 'COMP'
+SET comp_until = now(), comp_reason = sqlc.arg(comp_reason), version = version + 1, updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND comp_until > now() AND comp_at < now()
 RETURNING version;
 
 -- name: EntitlementUsage :one

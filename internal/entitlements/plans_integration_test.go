@@ -213,57 +213,69 @@ func TestHR357_ALapsedOrMissingPlanNeverWeakensEnforcement(t *testing.T) {
 	}
 }
 
-// TestHR358_CompPlansAreOperatorOnlyWithAReasonAtMostAYearAndAudited.
+// TestHR358_CompPlansAreOperatorOnlyWithAReasonAtMostAYearAndAudited, and
+// only for hosted billing: a licence is never overridden (D85).
 func TestHR358_CompPlansAreOperatorOnlyWithAReasonAtMostAYearAndAudited(t *testing.T) {
 	f := newFixture(t)
 	org := f.org(t)
 	ctx := context.Background()
-	for _, mode := range []entitlements.Mode{entitlements.ModeLicence, entitlements.ModeExternal} {
-		s := f.svc(t, mode)
-		now := time.Now()
-		for name, g := range map[string]entitlements.CompGrant{
-			"no reason":  {PlanID: "team", Until: now.Add(time.Hour), Operator: "cli:op"},
-			"too long":   {PlanID: "team", Until: now.Add(400 * 24 * time.Hour), Reason: "pilot", Operator: "cli:op"},
-			"ended":      {PlanID: "team", Until: now.Add(-time.Hour), Reason: "pilot", Operator: "cli:op"},
-			"dev":        {PlanID: "dev", Edition: "development", Until: now.Add(time.Hour), Reason: "pilot", Operator: "cli:op"},
-			"no edition": {PlanID: "partner", Until: now.Add(time.Hour), Reason: "pilot", Operator: "cli:op"},
-		} {
-			if err := s.GrantComp(ctx, org, g); !errors.Is(err, entitlements.ErrInvalidComp) {
-				t.Errorf("%s/%s: %v", mode, name, err)
-			}
-		}
-		if err := s.GrantComp(ctx, org, entitlements.CompGrant{
-			PlanID: "partner", Edition: "business", Until: now.Add(30 * 24 * time.Hour), Reason: "design partner", Operator: "cli:op",
-		}); err != nil {
-			t.Fatal(err)
-		}
-		p := f.plan(t, s, org)
-		if p.Status != entitlements.StatusComp || p.Source != entitlements.SourceComp || p.CompReason != "design partner" || p.CompUntil == nil {
-			t.Fatalf("%s: plan = %+v", mode, p)
-		}
-		if e, _ := s.For(ctx, org); e.Edition != billing.Business {
-			t.Errorf("%s: comp edition not in force: %v", mode, e.Edition)
-		}
-		f.clock.now = now.Add(31 * 24 * time.Hour)
-		if p := f.plan(t, s, org); mode == entitlements.ModeExternal && p.Status != entitlements.StatusLapsed {
-			t.Errorf("an ended comp plan reads %s", p.Status)
-		}
-		if p := f.plan(t, s, org); mode == entitlements.ModeLicence && p.Source != entitlements.SourceLicence {
-			t.Errorf("self-hosted: an ended comp plan still overrides the licence: %+v", p)
-		}
-		f.clock.now = now
-	}
 	s := f.svc(t, entitlements.ModeExternal)
+	now := time.Now()
+	for name, g := range map[string]entitlements.CompGrant{
+		"no reason":  {PlanID: "team", Until: now.Add(time.Hour), Operator: "cli:op"},
+		"too long":   {PlanID: "team", Until: now.Add(400 * 24 * time.Hour), Reason: "pilot", Operator: "cli:op"},
+		"ended":      {PlanID: "team", Until: now.Add(-time.Hour), Reason: "pilot", Operator: "cli:op"},
+		"dev":        {PlanID: "dev", Edition: "development", Until: now.Add(time.Hour), Reason: "pilot", Operator: "cli:op"},
+		"no edition": {PlanID: "partner", Until: now.Add(time.Hour), Reason: "pilot", Operator: "cli:op"},
+	} {
+		if err := s.GrantComp(ctx, org, g); !errors.Is(err, entitlements.ErrInvalidComp) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	grant := entitlements.CompGrant{
+		PlanID: "partner", Edition: "business", Until: now.Add(30 * 24 * time.Hour), Reason: "design partner", Operator: "cli:op",
+	}
+	if err := s.GrantComp(ctx, org, grant); err != nil {
+		t.Fatal(err)
+	}
+	p := f.plan(t, s, org)
+	if p.Status != entitlements.StatusComp || p.Source != entitlements.SourceComp || p.CompReason != "design partner" || p.CompUntil == nil {
+		t.Fatalf("plan = %+v", p)
+	}
+	if e, _ := s.For(ctx, org); e.Edition != billing.Business {
+		t.Errorf("comp edition not in force: %v", e.Edition)
+	}
+	// Self-hosted: refused, and a stored comp plan changes nothing (D85).
+	lic := f.svc(t, entitlements.ModeLicence)
+	if err := lic.GrantComp(ctx, org, grant); !errors.Is(err, entitlements.ErrCompNeedsHostedBilling) {
+		t.Errorf("licence mode grant: %v", err)
+	}
+	wantReason(t, "licence mode", entitlements.ErrCompNeedsHostedBilling, "COMP_NEEDS_HOSTED_BILLING")
+	if err := lic.RevokeComp(ctx, org, "x", "cli:op"); !errors.Is(err, entitlements.ErrCompNeedsHostedBilling) {
+		t.Errorf("licence mode revoke: %v", err)
+	}
+	if p := f.plan(t, lic, org); p.Source != entitlements.SourceLicence || p.Edition != "team" {
+		t.Errorf("licence mode reads a stored comp plan: %+v", p)
+	}
+	if e, _ := lic.For(ctx, org); e.Edition != billing.Team {
+		t.Errorf("licence mode entitlements = %v, want the licence's", e.Edition)
+	}
+	f.clock.now = now.Add(31 * 24 * time.Hour)
+	if p := f.plan(t, s, org); p.Status != entitlements.StatusLapsed || p.Edition != "business" {
+		t.Errorf("an ended comp plan without billing reads %+v", p)
+	}
+	f.clock.now = now
 	if err := s.RevokeComp(ctx, org, "pilot over", "cli:op"); err != nil {
 		t.Fatal(err)
 	}
+	f.clock.now = time.Now().Add(time.Second) // the revoke ended the comp at the database's now
 	if p := f.plan(t, s, org); p.Status != entitlements.StatusLapsed {
 		t.Errorf("revoked comp reads %s", p.Status)
 	}
 	if err := s.RevokeComp(ctx, org, "again", "cli:op"); !errors.Is(err, entitlements.ErrNoComp) {
 		t.Errorf("second revoke: %v", err)
 	}
-	if n := f.audits(t, org, "billing.comp_granted"); n != 2 {
+	if n := f.audits(t, org, "billing.comp_granted"); n != 1 {
 		t.Errorf("comp_granted audits = %d", n)
 	}
 	if n := f.audits(t, org, "billing.comp_revoked"); n != 1 {
@@ -272,13 +284,93 @@ func TestHR358_CompPlansAreOperatorOnlyWithAReasonAtMostAYearAndAudited(t *testi
 	// The table refuses a comp plan beyond a year or ending before it began.
 	for _, until := range []string{"now() + interval '13 months'", "now() - interval '1 minute'"} {
 		err := f.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-			_, err := tx.Exec(ctx, `UPDATE pc.org_entitlements SET status = 'COMP', comp_at = now(), comp_until = `+until+` WHERE org_id = $1`, org)
+			_, err := tx.Exec(ctx, `UPDATE pc.org_entitlements SET comp_at = now(), comp_until = `+until+` WHERE org_id = $1`, org)
 			return err
 		})
 		if err == nil {
 			t.Errorf("comp_until %s stored", until)
 		}
 	}
+}
+
+// TestHR358_PayingDuringACompPlan (D87): billing events keep the billing
+// state current under a comp plan, and the comp plan's end or revoke falls
+// back to it at once.
+func TestHR358_PayingDuringACompPlan(t *testing.T) {
+	f := newFixture(t)
+	s := f.svc(t, entitlements.ModeExternal)
+	ctx := context.Background()
+	now := time.Now()
+	comp := func(org ids.OrgID) {
+		t.Helper()
+		if err := s.GrantComp(ctx, org, entitlements.CompGrant{
+			PlanID: "partner", Edition: "enterprise", Until: now.Add(10 * 24 * time.Hour), Reason: "pilot", Operator: "cli:op",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	at := now.Add(-time.Minute)
+
+	// comp + ACTIVE event: COMP in force, billing recorded.
+	a := f.org(t)
+	comp(a)
+	if err := s.ApplyPlan(ctx, a, snap("evt_a", at, entitlements.StatusActive)); err != nil {
+		t.Fatal(err)
+	}
+	if p := f.plan(t, s, a); p.Status != entitlements.StatusComp || p.Edition != "enterprise" {
+		t.Errorf("comp + active = %+v", p)
+	}
+	if n := f.count(t, a, "SELECT count(*)::int FROM pc.entitlement_events WHERE org_id = $1 AND kind = 'APPLIED'", a); n != 1 {
+		t.Errorf("billing events applied under comp = %d", n)
+	}
+	// comp expiry → the billing state, ACTIVE.
+	f.clock.now = now.Add(11 * 24 * time.Hour)
+	if p := f.plan(t, s, a); p.Status != entitlements.StatusActive || p.Edition != "team" || p.Source != entitlements.SourceBilling {
+		t.Errorf("after the comp = %+v", p)
+	}
+	f.clock.now = now
+
+	// revoke → ACTIVE at once.
+	b := f.org(t)
+	comp(b)
+	if err := s.ApplyPlan(ctx, b, snap("evt_b", at, entitlements.StatusActive)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RevokeComp(ctx, b, "converted", "cli:op"); err != nil {
+		t.Fatal(err)
+	}
+	f.clock.now = time.Now().Add(time.Second)
+	if p := f.plan(t, s, b); p.Status != entitlements.StatusActive {
+		t.Errorf("after revoke = %+v", p)
+	}
+
+	// comp + CANCELED → after the comp, CANCELED semantics (LAPSED past
+	// the period end, CANCELED before it).
+	c := f.org(t)
+	comp(c)
+	canceled := snap("evt_c", at, entitlements.StatusCanceled)
+	canceled.PeriodEnd = now.Add(20 * 24 * time.Hour)
+	if err := s.ApplyPlan(ctx, c, canceled); err != nil {
+		t.Fatal(err)
+	}
+	f.clock.now = now.Add(11 * 24 * time.Hour)
+	if p := f.plan(t, s, c); p.Status != entitlements.StatusCanceled {
+		t.Errorf("after the comp, before the period end = %+v", p)
+	}
+	f.clock.now = now.Add(21 * 24 * time.Hour)
+	if p := f.plan(t, s, c); p.Status != entitlements.StatusLapsed {
+		t.Errorf("after the period end = %+v", p)
+	}
+	f.clock.now = now
+
+	// comp without billing → after the comp, LAPSED as before.
+	d := f.org(t)
+	comp(d)
+	f.clock.now = now.Add(11 * 24 * time.Hour)
+	if p := f.plan(t, s, d); p.Status != entitlements.StatusLapsed || p.Edition != "enterprise" {
+		t.Errorf("comp without billing, after = %+v", p)
+	}
+	f.clock.now = now
 }
 
 // TestHR361_COMPAndDEVNeverComeThroughApplyPlan.
