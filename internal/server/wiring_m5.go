@@ -44,6 +44,10 @@ func newM5(ctx context.Context, cfg *Config, pool *db.Pool, kp keys.KeyProvider,
 		return nil, err
 	}
 	notif.SetEditions(bill)
+	probeM14("m14.notifications", notif)
+	if err := cfg.devSlack(notif); err != nil {
+		return nil, err
+	}
 	mailer, err := cfg.mailer()
 	if err != nil {
 		return nil, err

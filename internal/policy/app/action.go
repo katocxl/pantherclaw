@@ -37,7 +37,9 @@ func celType(t defs.ParamType) *types.Type {
 		return cel.ListType(cel.StringType)
 	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath:
 		return cel.StringType
-	case defs.TypeText:
+	case defs.TypeText, defs.TypeQueryFilter:
+		// Never visible to policy: untrusted prose, and a query filter
+		// (its columns are bounded by identifier_list params, G0 M14 D9).
 	}
 	return nil
 }
@@ -125,7 +127,7 @@ func value(v defs.Value) ref.Val {
 		return types.NewStringList(types.DefaultTypeAdapter, v.List)
 	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath:
 		return types.String(v.Str)
-	case defs.TypeText:
+	case defs.TypeText, defs.TypeQueryFilter:
 	}
 	return nil
 }

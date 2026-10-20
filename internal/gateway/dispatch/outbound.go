@@ -35,7 +35,12 @@ func (e *Engine) simulatorRefusal(ctx context.Context, conn *control.Connection)
 	switch conn.GetKind() {
 	case "local":
 		return "" // no target to send to
-	case "http", "mcp":
+	case "postgres":
+		return e.pgSimVerify(ctx, conn) // D110
+	case "http", "mcp", "a2a":
+		// An a2a simulator answers the handshake at its interface URL
+		// (G0 M14 D100); a postgres target has no HTTP handshake, so a
+		// simulated one stays unverified (fail closed).
 		ce, err := e.entry(conn)
 		if err != nil {
 			return CodeSimulatorUnverified

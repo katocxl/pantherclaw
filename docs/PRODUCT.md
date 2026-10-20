@@ -68,7 +68,7 @@ Each component lists what an administrator does with it, the result they can sho
 
 - **What you do:** issue task grants from templates ("fix this repository: read, branch, open a pull request; merging needs a reviewer"); handle access requests instead of switching guardrails off; approve exact actions, with a security key for high-consequence ones; inspect the delegation chain when an agent hands work to a sub-agent.
 - **What you can show:** no standing agent privileges; every grant has an accountable grantor and an expiry; approvals cover one exact action and lapse when anything material changes; time to decision.
-- **Works with:** approvals through the API, the CLI and the approval page first, Slack later (M14); WebAuthn security keys and passkeys.
+- **Works with:** approvals through the API, the CLI and the approval page first, Slack approval cards with a link to the approval page, never a decision in Slack (M14, Team); WebAuthn security keys and passkeys.
 - **Inside:** Task grants & delegation, Agent Waitlist (approvals, access requests, step-up).
 - **Similar offerings:** Keycard, Descope, Auth0 asynchronous authorisation, CyberArk just-in-time access, Permit.io consent flows. **Our difference:** grants belong to a run that only PantherClaw can create; a sub-agent can only receive a narrower grant; approvals are bound to the exact action and die on any material change.
 
@@ -76,7 +76,7 @@ Each component lists what an administrator does with it, the result they can sho
 
 - **What you do:** start from templates (coding to production, support, refunds, diagnostics, release); set budgets, counts, rates and sequences ("no external message after reading customer data in the same task"); test a policy and simulate it against recorded activity before enforcing it; roll it out to a pilot group first; grant exceptions that expire.
 - **What you can show:** every decision explained by the exact rule and value that decided it; zero overspend under concurrent agents; each policy change simulated before publication.
-- **Works with:** OPA as an extra, restrict-only check ([ADR-0004](adr/0004-cel-policy-engine.md)); gateways you already run, which can ask for decisions through OpenID AuthZEN (PN-023, M14; those routes count as Partly protected); trusted external facts and risk signals (F366, Next).
+- **Works with:** OPA as an extra, restrict-only check ([ADR-0004](adr/0004-cel-policy-engine.md)); gateways you already run, registered as enforcement points, which ask for decisions through OpenID AuthZEN with the agent's own proof (PN-023, M14; those routes count as Partly protected); data scoping of reads by record and data class (M14, Team); trusted external facts and risk signals (F366, Next).
 - **Inside:** Decision pipeline & policy engine, Policy lifecycle, Agent Controls.
 - **Similar offerings:** AWS AgentCore policies, Cerbos, Permit.io, Pomerium, OPA. **Our difference:** limits are reserved atomically across parallel runs and sub-agents; missing evidence gives "Cannot authorise", never a guess; the same rule applies whether the agent uses MCP, a direct API or a hook (F099).
 
@@ -84,7 +84,7 @@ Each component lists what an administrator does with it, the result they can sho
 
 - **What you do:** put the gateway in front of MCP servers and APIs; install the Claude Code or Agent SDK integration; run agents in the containment sandbox, whose only network route is the gateway; review what each tool really does (tool packages); switch routes from Watching to Enforced; read the coverage card for each agent.
 - **What you can show:** the protection level of each agent and route (§5), with its expiry date, and the bypass routes closed.
-- **Works with:** any MCP client (spec 2026-07-28 and 2025-11-25), REST APIs, Claude Code and the Claude Agent SDK, Python/TypeScript/Go SDKs, and target-side verifier middleware for your own services.
+- **Works with:** any MCP client (spec 2026-07-28 and 2025-11-25), REST APIs, Claude Code and the Claude Agent SDK, LangChain/LangGraph, the OpenAI Agents SDK, CrewAI, the Vercel AI SDK and the MCP TypeScript SDK (M14), Python/TypeScript/Go SDKs, Stripe (test mode), Postgres and Slack as reviewed connectors (M14), other agents over A2A (M14), and target-side verifier middleware for your own services.
 - **Inside:** Gateway & dispatch, Connections & connectors, Reviewed tool packages, Coverage & Bypass Resistance, plus the containment sandbox.
 - **Similar offerings:** Pomerium, Permit.io, Aembit and agentgateway MCP/HTTP gateways; AuthZed SpiceBox and Astrix hooks for coding agents; the sandboxes built into coding agents. **Our difference:** the gateway forwards exactly what was authorised (it rebuilds the request), commits each dispatch on the server, labels cooperative routes honestly as Partly protected, and proves route closure with probes that expire.
 
@@ -92,7 +92,7 @@ Each component lists what an administrator does with it, the result they can sho
 
 - **What you do:** seal target credentials into the gateway (`pclaw seal`); replace personal access tokens and SSH keys with per-action GitHub App tokens; compare what each credential can do with what the task needs; revoke or rotate with a preview of who depends on it.
 - **What you can show:** no reusable secrets in agent processes for covered targets; credential-overreach findings closed.
-- **Works with:** GitHub App installation tokens first (M8), Stripe test mode later (M14); enterprise vaults as credential sources later (a `KeyProvider`-style adapter, recorded in [UPGRADES.md](UPGRADES.md) when scheduled).
+- **Works with:** GitHub App installation tokens first (M8), Stripe restricted test keys (M14; live keys refused), Postgres read-only roles and Slack bot tokens (M14); enterprise vaults as credential sources later (a `KeyProvider`-style adapter, recorded in [UPGRADES.md](UPGRADES.md) when scheduled).
 - **Inside:** Credential custody (access modes, sealed credentials, access-source inspection, revocation completeness), credential-reach findings.
 - **Similar offerings:** CyberArk, Aembit, Arcade, Keycard, HashiCorp Vault. **Our difference:** a credential is opened only for an authorised, committed action and never reaches the agent, and we don't need to become your vault.
 

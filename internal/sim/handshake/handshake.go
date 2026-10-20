@@ -27,8 +27,8 @@ type Answer struct {
 	Nonce     string `json:"nonce"`
 }
 
-// Wrap answers the handshake for kind (payments, mcp or github) and passes
-// every other request to next.
+// Wrap answers the handshake for kind (payments, mcp, github, stripe, slack
+// or a2a) and passes every other request to next.
 func Wrap(kind string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != Path {

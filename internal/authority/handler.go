@@ -82,6 +82,9 @@ func (h *Handler) Authorize(ctx context.Context, req *pantherclawv1.AuthorizeReq
 	if err != nil {
 		return nil, err
 	}
+	if out := refusedChannel(req.GetActionIr()); out != nil {
+		return out, nil
+	}
 	creds := credentials(req.GetWorkload())
 	var findings []pipeline.PayloadFinding
 	for _, f := range req.GetPayloadFindings() {
@@ -170,6 +173,9 @@ func (h *Handler) BeginDispatch(ctx context.Context, req *pantherclawv1.BeginDis
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, "invalid permit id")
 	}
+	if err := h.gatewayPermit(ctx, gw, id); err != nil {
+		return nil, err
+	}
 	token, err := h.svc.BeginDispatch(ctx, gw, id, req.GetEpoch(), Outbound{
 		Method: req.GetOutboundMethod(), URL: req.GetOutboundUrl(), BodySHA256: req.GetOutboundBodySha256(),
 	})
@@ -196,6 +202,9 @@ func (h *Handler) RecordExecution(ctx context.Context, req *pantherclawv1.Record
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, "invalid permit id")
 	}
+	if err := h.gatewayPermit(ctx, gw, id); err != nil {
+		return nil, err
+	}
 	outcome, ok := outcomeFromProto[req.GetOutcome()]
 	if !ok {
 		return nil, connect.NewError(connect.CodeInvalidArgument, "invalid outcome")
@@ -203,7 +212,8 @@ func (h *Handler) RecordExecution(ctx context.Context, req *pantherclawv1.Record
 	receipt, err := h.svc.RecordExecution(ctx, gw, Execution{
 		Permit: id, Outcome: outcome, TargetStatus: req.GetTargetStatus(),
 		ResponseDigest: req.GetResponseDigest(), DispatchMS: req.GetDispatchMs(), TargetRef: req.GetTargetRef(),
-		Access: accessOf(req.GetCredentialAccess()),
+		Access:    accessOf(req.GetCredentialAccess()),
+		DataScope: dataScopeOf(req.GetDataScope()),
 	})
 	if err != nil {
 		return nil, err

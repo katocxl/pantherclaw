@@ -1,0 +1,22 @@
+{{template "head" .}}
+<h1>Enforcement point: {{.Name}}</h1>
+<p>State: <strong>{{.State}}</strong>. Created at {{.CreatedAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{with .ActivatedAt}}; activated {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}.</p>
+<dl>
+<dt>Enforcement point</dt><dd><code>{{.ID}}</code></dd>
+<dt>Description</dt><dd class="untrusted">{{.Description}}</dd>
+<dt>Service account</dt><dd><code>{{.ServiceAccount}}</code></dd>
+<dt>Rate</dt><dd>At most {{.RatePerSecond}} evaluations a second on each server</dd>
+<dt>Connections it fronts</dt><dd>{{range $i, $c := .Connections}}{{if $i}}, {{end}}<code>{{$c}}</code>{{else}}none yet{{end}}</dd>
+{{if .Proposed}}<dt>Proposed connections</dt><dd>{{range $i, $c := .Proposed}}{{if $i}}, {{end}}<code>{{$c}}</code>{{end}}</dd>{{end}}
+</dl>
+<p class="note">An enforcement point asks PantherClaw for decisions about the agents' requests to these connections and enforces the answers itself. It can only forward each agent's own credentials, which PantherClaw verifies; actions it allows are recorded as delegated, with PARTIAL coverage.</p>
+{{if and .CanManage .Proposed (ne .State "DISABLED")}}
+<h2>Confirm</h2>
+<p class="note">Confirming lets the point ask about the proposed connections{{if eq .State "PENDING"}} and activates it{{end}}. It needs your security key.</p>
+<p><button type="button" class="danger" data-action="activate" data-path="/enforcement-points/{{.ID}}/activate">Confirm with your security key</button></p>
+{{else if .Proposed}}
+<p class="note">You cannot confirm this: that needs enforcement_point.manage and a security key.</p>
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/automation_endpoints.js"></script>
+{{template "foot" .}}

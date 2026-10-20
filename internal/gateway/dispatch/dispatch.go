@@ -172,6 +172,9 @@ type Options struct {
 	// ReportCircuit tells the server a connection's circuit opened
 	// (HR-078); nil reports nothing.
 	ReportCircuit Reporter
+	// ReportCircuitReason tells the server a connection's circuit opened
+	// for a reason, without the thresholds (G0 M14 D54); nil reports nothing.
+	ReportCircuitReason ReasonReporter
 	// OnDrift is told of each drifted upstream tool that a call's own check
 	// finds (CheckDrift returns what it finds instead); nil tells nothing.
 	OnDrift func(ctx context.Context, connection string, d Drift)
@@ -266,7 +269,7 @@ func New(o Options) (*Engine, error) {
 	}
 	return &Engine{
 		org: o.Org, authority: o.Authority, permits: newPermitVerifier(o.JWKSURL, o.JWKSClient, o.GatewayID, o.Org),
-		containment: o.Containment, broker: o.Broker, allowed: o.AllowedPrefixes, breaker: newBreaker(o.Now, o.ReportCircuit, o.Log),
+		containment: o.Containment, broker: o.Broker, allowed: o.AllowedPrefixes, breaker: newBreaker(o.Now, o.ReportCircuit, o.Log).withReason(o.ReportCircuitReason),
 		log: o.Log, onDrift: o.OnDrift, clients: map[string]clientEntry{}, drift: map[string]driftEntry{}, approvers: o.Approvers,
 		connectors:  o.Connectors,
 		reportFacts: o.ReportFacts, factTimeout: o.FactTimeout, revocations: o.ReportRevocation,
@@ -374,6 +377,9 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	if _, class, code := e.contained(conn); class != "" {
 		return Result{Class: class, Code: code}
 	}
+	if code := kindRefusal(conn); code != "" {
+		return Result{Class: CannotAuthorize, Code: code, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
+	}
 	if e.breaker.open(ctx, conn) {
 		return Result{Class: EnforcementFailed, Code: CodeCircuitOpen}
 	}
@@ -398,6 +404,12 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 			// for, so that observation cannot decide (#353 review).
 			return Result{Class: CannotAuthorize, Code: CodeFactsUnreported, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
 		}
+	}
+	if res, stop := e.stripeFacts(ctx, conn, c.Action.Action, t); stop {
+		return res
+	}
+	if read, unreported := e.reportSlackFacts(ctx, conn, c.Action.Action); read && unreported != nil {
+		return Result{Class: CannotAuthorize, Code: CodeFactsUnreported, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
 	}
 	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{ActionIr: c.Action.Canonical, Workload: c.Workload, PayloadFindings: findings})
 	t.lap("authz")
@@ -474,6 +486,10 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	if want.Epoch < epoch {
 		return r.fail(EnforcementFailed, CodeEpochStale)
 	}
+	ctx, scopeCode := withScope(ctx, conn, def, ar.GetObligations())
+	if scopeCode != "" {
+		return r.fail(EnforcementFailed, scopeCode)
+	}
 	if cooperative(c) {
 		return e.delegateSDK(ctx, r, conn, def, bound, want, t)
 	}
@@ -482,8 +498,13 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 		return e.sendMCP(ctx, r, conn, def, bound, want, t)
 	case "local":
 		return e.delegate(ctx, r, want, t)
+	case "http":
+		return e.send(ctx, r, conn, def, bound, want, t)
 	}
-	return e.send(ctx, r, conn, def, bound, want, t)
+	if send, ok := kindSenders[conn.GetKind()]; ok {
+		return send(e, ctx, r, conn, def, bound, want, t) // G0 M14 D75
+	}
+	return r.fail(EnforcementFailed, CodeKindNotImplemented)
 }
 
 // delegate commits and records a cooperative channel's permitted action
@@ -559,6 +580,9 @@ func effective(def *defs.Definition, p actionir.Parsed, obligations []*pb.Obliga
 	}
 	changed := false
 	for _, o := range obligations {
+		if scopeObligation(o) {
+			continue // applied to the answer by the scope engine (scope.go)
+		}
 		if o.GetKind() == string(defs.ConstraintDisclosureLimits) {
 			if err := disclosed(vals, o); err != nil {
 				return actionir.Parsed{}, err
@@ -626,6 +650,9 @@ func (e *Engine) client(conn *control.Connection) (*egress.Client, error) {
 
 // entry returns the connection's clients, new for each revision.
 func (e *Engine) entry(conn *control.Connection) (clientEntry, error) {
+	if kindNotImplemented(conn.GetKind()) {
+		return clientEntry{}, errKindNotImplemented
+	}
 	if conn.GetKind() == "mcp_container" {
 		return e.connectorEntry(conn)
 	}
@@ -751,8 +778,14 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 	start := time.Now()
 	res, err := p.client.Do(p.req)
 	elapsed := time.Since(start)
+	e.stripeAnswerLive(ctx, conn, res.Body, "dispatch")
 	t.lap("target")
 	outcome, class, code := classify(res.Status, err)
+	if res.Status != 0 {
+		if o, c, k := checkSuccess(def, outcome, res.Body); o != outcome {
+			outcome, class, code = o, c, k
+		}
+	}
 	e.breaker.record(ctx, conn, outcome)
 	if err != nil && res.Status == 0 {
 		e.log.WarnContext(ctx, "gateway.target_error", slog.String("transaction_id", want.Txn), slog.String("outcome", outcome.String()),
@@ -772,6 +805,7 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 		res.Body = egress.Redacted(res.Body, secret)
 		res.ContentType = string(egress.Redacted([]byte(res.ContentType), secret))
 		res.RequestID = string(egress.Redacted([]byte(res.RequestID), secret))
+		class, code = e.scopeHTTP(ctx, conn, def, &res, class, code)
 		r.Response = &res
 		response = &res.Body
 	}
@@ -780,6 +814,7 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 	revoke()
 	return e.record(ctx, r, want, outcome, res.Status, digest, elapsed, class, code, t, func(req *pb.RecordExecutionRequest) {
 		req.TargetRef, req.Captures, req.CredentialAccess = ref, caps, access()
+		req.DataScope = appliedScope(ctx) // D102
 	})
 }
 
@@ -820,9 +855,19 @@ func targetRef(def *defs.Definition, body, secret []byte) string {
 func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *defs.Definition, target actionir.Target,
 	req *http.Request, c broker.Sender, purpose string,
 ) (secret []byte, release func(), access func() *pb.CredentialAccess, err error) {
+	if conn.Credential.GetKind() == credentials.KindGitHubApp {
+		if err := CheckCredentialPattern(def, credentials.KindGitHubApp, nil); err != nil {
+			return nil, nil, nil, err // a pattern is for a static credential
+		}
+	}
 	if conn.Credential.GetKind() != credentials.KindGitHubApp {
 		plain, err := e.openStatic(ctx, conn)
 		if err != nil {
+			return nil, nil, nil, err
+		}
+		if err := CheckCredentialPattern(def, conn.Credential.GetKind(), plain); err != nil {
+			// Checked before any byte is sent (G0 M14 D8, HR-301).
+			clear(plain)
 			return nil, nil, nil, err
 		}
 		if err := placeCredential(conn, req, plain); err != nil {
@@ -878,6 +923,9 @@ func (e *Engine) credentialFailed(ctx context.Context, r Result, conn *control.C
 		slog.String("connection_id", conn.GetId()), pclog.Err(err))
 	code := CodeCredential
 	var granted []func(*pb.RecordExecutionRequest)
+	if errors.Is(err, ErrCredentialPattern) {
+		code = CodeCredentialPattern
+	}
 	if sm := (*broker.ScopeMismatchError)(nil); errors.As(err, &sm) {
 		code = CodeScopeMismatch
 		granted = append(granted, func(req *pb.RecordExecutionRequest) { req.CredentialAccess = accessOf(sm.Access) })

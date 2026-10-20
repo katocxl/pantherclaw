@@ -160,6 +160,9 @@ func (d *rangeDriver) agentSteal(_ context.Context, st domain.Step) (domain.Obse
 	if err := json.Unmarshal(st.With, &w); err != nil {
 		return domain.Observation{}, err
 	}
+	if w.Call.Face == "authzen" {
+		return d.stealAuthZEN(w.Mode, w.Call)
+	}
 	url, body, err := d.stealTarget(w.Call)
 	if err != nil {
 		return domain.Observation{}, err
@@ -337,6 +340,8 @@ func (d *rangeDriver) simMutate(st domain.Step) (domain.Observation, error) {
 		return domain.Observation{}, err
 	}
 	switch {
+	case w.Sim == "postgres":
+		return d.mutatePostgres(w.Change, w.Args)
 	case w.Sim == "github" && w.Change == "push_commit":
 		var a struct {
 			Branch string            `json:"branch"`
@@ -368,6 +373,12 @@ func (d *rangeDriver) simMutate(st domain.Step) (domain.Observation, error) {
 		return domain.Observation{}, nil
 	case w.Sim == "mcp":
 		return d.extra.mutateMCP(d, w.Change, w.Args)
+	case w.Sim == "stripe":
+		return d.mutateStripe(w.Change, w.Args)
+	case w.Sim == "slack":
+		return d.slackMutate(w.Change, w.Args)
+	case w.Sim == "a2a":
+		return d.mutateA2A(w.Change, w.Args)
 	}
 	return domain.Observation{}, fmt.Errorf("sim.mutate %s %s", w.Sim, w.Change)
 }

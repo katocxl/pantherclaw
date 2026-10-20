@@ -1,0 +1,13 @@
+{
+  "bounds": {
+    "operations": ["postgres.rows.read", "postgres.rows.aggregate", "postgres.tables.read", "slack.message.post", "slack.message.disclose", "slack.channel.read"],
+    "targets": {
+      "slack_channel": {"ids": ["{{slack_channel}}"]}
+    },
+    "destinations": {"ids": ["{{slack_channel}}"]},
+    "scope": {
+      "postgres.rows.read": {"classes": {"ids": ["public", "internal"]}},
+      "postgres.rows.aggregate": {"classes": {"ids": ["public", "internal"]}}
+    }
+  }
+}

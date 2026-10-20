@@ -238,6 +238,10 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	if err != nil {
 		return err
 	}
+	m14core := wireM14Core(m6)
+	wireM14A2A(m14core)
+	_ = m14core // the M14 streams' wiring registers its kinds here (G0 M14 D64)
+	wireM14Data(m14core, m6)
 	// Sealing a GitHub App credential schedules an org scan, and a daily one
 	// follows, so coverage reads its installation's permissions (F048).
 	ghScans := &githubapp.Scans{Pool: pool, Ents: bill}
@@ -261,6 +265,8 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	// protect sets its ports on it in every role (D110 P1).
 	autos, m11protect := newM11Core(pool, bill, cfg.Auth.PublicURL)
 	wireM11Process(autos, m11protect, pool)
+	wireM14Process(autos, bill)
+	wireM14A2APeer(svc, authorityStore, autos, pool)
 	if cfg.Role == RoleAPI || cfg.Role == RoleAll {
 		tokens, err := token.New(reg, cfg.Auth.PublicURL, token.Audience)
 		if err != nil {
@@ -613,6 +619,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	identity := iapp.New(pool, reg, d.publicURL, clock.System{}).WithAttestors(attestors)
 	pantherclawv1connect.RegisterIdentityServiceHandler(rs, identityrpc.NewIdentity(identity, d.clusters))
 	grants, runs := m11Issuance(d)
+	wireM14Grants(grants, d)
 	if len(d.subjects) > 0 {
 		runs.WithSubjects(d.subjects)
 	}
@@ -665,6 +672,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	registerReflexCore(rs, d)
 	registerM11Govern(rs, d)
+	registerSlackChannels(d)
 	autos = registerAutomationsCore(rs, d, grants, runs)
 	if err := registerAutomationAssurance(rs, d, autos); err != nil {
 		return nil, err
@@ -678,9 +686,14 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		return nil, err
 	}
 	registerM11Protect(rs, d, autos)
+	authzen := registerAuthZEN(rs, d)
 	mux := http.NewServeMux()
 	edges.mount(mux)
 	automationTriggers.mount(mux)
+	authzen.mount(mux)
+	if err := mountM14A2A(mux, d); err != nil {
+		return nil, err
+	}
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)
 	d.oauth.Mount(mux)
@@ -688,6 +701,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if d.web != nil {
 		d.web.Mount(mux)
 	}
+	mountM14Data(mux, d)
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, "ok\n")

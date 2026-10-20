@@ -184,6 +184,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateCoverage()...)
 	errs = append(errs, c.validateGateways()...)
 	errs = append(errs, c.validateDev()...)
+	errs = append(errs, c.validateDevSlack()...)
 	if err := c.CEL.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("cel: %w", err))
 	}

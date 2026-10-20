@@ -456,6 +456,9 @@ func (e *Engine) readWith(ctx context.Context, conn *control.Connection, read *d
 	if err != nil {
 		return egress.Response{Status: res.Status}, false
 	}
+	if e.stripeAnswerLive(ctx, conn, res.Body, "verify") {
+		return egress.Response{Status: res.Status}, false
+	}
 	return res, true
 }
 
@@ -484,6 +487,9 @@ func (e *Engine) connectionTest(ctx context.Context, conn *control.Connection, l
 		conn.Package == nil || req.Target.Type != defs.ConnectionTarget || req.Target.ID != conn.GetId() || len(req.Params) != 0 ||
 		req.EffectOf != "" {
 		return Observation{}, fmt.Errorf("%w: request", ErrNotReviewedRead)
+	}
+	if conn.GetKind() == "postgres" {
+		return e.postgresTest(ctx, conn, l.Operation)
 	}
 	read, ok := conn.Package.Definition(l.Operation)
 	if !ok || !read.Test || read.Access != defs.AccessRead || read.Dispatch == nil || read.Dispatch.HTTP == nil ||

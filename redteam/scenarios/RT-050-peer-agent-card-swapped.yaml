@@ -1,0 +1,53 @@
+apiVersion: pantherclaw.range/v1
+id: RT-050
+title: A peer agent that swaps its card is refused until a new card is confirmed
+category: boundary
+suite: platform
+tier: business
+attacker: A9
+threats: [T-149]
+rules: [HR-322]
+requires: [a2a.send, a2a.card_swap]
+harness_only: false
+steps:
+  - id: ask-before
+    do: agent.call
+    with:
+      face: a2a
+      connection: peer
+      tool: SendMessage
+      args:
+        message:
+          messageId: "rt-050a-${fixture.nonce}"
+          role: ROLE_USER
+          parts:
+            - text: "Echo this."
+          metadata:
+            skill: echo
+    expect:
+      outcome: ALLOW
+  - id: swap-card
+    do: sim.mutate
+    with:
+      sim: a2a
+      change: fault
+      args:
+        card: swap
+  - id: ask-after
+    do: agent.call
+    with:
+      face: a2a
+      connection: peer
+      tool: SendMessage
+      args:
+        message:
+          messageId: "rt-050b-${fixture.nonce}"
+          role: ROLE_USER
+          parts:
+            - text: "Echo this again."
+          metadata:
+            skill: echo
+    expect:
+      outcome: REFUSED
+      code: A2A_CARD_DRIFT
+      decisive_control: HR-322

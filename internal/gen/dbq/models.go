@@ -15,6 +15,44 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
 
+type PcA2aPeerRun struct {
+	OrgID          ids.OrgID
+	RequesterRunID ids.UUID
+	ConnectionID   ids.UUID
+	ContextID      string
+	ChildRunID     ids.UUID
+	ChildGrantID   ids.UUID
+	CreatedAt      time.Time
+}
+
+type PcA2aPin struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	ConnectionID        ids.UUID
+	State               string
+	CardUrl             string
+	Binding             string
+	InterfaceUrl        string
+	PinnedCard          []byte
+	CardDigest          []byte
+	CardKeys            []byte
+	Skills              []string
+	PeerAgentID         *ids.UUID
+	PeerBounds          []byte
+	PeerLimits          []byte
+	MaxAnswerBytes      int32
+	MaxStreamSeconds    int32
+	ProposedBy          string
+	ProposedAt          time.Time
+	ConfirmedBy         *ids.UUID
+	ConfirmedCredential *ids.UUID
+	ConfirmedOperator   *string
+	ConfirmedAt         *time.Time
+	DecidedAt           *time.Time
+	DriftedAt           *time.Time
+	ObservedDigest      []byte
+}
+
 type PcActionDefinition struct {
 	OrgID     ids.OrgID
 	ID        ids.UUID
@@ -1446,6 +1484,32 @@ type PcEffectReceipt struct {
 	RemovedByPolicy *ids.UUID
 }
 
+type PcEnforcementPoint struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Name                string
+	Description         string
+	ServiceAccountID    ids.UUID
+	ProposedConnections []ids.UUID
+	RatePerSecond       int32
+	State               string
+	CreatedBy           ids.UUID
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	DisabledBy          *ids.UUID
+	DisabledAt          *time.Time
+	UpdatedAt           time.Time
+}
+
+type PcEnforcementPointConnection struct {
+	OrgID        ids.OrgID
+	PointID      ids.UUID
+	ConnectionID ids.UUID
+	BoundAt      time.Time
+}
+
 type PcEnrollmentToken struct {
 	OrgID         ids.OrgID
 	ID            ids.UUID
@@ -2430,6 +2494,20 @@ type PcPolicyVersion struct {
 	ContentDigest []byte
 }
 
+type PcPostgresConnection struct {
+	OrgID               ids.OrgID
+	ConnectionID        ids.UUID
+	Config              []byte
+	Digest              []byte
+	Proposed            []byte
+	ProposedDigest      []byte
+	ProposedAt          *time.Time
+	ConfirmedBy         *ids.UUID
+	ConfirmedCredential *ids.UUID
+	ConfirmedAt         *time.Time
+	UpdatedAt           time.Time
+}
+
 type PcPostureFinding struct {
 	OrgID                ids.OrgID
 	ID                   ids.UUID
@@ -2908,6 +2986,41 @@ type PcSiemDestination struct {
 	Retries             int64
 }
 
+type PcSlackAppChannel struct {
+	OrgID               ids.OrgID
+	ChannelRecordID     ids.UUID
+	SlackChannel        string
+	DataLevel           string
+	State               string
+	TeamID              *string
+	BotID               *string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	TokenReplacedBy     *string
+	TokenReplacedAt     *time.Time
+	SharedExternallyAt  *time.Time
+	LastCheckedAt       *time.Time
+	UpdatedAt           time.Time
+}
+
+type PcSlackCard struct {
+	OrgID           ids.OrgID
+	CardID          ids.UUID
+	RequestID       ids.UUID
+	ChannelRecordID ids.UUID
+	SlackChannel    string
+	Ts              *string
+	State           string
+	Escalations     int32
+	CloseAttempts   int32
+	CloseRetries    int32
+	CloseAfter      *time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
 type PcSoarRequest struct {
 	OrgID          ids.OrgID
 	IdempotencyKey string
@@ -3054,6 +3167,8 @@ type PcTransaction struct {
 	EffectLevelRequired *string
 	EffectLevelAchieved *string
 	Simulated           bool
+	DecidedVia          *string
+	EnforcementPointID  *ids.UUID
 }
 
 type PcTransactionLink struct {

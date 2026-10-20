@@ -55,7 +55,7 @@ type templateData struct {
 func (o templateOptions) renderOptions() render.Options {
 	return render.Options{
 		Name: o.name, Repos: o.repos, Defaults: o.defaults, Agent: o.agent, Environment: o.environment,
-		EnvironmentID: o.environmentID, Workspace: o.workspace, TimeZone: o.timeZone,
+		EnvironmentID: o.environmentID, Workspace: o.workspace, TimeZone: o.timeZone, Lists: o.lists,
 	}
 }
 
@@ -65,9 +65,9 @@ type renderer struct {
 	spec map[string]placeholderSpec
 }
 
-// fill replaces the placeholders in s.
-func (r renderer) fill(s, repo string, cel bool) (string, error) {
-	return render.Renderer{O: r.o.renderOptions(), Spec: r.spec}.Fill(s, repo, cel)
+// fill replaces the placeholders in s, outside any per-repository item.
+func (r renderer) fill(s string, cel bool) (string, error) {
+	return render.Renderer{O: r.o.renderOptions(), Spec: r.spec}.Fill(s, "", cel)
 }
 
 // renderTemplate reads the template's files and fills in the options.

@@ -75,6 +75,9 @@ type outcome struct {
 	// skip: nothing was sent and nothing will be (email not configured,
 	// recipient without an address).
 	skip bool
+	// contended: another delivery holds what this one needs (a Slack
+	// escalation claim, G0 M14 D127): retried, never a channel failure.
+	contended bool
 }
 
 // errRetry is returned to River when the attempt failed and another one
@@ -160,7 +163,7 @@ func (s *Service) record(ctx context.Context, org ids.OrgID, d dbq.LoadDeliveryR
 		if err != nil || n == 0 {
 			return err // 0 rows: a concurrent attempt recorded first
 		}
-		if d.ChannelID == nil {
+		if d.ChannelID == nil || out.contended {
 			return nil
 		}
 		if out.ok {
@@ -244,6 +247,8 @@ func (s *Service) send(ctx context.Context, org ids.OrgID, d dbq.LoadDeliveryRow
 		return s.post(ctx, string(secret), body, nil, true)
 	case domain.KindWebhook:
 		return s.sendWebhook(ctx, org, d, link)
+	case domain.KindSlackApp:
+		return s.sendSlackApp(ctx, org, d, link)
 	}
 	return outcome{code: "unknown_kind", permanent: true}
 }

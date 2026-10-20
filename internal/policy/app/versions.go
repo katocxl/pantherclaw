@@ -115,6 +115,9 @@ type Versions struct {
 	Changes *Changes
 	// OnPublished, when set, runs in every publishing transaction (D6).
 	OnPublished PublishedHook
+	// Editions gates publishing data scope rules (G0 M14 D11); without it
+	// such a version is not published (fail closed).
+	Editions Editions
 }
 
 func (v *Versions) caller(ctx context.Context, p tdomain.Permission) (tapp.Caller, error) {

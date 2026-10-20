@@ -114,10 +114,19 @@ func TestHR078_AnOpenCircuitClosesOnlyWhenTheConnectionIsRestored(t *testing.T) 
 	r.mu.Lock()
 	r.fail = false
 	r.mu.Unlock()
-	if !b.open(ctx, c) {
-		t.Fatal("not open")
+	// Each request asks the open circuit again, which retries the report
+	// once the failed one has finished: the first ask may still find it in
+	// flight (D133).
+	deadline := time.Now().Add(5 * time.Second)
+	for r.count() < 2 {
+		if !b.open(ctx, c) {
+			t.Fatal("not open")
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d reports, want 2", r.count())
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	r.wait(t, 2)
 	if !b.open(ctx, conn(3, "ACTIVE")) || !b.open(ctx, conn(4, "QUARANTINED")) {
 		t.Fatal("the circuit closed before a restore")
 	}

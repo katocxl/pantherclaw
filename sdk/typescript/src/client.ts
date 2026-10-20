@@ -500,11 +500,11 @@ export class Client {
    * Asks about a call and, while it is held, waits in PantherClaw (the SSE
    * stream, else long-polls) and resubmits the identical call with the same
    * action id once it is ready (PAP/1 §8). Never throws; past `deadlineMs`
-   * the call cannot be decided.
+   * the call cannot be decided, and so it cannot once `signal` aborts.
    */
-  async authorizeAndWait(connection: string, call: ToolCall, actionId: string, deadlineMs = 300_000): Promise<Result> {
+  async authorizeAndWait(connection: string, call: ToolCall, actionId: string, deadlineMs = 300_000, signal?: AbortSignal): Promise<Result> {
     const until = Date.now() + deadlineMs;
-    return this.resume(connection, call, actionId, await this.authorize(connection, call, actionId), Math.max(0, until - Date.now()));
+    return this.resume(connection, call, actionId, await this.authorize(connection, call, actionId), Math.max(0, until - Date.now()), signal);
   }
 
   /**
@@ -512,13 +512,16 @@ export class Client {
    * resubmits the identical call with the same action id, checking that it
    * maps to the same action. A wait ends at `deadlineMs` or at the hold's
    * own deadline (plus a few seconds' grace), and a call held again after
-   * three resubmissions is not resubmitted; each is cannot_decide. Never
-   * throws.
+   * three resubmissions is not resubmitted; each is cannot_decide. When
+   * `signal` aborts, the wait ends at once and nothing more is resubmitted
+   * (cannot_decide), so a later approval is not used up by a call nobody
+   * runs. Never throws.
    */
-  async resume(connection: string, call: ToolCall, actionId: string, first: Result, deadlineMs = 300_000): Promise<Result> {
+  async resume(connection: string, call: ToolCall, actionId: string, first: Result, deadlineMs = 300_000, signal?: AbortSignal): Promise<Result> {
     const until = Date.now() + deadlineMs;
     let res = first;
     for (let resubmits = 0; res.outcome === "hold"; resubmits++) {
+      if (signal?.aborted) return cannot("the wait was aborted");
       if (resubmits === MAX_RESUBMITS) return cannot(`the call was held again after ${MAX_RESUBMITS} resubmissions`);
       const hash = res.answer?.action_hash ?? "";
       const held = res.answer?.wait as WaitState;
@@ -526,14 +529,18 @@ export class Client {
       const end = Number.isFinite(deadline) ? Math.min(until, deadline + WAIT_GRACE_MS) : until;
       let w: WaitState;
       const stop = new AbortController();
+      const abort = () => stop.abort();
+      signal?.addEventListener("abort", abort, { once: true });
       try {
-        w = await withDeadline(this.waitReady(held, stop.signal), end);
+        w = await withDeadline(this.waitReady(held, stop.signal), end, stop.signal);
       } catch (e) {
         return cannot(`the wait for PantherClaw's decision ended: ${e instanceof Error ? e.message : String(e)}`);
       } finally {
         // Ends a stream or long-poll still in flight at the deadline.
+        signal?.removeEventListener("abort", abort);
         stop.abort();
       }
+      if (signal?.aborted) return cannot("the wait was aborted");
       if (next(w) === "deny") return { outcome: "deny", answer: res.answer, why: `the hold ended: ${w.state} ${w.code ?? ""}` };
       res = await this.authorize(connection, call, actionId, hash);
     }
@@ -631,9 +638,17 @@ export async function readStream(stream: ReadableStream<Uint8Array>, fn: (w: Wai
   }
 }
 
-function withDeadline<T>(p: Promise<T>, until: number): Promise<T> {
+function withDeadline<T>(p: Promise<T>, until: number, signal?: AbortSignal): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("deadline")), Math.max(0, until - Date.now()));
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(new Error("aborted"));
+      },
+      { once: true },
+    );
     p.then(
       (v) => {
         clearTimeout(timer);

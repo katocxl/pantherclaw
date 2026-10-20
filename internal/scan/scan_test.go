@@ -82,6 +82,24 @@ func TestF015_ScanFindsMCPConfigsAgentProjectsAndCredentials(t *testing.T) {
 	}
 }
 
+// TestF015_ScanFindsTheVercelAISDKOnlyInNpmManifests: "ai" in a
+// package.json is the Vercel AI SDK; the same name in a Python or Go
+// manifest is not read as it.
+func TestF015_ScanFindsTheVercelAISDKOnlyInNpmManifests(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "web", "package.json"), `{"dependencies": {"ai": "7.0.137", "react": "19"}, "devDependencies": {"@modelcontextprotocol/sdk": "1.32.1"}}`)
+	write(t, filepath.Join(root, "py", "requirements.txt"), "ai==1.0\nrequests\n")
+	got := map[string]string{}
+	for _, f := range scan.Run(scan.Options{Host: "laptop-1", Home: filepath.Join(root, "home"), ConfigDir: filepath.Join(root, "config"), Paths: []string{root}}) {
+		if f.Kind == scan.KindAgentProject {
+			got[filepath.Base(f.Attributes["path"])] = f.Attributes["frameworks"]
+		}
+	}
+	if len(got) != 1 || got["web"] != "mcp-sdk,vercel-ai" {
+		t.Errorf("agent projects %v, want only web with mcp-sdk,vercel-ai", got)
+	}
+}
+
 // TestHR056_ScanFindingsCarryNoSecrets: values, arguments and URL queries
 // never appear in a finding; a credential shows only its known prefix.
 func TestHR056_ScanFindingsCarryNoSecrets(t *testing.T) {

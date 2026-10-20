@@ -1,0 +1,8 @@
+{
+  "bounds": {
+    "operations": ["postgres.rows.aggregate", "postgres.tables.read"],
+    "scope": {
+      "postgres.rows.aggregate": {"classes": {"ids": ["public", "internal"]}}
+    }
+  }
+}

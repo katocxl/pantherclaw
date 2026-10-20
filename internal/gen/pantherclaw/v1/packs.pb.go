@@ -34,7 +34,8 @@ type Pack struct {
 	// covers lists what the pack protects.
 	Covers []string `protobuf:"bytes,4,rep,name=covers,proto3" json:"covers,omitempty"`
 	// parameters are what ApplyPack needs besides the environment and the
-	// agents: repos, default_branch, workspace, time_zone.
+	// agents: repos, default_branch, workspace, time_zone, payees, customers,
+	// slack_channels.
 	Parameters         []string `protobuf:"bytes,5,rep,name=parameters,proto3" json:"parameters,omitempty"`
 	BaselineTtlSeconds int32    `protobuf:"varint,6,opt,name=baseline_ttl_seconds,json=baselineTtlSeconds,proto3" json:"baseline_ttl_seconds,omitempty"`
 	// automation_template, when set, names the automation template that

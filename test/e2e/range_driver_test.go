@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -30,6 +31,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authn/webauthntest"
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
 	"github.com/katocxl/pantherclaw/internal/gateway"
+	"github.com/katocxl/pantherclaw/internal/gateway/pgtarget/pgtargettest"
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/redteam/app"
@@ -95,10 +97,16 @@ func newRangeDriver(t *testing.T) *rangeDriver {
 
 // Capabilities are what this driver can run.
 func (d *rangeDriver) Capabilities() map[app.Capability]bool {
-	return map[app.Capability]bool{
+	caps := map[app.Capability]bool{
 		app.CapGitHub: true, app.CapPayments: true, app.CapMCP: true, app.CapPerson: true, app.CapSecondOrg: true,
 		app.CapHarness: true, app.CapSandbox: d.extra.available(),
+		capSlackPost: true, capSlackInteraction: true,
+		app.Capability("authzen.evaluate"): true,
 	}
+	maps.Copy(caps, stripeCapabilities())
+	maps.Copy(caps, a2aCapabilities())
+	maps.Copy(caps, pgCapabilities())
+	return caps
 }
 
 func requires(s domain.Scenario, what string) bool { return slices.Contains(s.Requires, what) }
@@ -120,12 +128,18 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	case "RT-036":
 		o.access, o.actionTokens = capp.AccessTargetEnforced, true
 	}
+	o.stripe = needsStripe(sc)
+	o.a2a = needsA2A(sc)
+	if needsPostgres(sc) {
+		o.postgres = pgtargettest.New(t)
+	}
 	var p idp
-	if requires(sc, "person") || sc.ID == "RT-009" {
+	if requires(sc, "person") || sc.ID == "RT-009" || slackScenario(sc) {
 		p = inProcessIdP(t)
 		o.people = &p
 	}
 	o.github = requires(sc, "github") || requires(sc, "sandbox")
+	o.slack = slackScenario(sc)
 	if sc.ID == "RT-011" {
 		o.github = true
 	}
@@ -145,10 +159,19 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	if o.github {
 		d.setupGitHub()
 	}
+	if o.stripe {
+		d.setupStripe()
+	}
+	if o.postgres != nil {
+		d.setupPostgres()
+	}
 	if requires(sc, "second_org") {
 		d.other = start(t, options{budget: "1000.00"})
 	}
 	d.setupPayments()
+	if o.slack {
+		d.setupSlack()
+	}
 	if requires(sc, "mcp") {
 		d.setupMCPUpstream()
 	}
@@ -374,6 +397,10 @@ func (d *rangeDriver) callOnce(w callWith, _ []byte, _ int) (domain.Observation,
 		return d.callSDK(conn, w, act)
 	case "hook":
 		return d.callHook(w)
+	case "authzen":
+		return d.callAuthZEN(conn, w, act)
+	case "a2a":
+		return d.callA2A(conn, w, act)
 	}
 	return domain.Observation{}, nil, fmt.Errorf("face %q", w.Face)
 }
@@ -420,7 +447,7 @@ func (d *rangeDriver) callHTTP(conn string, w callWith, act ids.UUID) (domain.Ob
 		return domain.Observation{}, nil, err
 	}
 	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", contentType(conn))
 	}
 	req.Header.Set(gateway.HeaderRunID, d.runHeader())
 	req.Header.Set(gateway.HeaderActionID, act.String())

@@ -123,7 +123,8 @@ func serveAndRecord(t *testing.T, role string) map[string][]any {
 		defer mu.Unlock()
 		got[kind] = append(got[kind], v)
 	}
-	t.Cleanup(func() { m11Probe = nil })
+	m14Probe = m11Probe
+	t.Cleanup(func() { m11Probe, m14Probe = nil, nil })
 	d := dbtest.New(t)
 	cfg := testConfig(t, d, role)
 	ctx, cancel := context.WithCancel(context.Background())

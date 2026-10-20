@@ -44,25 +44,31 @@ type DelegateRequest struct {
 // (HR-045, HR-047); the repository repeats the fan-out check while the
 // parent's row is locked and binds the grant to the child run.
 func (s *Service) Delegate(ctx context.Context, w Workload, req DelegateRequest) (domain.Grant, error) {
-	parentRun, err := s.run(ctx, w.Org, w.RunID)
+	return s.delegateWith(ctx, repoDelegation{s}, w, req)
+}
+
+// delegateWith is Delegate over d: the repository's own transactions, or
+// the caller's (DelegateTx). Every check is here, once.
+func (s *Service) delegateWith(ctx context.Context, d delegation, w Workload, req DelegateRequest) (domain.Grant, error) {
+	parentRun, err := d.run(ctx, w.Org, w.RunID)
 	if err != nil {
 		return domain.Grant{}, err
 	}
 	if !parentRun.Active || parentRun.InstanceID != w.InstanceID || parentRun.GrantID.IsZero() {
 		return domain.Grant{}, ErrRunNotEligible
 	}
-	childRun, err := s.run(ctx, w.Org, req.ChildRunID)
+	childRun, err := d.run(ctx, w.Org, req.ChildRunID)
 	if err != nil {
 		return domain.Grant{}, err
 	}
 	if !childRun.Active || childRun.ParentRunID != parentRun.ID || !childRun.GrantID.IsZero() {
 		return domain.Grant{}, ErrRunNotEligible
 	}
-	parent, err := s.grant(ctx, w.Org, parentRun.GrantID)
+	parent, err := d.grant(ctx, w.Org, parentRun.GrantID)
 	if err != nil {
 		return domain.Grant{}, err
 	}
-	agent, err := s.agent(ctx, w.Org, childRun.AgentID)
+	agent, err := d.agent(ctx, w.Org, childRun.AgentID)
 	if err != nil {
 		return domain.Grant{}, err
 	}
@@ -82,13 +88,13 @@ func (s *Service) Delegate(ctx context.Context, w Workload, req DelegateRequest)
 		Basis:   fmt.Sprintf("delegation from grant %s revision %d in run %s", parent.ID, parent.Revision, parentRun.ID),
 	}
 	ic := domain.IssueContext{Now: now, Parent: &parent}
-	if ic.Envelopes, err = s.Repo.Envelopes(ctx, w.Org, scopesFor(agent, child.EnvironmentID, child.Principal)); err != nil {
+	if ic.Envelopes, err = d.envelopes(ctx, w.Org, scopesFor(agent, child.EnvironmentID, child.Principal)); err != nil {
 		return domain.Grant{}, err
 	}
 	if ic.Lookup, err = s.lookup(ctx, w.Org, child.Bounds, child.Limits); err != nil {
 		return domain.Grant{}, err
 	}
-	if ic.ActiveChildren, ic.TotalChildren, err = s.Repo.ChildCounts(ctx, w.Org, parent.ID, now); err != nil {
+	if ic.ActiveChildren, ic.TotalChildren, err = d.childCounts(ctx, w.Org, parent.ID, now); err != nil {
 		return domain.Grant{}, err
 	}
 	if err := child.ValidateIssue(ic); err != nil {
@@ -103,7 +109,7 @@ func (s *Service) Delegate(ctx context.Context, w Workload, req DelegateRequest)
 	ev := grantEvent(actor, "grant.delegated", child, map[string]string{
 		"parent": parent.ID.String(), "parent_revision": fmt.Sprint(parent.Revision), "child_run": childRun.ID.String(),
 	})
-	if err := s.Repo.Delegate(ctx, w.Org, &child, parent.Revision, childRun.ID, fan, ev); err != nil {
+	if err := d.delegate(ctx, w.Org, &child, parent.Revision, childRun.ID, fan, ev); err != nil {
 		return domain.Grant{}, apiError(err)
 	}
 	child.RevisedAt = now

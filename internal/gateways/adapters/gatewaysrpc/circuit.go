@@ -15,6 +15,9 @@ import (
 // Circuits records a gateway's circuit reports (connections app).
 type Circuits interface {
 	OpenCircuit(ctx context.Context, org ids.OrgID, gateway, connection ids.UUID, unknown, total int32) (bool, error)
+	// OpenCircuitFor opens a circuit for a reason, without the thresholds
+	// (stripe_livemode, G0 M14 D76).
+	OpenCircuitFor(ctx context.Context, org ids.OrgID, gateway, connection ids.UUID, reason string) (bool, error)
 }
 
 // WithCircuits serves ReportCircuit from c.
@@ -39,7 +42,12 @@ func (h *GatewayHandler) ReportCircuit(ctx context.Context, req *pb.ReportCircui
 	if err != nil {
 		return nil, errInvalidID
 	}
-	quarantined, err := h.circuits.OpenCircuit(ctx, id.Org, id.Gateway, conn, req.GetUnknownCount(), req.GetTotalCount())
+	var quarantined bool
+	if req.GetReason() != "" {
+		quarantined, err = h.circuits.OpenCircuitFor(ctx, id.Org, id.Gateway, conn, req.GetReason())
+	} else {
+		quarantined, err = h.circuits.OpenCircuit(ctx, id.Org, id.Gateway, conn, req.GetUnknownCount(), req.GetTotalCount())
+	}
 	if err != nil {
 		return nil, err
 	}

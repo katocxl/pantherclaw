@@ -1,0 +1,7 @@
+{
+  "name": "treasury-payments",
+  "bounds": {},
+  "limits": {
+    "budgets": [{"id": "treasury_weekly_transfers", "grouping": "org", "operations": ["stripe.transfer.create"], "currency": "USD", "limit": "50000.00", "period": "week"}]
+  }
+}

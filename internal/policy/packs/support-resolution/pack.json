@@ -1,0 +1,13 @@
+{
+  "name": "support-resolution",
+  "summary": "Support agents resolve tickets: they read the ticket's customer's records in PostgreSQL, scoped to that customer and to public and internal columns, and refund Stripe test-mode payments, with an approver releasing refunds above 50.00 USD, refunds above 100.00 USD refused and a weekly refund budget.",
+  "template": "customer-support",
+  "baseline_ttl_seconds": 28800,
+  "covers": [
+    "customer-scoped reads: support.tickets, shop.customers and shop.orders only for the named customers, narrowed to one ticket's customer with a delegated child grant",
+    "data classes: pii and secret columns are redacted, at most 50 rows a read, no aggregates",
+    "refunds held for an independent approver above 50.00 USD and refused above 100.00 USD",
+    "a refund never exceeds what is left to refund on the payment",
+    "a weekly refund budget of 500.00 USD per task in the grant baseline; the team-wide weekly cap is the template's guardrail envelope (pclaw template apply customer-support --team or --bu)"
+  ]
+}

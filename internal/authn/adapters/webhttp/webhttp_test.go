@@ -62,6 +62,11 @@ func (f *fakeBrowser) Authenticate(_ context.Context, cookie string) (authnapp.B
 		s.Bindings = []td.Binding{{Role: td.RoleEmergency, Scope: td.Scope{Type: td.ScopeOrg, ID: testOrg.UUID()}}}
 		s.StepUpCredential, s.StepUpAt = responderKey, steppedUpAt
 		return s, nil
+	case "org-admin": // slackapp_test.go
+		s.Principal.ID = responderID
+		s.Bindings = []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: testOrg.UUID()}}}
+		s.StepUpCredential, s.StepUpAt = responderKey, steppedUpAt
+		return s, nil
 	case "reader":
 		s.Bindings = []td.Binding{{Role: td.RoleAuditor, Scope: td.Scope{Type: td.ScopeOrg, ID: testOrg.UUID()}}}
 		return s, nil
