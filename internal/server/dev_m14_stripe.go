@@ -131,7 +131,7 @@ func seedStripeFacts(ctx context.Context, pool *db.Pool, org ids.OrgID, gateway,
 // approver. Its scenario tests hold a refund one cent over and allow one
 // at the limit.
 func devStripeHoldBundle(base *pdomain.Bundle) *pdomain.Bundle {
-	refund := func(id, value string, expect pdomain.TestExpect) pdomain.TestCase {
+	refund := func(id, value string, age int, expect pdomain.TestExpect) pdomain.TestCase {
 		return pdomain.TestCase{
 			ID: id, Summary: "a Stripe refund of " + value + " " + devStripeCurrency,
 			Action: pdomain.TestAction{
@@ -142,7 +142,7 @@ func devStripeHoldBundle(base *pdomain.Bundle) *pdomain.Bundle {
 				"stripe.payment.refundable": {
 					Value: jsontext.Value(`{"object":{"livemode":false,"payment":"ch_DevCharge0001",` +
 						`"remaining":{"currency":"USD","value":"150.00"}}}`),
-					AgeSeconds: 10,
+					AgeSeconds: age,
 				},
 			}},
 			Expect: expect,
@@ -162,10 +162,13 @@ func devStripeHoldBundle(base *pdomain.Bundle) *pdomain.Bundle {
 		Reason:     devStripeHoldRsn, Approval: &pdomain.ApprovalRequirement{Role: "approver", Count: 1},
 	})
 	b.Tests = append(b.Tests,
-		refund("stripe-over-the-limit-is-held", "50.01", pdomain.TestExpect{
+		refund("stripe-over-the-limit-is-held", "50.01", 10, pdomain.TestExpect{
 			Decision: "REQUIRE_APPROVAL", Reason: devStripeHoldRsn, Rule: "approve-large-stripe-refunds",
 		}),
-		refund("stripe-at-the-limit-is-allowed", devStripeHoldOver, pdomain.TestExpect{Decision: "ALLOW", Reason: "GRANT_COVERS"}),
+		refund("stripe-at-the-limit-is-allowed", devStripeHoldOver, 10, pdomain.TestExpect{Decision: "ALLOW", Reason: "GRANT_COVERS"}),
+		// A refundable fact older than its 60 seconds decides nothing
+		// (HR-305): the publish gate runs this through the pipeline.
+		refund("stripe-stale-refundable-fact-cannot-authorize", "10.00", 61, pdomain.TestExpect{Decision: "CANNOT_AUTHORIZE", Reason: "FACT_STALE"}),
 	)
 	return b
 }

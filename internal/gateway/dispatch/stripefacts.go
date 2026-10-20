@@ -6,6 +6,7 @@ package dispatch
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -57,12 +58,16 @@ func stripeFactNames(conn *control.Connection, def *defs.Definition) []string {
 // the server may still hold a fresh earlier observation, or an answer was
 // in live mode (D54).
 func (e *Engine) stripeFacts(ctx context.Context, conn *control.Connection, a actionir.ActionIR, t *timer) (res Result, stop bool) {
-	tried, unreported, live := e.reportStripeFacts(ctx, conn, a)
+	tried, unreported, live, refused := e.reportStripeFacts(ctx, conn, a)
 	if !tried {
 		return Result{}, false
 	}
 	t.lap("facts")
 	switch {
+	case refused != nil:
+		// The key is not a test key: no fact was read, and nothing will be
+		// sent (HR-301, HR-303).
+		return Result{Class: CannotAuthorize, Code: CodeCredentialPattern, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}, true
 	case live:
 		e.stripeLivemode(ctx, conn, "fact")
 		return Result{Class: CannotAuthorize, Code: CodeStripeLivemode, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}, true
@@ -76,20 +81,20 @@ func (e *Engine) stripeFacts(ctx context.Context, conn *control.Connection, a ac
 // within the fact timeout, and reports them, every fact it could not read
 // as unread. The key must match the definition's credential pattern before
 // any read is sent (HR-301, HR-303).
-func (e *Engine) reportStripeFacts(ctx context.Context, conn *control.Connection, a actionir.ActionIR) (tried bool, unreported error, live bool) {
+func (e *Engine) reportStripeFacts(ctx context.Context, conn *control.Connection, a actionir.ActionIR) (tried bool, unreported error, live bool, refused error) {
 	if e.reportFacts == nil || conn.Package == nil || conn.GetKind() != "http" {
-		return false, nil, false
+		return false, nil, false, nil
 	}
 	if k := conn.Credential.GetKind(); k != "" && k != credentials.KindStatic {
-		return false, nil, false
+		return false, nil, false, nil
 	}
 	def, ok := conn.Package.Definition(a.Operation)
 	if !ok {
-		return false, nil, false
+		return false, nil, false, nil
 	}
 	names := stripeFactNames(conn, def)
 	if len(names) == 0 {
-		return false, nil, false
+		return false, nil, false, nil
 	}
 	read, cancel := context.WithTimeout(ctx, e.factTimeout)
 	defer cancel()
@@ -125,7 +130,10 @@ func (e *Engine) reportStripeFacts(ctx context.Context, conn *control.Connection
 		e.log.WarnContext(ctx, "gateway.facts_unavailable", slog.String("connection_id", conn.GetId()),
 			slog.String("operation", a.Operation), pclog.Err(err))
 		report("no Stripe client or key")
-		return true, unreported, false
+		if errors.Is(err, ErrCredentialPattern) {
+			refused = err
+		}
+		return true, unreported, false, refused
 	}
 	defer release()
 	var facts []stripefacts.Fact
@@ -134,7 +142,7 @@ func (e *Engine) reportStripeFacts(ctx context.Context, conn *control.Connection
 		add(f.Name, f.Value)
 	}
 	report("not read from Stripe")
-	return true, unreported, live
+	return true, unreported, live, nil
 }
 
 // stripeGetter is a fact read's Getter: GET at the connection's base URL

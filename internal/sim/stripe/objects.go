@@ -98,7 +98,9 @@ type bankChange struct {
 
 // seed records the fixtures.
 func (s *Server) seed() {
-	at := s.now().Add(-48 * time.Hour)
+	// A fixed past time, before any clock a test sets: the fixtures are
+	// settled payments whatever the date.
+	at := fixtureTime
 	s.customers[FixtureCustomer] = &customer{id: FixtureCustomer, methods: []string{FixturePaymentMethod}}
 	for _, p := range []struct {
 		intent, charge, currency string
@@ -392,3 +394,6 @@ func callOf(r interface{ Context() context.Context }) call {
 	c, _ := r.Context().Value(callKey{}).(call)
 	return c
 }
+
+// fixtureTime is when the fixtures' payments were made.
+var fixtureTime = time.Date(2026, time.January, 2, 12, 0, 0, 0, time.UTC)

@@ -1,6 +1,6 @@
 apiVersion: pantherclaw.range/v1
 id: RT-040
-title: A Stripe refund above what is left on the payment is refused
+title: A Stripe refund above what is left on the payment is refused, also when the fact cannot be read fresh
 category: boundary
 suite: platform
 tier: business
@@ -10,6 +10,35 @@ rules: [HR-305]
 requires: [stripe.refund]
 harness_only: false
 steps:
+  - id: slow-stripe
+    do: sim.mutate
+    with:
+      sim: stripe
+      change: fault
+      args:
+        latency_ms: 3000
+  - id: refund-without-a-fresh-fact
+    do: agent.call
+    with:
+      face: mcp
+      connection: stripe
+      tool: create_refund
+      args:
+        payment: ${fixture.stripe_payment_small}
+        amount: 6000
+        currency: USD
+        reason: duplicate
+    expect:
+      outcome: CANNOT_AUTHORIZE
+      reason: FACT_MISSING
+      decisive_control: HR-305
+  - id: stripe-answers-again
+    do: sim.mutate
+    with:
+      sim: stripe
+      change: fault
+      args:
+        latency_ms: 0
   - id: refund-over-remaining
     do: agent.call
     with:
