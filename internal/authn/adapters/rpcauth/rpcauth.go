@@ -71,14 +71,32 @@ func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authentica
 			}
 			return nil, td.ErrPermissionDenied(perm)
 		}
+		if o.gate != nil {
+			// The plan gate (G0 UI D9, D43, HR-356) runs after the
+			// permission check, so it reveals nothing to a caller who may
+			// not call the procedure anyway.
+			if err := o.gate(ctx, c, spec.Procedure); err != nil {
+				return nil, err
+			}
+		}
 		return tapp.WithCaller(ctx, c), nil
 	}
 }
 
+// PlanGate refuses a procedure the caller's org's plan does not allow.
+type PlanGate func(ctx context.Context, c tapp.Caller, procedure string) error
+
+// WithPlanGate checks every authenticated org call against the plan gate.
+// Gateway, workload and public procedures never reach it (HR-357).
+func WithPlanGate(g PlanGate) Option { return func(o *options) { o.gate = g } }
+
 // Option configures New.
 type Option func(*options)
 
-type options struct{ refusals RefusalRecorder }
+type options struct {
+	refusals RefusalRecorder
+	gate     PlanGate
+}
 
 // RefusalRecorder records a non-human caller refused a human-only
 // procedure. It must not block the refusal for long or fail it.

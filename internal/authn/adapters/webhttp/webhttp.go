@@ -29,6 +29,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/accounts"
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	covdomain "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
@@ -118,6 +119,10 @@ type Handler struct {
 	// slackChannels is the Slack approval channel page (G0 M14 D22); nil when
 	// not mounted.
 	slackChannels SlackChannels
+	// accounts is the hosted account pages (G0 UI D8); nil when not
+	// served.
+	accounts  AccountBrowser
+	selfServe bool
 }
 
 // New returns the handler. publicURL is the server's public URL: its origin
@@ -158,6 +163,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	h.mountPromotions(mux)
 	h.mountProtect(mux)
 	h.mountSlackChannels(mux)
+	h.mountAccounts(mux)
 }
 
 // Routes lists the mounted routes.
@@ -313,6 +319,9 @@ type page struct {
 	Keys        []authnapp.CredentialInfo
 	KeysEnabled bool
 	SteppedUp   bool
+	// Orgs and SelfServe are the org picker's (G0 UI D8).
+	Orgs      []accounts.Membership
+	SelfServe bool
 }
 
 func (h *Handler) render(w http.ResponseWriter, status int, name string, p page) {
@@ -379,6 +388,9 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 	case out.Reason != "":
 		h.render(w, http.StatusForbidden, "error.html", page{Title: "Sign in", Message: reasonText[out.Reason]})
 		return
+	case out.Kind == authnapp.SessionAccount:
+		h.accountSignedIn(w, out)
+		return
 	}
 	next := out.Next
 	if !authnapp.ValidReturnPath(next) {
@@ -395,6 +407,11 @@ var reasonText = map[string]string{
 	"USER_DISABLED": "Your account in this organization is disabled.",
 	"IDP_ERROR":     "The identity provider did not complete the sign-in.",
 	"LOGIN_FAILED":  "The sign-in could not be verified. Start again.",
+	// Invitations accepted in the browser (G0 UI D8, HR-352).
+	"INVITATION_INVALID":        "This invitation is invalid, already used or expired. Ask for a new one.",
+	"INVITATION_EMAIL_MISMATCH": "This invitation is for another email address. Sign in with the account your identity provider verified for that address.",
+	"ALREADY_MEMBER":            "Your account is already a member of this organization. Sign in to it instead.",
+	"PLAN_LIMIT":                "The organization's plan allows no more members. Ask an administrator.",
 }
 
 func (h *Handler) signedOut(w http.ResponseWriter, _ *http.Request) {
@@ -478,6 +495,7 @@ func (h *Handler) static(w http.ResponseWriter, r *http.Request) {
 		"pc.css":                  "text/css; charset=utf-8",
 		"protect.js":              "text/javascript; charset=utf-8",
 		"slack_channel.js":        "text/javascript; charset=utf-8",
+		"org_picker.js":           "text/javascript; charset=utf-8",
 	}
 	ct, ok := types[name]
 	if !ok {

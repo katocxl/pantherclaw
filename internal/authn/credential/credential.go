@@ -13,6 +13,8 @@
 //	pcs_<org>_<secret>         OAuth state (browser leg of the device flow)
 //	pcb_<org>_<secret>         browser session (the __Host-pc_session cookie, M5)
 //	pcl_<org>_<secret>         browser sign-in state (M5)
+//	pcu_<platform>_<secret>    account browser session (G0 UI D8)
+//	pcm_<platform>_<secret>    sign-in state without an org (G0 UI D8)
 //
 // <org> is the org's UUID as 32 lowercase hex digits; <secret> is 256 random
 // bits in 43 base62 characters. Only hashes are stored. Service-account
@@ -51,6 +53,12 @@ const (
 	// GatewayEnrollmentToken is a single-use gateway enrollment token
 	// (G0 M6, HR-180).
 	GatewayEnrollmentToken Kind = "pcg"
+	// Hosted accounts (G0 UI D8): an account browser session (the
+	// __Host-pc_account cookie) and the state of a sign-in without an org.
+	// They belong to no org: their <org> is the platform org, a fixed
+	// routing value, and the hash is looked up only in the account tables.
+	AccountSession    Kind = "pcu"
+	AccountLoginState Kind = "pcm"
 )
 
 // Env labels API keys by deployment, so that a key made for one deployment
@@ -202,7 +210,7 @@ func (k Kind) valid() bool {
 	switch k {
 	case APIKey, Invitation, DeviceCode, RefreshToken, OAuthState, EnrollmentToken:
 		return true
-	case BrowserSession, LoginState, GatewayEnrollmentToken:
+	case BrowserSession, LoginState, GatewayEnrollmentToken, AccountSession, AccountLoginState:
 		return true
 	}
 	return false

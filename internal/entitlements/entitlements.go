@@ -138,10 +138,17 @@ type Plan struct {
 	LastEventAt *time.Time
 }
 
-// Licence is the installed licence (billing.Service).
+// Licence is the installed licence (billing.Service.Licence, adapted with
+// LicenceFunc).
 type Licence interface {
 	Current(ctx context.Context) (billing.Entitlements, error)
 }
+
+// LicenceFunc adapts a function to Licence.
+type LicenceFunc func(ctx context.Context) (billing.Entitlements, error)
+
+// Current implements Licence.
+func (f LicenceFunc) Current(ctx context.Context) (billing.Entitlements, error) { return f(ctx) }
 
 // Service resolves and writes per-org plans.
 type Service struct {
@@ -179,13 +186,28 @@ func (s *Service) Mode() Mode { return s.mode }
 // authenticated caller's org, or the org a job named with tenantctx.WithOrg.
 // Without either it returns the licence's (self-hosted behaviour).
 func (s *Service) Current(ctx context.Context) (billing.Entitlements, error) {
-	if c, err := tapp.CallerFrom(ctx); err == nil {
-		return s.For(ctx, c.Org)
-	}
-	if org, ok := tenantctx.Org(ctx); ok {
+	if org, ok := orgOfContext(ctx); ok {
 		return s.For(ctx, org)
 	}
 	return s.licence.Current(ctx)
+}
+
+// OrgEntitlements implements billing.OrgSource: the entitlements of the org
+// ctx is for (caller or tenantctx), ok false when it names none.
+func (s *Service) OrgEntitlements(ctx context.Context) (billing.Entitlements, bool, error) {
+	org, ok := orgOfContext(ctx)
+	if !ok {
+		return billing.Entitlements{}, false, nil
+	}
+	e, err := s.For(ctx, org)
+	return e, true, err
+}
+
+func orgOfContext(ctx context.Context) (ids.OrgID, bool) {
+	if c, err := tapp.CallerFrom(ctx); err == nil {
+		return c.Org, true
+	}
+	return tenantctx.Org(ctx)
 }
 
 // For returns org's entitlements, which every gate and limit reads.

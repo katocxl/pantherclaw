@@ -29,6 +29,8 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/tenantctx"
 )
 
 // TxType is the transaction type River is instantiated with.
@@ -56,11 +58,45 @@ func Register[T river.JobArgs](r *Registry, w river.Worker[T]) error {
 	if err := CheckArgs(reflect.TypeOf(args)); err != nil {
 		return fmt.Errorf("jobs: %s: %w", args.Kind(), err)
 	}
+	if f, ok := orgField(reflect.TypeOf(args)); ok {
+		w = orgWorker[T]{Worker: w, field: f}
+	}
 	if err := river.AddWorkerSafely(r.workers, w); err != nil {
 		return fmt.Errorf("jobs: register %s: %w", args.Kind(), err)
 	}
 	r.kinds = append(r.kinds, args.Kind())
 	return nil
+}
+
+var orgIDType = reflect.TypeFor[ids.OrgID]()
+
+// orgField returns the index of the org id field (OrgID or Org) of a job
+// argument struct.
+func orgField(t reflect.Type) ([]int, bool) {
+	if t == nil || t.Kind() != reflect.Struct {
+		return nil, false
+	}
+	for _, name := range []string{"OrgID", "Org"} {
+		if f, ok := t.FieldByName(name); ok && f.Type == orgIDType {
+			return f.Index, true
+		}
+	}
+	return nil, false
+}
+
+// orgWorker runs a job whose arguments name an org with that org in the
+// context, so the entitlements it reads are the org's (G0 UI D9).
+type orgWorker[T river.JobArgs] struct {
+	river.Worker[T]
+	field []int
+}
+
+// Work implements river.Worker.
+func (w orgWorker[T]) Work(ctx context.Context, job *river.Job[T]) error {
+	if org, ok := reflect.ValueOf(job.Args).FieldByIndex(w.field).Interface().(ids.OrgID); ok && !org.IsZero() {
+		ctx = tenantctx.WithOrg(ctx, org)
+	}
+	return w.Worker.Work(ctx, job)
 }
 
 // forbiddenFieldParts are rejected in argument field names: arguments name

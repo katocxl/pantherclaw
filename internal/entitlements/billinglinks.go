@@ -6,6 +6,7 @@ package entitlements
 import (
 	"context"
 	"errors"
+	"fmt"
 	"regexp"
 	"time"
 
@@ -21,7 +22,12 @@ var (
 	ErrLinkNotFound = pcerr.New(pcerr.NotFound, "BILLING_LINK_NOT_FOUND", "unknown billing reference")
 	ErrLinkConflict = pcerr.New(pcerr.Aborted, "BILLING_LINK_CONFLICT", "the billing reference conflicts with a recorded one")
 	ErrInvalidLink  = pcerr.New(pcerr.InvalidArgument, "INVALID_BILLING_LINK", "invalid billing reference")
+	// ErrLinkDuplicate: the subscription was kept as a duplicate of the
+	// org's current one (D52); it is a kind of ErrLinkConflict.
+	ErrLinkDuplicate = fmt.Errorf("%w: duplicate subscription", ErrLinkConflict)
 )
+
+const stateDuplicate = "DUPLICATE"
 
 // MaxCheckoutTTL bounds a recorded checkout's life (the table allows 7 days).
 const MaxCheckoutTTL = 7 * 24 * time.Hour
@@ -178,7 +184,9 @@ func (l *Links) BindSubscription(ctx context.Context, provider, checkoutRef, sub
 	if !found {
 		return "", ErrLinkNotFound
 	}
-	err = l.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+	var duplicate bool
+	bind := func(ctx context.Context, tx db.TenantTx) error {
+		duplicate = false
 		q := dbq.New(tx)
 		if err := q.LockBillingOrg(ctx, org.UUID()); err != nil {
 			return err
@@ -193,10 +201,13 @@ func (l *Links) BindSubscription(ctx context.Context, provider, checkoutRef, sub
 			return err
 		}
 		if sub, err := q.SubscriptionByCheckout(ctx, org, &co.ID); err == nil {
-			if sub.Ref == subscriptionRef {
-				return nil // the same binding again
+			switch {
+			case sub.Ref != subscriptionRef:
+				return ErrLinkConflict
+			case sub.State == stateDuplicate:
+				duplicate = true
 			}
-			return ErrLinkConflict
+			return nil // the same binding again
 		} else if !db.IsNoRows(err) {
 			return err
 		}
@@ -205,8 +216,11 @@ func (l *Links) BindSubscription(ctx context.Context, provider, checkoutRef, sub
 		} else if taken {
 			return ErrLinkConflict
 		}
+		state := "CURRENT"
 		if _, err := q.CurrentSubscription(ctx, org, provider); err == nil {
-			return ErrLinkConflict
+			// D52: a second subscription of the org is kept, ended, for
+			// the adapter to cancel and refund.
+			state, duplicate = stateDuplicate, true
 		} else if !db.IsNoRows(err) {
 			return err
 		}
@@ -215,24 +229,44 @@ func (l *Links) BindSubscription(ctx context.Context, provider, checkoutRef, sub
 		}); err != nil {
 			return err
 		} else if n == 0 {
-			return ErrLinkConflict
+			return db.ErrLostRace
 		}
 		id := ids.NewV7()
 		if err := q.InsertBillingLink(ctx, dbq.InsertBillingLinkParams{
 			OrgID: org, ID: id, Provider: provider, Kind: kindSubscription, Ref: subscriptionRef, CustomerRef: customerRef,
-			State: "CURRENT", CheckoutID: &co.ID,
+			State: state, CheckoutID: &co.ID,
 		}); err != nil {
 			return err
 		}
+		name, outcome := "billing.subscription_bound", audit.Success
+		if duplicate {
+			name, outcome = "billing.subscription_duplicate", audit.Denied
+		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "billing.subscription_bound", Actor: billingActor, Outcome: audit.Success,
+			Name: name, Actor: billingActor, Outcome: outcome,
 			Object:  &audit.Object{Type: "billing_link", ID: id.String()},
 			Details: map[string]string{"provider": provider, "checkout_link": co.ID.String(), "checkout_state": co.State},
 		})
 		return err
-	})
+	}
+	// Both locks serialize binds of one org and of one subscription, so a
+	// unique clash means a concurrent writer got in first some other way:
+	// decide again from what it stored (D55), never surface the clash.
+	for attempt := 0; ; attempt++ {
+		err = l.pool.InTenantTx(ctx, org, bind)
+		if (db.IsUniqueViolation(err) || errors.Is(err, db.ErrLostRace)) && attempt == 0 {
+			continue
+		}
+		break
+	}
+	if db.IsUniqueViolation(err) {
+		err = ErrLinkConflict
+	}
 	if err != nil {
 		return "", err
+	}
+	if duplicate {
+		return org.String(), ErrLinkDuplicate
 	}
 	return org.String(), nil
 }

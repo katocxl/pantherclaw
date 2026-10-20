@@ -1,0 +1,17 @@
+{{template "head" .}}
+<h1>Choose an organization</h1>
+{{if .Orgs}}
+<p>Your account belongs to these organizations. Opening one signs you in to it; to switch later, sign in again.</p>
+<ul class="orgs">
+{{range .Orgs}}
+<li><button type="button" class="pick-org" data-org="{{.Org}}">{{.Name}}</button>{{if .Slug}} <span class="note">{{.Slug}}</span>{{end}} <code>{{.Org}}</code></li>
+{{end}}
+</ul>
+{{else}}
+<p>Your account does not belong to any organization yet.</p>
+{{end}}
+{{if .SelfServe}}<p><a href="/app/">Create an organization</a></p>{{end}}
+<p><button type="button" id="account-sign-out">Sign out</button></p>
+<p id="status" role="status"></p>
+<script src="/static/org_picker.js"></script>
+{{template "foot" .}}

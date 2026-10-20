@@ -15,6 +15,7 @@ import (
 
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/tenantctx"
 )
 
 // DBTX is the query interface shared by TenantTx and GlobalTx; sqlc-generated
@@ -123,7 +124,8 @@ func (p *Pool) InTenantTx(ctx context.Context, org ids.OrgID, fn func(context.Co
 		if _, err := tx.Exec(ctx, tenantSetup, org.String()); err != nil {
 			return fmt.Errorf("db: set tenant: %w", err)
 		}
-		return fn(ctx, TenantTx{queryTx: queryTx{tx: tx}, org: org})
+		// Entitlement lookups inside the transaction are for its org (G0 UI D9).
+		return fn(tenantctx.WithOrg(ctx, org), TenantTx{queryTx: queryTx{tx: tx}, org: org})
 	})
 }
 
@@ -230,7 +232,7 @@ const (
 // ListerParams are the inputs of the parameterized lister purposes, set
 // for the lister's transaction only and recorded in its audit row.
 type ListerParams struct {
-	AccountID                               ids.UUID
+	AccountID                                ids.UUID
 	BillingProvider, BillingKind, BillingRef string
 }
 

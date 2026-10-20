@@ -23,6 +23,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/tenantctx"
 	"github.com/katocxl/pantherclaw/internal/reflex/alerts"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
@@ -93,6 +94,7 @@ func (e *Engine) log() *slog.Logger {
 // signals, rule state and the cursor commit together or not at all
 // (HR-240).
 func (e *Engine) Process(ctx context.Context, org ids.OrgID) (RunResult, error) {
+	ctx = tenantctx.WithOrg(ctx, org) // the org's entitlements (G0 UI D9)
 	batch := e.Batch
 	if batch <= 0 || batch > feed.MaxBatch {
 		batch = feed.MaxBatch

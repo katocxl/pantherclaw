@@ -139,7 +139,7 @@ func Evaluate(c Claims, now time.Time) Entitlements {
 	}
 	paid := Entitlements{
 		Edition: c.Edition, Status: StatusValid, LicenceID: c.LicenceID,
-		Limits:  Limits{MaxAgents: c.MaxAgents, MaxOrgs: c.MaxOrgs, MaxEnvironments: Unlimited, MaxMembers: Unlimited},
+		Limits:    Limits{MaxAgents: c.MaxAgents, MaxOrgs: c.MaxOrgs, MaxEnvironments: Unlimited, MaxMembers: Unlimited},
 		ExpiresAt: c.ExpiresAt,
 	}
 	graceEnds := c.ExpiresAt.Add(GracePeriod)

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/accounts"
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
@@ -97,6 +98,10 @@ type Browser struct {
 	idps   map[string]IdP
 	clock  clock.Clock
 	log    *slog.Logger
+	// Hosted accounts (accounts.go); nil: every sign-in names an org.
+	accounts  *accounts.Store
+	invites   *accounts.Invitations
+	selfServe bool
 }
 
 // NewBrowser returns the browser sign-in use cases. issuer is the server's
@@ -130,15 +135,15 @@ type BrowserStart struct {
 	Org, Provider, Next string
 	Recent              bool
 	ClientIP            string
+	// Invitation is an invitation token to accept after a sign-in without
+	// an org (the /invite page; G0 UI D8).
+	Invitation string
 }
 
 // Start records a pending sign-in and returns the provider URL and the
-// browser binding, which the caller sets as an HttpOnly cookie.
+// browser binding, which the caller sets as an HttpOnly cookie. Without an
+// org it is a sign-in without an org (hosted accounts, when enabled).
 func (b *Browser) Start(ctx context.Context, in BrowserStart) (Redirect, error) {
-	org, err := ids.Parse[ids.Org](in.Org)
-	if err != nil {
-		return Redirect{}, ErrSignInUnavailable
-	}
 	idp, ok := b.provider(in.Provider)
 	if !ok {
 		return Redirect{}, ErrSignInUnavailable
@@ -148,6 +153,16 @@ func (b *Browser) Start(ctx context.Context, in BrowserStart) (Redirect, error) 
 		next = AccountPath
 	}
 	if !ValidReturnPath(next) {
+		return Redirect{}, ErrSignInUnavailable
+	}
+	if in.Org == "" {
+		return b.startAccount(ctx, idp, next, in.Invitation, in.ClientIP, in.Recent)
+	}
+	if in.Invitation != "" {
+		return Redirect{}, ErrSignInUnavailable
+	}
+	org, err := ids.Parse[ids.Org](in.Org)
+	if err != nil {
 		return Redirect{}, ErrSignInUnavailable
 	}
 	state, err := credential.New(credential.LoginState, "", org)
@@ -210,6 +225,12 @@ type BrowserSignIn struct {
 	Secret  string
 	Next    string
 	Reason  string
+	// Kind is SessionOrg (Secret is an org session cookie) or
+	// SessionAccount (an account session cookie, G0 UI D8); "" is an org
+	// session too.
+	Kind string
+	// Account is the hosted account, when the sign-in had none of an org.
+	Account ids.UUID
 }
 
 // Callback completes a browser sign-in. The state is consumed first (single
@@ -220,6 +241,9 @@ func (b *Browser) Callback(ctx context.Context, providerName string, params url.
 	idp, ok := b.idps[providerName]
 	if !ok {
 		return BrowserSignIn{}, ErrBadCallback
+	}
+	if strings.HasPrefix(params.Get("state"), string(credential.AccountLoginState)+"_") {
+		return b.accountCallback(ctx, idp, providerName, params, binding, meta)
 	}
 	state, err := credential.Parse(credential.LoginState, params.Get("state"))
 	if err != nil {

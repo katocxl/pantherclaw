@@ -1,14 +1,17 @@
 -- SPDX-License-Identifier: BUSL-1.1
 -- Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 --
--- Billing links (G0 UI D33, D36, D37; HR-354). A subscription is bound to
--- an org only through a checkout the server itself created for that org:
--- the billing extension records the checkout (PENDING, with an expiry),
--- and the provider's event naming that checkout binds the subscription
--- (CURRENT) and consumes the checkout. custom_data in a provider event is
--- never trusted for the binding. An org has at most one current
--- subscription per provider; a subscription that ended stays ENDED, and a
--- ref never moves to another org.
+-- Billing links (G0 UI D36, D37, D45, D46, D52; HR-354). A subscription
+-- is bound to an org only through a checkout the server itself created for
+-- that org: the billing extension records the checkout (PENDING, with an
+-- expiry; a newer one supersedes it as EXPIRED), and the provider's event
+-- naming that checkout binds the subscription (CURRENT) and consumes the
+-- checkout, even an expired one when the org has no current subscription.
+-- custom_data in a provider event is never trusted for the binding. An org
+-- has at most one current subscription per provider: a second one bought
+-- through another checkout is kept as DUPLICATE (ended) for the adapter to
+-- cancel and refund. A subscription that ended stays ENDED, and a ref never
+-- moves to another org.
 --
 -- Provider events carry no org, so the org of a ref is found only through
 -- the audited cross-org lister (purpose billing_link_lookup), with the ref
@@ -26,7 +29,7 @@ CREATE TABLE pc.billing_links (
     kind         text        NOT NULL CHECK (kind IN ('CHECKOUT', 'SUBSCRIPTION')),
     ref          text        NOT NULL CHECK (char_length(ref) BETWEEN 1 AND 255),
     customer_ref text        NOT NULL DEFAULT '' CHECK (char_length(customer_ref) <= 255),
-    state        text        NOT NULL CHECK (state IN ('PENDING', 'CONSUMED', 'EXPIRED', 'CURRENT', 'ENDED')),
+    state        text        NOT NULL CHECK (state IN ('PENDING', 'CONSUMED', 'EXPIRED', 'CURRENT', 'ENDED', 'DUPLICATE')),
     -- The checkout a subscription was bound through.
     checkout_id  uuid,
     expires_at   timestamptz,
@@ -36,7 +39,7 @@ CREATE TABLE pc.billing_links (
     UNIQUE (org_id, provider, kind, ref),
     FOREIGN KEY (org_id, checkout_id) REFERENCES pc.billing_links (org_id, id),
     CHECK (kind <> 'CHECKOUT' OR (state IN ('PENDING', 'CONSUMED', 'EXPIRED') AND expires_at IS NOT NULL AND checkout_id IS NULL)),
-    CHECK (kind <> 'SUBSCRIPTION' OR (state IN ('CURRENT', 'ENDED') AND checkout_id IS NOT NULL)),
+    CHECK (kind <> 'SUBSCRIPTION' OR (state IN ('CURRENT', 'ENDED', 'DUPLICATE') AND checkout_id IS NOT NULL)),
     CHECK (expires_at IS NULL OR expires_at <= created_at + interval '7 days')
 );
 CREATE UNIQUE INDEX billing_links_current ON pc.billing_links (org_id, provider)
@@ -45,7 +48,7 @@ CREATE UNIQUE INDEX billing_links_current ON pc.billing_links (org_id, provider)
 -- Only the state moves, and only forward: PENDING → CONSUMED or EXPIRED,
 -- EXPIRED → CONSUMED (a late payment of a superseded or expired checkout
 -- still binds when the org has no current subscription, D46), CURRENT →
--- ENDED.
+-- ENDED. DUPLICATE is final from its insert.
 -- +goose StatementBegin
 CREATE FUNCTION pc.billing_link_guard() RETURNS trigger
     LANGUAGE plpgsql AS $$
