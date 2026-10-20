@@ -4,11 +4,11 @@
 package server
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"regexp"
 	"time"
 
@@ -137,10 +137,12 @@ func coreRouteFor(mux *http.ServeMux, pattern string) string {
 		}
 		return "x"
 	})
-	req, err := http.NewRequestWithContext(context.Background(), method, "http://ext.invalid"+path, nil) // a probe, never sent
+	u, err := url.Parse("http://ext.invalid" + path)
 	if err != nil {
 		return ""
 	}
+	// A probe the mux only matches, never sent or served.
+	req := &http.Request{Method: method, URL: u, Host: u.Host, Header: http.Header{}}
 	if _, p := mux.Handler(req); p != consolePattern {
 		return p
 	}
