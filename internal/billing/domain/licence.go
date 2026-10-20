@@ -36,6 +36,10 @@ func (e Edition) Paid() bool { return e == Team || e == Business || e == Enterpr
 type Limits struct {
 	MaxAgents int
 	MaxOrgs   int
+	// MaxEnvironments and MaxMembers come only from a hosted org's plan
+	// (G0 UI D9, HR-360); licences leave them Unlimited.
+	MaxEnvironments int
+	MaxMembers      int
 }
 
 // Unlimited marks a limit without a cap.
@@ -43,7 +47,7 @@ const Unlimited = -1
 
 // CommunityLimits are the BSL Additional Use Grant limits: 5 governed agents
 // in 1 organization (LICENSE, ADR-0007).
-var CommunityLimits = Limits{MaxAgents: 5, MaxOrgs: 1}
+var CommunityLimits = Limits{MaxAgents: 5, MaxOrgs: 1, MaxEnvironments: Unlimited, MaxMembers: Unlimited}
 
 // GracePeriod is how long an expired paid licence keeps its limits.
 const GracePeriod = 14 * 24 * time.Hour
@@ -135,7 +139,8 @@ func Evaluate(c Claims, now time.Time) Entitlements {
 	}
 	paid := Entitlements{
 		Edition: c.Edition, Status: StatusValid, LicenceID: c.LicenceID,
-		Limits: Limits{MaxAgents: c.MaxAgents, MaxOrgs: c.MaxOrgs}, ExpiresAt: c.ExpiresAt,
+		Limits:  Limits{MaxAgents: c.MaxAgents, MaxOrgs: c.MaxOrgs, MaxEnvironments: Unlimited, MaxMembers: Unlimited},
+		ExpiresAt: c.ExpiresAt,
 	}
 	graceEnds := c.ExpiresAt.Add(GracePeriod)
 	switch {
@@ -178,6 +183,24 @@ func (e Entitlements) CheckOrgs(current int) error {
 func (e Entitlements) CheckAgents(current int) error {
 	if e.Limits.MaxAgents != Unlimited && current+1 > e.Limits.MaxAgents {
 		return fmt.Errorf("%w: %d agent(s) allowed by %s (%s)", ErrLimitReached, e.Limits.MaxAgents, e.Edition, e.Status)
+	}
+	return nil
+}
+
+// CheckEnvironments reports whether creating one more environment is
+// allowed (HR-360).
+func (e Entitlements) CheckEnvironments(current int) error {
+	if e.Limits.MaxEnvironments != Unlimited && current+1 > e.Limits.MaxEnvironments {
+		return fmt.Errorf("%w: %d environment(s) allowed by the plan", ErrLimitReached, e.Limits.MaxEnvironments)
+	}
+	return nil
+}
+
+// CheckMembers reports whether adding one more member is allowed when
+// current members and pending invitations exist (HR-360).
+func (e Entitlements) CheckMembers(current int) error {
+	if e.Limits.MaxMembers != Unlimited && current+1 > e.Limits.MaxMembers {
+		return fmt.Errorf("%w: %d member(s) allowed by the plan", ErrLimitReached, e.Limits.MaxMembers)
 	}
 	return nil
 }

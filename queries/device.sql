@@ -86,7 +86,7 @@ RETURNING *;
 SELECT *, (expires_at > now())::bool AS live FROM pc.invitations WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) FOR UPDATE;
 
 -- name: AcceptInvitation :execrows
-UPDATE pc.invitations SET state = 'ACCEPTED', accepted_at = now(), accepted_user_id = sqlc.arg(user_id)
+UPDATE pc.invitations SET state = 'ACCEPTED', accepted_at = now(), accepted_user_id = sqlc.arg(user_id), accepted_via = 'CLI'
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING' AND expires_at > now();
 
 -- name: InsertCLISession :one

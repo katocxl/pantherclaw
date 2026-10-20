@@ -16,7 +16,7 @@ import (
 )
 
 const acceptInvitation = `-- name: AcceptInvitation :execrows
-UPDATE pc.invitations SET state = 'ACCEPTED', accepted_at = now(), accepted_user_id = $1
+UPDATE pc.invitations SET state = 'ACCEPTED', accepted_at = now(), accepted_user_id = $1, accepted_via = 'CLI'
 WHERE org_id = $2 AND id = $3 AND state = 'PENDING' AND expires_at > now()
 `
 
@@ -232,7 +232,7 @@ func (q *Queries) InsertDeviceCode(ctx context.Context, arg InsertDeviceCodePara
 const insertUser = `-- name: InsertUser :one
 INSERT INTO pc.users (org_id, id, issuer, subject, email, display_name, last_login_at)
 VALUES ($1, $2, $3, $4, $5, $6, now())
-RETURNING org_id, id, issuer, subject, email, display_name, state, created_at, updated_at, last_login_at
+RETURNING org_id, id, issuer, subject, email, display_name, state, created_at, updated_at, last_login_at, account_id
 `
 
 type InsertUserParams struct {
@@ -265,29 +265,32 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (PcUser,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastLoginAt,
+		&i.AccountID,
 	)
 	return i, err
 }
 
 const lockInvitation = `-- name: LockInvitation :one
-SELECT org_id, id, kind, email, roles, token_hash, state, created_by, created_at, expires_at, accepted_at, accepted_user_id, revoked_at, (expires_at > now())::bool AS live FROM pc.invitations WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, kind, email, roles, token_hash, state, created_by, created_at, expires_at, accepted_at, accepted_user_id, revoked_at, accepted_account_id, accepted_via, (expires_at > now())::bool AS live FROM pc.invitations WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 type LockInvitationRow struct {
-	OrgID          ids.OrgID
-	ID             ids.UUID
-	Kind           string
-	Email          string
-	Roles          []string
-	TokenHash      []byte
-	State          string
-	CreatedBy      string
-	CreatedAt      time.Time
-	ExpiresAt      time.Time
-	AcceptedAt     *time.Time
-	AcceptedUserID *ids.UUID
-	RevokedAt      *time.Time
-	Live           bool
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	Kind              string
+	Email             string
+	Roles             []string
+	TokenHash         []byte
+	State             string
+	CreatedBy         string
+	CreatedAt         time.Time
+	ExpiresAt         time.Time
+	AcceptedAt        *time.Time
+	AcceptedUserID    *ids.UUID
+	RevokedAt         *time.Time
+	AcceptedAccountID *ids.UUID
+	AcceptedVia       *string
+	Live              bool
 }
 
 func (q *Queries) LockInvitation(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (LockInvitationRow, error) {
@@ -307,6 +310,8 @@ func (q *Queries) LockInvitation(ctx context.Context, orgID ids.OrgID, iD ids.UU
 		&i.AcceptedAt,
 		&i.AcceptedUserID,
 		&i.RevokedAt,
+		&i.AcceptedAccountID,
+		&i.AcceptedVia,
 		&i.Live,
 	)
 	return i, err
@@ -508,7 +513,7 @@ func (q *Queries) SessionByRefresh(ctx context.Context, orgID ids.OrgID, refresh
 }
 
 const userByIdentity = `-- name: UserByIdentity :one
-SELECT org_id, id, issuer, subject, email, display_name, state, created_at, updated_at, last_login_at FROM pc.users WHERE org_id = $1 AND issuer = $2 AND subject = $3 FOR UPDATE
+SELECT org_id, id, issuer, subject, email, display_name, state, created_at, updated_at, last_login_at, account_id FROM pc.users WHERE org_id = $1 AND issuer = $2 AND subject = $3 FOR UPDATE
 `
 
 func (q *Queries) UserByIdentity(ctx context.Context, orgID ids.OrgID, issuer string, subject string) (PcUser, error) {
@@ -525,6 +530,7 @@ func (q *Queries) UserByIdentity(ctx context.Context, orgID ids.OrgID, issuer st
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastLoginAt,
+		&i.AccountID,
 	)
 	return i, err
 }

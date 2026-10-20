@@ -1,21 +1,27 @@
 -- SPDX-License-Identifier: BUSL-1.1
 -- Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 --
--- Hosted accounts (G0 UI D8; PN-026; HR-348..353). An account is one OIDC
--- identity (issuer, subject) across organizations; it is never linked to
--- another issuer's identity by email (HR-348). The account tables are
--- global (no tenant data beyond the person's own identity) and are read
--- and written only by the server's restricted, audited account functions
--- under their own global purpose; an org user row links to its account by
--- account_id, and a trigger keeps the link to the same (issuer, subject).
--- An account's memberships are found only through the audited cross-org
--- lister (purpose account_memberships, HR-349).
+-- Hosted accounts (G0 UI D8, D41; PN-026; HR-348..353). An account is one
+-- OIDC identity (issuer, subject) across organizations; it is never linked
+-- to another issuer's identity by email (HR-348). The account tables hold
+-- no tenant data, so they have no org_id, but they hold every hosted
+-- person's identity and sessions, so their rows are visible only in an
+-- account context (app.account_id set to the row's account, by the server,
+-- for that account's own transaction) or in the restricted global
+-- transaction with the audited purpose "accounts" (app.purpose). A tenant
+-- transaction sees none of them (D41). An org user row links to its
+-- account by account_id, and a trigger keeps the link to the same
+-- (issuer, subject). An account's memberships are found only through the
+-- audited cross-org lister (purpose account_memberships, HR-349), whose
+-- audit row now records the account listed.
 --
 -- Sign-in without an org starts an account login request; its callback
 -- resolves the account and then opens an org session (one membership, or
--- the one picked) or, with self-serve sign-up on, an account session, which
--- may call only the allow-listed procedures (HR-350). Secrets are stored
--- only as SHA-256 hashes, as for org sign-ins (00030).
+-- the one picked) or an account session, which may call only the
+-- allow-listed procedures (HR-350). The sign-in state, the browser binding,
+-- the nonce and session secrets are stored only as SHA-256 hashes; the PKCE
+-- verifier is stored as is until the callback consumes it, because it must
+-- be sent to the provider's token endpoint.
 
 -- +goose Up
 CREATE TABLE pc.accounts (
@@ -37,7 +43,7 @@ CREATE TABLE pc.account_login_requests (
     id            uuid        PRIMARY KEY,
     state_hash    bytea       UNIQUE CHECK (state_hash IS NULL OR octet_length(state_hash) = 32),
     binding_hash  bytea       CHECK (binding_hash IS NULL OR octet_length(binding_hash) = 32),
-    nonce         text        CHECK (nonce IS NULL OR char_length(nonce) <= 64),
+    nonce_hash    bytea       CHECK (nonce_hash IS NULL OR octet_length(nonce_hash) = 32),
     pkce_verifier text        CHECK (pkce_verifier IS NULL OR char_length(pkce_verifier) <= 128),
     provider      text        NOT NULL CHECK (provider ~ '^[a-z0-9-]{1,32}$'),
     -- A PantherClaw path from a fixed list (HR-152): never another origin.
@@ -51,7 +57,7 @@ CREATE TABLE pc.account_login_requests (
     CHECK (expires_at <= created_at + interval '10 minutes'),
     CHECK ((state = 'PENDING') = (consumed_at IS NULL)),
     CHECK (state <> 'PENDING' OR (state_hash IS NOT NULL AND binding_hash IS NOT NULL)),
-    CHECK (state = 'PENDING' OR (state_hash IS NULL AND binding_hash IS NULL AND nonce IS NULL AND pkce_verifier IS NULL))
+    CHECK (state = 'PENDING' OR (state_hash IS NULL AND binding_hash IS NULL AND nonce_hash IS NULL AND pkce_verifier IS NULL))
 );
 
 -- One account browser session (HR-150, HR-350): no org, so no role and no
@@ -100,7 +106,7 @@ CREATE INDEX account_events_ip_kind ON pc.account_events (client_ip, kind, creat
 
 GRANT SELECT, INSERT ON pc.accounts, pc.account_login_requests, pc.account_sessions TO pc_app;
 GRANT UPDATE (email, email_verified, display_name, last_sign_in_at) ON pc.accounts TO pc_app;
-GRANT UPDATE (state_hash, binding_hash, nonce, pkce_verifier, state, consumed_at) ON pc.account_login_requests TO pc_app;
+GRANT UPDATE (state_hash, binding_hash, nonce_hash, pkce_verifier, state, consumed_at) ON pc.account_login_requests TO pc_app;
 GRANT UPDATE (secret_hash, prev_secret_hash, rotated_at, generation, state, end_reason, last_seen_at, ended_at)
     ON pc.account_sessions TO pc_app;
 GRANT DELETE ON pc.account_login_requests, pc.account_sessions TO pc_app;
@@ -110,6 +116,43 @@ GRANT SELECT (id, account_id, provider, auth_time, user_agent, client_ip, state,
     expires_at, ended_at, generation) ON pc.account_sessions TO pc_audit_ro;
 GRANT SELECT ON pc.account_events TO pc_audit_ro;
 
+-- D41: an account's own rows in its account context, every row in the
+-- audited global purpose "accounts", nothing anywhere else. Pending
+-- sign-ins belong to no account yet: only the global purpose sees them.
+ALTER TABLE pc.accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pc.accounts FORCE ROW LEVEL SECURITY;
+CREATE POLICY account_isolation ON pc.accounts
+    USING (id = (SELECT NULLIF(current_setting('app.account_id', true), '')::uuid)
+           OR (SELECT current_setting('app.purpose', true)) = 'accounts')
+    WITH CHECK (id = (SELECT NULLIF(current_setting('app.account_id', true), '')::uuid)
+                OR (SELECT current_setting('app.purpose', true)) = 'accounts');
+ALTER TABLE pc.account_login_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pc.account_login_requests FORCE ROW LEVEL SECURITY;
+CREATE POLICY account_isolation ON pc.account_login_requests
+    USING ((SELECT current_setting('app.purpose', true)) = 'accounts')
+    WITH CHECK ((SELECT current_setting('app.purpose', true)) = 'accounts');
+-- +goose StatementBegin
+DO $$
+DECLARE
+    t text;
+BEGIN
+    FOREACH t IN ARRAY ARRAY['account_sessions', 'account_events'] LOOP
+        EXECUTE format('ALTER TABLE pc.%I ENABLE ROW LEVEL SECURITY', t);
+        EXECUTE format('ALTER TABLE pc.%I FORCE ROW LEVEL SECURITY', t);
+        EXECUTE format($p$CREATE POLICY account_isolation ON pc.%I
+            USING (account_id = (SELECT NULLIF(current_setting('app.account_id', true), '')::uuid)
+                   OR (SELECT current_setting('app.purpose', true)) = 'accounts')
+            WITH CHECK (account_id = (SELECT NULLIF(current_setting('app.account_id', true), '')::uuid)
+                        OR (SELECT current_setting('app.purpose', true)) = 'accounts')$p$, t);
+    END LOOP;
+END
+$$;
+-- +goose StatementEnd
+
+-- The lister's audit row names what a parameterized purpose listed (the
+-- account of account_memberships, L1).
+ALTER TABLE pc.cross_org_list_audit ADD COLUMN subject text CHECK (subject IS NULL OR char_length(subject) <= 600);
+
 -- An org user's account: set when the account signs in to the org, joins
 -- it or creates it. No foreign key (tenant keys lead with org_id, HR-050);
 -- the trigger checks the account exists and has the user's own (issuer,
@@ -118,7 +161,7 @@ ALTER TABLE pc.users ADD COLUMN account_id uuid;
 -- The new column is NULL in every row, so the partial index is empty and
 -- built at once.
 -- squawk-ignore require-concurrent-index-creation
-CREATE INDEX users_account ON pc.users (org_id, account_id) WHERE account_id IS NOT NULL;
+CREATE INDEX users_account ON pc.users (account_id) WHERE account_id IS NOT NULL;
 
 -- +goose StatementBegin
 CREATE FUNCTION pc.user_account_link() RETURNS trigger
@@ -139,7 +182,12 @@ CREATE TRIGGER users_account_link BEFORE INSERT OR UPDATE OF account_id ON pc.us
     FOR EACH ROW EXECUTE FUNCTION pc.user_account_link();
 
 GRANT UPDATE (account_id) ON pc.users TO pc_app;
-GRANT SELECT (org_id, id, account_id, state) ON pc.users TO pc_lister;
+GRANT SELECT (org_id, id, issuer, subject, account_id, state) ON pc.users TO pc_lister;
+GRANT SELECT (id, issuer, subject) ON pc.accounts TO pc_lister;
+-- The lister finds an account's users by (issuer, subject) across orgs. pc.users
+-- holds people, a small table, so the build blocks writes only briefly.
+-- squawk-ignore require-concurrent-index-creation
+CREATE INDEX users_identity ON pc.users (issuer, subject);
 
 -- The lister below replaces the whole function, starting from 00111's.
 -- Refuse to run if the current one has purposes it does not carry (a
@@ -174,8 +222,9 @@ BEGIN
     IF p_max_rows IS NULL OR p_max_rows < 1 OR p_max_rows > 10000 THEN
         RAISE EXCEPTION 'cross_org_list: max_rows must be between 1 and 10000';
     END IF;
-    INSERT INTO pc.cross_org_list_audit (purpose, max_rows, caller)
-    VALUES (left(p_purpose, 64), p_max_rows, session_user);
+    INSERT INTO pc.cross_org_list_audit (purpose, max_rows, caller, subject)
+    VALUES (left(p_purpose, 64), p_max_rows, session_user,
+            CASE WHEN p_purpose = 'account_memberships' THEN NULLIF(current_setting('app.account_id', true), '') END);
     CASE p_purpose
         WHEN 'orgs' THEN
             RETURN QUERY SELECT o.id, o.id FROM pc.orgs o WHERE o.state = 'ACTIVE' ORDER BY o.id LIMIT p_max_rows;
@@ -280,13 +329,17 @@ BEGIN
         WHEN 'account_memberships' THEN
             -- The active memberships of one hosted account (G0 UI D8,
             -- HR-349): (org, user) pairs of the active users of active orgs
-            -- linked to the account the caller set in app.account_id for
-            -- this transaction. Without it the purpose matches nothing.
+            -- with the (issuer, subject) of the account the caller set in
+            -- app.account_id for this transaction — linked already or not,
+            -- never matched by email (HR-348). Without the setting the
+            -- purpose matches nothing.
             RETURN QUERY
                 SELECT u.org_id, u.id
-                FROM pc.users u
+                FROM pc.accounts a
+                JOIN pc.users u ON u.issuer = a.issuer AND u.subject = a.subject
                 JOIN pc.orgs o ON o.id = u.org_id
-                WHERE u.account_id = (SELECT NULLIF(current_setting('app.account_id', true), '')::uuid)
+                WHERE a.id = (SELECT NULLIF(current_setting('app.account_id', true), '')::uuid)
+                  AND (u.account_id IS NULL OR u.account_id = a.id)
                   AND u.state = 'ACTIVE' AND o.state = 'ACTIVE'
                 ORDER BY 1
                 LIMIT p_max_rows;
@@ -420,10 +473,12 @@ $$;
 -- +goose StatementEnd
 DROP TRIGGER users_account_link ON pc.users;
 DROP FUNCTION pc.user_account_link();
-REVOKE SELECT (org_id, id, account_id, state) ON pc.users FROM pc_lister;
+REVOKE SELECT (org_id, id, issuer, subject, account_id, state) ON pc.users FROM pc_lister;
+DROP INDEX pc.users_identity;
 DROP INDEX pc.users_account;
 ALTER TABLE pc.users DROP COLUMN account_id;
 DROP TABLE pc.account_events;
 DROP TABLE pc.account_sessions;
 DROP TABLE pc.account_login_requests;
 DROP TABLE pc.accounts;
+ALTER TABLE pc.cross_org_list_audit DROP COLUMN subject;

@@ -80,9 +80,14 @@ const (
 	// GlobalAnchors is the anchoring job's pc.anchors (G0 M7 design decision
 	// 12): the one global evidence table, blinded leaves and roots only.
 	GlobalAnchors GlobalPurpose = "anchors"
+	// GlobalAccounts is the hosted account tables (G0 UI D8, D41): sign-in
+	// callbacks, account creation and account sessions. Those tables'
+	// policies show their rows only in this purpose (app.purpose) or in
+	// the account's own context (app.account_id).
+	GlobalAccounts GlobalPurpose = "accounts"
 )
 
-var globalPurposes = []GlobalPurpose{GlobalLicence, GlobalJobs, GlobalCrossOrgList, GlobalHealth, GlobalAnchors}
+var globalPurposes = []GlobalPurpose{GlobalLicence, GlobalJobs, GlobalCrossOrgList, GlobalHealth, GlobalAnchors, GlobalAccounts}
 
 // TxOption customizes a transaction.
 type TxOption func(*pgx.TxOptions)
@@ -115,7 +120,7 @@ func (p *Pool) InTenantTx(ctx context.Context, org ids.OrgID, fn func(context.Co
 		return ErrNoTenant
 	}
 	return pgx.BeginTxFunc(ctx, p.pool, txOptions(opts), func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, "SELECT set_config('app.org_id', $1::text, true)", org.String()); err != nil {
+		if _, err := tx.Exec(ctx, tenantSetup, org.String()); err != nil {
 			return fmt.Errorf("db: set tenant: %w", err)
 		}
 		return fn(ctx, TenantTx{queryTx: queryTx{tx: tx}, org: org})
@@ -129,11 +134,36 @@ func (p *Pool) InGlobalTx(ctx context.Context, purpose GlobalPurpose, fn func(co
 		return fmt.Errorf("db: unregistered global purpose %q", purpose)
 	}
 	return pgx.BeginTxFunc(ctx, p.pool, txOptions(opts), func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, "SELECT set_config('app.org_id', '', true)"); err != nil {
+		if _, err := tx.Exec(ctx, globalSetup, string(purpose)); err != nil {
 			return fmt.Errorf("db: clear tenant: %w", err)
 		}
 		return fn(ctx, GlobalTx{queryTx: queryTx{tx: tx}, purpose: purpose})
 	})
+}
+
+// The first statement of every transaction. A tenant transaction never has
+// a global purpose or an account context (D41); a global one records its
+// purpose, which the hosted account tables' policies read.
+const (
+	tenantSetup = "SELECT set_config('app.org_id', $1::text, true), set_config('app.purpose', '', true), " +
+		"set_config('app.account_id', '', true)"
+	globalSetup = "SELECT set_config('app.org_id', '', true), set_config('app.purpose', $1::text, true), " +
+		"set_config('app.account_id', '', true)"
+)
+
+// ErrNoAccount reports an account context without an account.
+var ErrNoAccount = pcerr.New(pcerr.Internal, "NO_ACCOUNT", "account context missing")
+
+// SetAccountContext makes one hosted account's own rows visible for the
+// rest of tx (D41: the account context, app.account_id). The server sets it
+// only for that account's own actions, such as linking the account's user
+// in an org.
+func SetAccountContext(ctx context.Context, tx DBTX, account ids.UUID) error {
+	if account.IsZero() {
+		return ErrNoAccount
+	}
+	_, err := tx.Exec(ctx, "SELECT set_config('app.account_id', $1::text, true)", account.String())
+	return err
 }
 
 func txOptions(opts []TxOption) pgx.TxOptions {
@@ -188,7 +218,73 @@ const (
 	// ListIntegrityDue lists orgs with a checkpoint whose chain was not
 	// re-verified in the last day (HR-194).
 	ListIntegrityDue ListerPurpose = "integrity_due"
+	// ListAccountMemberships lists the (org, user) pairs of one hosted
+	// account's active memberships (G0 UI D8, HR-349). It takes the account
+	// as the ListerParams AccountID.
+	ListAccountMemberships ListerPurpose = "account_memberships"
+	// ListBillingLink finds the (org, link) of one billing ref (G0 UI D37).
+	// It takes the ref as the ListerParams Billing*.
+	ListBillingLink ListerPurpose = "billing_link_lookup"
 )
+
+// ListerParams are the inputs of the parameterized lister purposes, set
+// for the lister's transaction only and recorded in its audit row.
+type ListerParams struct {
+	AccountID                               ids.UUID
+	BillingProvider, BillingKind, BillingRef string
+}
+
+func (lp ListerParams) settings() [][2]string {
+	var out [][2]string
+	if !lp.AccountID.IsZero() {
+		out = append(out, [2]string{"app.account_id", lp.AccountID.String()})
+	}
+	if lp.BillingProvider != "" || lp.BillingKind != "" || lp.BillingRef != "" {
+		out = append(out, [2]string{"app.billing_provider", lp.BillingProvider},
+			[2]string{"app.billing_kind", lp.BillingKind}, [2]string{"app.billing_ref", lp.BillingRef})
+	}
+	return out
+}
+
+// CrossOrgListWith calls the audited cross-org lister for a parameterized
+// purpose in its own global transaction.
+func (p *Pool) CrossOrgListWith(ctx context.Context, purpose ListerPurpose, maxRows int, lp ListerParams) ([]OrgRef, error) {
+	var out []OrgRef
+	err := p.InGlobalTx(ctx, GlobalCrossOrgList, func(ctx context.Context, tx GlobalTx) error {
+		var err error
+		out, err = CrossOrgListIn(ctx, tx, purpose, maxRows, lp)
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("db: cross-org list %q: %w", purpose, err)
+	}
+	return out, nil
+}
+
+// CrossOrgListIn calls the audited cross-org lister inside tx, for a writer
+// that must check a cross-org uniqueness in the same transaction as its
+// insert (G0 UI D37). The parameters stay set for the rest of tx.
+func CrossOrgListIn(ctx context.Context, tx DBTX, purpose ListerPurpose, maxRows int, lp ListerParams) ([]OrgRef, error) {
+	for _, s := range lp.settings() {
+		if _, err := tx.Exec(ctx, "SELECT set_config($1::text, $2::text, true)", s[0], s[1]); err != nil {
+			return nil, err
+		}
+	}
+	rows, err := tx.Query(ctx, "SELECT org_id, id FROM pc.cross_org_list($1, $2)", string(purpose), maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []OrgRef
+	for rows.Next() {
+		var ref OrgRef
+		if err := rows.Scan(&ref.Org, &ref.ID); err != nil {
+			return nil, err
+		}
+		out = append(out, ref)
+	}
+	return out, rows.Err()
+}
 
 // CrossOrgList calls the single audited cross-org lister (HR-053, HR-054).
 // Callers must then process each org in its own InTenantTx.

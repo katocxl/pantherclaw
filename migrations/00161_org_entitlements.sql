@@ -15,13 +15,28 @@
 -- from, so a replayed event changes nothing.
 
 -- +goose Up
+-- A plan's limits: an object of at most the five known keys, each a whole
+-- number from 0 (unlimited) to 10^9 (L3).
+-- +goose StatementBegin
+CREATE FUNCTION pc.valid_plan_limits(l jsonb) RETURNS boolean
+    LANGUAGE sql IMMUTABLE STRICT AS $$
+    SELECT jsonb_typeof(l) = 'object'
+       AND l - ARRAY['max_agents', 'max_environments', 'retention_days', 'instance_allowance', 'max_members'] = '{}'::jsonb
+       AND NOT EXISTS (SELECT 1 FROM jsonb_each(l) e
+                       WHERE jsonb_typeof(e.value) <> 'number'
+                          OR (e.value #>> '{}')::numeric < 0
+                          OR (e.value #>> '{}')::numeric > 1000000000
+                          OR (e.value #>> '{}')::numeric <> trunc((e.value #>> '{}')::numeric))
+$$;
+-- +goose StatementEnd
+
 CREATE TABLE pc.org_entitlements (
     org_id        uuid        PRIMARY KEY REFERENCES pc.orgs (id),
     plan_id       text        NOT NULL DEFAULT '' CHECK (plan_id ~ '^([a-z0-9][a-z0-9_-]{0,63})?$'),
     edition       text        NOT NULL CHECK (edition IN ('community', 'team', 'business', 'enterprise', 'development')),
     -- {max_agents, max_environments, retention_days, instance_allowance,
     -- max_members}: non-negative integers, 0 = unlimited.
-    limits        jsonb       NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(limits) = 'object' AND octet_length(limits::text) <= 1024),
+    limits        jsonb       NOT NULL DEFAULT '{}' CHECK (pc.valid_plan_limits(limits)),
     features      text[]      NOT NULL DEFAULT '{}' CHECK (cardinality(features) <= 128 AND array_position(features, NULL) IS NULL),
     status        text        NOT NULL CHECK (status IN ('NONE', 'TRIALING', 'ACTIVE', 'PAST_DUE', 'PAUSED', 'CANCELED',
                                                          'LAPSED', 'COMP', 'DEV')),
@@ -38,12 +53,15 @@ CREATE TABLE pc.org_entitlements (
     created_at    timestamptz NOT NULL DEFAULT now(),
     updated_at    timestamptz NOT NULL DEFAULT now(),
     -- COMP and DEV come only from their own writers (HR-361).
-    CHECK ((status = 'COMP') = (source = 'COMP')),
+    CHECK (status <> 'COMP' OR source = 'COMP'),
+    -- A revoked or expired comp plan stays COMP-sourced and LAPSED until a
+    -- billing event replaces it.
+    CHECK (source <> 'COMP' OR status IN ('COMP', 'LAPSED')),
     CHECK ((status = 'DEV') = (source = 'DEV')),
     CHECK (source <> 'LICENCE'),
     -- A comp plan has an expiry within a year of its grant and a reason (HR-358).
     CHECK ((source = 'COMP') = (comp_until IS NOT NULL AND comp_reason IS NOT NULL AND comp_by IS NOT NULL AND comp_at IS NOT NULL)),
-    CHECK (comp_until IS NULL OR comp_until <= comp_at + interval '1 year'),
+    CHECK (comp_until IS NULL OR (comp_until > comp_at AND comp_until <= comp_at + interval '1 year')),
     CHECK (source <> 'BILLING' OR last_event_at IS NOT NULL)
 );
 
@@ -51,8 +69,9 @@ CREATE TABLE pc.entitlement_events (
     org_id      uuid        NOT NULL REFERENCES pc.orgs (id),
     event_id    text        NOT NULL CHECK (char_length(event_id) BETWEEN 1 AND 128),
     -- What the event did to the plan: APPLIED, or IGNORED as older than
-    -- the plan's newest event.
-    kind        text        NOT NULL CHECK (kind IN ('APPLIED', 'IGNORED_STALE')),
+    -- the plan's newest event, or IGNORED_COMP while a complimentary plan
+    -- is in force (the comp plan is never replaced by a billing event).
+    kind        text        NOT NULL CHECK (kind IN ('APPLIED', 'IGNORED_STALE', 'IGNORED_COMP')),
     status      text        NOT NULL CHECK (status IN ('NONE', 'TRIALING', 'ACTIVE', 'PAST_DUE', 'PAUSED', 'CANCELED', 'LAPSED')),
     event_at    timestamptz NOT NULL,
     received_at timestamptz NOT NULL DEFAULT now(),
@@ -83,3 +102,4 @@ GRANT SELECT ON pc.org_entitlements, pc.entitlement_events TO pc_audit_ro;
 -- +goose Down
 DROP TABLE pc.entitlement_events;
 DROP TABLE pc.org_entitlements;
+DROP FUNCTION pc.valid_plan_limits(jsonb);

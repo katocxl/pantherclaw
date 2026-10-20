@@ -53,6 +53,64 @@ type PcA2aPin struct {
 	ObservedDigest      []byte
 }
 
+type PcAccount struct {
+	ID            ids.UUID
+	Issuer        string
+	Subject       string
+	Email         string
+	EmailVerified bool
+	DisplayName   string
+	CreatedAt     time.Time
+	LastSignInAt  *time.Time
+}
+
+type PcAccountEvent struct {
+	ID        int64
+	AccountID ids.UUID
+	Kind      string
+	OrgID     ids.OrgID
+	ClientIp  string
+	Detail    string
+	CreatedAt time.Time
+}
+
+type PcAccountLoginRequest struct {
+	ID                  ids.UUID
+	StateHash           []byte
+	BindingHash         []byte
+	NonceHash           []byte
+	PkceVerifier        *string
+	Provider            string
+	NextPath            string
+	MaxAge              *int32
+	RequestedIp         string
+	State               string
+	CreatedAt           time.Time
+	ExpiresAt           time.Time
+	ConsumedAt          *time.Time
+	InvitationOrgID     *ids.UUID
+	InvitationTokenHash []byte
+}
+
+type PcAccountSession struct {
+	ID             ids.UUID
+	AccountID      ids.UUID
+	SecretHash     []byte
+	PrevSecretHash []byte
+	RotatedAt      *time.Time
+	Generation     int32
+	Provider       string
+	AuthTime       *time.Time
+	UserAgent      string
+	ClientIp       string
+	State          string
+	EndReason      *string
+	CreatedAt      time.Time
+	LastSeenAt     time.Time
+	ExpiresAt      time.Time
+	EndedAt        *time.Time
+}
+
 type PcActionDefinition struct {
 	OrgID     ids.OrgID
 	ID        ids.UUID
@@ -703,6 +761,20 @@ type PcAutomationVersion struct {
 	ChangeRequestID *ids.UUID
 }
 
+type PcBillingLink struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	Provider    string
+	Kind        string
+	Ref         string
+	CustomerRef string
+	State       string
+	CheckoutID  *ids.UUID
+	ExpiresAt   *time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 type PcBrokerKey struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID
@@ -1254,6 +1326,7 @@ type PcCrossOrgListAudit struct {
 	MaxRows  int32
 	Caller   string
 	CalledAt time.Time
+	Subject  *string
 }
 
 type PcCustomDetectionRule struct {
@@ -1522,6 +1595,15 @@ type PcEnrollmentToken struct {
 	ExpiresAt     time.Time
 	UsedAt        *time.Time
 	RevokedAt     *time.Time
+}
+
+type PcEntitlementEvent struct {
+	OrgID      ids.OrgID
+	EventID    string
+	Kind       string
+	Status     string
+	EventAt    time.Time
+	ReceivedAt time.Time
 }
 
 type PcEnvelope struct {
@@ -1955,19 +2037,21 @@ type PcIncidentEvent struct {
 }
 
 type PcInvitation struct {
-	OrgID          ids.OrgID
-	ID             ids.UUID
-	Kind           string
-	Email          string
-	Roles          []string
-	TokenHash      []byte
-	State          string
-	CreatedBy      string
-	CreatedAt      time.Time
-	ExpiresAt      time.Time
-	AcceptedAt     *time.Time
-	AcceptedUserID *ids.UUID
-	RevokedAt      *time.Time
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	Kind              string
+	Email             string
+	Roles             []string
+	TokenHash         []byte
+	State             string
+	CreatedBy         string
+	CreatedAt         time.Time
+	ExpiresAt         time.Time
+	AcceptedAt        *time.Time
+	AcceptedUserID    *ids.UUID
+	RevokedAt         *time.Time
+	AcceptedAccountID *ids.UUID
+	AcceptedVia       *string
 }
 
 type PcKey struct {
@@ -2179,11 +2263,13 @@ type PcOperationalFailure struct {
 }
 
 type PcOrg struct {
-	ID        ids.OrgID
-	Name      string
-	State     string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID               ids.OrgID
+	Name             string
+	State            string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	Slug             *string
+	CreatedByAccount *ids.UUID
 }
 
 type PcOrgContainment struct {
@@ -2194,6 +2280,36 @@ type PcOrgContainment struct {
 	EngagedBy    *string
 	EngagedAt    *time.Time
 	EngageReason *string
+}
+
+type PcOrgEntitlement struct {
+	OrgID       ids.OrgID
+	PlanID      string
+	Edition     string
+	Limits      []byte
+	Features    []string
+	Status      string
+	Source      string
+	PeriodEnd   *time.Time
+	CompUntil   *time.Time
+	CompReason  *string
+	CompBy      *string
+	CompAt      *time.Time
+	Version     int64
+	LastEventAt *time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type PcOrgTermsAcceptance struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	AccountID    ids.UUID
+	UserID       ids.UUID
+	TermsVersion string
+	DpaVersion   string
+	ClientIp     string
+	AcceptedAt   time.Time
 }
 
 type PcPackagePin struct {
@@ -3228,6 +3344,7 @@ type PcUser struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	LastLoginAt *time.Time
+	AccountID   *ids.UUID
 }
 
 type PcVerification struct {

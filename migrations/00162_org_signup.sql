@@ -33,6 +33,22 @@ CREATE TABLE pc.org_terms_acceptances (
 );
 CREATE INDEX org_terms_acceptances_user ON pc.org_terms_acceptances (org_id, user_id);
 
+-- The accepting account is the accepting user's own account (L2).
+-- +goose StatementBegin
+CREATE FUNCTION pc.terms_acceptance_account() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pc.users u
+                   WHERE u.org_id = NEW.org_id AND u.id = NEW.user_id AND u.account_id = NEW.account_id) THEN
+        RAISE EXCEPTION 'terms are accepted only by the user''s own account' USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER org_terms_acceptances_account BEFORE INSERT ON pc.org_terms_acceptances
+    FOR EACH ROW EXECUTE FUNCTION pc.terms_acceptance_account();
+
 ALTER TABLE pc.org_terms_acceptances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pc.org_terms_acceptances FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON pc.org_terms_acceptances
@@ -44,4 +60,5 @@ GRANT SELECT ON pc.org_terms_acceptances TO pc_audit_ro;
 
 -- +goose Down
 DROP TABLE pc.org_terms_acceptances;
+DROP FUNCTION pc.terms_acceptance_account();
 ALTER TABLE pc.orgs DROP COLUMN created_by_account, DROP COLUMN slug;
