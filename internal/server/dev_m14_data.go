@@ -83,7 +83,8 @@ func devPostgresTables() []capp.PostgresTable {
 			col("id", "bigint", "public"), col("customer_id", "bigint", "public"), col("amount", "numeric", "internal"),
 			col("status", "text", "public"),
 		}},
-		{Schema: "support", Name: "tickets", ScopeKey: "customer", ScopeColumn: "customer_id", Columns: []capp.PostgresColumn{
+		// No scope key: a record-scoped read of it is refused (RT-043).
+		{Schema: "support", Name: "tickets", Columns: []capp.PostgresColumn{
 			col("id", "bigint", "public"), col("customer_id", "bigint", "public"), col("subject", "text", "internal"),
 		}},
 	}
@@ -106,8 +107,16 @@ func seedPostgresConnection(ctx context.Context, cfg *Config, pool *db.Pool, org
 	if pc.Internal {
 		class = capp.ClassInternal
 	}
+	hosted, err := cfg.pantherClawHosted()
+	if err != nil {
+		return err
+	}
+	set := map[ids.UUID]bool{}
+	for _, g := range hosted {
+		set[g] = true
+	}
 	kinds := &ports.KindConfigs{}
-	kinds.Register(capp.KindPostgres, pgmanifest.Store{})
+	kinds.Register(capp.KindPostgres, pgmanifest.Store{Hosted: func(g ids.UUID) bool { return set[g] }})
 	c, err := capp.New(pool, nil, cfg.Auth.PublicURL, cfg.GatewayAPI.URL).WithKindConfigs(kinds).Seed(ctx, org, "dev-seed", capp.CreateInput{
 		Name: devPostgresConnectionName, Kind: capp.KindPostgres, Package: pcpostgres.Name, Gateway: gateway,
 		DestinationClass: class, AccessMode: capp.AccessHeld, DefaultMode: "enforce", Postgres: &pc,

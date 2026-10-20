@@ -31,7 +31,7 @@ func classesOnly(values ...string) []*pb.Obligation {
 // may not read withheld, on the HTTP face and the MCP face alike; without
 // one, the answer passes unchanged.
 func TestHR311_JSONAnswerRedactedThroughTheGateway(t *testing.T) {
-	h := setup(t, func(h *harness) { h.mutatePkg = scopedRefundRead })
+	h := setup(t, withCredential(t, []string{"127.0.0.1"}), func(h *harness) { h.mutatePkg = scopedRefundRead })
 	r := h.do(t, http.MethodGet, "/payments/v1/refunds/re_1", "", nil)
 	if r.code != http.StatusOK || !strings.Contains(r.body, `"status":"succeeded"`) {
 		t.Fatalf("unscoped: %d %s", r.code, r.body)
@@ -43,6 +43,10 @@ func TestHR311_JSONAnswerRedactedThroughTheGateway(t *testing.T) {
 	if r.code != http.StatusOK || !strings.Contains(r.body, `"status":"[redacted:pii]"`) || strings.Contains(r.body, "succeeded") ||
 		!strings.Contains(r.body, `"id":"re_1"`) {
 		t.Fatalf("scoped http: %d %s", r.code, r.body)
+	}
+	recs := h.auth.snap().records
+	if ds := recs[len(recs)-1].GetDataScope(); ds.GetRows() != 1 || ds.GetValuesRedacted() != 1 {
+		t.Fatalf("data scope on the record: %v", ds)
 	}
 	m := h.mcpCall(t, http.MethodPost, mcpPath, jsonRPC("tools/call", `"name":"get_refund","arguments":{"refund":"re_1"}`), nil)
 	if m.body.Result.IsError || !strings.Contains(string(m.body.Result.StructuredContent), `"status":"[redacted:pii]"`) {
@@ -65,7 +69,7 @@ func TestT144_UnreadableAnswerIsWithheld(t *testing.T) {
 		_, _ = io.WriteString(w, "<html>Ada Lovelace, ada@example.com</html>")
 	}))
 	t.Cleanup(ts.Close)
-	h := setup(t, func(h *harness) { h.mutatePkg, h.targetURL = scopedRefundRead, ts.URL })
+	h := setup(t, withCredential(t, []string{"127.0.0.1"}), func(h *harness) { h.mutatePkg, h.targetURL = scopedRefundRead, ts.URL })
 	h.auth.mu.Lock()
 	h.auth.obligations = classesOnly("public")
 	h.auth.mu.Unlock()

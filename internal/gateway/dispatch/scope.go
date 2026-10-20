@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
 	"log/slog"
 	"slices"
 
@@ -64,6 +65,8 @@ func scopeObligation(o *pb.Obligation) bool {
 type dataScope struct {
 	records *pgdispatch.RecordScope
 	classes []pgdispatch.Class
+	// applied is what scopeHTTP did to the answer, for the receipt (D102).
+	applied *pb.DataScopeApplied
 }
 
 type scopeKey struct{}
@@ -110,6 +113,11 @@ func withScope(ctx context.Context, conn *control.Connection, def *defs.Definiti
 	if len(seen) == 0 {
 		return ctx, ""
 	}
+	// Only these routes pass the answer through the scope engine: any other
+	// kind or access mode fails closed (D102, D116).
+	if (conn.GetKind() != "http" && conn.GetKind() != "postgres") || conn.GetAccessMode() != "pantherclaw_held" {
+		return ctx, CodeScopeUnsupported
+	}
 	return context.WithValue(ctx, scopeKey{}, &s), ""
 }
 
@@ -136,33 +144,58 @@ func (e *Engine) scopeHTTP(ctx context.Context, conn *control.Connection, def *d
 	if s == nil || s.classes == nil || len(res.Body) == 0 {
 		return class, code
 	}
-	body, redacted, ok := scopeJSON(res.Body, res.Truncated, def.Response, s)
+	body, redacted, items, ok := scopeJSON(res.Body, res.Truncated, def.Response, s)
 	if !ok {
 		e.log.WarnContext(ctx, "gateway.scope_unenforceable", slog.String("connection_id", conn.GetId()), slog.String("operation", def.Operation))
 		res.Body, res.ContentType, res.Truncated = nil, "", false
 		return EnforcementFailed, CodeScopeUnenforceable
 	}
 	res.Body = body
-	e.log.InfoContext(ctx, "gateway.scope_applied", slog.String("connection_id", conn.GetId()), slog.String("operation", def.Operation),
-		slog.Int("values_redacted", redacted))
+	s.applied = &pb.DataScopeApplied{Rows: int32(min(items, 1_000_000)), ValuesRedacted: int32(min(redacted, 100_000_000))} //nolint:gosec // G115: clamped
 	return class, code
 }
+
+// appliedScope is what the scope engine did to a dispatch's answer, nil
+// when it did nothing.
+func appliedScope(ctx context.Context) *pb.DataScopeApplied {
+	if s := scopeOf(ctx); s != nil {
+		return s.applied
+	}
+	return nil
+}
+
+// Bounds of an answer the scope engine reads (D116): a deeper or larger
+// one is withheld.
+const (
+	maxScopedDepth  = 32
+	maxScopedAnswer = 4 << 20
+)
+
+var errTooDeep = errors.New("dispatch: the answer is nested too deeply to scope")
 
 // scopeJSON redacts every value of a JSON answer whose class the scope
 // does not allow: the class of a value is the strictest declared field
 // covering its path (D73), and a value covered by a disallowed class is
-// replaced whole, subtree included. ok is false for an answer that is not
-// one JSON value or was cut at the size cap.
-func scopeJSON(body []byte, truncated bool, spec *defs.ResponseSpec, s *dataScope) ([]byte, int, bool) {
-	if truncated {
-		return nil, 0, false
+// replaced whole, subtree included. It returns the answer, how many values
+// it redacted, and its items: a root array's length, else 1. ok is false
+// for an answer that is not one JSON value or was cut at the size cap.
+func scopeJSON(body []byte, truncated bool, spec *defs.ResponseSpec, s *dataScope) (scoped []byte, redacted, items int, ok bool) {
+	if truncated || len(body) > maxScopedAnswer {
+		return nil, 0, 0, false
 	}
 	n := 0
+	items = 1
 	// Scalars keep their exact bytes (a large integer stays exact); objects
 	// and arrays are rebuilt, duplicate members refused as ambiguous.
 	var walk func(v jsontext.Value, path []string) (jsontext.Value, error)
 	walk = func(v jsontext.Value, path []string) (jsontext.Value, error) {
-		if c := spec.ClassOf(path); !s.readable(c) && (len(path) > 0 || c != "public") {
+		if len(path) > maxScopedDepth {
+			return nil, errTooDeep
+		}
+		// An undeclared root object or array is a container, not a value of
+		// its own; a root scalar is checked like any value (D116).
+		container := v.Kind() == jsontext.KindBeginObject || v.Kind() == jsontext.KindBeginArray
+		if c := spec.ClassOf(path); !s.readable(c) && (len(path) > 0 || c != "public" || !container) {
 			n++
 			return json.Marshal(pgdispatch.Redacted(pgdispatch.Class(c)))
 		}
@@ -185,6 +218,9 @@ func scopeJSON(body []byte, truncated bool, spec *defs.ResponseSpec, s *dataScop
 			if err := json.Unmarshal(v, &a); err != nil {
 				return nil, err
 			}
+			if len(path) == 0 {
+				items = len(a)
+			}
 			for i, val := range a {
 				w, err := walk(val, append(slices.Clone(path), "*"))
 				if err != nil {
@@ -201,11 +237,11 @@ func scopeJSON(body []byte, truncated bool, spec *defs.ResponseSpec, s *dataScop
 	}
 	v := jsontext.Value(body)
 	if !v.IsValid() {
-		return nil, 0, false
+		return nil, 0, 0, false
 	}
 	out, err := walk(v.Clone(), nil)
 	if err != nil {
-		return nil, 0, false
+		return nil, 0, 0, false
 	}
-	return out, n, true
+	return out, n, items, true
 }

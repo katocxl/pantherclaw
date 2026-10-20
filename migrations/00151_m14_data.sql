@@ -66,6 +66,17 @@ ALTER TABLE pc.credentials
 ALTER TABLE pc.credentials VALIDATE CONSTRAINT credentials_placement;
 
 -- +goose Down
+-- A header-less credential (a postgres password) has no place under the old
+-- CHECKs: the rollback refuses while any exists, and never deletes one.
+-- +goose StatementBegin
+DO $$
+BEGIN
+    IF EXISTS (SELECT FROM pc.credentials WHERE header = '') THEN
+        RAISE EXCEPTION '00151 down: header-less postgres credentials exist; revoke and delete them first';
+    END IF;
+END
+$$;
+-- +goose StatementEnd
 ALTER TABLE pc.credentials
     DROP CONSTRAINT credentials_placement,
     ADD CONSTRAINT credentials_allowed_hosts_check CHECK (cardinality(allowed_hosts) BETWEEN 1 AND 16) NOT VALID,

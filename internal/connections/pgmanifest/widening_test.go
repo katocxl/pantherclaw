@@ -52,20 +52,21 @@ func TestWidening(t *testing.T) {
 		"new column": func(c *capp.PostgresConfig) {
 			c.Tables[0].Columns = append(c.Tables[0].Columns, capp.PostgresColumn{Name: "tier", Type: "text", Class: "public"})
 		},
-		"class lowered":     func(c *capp.PostgresConfig) { c.Tables[0].Columns[1].Class = "public" },
-		"secret to pii":     func(c *capp.PostgresConfig) { c.Tables[0].Columns[2].Class = "pii" },
-		"type changed":      func(c *capp.PostgresConfig) { c.Tables[0].Columns[0].Type = "text" },
-		"rows raised":       func(c *capp.PostgresConfig) { c.MaxRows = 1000 },
-		"timeout raised":    func(c *capp.PostgresConfig) { c.StatementTimeoutMs = 30000 },
-		"bytes raised":      func(c *capp.PostgresConfig) { c.MaxResultBytes = 4 << 20 },
-		"min group lowered": func(c *capp.PostgresConfig) { c.MinGroupSize = 2 },
-		"table rows up":     func(c *capp.PostgresConfig) { c.Tables[0].MaxRows = 0 },
-		"scope removed":     func(c *capp.PostgresConfig) { c.Tables[0].ScopeKey, c.Tables[0].ScopeColumn = "", "" },
-		"internal on":       func(c *capp.PostgresConfig) { c.Internal = true },
-		"another host":      func(c *capp.PostgresConfig) { c.Host = "other.example.test" },
-		"another role":      func(c *capp.PostgresConfig) { c.User = "admin" },
-		"weaker TLS":        func(c *capp.PostgresConfig) { c.SSLMode = capp.SSLRequire },
-		"another CA":        func(c *capp.PostgresConfig) { c.CAPEM = "pem" },
+		"class lowered":      func(c *capp.PostgresConfig) { c.Tables[0].Columns[1].Class = "public" },
+		"secret to pii":      func(c *capp.PostgresConfig) { c.Tables[0].Columns[2].Class = "pii" },
+		"type changed":       func(c *capp.PostgresConfig) { c.Tables[0].Columns[0].Type = "text" },
+		"rows raised":        func(c *capp.PostgresConfig) { c.MaxRows = 1000 },
+		"timeout raised":     func(c *capp.PostgresConfig) { c.StatementTimeoutMs = 30000 },
+		"bytes raised":       func(c *capp.PostgresConfig) { c.MaxResultBytes = 4 << 20 },
+		"min group lowered":  func(c *capp.PostgresConfig) { c.MinGroupSize = 2 },
+		"table rows up":      func(c *capp.PostgresConfig) { c.Tables[0].MaxRows = 0 },
+		"scope removed":      func(c *capp.PostgresConfig) { c.Tables[0].ScopeKey, c.Tables[0].ScopeColumn = "", "" },
+		"scope column moved": func(c *capp.PostgresConfig) { c.Tables[0].ScopeColumn = "email" },
+		"internal on":        func(c *capp.PostgresConfig) { c.Internal = true },
+		"another host":       func(c *capp.PostgresConfig) { c.Host = "other.example.test" },
+		"another role":       func(c *capp.PostgresConfig) { c.User = "admin" },
+		"weaker TLS":         func(c *capp.PostgresConfig) { c.SSLMode = capp.SSLRequire },
+		"another CA":         func(c *capp.PostgresConfig) { c.CAPEM = "pem" },
 	} {
 		next := base()
 		mut(&next)
@@ -102,5 +103,16 @@ func TestWidening_EveryFieldHasARule(t *testing.T) {
 		if !found {
 			t.Errorf("rule for %s names no field", name)
 		}
+	}
+}
+
+// TestWidening_AddedScopeWidens (D116): mapping a record scope onto a
+// table that had none decides which rows a scoped read returns, so it
+// needs the confirmation too.
+func TestWidening_AddedScopeWidens(t *testing.T) {
+	cur, next := base(), base()
+	cur.Tables[0].ScopeKey, cur.Tables[0].ScopeColumn = "", ""
+	if w := Widening(cur, next); len(w) == 0 {
+		t.Fatal("an added record scope applied at once")
 	}
 }

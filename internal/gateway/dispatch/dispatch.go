@@ -814,6 +814,7 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 	revoke()
 	return e.record(ctx, r, want, outcome, res.Status, digest, elapsed, class, code, t, func(req *pb.RecordExecutionRequest) {
 		req.TargetRef, req.Captures, req.CredentialAccess = ref, caps, access()
+		req.DataScope = appliedScope(ctx) // D102
 	})
 }
 

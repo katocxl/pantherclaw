@@ -25,6 +25,10 @@ import (
 	pcpostgres "github.com/katocxl/pantherclaw/packages/pc-postgres"
 )
 
+// noneHosted is a server whose configuration names no PantherClaw-hosted
+// gateway: a nil Hosted would refuse internal everywhere (D121).
+func noneHosted(ids.UUID) bool { return false }
+
 func config() capp.PostgresConfig {
 	return capp.PostgresConfig{
 		Host: "db.example.test", Database: "shop", User: "reader", SSLMode: capp.SSLVerifyFull,
@@ -51,9 +55,10 @@ func TestIntPostgresManifestConfirmation(t *testing.T) {
 	f.Exec(t, "INSERT INTO pc.package_pins (org_id, package_id, version_id, version, digest) VALUES ($1, $2, $3, $4, $5)",
 		f.Org, pkg, ver, pcpostgres.Version, manifest.FileDigest(raw))
 	kinds := &ports.KindConfigs{}
-	kinds.Register(capp.KindPostgres, pgmanifest.Store{})
+	kinds.Register(capp.KindPostgres, pgmanifest.Store{Hosted: noneHosted})
 	conns := capp.New(f.Pool, nil, "https://pantherclaw.example.test", "https://gw.example.test").WithKindConfigs(kinds)
 	svc := pgmanifest.New(f.Pool)
+	svc.Hosted = noneHosted
 	admin := f.As(td.KindUser, td.RoleGatewayAdmin)
 	fresh := func() *stepup.StepUp { return &stepup.StepUp{Credential: f.Cred, At: time.Now()} }
 
@@ -202,15 +207,119 @@ func TestIntPostgresInternalOnlyOnCustomerHostedGateways(t *testing.T) {
 	if err != nil {
 		t.Fatalf("internal on a customer-hosted gateway: %v", err)
 	}
+	// An internal connection cannot move to a gateway PantherClaw hosts (D105).
+	if _, err := conns.Update(admin, capp.UpdateInput{ID: owned.ID, Revision: owned.Revision, Gateway: &hosted}); !errors.Is(err, pgmanifest.ErrInternalHosted) {
+		t.Fatalf("an internal connection moved to a hosted gateway: %v", err)
+	}
+	if _, err := conns.Update(admin, capp.UpdateInput{ID: c.ID, Revision: c.Revision, Gateway: &own}); err != nil {
+		t.Fatalf("a public connection moving gateway: %v", err)
+	}
 	// The confirm page checks the gateway serving it now (D105): here the
 	// gateway became one PantherClaw hosts after the proposal.
 	svc := pgmanifest.New(f.Pool)
-	svc.Hosted = func(g ids.UUID) bool { return g == own }
 	m, err := svc.Get(admin, owned.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Without Hosted the page fails closed (D121).
+	if err := svc.Confirm(admin, owned.ID, m.Digest, &stepup.StepUp{Credential: f.Cred, At: time.Now()}); !errors.Is(err, pgmanifest.ErrInternalHosted) {
+		t.Fatalf("confirm without Hosted: %v", err)
+	}
+	svc.Hosted = func(g ids.UUID) bool { return g == own }
 	if err := svc.Confirm(admin, owned.ID, m.Digest, &stepup.StepUp{Credential: f.Cred, At: time.Now()}); !errors.Is(err, pgmanifest.ErrInternalHosted) {
 		t.Fatalf("confirm on a now hosted gateway: %v", err)
+	}
+
+	// A store without Hosted fails closed (D121): internal is refused on a
+	// customer-hosted gateway too, at creation and on a move; a public
+	// configuration is unaffected.
+	other := ids.NewV7()
+	f.Exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'other', 'test')", f.Org, other)
+	nilKinds := &ports.KindConfigs{}
+	nilKinds.Register(capp.KindPostgres, pgmanifest.Store{})
+	nilConns := capp.New(f.Pool, nil, "https://pantherclaw.example.test", "https://gw.example.test").WithKindConfigs(nilKinds)
+	if _, err := nilConns.Create(admin, in("nil-internal", own, true)); !errors.Is(err, pgmanifest.ErrInternalHosted) {
+		t.Fatalf("internal without Hosted: %v", err)
+	}
+	if _, err := nilConns.Create(admin, in("nil-public", own, false)); err != nil {
+		t.Fatalf("public without Hosted: %v", err)
+	}
+	if _, err := nilConns.Update(admin, capp.UpdateInput{ID: owned.ID, Revision: owned.Revision, Gateway: &other}); !errors.Is(err, pgmanifest.ErrInternalHosted) {
+		t.Fatalf("an internal connection moved without Hosted: %v", err)
+	}
+}
+
+// TestIntPostgresGatewayMove (D105, D115, D116): a move to a gateway
+// PantherClaw hosts is refused for a connection whose serving or pending
+// proposed configuration is internal, and when the same update moves it
+// and makes it internal; a public one moves.
+func TestIntPostgresGatewayMove(t *testing.T) {
+	f := triggerstest.New(t)
+	hosted, own, pkg, ver := ids.NewV7(), ids.NewV7(), ids.NewV7(), ids.NewV7()
+	raw := pcpostgres.Package
+	f.Exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'hosted', 'test')", f.Org, hosted)
+	f.Exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'own', 'test')", f.Org, own)
+	f.Exec(t, "INSERT INTO pc.tool_packages (org_id, id, name) VALUES ($1, $2, $3)", f.Org, pkg, pcpostgres.Name)
+	f.Exec(t, `INSERT INTO pc.package_versions (org_id, id, package_id, version, file_digest, raw, state) VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE')`,
+		f.Org, ver, pkg, pcpostgres.Version, manifest.FileDigest(raw), raw)
+	f.Exec(t, "INSERT INTO pc.package_pins (org_id, package_id, version_id, version, digest) VALUES ($1, $2, $3, $4, $5)",
+		f.Org, pkg, ver, pcpostgres.Version, manifest.FileDigest(raw))
+	isHosted := func(g ids.UUID) bool { return g == hosted }
+	kinds := &ports.KindConfigs{}
+	kinds.Register(capp.KindPostgres, pgmanifest.Store{Hosted: isHosted})
+	conns := capp.New(f.Pool, nil, "https://pantherclaw.example.test", "https://gw.example.test").WithKindConfigs(kinds)
+	svc := pgmanifest.New(f.Pool)
+	svc.Hosted = isHosted
+	admin := f.As(td.KindUser, td.RoleGatewayAdmin)
+	confirmed := func(name string) capp.Connection {
+		t.Helper()
+		cfg := config()
+		c, err := conns.Create(admin, capp.CreateInput{
+			Name: name, Kind: capp.KindPostgres, Package: pcpostgres.Name, Gateway: own, DestinationClass: capp.ClassInternal,
+			AccessMode: capp.AccessHeld, DefaultMode: "enforce", Postgres: &cfg,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		m, err := svc.Get(admin, c.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := svc.Confirm(admin, c.ID, m.Digest, &stepup.StepUp{Credential: f.Cred, At: time.Now()}); err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	internal := config()
+	internal.Internal = true
+
+	// A pending internal proposal keeps the connection off hosted gateways.
+	pending := confirmed("pending")
+	u, err := conns.Update(admin, capp.UpdateInput{ID: pending.ID, Revision: pending.Revision, Postgres: &internal})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conns.Update(admin, capp.UpdateInput{ID: pending.ID, Revision: u.Revision, Gateway: &hosted}); !errors.Is(err, pgmanifest.ErrInternalHosted) {
+		t.Fatalf("move with a pending internal proposal: %v", err)
+	}
+	// Moving and turning internal on in one update is checked against the
+	// new gateway.
+	both := confirmed("both")
+	if _, err := conns.Update(admin, capp.UpdateInput{ID: both.ID, Revision: both.Revision, Gateway: &hosted, Postgres: &internal}); !errors.Is(err, pgmanifest.ErrInternalHosted) {
+		t.Fatalf("move and internal in one update: %v", err)
+	}
+	// A public connection moves.
+	public := confirmed("public")
+	if _, err := conns.Update(admin, capp.UpdateInput{ID: public.ID, Revision: public.Revision, Gateway: &hosted}); err != nil {
+		t.Fatalf("public move: %v", err)
+	}
+	// Only a person confirms (N6).
+	svcAcct := f.As(td.KindServiceAccount, td.RoleGatewayAdmin)
+	m, err := svc.Get(admin, pending.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Confirm(svcAcct, pending.ID, m.Digest, &stepup.StepUp{Credential: f.Cred, At: time.Now()}); pcerr.CodeOf(err) != pcerr.PermissionDenied {
+		t.Fatalf("a service account confirmed: %v", err)
 	}
 }

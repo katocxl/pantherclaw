@@ -168,9 +168,13 @@ func New(t testing.TB, opts ...Option) *Target {
 			return
 		}
 		defer func() { _ = c.Close(context.Background()) }()
-		_, _ = c.Exec(context.Background(), "DROP DATABASE IF EXISTS "+quote(tg.Database)+" WITH (FORCE)")
-		_, _ = c.Exec(context.Background(), "DROP ROLE IF EXISTS "+quote(tg.ReadOnly))
-		_, _ = c.Exec(context.Background(), "DROP ROLE IF EXISTS "+quote(tg.Writer))
+		for _, stmt := range []string{
+			"DROP DATABASE IF EXISTS " + quote(tg.Database) + " WITH (FORCE)",
+			"DROP ROLE IF EXISTS " + quote(tg.ReadOnly),
+			"DROP ROLE IF EXISTS " + quote(tg.Writer),
+		} {
+			_, _ = c.Exec(context.Background(), stmt) // nosemgrep: pc-sql-built-with-sprintf -- test-only helper; the fixture's own identifiers, quoted; no request input
+		}
 	})
 	inDB := admin.Copy()
 	inDB.Database = tg.Database
@@ -349,7 +353,8 @@ func (tg *Target) Lock(t testing.TB, table string) (release func()) {
 	if _, err := c.Exec(ctx, "BEGIN"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.Exec(ctx, "LOCK TABLE "+table+" IN ACCESS EXCLUSIVE MODE"); err != nil {
+	stmt := "LOCK TABLE " + pgx.Identifier(strings.Split(table, ".")).Sanitize() + " IN ACCESS EXCLUSIVE MODE"
+	if _, err := c.Exec(ctx, stmt); err != nil { // nosemgrep: pc-sql-built-with-sprintf -- test-only helper; a test's table name, quoted; no request input
 		t.Fatal(err)
 	}
 	return func() {

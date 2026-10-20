@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
+	"github.com/katocxl/pantherclaw/internal/connections/ports"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
@@ -53,12 +54,20 @@ var (
 	ErrChanged = pcerr.New(pcerr.FailedPrecondition, "PROPOSAL_CHANGED", "the proposed configuration changed; reload the page")
 )
 
+// Store must check gateway moves (core makes the check required, D115).
+var _ ports.KindGatewayCheck = Store{}
+
 // Store is the postgres kind's configuration store (ports.KindConfig).
 // Hosted reports whether PantherClaw hosts a gateway (the server's
-// configuration); nil: none is.
+// configuration); nil fails closed: internal is refused on every gateway
+// (D121).
 type Store struct {
 	Hosted func(gateway ids.UUID) bool
 }
+
+// hosted reports whether internal is refused on a gateway: PantherClaw
+// hosts it, or nothing says which gateways it hosts.
+func hosted(f func(ids.UUID) bool, gateway ids.UUID) bool { return f == nil || f(gateway) }
 
 // encode is a configuration's canonical JSON and its digest.
 func encode(c *capp.PostgresConfig) ([]byte, []byte, error) {
@@ -95,12 +104,19 @@ func (s Store) Save(ctx context.Context, tx db.TenantTx, org ids.OrgID, connecti
 		return "", err
 	}
 	q := dbq.New(tx)
-	if pc.Internal && s.Hosted != nil {
+	if pc.Internal {
+		if s.Hosted == nil {
+			return "", ErrInternalHosted
+		}
 		conn, err := q.GetConnection(ctx, org, connection)
 		if err != nil {
 			return "", err
 		}
-		if s.Hosted(conn.GatewayID) {
+		gateway, err := movingTo(ctx, tx, connection, conn.GatewayID)
+		if err != nil {
+			return "", err
+		}
+		if s.Hosted(gateway) {
 			return "", ErrInternalHosted
 		}
 	}
@@ -216,7 +232,9 @@ func Widening(current, next capp.PostgresConfig) []string {
 			continue
 		}
 		ct := current.Tables[i]
-		if ct.ScopeKey != "" && (nt.ScopeKey != ct.ScopeKey || nt.ScopeColumn != ct.ScopeColumn) {
+		// Any change to a record scope mapping widens, an added one too: it
+		// decides which rows a scoped read returns (HR-310, D116).
+		if nt.ScopeKey != ct.ScopeKey || nt.ScopeColumn != ct.ScopeColumn {
 			add("record scope of %s changed", ref)
 		}
 		if limit(next, nt) > limit(current, ct) {
@@ -238,7 +256,7 @@ func Widening(current, next capp.PostgresConfig) []string {
 }
 
 // Service is the confirm page's use cases. Hosted reports whether
-// PantherClaw hosts a gateway; nil: none is.
+// PantherClaw hosts a gateway; nil fails closed, as in Store.
 type Service struct {
 	pool   *db.Pool
 	Hosted func(gateway ids.UUID) bool
@@ -365,7 +383,7 @@ func (s *Service) Confirm(ctx context.Context, id ids.UUID, digest string, su *s
 		}
 		// The connection may have moved to another gateway since it was
 		// proposed: internal is checked against the gateway serving it now (D105).
-		if proposed.Internal && s.Hosted != nil && s.Hosted(conn.GatewayID) {
+		if proposed.Internal && hosted(s.Hosted, conn.GatewayID) {
 			return ErrInternalHosted
 		}
 		widening := []string{"first configuration"}
@@ -394,4 +412,52 @@ func (s *Service) Confirm(ctx context.Context, id ids.UUID, digest string, su *s
 		})
 		return err
 	})
+}
+
+// CheckGateway validates a postgres connection's configuration for the
+// gateway it moves to, in the move's transaction (ports.KindGatewayCheck,
+// D105): an internal configuration, serving or proposed, cannot move to a
+// gateway PantherClaw hosts. The operator's private prefixes are the
+// gateway's own and are checked where it dials.
+func (s Store) CheckGateway(ctx context.Context, tx db.TenantTx, org ids.OrgID, connection, gateway ids.UUID) error {
+	// An update that moves the connection checks the gateway first and may
+	// save a configuration after: Save checks that one against the new
+	// gateway, which the transaction remembers (D115).
+	if _, err := tx.Exec(ctx, "SELECT pg_catalog.set_config('pantherclaw.postgres_move', $1, true)", connection.String()+"="+gateway.String()); err != nil {
+		return err
+	}
+	if !hosted(s.Hosted, gateway) {
+		return nil
+	}
+	row, err := dbq.New(tx).LockPostgresConnection(ctx, org, connection)
+	if db.IsNoRows(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	for _, raw := range [][]byte{row.Config, row.Proposed} {
+		c, err := decode(raw)
+		if err != nil {
+			return err
+		}
+		if c != nil && c.Internal {
+			return ErrInternalHosted
+		}
+	}
+	return nil
+}
+
+// movingTo is the gateway a connection serves from once the transaction
+// commits: the one CheckGateway recorded for it in this transaction, else
+// the one it has.
+func movingTo(ctx context.Context, tx db.TenantTx, connection, current ids.UUID) (ids.UUID, error) {
+	var move string
+	if err := tx.QueryRow(ctx, "SELECT coalesce(pg_catalog.current_setting('pantherclaw.postgres_move', true), '')").Scan(&move); err != nil {
+		return ids.UUID{}, err
+	}
+	conn, gw, ok := strings.Cut(move, "=")
+	if !ok || conn != connection.String() {
+		return current, nil
+	}
+	return ids.ParseUUID(gw)
 }

@@ -231,6 +231,11 @@ func TestHR310_RecordScopeIsAMandatoryPredicate(t *testing.T) {
 			t.Fatalf("another customer's row %v", row)
 		}
 	}
+	// The receipt records counts only (D20, D102).
+	recs := h.auth.snap().records
+	if ds := recs[len(recs)-1].GetDataScope(); ds.GetRecordsKey() != "customer" || ds.GetRows() != 3 || ds.GetValuesRedacted() != 0 {
+		t.Fatalf("data scope on the record: %v", ds)
+	}
 	// Asking for another customer finds nothing.
 	a, _ = pgRows(t, h, "/payments/v1/query", `{"table":"shop.orders","columns":["id"],"filters":[{"column":"customer_id","op":"eq","value":"1"}]}`)
 	if len(a.Rows) != 0 {
@@ -256,6 +261,10 @@ func TestHR311_ClassesThroughTheGateway(t *testing.T) {
 	a, r := pgRows(t, h, "/payments/v1/query", pgQuery)
 	if r.code != http.StatusOK || a.Rows[0][1] != "[redacted:pii]" || a.Rows[0][2] != "[redacted:secret]" || strings.Contains(r.body, "@example.com") {
 		t.Fatalf("redacted: %d %s", r.code, r.body)
+	}
+	recs := h.auth.snap().records
+	if ds := recs[len(recs)-1].GetDataScope(); ds.GetRecordsKey() != "" || ds.GetRows() != 2 || ds.GetValuesRedacted() != 4 {
+		t.Fatalf("data scope on the record: %v", ds)
 	}
 	for body, code := range map[string]string{
 		`{"table":"shop.customers","columns":["id"],"filters":[{"column":"email","op":"prefix","value":"a"}]}`: "column_not_allowed",
@@ -324,7 +333,7 @@ func TestT144_ScopeEscapeAttemptsAtTheGateway(t *testing.T) {
 			t.Errorf("%s: %d %s", body, r.code, r.body)
 		}
 	}
-	if _, r := pgRows(t, h, "/payments/v1/query", `{"table":"shop.notes","columns":["id"]}`); r.refusal.Error != "scope_unsupported" {
+	if _, r := pgRows(t, h, "/payments/v1/query", `{"table":"shop.notes","columns":["id"]}`); r.refusal.Error != "scope_unsupported" || r.refusal.ErrorClass != "cannot_authorize" {
 		t.Errorf("table without the scope key: %d %s", r.code, r.body)
 	}
 	a, _ := pgRows(t, h, "/payments/v1/query", `{"table":"shop.customers","columns":["id","ssn"],"filters":[{"column":"id","op":"in","values":["2","3"]}]}`)
@@ -349,5 +358,48 @@ func TestHR301_PostgresPatternPerDefinition(t *testing.T) {
 	}
 	if _, r := pgRows(t, h, "/payments/v1/query", pgQuery); r.code == http.StatusOK || !strings.Contains(r.refusal.Error, "credential") {
 		t.Fatalf("patterned read: %d %s", r.code, r.body)
+	}
+}
+
+// TestHR221_SimulatedPostgresNeedsItsHandshake (D110, D116): a simulated
+// postgres connection dispatches only when its host is a loopback literal
+// and the database answers exactly one handshake row naming it.
+func TestHR221_SimulatedPostgresNeedsItsHandshake(t *testing.T) {
+	tg := pgtargettest.New(t)
+	simulated := func(host string) func(*harness) {
+		return func(h *harness) { h.conn.Simulated, h.conn.Postgres.Host = true, host }
+	}
+	call := func(h *harness) reply {
+		t.Helper()
+		return h.do(t, http.MethodPost, "/payments/v1/query", `{"table":"shop.orders","columns":["id"],"limit":1}`, nil)
+	}
+	// No handshake table.
+	h := setup(t, withPostgres(t, tg, false), simulated("127.0.0.1"))
+	if r := call(h); r.refusal.Error != "simulator_unverified" {
+		t.Fatalf("no handshake: %d %s", r.code, r.body)
+	}
+	// The handshake names another connection.
+	tg.SimHandshake(t, "another-connection")
+	h = setup(t, withPostgres(t, tg, false), simulated("127.0.0.1"))
+	if r := call(h); r.refusal.Error != "simulator_unverified" {
+		t.Fatalf("another connection: %d %s", r.code, r.body)
+	}
+	// Two rows.
+	tg.SimHandshake(t, connID)
+	tg.AdminExec(t, "INSERT INTO pantherclaw_sim.handshake VALUES ('postgres', '"+connID+"')")
+	h = setup(t, withPostgres(t, tg, false), simulated("127.0.0.1"))
+	if r := call(h); r.refusal.Error != "simulator_unverified" {
+		t.Fatalf("two rows: %d %s", r.code, r.body)
+	}
+	// A host name, even one that resolves to loopback.
+	tg.SimHandshake(t, connID)
+	h = setup(t, withPostgres(t, tg, false), simulated(pgtargettest.Host))
+	if r := call(h); r.refusal.Error != "simulator_unverified" {
+		t.Fatalf("host name: %d %s", r.code, r.body)
+	}
+	// The handshake as it should be.
+	h = setup(t, withPostgres(t, tg, false), simulated("127.0.0.1"))
+	if r := call(h); r.code != http.StatusOK {
+		t.Fatalf("verified simulator: %d %s", r.code, r.body)
 	}
 }

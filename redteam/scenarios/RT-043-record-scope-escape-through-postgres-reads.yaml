@@ -85,3 +85,16 @@ steps:
       outcome: REFUSED
       code: column_not_allowed
       decisive_control: HR-312
+  - id: table-without-the-scope-key
+    do: agent.call
+    with:
+      face: http
+      connection: warehouse
+      method: POST
+      path: /v1/query
+      body:
+        table: support.tickets
+        columns: [id, customer_id]
+    expect:
+      outcome: CANNOT_AUTHORIZE
+      decisive_control: HR-310
