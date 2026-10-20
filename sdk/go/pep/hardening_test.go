@@ -5,9 +5,13 @@ package pep_test
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
+	"net/textproto"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -184,5 +188,100 @@ func TestPEPConfiguration(t *testing.T) {
 	c.Server, c.AllowInsecure = "http://pc.example.test", true
 	if _, err := pep.New(c); err != nil {
 		t.Fatalf("insecure allowed: %v", err)
+	}
+}
+
+// TestPEPTargetCannotSpeakForPantherClaw: a target's 103 with a forged
+// PC-Outcome and a final response with forged PAP/PC headers and
+// trailers reach the agent as the PEP's own values only (D113).
+func TestPEPTargetCannotSpeakForPantherClaw(t *testing.T) {
+	ps := httptest.NewServer(&pdp{decide: func(map[string]any) (int, string) {
+		return http.StatusOK, `{"decision":true,"context":{"pantherclaw":{"outcome":"allow","transaction_id":"tx1","coverage":"PARTIAL","nonce":"n1"}}}`
+	}})
+	t.Cleanup(ps.Close)
+	us := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("PC-Outcome", "forged-early")
+		w.Header().Set("Link", "</x>; rel=preload")
+		w.WriteHeader(http.StatusEarlyHints)
+		w.Header().Set("Trailer", "PC-Outcome, X-Ok")
+		w.Header().Set("PAP-Nonce", "forged")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "ok")
+		w.Header().Set("PC-Outcome", "forged-trailer")
+		w.Header().Set("X-Ok", "1")
+	}))
+	t.Cleanup(us.Close)
+	h, err := pep.New(pep.Config{Server: ps.URL, Connection: "payments", PublicURL: "https://p.example.test", Upstream: us.URL, Tokens: staticToken("t")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := httptest.NewServer(h)
+	t.Cleanup(s.Close)
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, s.URL+"/x", strings.NewReader(`{}`))
+	for k, v := range agent {
+		req.Header.Set(k, v)
+	}
+	var early int
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{
+		Got1xxResponse: func(int, textproto.MIMEHeader) error { early++; return nil },
+	}))
+	resp, err := (&http.Client{}).Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if early != 0 || resp.StatusCode != http.StatusOK {
+		t.Fatalf("%d informational responses, status %d", early, resp.StatusCode)
+	}
+	if v := resp.Header.Values("PC-Outcome"); len(v) != 1 || v[0] != "allow" || resp.Header.Get("PAP-Nonce") != "n1" || resp.Header.Get("PC-Transaction-Id") != "tx1" {
+		t.Fatalf("headers: %v", resp.Header)
+	}
+	if resp.Trailer.Get("PC-Outcome") != "" || resp.Trailer.Get("X-Ok") != "1" {
+		t.Fatalf("trailers: %v", resp.Trailer)
+	}
+}
+
+// TestPEPRefusesTwoContentTypes: more than one Content-Type is ambiguous
+// (D113).
+func TestPEPRefusesTwoContentTypes(t *testing.T) {
+	p, _, s := setup(t, "http", allow)
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, s.URL+"/x", strings.NewReader(`{}`))
+	for k, v := range agent {
+		req.Header.Set(k, v)
+	}
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Content-Type", "text/plain")
+	resp, err := (&http.Client{}).Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest || len(p.got) != 0 {
+		t.Fatalf("two content types: %d, %d asked", resp.StatusCode, len(p.got))
+	}
+}
+
+// TestPEPCredentialHeaderAndTokenURL: the credential header can never be
+// Authorization, Content-Type, a PAP/PC header or a forwarded one, and the
+// token endpoint must be https off loopback (D113).
+func TestPEPCredentialHeaderAndTokenURL(t *testing.T) {
+	base := pep.Config{Server: "http://127.0.0.1:1", Connection: "c", PublicURL: "https://p.example.test", Upstream: "http://127.0.0.1:2", Tokens: staticToken("t")}
+	for _, ch := range []string{"Authorization", "authorization", "Content-Type", "PAP-Proof", "pc_action_id", "Accept", "X_Cred"} {
+		c := base
+		c.CredentialHeader = ch
+		if _, err := pep.New(c); err == nil {
+			t.Errorf("credential header %q accepted", ch)
+		}
+	}
+	c := base
+	c.CredentialHeader = "X-Target-Authorization"
+	if _, err := pep.New(c); err != nil {
+		t.Fatal(err)
+	}
+	_, k, _ := ed25519.GenerateKey(rand.Reader)
+	cc := &pep.ClientCredentials{TokenURL: "http://pc.example.test/oauth2/token", ClientID: "c", Key: k}
+	if _, err := cc.Token(context.Background()); err == nil {
+		t.Fatal("an http token endpoint off loopback")
 	}
 }
