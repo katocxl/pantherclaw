@@ -39,9 +39,6 @@ const (
 	// CodeTargetMismatch: postgres.tables.read named a pg_database other than
 	// the connection's database (D79).
 	CodeTargetMismatch = "target_mismatch"
-	// CodeKindConfigMissing: the gateway has no postgres configuration for
-	// the connection (D85).
-	CodeKindConfigMissing = "kind_config_missing"
 )
 
 // roleRecheck is how long a passed role check holds before the pool checks
@@ -87,7 +84,7 @@ func (e *Engine) sendPostgres(ctx context.Context, r Result, conn *control.Conne
 		// or sent (D85).
 		return r.fail(CannotAuthorize, CodeKindConfigMissing)
 	}
-	query, buildErr := pgQuery(pc, def, a.Action)
+	query, buildErr := pgQuery(pc, def, a.Action, scopeOf(ctx))
 	// A postgres connection is pantherclaw_held only: no action token, and
 	// no HTTP request to bind.
 	_, err := e.authority.BeginDispatch(ctx, &pb.BeginDispatchRequest{PermitId: want.PermitID, Epoch: want.Epoch})
@@ -141,6 +138,15 @@ func (e *Engine) sendPostgres(ctx context.Context, r Result, conn *control.Conne
 			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, time.Since(start), class, code, t)
 		}
 		e.breaker.record(ctx, conn, pb.Outcome_OUTCOME_ACCEPTED)
+		if s := scopeOf(ctx); s != nil || res.Redacted > 0 {
+			// Counts only, never values (D20); see the receipt question in the PR.
+			key := ""
+			if s != nil && s.records != nil {
+				key = s.records.Key
+			}
+			e.log.InfoContext(ctx, "gateway.scope_applied", slog.String("transaction_id", want.Txn), slog.String("records_key", key),
+				slog.Int("rows", res.Rows), slog.Int("values_redacted", res.Redacted), slog.Bool("truncated", res.Truncated))
+		}
 	}
 	elapsed := time.Since(start)
 	t.lap("target")
@@ -177,7 +183,7 @@ var errNoPostgresConfig = errors.New("dispatch: the connection has no postgres c
 
 // pgQuery builds the statement of a postgres read from the permitted
 // action: the target and the typed params only (HR-307).
-func pgQuery(pc *pb.PostgresConfig, def *defs.Definition, a actionir.ActionIR) (pgPlan, error) {
+func pgQuery(pc *pb.PostgresConfig, def *defs.Definition, a actionir.ActionIR, scope *dataScope) (pgPlan, error) {
 	if pc == nil {
 		return pgPlan{}, errNoPostgresConfig
 	}
@@ -193,6 +199,8 @@ func pgQuery(pc *pb.PostgresConfig, def *defs.Definition, a actionir.ActionIR) (
 		return pgPlan{}, err
 	}
 	plan := pgPlan{manifest: m}
+	var records *pgdispatch.RecordScope
+	plan.access, records = scope.pgAccess()
 	limit := 0
 	if v, ok := vals["limit"]; ok {
 		if v.Int < 1 {
@@ -213,7 +221,7 @@ func pgQuery(pc *pb.PostgresConfig, def *defs.Definition, a actionir.ActionIR) (
 			order = append(order, o)
 		}
 		plan.statement, err = pgdispatch.BuildRows(m, pgdispatch.Rows{
-			Table: a.Target.ID, Columns: vals["columns"].List, Filters: filters, OrderBy: order, Limit: limit, Access: plan.access,
+			Table: a.Target.ID, Columns: vals["columns"].List, Filters: filters, OrderBy: order, Limit: limit, Access: plan.access, Scope: records,
 		})
 	case "aggregate":
 		var measures []pgdispatch.Measure
@@ -225,7 +233,7 @@ func pgQuery(pc *pb.PostgresConfig, def *defs.Definition, a actionir.ActionIR) (
 			measures = append(measures, ms)
 		}
 		plan.statement, err = pgdispatch.BuildAggregate(m, pgdispatch.Aggregate{
-			Table: a.Target.ID, GroupBy: vals["group_by"].List, Measures: measures, Filters: filters, Limit: limit, Access: plan.access,
+			Table: a.Target.ID, GroupBy: vals["group_by"].List, Measures: measures, Filters: filters, Limit: limit, Access: plan.access, Scope: records,
 		})
 	case "tables":
 		if a.Target.ID != pc.GetDatabase() {

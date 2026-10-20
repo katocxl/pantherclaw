@@ -847,3 +847,18 @@ func TestHR311_TableBound(t *testing.T) {
 		t.Fatalf("describe %s", out)
 	}
 }
+
+// TestHR312_CountTakesAnyNonSecretColumn (D79): a count returns a number,
+// never a value, so it may count any column but a secret one, whatever
+// the classes allow.
+func TestHR312_CountTakesAnyNonSecretColumn(t *testing.T) {
+	pub := Access{Classes: []Class{ClassPublic}}
+	st, err := BuildAggregate(shop(), Aggregate{Table: "shop.customers", Measures: []Measure{{"count", "email"}}, Access: pub})
+	if err != nil || !strings.Contains(st.SQL, `count("shop"."customers"."email")`) {
+		t.Fatalf("count of pii: %v %v", st, err)
+	}
+	_, err = BuildAggregate(shop(), Aggregate{Table: "shop.customers", Measures: []Measure{{"count", "ssn"}}})
+	code(t, err, CodeColumnNotAllowed)
+	_, err = BuildAggregate(shop(), Aggregate{Table: "shop.customers", Measures: []Measure{{"count", "nope"}}})
+	code(t, err, CodeColumnNotAllowed)
+}

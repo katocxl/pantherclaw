@@ -192,3 +192,143 @@ func TestHR330_PostgresPrivateTargetNeedsInternal(t *testing.T) {
 		t.Fatalf("%d %s", r.code, r.body)
 	}
 }
+
+func scopeObligations(customer string, classes ...string) []*pb.Obligation {
+	var out []*pb.Obligation
+	if customer != "" {
+		out = append(out, &pb.Obligation{Kind: "record_scope", Param: "customer", Values: []string{customer}, Timing: "before_execution"})
+	}
+	if classes != nil {
+		out = append(out, &pb.Obligation{Kind: "data_classes", Values: classes, Timing: "before_execution"})
+	}
+	return out
+}
+
+func pgRows(t *testing.T, h *harness, path, body string) (pgAnswer, reply) {
+	t.Helper()
+	r := h.do(t, http.MethodPost, path, body, nil)
+	var a pgAnswer
+	if r.code == http.StatusOK {
+		if err := json.Unmarshal([]byte(r.body), &a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return a, r
+}
+
+// TestHR310_RecordScopeIsAMandatoryPredicate (D20): under a record scope
+// only the scoped customer's rows come back, however the agent filters,
+// sorts or aggregates; a table without that scope key is refused.
+func TestHR310_RecordScopeIsAMandatoryPredicate(t *testing.T) {
+	tg := pgtargettest.New(t)
+	h := setup(t, withPostgres(t, tg, false), func(h *harness) { h.auth.obligations = scopeObligations("2") })
+	a, r := pgRows(t, h, "/payments/v1/query", `{"table":"shop.orders","columns":["id","customer_id"]}`)
+	if r.code != http.StatusOK || len(a.Rows) != 3 {
+		t.Fatalf("scoped rows: %d %s", r.code, r.body)
+	}
+	for _, row := range a.Rows {
+		if row[1] != float64(2) {
+			t.Fatalf("another customer's row %v", row)
+		}
+	}
+	// Asking for another customer finds nothing.
+	a, _ = pgRows(t, h, "/payments/v1/query", `{"table":"shop.orders","columns":["id"],"filters":[{"column":"customer_id","op":"eq","value":"1"}]}`)
+	if len(a.Rows) != 0 {
+		t.Fatalf("escaped by filter: %v", a.Rows)
+	}
+	a, _ = pgRows(t, h, "/payments/v1/query", `{"table":"shop.customers","columns":["id","tier"]}`)
+	if len(a.Rows) != 1 || a.Rows[0][0] != float64(2) {
+		t.Fatalf("customers: %v", a.Rows)
+	}
+	// The scoped customer has 3 orders: under the minimum group size.
+	a, r = pgRows(t, h, "/payments/v1/aggregate", `{"table":"shop.orders","measures":["count:*"]}`)
+	if r.code != http.StatusOK || len(a.Rows) != 0 {
+		t.Fatalf("aggregate: %d %s", r.code, r.body)
+	}
+}
+
+// TestHR311_ClassesThroughTheGateway (D20): under a data_classes scope the
+// values of other classes come back withheld and cannot be filtered,
+// sorted or grouped on; secret never comes back; count still counts.
+func TestHR311_ClassesThroughTheGateway(t *testing.T) {
+	tg := pgtargettest.New(t)
+	h := setup(t, withPostgres(t, tg, false), func(h *harness) { h.auth.obligations = scopeObligations("", "public") })
+	a, r := pgRows(t, h, "/payments/v1/query", pgQuery)
+	if r.code != http.StatusOK || a.Rows[0][1] != "[redacted:pii]" || a.Rows[0][2] != "[redacted:secret]" || strings.Contains(r.body, "@example.com") {
+		t.Fatalf("redacted: %d %s", r.code, r.body)
+	}
+	for body, code := range map[string]string{
+		`{"table":"shop.customers","columns":["id"],"filters":[{"column":"email","op":"prefix","value":"a"}]}`: "column_not_allowed",
+		`{"table":"shop.customers","columns":["id"],"order_by":["name:asc"]}`:                                  "column_not_allowed",
+	} {
+		if _, r := pgRows(t, h, "/payments/v1/query", body); r.refusal.Error != code {
+			t.Errorf("%s: %d %s", body, r.code, r.body)
+		}
+	}
+	if _, r := pgRows(t, h, "/payments/v1/aggregate", `{"table":"shop.orders","group_by":["amount"],"measures":["count:*"]}`); r.refusal.Error != "column_not_allowed" {
+		t.Errorf("group on internal: %d %s", r.code, r.body)
+	}
+	a, r = pgRows(t, h, "/payments/v1/aggregate", `{"table":"shop.orders","measures":["count:amount"]}`)
+	if r.code != http.StatusOK || len(a.Rows) != 1 || a.Rows[0][0] != float64(11) {
+		t.Errorf("count of an internal column: %d %s", r.code, r.body)
+	}
+}
+
+// TestT143_InjectionAndWritesThroughTheFaces: hostile identifiers and
+// values through either face never become SQL, and a write-capable role
+// never runs a query.
+func TestT143_InjectionAndWritesThroughTheFaces(t *testing.T) {
+	tg := pgtargettest.New(t)
+	h := setup(t, withPostgres(t, tg, false))
+	for _, body := range []string{
+		`{"table":"shop.orders; DELETE FROM shop.orders","columns":["id"]}`,
+		`{"table":"shop.orders","columns":["id\"; DROP TABLE shop.orders; --"]}`,
+		`{"table":"shop.orders","columns":["id"],"order_by":["id:asc, (SELECT pg_sleep(5))"]}`,
+	} {
+		if r := h.do(t, http.MethodPost, "/payments/v1/query", body, nil); r.code == http.StatusOK {
+			t.Errorf("%s answered %s", body, r.body)
+		}
+	}
+	a, r := pgRows(t, h, "/payments/v1/query", `{"table":"shop.orders","columns":["id"],"filters":[{"column":"status","op":"prefix","value":"%' OR '1'='1"}]}`)
+	if r.code != http.StatusOK || len(a.Rows) != 0 {
+		t.Fatalf("prefix injection: %d %s", r.code, r.body)
+	}
+	a, _ = pgRows(t, h, "/payments/v1/aggregate", `{"table":"shop.orders","measures":["count:*"]}`)
+	if len(a.Rows) != 1 || a.Rows[0][0] != float64(11) {
+		t.Fatalf("orders changed: %v", a.Rows)
+	}
+	w := setup(t, withPostgres(t, tg, true))
+	if r := w.do(t, http.MethodPost, "/payments/v1/query", pgQuery, nil); r.refusal.Error != "role_not_read_only" {
+		t.Fatalf("writer: %s", r.body)
+	}
+}
+
+// TestT144_ScopeEscapeAttemptsAtTheGateway: under a record scope and a
+// public-only class scope, sorting or grouping on a secret column, a
+// filter on another customer and a table outside the scope key all fail
+// to reveal anything.
+func TestT144_ScopeEscapeAttemptsAtTheGateway(t *testing.T) {
+	tg := pgtargettest.New(t)
+	tg.AdminExec(t, "CREATE TABLE shop.notes (id bigint, body text)", "GRANT SELECT ON shop.notes TO "+tg.ReadOnly)
+	h := setup(t, withPostgres(t, tg, false), func(h *harness) {
+		h.auth.obligations = scopeObligations("1", "public")
+		h.conn.Postgres.Tables = append(h.conn.Postgres.Tables, &pb.PostgresTable{Schema: "shop", Name: "notes", Columns: []*pb.PostgresColumn{
+			{Name: "id", Type: "bigint", Class: "public"}, {Name: "body", Type: "text", Class: "internal"},
+		}})
+	})
+	for path, body := range map[string]string{
+		"/payments/v1/query":     `{"table":"shop.customers","columns":["id"],"order_by":["ssn:desc"]}`,
+		"/payments/v1/aggregate": `{"table":"shop.customers","group_by":["ssn"],"measures":["count:*"]}`,
+	} {
+		if _, r := pgRows(t, h, path, body); r.refusal.Error != "column_not_allowed" {
+			t.Errorf("%s: %d %s", body, r.code, r.body)
+		}
+	}
+	if _, r := pgRows(t, h, "/payments/v1/query", `{"table":"shop.notes","columns":["id"]}`); r.refusal.Error != "scope_unsupported" {
+		t.Errorf("table without the scope key: %d %s", r.code, r.body)
+	}
+	a, _ := pgRows(t, h, "/payments/v1/query", `{"table":"shop.customers","columns":["id","ssn"],"filters":[{"column":"id","op":"in","values":["2","3"]}]}`)
+	if len(a.Rows) != 0 {
+		t.Fatalf("another customer: %v", a.Rows)
+	}
+}

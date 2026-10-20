@@ -477,6 +477,10 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	if want.Epoch < epoch {
 		return r.fail(EnforcementFailed, CodeEpochStale)
 	}
+	ctx, scopeCode := withScope(ctx, conn, def, ar.GetObligations())
+	if scopeCode != "" {
+		return r.fail(EnforcementFailed, scopeCode)
+	}
 	if cooperative(c) {
 		return e.delegateSDK(ctx, r, conn, def, bound, want, t)
 	}
@@ -567,6 +571,9 @@ func effective(def *defs.Definition, p actionir.Parsed, obligations []*pb.Obliga
 	}
 	changed := false
 	for _, o := range obligations {
+		if scopeObligation(o) {
+			continue // applied to the answer by the scope engine (scope.go)
+		}
 		if o.GetKind() == string(defs.ConstraintDisclosureLimits) {
 			if err := disclosed(vals, o); err != nil {
 				return actionir.Parsed{}, err
@@ -788,6 +795,7 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 		res.Body = egress.Redacted(res.Body, secret)
 		res.ContentType = string(egress.Redacted([]byte(res.ContentType), secret))
 		res.RequestID = string(egress.Redacted([]byte(res.RequestID), secret))
+		class, code = e.scopeHTTP(ctx, conn, def, &res, class, code)
 		r.Response = &res
 		response = &res.Body
 	}

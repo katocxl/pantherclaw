@@ -549,14 +549,23 @@ func (b *builder) measure(ms Measure) (expr string, typ ColumnType, err error) {
 		}
 		return "count(*)", TypeBigint, nil
 	}
+	if ms.Func == "count" {
+		// A count returns a number, never a value: any column but a secret
+		// one, whatever the classes allow (D79).
+		c, err := b.column(ms.Column)
+		if err != nil {
+			return "", "", err
+		}
+		if c.Class == ClassSecret {
+			return "", "", &Error{Code: CodeColumnNotAllowed, Detail: fmt.Sprintf("column %q is secret", c.Name)}
+		}
+		return "count(" + b.col(c) + ")", TypeBigint, nil
+	}
 	c, err := b.readable(ms.Column, "measure")
 	if err != nil {
 		return "", "", err
 	}
 	col := b.col(c)
-	if ms.Func == "count" {
-		return "count(" + col + ")", TypeBigint, nil
-	}
 	// sum, avg, min and max carry values of the column; min and max return
 	// one row's value outright. They apply only to public or internal
 	// columns (D72, HR-312).

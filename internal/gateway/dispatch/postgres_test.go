@@ -76,7 +76,7 @@ func TestHR307_FacesBuildTheSameStatement(t *testing.T) {
 		t.Fatalf("the faces map to different actions:\n%+v\n%+v", viaMCP.Action, viaHTTP.Action)
 	}
 	def, _ := pkg.Definition(viaMCP.Action.Operation)
-	plan, err := pgQuery(shopConfig(), def, viaMCP.Action)
+	plan, err := pgQuery(shopConfig(), def, viaMCP.Action, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestPgQuery_Operations(t *testing.T) {
 			t.Fatalf("%s %s: %v", tool, args, err)
 		}
 		def, _ := pkg.Definition(p.Action.Operation)
-		return pgQuery(shopConfig(), def, p.Action)
+		return pgQuery(shopConfig(), def, p.Action, nil)
 	}
 	plan, err := call("aggregate_rows", `{"table":"shop.orders","group_by":["status"],"measures":["count:*","sum:amount"]}`)
 	if err != nil || !strings.Contains(plan.statement.SQL, "HAVING count(*) >= 5") {
@@ -129,10 +129,10 @@ func TestPgQuery_Operations(t *testing.T) {
 	}
 	p.Action.Params = []byte(`{"columns":["id"],"limit":"0"}`)
 	def, _ := pkg.Definition(p.Action.Operation)
-	if _, err := pgQuery(shopConfig(), def, p.Action); err == nil {
+	if _, err := pgQuery(shopConfig(), def, p.Action, nil); err == nil {
 		t.Errorf("limit 0: %v", err)
 	}
-	if _, err := pgQuery(nil, &defs.Definition{}, actionir.ActionIR{}); !errors.Is(err, errNoPostgresConfig) {
+	if _, err := pgQuery(nil, &defs.Definition{}, actionir.ActionIR{}, nil); !errors.Is(err, errNoPostgresConfig) {
 		t.Errorf("no config: %v", err)
 	}
 }
