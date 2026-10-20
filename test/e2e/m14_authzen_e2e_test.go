@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -44,26 +45,55 @@ type azReply struct {
 	body    map[string]any
 }
 
-func (a *azAgent) refund(t *testing.T, act ids.UUID, charge, amount string, key ed25519.PrivateKey) azReply {
+// azCall is how one refund is signed.
+type azCall struct {
+	key ed25519.PrivateKey // nil: the agent's own
+	// proofPath signs the proof for another path; noProof sends none.
+	proofPath string
+	noProof   bool
+}
+
+// signed is a signed refund request, sent again verbatim for a replay.
+type signed struct {
+	url    string
+	header http.Header
+	body   []byte
+}
+
+func (a *azAgent) sign(t *testing.T, act ids.UUID, charge, amount string, c azCall) signed {
 	t.Helper()
 	body := []byte(`{"charge":"` + charge + `","amount":"` + amount + `","currency":"USD","reason":"duplicate"}`)
+	key := c.key
 	if key == nil {
 		key = a.s.key
 	}
-	proof, err := pap.NewProof(key, pap.ProofParams{
-		Method: http.MethodPost, URL: a.url + "/v1/refunds", Body: body, Token: a.s.token, Nonce: a.nonce, Now: time.Now(),
-	})
-	if err != nil {
-		t.Fatal(err)
+	h := http.Header{}
+	h.Set("Content-Type", "application/json")
+	h.Set("Authorization", "PAP "+a.s.token)
+	h.Set("PAP-Run-Id", a.s.run)
+	h.Set("PC-Action-Id", act.String())
+	h.Set("Idempotency-Key", "agent-"+act.String())
+	if !c.noProof {
+		path := "/v1/refunds"
+		if c.proofPath != "" {
+			path = c.proofPath
+		}
+		proof, err := pap.NewProof(key, pap.ProofParams{
+			Method: http.MethodPost, URL: a.url + path, Body: body, Token: a.s.token, Nonce: a.nonce, Now: time.Now(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		h.Set("PAP-Proof", proof)
 	}
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, a.url+"/v1/refunds", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "PAP "+a.s.token)
-	req.Header.Set("PAP-Proof", proof)
-	req.Header.Set("PAP-Run-Id", a.s.run)
-	req.Header.Set("PC-Action-Id", act.String())
-	req.Header.Set("Idempotency-Key", "agent-"+act.String())
-	resp, err := http.DefaultClient.Do(req)
+	return signed{url: a.url + "/v1/refunds", header: h, body: body}
+}
+
+func (a *azAgent) send(t *testing.T, s signed) azReply {
+	t.Helper()
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, s.url, bytes.NewReader(s.body))
+	req.Header = s.header.Clone()
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,6 +107,13 @@ func (a *azAgent) refund(t *testing.T, act ids.UUID, charge, amount string, key 
 	return r
 }
 
+func (a *azAgent) refund(t *testing.T, act ids.UUID, charge, amount string, key ed25519.PrivateKey) azReply {
+	t.Helper()
+	return a.send(t, a.sign(t, act, charge, amount, azCall{key: key}))
+}
+
+func code(r azReply) string { s, _ := r.body["code"].(string); return s }
+
 // TestE2E_M14_AuthZEN: the reference enforcement point in front of the
 // payments simulator on an agent_held connection (G0 M14 D26-D29). An
 // allowed refund is decided, committed DELEGATED and spent, then forwarded
@@ -89,7 +126,7 @@ func TestE2E_M14_AuthZEN(t *testing.T) {
 	pepURL := runPEP(t, s, point)
 	s.db.AdminExec(t, "UPDATE pc.connections SET base_url = $3 WHERE org_id = $1 AND id = $2", s.org, s.conn, pepURL)
 	point.base = pepURL
-	refundableMore(t, s, "ch_az1", "ch_az2", "ch_az3", "ch_az4")
+	refundableMore(t, s, "ch_az1", "ch_az2", "ch_az3", "ch_az4", "ch_az5", "ch_az6", "ch_az7", "ch_az8")
 	agent := &azAgent{s: s, url: pepURL, nonce: point.liveNonce(t)}
 
 	// Allowed: decided, committed DELEGATED, spent and forwarded once.
@@ -105,51 +142,96 @@ func TestE2E_M14_AuthZEN(t *testing.T) {
 	}
 	s.waitSettled(t, "30")
 
-	// A forged proof forwards nothing.
+	// Through the PEP, a forged, missing, other-URL or replayed proof
+	// forwards nothing and spends nothing.
 	_, thief, _ := ed25519.GenerateKey(rand.Reader)
-	if r := agent.refund(t, ids.NewV7(), "ch_az2", "10.00", thief); r.status != http.StatusForbidden || s.sim.Stats().Refunds != 1 {
-		t.Fatalf("forged: %+v", r)
+	refused := func(name string, r azReply, want string) {
+		t.Helper()
+		if r.status != http.StatusForbidden || code(r) != want || s.sim.Stats().Refunds != 1 {
+			t.Fatalf("%s: %+v, %d refunds", name, r, s.sim.Stats().Refunds)
+		}
 	}
+	refused("forged", agent.send(t, agent.sign(t, ids.NewV7(), "ch_az2", "10.00", azCall{key: thief})), "IDENTITY_UNVERIFIED")
+	refused("missing", agent.send(t, agent.sign(t, ids.NewV7(), "ch_az2", "10.00", azCall{noProof: true})), "PAP_CREDENTIALS_REQUIRED")
+	refused("another URL", agent.send(t, agent.sign(t, ids.NewV7(), "ch_az2", "10.00", azCall{proofPath: "/v1/charges"})), "IDENTITY_UNVERIFIED")
+	once := agent.sign(t, ids.NewV7(), "ch_az5", "5.00", azCall{})
+	if r := agent.send(t, once); r.status != http.StatusOK || s.sim.Stats().Refunds != 2 {
+		t.Fatalf("before the replay: %+v", r)
+	}
+	if r := agent.send(t, once); r.status != http.StatusForbidden || code(r) != "IDENTITY_UNVERIFIED" || s.sim.Stats().Refunds != 2 {
+		t.Fatalf("replayed: %+v", r)
+	}
+	s.waitSettled(t, "35")
 
 	// Held, approved, resubmitted with the same action id.
 	held := ids.NewV7()
 	r = agent.refund(t, held, "ch_az3", "85.00", nil)
-	if r.status != http.StatusForbidden || r.outcome != "hold" || r.body["wait_handle"] == nil || s.sim.Stats().Refunds != 1 {
+	if r.status != http.StatusForbidden || r.outcome != "hold" || r.body["wait_handle"] == nil || s.sim.Stats().Refunds != 2 {
 		t.Fatalf("held: %+v", r)
 	}
 	s.approve(t, b, key, r.txn)
 	if r2 := agent.refund(t, held, "ch_az3", "85.00", nil); r2.status != http.StatusOK || r2.outcome != "allow" || r2.txn != r.txn ||
-		s.sim.Stats().Refunds != 2 {
+		s.sim.Stats().Refunds != 3 {
 		t.Fatalf("approved resubmission: %+v", r2)
 	}
-	s.waitSettled(t, "115")
+	s.waitSettled(t, "120")
+
+	// Batches: deny_on_first_deny stops at the refusal, permit_on_first_permit
+	// at the permit, execute_all answers each; each allowed refund in them is
+	// committed DELEGATED and spent exactly once.
+	nameOnly := map[string]any{"subject": map[string]any{"type": "user", "id": "alice"}, "resource": map[string]any{"type": "pantherclaw:http_request", "id": "payments"}, "action": map[string]any{"name": "POST"}}
+	delegated := func() string {
+		return s.row(t, "SELECT count(*) FROM pc.execution_attempts WHERE org_id = $1 AND outcome = 'delegated'", s.org)
+	}
+	for _, tc := range []struct {
+		sem    string
+		charge string
+		first  bool // the permit comes first
+		want   []bool
+	}{
+		{"deny_on_first_deny", "ch_az6", false, []bool{false}},
+		{"permit_on_first_permit", "ch_az7", true, []bool{true}},
+		{"execute_all", "ch_az8", true, []bool{true, false}},
+	} {
+		point.nonce = agent.nonce
+		good := point.evaluation(t, azRequest{Method: http.MethodPost, Path: "/v1/refunds", Action: ids.NewV7(),
+			Body: []byte(`{"charge":"` + tc.charge + `","amount":"5.00","currency":"USD","reason":"duplicate"}`)})
+		evs := []any{nameOnly, good}
+		if tc.first {
+			evs = []any{good, nameOnly}
+		}
+		before := delegated()
+		st, raw := point.post(t, "/access/v1/evaluations", map[string]any{"evaluations": evs, "options": map[string]any{"evaluations_semantic": tc.sem}}, "")
+		var out struct {
+			Evaluations []azAnswer `json:"evaluations"`
+		}
+		if err := json.Unmarshal(raw, &out, json.RejectUnknownMembers(false)); err != nil || st != http.StatusOK || len(out.Evaluations) != len(tc.want) {
+			t.Fatalf("%s: %d %s", tc.sem, st, raw)
+		}
+		for i, w := range tc.want {
+			if out.Evaluations[i].Decision != w {
+				t.Fatalf("%s: evaluation %d: %s", tc.sem, i, raw)
+			}
+			if n := out.Evaluations[i].Context.PantherClaw.Nonce; n != "" {
+				agent.nonce = n
+			}
+		}
+		wantDelegated := map[bool]int{true: 1, false: 0}[tc.first]
+		if got := delegated(); mustAtoi(t, got)-mustAtoi(t, before) != wantDelegated {
+			t.Fatalf("%s: delegated %s → %s", tc.sem, before, got)
+		}
+	}
+	s.waitSettled(t, "130")
 
 	// A monitor route answers true, observes, and reserves nothing.
 	s.db.AdminExec(t, `INSERT INTO pc.connection_routes (org_id, connection_id, route, mode, changed_by)
 		VALUES ($1, $2, 'payments-refund', 'monitor', 'e2e')
 		ON CONFLICT (org_id, connection_id, route) DO UPDATE SET mode = 'monitor'`, s.org, s.conn)
-	if r := agent.refund(t, ids.NewV7(), "ch_az4", "60.00", nil); r.status != http.StatusOK || r.outcome != "observe" || s.sim.Stats().Refunds != 3 {
+	if r := agent.refund(t, ids.NewV7(), "ch_az4", "60.00", nil); r.status != http.StatusOK || r.outcome != "observe" || s.sim.Stats().Refunds != 4 {
 		t.Fatalf("monitor: %+v", r)
 	}
-	s.waitSettled(t, "115")
+	s.waitSettled(t, "130")
 
-	// Batches: deny_on_first_deny stops at the refusal, permit_on_first_permit
-	// at the permit, execute_all answers each.
-	nameOnly := map[string]any{"subject": map[string]any{"type": "user", "id": "alice"}, "resource": map[string]any{"type": "pantherclaw:http_request", "id": "payments"}, "action": map[string]any{"name": "POST"}}
-	for sem, want := range map[string]int{"deny_on_first_deny": 1, "permit_on_first_permit": 2, "execute_all": 2} {
-		point.nonce = agent.nonce
-		good := point.evaluation(t, azRequest{Method: http.MethodPost, Path: "/v1/refunds", Body: []byte(`{}`), Action: ids.NewV7()})
-		st, raw := point.post(t, "/access/v1/evaluations", map[string]any{
-			"evaluations": []any{nameOnly, good}, "options": map[string]any{"evaluations_semantic": sem},
-		}, "")
-		var out struct {
-			Evaluations []azAnswer `json:"evaluations"`
-		}
-		if err := json.Unmarshal(raw, &out, json.RejectUnknownMembers(false)); err != nil || st != http.StatusOK || len(out.Evaluations) != want ||
-			out.Evaluations[0].Decision {
-			t.Fatalf("%s: %d %s", sem, st, raw)
-		}
-	}
 }
 
 // runPEP builds the reference enforcement point (sdk/go/pep/cmd/pep, its
@@ -175,7 +257,7 @@ func runPEP(t *testing.T, s *stack, point *azPoint) string {
 		t.Fatal(err)
 	}
 	cmd := exec.Command(bin, "-listen", "127.0.0.1:0", "-upstream", s.simURL, "-server", s.apiURL, "-connection", "payments",
-		"-client-id", point.clientID, "-key", keyFile)
+		"-client-id", point.clientID, "-key", keyFile, "-forward-header", "Idempotency-Key")
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -185,13 +267,38 @@ func runPEP(t *testing.T, s *stack, point *azPoint) string {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
-	sc := bufio.NewScanner(stdout)
-	for sc.Scan() {
-		if addr, ok := strings.CutPrefix(sc.Text(), "pep: listening on "); ok {
-			go func() { _, _ = io.Copy(io.Discard, stdout) }()
-			return "http://" + addr
+	ready := make(chan string, 1)
+	go func() {
+		sc := bufio.NewScanner(stdout)
+		for sc.Scan() {
+			if addr, ok := strings.CutPrefix(sc.Text(), "pep: listening on "); ok {
+				ready <- addr
+				_, _ = io.Copy(io.Discard, stdout)
+				return
+			}
 		}
+		close(ready)
+	}()
+	deadline := time.NewTimer(time.Minute)
+	defer deadline.Stop()
+	select {
+	case addr, ok := <-ready:
+		if !ok {
+			t.Fatal("pep exited before listening")
+		}
+		return "http://" + addr
+	case <-deadline.C:
+		_ = cmd.Process.Kill()
+		t.Fatal("pep did not listen within a minute")
 	}
-	t.Fatalf("pep exited before listening: %v", sc.Err())
 	return ""
+}
+
+func mustAtoi(t *testing.T, s string) int {
+	t.Helper()
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
 }
