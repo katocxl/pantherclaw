@@ -10,7 +10,9 @@ import (
 	"io"
 
 	"github.com/katocxl/pantherclaw/internal/billing"
+	billingdomain "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/billing/licence"
+	"github.com/katocxl/pantherclaw/internal/entitlements"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -21,6 +23,9 @@ import (
 // `org admin-invite`. They need database access and print the bootstrap
 // admin token once (BUILD_GUIDE §8 M2); it is never retrievable again.
 func cmdOrg(ctx context.Context, args []string, stdout, stderr io.Writer, env Env) error {
+	if len(args) > 0 && args[0] == "plan" {
+		return cmdOrgPlan(ctx, args[1:], stdout, stderr, env)
+	}
 	if len(args) == 0 || (args[0] != "create" && args[0] != "admin-invite") {
 		_, _ = fmt.Fprint(stderr, usage)
 		return errUsage
@@ -56,7 +61,13 @@ func cmdOrg(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	if err != nil {
 		return err
 	}
-	b := tapp.NewBootstrap(pool, billing.New(pool, roots, clock.System{}, newLogger(cfg, stderr)))
+	var ents tapp.Entitlements = billing.New(pool, roots, clock.System{}, newLogger(cfg, stderr))
+	if cfg.billingMode() != entitlements.ModeLicence {
+		// Hosted: plans are per org (G0 UI D9), so the licence's org limit
+		// does not apply.
+		ents = hostedOrgLimit{ents}
+	}
+	b := tapp.NewBootstrap(pool, ents)
 
 	var org ids.OrgID
 	var tok string
@@ -82,4 +93,14 @@ func cmdOrg(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	_, _ = fmt.Fprintf(stdout, "\nthe first administrator signs in with:\n  pclaw login --server %s --org %s --invitation %s\n",
 		cfg.Auth.PublicURL, org, tok)
 	return nil
+}
+
+// hostedOrgLimit lifts the licence's org limit for hosted servers.
+type hostedOrgLimit struct{ tapp.Entitlements }
+
+// Current implements tapp.Entitlements.
+func (h hostedOrgLimit) Current(ctx context.Context) (billingdomain.Entitlements, error) {
+	e, err := h.Entitlements.Current(ctx)
+	e.Limits.MaxOrgs = billingdomain.Unlimited
+	return e, err
 }

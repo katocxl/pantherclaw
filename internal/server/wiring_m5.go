@@ -24,6 +24,8 @@ import (
 type m5Services struct {
 	notifications *napp.Service
 	webauthn      *authnapp.WebAuthn // nil when security keys are off
+	// browser is the browser sign-in the pages use (set by web).
+	browser *authnapp.Browser
 }
 
 // newM5 builds the notification service (with the SMTP relay and the
@@ -76,7 +78,8 @@ func newM5(ctx context.Context, cfg *Config, pool *db.Pool, kp keys.KeyProvider,
 // web builds the browser pages: sign-in on the shared callback, the
 // account page, and the security-key routes when WebAuthn is on.
 func (m *m5Services) web(cfg *Config, pool *db.Pool, idps []authnapp.IdP, limiter *httpx.Limiter, log *slog.Logger) (*webhttp.Handler, error) {
-	h, err := webhttp.New(authnapp.NewBrowser(pool, cfg.Auth.PublicURL, idps, clock.System{}, log), cfg.Auth.PublicURL, limiter, log)
+	m.browser = authnapp.NewBrowser(pool, cfg.Auth.PublicURL, idps, clock.System{}, log)
+	h, err := webhttp.New(m.browser, cfg.Auth.PublicURL, limiter, log)
 	if err != nil {
 		return nil, err
 	}

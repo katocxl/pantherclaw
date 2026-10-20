@@ -22,7 +22,7 @@ WHERE c.org_id = sqlc.arg(org_id) AND c.issued_via = 'ENROLL'
 ORDER BY c.issued_at, c.id LIMIT 1;
 
 -- name: OnboardingAgentInstance :one
-SELECT i.id, coalesce(i.decided_at, i.created_at)::timestamptz AS at FROM pc.agent_instances i
+SELECT i.agent_id, coalesce(i.decided_at, i.created_at)::timestamptz AS at FROM pc.agent_instances i
 JOIN pc.agents a ON a.org_id = i.org_id AND a.id = i.agent_id
 WHERE i.org_id = sqlc.arg(org_id) AND i.state = 'ADMITTED' AND NOT a.range_agent
 ORDER BY 2, i.id LIMIT 1;
@@ -47,9 +47,25 @@ ORDER BY p.created_at, p.id LIMIT 1;
 
 -- name: OnboardingSuspension :one
 -- An agent restored after it was suspended.
-SELECT r.agent_id, r.created_at FROM pc.agent_changes r
+SELECT r.agent_id, r.created_at,
+       (SELECT s.id FROM pc.agent_changes s
+        WHERE s.org_id = r.org_id AND s.agent_id = r.agent_id AND s.kind = 'agent.suspended' AND s.created_at <= r.created_at
+        ORDER BY s.created_at DESC, s.id DESC LIMIT 1)::uuid AS suspension_id
+FROM pc.agent_changes r
 JOIN pc.agents a ON a.org_id = r.org_id AND a.id = r.agent_id
 WHERE r.org_id = sqlc.arg(org_id) AND r.kind = 'agent.restored' AND NOT a.range_agent
   AND EXISTS (SELECT 1 FROM pc.agent_changes s WHERE s.org_id = r.org_id AND s.agent_id = r.agent_id
               AND s.kind = 'agent.suspended' AND s.created_at <= r.created_at)
 ORDER BY r.created_at, r.id LIMIT 1;
+
+-- name: OnboardingHeld :one
+-- The first real action held for approval, with its approval request.
+SELECT t.id, t.created_at,
+       (SELECT q.id FROM pc.approval_requests q WHERE q.org_id = t.org_id AND q.transaction_id = t.id
+        ORDER BY q.created_at, q.id LIMIT 1)::uuid AS request_id
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+JOIN pc.agents a ON a.org_id = r.org_id AND a.id = r.agent_id
+WHERE t.org_id = sqlc.arg(org_id) AND NOT t.simulated AND NOT r.simulated AND NOT a.range_agent
+  AND t.decision = 'REQUIRE_APPROVAL'
+ORDER BY t.created_at, t.id LIMIT 1;

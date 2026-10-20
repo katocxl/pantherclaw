@@ -83,6 +83,9 @@ func (h *Hierarchy) CreateEnvironment(ctx context.Context, teamID td.TeamID, kin
 		if err := c.Require(td.PermEnvironmentManage, path); err != nil {
 			return err
 		}
+		if err := checkEnvironmentLimit(ctx, h.ents, q, c.Org); err != nil {
+			return err
+		}
 		r, err := q.InsertEnvironment(ctx, dbq.InsertEnvironmentParams{
 			OrgID: c.Org, ID: ids.NewV7(), TeamID: optUUID(teamID), Slug: in.Slug, Name: in.Name,
 			Description: in.Description, Kind: string(kind),

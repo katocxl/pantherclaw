@@ -161,11 +161,16 @@ func (StepState) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_onboarding_proto_rawDescGZIP(), []int{1}
 }
 
-// EvidenceRef names a record that completed a step.
+// EvidenceRef names a record that completed a step. The kinds are fixed
+// per step: SECURITY_KEY "security_key" (the credential id); INVITE_TEAM
+// "invitation"; GATEWAY_ENROLLED "gateway"; AGENT_ENROLLED "agent";
+// FIRST_DECISION "decision" (the transaction whose decision receipt it
+// is); TEST_ALLOWED and TEST_DENIED "transaction"; TEST_HELD "approval"
+// (the approval request) and "transaction"; APPROVAL_DECIDED "approval";
+// SUSPENSION_TESTED "suspension" (the agent change that suspended it).
 type EvidenceRef struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Record kind, for example "gateway", "agent", "transaction",
-	// "approval" or "webauthn_credential".
+	// Record kind (see above).
 	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	// Record id in the caller's org.
 	Id            string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`

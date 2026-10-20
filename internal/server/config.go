@@ -69,6 +69,10 @@ type Config struct {
 	Gateways GatewaysConfig `json:"gateways"`
 	// Dev holds development-only settings (config_dev.go).
 	Dev DevConfig `json:"dev"`
+	// Billing and Signup are hosted plans and self-serve organizations
+	// (G0 UI D8, D9, D12; config_ui_tenancy.go).
+	Billing BillingConfig `json:"billing"`
+	Signup  SignupConfig  `json:"signup"`
 }
 
 // IdentityConfig configures workload identity (M3).
@@ -177,6 +181,7 @@ func (c *Config) Validate() error {
 		errs = append(errs, errors.New("worker_concurrency must be 1..1000"))
 	}
 	errs = append(errs, c.validateDeployment()...)
+	errs = append(errs, c.validateTenancy()...)
 	errs = append(errs, c.validateAuthority()...)
 	errs = append(errs, c.validateAuth()...)
 	errs = append(errs, c.validateOIDC()...)

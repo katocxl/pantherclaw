@@ -96,6 +96,10 @@ Usage:
                                                      create an organization and print its one-time admin token
   pantherclaw-server org admin-invite --org ID [--admin-email E] [--config FILE]
                                                      issue a new one-time admin token (recovery)
+  pantherclaw-server org plan grant --org ID --plan P --until RFC3339 --reason TEXT [--edition E] [--config FILE]
+                                                     give an org a complimentary plan (at most a year; audited)
+  pantherclaw-server org plan revoke --org ID --reason TEXT [--config FILE]
+                                                     end an org's complimentary plan now
   pantherclaw-server evidence integrity reset --org ID --reason TEXT --confirm [--config FILE]
                                                      resume checkpointing of an org whose evidence integrity FAILED,
                                                      after investigating; its ledger is checked again
@@ -234,6 +238,11 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	entsSvc, err := newEntitlements(cfg, pool, bill, log)
+	if err != nil {
+		return err
+	}
+	ui := newUITenancy(cfg, pool, entsSvc)
 	ents, err := bill.Current(ctx)
 	if err != nil {
 		return err
@@ -337,6 +346,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err != nil {
 			return err
 		}
+		ui.wireBrowser(m5.browser, web)
 		m6.mountPages(web)
 		m5p2.mountPages(web, m5)
 		mountM7Pages(web, pool, verification, m5)
@@ -349,7 +359,8 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		handler, err := apiHandler(apiDeps{
 			pool: pool, reg: reg, log: log, authority: svc, billing: bill,
 			auth: rpcauth.New(authn, procedurePermissions, nil,
-				rpcauth.WithRefusals(&rpcauth.AuditRefusals{Pool: pool, Log: log})),
+				rpcauth.WithRefusals(&rpcauth.AuditRefusals{Pool: pool, Log: log}),
+				rpcauth.WithPlanGate(planGate(entsSvc, cfg.Billing.RequirePlan))),
 			apiKeyEnv: credential.Env(cfg.Auth.APIKeyEnv),
 			cel:       cfg.CEL,
 			oauth: oauthhttp.New(authnapp.NewOAuth(pool, tokens, cfg.Auth.PublicURL, clock.System{}, log),
@@ -371,7 +382,8 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			autos:        autos,
 			m11protect:   m11protect,
 			ext:          ext,
-			extDeps:      xdeps,
+			extDeps:      ui.extensionDeps(xdeps),
+			ui:           ui,
 		})
 		if err != nil {
 			return err
@@ -608,6 +620,9 @@ type apiDeps struct {
 	m10ops m10OpsDeps
 	// M11 protect: the protected-change Gate and compromised publishers.
 	m11protect m11Protect
+	// ui is the UI phase's core services (wiring_ui_tenancy.go); nil in
+	// tests that do not need them.
+	ui *uiTenancy
 	// autos is the process's M11 part 2 core (nil: apiHandler builds one).
 	autos *automationsCore
 	// ext is what this build adds (internal/extension; zero: nothing), and
@@ -632,9 +647,8 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	pantherclawv1connect.RegisterSystemServiceHandler(rs, systemService{})
 	pantherclawv1connect.RegisterAuthorityServiceHandler(rs, authority.NewHandler(d.authority))
-	pantherclawv1connect.RegisterTenancyServiceHandler(rs, tenancyrpc.NewTenancy(tapp.NewHierarchy(pool, d.billing)))
-	pantherclawv1connect.RegisterAccessServiceHandler(rs, tenancyrpc.NewAccess(tapp.NewAccess(pool, log)).
-		WithDeployment(string(d.extDeps.Deployment)))
+	pantherclawv1connect.RegisterTenancyServiceHandler(rs, tenancyHandler(tenancyrpc.NewTenancy(tapp.NewHierarchy(pool, d.billing)), d.ui))
+	pantherclawv1connect.RegisterAccessServiceHandler(rs, accessHandler(tenancyrpc.NewAccess(tapp.NewAccess(pool, log).WithEntitlements(d.billing)).WithDeployment(string(d.extDeps.Deployment)), d.ui))
 	pantherclawv1connect.RegisterServiceAccountServiceHandler(rs, tenancyrpc.NewServiceAccounts(tapp.NewServiceAccounts(pool, d.apiKeyEnv)))
 	// autos is the M11 part 2 core, set below once grants and runs exist;
 	// ListAgents reads it only while serving.

@@ -57,10 +57,15 @@ enum StepState {
   STEP_STATE_DONE = 2;
 }
 
-// EvidenceRef names a record that completed a step.
+// EvidenceRef names a record that completed a step. The kinds are fixed
+// per step: SECURITY_KEY "security_key" (the credential id); INVITE_TEAM
+// "invitation"; GATEWAY_ENROLLED "gateway"; AGENT_ENROLLED "agent";
+// FIRST_DECISION "decision" (the transaction whose decision receipt it
+// is); TEST_ALLOWED and TEST_DENIED "transaction"; TEST_HELD "approval"
+// (the approval request) and "transaction"; APPROVAL_DECIDED "approval";
+// SUSPENSION_TESTED "suspension" (the agent change that suspended it).
 message EvidenceRef {
-  // Record kind, for example "gateway", "agent", "transaction",
-  // "approval" or "webauthn_credential".
+  // Record kind (see above).
   string kind = 1;
   // Record id in the caller's org.
   string id = 2;

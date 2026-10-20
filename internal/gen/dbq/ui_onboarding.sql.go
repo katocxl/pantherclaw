@@ -16,21 +16,21 @@ import (
 )
 
 const onboardingAgentInstance = `-- name: OnboardingAgentInstance :one
-SELECT i.id, coalesce(i.decided_at, i.created_at)::timestamptz AS at FROM pc.agent_instances i
+SELECT i.agent_id, coalesce(i.decided_at, i.created_at)::timestamptz AS at FROM pc.agent_instances i
 JOIN pc.agents a ON a.org_id = i.org_id AND a.id = i.agent_id
 WHERE i.org_id = $1 AND i.state = 'ADMITTED' AND NOT a.range_agent
 ORDER BY 2, i.id LIMIT 1
 `
 
 type OnboardingAgentInstanceRow struct {
-	ID ids.UUID
-	At time.Time
+	AgentID ids.UUID
+	At      time.Time
 }
 
 func (q *Queries) OnboardingAgentInstance(ctx context.Context, orgID ids.OrgID) (OnboardingAgentInstanceRow, error) {
 	row := q.db.QueryRow(ctx, onboardingAgentInstance, orgID)
 	var i OnboardingAgentInstanceRow
-	err := row.Scan(&i.ID, &i.At)
+	err := row.Scan(&i.AgentID, &i.At)
 	return i, err
 }
 
@@ -96,6 +96,32 @@ func (q *Queries) OnboardingGateway(ctx context.Context, orgID ids.OrgID) (Onboa
 	return i, err
 }
 
+const onboardingHeld = `-- name: OnboardingHeld :one
+SELECT t.id, t.created_at,
+       (SELECT q.id FROM pc.approval_requests q WHERE q.org_id = t.org_id AND q.transaction_id = t.id
+        ORDER BY q.created_at, q.id LIMIT 1)::uuid AS request_id
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+JOIN pc.agents a ON a.org_id = r.org_id AND a.id = r.agent_id
+WHERE t.org_id = $1 AND NOT t.simulated AND NOT r.simulated AND NOT a.range_agent
+  AND t.decision = 'REQUIRE_APPROVAL'
+ORDER BY t.created_at, t.id LIMIT 1
+`
+
+type OnboardingHeldRow struct {
+	ID        ids.UUID
+	CreatedAt time.Time
+	RequestID ids.UUID
+}
+
+// The first real action held for approval, with its approval request.
+func (q *Queries) OnboardingHeld(ctx context.Context, orgID ids.OrgID) (OnboardingHeldRow, error) {
+	row := q.db.QueryRow(ctx, onboardingHeld, orgID)
+	var i OnboardingHeldRow
+	err := row.Scan(&i.ID, &i.CreatedAt, &i.RequestID)
+	return i, err
+}
+
 const onboardingInvitation = `-- name: OnboardingInvitation :one
 SELECT id, created_at FROM pc.invitations
 WHERE org_id = $1 AND kind = 'MEMBER'
@@ -141,7 +167,11 @@ func (q *Queries) OnboardingSecurityKey(ctx context.Context, orgID ids.OrgID, us
 }
 
 const onboardingSuspension = `-- name: OnboardingSuspension :one
-SELECT r.agent_id, r.created_at FROM pc.agent_changes r
+SELECT r.agent_id, r.created_at,
+       (SELECT s.id FROM pc.agent_changes s
+        WHERE s.org_id = r.org_id AND s.agent_id = r.agent_id AND s.kind = 'agent.suspended' AND s.created_at <= r.created_at
+        ORDER BY s.created_at DESC, s.id DESC LIMIT 1)::uuid AS suspension_id
+FROM pc.agent_changes r
 JOIN pc.agents a ON a.org_id = r.org_id AND a.id = r.agent_id
 WHERE r.org_id = $1 AND r.kind = 'agent.restored' AND NOT a.range_agent
   AND EXISTS (SELECT 1 FROM pc.agent_changes s WHERE s.org_id = r.org_id AND s.agent_id = r.agent_id
@@ -150,14 +180,15 @@ ORDER BY r.created_at, r.id LIMIT 1
 `
 
 type OnboardingSuspensionRow struct {
-	AgentID   ids.UUID
-	CreatedAt time.Time
+	AgentID      ids.UUID
+	CreatedAt    time.Time
+	SuspensionID ids.UUID
 }
 
 // An agent restored after it was suspended.
 func (q *Queries) OnboardingSuspension(ctx context.Context, orgID ids.OrgID) (OnboardingSuspensionRow, error) {
 	row := q.db.QueryRow(ctx, onboardingSuspension, orgID)
 	var i OnboardingSuspensionRow
-	err := row.Scan(&i.AgentID, &i.CreatedAt)
+	err := row.Scan(&i.AgentID, &i.CreatedAt, &i.SuspensionID)
 	return i, err
 }
