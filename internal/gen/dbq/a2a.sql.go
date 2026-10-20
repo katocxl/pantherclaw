@@ -41,6 +41,20 @@ func (q *Queries) ActivateA2APin(ctx context.Context, arg ActivateA2APinParams) 
 	return result.RowsAffected(), nil
 }
 
+const activateA2APinAsOperator = `-- name: ActivateA2APinAsOperator :execrows
+UPDATE pc.a2a_pins SET state = 'ACTIVE', confirmed_operator = $1
+WHERE org_id = $2 AND id = $3 AND state = 'PROPOSED'
+`
+
+// ActivateA2APinAsOperator is dev seed's activation (DEVELOPMENT ONLY).
+func (q *Queries) ActivateA2APinAsOperator(ctx context.Context, operator *string, orgID ids.OrgID, iD ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, activateA2APinAsOperator, operator, orgID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getA2AConnectionWriter = `-- name: GetA2AConnectionWriter :one
 SELECT simulated, updated_by, revision, gateway_id, name
 FROM pc.connections
@@ -105,7 +119,7 @@ func (q *Queries) GetA2APeerRun(ctx context.Context, arg GetA2APeerRunParams) (G
 }
 
 const getA2APin = `-- name: GetA2APin :one
-SELECT org_id, id, connection_id, state, card_url, binding, interface_url, pinned_card, card_digest, card_keys, skills, peer_agent_id, peer_bounds, peer_limits, max_answer_bytes, max_stream_seconds, proposed_by, proposed_at, confirmed_by, confirmed_credential, confirmed_at, decided_at, drifted_at, observed_digest
+SELECT org_id, id, connection_id, state, card_url, binding, interface_url, pinned_card, card_digest, card_keys, skills, peer_agent_id, peer_bounds, peer_limits, max_answer_bytes, max_stream_seconds, proposed_by, proposed_at, confirmed_by, confirmed_credential, confirmed_operator, confirmed_at, decided_at, drifted_at, observed_digest
 FROM pc.a2a_pins
 WHERE org_id = $1 AND connection_id = $2 AND state = $3
 `
@@ -134,6 +148,7 @@ func (q *Queries) GetA2APin(ctx context.Context, orgID ids.OrgID, connectionID i
 		&i.ProposedAt,
 		&i.ConfirmedBy,
 		&i.ConfirmedCredential,
+		&i.ConfirmedOperator,
 		&i.ConfirmedAt,
 		&i.DecidedAt,
 		&i.DriftedAt,
@@ -263,7 +278,7 @@ func (q *Queries) ListA2APeerRuns(ctx context.Context, orgID ids.OrgID, connecti
 }
 
 const lockA2AProposal = `-- name: LockA2AProposal :one
-SELECT org_id, id, connection_id, state, card_url, binding, interface_url, pinned_card, card_digest, card_keys, skills, peer_agent_id, peer_bounds, peer_limits, max_answer_bytes, max_stream_seconds, proposed_by, proposed_at, confirmed_by, confirmed_credential, confirmed_at, decided_at, drifted_at, observed_digest
+SELECT org_id, id, connection_id, state, card_url, binding, interface_url, pinned_card, card_digest, card_keys, skills, peer_agent_id, peer_bounds, peer_limits, max_answer_bytes, max_stream_seconds, proposed_by, proposed_at, confirmed_by, confirmed_credential, confirmed_operator, confirmed_at, decided_at, drifted_at, observed_digest
 FROM pc.a2a_pins
 WHERE org_id = $1 AND connection_id = $2 AND id = $3 AND state = 'PROPOSED'
 FOR UPDATE
@@ -293,6 +308,7 @@ func (q *Queries) LockA2AProposal(ctx context.Context, orgID ids.OrgID, connecti
 		&i.ProposedAt,
 		&i.ConfirmedBy,
 		&i.ConfirmedCredential,
+		&i.ConfirmedOperator,
 		&i.ConfirmedAt,
 		&i.DecidedAt,
 		&i.DriftedAt,

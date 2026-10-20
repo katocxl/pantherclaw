@@ -205,3 +205,23 @@ func InsertPeerRun(ctx context.Context, q *dbq.Queries, org ids.OrgID, requester
 		OrgID: org, RequesterRunID: requester, ConnectionID: conn, ContextID: contextID, ChildRunID: p.Run, ChildGrantID: p.Grant,
 	})
 }
+
+// ActivateAsOperator makes the proposal pin the connection's ACTIVE pin
+// for dev seed's operator, without a person or a security key.
+// DEVELOPMENT ONLY: the API and the confirm page never call it.
+func ActivateAsOperator(ctx context.Context, q *dbq.Queries, org ids.OrgID, conn, pin ids.UUID, operator string) (Pin, error) {
+	if _, err := q.LockA2AProposal(ctx, org, conn, pin); db.IsNoRows(err) {
+		return Pin{}, ErrNotFound
+	} else if err != nil {
+		return Pin{}, err
+	}
+	if _, err := q.SupersedeA2APin(ctx, org, conn); err != nil {
+		return Pin{}, err
+	}
+	if n, err := q.ActivateA2APinAsOperator(ctx, &operator, org, pin); err != nil {
+		return Pin{}, err
+	} else if n != 1 {
+		return Pin{}, ErrNotFound
+	}
+	return Get(ctx, q, org, conn, StateActive)
+}

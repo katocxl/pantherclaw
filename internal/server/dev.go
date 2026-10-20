@@ -61,6 +61,9 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	githubURL := fs.String("github-url", "", "with --gateway-out: also seed pc.github and the connection \"github\" to this GitHub API "+
 		"(pantherclaw-sim github), held by the gateway (seal the GitHub App with pclaw seal --github-app), the gateway as its fact provider, "+
 		"and, with --workload-out, the GitHub operations in the grant")
+	a2aURL := fs.String("a2a-url", "", "with --gateway-out and --workload-out: also seed pc.a2a, the peer agent dev-peer and the simulated a2a connection \"peer\" "+
+		"to this A2A agent (pantherclaw-sim a2a), its card pinned, and the a2a operations in the grant (G0 M14 D33)")
+	a2aPeerOut := fs.String("a2a-peer-out", "", "with --a2a-url: write the peer agent's key file here (0600, never overwritten)")
 	workloadOut := fs.String("workload-out", "", "also seed an admitted PAP/1 workload with a grant and a run; write its key file here (0600, never overwritten)")
 	factsOut := fs.String("facts-key-out", "", "with --workload-out: write the API key of the development fact provider here (0600, never overwritten)")
 	holdOver := fs.String("hold-over", "50.00", "publish a policy holding refunds over this amount (grant currency) for an approver; empty for none")
@@ -107,8 +110,11 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 			return fmt.Errorf("dev seed: %s already exists", out)
 		}
 	}
-	if (*targetURL != "" || *shell || *githubURL != "") && *gatewayOut == "" {
+	if (*targetURL != "" || *shell || *githubURL != "" || *a2aURL != "") && *gatewayOut == "" {
 		return errTargetNeedsGateway
+	}
+	if *a2aURL != "" && (*workloadOut == "" || *a2aPeerOut == "") {
+		return errors.New("dev seed: --a2a-url needs --workload-out and --a2a-peer-out")
 	}
 	if *access == "" {
 		*access = capp.AccessNone
@@ -163,6 +169,9 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	if *githubURL != "" {
 		pkgs = append(pkgs, devPackage{pcgithub.Name, pcgithub.Version, pcgithub.Package})
 	}
+	if *a2aURL != "" {
+		pkgs = append(pkgs, devA2APackage())
+	}
 	if err := seedPackages(ctx, pool, org, signer, pkgs...); err != nil {
 		return err
 	}
@@ -203,6 +212,11 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 			_, _ = fmt.Fprintf(stdout, "seeded github connection %s (%s) to %s, its facts read by the gateway; seal the GitHub App with "+
 				"pclaw seal --connection %s --github-app ID --installation N --account LOGIN --from-file KEY.pem\n", c.ID, c.Name, *githubURL, c.ID)
 		}
+		if *a2aURL != "" {
+			if err := seedA2A(ctx, cfg, pool, org, gw, w, *a2aURL, *a2aPeerOut, stdout); err != nil {
+				return err
+			}
+		}
 		if *shell {
 			c, err := seedShellConnection(ctx, cfg, pool, org, gw)
 			if err != nil {
@@ -219,7 +233,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	if err != nil {
 		return err
 	}
-	g, err := seedGrant(ctx, pool, org, w, devGrantTerms{MaxPerAction: maxPer, Limit: lim, MaxCount: *maxCount, Shell: *shell, GitHub: *githubURL != ""})
+	g, err := seedGrant(ctx, pool, org, w, devGrantTerms{MaxPerAction: maxPer, Limit: lim, MaxCount: *maxCount, Shell: *shell, GitHub: *githubURL != "", A2A: *a2aURL != ""})
 	if err != nil {
 		return err
 	}

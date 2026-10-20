@@ -47,6 +47,8 @@ CREATE TABLE pc.a2a_pins (
     proposed_at          timestamptz NOT NULL DEFAULT now(),
     confirmed_by         uuid,
     confirmed_credential uuid,
+    -- Dev seed only: the operator who activated a development pin.
+    confirmed_operator   text        CHECK (char_length(confirmed_operator) BETWEEN 1 AND 100),
     confirmed_at         timestamptz,
     decided_at           timestamptz,
     drifted_at           timestamptz,
@@ -58,7 +60,9 @@ CREATE TABLE pc.a2a_pins (
     CHECK ((peer_agent_id IS NULL) = (peer_bounds IS NULL)),
     CHECK (peer_limits IS NULL OR peer_agent_id IS NOT NULL),
     CHECK ((state IN ('ACTIVE', 'SUPERSEDED')) = (confirmed_at IS NOT NULL)),
-    CHECK ((confirmed_at IS NULL) = (confirmed_by IS NULL) AND (confirmed_at IS NULL) = (confirmed_credential IS NULL)),
+    CHECK ((confirmed_by IS NULL) = (confirmed_credential IS NULL)),
+    CHECK ((confirmed_at IS NULL) = (confirmed_by IS NULL AND confirmed_operator IS NULL)),
+    CHECK (confirmed_by IS NULL OR confirmed_operator IS NULL),
     CHECK ((state = 'PROPOSED') = (decided_at IS NULL)),
     CHECK ((drifted_at IS NULL) = (observed_digest IS NULL)),
     CHECK (drifted_at IS NULL OR state IN ('ACTIVE', 'SUPERSEDED'))
@@ -76,7 +80,7 @@ SET search_path = pc, pg_temp
 AS $$
 BEGIN
     IF TG_OP = 'INSERT' THEN
-        IF NEW.state <> 'PROPOSED' OR NEW.confirmed_at IS NOT NULL OR NEW.drifted_at IS NOT NULL THEN
+        IF NEW.state <> 'PROPOSED' OR NEW.confirmed_at IS NOT NULL OR NEW.confirmed_operator IS NOT NULL OR NEW.drifted_at IS NOT NULL THEN
             RAISE EXCEPTION 'an a2a pin is inserted PROPOSED' USING ERRCODE = 'check_violation';
         END IF;
         NEW.proposed_at := now();
@@ -98,7 +102,8 @@ BEGIN
         RAISE EXCEPTION 'an a2a pin moves PROPOSED to ACTIVE or VOIDED, ACTIVE to SUPERSEDED' USING ERRCODE = 'check_violation';
     END IF;
     IF OLD.state <> 'PROPOSED' AND (NEW.confirmed_by IS DISTINCT FROM OLD.confirmed_by
-            OR NEW.confirmed_credential IS DISTINCT FROM OLD.confirmed_credential OR NEW.confirmed_at IS DISTINCT FROM OLD.confirmed_at) THEN
+            OR NEW.confirmed_credential IS DISTINCT FROM OLD.confirmed_credential OR NEW.confirmed_at IS DISTINCT FROM OLD.confirmed_at
+            OR NEW.confirmed_operator IS DISTINCT FROM OLD.confirmed_operator) THEN
         RAISE EXCEPTION 'an a2a pin is confirmed once' USING ERRCODE = 'check_violation';
     END IF;
     IF OLD.state = 'PROPOSED' AND NEW.state <> 'PROPOSED' THEN
@@ -153,7 +158,7 @@ $$;
 -- +goose StatementEnd
 
 GRANT SELECT, INSERT ON pc.a2a_pins, pc.a2a_peer_runs TO pc_app;
-GRANT UPDATE (state, confirmed_by, confirmed_credential, confirmed_at, decided_at, drifted_at, observed_digest)
+GRANT UPDATE (state, confirmed_by, confirmed_credential, confirmed_operator, confirmed_at, decided_at, drifted_at, observed_digest)
     ON pc.a2a_pins TO pc_app;
 GRANT SELECT ON pc.a2a_pins, pc.a2a_peer_runs TO pc_audit_ro;
 

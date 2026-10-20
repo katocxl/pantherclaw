@@ -46,6 +46,7 @@ type PcA2aPin struct {
 	ProposedAt          time.Time
 	ConfirmedBy         *ids.UUID
 	ConfirmedCredential *ids.UUID
+	ConfirmedOperator   *string
 	ConfirmedAt         *time.Time
 	DecidedAt           *time.Time
 	DriftedAt           *time.Time

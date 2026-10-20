@@ -73,3 +73,8 @@ LIMIT 200;
 
 -- name: TransactionRun :one
 SELECT run_id FROM pc.transactions WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- ActivateA2APinAsOperator is dev seed's activation (DEVELOPMENT ONLY).
+-- name: ActivateA2APinAsOperator :execrows
+UPDATE pc.a2a_pins SET state = 'ACTIVE', confirmed_operator = sqlc.arg(operator)
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PROPOSED';

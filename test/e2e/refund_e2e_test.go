@@ -96,6 +96,9 @@ type stack struct {
 	// gh is the GitHub simulator, its address, the seeded connection
 	// "github" to it, and its App's private key (G0 M8, options.github).
 	gh *githubSim
+	// a2a is the A2A simulator acting as the peer agent, the seeded a2a
+	// connection "peer" to it and the peer's workload (G0 M14, options.a2a).
+	a2a *a2aPeerSim
 }
 
 type options struct {
@@ -129,6 +132,10 @@ type options struct {
 	// claimTimeout is the server's coverage.claim_timeout; zero is its
 	// default (G0 M9).
 	claimTimeout time.Duration
+	// a2a also starts the A2A simulator as a PantherClaw peer agent and seeds
+	// pc.a2a, the peer agent and the connection "peer" (dev seed --a2a-url,
+	// G0 M14 D33).
+	a2a bool
 }
 
 // freePorts are the ports freeAddr has handed out in this test binary.
@@ -235,6 +242,9 @@ func start(t *testing.T, o options) *stack {
 	if o.shell {
 		args = append(args, "--shell")
 	}
+	if o.a2a {
+		args = append(args, s.startA2APeer(t, dir)...)
+	}
 	if o.github {
 		s.gh = o.githubAt
 		if s.gh == nil {
@@ -257,6 +267,9 @@ func start(t *testing.T, o options) *stack {
 			t.Fatalf("dev seed output %q", out.String())
 		}
 		s.gh.conn = mustUUID(t, g[1])
+	}
+	if o.a2a {
+		s.a2aSeeded(t, out.String())
 	}
 	s.pool = s.db.AppPool(t)
 
@@ -292,6 +305,9 @@ func start(t *testing.T, o options) *stack {
 	s.keyFile = keyFile
 	s.factsKey = factsFile
 	s.workload(t, keyFile)
+	if o.a2a {
+		s.a2aWorkload(t)
+	}
 	refundable(t, "http://"+apiAddr, factsFile, "ch_1")
 
 	gs := httptest.NewUnstartedServer(nil)

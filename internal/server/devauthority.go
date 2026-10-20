@@ -144,6 +144,9 @@ type devGrantTerms struct {
 	// release_approver (inside a change window, HR-207), and a task merges
 	// once (G0 M8, §43).
 	GitHub bool
+	// A2A also allows the pc.a2a operations: messages to the peer agent,
+	// whose runs this grant delegates to (G0 M14 D33).
+	A2A bool
 }
 
 // seedGrant issues a root grant to the seeded agent for its owner: refunds
@@ -158,6 +161,9 @@ func seedGrant(ctx context.Context, pool *db.Pool, org ids.OrgID, w devWorkload,
 	}
 	if t.GitHub {
 		ops = append(ops, githubOperations...)
+	}
+	if t.A2A {
+		ops = append(ops, devA2AOperations...)
 	}
 	bounds, err := json.Marshal(map[string]any{
 		"operations": ops,
@@ -215,8 +221,8 @@ func seedGrant(ctx context.Context, pool *db.Pool, org ids.OrgID, w devWorkload,
 	}
 	defsStore := &defspg.Store{Pool: pool}
 	active := map[string]*defs.Definition{}
-	for _, op := range append([]string{"payments.refund.create", shellOperation}, githubOperations...) {
-		if (op == shellOperation && !t.Shell) || (slices.Contains(githubOperations, op) && !t.GitHub) {
+	for _, op := range append(append([]string{"payments.refund.create", shellOperation}, githubOperations...), devA2AOperations...) {
+		if (op == shellOperation && !t.Shell) || (slices.Contains(githubOperations, op) && !t.GitHub) || (slices.Contains(devA2AOperations, op) && !t.A2A) {
 			continue
 		}
 		d, err := defsStore.Active(ctx, org, op)
