@@ -48,9 +48,6 @@ const (
 	// CodeA2AStream: the stream broke off, ran over its cap or time, or
 	// carried an event that is not one.
 	CodeA2AStream = "a2a_stream_cut"
-	// CodeKindConfigMissing: the connection carries no pinned a2a
-	// configuration (D85).
-	CodeKindConfigMissing = "kind_config_missing"
 )
 
 // Limits of A2A dispatch.

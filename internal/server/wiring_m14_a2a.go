@@ -17,7 +17,7 @@ import (
 // D64): a2a connections can then be created, their card pinned in the
 // creating transaction, and gateways get the pin with the connection. It also
 // gives the Authority its peer delegation.
-func wireM14A2A(core *m14Core, store *pgauthority.Store, pool *db.Pool) {
+func wireM14A2A(core *m14Core, svc *authority.Service, store *pgauthority.Store, pool *db.Pool) {
 	if core == nil {
 		return
 	}
@@ -26,7 +26,10 @@ func wireM14A2A(core *m14Core, store *pgauthority.Store, pool *db.Pool) {
 	// (D33, D89): the peer gets a child run and a grant within the
 	// requester's.
 	_, grants := newGrants(pool)
-	store.Peer = (&authority.Peer{Grants: grants}).Delegate
+	peer := &authority.Peer{Grants: grants, Pool: pool}
+	store.Peer = peer.Delegate
+	svc.WithPeerCheck(peer.Check)
+	core.kinds.RegisterDrift(capp.KindA2A, a2astore.DriftHook{})
 }
 
 // mountM14A2A adds the a2a pin confirm page (D85): a proposed card serves

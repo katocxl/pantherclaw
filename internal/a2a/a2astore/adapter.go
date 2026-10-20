@@ -4,8 +4,10 @@
 package a2astore
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json/v2"
 	"errors"
@@ -256,4 +258,44 @@ func ToProto(c *capp.A2AConfig) *pb.A2AConfig {
 		out.PeerScope = &pb.A2APeerScope{Bounds: c.PeerScope.Bounds, Limits: c.PeerScope.Limits}
 	}
 	return out
+}
+
+// DriftHook records a reported card drift on the connection's ACTIVE pin
+// (ports.KindDrift, D86): the server calls it in the transaction that
+// quarantines the connection. A report against a digest that is no longer
+// the pinned one is stale and refused; a repeat is accepted.
+type DriftHook struct{}
+
+var _ ports.KindDrift = DriftHook{}
+
+// ErrStaleDrift refuses a drift report about a pin that is no longer the
+// connection's.
+var ErrStaleDrift = pcerr.New(pcerr.FailedPrecondition, "A2A_DRIFT_STALE",
+	"the reported digest is not the connection's pinned card")
+
+// Drift implements ports.KindDrift: expected and observed are the pinned
+// and the observed card digests in hex (or a word for an unreadable or
+// invalid card).
+func (DriftHook) Drift(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn ids.UUID, expected, observed string) error {
+	pinned, err := hex.DecodeString(expected)
+	if err != nil || len(pinned) != 32 {
+		return ErrStaleDrift
+	}
+	q := dbq.New(tx)
+	p, err := Get(ctx, q, org, conn, StateActive)
+	if err != nil || !bytes.Equal(p.Config.GetCardDigest(), pinned) {
+		return ErrStaleDrift
+	}
+	if p.DriftedAt != nil {
+		return nil
+	}
+	obs, err := hex.DecodeString(observed)
+	if err != nil || len(obs) != 32 {
+		// Not a digest ("invalid", "unreadable", "signature"): recorded as
+		// the digest of the word, so the pin still reads as drifted.
+		sum := sha256.Sum256([]byte(observed))
+		obs = sum[:]
+	}
+	_, err = MarkDrift(ctx, q, org, conn, pinned, obs)
+	return err
 }

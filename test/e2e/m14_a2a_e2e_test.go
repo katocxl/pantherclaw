@@ -414,3 +414,20 @@ func TestT148_PeerAgentCannotLaunderAuthority(t *testing.T) {
 		t.Fatalf("refund beyond it: %d %+v", code, r)
 	}
 }
+
+// TestHR324_PeerCallNeedsADelegatingGrant: a requester whose grant cannot
+// delegate is denied a message to a peer agent at decision time
+// (DELEGATION_NOT_ALLOWED), and nothing reaches the peer.
+func TestHR324_PeerCallNeedsADelegatingGrant(t *testing.T) {
+	s := start(t, options{budget: "1000.00", a2a: true})
+	s.a2aRange(t)
+	s.db.AdminExec(t, `UPDATE pc.grant_revisions v SET delegation_depth = 0 FROM pc.runs r
+		WHERE r.org_id = $1 AND r.id = $2 AND v.org_id = r.org_id AND v.grant_id = r.grant_id`, s.org, s.run)
+	a := s.askPeer(t, wire.MethodSendMessage, peerMessage("refund ch_1"))
+	if a.Error == nil || a.Error.Data["decision"] != "DENY" || a.Error.Data["error"] != "DELEGATION_NOT_ALLOWED" {
+		t.Fatalf("a requester that cannot delegate: %+v", a.Error)
+	}
+	if n := len(s.a2a.sim.Received()); n != 0 {
+		t.Fatalf("the peer received %d messages", n)
+	}
+}

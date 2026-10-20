@@ -7,6 +7,7 @@ package a2astore_test
 
 import (
 	"bytes"
+	"encoding/hex"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -265,6 +266,37 @@ func TestHR322_PinRowsNeverChange(t *testing.T) {
 		}
 		if state != a2astore.StateVoided {
 			t.Fatalf("older proposal is %s", state)
+		}
+		return nil
+	})
+}
+
+// TestHR322_DriftHookRecordsOnlyAgainstThePin (D86): the server's drift
+// report reaches the ACTIVE pin; a report about another digest is stale
+// and refused; a word for an unreadable card still marks the pin drifted.
+func TestHR322_DriftHookRecordsOnlyAgainstThePin(t *testing.T) {
+	pool := dbtest.New(t).AppPool(t)
+	w := newWorld(t, pool, "https://peer.example/a2a")
+	cfg := pinned(`{"name":"peer"}`)
+	w.tx(t, func(ctx context.Context, q *dbq.Queries, _ db.TenantTx) error {
+		id, err := a2astore.Propose(ctx, q, w.org, w.conn, cfg, "user:x")
+		if err != nil {
+			return err
+		}
+		_, err = a2astore.ActivateAsOperator(ctx, q, w.org, w.conn, id, "test")
+		return err
+	})
+	stale := sha256.Sum256([]byte("stale"))
+	w.tx(t, func(ctx context.Context, q *dbq.Queries, tx db.TenantTx) error {
+		if err := (a2astore.DriftHook{}).Drift(ctx, tx, w.org, w.conn, hex.EncodeToString(stale[:]), "unreadable"); !errors.Is(err, a2astore.ErrStaleDrift) {
+			t.Fatalf("stale report: %v", err)
+		}
+		if err := (a2astore.DriftHook{}).Drift(ctx, tx, w.org, w.conn, hex.EncodeToString(cfg.GetCardDigest()), "unreadable"); err != nil {
+			return err
+		}
+		p, err := a2astore.Get(ctx, q, w.org, w.conn, a2astore.StateActive)
+		if err != nil || p.DriftedAt == nil {
+			t.Fatalf("drift not recorded: %+v %v", p, err)
 		}
 		return nil
 	})

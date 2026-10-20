@@ -10,6 +10,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/a2a/a2astore"
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
+	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
@@ -47,6 +48,47 @@ var ErrPeerDelegation = pcerr.New(pcerr.FailedPrecondition, "DELEGATION_NOT_ALLO
 // in-transaction store (DelegateTx).
 type Peer struct {
 	Grants *grantsapp.Service
+	// Pool reads the connection's pin for the decision-time check.
+	Pool *db.Pool
+}
+
+// Check is the decision-time peer check (pipeline.PeerCheck, D89, HR-324):
+// a call through an a2a connection that names a peer agent of the org
+// needs the requester's grant to allow delegation (depth, and fan-out
+// under its own cap); "" lets it through. A connection to an external
+// peer delegates nothing. The fan-out is checked again, under the parent's
+// row lock, when BeginDispatch delegates.
+func (p *Peer) Check(ctx context.Context, org ids.OrgID, conn pipeline.Connection, grant gdomain.Grant) string {
+	var peer string
+	err := p.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		pin, err := a2astore.Get(ctx, dbq.New(tx), org, conn.ID, a2astore.StateActive)
+		if err != nil {
+			return err
+		}
+		peer = pin.Config.GetPeerAgentId()
+		return nil
+	}, db.ReadOnly())
+	switch {
+	case errors.Is(err, a2astore.ErrNotFound):
+		return "the connection has no confirmed peer card"
+	case err != nil:
+		return "the connection's peer could not be read"
+	case peer == "":
+		return ""
+	case grant.Delegation.Depth < 1:
+		return "the requester's grant does not allow delegation to a peer agent"
+	case grant.Delegation.MaxChildren < 1:
+		return "the requester's grant allows no delegated runs"
+	}
+	return ""
+}
+
+// WithPeerCheck gives the decision pipeline its peer check (D89).
+func (s *Service) WithPeerCheck(c pipeline.PeerCheck) *Service {
+	if s.decider != nil && s.decider.Pipeline != nil {
+		s.decider.Pipeline.Peer = c
+	}
+	return s
 }
 
 // Delegate is the BeginDispatch hook (pgauthority.Store.Peer): for a peer
