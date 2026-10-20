@@ -441,9 +441,9 @@ func (s *Service) m14Shape(kind string, simulated bool, in *CreateInput) (*strin
 
 // checkKindGateway asks the store of a postgres or a2a connection's kind to
 // validate the configuration for the gateway it moves to, in the move's
-// transaction (G0 M14 D105): without a store the kind is not implemented;
-// a store without a gateway check accepts the move. Other kinds are not
-// asked.
+// transaction (G0 M14 D105, D115): without a store the kind is not
+// implemented, and a store without a gateway check cannot validate the
+// move, so it is refused too (fail closed). Other kinds are not asked.
 func (s *Service) checkKindGateway(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn dbq.PcConnection, gateway ids.UUID) error {
 	if conn.Kind != KindPostgres && conn.Kind != KindA2A {
 		return nil
@@ -452,8 +452,14 @@ func (s *Service) checkKindGateway(ctx context.Context, tx db.TenantTx, org ids.
 	if !ok {
 		return ErrKindNotImplemented
 	}
-	if check, ok := store.(ports.KindGatewayCheck); ok {
-		return check.CheckGateway(ctx, tx, org, conn.ID, gateway)
+	check, ok := store.(ports.KindGatewayCheck)
+	if !ok {
+		return ErrKindGatewayUnchecked
 	}
-	return nil
+	return check.CheckGateway(ctx, tx, org, conn.ID, gateway)
 }
+
+// ErrKindGatewayUnchecked: the kind's store cannot validate a move to
+// another gateway, so the connection stays where it is (D115).
+var ErrKindGatewayUnchecked = pcerr.New(pcerr.FailedPrecondition, "KIND_GATEWAY_UNCHECKED",
+	"this kind of connection cannot be moved to another gateway in this build")
