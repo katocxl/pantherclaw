@@ -18,6 +18,10 @@ import (
 // Authority is asked, and nothing is sent.
 const CodeKindNotImplemented = "kind_not_implemented"
 
+// CodeKindConfigMissing: an a2a or postgres connection reached the gateway
+// without its configuration (G0 M14 D94); nothing is asked or sent.
+const CodeKindConfigMissing = "kind_config_missing"
+
 // errKindNotImplemented is what a client lookup returns for such a kind.
 var errKindNotImplemented = errors.New("dispatch: connection kind not implemented")
 
@@ -42,4 +46,17 @@ func kindNotImplemented(kind string) bool {
 	}
 	_, ok := kindSenders[kind]
 	return !ok
+}
+
+// kindRefusal is why the gateway refuses a call through conn before the
+// Authority is asked, or "" (D94): a kind without a sender, or an a2a or
+// postgres connection without its configuration.
+func kindRefusal(conn *control.Connection) string {
+	switch kind := conn.GetKind(); {
+	case kindNotImplemented(kind):
+		return CodeKindNotImplemented
+	case kind == "a2a" && conn.GetA2A() == nil, kind == "postgres" && conn.GetPostgres() == nil:
+		return CodeKindConfigMissing
+	}
+	return ""
 }

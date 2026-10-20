@@ -322,3 +322,21 @@ func TestM14_ResponseClassesCoverSubtrees(t *testing.T) {
 		t.Fatalf("overlapping declarations are valid: %v", err)
 	}
 }
+
+// TestM14_RequiredSets: only target_set and destination_set can be
+// required (G0 M14 D78).
+func TestM14_RequiredSets(t *testing.T) {
+	for kind, ok := range map[domain.ConstraintKind]bool{
+		domain.ConstraintTargetSet: true, domain.ConstraintDestinationSet: true, domain.ConstraintCountMax: false,
+	} {
+		d := minimal(map[string]domain.ParamSpec{"n": {Type: domain.TypeInteger, Unit: "count"}})
+		c := domain.ConstraintSpec{Kind: kind, Required: true}
+		if kind == domain.ConstraintCountMax {
+			c.Param = "n"
+		}
+		d.Constraints = []domain.ConstraintSpec{c}
+		if err := d.Validate(); (err == nil) != ok {
+			t.Errorf("%s required: %v", kind, err)
+		}
+	}
+}
