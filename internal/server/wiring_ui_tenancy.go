@@ -20,6 +20,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/tenancy/adapters/tenancyrpc"
+	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 )
 
 // Hosted accounts and self-serve organizations (G0 UI D8): accounts, sign-in
@@ -36,6 +37,22 @@ type uiTenancy struct {
 	// browser and web are set once the browser pages exist (API role).
 	browser *authnapp.Browser
 	web     *webhttp.Handler
+	// invitations emails new invitations' links (nil: off).
+	invitations invitationMailer
+	publicURL   string
+}
+
+// invitationMailer emails an invitation link (notifications.Service).
+type invitationMailer interface {
+	SendInvitation(ctx context.Context, org ids.OrgID, invitation ids.UUID, link string) error
+}
+
+// wireInvitationEmails turns on invitation emails (signup.invitation_emails).
+func (u *uiTenancy) wireInvitationEmails(cfg *Config, m invitationMailer) {
+	if u == nil || m == nil || !cfg.Signup.InvitationEmails {
+		return
+	}
+	u.invitations, u.publicURL = m, cfg.Auth.PublicURL
 }
 
 // newUITenancy builds the services over pool and the per-org plans.
@@ -165,6 +182,24 @@ type uiAccessHandler struct {
 // accessHandler returns AccessService with browser invitations.
 func accessHandler(a *tenancyrpc.Access, ui *uiTenancy) uiAccessHandler {
 	return uiAccessHandler{Access: a, ui: ui}
+}
+
+// CreateInvitation implements AccessServiceHandler: with invitation emails
+// on, the link goes to the invited address only (HR-157 widened for
+// invitations). A failed email never fails the invitation; the token is
+// still returned once.
+func (h uiAccessHandler) CreateInvitation(ctx context.Context, req *pantherclawv1.CreateInvitationRequest) (*pantherclawv1.CreateInvitationResponse, error) {
+	out, err := h.Access.CreateInvitation(ctx, req)
+	if err != nil || h.ui == nil || h.ui.invitations == nil {
+		return out, err
+	}
+	if c, cerr := tapp.CallerFrom(ctx); cerr == nil {
+		if id, perr := ids.ParseUUID(out.GetInvitation().GetId()); perr == nil {
+			link := h.ui.publicURL + authnapp.InvitePath + "/" + out.GetToken()
+			_ = h.ui.invitations.SendInvitation(ctx, c.Org, id, link) // recorded and logged by the sender
+		}
+	}
+	return out, nil
 }
 
 // AcceptInvitation implements AccessServiceHandler (HR-352). The caller's

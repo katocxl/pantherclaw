@@ -145,3 +145,10 @@ SELECT count(*)::int FROM pc.users WHERE org_id = sqlc.arg(org_id) AND state = '
 -- name: CountPendingMemberInvitations :one
 SELECT count(*)::int FROM pc.invitations
 WHERE org_id = sqlc.arg(org_id) AND state = 'PENDING' AND expires_at > now();
+
+-- name: PendingInvitationForMail :one
+-- The only address an invitation email goes to: the pending invitation's
+-- own (HR-157, widened for invitations only).
+SELECT i.email, i.expires_at, o.name AS org_name FROM pc.invitations i
+JOIN pc.orgs o ON o.id = i.org_id
+WHERE i.org_id = sqlc.arg(org_id) AND i.id = sqlc.arg(id) AND i.state = 'PENDING' AND i.expires_at > now() AND i.email <> '';

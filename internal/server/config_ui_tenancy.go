@@ -41,6 +41,9 @@ type SignupConfig struct {
 	// must accept.
 	TermsVersion string `json:"terms_version" env:"PC_SIGNUP_TERMS_VERSION"`
 	DPAVersion   string `json:"dpa_version" env:"PC_SIGNUP_DPA_VERSION"`
+	// InvitationEmails emails each new invitation's link to the invited
+	// address (HR-157 widened for invitations only); needs SMTP.
+	InvitationEmails bool `json:"invitation_emails" env:"PC_SIGNUP_INVITATION_EMAILS"`
 }
 
 func (c *Config) billingMode() entitlements.Mode {

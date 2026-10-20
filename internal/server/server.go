@@ -269,6 +269,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	ui.wireInvitationEmails(cfg, m5.notifications)
 	// A monitor-mode action with an unknown consequence notifies (HR-206).
 	authorityStore.Notify = m5.notifications
 	m6, err := newM6(cfg, pool, reg, m5.notifications, log)
