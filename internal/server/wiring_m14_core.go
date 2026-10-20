@@ -4,6 +4,7 @@
 package server
 
 import (
+	"github.com/katocxl/pantherclaw/internal/billing"
 	"github.com/katocxl/pantherclaw/internal/connections/ports"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	policyapp "github.com/katocxl/pantherclaw/internal/policy/app"
@@ -26,6 +27,15 @@ func wireM14Core(m6 *m6Services) *m14Core {
 		m6.gateways.WithKindConfigs(c.kinds)
 	}
 	return c
+}
+
+// wireM14Process gives the process's one grants service (the automations
+// core's, shared by the API, jobs and workers) the licence, in every
+// role, so data scope in grants is gated by edition (G0 M14 D11).
+func wireM14Process(core *automationsCore, bill *billing.Service) {
+	if core != nil && core.grants != nil && bill != nil {
+		core.grants.Editions = bill
+	}
 }
 
 // wireM14Grants gates data scope in issued and revised grants by the

@@ -263,6 +263,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	// protect sets its ports on it in every role (D110 P1).
 	autos, m11protect := newM11Core(pool, bill, cfg.Auth.PublicURL)
 	wireM11Process(autos, m11protect, pool)
+	wireM14Process(autos, bill)
 	if cfg.Role == RoleAPI || cfg.Role == RoleAll {
 		tokens, err := token.New(reg, cfg.Auth.PublicURL, token.Audience)
 		if err != nil {
