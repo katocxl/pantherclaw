@@ -96,7 +96,7 @@ Scope narrows what an allowed read returns. It is set on grants (per operation) 
 
 Scope works only where the gateway sees the answer (R-42). On SDK, hook and AuthZEN routes or agent-held connections, a decision with a scope obligation is `CANNOT_AUTHORIZE` `SCOPE_UNSUPPORTED`. HTTP connections can be scoped too when their definitions declare `Response.fields` classes; an answer the gateway cannot parse under an obligation is withheld (`SCOPE_UNENFORCEABLE`). Receipts record counts only (rows, values redacted, scope key), never the values.
 
-**Customer-support template.** `pclaw template apply customer-support --customer <id>` (repeatable, required) scopes `postgres.rows.read` to those customers, allows classes public and internal, caps reads at 50 rows and forbids aggregates. A per-ticket agent can be narrowed further with a delegated grant.
+**Customer-support template.** `pclaw template apply customer-support --agent <agent> --customer <id>` (`--agent` required, because the Postgres rules apply per agent; `--customer` repeatable and required) scopes `postgres.rows.read` to those customers, allows classes public and internal, caps reads at 50 rows and forbids aggregates. A per-ticket agent can be narrowed further with a delegated grant.
 
 ## 7. Development
 
