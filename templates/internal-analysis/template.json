@@ -1,0 +1,31 @@
+{
+  "name": "internal-analysis",
+  "summary": "Analysis agents query allow-listed PostgreSQL tables and post findings to named internal Slack channels: public and internal columns only, at most 20 rows a read, and nothing posted to a channel shared outside the organization.",
+  "task_ref": "template:internal-analysis",
+  "protects": [
+    "with --agent: that agent reads and aggregates only public and internal columns (pii and secret values are withheld), and reads at most 20 rows at a time; without --agent these rules are skipped and no grant is issued",
+    "with --agent: that agent posts only to the Slack channels named with --slack-channel; without --slack-channel it posts nowhere",
+    "with --agent: that agent never posts to a channel shared with another workspace or organization, read from Slack within the last 5 minutes",
+    "the agent's grant covers reads, aggregates and the table list on pc.postgres, and posts to the named channels only"
+  ],
+  "excludes": [
+    "what a post says: pc.slack applies the disclosure limits to its text, and a person reads the channel",
+    "who is in an internal channel: anyone in it reads the post",
+    "inference across many aggregates (differencing)",
+    "data scoping needs the Team edition",
+    "the limits are examples: change them in a new policy version before relying on them"
+  ],
+  "placeholders": {
+    "slack_channel": {"kind": "slack_channel", "pattern": "^[CG][A-Z0-9]{8,12}$"},
+    "agent": {"kind": "agent", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}
+  },
+  "routes": [{"package": "pc.postgres", "route": "postgres-rows-read"}, {"package": "pc.slack", "route": "slack-message-post"}],
+  "grant": "reads and aggregates of the connection's tables, public and internal columns only; posts to the named Slack channels",
+  "requires": {
+    "packages": ["pc.postgres", "pc.slack"],
+    "connections": [
+      "a pc.postgres connection in enforce mode with a manifest that classes every column",
+      "a pc.slack connection with a bot token in enforce mode, which also provides the fact slack.channel.external"
+    ]
+  }
+}

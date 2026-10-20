@@ -26,7 +26,7 @@ import (
 // publish gate's mutation run with no survivors (HR-044).
 
 // m14Templates are the M14 templates that carry scenario tests.
-var m14Templates = []string{"aggregate-reporting", "customer-support", "treasury-payments"}
+var m14Templates = []string{"aggregate-reporting", "customer-support", "internal-analysis", "treasury-payments"}
 
 // m14Manifests are the business-connector packages the templates require.
 var m14Manifests = [][]byte{pcstripe.Package, pcpostgres.Package, pcslack.Package}
