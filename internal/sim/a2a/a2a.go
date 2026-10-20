@@ -79,6 +79,10 @@ type Options struct {
 	// SendStreamingMessage request (its exact body): an error refuses it
 	// (a PAP-Action or peer-run check).
 	RequireAction func(r *http.Request, body []byte) error
+	// VerifyPeer, when set, makes the simulator a PantherClaw peer agent
+	// (D33, D77): every SendMessage and SendStreamingMessage must carry an
+	// action token naming its delegated run, which is recorded (PeerVerifier).
+	VerifyPeer func(r *http.Request, body []byte) (peerRun string, err error)
 }
 
 // Received is one message the simulator accepted.
@@ -88,6 +92,7 @@ type Received struct {
 	Message   wire.Message   `json:"message"`
 	Metadata  map[string]any `json:"metadata,omitzero"`
 	HasAction bool           `json:"has_action"`
+	PeerRun   string         `json:"peer_run,omitzero"`
 	TaskID    string         `json:"task_id"`
 }
 
@@ -459,10 +464,19 @@ func (s *Server) send(c call) (*wire.Task, *wire.Message, *callError) {
 			return nil, nil, &callError{wire.CodeInvalidRequest, "refused: " + err.Error()}
 		}
 	}
+	var peerRun string
+	if s.opts.VerifyPeer != nil {
+		var err error
+		if peerRun, err = s.opts.VerifyPeer(c.r, c.body); err != nil {
+			s.log.Info("sim.a2a_refused", slog.String("reason", err.Error()))
+			return nil, nil, &callError{wire.CodeInvalidRequest, "refused: " + err.Error()}
+		}
+	}
 	f := s.fault()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rec := Received{Method: c.method, Binding: c.binding, Message: p.Message, Metadata: p.Metadata, HasAction: c.r.Header.Get("PAP-Action") != ""}
+	rec.PeerRun = peerRun
 	if p.Message.Text() == "ping" && p.Message.TaskID == "" {
 		s.received = append(s.received, rec)
 		reply := wire.Message{MessageID: s.next("msg"), ContextID: p.Message.ContextID, Role: wire.RoleAgent, Parts: []wire.Part{wire.TextPart("pong (SIMULATED)")}}

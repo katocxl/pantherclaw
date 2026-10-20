@@ -21,6 +21,7 @@ import (
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/platform/version"
 	a2asim "github.com/katocxl/pantherclaw/internal/sim/a2a"
+	"github.com/katocxl/pantherclaw/internal/sim/payments"
 )
 
 // runA2A serves a simulated A2A 1.0 peer agent (G0 M14 D33).
@@ -40,6 +41,9 @@ func runA2A(ctx context.Context, args []string, stderr io.Writer) error {
 	authRequired := fl.Bool("auth-required", false, "end every task in TASK_STATE_AUTH_REQUIRED")
 	fail := fl.Bool("fail", false, "end every task in TASK_STATE_FAILED")
 	description := fl.String("description", "", "replace the card's description (drift)")
+	peerTokens := fl.Bool("require-peer-tokens", false, "act as a PantherClaw peer agent: require an action token naming a delegated run on every message (with --jwks-url and --audience)")
+	jwksURL := fl.String("jwks-url", "", "the PantherClaw server's /.well-known/pantherclaw/jwks.json")
+	audience := fl.String("audience", "", "the audience peer tokens must be addressed to: this agent's interface URL")
 	if err := fl.Parse(args); err != nil {
 		return err
 	}
@@ -47,6 +51,12 @@ func runA2A(ctx context.Context, args []string, stderr io.Writer) error {
 		return errors.New("--jwks-out goes with --sign-key")
 	}
 	o := a2asim.Options{Name: *name, BaseURL: strings.TrimRight(*base, "/")}
+	if *peerTokens {
+		if *jwksURL == "" || *audience == "" {
+			return errors.New("--require-peer-tokens needs --jwks-url and --audience")
+		}
+		o.VerifyPeer = a2asim.PeerVerifier(&payments.ActionVerifier{JWKSURL: *jwksURL, Audience: *audience})
+	}
 	if *tokenFile != "" {
 		b, err := os.ReadFile(*tokenFile)
 		if err != nil {

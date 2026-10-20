@@ -40,6 +40,7 @@ Usage:
                        [--warmup 5s] [--max-in-flight 2048] [--amount 1.00 | --unique] [--facts-key-file FILE] [--out FILE]
   pantherclaw-sim a2a [--addr 127.0.0.1:9093] [--base-url URL] [--name NAME] [--token-file FILE] [--sign-key FILE [--jwks-out FILE]]
                       [--latency 0s] [--complete-after 0s] [--stream-delay 0s] [--oversize 0] [--auth-required] [--fail] [--description TEXT]
+                      [--require-peer-tokens --jwks-url URL --audience URL]
   pantherclaw-sim canary [--host 127.0.0.1] [--dns-port 18453] [--https-port 18443] [--ssh-port 18422] [--query-addr 127.0.0.1:18433]
   pantherclaw-sim version
 `
