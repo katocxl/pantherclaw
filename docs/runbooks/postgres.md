@@ -61,7 +61,7 @@ pclaw seal --connection <connection id> --from-file db-password.txt --fingerprin
 
 The password is a sealed static credential with no header binding; only the gateway's Postgres client opens it, inside a dispatch. Delete the file afterwards. The gateway applies the same dial-time egress checks as for HTTP connections; private addresses are reachable only with `internal`.
 
-**Confirm the manifest.** The new connection's manifest is only proposed, and the connection cannot dispatch until a person holding `connection.manage` (Gateway Admin) confirms it (Org Admin does not hold that permission): open the confirmation page the create command prints, check the tables, columns, classes, limits and `internal`, and confirm with your security key. Later updates that narrow the manifest apply at once; a widening (a new table or column, a lowered class, a raised limit, `internal` turned on) stays proposed until confirmed on the same page, and the current manifest keeps serving meanwhile.
+**Confirm the manifest.** The new connection's manifest is only proposed, and the connection cannot dispatch until a person holding `connection.manage` (Gateway Admin) confirms it (Org Admin does not hold that permission): open the confirmation page the create command prints, check the tables, columns, classes, limits and `internal`, and confirm with your security key. Later updates that narrow the manifest apply at once; a widening (a new table or column, a lowered class, a raised limit, `internal` turned on, or any change to a table's `scope_key` or `scope_column`) stays proposed until confirmed on the same page, and the current manifest keeps serving meanwhile. Rolling back migration 00151 refuses while header-less (Postgres) credentials exist; delete those connections first.
 
 ## 4. Test the connection
 
@@ -96,7 +96,7 @@ Scope narrows what an allowed read returns. It is set on grants (per operation) 
 
 Scope works only where the gateway sees the answer (R-42). On SDK, hook and AuthZEN routes or agent-held connections, a decision with a scope obligation is `CANNOT_AUTHORIZE` `SCOPE_UNSUPPORTED`. HTTP connections can be scoped too when their definitions declare `Response.fields` classes; an answer the gateway cannot parse under an obligation is withheld (`SCOPE_UNENFORCEABLE`). Receipts record counts only (rows, values redacted, scope key), never the values.
 
-**Customer-support template.** `pclaw template apply customer-support --customer <id>` (repeatable, required) scopes `postgres.rows.read` to those customers, allows classes public and internal, caps reads at 50 rows and forbids aggregates. A per-ticket agent can be narrowed further with a delegated grant.
+**Customer-support template.** `pclaw template apply customer-support --agent <agent> --customer <id>` (`--agent` required, because the Postgres rules apply per agent; `--customer` repeatable and required) scopes `postgres.rows.read` to those customers, allows classes public and internal, caps reads at 50 rows and forbids aggregates. A per-ticket agent can be narrowed further with a delegated grant.
 
 ## 7. Development
 
