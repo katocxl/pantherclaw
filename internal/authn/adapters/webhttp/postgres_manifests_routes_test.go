@@ -28,8 +28,10 @@ type fakeManifests struct {
 func (f *fakeManifests) Get(_ context.Context, id ids.UUID) (pgmanifest.Manifest, error) {
 	return pgmanifest.Manifest{
 		Connection: id, Name: `warehouse<script>`, State: "ACTIVE", Digest: strings.Repeat("cd", 32),
-		Proposed: &capp.PostgresConfig{Host: "db.example.test", Port: 5432, Database: "shop", User: "reader", SSLMode: "verify-full",
-			Tables: []capp.PostgresTable{{Schema: "shop", Name: "customers", Columns: []capp.PostgresColumn{{Name: "id", Type: "bigint", Class: "public"}}}}},
+		Proposed: &capp.PostgresConfig{
+			Host: "db.example.test", Port: 5432, Database: "shop", User: "reader", SSLMode: "verify-full",
+			Tables: []capp.PostgresTable{{Schema: "shop", Name: "customers", Columns: []capp.PostgresColumn{{Name: "id", Type: "bigint", Class: "public"}}}},
+		},
 		Widening: []string{"a first configuration: the connection serves nothing until it is confirmed"},
 	}, nil
 }

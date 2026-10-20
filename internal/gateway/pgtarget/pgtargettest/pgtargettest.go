@@ -113,7 +113,7 @@ type Option func(*options)
 type options struct{ nameOnly bool }
 
 // NameOnly issues the proxy's certificate for Host alone, without the
-// loopback address, so that dialling 127.0.0.1 fails verify-full.
+// loopback address, so that dialing 127.0.0.1 fails verify-full.
 func NameOnly() Option { return func(o *options) { o.nameOnly = true } }
 
 // New creates a fixture database, its roles and a TLS proxy to it, removed

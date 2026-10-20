@@ -74,8 +74,11 @@ func TestHR310_ScopeIsAppliedOrNothingIsSent(t *testing.T) {
 // an answer the engine cannot read is withheld.
 func TestHR311_JSONAnswersAreRedactedByClass(t *testing.T) {
 	spec := &defs.ResponseSpec{Format: "json", Fields: []defs.ResponseField{
-		{Path: "billing_details", Class: "pii"}, {Path: "receipt_email", Class: "pii"}, {Path: "charges.*.card", Class: "internal"},
-		{Path: "charges.*.card.fingerprint", Class: "secret"}, {Path: "metadata.note", Class: "internal"},
+		{Path: "billing_details", Class: "pii"},
+		{Path: "receipt_email", Class: "pii"},
+		{Path: "charges.*.card", Class: "internal"},
+		{Path: "charges.*.card.fingerprint", Class: "secret"},
+		{Path: "metadata.note", Class: "internal"},
 	}}
 	body := `{"id":"pi_1","amount":12345678901234567890,"receipt_email":"a@example.com","billing_details":{"name":"Ada","address":{"city":"London"}},` +
 		`"charges":[{"id":"ch_1","card":{"last4":"4242","fingerprint":"fp"}}],"metadata":{"note":"vip","tag":"x"}}`

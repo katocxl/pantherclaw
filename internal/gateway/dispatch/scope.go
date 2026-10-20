@@ -167,7 +167,7 @@ func scopeJSON(body []byte, truncated bool, spec *defs.ResponseSpec, s *dataScop
 			return json.Marshal(pgdispatch.Redacted(pgdispatch.Class(c)))
 		}
 		switch v.Kind() {
-		case '{':
+		case jsontext.KindBeginObject:
 			var m map[string]jsontext.Value
 			if err := json.Unmarshal(v, &m); err != nil {
 				return nil, err
@@ -180,7 +180,7 @@ func scopeJSON(body []byte, truncated bool, spec *defs.ResponseSpec, s *dataScop
 				m[k] = w
 			}
 			return json.Marshal(m, json.Deterministic(true))
-		case '[':
+		case jsontext.KindBeginArray:
 			var a []jsontext.Value
 			if err := json.Unmarshal(v, &a); err != nil {
 				return nil, err
@@ -193,6 +193,9 @@ func scopeJSON(body []byte, truncated bool, spec *defs.ResponseSpec, s *dataScop
 				a[i] = w
 			}
 			return json.Marshal(a)
+		case jsontext.KindInvalid, jsontext.KindNull, jsontext.KindFalse, jsontext.KindTrue, jsontext.KindString, jsontext.KindNumber,
+			jsontext.KindEndObject, jsontext.KindEndArray:
+			return v, nil // a scalar keeps its exact bytes
 		}
 		return v, nil
 	}

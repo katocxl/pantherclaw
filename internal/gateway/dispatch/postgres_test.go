@@ -11,9 +11,9 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
-	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
+	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/pgdispatch"
 	"github.com/katocxl/pantherclaw/internal/gateway/pgtarget"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
