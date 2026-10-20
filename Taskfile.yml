@@ -227,6 +227,9 @@ tasks:
       - cd sdk/python && PYTHONPATH=src {{.PYTHON}} -m unittest discover -s tests
       # The integrations' tests run inside the real Agent SDKs (dev-only: pnpm-lock.yaml, uv.lock); on Windows the Python ones use the TypeScript one's CLI.
       - cd integrations/claude-agent-sdk/typescript && COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install --frozen-lockfile && node --test "test/**/*.test.ts"
+      # The TypeScript framework wrappers run every wrappers.json case and their own tests inside the real Vercel AI SDK and MCP TypeScript SDK (dev-only, pnpm-lock.yaml).
+      - cd integrations/vercel-ai/typescript && COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install --frozen-lockfile && node --test "test/**/*.test.ts"
+      - cd integrations/mcp/typescript && COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install --frozen-lockfile && node --test "test/**/*.test.ts"
       - cd integrations/claude-agent-sdk/python && {{.PYTHON}} -m unittest discover -s tests
       # The Python framework wrappers run every wrappers.json case inside the real frameworks (dev-only, uv.lock); CrewAI on a stand-in (task sdk:crewai-real runs the real one).
       - cd integrations/langchain/python && {{.PYTHON}} -m unittest discover -s tests

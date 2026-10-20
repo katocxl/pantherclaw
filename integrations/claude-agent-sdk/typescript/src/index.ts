@@ -397,7 +397,7 @@ export class PantherClaw {
   private answer(res: Result, input: PreToolUseInput, call: ToolCall, actionId: string, key: string, builtin: boolean): HookOutput {
     switch (res.outcome) {
       case "allow":
-        this.retries.delete(key);
+        this.forget(key, actionId);
         if (res.send) {
           if (!this.o.onDispatch) return decision("deny", "this connection's target accepts only PantherClaw's own request: pass onDispatch to send it");
           this.o.onDispatch(call.tool_use_id, res.send);
@@ -417,6 +417,8 @@ export class PantherClaw {
         return decision("deny", `PantherClaw holds this call for an approval by an eligible person (transaction ${w.handle}); once it is approved, make the same call again`);
       }
       default:
+        // A final outcome: an identical later call is a new decision (D68).
+        this.forget(key, actionId);
         if (res.answer?.code === "unknown_tool" && this.o.observeUnmapped) return {};
         return decision("deny", res.why || "PantherClaw denied this call");
     }
@@ -442,6 +444,11 @@ export class PantherClaw {
   private remember(id: string): void {
     this.asked.add(id);
     if (this.asked.size > MAX_ASKED) this.asked.delete(this.asked.values().next().value as string);
+  }
+
+  /** Forgets a call's retry id once its action is final, unless another call has replaced it (D68). */
+  private forget(key: string, actionId: string): void {
+    if (this.retries.get(key)?.actionId === actionId) this.retries.delete(key);
   }
 
   /** Forgets holds and retry ids past their wait. */
@@ -477,13 +484,22 @@ export class PantherClaw {
       this.held.delete(id as string);
       try {
         const held: Result = { outcome: "hold", why: "", answer: { decision: "hold", action_hash: h.hash, wait: h.wait } };
-        const res = await withDeadline(this.o.client.resume(this.o.connection, h.call, h.actionId, held, this.o.waitMs), this.o.waitMs, options.signal);
-        if (res.outcome !== "allow") return { behavior: "deny", message: `${res.why || "PantherClaw did not allow this call"} (PantherClaw, PARTIAL)` };
+        const res = await withDeadline(
+          this.o.client.resume(this.o.connection, h.call, h.actionId, held, this.o.waitMs, options.signal),
+          this.o.waitMs,
+          options.signal,
+        );
+        if (res.outcome !== "allow") {
+          // Declined in PantherClaw is final (D68); a wait that ran out leaves the hold for an identical later call.
+          if (res.outcome === "deny") this.forget(h.key, h.actionId);
+          return { behavior: "deny", message: `${res.why || "PantherClaw did not allow this call"} (PantherClaw, PARTIAL)` };
+        }
+        // An allow is final, whether or not this call can send it (D68).
+        this.forget(h.key, h.actionId);
         if (res.send) {
           if (!this.o.onDispatch) return { behavior: "deny", message: "this connection's target accepts only PantherClaw's own request: pass onDispatch to send it" };
           this.o.onDispatch(h.call.tool_use_id, res.send);
         }
-        this.retries.delete(h.key);
         return { behavior: "allow", updatedInput: h.call.input };
       } catch (e) {
         return { behavior: "deny", message: `the wait for PantherClaw's decision ended: ${e instanceof Error ? e.message : String(e)}` };

@@ -329,3 +329,25 @@ test("TestHR200_resubmissions are bounded", async (t) => {
   assert.equal(r.outcome, "cannot_decide", r.why);
   assert.equal(calls.n, 4);
 });
+
+test("TestHR200_an aborted wait ends at once and resubmits nothing", async (t) => {
+  const calls = { n: 0 };
+  let release: () => void = () => {};
+  const f = await fake(t, heldThenAllowed(calls), {
+    wait: (_req, res) => {
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      res.write('event: state\ndata: {"handle":"h","state":"PENDING"}\n\n');
+      // The approval arrives after the abort: it must not be used up.
+      release = () => res.end('event: state\ndata: {"handle":"h","state":"READY"}\n\n');
+    },
+  });
+  const ac = new AbortController();
+  setTimeout(() => ac.abort(), 100);
+  const start = Date.now();
+  const r = await f.client.authorizeAndWait("payments", refund, newActionId(), 60_000, ac.signal);
+  assert.equal(r.outcome, "cannot_decide", r.why);
+  assert.ok(Date.now() - start < 2_000, `waited ${Date.now() - start} ms`);
+  release();
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(calls.n, 1, "no resubmission after the abort");
+});
