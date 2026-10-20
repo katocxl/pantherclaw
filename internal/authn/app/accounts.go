@@ -390,8 +390,8 @@ func (b *Browser) AuthenticateAccount(ctx context.Context, cookie string) (Accou
 			return err
 		}
 		out = AccountSession{
-			Caller:        accounts.Caller{Account: s.AccountID, Session: s.ID, Provider: s.Provider},
-			Email:         s.Email, EmailVerified: s.EmailVerified, DisplayName: s.DisplayName, CreatedAt: s.CreatedAt, Now: s.DbNow,
+			Caller: accounts.Caller{Account: s.AccountID, Session: s.ID, Provider: s.Provider},
+			Email:  s.Email, EmailVerified: s.EmailVerified, DisplayName: s.DisplayName, CreatedAt: s.CreatedAt, Now: s.DbNow,
 		}
 		if s.AuthTime != nil {
 			out.AuthTime = *s.AuthTime

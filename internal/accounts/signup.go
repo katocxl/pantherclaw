@@ -72,7 +72,7 @@ func (s *Signup) SelfServe() bool { return s != nil && s.cfg.SelfServe }
 
 // NewOrg is a CreateOrg request.
 type NewOrg struct {
-	Name, Slug                string
+	Name, Slug               string
 	TermsVersion, DPAVersion string
 }
 
