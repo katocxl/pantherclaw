@@ -159,8 +159,10 @@ func TestHR320_TargetEnforcedDecisionsCarryTheActionToken(t *testing.T) {
 	}
 	// A token for one body never carries another.
 	refundableMore(t, s, "ch_te2")
-	b2 := p.evaluate(t, p.evaluation(t, azRequest{Method: http.MethodPost, Path: "/v1/refunds", Action: ids.NewV7(),
-		Body: []byte(`{"charge":"ch_te2","amount":"10.00","currency":"USD","reason":"duplicate"}`)}))
+	b2 := p.evaluate(t, p.evaluation(t, azRequest{
+		Method: http.MethodPost, Path: "/v1/refunds", Action: ids.NewV7(),
+		Body: []byte(`{"charge":"ch_te2","amount":"10.00","currency":"USD","reason":"duplicate"}`),
+	}))
 	if !b2.Decision || b2.Context.PantherClaw.ActionToken == "" {
 		t.Fatalf("second decision: %+v", b2.Context.PantherClaw)
 	}

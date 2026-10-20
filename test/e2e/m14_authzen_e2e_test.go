@@ -194,8 +194,10 @@ func TestE2E_M14_AuthZEN(t *testing.T) {
 		{"execute_all", "ch_az8", true, []bool{true, false}},
 	} {
 		point.nonce = agent.nonce
-		good := point.evaluation(t, azRequest{Method: http.MethodPost, Path: "/v1/refunds", Action: ids.NewV7(),
-			Body: []byte(`{"charge":"` + tc.charge + `","amount":"5.00","currency":"USD","reason":"duplicate"}`)})
+		good := point.evaluation(t, azRequest{
+			Method: http.MethodPost, Path: "/v1/refunds", Action: ids.NewV7(),
+			Body: []byte(`{"charge":"` + tc.charge + `","amount":"5.00","currency":"USD","reason":"duplicate"}`),
+		})
 		evs := []any{nameOnly, good}
 		if tc.first {
 			evs = []any{good, nameOnly}
@@ -231,7 +233,6 @@ func TestE2E_M14_AuthZEN(t *testing.T) {
 		t.Fatalf("monitor: %+v", r)
 	}
 	s.waitSettled(t, "130")
-
 }
 
 // runPEP builds the reference enforcement point (sdk/go/pep/cmd/pep, its
