@@ -46,6 +46,24 @@ steps:
       outcome: CANNOT_AUTHORIZE
       reason: IDENTITY_UNVERIFIED
       decisive_control: HR-318
+  - id: subject-naming-another-agent
+    do: agent.steal
+    with:
+      mode: other_instance
+      call:
+        face: authzen
+        connection: payments
+        method: POST
+        path: /v1/refunds
+        body:
+          charge: ch_${fixture.nonce}rt047d
+          amount: "20.00"
+          currency: USD
+          reason: duplicate
+    expect:
+      outcome: CANNOT_AUTHORIZE
+      reason: SUBJECT_MISMATCH
+      decisive_control: HR-318
   - id: the-agent-itself
     do: agent.call
     with:
