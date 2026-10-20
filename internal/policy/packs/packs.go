@@ -63,6 +63,9 @@ const (
 	ParamDefaultBranch = "default_branch"
 	ParamWorkspace     = "workspace"
 	ParamTimeZone      = "time_zone"
+	// ParamPayees are the Stripe connected accounts a treasury pack may send
+	// funds to, comma-separated (G0 M14 D97).
+	ParamPayees = "payees"
 )
 
 // paramNames name each placeholder kind's value in errors.
@@ -70,6 +73,7 @@ var paramNames = map[string]string{
 	render.KindRepository: ParamRepos, render.KindDefaultBranch: ParamDefaultBranch, render.KindEnvironment: "environment",
 	render.KindEnvironmentID: "environment", render.KindWorkspace: ParamWorkspace, render.KindAgent: "agents",
 	render.KindTimeZone: ParamTimeZone,
+	render.KindPayee:    ParamPayees,
 }
 
 const (
@@ -139,6 +143,8 @@ func (p Pack) Needs() []string {
 			out = append(out, ParamWorkspace)
 		case render.KindTimeZone:
 			out = append(out, ParamTimeZone)
+		case render.KindPayee:
+			out = append(out, ParamPayees)
 		}
 	}
 	slices.Sort(out)
@@ -172,7 +178,7 @@ type Apply struct {
 	Cohort      *ids.UUID
 	// Parameters: repos (comma-separated owner/repo), default_branch (a
 	// branch, or owner/repo=branch entries, comma-separated), workspace,
-	// time_zone.
+	// time_zone, payees (comma-separated acct_ ids).
 	Parameters map[string]string
 }
 
@@ -384,6 +390,15 @@ func (p Pack) options(params map[string]string) (render.Options, error) {
 	o.Workspace = params[ParamWorkspace]
 	if slices.Contains(needs, ParamWorkspace) && o.Workspace == "" {
 		return o, invalid("pack %s needs workspace", p.Name)
+	}
+	for _, x := range strings.Split(params[ParamPayees], ",") {
+		if x = strings.TrimSpace(x); x != "" && !slices.Contains(o.Payees, x) {
+			o.Payees = append(o.Payees, x)
+		}
+	}
+	slices.Sort(o.Payees)
+	if slices.Contains(needs, ParamPayees) && len(o.Payees) == 0 {
+		return o, invalid("pack %s needs payees", p.Name)
 	}
 	o.TimeZone = params[ParamTimeZone]
 	if o.TimeZone == "" {
