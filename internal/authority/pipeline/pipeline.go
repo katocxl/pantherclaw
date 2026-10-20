@@ -1392,7 +1392,8 @@ func (s *state) disclosure() {
 	}
 	slices.Sort(names)
 	ch := defs.Channel(s.a.Channel)
-	mediated := (ch == defs.ChannelMCP || ch == defs.ChannelHTTP) && s.conn.Kind != "local"
+	// The gateway also mediates a call to a peer agent (G0 M14 D96).
+	mediated := (ch == defs.ChannelMCP || ch == defs.ChannelHTTP || ch == defs.ChannelA2A) && s.conn.Kind != "local"
 	for _, name := range names {
 		maxBytes, maxEntropy := s.def.Params[name].DisclosureLimits()
 		entropy := strconv.FormatFloat(maxEntropy, 'f', -1, 64)

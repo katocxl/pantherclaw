@@ -5,12 +5,15 @@ package pipeline
 
 import (
 	"context"
+	"strings"
 	"testing"
 
+	"github.com/katocxl/pantherclaw/internal/actionir"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 )
 
 // TestM14_PeerCallsAreChecked: a call through an a2a connection asks the
@@ -58,5 +61,35 @@ func TestM14_PeerCallsAreChecked(t *testing.T) {
 		dispatches("a2a", &defs.Definition{Dispatch: &defs.Dispatch{HTTP: &defs.HTTPDispatch{}}}) ||
 		!dispatches("postgres", &defs.Definition{Dispatch: &defs.Dispatch{SQL: &defs.SQLDispatch{Operation: "rows"}}}) {
 		t.Fatal("a2a and postgres connections serve their own dispatch parts")
+	}
+}
+
+// TestM14_A2ADisclosureIsLimited: a disclosure param sent to a peer agent
+// at a public destination is checked like one sent over HTTP or MCP: over
+// its limits it is DENIED DISCLOSURE_LIMIT, within them it carries the
+// disclosure_limits obligation the gateway applies (G0 M14 D96).
+func TestM14_A2ADisclosureIsLimited(t *testing.T) {
+	def := &defs.Definition{Params: map[string]defs.ParamSpec{"text": {Type: defs.TypeText, Disclosure: true, MaxBytes: 64}}}
+	run := func(text string) *state {
+		s := &state{
+			a: actionir.ActionIR{Channel: string(defs.ChannelA2A)}, ev: &Evaluation{}, def: def,
+			conn: &Connection{Kind: "a2a", DestinationClass: "public"},
+			vals: defs.Values{"text": {Type: defs.TypeText, Str: text}},
+		}
+		s.disclosure()
+		return s
+	}
+	s := run("Please refund order 42.")
+	if len(s.ev.Obligations) != 1 || s.ev.Obligations[0].Kind != pdomain.DisclosureLimits || s.ev.Obligations[0].Param != "text" ||
+		s.ev.Obligations[0].Max != "64" {
+		t.Fatalf("within limits: %+v", s.ev.Obligations)
+	}
+	s = run(strings.Repeat("x", 65))
+	denied := false
+	for _, it := range s.cl.items {
+		denied = denied || (it.effect == adomain.Deny && it.Code == ReasonDisclosureLimit)
+	}
+	if !denied || len(s.ev.Obligations) != 0 {
+		t.Fatalf("over limits: %+v %+v", s.cl.items, s.ev.Obligations)
 	}
 }
