@@ -9,6 +9,7 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/redteam/app"
 	"github.com/katocxl/pantherclaw/internal/redteam/domain"
@@ -37,19 +38,27 @@ func (d *rangeDriver) setupStripe() {
 	d.fix["stripe_other_payee"] = stripe.FixturePayee2
 }
 
-// mutateStripe changes what the Stripe connection holds: sealed_key live
-// swaps a live key into it, as a careless or hostile admin would (RT-039).
+// mutateStripe changes what the Stripe connection holds or how Stripe
+// answers: sealed_key live swaps a live key into the connection, as a
+// careless or hostile admin would (RT-039); latency_ms makes Stripe answer
+// slower than the gateway's fact timeout, so no fresh fact can be read
+// (RT-040), and 0 clears it.
 func (d *rangeDriver) mutateStripe(change string, args jsontext.Value) (domain.Observation, error) {
 	var a struct {
 		SealedKey string `json:"sealed_key"`
+		LatencyMS *int   `json:"latency_ms"`
 	}
 	if err := json.Unmarshal(args, &a); err != nil {
 		return domain.Observation{}, err
 	}
-	if change != "fault" || a.SealedKey != "live" {
+	switch {
+	case change == "fault" && a.SealedKey == "live":
+		d.s.waitConfig(d.t, d.s.sealStripeKey(d.t, stripeLiveKey))
+	case change == "fault" && a.LatencyMS != nil:
+		d.s.st.sim.SetFaults(stripe.Faults{Latency: time.Duration(*a.LatencyMS) * time.Millisecond})
+	default:
 		return domain.Observation{}, fmt.Errorf("sim.mutate stripe %s %s", change, args)
 	}
-	d.s.waitConfig(d.t, d.s.sealStripeKey(d.t, stripeLiveKey))
 	return domain.Observation{}, nil
 }
 

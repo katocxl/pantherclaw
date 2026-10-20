@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,24 +52,34 @@ var (
 var seededStripe = regexp.MustCompile(`seeded stripe connection ([0-9a-f-]{36}) `)
 
 // stripeSim is the Stripe a stack's connection "stripe" calls
-// (options.stripe): the simulator, with its own count of writes.
+// (options.stripe): the simulator, with its own count of writes and of
+// refund reads (the verifier's), and a clock a test moves forward.
 type stripeSim struct {
-	sim    *stripe.Server
-	url    string
-	conn   ids.UUID
-	writes atomic.Int64 // non-GET API requests the simulator received
+	sim         *stripe.Server
+	url         string
+	conn        ids.UUID
+	writes      atomic.Int64 // non-GET API requests the simulator received
+	refundReads atomic.Int64 // GET /v1/refunds/{id}
+	ahead       atomic.Int64 // how far the simulator's clock is ahead, in nanoseconds
 }
+
+// advance moves the simulator's clock forward: refunds settle.
+func (st *stripeSim) advance(d time.Duration) { st.ahead.Add(int64(d)) }
 
 // startStripeSim starts the simulator with faults; it accepts the e2e test
 // key, and the live-mode key answering in live mode.
 func startStripeSim(t *testing.T, f stripe.Faults) *stripeSim {
 	t.Helper()
-	sim := stripe.New(f, pclog.Discard()).WithRequire(stripe.Require{Keys: []string{stripeTestKey}, LivemodeKey: stripeLivemodeKey})
-	st := &stripeSim{sim: sim}
-	h := sim.Handler()
+	st := &stripeSim{}
+	st.sim = stripe.New(f, pclog.Discard()).WithRequire(stripe.Require{Keys: []string{stripeTestKey}, LivemodeKey: stripeLivemodeKey}).
+		WithClock(func() time.Time { return time.Now().Add(time.Duration(st.ahead.Load())) })
+	h := st.sim.Handler()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
+		switch {
+		case r.Method != http.MethodGet:
 			st.writes.Add(1)
+		case strings.HasPrefix(r.URL.Path, "/v1/refunds/"):
+			st.refundReads.Add(1)
 		}
 		h.ServeHTTP(w, r)
 	}))
@@ -175,8 +186,11 @@ func refundForm(payment, amount, currency string) url.Values {
 // TestE2E_M14_StripeRefunds is the second-market refund flow on the Stripe
 // simulator (D14).
 func TestE2E_M14_StripeRefunds(t *testing.T) {
-	t.Run("allowed refund settles to CONFIRMED with the transaction's idempotency key", func(t *testing.T) {
-		s := start(t, options{budget: "1000.00", stripe: true, stripeFaults: stripe.Faults{SettleAfter: 10 * time.Second}})
+	settles := func(t *testing.T, f stripe.Faults, want string) {
+		t.Helper()
+		// Stripe keeps the refund pending until its clock moves an hour on.
+		f.SettleAfter = time.Hour
+		s := start(t, options{budget: "1000.00", stripe: true, stripeFaults: f})
 		code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment, "3000", "usd")
 		if code != http.StatusOK || r.Outcome != "ACCEPTED" || r.Receipt == "" {
 			t.Fatalf("refund: %d %+v", code, r)
@@ -185,12 +199,28 @@ func TestE2E_M14_StripeRefunds(t *testing.T) {
 		if len(refunds) != 1 || refunds[0].Amount != 3000 || refunds[0].PaymentIntent != stripe.FixturePayment || refunds[0].Key != "pc-"+r.TransactionID {
 			t.Fatalf("refunds at Stripe %+v, want one of 3000 keyed pc-%s", refunds, r.TransactionID)
 		}
-		// Pending while Stripe settles, then confirmed by the verifier.
-		s.eventually(t, "PROPAGATION_PENDING", "SELECT coalesce(effect_state, '') FROM pc.transactions WHERE id = $1", r.TransactionID)
-		s.eventually(t, "CONFIRMED", "SELECT coalesce(effect_state, '') FROM pc.transactions WHERE id = $1", r.TransactionID)
+		// The verifier reads the pending refund, more than once, and the
+		// effect stays pending: a pending refund is never CONFIRMED (HR-305).
+		reads := s.st.refundReads.Load()
+		for deadline := time.Now().Add(30 * time.Second); s.st.refundReads.Load() < reads+2; time.Sleep(100 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatal("the verifier never read the refund")
+			}
+		}
+		if got := s.row(t, "SELECT coalesce(effect_state, '') FROM pc.transactions WHERE id = $1", r.TransactionID); got != "PROPAGATION_PENDING" {
+			t.Fatalf("effect while Stripe reports pending: %q", got)
+		}
+		s.st.advance(2 * time.Hour)
+		s.eventually(t, want, "SELECT coalesce(effect_state, '') FROM pc.transactions WHERE id = $1", r.TransactionID)
 		if s.st.writes.Load() != 1 {
 			t.Fatalf("%d writes at Stripe, want 1", s.st.writes.Load())
 		}
+	}
+	t.Run("allowed refund stays pending, then settles to CONFIRMED", func(t *testing.T) {
+		settles(t, stripe.Faults{}, "CONFIRMED")
+	})
+	t.Run("a refund that fails after pending is NONE_CONFIRMED", func(t *testing.T) {
+		settles(t, stripe.Faults{FailAfterPending: true}, "NONE_CONFIRMED")
 	})
 
 	t.Run("a refund over 50 is held, approved and dispatched once", func(t *testing.T) {
@@ -230,26 +260,31 @@ func TestE2E_M14_StripeRefunds(t *testing.T) {
 
 	t.Run("two concurrent refunds against a one-refund budget: exactly one", func(t *testing.T) {
 		s := start(t, options{budget: "1000.00", stripe: true})
+		// Two different amounts: two dedupe keys, so only the budget can
+		// stop the second.
 		var wg sync.WaitGroup
-		codes := make([]int, 2)
-		for i := range codes {
+		codes, replies := make([]int, 2), make([]reply, 2)
+		for i, amount := range []string{"1000", "1100"} {
 			wg.Go(func() {
-				code, _, _, err := s.tryStripeCall(http.MethodPost, "/v1/refunds", refundForm(stripe.FixturePayment, "1000", "usd"), ids.NewV7())
+				code, r, _, err := s.tryStripeCall(http.MethodPost, "/v1/refunds", refundForm(stripe.FixturePayment, amount, "usd"), ids.NewV7())
 				if err != nil {
 					t.Error(err)
 				}
-				codes[i] = code
+				codes[i], replies[i] = code, r
 			})
 		}
 		wg.Wait()
-		ok := 0
-		for _, c := range codes {
-			if c == http.StatusOK {
+		ok, budget := 0, 0
+		for i, c := range codes {
+			switch {
+			case c == http.StatusOK:
 				ok++
+			case slices.Contains(replies[i].Reasons, "BUDGET_EXHAUSTED"):
+				budget++
 			}
 		}
-		if ok != 1 || len(s.st.sim.Refunds()) != 1 {
-			t.Fatalf("codes %v, refunds %d: want exactly one", codes, len(s.st.sim.Refunds()))
+		if ok != 1 || budget != 1 || len(s.st.sim.Refunds()) != 1 {
+			t.Fatalf("codes %v, replies %+v, refunds %d: want one refund and one BUDGET_EXHAUSTED", codes, replies, len(s.st.sim.Refunds()))
 		}
 	})
 }
@@ -276,14 +311,23 @@ func stripeWrites() map[string]stripeWrite {
 }
 
 // TestHR303_LiveKeyRefusedBeforeSend: with a live key sealed, every
-// pc.stripe write is refused and nothing reaches Stripe, not even a fact
-// read (HR-301, HR-303).
+// pc.stripe write is refused for its credential pattern and nothing reaches
+// Stripe, not even a fact read (HR-301, HR-303); the same requests with the
+// test key do reach it.
 func TestHR303_LiveKeyRefusedBeforeSend(t *testing.T) {
+	control := start(t, options{budget: "1000.00", stripe: true})
+	for op, w := range stripeWrites() {
+		before := control.st.writes.Load()
+		control.stripeCall(t, http.MethodPost, w.path, w.form, ids.NewV7())
+		if control.st.writes.Load() != before+1 {
+			t.Fatalf("control: %s with the test key never reached Stripe", op)
+		}
+	}
 	s := start(t, options{budget: "1000.00", stripe: true, stripeKey: stripeLiveKey})
 	for op, w := range stripeWrites() {
 		code, r, body := s.stripeCall(t, http.MethodPost, w.path, w.form, ids.NewV7())
-		if code == http.StatusOK || r.Outcome == "ACCEPTED" {
-			t.Errorf("%s with a live key: %d %s", op, code, body)
+		if code == http.StatusOK || r.Error != "credential_pattern" {
+			t.Errorf("%s with a live key: %d %s, want credential_pattern", op, code, body)
 		}
 	}
 	if st := s.st.sim.Stats(); st.Requests != 0 {
@@ -335,7 +379,11 @@ func TestHR303_LivemodeAnswerQuarantines(t *testing.T) {
 		s := start(t, options{budget: "1000.00", stripe: true})
 		s.st.sim.SetFaults(stripe.Faults{AnswerLivemode: true})
 		w := stripeWrites()["stripe.payment_intent.create"]
-		s.stripeCall(t, http.MethodPost, w.path, w.form, ids.NewV7())
+		// The write happened (in live mode): the agent is told so, and the
+		// connection is quarantined behind it.
+		if code, r, body := s.stripeCall(t, http.MethodPost, w.path, w.form, ids.NewV7()); code != http.StatusOK || r.Outcome != "ACCEPTED" {
+			t.Fatalf("payment intent: %d %+v %s", code, r, body)
+		}
 		quarantined(t, s)
 	})
 	t.Run("verifier read", func(t *testing.T) {
@@ -351,7 +399,8 @@ func TestHR303_LivemodeAnswerQuarantines(t *testing.T) {
 
 // TestHR304_IdempotencyKeyIsTheTransaction: a refund carries
 // Idempotency-Key and metadata[pantherclaw_key] pc-<transaction>; the
-// agent's retry of the same action refunds nothing more.
+// agent's retry of the same action sends nothing more, and Stripe itself
+// would replay a resend with that key.
 func TestHR304_IdempotencyKeyIsTheTransaction(t *testing.T) {
 	s := start(t, options{budget: "1000.00", stripe: true})
 	act := ids.NewV7()
@@ -366,8 +415,25 @@ func TestHR304_IdempotencyKeyIsTheTransaction(t *testing.T) {
 	if code, again := s.stripeRefund(t, act, stripe.FixturePayment, "1500", "usd"); code == http.StatusOK && again.TransactionID != r.TransactionID {
 		t.Fatalf("the retry made transaction %s", again.TransactionID)
 	}
-	if n := len(s.st.sim.Refunds()); n != 1 {
-		t.Fatalf("%d refunds after the retry", n)
+	if n := s.st.writes.Load(); n != 1 {
+		t.Fatalf("%d writes after the retry, want 1", n)
+	}
+	// What the gateway sent, sent again with the same key, is a replay.
+	form := url.Values{
+		"payment_intent": {stripe.FixturePayment}, "amount": {"1500"}, "reason": {"duplicate"},
+		"metadata[pantherclaw_key]": {"pc-" + r.TransactionID},
+	}
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, s.st.url+"/v1/refunds", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer "+stripeTestKey)
+	req.Header.Set("Idempotency-Key", "pc-"+r.TransactionID)
+	res, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusOK || res.Header.Get("Idempotent-Replayed") != "true" || len(s.st.sim.Refunds()) != 1 {
+		t.Fatalf("a resend with pc-%s: %d replayed=%q", r.TransactionID, res.StatusCode, res.Header.Get("Idempotent-Replayed"))
 	}
 }
 
@@ -406,15 +472,26 @@ func TestHR305_BothOrNeitherPaymentIsRefused(t *testing.T) {
 	}
 }
 
-// TestHR305_StaleRefundableFactIsCannotAuthorize: Stripe answers slower
-// than the gateway's fact timeout, so there is no fresh refundable fact:
-// nothing is decided or sent.
+// TestHR305_StaleRefundableFactIsCannotAuthorize: a stored refundable fact
+// that has aged never decides. The gateway reads the fact again before every
+// decision; when that read fails, the old observation is not used: the
+// refund is CANNOT_AUTHORIZE and nothing is sent. (A fact older than its 60
+// seconds is FACT_STALE: the seeded policy's scenario test pins that through
+// the pipeline at publication, which every Stripe stack passes.)
 func TestHR305_StaleRefundableFactIsCannotAuthorize(t *testing.T) {
 	s := start(t, options{budget: "1000.00", stripe: true})
+	// A read of the payment stores a fresh refundable fact.
+	if code, r, body := s.stripeCall(t, http.MethodGet, "/v1/payment_intents/"+stripe.FixturePayment, nil, ids.NewV7()); code != http.StatusOK {
+		t.Fatalf("read: %d %+v %s", code, r, body)
+	}
+	// It ages past 60 seconds, and Stripe stops answering in time.
+	s.exec(t, `UPDATE pc.facts SET observed_at = observed_at - interval '2 minutes', recorded_at = recorded_at - interval '2 minutes'
+		WHERE name = 'stripe.payment.refundable'`)
 	s.st.sim.SetFaults(stripe.Faults{Latency: 3 * time.Second})
 	code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment, "1000", "usd")
-	if code == http.StatusOK || r.Decision != "CANNOT_AUTHORIZE" || s.st.writes.Load() != 0 {
-		t.Fatalf("no fresh fact: %d %+v (writes %d)", code, r, s.st.writes.Load())
+	reasons := strings.Join(r.Reasons, " ")
+	if code == http.StatusOK || r.Decision != "CANNOT_AUTHORIZE" || !strings.Contains(reasons, "FACT_") || s.st.writes.Load() != 0 {
+		t.Fatalf("a refund without a fresh fact: %d %+v (writes %d)", code, r, s.st.writes.Load())
 	}
 }
 
@@ -441,38 +518,46 @@ func TestHR305_LostAnswerIsReconciledNeverRetried(t *testing.T) {
 }
 
 // TestHR306_PayeeChangedRecentlyHoldsTheTransfer: a transfer to a payee
-// whose bank details changed within 7 days, or could not be read, is held
-// for an approver; to a quiet payee it goes through.
+// whose bank details changed within 7 days is held for an approver; to a
+// quiet payee it goes through; and when the change cannot be read for a
+// payee never read before, the consequence is unknown and held.
 func TestHR306_PayeeChangedRecentlyHoldsTheTransfer(t *testing.T) {
-	s := start(t, options{budget: "1000.00", stripe: true})
-	// Each transfer is of another amount: a recent success on the same
-	// dedupe key would park the next (HR-007).
-	amount := 1000
-	transfer := func() (int, reply) {
-		amount += 100
+	transfer := func(s *stack, amount int) (int, reply) {
+		// Each transfer is of another amount: a recent success on the same
+		// dedupe key would park the next (HR-007).
 		form := url.Values{"destination": {stripe.FixturePayee}, "amount": {strconv.Itoa(amount)}, "currency": {"usd"}}
 		code, r, _ := s.stripeCall(t, http.MethodPost, "/v1/transfers", form, ids.NewV7())
 		return code, r
 	}
-	if code, r := transfer(); code != http.StatusOK || r.Outcome != "ACCEPTED" {
-		t.Fatalf("to a quiet payee: %d %+v", code, r)
-	}
-	s.st.sim.ChangeBank(stripe.FixturePayee, time.Now().Add(-time.Hour))
-	if code, r := transfer(); code != http.StatusForbidden || r.Decision != "REQUIRE_APPROVAL" ||
-		!strings.Contains(strings.Join(r.Reasons, " "), "PAYEE_CHANGED_RECENTLY") {
-		t.Fatalf("to a payee whose bank changed: %d %+v", code, r)
-	}
-	s.st.sim.SetFaults(stripe.Faults{EventsUnavailable: true})
-	if code, r := transfer(); code != http.StatusForbidden || r.Decision != "REQUIRE_APPROVAL" {
-		t.Fatalf("with the bank change unreadable: %d %+v", code, r)
-	}
-	if n := len(s.st.sim.Transfers()); n != 1 {
-		t.Fatalf("%d transfers, want only the first", n)
-	}
+	t.Run("changed", func(t *testing.T) {
+		s := start(t, options{budget: "1000.00", stripe: true})
+		if code, r := transfer(s, 1000); code != http.StatusOK || r.Outcome != "ACCEPTED" {
+			t.Fatalf("to a quiet payee: %d %+v", code, r)
+		}
+		s.st.sim.ChangeBank(stripe.FixturePayee, time.Now().Add(-time.Hour))
+		if code, r := transfer(s, 1100); code != http.StatusForbidden || r.Decision != "REQUIRE_APPROVAL" ||
+			!slices.Contains(r.Reasons, "PAYEE_CHANGED_RECENTLY") {
+			t.Fatalf("to a payee whose bank changed: %d %+v", code, r)
+		}
+		if n := len(s.st.sim.Transfers()); n != 1 {
+			t.Fatalf("%d transfers, want only the first", n)
+		}
+	})
+	t.Run("unreadable", func(t *testing.T) {
+		s := start(t, options{budget: "1000.00", stripe: true, stripeFaults: stripe.Faults{EventsUnavailable: true}})
+		code, r := transfer(s, 1000)
+		if code != http.StatusForbidden || r.Decision != "REQUIRE_APPROVAL" || !slices.Contains(r.Reasons, "CONSEQUENCE_UNKNOWN") {
+			t.Fatalf("with the bank change unreadable: %d %+v", code, r)
+		}
+		if n := len(s.st.sim.Transfers()); n != 0 {
+			t.Fatalf("%d transfers", n)
+		}
+	})
 }
 
 // TestT141_LiveKeySwappedIntoTheConnection: an admin who swaps a live key
-// into a working test connection stops it: the next refund sends nothing.
+// into a working test connection stops it: the next refund is refused for
+// its credential pattern and sends nothing.
 func TestT141_LiveKeySwappedIntoTheConnection(t *testing.T) {
 	s := start(t, options{budget: "1000.00", stripe: true})
 	if code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment, "1000", "usd"); code != http.StatusOK {
@@ -480,7 +565,7 @@ func TestT141_LiveKeySwappedIntoTheConnection(t *testing.T) {
 	}
 	s.waitConfig(t, s.sealStripeKey(t, stripeLiveKey))
 	before := s.st.sim.Stats().Requests
-	if code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment2, "1000", "usd"); code == http.StatusOK {
+	if code, r := s.stripeRefund(t, ids.NewV7(), stripe.FixturePayment2, "1000", "usd"); code == http.StatusOK || r.Error != "credential_pattern" {
 		t.Fatalf("with the swapped live key: %d %+v", code, r)
 	}
 	if after := s.st.sim.Stats().Requests; after != before {

@@ -44,3 +44,11 @@ func TestStripeStopsOnCancel(t *testing.T) {
 		t.Fatalf("missing key file: %d", code)
 	}
 }
+
+func TestStripeLivemodeKeyFlagsAreExclusive(t *testing.T) {
+	var out, errb bytes.Buffer
+	args := []string{"stripe", "--addr", "127.0.0.1:0", "--livemode-key", "k", "--livemode-key-file", "f"}
+	if code := Run(context.Background(), args, &out, &errb); code != 1 || !strings.Contains(errb.String(), "exclusive") {
+		t.Fatalf("both flags: %d %s", code, errb.String())
+	}
+}

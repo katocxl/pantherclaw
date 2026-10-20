@@ -80,8 +80,13 @@ func TestM14_CheckCredentialPattern(t *testing.T) {
 		cred string
 		ok   bool
 	}{
-		{nil, "static", "x", true}, {&defs.Definition{}, "static", "x", true}, {&defs.Definition{Dispatch: &defs.Dispatch{}}, "github_app", "", true},
-		{d, "static", "key_abcd", true}, {d, "", "key_abcd", true}, {d, "static", "key_abcde", false}, {d, "static", "", false},
+		{nil, "static", "x", true},
+		{&defs.Definition{}, "static", "x", true},
+		{&defs.Definition{Dispatch: &defs.Dispatch{}}, "github_app", "", true},
+		{d, "static", "key_abcd", true},
+		{d, "", "key_abcd", true},
+		{d, "static", "key_abcde", false},
+		{d, "static", "", false},
 		{d, "github_app", "key_abcd", false},
 	} {
 		if err := CheckCredentialPattern(c.def, c.kind, []byte(c.cred)); (err == nil) != c.ok {
