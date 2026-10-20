@@ -221,8 +221,37 @@ message WhoAmIResponse {
   repeated RoleBinding bindings = 4;
   // Permissions held somewhere in the org (after API key scopes).
   repeated string permissions = 5;
-  // How the caller authenticated: "access_token" or "api_key".
+  // How the caller authenticated: "access_token", "api_key" or
+  // "browser_session".
   string credential = 6;
+  // The kind of deployment the server runs as (config `deployment`); a
+  // console shows a permanent banner outside production (HR-346).
+  Deployment deployment = 7;
+  // Whether the caller holds a bearer credential or a browser session, and
+  // which kind of session.
+  CallerSessionKind session_kind = 8;
+  // The hosted account of an account browser session; empty otherwise.
+  string account_id = 9;
+}
+
+// Deployment is the kind of deployment a server runs as.
+enum Deployment {
+  DEPLOYMENT_UNSPECIFIED = 0;
+  DEPLOYMENT_DEVELOPMENT = 1;
+  DEPLOYMENT_STAGING = 2;
+  DEPLOYMENT_PRODUCTION = 3;
+}
+
+// CallerSessionKind is how a WhoAmI caller is signed in (SessionKind in
+// account.proto is how one session was created).
+enum CallerSessionKind {
+  CALLER_SESSION_KIND_UNSPECIFIED = 0;
+  // An access token or an API key (Authorization: Bearer).
+  CALLER_SESSION_KIND_BEARER = 1;
+  // A browser session in one org.
+  CALLER_SESSION_KIND_ORG_BROWSER = 2;
+  // A browser session of a hosted account, before choosing an org.
+  CALLER_SESSION_KIND_ACCOUNT_BROWSER = 3;
 }
 
 // ListUsersRequest pages through users.

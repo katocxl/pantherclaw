@@ -19,6 +19,8 @@ import (
 type Access struct {
 	pantherclawv1connect.UnimplementedAccessServiceHandler
 	a *app.Access
+	// deployment is what WhoAmI reports (whoami_ui.go).
+	deployment pantherclawv1.Deployment
 }
 
 // NewAccess returns the AccessService handler.
@@ -35,6 +37,7 @@ func (s *Access) WhoAmI(ctx context.Context, _ *pantherclawv1.WhoAmIRequest) (*p
 			Type: principalTypeToProto[id.Principal.Kind], Id: id.Principal.ID.String(), DisplayName: id.DisplayName,
 		},
 		OrgId: id.Org.String(), OrgName: id.OrgName, Credential: string(id.Credential),
+		Deployment: s.deployment, SessionKind: sessionKindOf(id.Credential),
 	}
 	for _, b := range id.Bindings {
 		out.Bindings = append(out.Bindings, bindingProto(b))

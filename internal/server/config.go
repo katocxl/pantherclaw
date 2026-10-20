@@ -15,6 +15,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/oidcrp"
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
+	"github.com/katocxl/pantherclaw/internal/extension"
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/kube"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/config"
@@ -33,10 +34,12 @@ const (
 // Config is the pantherclaw-server configuration (JSON file + PC_* env).
 // Secrets are referenced by file path only (SB-7).
 type Config struct {
-	Role string     `json:"role" env:"PC_ROLE"`
-	Log  LogConfig  `json:"log"`
-	HTTP HTTPConfig `json:"http"`
-	DB   DBConfig   `json:"database"`
+	Role string `json:"role" env:"PC_ROLE"`
+	// Deployment is development, staging or production (config_ui_web.go).
+	Deployment string     `json:"deployment" env:"PC_DEPLOYMENT"`
+	Log        LogConfig  `json:"log"`
+	HTTP       HTTPConfig `json:"http"`
+	DB         DBConfig   `json:"database"`
 	// KEKFiles are key-encryption-key files; the first wraps new keys.
 	KEKFiles    []string `json:"kek_files" env:"PC_KEK_FILES"`
 	LicenceFile string   `json:"licence_file" env:"PC_LICENCE_FILE"`
@@ -119,9 +122,10 @@ type DBConfig struct {
 func DefaultConfig() Config {
 	d := db.Defaults()
 	return Config{
-		Role: RoleAll,
-		Log:  LogConfig{Level: "info"},
-		HTTP: HTTPConfig{Addr: "127.0.0.1:8080"},
+		Role:       RoleAll,
+		Deployment: string(extension.DeploymentDevelopment),
+		Log:        LogConfig{Level: "info"},
+		HTTP:       HTTPConfig{Addr: "127.0.0.1:8080"},
 		DB: DBConfig{
 			Host: d.Host, Port: d.Port, Name: d.Database, SSLMode: d.SSLMode,
 			AppUser: db.RoleApp, MigratorUser: db.RoleMigrator, MaxConns: int(d.MaxConns),
@@ -172,6 +176,7 @@ func (c *Config) Validate() error {
 	if c.WorkerConcurrency < 1 || c.WorkerConcurrency > 1000 {
 		errs = append(errs, errors.New("worker_concurrency must be 1..1000"))
 	}
+	errs = append(errs, c.validateDeployment()...)
 	errs = append(errs, c.validateAuthority()...)
 	errs = append(errs, c.validateAuth()...)
 	errs = append(errs, c.validateOIDC()...)
