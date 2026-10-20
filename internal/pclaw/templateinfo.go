@@ -42,6 +42,11 @@ type templateInfo struct {
 	Routes []templateRoute `json:"routes"`
 	// Grant says what the template's grant allows, for the plan.
 	Grant string `json:"grant"`
+	// RequiresAgent: the template is applied only with --agent (D114).
+	RequiresAgent bool `json:"requires_agent,omitzero"`
+	// RequiresScope: the template is applied only with --team or --bu, the
+	// scope of the envelope that carries its weekly cap (D120).
+	RequiresScope bool `json:"requires_scope,omitzero"`
 }
 
 // templateRoute is a connection route of a package.

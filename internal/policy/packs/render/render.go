@@ -48,6 +48,13 @@ const (
 	KindWorkspace     = "workspace"
 	KindAgent         = "agent"
 	KindTimeZone      = "time_zone"
+	// List kinds take several values (ListKinds): a Stripe connected account
+	// a template sends funds to (G0 M14 D97), a customer whose records a
+	// support agent may read (D106), a Slack channel an agent may post to
+	// (D107).
+	KindPayee        = "payee"
+	KindCustomer     = "customer"
+	KindSlackChannel = "slack_channel"
 )
 
 var (
@@ -55,8 +62,14 @@ var (
 	RepoRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,38}/\.?[a-z0-9_-][a-z0-9._-]{0,98}$`)
 	// BranchRe is a branch name.
 	BranchRe = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}){0,7}$`)
-	uuidRe   = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-	nameRe   = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
+	// PayeeRe is a Stripe connected account as pc.stripe names targets.
+	PayeeRe = regexp.MustCompile(`^acct_[A-Za-z0-9]{8,64}$`)
+	// CustomerRe is a customer id as a record scope names it.
+	CustomerRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+	// SlackChannelRe is a Slack channel id as pc.slack names targets.
+	SlackChannelRe = regexp.MustCompile(`^[CG][A-Z0-9]{8,12}$`)
+	uuidRe         = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	nameRe         = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
 )
 
 // kinds are the kinds and the checks a value of each must pass besides its
@@ -93,20 +106,57 @@ var kinds = map[string]func(string) error{
 		}
 		return nil
 	},
-	KindTimeZone: func(string) error { return nil },
+	KindTimeZone:     func(string) error { return nil },
+	KindPayee:        ListKinds[KindPayee].check,
+	KindCustomer:     ListKinds[KindCustomer].check,
+	KindSlackChannel: ListKinds[KindSlackChannel].check,
 }
 
 // Flags name the option each kind's value comes from in pclaw; Options
 // carries other names for other callers.
 var Flags = map[string]string{
 	KindRepository: "--repos", KindDefaultBranch: "--default-branch", KindEnvironment: "--environment",
-	KindEnvironmentID: "--environment", KindWorkspace: "--workspace", KindAgent: "--agent", KindTimeZone: "--time-zone",
+	KindEnvironmentID: "--environment", KindWorkspace: "--workspace", KindAgent: "--agent", KindTimeZone: "--time-zone", KindPayee: "--payee",
+	KindCustomer: "--customer", KindSlackChannel: "--slack-channel",
 }
 
 // OtherEnvironmentID is {{other_environment_id}}: an environment id that
 // is never the template's, for tests that show a rule stays in its
 // environment.
 const OtherEnvironmentID = "00000000-0000-7000-8000-0000000000e9"
+
+// Values that are never one of a template's, for tests that show an action
+// elsewhere is refused ({{other_payee}}, {{other_customer}},
+// {{other_slack_channel}}). A value named so is refused.
+const (
+	OtherPayee        = "acct_PantherClawNotAPayee"
+	OtherCustomer     = "pantherclaw-not-a-customer"
+	OtherSlackChannel = "CPCNOTALLOWED"
+)
+
+// ListKind is a placeholder kind that takes a list of values. In a
+// condition {{<Plural>}} is the list as quoted CEL literals; a list item
+// naming {{<kind>}} is repeated for each value; {{<kind>}} anywhere else is
+// the first value (for tests); {{other_<kind>}} is Other.
+type ListKind struct {
+	Plural, Other string
+	Re            *regexp.Regexp
+	What          string
+}
+
+// ListKinds are the list kinds.
+var ListKinds = map[string]ListKind{
+	KindPayee:        {Plural: "payees", Other: OtherPayee, Re: PayeeRe, What: "a Stripe connected account (acct_...)"},
+	KindCustomer:     {Plural: "customers", Other: OtherCustomer, Re: CustomerRe, What: "a customer id"},
+	KindSlackChannel: {Plural: "slack_channels", Other: OtherSlackChannel, Re: SlackChannelRe, What: "a Slack channel id (C... or G...)"},
+}
+
+func (k ListKind) check(v string) error {
+	if !k.Re.MatchString(v) || v == k.Other {
+		return errors.New("not " + k.What)
+	}
+	return nil
+}
 
 // ErrNeedsEnvironmentID: the template uses the environment's id, which
 // the caller resolves.
@@ -166,6 +216,8 @@ type Options struct {
 	// Environment is the environment's slug, EnvironmentID its id.
 	Environment, EnvironmentID string
 	Workspace, TimeZone        string
+	// Lists are the values of the list kinds (ListKinds), by kind.
+	Lists map[string][]string
 	// Names name each kind's value in errors (nil: Flags).
 	Names map[string]string
 }
@@ -195,6 +247,12 @@ type Window struct {
 type Info struct {
 	TaskRef      string          `json:"task_ref"`
 	Placeholders map[string]Spec `json:"placeholders"`
+	// RequiresAgent: the template has per-agent rules, so it renders only for
+	// an agent (G0 M14 D114).
+	RequiresAgent bool `json:"requires_agent,omitzero"`
+	// RequiresScope: the template's envelope carries limits that must exist,
+	// so it renders only for a team or business unit (D120).
+	RequiresScope bool `json:"requires_scope,omitzero"`
 }
 
 // Data is a template rendered for its options.
@@ -205,6 +263,9 @@ type Data struct {
 		Present bool
 		Name    string
 		Bounds  []byte
+		// Limits are the envelope's budgets and counters; nil for none
+		// (G0 M14 D120).
+		Limits []byte
 	}
 	Grant struct {
 		Bounds, Limits []byte
@@ -229,6 +290,9 @@ var placeholderRe = regexp.MustCompile(`\{\{([a-z_]+)\}\}`)
 type Renderer struct {
 	O    Options
 	Spec map[string]Spec
+	// tests: the renderer fills scenario tests, where a list kind's
+	// {{<kind>}} outside a list item is its first value (D119 L5).
+	tests bool
 }
 
 // declared reports whether the template declares a kind.
@@ -300,6 +364,25 @@ func (r Renderer) value(name, repo string, cel bool) (string, error) {
 			return quote(OtherEnvironmentID), nil
 		}
 	}
+	for kind, lk := range ListKinds {
+		if !r.declared(kind) {
+			continue
+		}
+		switch name {
+		case lk.Plural:
+			if !cel {
+				return "", fmt.Errorf("{{%s}} is a condition and is used outside one", name)
+			}
+			values := r.O.Lists[kind]
+			q := make([]string, len(values))
+			for i, x := range values {
+				q[i] = CELQuote(x)
+			}
+			return "[" + strings.Join(q, ", ") + "]", nil
+		case "other_" + kind:
+			return quote(lk.Other), nil
+		}
+	}
 	if !r.declared(name) || name == KindRepository {
 		return "", fmt.Errorf("{{%s}} is not a declared placeholder", name)
 	}
@@ -320,6 +403,13 @@ func (r Renderer) value(name, repo string, cel bool) (string, error) {
 		v = r.O.Agent
 	case KindTimeZone:
 		v = r.O.TimeZone
+	case KindPayee, KindCustomer, KindSlackChannel:
+		if !r.tests {
+			return "", fmt.Errorf("{{%s}} is one of several values: use it as a list item or {{%s}}", name, ListKinds[name].Plural)
+		}
+		if values := r.O.Lists[name]; len(values) > 0 {
+			v = values[0]
+		}
 	}
 	switch {
 	case v == "" && name == KindEnvironmentID:
@@ -328,6 +418,16 @@ func (r Renderer) value(name, repo string, cel bool) (string, error) {
 		return "", fmt.Errorf("{{%s}} needs %s", name, r.O.name(name))
 	}
 	return quote(v), nil
+}
+
+// listItem is the declared list kind a list item names ({{<kind>}}), or "".
+func (r Renderer) listItem(s string) string {
+	for kind := range ListKinds {
+		if r.declared(kind) && strings.Contains(s, "{{"+kind+"}}") {
+			return kind
+		}
+	}
+	return ""
 }
 
 // Fill replaces the placeholders in s.
@@ -369,6 +469,18 @@ func (r Renderer) walk(v any, repo string, when bool) (any, error) {
 				}
 				continue
 			}
+			if s, ok := x.(string); ok {
+				if kind := r.listItem(s); kind != "" {
+					for _, each := range r.O.Lists[kind] {
+						y, err := r.Fill(strings.ReplaceAll(s, "{{"+kind+"}}", each), repo, false)
+						if err != nil {
+							return nil, err
+						}
+						out = append(out, y)
+					}
+					continue
+				}
+			}
 			y, err := r.walk(x, repo, false)
 			if err != nil {
 				return nil, err
@@ -384,6 +496,7 @@ func (r Renderer) walk(v any, repo string, when bool) (any, error) {
 
 // items renders a policy.json or tests.json list by its "per".
 func (r Renderer) items(list []map[string]any, what string) (out []map[string]any, skipped, reposItems []string, err error) {
+	r.tests = what == "test"
 	for _, item := range list {
 		per, _ := item["per"].(string)
 		base, _ := item["id"].(string)
@@ -473,6 +586,10 @@ func (r Renderer) checkValues() error {
 			values = []string{r.O.Agent}
 		case KindTimeZone:
 			values = []string{r.O.TimeZone}
+		case KindPayee, KindCustomer, KindSlackChannel:
+			if values = r.O.Lists[name]; len(values) == 0 {
+				return fmt.Errorf("template %s needs %s", r.O.Name, r.O.name(name))
+			}
 		}
 		for _, v := range values {
 			if v == "" {
@@ -514,6 +631,9 @@ func Render(o Options) (Data, error) {
 	if err != nil {
 		return out, err
 	}
+	if info.RequiresAgent && o.Agent == "" {
+		return out, fmt.Errorf("template %s needs %s: its rules are the agent's", o.Name, o.name(KindAgent))
+	}
 	r := Renderer{O: o, Spec: info.Placeholders}
 	if err := r.checkValues(); err != nil {
 		return out, err
@@ -549,6 +669,7 @@ func Render(o Options) (Data, error) {
 	var env struct {
 		Name   string `json:"name"`
 		Bounds any    `json:"bounds"`
+		Limits any    `json:"limits"`
 	}
 	var grant struct {
 		Bounds any `json:"bounds"`
@@ -589,6 +710,11 @@ func Render(o Options) (Data, error) {
 	out.TaskRef, out.Placeholders, out.Envelope.Name = info.TaskRef, info.Placeholders, env.Name
 	if out.Envelope.Bounds, err = json.Marshal(env.Bounds, json.Deterministic(true)); err != nil {
 		return out, err
+	}
+	if env.Limits != nil {
+		if out.Envelope.Limits, err = json.Marshal(env.Limits, json.Deterministic(true)); err != nil {
+			return out, err
+		}
 	}
 	if out.Grant.Bounds, err = json.Marshal(grant.Bounds, json.Deterministic(true)); err != nil {
 		return out, err

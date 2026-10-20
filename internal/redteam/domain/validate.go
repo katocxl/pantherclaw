@@ -14,29 +14,36 @@ import (
 )
 
 var (
-	idPattern      = regexp.MustCompile(`^RT-[0-9]{3}$`)
-	stepIDPattern  = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
-	attackerRE     = regexp.MustCompile(`^A([1-9]|1[0-2])$`)
-	threatRE       = regexp.MustCompile(`^T-[0-9]{3}$`)
-	ruleRE         = regexp.MustCompile(`^HR-[0-9]{3}$`)
-	fileNameRE     = regexp.MustCompile(`^(RT-[0-9]{3})-[a-z0-9]+(-[a-z0-9]+)*\.yaml$`)
-	roleRE         = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
-	toolRE         = regexp.MustCompile(`^[A-Za-z0-9_.:/-]{1,120}$`)
-	tokenRE        = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
-	saveNameRE     = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
-	categories     = []string{"functional", "boundary", "recovery", "explanation"}
-	suites         = []string{"coding-agent", "platform"}
-	tiers          = []string{"community", "business"}
-	capabilities   = []string{"github", "payments", "mcp", "sandbox", "person", "second_org"}
-	faces          = []string{"mcp", "http", "sdk", "hook"}
-	methods        = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"}
-	instances      = []string{"primary", "other"}
-	credentials    = []string{"none", "found_pat"}
-	widenings      = []string{"destinations", "amount", "operations", "lifetime"}
-	stealModes     = []string{"token_without_key", "proof_replay", "stale_nonce", "other_instance"}
-	probes         = []string{"dns_docker_resolver", "dns_external", "ipv6", "icmp", "metadata", "host_gateway", "docker_socket", "direct_https", "ssh_push", "planted_pat_push", "raw_curl_merge"}
-	sims           = []string{"github", "mcp", "payments"}
-	simChanges     = []string{"push_commit", "tool_description", "fault"}
+	idPattern     = regexp.MustCompile(`^RT-[0-9]{3}$`)
+	stepIDPattern = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
+	attackerRE    = regexp.MustCompile(`^A([1-9]|1[0-2])$`)
+	threatRE      = regexp.MustCompile(`^T-[0-9]{3}$`)
+	ruleRE        = regexp.MustCompile(`^HR-[0-9]{3}$`)
+	fileNameRE    = regexp.MustCompile(`^(RT-[0-9]{3})-[a-z0-9]+(-[a-z0-9]+)*\.yaml$`)
+	roleRE        = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
+	toolRE        = regexp.MustCompile(`^[A-Za-z0-9_.:/-]{1,120}$`)
+	tokenRE       = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
+	saveNameRE    = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
+	categories    = []string{"functional", "boundary", "recovery", "explanation"}
+	suites        = []string{"coding-agent", "platform"}
+	tiers         = []string{"community", "business"}
+	// M14 capabilities and faces: G0 M14 D46.
+	capabilities = []string{
+		"github", "payments", "mcp", "sandbox", "person", "second_org",
+		"stripe.refund", "stripe.transfer", "stripe.key_swap", "pg.query", "pg.role_swap", "slack.post",
+		"slack.interaction_post", "authzen.evaluate", "a2a.send", "a2a.card_swap",
+	}
+	faces       = []string{"mcp", "http", "sdk", "hook", "a2a", "authzen"}
+	methods     = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"}
+	instances   = []string{"primary", "other"}
+	credentials = []string{"none", "found_pat"}
+	widenings   = []string{"destinations", "amount", "operations", "lifetime"}
+	stealModes  = []string{"token_without_key", "proof_replay", "stale_nonce", "other_instance"}
+	probes      = []string{"dns_docker_resolver", "dns_external", "ipv6", "icmp", "metadata", "host_gateway", "docker_socket", "direct_https", "ssh_push", "planted_pat_push", "raw_curl_merge"}
+	sims        = []string{"github", "mcp", "payments", "stripe", "postgres", "slack", "a2a"}
+	simChanges  = []string{"push_commit", "tool_description", "fault", "reaction", "reply", "interaction_post"}
+	// slackChanges are valid only with sim: slack (G0 M14 D91).
+	slackChanges   = []string{"reaction", "reply", "interaction_post"}
 	personRoles    = []string{"approver", "launcher", "developer"}
 	readObjects    = []string{"transaction", "approval", "run"}
 	waitFor        = []string{"effect_confirmed", "effect_unknown"}
@@ -317,6 +324,9 @@ func checkWith(kind string, with []byte, earlier map[string]bool) error {
 		}
 		if !slices.Contains(sims, w.Sim) || !slices.Contains(simChanges, w.Change) {
 			return fmt.Errorf("sim must be one of %v and change one of %v", sims, simChanges)
+		}
+		if slices.Contains(slackChanges, w.Change) && w.Sim != "slack" {
+			return fmt.Errorf("change %s is only for sim slack", w.Change)
 		}
 		return checkDepth("args", w.Args)
 	case "person.approve", "person.decline":

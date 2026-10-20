@@ -1,0 +1,14 @@
+{
+  "bounds": {
+    "operations": ["postgres.rows.read", "postgres.tables.read", "slack.message.post", "slack.message.disclose", "slack.channel.read", "github.contents.read", "github.pull.read", "github.pull.create"],
+    "targets": {
+      "slack_channel": {"ids": ["{{slack_channel}}"]},
+      "github.repository": {"ids": ["{{repo}}"]},
+      "github.pull_request": {"prefixes": ["{{repo}}#"]}
+    },
+    "destinations": {"ids": ["{{slack_channel}}"]},
+    "scope": {
+      "postgres.rows.read": {"classes": {"ids": ["public", "internal"]}}
+    }
+  }
+}

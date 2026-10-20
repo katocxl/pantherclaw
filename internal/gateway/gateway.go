@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/katocxl/pantherclaw/internal/approvals/proof"
+	"github.com/katocxl/pantherclaw/internal/gateway/a2aface"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
 	"github.com/katocxl/pantherclaw/internal/gateway/connectors"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
@@ -63,6 +64,7 @@ type Gateway struct {
 	mcp         *mcp.Handler
 	hook        *hook.Handler
 	sdk         *sdk.Handler
+	a2a         *a2aface.Handler
 	log         *slog.Logger
 	// reportDrift, driftEvery and driftPoll drive the drift checks
 	// (drift.go).
@@ -77,7 +79,7 @@ type Gateway struct {
 }
 
 // Handler returns the gateway's agent-facing HTTP handler: `/mcp/{connection}`
-// (mcp), `/hook/{connection}` (hook), `/sdk/{connection}` (sdk) and
+// (mcp), `/hook/{connection}` (hook), `/sdk/{connection}` (sdk), `/a2a/{connection}` (a2a) and
 // `/{connection}/…` (httpproxy).
 func (g *Gateway) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -91,6 +93,10 @@ func (g *Gateway) Handler() http.Handler {
 		}
 		if _, ok := sdk.Path(r.URL.EscapedPath()); ok {
 			g.sdk.ServeHTTP(w, r)
+			return
+		}
+		if _, _, ok := a2aface.Path(r.URL.EscapedPath()); ok {
+			g.a2a.ServeHTTP(w, r)
 			return
 		}
 		g.http.ServeHTTP(w, r)
@@ -116,6 +122,9 @@ type Deps struct {
 	// ReportCircuit tells the server a connection's circuit opened
 	// (HR-078); nil reports nothing.
 	ReportCircuit dispatch.Reporter
+	// ReportCircuitReason tells the server a connection's circuit opened for
+	// a reason (stripe_livemode, G0 M14 D76).
+	ReportCircuitReason dispatch.ReasonReporter
 	// ReportDrift tells the server an upstream MCP tool drifted (HR-081);
 	// nil reports nothing.
 	ReportDrift DriftReporter
@@ -165,6 +174,10 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 		Containment: k, Configuration: store, Run: []func(context.Context) error{ctl.Run, k.Run, store.Run},
 		ReportCircuit: func(ctx context.Context, conn string, unknown, total int32) error {
 			_, err := ctl.Gateway.ReportCircuit(ctx, &pb.ReportCircuitRequest{ConnectionId: conn, UnknownCount: unknown, TotalCount: total})
+			return err
+		},
+		ReportCircuitReason: func(ctx context.Context, conn, reason string) error {
+			_, err := ctl.Gateway.ReportCircuit(ctx, &pb.ReportCircuitRequest{ConnectionId: conn, Reason: reason})
 			return err
 		},
 		ReportDrift: func(ctx context.Context, conn string, d dispatch.Drift) error {
@@ -225,7 +238,7 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 	}
 	o := dispatch.Options{
 		Org: d.Org, GatewayID: d.GatewayID, Authority: d.Authority, JWKSURL: d.JWKSURL, JWKSClient: d.JWKSClient,
-		Containment: d.Containment, AllowedPrefixes: prefixes, ReportCircuit: d.ReportCircuit, Log: log,
+		Containment: d.Containment, AllowedPrefixes: prefixes, ReportCircuit: d.ReportCircuit, ReportCircuitReason: d.ReportCircuitReason, Log: log,
 		Approvers:   proof.NewPinned(cfg.Approvals.ApproverKeysFile, d.Org),
 		ReportFacts: d.ReportFacts, FactTimeout: cfg.GitHub.FactTimeout.D(), ReportRevocation: d.ReportRevocation,
 		GitHubAPIURL: cfg.GitHub.APIURL,
@@ -244,6 +257,9 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 	if err != nil {
 		return nil, err
 	}
+	if s, ok := d.Configuration.(interface{ Subscribe(func(*control.Config)) }); ok {
+		s.Subscribe(engine.Configured) // D105: pools of gone connections close
+	}
 	if d.Connectors != nil {
 		d.Connectors.WithEgress(engine)
 	}
@@ -256,6 +272,7 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		mcp:  mcp.New(engine, d.Configuration, cfg.PublicURL, log),
 		hook: hook.New(engine, d.Configuration, cfg.PublicURL, log),
 		sdk:  sdk.New(engine, d.Configuration, cfg.PublicURL, log),
+		a2a:  a2aface.New(engine, d.Configuration, a2aPeer, cfg.PublicURL, log),
 		log:  log, reportDrift: d.ReportDrift, driftEvery: DriftEvery, driftPoll: driftPoll,
 		verifications: d.Verifications, verifyEvery: VerifyEvery, verifyHintGap: verifyHintGap,
 		submitScan: d.SubmitScan,
@@ -273,6 +290,7 @@ func (g *Gateway) Run(ctx context.Context) error {
 		eg.Go(func() error { return f(ctx) })
 	}
 	eg.Go(func() error { return g.watchDrift(ctx) })
+	eg.Go(func() error { return g.watchA2ACards(ctx) })
 	eg.Go(func() error { return g.watchVerifications(ctx) })
 	eg.Go(func() error { <-ctx.Done(); return nil })
 	return eg.Wait()

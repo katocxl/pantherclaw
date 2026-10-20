@@ -122,14 +122,17 @@ func deref(p *string) string {
 	return *p
 }
 
-// held returns a connection that can take a credential.
+// held returns a connection that can take a credential. A postgres
+// connection's password goes in no header: it is held with none, and only
+// the gateway's target-database client opens it, inside a dispatch (G0 M14
+// D84).
 func held(conn dbq.PcConnection, err error) (dbq.PcConnection, error) {
 	if db.IsNoRows(err) {
 		return conn, ErrConnectionNotFound
 	} else if err != nil {
 		return conn, err
 	}
-	if conn.State == "RETIRED" || conn.AccessMode != "pantherclaw_held" || conn.CredentialHeader == nil {
+	if conn.State == "RETIRED" || conn.AccessMode != "pantherclaw_held" || (conn.CredentialHeader == nil && conn.Kind != "postgres") {
 		return conn, ErrNotHeld
 	}
 	return conn, nil
@@ -290,6 +293,9 @@ func (s *Service) put(ctx context.Context, tx db.TenantTx, c tenancy.Caller, in 
 		q := dbq.New(tx)
 		conn, err := held(q.LockConnection(ctx, c.Org, in.Connection))
 		if err != nil {
+			return err
+		}
+		if err := checkPattern(ctx, q, conn, in.Kind); err != nil {
 			return err
 		}
 		if err := live(q.LockGateway(ctx, c.Org, conn.GatewayID)); err != nil {

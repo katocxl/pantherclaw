@@ -51,7 +51,7 @@ func renderedBundle(t *testing.T, name, agent string) *domain.Bundle {
 	}
 	o.name, o.agent = name, agent
 	// The values a template may declare besides repositories (M11.1 D27).
-	o.environmentID, o.workspace = exampleEnvironmentID, exampleWorkspace
+	o.environmentID, o.workspace, o.lists = exampleEnvironmentID, exampleWorkspace, exampleLists()
 	d, err := renderTemplate(o)
 	if err != nil {
 		t.Fatal(err)

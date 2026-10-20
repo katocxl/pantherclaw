@@ -24,6 +24,7 @@ import (
 	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
 	pcshell "github.com/katocxl/pantherclaw/packages/pc-shell"
+	pcslack "github.com/katocxl/pantherclaw/packages/pc-slack"
 )
 
 // devSeedActor records `dev seed` in the audit log.
@@ -61,9 +62,19 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	githubURL := fs.String("github-url", "", "with --gateway-out: also seed pc.github and the connection \"github\" to this GitHub API "+
 		"(pantherclaw-sim github), held by the gateway (seal the GitHub App with pclaw seal --github-app), the gateway as its fact provider, "+
 		"and, with --workload-out, the GitHub operations in the grant")
+	stripeURL := fs.String("stripe-url", "", "with --gateway-out: also seed pc.stripe and the connection \"stripe\" to this Stripe API (pantherclaw-sim stripe), "+
+		"held by the gateway, its facts read by the gateway, refunds over "+devStripeHoldOver+" USD held; seal a restricted test key with pclaw seal")
+	stripePayee := fs.String("stripe-payee", devStripePayee, "with --stripe-url and --workload-out: the connected account the seeded grant may transfer to")
+	a2aURL := fs.String("a2a-url", "", "with --gateway-out and --workload-out: also seed pc.a2a, the peer agent dev-peer and the simulated a2a connection \"peer\" "+
+		"to this A2A agent (pantherclaw-sim a2a), its card pinned, and the a2a operations in the grant (G0 M14 D33)")
+	a2aPeerOut := fs.String("a2a-peer-out", "", "with --a2a-url: write the peer agent's key file here (0600, never overwritten)")
 	workloadOut := fs.String("workload-out", "", "also seed an admitted PAP/1 workload with a grant and a run; write its key file here (0600, never overwritten)")
 	factsOut := fs.String("facts-key-out", "", "with --workload-out: write the API key of the development fact provider here (0600, never overwritten)")
 	holdOver := fs.String("hold-over", "50.00", "publish a policy holding refunds over this amount (grant currency) for an approver; empty for none")
+	postgresFile := fs.String("postgres", "", "with --gateway-out: also seed pc.postgres and the connection \"warehouse\" to the database a file names as one URL (G0 M14 D21)")
+	slackChannel := fs.String("slack-channel", "", "also seed a PENDING slack_app channel posting approval cards to this Slack channel id (with --slack-token-file; Team edition)")
+	slackToken := fs.String("slack-token-file", "", "with --slack-channel: the file holding the bot token (xoxb-...)")
+	slackURL := fs.String("slack-url", "", "with --gateway-out: also seed pc.slack and the connection \"slack\" to this Slack Web API base (pantherclaw-sim slack: http://127.0.0.1:9095/api), its channel facts read by the gateway")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -107,8 +118,12 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 			return fmt.Errorf("dev seed: %s already exists", out)
 		}
 	}
-	if (*targetURL != "" || *shell || *githubURL != "") && *gatewayOut == "" {
+	if (*targetURL != "" || *shell || *githubURL != "" || *stripeURL != "" || *postgresFile != "" || *slackURL != "" || *a2aURL != "") &&
+		*gatewayOut == "" {
 		return errTargetNeedsGateway
+	}
+	if *a2aURL != "" && (*workloadOut == "" || *a2aPeerOut == "") {
+		return errors.New("dev seed: --a2a-url needs --workload-out and --a2a-peer-out")
 	}
 	if *access == "" {
 		*access = capp.AccessNone
@@ -163,8 +178,25 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	if *githubURL != "" {
 		pkgs = append(pkgs, devPackage{pcgithub.Name, pcgithub.Version, pcgithub.Package})
 	}
+	if *stripeURL != "" {
+		pkgs = append(pkgs, devStripePackage())
+	}
+	if *postgresFile != "" {
+		pkgs = append(pkgs, devPostgresPackage())
+	}
+	if *slackURL != "" {
+		pkgs = append(pkgs, devPackage{pcslack.Name, pcslack.Version, pcslack.Package})
+	}
+	if *a2aURL != "" {
+		pkgs = append(pkgs, devA2APackage())
+	}
 	if err := seedPackages(ctx, pool, org, signer, pkgs...); err != nil {
 		return err
+	}
+	if *slackChannel != "" {
+		if err := seedSlackChannel(ctx, cfg, pool, org, *slackChannel, *slackToken, stdout); err != nil {
+			return err
+		}
 	}
 	_, _ = fmt.Fprintf(stdout, "seeded org %s (%q) with package %s@%s active\n", org, *name, mockpayments.Name, mockpayments.Version)
 	if hold != nil {
@@ -203,6 +235,29 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 			_, _ = fmt.Fprintf(stdout, "seeded github connection %s (%s) to %s, its facts read by the gateway; seal the GitHub App with "+
 				"pclaw seal --connection %s --github-app ID --installation N --account LOGIN --from-file KEY.pem\n", c.ID, c.Name, *githubURL, c.ID)
 		}
+		if *stripeURL != "" {
+			if err := seedStripe(ctx, cfg, pool, org, gw, *stripeURL, hold, stdout); err != nil {
+				return err
+			}
+		}
+		if *postgresFile != "" {
+			if err := seedPostgresConnection(ctx, cfg, pool, org, gw, *postgresFile, stdout); err != nil {
+				return err
+			}
+		}
+		if *slackURL != "" {
+			c, err := seedSlackAgentConnection(ctx, cfg, pool, org, gw, *slackURL)
+			if err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(stdout, "seeded slack connection %s (%s) to %s, its channel facts read by the gateway; seal the bot token with "+
+				"pclaw seal --connection %s --from-file TOKEN\n", c.ID, c.Name, *slackURL, c.ID)
+		}
+		if *a2aURL != "" {
+			if err := seedA2A(ctx, cfg, pool, org, gw, w, *a2aURL, *a2aPeerOut, stdout); err != nil {
+				return err
+			}
+		}
 		if *shell {
 			c, err := seedShellConnection(ctx, cfg, pool, org, gw)
 			if err != nil {
@@ -219,7 +274,10 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	if err != nil {
 		return err
 	}
-	g, err := seedGrant(ctx, pool, org, w, devGrantTerms{MaxPerAction: maxPer, Limit: lim, MaxCount: *maxCount, Shell: *shell, GitHub: *githubURL != ""})
+	g, err := seedGrant(ctx, pool, org, w, devGrantTerms{
+		MaxPerAction: maxPer, Limit: lim, MaxCount: *maxCount, Shell: *shell, GitHub: *githubURL != "", Stripe: *stripeURL != "",
+		StripePayee: *stripePayee, Postgres: *postgresFile != "", A2A: *a2aURL != "",
+	})
 	if err != nil {
 		return err
 	}

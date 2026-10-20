@@ -390,9 +390,21 @@ func (s *Service) StartChildRun(ctx context.Context, in ChildInput) (Run, error)
 	if err != nil {
 		return Run{}, err
 	}
+	var out Run
+	err = s.pool.InTenantTx(ctx, in.Caller.Org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		out, err = startChildRunTx(ctx, tx, in, minutes)
+		return err
+	})
+	return out, err
+}
+
+// startChildRunTx starts the child run in tx, its label and lifetime
+// already checked (minutes).
+func startChildRunTx(ctx context.Context, tx db.TenantTx, in ChildInput, minutes int32) (Run, error) {
 	org := in.Caller.Org
 	var out Run
-	err = s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+	err := func() error {
 		q := dbq.New(tx)
 		inst, err := q.GetInstance(ctx, org, in.Caller.Instance)
 		if err != nil || inst.State != "ADMITTED" || inst.AgentID != in.Caller.Agent {
@@ -446,7 +458,7 @@ func (s *Service) StartChildRun(ctx context.Context, in ChildInput) (Run, error)
 			return err
 		}
 		return record(ctx, tx, evdomain.Actor{Type: "instance", ID: inst.ID.String()}, "run.started", out)
-	})
+	}()
 	return out, err
 }
 

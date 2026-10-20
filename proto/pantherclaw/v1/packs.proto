@@ -40,7 +40,8 @@ message Pack {
   // covers lists what the pack protects.
   repeated string covers = 4;
   // parameters are what ApplyPack needs besides the environment and the
-  // agents: repos, default_branch, workspace, time_zone.
+  // agents: repos, default_branch, workspace, time_zone, payees, customers,
+  // slack_channels.
   repeated string parameters = 5;
   int32 baseline_ttl_seconds = 6;
   // automation_template, when set, names the automation template that

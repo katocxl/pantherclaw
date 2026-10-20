@@ -17,7 +17,7 @@ import "google/protobuf/timestamp.proto";
 // state is UNKNOWN, OBSERVE_ONLY, PARTIAL or ENFORCED, computed only from
 // evidence: observed traffic, the route inventory and sandbox closure
 // evidence. A setting alone never yields a state (F460). Cooperative
-// channels (SDK, hook) are capped at PARTIAL unless the target verifies
+// channels (SDK, hook, AuthZEN) are capped at PARTIAL unless the target verifies
 // action tokens (HR-024), and routes through opaque MCP servers unless
 // their egress is mediated (HR-086). ENFORCED expires (24 hours by
 // default) and every invalidating change drops it at once; a record read
@@ -196,7 +196,7 @@ message CoverageRoute {
   string id = 1;
   // Kind.
   CoverageRouteKind kind = 2;
-  // For a channel: "http", "mcp", "sdk" or "hook".
+  // For a channel: "http", "mcp", "sdk", "hook", "authzen" or "a2a".
   string channel = 3;
   // Where it goes (a host, a file, an identity); untrusted text.
   string locator = 4;

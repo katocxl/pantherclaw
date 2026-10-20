@@ -46,7 +46,7 @@ PantherClaw is itself a mitigation product for these risks; this table maps what
 | ASI04 Agentic Supply Chain Vulnerabilities | Signed tool packages, reviewed descriptions, drift quarantine | 6, 16 |
 | ASI05 Unexpected Code Execution | Shell/host routes governed, sandbox, coverage states | 16, 17 |
 | ASI06 Memory & Context Poisoning | Agent memory is never evidence of history/authority (F126); trusted facts only | 5, 8 |
-| ASI07 Insecure Inter-Agent Communication | Child agents get own identities and narrowed grants; delegation lineage. Peer agent-to-agent calls (e.g. A2A) are open: [BUILD_GUIDE](../BUILD_GUIDE.md) M14 | 4, 5 |
+| ASI07 Insecure Inter-Agent Communication | Child agents get own identities and narrowed grants; delegation lineage. Peer agent-to-agent calls over A2A are mediated by the gateway (M14, [ADR-0029](../adr/0029-peer-agent-calls-a2a.md)): pinned agent cards with drift quarantine, requests rebuilt from ActionIR with text parts only, decided under the requester's grant; an enrolled peer acts in a child run under the intersection of the requester's grant and the route's peer scope (HR-322..327, T-148, T-149). External peers are governed outbound only and labelled `PARTIAL` (R-41) | 4, 5, 6 |
 | ASI08 Cascading Failures | Fail-closed, circuit breakers, kill switch, dependency previews | 6, 10, 14 |
 | ASI09 Human-Agent Trust Exploitation | Template-only approval rendering, untrusted text quarantine, WebAuthn binding | 7 |
 | ASI10 Rogue Agents | Discovery, admission, containment, detections | 2, 10, 12 |

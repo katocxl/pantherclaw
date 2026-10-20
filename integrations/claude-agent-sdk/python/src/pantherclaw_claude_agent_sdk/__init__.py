@@ -354,9 +354,11 @@ class PantherClaw:
         return _decision("deny", res.why or "PantherClaw denied this command")
 
     def _answer(self, res: Result, data: dict[str, Any], h: _Held, builtin: bool) -> dict[str, Any]:
-        if res.outcome == "allow":
+        if res.outcome != "hold":
+            # A final answer: an identical call later is a new decision (M14 D68).
             with self._lock:
                 self._retries.pop(h.key, None)
+        if res.outcome == "allow":
             if res.send is not None:
                 if self._on_dispatch is None:
                     return _decision("deny", "this connection's target accepts only PantherClaw's own request: pass on_dispatch to send it")
@@ -442,13 +444,18 @@ class PantherClaw:
                 cancelled.set()
                 return PermissionResultDeny(message=f"the wait for PantherClaw's decision ended: {e or type(e).__name__}")
             if res.outcome != "allow":
+                if res.outcome == "deny":
+                    # The hold ended in PantherClaw: an identical call later is a new decision (M14 D68).
+                    with self._lock:
+                        self._retries.pop(h.key, None)
                 return PermissionResultDeny(message=f"{res.why or 'PantherClaw did not allow this call'} (PantherClaw, PARTIAL)")
+            # A final allow: forget the action id before anything else can return (M14 D68, D81).
+            with self._lock:
+                self._retries.pop(h.key, None)
             if res.send is not None:
                 if self._on_dispatch is None:
                     return PermissionResultDeny(message="this connection's target accepts only PantherClaw's own request: pass on_dispatch to send it")
                 self._on_dispatch(h.tool_use_id, res.send)
-            with self._lock:
-                self._retries.pop(h.key, None)
             return PermissionResultAllow(updated_input=h.tool_input)
 
         return callback

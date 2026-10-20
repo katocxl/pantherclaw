@@ -1,0 +1,80 @@
+{
+  "tests": [
+    {
+      "id": "tr-transfer-held", "per": "org",
+      "summary": "a transfer of 100.00 USD to a payee whose bank details did not change waits for two approvers",
+      "action": {"operation": "stripe.transfer.create", "target": {"type": "stripe.account", "id": "{{payee}}"}, "params": {"amount": {"value": "100.00", "currency": "USD"}}},
+      "given": {"facts": {"stripe.account.payout_details_changed": {"value": {"object": {"changed": false, "last_changed": 0, "account": "{{payee}}"}}, "age_seconds": 10}}},
+      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "TRANSFER_NEEDS_APPROVAL", "rule": "tr-transfer-approve"}
+    },
+    {
+      "id": "tr-transfer-approved", "per": "org",
+      "summary": "an approved transfer of 10000.00 USD to a payee whose bank details did not change goes through, verified at the domain effect",
+      "action": {"operation": "stripe.transfer.create", "target": {"type": "stripe.account", "id": "{{payee}}"}, "params": {"amount": {"value": "10000.00", "currency": "USD"}}},
+      "given": {"facts": {"stripe.account.payout_details_changed": {"value": {"object": {"changed": false, "last_changed": 0, "account": "{{payee}}"}}, "age_seconds": 10}}, "approval": "approved"},
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "TRANSFER_NEEDS_VERIFICATION", "rule": "tr-transfer-verify"}
+    },
+    {
+      "id": "tr-transfer-over-cap", "per": "org",
+      "summary": "a transfer of 10000.01 USD is refused even when approved and stepped up",
+      "action": {"operation": "stripe.transfer.create", "target": {"type": "stripe.account", "id": "{{payee}}"}, "params": {"amount": {"value": "10000.01", "currency": "USD"}}},
+      "given": {"facts": {"stripe.account.payout_details_changed": {"value": {"object": {"changed": false, "last_changed": 0, "account": "{{payee}}"}}, "age_seconds": 10}}, "approval": "approved", "step_up": "done"},
+      "expect": {"decision": "DENY", "reason": "TRANSFER_OVER_CAP", "rule": "tr-transfer-cap"}
+    },
+    {
+      "id": "tr-payee-changed-held", "per": "org",
+      "summary": "a transfer to a payee whose bank details changed within 7 days waits for the approvers",
+      "action": {"operation": "stripe.transfer.create", "target": {"type": "stripe.account", "id": "{{payee}}"}, "params": {"amount": {"value": "100.00", "currency": "USD"}}},
+      "given": {"facts": {"stripe.account.payout_details_changed": {"value": {"object": {"changed": true, "last_changed": 1790000000, "account": "{{payee}}"}}, "age_seconds": 10}}},
+      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "TRANSFER_NEEDS_APPROVAL", "rule": "tr-transfer-approve"}
+    },
+    {
+      "id": "tr-payee-changed-approved", "per": "org",
+      "summary": "the two approvals that release a normal transfer do not release one to a payee whose bank details changed: it stays held until the principal steps up",
+      "action": {"operation": "stripe.transfer.create", "target": {"type": "stripe.account", "id": "{{payee}}"}, "params": {"amount": {"value": "100.00", "currency": "USD"}}},
+      "given": {"facts": {"stripe.account.payout_details_changed": {"value": {"object": {"changed": true, "last_changed": 1790000000, "account": "{{payee}}"}}, "age_seconds": 10}}, "approval": "approved"},
+      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "TRANSFER_NEEDS_APPROVAL", "rule": "tr-transfer-approve"}
+    },
+    {
+      "id": "tr-payee-changed-released", "per": "org",
+      "summary": "a transfer to a payee whose bank details changed goes through once approved and stepped up",
+      "action": {"operation": "stripe.transfer.create", "target": {"type": "stripe.account", "id": "{{payee}}"}, "params": {"amount": {"value": "100.00", "currency": "USD"}}},
+      "given": {"facts": {"stripe.account.payout_details_changed": {"value": {"object": {"changed": true, "last_changed": 1790000000, "account": "{{payee}}"}}, "age_seconds": 10}}, "approval": "approved", "step_up": "done"},
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "TRANSFER_NEEDS_VERIFICATION", "rule": "tr-transfer-verify"}
+    },
+    {
+      "id": "tr-payee-unread", "per": "org",
+      "summary": "a transfer whose payee's bank-detail changes cannot be read is refused",
+      "action": {"operation": "stripe.transfer.create", "target": {"type": "stripe.account", "id": "{{payee}}"}, "params": {"amount": {"value": "100.00", "currency": "USD"}}},
+      "expect": {"decision": "DENY", "reason": "PAYEE_CHANGES_UNREAD", "rule": "tr-payee-unread"}
+    },
+    {
+      "id": "tr-payee-unread-approved", "per": "org",
+      "summary": "a transfer whose payee's bank-detail changes cannot be read is refused even approved and stepped up",
+      "action": {"operation": "stripe.transfer.create", "target": {"type": "stripe.account", "id": "{{payee}}"}, "params": {"amount": {"value": "100.00", "currency": "USD"}}},
+      "given": {"approval": "approved", "step_up": "done"},
+      "expect": {"decision": "DENY", "reason": "PAYEE_CHANGES_UNREAD", "rule": "tr-payee-unread"}
+    },
+    {
+      "id": "tr-other-payee", "per": "org",
+      "summary": "an approved transfer to a connected account the template was not applied for is refused",
+      "action": {"operation": "stripe.transfer.create", "target": {"type": "stripe.account", "id": "{{other_payee}}"}, "params": {"amount": {"value": "100.00", "currency": "USD"}}},
+      "given": {"facts": {"stripe.account.payout_details_changed": {"value": {"object": {"changed": false, "last_changed": 0, "account": "{{other_payee}}"}}, "age_seconds": 10}}, "approval": "approved"},
+      "expect": {"decision": "DENY", "reason": "PAYEE_NOT_ALLOWED", "rule": "tr-payees"}
+    },
+    {
+      "id": "tr-weekly-cap", "per": "org",
+      "summary": "an approved transfer of 100.00 USD when 49950.00 USD of the week's 50000.00 USD is spent is refused",
+      "action": {"operation": "stripe.transfer.create", "target": {"type": "stripe.account", "id": "{{payee}}"}, "params": {"amount": {"value": "100.00", "currency": "USD"}}},
+      "given": {"facts": {"stripe.account.payout_details_changed": {"value": {"object": {"changed": false, "last_changed": 0, "account": "{{payee}}"}}, "age_seconds": 10}}, "approval": "approved",
+        "budget": {"param": "amount", "currency": "USD", "limit": "50000.00", "used": "49950.00"}},
+      "expect": {"decision": "DENY", "reason": "BUDGET_EXHAUSTED"}
+    },
+    {
+      "id": "tr-transfer-read", "per": "org",
+      "summary": "reading a transfer is allowed",
+      "action": {"operation": "stripe.transfer.read", "target": {"type": "stripe.transfer", "id": "tr_Transfer0001"}, "params": {}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    }
+  ]
+}

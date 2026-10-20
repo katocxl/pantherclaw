@@ -51,7 +51,7 @@ import (
 // runs the same cases through the whole decision pipeline.
 
 // m11Templates are the templates that carry scenario tests.
-var m11Templates = []string{"production-diagnostics", "refunds", "release-deployment"}
+var m11Templates = slices.Concat([]string{"production-diagnostics", "refunds", "release-deployment"}, m14Templates)
 
 // Example values the placeholders are rendered with.
 const (
@@ -124,6 +124,7 @@ func renderM11Env(t *testing.T, name string, repos []string, environment string)
 	if err != nil {
 		t.Fatal(err)
 	}
+	o.lists = exampleLists()
 	if _, ok := info.Placeholders[kindRepository]; ok {
 		o.repos = repos
 		for _, r := range repos {
@@ -178,7 +179,7 @@ func (r m11Rendered) bundle(t *testing.T) *domain.Bundle {
 func m11Packages(t *testing.T) map[string]*defs.Package {
 	t.Helper()
 	out := map[string]*defs.Package{}
-	for _, raw := range [][]byte{mockpayments.Package, pcgithub.Package, pcshell.Package} {
+	for _, raw := range slices.Concat([][]byte{mockpayments.Package, pcgithub.Package, pcshell.Package}, m14Manifests) {
 		p, err := manifest.Decode(raw)
 		if err != nil {
 			t.Fatal(err)
@@ -539,7 +540,7 @@ func (m11World) Catalog(context.Context, ids.OrgID) (map[string]fdomain.Type, er
 func TestM11TemplatesPassTheGate(t *testing.T) {
 	var ds []*defs.Definition
 	var pkgs []*defs.Package
-	for _, raw := range [][]byte{mockpayments.Package, pcgithub.Package, pcshell.Package} {
+	for _, raw := range slices.Concat([][]byte{mockpayments.Package, pcgithub.Package, pcshell.Package}, m14Manifests) {
 		p, err := manifest.Decode(raw)
 		if err != nil {
 			t.Fatal(err)
@@ -550,7 +551,7 @@ func TestM11TemplatesPassTheGate(t *testing.T) {
 		}
 	}
 	org := ids.MustParse[ids.Org]("01890000-0000-7000-8000-000000000001")
-	for _, n := range []string{"coding-to-production", "production-diagnostics", "refunds", "release-deployment"} {
+	for _, n := range append([]string{"coding-to-production"}, m11Templates...) {
 		for _, env := range []string{"production", "staging"} {
 			t.Run(n+"/"+env, func(t *testing.T) {
 				r := renderM11Env(t, n, []string{"acme/api", "acme/web"}, env)
@@ -633,14 +634,14 @@ func TestM11PlaceholdersAreChecked(t *testing.T) {
 	// condition or not, and a condition-only placeholder stays in one.
 	r := renderer{o: base, spec: map[string]placeholderSpec{kindEnvironment: {Kind: kindEnvironment, Pattern: "^[a-z]+$"}}}
 	for _, s := range []string{"{{workspace}}", "{{agent}}", "{{nope}}", "{{repository}}"} {
-		if _, err := r.fill(s, "", true); err == nil {
+		if _, err := r.fill(s, true); err == nil {
 			t.Errorf("%s filled without a declaration", s)
 		}
 	}
-	if got, err := r.fill("env == {{environment}}", "", true); err != nil || got != "env == 'production'" {
+	if got, err := r.fill("env == {{environment}}", true); err != nil || got != "env == 'production'" {
 		t.Errorf("condition: %q %v", got, err)
 	}
-	if got, err := r.fill("for {{environment}}", "", false); err != nil || got != "for production" {
+	if got, err := r.fill("for {{environment}}", false); err != nil || got != "for production" {
 		t.Errorf("text: %q %v", got, err)
 	}
 }

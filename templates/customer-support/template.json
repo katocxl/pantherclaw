@@ -1,0 +1,39 @@
+{
+  "name": "customer-support",
+  "summary": "Support agents read their ticket's customer's records in PostgreSQL and refund Stripe payments in test mode: reads are scoped to the named customers and to public and internal columns, an approver releases refunds above 50.00 USD, refunds above 100.00 USD are refused, and the team refunds at most 500.00 USD a week.",
+  "task_ref": "template:customer-support",
+  "requires_agent": true,
+  "requires_scope": true,
+  "protects": [
+    "every refund above 50.00 USD waits for an independent approver",
+    "no refund above 100.00 USD is made, approved or not",
+    "the team named with --team or --bu (required) refunds at most 500.00 USD a week across all its agents and tasks (its guardrail envelope), and each task grant at most 500.00 USD a week (its own budget)",
+    "a refund never exceeds what is left to refund on the payment, read from Stripe within the last 60 seconds",
+    "the agent's grant reads support.tickets, shop.customers and shop.orders only for the customers named with --customer: other customers' rows are never returned (record scope); narrow it to one ticket's customer with a delegated child grant",
+    "the agent named with --agent (required) reads only public and internal columns (pii and secret values are redacted), at most 50 rows at a time, and does not aggregate",
+    "the agent's grant covers creating and reading refunds, reading payments, and reading those three tables only"
+  ],
+  "excludes": [
+    "ticket updates and replies to the customer: M14 has no write connector for the ticket system",
+    "refunds in currencies other than USD: the rules fail closed (CANNOT_AUTHORIZE) until you add rules for them",
+    "whether a refund is justified: the approver decides from the payment and the reason the agent gives",
+    "whether the refunded payment belongs to the ticket's customer: the approver checks it",
+    "refunds made outside PantherClaw (the Stripe dashboard, another integration, a person with the API key) are not seen or limited",
+    "Stripe live mode: pc.stripe refuses live keys",
+    "data scoping needs the Team edition",
+    "the thresholds are examples: change them in a new policy version before relying on them"
+  ],
+  "placeholders": {
+    "customer": {"kind": "customer", "pattern": "^[A-Za-z0-9_-]{1,64}$"},
+    "agent": {"kind": "agent", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}
+  },
+  "routes": [{"package": "pc.stripe", "route": "stripe-refund"}, {"package": "pc.postgres", "route": "postgres-rows-read"}],
+  "grant": "creating refunds on Stripe payments, reading refunds and payments, 500.00 USD of refunds a week; reading the support tables for the named customers, public and internal columns only",
+  "requires": {
+    "packages": ["pc.stripe", "pc.postgres"],
+    "connections": [
+      "a pc.stripe connection with a restricted test key in enforce mode, which also provides the fact stripe.payment.refundable",
+      "a pc.postgres connection in enforce mode whose manifest lists support.tickets, shop.customers and shop.orders with scope key customer and classes every column"
+    ]
+  }
+}

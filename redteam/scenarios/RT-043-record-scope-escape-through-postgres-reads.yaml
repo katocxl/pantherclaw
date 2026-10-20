@@ -1,0 +1,100 @@
+apiVersion: pantherclaw.range/v1
+id: RT-043
+title: A read scoped to one customer's public data cannot reach other columns through sort, group, filter or measure
+category: boundary
+suite: platform
+tier: business
+attacker: A1
+threats: [T-144]
+rules: [HR-310, HR-311]
+requires: [pg.query]
+harness_only: false
+steps:
+  - id: sort-on-a-secret-column
+    do: agent.call
+    with:
+      face: http
+      connection: warehouse
+      method: POST
+      path: /v1/query
+      body:
+        table: shop.customers
+        columns: [id]
+        order_by: ["ssn:desc"]
+    expect:
+      outcome: REFUSED
+      code: column_not_allowed
+      decisive_control: HR-311
+  - id: sort-on-a-secret-column-over-mcp
+    do: agent.call
+    with:
+      face: mcp
+      connection: warehouse
+      tool: query_rows
+      args:
+        table: shop.customers
+        columns: [id]
+        order_by: ["ssn:desc"]
+    expect:
+      outcome: REFUSED
+      code: column_not_allowed
+      same_decision_as: sort-on-a-secret-column
+      decisive_control: HR-311
+  - id: group-on-a-pii-column
+    do: agent.call
+    with:
+      face: http
+      connection: warehouse
+      method: POST
+      path: /v1/aggregate
+      body:
+        table: shop.customers
+        group_by: [email]
+        measures: ["count:*"]
+    expect:
+      outcome: REFUSED
+      code: column_not_allowed
+      decisive_control: HR-311
+  - id: filter-on-a-pii-column
+    do: agent.call
+    with:
+      face: http
+      connection: warehouse
+      method: POST
+      path: /v1/query
+      body:
+        table: shop.customers
+        columns: [id]
+        filters:
+          - {column: email, op: prefix, value: "ada"}
+    expect:
+      outcome: REFUSED
+      code: column_not_allowed
+      decisive_control: HR-311
+  - id: max-of-a-pii-column
+    do: agent.call
+    with:
+      face: http
+      connection: warehouse
+      method: POST
+      path: /v1/aggregate
+      body:
+        table: shop.customers
+        measures: ["max:name"]
+    expect:
+      outcome: REFUSED
+      code: column_not_allowed
+      decisive_control: HR-312
+  - id: table-without-the-scope-key
+    do: agent.call
+    with:
+      face: http
+      connection: warehouse
+      method: POST
+      path: /v1/query
+      body:
+        table: support.tickets
+        columns: [id, customer_id]
+    expect:
+      outcome: CANNOT_AUTHORIZE
+      decisive_control: HR-310

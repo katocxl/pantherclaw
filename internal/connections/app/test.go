@@ -187,6 +187,8 @@ func credentialTest(ctx context.Context, q *dbq.Queries, c actor, conn dbq.PcCon
 func leasedTest(ctx context.Context, q *dbq.Queries, c actor, conn dbq.PcConnection, kind string) (dbq.PcConnectionTest, error) {
 	mode := TestReadMode
 	switch {
+	case conn.Kind == KindPostgres:
+		return postgresTest(ctx, q, c, conn, kind)
 	case conn.State != StateActive || conn.Kind != KindHTTP:
 		if kind == KindVerifierTest {
 			return dbq.PcConnectionTest{}, ErrVerifierTest

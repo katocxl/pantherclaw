@@ -74,6 +74,9 @@ type Service struct {
 	// Ceilings checks automation ceilings and daily caps (the automations
 	// app). Without it nothing is issued under a ceiling.
 	Ceilings Ceilings
+	// Editions gates data scope in issued and revised grants (G0 M14 D11);
+	// without it, such a grant is refused.
+	Editions Editions
 	// Promotions is the production promotion gate (G0 M11 part 2 D9, D39,
 	// D93), the one gate field: automation issuance runs it in the
 	// engine's transaction. Person issuance, widening revisions and
@@ -126,6 +129,9 @@ func (s *Service) Issue(ctx context.Context, req IssueRequest) (domain.Grant, er
 		Bounds: req.Bounds, Requirements: req.Requirements, Limits: req.Limits, Delegation: req.Delegation, MinAttestation: req.MinAttestation,
 		Grantor: domain.Principal{Kind: domain.PrincipalUser, ID: c.Principal.ID},
 		Basis:   fmt.Sprintf("%s on team %s", PermGrantIssue, agent.TeamID),
+	}
+	if err := s.checkScopeEdition(ctx, g.Bounds); err != nil {
+		return domain.Grant{}, err
 	}
 	if g.NotBefore.IsZero() {
 		g.NotBefore = now.Add(-domain.IssueSkew)
@@ -198,6 +204,11 @@ func (s *Service) Revise(ctx context.Context, req ReviseRequest) (domain.Grant, 
 	next.Delegation, next.MinAttestation = req.Delegation, req.MinAttestation
 	if !req.ExpiresAt.IsZero() {
 		next.ExpiresAt = req.ExpiresAt
+	}
+	if err := s.checkScopeEdition(ctx, next.Bounds); err != nil && !domain.ScopeEqual(cur.Bounds.Scope, next.Bounds.Scope) {
+		// A revision that keeps the scope in force goes through after a
+		// downgrade; adding or changing one needs the edition (D11).
+		return domain.Grant{}, domain.Revision{}, err
 	}
 	rev, err := domain.CompareRevision(cur, next)
 	if err != nil {

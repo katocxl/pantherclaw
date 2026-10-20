@@ -85,11 +85,18 @@ jobs:
               - '.github/**'
             python:
               - 'sdk/python/**'
+              - 'sdk/conformance/**'
               - 'integrations/claude-agent-sdk/python/**'
+              - 'integrations/langchain/python/**'
+              - 'integrations/openai-agents/python/**'
+              - 'integrations/crewai/python/**'
             typescript:
               - 'sdk/typescript/**'
+              - 'sdk/conformance/**'
               - 'integrations/claude-code/**'
               - 'integrations/claude-agent-sdk/typescript/**'
+              - 'integrations/vercel-ai/typescript/**'
+              - 'integrations/mcp/typescript/**'
 
   go-static:
     name: go / format, headers, lint
@@ -475,6 +482,10 @@ jobs:
             Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, ISC, MPL-2.0, Unicode-DFS-2016,
             Unicode-3.0, CC0-1.0, 0BSD, BlueOak-1.0.0, Python-2.0, PSF-2.0, Zlib,
             LicenseRef-scancode-google-patent-license-golang
+          # json-schema (AFL-2.1/AFL-3.0/BSD-3-Clause, via ai) and json-schema-typed
+          # (BSD-2-Clause AND JSON, via @modelcontextprotocol/sdk) come only with the
+          # TypeScript framework wrappers' pinned dev and test installs, never with a
+          # published package (DEPENDENCY_POLICY, SDK dependencies; M14 D126).
           # rivershared is MPL-2.0 with an MIT-licensed levenshtein subpackage; the
           # scanner reports the pair as LicenseRef-bad-mit-mpl-2.0. Both licences
           # are allowed (DEPENDENCY_POLICY section 1).
@@ -482,13 +493,19 @@ jobs:
           # never linked into shipped artifacts; their extra licences cover
           # documentation (CC-BY), the DCO, MIT-0 and the PostgreSQL licence
           # (DEPENDENCY_POLICY, dev tools).
+          # cffi is MIT-0, brought by the Python SDK's cryptography (M14 D80).
+          # typing-extensions is PSF-2.0; the scanner mis-detects its licence text (M14 D80).
           allow-dependencies-licenses: >-
+            pkg:npm/json-schema,
+            pkg:npm/json-schema-typed,
             pkg:golang/github.com/riverqueue/river/rivershared,
             pkg:golang/github.com/opencontainers/go-digest,
             pkg:golang/github.com/opencontainers/image-spec,
             pkg:golang/github.com/segmentio/asm,
             pkg:golang/github.com/fatih/structtag,
-            pkg:golang/github.com/pganalyze/pg_query_go/v6
+            pkg:golang/github.com/pganalyze/pg_query_go/v6,
+            pkg:pypi/cffi,
+            pkg:pypi/typing-extensions
 
   workflows:
     name: security / workflows (zizmor)
@@ -539,11 +556,14 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: false
-      - name: SDK and Agent SDK integration tests (Python 3.13 and 3.14)
+      - name: SDK, Agent SDK integration and framework wrapper tests (Python 3.13 and 3.14)
+        # No committed lock contains CrewAI (M14 D60): its wrapper's tests run on a stand-in for CrewAI's tool interface; task sdk:crewai-real runs them in the real CrewAI, locally.
         run: |
           for py in 3.13 3.14; do
             (cd sdk/python && PYTHONPATH=src uv run --locked --python "$py" python -m unittest discover -s tests)
-            (cd integrations/claude-agent-sdk/python && uv run --locked --python "$py" python -m unittest discover -s tests)
+            for d in claude-agent-sdk langchain openai-agents crewai; do
+              (cd "integrations/$d/python" && uv run --locked --python "$py" python -m unittest discover -s tests)
+            done
           done
 
   typescript-sdk:
@@ -574,6 +594,13 @@ jobs:
         run: |
           corepack pnpm install --frozen-lockfile
           node --test "test/**/*.test.ts"
+      - name: Framework wrapper tests, wrappers.json included (Vercel AI SDK, MCP TypeScript SDK)
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+        run: |
+          for d in vercel-ai mcp; do
+            (cd "integrations/$d/typescript" && corepack pnpm install --frozen-lockfile && node --test "test/**/*.test.ts")
+          done
 
   ci-ok:
     name: ci-ok

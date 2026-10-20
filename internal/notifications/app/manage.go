@@ -34,13 +34,16 @@ const (
 
 // API errors.
 var (
-	ErrChannelNotFound   = pcerr.New(pcerr.NotFound, "CHANNEL_NOT_FOUND", "notification channel not found")
-	ErrChannelNameTaken  = pcerr.New(pcerr.AlreadyExists, "CHANNEL_EXISTS", "a channel with this name exists")
-	ErrChannelLimit      = pcerr.New(pcerr.FailedPrecondition, "CHANNEL_LIMIT", "the Community edition allows 3 notification channels")
-	ErrInvalidChannel    = pcerr.New(pcerr.InvalidArgument, "INVALID_CHANNEL", "invalid channel settings")
-	ErrInvalidURL        = pcerr.New(pcerr.InvalidArgument, "INVALID_CHANNEL_URL", "the URL must be https, public and not PantherClaw itself (Slack: https://hooks.slack.com/services/...)")
-	ErrNotAWebhook       = pcerr.New(pcerr.FailedPrecondition, "NOT_A_WEBHOOK", "only webhook channels have a signing secret")
-	ErrNoUsableSecret    = pcerr.New(pcerr.Internal, "SECRET_UNAVAILABLE", "the channel secret could not be opened")
+	ErrChannelNotFound  = pcerr.New(pcerr.NotFound, "CHANNEL_NOT_FOUND", "notification channel not found")
+	ErrChannelNameTaken = pcerr.New(pcerr.AlreadyExists, "CHANNEL_EXISTS", "a channel with this name exists")
+	ErrChannelLimit     = pcerr.New(pcerr.FailedPrecondition, "CHANNEL_LIMIT", "the Community edition allows 3 notification channels")
+	ErrInvalidChannel   = pcerr.New(pcerr.InvalidArgument, "INVALID_CHANNEL", "invalid channel settings")
+	ErrInvalidURL       = pcerr.New(pcerr.InvalidArgument, "INVALID_CHANNEL_URL", "the URL must be https, public and not PantherClaw itself (Slack: https://hooks.slack.com/services/...)")
+	ErrNotAWebhook      = pcerr.New(pcerr.FailedPrecondition, "NOT_A_WEBHOOK", "only webhook channels have a signing secret")
+	ErrNoUsableSecret   = pcerr.New(pcerr.Internal, "SECRET_UNAVAILABLE", "the channel secret could not be opened")
+	// ErrSlackEdition: Slack approval cards are a Team edition feature
+	// (G0 M14 D22).
+	ErrSlackEdition      = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED", "Slack approval cards need the Team edition or above")
 	errEditionUnreadable = errors.New("notifications: edition unavailable")
 )
 
@@ -70,6 +73,8 @@ type ChannelView struct {
 	LastFailureCode      string
 	PreviousSecretExpiry *time.Time
 	CreatedAt, UpdatedAt time.Time
+	// SlackApp is a slack_app channel's configuration (nil for other kinds).
+	SlackApp *SlackAppView
 }
 
 func channelView(c dbq.PcNotificationChannel) ChannelView {
@@ -137,11 +142,21 @@ type ChannelInput struct {
 	MinSeverity   domain.Severity
 	RecipientRole string
 	URL           string
+	// SlackApp is a slack_app channel's configuration (G0 M14 D22).
+	SlackApp *domain.SlackAppConfig
 }
 
 // CreateChannel adds a channel (notification.manage); the webhook signing
 // secret is returned once.
 func (s *Service) CreateChannel(ctx context.Context, in ChannelInput) (ChannelView, string, error) {
+	if (in.Kind == domain.KindSlackApp) != (in.SlackApp != nil) {
+		return ChannelView{}, "", ErrInvalidChannel
+	}
+	if in.Kind == domain.KindSlackApp {
+		if err := s.requireSlackApprovals(ctx); err != nil {
+			return ChannelView{}, "", err
+		}
+	}
 	limit, err := s.channelLimit(ctx)
 	if err != nil {
 		return ChannelView{}, "", err
@@ -161,6 +176,7 @@ func (s *Service) CreateChannel(ctx context.Context, in ChannelInput) (ChannelVi
 		created, err := s.CreateChannelTx(ctx, tx, NewChannel{
 			Org: c.Org, Name: in.Name, Kind: in.Kind, EventTypes: in.EventTypes, MinSeverity: in.MinSeverity,
 			RecipientRole: in.RecipientRole, URL: in.URL, CreatedBy: c.Actor().Type + ":" + c.Actor().ID,
+			SlackApp: in.SlackApp,
 		})
 		if err != nil {
 			return apiError(err)
@@ -170,7 +186,9 @@ func (s *Service) CreateChannel(ctx context.Context, in ChannelInput) (ChannelVi
 		if err != nil {
 			return err
 		}
-		out = channelView(row)
+		if out, err = s.withSlackApp(ctx, q, c.Org, channelView(row)); err != nil {
+			return err
+		}
 		return s.audit(ctx, tx, c, "notification.channel_created", created.ID, map[string]string{"kind": string(in.Kind), "name": in.Name})
 	})
 	return out, secret, err
@@ -207,7 +225,9 @@ func (s *Service) GetChannel(ctx context.Context, id ids.UUID) (ChannelView, []D
 		if err != nil {
 			return notFoundAs(err, ErrChannelNotFound)
 		}
-		out = channelView(row)
+		if out, err = s.withSlackApp(ctx, q, c.Org, channelView(row)); err != nil {
+			return err
+		}
 		rows, err := q.ListDeliveries(ctx, dbq.ListDeliveriesParams{OrgID: c.Org, ChannelID: &id, PageLimit: recentDeliveries})
 		if err != nil {
 			return err
@@ -231,7 +251,7 @@ func (s *Service) ListChannels(ctx context.Context, pr page.Request) ([]ChannelV
 		for _, r := range rows {
 			out = append(out, channelView(r))
 		}
-		return nil
+		return s.withSlackApps(ctx, q, c.Org, out)
 	}, db.ReadOnly())
 	return out, next, err
 }
@@ -242,6 +262,9 @@ type ChannelUpdate struct {
 	EventTypes  []string
 	MinSeverity *domain.Severity
 	Paused      *bool
+	// SlackBotToken gives a slack_app channel a new bot token, which puts it
+	// back to PENDING_ACTIVATION until confirmed with a key (G0 M14 D66).
+	SlackBotToken *string
 }
 
 // UpdateChannel changes a channel (notification.manage). Its destination
@@ -254,6 +277,9 @@ func (s *Service) UpdateChannel(ctx context.Context, id ids.UUID, u ChannelUpdat
 		return ChannelView{}, ErrInvalidChannel
 	}
 	if u.MinSeverity != nil && !u.MinSeverity.Valid() {
+		return ChannelView{}, ErrInvalidChannel
+	}
+	if u.SlackBotToken != nil && !slackTokenPattern.MatchString(*u.SlackBotToken) {
 		return ChannelView{}, ErrInvalidChannel
 	}
 	var out ChannelView
@@ -276,6 +302,9 @@ func (s *Service) UpdateChannel(ctx context.Context, id ids.UUID, u ChannelUpdat
 		if n == 0 {
 			return ErrChannelNotFound
 		}
+		if err := s.slackChannelUpdate(ctx, tx, q, c, id, u); err != nil {
+			return err
+		}
 		details := map[string]string{}
 		if u.Paused != nil {
 			if _, err := q.SetChannelPaused(ctx, *u.Paused, c.Org, id); err != nil {
@@ -287,7 +316,9 @@ func (s *Service) UpdateChannel(ctx context.Context, id ids.UUID, u ChannelUpdat
 		if err != nil {
 			return err
 		}
-		out = channelView(row)
+		if out, err = s.withSlackApp(ctx, q, c.Org, channelView(row)); err != nil {
+			return err
+		}
 		return s.audit(ctx, tx, c, "notification.channel_updated", id, details)
 	})
 	return out, err

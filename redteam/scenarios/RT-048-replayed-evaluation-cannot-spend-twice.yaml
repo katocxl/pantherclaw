@@ -1,0 +1,61 @@
+apiVersion: pantherclaw.range/v1
+id: RT-048
+title: An enforcement point replaying an evaluation cannot spend a budget twice
+category: boundary
+suite: platform
+tier: business
+attacker: A9
+threats: [T-147]
+rules: [HR-318, HR-319]
+requires: [payments, authzen.evaluate]
+harness_only: false
+steps:
+  - id: refund
+    do: agent.call
+    with:
+      face: authzen
+      connection: payments
+      method: POST
+      path: /v1/refunds
+      body:
+        charge: ch_${fixture.nonce}rt048
+        amount: "30.00"
+        currency: USD
+        reason: duplicate
+    expect:
+      outcome: ALLOW
+  - id: replayed-evaluation
+    do: agent.steal
+    with:
+      mode: proof_replay
+      call:
+        face: authzen
+        connection: payments
+        method: POST
+        path: /v1/refunds
+        body:
+          charge: ch_${fixture.nonce}rt048a
+          amount: "30.00"
+          currency: USD
+          reason: duplicate
+    expect:
+      outcome: CANNOT_AUTHORIZE
+      reason: IDENTITY_UNVERIFIED
+      decisive_control: HR-318
+  - id: same-action-again
+    do: agent.call
+    with:
+      action_of: refund
+      face: authzen
+      connection: payments
+      method: POST
+      path: /v1/refunds
+      body:
+        charge: ch_${fixture.nonce}rt048
+        amount: "30.00"
+        currency: USD
+        reason: duplicate
+    expect:
+      outcome: CANNOT_AUTHORIZE
+      reason: DUPLICATE
+      decisive_control: HR-319

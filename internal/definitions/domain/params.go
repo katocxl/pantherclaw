@@ -133,6 +133,10 @@ func (p ParamSpec) validate(name string) error {
 			return invalid("%s: max_length of a path is at most %d", name, actionir.MaxPath)
 		}
 	case TypeDecimal, TypeInteger, TypeBoolean, TypeText, TypeCommand, TypeContent:
+	case TypeQueryFilter:
+		if p.MaxLength != 0 {
+			return invalid("%s: a query filter's limits are fixed (G0 M14 D9)", name)
+		}
 	default:
 		return invalid("%s: unknown type %q", name, p.Type)
 	}

@@ -1,0 +1,52 @@
+apiVersion: pantherclaw.range/v1
+id: RT-051
+title: A run cannot read or continue a peer task another run created
+category: boundary
+suite: platform
+tier: business
+attacker: A1
+threats: [T-148]
+rules: [HR-323]
+requires: [a2a.send]
+harness_only: false
+steps:
+  - id: create-task
+    do: agent.call
+    with:
+      face: a2a
+      connection: peer
+      tool: SendMessage
+      args:
+        message:
+          messageId: "rt-051-${fixture.nonce}"
+          role: ROLE_USER
+          parts:
+            - text: "Start a task."
+          metadata:
+            skill: echo
+    save:
+      task: /task/id
+    expect:
+      outcome: ALLOW
+  - id: owner-reads-task
+    do: agent.call
+    with:
+      face: a2a
+      connection: peer
+      tool: GetTask
+      args:
+        id: "${task}"
+    expect:
+      outcome: ALLOW
+  - id: hijack-from-another-run
+    do: sim.mutate
+    with:
+      sim: a2a
+      change: fault
+      args:
+        other_run: get_task
+        task: "${task}"
+    expect:
+      outcome: REFUSED
+      code: A2A_TASK_UNKNOWN
+      decisive_control: HR-323

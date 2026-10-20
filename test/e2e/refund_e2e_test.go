@@ -36,6 +36,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/gateway"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
+	"github.com/katocxl/pantherclaw/internal/gateway/pgtarget/pgtargettest"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
@@ -48,6 +49,7 @@ import (
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/server"
 	"github.com/katocxl/pantherclaw/internal/sim/payments"
+	"github.com/katocxl/pantherclaw/internal/sim/stripe"
 )
 
 func noEnv(string) (string, bool) { return "", false }
@@ -96,6 +98,18 @@ type stack struct {
 	// gh is the GitHub simulator, its address, the seeded connection
 	// "github" to it, and its App's private key (G0 M8, options.github).
 	gh *githubSim
+	// st is the Stripe simulator and the seeded connection "stripe" to it
+	// (G0 M14, options.stripe).
+	st *stripeSim
+	// slack is the Slack simulator and the seeded connection "slack" to it
+	// (G0 M14, options.slack; m14_slack_e2e_test.go).
+	slack *slackSim
+	// a2a is the A2A simulator acting as the peer agent, the seeded a2a
+	// connection "peer" to it and the peer's workload (G0 M14, options.a2a).
+	a2a *a2aPeerSim
+	// pg is the fixture database and the seeded connection "warehouse" to it
+	// (G0 M14, options.postgres).
+	pg *pgSeed
 }
 
 type options struct {
@@ -129,6 +143,29 @@ type options struct {
 	// claimTimeout is the server's coverage.claim_timeout; zero is its
 	// default (G0 M9).
 	claimTimeout time.Duration
+	// stripe also starts the Stripe simulator with stripeFaults and seeds
+	// pc.stripe and the connection "stripe" to it, held by the gateway with
+	// stripeKey sealed (the e2e test key when empty; dev seed --stripe-url,
+	// G0 M14).
+	stripe       bool
+	stripeFaults stripe.Faults
+	stripeKey    string
+	// stripeAt, with stripe, is the Stripe to call instead of the
+	// simulator, and stripePayee the payee the grant names (task
+	// test:stripe-live).
+	stripeAt    *stripeSim
+	stripePayee string
+	// slack also starts the Slack simulator and seeds pc.slack and the
+	// connection "slack" to it, its bot token held by the gateway (dev seed
+	// --slack-url, G0 M14 D25).
+	slack bool
+	// a2a also starts the A2A simulator as a PantherClaw peer agent and seeds
+	// pc.a2a, the peer agent and the connection "peer" (dev seed --a2a-url,
+	// G0 M14 D33).
+	a2a bool
+	// postgres also seeds pc.postgres and the connection "warehouse" to this
+	// fixture database (dev seed --postgres, G0 M14 D21).
+	postgres *pgtargettest.Target
 }
 
 // freePorts are the ports freeAddr has handed out in this test binary.
@@ -235,12 +272,32 @@ func start(t *testing.T, o options) *stack {
 	if o.shell {
 		args = append(args, "--shell")
 	}
+	if o.a2a {
+		args = append(args, s.startA2APeer(t, dir)...)
+	}
 	if o.github {
 		s.gh = o.githubAt
 		if s.gh == nil {
 			s.gh = startGitHubSim(t)
 		}
 		args = append(args, "--github-url", s.gh.url)
+	}
+	if o.stripe {
+		s.st = o.stripeAt
+		if s.st == nil {
+			s.st = startStripeSim(t, o.stripeFaults)
+		}
+		args = append(args, "--stripe-url", s.st.url)
+		if o.stripePayee != "" {
+			args = append(args, "--stripe-payee", o.stripePayee)
+		}
+	}
+	if o.slack {
+		s.slack = startSlackSim(t)
+		args = append(args, "--slack-url", s.slack.url+"/api")
+	}
+	if o.postgres != nil {
+		args = append(args, "--postgres", s.postgresSeedFile(t, dir, o.postgres))
 	}
 	var out, errb bytes.Buffer
 	if code := server.Run(context.Background(), args, &out, &errb, noEnv); code != 0 {
@@ -257,6 +314,18 @@ func start(t *testing.T, o options) *stack {
 			t.Fatalf("dev seed output %q", out.String())
 		}
 		s.gh.conn = mustUUID(t, g[1])
+	}
+	if o.stripe {
+		s.stripeSeeded(t, out.String())
+	}
+	if o.slack {
+		s.slack.seeded(t, out.String())
+	}
+	if o.a2a {
+		s.a2aSeeded(t, out.String())
+	}
+	if o.postgres != nil {
+		s.postgresSeeded(t, out.String(), o.postgres)
 	}
 	s.pool = s.db.AppPool(t)
 
@@ -292,6 +361,9 @@ func start(t *testing.T, o options) *stack {
 	s.keyFile = keyFile
 	s.factsKey = factsFile
 	s.workload(t, keyFile)
+	if o.a2a {
+		s.a2aWorkload(t)
+	}
 	refundable(t, "http://"+apiAddr, factsFile, "ch_1")
 
 	gs := httptest.NewUnstartedServer(nil)
@@ -315,7 +387,7 @@ func start(t *testing.T, o options) *stack {
 		// GitHub the stack calls (github.api_url).
 		gc.GitHub.APIURL = s.gh.url
 	}
-	if o.access == "pantherclaw_held" || o.github {
+	if o.access == "pantherclaw_held" || o.github || o.stripe || o.slack || o.postgres != nil {
 		// The gateway's broker key, which only it can open credentials with
 		// (HR-061); it registers the public half when it starts.
 		gc.Broker.KEKFiles = []string{filepath.Join(dir, "gateway-kek")}
@@ -343,6 +415,19 @@ func start(t *testing.T, o options) *stack {
 	}
 	if o.github {
 		s.waitConfig(t, s.sealGitHubApp(t))
+	}
+	if o.stripe {
+		key := o.stripeKey
+		if key == "" {
+			key = stripeTestKey
+		}
+		s.waitConfig(t, s.sealStripeKey(t, key))
+	}
+	if o.slack {
+		s.waitConfig(t, s.sealFor(t, s.slack.conn, slackBotToken))
+	}
+	if o.postgres != nil {
+		s.postgresReady(t)
 	}
 	return s
 }

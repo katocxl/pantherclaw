@@ -33,7 +33,7 @@ func init() {
 			}
 		}),
 		"apply": rpc("policy pack apply NAME --environment ID [--agent ID... | --cohort ID] [--param KEY=VALUE]... "+
-			"(params: repos, default_branch, workspace, time_zone; drafts only)", 1, func(fs *flag.FlagSet) call {
+			"(params: repos, default_branch, workspace, time_zone, payees, customers, slack_channels; drafts only)", 1, func(fs *flag.FlagSet) call {
 			env := fs.String("environment", "", "the environment id")
 			var agents, params list
 			fs.Var(&agents, "agent", "an agent id (repeatable)")

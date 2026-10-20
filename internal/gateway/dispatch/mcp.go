@@ -226,9 +226,17 @@ func (e *Engine) mcpCredential(ctx context.Context, conn *control.Connection, de
 		if err != nil {
 			return nil, err
 		}
+		if err := CheckCredentialPattern(def, conn.Credential.GetKind(), secret); err != nil {
+			// Checked before any byte is sent (G0 M14 D85, HR-301).
+			clear(secret)
+			return nil, err
+		}
 		return &upstreamCredential{
 			secret: secret, put: func(req *http.Request) error { return placeCredential(conn, req, secret) }, done: func() { clear(secret) },
 		}, nil
+	}
+	if err := CheckCredentialPattern(def, credentials.KindGitHubApp, nil); err != nil {
+		return nil, err // a pattern is for a static credential
 	}
 	base, c, err := e.gitHubAPI(conn)
 	if err != nil {

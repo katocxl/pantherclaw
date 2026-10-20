@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Joshua Kato
+
+[project]
+name = "pantherclaw-langchain"
+version = "0.0.0"
+description = "PantherClaw enforcement for LangChain tools and LangGraph tool nodes: every tool call decided before it runs, refused when PantherClaw cannot decide"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = ["pantherclaw"]
+
+[project.optional-dependencies]
+langchain = ["langchain-core>=1.6.9,<2"]
+langgraph = ["langchain-core>=1.6.9,<2", "langgraph>=1.2.14,<2"]
+
+[dependency-groups]
+# The real frameworks, for the tests only: never shipped or installed with
+# the package; uv.lock pins the versions tested.
+dev = ["langchain-core==1.6.9", "langgraph==1.2.14"]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pantherclaw_langchain"]
+
+[tool.uv]
+# DEPENDENCY_POLICY: nothing uploaded in the last 7 days is locked (the cooldown).
+exclude-newer = "7 days"
+
+[tool.uv.sources]
+# The core client from this repository, until it is published.
+pantherclaw = { path = "../../../sdk/python", editable = true }

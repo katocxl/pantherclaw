@@ -414,8 +414,19 @@ func toEnvelope(org ids.OrgID, r envelopeRow) (domain.Envelope, error) {
 
 // ChildCounts implements app.Repository.
 func (s *Store) ChildCounts(ctx context.Context, org ids.OrgID, id domain.GrantID, now time.Time) (int, int, error) {
-	var active, total int32
+	var active, total int
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		active, total, err = s.ChildCountsInTx(ctx, tx, org, id, now)
+		return err
+	})
+	return active, total, err
+}
+
+// ChildCountsInTx is ChildCounts inside the caller's transaction (D89).
+func (s *Store) ChildCountsInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, id domain.GrantID, now time.Time) (int, int, error) {
+	var active, total int32
+	err := func() error {
 		q := dbq.New(tx)
 		parent := id.UUID()
 		var err error
@@ -427,7 +438,7 @@ func (s *Store) ChildCounts(ctx context.Context, org ids.OrgID, id domain.GrantI
 			return app.ErrNotFound
 		}
 		return err
-	})
+	}()
 	return int(active), int(total), err
 }
 
@@ -532,6 +543,19 @@ func (s *Store) promoted(ctx context.Context, tx db.TenantTx, org ids.OrgID, g *
 // Delegate implements app.Repository.
 func (s *Store) Delegate(ctx context.Context, org ids.OrgID, child *domain.Grant, parentRevision int, childRun ids.UUID, f app.Fanout, ev audit.Event) error {
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		return s.DelegateInTx(ctx, tx, org, child, parentRevision, childRun, f, ev)
+	})
+	if db.IsUniqueViolation(err) {
+		return app.ErrConflict
+	}
+	return err
+}
+
+// DelegateInTx is Delegate inside the caller's transaction (G0 M14 D89):
+// the containment share, the parent's row lock, the fan-out and the
+// child's binding to its run, as Delegate does.
+func (s *Store) DelegateInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, child *domain.Grant, parentRevision int, childRun ids.UUID, f app.Fanout, ev audit.Event) error {
+	err := func() error {
 		q := dbq.New(tx)
 		if _, err := q.ShareContainment(ctx, org); err != nil {
 			return fmt.Errorf("grants: containment: %w", err)
@@ -579,7 +603,7 @@ func (s *Store) Delegate(ctx context.Context, org ids.OrgID, child *domain.Grant
 		}
 		_, err = audit.Record(ctx, tx, ev)
 		return err
-	})
+	}()
 	if db.IsUniqueViolation(err) {
 		return app.ErrConflict
 	}
@@ -738,6 +762,17 @@ func (s *Store) AgentInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, id
 func (s *Store) Run(ctx context.Context, org ids.OrgID, id ids.UUID) (app.Run, error) {
 	var out app.Run
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		out, err = s.RunInTx(ctx, tx, org, id)
+		return err
+	})
+	return out, err
+}
+
+// RunInTx is Run inside the caller's transaction (D89).
+func (s *Store) RunInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, id ids.UUID) (app.Run, error) {
+	var out app.Run
+	err := func() error {
 		row, err := dbq.New(tx).SubjectRun(ctx, org, id)
 		if db.IsNoRows(err) {
 			return app.ErrNotFound
@@ -759,7 +794,7 @@ func (s *Store) Run(ctx context.Context, org ids.OrgID, id ids.UUID) (app.Run, e
 			out.GrantID, err = domain.ParseGrantID(row.GrantID.String())
 		}
 		return err
-	})
+	}()
 	return out, err
 }
 

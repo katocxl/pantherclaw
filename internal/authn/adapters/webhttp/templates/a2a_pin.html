@@ -1,0 +1,36 @@
+{{template "head" .}}
+<h1>Peer agent card: {{.Name}}</h1>
+<p class="note">PantherClaw calls this peer agent only as its confirmed card says: the interface, the skills agents may ask for and, for a peer agent of this organization, the scope its delegated runs get. A changed card is refused until a new one is confirmed here.</p>
+{{define "a2a_pin_fields"}}
+<dl>
+<dt>Pin</dt><dd><code>{{.ID}}</code> ({{.State}}), proposed by <code>{{.ProposedBy}}</code> at {{.ProposedAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{with .ConfirmedAt}}; confirmed {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}</dd>
+<dt>Card digest (SHA-256 of its JCS form)</dt><dd><code>{{.Digest}}</code></dd>
+<dt>Card URL</dt><dd><code>{{.Config.CardUrl}}</code></dd>
+<dt>Interface</dt><dd><code>{{.Config.Interface.Protocol}}</code> at <code>{{.Config.Interface.Url}}</code></dd>
+<dt>Card keys</dt><dd>{{if .Config.CardKeys}}pinned; the card's signature is verified with them{{else}}none pinned; the card is not signed{{end}}</dd>
+<dt>Allowed skills</dt><dd>{{range $i, $s := .Config.Skills}}{{if $i}}, {{end}}<code>{{$s}}</code>{{else}}every skill of the card{{end}}</dd>
+<dt>Answer and stream caps</dt><dd>{{.Config.MaxAnswerBytes}} bytes, {{.Config.MaxStreamSeconds}} seconds</dd>
+{{if .Config.PeerAgentId}}
+<dt>Peer agent</dt><dd><code>{{.Config.PeerAgentId}}</code>: its runs for requests through this connection are delegated from the requester's grant</dd>
+<dt>Peer scope: bounds</dt><dd><pre class="untrusted">{{printf "%s" .Config.PeerScope.Bounds}}</pre></dd>
+{{with .Config.PeerScope.Limits}}<dt>Peer scope: limits</dt><dd><pre class="untrusted">{{printf "%s" .}}</pre></dd>{{end}}
+{{else}}
+<dt>Peer agent</dt><dd>none: an external agent acting under its own authority (coverage PARTIAL)</dd>
+{{end}}
+{{with .DriftedAt}}<dt>Drift</dt><dd>A re-read found another card at {{.UTC.Format "2006-01-02 15:04:05 UTC"}}; the connection is refused until a new card is confirmed.</dd>{{end}}
+</dl>
+{{end}}
+<h2>Serving</h2>
+{{with .Active}}{{template "a2a_pin_fields" .}}{{else}}<p>No confirmed card: the connection sends nothing yet.</p>{{end}}
+<h2>Proposed</h2>
+{{with .Proposed}}{{template "a2a_pin_fields" .}}{{else}}<p>Nothing is proposed.</p>{{end}}
+{{if and .CanManage .Proposed}}
+<h2>Confirm</h2>
+<p class="note">Confirming reads the card again; it must still be the one shown. It needs your security key.</p>
+<p><button type="button" class="danger" data-action="confirm" data-path="/connections/{{.Connection}}/a2a-pin/{{.Proposed.ID}}/confirm">Confirm with your security key</button></p>
+{{else if .Proposed}}
+<p class="note">You cannot confirm this: that needs connection.manage and a security key.</p>
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/automation_endpoints.js"></script>
+{{template "foot" .}}

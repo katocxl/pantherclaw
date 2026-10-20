@@ -122,8 +122,15 @@ func build(org ids.OrgID, now time.Time, def *defs.Definition, rules []consequen
 	if err := checkApproval(g); err != nil {
 		return nil, err
 	}
-	kind, channel := "local", string(defs.ChannelHook)
+	kind, channel, access := "local", string(defs.ChannelHook), "none"
 	switch d := def.Dispatch; {
+	case d != nil && d.SQL != nil:
+		// A structured read the gateway runs itself, where a data scope
+		// is enforced (G0 M14 D108).
+		kind, channel, access = "postgres", string(defs.ChannelHTTP), "pantherclaw_held"
+	case d != nil && d.HTTP != nil && len(def.Scoping) > 0:
+		// A read whose answer the gateway reads (D108).
+		kind, channel, access = "http", string(defs.ChannelHTTP), "pantherclaw_held"
 	case d != nil && d.HTTP != nil:
 		kind, channel = "http", string(defs.ChannelSDK)
 	case d != nil && d.MCP != nil:
@@ -132,8 +139,19 @@ func build(org ids.OrgID, now time.Time, def *defs.Definition, rules []consequen
 	if len(def.Mappings) == 0 {
 		return nil, caseErr("the definition of %s has no route", def.Operation)
 	}
+	route := def.Mappings[0].Route
+	if channel == string(defs.ChannelHTTP) {
+		// The route of a mapping on a gateway face: http, else mcp.
+		if i := slices.IndexFunc(def.Mappings, func(m defs.Mapping) bool { return m.Channel == defs.ChannelHTTP }); i >= 0 {
+			route = def.Mappings[i].Route
+		} else if i := slices.IndexFunc(def.Mappings, func(m defs.Mapping) bool { return m.Channel == defs.ChannelMCP }); i >= 0 {
+			channel, route = string(defs.ChannelMCP), def.Mappings[i].Route
+		} else {
+			kind, channel, access = "local", string(defs.ChannelHook), "none"
+		}
+	}
 	f.conn = pipeline.Connection{
-		ID: connectionID, Gateway: gatewayID, Kind: kind, Package: fixturePackage, State: "ACTIVE", AccessMode: "none",
+		ID: connectionID, Gateway: gatewayID, Kind: kind, Package: fixturePackage, State: "ACTIVE", AccessMode: access,
 		DefaultMode: pipeline.ModeEnforce, DestinationClass: g.DestinationClass, Modes: map[string]string{}, Reads: reads,
 	}
 	target := actionir.Target{Type: def.Target.Type}
@@ -148,7 +166,7 @@ func build(org ids.OrgID, now time.Time, def *defs.Definition, rules []consequen
 		V: actionir.Version, Org: org.String(), Env: f.env.String(), RunID: runID.String(), ActionID: actionID.String(),
 		AgentInstance: instanceID.String(), Operation: tc.Action.Operation,
 		Definition: actionir.Definition{Package: fixturePackage, Version: fixtureVersion, Digest: def.Digest},
-		Channel:    channel, Route: def.Mappings[0].Route, Connection: connectionID.String(), Target: target, Params: params,
+		Channel:    channel, Route: route, Connection: connectionID.String(), Target: target, Params: params,
 	})
 	if err != nil {
 		return nil, caseErr("the action is not a valid action: %v", err)
@@ -195,6 +213,18 @@ func (f *fixture) buildGrant(g *pdomain.TestGiven) error {
 				b.Targets = &t
 			case pdomain.DestinationSet:
 				b.Destinations = &gdomain.Match{IDs: c.Values}
+			case pdomain.RecordScope, pdomain.DataClasses:
+				// A grant's data scope on the operation (G0 M14 D11).
+				if b.Scope == nil {
+					b.Scope = map[string]gdomain.ScopeBound{}
+				}
+				sb := b.Scope[op]
+				if c.Kind == pdomain.RecordScope {
+					sb.Records = &gdomain.RecordScope{Key: c.Param, Values: slices.Clone(c.Values)}
+				} else {
+					sb.Classes = &gdomain.Match{IDs: slices.Clone(c.Values), Prefixes: []string{}}
+				}
+				b.Scope[op] = sb
 			case pdomain.Verify, pdomain.DisclosureLimits:
 				return caseErr("given.grant: a grant has no %q constraint", c.Kind)
 			default:

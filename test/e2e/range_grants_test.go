@@ -90,7 +90,11 @@ func (d *rangeDriver) agentChild(ctx context.Context, st domain.Step, _ map[stri
 	} else {
 		obs.Detail = "delegation: " + derr.Error() + " " + obs.Detail
 	}
-	obs.Code = code
+	if obs.Code == "" {
+		// A refusal of the face itself (an a2a task of another run) keeps its
+		// own code; otherwise the delegation's says why (G0 M14 RT-051).
+		obs.Code = code
+	}
 	return obs, nil
 }
 
