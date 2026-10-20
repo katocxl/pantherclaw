@@ -16,7 +16,7 @@ In a hosted deployment an organization's plan changes when the merchant-of-recor
 
 1. **Is the route reachable?** The provider's dashboard shows delivery attempts and their HTTP status. Repeated timeouts or 5xx answers point at the deployment (ingress, the server, the database); fix those first. The provider retries on its own schedule.
 2. **Are events refused?** A signature refusal means the configured webhook secret does not match the provider's, or the clock is skewed beyond the allowed window. Check the server's clock and the configured secret file (never print it); rotate it in both places if in doubt.
-3. **Unknown organization?** The event names an organization this deployment does not have (a test event, another environment's event, or a deleted organization). It is audited and answered 200 so the provider stops retrying; nothing changes.
+3. **Unknown organization?** Events carry no organization of their own; the extension finds it through the billing links recorded at checkout (`pc.billing_links`, read only through an audited global function). An event whose customer or subscription has no link, or that resolves to an organization this deployment does not have (a test event, another environment's event, or a deleted organization), is audited and answered 200 so the provider stops retrying; nothing changes.
 4. **Out of order or duplicate?** Older and repeated events are ignored by design; only the newest state counts. If the newest event was lost, ask the provider to resend it.
 5. **Wrong environment?** Development and staging must use the provider's sandbox and production its live account; a production server refuses to start with billing off or faked (HR-359), and the commercial distribution checks key types at start-up.
 
