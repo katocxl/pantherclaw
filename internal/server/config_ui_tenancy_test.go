@@ -29,9 +29,14 @@ func TestHR359_ProductionRefusesBillingModeOff(t *testing.T) {
 		deployment, mode string
 		ok               bool
 	}{
-		{"development", "off", true}, {"staging", "off", true}, {"production", "off", false},
-		{"production", "external", true}, {"production", "", true}, {"production", "licence", true},
-		{"development", "fake", false}, {"production", "OFF", false},
+		{"development", "off", true},
+		{"staging", "off", true},
+		{"production", "off", false},
+		{"production", "external", true},
+		{"production", "", true},
+		{"production", "licence", true},
+		{"development", "fake", false},
+		{"production", "OFF", false},
 	} {
 		c := uiWebConfig()
 		c.Deployment, c.Billing.Mode = tc.deployment, tc.mode
@@ -91,8 +96,10 @@ func TestHR357_GatewayAndWorkloadProceduresAreNeverPlanGated(t *testing.T) {
 		return ctx, nil
 	}
 	org := ids.New[ids.Org]()
-	authn := fakeBearer{c: tapp.Caller{Subject: td.Subject{Org: org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: ids.NewV7()},
-		Bindings: []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}}}}}
+	authn := fakeBearer{c: tapp.Caller{Subject: td.Subject{
+		Org: org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: ids.NewV7()},
+		Bindings: []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}},
+	}}}
 	auth := rpcauth.New(authn, procedurePermissions, gateway, rpcauth.WithPlanGate(refuse))
 	for proc, perm := range procedurePermissions {
 		if !perm.Gateway() && !perm.Workload() && perm != td.PermGatewayEnroll {

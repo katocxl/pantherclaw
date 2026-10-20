@@ -51,7 +51,10 @@ func (s Snapshot) check() error {
 	switch {
 	case !s.Status.Billing():
 		return ErrInvalidSnapshot
-	case !ValidEdition(s.Edition) || s.Edition == EditionDevelopment:
+	case s.Edition == EditionDevelopment, s.Edition != "" && !ValidEdition(s.Edition):
+		return ErrInvalidSnapshot
+	case s.PlanID != "" && s.Edition == "":
+		// A status-only event (no plan id) may leave the edition out (D70).
 		return ErrInvalidSnapshot
 	case !planIDPattern(s.PlanID):
 		return ErrInvalidSnapshot
@@ -126,6 +129,18 @@ func (s *Service) ApplyPlan(ctx context.Context, org ids.OrgID, snap Snapshot) e
 		if err != nil && !db.IsNoRows(err) {
 			return err
 		}
+		// A status-only event (no plan id) keeps the plan, edition, limits
+		// and features in force and changes only the status and period
+		// (D70); without a plan in force it needs an edition.
+		planID, edition := snap.PlanID, snap.Edition
+		if planID == "" {
+			switch {
+			case found:
+				planID, edition, limits, features = cur.PlanID, cur.Edition, cur.Limits, cur.Features
+			case edition == "":
+				return ErrInvalidSnapshot
+			}
+		}
 		kind := "APPLIED"
 		switch {
 		case found && cur.Source == string(SourceComp) && cur.Status == string(StatusComp) &&
@@ -145,7 +160,7 @@ func (s *Service) ApplyPlan(ctx context.Context, org ids.OrgID, snap Snapshot) e
 		}
 		details := map[string]string{
 			"event_id": snap.EventID, "event_at": at.Format(time.RFC3339Nano), "status": string(snap.Status),
-			"plan_id": snap.PlanID, "edition": snap.Edition,
+			"plan_id": planID, "edition": edition,
 		}
 		if kind != "APPLIED" {
 			_, err := audit.Record(ctx, tx, audit.Event{
@@ -161,7 +176,7 @@ func (s *Service) ApplyPlan(ctx context.Context, org ids.OrgID, snap Snapshot) e
 			details["period_end"] = pe.Format(time.RFC3339)
 		}
 		version, err := q.PutBillingPlan(ctx, dbq.PutBillingPlanParams{
-			OrgID: org, PlanID: snap.PlanID, Edition: snap.Edition, Limits: limits, Features: features,
+			OrgID: org, PlanID: planID, Edition: edition, Limits: limits, Features: features,
 			Status: string(snap.Status), PeriodEnd: periodEnd, EventAt: &at,
 		})
 		if err != nil {

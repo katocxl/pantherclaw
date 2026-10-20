@@ -27,10 +27,13 @@ const (
 	PermOrgsCreate        Permission = "orgs.create"
 	PermOrgsListMine      Permission = "orgs.list_mine"
 	PermInvitationsAccept Permission = "invitations.accept"
+	// PermBillingManage starts checkouts and opens the billing portal
+	// through the billing extension (D70); Org Admin only.
+	PermBillingManage Permission = "billing.manage"
 )
 
 // uiCatalog are the UI phase's grantable permissions in catalog order.
-var uiCatalog = []Permission{PermEntitlementsRead, PermOnboardingRead}
+var uiCatalog = []Permission{PermEntitlementsRead, PermOnboardingRead, PermBillingManage}
 
 // accountOnly are the account-session requirements (declarable only).
 var accountOnly = []Permission{PermOrgsCreate, PermOrgsListMine, PermInvitationsAccept}
@@ -63,6 +66,10 @@ func init() {
 		}
 		if len(reads) > 0 {
 			r.Description += " Reads the org's " + strings.Join(reads, " and ") + "."
+		}
+		if r.Name == RoleOrgAdmin {
+			r.Permissions = append(r.Permissions, PermBillingManage)
+			r.Description += " Manages the org's subscription (checkout and billing portal)."
 		}
 	}
 }

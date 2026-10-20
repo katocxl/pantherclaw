@@ -121,8 +121,10 @@ func TestHR356_PlanRequiredGateKeepsOnlyTheAllowListWithoutAPlan(t *testing.T) {
 	s := f.svc(t, entitlements.ModeExternal)
 	org := f.org(t)
 	ctx := context.Background()
-	class := map[string]entitlements.Class{"/allow": entitlements.ClassAllow, "/read": entitlements.ClassRead,
-		"/safety": entitlements.ClassSafety, "/change": entitlements.ClassChange}
+	class := map[string]entitlements.Class{
+		"/allow": entitlements.ClassAllow, "/read": entitlements.ClassRead,
+		"/safety": entitlements.ClassSafety, "/change": entitlements.ClassChange,
+	}
 	g := entitlements.NewGate(s, true, func(p string) entitlements.Class { return class[p] })
 	check := func(want map[string]bool) {
 		t.Helper()
@@ -333,5 +335,35 @@ func TestT162_BillingEventsForUnknownOrgsAndReplaysChangeNothing(t *testing.T) {
 	}
 	if pa, pb := f.plan(t, s, a), f.plan(t, s, b); pa.Status != entitlements.StatusActive || pb.Status != entitlements.StatusLapsed {
 		t.Errorf("plans = %s, %s", pa.Status, pb.Status)
+	}
+}
+
+// TestHR355_AStatusOnlyEventKeepsThePlanInForce (D70): an event without a
+// plan id changes only the status and period; without a plan in force it
+// needs an edition.
+func TestHR355_AStatusOnlyEventKeepsThePlanInForce(t *testing.T) {
+	f := newFixture(t)
+	s := f.svc(t, entitlements.ModeExternal)
+	org := f.org(t)
+	ctx := context.Background()
+	at := time.Now().Add(-time.Hour)
+	if err := s.ApplyPlan(ctx, org, entitlements.Snapshot{Status: entitlements.StatusActive, EventID: "evt_0", EventAt: at}); !errors.Is(err, entitlements.ErrInvalidSnapshot) {
+		t.Errorf("status only without a plan: %v", err)
+	}
+	biz := snap("evt_1", at, entitlements.StatusActive)
+	biz.PlanID, biz.Edition = "business", "business"
+	if err := s.ApplyPlan(ctx, org, biz); err != nil {
+		t.Fatal(err)
+	}
+	end := time.Now().Add(72 * time.Hour).Truncate(time.Second)
+	if err := s.ApplyPlan(ctx, org, entitlements.Snapshot{
+		Status: entitlements.StatusCanceled, PeriodEnd: end, EventID: "evt_2", EventAt: at.Add(time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	p := f.plan(t, s, org)
+	if p.Status != entitlements.StatusCanceled || p.PlanID != "business" || p.Edition != "business" ||
+		p.Limits.MaxAgents != 10 || len(p.Features) != 1 || p.PeriodEnd == nil || !p.PeriodEnd.Equal(end) {
+		t.Errorf("plan after a status-only event = %+v", p)
 	}
 }

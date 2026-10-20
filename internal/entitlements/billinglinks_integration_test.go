@@ -103,8 +103,14 @@ func TestT163_SubscriptionsBindOnlyThroughServerRecordedCheckouts(t *testing.T) 
 	}
 	for name, err := range map[string]error{
 		"bad provider": func() error { _, err := l.RecordCheckout(ctx, a.String(), "Paddle!", "x", exp); return err }(),
-		"too long":     func() error { _, err := l.RecordCheckout(ctx, a.String(), "paddle", "x", time.Now().Add(8*24*time.Hour)); return err }(),
-		"platform org": func() error { _, err := l.RecordCheckout(ctx, "00000000-0000-7000-8000-000000000001", "paddle", "x", exp); return err }(),
+		"too long": func() error {
+			_, err := l.RecordCheckout(ctx, a.String(), "paddle", "x", time.Now().Add(8*24*time.Hour))
+			return err
+		}(),
+		"platform org": func() error {
+			_, err := l.RecordCheckout(ctx, "00000000-0000-7000-8000-000000000001", "paddle", "x", exp)
+			return err
+		}(),
 	} {
 		if err == nil {
 			t.Errorf("%s accepted", name)

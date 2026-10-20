@@ -25,6 +25,9 @@ func TestUIPermissionGrantsFollowD35(t *testing.T) {
 		if r.Has(domain.PermOnboardingRead) != slices.Contains(onboarding, r.Name) {
 			t.Errorf("%s: onboarding.read wrong", r.Name)
 		}
+		if r.Has(domain.PermBillingManage) != (r.Name == domain.RoleOrgAdmin) {
+			t.Errorf("%s: billing.manage wrong (D70: Org Admin only)", r.Name)
+		}
 		for _, p := range []domain.Permission{domain.PermOrgsCreate, domain.PermOrgsListMine, domain.PermInvitationsAccept} {
 			if r.Has(p) {
 				t.Errorf("%s holds the account permission %s", r.Name, p)

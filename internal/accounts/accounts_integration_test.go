@@ -413,7 +413,7 @@ func TestHR352_InvitationsInTheBrowserNeedTheVerifiedEmailAreSingleUseAndExpire(
 	ctx := context.Background()
 	iv := accounts.NewInvitations(f.store, f.ents)
 	org := f.org(t, "acme")
-	invite := func(email string, ttl string) string {
+	invite := func(email, ttl string) string {
 		tok, err := credential.New(credential.Invitation, "", org)
 		if err != nil {
 			t.Fatal(err)
@@ -510,8 +510,10 @@ func TestHR360_MemberLimitHoldsForBrowserInvitations(t *testing.T) {
 	}
 	// And at invitation time, through the access use case.
 	a := tapp.NewAccess(f.pool, nil).WithEntitlements(f.ents)
-	admin := tapp.WithCaller(ctx, tapp.Caller{Subject: td.Subject{Org: org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: ids.NewV7()},
-		Bindings: []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}}}, Credential: tapp.CredAccessToken})
+	admin := tapp.WithCaller(ctx, tapp.Caller{Subject: td.Subject{
+		Org: org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: ids.NewV7()},
+		Bindings: []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}},
+	}, Credential: tapp.CredAccessToken})
 	if _, _, err := a.CreateInvitation(admin, "bob@example.test", nil, 0); pcerr.ReasonOf(err) != "PLAN_LIMIT" {
 		t.Errorf("invitation over the member limit: %v", err)
 	}

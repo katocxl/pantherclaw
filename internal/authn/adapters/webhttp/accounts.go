@@ -175,8 +175,10 @@ func (h *Handler) invite(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case errors.Is(err, authnapp.ErrSignInUnavailable):
-		h.render(w, http.StatusNotFound, "error.html", page{Title: "Invitation",
-			Message: "This invitation link cannot be used here. Ask for a new invitation, or accept it with pclaw login --invitation."})
+		h.render(w, http.StatusNotFound, "error.html", page{
+			Title:   "Invitation",
+			Message: "This invitation link cannot be used here. Ask for a new invitation, or accept it with pclaw login --invitation.",
+		})
 		return
 	case errors.Is(err, authnapp.ErrSignInBusy):
 		h.render(w, http.StatusServiceUnavailable, "error.html", page{Title: "Invitation", Message: "Too many sign-ins are in progress. Try again in a few minutes."})

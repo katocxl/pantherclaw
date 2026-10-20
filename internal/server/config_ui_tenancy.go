@@ -60,8 +60,10 @@ func (c *Config) signup() accounts.SignupConfig {
 		set int
 		to  *int
 	}{
-		{c.Signup.MaxOrgsPerAccount, &s.MaxOrgsPerAccount}, {c.Signup.MaxUnplannedPerAccount, &s.MaxUnplannedPerAccount},
-		{c.Signup.PerAccountPerHour, &s.PerAccountPerHour}, {c.Signup.PerIPPerHour, &s.PerIPPerHour},
+		{c.Signup.MaxOrgsPerAccount, &s.MaxOrgsPerAccount},
+		{c.Signup.MaxUnplannedPerAccount, &s.MaxUnplannedPerAccount},
+		{c.Signup.PerAccountPerHour, &s.PerAccountPerHour},
+		{c.Signup.PerIPPerHour, &s.PerIPPerHour},
 	} {
 		if v.set != 0 {
 			*v.to = v.set
