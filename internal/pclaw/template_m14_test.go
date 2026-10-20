@@ -359,9 +359,10 @@ func TestM14TreasuryRequirements(t *testing.T) {
 	}
 }
 
-// TestM14SupportRecordScope (D106, D119 L1): customer-support's read
-// carries a record_scope obligation on key customer with exactly the
-// --customer values, never another customer.
+// TestM14SupportRecordScope (D106, D119 L1, D129 M1): customer-support's
+// read of a support table carries a record_scope obligation on key
+// customer with exactly the --customer values, never another customer, and
+// a data_classes obligation of public and internal only.
 func TestM14SupportRecordScope(t *testing.T) {
 	_, b := m14Render(t, "customer-support")
 	out := m14Evaluate(t, b, "pc.postgres", "postgres.rows.read", actionir.Target{Type: "pg_table", ID: "shop.orders"}, `{"columns":["id"],"limit":"10"}`, nil)
@@ -376,6 +377,15 @@ func TestM14SupportRecordScope(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("no record_scope obligation: %+v", out.Obligations)
+	}
+	var classes []string
+	for _, o := range out.Obligations {
+		if o.Kind == domain.DataClasses {
+			classes = o.Values
+		}
+	}
+	if !slices.Equal(classes, []string{"public", "internal"}) {
+		t.Errorf("data_classes obligation %v, want public and internal: %+v", classes, out.Obligations)
 	}
 }
 

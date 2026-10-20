@@ -106,10 +106,17 @@
     },
     {
       "id": "cs-rows-other-customer", "per": "agent",
-      "summary": "the support agent whose grant names another customer reads none of the named customers' rows, nor that customer's",
+      "summary": "a read under a grant that names another customer is still scoped by the template's customer rule (TestM14SupportRecordScope checks the values)",
       "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"columns": ["id", "customer_id", "amount"], "limit": "10"}},
       "given": {"agent": "{{agent}}", "grant": {"constraints": [{"kind": "record_scope", "param": "customer", "values": ["{{other_customer}}"]}]}},
       "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "SUPPORT_READ_CUSTOMERS"}
+    },
+    {
+      "id": "cs-rows-other-table", "per": "agent",
+      "summary": "the support agent's read of another table, under a grant that allows pii, is still limited to public and internal columns",
+      "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.products"}, "params": {"columns": ["id", "name"], "limit": "10"}},
+      "given": {"agent": "{{agent}}", "grant": {"constraints": [{"kind": "data_classes", "values": ["public", "internal", "pii"]}]}},
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "SUPPORT_READ_CLASSES", "rule": "cs-rows-classes--{{agent}}"}
     }
   ]
 }

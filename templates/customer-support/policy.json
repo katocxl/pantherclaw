@@ -20,9 +20,15 @@
     },
     {
       "id": "cs-rows-customers", "per": "agent", "kind": "CONSTRAIN",
-      "summary": "the support agent reads only the named customers' records",
-      "operations": ["postgres.rows.read"], "when": "run.agent_id == {{agent}}", "reason": "SUPPORT_READ_CUSTOMERS",
+      "summary": "the support agent reads only the named customers' records in the support tables",
+      "operations": ["postgres.rows.read"], "when": "run.agent_id == {{agent}} && action.target.id in ['support.tickets', 'shop.customers', 'shop.orders']", "reason": "SUPPORT_READ_CUSTOMERS",
       "constraint": {"kind": "record_scope", "param": "customer", "values": ["{{customer}}"]}
+    },
+    {
+      "id": "cs-rows-classes", "per": "agent", "kind": "CONSTRAIN",
+      "summary": "the support agent reads only public and internal columns: pii and secret values are redacted, whatever its grant allows",
+      "operations": ["postgres.rows.read"], "when": "run.agent_id == {{agent}}", "reason": "SUPPORT_READ_CLASSES",
+      "constraint": {"kind": "data_classes", "values": ["public", "internal"]}
     },
     {
       "id": "cs-no-aggregate", "per": "agent", "kind": "FORBID",
