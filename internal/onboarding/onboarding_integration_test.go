@@ -195,3 +195,45 @@ func TestHR362_OnboardingProgressIsComputedNeverSetByAClient(t *testing.T) {
 		t.Error("progress without a caller")
 	}
 }
+
+// TestHR362_OnboardingCompletesWithoutTheFollowUpSteps (D79): a person
+// alone in a new org completes onboarding without inviting anyone or
+// deciding an approval; those steps stay reported.
+func TestHR362_OnboardingCompletesWithoutTheFollowUpSteps(t *testing.T) {
+	f := &fixture{d: dbtest.New(t)}
+	f.pool = f.d.AppPool(t)
+	s := onboarding.New(f.pool)
+	w := f.world(t)
+	f.agent(t, w, false, "ALLOW", "DENY", "REQUIRE_APPROVAL")
+	p, err := s.GetProgress(w.ctx())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Complete {
+		t.Fatal("complete without a security key and a gateway")
+	}
+	f.exec(t, w.org, `INSERT INTO pc.webauthn_credentials (org_id, id, user_id, credential_id, public_key, alg, backup_eligible,
+		backup_state, attestation_fmt, name) VALUES ($1, $2, $3, $4, $5, -7, false, false, 'none', 'key')`,
+		w.org, ids.NewV7(), w.user, []byte("cred-onboarding-0123456789"), []byte("public-key-onboarding-0123456789abcdefghijklmnop"))
+	gw := ids.NewV7()
+	f.exec(t, w.org, `INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'gw', 'test')`, w.org, gw)
+	f.exec(t, w.org, `INSERT INTO pc.gateway_certs (org_id, id, gateway_id, serial, key_thumbprint, issued_via, not_before, not_after)
+		VALUES ($1, $2, $3, '\x01', $4, 'ENROLL', now(), now() + interval '1 hour')`, w.org, ids.NewV7(), gw, strings.Repeat("k", 43))
+	got := progress(t, s, w)
+	p, err = s.GetProgress(w.ctx())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.Complete {
+		t.Errorf("not complete: %+v", got)
+	}
+	if got[onboarding.StepInviteTeam].Done() || got[onboarding.StepApprovalDecided].Done() {
+		t.Error("follow-up steps done without their records")
+	}
+	if !got[onboarding.StepSecurityKey].Done() || got[onboarding.StepSecurityKey].Evidence[0].Kind != onboarding.KindSecurityKey {
+		t.Errorf("security key step = %+v", got[onboarding.StepSecurityKey])
+	}
+	if len(got[onboarding.StepTestHeld].Evidence) == 0 {
+		t.Error("TEST_HELD has no evidence once the hold is recorded")
+	}
+}

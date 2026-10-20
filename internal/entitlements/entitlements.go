@@ -74,6 +74,8 @@ func (s Status) Billing() bool {
 	switch s {
 	case StatusNone, StatusTrialing, StatusActive, StatusPastDue, StatusPaused, StatusCanceled, StatusLapsed:
 		return true
+	case StatusComp, StatusDev:
+		return false
 	}
 	return false
 }
@@ -184,7 +186,7 @@ func (s *Service) Mode() Mode { return s.mode }
 
 // Current returns the entitlements of the org the context is for: the
 // authenticated caller's org, or the org a job named with tenantctx.WithOrg.
-// Without either it returns the licence's (self-hosted behaviour).
+// Without either it returns the licence's (as self-hosted servers always did).
 func (s *Service) Current(ctx context.Context) (billing.Entitlements, error) {
 	if org, ok := orgOfContext(ctx); ok {
 		return s.For(ctx, org)
@@ -252,18 +254,16 @@ func (s *Service) Plan(ctx context.Context, org ids.OrgID) (Plan, error) {
 			return p, nil
 		}
 	}
-	switch {
-	case s.mode == ModeExternal:
+	if s.mode == ModeExternal {
 		return Plan{Org: org, Edition: string(billing.Community), Status: StatusNone, Source: SourceBilling}, nil
-	default:
-		lic, err := s.licence.Current(ctx)
-		if err != nil {
-			return Plan{}, err
-		}
-		return Plan{Org: org, Edition: string(lic.Edition), Status: StatusActive, Source: SourceLicence, Limits: Limits{
-			MaxAgents: fromLicence(lic.Limits.MaxAgents),
-		}}, nil
 	}
+	lic, err := s.licence.Current(ctx)
+	if err != nil {
+		return Plan{}, err
+	}
+	return Plan{Org: org, Edition: string(lic.Edition), Status: StatusActive, Source: SourceLicence, Limits: Limits{
+		MaxAgents: fromLicence(lic.Limits.MaxAgents),
+	}}, nil
 }
 
 func fromLicence(n int) int {
@@ -306,21 +306,20 @@ func planFromRow(r dbq.PcOrgEntitlement) (Plan, error) {
 // limits stay whatever the plan's status (HR-357); development is every
 // feature (Enterprise) without a limit.
 func (p Plan) entitlements() billing.Entitlements {
-	ed := billing.Edition(p.Edition)
-	if p.Edition == EditionDevelopment {
-		ed = billing.Enterprise
-		p.Limits = Limits{}
-	}
 	if p.Status == StatusNone {
 		e := billing.CommunityEntitlements()
 		e.Limits.MaxOrgs = billing.Unlimited
 		return e
 	}
+	ed, l := billing.Edition(p.Edition), p.Limits
+	if p.Edition == EditionDevelopment {
+		ed, l = billing.Enterprise, Limits{}
+	}
 	return billing.Entitlements{
 		Edition: ed, Status: billing.StatusValid,
 		Limits: billing.Limits{
-			MaxAgents: toLimit(p.Limits.MaxAgents), MaxOrgs: billing.Unlimited,
-			MaxEnvironments: toLimit(p.Limits.MaxEnvironments), MaxMembers: toLimit(p.Limits.MaxMembers),
+			MaxAgents: toLimit(l.MaxAgents), MaxOrgs: billing.Unlimited,
+			MaxEnvironments: toLimit(l.MaxEnvironments), MaxMembers: toLimit(l.MaxMembers),
 		},
 	}
 }

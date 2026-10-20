@@ -337,7 +337,9 @@ type GetProgressResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Steps, in the order the console shows them.
 	Steps []*OnboardingStep `protobuf:"bytes,1,rep,name=steps,proto3" json:"steps,omitempty"`
-	// Whether every step is done.
+	// Whether every required step is done: all but INVITE_TEAM and
+	// APPROVAL_DECIDED, which a person alone in a new org cannot finish
+	// (they stay follow-up steps). TEST_HELD is done once a hold is recorded.
 	Complete      bool `protobuf:"varint,2,opt,name=complete,proto3" json:"complete,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

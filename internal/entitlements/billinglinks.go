@@ -54,14 +54,14 @@ type Links struct {
 func (s *Service) NewLinks() *Links { return &Links{pool: s.pool, clock: s.clock} }
 
 // orgOf finds the org of (provider, kind, ref) through the audited lister.
-func orgOf(ctx context.Context, tx db.DBTX, provider, kind, ref string) (ids.OrgID, ids.UUID, bool, error) {
+func orgOf(ctx context.Context, tx db.DBTX, provider, kind, ref string) (ids.OrgID, bool, error) {
 	refs, err := db.CrossOrgListIn(ctx, tx, db.ListBillingLink, 2, db.ListerParams{
 		BillingProvider: provider, BillingKind: kind, BillingRef: ref,
 	})
 	if err != nil || len(refs) == 0 {
-		return ids.OrgID{}, ids.UUID{}, false, err
+		return ids.OrgID{}, false, err
 	}
-	return refs[0].Org, refs[0].ID, true, nil
+	return refs[0].Org, true, nil
 }
 
 // lookup finds the org of a ref in its own global transaction.
@@ -70,7 +70,7 @@ func (l *Links) lookup(ctx context.Context, provider, kind, ref string) (ids.Org
 	var found bool
 	err := l.pool.InGlobalTx(ctx, db.GlobalCrossOrgList, func(ctx context.Context, tx db.GlobalTx) error {
 		var err error
-		org, _, found, err = orgOf(ctx, tx, provider, kind, ref)
+		org, found, err = orgOf(ctx, tx, provider, kind, ref)
 		return err
 	})
 	return org, found, err
@@ -113,7 +113,7 @@ func (l *Links) RecordCheckout(ctx context.Context, orgID, provider, checkoutRef
 		if err := q.LockBillingRef(ctx, provider, kindCheckout, checkoutRef); err != nil {
 			return err
 		}
-		owner, _, found, err := orgOf(ctx, tx, provider, kindCheckout, checkoutRef)
+		owner, found, err := orgOf(ctx, tx, provider, kindCheckout, checkoutRef)
 		if err != nil {
 			return err
 		}
@@ -211,7 +211,7 @@ func (l *Links) BindSubscription(ctx context.Context, provider, checkoutRef, sub
 		} else if !db.IsNoRows(err) {
 			return err
 		}
-		if _, _, taken, err := orgOf(ctx, tx, provider, kindSubscription, subscriptionRef); err != nil {
+		if _, taken, err := orgOf(ctx, tx, provider, kindSubscription, subscriptionRef); err != nil {
 			return err
 		} else if taken {
 			return ErrLinkConflict

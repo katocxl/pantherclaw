@@ -90,6 +90,8 @@ message GetProgressRequest {}
 message GetProgressResponse {
   // Steps, in the order the console shows them.
   repeated OnboardingStep steps = 1;
-  // Whether every step is done.
+  // Whether every required step is done: all but INVITE_TEAM and
+  // APPROVAL_DECIDED, which a person alone in a new org cannot finish
+  // (they stay follow-up steps). TEST_HELD is done once a hold is recorded.
   bool complete = 2;
 }

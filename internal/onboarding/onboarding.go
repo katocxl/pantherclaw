@@ -10,6 +10,7 @@ package onboarding
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -162,9 +163,20 @@ func (s *Service) GetProgress(ctx context.Context) (Progress, error) {
 		st, ok := steps[id]
 		if !ok {
 			st = Step{ID: id}
-			out.Complete = false
+			if slices.Contains(Required, id) {
+				out.Complete = false
+			}
 		}
 		out.Steps = append(out.Steps, st)
 	}
 	return out, nil
+}
+
+// Required are the steps that complete onboarding (D79). Inviting a
+// teammate and deciding an approval stay follow-up steps: a person alone
+// in a new org cannot decide an approval of their own agent (owner
+// exclusion and minimum ages stay in force).
+var Required = []StepID{
+	StepSecurityKey, StepGatewayEnrolled, StepAgentEnrolled, StepFirstDecision,
+	StepTestAllowed, StepTestHeld, StepTestDenied, StepSuspensionTested,
 }

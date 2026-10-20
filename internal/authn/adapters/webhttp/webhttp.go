@@ -170,7 +170,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 // Routes lists the mounted routes.
 func (h *Handler) Routes() []Route { return append([]Route(nil), h.routes...) }
 
-func (h *Handler) public(mux *http.ServeMux, method, path string, f http.HandlerFunc) {
+func (h *Handler) public(mux *http.ServeMux, method, path string, f http.HandlerFunc) { //nolint:unparam // every public page is a GET today; the route table records the method
 	h.routes = append(h.routes, Route{Method: method, Path: path})
 	mux.HandleFunc(method+" "+path, h.limited(f))
 }

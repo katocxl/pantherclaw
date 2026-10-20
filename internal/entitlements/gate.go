@@ -42,6 +42,8 @@ func (c Class) String() string {
 		return "change"
 	case ClassAllow:
 		return "allow"
+	case ClassUnknown:
+		return "unknown"
 	}
 	return "unknown"
 }
@@ -62,9 +64,10 @@ func Allows(st Status, c Class) bool {
 		return true
 	case StatusLapsed, StatusPaused:
 		return c == ClassRead || c == ClassSafety || c == ClassAllow
-	default:
+	case StatusNone:
 		return c == ClassAllow
 	}
+	return c == ClassAllow
 }
 
 // Gate refuses org procedures the org's plan does not allow, when the

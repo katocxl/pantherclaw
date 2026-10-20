@@ -364,7 +364,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err != nil {
 			return err
 		}
-		handler, err := apiHandler(apiDeps{
+		handler, err := apiHandler(apiDeps{ //nolint:contextcheck // the extension route probe (coreRouteFor) is never sent
 			pool: pool, reg: reg, log: log, authority: svc, billing: bill,
 			auth: rpcauth.New(authn, procedurePermissions, nil,
 				rpcauth.WithRefusals(&rpcauth.AuditRefusals{Pool: pool, Log: log}),

@@ -708,7 +708,7 @@ func deref(s *string) string {
 	return *s
 }
 
-func trim(s string, n int) string {
+func trim(s string, n int) string { //nolint:unparam // one bound today, a helper for every stored observed value
 	if len(s) > n {
 		return s[:n]
 	}
