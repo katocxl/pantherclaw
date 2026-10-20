@@ -31,7 +31,8 @@ func FuzzNextPath(f *testing.F) {
 		"/account#x", "/account/", "/./account", " /account", "/account\t", "%2Faccount", "/account%00", "",
 		// Console pages (HR-345).
 		"/app", "/app/", "/app/agents/1", "/app//evil.example", "/app/../account", "/app/./x", "/app?x=1", "/app/%2F",
-		`/app\evil.example`, "/apps", "/app/x/",
+		`/app\evil.example`, "/apps", "/app/x/", "/app/a%2fb", "/app/a%252fb", "/app/x?u=%0a", "/app/x?u=%2f",
+		"/app/x?u=%5c", "/app/x?u=%25", "/app/x?team=a&range=24h", "/app/a%20b",
 	} {
 		f.Add(s)
 	}
@@ -80,11 +81,22 @@ func checkConsolePath(t *testing.T, base *url.URL, next string) {
 	if err != nil || u.Scheme != "" || u.Host != "" || u.User != nil || u.Fragment != "" || u.Opaque != "" {
 		t.Fatalf("accepted %q, which parses as %#v (%v)", next, u, err)
 	}
-	if strings.ContainsAny(u.Path, `\`) || strings.Contains(u.Path, "//") || strings.Contains(u.RawQuery, "/") {
+	rawPath, _, _ := strings.Cut(next, "?")
+	query, err := url.QueryUnescape(u.RawQuery)
+	if err != nil {
+		t.Fatalf("accepted %q, whose query does not decode (%v)", next, err)
+	}
+	if strings.Count(rawPath, "/") != strings.Count(u.Path, "/") {
+		t.Fatalf("accepted %q, whose escapes decode to a slash in the path", next)
+	}
+	if strings.ContainsAny(u.Path, `\`) || strings.Contains(u.Path, "//") || strings.ContainsAny(query, `/\`) {
 		t.Fatalf("accepted %q, whose escapes decode to a slash or backslash", next)
 	}
-	if strings.ContainsFunc(u.Path+u.RawQuery, func(r rune) bool { return r < ' ' || r == 0x7f }) {
+	if strings.ContainsFunc(u.Path+query, func(r rune) bool { return r < ' ' || r == 0x7f }) {
 		t.Fatalf("accepted %q, whose escapes decode to a control character", next)
+	}
+	if strings.Contains(rawPath+"?"+u.RawQuery, "%25") {
+		t.Fatalf("accepted %q, with an encoded percent sign", next)
 	}
 	for _, seg := range strings.Split(u.Path, "/") {
 		if seg == "." || seg == ".." {

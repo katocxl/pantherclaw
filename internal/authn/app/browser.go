@@ -133,7 +133,8 @@ func consoleChars(s string, inPath bool) bool {
 				return false
 			}
 			v := unhex(s[i+1])<<4 | unhex(s[i+2])
-			if v < 0x20 || v == 0x7f || v == '/' || v == '\\' || (inPath && v == '.') {
+			// An encoded % could be decoded twice into any of the others.
+			if v < 0x20 || v == 0x7f || v == '/' || v == '\\' || v == '%' || (inPath && v == '.') {
 				return false
 			}
 			i += 2
