@@ -6,6 +6,7 @@ A complimentary plan gives one organization a plan without payment, for a limite
 
 ## 1. Before you grant
 
+- Complimentary plans exist only with hosted billing (`billing.mode: external`). On a self-hosted server with licence billing the command refuses with `COMP_NEEDS_HOSTED_BILLING`: self-hosted entitlements come from the licence only, and a complimentary plan never overrides it.
 - Confirm the organization id (from the console's organization settings, or `WhoAmI` for a member of it) and the plan id (a plan the deployment knows).
 - Decide the end date. The expiry is at most one year from now (HR-358); longer arrangements are a new grant at the time.
 - Write a short reason that a later reader understands, for example `design partner pilot, agreement 2026-10`. Do not put personal data, prices or contract terms in it: the reason is stored in the evidence ledger.
