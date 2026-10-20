@@ -44,52 +44,72 @@ WHERE org_id = sqlc.arg(org_id) AND channel_record_id = sqlc.arg(channel_record_
 UPDATE pc.notification_channels SET secret = sqlc.arg(secret), updated_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND kind = 'slack_app' AND state <> 'DISABLED';
 
--- name: GetSlackCard :one
+-- name: LatestSlackCard :one
+-- A request's newest card in a channel (a request that returned to
+-- PENDING may have a CLOSED card and a newer one, D104).
 SELECT * FROM pc.slack_cards
-WHERE org_id = sqlc.arg(org_id) AND request_id = sqlc.arg(request_id) AND channel_record_id = sqlc.arg(channel_record_id);
+WHERE org_id = sqlc.arg(org_id) AND request_id = sqlc.arg(request_id) AND channel_record_id = sqlc.arg(channel_record_id)
+ORDER BY created_at DESC, card_id DESC
+LIMIT 1;
+
+-- name: GetSlackCardByID :one
+SELECT * FROM pc.slack_cards WHERE org_id = sqlc.arg(org_id) AND card_id = sqlc.arg(card_id);
 
 -- name: ClaimSlackCard :execrows
--- Claims the one card of a request in a channel before it is posted (D88):
+-- Claims a request's live card in a channel before it is posted (D88):
 -- 0 rows means another delivery claimed it first.
-INSERT INTO pc.slack_cards (org_id, request_id, channel_record_id, slack_channel, state)
-VALUES (sqlc.arg(org_id), sqlc.arg(request_id), sqlc.arg(channel_record_id), sqlc.arg(slack_channel), 'POSTING')
-ON CONFLICT (org_id, request_id, channel_record_id) DO NOTHING;
+INSERT INTO pc.slack_cards (org_id, card_id, request_id, channel_record_id, slack_channel, state)
+VALUES (sqlc.arg(org_id), sqlc.arg(card_id), sqlc.arg(request_id), sqlc.arg(channel_record_id), sqlc.arg(slack_channel), 'POSTING')
+ON CONFLICT (org_id, request_id, channel_record_id) WHERE state IN ('POSTING', 'OPEN', 'UNKNOWN') DO NOTHING;
 
 -- name: SetSlackCardPosted :execrows
--- Stores the ts Slack answered for a claimed card.
+-- Stores the ts Slack answered for a claimed card, also when a concurrent
+-- delivery already marked the claim UNKNOWN (D104): the returned ts wins.
 UPDATE pc.slack_cards SET ts = sqlc.arg(ts), state = sqlc.arg(state), updated_at = now()
-WHERE org_id = sqlc.arg(org_id) AND request_id = sqlc.arg(request_id) AND channel_record_id = sqlc.arg(channel_record_id)
-  AND state = 'POSTING';
+WHERE org_id = sqlc.arg(org_id) AND card_id = sqlc.arg(card_id) AND state IN ('POSTING', 'UNKNOWN');
 
 -- name: MarkSlackCardUnknown :execrows
 -- A claimed card whose post may or may not have reached Slack: never
 -- posted again.
 UPDATE pc.slack_cards SET state = 'UNKNOWN', updated_at = now()
-WHERE org_id = sqlc.arg(org_id) AND request_id = sqlc.arg(request_id) AND channel_record_id = sqlc.arg(channel_record_id)
-  AND state = 'POSTING';
+WHERE org_id = sqlc.arg(org_id) AND card_id = sqlc.arg(card_id) AND state = 'POSTING';
 
 -- name: ReleaseSlackCard :execrows
 -- Releases a claim whose post Slack refused: nothing was posted.
 DELETE FROM pc.slack_cards
-WHERE org_id = sqlc.arg(org_id) AND request_id = sqlc.arg(request_id) AND channel_record_id = sqlc.arg(channel_record_id)
-  AND state = 'POSTING';
+WHERE org_id = sqlc.arg(org_id) AND card_id = sqlc.arg(card_id) AND state = 'POSTING';
 
 -- name: SlackCardsToClose :many
--- Open cards whose request is final, oldest first, for the reconciler
--- (D88): bounded.
-SELECT c.request_id, c.channel_record_id
+-- Open cards of active channels whose request is final, least recently
+-- tried first, for the reconciler (D88, D104): bounded, and a card that
+-- failed to close moves to the back.
+SELECT c.card_id, c.request_id, c.channel_record_id
 FROM pc.slack_cards c
 JOIN pc.approval_requests r ON r.org_id = c.org_id AND r.id = c.request_id
-WHERE c.org_id = sqlc.arg(org_id) AND c.state = 'OPEN'
+JOIN pc.slack_app_channels a ON a.org_id = c.org_id AND a.channel_record_id = c.channel_record_id
+JOIN pc.notification_channels n ON n.org_id = c.org_id AND n.id = c.channel_record_id
+WHERE c.org_id = sqlc.arg(org_id) AND c.state = 'OPEN' AND a.state = 'ACTIVE' AND n.state <> 'DISABLED'
   AND r.state IN ('APPROVED', 'CONSUMED', 'DECLINED', 'EXPIRED', 'INVALIDATED', 'SUPERSEDED')
-ORDER BY c.updated_at
+ORDER BY c.updated_at, c.card_id
 LIMIT sqlc.arg(batch);
 
+-- name: FailSlackCardClose :one
+-- Counts a failed close; the fifth makes the card ORPHANED, so unclosable
+-- cards never starve the batch (D104).
+UPDATE pc.slack_cards
+SET close_attempts = close_attempts + 1, updated_at = now(),
+    state = CASE WHEN close_attempts + 1 >= 5 THEN 'ORPHANED' ELSE state END
+WHERE org_id = sqlc.arg(org_id) AND card_id = sqlc.arg(card_id) AND state = 'OPEN'
+RETURNING state;
+
 -- name: ActiveSlackAppChannels :many
+-- Active channels after a cursor, in id order (the re-check pages through
+-- all of them, D104).
 SELECT a.channel_record_id, a.slack_channel, c.secret
 FROM pc.slack_app_channels a
 JOIN pc.notification_channels c ON c.org_id = a.org_id AND c.id = a.channel_record_id
 WHERE a.org_id = sqlc.arg(org_id) AND a.state = 'ACTIVE' AND c.state <> 'DISABLED'
+  AND (sqlc.narg(after)::uuid IS NULL OR a.channel_record_id > sqlc.narg(after)::uuid)
 ORDER BY a.channel_record_id
 LIMIT sqlc.arg(batch);
 
@@ -101,12 +121,18 @@ WHERE org_id = sqlc.arg(org_id) AND channel_record_id = sqlc.arg(channel_record_
 
 -- name: SetSlackCardState :exec
 UPDATE pc.slack_cards SET state = sqlc.arg(state), updated_at = now()
-WHERE org_id = sqlc.arg(org_id) AND request_id = sqlc.arg(request_id) AND channel_record_id = sqlc.arg(channel_record_id);
+WHERE org_id = sqlc.arg(org_id) AND card_id = sqlc.arg(card_id) AND state IN ('OPEN', 'CLOSED');
 
--- name: AddSlackCardEscalation :one
-UPDATE pc.slack_cards SET escalations = least(escalations + 1, 100), updated_at = now()
-WHERE org_id = sqlc.arg(org_id) AND request_id = sqlc.arg(request_id) AND channel_record_id = sqlc.arg(channel_record_id)
-RETURNING escalations;
+-- name: ClaimSlackEscalation :execrows
+-- Claims escalation reply number seen + 1 before it is posted (D104).
+UPDATE pc.slack_cards SET escalations = escalations + 1, updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND card_id = sqlc.arg(card_id) AND state = 'OPEN' AND escalations = sqlc.arg(seen)
+  AND escalations < 100;
+
+-- name: ReleaseSlackEscalation :execrows
+-- Releases an escalation claim whose reply Slack refused.
+UPDATE pc.slack_cards SET escalations = escalations - 1, updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND card_id = sqlc.arg(card_id) AND escalations = sqlc.arg(claimed);
 
 -- name: SlackCardFacts :one
 -- What a card may show about a request (D23): its kind, the definition's
