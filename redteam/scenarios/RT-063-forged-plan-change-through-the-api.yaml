@@ -1,0 +1,53 @@
+apiVersion: pantherclaw.range/v1
+id: RT-063
+title: No API call, forged status or replayed event changes an org's plan
+category: boundary
+suite: platform
+tier: business
+attacker: A8
+threats: [T-162, T-163]
+rules: [HR-354, HR-355, HR-361]
+requires: [billing]
+harness_only: true
+steps:
+  - id: no-plan-setter
+    do: person.rpc
+    with:
+      procedure: /pantherclaw.v1.EntitlementService/SetPlan
+      as: org_admin
+    expect:
+      outcome: NOT_FOUND
+      decisive_control: HR-354
+  - id: forged-comp
+    do: plan.event
+    with:
+      status: COMP
+      edition: enterprise
+    expect:
+      outcome: REFUSED
+      reason: INVALID_PLAN
+      decisive_control: HR-361
+  - id: forged-dev
+    do: plan.event
+    with:
+      status: DEV
+      edition: development
+    expect:
+      outcome: REFUSED
+      reason: INVALID_PLAN
+      decisive_control: HR-361
+  - id: real-renewal
+    do: plan.event
+    with:
+      status: PAST_DUE
+    expect:
+      outcome: ALLOW
+  - id: replayed-older-event
+    do: plan.event
+    with:
+      status: ACTIVE
+      age: older
+    expect:
+      outcome: REFUSED
+      reason: IGNORED_STALE
+      decisive_control: HR-355

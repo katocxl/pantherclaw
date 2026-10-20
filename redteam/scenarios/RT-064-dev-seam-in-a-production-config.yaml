@@ -1,0 +1,43 @@
+apiVersion: pantherclaw.range/v1
+id: RT-064
+title: A production server refuses to start with a development billing seam
+category: boundary
+suite: platform
+tier: business
+attacker: A8
+threats: [T-166]
+rules: [HR-359]
+requires: [billing]
+harness_only: false
+steps:
+  - id: production-with-billing-off
+    do: config.check
+    with:
+      deployment: production
+      billing_mode: "off"
+    expect:
+      outcome: REFUSED
+      reason: DEPLOYMENT_CONFIG
+      decisive_control: HR-359
+  - id: production-with-a-fake-mode
+    do: config.check
+    with:
+      deployment: production
+      billing_mode: fake
+    expect:
+      outcome: REFUSED
+      decisive_control: HR-359
+  - id: development-with-billing-off
+    do: config.check
+    with:
+      deployment: development
+      billing_mode: "off"
+    expect:
+      outcome: ALLOW
+  - id: production-hosted
+    do: config.check
+    with:
+      deployment: production
+      billing_mode: external
+    expect:
+      outcome: ALLOW

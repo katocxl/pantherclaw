@@ -1,0 +1,93 @@
+apiVersion: pantherclaw.range/v1
+id: RT-062
+title: A lapsed plan blocks changes but never the gateway's decisions, reads or containment
+category: boundary
+suite: platform
+tier: business
+attacker: A8
+threats: [T-163]
+rules: [HR-356, HR-357]
+requires: [payments, billing]
+harness_only: true
+steps:
+  - id: refund-on-a-plan
+    do: agent.call
+    with:
+      face: mcp
+      connection: payments
+      tool: create_refund
+      args:
+        charge: ch_${fixture.nonce}rt062a
+        amount: "20.00"
+        currency: USD
+        reason: duplicate
+    expect:
+      outcome: ALLOW
+  - id: plan-lapses
+    do: plan.event
+    with:
+      status: LAPSED
+    expect:
+      outcome: ALLOW
+  - id: new-agent-refused
+    do: person.rpc
+    with:
+      procedure: /pantherclaw.v1.AgentService/CreateAgent
+      as: org_admin
+    expect:
+      outcome: REFUSED
+      reason: PLAN_REQUIRED
+      decisive_control: HR-356
+  - id: new-connection-refused
+    do: person.rpc
+    with:
+      procedure: /pantherclaw.v1.ConnectionService/CreateConnection
+      as: org_admin
+    expect:
+      outcome: REFUSED
+      reason: PLAN_REQUIRED
+      decisive_control: HR-356
+  - id: reads-still-work
+    do: person.rpc
+    with:
+      procedure: /pantherclaw.v1.AgentService/ListAgents
+      as: viewer
+    expect:
+      outcome: ALLOW
+      decisive_control: HR-357
+  - id: containment-still-works
+    do: person.rpc
+    with:
+      procedure: /pantherclaw.v1.ResponseService/Contain
+      as: emergency_responder
+    expect:
+      outcome: ALLOW
+      decisive_control: HR-357
+  - id: refund-after-the-lapse
+    do: agent.call
+    with:
+      face: mcp
+      connection: payments
+      tool: create_refund
+      args:
+        charge: ch_${fixture.nonce}rt062b
+        amount: "20.00"
+        currency: USD
+        reason: duplicate
+    expect:
+      outcome: ALLOW
+      decisive_control: HR-357
+  - id: over-the-grant-after-the-lapse
+    do: agent.call
+    with:
+      face: mcp
+      connection: payments
+      tool: create_refund
+      args:
+        charge: ch_${fixture.nonce}rt062c
+        amount: "5000.00"
+        currency: USD
+        reason: duplicate
+    expect:
+      outcome: DENY
+      decisive_control: HR-357

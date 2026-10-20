@@ -73,6 +73,9 @@ type rangeDriver struct {
 
 	// fresh counts the extra pull requests opened.
 	fresh int
+
+	// planEvents counts the plan events reported (G0 UI range steps).
+	planEvents int
 }
 
 type reviewer struct {
@@ -101,7 +104,7 @@ func (d *rangeDriver) Capabilities() map[app.Capability]bool {
 		app.CapGitHub: true, app.CapPayments: true, app.CapMCP: true, app.CapPerson: true, app.CapSecondOrg: true,
 		app.CapHarness: true, app.CapSandbox: d.extra.available(),
 		capSlackPost: true, capSlackInteraction: true,
-		app.Capability("authzen.evaluate"): true,
+		app.Capability("authzen.evaluate"): true, capBilling: true,
 	}
 	maps.Copy(caps, stripeCapabilities())
 	maps.Copy(caps, a2aCapabilities())
@@ -130,6 +133,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	}
 	o.stripe = needsStripe(sc)
 	o.a2a = needsA2A(sc)
+	o.billing = requires(sc, "billing")
 	if needsPostgres(sc) {
 		o.postgres = pgtargettest.New(t)
 	}
@@ -169,6 +173,9 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 		d.other = start(t, options{budget: "1000.00"})
 	}
 	d.setupPayments()
+	if o.billing {
+		d.setupBilling()
+	}
 	if o.slack {
 		d.setupSlack()
 	}
@@ -314,6 +321,9 @@ func (d *rangeDriver) Do(ctx context.Context, sc domain.Scenario, st domain.Step
 		return d.killSwitch()
 	case "sandbox.probe":
 		return d.extra.probe(d, st, vars)
+	}
+	if obs, ok, err := d.uiStep(st); ok {
+		return obs, err
 	}
 	return domain.Observation{}, fmt.Errorf("the harness driver does not run %s", st.Do)
 }
