@@ -13,6 +13,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -271,6 +272,53 @@ func TestHR322_PinRowsNeverChange(t *testing.T) {
 	})
 }
 
+// TestHR322_OnlyAPersonActivatesARealPin (D112): pc_app activates a pin
+// without a person and a security key only for a simulated connection
+// (dev seed); a real connection's proposal stays PROPOSED, through
+// ActivateAsOperator or a raw update, while the simulated one's activates.
+func TestHR322_OnlyAPersonActivatesARealPin(t *testing.T) {
+	pool := dbtest.New(t).AppPool(t)
+	w := newWorld(t, pool, "https://peer.example/a2a")
+	real := ids.NewV7()
+	var realPin, simPin ids.UUID
+	w.tx(t, func(ctx context.Context, q *dbq.Queries, tx db.TenantTx) error {
+		if _, err := tx.Exec(ctx, `INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, access_mode, created_by, updated_by)
+			VALUES ($1, $2, 'real', 'a2a', $3, 'pc.a2a', 'https://peer.example/a2a', 'pantherclaw_held', 'test', 'user:proposer')`,
+			w.org, real, w.gateway); err != nil {
+			return err
+		}
+		var err error
+		if realPin, err = a2astore.Propose(ctx, q, w.org, real, pinned(`{"name":"real"}`), "user:x"); err != nil {
+			return err
+		}
+		simPin, err = a2astore.Propose(ctx, q, w.org, w.conn, pinned(`{"name":"sim"}`), "user:x")
+		return err
+	})
+	for name, fn := range map[string]func(ctx context.Context, q *dbq.Queries, tx db.TenantTx) error{
+		"ActivateAsOperator": func(ctx context.Context, q *dbq.Queries, _ db.TenantTx) error {
+			_, err := a2astore.ActivateAsOperator(ctx, q, w.org, real, realPin, "test")
+			return err
+		},
+		"raw update": func(ctx context.Context, _ *dbq.Queries, tx db.TenantTx) error {
+			_, err := tx.Exec(ctx, "UPDATE pc.a2a_pins SET state = 'ACTIVE', confirmed_operator = 'x' WHERE id = $1", realPin)
+			return err
+		},
+	} {
+		if err := pool.InTenantTx(context.Background(), w.org, func(ctx context.Context, tx db.TenantTx) error {
+			return fn(ctx, dbq.New(tx), tx)
+		}); err == nil {
+			t.Errorf("%s activated a real connection's pin without a person", name)
+		}
+	}
+	w.tx(t, func(ctx context.Context, q *dbq.Queries, tx db.TenantTx) error {
+		if p, err := a2astore.Get(ctx, q, w.org, real, a2astore.StateProposed); err != nil || p.ID != realPin {
+			t.Fatalf("the real connection's proposal: %+v %v", p, err)
+		}
+		_, err := a2astore.ActivateAsOperator(ctx, q, w.org, w.conn, simPin, "test")
+		return err
+	})
+}
+
 // TestHR322_DriftHookRecordsOnlyAgainstThePin (D86): the server's drift
 // report reaches the ACTIVE pin; a report about another digest is stale
 // and refused; a word for an unreadable card still marks the pin drifted.
@@ -300,4 +348,46 @@ func TestHR322_DriftHookRecordsOnlyAgainstThePin(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestHR221_AnA2AMoveIsCheckedByTheStore (D115): a connection moves only
+// to an active gateway; a simulated connection whose pin is a loopback
+// literal moves, and one whose pinned URLs are not is refused.
+func TestHR221_AnA2AMoveIsCheckedByTheStore(t *testing.T) {
+	pool := dbtest.New(t).AppPool(t)
+	local := newWorld(t, pool, "http://127.0.0.1:9/a2a")
+	remote := newWorld(t, pool, "https://peer.example/a2a")
+	check := func(w world, gateway ids.UUID) error {
+		var got error
+		w.tx(t, func(ctx context.Context, _ *dbq.Queries, tx db.TenantTx) error {
+			got = (&a2astore.Adapter{}).CheckGateway(ctx, tx, w.org, w.conn, gateway)
+			return nil
+		})
+		return got
+	}
+	next := ids.NewV7()
+	for w, iface := range map[world]string{local: "http://127.0.0.1:9/a2a", remote: "https://peer.example/a2a"} {
+		cfg := pinned(`{"name":"peer"}`)
+		cfg.CardUrl, cfg.Interface.Url = strings.TrimSuffix(iface, "/a2a")+"/.well-known/agent-card.json", iface
+		w.tx(t, func(ctx context.Context, q *dbq.Queries, tx db.TenantTx) error {
+			id, err := a2astore.Propose(ctx, q, w.org, w.conn, cfg, "user:x")
+			if err != nil {
+				return err
+			}
+			if _, err := a2astore.ActivateAsOperator(ctx, q, w.org, w.conn, id, "test"); err != nil {
+				return err
+			}
+			_, err = tx.Exec(ctx, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'next', 'test')", w.org, next)
+			return err
+		})
+	}
+	if err := check(local, next); err != nil {
+		t.Fatalf("a loopback simulated connection's move: %v", err)
+	}
+	if err := check(remote, next); !errors.Is(err, a2astore.ErrSimulatedCardURL) {
+		t.Fatalf("a simulated connection pinned to another host: %v", err)
+	}
+	if err := check(local, ids.NewV7()); !errors.Is(err, a2astore.ErrGatewayInactive) {
+		t.Fatalf("a move to an unknown gateway: %v", err)
+	}
 }

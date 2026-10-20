@@ -52,8 +52,8 @@ func TestHR324_PeerCheckAsksOnlyAboutPeers(t *testing.T) {
 			}
 		}
 		for i, c := range []ids.UUID{external, enrolled, unconfirmed} {
-			if _, err := tx.Exec(ctx, `INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, access_mode, created_by, updated_by)
-				VALUES ($1, $2, $3, 'a2a', $4, 'pc.a2a', 'https://peer.example/a2a', 'pantherclaw_held', 'test', 'test')`,
+			if _, err := tx.Exec(ctx, `INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, access_mode, simulated, created_by, updated_by)
+				VALUES ($1, $2, $3, 'a2a', $4, 'pc.a2a', 'https://peer.example/a2a', 'pantherclaw_held', true, 'test', 'test')`,
 				org, c, []string{"ext", "enr", "unc"}[i], gw); err != nil {
 				return err
 			}

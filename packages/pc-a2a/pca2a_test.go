@@ -34,6 +34,13 @@ func TestPackageMapsEveryMethodToItsRoute(t *testing.T) {
 	if !ok || send.Params["text"].Type != "content" || !send.Params["text"].Disclosure || send.Params["text"].MaxBytes != 32768 {
 		t.Fatalf("message text: %+v", send.Params["text"])
 	}
+	// Reading a peer's task is a read, which never consults the peer check
+	// (D111); sending and cancelling are writes it decides.
+	for op, access := range map[string]string{"a2a.message.send": "write", "a2a.task.read": "read", "a2a.task.cancel": "write"} {
+		if d, ok := p.Definition(op); !ok || string(d.Access) != access {
+			t.Errorf("%s: access %v, want %s", op, d, access)
+		}
+	}
 	m, err := mapping.New(p, celenv.DefaultLimits)
 	if err != nil {
 		t.Fatal(err)

@@ -28,17 +28,24 @@ steps:
       task: /task/id
     expect:
       outcome: ALLOW
-  - id: hijack-from-another-run
-    do: agent.child
+  - id: owner-reads-task
+    do: agent.call
     with:
-      grant:
-        widen: [lifetime]
-      then:
-        face: a2a
-        connection: peer
-        tool: GetTask
-        args:
-          id: "${task}"
+      face: a2a
+      connection: peer
+      tool: GetTask
+      args:
+        id: "${task}"
+    expect:
+      outcome: ALLOW
+  - id: hijack-from-another-run
+    do: sim.mutate
+    with:
+      sim: a2a
+      change: fault
+      args:
+        other_run: get_task
+        task: "${task}"
     expect:
       outcome: REFUSED
       code: A2A_TASK_UNKNOWN

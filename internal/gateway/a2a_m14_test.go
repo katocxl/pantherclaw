@@ -5,8 +5,10 @@ package gateway
 
 import (
 	"bufio"
+	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +18,7 @@ import (
 
 	wire "github.com/katocxl/pantherclaw/internal/a2a"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
+	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	a2asim "github.com/katocxl/pantherclaw/internal/sim/a2a"
@@ -137,12 +140,13 @@ func TestHR327_A2AFaceRelaysStreamsEventByEvent(t *testing.T) {
 // send, until a new pin.
 func TestHR322_A2ACardDriftRefusesTheConnection(t *testing.T) {
 	r := setupA2A(t, wire.BindingJSONRPC)
-	r.gw.checkA2ACards(t.Context(), r.gw.config.Current())
+	reports := cardReports{}
+	r.gw.checkA2ACards(t.Context(), r.gw.config.Current(), reports)
 	if len(r.driftReports()) != 0 {
 		t.Fatalf("drift on the pinned card: %v", r.driftReports())
 	}
 	r.sim.SetFaults(a2asim.Faults{Description: "Now also moves money"})
-	r.gw.checkA2ACards(t.Context(), r.gw.config.Current())
+	r.gw.checkA2ACards(t.Context(), r.gw.config.Current(), reports)
 	if d := r.driftReports(); len(d) != 1 || !strings.Contains(d[0], "a2a.card") {
 		t.Fatalf("drift reports %v", d)
 	}
@@ -187,9 +191,10 @@ func (r *a2aRig) call(t *testing.T, method, path, body string, hdr map[string]st
 // quarantined until a new pin is confirmed), and drift is reported once.
 func TestHR322_A2ACardDriftClearsOnlyOnThePinnedCard(t *testing.T) {
 	r := setupA2A(t, wire.BindingJSONRPC)
+	reports := cardReports{}
 	r.sim.SetFaults(a2asim.Faults{Description: strings.Repeat("x", wire.MaxCardBytes)})
-	r.gw.checkA2ACards(t.Context(), r.gw.config.Current())
-	r.gw.checkA2ACards(t.Context(), r.gw.config.Current())
+	r.gw.checkA2ACards(t.Context(), r.gw.config.Current(), reports)
+	r.gw.checkA2ACards(t.Context(), r.gw.config.Current(), reports)
 	if d := r.driftReports(); len(d) != 1 || !strings.Contains(d[0], "invalid") {
 		t.Fatalf("oversize card: drift reports %v", d)
 	}
@@ -197,9 +202,44 @@ func TestHR322_A2ACardDriftClearsOnlyOnThePinnedCard(t *testing.T) {
 		t.Fatalf("drifted connection served: %s", got.body)
 	}
 	r.sim.SetFaults(a2asim.Faults{})
-	r.gw.checkA2ACards(t.Context(), r.gw.config.Current())
+	r.gw.checkA2ACards(t.Context(), r.gw.config.Current(), reports)
 	got := r.call(t, http.MethodPost, "/a2a/peer", a2aSend, nil)
 	if strings.Contains(got.body, "A2A_CARD_DRIFT") || len(r.sim.Received()) != 1 {
 		t.Fatalf("pinned card again, still refused: %s", got.body)
+	}
+}
+
+// TestHR322_A2ACardDriftReportIsRetried (D112): a drift report the server
+// does not take is sent again, after a backoff that grows, until it is
+// taken; then it is not sent again for the same drift.
+func TestHR322_A2ACardDriftReportIsRetried(t *testing.T) {
+	r := setupA2A(t, wire.BindingJSONRPC)
+	reports := cardReports{}
+	ok, tries := r.gw.reportDrift, 0
+	r.gw.reportDrift = func(ctx context.Context, conn string, d dispatch.Drift) error {
+		tries++
+		if tries < 3 {
+			return errors.New("server unavailable")
+		}
+		return ok(ctx, conn, d)
+	}
+	r.sim.SetFaults(a2asim.Faults{Description: "Now also moves money"})
+	r.gw.checkA2ACards(t.Context(), r.gw.config.Current(), reports)
+	now := time.Now()
+	r.gw.reportA2ACards(t.Context(), reports, now)
+	if tries != 1 || len(r.driftReports()) != 0 {
+		t.Fatalf("before the backoff: %d tries, reports %v", tries, r.driftReports())
+	}
+	now = now.Add(cardReportFirst)
+	r.gw.reportA2ACards(t.Context(), reports, now)
+	r.gw.reportA2ACards(t.Context(), reports, now.Add(cardReportFirst))
+	if tries != 2 {
+		t.Fatalf("the backoff did not grow: %d tries", tries)
+	}
+	r.gw.reportA2ACards(t.Context(), reports, now.Add(2*cardReportFirst))
+	r.gw.checkA2ACards(t.Context(), r.gw.config.Current(), reports)
+	r.gw.reportA2ACards(t.Context(), reports, now.Add(time.Hour))
+	if d := r.driftReports(); tries != 3 || len(d) != 1 || !strings.Contains(d[0], "a2a.card") {
+		t.Fatalf("%d tries, reports %v", tries, d)
 	}
 }

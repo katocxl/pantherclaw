@@ -207,7 +207,8 @@ func InsertPeerRun(ctx context.Context, q *dbq.Queries, org ids.OrgID, requester
 }
 
 // ActivateAsOperator makes the proposal pin the connection's ACTIVE pin
-// for dev seed's operator, without a person or a security key.
+// for dev seed's operator, without a person or a security key; the
+// database accepts it only for a simulated connection (HR-221).
 // DEVELOPMENT ONLY: the API and the confirm page never call it.
 func ActivateAsOperator(ctx context.Context, q *dbq.Queries, org ids.OrgID, conn, pin ids.UUID, operator string) (Pin, error) {
 	if _, err := q.LockA2AProposal(ctx, org, conn, pin); db.IsNoRows(err) {
