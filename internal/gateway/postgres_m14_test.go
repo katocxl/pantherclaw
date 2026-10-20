@@ -332,3 +332,22 @@ func TestT144_ScopeEscapeAttemptsAtTheGateway(t *testing.T) {
 		t.Fatalf("another customer: %v", a.Rows)
 	}
 }
+
+// TestHR301_PostgresPatternPerDefinition (D105): a definition's credential
+// pattern is checked on its own dispatch, even when the pool is already
+// open for another definition.
+func TestHR301_PostgresPatternPerDefinition(t *testing.T) {
+	tg := pgtargettest.New(t)
+	h := setup(t, withPostgres(t, tg, false), func(h *harness) {
+		h.mutatePkg = func(raw []byte) []byte {
+			return []byte(strings.Replace(string(raw), "    dispatch:\n      sql:\n        operation: rows\n",
+				"    dispatch:\n      credential_pattern: '^nothing-matches$'\n      sql:\n        operation: rows\n", 1))
+		}
+	})
+	if _, r := pgRows(t, h, "/payments/v1/aggregate", `{"table":"shop.orders","measures":["count:*"]}`); r.code != http.StatusOK {
+		t.Fatalf("aggregate: %d %s", r.code, r.body)
+	}
+	if _, r := pgRows(t, h, "/payments/v1/query", pgQuery); r.code == http.StatusOK || !strings.Contains(r.refusal.Error, "credential") {
+		t.Fatalf("patterned read: %d %s", r.code, r.body)
+	}
+}

@@ -86,7 +86,7 @@ func (e *Engine) sendPostgres(ctx context.Context, r Result, conn *control.Conne
 		// or sent (D85).
 		return r.fail(CannotAuthorize, CodeKindConfigMissing)
 	}
-	query, buildErr := pgQuery(pc, def, a.Action, scopeOf(ctx))
+	query, buildErr := pgQuery(pc, def, a.Action, scopeOf(ctx), nil)
 	// A postgres connection is pantherclaw_held only: no action token, and
 	// no HTTP request to bind.
 	_, err := e.authority.BeginDispatch(ctx, &pb.BeginDispatchRequest{PermitId: want.PermitID, Epoch: want.Epoch})
@@ -131,6 +131,10 @@ func (e *Engine) sendPostgres(ctx context.Context, r Result, conn *control.Conne
 			}
 			e.breaker.record(ctx, conn, pb.Outcome_OUTCOME_FAILED)
 			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, time.Since(start), class, code, t)
+		}
+		if p, err := pgQuery(pc, def, a.Action, scopeOf(ctx), ent.pool.Partitioned); err == nil {
+			// The check found which tables are partitioned (read whole, D105).
+			query = p
 		}
 		res, err = ent.pool.Run(runCtx, query.statement)
 		if err != nil {
@@ -185,7 +189,7 @@ var errNoPostgresConfig = errors.New("dispatch: the connection has no postgres c
 
 // pgQuery builds the statement of a postgres read from the permitted
 // action: the target and the typed params only (HR-307).
-func pgQuery(pc *pb.PostgresConfig, def *defs.Definition, a actionir.ActionIR, scope *dataScope) (pgPlan, error) {
+func pgQuery(pc *pb.PostgresConfig, def *defs.Definition, a actionir.ActionIR, scope *dataScope, partitioned func(table string) bool) (pgPlan, error) {
 	if pc == nil {
 		return pgPlan{}, errNoPostgresConfig
 	}
@@ -195,6 +199,9 @@ func pgQuery(pc *pb.PostgresConfig, def *defs.Definition, a actionir.ActionIR, s
 	m, err := pgManifest(pc).Normalized()
 	if err != nil {
 		return pgPlan{}, err
+	}
+	for i := range m.Tables {
+		m.Tables[i].Partitioned = partitioned != nil && partitioned(m.Tables[i].Ref())
 	}
 	vals, err := def.DecodeParams(a.Params)
 	if err != nil {
@@ -275,6 +282,19 @@ func pgManifest(pc *pb.PostgresConfig) pgdispatch.Manifest {
 // opening it with the sealed password, which must match the definition's
 // credential pattern if it declares one.
 func (e *Engine) pgPool(ctx context.Context, conn *control.Connection, def *defs.Definition, pc *pb.PostgresConfig) (*pgEntry, error) {
+	// A definition's credential pattern is checked on every dispatch, not
+	// only when the pool opens (HR-301, D105).
+	if def.Dispatch != nil && def.Dispatch.CredentialPattern != "" {
+		plain, err := e.openStatic(ctx, conn)
+		if err != nil {
+			return nil, err
+		}
+		err = CheckCredentialPattern(def, conn.Credential.GetKind(), plain)
+		clear(plain)
+		if err != nil {
+			return nil, err
+		}
+	}
 	// A confirmed manifest changes the configuration, not the revision.
 	raw, err := proto.MarshalOptions{Deterministic: true}.Marshal(pc)
 	if err != nil {
@@ -309,9 +329,6 @@ func (e *Engine) pgPool(ctx context.Context, conn *control.Connection, def *defs
 		return nil, err
 	}
 	defer clear(plain)
-	if err := CheckCredentialPattern(def, conn.Credential.GetKind(), plain); err != nil {
-		return nil, err
-	}
 	p, err := pgtarget.Open(ctx, pgtarget.Config{
 		Endpoint: pgtarget.Endpoint{
 			Host: pc.GetHost(), Port: int(pc.GetPort()), Database: pc.GetDatabase(), User: pc.GetUser(), SSLMode: pc.GetSslmode(),

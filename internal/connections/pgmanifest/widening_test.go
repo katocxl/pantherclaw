@@ -4,6 +4,8 @@
 package pgmanifest
 
 import (
+	"reflect"
+	"strings"
 	"testing"
 
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
@@ -69,6 +71,36 @@ func TestWidening(t *testing.T) {
 		mut(&next)
 		if w := Widening(base(), next); len(w) == 0 {
 			t.Errorf("%s does not widen", name)
+		}
+	}
+}
+
+// TestWidening_EveryFieldHasARule (D105): every field of a postgres
+// configuration, its tables and columns has a widening rule, so a field
+// added later cannot widen a manifest unconfirmed.
+func TestWidening_EveryFieldHasARule(t *testing.T) {
+	for _, typ := range []reflect.Type{
+		reflect.TypeFor[capp.PostgresConfig](), reflect.TypeFor[capp.PostgresTable](), reflect.TypeFor[capp.PostgresColumn](),
+	} {
+		for f := range typ.Fields() {
+			if _, ok := widenedBy[typ.Name()+"."+f.Name]; !ok {
+				t.Errorf("%s.%s has no widening rule", typ.Name(), f.Name)
+			}
+		}
+	}
+	// And every rule names a field that exists.
+	for name := range widenedBy {
+		typ, field, _ := strings.Cut(name, ".")
+		var found bool
+		for _, t := range []reflect.Type{
+			reflect.TypeFor[capp.PostgresConfig](), reflect.TypeFor[capp.PostgresTable](), reflect.TypeFor[capp.PostgresColumn](),
+		} {
+			if _, ok := t.FieldByName(field); ok && t.Name() == typ {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("rule for %s names no field", name)
 		}
 	}
 }

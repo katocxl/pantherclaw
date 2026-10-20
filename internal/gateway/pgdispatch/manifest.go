@@ -75,6 +75,10 @@ type Table struct {
 	ScopeKey    string   `json:"scope_key,omitzero"`
 	ScopeColumn string   `json:"scope_column,omitzero"`
 	MaxRows     int      `json:"max_rows,omitzero"`
+	// Partitioned marks a partitioned table, which is read whole; any other
+	// table is read with ONLY, so no inheritance child is (D105). The
+	// gateway learns it from the database, never from the manifest.
+	Partitioned bool `json:"-"`
 	Columns     []Column `json:"columns"`
 }
 

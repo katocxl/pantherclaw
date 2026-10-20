@@ -22,6 +22,7 @@ import (
 	"net"
 	"net/netip"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -200,6 +201,18 @@ type Pool struct {
 	pool     *pgxpool.Pool
 	manifest pgdispatch.Manifest
 	settings []string
+
+	mu sync.Mutex
+	// partitioned are the manifest tables the last check found partitioned.
+	partitioned map[string]bool
+}
+
+// Partitioned reports whether the last role check found table (schema.table)
+// partitioned: it is then read whole, any other table with ONLY.
+func (p *Pool) Partitioned(table string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.partitioned[table]
 }
 
 // Open builds the pool. It dials nothing until the first use; Check makes
@@ -352,6 +365,14 @@ WHERE pg_catalog.has_table_privilege(pg_catalog.quote_ident($1) || '.' || pg_cat
 UNION ALL SELECT 'can ' || p.priv || ' a column of ' || $1 || '.' || $2 FROM unnest(ARRAY['INSERT','UPDATE']) AS p(priv)
 WHERE pg_catalog.has_any_column_privilege(pg_catalog.quote_ident($1) || '.' || pg_catalog.quote_ident($2), p.priv)`
 
+// partitionSQL finds the partitions of a partitioned table, at any depth,
+// that are not tables.
+const partitionSQL = `WITH RECURSIVE d(oid) AS (
+  SELECT inhrelid FROM pg_catalog.pg_inherits WHERE inhparent = (pg_catalog.quote_ident($1) || '.' || pg_catalog.quote_ident($2))::regclass
+  UNION SELECT i.inhrelid FROM pg_catalog.pg_inherits i JOIN d ON i.inhparent = d.oid)
+SELECT $1 || '.' || $2 || ' has a partition that is not a table: ' || c.relname || ' (relkind ' || c.relkind::text || ')'
+FROM d JOIN pg_catalog.pg_class c ON c.oid = d.oid WHERE c.relkind NOT IN ('r', 'p')`
+
 // columnSQL lists a table's columns and their types as the catalog has
 // them.
 const columnSQL = `SELECT a.attname, pg_catalog.format_type(a.atttypid, NULL), c.relkind::text FROM pg_catalog.pg_attribute a
@@ -376,6 +397,12 @@ func (p *Pool) Check(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	defer conn.Release()
+	partitioned := map[string]bool{}
+	defer func() {
+		p.mu.Lock()
+		p.partitioned = partitioned
+		p.mu.Unlock()
+	}()
 	var findings []string
 	collect := func(sql string, args ...any) error {
 		rows, err := conn.Query(ctx, sql, args...)
@@ -408,6 +435,13 @@ func (p *Pool) Check(ctx context.Context) ([]string, error) {
 		if k := have[0].Kind; k != "r" && k != "p" {
 			findings = append(findings, t.Ref()+" is not a table (relkind "+k+")")
 			continue
+		} else if k == "p" {
+			partitioned[t.Ref()] = true
+			// Every partition, at any depth, is a table too: a foreign
+			// partition would make the database dial out (D105).
+			if err := collect(partitionSQL, t.Schema, t.Name); err != nil {
+				return nil, err
+			}
 		}
 		types := make(map[string]string, len(have))
 		for _, c := range have {

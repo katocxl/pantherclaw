@@ -414,7 +414,12 @@ func (b *builder) limit(request, clamp int) (int, error) {
 	return n, nil
 }
 
-func (b *builder) from() string { return " FROM " + quote(b.t.Schema, b.t.Name) }
+func (b *builder) from() string {
+	if b.t.Partitioned {
+		return " FROM " + quote(b.t.Schema, b.t.Name)
+	}
+	return " FROM ONLY " + quote(b.t.Schema, b.t.Name)
+}
 
 // BuildRows builds the statement of a postgres.rows.read query. A selected
 // column whose class may not be read is not selected at all; the answer
