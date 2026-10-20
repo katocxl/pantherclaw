@@ -23,6 +23,7 @@ import (
 	"io"
 	"math/big"
 	"net"
+	"net/netip"
 	"os"
 	"strconv"
 	"sync"
@@ -201,6 +202,9 @@ func (tg *Target) Config(writer bool) pgtarget.Config {
 		},
 		Manifest: Manifest(),
 		Password: pass,
+		// The proxy is on loopback: the operator of a customer-hosted gateway
+		// allows it explicitly (D98).
+		Allowed: []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")},
 	}
 }
 

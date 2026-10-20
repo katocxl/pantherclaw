@@ -18,7 +18,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway/pgdispatch"
 	"github.com/katocxl/pantherclaw/internal/gateway/pgtarget"
 	"github.com/katocxl/pantherclaw/internal/gateway/pgtarget/pgtargettest"
-	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 )
 
 func open(t *testing.T, c pgtarget.Config) *pgtarget.Pool {
@@ -107,6 +106,21 @@ func TestHR309_WritableRoleRefused(t *testing.T) {
 		t.Fatalf("pg_write_all_data: %v", findings)
 	}
 	tg.AdminExec(t, "REVOKE pg_write_all_data FROM "+tg.ReadOnly)
+	// A member that does not inherit could still SET ROLE (D98).
+	tg.AdminExec(t, "ALTER ROLE "+tg.ReadOnly+" NOINHERIT", "GRANT pg_write_all_data TO "+tg.ReadOnly)
+	findings, _ = open(t, tg.Config(false)).Check(context.Background())
+	if !slices.Contains(findings, "member of pg_write_all_data") {
+		t.Fatalf("NOINHERIT member: %v", findings)
+	}
+	tg.AdminExec(t, "REVOKE pg_write_all_data FROM "+tg.ReadOnly, "ALTER ROLE "+tg.ReadOnly+" INHERIT")
+	// Views (and foreign tables) are not tables (D98).
+	tg.AdminExec(t, "CREATE VIEW shop.gold AS SELECT id, tier FROM shop.customers", "GRANT SELECT ON shop.gold TO "+tg.ReadOnly)
+	v := tg.Config(false)
+	v.Manifest.Tables = append(v.Manifest.Tables, pgdispatch.Table{Schema: "shop", Name: "gold", Columns: []pgdispatch.Column{{Name: "id", Type: pgdispatch.TypeBigint, Class: pgdispatch.ClassPublic}}})
+	findings, _ = open(t, v).Check(context.Background())
+	if !slices.Equal(findings, []string{"shop.gold is not a table (relkind v)"}) {
+		t.Fatalf("view: %v", findings)
+	}
 	c := tg.Config(false)
 	c.Manifest.Tables[0].Columns[1].Type = pgdispatch.TypeInt
 	c.Manifest.Tables[1].Columns = append(c.Manifest.Tables[1].Columns, pgdispatch.Column{Name: "missing", Type: pgdispatch.TypeText, Class: pgdispatch.ClassPublic})
@@ -257,6 +271,12 @@ func TestHR330_TransportAndEgress(t *testing.T) {
 	c.Endpoint.Internal = false
 	refused("loopback without internal", c)
 	c = tg.Config(false)
+	c.Allowed = nil // a gateway whose operator allows no private prefix, as PantherClaw hosts them
+	refused("internal without an operator prefix", c)
+	c = tg.Config(false)
+	c.Allowed = []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}
+	refused("loopback outside the operator's prefixes", c)
+	c = tg.Config(false)
 	c.Endpoint.Host = "127.0.0.1" // not the certificate's name
 	refused("wrong host name", c)
 	c = tg.Config(false)
@@ -271,27 +291,4 @@ func TestHR330_TransportAndEgress(t *testing.T) {
 	if findings, err := open(t, c).Check(ctx); err != nil || len(findings) != 0 {
 		t.Fatalf("require: %v %v", findings, err)
 	}
-}
-
-func TestDenied(t *testing.T) {
-	for _, c := range []struct {
-		addr     string
-		internal bool
-		denied   bool
-	}{
-		{"8.8.8.8", false, false},
-		{"10.0.0.5", false, true},
-		{"127.0.0.1", false, true},
-		{"10.0.0.5", true, false},
-		{"127.0.0.1", true, false},
-		{"169.254.169.254", true, true},
-		{"fd00:ec2::254", true, true},
-		{"0.0.0.0", true, true},
-		{"224.0.0.1", true, true},
-	} {
-		if got := pgtarget.Denied(netip.MustParseAddr(c.addr), c.internal, nil); got != c.denied {
-			t.Errorf("%s internal=%v: denied %v", c.addr, c.internal, got)
-		}
-	}
-	_ = httpx.ErrDestinationDenied
 }

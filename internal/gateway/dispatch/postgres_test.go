@@ -122,6 +122,16 @@ func TestPgQuery_Operations(t *testing.T) {
 	if _, err := call("aggregate_rows", `{"table":"shop.customers","measures":["max:email"]}`); pgdispatch.CodeOf(err) != pgdispatch.CodeColumnNotAllowed {
 		t.Errorf("max of pii: %v", err)
 	}
+	// A limit clamped to zero is refused, never read as no limit (D98).
+	p, err := m.MCP(context.Background(), pgContext(), "query_rows", []byte(`{"table":"shop.orders","columns":["id"],"limit":5}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Action.Params = []byte(`{"columns":["id"],"limit":"0"}`)
+	def, _ := pkg.Definition(p.Action.Operation)
+	if _, err := pgQuery(shopConfig(), def, p.Action); err == nil {
+		t.Errorf("limit 0: %v", err)
+	}
 	if _, err := pgQuery(nil, &defs.Definition{}, actionir.ActionIR{}); !errors.Is(err, errNoPostgresConfig) {
 		t.Errorf("no config: %v", err)
 	}

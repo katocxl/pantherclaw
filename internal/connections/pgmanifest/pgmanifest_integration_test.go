@@ -159,3 +159,46 @@ func TestIntPostgresManifestConfirmation(t *testing.T) {
 		t.Fatalf("%d confirmations audited", n)
 	}
 }
+
+// TestIntPostgresInternalOnlyOnCustomerHostedGateways (D98, HR-077): a
+// connection a PantherClaw-hosted gateway serves cannot be internal,
+// neither at creation nor by an update; on a customer-hosted gateway it can.
+func TestIntPostgresInternalOnlyOnCustomerHostedGateways(t *testing.T) {
+	f := triggerstest.New(t)
+	hosted, own, pkg, ver := ids.NewV7(), ids.NewV7(), ids.NewV7(), ids.NewV7()
+	raw := pcpostgres.Package
+	f.Exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'hosted', 'test')", f.Org, hosted)
+	f.Exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'own', 'test')", f.Org, own)
+	f.Exec(t, "INSERT INTO pc.tool_packages (org_id, id, name) VALUES ($1, $2, $3)", f.Org, pkg, pcpostgres.Name)
+	f.Exec(t, `INSERT INTO pc.package_versions (org_id, id, package_id, version, file_digest, raw, state) VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE')`,
+		f.Org, ver, pkg, pcpostgres.Version, manifest.FileDigest(raw), raw)
+	f.Exec(t, "INSERT INTO pc.package_pins (org_id, package_id, version_id, version, digest) VALUES ($1, $2, $3, $4, $5)",
+		f.Org, pkg, ver, pcpostgres.Version, manifest.FileDigest(raw))
+	kinds := &ports.KindConfigs{}
+	kinds.Register(capp.KindPostgres, pgmanifest.Store{Hosted: func(g ids.UUID) bool { return g == hosted }})
+	conns := capp.New(f.Pool, nil, "https://pantherclaw.example.test", "https://gw.example.test").WithKindConfigs(kinds)
+	admin := f.As(td.KindUser, td.RoleGatewayAdmin)
+	in := func(name string, gw ids.UUID, internal bool) capp.CreateInput {
+		cfg := config()
+		cfg.Internal = internal
+		return capp.CreateInput{
+			Name: name, Kind: capp.KindPostgres, Package: pcpostgres.Name, Gateway: gw, DestinationClass: capp.ClassInternal,
+			AccessMode: capp.AccessHeld, DefaultMode: "enforce", Postgres: &cfg,
+		}
+	}
+	if _, err := conns.Create(admin, in("hosted-internal", hosted, true)); !errors.Is(err, pgmanifest.ErrInternalHosted) {
+		t.Fatalf("internal on a hosted gateway: %v", err)
+	}
+	c, err := conns.Create(admin, in("hosted-public", hosted, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wide := config()
+	wide.Internal = true
+	if _, err := conns.Update(admin, capp.UpdateInput{ID: c.ID, Revision: c.Revision, Postgres: &wide}); !errors.Is(err, pgmanifest.ErrInternalHosted) {
+		t.Fatalf("internal by update on a hosted gateway: %v", err)
+	}
+	if _, err := conns.Create(admin, in("own-internal", own, true)); err != nil {
+		t.Fatalf("internal on a customer-hosted gateway: %v", err)
+	}
+}

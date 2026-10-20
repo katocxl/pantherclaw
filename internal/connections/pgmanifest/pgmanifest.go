@@ -44,12 +44,21 @@ var (
 	ErrNothing = pcerr.New(pcerr.FailedPrecondition, "NOTHING_PROPOSED", "this connection has no proposed configuration")
 	// ErrHuman: only a person confirms.
 	ErrHuman = pcerr.New(pcerr.PermissionDenied, "HUMAN_REQUIRED", "only a person can confirm a postgres manifest")
+	// ErrInternalHosted: internal on a connection served by a gateway
+	// PantherClaw hosts (D98, HR-077): private targets are reached only from
+	// customer-hosted gateways.
+	ErrInternalHosted = pcerr.New(pcerr.InvalidArgument, "INTERNAL_NOT_ALLOWED",
+		"internal is allowed only on a postgres connection served by a customer-hosted gateway")
 	// ErrChanged: the proposal changed while the page was open.
 	ErrChanged = pcerr.New(pcerr.FailedPrecondition, "PROPOSAL_CHANGED", "the proposed configuration changed; reload the page")
 )
 
 // Store is the postgres kind's configuration store (ports.KindConfig).
-type Store struct{}
+// Hosted reports whether PantherClaw hosts a gateway (the server's
+// configuration); nil: none is.
+type Store struct {
+	Hosted func(gateway ids.UUID) bool
+}
 
 // encode is a configuration's canonical JSON and its digest.
 func encode(c *capp.PostgresConfig) ([]byte, []byte, error) {
@@ -76,7 +85,7 @@ func decode(raw []byte) (*capp.PostgresConfig, error) {
 // updates the connection: the first one, and a widening change, as
 // proposed; a narrowing change at once, voiding a pending proposal. A
 // postgres connection has no base URL.
-func (Store) Save(ctx context.Context, tx db.TenantTx, org ids.OrgID, connection ids.UUID, _ int32, cfg any) (string, error) {
+func (s Store) Save(ctx context.Context, tx db.TenantTx, org ids.OrgID, connection ids.UUID, _ int32, cfg any) (string, error) {
 	pc, ok := cfg.(*capp.PostgresConfig)
 	if !ok || pc == nil {
 		return "", ErrType
@@ -86,6 +95,15 @@ func (Store) Save(ctx context.Context, tx db.TenantTx, org ids.OrgID, connection
 		return "", err
 	}
 	q := dbq.New(tx)
+	if pc.Internal && s.Hosted != nil {
+		conn, err := q.GetConnection(ctx, org, connection)
+		if err != nil {
+			return "", err
+		}
+		if s.Hosted(conn.GatewayID) {
+			return "", ErrInternalHosted
+		}
+	}
 	row, err := q.LockPostgresConnection(ctx, org, connection)
 	if db.IsNoRows(err) {
 		return "", q.ProposePostgresConnection(ctx, dbq.ProposePostgresConnectionParams{

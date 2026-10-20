@@ -56,7 +56,14 @@ type pgEntry struct {
 
 	mu      sync.Mutex
 	checked time.Time
+	// used is when a dispatch last took the pool (under pgPools).
+	used time.Time
 }
+
+// pgIdle is how long a pool nobody takes stays open: a deleted or retired
+// connection's pool closes once it has gone unused this long (D98); a
+// changed configuration closes it at once.
+const pgIdle = 15 * time.Minute
 
 // pgPools are the open pools of each engine, by connection id.
 var pgPools = struct {
@@ -188,6 +195,10 @@ func pgQuery(pc *pb.PostgresConfig, def *defs.Definition, a actionir.ActionIR) (
 	plan := pgPlan{manifest: m}
 	limit := 0
 	if v, ok := vals["limit"]; ok {
+		if v.Int < 1 {
+			// A limit, the clamped one included, is at least one row (D98).
+			return pgPlan{}, &pgdispatch.Error{Code: pgdispatch.CodeQueryInvalid, Detail: "limit must be at least 1"}
+		}
 		limit = int(min(v.Int, int64(pgdispatch.MaxRowsLimit)))
 	}
 	filters := pgFilters(vals["filters"].Filter)
@@ -268,8 +279,16 @@ func (e *Engine) pgPool(ctx context.Context, conn *control.Connection, def *defs
 		pools = map[string]*pgEntry{}
 		pgPools.m[e] = pools
 	}
+	now := time.Now()
+	for id, ent := range pools {
+		if id != conn.GetId() && now.Sub(ent.used) > pgIdle {
+			ent.pool.Close()
+			delete(pools, id)
+		}
+	}
 	if ent, ok := pools[conn.GetId()]; ok {
 		if ent.key == key {
+			ent.used = now
 			return ent, nil
 		}
 		ent.pool.Close()
@@ -295,7 +314,7 @@ func (e *Engine) pgPool(ctx context.Context, conn *control.Connection, def *defs
 	if err != nil {
 		return nil, err
 	}
-	ent := &pgEntry{key: key, pool: p, db: pc.GetDatabase()}
+	ent := &pgEntry{key: key, pool: p, db: pc.GetDatabase(), used: now}
 	pools[conn.GetId()] = ent
 	return ent, nil
 }
@@ -346,6 +365,11 @@ func (e *Engine) postgresTest(ctx context.Context, conn *control.Connection, ope
 		return Observation{}, ErrNotReviewedRead
 	}
 	findings, err := e.PostgresCheck(ctx, conn)
+	if errors.Is(err, httpx.ErrDestinationDenied) {
+		// The address is outside what this gateway may reach (D98): the test
+		// fails, as every dispatch would.
+		findings, err = []string{"the database address is outside this gateway's egress allow-list"}, nil
+	}
 	if err != nil {
 		e.log.WarnContext(ctx, "gateway.postgres_test_inconclusive", slog.String("connection_id", conn.GetId()), pclog.Err(err))
 		return Observation{}, nil

@@ -66,6 +66,10 @@ type Endpoint struct {
 type Config struct {
 	Endpoint Endpoint
 	Manifest pgdispatch.Manifest
+	// Password is a Go string because pgx keeps it in the pool's connection
+	// configuration, to authenticate each new connection: it cannot be
+	// cleared, and it lives in gateway memory for the pool's lifetime, never
+	// logged (HR-061; D98).
 	Password string
 	// Allowed are the operator's allowed egress prefixes (HR-077).
 	Allowed []netip.Prefix
@@ -165,16 +169,30 @@ func dialer(internal bool, allowed []netip.Prefix) *net.Dialer {
 	}
 }
 
-// Denied reports whether a database address is refused: every address the
-// HTTP egress client refuses, except that an internal endpoint may reach
-// private, loopback and link-local unicast addresses. Metadata, multicast
-// and unspecified addresses are refused always.
+// Denied reports whether a database address is refused (HR-330, HR-077,
+// HR-142; G0 M14 D98). A public address is reached as the HTTP egress client
+// reaches it. Any other address (private, loopback, link-local, CGNAT, ...)
+// only for an internal endpoint and only inside a prefix the gateway's
+// operator allowed: loopback and link-local therefore only when the
+// operator lists them, and never on a PantherClaw-hosted gateway, whose
+// operator lists none. Cloud metadata addresses are refused always.
 func Denied(a netip.Addr, internal bool, allowed []netip.Prefix) bool {
 	a = a.WithZone("")
-	if !internal || httpx.MetadataAddr(a) {
-		return httpx.DeniedAddr(a, allowed)
+	if httpx.MetadataAddr(a) {
+		return true
 	}
-	return !a.IsValid() || a.IsUnspecified() || a.IsMulticast()
+	if !httpx.DeniedAddr(a, nil) {
+		return false
+	}
+	if !internal {
+		return true
+	}
+	for _, p := range allowed {
+		if p.Contains(a) {
+			return !a.IsValid() || a.IsUnspecified() || a.IsMulticast()
+		}
+	}
+	return true
 }
 
 // Pool is one connection revision's open pool.
@@ -326,7 +344,7 @@ const MinServerVersion = 130000
 const roleSQL = `SELECT 'server version ' || current_setting('server_version') WHERE current_setting('server_version_num')::int < $1
 UNION ALL SELECT 'superuser' FROM pg_catalog.pg_roles WHERE rolname = current_user AND rolsuper
 UNION ALL SELECT 'member of pg_write_all_data' WHERE CASE WHEN EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'pg_write_all_data')
-THEN pg_catalog.pg_has_role(current_user, 'pg_write_all_data', 'USAGE') ELSE false END`
+THEN pg_catalog.pg_has_role(current_user, 'pg_write_all_data', 'MEMBER') ELSE false END`
 
 // tableSQL checks one manifest table: privileges first, then its columns.
 const tableSQL = `SELECT 'can ' || p.priv || ' ' || $1 || '.' || $2 FROM unnest(ARRAY['INSERT','UPDATE','DELETE','TRUNCATE']) AS p(priv)
@@ -336,7 +354,7 @@ WHERE pg_catalog.has_any_column_privilege(pg_catalog.quote_ident($1) || '.' || p
 
 // columnSQL lists a table's columns and their types as the catalog has
 // them.
-const columnSQL = `SELECT a.attname, pg_catalog.format_type(a.atttypid, NULL) FROM pg_catalog.pg_attribute a
+const columnSQL = `SELECT a.attname, pg_catalog.format_type(a.atttypid, NULL), c.relkind::text FROM pg_catalog.pg_attribute a
 JOIN pg_catalog.pg_class c ON c.oid = a.attrelid JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = $1 AND c.relname = $2 AND a.attnum > 0 AND NOT a.attisdropped`
 
@@ -376,13 +394,19 @@ func (p *Pool) Check(ctx context.Context) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		type col struct{ Name, Type string }
+		type col struct{ Name, Type, Kind string }
 		have, err := pgx.CollectRows(rows, pgx.RowToStructByPos[col])
 		if err != nil {
 			return nil, err
 		}
 		if len(have) == 0 {
 			findings = append(findings, "table "+t.Ref()+" does not exist")
+			continue
+		}
+		// Ordinary and partitioned tables only: a view reads other tables,
+		// and a foreign table makes the database dial out (D98).
+		if k := have[0].Kind; k != "r" && k != "p" {
+			findings = append(findings, t.Ref()+" is not a table (relkind "+k+")")
 			continue
 		}
 		types := make(map[string]string, len(have))

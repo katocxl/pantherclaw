@@ -180,3 +180,15 @@ func TestHR307_PostgresWithoutConfigurationSendsNothing(t *testing.T) {
 		t.Fatalf("%d %s", r.code, r.body)
 	}
 }
+
+// TestHR330_PostgresPrivateTargetNeedsInternal: a loopback database the
+// connection does not mark internal is refused at dial time, whatever the
+// operator allows (D98).
+func TestHR330_PostgresPrivateTargetNeedsInternal(t *testing.T) {
+	tg := pgtargettest.New(t)
+	h := setup(t, withPostgres(t, tg, false), func(h *harness) { h.conn.Postgres.Internal = false })
+	r := h.do(t, http.MethodPost, "/payments/v1/query", pgQuery, nil)
+	if r.refusal.Error != "egress_denied" {
+		t.Fatalf("%d %s", r.code, r.body)
+	}
+}
