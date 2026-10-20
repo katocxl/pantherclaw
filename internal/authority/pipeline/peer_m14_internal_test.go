@@ -93,3 +93,23 @@ func TestM14_A2ADisclosureIsLimited(t *testing.T) {
 		t.Fatalf("over limits: %+v %+v", s.cl.items, s.ev.Obligations)
 	}
 }
+
+// TestM14_APeerReadIsNotAPeerCall: reading a peer agent's task (an a2a
+// read) never consults the peer port, which only decides writes (D111).
+func TestM14_APeerReadIsNotAPeerCall(t *testing.T) {
+	asked := 0
+	s := &state{
+		req: Request{Org: ids.New[ids.Org]()}, ev: &Evaluation{}, conn: &Connection{Kind: "a2a"},
+		def:   &defs.Definition{Operation: "a2a.task.read", Access: defs.AccessRead},
+		chain: gdomain.Chain{Grants: []gdomain.Grant{{ID: gdomain.NewGrantID()}}},
+	}
+	(&Pipeline{Peer: func(context.Context, ids.OrgID, Connection, gdomain.Grant) string { asked++; return "no" }}).peerCheck(context.Background(), s)
+	if asked != 0 || len(s.cl.items) != 0 {
+		t.Fatalf("a read asked the port %d times: %+v", asked, s.cl.items)
+	}
+	s.def.Access = defs.AccessWrite
+	(&Pipeline{Peer: func(context.Context, ids.OrgID, Connection, gdomain.Grant) string { asked++; return "no" }}).peerCheck(context.Background(), s)
+	if asked != 1 {
+		t.Fatal("a write did not ask the port")
+	}
+}
