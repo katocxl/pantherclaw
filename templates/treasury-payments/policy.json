@@ -1,0 +1,35 @@
+{
+  "rules": [
+    {
+      "id": "tr-payees", "per": "org", "kind": "FORBID",
+      "summary": "transfers go only to the payees the template was applied for; this rule applies org-wide, to every agent",
+      "operations": ["stripe.transfer.create"], "when": "!(action.target.id in {{payees}})", "reason": "PAYEE_NOT_ALLOWED"
+    },
+    {
+      "id": "tr-transfer-cap", "per": "org", "kind": "CONSTRAIN",
+      "summary": "no single transfer above 10000.00 USD",
+      "operations": ["stripe.transfer.create"], "when": "true", "reason": "TRANSFER_OVER_CAP",
+      "constraint": {"kind": "amount_max", "param": "amount", "max": "10000.00", "currency": "USD"}
+    },
+    {
+      "id": "tr-transfer-verify", "per": "org", "kind": "CONSTRAIN",
+      "summary": "every transfer is verified at the domain effect: Stripe reports the transfer to that account for that amount, not reversed",
+      "operations": ["stripe.transfer.create"], "when": "true", "reason": "TRANSFER_NEEDS_VERIFICATION",
+      "constraint": {"kind": "verify", "level": "domain_effect"}
+    },
+    {
+      "id": "tr-transfer-approve", "per": "org", "kind": "REQUIRE_APPROVAL",
+      "summary": "two independent approvers approve every transfer",
+      "operations": ["stripe.transfer.create"],
+      "when": "true",
+      "reason": "TRANSFER_NEEDS_APPROVAL",
+      "approval": {"role": "approver", "count": 2, "independent": true}
+    },
+    {
+      "id": "tr-payee-changed", "per": "org", "kind": "REQUIRE_STEP_UP",
+      "summary": "a transfer to a payee whose bank details changed within 7 days, or whose changes cannot be read, also needs the principal's security-key step-up on top of the two approvals",
+      "operations": ["stripe.payee.changed_recently"], "when": "true", "reason": "PAYEE_CHANGED_RECENTLY",
+      "step_up": {"subject": "principal", "method": "webauthn"}
+    }
+  ]
+}
