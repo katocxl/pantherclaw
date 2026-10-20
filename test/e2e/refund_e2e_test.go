@@ -36,6 +36,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/gateway"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
+	"github.com/katocxl/pantherclaw/internal/gateway/pgtarget/pgtargettest"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
@@ -106,6 +107,9 @@ type stack struct {
 	// a2a is the A2A simulator acting as the peer agent, the seeded a2a
 	// connection "peer" to it and the peer's workload (G0 M14, options.a2a).
 	a2a *a2aPeerSim
+	// pg is the fixture database and the seeded connection "warehouse" to it
+	// (G0 M14, options.postgres).
+	pg *pgSeed
 }
 
 type options struct {
@@ -159,6 +163,9 @@ type options struct {
 	// pc.a2a, the peer agent and the connection "peer" (dev seed --a2a-url,
 	// G0 M14 D33).
 	a2a bool
+	// postgres also seeds pc.postgres and the connection "warehouse" to this
+	// fixture database (dev seed --postgres, G0 M14 D21).
+	postgres *pgtargettest.Target
 }
 
 // freePorts are the ports freeAddr has handed out in this test binary.
@@ -289,6 +296,9 @@ func start(t *testing.T, o options) *stack {
 		s.slack = startSlackSim(t)
 		args = append(args, "--slack-url", s.slack.url+"/api")
 	}
+	if o.postgres != nil {
+		args = append(args, "--postgres", s.postgresSeedFile(t, dir, o.postgres))
+	}
 	var out, errb bytes.Buffer
 	if code := server.Run(context.Background(), args, &out, &errb, noEnv); code != 0 {
 		t.Fatalf("dev seed: %d %s", code, errb.String())
@@ -313,6 +323,9 @@ func start(t *testing.T, o options) *stack {
 	}
 	if o.a2a {
 		s.a2aSeeded(t, out.String())
+	}
+	if o.postgres != nil {
+		s.postgresSeeded(t, out.String(), o.postgres)
 	}
 	s.pool = s.db.AppPool(t)
 
@@ -374,7 +387,7 @@ func start(t *testing.T, o options) *stack {
 		// GitHub the stack calls (github.api_url).
 		gc.GitHub.APIURL = s.gh.url
 	}
-	if o.access == "pantherclaw_held" || o.github || o.stripe || o.slack {
+	if o.access == "pantherclaw_held" || o.github || o.stripe || o.slack || o.postgres != nil {
 		// The gateway's broker key, which only it can open credentials with
 		// (HR-061); it registers the public half when it starts.
 		gc.Broker.KEKFiles = []string{filepath.Join(dir, "gateway-kek")}
@@ -412,6 +425,9 @@ func start(t *testing.T, o options) *stack {
 	}
 	if o.slack {
 		s.waitConfig(t, s.sealFor(t, s.slack.conn, slackBotToken))
+	}
+	if o.postgres != nil {
+		s.postgresReady(t)
 	}
 	return s
 }

@@ -156,6 +156,19 @@ func Proto(c capp.PostgresConfig) *pb.PostgresConfig {
 	return out
 }
 
+// widenedBy names every field of a postgres configuration and the rule
+// Widening compares it by (D105): a field added to the configuration
+// without a rule here fails TestWidening_EveryFieldHasARule.
+var widenedBy = map[string]string{
+	"PostgresConfig.Host": "endpoint", "PostgresConfig.Port": "endpoint", "PostgresConfig.Database": "endpoint",
+	"PostgresConfig.User": "endpoint", "PostgresConfig.SSLMode": "tls", "PostgresConfig.CAPEM": "tls",
+	"PostgresConfig.Internal": "turned on", "PostgresConfig.Tables": "per table", "PostgresConfig.MaxRows": "raised",
+	"PostgresConfig.StatementTimeoutMs": "raised", "PostgresConfig.MaxResultBytes": "raised", "PostgresConfig.MinGroupSize": "lowered",
+	"PostgresTable.Schema": "new table", "PostgresTable.Name": "new table", "PostgresTable.ScopeKey": "scope changed",
+	"PostgresTable.ScopeColumn": "scope changed", "PostgresTable.MaxRows": "raised", "PostgresTable.Columns": "per column",
+	"PostgresColumn.Name": "new column", "PostgresColumn.Type": "type changed", "PostgresColumn.Class": "lowered",
+}
+
 // classRank orders the data classes from least to most protected.
 var classRank = map[string]int{"public": 0, "internal": 1, "pii": 2, "secret": 3}
 
@@ -224,9 +237,11 @@ func Widening(current, next capp.PostgresConfig) []string {
 	return out
 }
 
-// Service is the confirm page's use cases.
+// Service is the confirm page's use cases. Hosted reports whether
+// PantherClaw hosts a gateway; nil: none is.
 type Service struct {
-	pool *db.Pool
+	pool   *db.Pool
+	Hosted func(gateway ids.UUID) bool
 }
 
 // New returns a Service.
@@ -347,6 +362,11 @@ func (s *Service) Confirm(ctx context.Context, id ids.UUID, digest string, su *s
 		proposed, err := decode(row.Proposed)
 		if err != nil {
 			return err
+		}
+		// The connection may have moved to another gateway since it was
+		// proposed: internal is checked against the gateway serving it now (D105).
+		if proposed.Internal && s.Hosted != nil && s.Hosted(conn.GatewayID) {
+			return ErrInternalHosted
 		}
 		widening := []string{"first configuration"}
 		if current != nil {

@@ -52,5 +52,26 @@ GRANT UPDATE (config, digest, proposed, proposed_digest, proposed_at, confirmed_
     ON pc.postgres_connections TO pc_app;
 GRANT SELECT ON pc.postgres_connections TO pc_audit_ro;
 
+-- A postgres connection's password goes in no header and to no HTTP host
+-- (D84): a static credential may have neither, and nothing else changes.
+-- squawk: the new CHECK only widens the old pair; NOT VALID then VALIDATE
+-- keeps the lock short.
+ALTER TABLE pc.credentials
+    DROP CONSTRAINT credentials_allowed_hosts_check,
+    DROP CONSTRAINT credentials_header_check,
+    ADD CONSTRAINT credentials_placement CHECK (
+        (header ~ '^[A-Za-z0-9-]{1,64}$' AND cardinality(allowed_hosts) BETWEEN 1 AND 16)
+        OR (header = '' AND scheme IS NULL AND cardinality(allowed_hosts) = 0 AND kind = 'static')) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.credentials VALIDATE CONSTRAINT credentials_placement;
+
 -- +goose Down
+ALTER TABLE pc.credentials
+    DROP CONSTRAINT credentials_placement,
+    ADD CONSTRAINT credentials_allowed_hosts_check CHECK (cardinality(allowed_hosts) BETWEEN 1 AND 16) NOT VALID,
+    ADD CONSTRAINT credentials_header_check CHECK (header ~ '^[A-Za-z0-9-]{1,64}$') NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.credentials VALIDATE CONSTRAINT credentials_allowed_hosts_check;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.credentials VALIDATE CONSTRAINT credentials_header_check;
 DROP TABLE pc.postgres_connections;

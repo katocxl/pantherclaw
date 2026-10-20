@@ -76,6 +76,8 @@ type Store struct {
 	ready chan struct{}
 	once  sync.Once
 	wake  chan struct{}
+	// loaded are told each configuration a load installs (Subscribe).
+	loaded []func(*Config)
 
 	// Limits bound the package mapping expressions; zero means
 	// celenv.DefaultLimits. The gateway sets them from its configuration.
@@ -102,6 +104,14 @@ func (s *Store) Current() *Config {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.cur
+}
+
+// Subscribe has f told each configuration a load installs, after it is
+// current: the dispatch engine closes what the old one held (G0 M14 D105).
+func (s *Store) Subscribe(f func(*Config)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.loaded = append(s.loaded, f)
 }
 
 // Ready is closed once a configuration is loaded.
@@ -169,7 +179,11 @@ func (s *Store) load(ctx context.Context) error {
 	}
 	s.mu.Lock()
 	s.cur = cfg
+	loaded := s.loaded
 	s.mu.Unlock()
+	for _, f := range loaded {
+		f(cfg)
+	}
 	s.once.Do(func() { close(s.ready) })
 	s.log.InfoContext(ctx, "gateway.configuration_loaded", slog.Int64("version", cfg.Version), slog.Int("connections", len(cfg.ByID)))
 	return nil

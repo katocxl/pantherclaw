@@ -340,6 +340,8 @@ func (d *rangeDriver) simMutate(st domain.Step) (domain.Observation, error) {
 		return domain.Observation{}, err
 	}
 	switch {
+	case w.Sim == "postgres":
+		return d.mutatePostgres(w.Change, w.Args)
 	case w.Sim == "github" && w.Change == "push_commit":
 		var a struct {
 			Branch string            `json:"branch"`

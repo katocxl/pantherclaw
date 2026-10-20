@@ -276,8 +276,9 @@ func TestHR330_TransportAndEgress(t *testing.T) {
 	c = tg.Config(false)
 	c.Allowed = []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}
 	refused("loopback outside the operator's prefixes", c)
-	c = tg.Config(false)
-	c.Endpoint.Host = "127.0.0.1" // not the certificate's name
+	named := pgtargettest.New(t, pgtargettest.NameOnly())
+	c = named.Config(false)
+	c.Endpoint.Host = "127.0.0.1" // not a name its certificate holds
 	refused("wrong host name", c)
 	c = tg.Config(false)
 	c.Endpoint.CAPEM = pgtargettest.New(t).CAPEM // another CA
@@ -290,5 +291,45 @@ func TestHR330_TransportAndEgress(t *testing.T) {
 	c.Endpoint.SSLMode, c.Endpoint.Host = pgtarget.SSLRequire, "127.0.0.1"
 	if findings, err := open(t, c).Check(ctx); err != nil || len(findings) != 0 {
 		t.Fatalf("require: %v %v", findings, err)
+	}
+}
+
+// TestHR307_PartitionsAndInheritance (D105): a partitioned table whose
+// partitions are tables passes and is read whole; an ordinary table is
+// read with ONLY, so an inheritance child's rows never join its answer.
+func TestHR307_PartitionsAndInheritance(t *testing.T) {
+	tg := pgtargettest.New(t)
+	tg.AdminExec(t,
+		"CREATE TABLE shop.events (id bigint, at date) PARTITION BY RANGE (at)",
+		"CREATE TABLE shop.events_2026 PARTITION OF shop.events FOR VALUES FROM ('2026-01-01') TO ('2027-01-01') PARTITION BY RANGE (id)",
+		"CREATE TABLE shop.events_2026_a PARTITION OF shop.events_2026 FOR VALUES FROM (0) TO (1000)",
+		"INSERT INTO shop.events VALUES (1, '2026-10-17'), (2, '2026-10-18')",
+		"GRANT SELECT ON shop.events TO "+tg.ReadOnly,
+		"CREATE TABLE shop.orders_archive () INHERITS (shop.orders)",
+		"INSERT INTO shop.orders_archive VALUES (99, 1, 1.00, 'paid')",
+		"GRANT SELECT ON shop.orders_archive TO "+tg.ReadOnly,
+	)
+	c := tg.Config(false)
+	c.Manifest.Tables = append(c.Manifest.Tables, pgdispatch.Table{Schema: "shop", Name: "events", Columns: []pgdispatch.Column{
+		{Name: "id", Type: pgdispatch.TypeBigint, Class: pgdispatch.ClassPublic}, {Name: "at", Type: pgdispatch.TypeDate, Class: pgdispatch.ClassPublic},
+	}})
+	p := open(t, c)
+	if findings, err := p.Check(context.Background()); err != nil || len(findings) != 0 {
+		t.Fatalf("findings %v %v", findings, err)
+	}
+	if !p.Partitioned("shop.events") || p.Partitioned("shop.orders") {
+		t.Fatal("partitioned tables not recognised")
+	}
+	m := p.Manifest()
+	for i := range m.Tables {
+		m.Tables[i].Partitioned = p.Partitioned(m.Tables[i].Ref())
+	}
+	st, _ := pgdispatch.BuildRows(m, pgdispatch.Rows{Table: "shop.events", Columns: []string{"id"}})
+	if a := run(t, p, st); len(a.Rows) != 2 {
+		t.Fatalf("partitioned rows %v", a.Rows)
+	}
+	st, _ = pgdispatch.BuildAggregate(m, pgdispatch.Aggregate{Table: "shop.orders", Measures: []pgdispatch.Measure{{Func: "count", Column: "*"}}})
+	if a := run(t, p, st); a.Rows[0][0] != float64(11) {
+		t.Fatalf("an inheritance child joined the answer: %v", a.Rows)
 	}
 }

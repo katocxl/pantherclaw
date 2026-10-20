@@ -28,8 +28,11 @@ func wireM14Data(c *m14Core, m6 *m6Services) {
 // mountM14Data adds the postgres manifest confirm page (D84).
 func mountM14Data(mux *http.ServeMux, d apiDeps) {
 	if d.web != nil {
-		manifests := pgmanifest.New(d.pool)
-		d.web.MountPostgresManifests(mux, manifests)
-		probeM14("m14.postgres.manifests", manifests)
+		svc := pgmanifest.New(d.pool)
+		if d.m6 != nil && d.m6.gateways != nil {
+			svc.Hosted = d.m6.gateways.PantherClawHosted
+		}
+		d.web.MountPostgresManifests(mux, svc)
+		probeM14("m14.postgres.manifests", svc)
 	}
 }

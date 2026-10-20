@@ -31,6 +31,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authn/webauthntest"
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
 	"github.com/katocxl/pantherclaw/internal/gateway"
+	"github.com/katocxl/pantherclaw/internal/gateway/pgtarget/pgtargettest"
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/redteam/app"
@@ -104,6 +105,7 @@ func (d *rangeDriver) Capabilities() map[app.Capability]bool {
 	}
 	maps.Copy(caps, stripeCapabilities())
 	maps.Copy(caps, a2aCapabilities())
+	maps.Copy(caps, pgCapabilities())
 	return caps
 }
 
@@ -128,6 +130,9 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	}
 	o.stripe = needsStripe(sc)
 	o.a2a = needsA2A(sc)
+	if needsPostgres(sc) {
+		o.postgres = pgtargettest.New(t)
+	}
 	var p idp
 	if requires(sc, "person") || sc.ID == "RT-009" || slackScenario(sc) {
 		p = inProcessIdP(t)
@@ -156,6 +161,9 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	}
 	if o.stripe {
 		d.setupStripe()
+	}
+	if o.postgres != nil {
+		d.setupPostgres()
 	}
 	if requires(sc, "second_org") {
 		d.other = start(t, options{budget: "1000.00"})

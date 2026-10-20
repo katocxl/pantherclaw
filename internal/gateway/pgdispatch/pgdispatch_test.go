@@ -127,7 +127,7 @@ func TestBuildRows_Golden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := orders(`SELECT left(O."id"::text, 4097), left(O."amount"::text, 4097), left(O."status"::text, 4097) FROM "shop"."orders"` +
+	want := orders(`SELECT left(O."id"::text, 4097), left(O."amount"::text, 4097), left(O."status"::text, 4097) FROM ONLY "shop"."orders"` +
 		` WHERE (O."status" = $1::text::text) AND (O."amount" >= $2::text::numeric) AND (O."id" = ANY($3::text[]::bigint[]))` +
 		` AND (O."placed" IS NOT NULL) AND (O."status" LIKE $4::text ESCAPE E'\\')` +
 		` ORDER BY O."placed" DESC, O."id" ASC LIMIT 21`)
@@ -280,7 +280,7 @@ func TestHR307_InjectionThroughValues(t *testing.T) {
 // tokenRe matches what built SQL may consist of: keywords, functions,
 // quoted manifest identifiers, placeholders with casts, operators and the
 // fixed escape.
-var tokenRe = regexp.MustCompile(`^(::text|SELECT|FROM|WHERE|AND|ORDER|BY|ASC|DESC|LIMIT|GROUP|HAVING|IS|NOT|NULL|ANY|LIKE|ESCAPE|E'\\\\'|left|count|sum|avg|min|max|\*|"[a-z_][a-z0-9_]*"(\."[a-z_][a-z0-9_]*"){0,2}(::text)?|\$[0-9]+::text(\[\])?(::[a-z]+(\[\])?)?|[(),]|=|<>|<|<=|>|>=|[0-9]+)$`)
+var tokenRe = regexp.MustCompile(`^(::text|SELECT|FROM|ONLY|WHERE|AND|ORDER|BY|ASC|DESC|LIMIT|GROUP|HAVING|IS|NOT|NULL|ANY|LIKE|ESCAPE|E'\\\\'|left|count|sum|avg|min|max|\*|"[a-z_][a-z0-9_]*"(\."[a-z_][a-z0-9_]*"){0,2}(::text)?|\$[0-9]+::text(\[\])?(::[a-z]+(\[\])?)?|[(),]|=|<>|<|<=|>|>=|[0-9]+)$`)
 
 func assertOnlyKnownTokens(t *testing.T, sql string) {
 	t.Helper()
@@ -426,7 +426,7 @@ func TestHR310_RecordScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := orders(`SELECT left(O."id"::text, 4097) FROM "shop"."orders" WHERE (O."customer_id" = $1::text::bigint) AND (O."customer_id" = ANY($2::text[]::bigint[])) LIMIT 51`)
+	want := orders(`SELECT left(O."id"::text, 4097) FROM ONLY "shop"."orders" WHERE (O."customer_id" = $1::text::bigint) AND (O."customer_id" = ANY($2::text[]::bigint[])) LIMIT 51`)
 	if st.SQL != want {
 		t.Fatalf("SQL\n got %s\nwant %s", st.SQL, want)
 	}
@@ -469,7 +469,7 @@ func TestBuildAggregate_Golden(t *testing.T) {
 	}
 	want := orders(`SELECT left(O."status"::text, 4097), left(O."paid"::text, 4097), left(count(*)::text, 4097),` +
 		` left(sum(O."amount")::text, 4097), left(avg(O."amount")::text, 4097), left(max(O."placed")::text, 4097), left(count(O."id")::text, 4097)` +
-		` FROM "shop"."orders" WHERE (O."paid" = $1::text::boolean) AND (O."customer_id" = ANY($2::text[]::bigint[]))` +
+		` FROM ONLY "shop"."orders" WHERE (O."paid" = $1::text::boolean) AND (O."customer_id" = ANY($2::text[]::bigint[]))` +
 		` GROUP BY O."status", O."paid" HAVING count(*) >= 5 ORDER BY O."status", O."paid" LIMIT 11`)
 	if st.SQL != want {
 		t.Fatalf("SQL\n got %s\nwant %s", st.SQL, want)
@@ -495,7 +495,7 @@ func TestHR312_SmallGroupsSuppressed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.SQL != orders(`SELECT left(sum(O."amount")::text, 4097) FROM "shop"."orders" HAVING count(*) >= 3 LIMIT 51`) {
+	if st.SQL != orders(`SELECT left(sum(O."amount")::text, 4097) FROM ONLY "shop"."orders" HAVING count(*) >= 3 LIMIT 51`) {
 		t.Fatalf("SQL %s", st.SQL)
 	}
 	for name, q := range map[string]Aggregate{
@@ -845,5 +845,35 @@ func TestHR311_TableBound(t *testing.T) {
 	}
 	if strings.Contains(string(out), "customers") || strings.Contains(string(out), "tickets") || !strings.Contains(string(out), "shop.orders") {
 		t.Fatalf("describe %s", out)
+	}
+}
+
+// TestHR312_CountTakesAnyNonSecretColumn (D79): a count returns a number,
+// never a value, so it may count any column but a secret one, whatever
+// the classes allow.
+func TestHR312_CountTakesAnyNonSecretColumn(t *testing.T) {
+	pub := Access{Classes: []Class{ClassPublic}}
+	st, err := BuildAggregate(shop(), Aggregate{Table: "shop.customers", Measures: []Measure{{"count", "email"}}, Access: pub})
+	if err != nil || !strings.Contains(st.SQL, `count("shop"."customers"."email")`) {
+		t.Fatalf("count of pii: %v %v", st, err)
+	}
+	_, err = BuildAggregate(shop(), Aggregate{Table: "shop.customers", Measures: []Measure{{"count", "ssn"}}})
+	code(t, err, CodeColumnNotAllowed)
+	_, err = BuildAggregate(shop(), Aggregate{Table: "shop.customers", Measures: []Measure{{"count", "nope"}}})
+	code(t, err, CodeColumnNotAllowed)
+}
+
+// TestHR307_OnlyThisTable (D105): an ordinary table is read with ONLY, so
+// no inheritance child joins the answer; a partitioned one is read whole.
+func TestHR307_OnlyThisTable(t *testing.T) {
+	st, err := BuildRows(shop(), Rows{Table: "shop.orders", Columns: []string{"id"}})
+	if err != nil || !strings.Contains(st.SQL, ` FROM ONLY "shop"."orders" `) {
+		t.Fatalf("ordinary: %v %v", st, err)
+	}
+	m := shop()
+	m.Tables[1].Partitioned = true
+	st, err = BuildAggregate(m, Aggregate{Table: "shop.orders", Measures: []Measure{{"count", "*"}}})
+	if err != nil || !strings.Contains(st.SQL, ` FROM "shop"."orders" `) || strings.Contains(st.SQL, "ONLY") {
+		t.Fatalf("partitioned: %v %v", st, err)
 	}
 }

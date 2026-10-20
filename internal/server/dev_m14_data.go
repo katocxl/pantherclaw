@@ -14,6 +14,8 @@ import (
 	"strings"
 
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
+	"github.com/katocxl/pantherclaw/internal/connections/pgmanifest"
+	"github.com/katocxl/pantherclaw/internal/connections/ports"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pcpostgres "github.com/katocxl/pantherclaw/packages/pc-postgres"
@@ -104,7 +106,9 @@ func seedPostgresConnection(ctx context.Context, cfg *Config, pool *db.Pool, org
 	if pc.Internal {
 		class = capp.ClassInternal
 	}
-	c, err := capp.New(pool, nil, cfg.Auth.PublicURL, cfg.GatewayAPI.URL).Seed(ctx, org, "dev-seed", capp.CreateInput{
+	kinds := &ports.KindConfigs{}
+	kinds.Register(capp.KindPostgres, pgmanifest.Store{})
+	c, err := capp.New(pool, nil, cfg.Auth.PublicURL, cfg.GatewayAPI.URL).WithKindConfigs(kinds).Seed(ctx, org, "dev-seed", capp.CreateInput{
 		Name: devPostgresConnectionName, Kind: capp.KindPostgres, Package: pcpostgres.Name, Gateway: gateway,
 		DestinationClass: class, AccessMode: capp.AccessHeld, DefaultMode: "enforce", Postgres: &pc,
 	})

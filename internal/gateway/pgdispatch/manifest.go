@@ -70,11 +70,15 @@ type Column struct {
 // the record_scope obligation key the table is filtered by, through
 // ScopeColumn (D20).
 type Table struct {
-	Schema      string   `json:"schema"`
-	Name        string   `json:"name"`
-	ScopeKey    string   `json:"scope_key,omitzero"`
-	ScopeColumn string   `json:"scope_column,omitzero"`
-	MaxRows     int      `json:"max_rows,omitzero"`
+	Schema      string `json:"schema"`
+	Name        string `json:"name"`
+	ScopeKey    string `json:"scope_key,omitzero"`
+	ScopeColumn string `json:"scope_column,omitzero"`
+	MaxRows     int    `json:"max_rows,omitzero"`
+	// Partitioned marks a partitioned table, which is read whole; any other
+	// table is read with ONLY, so no inheritance child is (D105). The
+	// gateway learns it from the database, never from the manifest.
+	Partitioned bool     `json:"-"`
 	Columns     []Column `json:"columns"`
 }
 

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway/egress"
 	"github.com/katocxl/pantherclaw/internal/gateway/pgdispatch"
 	"github.com/katocxl/pantherclaw/internal/gateway/pgtarget"
+	"github.com/katocxl/pantherclaw/internal/gateway/simcheck"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
@@ -84,7 +86,7 @@ func (e *Engine) sendPostgres(ctx context.Context, r Result, conn *control.Conne
 		// or sent (D85).
 		return r.fail(CannotAuthorize, CodeKindConfigMissing)
 	}
-	query, buildErr := pgQuery(pc, def, a.Action)
+	query, buildErr := pgQuery(pc, def, a.Action, scopeOf(ctx), nil)
 	// A postgres connection is pantherclaw_held only: no action token, and
 	// no HTTP request to bind.
 	_, err := e.authority.BeginDispatch(ctx, &pb.BeginDispatchRequest{PermitId: want.PermitID, Epoch: want.Epoch})
@@ -130,6 +132,10 @@ func (e *Engine) sendPostgres(ctx context.Context, r Result, conn *control.Conne
 			e.breaker.record(ctx, conn, pb.Outcome_OUTCOME_FAILED)
 			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, time.Since(start), class, code, t)
 		}
+		if p, err := pgQuery(pc, def, a.Action, scopeOf(ctx), ent.pool.Partitioned); err == nil {
+			// The check found which tables are partitioned (read whole, D105).
+			query = p
+		}
 		res, err = ent.pool.Run(runCtx, query.statement)
 		if err != nil {
 			class, code := pgClassify(err)
@@ -138,6 +144,15 @@ func (e *Engine) sendPostgres(ctx context.Context, r Result, conn *control.Conne
 			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, time.Since(start), class, code, t)
 		}
 		e.breaker.record(ctx, conn, pb.Outcome_OUTCOME_ACCEPTED)
+		if s := scopeOf(ctx); s != nil || res.Redacted > 0 {
+			// Counts only, never values (D20); see the receipt question in the PR.
+			key := ""
+			if s != nil && s.records != nil {
+				key = s.records.Key
+			}
+			e.log.InfoContext(ctx, "gateway.scope_applied", slog.String("transaction_id", want.Txn), slog.String("records_key", key),
+				slog.Int("rows", res.Rows), slog.Int("values_redacted", res.Redacted), slog.Bool("truncated", res.Truncated))
+		}
 	}
 	elapsed := time.Since(start)
 	t.lap("target")
@@ -174,7 +189,7 @@ var errNoPostgresConfig = errors.New("dispatch: the connection has no postgres c
 
 // pgQuery builds the statement of a postgres read from the permitted
 // action: the target and the typed params only (HR-307).
-func pgQuery(pc *pb.PostgresConfig, def *defs.Definition, a actionir.ActionIR) (pgPlan, error) {
+func pgQuery(pc *pb.PostgresConfig, def *defs.Definition, a actionir.ActionIR, scope *dataScope, partitioned func(table string) bool) (pgPlan, error) {
 	if pc == nil {
 		return pgPlan{}, errNoPostgresConfig
 	}
@@ -185,11 +200,16 @@ func pgQuery(pc *pb.PostgresConfig, def *defs.Definition, a actionir.ActionIR) (
 	if err != nil {
 		return pgPlan{}, err
 	}
+	for i := range m.Tables {
+		m.Tables[i].Partitioned = partitioned != nil && partitioned(m.Tables[i].Ref())
+	}
 	vals, err := def.DecodeParams(a.Params)
 	if err != nil {
 		return pgPlan{}, err
 	}
 	plan := pgPlan{manifest: m}
+	var records *pgdispatch.RecordScope
+	plan.access, records = scope.pgAccess()
 	limit := 0
 	if v, ok := vals["limit"]; ok {
 		if v.Int < 1 {
@@ -210,7 +230,7 @@ func pgQuery(pc *pb.PostgresConfig, def *defs.Definition, a actionir.ActionIR) (
 			order = append(order, o)
 		}
 		plan.statement, err = pgdispatch.BuildRows(m, pgdispatch.Rows{
-			Table: a.Target.ID, Columns: vals["columns"].List, Filters: filters, OrderBy: order, Limit: limit, Access: plan.access,
+			Table: a.Target.ID, Columns: vals["columns"].List, Filters: filters, OrderBy: order, Limit: limit, Access: plan.access, Scope: records,
 		})
 	case "aggregate":
 		var measures []pgdispatch.Measure
@@ -222,7 +242,7 @@ func pgQuery(pc *pb.PostgresConfig, def *defs.Definition, a actionir.ActionIR) (
 			measures = append(measures, ms)
 		}
 		plan.statement, err = pgdispatch.BuildAggregate(m, pgdispatch.Aggregate{
-			Table: a.Target.ID, GroupBy: vals["group_by"].List, Measures: measures, Filters: filters, Limit: limit, Access: plan.access,
+			Table: a.Target.ID, GroupBy: vals["group_by"].List, Measures: measures, Filters: filters, Limit: limit, Access: plan.access, Scope: records,
 		})
 	case "tables":
 		if a.Target.ID != pc.GetDatabase() {
@@ -262,13 +282,23 @@ func pgManifest(pc *pb.PostgresConfig) pgdispatch.Manifest {
 // opening it with the sealed password, which must match the definition's
 // credential pattern if it declares one.
 func (e *Engine) pgPool(ctx context.Context, conn *control.Connection, def *defs.Definition, pc *pb.PostgresConfig) (*pgEntry, error) {
-	// A confirmed manifest changes the configuration, not the revision.
-	raw, err := proto.MarshalOptions{Deterministic: true}.Marshal(pc)
+	// A definition's credential pattern is checked on every dispatch, not
+	// only when the pool opens (HR-301, D105).
+	if def.Dispatch != nil && def.Dispatch.CredentialPattern != "" {
+		plain, err := e.openStatic(ctx, conn)
+		if err != nil {
+			return nil, err
+		}
+		err = CheckCredentialPattern(def, conn.Credential.GetKind(), plain)
+		clear(plain)
+		if err != nil {
+			return nil, err
+		}
+	}
+	key, err := pgKey(conn, pc)
 	if err != nil {
 		return nil, err
 	}
-	sum := sha256.Sum256(raw)
-	key := fmt.Sprintf("%d/%s/%d/%x", conn.GetRevision(), conn.Credential.GetId(), conn.Credential.GetVersion(), sum)
 	pgPools.Lock()
 	defer pgPools.Unlock()
 	pools := pgPools.m[e]
@@ -296,9 +326,6 @@ func (e *Engine) pgPool(ctx context.Context, conn *control.Connection, def *defs
 		return nil, err
 	}
 	defer clear(plain)
-	if err := CheckCredentialPattern(def, conn.Credential.GetKind(), plain); err != nil {
-		return nil, err
-	}
 	p, err := pgtarget.Open(ctx, pgtarget.Config{
 		Endpoint: pgtarget.Endpoint{
 			Host: pc.GetHost(), Port: int(pc.GetPort()), Database: pc.GetDatabase(), User: pc.GetUser(), SSLMode: pc.GetSslmode(),
@@ -379,4 +406,77 @@ func (e *Engine) postgresTest(ctx context.Context, conn *control.Connection, ope
 	}
 	sum := sha256.Sum256([]byte(strings.Join(findings, "\n")))
 	return Observation{HTTPStatus: status, Digest: sum[:]}, nil
+}
+
+// pgSims remembers verified simulated postgres connections, as simcheck
+// does for HTTP simulators.
+var pgSims = struct {
+	sync.Mutex
+	ok map[string]time.Time
+}{ok: map[string]time.Time{}}
+
+// pgSimVerify verifies a simulated postgres connection (G0 M14 D110): its
+// host is a loopback literal, and the database, reached with the same TLS
+// and egress rules as any dispatch, answers the handshake with this
+// connection. A success is trusted for simcheck.TTL.
+func (e *Engine) pgSimVerify(ctx context.Context, conn *control.Connection) string {
+	pc := postgresOf(conn)
+	if pc == nil {
+		return CodeSimulatorUnverified
+	}
+	if a, err := netip.ParseAddr(pc.GetHost()); err != nil || !a.Unmap().IsLoopback() {
+		return CodeSimulatorUnverified
+	}
+	key := fmt.Sprintf("%p/%s/%d/%s", e, conn.GetId(), conn.GetRevision(), pc.GetHost())
+	pgSims.Lock()
+	at, ok := pgSims.ok[key]
+	pgSims.Unlock()
+	if ok && time.Since(at) < simcheck.TTL {
+		return ""
+	}
+	ent, err := e.pgPool(ctx, conn, &defs.Definition{Dispatch: &defs.Dispatch{}}, pc)
+	if err != nil {
+		e.log.WarnContext(ctx, "gateway.simulator_unverified", slog.String("connection_id", conn.GetId()), pclog.Err(err))
+		return CodeSimulatorUnverified
+	}
+	hctx, cancel := context.WithTimeout(ctx, pgtarget.ConnectTimeout+5*time.Second)
+	defer cancel()
+	kind, id, err := ent.pool.Handshake(hctx)
+	if err != nil || kind != "postgres" || id != conn.GetId() {
+		e.log.WarnContext(ctx, "gateway.simulator_unverified", slog.String("connection_id", conn.GetId()), pclog.Err(err))
+		return CodeSimulatorUnverified
+	}
+	pgSims.Lock()
+	pgSims.ok[key] = time.Now()
+	pgSims.Unlock()
+	return ""
+}
+
+// Configured closes the pools of postgres connections a new configuration
+// no longer serves, or serves with another configuration (D105).
+func (e *Engine) Configured(cfg *control.Config) {
+	pgPools.Lock()
+	defer pgPools.Unlock()
+	for id, ent := range pgPools.m[e] {
+		conn, ok := cfg.ByID[id]
+		if ok && conn.GetKind() == "postgres" && conn.GetPostgres() != nil {
+			if key, err := pgKey(conn, conn.GetPostgres()); err == nil && key == ent.key {
+				continue
+			}
+		}
+		ent.pool.Close()
+		delete(pgPools.m[e], id)
+	}
+}
+
+// pgKey identifies what a pool was opened for: the connection revision,
+// the credential version and the configuration (a confirmed manifest
+// changes the configuration, not the revision).
+func pgKey(conn *control.Connection, pc *pb.PostgresConfig) (string, error) {
+	raw, err := proto.MarshalOptions{Deterministic: true}.Marshal(pc)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(raw)
+	return fmt.Sprintf("%d/%s/%d/%x", conn.GetRevision(), conn.Credential.GetId(), conn.Credential.GetVersion(), sum), nil
 }
