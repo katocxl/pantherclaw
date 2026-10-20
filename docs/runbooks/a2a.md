@@ -19,7 +19,7 @@ pclaw connection create helpdesk-agent --kind a2a --gateway <gateway id> --packa
 
 | Field | Meaning |
 |---|---|
-| `card_url` | HTTPS URL of the agent card (loopback only in dev) |
+| `card_url` | HTTPS URL of the agent card (in dev, a loopback literal; a simulated connection's card URL must be a loopback literal with the same origin as its interface, and the simulator handshake runs before any card fetch) |
 | `interface` | One interface the card declares: `JSONRPC` or `HTTP+JSON` and its URL (gRPC is refused) |
 | `card_keys` | Optional pinned JWKS (at most 64 KiB); if the card is signed, a signature must verify against it (the pinned card itself is at most 256 KiB) |
 | `skills` | The skill ids agents may use (a subset of the card's; at most 64, each at most 128 characters) |
@@ -29,7 +29,7 @@ pclaw connection create helpdesk-agent --kind a2a --gateway <gateway id> --packa
 
 If the remote agent needs its own credential (bearer or API key per its card's security scheme), seal it with `pclaw seal --connection <id>`.
 
-The gateway re-reads the card every 10 minutes and on configuration load. If its digest changes, or its signatures no longer verify, the gateway refuses the connection at once (`A2A_CARD_DRIFT`, nothing sent) and reports drift; the server **quarantines** the connection (reason `a2a_card_drift`) (HR-322). Review the new card and re-pin it: the re-pin is proposed until confirmed on the confirmation page with a security key, the old pin serving meanwhile, and the confirmed re-pin lifts the quarantine. `pclaw connection restore` alone does not accept a changed card.
+The gateway re-reads the card every 10 minutes and on configuration load. If its digest changes, the card grows past its size limit, or its signatures no longer verify, the gateway refuses the connection at once (`A2A_CARD_DRIFT`, nothing sent) and reports drift; the server **quarantines** the connection (reason `a2a_card_drift`) (HR-322). Review the new card and re-pin it: the re-pin is proposed until confirmed on the confirmation page with a security key, the old pin serving meanwhile, and the confirmed re-pin lifts the quarantine. `pclaw connection restore` alone does not accept a changed card.
 
 ## 2. What agents can call
 
@@ -45,7 +45,7 @@ Refused: file, raw, url and data parts (`A2A_PART_UNSUPPORTED`); push-notificati
 
 ## 3. Enrolled peers: the peer side
 
-For an enrolled peer, the requester's grant must allow delegation, checked when the call is decided (otherwise DENY `DELEGATION_NOT_ALLOWED`: no delegation, depth or fan-out caps reached, or organization caps). When the message is dispatched, PantherClaw creates (or reuses for the same requester run, connection and context) a child run for the peer agent. The run lasts at most 60 minutes and never beyond the requester's run, and its grant is the intersection of the requester's grant and `peer_scope`, with shared budgets and the requester's represented principal. Revoking the requester's run or grant revokes it. The run and grant are created through the same services as any child run and delegation, with the same checks.
+For an enrolled peer, the requester's grant must allow delegation, checked when the call is decided (otherwise DENY `DELEGATION_NOT_ALLOWED`: no delegation, depth or fan-out caps reached, or organization caps). When the message is dispatched, PantherClaw creates a child run for the peer agent, one per requester run and connection, reused for every message while it is active; after it expires or is revoked, the next allowed message creates a new one (counted against the fan-out cap). The run lasts at most 60 minutes and never beyond the requester's run, and its grant is the intersection of the requester's grant and `peer_scope`, with shared budgets and the requester's represented principal. Revoking the requester's run or grant revokes it. The run and grant are created through the same services as any child run and delegation, with the same checks.
 
 The request reaches the peer with a PAP/1 action token (header `PAP-Action`) carrying the child run id in its `pc_peer_run` claim; the run id is never put in message metadata. In the peer agent, use the receiver helper before acting:
 

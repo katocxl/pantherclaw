@@ -26,7 +26,7 @@ The manifest is part of the connection's `PostgresConfig`. Only what it lists ex
 | `host`, `port`, `database`, `user` | Where to connect | — |
 | `sslmode` | `verify-full` (required); `require` only with `internal` and a pinned CA | — |
 | `ca_pem` | Optional pinned CA | at most 16 KiB |
-| `internal` | Allows private addresses; setting it needs a step-up | false |
+| `internal` | Allows private addresses; setting it needs a step-up, and it is accepted only on a connection served by a customer-hosted gateway whose operator allow-list includes the target's private prefix (loopback and link-local only when listed). Moving the connection to another gateway re-checks this | false |
 | `tables[]` | `schema`, `name`, optional `scope_key` and `scope_column` (record scope), optional `max_rows`, `columns[]` of `{name, type, class}` | 1 to 64 tables, 1 to 128 columns each |
 | `max_rows` | Row cap per query | 200, at most 1000 |
 | `statement_timeout_ms` | Query timeout | 5000, at most 30000 |
@@ -34,6 +34,7 @@ The manifest is part of the connection's `PostgresConfig`. Only what it lists ex
 | `min_group_size` | Smallest aggregate group returned | 5, at least 2 |
 
 - Identifiers match `^[a-z_][a-z0-9_]{0,62}$` (no quoted identifiers).
+- Only ordinary and partitioned tables (every partition an ordinary table) may be listed; views, materialized views and foreign tables are refused.
 - Column types: `text int bigint numeric bool date timestamptz uuid` (no json, jsonb, bytea or arrays).
 - Classes: `public`, `internal`, `pii`, `secret`. A `secret` column is never returned to an agent.
 
@@ -95,13 +96,15 @@ Scope narrows what an allowed read returns. It is set on grants (per operation) 
 
 Scope works only where the gateway sees the answer (R-42). On SDK, hook and AuthZEN routes or agent-held connections, a decision with a scope obligation is `CANNOT_AUTHORIZE` `SCOPE_UNSUPPORTED`. HTTP connections can be scoped too when their definitions declare `Response.fields` classes; an answer the gateway cannot parse under an obligation is withheld (`SCOPE_UNENFORCEABLE`). Receipts record counts only (rows, values redacted, scope key), never the values.
 
+**Customer-support template.** `pclaw template apply customer-support --customer <id>` (repeatable, required) scopes `postgres.rows.read` to those customers, allows classes public and internal, caps reads at 50 rows and forbids aggregates. A per-ticket agent can be narrowed further with a delegated grant.
+
 ## 7. Development
 
 ```bash
 pantherclaw-server dev seed --postgres <file with the DSN>
 ```
 
-`TestE2E_M14_DataScoping` uses a fixture schema on the test cluster (127.0.0.1:5433): `shop.customers`, `shop.orders`, `support.tickets`, a read-only role and a write-capable role. Range scenarios RT-042..RT-044 cover injection, scope escape and write attempts.
+The fixture schema (`shop.customers`, `shop.orders`, `support.tickets`, a read-only role and a write-capable role) is used two ways. `TestE2E_M14_DataScoping` runs on the Community end-to-end stack against a TLS Postgres target (test CA) behind a customer-hosted gateway, with a confirmed manifest: columns, row caps, `secret`, writes, the connection test, timeouts and the MCP and HTTP faces. Record scope and class redaction (Team) run in in-process Team integration tests with the real Authority and the gateway scope engine. A simulated Postgres connection must target a loopback address and pass a handshake: a read-only `SELECT kind, connection FROM pantherclaw_sim.handshake` must return `postgres` and the connection id. Range scenarios RT-042..RT-044 cover injection, scope escape and write attempts.
 
 ## 8. Troubleshooting
 
