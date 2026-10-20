@@ -9,6 +9,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/url"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -87,7 +88,26 @@ var (
 // on the fixed list, one approval request's page or one reconciliation's
 // page, matched exactly.
 func ValidReturnPath(p string) bool {
-	return slices.Contains(returnPaths, p) || approvalPath.MatchString(p) || reconciliationPath.MatchString(p)
+	return slices.Contains(returnPaths, p) || approvalPath.MatchString(p) || reconciliationPath.MatchString(p) ||
+		ValidConsolePath(p)
+}
+
+// ConsolePath is the web console's root (G0 UI D10).
+const ConsolePath = "/app/"
+
+// consolePath is a same-origin console page: /app, or /app followed by
+// plain, non-empty path segments. No scheme or host, no "//", backslash,
+// percent (so no encoded slash or dot), query, "#", trailing slash or dot
+// segments (HR-345): the path is already clean.
+var consolePath = regexp.MustCompile(`^/app(/[A-Za-z0-9._~-]+)*$`)
+
+// maxConsolePath bounds a console return path.
+const maxConsolePath = 512
+
+// ValidConsolePath reports whether p is a console page a sign-in may
+// return to (HR-345, a prefix rule beside the fixed list of HR-152).
+func ValidConsolePath(p string) bool {
+	return len(p) <= maxConsolePath && consolePath.MatchString(p) && path.Clean(p) == p
 }
 
 // Browser implements browser sign-in (OIDC authorization code with PKCE)
@@ -383,6 +403,18 @@ func (s BrowserSession) User() ids.UUID { return s.Principal.ID }
 // session (theft signal). A session whose user's role bindings changed is
 // rotated. Every failure returns ErrUnauthenticated; the reason is logged.
 func (b *Browser) Authenticate(ctx context.Context, cookie string) (BrowserSession, error) {
+	return b.authenticate(ctx, cookie, true)
+}
+
+// Recheck is Authenticate without rotation, for a long response that can
+// no longer set a cookie (the live stream, HR-344): the session is checked
+// and its bindings reloaded, but a role change never replaces the secret
+// the browser holds. The next ordinary request rotates it.
+func (b *Browser) Recheck(ctx context.Context, cookie string) (BrowserSession, error) {
+	return b.authenticate(ctx, cookie, false)
+}
+
+func (b *Browser) authenticate(ctx context.Context, cookie string, rotate bool) (BrowserSession, error) {
 	tok, err := credential.Parse(credential.BrowserSession, cookie)
 	if err != nil {
 		return b.authFailed(ctx, reject("session_malformed"))
@@ -424,6 +456,11 @@ func (b *Browser) Authenticate(ctx context.Context, cookie string) (BrowserSessi
 			return nil
 		}
 		switch {
+		case !s.Current && !s.WithinGrace && !rotate:
+			// A recheck holds the secret the stream opened with; another
+			// request rotated it since. That is no theft signal: the check
+			// fails (the stream closes) and the session lives on.
+			return reject("session_secret_replaced")
 		case !s.Current && !s.WithinGrace:
 			return end("REUSE", "session_secret_reused")
 		case !s.WithinLifetime:
@@ -455,7 +492,7 @@ func (b *Browser) Authenticate(ctx context.Context, cookie string) (BrowserSessi
 		}
 		// A role change rotates the secret (SB-2). A request carrying the
 		// previous secret inside the grace never rotates again.
-		if digest := rolesDigest(bs); s.Current && string(digest) != string(s.RolesDigest) {
+		if digest := rolesDigest(bs); rotate && s.Current && string(digest) != string(s.RolesDigest) {
 			secret, err := rotateSession(ctx, q, org, s.ID, tok.Hash(), digest)
 			if err != nil {
 				return err

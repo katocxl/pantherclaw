@@ -116,14 +116,44 @@ func annotated(ctx context.Context, ev Event) (Event, error) {
 	if err := ev.validate(); err != nil {
 		return ev, err
 	}
+	if kind, ok := ctx.Value(authKindKey{}).(string); ok {
+		// A browser session on the API (HR-347): the event says so. A caller
+		// that names its own auth_kind keeps it.
+		if _, set := ev.Details[AuthKindDetail]; !set {
+			ev.Details = maps.Clone(ev.Details)
+			if ev.Details == nil {
+				ev.Details = map[string]string{}
+			}
+			ev.Details[AuthKindDetail] = kind
+		}
+	}
 	if _, ok := automationctx.From(ctx); !ok {
-		return ev, nil
+		return ev, validateDetails(ev.Details, maxDetails+1)
 	}
 	if k, bad := automationctx.Conflict(ctx, ev.Details); bad {
 		return ev, fmt.Errorf("%w: detail %q contradicts the automation attribution", ErrInvalidEvent, k)
 	}
 	ev.Details = automationctx.Annotate(ctx, maps.Clone(ev.Details))
-	return ev, validateDetails(ev.Details, maxDetails+automationctx.MaxDetails)
+	return ev, validateDetails(ev.Details, maxDetails+1+automationctx.MaxDetails)
+}
+
+// AuthKindDetail is the detail naming how the actor authenticated, added
+// to every event recorded under WithAuthKind.
+const AuthKindDetail = "auth_kind"
+
+type authKindKey struct{}
+
+// WithAuthKind returns ctx under which every recorded event carries
+// auth_kind=kind (rpcauth sets "browser_session" for cookie-authenticated
+// API calls, HR-347).
+func WithAuthKind(ctx context.Context, kind string) context.Context {
+	return context.WithValue(ctx, authKindKey{}, kind)
+}
+
+// AuthKindFrom returns the auth kind WithAuthKind set on ctx.
+func AuthKindFrom(ctx context.Context) (string, bool) {
+	k, ok := ctx.Value(authKindKey{}).(string)
+	return k, ok
 }
 
 // Record writes ev to the ledger in tx (the privileged change's transaction).

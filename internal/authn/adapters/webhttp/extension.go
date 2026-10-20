@@ -45,6 +45,11 @@ func (h *Handler) SessionProfile(ctx context.Context, s authnapp.BrowserSession)
 	return h.b.Profile(ctx, s)
 }
 
+// JSONError answers {"error": code} with status.
+func (h *Handler) JSONError(w http.ResponseWriter, status int, code string) {
+	h.jsonError(w, status, code)
+}
+
 // InternalError answers a JSON 500 and logs err.
 func (h *Handler) InternalError(w http.ResponseWriter, r *http.Request, err error) {
 	h.log.ErrorContext(r.Context(), "web.extension_error", pclog.Err(err))

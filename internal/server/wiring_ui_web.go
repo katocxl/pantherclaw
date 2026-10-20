@@ -4,6 +4,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,11 +12,14 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/authn/adapters/webguard"
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/webhttp"
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	"github.com/katocxl/pantherclaw/internal/extension"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
+	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 )
 
 // extensionDeps are what the core hands to an extension. Plans, Accounts
@@ -38,6 +42,27 @@ func validateExtension(ext extension.Set, d extension.Deps) error {
 	return nil
 }
 
+// browserSessions are the session cookie rules the Connect API and the
+// live stream share with the pages (G0 UI D11).
+func browserSessions(cfg *Config, pool *db.Pool, idps []authnapp.IdP, log *slog.Logger) (*webguard.Sessions, error) {
+	return webguard.NewSessions(authnapp.NewBrowser(pool, cfg.Auth.PublicURL, idps, clock.System{}, log), cfg.Auth.PublicURL)
+}
+
+// mountConsole serves the extension's console at /app/ with the console
+// CSP, and redirects / to it (HR-340). Without a console nothing is
+// mounted and / stays unanswered.
+func mountConsole(mux *http.ServeMux, ext extension.Set) error {
+	if ext.Console == nil {
+		return nil
+	}
+	c, err := webhttp.NewConsole(ext.Console)
+	if err != nil {
+		return err
+	}
+	c.Mount(mux)
+	return nil
+}
+
 // errExtensionRoute reports an extension route the server refuses at
 // start-up (HR-341).
 var errExtensionRoute = errors.New("server: extension route refused")
@@ -48,7 +73,7 @@ var wildcard = regexp.MustCompile(`\{[^}]*\}`)
 // consolePattern is the console's own subtree (D10). It leaves /app/ext/
 // to extensions, so an extension route under /app/ext/ never conflicts
 // with it.
-const consolePattern = "GET /app/"
+const consolePattern = "GET " + webhttp.ConsoleRoot
 
 // Limits of AuthNone extension routes, which have no session to bound
 // them: a request body cap and a per-client rate (D48). A handler may cap
@@ -88,7 +113,7 @@ func mountExtension(mux *http.ServeMux, ext extension.Set, d extension.Deps, web
 	}
 	limiter := httpx.NewLimiter(extRateLimit, time.Minute, nil).WithClientIP(clientIP)
 	for _, r := range routes {
-		if err := mountRoute(mux, r, web, limiter); err != nil {
+		if err := mountRoute(mux, r, web, limiter, d.Authz != nil); err != nil {
 			return err
 		}
 	}
@@ -112,7 +137,7 @@ func coreRouteFor(mux *http.ServeMux, pattern string) string {
 		}
 		return "x"
 	})
-	req, err := http.NewRequest(method, "http://ext.invalid"+path, nil) //nolint:noctx // a probe, never sent
+	req, err := http.NewRequestWithContext(context.Background(), method, "http://ext.invalid"+path, nil) // a probe, never sent
 	if err != nil {
 		return ""
 	}
@@ -124,7 +149,7 @@ func coreRouteFor(mux *http.ServeMux, pattern string) string {
 
 // mountRoute mounts one checked route; a conflict with another extension
 // route is a start-up error, not a panic.
-func mountRoute(mux *http.ServeMux, r extension.Route, web *webhttp.Handler, limiter *httpx.Limiter) (err error) {
+func mountRoute(mux *http.ServeMux, r extension.Route, web *webhttp.Handler, limiter *httpx.Limiter, authz bool) (err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			err = fmt.Errorf("%w: %q: %v", errExtensionRoute, r.Pattern, p)
@@ -144,12 +169,21 @@ func mountRoute(mux *http.ServeMux, r extension.Route, web *webhttp.Handler, lim
 	case extension.AuthSession, extension.AuthSessionCSRF:
 		web.SessionRoute(mux, r.Pattern, r.Auth == extension.AuthSessionCSRF,
 			func(w http.ResponseWriter, req *http.Request, s authnapp.BrowserSession) {
+				if !authz {
+					// Without the core's permission check no session route
+					// may run (G0 UI D70).
+					web.JSONError(w, http.StatusServiceUnavailable, "unavailable")
+					return
+				}
 				p, err := principalOf(req, web, s)
 				if err != nil {
 					web.InternalError(w, req, err)
 					return
 				}
-				h.ServeHTTP(w, req.WithContext(extension.WithPrincipal(req.Context(), p)))
+				// The caller is in the context for Deps.Authz, as for a Connect
+				// procedure; the principal for the extension.
+				ctx := tapp.WithCaller(extension.WithPrincipal(req.Context(), p), s.Caller)
+				h.ServeHTTP(w, req.WithContext(ctx))
 			})
 	default:
 		return fmt.Errorf("%w: %q: unknown auth mode", errExtensionRoute, r.Pattern)

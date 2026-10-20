@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/accounts"
+	"github.com/katocxl/pantherclaw/internal/authn/adapters/webguard"
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	covdomain "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
@@ -50,7 +51,7 @@ const PageCSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-sr
 	"form-action 'self'; frame-ancestors 'none'; base-uri 'none'; require-trusted-types-for 'script'; trusted-types 'none'"
 
 // CSRFHeader must accompany every state-changing browser request.
-const CSRFHeader = "PC-CSRF"
+const CSRFHeader = webguard.CSRFHeader
 
 // maxJSONBody bounds a JSON request body from a page.
 const maxJSONBody = 64 << 10
@@ -228,18 +229,8 @@ func pageHeaders(w http.ResponseWriter) {
 // neither the custom header nor a JSON content type, and cross-site fetches
 // with them need a CORS preflight that this server never answers.
 func (h *Handler) csrfOK(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	switch r.Header.Get("Sec-Fetch-Site") {
-	case "same-origin":
-		if origin != "" && origin != h.origin {
-			return false
-		}
-	case "":
-		if origin != h.origin {
-			return false // no Fetch Metadata: the Origin must prove the page
-		}
-	default:
-		return false // cross-site, same-site (another subdomain) or none (typed URL)
+	if !webguard.SameOrigin(r.Header.Get, h.origin) {
+		return false // cross-site, same-site (another subdomain), none (typed URL) or no proof
 	}
 	if r.Header.Get(CSRFHeader) != "1" {
 		return false
@@ -258,7 +249,7 @@ func (h *Handler) cookieName(base string) string {
 }
 
 const (
-	sessionCookie = "pc_session"
+	sessionCookie = webguard.SessionCookieBase
 	loginCookie   = "pc_login"
 )
 

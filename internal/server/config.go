@@ -325,6 +325,13 @@ type OIDCProviderConfig struct {
 	// 8693 subject tokens at StartRun when their aud contains it, so a run
 	// can represent a signed-in user (HR-145). Leave it empty otherwise.
 	SubjectTokenAudience string `json:"subject_token_audience"`
+	// TokenAuth is how the client secret goes to the token endpoint:
+	// basic (client_secret_basic, the default) or post
+	// (client_secret_post) (G0 UI D32).
+	TokenAuth string `json:"token_auth"`
+	// Dev marks a development identity provider (a mock server or a local
+	// Keycloak realm); a production deployment refuses it (HR-346).
+	Dev bool `json:"dev"`
 }
 
 func (c *Config) validateOIDC() []error {
@@ -341,7 +348,7 @@ func (c *Config) validateOIDC() []error {
 		}
 		if _, err := oidcrp.New(oidcrp.Config{
 			Name: p.Name, Issuer: p.Issuer, ClientID: p.ClientID, ClientSecret: pclog.NewSecret([]byte("x")),
-			AllowInsecureLoopback: p.AllowInsecureLoopback, SubjectTokenAudience: p.SubjectTokenAudience,
+			AllowInsecureLoopback: p.AllowInsecureLoopback, SubjectTokenAudience: p.SubjectTokenAudience, TokenAuth: p.TokenAuth,
 		}); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", at, err))
 		}
@@ -359,7 +366,7 @@ func (c *Config) oidcProviders() ([]*oidcrp.Provider, error) {
 		}
 		prov, err := oidcrp.New(oidcrp.Config{
 			Name: p.Name, Issuer: p.Issuer, ClientID: p.ClientID, ClientSecret: secret, Scopes: p.Scopes,
-			TrustEmail: p.TrustEmail, AllowInsecureLoopback: p.AllowInsecureLoopback, SubjectTokenAudience: p.SubjectTokenAudience,
+			TrustEmail: p.TrustEmail, AllowInsecureLoopback: p.AllowInsecureLoopback, SubjectTokenAudience: p.SubjectTokenAudience, TokenAuth: p.TokenAuth,
 		})
 		if err != nil {
 			return nil, err

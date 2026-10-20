@@ -458,3 +458,21 @@ func (b *Browser) PickOrg(ctx context.Context, s AccountSession, org ids.OrgID, 
 }
 
 func ptrString(s string) *string { return &s }
+
+// UserAccount returns the account org's user is linked to, if any.
+func (b *Browser) UserAccount(ctx context.Context, org ids.OrgID, user ids.UUID) (ids.UUID, bool, error) {
+	var out ids.UUID
+	err := b.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		u, err := dbq.New(tx).GetUser(ctx, org, user)
+		if db.IsNoRows(err) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		if u.AccountID != nil && td.AccountState(u.State) == td.Enabled {
+			out = *u.AccountID
+		}
+		return nil
+	}, db.ReadOnly())
+	return out, !out.IsZero(), err
+}

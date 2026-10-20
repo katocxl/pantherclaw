@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/katocxl/pantherclaw/internal/accounts"
+	"github.com/katocxl/pantherclaw/internal/authn/adapters/rpcauth"
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/webhttp"
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	"github.com/katocxl/pantherclaw/internal/entitlements"
@@ -84,6 +85,8 @@ func (u *uiTenancy) extensionDeps(d extension.Deps) extension.Deps {
 	d.Plans = planWriter{svc: u.ents}
 	d.Accounts = accountReader{store: u.store}
 	d.BillingLinks = u.links()
+	d.Authz = extAuthorizer{pool: u.store.Pool()}
+	d.Audit = extAudit{pool: u.store.Pool()}
 	return d
 }
 
@@ -176,12 +179,43 @@ func (h uiTenancyHandler) ListMyOrgs(ctx context.Context, _ *pantherclawv1.ListM
 // uiAccessHandler adds AcceptInvitation to AccessService.
 type uiAccessHandler struct {
 	*tenancyrpc.Access
-	ui *uiTenancy
+	ui         *uiTenancy
+	deployment pantherclawv1.Deployment
 }
 
-// accessHandler returns AccessService with browser invitations.
-func accessHandler(a *tenancyrpc.Access, ui *uiTenancy) uiAccessHandler {
-	return uiAccessHandler{Access: a, ui: ui}
+// accessHandler returns AccessService with browser invitations and account
+// sessions; deployment is what WhoAmI reports to an account session.
+func accessHandler(a *tenancyrpc.Access, ui *uiTenancy, deployment extension.Deployment) uiAccessHandler {
+	d := map[extension.Deployment]pantherclawv1.Deployment{
+		extension.DeploymentDevelopment: pantherclawv1.Deployment_DEPLOYMENT_DEVELOPMENT,
+		extension.DeploymentStaging:     pantherclawv1.Deployment_DEPLOYMENT_STAGING,
+		extension.DeploymentProduction:  pantherclawv1.Deployment_DEPLOYMENT_PRODUCTION,
+	}[deployment]
+	return uiAccessHandler{Access: a, ui: ui, deployment: d}
+}
+
+// WhoAmI implements AccessServiceHandler: an account session (no org) is
+// described by its account (G0 UI D8, D21); an org caller as before, with
+// its account when its user is linked to one.
+func (h uiAccessHandler) WhoAmI(ctx context.Context, req *pantherclawv1.WhoAmIRequest) (*pantherclawv1.WhoAmIResponse, error) {
+	if _, err := tapp.CallerFrom(ctx); err != nil {
+		if a, ok := accounts.CallerFrom(ctx); ok {
+			return &pantherclawv1.WhoAmIResponse{
+				Deployment: h.deployment, SessionKind: pantherclawv1.CallerSessionKind_CALLER_SESSION_KIND_ACCOUNT_BROWSER,
+				AccountId: a.Account.String(),
+			}, nil
+		}
+	}
+	out, err := h.Access.WhoAmI(ctx, req)
+	if err != nil || h.ui == nil || h.ui.browser == nil {
+		return out, err
+	}
+	if c, cerr := tapp.CallerFrom(ctx); cerr == nil && c.Human() {
+		if acct, ok, aerr := h.ui.browser.UserAccount(ctx, c.Org, c.Principal.ID); aerr == nil && ok {
+			out.AccountId = acct.String()
+		}
+	}
+	return out, nil
 }
 
 // CreateInvitation implements AccessServiceHandler: with invitation emails
@@ -229,4 +263,13 @@ func setCookies(ctx context.Context, cs ...*http.Cookie) {
 	for _, c := range cs {
 		info.ResponseHeader().Add("Set-Cookie", c.String())
 	}
+}
+
+// accountSessions lets the API accept account sessions and give org
+// browser sessions their account (HR-350).
+func (u *uiTenancy) accountSessions(web *webhttp.Handler, origin string) rpcauth.Option {
+	if u == nil || u.browser == nil || web == nil {
+		return rpcauth.WithAccountSessions(nil, "", "")
+	}
+	return rpcauth.WithAccountSessions(u.browser, web.AccountCookieName(), origin)
 }

@@ -93,7 +93,13 @@ func (h *Handler) keyError(w http.ResponseWriter, r *http.Request, s authnapp.Br
 		if errors.Is(err, e.err) {
 			body := map[string]string{"error": e.code}
 			if e.code == "recent_auth_required" {
-				q := url.Values{"org": {s.Org.String()}, "next": {authnapp.AccountPath}, "recent": {"1"}}
+				// The console names the page to come back to in return_to;
+				// only a same-origin console path is taken (HR-345).
+				next := authnapp.AccountPath
+				if rt := r.URL.Query().Get("return_to"); authnapp.ValidConsolePath(rt) {
+					next = rt
+				}
+				q := url.Values{"org": {s.Org.String()}, "next": {next}, "recent": {"1"}}
 				body["sign_in"] = authnapp.LoginPath + "?" + q.Encode()
 			}
 			h.writeJSON(w, e.status, body)

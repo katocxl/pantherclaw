@@ -51,6 +51,9 @@ type Knobs struct {
 	// when it was not (unless OmitAuthTime).
 	AuthTime     time.Time
 	OmitAuthTime bool
+	// TokenAuthPost makes the token endpoint take the client secret only
+	// as client_secret_post form fields (and refuse HTTP Basic).
+	TokenAuthPost bool
 }
 
 // Provider is a running test provider.
@@ -166,13 +169,17 @@ func (p *Provider) authorize(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Provider) token(w http.ResponseWriter, r *http.Request) {
-	id, secret, ok := r.BasicAuth()
-	if !ok || id != p.ClientID || secret != p.ClientSecret {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_client"})
-		return
-	}
 	if err := r.ParseForm(); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})
+		return
+	}
+	id, secret, ok := r.BasicAuth()
+	if _, k := p.state(); k.TokenAuthPost {
+		id, secret = r.PostForm.Get("client_id"), r.PostForm.Get("client_secret")
+		ok = !hasBasic(r) && id != "" && secret != ""
+	}
+	if !ok || id != p.ClientID || secret != p.ClientSecret {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_client"})
 		return
 	}
 	p.mu.Lock()
@@ -187,6 +194,11 @@ func (p *Provider) token(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"access_token": rand.Text(), "token_type": "Bearer", "expires_in": 300, "id_token": p.idToken(g),
 	})
+}
+
+func hasBasic(r *http.Request) bool {
+	_, _, ok := r.BasicAuth()
+	return ok
 }
 
 func (p *Provider) idToken(g grant) string {

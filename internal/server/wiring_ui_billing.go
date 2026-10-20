@@ -33,6 +33,17 @@ type extAuthorizer struct{ pool *db.Pool }
 func (a extAuthorizer) Require(ctx context.Context, permission string) error {
 	perm := td.Permission(permission)
 	denied := td.ErrPermissionDenied(perm)
+	if !perm.Known() {
+		return denied
+	}
+	// A session route puts the session's caller in the context, with the
+	// bindings its authentication loaded.
+	if c, err := tapp.CallerFrom(ctx); err == nil {
+		if !c.CanAnywhere(perm) {
+			return denied
+		}
+		return nil
+	}
 	p, ok := extension.PrincipalFrom(ctx)
 	if !ok || p.OrgID == "" || p.UserID == "" || !perm.Known() {
 		return denied
@@ -105,6 +116,3 @@ func (a extAudit) Record(ctx context.Context, orgID, kind string, fields map[str
 	})
 }
 
-// The extension's Authz and Audit fields arrive with core-web's (web-A3);
-// until then these are wired nowhere.
-var _, _ = extAuthorizer{}, extAudit{}

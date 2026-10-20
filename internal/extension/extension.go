@@ -95,26 +95,55 @@ type Deps struct {
 	// BillingLinks binds provider subscriptions to orgs; nil until the
 	// core provides it.
 	BillingLinks BillingLinks
+	// Authz checks the session principal's permissions; nil until the core
+	// provides it, and while it is nil every session route refuses.
+	Authz Authorizer
+	// Audit records billing events in the org's audit ledger; nil until the
+	// core provides it.
+	Audit AuditRecorder
 }
+
+// Authorizer checks a permission for the principal of a session route's
+// request, with the core's normal permission check, scoped as for a
+// Connect procedure: the error refuses the request.
+type Authorizer interface {
+	Require(ctx context.Context, permission string) error
+}
+
+// AuditRecorder records one event in an org's audit ledger. kind must
+// start with "billing."; fields are small and never hold secrets (the core
+// bounds and checks them).
+type AuditRecorder interface {
+	Record(ctx context.Context, orgID, kind string, fields map[string]string) error
+}
+
+// AuditKindPrefix is the prefix every extension audit kind carries.
+const AuditKindPrefix = "billing."
 
 // Present reports whether s adds anything to the core server.
 func (s Set) Present() bool { return s.Console != nil || s.Mount != nil || s.Validate != nil }
 
 // BillingLinks binds billing-provider subscriptions to orgs, only through
 // checkouts the server created (a webhook's own org hint is never
-// trusted). A ref never moves to another org.
+// trusted). A ref never moves to another org. A subscription is "current"
+// from its binding until it ends (a subscription canceled at period end
+// stays current until the cancellation takes effect and EndSubscription is
+// called); an org has at most one current subscription per provider.
 type BillingLinks interface {
 	// RecordCheckout records a pending checkout the server created for
 	// orgID. An existing pending checkout of the same org and provider is
 	// marked expired and its ref returned as superseded (the caller cancels
-	// it at the provider); re-recording the same pending ref is a no-op. It
-	// returns ErrConflict only when the org has a current subscription.
+	// it at the provider); re-recording the same pending ref for the same
+	// org is a no-op. It returns ErrConflict when the org has a current
+	// subscription, and when checkoutRef is already recorded for another
+	// org.
 	RecordCheckout(ctx context.Context, orgID, provider, checkoutRef string, expiresAt time.Time) (superseded string, err error)
 	// BindSubscription binds a subscription to the org of a recorded
 	// checkout and marks the checkout consumed. A checkout still binds
 	// after it expired or was superseded while the org has no current
 	// subscription. The same checkout and subscription return the org again
-	// (idempotent); a checkout consumed by a different subscription returns
+	// (idempotent); a checkout consumed by a different subscription, and a
+	// subscription already bound through another checkout, return
 	// ErrConflict; an unknown checkout returns ErrNotFound. When the org
 	// already has a different current subscription, the new one is
 	// recorded as an ended duplicate and BindSubscription returns
@@ -124,10 +153,12 @@ type BillingLinks interface {
 	// SubscriptionOrg returns the org of a bound subscription and whether
 	// it is the org's current one; ErrNotFound if unknown.
 	SubscriptionOrg(ctx context.Context, provider, subscriptionRef string) (orgID string, current bool, err error)
-	// EndSubscription marks a subscription ended.
+	// EndSubscription marks a subscription ended; it is no longer current.
+	// Ending an ended subscription is a no-op; an unknown one returns
+	// ErrNotFound.
 	EndSubscription(ctx context.Context, provider, subscriptionRef string) error
 	// CurrentSubscription returns the org's current subscription with the
-	// provider, if any.
+	// provider, if any (ok false, no error, when there is none).
 	CurrentSubscription(ctx context.Context, orgID, provider string) (subscriptionRef string, ok bool, err error)
 }
 

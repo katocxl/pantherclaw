@@ -5,6 +5,7 @@ package server
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/katocxl/pantherclaw/internal/extension"
 )
@@ -26,7 +27,17 @@ func (c *Config) validateDeployment() []error {
 	if !c.deployment().Valid() {
 		return []error{errors.New(errDeploymentConfig + "deployment must be development, staging or production")}
 	}
-	return nil
+	var errs []error
+	if c.deployment() == extension.DeploymentProduction {
+		// A development identity provider signs anyone in (HR-346).
+		for i, p := range c.Auth.OIDCProviders {
+			if p.Dev {
+				errs = append(errs, fmt.Errorf("%sauth.oidc_providers[%d] (%q) is a development provider (dev: true), "+
+					"which a production deployment refuses", errDeploymentConfig, i, p.Name))
+			}
+		}
+	}
+	return errs
 }
 
 // checkDeploymentFor refuses to serve a build with an extension unless

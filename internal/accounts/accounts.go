@@ -109,6 +109,9 @@ type Store struct {
 // NewStore returns the account store.
 func NewStore(pool *db.Pool) *Store { return &Store{pool: pool} }
 
+// Pool is the store's database.
+func (s *Store) Pool() *db.Pool { return s.pool }
+
 func view(a dbq.PcAccount) Account {
 	return Account{
 		ID: a.ID, Issuer: a.Issuer, Subject: a.Subject, Email: a.Email, EmailVerified: a.EmailVerified,

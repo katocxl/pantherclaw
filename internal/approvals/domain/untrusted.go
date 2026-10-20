@@ -51,7 +51,7 @@ func Clean(source, s string, maxRunes int) Untrusted {
 		case r == '\n' || r == '\r' || r == '\t':
 			r = ' '
 		case unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Bidi_Control, r) ||
-			r == 0x2028 || r == 0x2029:
+			r == 0x2028 || r == 0x2029 || invisibleMark(r):
 			continue
 		}
 		if n == maxRunes {
@@ -64,6 +64,14 @@ func Clean(source, s string, maxRunes int) Untrusted {
 	out.Text = b.String()
 	out.MixedScript = MixedScript(out.Text)
 	return out
+}
+
+// invisibleMark reports a mark that changes how text looks or compares
+// without being seen: the variation selectors (U+FE00–FE0F and
+// U+E0100–E01EF) and the combining grapheme joiner U+034F. The web
+// console's UntrustedText removes the same set (G0 UI D64).
+func invisibleMark(r rune) bool {
+	return (r >= 0xFE00 && r <= 0xFE0F) || (r >= 0xE0100 && r <= 0xE01EF) || r == 0x034F
 }
 
 // scriptGroups are the writing systems a word may not mix. Han, Hiragana

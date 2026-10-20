@@ -360,11 +360,17 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err != nil {
 			return err
 		}
+		sessions, err := browserSessions(cfg, pool, idps, log)
+		if err != nil {
+			return err
+		}
 		handler, err := apiHandler(apiDeps{
 			pool: pool, reg: reg, log: log, authority: svc, billing: bill,
 			auth: rpcauth.New(authn, procedurePermissions, nil,
 				rpcauth.WithRefusals(&rpcauth.AuditRefusals{Pool: pool, Log: log}),
-				rpcauth.WithPlanGate(planGate(entsSvc, cfg.Billing.RequirePlan))),
+				rpcauth.WithPlanGate(planGate(entsSvc, cfg.Billing.RequirePlan)),
+				rpcauth.WithBrowserSessions(sessions, log),
+				ui.accountSessions(web, sessions.PublicOrigin())),
 			apiKeyEnv: credential.Env(cfg.Auth.APIKeyEnv),
 			cel:       cfg.CEL,
 			oauth: oauthhttp.New(authnapp.NewOAuth(pool, tokens, cfg.Auth.PublicURL, clock.System{}, log),
@@ -382,7 +388,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			verification: verification,
 			kp:           kp,
 			freshness:    freshnessOf(cfg),
-			m10ops:       m10OpsDeps{authn: authn, tokens: tokens},
+			m10ops:       m10OpsDeps{authn: authn, tokens: tokens, sessions: sessions},
 			autos:        autos,
 			m11protect:   m11protect,
 			ext:          ext,
@@ -652,7 +658,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	pantherclawv1connect.RegisterSystemServiceHandler(rs, systemService{})
 	pantherclawv1connect.RegisterAuthorityServiceHandler(rs, authority.NewHandler(d.authority))
 	pantherclawv1connect.RegisterTenancyServiceHandler(rs, tenancyHandler(tenancyrpc.NewTenancy(tapp.NewHierarchy(pool, d.billing)), d.ui))
-	pantherclawv1connect.RegisterAccessServiceHandler(rs, accessHandler(tenancyrpc.NewAccess(tapp.NewAccess(pool, log).WithEntitlements(d.billing)).WithDeployment(string(d.extDeps.Deployment)), d.ui))
+	pantherclawv1connect.RegisterAccessServiceHandler(rs, accessHandler(tenancyrpc.NewAccess(tapp.NewAccess(pool, log).WithEntitlements(d.billing)).WithDeployment(string(d.extDeps.Deployment)), d.ui, d.extDeps.Deployment))
 	pantherclawv1connect.RegisterServiceAccountServiceHandler(rs, tenancyrpc.NewServiceAccounts(tapp.NewServiceAccounts(pool, d.apiKeyEnv)))
 	// autos is the M11 part 2 core, set below once grants and runs exist;
 	// ListAgents reads it only while serving.
@@ -785,6 +791,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	mountM10Ops(mux)
 	// Extension routes come last, so they can be checked against every
 	// core route (HR-341).
+	if err := mountConsole(mux, d.ext); err != nil {
+		return nil, err
+	}
 	if err := mountExtension(mux, d.ext, d.extDeps, d.web, d.clientIP); err != nil {
 		return nil, err
 	}
