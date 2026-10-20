@@ -45,6 +45,9 @@ type Bounds struct {
 	Params map[string]map[string]ParamBound `json:"params,omitzero"`
 	// Weekly restricts the time of day and week (UTC).
 	Weekly *Weekly `json:"weekly,omitzero"`
+	// Scope limits the data a read's answer holds, per exact operation
+	// (G0 M14 D11, scope.go).
+	Scope map[string]ScopeBound `json:"scope,omitzero"`
 }
 
 // ParamBound limits one material parameter; exactly one field is set.
@@ -131,7 +134,7 @@ func (b Bounds) Validate() error {
 			return err
 		}
 	}
-	return nil
+	return validateScope(b.Scope)
 }
 
 func (pb ParamBound) validate(name string) error {
@@ -212,7 +215,7 @@ func (b Bounds) Within(p Bounds) *WithinError {
 			return &WithinError{"weekly", fmt.Sprintf("%s is outside %s", q, p.Weekly)}
 		}
 	}
-	return nil
+	return scopeWithin(b.Scope, p.Scope)
 }
 
 func matchWithin(dim string, b, p *Match) *WithinError {
@@ -312,6 +315,7 @@ func (b Bounds) Inherit(p Bounds) Bounds {
 		w := slices.Clone(*p.Weekly)
 		out.Weekly = &w
 	}
+	out.Scope = inheritScope(out.Scope, p.Scope)
 	return out
 }
 
@@ -344,6 +348,7 @@ func (b Bounds) clone() Bounds {
 		w := slices.Clone(*b.Weekly)
 		out.Weekly = &w
 	}
+	out.Scope = cloneScope(b.Scope)
 	return out
 }
 
@@ -402,6 +407,7 @@ func (b Bounds) Intersect(p Bounds) Bounds {
 		w := b.Weekly.Intersect(*p.Weekly)
 		out.Weekly = &w
 	}
+	out.Scope = intersectScope(b.Scope, p.Scope)
 	return out
 }
 

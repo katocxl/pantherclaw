@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/connections/app"
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -186,5 +188,27 @@ func TestM14KindsFailClosed(t *testing.T) {
 	}
 	if !strings.Contains(app.ErrKindNotImplemented.Error(), "not available") {
 		t.Errorf("message: %v", app.ErrKindNotImplemented)
+	}
+}
+
+// TestM14_CapabilitiesOfTheNewKinds: a postgres connection declares that the
+// gateway builds every query itself, an a2a connection that it builds every
+// message, with the limit that a peer outside the org acts on its own; both
+// are held by PantherClaw, so no agent-held limit applies (G0 M14 D100).
+func TestM14_CapabilitiesOfTheNewKinds(t *testing.T) {
+	for kind, limit := range map[string]string{app.KindPostgres: "", app.KindA2A: "PEER_AUTHORITY"} {
+		c := app.Declare(app.Connection{PcConnection: dbq.PcConnection{
+			Kind: kind, AccessMode: app.AccessHeld, DefaultMode: app.ModeEnforce, TimeoutMs: 2500,
+		}}, &defs.Package{})
+		has := false
+		for _, l := range c.Limits {
+			has = has || l.Code == limit
+			if l.Code == "KIND_NOT_IMPLEMENTED" || l.Code == "AGENT_HELD_CREDENTIAL" {
+				t.Errorf("%s: limit %s", kind, l.Code)
+			}
+		}
+		if c.Enforcement.Level != app.Supported || (limit != "" && !has) {
+			t.Errorf("%s: %+v %+v", kind, c.Enforcement, c.Limits)
+		}
 	}
 }

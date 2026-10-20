@@ -107,12 +107,17 @@ func TestM14_StaticHeadersSuccessAndCredentialPattern(t *testing.T) {
 		"content type":           func(x *domain.Dispatch) { x.HTTP.Headers = map[string]string{"content-type": "text/plain"} },
 		"the idempotency header": func(x *domain.Dispatch) { x.HTTP.Headers = map[string]string{"idempotency-key": "k"} },
 		"a pap header":           func(x *domain.Dispatch) { x.HTTP.Headers = map[string]string{"PAP-Run-Id": "r"} },
-		"a reference value":      func(x *domain.Dispatch) { x.HTTP.Headers = map[string]string{"X-A": "{params.reason}"} },
-		"a control character":    func(x *domain.Dispatch) { x.HTTP.Headers = map[string]string{"X-A": "a\r\nb"} },
-		"a long value":           func(x *domain.Dispatch) { x.HTTP.Headers = map[string]string{"X-A": strings.Repeat("v", 129)} },
-		"success field":          func(x *domain.Dispatch) { x.HTTP.Success = &domain.SuccessCheck{Field: "a.b"} },
-		"unanchored pattern":     func(x *domain.Dispatch) { x.CredentialPattern = `sk_test_` },
-		"long pattern":           func(x *domain.Dispatch) { x.CredentialPattern = "^" + strings.Repeat("a", 128) + "$" },
+		"a pc header":            func(x *domain.Dispatch) { x.HTTP.Headers = map[string]string{"PC-Action-Id": "a"} },
+		"accept-encoding":        func(x *domain.Dispatch) { x.HTTP.Headers = map[string]string{"Accept-Encoding": "gzip"} },
+		"a fixed idempotency key": func(x *domain.Dispatch) {
+			x.HTTP.IdempotencyHeader, x.HTTP.Headers = "", map[string]string{"Idempotency-Key": "k"}
+		},
+		"a reference value":   func(x *domain.Dispatch) { x.HTTP.Headers = map[string]string{"X-A": "{params.reason}"} },
+		"a control character": func(x *domain.Dispatch) { x.HTTP.Headers = map[string]string{"X-A": "a\r\nb"} },
+		"a long value":        func(x *domain.Dispatch) { x.HTTP.Headers = map[string]string{"X-A": strings.Repeat("v", 129)} },
+		"success field":       func(x *domain.Dispatch) { x.HTTP.Success = &domain.SuccessCheck{Field: "a.b"} },
+		"unanchored pattern":  func(x *domain.Dispatch) { x.CredentialPattern = `sk_test_` },
+		"long pattern":        func(x *domain.Dispatch) { x.CredentialPattern = "^" + strings.Repeat("a", 128) + "$" },
 	} {
 		c := formWrite(map[string]string{"reason": "params.reason"})
 		c.Dispatch.HTTP.IdempotencyHeader = "Idempotency-Key"
@@ -121,7 +126,7 @@ func TestM14_StaticHeadersSuccessAndCredentialPattern(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if !d.Dispatch.CredentialMatches([]byte("rk_" + "test_" + "0123456789abcdefXYZ")) || d.Dispatch.CredentialMatches([]byte("sk_" + "live_" + "0123456789abcdefXYZ")) {
+	if !d.Dispatch.CredentialMatches([]byte("rk_"+"test_"+"0123456789abcdefXYZ")) || d.Dispatch.CredentialMatches([]byte("sk_"+"live_"+"0123456789abcdefXYZ")) {
 		t.Fatal("credential pattern")
 	}
 }
@@ -315,5 +320,23 @@ func TestM14_ResponseClassesCoverSubtrees(t *testing.T) {
 	d.Response = r
 	if err := d.Validate(); err != nil {
 		t.Fatalf("overlapping declarations are valid: %v", err)
+	}
+}
+
+// TestM14_RequiredSets: only target_set and destination_set can be
+// required (G0 M14 D78).
+func TestM14_RequiredSets(t *testing.T) {
+	for kind, ok := range map[domain.ConstraintKind]bool{
+		domain.ConstraintTargetSet: true, domain.ConstraintDestinationSet: true, domain.ConstraintCountMax: false,
+	} {
+		d := minimal(map[string]domain.ParamSpec{"n": {Type: domain.TypeInteger, Unit: "count"}})
+		c := domain.ConstraintSpec{Kind: kind, Required: true}
+		if kind == domain.ConstraintCountMax {
+			c.Param = "n"
+		}
+		d.Constraints = []domain.ConstraintSpec{c}
+		if err := d.Validate(); (err == nil) != ok {
+			t.Errorf("%s required: %v", kind, err)
+		}
 	}
 }

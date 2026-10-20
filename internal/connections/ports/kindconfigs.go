@@ -21,8 +21,11 @@ import (
 // connection, and loads it for the gateway's configuration.
 type KindConfig interface {
 	// Save stores a validated configuration (the connections app's
-	// *PostgresConfig or *A2AConfig) at the connection's revision.
-	Save(ctx context.Context, tx db.TenantTx, org ids.OrgID, connection ids.UUID, revision int32, cfg any) error
+	// *PostgresConfig or *A2AConfig) at the connection's revision. It may
+	// return the base URL the configuration implies (an a2a interface
+	// URL), which an update writes with the configuration (G0 M14 D85);
+	// empty keeps the connection's.
+	Save(ctx context.Context, tx db.TenantTx, org ids.OrgID, connection ids.UUID, revision int32, cfg any) (baseURL string, err error)
 	// Load returns the connection's current configuration as the gateway
 	// gets it (*pb.PostgresConfig or *pb.A2AConfig).
 	Load(ctx context.Context, tx db.TenantTx, org ids.OrgID, connection ids.UUID) (proto.Message, error)
@@ -32,8 +35,9 @@ type KindConfig interface {
 // one cannot be created: the connections app refuses it with
 // KIND_NOT_IMPLEMENTED (D4, D64). The zero value has none.
 type KindConfigs struct {
-	mu sync.RWMutex
-	m  map[string]KindConfig
+	mu    sync.RWMutex
+	m     map[string]KindConfig
+	drift map[string]KindDrift
 }
 
 // Register sets the store of kind's configurations, at wiring time.
@@ -56,4 +60,33 @@ func (k *KindConfigs) Get(kind string) (KindConfig, bool) {
 	defer k.mu.RUnlock()
 	c, ok := k.m[kind]
 	return c, ok
+}
+
+// KindDrift hears a drift report about a connection of its kind in the
+// transaction that quarantines it (G0 M14 D86): an a2a card whose digest
+// changed. An error refuses the report (for example a stale expected
+// digest), and nothing is quarantined.
+type KindDrift interface {
+	Drift(ctx context.Context, tx db.TenantTx, org ids.OrgID, connection ids.UUID, expected, observed string) error
+}
+
+// RegisterDrift sets the drift hook of kind, at wiring time.
+func (k *KindConfigs) RegisterDrift(kind string, d KindDrift) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.drift == nil {
+		k.drift = map[string]KindDrift{}
+	}
+	k.drift[kind] = d
+}
+
+// Drift returns kind's drift hook; ok is false without one.
+func (k *KindConfigs) Drift(kind string) (KindDrift, bool) {
+	if k == nil {
+		return nil, false
+	}
+	k.mu.RLock()
+	defer k.mu.RUnlock()
+	d, ok := k.drift[kind]
+	return d, ok
 }

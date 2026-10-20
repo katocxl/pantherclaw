@@ -8,6 +8,7 @@ package app_test
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/proto"
@@ -69,9 +70,12 @@ type fakeKind struct {
 	load  proto.Message
 }
 
-func (f *fakeKind) Save(_ context.Context, _ db.TenantTx, _ ids.OrgID, _ ids.UUID, rev int32, cfg any) error {
+func (f *fakeKind) Save(_ context.Context, _ db.TenantTx, _ ids.OrgID, _ ids.UUID, rev int32, cfg any) (string, error) {
 	f.saved, f.revs = append(f.saved, cfg), append(f.revs, rev)
-	return nil
+	if a, ok := cfg.(*app.A2AConfig); ok {
+		return a.Interface.URL, nil // the interface URL is the base URL (D85)
+	}
+	return "", nil
 }
 
 func (f *fakeKind) Load(context.Context, db.TenantTx, ids.OrgID, ids.UUID) (proto.Message, error) {
@@ -129,12 +133,16 @@ func TestM14_KindConfigsAreSavedWithTheConnection(t *testing.T) {
 	}
 	next := a2aConfig()
 	next.Skills = []string{"reports"}
+	next.Interface.URL = "https://agents.example.test/peer/a2a"
 	u, err := e.svc.Update(e.admin, app.UpdateInput{ID: p.ID, Revision: p.Revision, A2A: &next})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(peerStore.saved) != 2 || peerStore.revs[1] != u.Revision || u.Revision != p.Revision+1 {
 		t.Fatalf("update saved %v at %v (connection %d)", len(peerStore.saved), peerStore.revs, u.Revision)
+	}
+	if u.BaseUrl == nil || *u.BaseUrl != "https://agents.example.test/peer/a2a" || !slices.Equal(u.AllowedHosts, []string{"agents.example.test"}) {
+		t.Fatalf("an interface change moves the base URL (D85): %v %v", u.BaseUrl, u.AllowedHosts)
 	}
 	if _, err := e.svc.Update(e.admin, app.UpdateInput{ID: u.ID, Revision: u.Revision, Postgres: &pg}); !is(err, app.ErrShape) {
 		t.Fatalf("a postgres configuration on an a2a connection: %v", err)
@@ -150,5 +158,64 @@ func TestM14_KindConfigsAreSavedWithTheConnection(t *testing.T) {
 	}
 	if got, ok := cfg.KindConfigs[p.ID].(*pb.A2AConfig); !ok || got.GetCardUrl() == "" {
 		t.Fatalf("gateway a2a configuration %v", cfg.KindConfigs[p.ID])
+	}
+}
+
+// fakeDrift refuses a report whose expected digest is not the pin.
+type fakeDrift struct {
+	pin   string
+	heard int
+}
+
+func (f *fakeDrift) Drift(_ context.Context, _ db.TenantTx, _ ids.OrgID, _ ids.UUID, expected, _ string) error {
+	f.heard++
+	if expected != f.pin {
+		return app.ErrDrift
+	}
+	return nil
+}
+
+// TestM14_ACardDriftQuarantinesTheConnection (G0 M14 D86, HR-322): a drift
+// report about an a2a connection's card (tool a2a.card) quarantines the
+// connection itself with reason a2a_card_drift after the kind's drift hook
+// accepts it in the same transaction; a hook that refuses (a stale pin)
+// changes nothing; another gateway's or another kind's report is not found.
+func TestM14_ACardDriftQuarantinesTheConnection(t *testing.T) {
+	e := newEnv(t)
+	e.pin(t, "test.m14-kinds", "1.0.0", []byte(m14Kinds))
+	kinds := &ports.KindConfigs{}
+	kinds.Register(app.KindA2A, &fakeKind{})
+	pin := "sha256:" + strings.Repeat("a", 64)
+	hook := &fakeDrift{pin: pin}
+	kinds.RegisterDrift(app.KindA2A, hook)
+	e.svc.WithKindConfigs(kinds)
+	peer := a2aConfig()
+	p, err := e.svc.Create(e.admin, app.CreateInput{
+		Name: "peer", Kind: app.KindA2A, Package: "test.m14-kinds", Gateway: e.gateway, AccessMode: app.AccessHeld, A2A: &peer,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, observed := context.Background(), "sha256:"+strings.Repeat("b", 64)
+	if _, err := e.svc.ReportDrift(ctx, e.org, e.gateway, p.ID, app.ToolA2ACard, "sha256:"+strings.Repeat("c", 64), observed); !is(err, app.ErrDrift) {
+		t.Fatalf("a stale pin: %v", err)
+	}
+	if _, err := e.svc.ReportDrift(ctx, e.org, ids.NewV7(), p.ID, app.ToolA2ACard, pin, observed); !is(err, app.ErrNotFound) {
+		t.Fatalf("another gateway: %v", err)
+	}
+	httpConn := e.payments(t, "payments")
+	if _, err := e.svc.ReportDrift(ctx, e.org, e.gateway, httpConn.ID, app.ToolA2ACard, pin, observed); !is(err, app.ErrNotFound) {
+		t.Fatalf("an http connection: %v", err)
+	}
+	q, err := e.svc.ReportDrift(ctx, e.org, e.gateway, p.ID, app.ToolA2ACard, pin, observed)
+	if err != nil || !q {
+		t.Fatalf("drift: %v %v", q, err)
+	}
+	got, err := e.svc.Get(e.admin, p.ID)
+	if err != nil || got.State != app.StateQuarantined || got.QuarantineReason == nil || *got.QuarantineReason != app.ReasonA2ACardDrift {
+		t.Fatalf("after drift: %s %v %v", got.State, got.QuarantineReason, err)
+	}
+	if hook.heard != 2 {
+		t.Fatalf("the hook heard %d reports", hook.heard)
 	}
 }
