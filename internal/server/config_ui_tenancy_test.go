@@ -87,7 +87,9 @@ func TestHR357_GatewayAndWorkloadProceduresAreNeverPlanGated(t *testing.T) {
 		asked++
 		return entitlements.ErrPlanRequired
 	}
-	gateway := func(ctx context.Context, _ *connect.CallInfo, _ connect.Spec) (context.Context, error) { return ctx, nil }
+	gateway := func(ctx context.Context, _ *connect.CallInfo, _ connect.Spec) (context.Context, error) {
+		return ctx, nil
+	}
 	org := ids.New[ids.Org]()
 	authn := fakeBearer{c: tapp.Caller{Subject: td.Subject{Org: org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: ids.NewV7()},
 		Bindings: []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}}}}}

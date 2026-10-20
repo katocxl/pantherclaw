@@ -5,6 +5,8 @@ package server
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -127,32 +129,53 @@ func (w planWriter) ApplyPlan(ctx context.Context, orgID string, s extension.Pla
 	})
 }
 
-// billingLinks is the extension's view of the billing links (D37, D45,
-// D46, D52). extension.BillingLinks is added by the core-web stream; the
-// method set below is its contract.
+// billingLinks is extension.BillingLinks over the billing links (D37, D45,
+// D46, D52), with the extension's error sentinels.
 type billingLinks struct{ l *entitlements.Links }
+
+var _ extension.BillingLinks = billingLinks{}
 
 // RecordCheckout records a checkout the server created for an org.
 func (b billingLinks) RecordCheckout(ctx context.Context, orgID, provider, checkoutRef string, expiresAt time.Time) (string, error) {
-	return b.l.RecordCheckout(ctx, orgID, provider, checkoutRef, expiresAt)
+	sup, err := b.l.RecordCheckout(ctx, orgID, provider, checkoutRef, expiresAt)
+	return sup, linkErr(err)
 }
 
 // BindSubscription binds a subscription through its recorded checkout.
 func (b billingLinks) BindSubscription(ctx context.Context, provider, checkoutRef, subscriptionRef, customerRef string) (string, error) {
-	return b.l.BindSubscription(ctx, provider, checkoutRef, subscriptionRef, customerRef)
+	org, err := b.l.BindSubscription(ctx, provider, checkoutRef, subscriptionRef, customerRef)
+	return org, linkErr(err)
 }
 
 // SubscriptionOrg returns a subscription's org and whether it is current.
 func (b billingLinks) SubscriptionOrg(ctx context.Context, provider, subscriptionRef string) (string, bool, error) {
-	return b.l.SubscriptionOrg(ctx, provider, subscriptionRef)
+	org, current, err := b.l.SubscriptionOrg(ctx, provider, subscriptionRef)
+	return org, current, linkErr(err)
 }
 
 // EndSubscription ends a subscription.
 func (b billingLinks) EndSubscription(ctx context.Context, provider, subscriptionRef string) error {
-	return b.l.EndSubscription(ctx, provider, subscriptionRef)
+	return linkErr(b.l.EndSubscription(ctx, provider, subscriptionRef))
 }
 
 // CurrentSubscription returns an org's current subscription.
 func (b billingLinks) CurrentSubscription(ctx context.Context, orgID, provider string) (string, bool, error) {
-	return b.l.CurrentSubscription(ctx, orgID, provider)
+	ref, ok, err := b.l.CurrentSubscription(ctx, orgID, provider)
+	return ref, ok, linkErr(err)
+}
+
+// linkErr maps the billing links' errors to the extension's sentinels,
+// keeping the cause.
+func linkErr(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, entitlements.ErrLinkDuplicate):
+		return fmt.Errorf("%w: %w", extension.ErrDuplicate, err)
+	case errors.Is(err, entitlements.ErrLinkConflict):
+		return fmt.Errorf("%w: %w", extension.ErrConflict, err)
+	case errors.Is(err, entitlements.ErrLinkNotFound):
+		return fmt.Errorf("%w: %w", extension.ErrNotFound, err)
+	}
+	return err
 }

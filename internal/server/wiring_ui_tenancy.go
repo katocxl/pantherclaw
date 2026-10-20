@@ -66,6 +66,7 @@ func (u *uiTenancy) extensionDeps(d extension.Deps) extension.Deps {
 	}
 	d.Plans = planWriter{svc: u.ents}
 	d.Accounts = accountReader{store: u.store}
+	d.BillingLinks = u.links()
 	return d
 }
 
