@@ -373,3 +373,26 @@ func TestM14SupportRecordScope(t *testing.T) {
 		t.Errorf("no record_scope obligation: %+v", out.Obligations)
 	}
 }
+
+// TestM14SlackGrantsNameTheChannels (D107, D123): the Slack templates'
+// grants bind pc.slack's destination set and targets to exactly the
+// --slack-channel values.
+func TestM14SlackGrantsNameTheChannels(t *testing.T) {
+	for _, name := range []string{"internal-analysis", "research-disclosure"} {
+		d, _ := m14Render(t, name)
+		var bounds struct {
+			Targets map[string]struct {
+				IDs []string `json:"ids"`
+			} `json:"targets"`
+			Destinations struct {
+				IDs []string `json:"ids"`
+			} `json:"destinations"`
+		}
+		if err := json.Unmarshal(d.Grant.Bounds, &bounds); err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(bounds.Destinations.IDs, exampleSlackChannels) || !slices.Equal(bounds.Targets["slack_channel"].IDs, exampleSlackChannels) {
+			t.Errorf("%s: grant bounds %s", name, d.Grant.Bounds)
+		}
+	}
+}
