@@ -34,6 +34,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	polapp "github.com/katocxl/pantherclaw/internal/policy/app"
 	"github.com/katocxl/pantherclaw/internal/policy/domain"
+	"github.com/katocxl/pantherclaw/internal/policy/packs/render"
 	"github.com/katocxl/pantherclaw/internal/policy/scenario"
 	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
@@ -123,6 +124,9 @@ func renderM11Env(t *testing.T, name string, repos []string, environment string)
 	info, err := readTemplateInfo(name)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if _, ok := info.Placeholders[render.KindPayee]; ok {
+		o.payees = examplePayees
 	}
 	if _, ok := info.Placeholders[kindRepository]; ok {
 		o.repos = repos

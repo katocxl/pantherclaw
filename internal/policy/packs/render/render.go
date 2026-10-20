@@ -48,6 +48,11 @@ const (
 	KindWorkspace     = "workspace"
 	KindAgent         = "agent"
 	KindTimeZone      = "time_zone"
+	// KindPayee is a Stripe connected account a template sends funds to
+	// (G0 M14 D97): {{payees}} in a condition is the list of them, a list
+	// item naming {{payee}} is repeated for each, and {{payee}} anywhere
+	// else is the first (for tests).
+	KindPayee = "payee"
 )
 
 var (
@@ -55,8 +60,10 @@ var (
 	RepoRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,38}/\.?[a-z0-9_-][a-z0-9._-]{0,98}$`)
 	// BranchRe is a branch name.
 	BranchRe = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}){0,7}$`)
-	uuidRe   = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-	nameRe   = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
+	// PayeeRe is a Stripe connected account as pc.stripe names targets.
+	PayeeRe = regexp.MustCompile(`^acct_[A-Za-z0-9]{8,64}$`)
+	uuidRe  = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	nameRe  = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
 )
 
 // kinds are the kinds and the checks a value of each must pass besides its
@@ -94,19 +101,30 @@ var kinds = map[string]func(string) error{
 		return nil
 	},
 	KindTimeZone: func(string) error { return nil },
+	KindPayee: func(v string) error {
+		if !PayeeRe.MatchString(v) || v == OtherPayee {
+			return errors.New("not a Stripe connected account (acct_...)")
+		}
+		return nil
+	},
 }
 
 // Flags name the option each kind's value comes from in pclaw; Options
 // carries other names for other callers.
 var Flags = map[string]string{
 	KindRepository: "--repos", KindDefaultBranch: "--default-branch", KindEnvironment: "--environment",
-	KindEnvironmentID: "--environment", KindWorkspace: "--workspace", KindAgent: "--agent", KindTimeZone: "--time-zone",
+	KindEnvironmentID: "--environment", KindWorkspace: "--workspace", KindAgent: "--agent", KindTimeZone: "--time-zone", KindPayee: "--payee",
 }
 
 // OtherEnvironmentID is {{other_environment_id}}: an environment id that
 // is never the template's, for tests that show a rule stays in its
 // environment.
 const OtherEnvironmentID = "00000000-0000-7000-8000-0000000000e9"
+
+// OtherPayee is {{other_payee}}: a connected account that is never one of
+// the template's payees, for tests that show a transfer elsewhere is
+// refused. A payee named so is refused.
+const OtherPayee = "acct_PantherClawNotAPayee"
 
 // ErrNeedsEnvironmentID: the template uses the environment's id, which
 // the caller resolves.
@@ -166,6 +184,8 @@ type Options struct {
 	// Environment is the environment's slug, EnvironmentID its id.
 	Environment, EnvironmentID string
 	Workspace, TimeZone        string
+	// Payees are the connected accounts a template sends funds to.
+	Payees []string
 	// Names name each kind's value in errors (nil: Flags).
 	Names map[string]string
 }
@@ -295,6 +315,22 @@ func (r Renderer) value(name, repo string, cel bool) (string, error) {
 			q[i] = CELQuote(x)
 		}
 		return "[" + strings.Join(q, ", ") + "]", nil
+	case "payees":
+		if !cel {
+			return "", errors.New("{{payees}} is a condition and is used outside one")
+		}
+		if !r.declared(KindPayee) {
+			return "", errors.New("{{payees}} needs the payee placeholder declared")
+		}
+		q := make([]string, len(r.O.Payees))
+		for i, x := range r.O.Payees {
+			q[i] = CELQuote(x)
+		}
+		return "[" + strings.Join(q, ", ") + "]", nil
+	case "other_payee":
+		if r.declared(KindPayee) {
+			return quote(OtherPayee), nil
+		}
 	case "other_environment_id":
 		if r.declared(KindEnvironmentID) {
 			return quote(OtherEnvironmentID), nil
@@ -320,6 +356,10 @@ func (r Renderer) value(name, repo string, cel bool) (string, error) {
 		v = r.O.Agent
 	case KindTimeZone:
 		v = r.O.TimeZone
+	case KindPayee:
+		if len(r.O.Payees) > 0 {
+			v = r.O.Payees[0]
+		}
 	}
 	switch {
 	case v == "" && name == KindEnvironmentID:
@@ -362,6 +402,16 @@ func (r Renderer) walk(v any, repo string, when bool) (any, error) {
 			if s, ok := x.(string); ok && repo == "" && strings.Contains(s, "{{repo}}") {
 				for _, each := range r.O.Repos {
 					y, err := r.Fill(s, each, false)
+					if err != nil {
+						return nil, err
+					}
+					out = append(out, y)
+				}
+				continue
+			}
+			if s, ok := x.(string); ok && r.declared(KindPayee) && strings.Contains(s, "{{payee}}") {
+				for _, each := range r.O.Payees {
+					y, err := r.Fill(strings.ReplaceAll(s, "{{payee}}", each), repo, false)
 					if err != nil {
 						return nil, err
 					}
@@ -473,6 +523,11 @@ func (r Renderer) checkValues() error {
 			values = []string{r.O.Agent}
 		case KindTimeZone:
 			values = []string{r.O.TimeZone}
+		case KindPayee:
+			if len(r.O.Payees) == 0 {
+				return fmt.Errorf("template %s needs %s", r.O.Name, r.O.name(name))
+			}
+			values = r.O.Payees
 		}
 		for _, v := range values {
 			if v == "" {

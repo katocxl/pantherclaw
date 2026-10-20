@@ -40,8 +40,10 @@ func init() {
 
 // templateOptions are what a template is applied with.
 type templateOptions struct {
-	name                  string
-	repos                 []string
+	name  string
+	repos []string
+	// payees are the Stripe connected accounts a template sends funds to.
+	payees                []string
 	defaults              map[string]string // repository → default branch
 	agent, team, bu       string
 	environment, timeZone string
@@ -86,6 +88,8 @@ func templateFlags(fs *flag.FlagSet, o *templateOptions) func() error {
 	repos := fs.String("repos", "", "the GitHub repositories, owner/repo, comma-separated")
 	var defaults multi
 	fs.Var(&defaults, "default-branch", "the default branch to protect (main), or OWNER/REPO=BRANCH for one repository (repeatable)")
+	var payees multi
+	fs.Var(&payees, "payee", "a Stripe connected account, acct_..., the template may send funds to (repeatable)")
 	fs.StringVar(&o.team, "team", "", "bound the grants of this team's agents to the repositories (a guardrail envelope)")
 	fs.StringVar(&o.bu, "bu", "", "bound the grants of this business unit's agents to the repositories (a guardrail envelope)")
 	fs.StringVar(&o.environment, "environment", "production", "the environment the template's rules and change window are for (its slug)")
@@ -109,6 +113,15 @@ func templateFlags(fs *flag.FlagSet, o *templateOptions) func() error {
 				o.repos = append(o.repos, r)
 			}
 		}
+		for _, p := range payees {
+			if !render.PayeeRe.MatchString(p) || p == render.OtherPayee {
+				return fmt.Errorf("--payee: %q is not a Stripe connected account (acct_...)", p)
+			}
+			if !slices.Contains(o.payees, p) {
+				o.payees = append(o.payees, p)
+			}
+		}
+		slices.Sort(o.payees)
 		switch {
 		case has(kindRepository) && len(o.repos) == 0:
 			return errors.New("--repos names no repository")
@@ -120,6 +133,10 @@ func templateFlags(fs *flag.FlagSet, o *templateOptions) func() error {
 			return fmt.Errorf("template %s needs --workspace", o.name)
 		case !has(kindWorkspace) && o.workspace != "":
 			return fmt.Errorf("template %s takes no --workspace", o.name)
+		case has(render.KindPayee) && len(o.payees) == 0:
+			return fmt.Errorf("template %s needs --payee", o.name)
+		case !has(render.KindPayee) && len(o.payees) > 0:
+			return fmt.Errorf("template %s takes no --payee", o.name)
 		}
 		slices.Sort(o.repos)
 		o.defaults = map[string]string{}
