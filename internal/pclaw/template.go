@@ -187,6 +187,9 @@ func templateFlags(fs *flag.FlagSet, o *templateOptions) func() error {
 		if info.RequiresAgent && o.agent == "" {
 			return fmt.Errorf("template %s needs --agent: its rules are the agent's", o.name)
 		}
+		if info.RequiresScope && o.team == "" && o.bu == "" {
+			return fmt.Errorf("template %s needs --team or --bu: its weekly cap is that scope's envelope", o.name)
+		}
 		if o.team != "" && o.bu != "" {
 			return errors.New("--team and --bu: give one scope")
 		}
@@ -391,6 +394,9 @@ func planEnvelope(ctx context.Context, c clients, o templateOptions, d templateD
 		what:  fmt.Sprintf("guardrail envelope %q on %s %s", d.Envelope.Name, strings.ToLower(strings.TrimPrefix(kind.String(), "GUARDRAIL_SCOPE_KIND_")), id),
 		notes: []string{"every grant of its agents is limited to the GitHub operations on these repositories"},
 	}
+	if d.Envelope.Limits != nil {
+		s.notes = []string{"every grant of its agents shares the envelope's budgets: " + string(d.Envelope.Limits)}
+	}
 	var cur *pantherclawv1.Envelope
 	for token := ""; ; {
 		res, err := c.guardrails.ListEnvelopes(ctx, &pantherclawv1.ListEnvelopesRequest{PageSize: 200, PageToken: token, Kind: kind})
@@ -406,29 +412,76 @@ func planEnvelope(ctx context.Context, c clients, o templateOptions, d templateD
 			break
 		}
 	}
-	switch {
-	case cur == nil:
+	if cur == nil {
 		s.state = stepCreate
 		s.apply = func(ctx context.Context) (string, error) {
 			res, err := c.guardrails.CreateEnvelope(ctx, &pantherclawv1.CreateEnvelopeRequest{
-				Scope: &pantherclawv1.GuardrailScope{Kind: kind, Id: id}, Name: d.Envelope.Name, Bounds: d.Envelope.Bounds,
+				Scope: &pantherclawv1.GuardrailScope{Kind: kind, Id: id}, Name: d.Envelope.Name, Bounds: d.Envelope.Bounds, Limits: d.Envelope.Limits,
 			})
 			return "guardrail envelope " + res.GetEnvelope().GetId() + " created", err
 		}
-	case sameJSON(cur.GetBounds(), d.Envelope.Bounds):
+		return s, nil
+	}
+	// A limits-only envelope (empty bounds, D120) keeps the scope's bounds
+	// and adds its budgets to the scope's, by id: it never widens what
+	// another template's envelope bounds.
+	bounds, limits := d.Envelope.Bounds, d.Envelope.Limits
+	if cur != nil && limits != nil && sameJSON(bounds, []byte("{}")) {
+		bounds = cur.GetBounds()
+		merged, err := mergeBudgets(cur.GetLimits(), limits)
+		if err != nil {
+			return s, fmt.Errorf("guardrail envelope %s: %w", cur.GetId(), err)
+		}
+		limits = merged
+	}
+	switch {
+	case sameJSON(cur.GetBounds(), bounds) && (limits == nil || sameJSON(cur.GetLimits(), limits)):
 		s.state = stepUnchanged
 	default:
 		s.state = stepDiffers
-		s.notes = append(s.notes, "its bounds now: "+string(cur.GetBounds()), "the template's: "+string(d.Envelope.Bounds))
+		s.notes = append(s.notes, "its bounds now: "+string(cur.GetBounds()), "the template's: "+string(bounds))
+		if limits == nil {
+			limits = cur.GetLimits()
+		} else {
+			s.notes = append(s.notes, "its limits now: "+string(cur.GetLimits()), "the template's: "+string(limits))
+		}
 		s.apply = func(ctx context.Context) (string, error) {
 			res, err := c.guardrails.ReviseEnvelope(ctx, &pantherclawv1.ReviseEnvelopeRequest{
-				Id: cur.GetId(), Revision: cur.GetRevision(), Name: cur.GetName(), Bounds: d.Envelope.Bounds,
-				Requirements: cur.GetRequirements(), Limits: cur.GetLimits(), Settings: cur.GetSettings(), MinAttestationLevel: cur.GetMinAttestationLevel(),
+				Id: cur.GetId(), Revision: cur.GetRevision(), Name: cur.GetName(), Bounds: bounds,
+				Requirements: cur.GetRequirements(), Limits: limits, Settings: cur.GetSettings(), MinAttestationLevel: cur.GetMinAttestationLevel(),
 			})
 			return fmt.Sprintf("guardrail envelope %s revised to %d", cur.GetId(), res.GetEnvelope().GetRevision()), err
 		}
 	}
 	return s, nil
+}
+
+// mergeBudgets adds the template's budgets to an envelope's limits,
+// replacing one of the same id and keeping every other budget and counter.
+func mergeBudgets(cur, tpl []byte) ([]byte, error) {
+	limits := map[string]any{}
+	if len(cur) > 0 && string(cur) != "null" {
+		if err := json.Unmarshal(cur, &limits); err != nil {
+			return nil, fmt.Errorf("its limits: %w", err)
+		}
+	}
+	var add struct {
+		Budgets []map[string]any `json:"budgets"`
+	}
+	if err := json.Unmarshal(tpl, &add); err != nil {
+		return nil, err
+	}
+	have, _ := limits["budgets"].([]any)
+	for _, b := range add.Budgets {
+		i := slices.IndexFunc(have, func(x any) bool { m, _ := x.(map[string]any); return m["id"] == b["id"] })
+		if i >= 0 {
+			have[i] = b
+		} else {
+			have = append(have, b)
+		}
+	}
+	limits["budgets"] = have
+	return json.Marshal(limits, json.Deterministic(true))
 }
 
 // planPolicy adds the template's rules and scenario tests to the published

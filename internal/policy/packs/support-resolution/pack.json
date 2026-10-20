@@ -8,6 +8,6 @@
     "data classes: pii and secret columns are redacted, at most 50 rows a read, no aggregates",
     "refunds held for an independent approver above 50.00 USD and refused above 100.00 USD",
     "a refund never exceeds what is left to refund on the payment",
-    "a weekly refund budget of 500.00 USD in the grant baseline"
+    "a weekly refund budget of 500.00 USD per task in the grant baseline; the team-wide weekly cap is the template's guardrail envelope (pclaw template apply customer-support --team or --bu)"
   ]
 }

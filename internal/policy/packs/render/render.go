@@ -250,6 +250,9 @@ type Info struct {
 	// RequiresAgent: the template has per-agent rules, so it renders only for
 	// an agent (G0 M14 D114).
 	RequiresAgent bool `json:"requires_agent,omitzero"`
+	// RequiresScope: the template's envelope carries limits that must exist,
+	// so it renders only for a team or business unit (D120).
+	RequiresScope bool `json:"requires_scope,omitzero"`
 }
 
 // Data is a template rendered for its options.
@@ -260,6 +263,9 @@ type Data struct {
 		Present bool
 		Name    string
 		Bounds  []byte
+		// Limits are the envelope's budgets and counters; nil for none
+		// (G0 M14 D120).
+		Limits []byte
 	}
 	Grant struct {
 		Bounds, Limits []byte
@@ -663,6 +669,7 @@ func Render(o Options) (Data, error) {
 	var env struct {
 		Name   string `json:"name"`
 		Bounds any    `json:"bounds"`
+		Limits any    `json:"limits"`
 	}
 	var grant struct {
 		Bounds any `json:"bounds"`
@@ -703,6 +710,11 @@ func Render(o Options) (Data, error) {
 	out.TaskRef, out.Placeholders, out.Envelope.Name = info.TaskRef, info.Placeholders, env.Name
 	if out.Envelope.Bounds, err = json.Marshal(env.Bounds, json.Deterministic(true)); err != nil {
 		return out, err
+	}
+	if env.Limits != nil {
+		if out.Envelope.Limits, err = json.Marshal(env.Limits, json.Deterministic(true)); err != nil {
+			return out, err
+		}
 	}
 	if out.Grant.Bounds, err = json.Marshal(grant.Bounds, json.Deterministic(true)); err != nil {
 		return out, err

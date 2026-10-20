@@ -1,0 +1,7 @@
+{
+  "name": "customer-support",
+  "bounds": {},
+  "limits": {
+    "budgets": [{"id": "support_weekly_refunds", "grouping": "team", "operations": ["stripe.refund.create"], "currency": "USD", "limit": "500.00", "period": "week"}]
+  }
+}

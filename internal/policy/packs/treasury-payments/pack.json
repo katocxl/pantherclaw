@@ -7,7 +7,7 @@
     "a destination set of payees: transfers to any other connected account are denied, and the grant baseline names only the payees",
     "two independent approvals for every transfer",
     "payout-redirection protection: a payee whose bank details changed within 7 days also needs the principal's security-key step-up, and a transfer whose payee's bank-detail changes cannot be read is refused",
-    "a per-transfer maximum of 10000.00 USD and a weekly budget of 50000.00 USD",
+    "a per-transfer maximum of 10000.00 USD and a weekly budget of 50000.00 USD per task in the grant baseline; the scope-wide weekly cap is the template's guardrail envelope (pclaw template apply treasury-payments --team or --bu)",
     "domain-effect verification of each transfer through the Stripe connector"
   ]
 }

@@ -13,11 +13,16 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
+	bdomain "github.com/katocxl/pantherclaw/internal/budgets/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
+	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/money"
 	polapp "github.com/katocxl/pantherclaw/internal/policy/app"
 	"github.com/katocxl/pantherclaw/internal/policy/domain"
 	"github.com/katocxl/pantherclaw/internal/policy/packs/render"
@@ -77,7 +82,7 @@ func TestM14PayeesAreChecked(t *testing.T) {
 		fs.SetOutput(io.Discard)
 		o := templateOptions{name: name}
 		check := templateFlags(fs, &o)
-		if err := fs.Parse(args); err != nil {
+		if err := fs.Parse(append([]string{"--team", exampleTeam}, args...)); err != nil {
 			return o, err
 		}
 		return o, check()
@@ -163,7 +168,7 @@ func TestM14CustomersAreChecked(t *testing.T) {
 		fs.SetOutput(io.Discard)
 		o := templateOptions{name: "customer-support", agent: templateAgent}
 		check := templateFlags(fs, &o)
-		if err := fs.Parse(args); err != nil {
+		if err := fs.Parse(append([]string{"--team", exampleTeam}, args...)); err != nil {
 			return o, err
 		}
 		return o, check()
@@ -227,7 +232,7 @@ func TestM14AgentTemplatesNeedAgent(t *testing.T) {
 			o := templateOptions{name: name}
 			check := templateFlags(fs, &o)
 			fs.StringVar(&o.agent, "agent", "", "")
-			if err := fs.Parse(append(slices.Clone(extra), more...)); err != nil {
+			if err := fs.Parse(append([]string{"--team", exampleTeam}, append(slices.Clone(extra), more...)...)); err != nil {
 				return o, err
 			}
 			return o, check()
@@ -394,5 +399,121 @@ func TestM14SlackGrantsNameTheChannels(t *testing.T) {
 		if !slices.Equal(bounds.Destinations.IDs, exampleSlackChannels) || !slices.Equal(bounds.Targets["slack_channel"].IDs, exampleSlackChannels) {
 			t.Errorf("%s: grant bounds %s", name, d.Grant.Bounds)
 		}
+	}
+}
+
+// exampleTeam is the team the scoped templates are applied for.
+const exampleTeam = "01890000-0000-7000-8000-0000000000b1"
+
+// TestM14WeeklyCapsAreEnvelopes (D120): customer-support and
+// treasury-payments need --team or --bu, and their envelope carries the
+// weekly cap (500.00 USD per team; 50000.00 USD for the scope, grouped by
+// org). The cap is one account for every task: a second task's grant
+// debits the same envelope account as the first, while each task grant's
+// own budget is a separate account, so no number of task grants exceeds
+// the envelope's cap.
+func TestM14WeeklyCapsAreEnvelopes(t *testing.T) {
+	teamID, err := ids.ParseUUID(exampleTeam)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]struct {
+		grouping, limit, op string
+		args                []string
+		action              gdomain.Action
+	}{
+		"customer-support": {"team", "500.00", "stripe.refund.create", []string{"--customer", "cus-1001", "--agent", templateAgent},
+			gdomain.Action{Operation: "stripe.refund.create", TargetType: "stripe.payment", TargetID: "pi_Support0001"}},
+		"treasury-payments": {"org", "50000.00", "stripe.transfer.create", []string{"--payee", examplePayees[0]},
+			gdomain.Action{Operation: "stripe.transfer.create", TargetType: "stripe.account", TargetID: examplePayees[0]}},
+	} {
+		parse := func(more ...string) (templateOptions, error) {
+			fs := flag.NewFlagSet("t", flag.ContinueOnError)
+			fs.SetOutput(io.Discard)
+			o := templateOptions{name: name}
+			check := templateFlags(fs, &o)
+			fs.StringVar(&o.agent, "agent", "", "")
+			if err := fs.Parse(append(slices.Clone(want.args), more...)); err != nil {
+				return o, err
+			}
+			return o, check()
+		}
+		if _, err := parse(); err == nil || !strings.Contains(err.Error(), "needs --team or --bu") {
+			t.Errorf("%s without --team or --bu: %v", name, err)
+		}
+		if _, err := parse("--bu", exampleTeam); err != nil {
+			t.Errorf("%s with --bu: %v", name, err)
+		}
+		o, err := parse("--team", exampleTeam)
+		if err != nil {
+			t.Fatal(err)
+		}
+		o.environment, o.timeZone = "production", "UTC"
+		d, err := renderTemplate(o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !d.Envelope.Present || !sameJSON(d.Envelope.Bounds, []byte("{}")) {
+			t.Fatalf("%s: envelope %+v", name, d.Envelope)
+		}
+		envLimits, err := gdomain.DecodeLimits(d.Envelope.Limits)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(envLimits.Budgets) != 1 || string(envLimits.Budgets[0].Grouping) != want.grouping || envLimits.Budgets[0].Limit != want.limit ||
+			envLimits.Budgets[0].Period != bdomain.PeriodWeek || !envLimits.Budgets[0].Operations.Matches(want.op) {
+			t.Fatalf("%s: envelope limits %+v", name, envLimits)
+		}
+		env := gdomain.Envelope{ID: gdomain.NewEnvelopeID(), Revision: 1, Scope: gdomain.Scope{Kind: gdomain.ScopeTeam, ID: teamID}, Name: name, Limits: envLimits}
+		grantLimits, err := gdomain.DecodeLimits(d.Grant.Limits)
+		if err != nil {
+			t.Fatal(err)
+		}
+		a := want.action
+		a.Access = defs.AccessWrite
+		a.Params = defs.Values{"amount": {Type: defs.TypeMoney, Money: money.Money{Amount: money.MustParse("10.00"), Currency: "USD"}}}
+		monday := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+		a.Time = monday
+		dc := gdomain.DebitContext{Now: monday, RunID: ids.NewV7(), TeamID: teamID}
+		var envRefs, taskRefs []bdomain.Ref
+		for range 2 {
+			g := gdomain.Grant{ID: gdomain.NewGrantID(), Limits: grantLimits}
+			plan, f := (gdomain.Chain{Envelopes: []gdomain.Envelope{env}, Grants: []gdomain.Grant{g}}).Debits(a, dc)
+			if f != nil {
+				t.Fatalf("%s: %+v", name, f)
+			}
+			if len(plan.Budgets) != 2 {
+				t.Fatalf("%s: debits %+v, want the envelope's and the task's", name, plan.Budgets)
+			}
+			envRefs, taskRefs = append(envRefs, plan.Budgets[0].Ref), append(taskRefs, plan.Budgets[1].Ref)
+		}
+		if envRefs[0] != envRefs[1] {
+			t.Errorf("%s: two task grants debit different envelope accounts %v", name, envRefs)
+		}
+		if taskRefs[0] == taskRefs[1] {
+			t.Errorf("%s: two task grants share a task account", name)
+		}
+	}
+}
+
+// TestM14MergeBudgets (D120): a limits-only envelope adds its budget to a
+// scope's existing limits, replacing one of the same id and keeping the
+// others and the counters.
+func TestM14MergeBudgets(t *testing.T) {
+	cur := []byte(`{"budgets":[{"id":"other","grouping":"team","operations":["github.*"],"max_count":"9","period":"day"},{"id":"support_weekly_refunds","grouping":"team","operations":["stripe.refund.create"],"currency":"USD","limit":"900.00","period":"week"}],"counters":[{"id":"c","operations":["github.*"],"key":"run","window":"none","max":"1"}]}`)
+	tpl := []byte(`{"budgets":[{"id":"support_weekly_refunds","grouping":"team","operations":["stripe.refund.create"],"currency":"USD","limit":"500.00","period":"week"}]}`)
+	got, err := mergeBudgets(cur, tpl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l, err := gdomain.DecodeLimits(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(l.Budgets) != 2 || l.Budgets[0].ID != "other" || l.Budgets[1].Limit != "500.00" || len(l.Counters) != 1 {
+		t.Errorf("merged %s", got)
+	}
+	if got, err := mergeBudgets(nil, tpl); err != nil || !sameJSON(got, tpl) {
+		t.Errorf("into none: %s %v", got, err)
 	}
 }
