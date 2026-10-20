@@ -117,8 +117,18 @@ func (s *stack) sealPostgres(t *testing.T, password string) {
 }
 
 // scopedRun issues the seeded agent a grant for the postgres reads with
-// this scope, starts a run on it, and makes it the stack's run.
+// this data scope (Team, D11), starts a run on it, and makes it the
+// stack's run.
 func (s *stack) scopedRun(t *testing.T, scope string) {
+	t.Helper()
+	s.grantRun(t, `{"operations": ["postgres.rows.read", "postgres.rows.aggregate", "postgres.tables.read"],
+	  "params": {"postgres.rows.read": {"columns": {"values": {"ids": ["id", "customer_id", "name", "email", "tier", "ssn", "amount", "status", "subject"]}}}},
+	  "scope": `+scope+`}`, true)
+}
+
+// grantRun issues the seeded agent a grant with these bounds, the Team
+// edition when team, starts a run on it and makes it the stack's run.
+func (s *stack) grantRun(t *testing.T, bounds string, team bool) {
 	t.Helper()
 	var agent, inst string
 	s.query(t, "SELECT agent_id::text FROM pc.runs WHERE id = $1", []any{s.run}, &agent)
@@ -132,14 +142,15 @@ func (s *stack) scopedRun(t *testing.T, scope string) {
 			{Role: td.RoleRunLauncher, Scope: td.Scope{Type: td.ScopeOrg, ID: s.org.UUID()}},
 		},
 	}, Credential: tapp.CredAccessToken})
-	b, err := gdomain.DecodeBounds([]byte(`{"operations": ["postgres.rows.read", "postgres.rows.aggregate", "postgres.tables.read"],
-	  "params": {"postgres.rows.read": {"columns": {"values": {"ids": ["id", "customer_id", "name", "email", "tier", "ssn", "amount", "status", "subject"]}}}},
-	  "scope": ` + scope + `}`))
+	b, err := gdomain.DecodeBounds([]byte(bounds))
 	if err != nil {
 		t.Fatal(err)
 	}
 	gs := &grantspg.Store{Pool: s.pool, Promotions: grantstest.OpenGate{}}
-	grants := &grantsapp.Service{Repo: gs, Subjects: gs, Defs: &defspg.Store{Pool: s.pool}, Authz: allowAll{}, Clock: clock.System{}, Editions: teamEdition{}}
+	grants := &grantsapp.Service{Repo: gs, Subjects: gs, Defs: &defspg.Store{Pool: s.pool}, Authz: allowAll{}, Clock: clock.System{}}
+	if team {
+		grants.Editions = teamEdition{}
+	}
 	g, err := grants.Issue(human, grantsapp.IssueRequest{
 		AgentID: mustUUID(t, agent), Principal: gdomain.Principal{Kind: gdomain.PrincipalUser, ID: user}, TaskRef: "data",
 		ExpiresAt: time.Now().Add(time.Hour), Bounds: b,
@@ -265,17 +276,83 @@ func (s *stack) connectionTest(t *testing.T) string {
 	return ""
 }
 
-// TestE2E_M14_DataScoping is D21's scenario.
+// TestE2E_M14_DataScoping is D21's scenario on the Community stack (D109):
+// the connection test passes a read-only role; a grant bounding the
+// columns and capping the rows reads through the HTTP and MCP faces alike;
+// a column outside the bound and a request over the cap are DENY, secret
+// values never leave the database, a crafted value writes nothing, a lock
+// wait fails without hanging, and a role that could write fails the
+// connection test and reads nothing.
 func TestE2E_M14_DataScoping(t *testing.T) {
 	tg := pgtargettest.New(t)
 	s := start(t, options{budget: "1000.00", postgres: tg})
-
-	// The read-only role passes the connection test.
 	if res := s.connectionTest(t); res != "PASSED" {
 		t.Fatalf("connection test: %q", res)
 	}
+	s.grantRun(t, `{"operations": ["postgres.rows.read", "postgres.rows.aggregate", "postgres.tables.read"],
+	  "params": {"postgres.rows.read": {"columns": {"values": {"ids": ["id", "customer_id", "tier", "ssn", "amount", "status"]}},
+	    "limit": {"range": {"max": "2", "unit": "rows"}}}}}`, false)
 
-	// Customer 2's records, public data only.
+	// Allowed columns are read; secret never leaves the database.
+	code, r, a := s.pgCall(t, http.MethodPost, "/v1/query", `{"table":"shop.customers","columns":["id","tier","ssn"],"order_by":["id:asc"],"limit":2}`)
+	if code != http.StatusOK || len(a.Rows) != 2 || a.Rows[0][1] != "gold" || a.Rows[0][2] != "[redacted:secret]" {
+		t.Fatalf("read: %d %+v %+v", code, r, a)
+	}
+	// The MCP face gives the same answer (F099).
+	m, errText := s.pgTool(t, "query_rows", `{"table":"shop.customers","columns":["id","tier","ssn"],"order_by":["id:asc"],"limit":2}`)
+	if errText != "" || len(m.Rows) != 2 || m.Rows[1][0] != a.Rows[1][0] || m.Rows[0][2] != "[redacted:secret]" {
+		t.Fatalf("mcp: %+v %s", m, errText)
+	}
+	// A column outside the grant's bound is a DENY (F105).
+	if code, r, _ := s.pgCall(t, http.MethodPost, "/v1/query", `{"table":"shop.customers","columns":["id","email"]}`); code == http.StatusOK || r.Decision != "DENY" {
+		t.Fatalf("column outside the bound: %d %+v", code, r)
+	}
+	// The grant caps the rows: a larger request is a DENY, and an answer at
+	// the cap says more rows matched.
+	if code, r, _ := s.pgCall(t, http.MethodPost, "/v1/query", `{"table":"shop.orders","columns":["id"],"limit":10}`); code == http.StatusOK || r.Decision != "DENY" {
+		t.Fatalf("over the row cap: %d %+v", code, r)
+	}
+	if code, r, a := s.pgCall(t, http.MethodPost, "/v1/query", `{"table":"shop.orders","columns":["id"],"limit":2}`); code != http.StatusOK ||
+		len(a.Rows) != 2 || !a.Truncated {
+		t.Fatalf("at the row cap: %d %+v %+v", code, r, a)
+	}
+	// A crafted value runs as a parameter and writes nothing.
+	if code, r, a := s.pgCall(t, http.MethodPost, "/v1/query",
+		`{"table":"shop.orders","columns":["id"],"limit":2,"filters":[{"column":"status","op":"prefix","value":"x'; DELETE FROM shop.orders; --"}]}`); code != http.StatusOK || len(a.Rows) != 0 {
+		t.Fatalf("crafted value: %d %+v %+v", code, r, a)
+	}
+	if code, r, a := s.pgCall(t, http.MethodPost, "/v1/aggregate", `{"table":"shop.orders","measures":["count:*"]}`); code != http.StatusOK ||
+		len(a.Rows) != 1 || a.Rows[0][0] != float64(11) {
+		t.Fatalf("orders after the crafted value: %d %+v %+v", code, r, a)
+	}
+
+	// A statement that waits on a lock fails, and does not hang.
+	release := tg.Lock(t, "shop.customers")
+	began := time.Now()
+	code, r, _ = s.pgCall(t, http.MethodPost, "/v1/query", `{"table":"shop.customers","columns":["id"],"limit":1}`)
+	release()
+	if code == http.StatusOK || r.Error != "statement_timeout" || r.Outcome != "FAILED" || time.Since(began) > 15*time.Second {
+		t.Fatalf("lock wait: %d %+v after %s", code, r, time.Since(began))
+	}
+
+	// A role that can write fails the connection test, and reads nothing.
+	tg.AdminExec(t, "GRANT INSERT ON shop.orders TO "+tg.ReadOnly)
+	if res := s.connectionTest(t); res != "FAILED" {
+		t.Fatalf("write-capable role passed the test: %q", res)
+	}
+	if code, r, _ := s.pgCall(t, http.MethodPost, "/v1/query", `{"table":"shop.customers","columns":["id"],"limit":1}`); code == http.StatusOK || r.Error != "role_not_read_only" {
+		t.Fatalf("write-capable role: %d %+v", code, r)
+	}
+}
+
+// TestT144_DataScopeThroughTheStack drives F101 data scope (Team, D11)
+// through the real Authority and the gateway's scope engine (D109): a
+// grant limited to customer 2 and to public data sees only that
+// customer's rows, pii and secret withheld, and no group under the
+// minimum; with pii allowed the email shows, secret still never does.
+func TestT144_DataScopeThroughTheStack(t *testing.T) {
+	tg := pgtargettest.New(t)
+	s := start(t, options{budget: "1000.00", postgres: tg})
 	s.scopedRun(t, `{"postgres.rows.read": {"records": {"key": "customer", "values": ["2"]}, "classes": {"ids": ["public"]}},
 	  "postgres.rows.aggregate": {"records": {"key": "customer", "values": ["2"]}, "classes": {"ids": ["public"]}}}`)
 	code, r, a := s.pgCall(t, http.MethodPost, "/v1/query", `{"table":"shop.customers","columns":["id","tier","email","ssn"]}`)
@@ -283,50 +360,22 @@ func TestE2E_M14_DataScoping(t *testing.T) {
 		a.Rows[0][2] != "[redacted:pii]" || a.Rows[0][3] != "[redacted:secret]" {
 		t.Fatalf("scoped read: %d %+v %+v", code, r, a)
 	}
-	// The MCP face gives the same answer (F099).
 	m, errText := s.pgTool(t, "query_rows", `{"table":"shop.customers","columns":["id","tier","email","ssn"]}`)
 	if errText != "" || len(m.Rows) != 1 || m.Rows[0][2] != "[redacted:pii]" {
 		t.Fatalf("mcp: %+v %s", m, errText)
 	}
-	// Another customer's rows stay invisible, however asked for.
 	if _, _, a := s.pgCall(t, http.MethodPost, "/v1/query", `{"table":"shop.orders","columns":["id"],"filters":[{"column":"customer_id","op":"eq","value":"1"}]}`); len(a.Rows) != 0 {
 		t.Fatalf("another customer's orders: %+v", a)
 	}
-	// A column outside the grant's columns is a DENY (F105).
-	if code, r, _ := s.pgCall(t, http.MethodPost, "/v1/query", `{"table":"shop.support","columns":["id"]}`); code == http.StatusOK || r.Decision == "ALLOW" {
-		t.Fatalf("unknown table: %d %+v", code, r)
+	if code, r, _ := s.pgCall(t, http.MethodPost, "/v1/query", `{"table":"shop.customers","columns":["id"],"order_by":["email:asc"]}`); code == http.StatusOK || r.Error != "column_not_allowed" {
+		t.Fatalf("sort on pii: %d %+v", code, r)
 	}
-	if code, r, _ := s.pgCall(t, http.MethodPost, "/v1/query", `{"table":"shop.orders","columns":["id","placed"]}`); code == http.StatusOK || r.Decision != "DENY" {
-		t.Fatalf("extra column: %d %+v", code, r)
-	}
-	// Customer 2 has 3 orders: below the minimum group size, the aggregate
-	// returns no group.
 	if code, r, a := s.pgCall(t, http.MethodPost, "/v1/aggregate", `{"table":"shop.orders","measures":["count:*"]}`); code != http.StatusOK || len(a.Rows) != 0 {
 		t.Fatalf("small group: %d %+v %+v", code, r, a)
 	}
-
-	// With pii allowed, the email shows; secret never does.
 	s.scopedRun(t, `{"postgres.rows.read": {"records": {"key": "customer", "values": ["2"]}, "classes": {"ids": ["public", "pii"]}}}`)
 	if _, _, a := s.pgCall(t, http.MethodPost, "/v1/query", `{"table":"shop.customers","columns":["email","ssn"]}`); len(a.Rows) != 1 ||
 		a.Rows[0][0] != "alan@example.com" || a.Rows[0][1] != "[redacted:secret]" {
 		t.Fatalf("pii allowed: %+v", a)
-	}
-
-	// A statement that waits on a lock fails, and does not hang.
-	release := tg.Lock(t, "shop.customers")
-	start := time.Now()
-	code, r, _ = s.pgCall(t, http.MethodPost, "/v1/query", `{"table":"shop.customers","columns":["id"]}`)
-	release()
-	if code == http.StatusOK || r.Error != "statement_timeout" || r.Outcome != "FAILED" || time.Since(start) > 15*time.Second {
-		t.Fatalf("lock wait: %d %+v after %s", code, r, time.Since(start))
-	}
-
-	// A role that can write fails the connection test, and dispatches nothing.
-	tg.AdminExec(t, "GRANT INSERT ON shop.orders TO "+tg.ReadOnly)
-	if res := s.connectionTest(t); res != "FAILED" {
-		t.Fatalf("write-capable role passed the test: %q", res)
-	}
-	if code, r, _ := s.pgCall(t, http.MethodPost, "/v1/query", `{"table":"shop.customers","columns":["id"]}`); code == http.StatusOK || r.Error != "role_not_read_only" {
-		t.Fatalf("write-capable role: %d %+v", code, r)
 	}
 }
