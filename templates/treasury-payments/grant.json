@@ -1,6 +1,6 @@
 {
   "bounds": {
-    "operations": ["stripe.transfer.create", "stripe.transfer.read", "stripe.balance.read"],
+    "operations": ["stripe.transfer.create", "stripe.payee.changed_recently", "stripe.transfer.read", "stripe.balance.read"],
     "targets": {
       "stripe.account": {"ids": ["{{payee}}"]},
       "stripe.transfer": {"prefixes": ["tr_"]},
