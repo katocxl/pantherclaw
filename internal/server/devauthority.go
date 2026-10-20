@@ -150,6 +150,8 @@ type devGrantTerms struct {
 	Stripe bool
 	// StripePayee is the connected account the grant may transfer to.
 	StripePayee string
+	// Postgres also allows the pc.postgres reads (G0 M14 D21).
+	Postgres bool
 }
 
 // seedGrant issues a root grant to the seeded agent for its owner: refunds
@@ -164,6 +166,9 @@ func seedGrant(ctx context.Context, pool *db.Pool, org ids.OrgID, w devWorkload,
 	}
 	if t.GitHub {
 		ops = append(ops, githubOperations...)
+	}
+	if t.Postgres {
+		ops = append(ops, postgresOperations...)
 	}
 	params := map[string]any{"payments.refund.create": map[string]any{
 		"amount": map[string]any{"max": map[string]string{string(t.MaxPerAction.Currency): t.MaxPerAction.Amount.String()}},
