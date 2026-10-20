@@ -13,8 +13,10 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
+	"github.com/katocxl/pantherclaw/internal/enforcementpoints"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -41,7 +43,8 @@ func TestT147_EnforcementPointAbuse(t *testing.T) {
 		}
 	}
 
-	// HR-317: no bearer, a person's or an unbound caller's, a disabled point.
+	// HR-317: no bearer, a bad one, an unbound connection (a disabled point
+	// at the end; a person.s or an API key.s bearer: the endpoint unit tests).
 	if st, _ := p.post(t, "/access/v1/evaluation", p.evaluation(t, req("ch_t147a")), "-"); st != http.StatusUnauthorized {
 		t.Fatalf("no bearer: %d", st)
 	}
@@ -62,9 +65,12 @@ func TestT147_EnforcementPointAbuse(t *testing.T) {
 	forged := req("ch_t147a")
 	forged.Key, forged.Token = thief, s.token
 	refused("a forged proof", p.evaluate(t, p.evaluation(t, forged)), "IDENTITY_UNVERIFIED")
-	cross := p.evaluation(t, req("ch_t147a"))
-	cross["resource"].(map[string]any)["properties"].(map[string]any)["url"] = s.simURL + "/v1/refunds/other"
-	refused("a proof for another URL", p.evaluate(t, cross), "")
+	cross := req("ch_t147a")
+	cross.ProofURL = p.base + "/v1/charges"
+	refused("a proof for another URL", p.evaluate(t, p.evaluation(t, cross)), "IDENTITY_UNVERIFIED")
+	another := req("ch_t147a")
+	another.Agent = ids.NewV7().String()
+	refused("a subject naming another agent", p.evaluate(t, p.evaluation(t, another)), "SUBJECT_MISMATCH")
 	outside := p.evaluation(t, req("ch_t147a"))
 	outside["resource"].(map[string]any)["properties"].(map[string]any)["url"] = "https://evil.example.test/v1/refunds"
 	refused("a URL outside the connection", p.evaluate(t, outside), "URL_OUTSIDE_CONNECTION")
@@ -84,10 +90,10 @@ func TestT147_EnforcementPointAbuse(t *testing.T) {
 	}
 	refused("the same evaluation again", p.evaluate(t, ev), "IDENTITY_UNVERIFIED")
 	refused("the same action, a fresh proof", p.evaluate(t, p.evaluation(t, r)), "DUPLICATE")
-	if n := s.row(t, `SELECT count(*) FROM pc.execution_attempts a JOIN pc.permits p ON p.org_id = a.org_id AND p.id = a.permit_id
-		WHERE a.org_id = $1 AND p.transaction_id = $2 AND a.outcome = 'delegated'`, s.org, first.Context.PantherClaw.TransactionID); n != "1" {
-		t.Fatalf("delegated attempts: %s", n)
+	if n := s.row(t, "SELECT count(*) FROM pc.execution_attempts WHERE org_id = $1 AND outcome = 'delegated'", s.org); n != "1" {
+		t.Fatalf("delegated attempts in the org: %s", n)
 	}
+	s.waitSettled(t, "10")
 	if v := s.row(t, "SELECT decided_via || ' ' || enforcement_point_id FROM pc.transactions WHERE org_id = $1 AND id = $2",
 		s.org, first.Context.PantherClaw.TransactionID); v != "authzen "+p.id.String() {
 		t.Fatalf("decided via: %q", v)
@@ -103,6 +109,14 @@ func TestT147_EnforcementPointAbuse(t *testing.T) {
 	}
 	if st, _ := p.post(t, "/access/v1/evaluations", map[string]any{"evaluations": many}, ""); st != http.StatusBadRequest {
 		t.Fatalf("a batch of 11: %d", st)
+	}
+
+	// A disabled point is answered no more.
+	if _, err := enforcementpoints.New(s.pool).Disable(p.admin.ctx, p.id); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := p.post(t, "/access/v1/evaluation", p.evaluation(t, req("ch_t147c")), ""); st != http.StatusUnauthorized {
+		t.Fatalf("a disabled point: %d", st)
 	}
 }
 
@@ -127,7 +141,7 @@ func TestHR320_TargetEnforcedDecisionsCarryTheActionToken(t *testing.T) {
 		if token != "" {
 			req.Header.Set("PAP-Action", token)
 		}
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -140,6 +154,19 @@ func TestHR320_TargetEnforcedDecisionsCarryTheActionToken(t *testing.T) {
 	if st := send(tok); st != http.StatusOK || s.sim.Stats().Refunds != 1 {
 		t.Fatalf("with it: %d, %d refunds", st, s.sim.Stats().Refunds)
 	}
+	if st := send(tok); st < 400 || s.sim.Stats().Refunds != 1 {
+		t.Fatalf("the action token used twice: %d", st)
+	}
+	// A token for one body never carries another.
+	refundableMore(t, s, "ch_te2")
+	b2 := p.evaluate(t, p.evaluation(t, azRequest{Method: http.MethodPost, Path: "/v1/refunds", Action: ids.NewV7(),
+		Body: []byte(`{"charge":"ch_te2","amount":"10.00","currency":"USD","reason":"duplicate"}`)}))
+	if !b2.Decision || b2.Context.PantherClaw.ActionToken == "" {
+		t.Fatalf("second decision: %+v", b2.Context.PantherClaw)
+	}
+	if st := send(b2.Context.PantherClaw.ActionToken); st < 400 || s.sim.Stats().Refunds != 1 {
+		t.Fatalf("a token for another body: %d", st)
+	}
 }
 
 // TestHR321_APointPastItsRateIsRefused: the endpoint answers 429 with
@@ -148,12 +175,15 @@ func TestHR321_APointPastItsRateIsRefused(t *testing.T) {
 	s := start(t, options{budget: "1000.00"})
 	p := authzenPoint(t, s, "agent_held", s.simURL)
 	s.db.AdminExec(t, "UPDATE pc.enforcement_points SET rate_per_second = 1 WHERE org_id = $1 AND id = $2", s.org, p.id)
-	codes := map[int]int{}
+	codes, retry := map[int]int{}, ""
 	for range 3 {
-		st, _ := p.post(t, "/access/v1/evaluation", map[string]any{}, "")
+		st, h, _ := p.postH(t, "/access/v1/evaluation", map[string]any{}, "")
 		codes[st]++
+		if st == http.StatusTooManyRequests {
+			retry = h.Get("Retry-After")
+		}
 	}
-	if codes[http.StatusTooManyRequests] == 0 {
+	if codes[http.StatusTooManyRequests] == 0 || retry == "" {
 		t.Fatalf("statuses %v, want a 429", codes)
 	}
 }
