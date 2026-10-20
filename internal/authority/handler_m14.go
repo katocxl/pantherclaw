@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect/v2"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
+	"github.com/katocxl/pantherclaw/internal/authority/finalize"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -64,4 +65,13 @@ func (h *Handler) gatewayPermit(ctx context.Context, gw Gateway, permit ids.UUID
 		return connect.NewError(connect.CodePermissionDenied, "a gateway cannot dispatch an authzen decision")
 	}
 	return nil
+}
+
+// dataScopeOf is what the gateway reports its data scope did to an answer
+// (G0 M14 D102); nil when none applied.
+func dataScopeOf(d *pantherclawv1.DataScopeApplied) *finalize.DataScopeApplied {
+	if d == nil {
+		return nil
+	}
+	return &finalize.DataScopeApplied{RecordsKey: d.GetRecordsKey(), Rows: d.GetRows(), ValuesRedacted: d.GetValuesRedacted(), Truncated: d.GetTruncated()}
 }

@@ -90,3 +90,11 @@ func (k *KindConfigs) Drift(kind string) (KindDrift, bool) {
 	d, ok := k.drift[kind]
 	return d, ok
 }
+
+// KindGatewayCheck is an optional part of a KindConfig: it validates the
+// connection's configuration for a new gateway (one that must hold the
+// postgres credential, or reach the peer agent), in the transaction that
+// moves the connection (G0 M14 D105). An error refuses the move.
+type KindGatewayCheck interface {
+	CheckGateway(ctx context.Context, tx db.TenantTx, org ids.OrgID, connection, gateway ids.UUID) error
+}

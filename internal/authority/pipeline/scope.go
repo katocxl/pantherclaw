@@ -49,8 +49,8 @@ func (p *Pipeline) boundariesM14(ctx context.Context, s *state) {
 
 // peerCheck asks the peer port about a call through an a2a connection.
 func (p *Pipeline) peerCheck(ctx context.Context, s *state) {
-	if s.conn == nil || s.conn.Kind != "a2a" {
-		return
+	if s.conn == nil || s.conn.Kind != "a2a" || (s.def != nil && s.def.Access == defs.AccessRead) {
+		return // a read of a peer's task delegates nothing (D111)
 	}
 	leaf, ok := s.chain.Leaf()
 	switch {

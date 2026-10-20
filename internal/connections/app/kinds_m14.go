@@ -4,6 +4,7 @@
 package app
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/json/v2"
 	"encoding/pem"
@@ -14,6 +15,8 @@ import (
 	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/connections/ports"
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -434,4 +437,23 @@ func (s *Service) m14Shape(kind string, simulated bool, in *CreateInput) (*strin
 		return &norm, hosts, nil
 	}
 	return nil, nil, ErrShape
+}
+
+// checkKindGateway asks the store of a postgres or a2a connection's kind to
+// validate the configuration for the gateway it moves to, in the move's
+// transaction (G0 M14 D105): without a store the kind is not implemented;
+// a store without a gateway check accepts the move. Other kinds are not
+// asked.
+func (s *Service) checkKindGateway(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn dbq.PcConnection, gateway ids.UUID) error {
+	if conn.Kind != KindPostgres && conn.Kind != KindA2A {
+		return nil
+	}
+	store, ok := s.kinds.Get(conn.Kind)
+	if !ok {
+		return ErrKindNotImplemented
+	}
+	if check, ok := store.(ports.KindGatewayCheck); ok {
+		return check.CheckGateway(ctx, tx, org, conn.ID, gateway)
+	}
+	return nil
 }

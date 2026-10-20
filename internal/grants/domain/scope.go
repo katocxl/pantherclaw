@@ -201,3 +201,29 @@ func cloneScope(s map[string]ScopeBound) map[string]ScopeBound {
 // HasScope reports whether the bounds limit any operation's data scope:
 // issuing or revising such a grant needs the Team edition (D11).
 func (b Bounds) HasScope() bool { return len(b.Scope) > 0 }
+
+// ScopeEqual reports whether two scopes allow the same: the same
+// operations, record keys, record values and classes, in any order.
+func ScopeEqual(a, b map[string]ScopeBound) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	set := func(s []string) []string {
+		out := slices.Clone(s)
+		slices.Sort(out)
+		return slices.Compact(out)
+	}
+	for op, x := range a {
+		y, ok := b[op]
+		if !ok || (x.Records == nil) != (y.Records == nil) || (x.Classes == nil) != (y.Classes == nil) {
+			return false
+		}
+		if x.Records != nil && (x.Records.Key != y.Records.Key || !slices.Equal(set(x.Records.Values), set(y.Records.Values))) {
+			return false
+		}
+		if x.Classes != nil && (!slices.Equal(set(x.Classes.IDs), set(y.Classes.IDs)) || !slices.Equal(set(x.Classes.Prefixes), set(y.Classes.Prefixes))) {
+			return false
+		}
+	}
+	return true
+}
