@@ -1,0 +1,32 @@
+{{template "head" .}}
+<h1>Postgres connection: {{.Name}}</h1>
+<p>State: <strong>{{.State}}</strong>.{{with .ConfirmedAt}} Last confirmed {{.UTC.Format "2006-01-02 15:04:05 UTC"}}.{{end}}{{if not .Current}} No configuration is confirmed yet: agents can read nothing through it.{{end}}</p>
+{{define "pgconfig"}}
+<dl>
+<dt>Database</dt><dd><code>{{.Host}}:{{.Port}}/{{.Database}}</code> as <code>{{.User}}</code></dd>
+<dt>TLS</dt><dd>{{.SSLMode}}{{if .CAPEM}}, with a pinned CA{{end}}</dd>
+<dt>Internal</dt><dd>{{if .Internal}}<strong>yes</strong>: the gateway may reach a private address{{else}}no{{end}}</dd>
+<dt>Limits</dt><dd>at most {{.MaxRows}} rows and {{.MaxResultBytes}} bytes an answer, {{.StatementTimeoutMs}} ms a statement; aggregates leave out groups under {{.MinGroupSize}} rows</dd>
+</dl>
+<table>
+<thead><tr><th>Table</th><th>Column</th><th>Type</th><th>Class</th></tr></thead>
+<tbody>
+{{range $t := .Tables}}{{range $i, $c := $t.Columns}}<tr><td>{{if not $i}}<code>{{$t.Schema}}.{{$t.Name}}</code>{{if $t.ScopeKey}} (scoped by {{$t.ScopeKey}} on {{$t.ScopeColumn}}){{end}}{{if $t.MaxRows}}, at most {{$t.MaxRows}} rows{{end}}{{end}}</td><td><code>{{$c.Name}}</code></td><td>{{$c.Type}}</td><td>{{$c.Class}}</td></tr>
+{{end}}{{end}}</tbody>
+</table>
+{{end}}
+{{with .Current}}<h2>Serving now</h2>{{template "pgconfig" .}}{{end}}
+{{if .Proposed}}
+<h2>Proposed{{with .ProposedAt}} {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}</h2>
+{{if .Widening}}<p>It reaches further than what serves now:</p><ul>{{range .Widening}}<li>{{.}}</li>{{end}}</ul>{{end}}
+{{template "pgconfig" .Proposed}}
+{{if .CanConfirm}}
+<p class="note">Agents can then read these columns of these tables, within the limits; secret columns are never returned. Confirming needs your security key.</p>
+<p><button type="button" class="danger" data-action="activate" data-path="/connections/{{.Connection}}/postgres/confirm?digest={{.Digest}}">Confirm with your security key</button></p>
+{{else}}
+<p class="note">You cannot confirm this: that needs connection.manage and a security key.</p>
+{{end}}
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/automation_endpoints.js"></script>
+{{template "foot" .}}

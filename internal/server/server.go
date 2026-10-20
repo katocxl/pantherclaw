@@ -240,6 +240,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	}
 	m14core := wireM14Core(m6)
 	_ = m14core // the M14 streams' wiring registers its kinds here (G0 M14 D64)
+	wireM14Data(m14core, m6)
 	// Sealing a GitHub App credential schedules an org scan, and a daily one
 	// follows, so coverage reads its installation's permissions (F048).
 	ghScans := &githubapp.Scans{Pool: pool, Ents: bill}
@@ -692,6 +693,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if d.web != nil {
 		d.web.Mount(mux)
 	}
+	mountM14Data(mux, d)
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, "ok\n")

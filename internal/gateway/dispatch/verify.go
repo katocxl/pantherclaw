@@ -488,6 +488,9 @@ func (e *Engine) connectionTest(ctx context.Context, conn *control.Connection, l
 		req.EffectOf != "" {
 		return Observation{}, fmt.Errorf("%w: request", ErrNotReviewedRead)
 	}
+	if conn.GetKind() == "postgres" {
+		return e.postgresTest(ctx, conn, l.Operation)
+	}
 	read, ok := conn.Package.Definition(l.Operation)
 	if !ok || !read.Test || read.Access != defs.AccessRead || read.Dispatch == nil || read.Dispatch.HTTP == nil ||
 		read.Dispatch.HTTP.Method != http.MethodGet {
