@@ -69,8 +69,52 @@ func coreMux() *http.ServeMux {
 	return mux
 }
 
+// callerAuthz allows a permission when the request carries a caller (the
+// core's permission check stands in).
+type callerAuthz struct{}
+
+func (callerAuthz) Require(ctx context.Context, _ string) error {
+	if _, err := tapp.CallerFrom(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
 func mountTest(mux *http.ServeMux, set extension.Set, web *webhttp.Handler) error {
-	return mountExtension(mux, set, extension.Deps{}, web, nil)
+	return mountExtension(mux, set, extension.Deps{Authz: callerAuthz{}}, web, nil)
+}
+
+// TestSessionRoutesNeedTheCoreAuthorizer (G0 UI D70): without Deps.Authz
+// every session route refuses; with it the handler sees the caller.
+func TestSessionRoutesNeedTheCoreAuthorizer(t *testing.T) {
+	web, fb := uiWebHandler(t)
+	var gotCaller bool
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := tapp.CallerFrom(r.Context())
+		gotCaller = err == nil && c.Org == fb.org
+		w.WriteHeader(http.StatusNoContent)
+	})
+	set := routes(extension.Route{Pattern: "GET /app/ext/plans", Auth: extension.AuthSession, Handler: h})
+	for _, tc := range []struct {
+		deps extension.Deps
+		want int
+	}{
+		{extension.Deps{}, http.StatusServiceUnavailable},
+		{extension.Deps{Authz: callerAuthz{}}, http.StatusNoContent},
+	} {
+		mux := coreMux()
+		if err := mountExtension(mux, set, tc.deps, web, nil); err != nil {
+			t.Fatal(err)
+		}
+		gotCaller = false
+		req := httptest.NewRequest(http.MethodGet, uiWebOrigin+"/app/ext/plans", nil)
+		req.AddCookie(&http.Cookie{Name: "pc_session", Value: "good"})
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != tc.want || gotCaller != (tc.want == http.StatusNoContent) {
+			t.Errorf("authz %v: %d (caller %v), want %d", tc.deps.Authz != nil, rec.Code, gotCaller, tc.want)
+		}
+	}
 }
 
 // TestHR341_ExtensionRoutesRefused: routes outside the prefixes, routes

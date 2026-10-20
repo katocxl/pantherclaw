@@ -95,7 +95,30 @@ type Deps struct {
 	// BillingLinks binds provider subscriptions to orgs; nil until the
 	// core provides it.
 	BillingLinks BillingLinks
+	// Authz checks the session principal's permissions; nil until the core
+	// provides it, and while it is nil every session route refuses.
+	Authz Authorizer
+	// Audit records billing events in the org's audit ledger; nil until the
+	// core provides it.
+	Audit AuditRecorder
 }
+
+// Authorizer checks a permission for the principal of a session route's
+// request, with the core's normal permission check, scoped as for a
+// Connect procedure: the error refuses the request.
+type Authorizer interface {
+	Require(ctx context.Context, permission string) error
+}
+
+// AuditRecorder records one event in an org's audit ledger. kind must
+// start with "billing."; fields are small and never hold secrets (the core
+// bounds and checks them).
+type AuditRecorder interface {
+	Record(ctx context.Context, orgID, kind string, fields map[string]string) error
+}
+
+// AuditKindPrefix is the prefix every extension audit kind carries.
+const AuditKindPrefix = "billing."
 
 // Present reports whether s adds anything to the core server.
 func (s Set) Present() bool { return s.Console != nil || s.Mount != nil || s.Validate != nil }

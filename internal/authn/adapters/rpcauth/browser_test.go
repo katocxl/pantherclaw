@@ -109,7 +109,13 @@ func consoleCall(ts *httptest.Server) browserCall {
 	}
 }
 
-func (c browserCall) do(t *testing.T, ts *httptest.Server, procedure string) (*http.Response, string) {
+// answer is a response's status and headers; its body is read and closed.
+type answer struct {
+	StatusCode int
+	Header     http.Header
+}
+
+func (c browserCall) do(t *testing.T, ts *httptest.Server, procedure string) (answer, string) {
 	t.Helper()
 	u := ts.URL + procedure
 	var body io.Reader = strings.NewReader(c.body)
@@ -143,7 +149,7 @@ func (c browserCall) do(t *testing.T, ts *httptest.Server, procedure string) (*h
 	}
 	defer res.Body.Close()
 	b, _ := io.ReadAll(res.Body)
-	return res, string(b)
+	return answer{res.StatusCode, res.Header}, string(b)
 }
 
 const whoAmI = pantherclawv1connect.AccessServiceWhoAmIProcedure
