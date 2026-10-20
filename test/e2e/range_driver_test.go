@@ -102,6 +102,7 @@ func (d *rangeDriver) Capabilities() map[app.Capability]bool {
 		app.CapHarness: true, app.CapSandbox: d.extra.available(),
 		capSlackPost: true, capSlackInteraction: true,
 		app.Capability("authzen.evaluate"): true,
+		capBrowser:                         true,
 	}
 	maps.Copy(caps, stripeCapabilities())
 	maps.Copy(caps, a2aCapabilities())
@@ -134,7 +135,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 		o.postgres = pgtargettest.New(t)
 	}
 	var p idp
-	if requires(sc, "person") || sc.ID == "RT-009" || slackScenario(sc) {
+	if requires(sc, "person") || sc.ID == "RT-009" || slackScenario(sc) || needsBrowser(sc) {
 		p = inProcessIdP(t)
 		o.people = &p
 	}
@@ -153,8 +154,11 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	if o.people != nil {
 		d.people = &m2Stack{url: d.s.apiURL, cfg: d.s.serverCfg, idp: p}
 	}
-	if requires(sc, "person") {
+	if requires(sc, "person") || needsBrowser(sc) {
 		d.setupPeople()
+	}
+	if needsBrowser(sc) {
+		d.setupBrowser()
 	}
 	if o.github {
 		d.setupGitHub()
@@ -312,6 +316,8 @@ func (d *rangeDriver) Do(ctx context.Context, sc domain.Scenario, st domain.Step
 		return d.revokeGrant()
 	case "operator.kill_switch":
 		return d.killSwitch()
+	case "browser.call":
+		return d.browserCall(st)
 	case "sandbox.probe":
 		return d.extra.probe(d, st, vars)
 	}

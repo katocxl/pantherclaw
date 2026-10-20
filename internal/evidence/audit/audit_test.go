@@ -56,6 +56,42 @@ func manyDetails(n int) map[string]string {
 	return m
 }
 
+// TestHR347_BrowserSessionEventsSayAuthKind: an event recorded for a
+// cookie-authenticated API call carries auth_kind=browser_session, also at
+// the detail limit and under an automation; a caller's own auth_kind is
+// kept; the caller's map is never changed.
+func TestHR347_BrowserSessionEventsSayAuthKind(t *testing.T) {
+	ctx := WithAuthKind(context.Background(), "browser_session")
+	if k, ok := AuthKindFrom(ctx); !ok || k != "browser_session" {
+		t.Fatalf("AuthKindFrom = %q, %v", k, ok)
+	}
+	ev := valid()
+	ev.Details = nil
+	got, err := annotated(ctx, ev)
+	if err != nil || got.Details[AuthKindDetail] != "browser_session" {
+		t.Fatalf("annotated = %v, %v", got.Details, err)
+	}
+	ev.Details = map[string]string{}
+	for i := range maxDetails {
+		ev.Details[fmt.Sprintf("k%02d", i)] = strings.Repeat("v", maxDetailValue)
+	}
+	r := automationctx.Ref{Automation: ids.NewV7(), Version: ids.NewV7(), Execution: ids.NewV7(), Trigger: ids.NewV7()}
+	got, err = annotated(automationctx.With(ctx, r), ev)
+	if err != nil || got.Details[AuthKindDetail] != "browser_session" || got.Details["trigger"] != r.Trigger.String() {
+		t.Fatalf("maximum event: %v", err)
+	}
+	if len(ev.Details) != maxDetails {
+		t.Error("the caller's map was changed")
+	}
+	ev.Details = map[string]string{AuthKindDetail: "api_key"}
+	if got, err := annotated(ctx, ev); err != nil || got.Details[AuthKindDetail] != "api_key" {
+		t.Errorf("caller's auth_kind: %v %v", got.Details, err)
+	}
+	if got, err := annotated(context.Background(), valid()); err != nil || got.Details[AuthKindDetail] != "" {
+		t.Errorf("no auth kind: %v %v", got.Details, err)
+	}
+}
+
 // TestAnnotationFitsAMaximumEvent: a caller's event at every detail limit
 // stays valid under an automation's attribution (G0 M11 part 2 D102 T5),
 // and a key contradicting it is refused (D106 D3).

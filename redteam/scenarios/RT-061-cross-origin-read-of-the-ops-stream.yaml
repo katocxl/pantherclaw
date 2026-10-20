@@ -1,0 +1,66 @@
+apiVersion: pantherclaw.range/v1
+id: RT-061
+title: Another site's page cannot read the live operations stream with a person's session cookie
+category: boundary
+suite: platform
+tier: business
+attacker: A9
+threats: [T-160]
+rules: [HR-344]
+requires: [browser]
+harness_only: false
+steps:
+  - id: console-stream
+    do: browser.call
+    with: {target: ops_stream, origin: same_origin, csrf: true, method: POST, body: json}
+    expect:
+      outcome: ALLOW
+  - id: cross-site-fetch
+    do: browser.call
+    with: {target: ops_stream, origin: cross_site, csrf: true, method: POST, body: json}
+    expect:
+      outcome: REFUSED
+      code: BROWSER_REQUEST_REFUSED
+      decisive_control: HR-344
+  - id: old-browser-other-origin
+    do: browser.call
+    with: {target: ops_stream, origin: other_origin, csrf: true, method: POST, body: json}
+    expect:
+      outcome: REFUSED
+      code: BROWSER_REQUEST_REFUSED
+      decisive_control: HR-344
+  - id: event-source-get
+    do: browser.call
+    with: {target: ops_stream, origin: cross_site, method: GET, body: json}
+    expect:
+      outcome: REFUSED
+      code: BROWSER_REQUEST_REFUSED
+      decisive_control: HR-344
+  - id: same-origin-get
+    do: browser.call
+    with: {target: ops_stream, origin: same_origin, csrf: true, method: GET, body: json}
+    expect:
+      outcome: REFUSED
+      code: BROWSER_REQUEST_REFUSED
+      decisive_control: HR-344
+  - id: no-csrf-header
+    do: browser.call
+    with: {target: ops_stream, origin: same_origin, method: POST, body: json}
+    expect:
+      outcome: REFUSED
+      code: BROWSER_REQUEST_REFUSED
+      decisive_control: HR-344
+  - id: simple-text-post
+    do: browser.call
+    with: {target: ops_stream, origin: cross_site, method: POST, body: text}
+    expect:
+      outcome: REFUSED
+      code: BROWSER_REQUEST_REFUSED
+      decisive_control: HR-344
+  - id: bearer-and-cookie
+    do: browser.call
+    with: {target: ops_stream, origin: same_origin, csrf: true, bearer: true, method: POST, body: json}
+    expect:
+      outcome: REFUSED
+      code: AMBIGUOUS_CREDENTIAL
+      decisive_control: HR-344

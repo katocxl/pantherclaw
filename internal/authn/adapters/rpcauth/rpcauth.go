@@ -2,18 +2,34 @@
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
 // Package rpcauth connects authentication to the RPC interceptor chain
-// (platform/rpc, step 5): it authenticates the bearer credential, refuses
-// procedures whose declared permission the caller holds nowhere, and puts
-// the caller into the context for the use cases, which check the exact
-// scope again.
+// (platform/rpc, step 5): it authenticates the bearer credential, or the
+// browser session cookie of the console, refuses procedures whose
+// declared permission the caller holds nowhere, and puts the caller into
+// the context for the use cases, which check the exact scope again.
+//
+// The session cookie is taken only from a page of the server's own origin
+// (Sec-Fetch-Site same-origin, or Origin equal to the public origin), with
+// the PC-CSRF: 1 header, as a POST of a unary Connect call with a JSON or
+// binary protobuf body (application/json or application/proto). A cookie
+// on a GET call is refused, no CORS header is ever sent, and a call
+// carrying both a bearer credential and the cookie is refused as
+// AMBIGUOUS_CREDENTIAL (HR-342, HR-343). Events such a call audits carry
+// auth_kind=browser_session (HR-347).
 package rpcauth
 
 import (
 	"context"
+	"log/slog"
+	"net/http"
 	"strings"
 
 	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
+	"github.com/katocxl/pantherclaw/internal/authn/adapters/webguard"
+	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
+	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/platform/rpc"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -24,6 +40,19 @@ type Authenticator interface {
 	Authenticate(ctx context.Context, bearer string) (tapp.Caller, error)
 }
 
+// Errors of the cookie path.
+var (
+	// ErrAmbiguousCredential: a bearer credential and the session cookie
+	// in one call (HR-343).
+	ErrAmbiguousCredential = pcerr.New(pcerr.Unauthenticated, "AMBIGUOUS_CREDENTIAL",
+		"send either a bearer credential or the browser session, not both")
+	// ErrBrowserRequest: the cookie came without the same-origin proof, the
+	// PC-CSRF header, a POST or a unary Connect body (HR-342).
+	ErrBrowserRequest = pcerr.New(pcerr.PermissionDenied, "BROWSER_REQUEST_REFUSED",
+		"a browser session is accepted only on a same-origin POST with PC-CSRF: 1")
+	errAuthRequired = pcerr.New(pcerr.Unauthenticated, "UNAUTHENTICATED", "authentication required")
+)
+
 // New returns the API's rpc.Authenticator. perms maps every non-public
 // procedure to its declared permission; a procedure missing from it is
 // refused (fail closed). Procedures declaring a gateway permission are
@@ -32,6 +61,9 @@ func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authentica
 	var o options
 	for _, opt := range opts {
 		opt(&o)
+	}
+	if o.log == nil {
+		o.log = pclog.Discard()
 	}
 	return func(ctx context.Context, info *connect.CallInfo, spec connect.Spec) (context.Context, error) {
 		perm, ok := perms[spec.Procedure]
@@ -54,13 +86,31 @@ func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authentica
 			}
 			return gateway(ctx, info, spec)
 		}
-		bearer, ok := strings.CutPrefix(info.RequestHeader().Get("Authorization"), "Bearer ")
-		if !ok || bearer == "" {
-			return nil, connect.NewError(connect.CodeUnauthenticated, "authentication required")
+		hd := info.RequestHeader()
+		authz := hd.Get("Authorization")
+		cookie, hasCookie := "", false
+		if o.sessions != nil {
+			cookie, hasCookie = o.sessions.Cookie(hd.Values("Cookie"))
 		}
-		c, err := a.Authenticate(ctx, bearer)
-		if err != nil {
-			return nil, err
+		var c tapp.Caller
+		switch {
+		case authz != "" && hasCookie:
+			return nil, ErrAmbiguousCredential
+		case hasCookie:
+			var err error
+			if c, err = o.browser(ctx, info, spec, cookie); err != nil {
+				return nil, err
+			}
+			ctx = audit.WithAuthKind(ctx, string(tapp.CredBrowserSession))
+		default:
+			bearer, ok := strings.CutPrefix(authz, "Bearer ")
+			if !ok || bearer == "" {
+				return nil, connect.NewError(connect.CodeUnauthenticated, "authentication required")
+			}
+			var err error
+			if c, err = a.Authenticate(ctx, bearer); err != nil {
+				return nil, err
+			}
 		}
 		if perm != td.PermAuthenticated && !c.CanAnywhere(perm) {
 			if o.refusals != nil && perm.HumanOnly() && (!c.Human() || c.Credential == tapp.CredAPIKey) {
@@ -75,10 +125,57 @@ func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authentica
 	}
 }
 
+// browser authenticates the session cookie of a console call (HR-342): the
+// request checks run before the session is looked up. A rotated secret
+// replaces the cookie on the response; the lookup itself refreshes the
+// idle limit (HR-150).
+func (o *options) browser(ctx context.Context, info *connect.CallInfo, spec connect.Spec, cookie string) (tapp.Caller, error) {
+	if !browserRequestOK(info, spec, o.sessions.PublicOrigin()) {
+		o.log.WarnContext(ctx, "rpc.browser_request_refused", slog.String("procedure", spec.Procedure),
+			slog.String("sec_fetch_site", trunc(info.RequestHeader().Get("Sec-Fetch-Site"), 32)))
+		return tapp.Caller{}, ErrBrowserRequest
+	}
+	s, err := o.sessions.Auth.Authenticate(ctx, cookie)
+	if err != nil {
+		return tapp.Caller{}, errAuthRequired
+	}
+	if s.Rotated != "" {
+		info.ResponseHeader().Add("Set-Cookie", o.sessions.SetCookie(s.Rotated))
+	}
+	return s.Caller, nil
+}
+
+// browserRequestOK is the request half of HR-342: same origin, PC-CSRF: 1,
+// a POST, and a unary Connect call with a JSON or binary body, which is
+// exactly Content-Type application/json or application/proto.
+func browserRequestOK(info *connect.CallInfo, spec connect.Spec, origin string) bool {
+	hd := info.RequestHeader()
+	if !webguard.SameOrigin(hd.Get, origin) || hd.Get(webguard.CSRFHeader) != "1" {
+		return false
+	}
+	si, ok := info.TransportInfo.(*connecthttp.ServerInfo)
+	if !ok || si.HTTPMethod() != http.MethodPost {
+		return false
+	}
+	return info.Protocol == connect.ProtocolNameConnect && spec.StreamType == connect.StreamTypeUnary &&
+		(info.Codec == connect.CodecNameJSON || info.Codec == connect.CodecNameProto)
+}
+
+func trunc(s string, n int) string {
+	if len(s) > n {
+		return s[:n]
+	}
+	return s
+}
+
 // Option configures New.
 type Option func(*options)
 
-type options struct{ refusals RefusalRecorder }
+type options struct {
+	refusals RefusalRecorder
+	sessions *webguard.Sessions
+	log      *slog.Logger
+}
 
 // RefusalRecorder records a non-human caller refused a human-only
 // procedure. It must not block the refusal for long or fail it.
@@ -88,3 +185,9 @@ type RefusalRecorder interface {
 
 // WithRefusals records human-only refusals through r (G0 M10 D67).
 func WithRefusals(r RefusalRecorder) Option { return func(o *options) { o.refusals = r } }
+
+// WithBrowserSessions accepts the console's session cookie under the
+// rules of HR-342 and HR-343; log records refused browser requests.
+func WithBrowserSessions(s *webguard.Sessions, log *slog.Logger) Option {
+	return func(o *options) { o.sessions, o.log = s, log }
+}

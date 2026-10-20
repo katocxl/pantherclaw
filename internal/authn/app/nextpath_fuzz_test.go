@@ -23,6 +23,9 @@ func FuzzNextPath(f *testing.F) {
 		"/approvals/0192F3A0-0000-7000-8000-000000000001", "/approvals/../account", "/approvals/", "//approvals",
 		"//evil.example", `/\evil.example`, "/%2F%2Fevil.example", "https://evil.example/account", "/account?x=1",
 		"/account#x", "/account/", "/./account", " /account", "/account\t", "%2Faccount", "/account%00", "",
+		// Console pages (HR-345).
+		"/app", "/app/", "/app/agents/1", "/app//evil.example", "/app/../account", "/app/./x", "/app?x=1", "/app/%2F",
+		`/app\evil.example`, "/apps", "/app/x/",
 	} {
 		f.Add(s)
 	}

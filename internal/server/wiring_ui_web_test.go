@@ -125,3 +125,49 @@ func TestHR346_RunWith(t *testing.T) {
 		t.Fatalf("staging: err = %v, calls = %v", err, calls)
 	}
 }
+
+// TestHR346_ProductionRefusesDevProviders: an OIDC provider marked dev:
+// true stops a production start-up with DEPLOYMENT_CONFIG; development
+// and staging accept it, and production accepts real providers.
+func TestHR346_ProductionRefusesDevProviders(t *testing.T) {
+	prov := func(name string, dev bool) OIDCProviderConfig {
+		return OIDCProviderConfig{
+			Name: name, Issuer: "https://idp.example.com", ClientID: "pantherclaw", ClientSecretFile: "secret", Dev: dev,
+		}
+	}
+	for _, tc := range []struct {
+		deployment string
+		providers  []OIDCProviderConfig
+		refused    bool
+	}{
+		{"production", []OIDCProviderConfig{prov("corp", false)}, false},
+		{"production", []OIDCProviderConfig{prov("corp", false), prov("mock", true)}, true},
+		{"production", []OIDCProviderConfig{prov("mock", true)}, true},
+		{"staging", []OIDCProviderConfig{prov("mock", true)}, false},
+		{"development", []OIDCProviderConfig{prov("mock", true)}, false},
+		{"", []OIDCProviderConfig{prov("mock", true)}, false},
+	} {
+		c := uiWebConfig()
+		c.Deployment, c.Auth.OIDCProviders = tc.deployment, tc.providers
+		err := c.Validate()
+		refused := err != nil && strings.Contains(err.Error(), "DEPLOYMENT_CONFIG") && strings.Contains(err.Error(), `"mock"`)
+		if refused != tc.refused || (!tc.refused && err != nil) {
+			t.Errorf("%q %+v: err = %v", tc.deployment, tc.providers, err)
+		}
+	}
+}
+
+// TestOIDCTokenAuthConfig: token_auth is basic, post or empty (G0 UI
+// D32).
+func TestOIDCTokenAuthConfig(t *testing.T) {
+	for _, ta := range []string{"", "basic", "post", "private_key_jwt", "Basic"} {
+		c := uiWebConfig()
+		c.Auth.OIDCProviders = []OIDCProviderConfig{{
+			Name: "corp", Issuer: "https://idp.example.com", ClientID: "pantherclaw", ClientSecretFile: "secret", TokenAuth: ta,
+		}}
+		err := c.Validate()
+		if want := ta == "" || ta == "basic" || ta == "post"; (err == nil) != want {
+			t.Errorf("token_auth %q: err = %v", ta, err)
+		}
+	}
+}

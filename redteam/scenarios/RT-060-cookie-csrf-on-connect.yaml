@@ -1,0 +1,84 @@
+apiVersion: pantherclaw.range/v1
+id: RT-060
+title: Another site's page cannot ride a person's session cookie into the Connect API
+category: boundary
+suite: platform
+tier: business
+attacker: A9
+threats: [T-160]
+rules: [HR-342, HR-343]
+requires: [browser]
+harness_only: false
+steps:
+  - id: console-call
+    do: browser.call
+    with: {target: api, origin: same_origin, csrf: true, method: POST, body: json}
+    expect:
+      outcome: ALLOW
+  - id: console-call-origin-only
+    do: browser.call
+    with: {target: api, origin: origin_only, csrf: true, method: POST, body: proto}
+    expect:
+      outcome: ALLOW
+  - id: cross-site-fetch
+    do: browser.call
+    with: {target: api, origin: cross_site, csrf: true, method: POST, body: json}
+    expect:
+      outcome: REFUSED
+      code: BROWSER_REQUEST_REFUSED
+      decisive_control: HR-342
+  - id: sibling-subdomain
+    do: browser.call
+    with: {target: api, origin: same_site, csrf: true, method: POST, body: json}
+    expect:
+      outcome: REFUSED
+      code: BROWSER_REQUEST_REFUSED
+      decisive_control: HR-342
+  - id: old-browser-other-origin
+    do: browser.call
+    with: {target: api, origin: other_origin, csrf: true, method: POST, body: json}
+    expect:
+      outcome: REFUSED
+      code: BROWSER_REQUEST_REFUSED
+      decisive_control: HR-342
+  - id: no-origin-proof
+    do: browser.call
+    with: {target: api, origin: no_proof, csrf: true, method: POST, body: json}
+    expect:
+      outcome: REFUSED
+      code: BROWSER_REQUEST_REFUSED
+      decisive_control: HR-342
+  - id: typed-url
+    do: browser.call
+    with: {target: api, origin: typed_url, csrf: true, method: POST, body: json}
+    expect:
+      outcome: REFUSED
+      code: BROWSER_REQUEST_REFUSED
+      decisive_control: HR-342
+  - id: no-csrf-header
+    do: browser.call
+    with: {target: api, origin: same_origin, method: POST, body: json}
+    expect:
+      outcome: REFUSED
+      code: BROWSER_REQUEST_REFUSED
+      decisive_control: HR-342
+  - id: plain-form-post
+    do: browser.call
+    with: {target: api, origin: cross_site, method: POST, body: form}
+    expect:
+      outcome: REFUSED
+      decisive_control: HR-342
+  - id: connect-get
+    do: browser.call
+    with: {target: api, origin: same_origin, csrf: true, method: GET, body: json}
+    expect:
+      outcome: REFUSED
+      code: BROWSER_REQUEST_REFUSED
+      decisive_control: HR-342
+  - id: bearer-and-cookie
+    do: browser.call
+    with: {target: api, origin: same_origin, csrf: true, bearer: true, method: POST, body: json}
+    expect:
+      outcome: REFUSED
+      code: AMBIGUOUS_CREDENTIAL
+      decisive_control: HR-343

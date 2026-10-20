@@ -32,6 +32,8 @@ var (
 		"github", "payments", "mcp", "sandbox", "person", "second_org",
 		"stripe.refund", "stripe.transfer", "stripe.key_swap", "pg.query", "pg.role_swap", "slack.post",
 		"slack.interaction_post", "authzen.evaluate", "a2a.send", "a2a.card_swap",
+		// G0 UI: a signed-in browser session of a person (RT-060, RT-061).
+		"browser",
 	}
 	faces       = []string{"mcp", "http", "sdk", "hook", "a2a", "authzen"}
 	methods     = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"}
@@ -51,7 +53,7 @@ var (
 	kindsNeedingEx = map[string]bool{
 		"agent.call": true, "agent.direct": true, "agent.child": true, "agent.steal": true,
 		"sandbox.probe": true, "server.read": true, "target.replay": true, "wait": true,
-		"person.approve": true, "person.decline": true, "check.receipt": true,
+		"person.approve": true, "person.decline": true, "check.receipt": true, "browser.call": true,
 	}
 )
 
@@ -59,7 +61,7 @@ var (
 var StepKinds = []string{
 	"agent.call", "agent.direct", "agent.child", "agent.steal", "sandbox.probe",
 	"sim.mutate", "person.approve", "person.decline", "operator.revoke_grant",
-	"operator.kill_switch", "server.read", "target.replay", "wait", "check.receipt",
+	"operator.kill_switch", "server.read", "target.replay", "wait", "check.receipt", "browser.call",
 }
 
 // Per-kind `with` shapes. Decoding is strict: an unknown field is an error.
@@ -123,6 +125,31 @@ type (
 		Has []string `json:"has"`
 	}
 	emptyWith struct{}
+	// browserWith is one request a page sends with the person's session
+	// cookie (G0 UI, RT-060, RT-061): to the Connect API or the live
+	// operations stream, from a page whose origin the step names, with or
+	// without the PC-CSRF header, the bearer token as well, a method and a
+	// body type. Never a host or URL.
+	browserWith struct {
+		Target string `json:"target"`
+		Origin string `json:"origin"`
+		CSRF   bool   `json:"csrf,omitzero"`
+		Bearer bool   `json:"bearer,omitzero"`
+		Method string `json:"method"`
+		Body   string `json:"body"`
+	}
+)
+
+// browser.call allow-lists.
+var (
+	browserTargets = []string{"api", "ops_stream"}
+	// same_origin: Sec-Fetch-Site same-origin and the public Origin;
+	// origin_only: no Fetch Metadata, the public Origin; the rest are
+	// another site's page, a sibling subdomain, a typed URL, another
+	// Origin without Fetch Metadata, and no proof at all.
+	browserOrigins = []string{"same_origin", "origin_only", "cross_site", "same_site", "typed_url", "other_origin", "no_proof"}
+	browserMethods = []string{"POST", "GET"}
+	browserBodies  = []string{"json", "proto", "form", "text"}
 )
 
 // CheckFileName checks that a file named <id>-<slug>.yaml carries this scenario's id.
@@ -187,6 +214,9 @@ func (s *Scenario) Validate() error {
 		}
 		if st.Do == "operator.kill_switch" && !s.HarnessOnly {
 			return invalid("%s: operator.kill_switch needs harness_only: true", at)
+		}
+		if st.Do == "browser.call" && !slices.Contains(s.Requires, "browser") {
+			return invalid("%s: browser.call needs requires: [browser]", at)
 		}
 		with, err := st.withJSON()
 		if err != nil {
@@ -381,6 +411,21 @@ func checkWith(kind string, with []byte, earlier map[string]bool) error {
 			return err
 		}
 		return needEarlier("of", w.Of, earlier)
+	case "browser.call":
+		var w browserWith
+		if err := strict(&w); err != nil {
+			return err
+		}
+		switch {
+		case !slices.Contains(browserTargets, w.Target):
+			return fmt.Errorf("target must be one of %v", browserTargets)
+		case !slices.Contains(browserOrigins, w.Origin):
+			return fmt.Errorf("origin must be one of %v", browserOrigins)
+		case !slices.Contains(browserMethods, w.Method):
+			return fmt.Errorf("method must be one of %v", browserMethods)
+		case !slices.Contains(browserBodies, w.Body):
+			return fmt.Errorf("body must be one of %v", browserBodies)
+		}
 	default:
 		return fmt.Errorf("unknown step kind %q", kind)
 	}

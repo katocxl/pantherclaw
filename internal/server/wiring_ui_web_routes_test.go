@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/webhttp"
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
@@ -137,7 +138,53 @@ func TestHR341_ConsoleLeavesAppExtToExtensions(t *testing.T) {
 	}
 }
 
-// TestExtensionRoutesServe: an AuthNone route serves anyone within its
+// TestHR340_ConsoleOnlyWithAConsole: without a console nothing answers at
+// / or /app/; with one, / leads to /app/, the console answers under /app/
+// with its CSP, and an extension route under /app/ext/ still wins.
+func TestHR340_ConsoleOnlyWithAConsole(t *testing.T) {
+	get := func(mux *http.ServeMux, p string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, uiWebOrigin+p, nil))
+		return rec
+	}
+	bare := http.NewServeMux()
+	if err := mountConsole(bare, extension.Set{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"/", "/app/", "/app/agents"} {
+		if rec := get(bare, p); rec.Code != http.StatusNotFound {
+			t.Errorf("no console: %s = %d", p, rec.Code)
+		}
+	}
+	if err := mountConsole(http.NewServeMux(), extension.Set{Console: fstest.MapFS{}}); err == nil {
+		t.Error("a console without index.html was mounted")
+	}
+	mux := http.NewServeMux()
+	set := routes(extension.Route{Pattern: "GET /app/ext/billing/plans", Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	})})
+	set.Console = fstest.MapFS{"index.html": {Data: []byte("<!doctype html>")}}
+	if err := mountConsole(mux, set); err != nil {
+		t.Fatal(err)
+	}
+	if err := mountTest(mux, set, nil); err != nil {
+		t.Fatal(err)
+	}
+	if rec := get(mux, "/"); rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/app/" {
+		t.Errorf("/ = %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	if rec := get(mux, "/app/agents"); rec.Code != http.StatusOK || rec.Header().Get("Content-Security-Policy") != webhttp.ConsoleCSP {
+		t.Errorf("/app/agents = %d %q", rec.Code, rec.Header().Get("Content-Security-Policy"))
+	}
+	if rec := get(mux, "/app/ext/billing/plans"); rec.Code != http.StatusTeapot {
+		t.Errorf("extension route = %d", rec.Code)
+	}
+	if rec := get(mux, "/app/ext/other"); rec.Code != http.StatusNotFound {
+		t.Errorf("unrouted /app/ext/ path = %d", rec.Code)
+	}
+}
+
+// TestExtensionRoutesServe:an AuthNone route serves anyone within its
 // body cap; session routes need the session cookie (and AuthSessionCSRF
 // the CSRF check) and see the caller, with the email, through
 // extension.PrincipalFrom.

@@ -11,10 +11,12 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/authn/adapters/webguard"
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/webhttp"
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	"github.com/katocxl/pantherclaw/internal/extension"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 )
 
@@ -38,6 +40,27 @@ func validateExtension(ext extension.Set, d extension.Deps) error {
 	return nil
 }
 
+// browserSessions are the session cookie rules the Connect API and the
+// live stream share with the pages (G0 UI D11).
+func browserSessions(cfg *Config, pool *db.Pool, idps []authnapp.IdP, log *slog.Logger) (*webguard.Sessions, error) {
+	return webguard.NewSessions(authnapp.NewBrowser(pool, cfg.Auth.PublicURL, idps, clock.System{}, log), cfg.Auth.PublicURL)
+}
+
+// mountConsole serves the extension's console at /app/ with the console
+// CSP, and redirects / to it (HR-340). Without a console nothing is
+// mounted and / stays unanswered.
+func mountConsole(mux *http.ServeMux, ext extension.Set) error {
+	if ext.Console == nil {
+		return nil
+	}
+	c, err := webhttp.NewConsole(ext.Console)
+	if err != nil {
+		return err
+	}
+	c.Mount(mux)
+	return nil
+}
+
 // errExtensionRoute reports an extension route the server refuses at
 // start-up (HR-341).
 var errExtensionRoute = errors.New("server: extension route refused")
@@ -48,7 +71,7 @@ var wildcard = regexp.MustCompile(`\{[^}]*\}`)
 // consolePattern is the console's own subtree (D10). It leaves /app/ext/
 // to extensions, so an extension route under /app/ext/ never conflicts
 // with it.
-const consolePattern = "GET /app/"
+const consolePattern = "GET " + webhttp.ConsoleRoot
 
 // Limits of AuthNone extension routes, which have no session to bound
 // them: a request body cap and a per-client rate (D48). A handler may cap
