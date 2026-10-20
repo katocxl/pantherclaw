@@ -1446,6 +1446,32 @@ type PcEffectReceipt struct {
 	RemovedByPolicy *ids.UUID
 }
 
+type PcEnforcementPoint struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Name                string
+	Description         string
+	ServiceAccountID    ids.UUID
+	ProposedConnections []ids.UUID
+	RatePerSecond       int32
+	State               string
+	CreatedBy           ids.UUID
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	DisabledBy          *ids.UUID
+	DisabledAt          *time.Time
+	UpdatedAt           time.Time
+}
+
+type PcEnforcementPointConnection struct {
+	OrgID        ids.OrgID
+	PointID      ids.UUID
+	ConnectionID ids.UUID
+	BoundAt      time.Time
+}
+
 type PcEnrollmentToken struct {
 	OrgID         ids.OrgID
 	ID            ids.UUID
@@ -3098,6 +3124,8 @@ type PcTransaction struct {
 	EffectLevelRequired *string
 	EffectLevelAchieved *string
 	Simulated           bool
+	DecidedVia          *string
+	EnforcementPointID  *ids.UUID
 }
 
 type PcTransactionLink struct {

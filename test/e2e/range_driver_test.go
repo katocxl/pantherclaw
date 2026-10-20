@@ -100,6 +100,7 @@ func (d *rangeDriver) Capabilities() map[app.Capability]bool {
 		app.CapGitHub: true, app.CapPayments: true, app.CapMCP: true, app.CapPerson: true, app.CapSecondOrg: true,
 		app.CapHarness: true, app.CapSandbox: d.extra.available(),
 		capSlackPost: true, capSlackInteraction: true,
+		app.Capability("authzen.evaluate"): true,
 	}
 	maps.Copy(caps, stripeCapabilities())
 	return caps
@@ -386,6 +387,8 @@ func (d *rangeDriver) callOnce(w callWith, _ []byte, _ int) (domain.Observation,
 		return d.callSDK(conn, w, act)
 	case "hook":
 		return d.callHook(w)
+	case "authzen":
+		return d.callAuthZEN(conn, w, act)
 	}
 	return domain.Observation{}, nil, fmt.Errorf("face %q", w.Face)
 }

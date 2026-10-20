@@ -684,9 +684,11 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		return nil, err
 	}
 	registerM11Protect(rs, d, autos)
+	authzen := registerAuthZEN(rs, d)
 	mux := http.NewServeMux()
 	edges.mount(mux)
 	automationTriggers.mount(mux)
+	authzen.mount(mux)
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)
 	d.oauth.Mount(mux)

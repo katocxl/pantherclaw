@@ -160,6 +160,9 @@ func (d *rangeDriver) agentSteal(_ context.Context, st domain.Step) (domain.Obse
 	if err := json.Unmarshal(st.With, &w); err != nil {
 		return domain.Observation{}, err
 	}
+	if w.Call.Face == "authzen" {
+		return d.stealAuthZEN(w.Mode, w.Call)
+	}
 	url, body, err := d.stealTarget(w.Call)
 	if err != nil {
 		return domain.Observation{}, err
