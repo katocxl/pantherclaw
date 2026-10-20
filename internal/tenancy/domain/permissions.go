@@ -237,7 +237,7 @@ var catalog = append([]Permission{
 	PermCoverageRead, PermCoverageManage, PermCoverageReassess,
 	PermSandboxRun,
 	PermRedteamRun, PermRedteamRead,
-}, slices.Concat(reflexCatalog, automationsCatalog, m14Catalog)...)
+}, slices.Concat(reflexCatalog, automationsCatalog, m14Catalog, uiCatalog)...)
 
 // humanOnly permissions can never be exercised by a service account or an
 // API key, whatever their bindings say (ARCHITECTURE §10: "pck_ keys never
@@ -273,10 +273,10 @@ func (p Permission) Gateway() bool { return slices.Contains(gatewayOnly, p) }
 func (p Permission) Workload() bool { return strings.HasPrefix(string(p), "workload.") }
 
 // declarableOnly are requirements an RPC may declare that no role grants.
-var declarableOnly = []Permission{
+var declarableOnly = append([]Permission{
 	PermPublic, PermAuthenticated, PermGatewayAuthorize, PermGatewayDispatch, PermGatewayObserve, PermGatewayEnroll,
 	PermGatewaySync, PermGatewayVerify, PermGatewayFactsReport, PermGatewayScanSubmit, PermWorkloadEnroll, PermWorkloadToken, PermWorkloadRun, PermWorkloadDelegate,
-}
+}, accountOnly...)
 
 // Declarable reports whether an RPC may declare p as its requirement.
 func (p Permission) Declarable() bool { return slices.Contains(declarableOnly, p) || p.Known() }

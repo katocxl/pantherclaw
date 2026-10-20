@@ -101,7 +101,7 @@ func with(ps ...[]Permission) []Permission {
 var roles = []Role{
 	{
 		Name: RoleOrgAdmin, Title: "Org Admin", Scopes: orgScope,
-		Description: "Administers the organization: hierarchy, users, invitations, roles and service accounts; imports tool packages and registers the org's package-signing keys; asks for policy exceptions, which only policy publishers confirm. Sets the Agent Waitlist's escalation chains and settings. Reads evidence, coverage, automations, detections, incidents, cases, exposure, posture, operations, search and integrations, and simulates policy versions over recorded decisions. Registers AuthZEN enforcement points (human only) and reads the runs peer agents made for requesters. Cannot approve actions or see approval requests, restore suspended agents, publish policies, activate packages, issue grants, change guardrails, manage gateways and connections, engage the kill switch, resolve unknown outcomes, export evidence packs, exclude routes from coverage, set retention or capture, or read restricted evidence.",
+		Description: "Administers the organization: hierarchy, users, invitations, roles and service accounts; imports tool packages and registers the org's package-signing keys; asks for policy exceptions, which only policy publishers confirm. Sets the Agent Waitlist's escalation chains and settings. Reads evidence, coverage, automations, detections, incidents, cases, exposure, posture, operations, search and integrations, and simulates policy versions over recorded decisions. Registers AuthZEN enforcement points (human only) and reads the runs peer agents made for requesters. Reads the org's plan and onboarding progress. Cannot approve actions or see approval requests, restore suspended agents, publish policies, activate packages, issue grants, change guardrails, manage gateways and connections, engage the kill switch, resolve unknown outcomes, export evidence packs, exclude routes from coverage, set retention or capture, or read restricted evidence.",
 		Permissions: with(basicReads, []Permission{
 			PermOrgUpdate, PermBusinessUnitManage, PermTeamManage, PermTeamMembersManage, PermEnvironmentManage,
 			PermUserRead, PermUserManage, PermInvitationRead, PermInvitationManage, PermRoleRead, PermRoleBind,
@@ -110,7 +110,7 @@ var roles = []Role{
 			PermPackageKeyManage, PermNotificationRead, PermNotificationManage, PermEvidenceRead, PermCoverageRead, PermRedteamRead,
 			PermPolicyExceptionRequest,
 			PermGitHubIdentityManage, PermGitHubIdentityProve, PermGitHubScanRun, PermPolicySimulate, PermAutomationRead,
-			PermEnforcementPointManage, PermA2APeerRunRead,
+			PermEnforcementPointManage, PermA2APeerRunRead, PermEntitlementsRead, PermOnboardingRead,
 		}, authorityReads, boundaryReads, reflexReads),
 	},
 	{

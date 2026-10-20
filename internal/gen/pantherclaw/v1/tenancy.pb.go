@@ -770,6 +770,274 @@ func (x *UpdateOrgResponse) GetOrg() *Org {
 	return nil
 }
 
+// CreateOrgRequest creates an organization.
+type CreateOrgRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Display name.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Short label: lowercase letters, digits and hyphens. It is shown, never
+	// looked up, and need not be unique across organizations (no existence
+	// oracle, T-164).
+	Slug string `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
+	// Version of the terms of service the person accepted.
+	TermsVersion string `protobuf:"bytes,3,opt,name=terms_version,json=termsVersion,proto3" json:"terms_version,omitempty"`
+	// Version of the data processing agreement the person accepted.
+	DpaVersion    string `protobuf:"bytes,4,opt,name=dpa_version,json=dpaVersion,proto3" json:"dpa_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateOrgRequest) Reset() {
+	*x = CreateOrgRequest{}
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateOrgRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateOrgRequest) ProtoMessage() {}
+
+func (x *CreateOrgRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateOrgRequest.ProtoReflect.Descriptor instead.
+func (*CreateOrgRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *CreateOrgRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CreateOrgRequest) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *CreateOrgRequest) GetTermsVersion() string {
+	if x != nil {
+		return x.TermsVersion
+	}
+	return ""
+}
+
+func (x *CreateOrgRequest) GetDpaVersion() string {
+	if x != nil {
+		return x.DpaVersion
+	}
+	return ""
+}
+
+// CreateOrgResponse returns the new organization.
+type CreateOrgResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The org.
+	Org           *Org `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateOrgResponse) Reset() {
+	*x = CreateOrgResponse{}
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateOrgResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateOrgResponse) ProtoMessage() {}
+
+func (x *CreateOrgResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateOrgResponse.ProtoReflect.Descriptor instead.
+func (*CreateOrgResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *CreateOrgResponse) GetOrg() *Org {
+	if x != nil {
+		return x.Org
+	}
+	return nil
+}
+
+// ListMyOrgsRequest asks for the account's organizations.
+type ListMyOrgsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMyOrgsRequest) Reset() {
+	*x = ListMyOrgsRequest{}
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMyOrgsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMyOrgsRequest) ProtoMessage() {}
+
+func (x *ListMyOrgsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMyOrgsRequest.ProtoReflect.Descriptor instead.
+func (*ListMyOrgsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{11}
+}
+
+// OrgSummary is one organization the account belongs to.
+type OrgSummary struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Org id.
+	OrgId string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// Display name.
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// Short label.
+	Slug          string `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OrgSummary) Reset() {
+	*x = OrgSummary{}
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OrgSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrgSummary) ProtoMessage() {}
+
+func (x *OrgSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrgSummary.ProtoReflect.Descriptor instead.
+func (*OrgSummary) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *OrgSummary) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *OrgSummary) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *OrgSummary) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+// ListMyOrgsResponse lists the account's organizations by name.
+type ListMyOrgsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The organizations.
+	Orgs          []*OrgSummary `protobuf:"bytes,1,rep,name=orgs,proto3" json:"orgs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMyOrgsResponse) Reset() {
+	*x = ListMyOrgsResponse{}
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMyOrgsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMyOrgsResponse) ProtoMessage() {}
+
+func (x *ListMyOrgsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMyOrgsResponse.ProtoReflect.Descriptor instead.
+func (*ListMyOrgsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ListMyOrgsResponse) GetOrgs() []*OrgSummary {
+	if x != nil {
+		return x.Orgs
+	}
+	return nil
+}
+
 // CreateBusinessUnitRequest creates a business unit.
 type CreateBusinessUnitRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -785,7 +1053,7 @@ type CreateBusinessUnitRequest struct {
 
 func (x *CreateBusinessUnitRequest) Reset() {
 	*x = CreateBusinessUnitRequest{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -797,7 +1065,7 @@ func (x *CreateBusinessUnitRequest) String() string {
 func (*CreateBusinessUnitRequest) ProtoMessage() {}
 
 func (x *CreateBusinessUnitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -810,7 +1078,7 @@ func (x *CreateBusinessUnitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateBusinessUnitRequest.ProtoReflect.Descriptor instead.
 func (*CreateBusinessUnitRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{9}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CreateBusinessUnitRequest) GetSlug() string {
@@ -845,7 +1113,7 @@ type CreateBusinessUnitResponse struct {
 
 func (x *CreateBusinessUnitResponse) Reset() {
 	*x = CreateBusinessUnitResponse{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -857,7 +1125,7 @@ func (x *CreateBusinessUnitResponse) String() string {
 func (*CreateBusinessUnitResponse) ProtoMessage() {}
 
 func (x *CreateBusinessUnitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -870,7 +1138,7 @@ func (x *CreateBusinessUnitResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateBusinessUnitResponse.ProtoReflect.Descriptor instead.
 func (*CreateBusinessUnitResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{10}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *CreateBusinessUnitResponse) GetBusinessUnit() *BusinessUnit {
@@ -891,7 +1159,7 @@ type GetBusinessUnitRequest struct {
 
 func (x *GetBusinessUnitRequest) Reset() {
 	*x = GetBusinessUnitRequest{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -903,7 +1171,7 @@ func (x *GetBusinessUnitRequest) String() string {
 func (*GetBusinessUnitRequest) ProtoMessage() {}
 
 func (x *GetBusinessUnitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -916,7 +1184,7 @@ func (x *GetBusinessUnitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBusinessUnitRequest.ProtoReflect.Descriptor instead.
 func (*GetBusinessUnitRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{11}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *GetBusinessUnitRequest) GetId() string {
@@ -937,7 +1205,7 @@ type GetBusinessUnitResponse struct {
 
 func (x *GetBusinessUnitResponse) Reset() {
 	*x = GetBusinessUnitResponse{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -949,7 +1217,7 @@ func (x *GetBusinessUnitResponse) String() string {
 func (*GetBusinessUnitResponse) ProtoMessage() {}
 
 func (x *GetBusinessUnitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -962,7 +1230,7 @@ func (x *GetBusinessUnitResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBusinessUnitResponse.ProtoReflect.Descriptor instead.
 func (*GetBusinessUnitResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{12}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *GetBusinessUnitResponse) GetBusinessUnit() *BusinessUnit {
@@ -987,7 +1255,7 @@ type ListBusinessUnitsRequest struct {
 
 func (x *ListBusinessUnitsRequest) Reset() {
 	*x = ListBusinessUnitsRequest{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -999,7 +1267,7 @@ func (x *ListBusinessUnitsRequest) String() string {
 func (*ListBusinessUnitsRequest) ProtoMessage() {}
 
 func (x *ListBusinessUnitsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1012,7 +1280,7 @@ func (x *ListBusinessUnitsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBusinessUnitsRequest.ProtoReflect.Descriptor instead.
 func (*ListBusinessUnitsRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{13}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ListBusinessUnitsRequest) GetPageSize() int32 {
@@ -1049,7 +1317,7 @@ type ListBusinessUnitsResponse struct {
 
 func (x *ListBusinessUnitsResponse) Reset() {
 	*x = ListBusinessUnitsResponse{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1061,7 +1329,7 @@ func (x *ListBusinessUnitsResponse) String() string {
 func (*ListBusinessUnitsResponse) ProtoMessage() {}
 
 func (x *ListBusinessUnitsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1074,7 +1342,7 @@ func (x *ListBusinessUnitsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBusinessUnitsResponse.ProtoReflect.Descriptor instead.
 func (*ListBusinessUnitsResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{14}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ListBusinessUnitsResponse) GetBusinessUnits() []*BusinessUnit {
@@ -1106,7 +1374,7 @@ type UpdateBusinessUnitRequest struct {
 
 func (x *UpdateBusinessUnitRequest) Reset() {
 	*x = UpdateBusinessUnitRequest{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1118,7 +1386,7 @@ func (x *UpdateBusinessUnitRequest) String() string {
 func (*UpdateBusinessUnitRequest) ProtoMessage() {}
 
 func (x *UpdateBusinessUnitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1131,7 +1399,7 @@ func (x *UpdateBusinessUnitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateBusinessUnitRequest.ProtoReflect.Descriptor instead.
 func (*UpdateBusinessUnitRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{15}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *UpdateBusinessUnitRequest) GetId() string {
@@ -1166,7 +1434,7 @@ type UpdateBusinessUnitResponse struct {
 
 func (x *UpdateBusinessUnitResponse) Reset() {
 	*x = UpdateBusinessUnitResponse{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[16]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1178,7 +1446,7 @@ func (x *UpdateBusinessUnitResponse) String() string {
 func (*UpdateBusinessUnitResponse) ProtoMessage() {}
 
 func (x *UpdateBusinessUnitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[16]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1191,7 +1459,7 @@ func (x *UpdateBusinessUnitResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateBusinessUnitResponse.ProtoReflect.Descriptor instead.
 func (*UpdateBusinessUnitResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{16}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *UpdateBusinessUnitResponse) GetBusinessUnit() *BusinessUnit {
@@ -1212,7 +1480,7 @@ type ArchiveBusinessUnitRequest struct {
 
 func (x *ArchiveBusinessUnitRequest) Reset() {
 	*x = ArchiveBusinessUnitRequest{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[17]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1224,7 +1492,7 @@ func (x *ArchiveBusinessUnitRequest) String() string {
 func (*ArchiveBusinessUnitRequest) ProtoMessage() {}
 
 func (x *ArchiveBusinessUnitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[17]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1237,7 +1505,7 @@ func (x *ArchiveBusinessUnitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArchiveBusinessUnitRequest.ProtoReflect.Descriptor instead.
 func (*ArchiveBusinessUnitRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{17}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ArchiveBusinessUnitRequest) GetId() string {
@@ -1258,7 +1526,7 @@ type ArchiveBusinessUnitResponse struct {
 
 func (x *ArchiveBusinessUnitResponse) Reset() {
 	*x = ArchiveBusinessUnitResponse{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[18]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1270,7 +1538,7 @@ func (x *ArchiveBusinessUnitResponse) String() string {
 func (*ArchiveBusinessUnitResponse) ProtoMessage() {}
 
 func (x *ArchiveBusinessUnitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[18]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1283,7 +1551,7 @@ func (x *ArchiveBusinessUnitResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArchiveBusinessUnitResponse.ProtoReflect.Descriptor instead.
 func (*ArchiveBusinessUnitResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{18}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ArchiveBusinessUnitResponse) GetBusinessUnit() *BusinessUnit {
@@ -1310,7 +1578,7 @@ type CreateTeamRequest struct {
 
 func (x *CreateTeamRequest) Reset() {
 	*x = CreateTeamRequest{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[19]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1322,7 +1590,7 @@ func (x *CreateTeamRequest) String() string {
 func (*CreateTeamRequest) ProtoMessage() {}
 
 func (x *CreateTeamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[19]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1335,7 +1603,7 @@ func (x *CreateTeamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTeamRequest.ProtoReflect.Descriptor instead.
 func (*CreateTeamRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{19}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *CreateTeamRequest) GetBusinessUnitId() string {
@@ -1377,7 +1645,7 @@ type CreateTeamResponse struct {
 
 func (x *CreateTeamResponse) Reset() {
 	*x = CreateTeamResponse{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1389,7 +1657,7 @@ func (x *CreateTeamResponse) String() string {
 func (*CreateTeamResponse) ProtoMessage() {}
 
 func (x *CreateTeamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1402,7 +1670,7 @@ func (x *CreateTeamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTeamResponse.ProtoReflect.Descriptor instead.
 func (*CreateTeamResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{20}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *CreateTeamResponse) GetTeam() *Team {
@@ -1423,7 +1691,7 @@ type GetTeamRequest struct {
 
 func (x *GetTeamRequest) Reset() {
 	*x = GetTeamRequest{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1435,7 +1703,7 @@ func (x *GetTeamRequest) String() string {
 func (*GetTeamRequest) ProtoMessage() {}
 
 func (x *GetTeamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1448,7 +1716,7 @@ func (x *GetTeamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTeamRequest.ProtoReflect.Descriptor instead.
 func (*GetTeamRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{21}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetTeamRequest) GetId() string {
@@ -1469,7 +1737,7 @@ type GetTeamResponse struct {
 
 func (x *GetTeamResponse) Reset() {
 	*x = GetTeamResponse{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[22]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1481,7 +1749,7 @@ func (x *GetTeamResponse) String() string {
 func (*GetTeamResponse) ProtoMessage() {}
 
 func (x *GetTeamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[22]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1494,7 +1762,7 @@ func (x *GetTeamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTeamResponse.ProtoReflect.Descriptor instead.
 func (*GetTeamResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{22}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GetTeamResponse) GetTeam() *Team {
@@ -1521,7 +1789,7 @@ type ListTeamsRequest struct {
 
 func (x *ListTeamsRequest) Reset() {
 	*x = ListTeamsRequest{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[23]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1533,7 +1801,7 @@ func (x *ListTeamsRequest) String() string {
 func (*ListTeamsRequest) ProtoMessage() {}
 
 func (x *ListTeamsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[23]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1546,7 +1814,7 @@ func (x *ListTeamsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTeamsRequest.ProtoReflect.Descriptor instead.
 func (*ListTeamsRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{23}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ListTeamsRequest) GetPageSize() int32 {
@@ -1590,7 +1858,7 @@ type ListTeamsResponse struct {
 
 func (x *ListTeamsResponse) Reset() {
 	*x = ListTeamsResponse{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1602,7 +1870,7 @@ func (x *ListTeamsResponse) String() string {
 func (*ListTeamsResponse) ProtoMessage() {}
 
 func (x *ListTeamsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1615,7 +1883,7 @@ func (x *ListTeamsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTeamsResponse.ProtoReflect.Descriptor instead.
 func (*ListTeamsResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{24}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ListTeamsResponse) GetTeams() []*Team {
@@ -1647,7 +1915,7 @@ type UpdateTeamRequest struct {
 
 func (x *UpdateTeamRequest) Reset() {
 	*x = UpdateTeamRequest{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1659,7 +1927,7 @@ func (x *UpdateTeamRequest) String() string {
 func (*UpdateTeamRequest) ProtoMessage() {}
 
 func (x *UpdateTeamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1672,7 +1940,7 @@ func (x *UpdateTeamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTeamRequest.ProtoReflect.Descriptor instead.
 func (*UpdateTeamRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{25}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *UpdateTeamRequest) GetId() string {
@@ -1707,7 +1975,7 @@ type UpdateTeamResponse struct {
 
 func (x *UpdateTeamResponse) Reset() {
 	*x = UpdateTeamResponse{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1719,7 +1987,7 @@ func (x *UpdateTeamResponse) String() string {
 func (*UpdateTeamResponse) ProtoMessage() {}
 
 func (x *UpdateTeamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1732,7 +2000,7 @@ func (x *UpdateTeamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTeamResponse.ProtoReflect.Descriptor instead.
 func (*UpdateTeamResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{26}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *UpdateTeamResponse) GetTeam() *Team {
@@ -1753,7 +2021,7 @@ type ArchiveTeamRequest struct {
 
 func (x *ArchiveTeamRequest) Reset() {
 	*x = ArchiveTeamRequest{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[27]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1765,7 +2033,7 @@ func (x *ArchiveTeamRequest) String() string {
 func (*ArchiveTeamRequest) ProtoMessage() {}
 
 func (x *ArchiveTeamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[27]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1778,7 +2046,7 @@ func (x *ArchiveTeamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArchiveTeamRequest.ProtoReflect.Descriptor instead.
 func (*ArchiveTeamRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{27}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ArchiveTeamRequest) GetId() string {
@@ -1799,7 +2067,7 @@ type ArchiveTeamResponse struct {
 
 func (x *ArchiveTeamResponse) Reset() {
 	*x = ArchiveTeamResponse{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[28]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1811,7 +2079,7 @@ func (x *ArchiveTeamResponse) String() string {
 func (*ArchiveTeamResponse) ProtoMessage() {}
 
 func (x *ArchiveTeamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[28]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1824,7 +2092,7 @@ func (x *ArchiveTeamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArchiveTeamResponse.ProtoReflect.Descriptor instead.
 func (*ArchiveTeamResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{28}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ArchiveTeamResponse) GetTeam() *Team {
@@ -1847,7 +2115,7 @@ type AddTeamMemberRequest struct {
 
 func (x *AddTeamMemberRequest) Reset() {
 	*x = AddTeamMemberRequest{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[29]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1859,7 +2127,7 @@ func (x *AddTeamMemberRequest) String() string {
 func (*AddTeamMemberRequest) ProtoMessage() {}
 
 func (x *AddTeamMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[29]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1872,7 +2140,7 @@ func (x *AddTeamMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddTeamMemberRequest.ProtoReflect.Descriptor instead.
 func (*AddTeamMemberRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{29}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *AddTeamMemberRequest) GetTeamId() string {
@@ -1900,7 +2168,7 @@ type AddTeamMemberResponse struct {
 
 func (x *AddTeamMemberResponse) Reset() {
 	*x = AddTeamMemberResponse{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[30]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1912,7 +2180,7 @@ func (x *AddTeamMemberResponse) String() string {
 func (*AddTeamMemberResponse) ProtoMessage() {}
 
 func (x *AddTeamMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[30]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1925,7 +2193,7 @@ func (x *AddTeamMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddTeamMemberResponse.ProtoReflect.Descriptor instead.
 func (*AddTeamMemberResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{30}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *AddTeamMemberResponse) GetMember() *TeamMember {
@@ -1948,7 +2216,7 @@ type RemoveTeamMemberRequest struct {
 
 func (x *RemoveTeamMemberRequest) Reset() {
 	*x = RemoveTeamMemberRequest{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[31]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1960,7 +2228,7 @@ func (x *RemoveTeamMemberRequest) String() string {
 func (*RemoveTeamMemberRequest) ProtoMessage() {}
 
 func (x *RemoveTeamMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[31]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1973,7 +2241,7 @@ func (x *RemoveTeamMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveTeamMemberRequest.ProtoReflect.Descriptor instead.
 func (*RemoveTeamMemberRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{31}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *RemoveTeamMemberRequest) GetTeamId() string {
@@ -1999,7 +2267,7 @@ type RemoveTeamMemberResponse struct {
 
 func (x *RemoveTeamMemberResponse) Reset() {
 	*x = RemoveTeamMemberResponse{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[32]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2011,7 +2279,7 @@ func (x *RemoveTeamMemberResponse) String() string {
 func (*RemoveTeamMemberResponse) ProtoMessage() {}
 
 func (x *RemoveTeamMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[32]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2024,7 +2292,7 @@ func (x *RemoveTeamMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveTeamMemberResponse.ProtoReflect.Descriptor instead.
 func (*RemoveTeamMemberResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{32}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{37}
 }
 
 // ListTeamMembersRequest pages through a team's members.
@@ -2042,7 +2310,7 @@ type ListTeamMembersRequest struct {
 
 func (x *ListTeamMembersRequest) Reset() {
 	*x = ListTeamMembersRequest{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[33]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2054,7 +2322,7 @@ func (x *ListTeamMembersRequest) String() string {
 func (*ListTeamMembersRequest) ProtoMessage() {}
 
 func (x *ListTeamMembersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[33]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2067,7 +2335,7 @@ func (x *ListTeamMembersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTeamMembersRequest.ProtoReflect.Descriptor instead.
 func (*ListTeamMembersRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{33}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *ListTeamMembersRequest) GetTeamId() string {
@@ -2104,7 +2372,7 @@ type ListTeamMembersResponse struct {
 
 func (x *ListTeamMembersResponse) Reset() {
 	*x = ListTeamMembersResponse{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[34]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2116,7 +2384,7 @@ func (x *ListTeamMembersResponse) String() string {
 func (*ListTeamMembersResponse) ProtoMessage() {}
 
 func (x *ListTeamMembersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[34]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2129,7 +2397,7 @@ func (x *ListTeamMembersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTeamMembersResponse.ProtoReflect.Descriptor instead.
 func (*ListTeamMembersResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{34}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ListTeamMembersResponse) GetMembers() []*TeamMember {
@@ -2165,7 +2433,7 @@ type CreateEnvironmentRequest struct {
 
 func (x *CreateEnvironmentRequest) Reset() {
 	*x = CreateEnvironmentRequest{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[35]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2177,7 +2445,7 @@ func (x *CreateEnvironmentRequest) String() string {
 func (*CreateEnvironmentRequest) ProtoMessage() {}
 
 func (x *CreateEnvironmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[35]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2190,7 +2458,7 @@ func (x *CreateEnvironmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateEnvironmentRequest.ProtoReflect.Descriptor instead.
 func (*CreateEnvironmentRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{35}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *CreateEnvironmentRequest) GetTeamId() string {
@@ -2239,7 +2507,7 @@ type CreateEnvironmentResponse struct {
 
 func (x *CreateEnvironmentResponse) Reset() {
 	*x = CreateEnvironmentResponse{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[36]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2251,7 +2519,7 @@ func (x *CreateEnvironmentResponse) String() string {
 func (*CreateEnvironmentResponse) ProtoMessage() {}
 
 func (x *CreateEnvironmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[36]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2264,7 +2532,7 @@ func (x *CreateEnvironmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateEnvironmentResponse.ProtoReflect.Descriptor instead.
 func (*CreateEnvironmentResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{36}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *CreateEnvironmentResponse) GetEnvironment() *Environment {
@@ -2285,7 +2553,7 @@ type GetEnvironmentRequest struct {
 
 func (x *GetEnvironmentRequest) Reset() {
 	*x = GetEnvironmentRequest{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[37]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2297,7 +2565,7 @@ func (x *GetEnvironmentRequest) String() string {
 func (*GetEnvironmentRequest) ProtoMessage() {}
 
 func (x *GetEnvironmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[37]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2310,7 +2578,7 @@ func (x *GetEnvironmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEnvironmentRequest.ProtoReflect.Descriptor instead.
 func (*GetEnvironmentRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{37}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *GetEnvironmentRequest) GetId() string {
@@ -2331,7 +2599,7 @@ type GetEnvironmentResponse struct {
 
 func (x *GetEnvironmentResponse) Reset() {
 	*x = GetEnvironmentResponse{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[38]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2343,7 +2611,7 @@ func (x *GetEnvironmentResponse) String() string {
 func (*GetEnvironmentResponse) ProtoMessage() {}
 
 func (x *GetEnvironmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[38]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2356,7 +2624,7 @@ func (x *GetEnvironmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEnvironmentResponse.ProtoReflect.Descriptor instead.
 func (*GetEnvironmentResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{38}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *GetEnvironmentResponse) GetEnvironment() *Environment {
@@ -2383,7 +2651,7 @@ type ListEnvironmentsRequest struct {
 
 func (x *ListEnvironmentsRequest) Reset() {
 	*x = ListEnvironmentsRequest{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[39]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2395,7 +2663,7 @@ func (x *ListEnvironmentsRequest) String() string {
 func (*ListEnvironmentsRequest) ProtoMessage() {}
 
 func (x *ListEnvironmentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[39]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2408,7 +2676,7 @@ func (x *ListEnvironmentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEnvironmentsRequest.ProtoReflect.Descriptor instead.
 func (*ListEnvironmentsRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{39}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ListEnvironmentsRequest) GetPageSize() int32 {
@@ -2452,7 +2720,7 @@ type ListEnvironmentsResponse struct {
 
 func (x *ListEnvironmentsResponse) Reset() {
 	*x = ListEnvironmentsResponse{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[40]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2464,7 +2732,7 @@ func (x *ListEnvironmentsResponse) String() string {
 func (*ListEnvironmentsResponse) ProtoMessage() {}
 
 func (x *ListEnvironmentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[40]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2477,7 +2745,7 @@ func (x *ListEnvironmentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEnvironmentsResponse.ProtoReflect.Descriptor instead.
 func (*ListEnvironmentsResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{40}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *ListEnvironmentsResponse) GetEnvironments() []*Environment {
@@ -2509,7 +2777,7 @@ type UpdateEnvironmentRequest struct {
 
 func (x *UpdateEnvironmentRequest) Reset() {
 	*x = UpdateEnvironmentRequest{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[41]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2521,7 +2789,7 @@ func (x *UpdateEnvironmentRequest) String() string {
 func (*UpdateEnvironmentRequest) ProtoMessage() {}
 
 func (x *UpdateEnvironmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[41]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2534,7 +2802,7 @@ func (x *UpdateEnvironmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateEnvironmentRequest.ProtoReflect.Descriptor instead.
 func (*UpdateEnvironmentRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{41}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *UpdateEnvironmentRequest) GetId() string {
@@ -2569,7 +2837,7 @@ type UpdateEnvironmentResponse struct {
 
 func (x *UpdateEnvironmentResponse) Reset() {
 	*x = UpdateEnvironmentResponse{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[42]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2581,7 +2849,7 @@ func (x *UpdateEnvironmentResponse) String() string {
 func (*UpdateEnvironmentResponse) ProtoMessage() {}
 
 func (x *UpdateEnvironmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[42]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2594,7 +2862,7 @@ func (x *UpdateEnvironmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateEnvironmentResponse.ProtoReflect.Descriptor instead.
 func (*UpdateEnvironmentResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{42}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *UpdateEnvironmentResponse) GetEnvironment() *Environment {
@@ -2615,7 +2883,7 @@ type ArchiveEnvironmentRequest struct {
 
 func (x *ArchiveEnvironmentRequest) Reset() {
 	*x = ArchiveEnvironmentRequest{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[43]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2627,7 +2895,7 @@ func (x *ArchiveEnvironmentRequest) String() string {
 func (*ArchiveEnvironmentRequest) ProtoMessage() {}
 
 func (x *ArchiveEnvironmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[43]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2640,7 +2908,7 @@ func (x *ArchiveEnvironmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArchiveEnvironmentRequest.ProtoReflect.Descriptor instead.
 func (*ArchiveEnvironmentRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{43}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ArchiveEnvironmentRequest) GetId() string {
@@ -2661,7 +2929,7 @@ type ArchiveEnvironmentResponse struct {
 
 func (x *ArchiveEnvironmentResponse) Reset() {
 	*x = ArchiveEnvironmentResponse{}
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[44]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2673,7 +2941,7 @@ func (x *ArchiveEnvironmentResponse) String() string {
 func (*ArchiveEnvironmentResponse) ProtoMessage() {}
 
 func (x *ArchiveEnvironmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[44]
+	mi := &file_pantherclaw_v1_tenancy_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2686,7 +2954,7 @@ func (x *ArchiveEnvironmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArchiveEnvironmentResponse.ProtoReflect.Descriptor instead.
 func (*ArchiveEnvironmentResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{44}
+	return file_pantherclaw_v1_tenancy_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ArchiveEnvironmentResponse) GetEnvironment() *Environment {
@@ -2753,7 +3021,24 @@ const file_pantherclaw_v1_tenancy_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xc8\x01R\x04name\":\n" +
 	"\x11UpdateOrgResponse\x12%\n" +
-	"\x03org\x18\x01 \x01(\v2\x13.pantherclaw.v1.OrgR\x03org\"\xa8\x01\n" +
+	"\x03org\x18\x01 \x01(\v2\x13.pantherclaw.v1.OrgR\x03org\"\x8d\x02\n" +
+	"\x10CreateOrgRequest\x12\x1e\n" +
+	"\x04name\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xc8\x01R\x04name\x12?\n" +
+	"\x04slug\x18\x02 \x01(\tB+\xbaH(r&2$^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$R\x04slug\x12M\n" +
+	"\rterms_version\x18\x03 \x01(\tB(\xbaH%r#2!^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$R\ftermsVersion\x12I\n" +
+	"\vdpa_version\x18\x04 \x01(\tB(\xbaH%r#2!^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$R\n" +
+	"dpaVersion\":\n" +
+	"\x11CreateOrgResponse\x12%\n" +
+	"\x03org\x18\x01 \x01(\v2\x13.pantherclaw.v1.OrgR\x03org\"\x13\n" +
+	"\x11ListMyOrgsRequest\"K\n" +
+	"\n" +
+	"OrgSummary\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\"D\n" +
+	"\x12ListMyOrgsResponse\x12.\n" +
+	"\x04orgs\x18\x01 \x03(\v2\x1a.pantherclaw.v1.OrgSummaryR\x04orgs\"\xa8\x01\n" +
 	"\x19CreateBusinessUnitRequest\x12?\n" +
 	"\x04slug\x18\x01 \x01(\tB+\xbaH(r&2$^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$R\x04slug\x12\x1e\n" +
 	"\x04name\x18\x02 \x01(\tB\n" +
@@ -2885,10 +3170,13 @@ const file_pantherclaw_v1_tenancy_proto_rawDesc = "" +
 	"\x1cENVIRONMENT_KIND_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cENVIRONMENT_KIND_DEVELOPMENT\x10\x01\x12\x1c\n" +
 	"\x18ENVIRONMENT_KIND_STAGING\x10\x02\x12\x1f\n" +
-	"\x1bENVIRONMENT_KIND_PRODUCTION\x10\x032\xbd\x0f\n" +
+	"\x1bENVIRONMENT_KIND_PRODUCTION\x10\x032\xe9\x10\n" +
 	"\x0eTenancyService\x12L\n" +
 	"\x06GetOrg\x12\x1d.pantherclaw.v1.GetOrgRequest\x1a\x1e.pantherclaw.v1.GetOrgResponse\"\x03\x90\x02\x01\x12P\n" +
-	"\tUpdateOrg\x12 .pantherclaw.v1.UpdateOrgRequest\x1a!.pantherclaw.v1.UpdateOrgResponse\x12k\n" +
+	"\tUpdateOrg\x12 .pantherclaw.v1.UpdateOrgRequest\x1a!.pantherclaw.v1.UpdateOrgResponse\x12P\n" +
+	"\tCreateOrg\x12 .pantherclaw.v1.CreateOrgRequest\x1a!.pantherclaw.v1.CreateOrgResponse\x12X\n" +
+	"\n" +
+	"ListMyOrgs\x12!.pantherclaw.v1.ListMyOrgsRequest\x1a\".pantherclaw.v1.ListMyOrgsResponse\"\x03\x90\x02\x01\x12k\n" +
 	"\x12CreateBusinessUnit\x12).pantherclaw.v1.CreateBusinessUnitRequest\x1a*.pantherclaw.v1.CreateBusinessUnitResponse\x12g\n" +
 	"\x0fGetBusinessUnit\x12&.pantherclaw.v1.GetBusinessUnitRequest\x1a'.pantherclaw.v1.GetBusinessUnitResponse\"\x03\x90\x02\x01\x12m\n" +
 	"\x11ListBusinessUnits\x12(.pantherclaw.v1.ListBusinessUnitsRequest\x1a).pantherclaw.v1.ListBusinessUnitsResponse\"\x03\x90\x02\x01\x12k\n" +
@@ -2924,7 +3212,7 @@ func file_pantherclaw_v1_tenancy_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_tenancy_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_pantherclaw_v1_tenancy_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
+var file_pantherclaw_v1_tenancy_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
 var file_pantherclaw_v1_tenancy_proto_goTypes = []any{
 	(EntityState)(0),                    // 0: pantherclaw.v1.EntityState
 	(EnvironmentKind)(0),                // 1: pantherclaw.v1.EnvironmentKind
@@ -2937,122 +3225,133 @@ var file_pantherclaw_v1_tenancy_proto_goTypes = []any{
 	(*GetOrgResponse)(nil),              // 8: pantherclaw.v1.GetOrgResponse
 	(*UpdateOrgRequest)(nil),            // 9: pantherclaw.v1.UpdateOrgRequest
 	(*UpdateOrgResponse)(nil),           // 10: pantherclaw.v1.UpdateOrgResponse
-	(*CreateBusinessUnitRequest)(nil),   // 11: pantherclaw.v1.CreateBusinessUnitRequest
-	(*CreateBusinessUnitResponse)(nil),  // 12: pantherclaw.v1.CreateBusinessUnitResponse
-	(*GetBusinessUnitRequest)(nil),      // 13: pantherclaw.v1.GetBusinessUnitRequest
-	(*GetBusinessUnitResponse)(nil),     // 14: pantherclaw.v1.GetBusinessUnitResponse
-	(*ListBusinessUnitsRequest)(nil),    // 15: pantherclaw.v1.ListBusinessUnitsRequest
-	(*ListBusinessUnitsResponse)(nil),   // 16: pantherclaw.v1.ListBusinessUnitsResponse
-	(*UpdateBusinessUnitRequest)(nil),   // 17: pantherclaw.v1.UpdateBusinessUnitRequest
-	(*UpdateBusinessUnitResponse)(nil),  // 18: pantherclaw.v1.UpdateBusinessUnitResponse
-	(*ArchiveBusinessUnitRequest)(nil),  // 19: pantherclaw.v1.ArchiveBusinessUnitRequest
-	(*ArchiveBusinessUnitResponse)(nil), // 20: pantherclaw.v1.ArchiveBusinessUnitResponse
-	(*CreateTeamRequest)(nil),           // 21: pantherclaw.v1.CreateTeamRequest
-	(*CreateTeamResponse)(nil),          // 22: pantherclaw.v1.CreateTeamResponse
-	(*GetTeamRequest)(nil),              // 23: pantherclaw.v1.GetTeamRequest
-	(*GetTeamResponse)(nil),             // 24: pantherclaw.v1.GetTeamResponse
-	(*ListTeamsRequest)(nil),            // 25: pantherclaw.v1.ListTeamsRequest
-	(*ListTeamsResponse)(nil),           // 26: pantherclaw.v1.ListTeamsResponse
-	(*UpdateTeamRequest)(nil),           // 27: pantherclaw.v1.UpdateTeamRequest
-	(*UpdateTeamResponse)(nil),          // 28: pantherclaw.v1.UpdateTeamResponse
-	(*ArchiveTeamRequest)(nil),          // 29: pantherclaw.v1.ArchiveTeamRequest
-	(*ArchiveTeamResponse)(nil),         // 30: pantherclaw.v1.ArchiveTeamResponse
-	(*AddTeamMemberRequest)(nil),        // 31: pantherclaw.v1.AddTeamMemberRequest
-	(*AddTeamMemberResponse)(nil),       // 32: pantherclaw.v1.AddTeamMemberResponse
-	(*RemoveTeamMemberRequest)(nil),     // 33: pantherclaw.v1.RemoveTeamMemberRequest
-	(*RemoveTeamMemberResponse)(nil),    // 34: pantherclaw.v1.RemoveTeamMemberResponse
-	(*ListTeamMembersRequest)(nil),      // 35: pantherclaw.v1.ListTeamMembersRequest
-	(*ListTeamMembersResponse)(nil),     // 36: pantherclaw.v1.ListTeamMembersResponse
-	(*CreateEnvironmentRequest)(nil),    // 37: pantherclaw.v1.CreateEnvironmentRequest
-	(*CreateEnvironmentResponse)(nil),   // 38: pantherclaw.v1.CreateEnvironmentResponse
-	(*GetEnvironmentRequest)(nil),       // 39: pantherclaw.v1.GetEnvironmentRequest
-	(*GetEnvironmentResponse)(nil),      // 40: pantherclaw.v1.GetEnvironmentResponse
-	(*ListEnvironmentsRequest)(nil),     // 41: pantherclaw.v1.ListEnvironmentsRequest
-	(*ListEnvironmentsResponse)(nil),    // 42: pantherclaw.v1.ListEnvironmentsResponse
-	(*UpdateEnvironmentRequest)(nil),    // 43: pantherclaw.v1.UpdateEnvironmentRequest
-	(*UpdateEnvironmentResponse)(nil),   // 44: pantherclaw.v1.UpdateEnvironmentResponse
-	(*ArchiveEnvironmentRequest)(nil),   // 45: pantherclaw.v1.ArchiveEnvironmentRequest
-	(*ArchiveEnvironmentResponse)(nil),  // 46: pantherclaw.v1.ArchiveEnvironmentResponse
-	(*timestamppb.Timestamp)(nil),       // 47: google.protobuf.Timestamp
+	(*CreateOrgRequest)(nil),            // 11: pantherclaw.v1.CreateOrgRequest
+	(*CreateOrgResponse)(nil),           // 12: pantherclaw.v1.CreateOrgResponse
+	(*ListMyOrgsRequest)(nil),           // 13: pantherclaw.v1.ListMyOrgsRequest
+	(*OrgSummary)(nil),                  // 14: pantherclaw.v1.OrgSummary
+	(*ListMyOrgsResponse)(nil),          // 15: pantherclaw.v1.ListMyOrgsResponse
+	(*CreateBusinessUnitRequest)(nil),   // 16: pantherclaw.v1.CreateBusinessUnitRequest
+	(*CreateBusinessUnitResponse)(nil),  // 17: pantherclaw.v1.CreateBusinessUnitResponse
+	(*GetBusinessUnitRequest)(nil),      // 18: pantherclaw.v1.GetBusinessUnitRequest
+	(*GetBusinessUnitResponse)(nil),     // 19: pantherclaw.v1.GetBusinessUnitResponse
+	(*ListBusinessUnitsRequest)(nil),    // 20: pantherclaw.v1.ListBusinessUnitsRequest
+	(*ListBusinessUnitsResponse)(nil),   // 21: pantherclaw.v1.ListBusinessUnitsResponse
+	(*UpdateBusinessUnitRequest)(nil),   // 22: pantherclaw.v1.UpdateBusinessUnitRequest
+	(*UpdateBusinessUnitResponse)(nil),  // 23: pantherclaw.v1.UpdateBusinessUnitResponse
+	(*ArchiveBusinessUnitRequest)(nil),  // 24: pantherclaw.v1.ArchiveBusinessUnitRequest
+	(*ArchiveBusinessUnitResponse)(nil), // 25: pantherclaw.v1.ArchiveBusinessUnitResponse
+	(*CreateTeamRequest)(nil),           // 26: pantherclaw.v1.CreateTeamRequest
+	(*CreateTeamResponse)(nil),          // 27: pantherclaw.v1.CreateTeamResponse
+	(*GetTeamRequest)(nil),              // 28: pantherclaw.v1.GetTeamRequest
+	(*GetTeamResponse)(nil),             // 29: pantherclaw.v1.GetTeamResponse
+	(*ListTeamsRequest)(nil),            // 30: pantherclaw.v1.ListTeamsRequest
+	(*ListTeamsResponse)(nil),           // 31: pantherclaw.v1.ListTeamsResponse
+	(*UpdateTeamRequest)(nil),           // 32: pantherclaw.v1.UpdateTeamRequest
+	(*UpdateTeamResponse)(nil),          // 33: pantherclaw.v1.UpdateTeamResponse
+	(*ArchiveTeamRequest)(nil),          // 34: pantherclaw.v1.ArchiveTeamRequest
+	(*ArchiveTeamResponse)(nil),         // 35: pantherclaw.v1.ArchiveTeamResponse
+	(*AddTeamMemberRequest)(nil),        // 36: pantherclaw.v1.AddTeamMemberRequest
+	(*AddTeamMemberResponse)(nil),       // 37: pantherclaw.v1.AddTeamMemberResponse
+	(*RemoveTeamMemberRequest)(nil),     // 38: pantherclaw.v1.RemoveTeamMemberRequest
+	(*RemoveTeamMemberResponse)(nil),    // 39: pantherclaw.v1.RemoveTeamMemberResponse
+	(*ListTeamMembersRequest)(nil),      // 40: pantherclaw.v1.ListTeamMembersRequest
+	(*ListTeamMembersResponse)(nil),     // 41: pantherclaw.v1.ListTeamMembersResponse
+	(*CreateEnvironmentRequest)(nil),    // 42: pantherclaw.v1.CreateEnvironmentRequest
+	(*CreateEnvironmentResponse)(nil),   // 43: pantherclaw.v1.CreateEnvironmentResponse
+	(*GetEnvironmentRequest)(nil),       // 44: pantherclaw.v1.GetEnvironmentRequest
+	(*GetEnvironmentResponse)(nil),      // 45: pantherclaw.v1.GetEnvironmentResponse
+	(*ListEnvironmentsRequest)(nil),     // 46: pantherclaw.v1.ListEnvironmentsRequest
+	(*ListEnvironmentsResponse)(nil),    // 47: pantherclaw.v1.ListEnvironmentsResponse
+	(*UpdateEnvironmentRequest)(nil),    // 48: pantherclaw.v1.UpdateEnvironmentRequest
+	(*UpdateEnvironmentResponse)(nil),   // 49: pantherclaw.v1.UpdateEnvironmentResponse
+	(*ArchiveEnvironmentRequest)(nil),   // 50: pantherclaw.v1.ArchiveEnvironmentRequest
+	(*ArchiveEnvironmentResponse)(nil),  // 51: pantherclaw.v1.ArchiveEnvironmentResponse
+	(*timestamppb.Timestamp)(nil),       // 52: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_tenancy_proto_depIdxs = []int32{
-	47, // 0: pantherclaw.v1.Org.create_time:type_name -> google.protobuf.Timestamp
+	52, // 0: pantherclaw.v1.Org.create_time:type_name -> google.protobuf.Timestamp
 	0,  // 1: pantherclaw.v1.BusinessUnit.state:type_name -> pantherclaw.v1.EntityState
-	47, // 2: pantherclaw.v1.BusinessUnit.create_time:type_name -> google.protobuf.Timestamp
-	47, // 3: pantherclaw.v1.BusinessUnit.update_time:type_name -> google.protobuf.Timestamp
+	52, // 2: pantherclaw.v1.BusinessUnit.create_time:type_name -> google.protobuf.Timestamp
+	52, // 3: pantherclaw.v1.BusinessUnit.update_time:type_name -> google.protobuf.Timestamp
 	0,  // 4: pantherclaw.v1.Team.state:type_name -> pantherclaw.v1.EntityState
-	47, // 5: pantherclaw.v1.Team.create_time:type_name -> google.protobuf.Timestamp
-	47, // 6: pantherclaw.v1.Team.update_time:type_name -> google.protobuf.Timestamp
+	52, // 5: pantherclaw.v1.Team.create_time:type_name -> google.protobuf.Timestamp
+	52, // 6: pantherclaw.v1.Team.update_time:type_name -> google.protobuf.Timestamp
 	1,  // 7: pantherclaw.v1.Environment.kind:type_name -> pantherclaw.v1.EnvironmentKind
 	0,  // 8: pantherclaw.v1.Environment.state:type_name -> pantherclaw.v1.EntityState
-	47, // 9: pantherclaw.v1.Environment.create_time:type_name -> google.protobuf.Timestamp
-	47, // 10: pantherclaw.v1.Environment.update_time:type_name -> google.protobuf.Timestamp
-	47, // 11: pantherclaw.v1.TeamMember.create_time:type_name -> google.protobuf.Timestamp
+	52, // 9: pantherclaw.v1.Environment.create_time:type_name -> google.protobuf.Timestamp
+	52, // 10: pantherclaw.v1.Environment.update_time:type_name -> google.protobuf.Timestamp
+	52, // 11: pantherclaw.v1.TeamMember.create_time:type_name -> google.protobuf.Timestamp
 	2,  // 12: pantherclaw.v1.GetOrgResponse.org:type_name -> pantherclaw.v1.Org
 	2,  // 13: pantherclaw.v1.UpdateOrgResponse.org:type_name -> pantherclaw.v1.Org
-	3,  // 14: pantherclaw.v1.CreateBusinessUnitResponse.business_unit:type_name -> pantherclaw.v1.BusinessUnit
-	3,  // 15: pantherclaw.v1.GetBusinessUnitResponse.business_unit:type_name -> pantherclaw.v1.BusinessUnit
-	3,  // 16: pantherclaw.v1.ListBusinessUnitsResponse.business_units:type_name -> pantherclaw.v1.BusinessUnit
-	3,  // 17: pantherclaw.v1.UpdateBusinessUnitResponse.business_unit:type_name -> pantherclaw.v1.BusinessUnit
-	3,  // 18: pantherclaw.v1.ArchiveBusinessUnitResponse.business_unit:type_name -> pantherclaw.v1.BusinessUnit
-	4,  // 19: pantherclaw.v1.CreateTeamResponse.team:type_name -> pantherclaw.v1.Team
-	4,  // 20: pantherclaw.v1.GetTeamResponse.team:type_name -> pantherclaw.v1.Team
-	4,  // 21: pantherclaw.v1.ListTeamsResponse.teams:type_name -> pantherclaw.v1.Team
-	4,  // 22: pantherclaw.v1.UpdateTeamResponse.team:type_name -> pantherclaw.v1.Team
-	4,  // 23: pantherclaw.v1.ArchiveTeamResponse.team:type_name -> pantherclaw.v1.Team
-	6,  // 24: pantherclaw.v1.AddTeamMemberResponse.member:type_name -> pantherclaw.v1.TeamMember
-	6,  // 25: pantherclaw.v1.ListTeamMembersResponse.members:type_name -> pantherclaw.v1.TeamMember
-	1,  // 26: pantherclaw.v1.CreateEnvironmentRequest.kind:type_name -> pantherclaw.v1.EnvironmentKind
-	5,  // 27: pantherclaw.v1.CreateEnvironmentResponse.environment:type_name -> pantherclaw.v1.Environment
-	5,  // 28: pantherclaw.v1.GetEnvironmentResponse.environment:type_name -> pantherclaw.v1.Environment
-	5,  // 29: pantherclaw.v1.ListEnvironmentsResponse.environments:type_name -> pantherclaw.v1.Environment
-	5,  // 30: pantherclaw.v1.UpdateEnvironmentResponse.environment:type_name -> pantherclaw.v1.Environment
-	5,  // 31: pantherclaw.v1.ArchiveEnvironmentResponse.environment:type_name -> pantherclaw.v1.Environment
-	7,  // 32: pantherclaw.v1.TenancyService.GetOrg:input_type -> pantherclaw.v1.GetOrgRequest
-	9,  // 33: pantherclaw.v1.TenancyService.UpdateOrg:input_type -> pantherclaw.v1.UpdateOrgRequest
-	11, // 34: pantherclaw.v1.TenancyService.CreateBusinessUnit:input_type -> pantherclaw.v1.CreateBusinessUnitRequest
-	13, // 35: pantherclaw.v1.TenancyService.GetBusinessUnit:input_type -> pantherclaw.v1.GetBusinessUnitRequest
-	15, // 36: pantherclaw.v1.TenancyService.ListBusinessUnits:input_type -> pantherclaw.v1.ListBusinessUnitsRequest
-	17, // 37: pantherclaw.v1.TenancyService.UpdateBusinessUnit:input_type -> pantherclaw.v1.UpdateBusinessUnitRequest
-	19, // 38: pantherclaw.v1.TenancyService.ArchiveBusinessUnit:input_type -> pantherclaw.v1.ArchiveBusinessUnitRequest
-	21, // 39: pantherclaw.v1.TenancyService.CreateTeam:input_type -> pantherclaw.v1.CreateTeamRequest
-	23, // 40: pantherclaw.v1.TenancyService.GetTeam:input_type -> pantherclaw.v1.GetTeamRequest
-	25, // 41: pantherclaw.v1.TenancyService.ListTeams:input_type -> pantherclaw.v1.ListTeamsRequest
-	27, // 42: pantherclaw.v1.TenancyService.UpdateTeam:input_type -> pantherclaw.v1.UpdateTeamRequest
-	29, // 43: pantherclaw.v1.TenancyService.ArchiveTeam:input_type -> pantherclaw.v1.ArchiveTeamRequest
-	31, // 44: pantherclaw.v1.TenancyService.AddTeamMember:input_type -> pantherclaw.v1.AddTeamMemberRequest
-	33, // 45: pantherclaw.v1.TenancyService.RemoveTeamMember:input_type -> pantherclaw.v1.RemoveTeamMemberRequest
-	35, // 46: pantherclaw.v1.TenancyService.ListTeamMembers:input_type -> pantherclaw.v1.ListTeamMembersRequest
-	37, // 47: pantherclaw.v1.TenancyService.CreateEnvironment:input_type -> pantherclaw.v1.CreateEnvironmentRequest
-	39, // 48: pantherclaw.v1.TenancyService.GetEnvironment:input_type -> pantherclaw.v1.GetEnvironmentRequest
-	41, // 49: pantherclaw.v1.TenancyService.ListEnvironments:input_type -> pantherclaw.v1.ListEnvironmentsRequest
-	43, // 50: pantherclaw.v1.TenancyService.UpdateEnvironment:input_type -> pantherclaw.v1.UpdateEnvironmentRequest
-	45, // 51: pantherclaw.v1.TenancyService.ArchiveEnvironment:input_type -> pantherclaw.v1.ArchiveEnvironmentRequest
-	8,  // 52: pantherclaw.v1.TenancyService.GetOrg:output_type -> pantherclaw.v1.GetOrgResponse
-	10, // 53: pantherclaw.v1.TenancyService.UpdateOrg:output_type -> pantherclaw.v1.UpdateOrgResponse
-	12, // 54: pantherclaw.v1.TenancyService.CreateBusinessUnit:output_type -> pantherclaw.v1.CreateBusinessUnitResponse
-	14, // 55: pantherclaw.v1.TenancyService.GetBusinessUnit:output_type -> pantherclaw.v1.GetBusinessUnitResponse
-	16, // 56: pantherclaw.v1.TenancyService.ListBusinessUnits:output_type -> pantherclaw.v1.ListBusinessUnitsResponse
-	18, // 57: pantherclaw.v1.TenancyService.UpdateBusinessUnit:output_type -> pantherclaw.v1.UpdateBusinessUnitResponse
-	20, // 58: pantherclaw.v1.TenancyService.ArchiveBusinessUnit:output_type -> pantherclaw.v1.ArchiveBusinessUnitResponse
-	22, // 59: pantherclaw.v1.TenancyService.CreateTeam:output_type -> pantherclaw.v1.CreateTeamResponse
-	24, // 60: pantherclaw.v1.TenancyService.GetTeam:output_type -> pantherclaw.v1.GetTeamResponse
-	26, // 61: pantherclaw.v1.TenancyService.ListTeams:output_type -> pantherclaw.v1.ListTeamsResponse
-	28, // 62: pantherclaw.v1.TenancyService.UpdateTeam:output_type -> pantherclaw.v1.UpdateTeamResponse
-	30, // 63: pantherclaw.v1.TenancyService.ArchiveTeam:output_type -> pantherclaw.v1.ArchiveTeamResponse
-	32, // 64: pantherclaw.v1.TenancyService.AddTeamMember:output_type -> pantherclaw.v1.AddTeamMemberResponse
-	34, // 65: pantherclaw.v1.TenancyService.RemoveTeamMember:output_type -> pantherclaw.v1.RemoveTeamMemberResponse
-	36, // 66: pantherclaw.v1.TenancyService.ListTeamMembers:output_type -> pantherclaw.v1.ListTeamMembersResponse
-	38, // 67: pantherclaw.v1.TenancyService.CreateEnvironment:output_type -> pantherclaw.v1.CreateEnvironmentResponse
-	40, // 68: pantherclaw.v1.TenancyService.GetEnvironment:output_type -> pantherclaw.v1.GetEnvironmentResponse
-	42, // 69: pantherclaw.v1.TenancyService.ListEnvironments:output_type -> pantherclaw.v1.ListEnvironmentsResponse
-	44, // 70: pantherclaw.v1.TenancyService.UpdateEnvironment:output_type -> pantherclaw.v1.UpdateEnvironmentResponse
-	46, // 71: pantherclaw.v1.TenancyService.ArchiveEnvironment:output_type -> pantherclaw.v1.ArchiveEnvironmentResponse
-	52, // [52:72] is the sub-list for method output_type
-	32, // [32:52] is the sub-list for method input_type
-	32, // [32:32] is the sub-list for extension type_name
-	32, // [32:32] is the sub-list for extension extendee
-	0,  // [0:32] is the sub-list for field type_name
+	2,  // 14: pantherclaw.v1.CreateOrgResponse.org:type_name -> pantherclaw.v1.Org
+	14, // 15: pantherclaw.v1.ListMyOrgsResponse.orgs:type_name -> pantherclaw.v1.OrgSummary
+	3,  // 16: pantherclaw.v1.CreateBusinessUnitResponse.business_unit:type_name -> pantherclaw.v1.BusinessUnit
+	3,  // 17: pantherclaw.v1.GetBusinessUnitResponse.business_unit:type_name -> pantherclaw.v1.BusinessUnit
+	3,  // 18: pantherclaw.v1.ListBusinessUnitsResponse.business_units:type_name -> pantherclaw.v1.BusinessUnit
+	3,  // 19: pantherclaw.v1.UpdateBusinessUnitResponse.business_unit:type_name -> pantherclaw.v1.BusinessUnit
+	3,  // 20: pantherclaw.v1.ArchiveBusinessUnitResponse.business_unit:type_name -> pantherclaw.v1.BusinessUnit
+	4,  // 21: pantherclaw.v1.CreateTeamResponse.team:type_name -> pantherclaw.v1.Team
+	4,  // 22: pantherclaw.v1.GetTeamResponse.team:type_name -> pantherclaw.v1.Team
+	4,  // 23: pantherclaw.v1.ListTeamsResponse.teams:type_name -> pantherclaw.v1.Team
+	4,  // 24: pantherclaw.v1.UpdateTeamResponse.team:type_name -> pantherclaw.v1.Team
+	4,  // 25: pantherclaw.v1.ArchiveTeamResponse.team:type_name -> pantherclaw.v1.Team
+	6,  // 26: pantherclaw.v1.AddTeamMemberResponse.member:type_name -> pantherclaw.v1.TeamMember
+	6,  // 27: pantherclaw.v1.ListTeamMembersResponse.members:type_name -> pantherclaw.v1.TeamMember
+	1,  // 28: pantherclaw.v1.CreateEnvironmentRequest.kind:type_name -> pantherclaw.v1.EnvironmentKind
+	5,  // 29: pantherclaw.v1.CreateEnvironmentResponse.environment:type_name -> pantherclaw.v1.Environment
+	5,  // 30: pantherclaw.v1.GetEnvironmentResponse.environment:type_name -> pantherclaw.v1.Environment
+	5,  // 31: pantherclaw.v1.ListEnvironmentsResponse.environments:type_name -> pantherclaw.v1.Environment
+	5,  // 32: pantherclaw.v1.UpdateEnvironmentResponse.environment:type_name -> pantherclaw.v1.Environment
+	5,  // 33: pantherclaw.v1.ArchiveEnvironmentResponse.environment:type_name -> pantherclaw.v1.Environment
+	7,  // 34: pantherclaw.v1.TenancyService.GetOrg:input_type -> pantherclaw.v1.GetOrgRequest
+	9,  // 35: pantherclaw.v1.TenancyService.UpdateOrg:input_type -> pantherclaw.v1.UpdateOrgRequest
+	11, // 36: pantherclaw.v1.TenancyService.CreateOrg:input_type -> pantherclaw.v1.CreateOrgRequest
+	13, // 37: pantherclaw.v1.TenancyService.ListMyOrgs:input_type -> pantherclaw.v1.ListMyOrgsRequest
+	16, // 38: pantherclaw.v1.TenancyService.CreateBusinessUnit:input_type -> pantherclaw.v1.CreateBusinessUnitRequest
+	18, // 39: pantherclaw.v1.TenancyService.GetBusinessUnit:input_type -> pantherclaw.v1.GetBusinessUnitRequest
+	20, // 40: pantherclaw.v1.TenancyService.ListBusinessUnits:input_type -> pantherclaw.v1.ListBusinessUnitsRequest
+	22, // 41: pantherclaw.v1.TenancyService.UpdateBusinessUnit:input_type -> pantherclaw.v1.UpdateBusinessUnitRequest
+	24, // 42: pantherclaw.v1.TenancyService.ArchiveBusinessUnit:input_type -> pantherclaw.v1.ArchiveBusinessUnitRequest
+	26, // 43: pantherclaw.v1.TenancyService.CreateTeam:input_type -> pantherclaw.v1.CreateTeamRequest
+	28, // 44: pantherclaw.v1.TenancyService.GetTeam:input_type -> pantherclaw.v1.GetTeamRequest
+	30, // 45: pantherclaw.v1.TenancyService.ListTeams:input_type -> pantherclaw.v1.ListTeamsRequest
+	32, // 46: pantherclaw.v1.TenancyService.UpdateTeam:input_type -> pantherclaw.v1.UpdateTeamRequest
+	34, // 47: pantherclaw.v1.TenancyService.ArchiveTeam:input_type -> pantherclaw.v1.ArchiveTeamRequest
+	36, // 48: pantherclaw.v1.TenancyService.AddTeamMember:input_type -> pantherclaw.v1.AddTeamMemberRequest
+	38, // 49: pantherclaw.v1.TenancyService.RemoveTeamMember:input_type -> pantherclaw.v1.RemoveTeamMemberRequest
+	40, // 50: pantherclaw.v1.TenancyService.ListTeamMembers:input_type -> pantherclaw.v1.ListTeamMembersRequest
+	42, // 51: pantherclaw.v1.TenancyService.CreateEnvironment:input_type -> pantherclaw.v1.CreateEnvironmentRequest
+	44, // 52: pantherclaw.v1.TenancyService.GetEnvironment:input_type -> pantherclaw.v1.GetEnvironmentRequest
+	46, // 53: pantherclaw.v1.TenancyService.ListEnvironments:input_type -> pantherclaw.v1.ListEnvironmentsRequest
+	48, // 54: pantherclaw.v1.TenancyService.UpdateEnvironment:input_type -> pantherclaw.v1.UpdateEnvironmentRequest
+	50, // 55: pantherclaw.v1.TenancyService.ArchiveEnvironment:input_type -> pantherclaw.v1.ArchiveEnvironmentRequest
+	8,  // 56: pantherclaw.v1.TenancyService.GetOrg:output_type -> pantherclaw.v1.GetOrgResponse
+	10, // 57: pantherclaw.v1.TenancyService.UpdateOrg:output_type -> pantherclaw.v1.UpdateOrgResponse
+	12, // 58: pantherclaw.v1.TenancyService.CreateOrg:output_type -> pantherclaw.v1.CreateOrgResponse
+	15, // 59: pantherclaw.v1.TenancyService.ListMyOrgs:output_type -> pantherclaw.v1.ListMyOrgsResponse
+	17, // 60: pantherclaw.v1.TenancyService.CreateBusinessUnit:output_type -> pantherclaw.v1.CreateBusinessUnitResponse
+	19, // 61: pantherclaw.v1.TenancyService.GetBusinessUnit:output_type -> pantherclaw.v1.GetBusinessUnitResponse
+	21, // 62: pantherclaw.v1.TenancyService.ListBusinessUnits:output_type -> pantherclaw.v1.ListBusinessUnitsResponse
+	23, // 63: pantherclaw.v1.TenancyService.UpdateBusinessUnit:output_type -> pantherclaw.v1.UpdateBusinessUnitResponse
+	25, // 64: pantherclaw.v1.TenancyService.ArchiveBusinessUnit:output_type -> pantherclaw.v1.ArchiveBusinessUnitResponse
+	27, // 65: pantherclaw.v1.TenancyService.CreateTeam:output_type -> pantherclaw.v1.CreateTeamResponse
+	29, // 66: pantherclaw.v1.TenancyService.GetTeam:output_type -> pantherclaw.v1.GetTeamResponse
+	31, // 67: pantherclaw.v1.TenancyService.ListTeams:output_type -> pantherclaw.v1.ListTeamsResponse
+	33, // 68: pantherclaw.v1.TenancyService.UpdateTeam:output_type -> pantherclaw.v1.UpdateTeamResponse
+	35, // 69: pantherclaw.v1.TenancyService.ArchiveTeam:output_type -> pantherclaw.v1.ArchiveTeamResponse
+	37, // 70: pantherclaw.v1.TenancyService.AddTeamMember:output_type -> pantherclaw.v1.AddTeamMemberResponse
+	39, // 71: pantherclaw.v1.TenancyService.RemoveTeamMember:output_type -> pantherclaw.v1.RemoveTeamMemberResponse
+	41, // 72: pantherclaw.v1.TenancyService.ListTeamMembers:output_type -> pantherclaw.v1.ListTeamMembersResponse
+	43, // 73: pantherclaw.v1.TenancyService.CreateEnvironment:output_type -> pantherclaw.v1.CreateEnvironmentResponse
+	45, // 74: pantherclaw.v1.TenancyService.GetEnvironment:output_type -> pantherclaw.v1.GetEnvironmentResponse
+	47, // 75: pantherclaw.v1.TenancyService.ListEnvironments:output_type -> pantherclaw.v1.ListEnvironmentsResponse
+	49, // 76: pantherclaw.v1.TenancyService.UpdateEnvironment:output_type -> pantherclaw.v1.UpdateEnvironmentResponse
+	51, // 77: pantherclaw.v1.TenancyService.ArchiveEnvironment:output_type -> pantherclaw.v1.ArchiveEnvironmentResponse
+	56, // [56:78] is the sub-list for method output_type
+	34, // [34:56] is the sub-list for method input_type
+	34, // [34:34] is the sub-list for extension type_name
+	34, // [34:34] is the sub-list for extension extendee
+	0,  // [0:34] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_tenancy_proto_init() }
@@ -3060,16 +3359,16 @@ func file_pantherclaw_v1_tenancy_proto_init() {
 	if File_pantherclaw_v1_tenancy_proto != nil {
 		return
 	}
-	file_pantherclaw_v1_tenancy_proto_msgTypes[15].OneofWrappers = []any{}
-	file_pantherclaw_v1_tenancy_proto_msgTypes[25].OneofWrappers = []any{}
-	file_pantherclaw_v1_tenancy_proto_msgTypes[41].OneofWrappers = []any{}
+	file_pantherclaw_v1_tenancy_proto_msgTypes[20].OneofWrappers = []any{}
+	file_pantherclaw_v1_tenancy_proto_msgTypes[30].OneofWrappers = []any{}
+	file_pantherclaw_v1_tenancy_proto_msgTypes[46].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_tenancy_proto_rawDesc), len(file_pantherclaw_v1_tenancy_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   45,
+			NumMessages:   50,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

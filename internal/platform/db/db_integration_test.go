@@ -24,6 +24,13 @@ import (
 // globalTables are the only tables in schema pc without tenant RLS. Adding a
 // table here requires a G0/G1 justification (HR-053).
 var globalTables = []string{
+	// Hosted accounts span orgs by design (G0 UI D8, HR-348..350): one
+	// person's own OIDC identity, sign-ins without an org, account sessions
+	// and their events; no org-scoped data.
+	"account_events",
+	"account_login_requests",
+	"account_sessions",
+	"accounts",
 	"anchors",              // the anchored global roots: blinded leaves only, no tenant data (G0 M7, HR-195)
 	"cross_org_list_audit", // audit of the cross-org lister; no pc_app access
 	"goose_db_version",     // migration bookkeeping; no pc_app access

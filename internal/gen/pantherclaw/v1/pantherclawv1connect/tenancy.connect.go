@@ -31,6 +31,10 @@ const (
 	TenancyServiceGetOrgProcedure = "/pantherclaw.v1.TenancyService/GetOrg"
 	// TenancyServiceUpdateOrgProcedure is the procedure name of the TenancyService's UpdateOrg RPC.
 	TenancyServiceUpdateOrgProcedure = "/pantherclaw.v1.TenancyService/UpdateOrg"
+	// TenancyServiceCreateOrgProcedure is the procedure name of the TenancyService's CreateOrg RPC.
+	TenancyServiceCreateOrgProcedure = "/pantherclaw.v1.TenancyService/CreateOrg"
+	// TenancyServiceListMyOrgsProcedure is the procedure name of the TenancyService's ListMyOrgs RPC.
+	TenancyServiceListMyOrgsProcedure = "/pantherclaw.v1.TenancyService/ListMyOrgs"
 	// TenancyServiceCreateBusinessUnitProcedure is the procedure name of the TenancyService's
 	// CreateBusinessUnit RPC.
 	TenancyServiceCreateBusinessUnitProcedure = "/pantherclaw.v1.TenancyService/CreateBusinessUnit"
@@ -96,6 +100,21 @@ var (
 			StreamType: connect.StreamTypeUnary,
 			Schema:     v1.File_pantherclaw_v1_tenancy_proto.Services().ByName("TenancyService").Methods().ByName("UpdateOrg"),
 			Procedure:  TenancyServiceUpdateOrgProcedure,
+		}
+	})
+	tenancyServiceCreateOrgSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_tenancy_proto.Services().ByName("TenancyService").Methods().ByName("CreateOrg"),
+			Procedure:  TenancyServiceCreateOrgProcedure,
+		}
+	})
+	tenancyServiceListMyOrgsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_tenancy_proto.Services().ByName("TenancyService").Methods().ByName("ListMyOrgs"),
+			Procedure:        TenancyServiceListMyOrgsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
 	tenancyServiceCreateBusinessUnitSpec = sync.OnceValue(func() connect.Spec {
@@ -241,6 +260,18 @@ type TenancyServiceClient interface {
 	// UpdateOrg renames the organization.
 	// permission: org.update
 	UpdateOrg(context.Context, *v1.UpdateOrgRequest) (*v1.UpdateOrgResponse, error)
+	// CreateOrg creates an organization for the signed-in account (hosted
+	// self-serve, D8): only from an account browser session with a verified
+	// email while self-serve sign-up is on (else SIGNUP_DISABLED), within the
+	// per-account limits (ACCOUNT_ORG_LIMIT) and rate limits. The account
+	// becomes the org's first user with Org Admin, the accepted terms and DPA
+	// versions are recorded, and the session is rotated into the new org.
+	// permission: orgs.create
+	CreateOrg(context.Context, *v1.CreateOrgRequest) (*v1.CreateOrgResponse, error)
+	// ListMyOrgs lists the organizations the signed-in account is an active
+	// member of, through the audited cross-org lister (HR-349).
+	// permission: orgs.list_mine
+	ListMyOrgs(context.Context, *v1.ListMyOrgsRequest) (*v1.ListMyOrgsResponse, error)
 	// CreateBusinessUnit creates a business unit (Business edition).
 	// permission: business_unit.manage
 	CreateBusinessUnit(context.Context, *v1.CreateBusinessUnitRequest) (*v1.CreateBusinessUnitResponse, error)
@@ -311,6 +342,18 @@ type TenancyServiceHandler interface {
 	// UpdateOrg renames the organization.
 	// permission: org.update
 	UpdateOrg(context.Context, *v1.UpdateOrgRequest) (*v1.UpdateOrgResponse, error)
+	// CreateOrg creates an organization for the signed-in account (hosted
+	// self-serve, D8): only from an account browser session with a verified
+	// email while self-serve sign-up is on (else SIGNUP_DISABLED), within the
+	// per-account limits (ACCOUNT_ORG_LIMIT) and rate limits. The account
+	// becomes the org's first user with Org Admin, the accepted terms and DPA
+	// versions are recorded, and the session is rotated into the new org.
+	// permission: orgs.create
+	CreateOrg(context.Context, *v1.CreateOrgRequest) (*v1.CreateOrgResponse, error)
+	// ListMyOrgs lists the organizations the signed-in account is an active
+	// member of, through the audited cross-org lister (HR-349).
+	// permission: orgs.list_mine
+	ListMyOrgs(context.Context, *v1.ListMyOrgsRequest) (*v1.ListMyOrgsResponse, error)
 	// CreateBusinessUnit creates a business unit (Business edition).
 	// permission: business_unit.manage
 	CreateBusinessUnit(context.Context, *v1.CreateBusinessUnitRequest) (*v1.CreateBusinessUnitResponse, error)
@@ -374,6 +417,8 @@ func RegisterTenancyServiceHandler(server *connect.Server, svc TenancyServiceHan
 	server.Register(
 		connect.Method{Spec: tenancyServiceGetOrgSpec(), Handler: adapter.getOrg},
 		connect.Method{Spec: tenancyServiceUpdateOrgSpec(), Handler: adapter.updateOrg},
+		connect.Method{Spec: tenancyServiceCreateOrgSpec(), Handler: adapter.createOrg},
+		connect.Method{Spec: tenancyServiceListMyOrgsSpec(), Handler: adapter.listMyOrgs},
 		connect.Method{Spec: tenancyServiceCreateBusinessUnitSpec(), Handler: adapter.createBusinessUnit},
 		connect.Method{Spec: tenancyServiceGetBusinessUnitSpec(), Handler: adapter.getBusinessUnit},
 		connect.Method{Spec: tenancyServiceListBusinessUnitsSpec(), Handler: adapter.listBusinessUnits},
@@ -404,6 +449,14 @@ func (UnimplementedTenancyServiceHandler) GetOrg(context.Context, *v1.GetOrgRequ
 
 func (UnimplementedTenancyServiceHandler) UpdateOrg(context.Context, *v1.UpdateOrgRequest) (*v1.UpdateOrgResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.TenancyService.UpdateOrg is not implemented")
+}
+
+func (UnimplementedTenancyServiceHandler) CreateOrg(context.Context, *v1.CreateOrgRequest) (*v1.CreateOrgResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.TenancyService.CreateOrg is not implemented")
+}
+
+func (UnimplementedTenancyServiceHandler) ListMyOrgs(context.Context, *v1.ListMyOrgsRequest) (*v1.ListMyOrgsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.TenancyService.ListMyOrgs is not implemented")
 }
 
 func (UnimplementedTenancyServiceHandler) CreateBusinessUnit(context.Context, *v1.CreateBusinessUnitRequest) (*v1.CreateBusinessUnitResponse, error) {
@@ -493,6 +546,22 @@ func (c *tenancyServiceClient) GetOrg(ctx context.Context, req *v1.GetOrgRequest
 func (c *tenancyServiceClient) UpdateOrg(ctx context.Context, req *v1.UpdateOrgRequest) (*v1.UpdateOrgResponse, error) {
 	var res v1.UpdateOrgResponse
 	if err := c.client.CallUnary(ctx, tenancyServiceUpdateOrgSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenancyServiceClient) CreateOrg(ctx context.Context, req *v1.CreateOrgRequest) (*v1.CreateOrgResponse, error) {
+	var res v1.CreateOrgResponse
+	if err := c.client.CallUnary(ctx, tenancyServiceCreateOrgSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenancyServiceClient) ListMyOrgs(ctx context.Context, req *v1.ListMyOrgsRequest) (*v1.ListMyOrgsResponse, error) {
+	var res v1.ListMyOrgsResponse
+	if err := c.client.CallUnary(ctx, tenancyServiceListMyOrgsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -662,6 +731,30 @@ func (h tenancyServiceHandler) updateOrg(ctx context.Context, _ connect.Spec, st
 		return err
 	}
 	res, err := h.svc.UpdateOrg(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenancyServiceHandler) createOrg(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateOrgRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateOrg(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenancyServiceHandler) listMyOrgs(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListMyOrgsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListMyOrgs(ctx, &req)
 	if err != nil {
 		return err
 	}

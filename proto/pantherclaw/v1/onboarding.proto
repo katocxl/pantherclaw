@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// OnboardingService reports how far the caller's organization has come in
+// getting its first agent protected (G0 UI D15; F322, F325, F335, F336,
+// F341). Every step is computed from the org's own records — security
+// keys, invitations, gateways, agents, decisions, approvals and suspension
+// events — never from flags a client sets (HR-362, HR-363), and simulated
+// records never complete a step (HR-364, F630). Skipping a step is a
+// console preference and is not stored. Verifying a receipt stays an
+// offline `pclaw verify` the server cannot see, so it is not a step.
+service OnboardingService {
+  // GetProgress returns every step and whether all are done.
+  // permission: onboarding.read
+  rpc GetProgress(GetProgressRequest) returns (GetProgressResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// StepId names one onboarding step.
+enum StepId {
+  STEP_ID_UNSPECIFIED = 0;
+  // The caller registered a security key.
+  STEP_ID_SECURITY_KEY = 1;
+  // A teammate was invited.
+  STEP_ID_INVITE_TEAM = 2;
+  // A gateway enrolled.
+  STEP_ID_GATEWAY_ENROLLED = 3;
+  // An agent enrolled.
+  STEP_ID_AGENT_ENROLLED = 4;
+  // The first decision was made for a real (not simulated) action.
+  STEP_ID_FIRST_DECISION = 5;
+  // A permitted test action was allowed.
+  STEP_ID_TEST_ALLOWED = 6;
+  // A test action was held for approval.
+  STEP_ID_TEST_HELD = 7;
+  // A prohibited test action was denied.
+  STEP_ID_TEST_DENIED = 8;
+  // A person decided an approval with a security key.
+  STEP_ID_APPROVAL_DECIDED = 9;
+  // An agent was suspended and restored.
+  STEP_ID_SUSPENSION_TESTED = 10;
+}
+
+// StepState is whether a step is done.
+enum StepState {
+  STEP_STATE_UNSPECIFIED = 0;
+  // Not done yet.
+  STEP_STATE_TODO = 1;
+  // Done; done_at and evidence say when and by which records.
+  STEP_STATE_DONE = 2;
+}
+
+// EvidenceRef names a record that completed a step.
+message EvidenceRef {
+  // Record kind, for example "gateway", "agent", "transaction",
+  // "approval" or "webauthn_credential".
+  string kind = 1;
+  // Record id in the caller's org.
+  string id = 2;
+}
+
+// OnboardingStep is one step's state.
+message OnboardingStep {
+  // Step.
+  StepId id = 1;
+  // State.
+  StepState state = 2;
+  // When the step was first done; unset while it is to do.
+  google.protobuf.Timestamp done_at = 3;
+  // The records that completed it.
+  repeated EvidenceRef evidence = 4;
+}
+
+// GetProgressRequest asks for the caller's org's progress.
+message GetProgressRequest {}
+
+// GetProgressResponse returns every step in order.
+message GetProgressResponse {
+  // Steps, in the order the console shows them.
+  repeated OnboardingStep steps = 1;
+  // Whether every step is done.
+  bool complete = 2;
+}
