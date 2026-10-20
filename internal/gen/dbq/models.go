@@ -3001,6 +3001,7 @@ type PcSlackAppChannel struct {
 	TokenReplacedBy     *string
 	TokenReplacedAt     *time.Time
 	SharedExternallyAt  *time.Time
+	LastCheckedAt       *time.Time
 	UpdatedAt           time.Time
 }
 
@@ -3014,6 +3015,8 @@ type PcSlackCard struct {
 	State           string
 	Escalations     int32
 	CloseAttempts   int32
+	CloseRetries    int32
+	CloseAfter      *time.Time
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }
