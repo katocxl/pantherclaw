@@ -6,6 +6,9 @@ package server
 import (
 	"errors"
 	"fmt"
+	"net/netip"
+	"net/url"
+	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/extension"
 )
@@ -30,14 +33,32 @@ func (c *Config) validateDeployment() []error {
 	var errs []error
 	if c.deployment() == extension.DeploymentProduction {
 		// A development identity provider signs anyone in (HR-346).
+		// So does one on a loopback issuer, which only a local mock or
+		// Keycloak has, flagged or not.
 		for i, p := range c.Auth.OIDCProviders {
-			if p.Dev {
-				errs = append(errs, fmt.Errorf("%sauth.oidc_providers[%d] (%q) is a development provider (dev: true), "+
-					"which a production deployment refuses", errDeploymentConfig, i, p.Name))
+			if p.Dev || p.AllowInsecureLoopback || loopbackIssuer(p.Issuer) {
+				errs = append(errs, fmt.Errorf("%sauth.oidc_providers[%d] (%q) is a development provider (dev: true, "+
+					"allow_insecure_loopback or a loopback issuer), which a production deployment refuses",
+					errDeploymentConfig, i, p.Name))
 			}
 		}
 	}
 	return errs
+}
+
+// loopbackIssuer reports a URL whose host is localhost (or a subdomain of it)
+// or a loopback address.
+func loopbackIssuer(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	h := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+	if h == "localhost" || strings.HasSuffix(h, ".localhost") {
+		return true
+	}
+	a, err := netip.ParseAddr(h)
+	return err == nil && a.Unmap().IsLoopback()
 }
 
 // checkDeploymentFor refuses to serve a build with an extension unless

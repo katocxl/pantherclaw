@@ -9,7 +9,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/url"
-	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -95,19 +94,70 @@ func ValidReturnPath(p string) bool {
 // ConsolePath is the web console's root (G0 UI D10).
 const ConsolePath = "/app/"
 
-// consolePath is a same-origin console page: /app, or /app followed by
-// plain, non-empty path segments. No scheme or host, no "//", backslash,
-// percent (so no encoded slash or dot), query, "#", trailing slash or dot
-// segments (HR-345): the path is already clean.
-var consolePath = regexp.MustCompile(`^/app(/[A-Za-z0-9._~-]+)*$`)
-
 // maxConsolePath bounds a console return path.
 const maxConsolePath = 512
 
 // ValidConsolePath reports whether p is a console page a sign-in may
-// return to (HR-345, a prefix rule beside the fixed list of HR-152).
+// return to (HR-345, a prefix rule beside the fixed list of HR-152; G0 UI
+// D78): exactly /app/ or /app/<path>, with an optional query. Characters
+// are limited to letters, digits, "-._~,:=&" and "/" in the path, plus
+// percent-escapes; an escape never encodes a slash, backslash, control
+// character or (in the path) a dot. No scheme or host, "//", backslash,
+// fragment or dot segment; at most 512 bytes. The vectors in
+// testdata/console_paths.json are shared with the console.
 func ValidConsolePath(p string) bool {
-	return len(p) <= maxConsolePath && consolePath.MatchString(p) && path.Clean(p) == p
+	if len(p) > maxConsolePath || !strings.HasPrefix(p, ConsolePath) {
+		return false
+	}
+	pth, query, _ := strings.Cut(p, "?")
+	if strings.Contains(pth, "//") || !consoleChars(pth, true) || !consoleChars(query, false) {
+		return false
+	}
+	for seg := range strings.SplitSeq(pth, "/") {
+		if seg == "." || seg == ".." {
+			return false
+		}
+	}
+	return true
+}
+
+// consoleChars checks one part of a console path; inPath also forbids "/"
+// in the query and encoded dots in the path.
+func consoleChars(s string, inPath bool) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', strings.IndexByte("-._~,:=&", c) >= 0:
+		case c == '/' && inPath:
+		case c == '%':
+			if i+2 >= len(s) || !isHex(s[i+1]) || !isHex(s[i+2]) {
+				return false
+			}
+			v := unhex(s[i+1])<<4 | unhex(s[i+2])
+			if v < 0x20 || v == 0x7f || v == '/' || v == '\\' || (inPath && v == '.') {
+				return false
+			}
+			i += 2
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func isHex(c byte) bool {
+	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+}
+
+func unhex(c byte) byte {
+	switch {
+	case c >= '0' && c <= '9':
+		return c - '0'
+	case c >= 'a' && c <= 'f':
+		return c - 'a' + 10
+	default:
+		return c - 'A' + 10
+	}
 }
 
 // Browser implements browser sign-in (OIDC authorization code with PKCE)

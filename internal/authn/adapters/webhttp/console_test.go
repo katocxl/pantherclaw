@@ -138,7 +138,10 @@ func TestHR345_RecentSignInReturnsToTheConsole(t *testing.T) {
 	for rt, want := range map[string]string{
 		"":                       authnapp.AccountPath,
 		"/app/settings/keys":     "/app/settings/keys",
-		"/app":                   "/app",
+		"/app/":                  "/app/",
+		"/app/approvals?team=a":  "/app/approvals?team=a",
+		"/app/x#frag":            authnapp.AccountPath,
+		"/app":                   authnapp.AccountPath,
 		"//evil.example":         authnapp.AccountPath,
 		"https://evil.example/x": authnapp.AccountPath,
 		"/app/../account":        authnapp.AccountPath,

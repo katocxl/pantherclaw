@@ -135,6 +135,11 @@ func TestHR346_ProductionRefusesDevProviders(t *testing.T) {
 			Name: name, Issuer: "https://idp.example.com", ClientID: "pantherclaw", ClientSecretFile: "secret", Dev: dev,
 		}
 	}
+	loop := func(name, issuer string, insecure bool) OIDCProviderConfig {
+		return OIDCProviderConfig{
+			Name: name, Issuer: issuer, ClientID: "pantherclaw", ClientSecretFile: "secret", AllowInsecureLoopback: insecure,
+		}
+	}
 	for _, tc := range []struct {
 		deployment string
 		providers  []OIDCProviderConfig
@@ -146,6 +151,16 @@ func TestHR346_ProductionRefusesDevProviders(t *testing.T) {
 		{"staging", []OIDCProviderConfig{prov("mock", true)}, false},
 		{"development", []OIDCProviderConfig{prov("mock", true)}, false},
 		{"", []OIDCProviderConfig{prov("mock", true)}, false},
+		// A local mock without the flag: its loopback issuer or its
+		// allow_insecure_loopback gives it away.
+		{"production", []OIDCProviderConfig{loop("mock", "http://127.0.0.1:8181/default", true)}, true},
+		{"production", []OIDCProviderConfig{loop("mock", "https://localhost:8443/realms/dev", false)}, true},
+		{"production", []OIDCProviderConfig{loop("mock", "https://kc.localhost/realms/dev", false)}, true},
+		{"production", []OIDCProviderConfig{loop("mock", "https://[::1]:8443/realms/dev", false)}, true},
+		{"production", []OIDCProviderConfig{loop("mock", "https://LOCALHOST./realms/dev", false)}, true},
+		{"production", []OIDCProviderConfig{loop("mock", "https://idp.example.com", true)}, true},
+		{"staging", []OIDCProviderConfig{loop("mock", "http://127.0.0.1:8181/default", true)}, false},
+		{"development", []OIDCProviderConfig{loop("mock", "http://localhost:8180/realms/dev", true)}, false},
 	} {
 		c := uiWebConfig()
 		c.Deployment, c.Auth.OIDCProviders = tc.deployment, tc.providers
