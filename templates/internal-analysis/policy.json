@@ -1,16 +1,16 @@
 {
   "rules": [
     {
-      "id": "ia-classes", "per": "agent", "kind": "CONSTRAIN",
-      "summary": "the analysis agent reads and aggregates only public and internal columns: pii and secret values are withheld",
-      "operations": ["postgres.rows.read", "postgres.rows.aggregate"], "when": "run.agent_id == {{agent}}", "reason": "ANALYSIS_CLASSES",
-      "constraint": {"kind": "data_classes", "values": ["public", "internal"]}
-    },
-    {
       "id": "ia-rows", "per": "agent", "kind": "CONSTRAIN",
       "summary": "the analysis agent reads at most 20 rows at a time; aggregates are how it looks at more",
       "operations": ["postgres.rows.read"], "when": "run.agent_id == {{agent}}", "reason": "ANALYSIS_ROWS",
       "constraint": {"kind": "count_max", "param": "limit", "max": "20"}
+    },
+    {
+      "id": "ia-classes", "per": "agent", "kind": "CONSTRAIN",
+      "summary": "the analysis agent reads and aggregates only public and internal columns: pii and secret values are withheld",
+      "operations": ["postgres.rows.read", "postgres.rows.aggregate"], "when": "run.agent_id == {{agent}}", "reason": "ANALYSIS_CLASSES",
+      "constraint": {"kind": "data_classes", "values": ["public", "internal"]}
     },
     {
       "id": "ia-channels", "per": "agent", "kind": "FORBID",

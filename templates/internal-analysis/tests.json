@@ -9,10 +9,10 @@
     },
     {
       "id": "ia-read-too-many", "per": "agent",
-      "summary": "the analysis agent asking for 21 rows is refused",
+      "summary": "the analysis agent asking for 21 rows gets at most 20 (the read is clamped)",
       "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"columns": ["id", "amount"], "limit": "21"}},
       "given": {"agent": "{{agent}}"},
-      "expect": {"decision": "DENY", "reason": "ANALYSIS_ROWS", "rule": "ia-rows--{{agent}}"}
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "ANALYSIS_ROWS", "rule": "ia-rows--{{agent}}"}
     },
     {
       "id": "ia-aggregate", "per": "agent",

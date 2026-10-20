@@ -1,16 +1,16 @@
 {
   "rules": [
     {
-      "id": "rs-classes", "per": "agent", "kind": "CONSTRAIN",
-      "summary": "the research agent reads only public and internal columns: pii and secret values are withheld",
-      "operations": ["postgres.rows.read"], "when": "run.agent_id == {{agent}}", "reason": "RESEARCH_CLASSES",
-      "constraint": {"kind": "data_classes", "values": ["public", "internal"]}
-    },
-    {
       "id": "rs-rows", "per": "agent", "kind": "CONSTRAIN",
       "summary": "the research agent reads at most 100 rows at a time",
       "operations": ["postgres.rows.read"], "when": "run.agent_id == {{agent}}", "reason": "RESEARCH_ROWS",
       "constraint": {"kind": "count_max", "param": "limit", "max": "100"}
+    },
+    {
+      "id": "rs-classes", "per": "agent", "kind": "CONSTRAIN",
+      "summary": "the research agent reads only public and internal columns: pii and secret values are withheld",
+      "operations": ["postgres.rows.read"], "when": "run.agent_id == {{agent}}", "reason": "RESEARCH_CLASSES",
+      "constraint": {"kind": "data_classes", "values": ["public", "internal"]}
     },
     {
       "id": "rs-channels", "per": "agent", "kind": "FORBID",

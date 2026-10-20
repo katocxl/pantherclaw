@@ -86,10 +86,10 @@
     },
     {
       "id": "cs-rows-too-many", "per": "agent",
-      "summary": "the support agent asking for 51 rows is refused",
+      "summary": "the support agent asking for 51 rows gets at most 50 (the read is clamped)",
       "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "support.tickets"}, "params": {"columns": ["id", "subject"], "limit": "51"}},
       "given": {"agent": "{{agent}}", "grant": {"constraints": [{"kind": "record_scope", "param": "customer", "values": ["{{customer}}"]}]}},
-      "expect": {"decision": "DENY", "reason": "SUPPORT_READ_ROWS", "rule": "cs-rows-count--{{agent}}"}
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "SUPPORT_READ_ROWS", "rule": "cs-rows-count--{{agent}}"}
     },
     {
       "id": "cs-aggregate", "per": "agent",

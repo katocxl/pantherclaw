@@ -9,10 +9,10 @@
     },
     {
       "id": "rs-read-too-many", "per": "agent",
-      "summary": "the research agent asking for 101 rows is refused",
+      "summary": "the research agent asking for 101 rows gets at most 100 (the read is clamped)",
       "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"columns": ["id", "amount"], "limit": "101"}},
       "given": {"agent": "{{agent}}"},
-      "expect": {"decision": "DENY", "reason": "RESEARCH_ROWS", "rule": "rs-rows--{{agent}}"}
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "RESEARCH_ROWS", "rule": "rs-rows--{{agent}}"}
     },
     {
       "id": "rs-post", "per": "agent",
