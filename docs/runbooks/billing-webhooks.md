@@ -1,6 +1,6 @@
 # Billing webhook failures
 
-**Milestone:** UI ([G0 UI](../g0/UI.md) D9, D12, D36–D38, D40, D43, D45, D46; [ADR-0031](../adr/0031-hosted-accounts-per-org-plans-and-test-seams.md); HR-355, HR-357, HR-359). **Audience:** the operator of a hosted deployment. Provider-specific steps (signature keys, the provider's dashboard and event replay) live with the commercial distribution's own runbooks; this page covers what the core does and what to check.
+**Milestone:** UI ([G0 UI](../g0/UI.md) D9, D12, D36–D38, D40, D43, D45, D46, D52, D55; [ADR-0031](../adr/0031-hosted-accounts-per-org-plans-and-test-seams.md); HR-355, HR-357, HR-359). **Audience:** the operator of a hosted deployment. Provider-specific steps (signature keys, the provider's dashboard and event replay) live with the commercial distribution's own runbooks; this page covers what the core does and what to check.
 
 In a hosted deployment an organization's plan changes when the merchant-of-record payment provider sends a signed event to the billing extension route, which verifies it and applies the plan change through the core's plan writer. The core applies each event once (by event id) and ignores events older than the last one applied (HR-355); every applied change is audited.
 
@@ -23,18 +23,18 @@ In a hosted deployment an organization's plan changes when the merchant-of-recor
 
 ## Refund and chargeback alerts
 
-A full refund or a chargeback sets the organization's plan LAPSED; the billing extension cancels the subscription with the provider at once and marks it ended, and later events for it are audited and ignored. It also raises an operator alert. On the alert:
+A full refund or a chargeback of the current subscription's latest (current-period) transaction sets the organization's plan LAPSED; the billing extension cancels the subscription with the provider at once and marks it ended, and later events for it are audited and ignored. It also raises an operator alert. On the alert:
 
-1. Check with the provider's records that the refund or chargeback is real and full (a partial refund changes nothing).
+1. Check with the provider's records that the refund or chargeback is real and full (a partial refund changes nothing). A refund of an older invoice is only audited and alerted: the plan and the subscription are unchanged, so check that this is what the customer and the provider expect.
 2. Confirm in the console (Settings › Plan & billing) that the organization shows no plan and that the subscription is cancelled with the provider; if the cancellation failed, cancel it in the provider's dashboard.
 3. Tell the organization's admins: protection keeps working (HR-357), configuration changes and new agents or connections need a new plan, which they start with a new checkout from the console.
 4. If the chargeback was a mistake on the customer's side, do not revive the old subscription; the customer checks out again, and a short complimentary plan can bridge the gap.
 
 ## Duplicate payment alerts
 
-A duplicate payment happens when a second subscription binds for an organization that already has a different current subscription, for example after two checkouts were paid in two browser tabs. The billing extension cancels the duplicate subscription at once, refunds it in full through the provider, audits each step and raises an operator alert. The organization's current subscription and plan are unchanged. On the alert:
+A duplicate payment happens when a second subscription binds for an organization that already has a different current subscription, for example after two checkouts were paid in two browser tabs. The billing extension cancels the duplicate subscription at once, refunds it in full through the provider (a duplicate whose transaction amount is zero, such as a trial, or that is already fully refunded is only cancelled), audits each step and raises an operator alert. The organization's current subscription and plan are unchanged. On the alert:
 
-1. In the provider's records, check that the duplicate subscription is cancelled and that the full refund went through. If either failed, finish it in the provider's dashboard.
+1. In the provider's records, check that the duplicate subscription is cancelled and that the full refund went through (not needed for a zero-amount or already refunded duplicate). A partial refund already on the transaction counts as done and raises this alert instead of a retry: decide with the customer whether to refund the rest by hand. An expired checkout is not cancelled at the provider, so a late payment can still bind or arrive here as a duplicate. If either failed, finish it in the provider's dashboard.
 2. Check in the console (Settings › Plan & billing) that the organization still shows its original plan.
 3. Tell the organization's admins that the second payment was refunded and that nothing else changed.
 
