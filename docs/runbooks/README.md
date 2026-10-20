@@ -23,3 +23,9 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [github-app.md](github-app.md) | M8 | Connect a GitHub App: per-action installation tokens, sealing and rotating the App key |
 | [github-live.md](github-live.md) | M8 | Run the manual, opt-in GitHub check against a sandbox org (`task test:github-live`) |
 | [range.md](range.md) | M12 | Run the adversarial range: set up range agents and simulators, run scenarios, read reports, the baseline gate, `task range` |
+| [stripe.md](stripe.md) | M14 | Connect Stripe in test mode with a restricted key; refunds, payment intents and transfers; the simulator and the live test (`task test:stripe-live`) |
+| [postgres.md](postgres.md) | M14 | Connect a read-only Postgres role with a manifest; structured queries and aggregates; data scoping by record and class (Team) |
+| [slack.md](slack.md) | M14 | Slack approval cards with a link button only (Team); agent posts with `pc.slack` and external-channel checks |
+| [authzen.md](authzen.md) | M14 | Register an AuthZEN enforcement point, wire your proxy, read decisions (`PARTIAL` routes) |
+| [a2a.md](a2a.md) | M14 | Connect peer agents over A2A: pinned cards, drift quarantine, enrolled peers with delegated runs, the receiver helper |
+| [frameworks.md](frameworks.md) | M14 | Wrap LangChain/LangGraph, OpenAI Agents SDK, CrewAI, Vercel AI SDK and MCP TypeScript tools; refusal codes and holds |
