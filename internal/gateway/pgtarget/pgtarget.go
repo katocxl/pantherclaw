@@ -476,6 +476,17 @@ func (p *Pool) Handshake(ctx context.Context) (kind, connection string, err erro
 		return "", "", err
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	err = tx.QueryRow(ctx, `SELECT kind, connection FROM pantherclaw_sim.handshake LIMIT 2`).Scan(&kind, &connection)
-	return kind, connection, err
+	rows, err := tx.Query(ctx, `SELECT kind, connection FROM pantherclaw_sim.handshake LIMIT 2`)
+	if err != nil {
+		return "", "", err
+	}
+	type row struct{ Kind, Connection string }
+	got, err := pgx.CollectRows(rows, pgx.RowToStructByPos[row])
+	if err != nil {
+		return "", "", err
+	}
+	if len(got) != 1 {
+		return "", "", fmt.Errorf("pgtarget: %d handshake rows, want exactly one", len(got))
+	}
+	return got[0].Kind, got[0].Connection, nil
 }

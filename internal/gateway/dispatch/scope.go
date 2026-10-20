@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
 	"log/slog"
 	"slices"
 
@@ -112,6 +113,11 @@ func withScope(ctx context.Context, conn *control.Connection, def *defs.Definiti
 	if len(seen) == 0 {
 		return ctx, ""
 	}
+	// Only these routes pass the answer through the scope engine: any other
+	// kind or access mode fails closed (D102, D116).
+	if (conn.GetKind() != "http" && conn.GetKind() != "postgres") || conn.GetAccessMode() != "pantherclaw_held" {
+		return ctx, CodeScopeUnsupported
+	}
 	return context.WithValue(ctx, scopeKey{}, &s), ""
 }
 
@@ -165,13 +171,22 @@ func appliedScope(ctx context.Context) *pb.DataScopeApplied {
 	return nil
 }
 
+// Bounds of an answer the scope engine reads (D116): a deeper or larger
+// one is withheld.
+const (
+	maxScopedDepth  = 32
+	maxScopedAnswer = 4 << 20
+)
+
+var errTooDeep = errors.New("dispatch: the answer is nested too deeply to scope")
+
 // scopeJSON redacts every value of a JSON answer whose class the scope
 // does not allow: the class of a value is the strictest declared field
 // covering its path (D73), and a value covered by a disallowed class is
 // replaced whole, subtree included. ok is false for an answer that is not
 // one JSON value or was cut at the size cap.
 func scopeJSON(body []byte, truncated bool, spec *defs.ResponseSpec, s *dataScope) ([]byte, int, bool) {
-	if truncated {
+	if truncated || len(body) > maxScopedAnswer {
 		return nil, 0, false
 	}
 	n := 0
@@ -179,7 +194,13 @@ func scopeJSON(body []byte, truncated bool, spec *defs.ResponseSpec, s *dataScop
 	// and arrays are rebuilt, duplicate members refused as ambiguous.
 	var walk func(v jsontext.Value, path []string) (jsontext.Value, error)
 	walk = func(v jsontext.Value, path []string) (jsontext.Value, error) {
-		if c := spec.ClassOf(path); !s.readable(c) && (len(path) > 0 || c != "public") {
+		if len(path) > maxScopedDepth {
+			return nil, errTooDeep
+		}
+		// An undeclared root object or array is a container, not a value of
+		// its own; a root scalar is checked like any value (D116).
+		container := v.Kind() == jsontext.KindBeginObject || v.Kind() == jsontext.KindBeginArray
+		if c := spec.ClassOf(path); !s.readable(c) && (len(path) > 0 || c != "public" || !container) {
 			n++
 			return json.Marshal(pgdispatch.Redacted(pgdispatch.Class(c)))
 		}

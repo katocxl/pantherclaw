@@ -15,7 +15,7 @@ import (
 )
 
 func scopeConn(kind string) *control.Connection {
-	return &control.Connection{GatewayConnection: &pb.GatewayConnection{Kind: kind}}
+	return &control.Connection{GatewayConnection: &pb.GatewayConnection{Kind: kind, AccessMode: "pantherclaw_held"}}
 }
 
 func readDef(scoping ...string) *defs.Definition {
@@ -114,5 +114,31 @@ func TestHR311_JSONAnswersAreRedactedByClass(t *testing.T) {
 	}
 	if _, _, ok := scopeJSON([]byte(`{}`), true, spec, s); ok {
 		t.Error("a truncated answer accepted")
+	}
+}
+
+// TestHR311_JSONScopeBounds (D116): an answer nested deeper than the bound,
+// or larger than it, is withheld, and a root scalar is checked like any
+// value.
+func TestHR311_JSONScopeBounds(t *testing.T) {
+	s := &dataScope{classes: []pgdispatch.Class{pgdispatch.ClassPublic}}
+	deep := strings.Repeat("[", maxScopedDepth+2) + "1" + strings.Repeat("]", maxScopedDepth+2)
+	if _, _, ok := scopeJSON([]byte(deep), false, nil, s); ok {
+		t.Error("a too deep answer was scoped")
+	}
+	ok32 := strings.Repeat("[", maxScopedDepth) + "1" + strings.Repeat("]", maxScopedDepth)
+	if _, _, ok := scopeJSON([]byte(ok32), false, nil, s); !ok {
+		t.Error("an answer within the depth bound was withheld")
+	}
+	if _, _, ok := scopeJSON([]byte(`"`+strings.Repeat("a", maxScopedAnswer)+`"`), false, nil, s); ok {
+		t.Error("a too large answer was scoped")
+	}
+	none := &dataScope{classes: []pgdispatch.Class{}}
+	out, n, ok := scopeJSON([]byte(`"ada@example.com"`), false, nil, none)
+	if !ok || n != 1 || string(out) != `"[redacted:public]"` {
+		t.Fatalf("root scalar with no readable class: %s %d %v", out, n, ok)
+	}
+	if out, _, _ := scopeJSON([]byte(`"x"`), false, nil, s); string(out) != `"x"` {
+		t.Fatalf("readable root scalar: %s", out)
 	}
 }

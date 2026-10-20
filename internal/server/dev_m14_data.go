@@ -83,7 +83,8 @@ func devPostgresTables() []capp.PostgresTable {
 			col("id", "bigint", "public"), col("customer_id", "bigint", "public"), col("amount", "numeric", "internal"),
 			col("status", "text", "public"),
 		}},
-		{Schema: "support", Name: "tickets", ScopeKey: "customer", ScopeColumn: "customer_id", Columns: []capp.PostgresColumn{
+		// No scope key: a record-scoped read of it is refused (RT-043).
+		{Schema: "support", Name: "tickets", Columns: []capp.PostgresColumn{
 			col("id", "bigint", "public"), col("customer_id", "bigint", "public"), col("subject", "text", "internal"),
 		}},
 	}

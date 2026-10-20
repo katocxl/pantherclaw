@@ -87,6 +87,12 @@ func (e *Engine) sendPostgres(ctx context.Context, r Result, conn *control.Conne
 		return r.fail(CannotAuthorize, CodeKindConfigMissing)
 	}
 	query, buildErr := pgQuery(pc, def, a.Action, scopeOf(ctx), nil)
+	if pgdispatch.CodeOf(buildErr) == pgdispatch.CodeScopeUnsupported {
+		// The scope cannot be applied to this table: refused before anything
+		// is committed (D20, D116).
+		r.Decision = pb.Decision_DECISION_CANNOT_AUTHORIZE
+		return r.fail(CannotAuthorize, CodeScopeUnsupported)
+	}
 	// A postgres connection is pantherclaw_held only: no action token, and
 	// no HTTP request to bind.
 	_, err := e.authority.BeginDispatch(ctx, &pb.BeginDispatchRequest{PermitId: want.PermitID, Epoch: want.Epoch})
@@ -313,7 +319,7 @@ func (e *Engine) pgPool(ctx context.Context, conn *control.Connection, def *defs
 	now := time.Now()
 	for id, ent := range pools {
 		if id != conn.GetId() && now.Sub(ent.used) > pgIdle {
-			ent.pool.Close()
+			go ent.pool.Close() // waits for queries in flight: not under the lock
 			delete(pools, id)
 		}
 	}
@@ -322,7 +328,7 @@ func (e *Engine) pgPool(ctx context.Context, conn *control.Connection, def *defs
 			ent.used = now
 			return ent, nil
 		}
-		ent.pool.Close()
+		go ent.pool.Close()
 		delete(pools, conn.GetId())
 	}
 	plain, err := e.openStatic(ctx, conn)
@@ -431,7 +437,13 @@ func (e *Engine) pgSimVerify(ctx context.Context, conn *control.Connection) stri
 	if a, err := netip.ParseAddr(pc.GetHost()); err != nil || !a.Unmap().IsLoopback() {
 		return CodeSimulatorUnverified
 	}
-	key := fmt.Sprintf("%p/%s/%d/%s", e, conn.GetId(), conn.GetRevision(), pc.GetHost())
+	pk, err := pgKey(conn, pc)
+	if err != nil {
+		return CodeSimulatorUnverified
+	}
+	// The whole configuration is in the key: a confirmed manifest may move
+	// the port, database or role without a new revision (D116).
+	key := fmt.Sprintf("%p/%s/%s", e, conn.GetId(), pk)
 	pgSims.Lock()
 	at, ok := pgSims.ok[key]
 	pgSims.Unlock()
@@ -459,6 +471,14 @@ func (e *Engine) pgSimVerify(ctx context.Context, conn *control.Connection) stri
 // Configured closes the pools of postgres connections a new configuration
 // no longer serves, or serves with another configuration (D105).
 func (e *Engine) Configured(cfg *control.Config) {
+	var closing []*pgtarget.Pool
+	defer func() {
+		// Outside the lock and off the configuration load: closing waits for
+		// queries in flight (D116).
+		for _, p := range closing {
+			go p.Close()
+		}
+	}()
 	pgPools.Lock()
 	defer pgPools.Unlock()
 	for id, ent := range pgPools.m[e] {
@@ -468,7 +488,7 @@ func (e *Engine) Configured(cfg *control.Config) {
 				continue
 			}
 		}
-		ent.pool.Close()
+		closing = append(closing, ent.pool)
 		delete(pgPools.m[e], id)
 	}
 }
