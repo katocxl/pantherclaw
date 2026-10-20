@@ -255,6 +255,11 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			if conn.Kind == KindMCPContainer && in.Connector == nil {
 				return ErrConnector
 			}
+			if *in.Gateway != conn.GatewayID {
+				if err := s.checkKindGateway(ctx, tx, c.Org, conn, *in.Gateway); err != nil {
+					return err
+				}
+			}
 			p.GatewayID = *in.Gateway
 			set("gateway_id", conn.GatewayID.String(), p.GatewayID.String(), true)
 		}

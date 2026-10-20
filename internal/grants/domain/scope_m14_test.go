@@ -96,3 +96,15 @@ func TestT144_ScopeCannotEscapeThroughDelegationOrRevision(t *testing.T) {
 		t.Fatalf("two record keys: %+v", keys.Records)
 	}
 }
+
+// TestM14_ScopeEqualityIgnoresOrder: two scopes allowing the same records
+// and classes in another order are equal, so a revision that only reorders
+// them changes no scope (D103); a different value is not equal.
+func TestM14_ScopeEqualityIgnoresOrder(t *testing.T) {
+	a := scoped("customer", []string{"cus_1", "cus_2"}, "public", "pii").Scope
+	b := scoped("customer", []string{"cus_2", "cus_1"}, "pii", "public").Scope
+	if !ScopeEqual(a, b) || ScopeEqual(a, scoped("customer", []string{"cus_1"}, "public", "pii").Scope) ||
+		ScopeEqual(a, scoped("tenant", []string{"cus_1", "cus_2"}, "public", "pii").Scope) || !ScopeEqual(nil, map[string]ScopeBound{}) {
+		t.Fatal("scope equality")
+	}
+}

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -206,7 +205,7 @@ func (s *Service) Revise(ctx context.Context, req ReviseRequest) (domain.Grant, 
 	if !req.ExpiresAt.IsZero() {
 		next.ExpiresAt = req.ExpiresAt
 	}
-	if err := s.checkScopeEdition(ctx, next.Bounds); err != nil && !reflect.DeepEqual(cur.Bounds.Scope, next.Bounds.Scope) {
+	if err := s.checkScopeEdition(ctx, next.Bounds); err != nil && !domain.ScopeEqual(cur.Bounds.Scope, next.Bounds.Scope) {
 		// A revision that keeps the scope in force goes through after a
 		// downgrade; adding or changing one needs the edition (D11).
 		return domain.Grant{}, domain.Revision{}, err
