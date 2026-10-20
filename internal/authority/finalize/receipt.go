@@ -283,6 +283,18 @@ type Execution struct {
 	// Access is what the dispatch's minted credential allowed (G0 M8,
 	// ADR-0021 item 5); nil for a credential placed as sealed, or none.
 	Access *Access
+	// DataScope is what the gateway's data scope did to the answer (G0 M14
+	// D102), counts only; nil when none applied.
+	DataScope *DataScopeApplied
+}
+
+// DataScopeApplied is what applying a read's data scope did to its answer:
+// the record key and counts, never a value.
+type DataScopeApplied struct {
+	RecordsKey     string
+	Rows           int32
+	ValuesRedacted int32
+	Truncated      bool
 }
 
 // Access is what a GitHub App installation token allowed: the
@@ -343,6 +355,13 @@ func (a *Authority) executionReceipt(gw Gateway, e Execution, x Executed, now ti
 			access["expires_at"] = a.Expires.UTC().Format(time.RFC3339)
 		}
 		pap["access"] = access
+	}
+	if d := e.DataScope; d != nil {
+		scope := map[string]any{"rows": d.Rows, "values_redacted": d.ValuesRedacted, "truncated": d.Truncated}
+		if d.RecordsKey != "" {
+			scope["records_key"] = d.RecordsKey
+		}
+		pap["data_scope"] = scope
 	}
 	payload, err := json.Marshal(map[string]any{"iss": a.issuer(), "jti": e.Permit.String(), "iat": now.Unix(), "pap": pap}, json.Deterministic(true))
 	if err != nil {

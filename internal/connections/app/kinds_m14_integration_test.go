@@ -219,3 +219,47 @@ func TestM14_ACardDriftQuarantinesTheConnection(t *testing.T) {
 		t.Fatalf("the hook heard %d reports", hook.heard)
 	}
 }
+
+// gatedKind is a kind store that validates gateway moves.
+type gatedKind struct {
+	fakeKind
+	refuse  ids.UUID
+	checked []ids.UUID
+}
+
+func (g *gatedKind) CheckGateway(_ context.Context, _ db.TenantTx, _ ids.OrgID, _, gateway ids.UUID) error {
+	g.checked = append(g.checked, gateway)
+	if gateway == g.refuse {
+		return app.ErrShape
+	}
+	return nil
+}
+
+// TestM14_AMoveIsValidatedByTheKind: moving a postgres or a2a connection to
+// another gateway asks its kind's store about the new gateway in the same
+// transaction; a refusal leaves the connection where it was (G0 M14 D105).
+func TestM14_AMoveIsValidatedByTheKind(t *testing.T) {
+	e := newEnv(t)
+	e.pin(t, "test.m14-kinds", "1.0.0", []byte(m14Kinds))
+	bad, good := ids.NewV7(), ids.NewV7()
+	e.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'bad', 'test')", e.org, bad)
+	e.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'good', 'test')", e.org, good)
+	store := &gatedKind{refuse: bad}
+	kinds := &ports.KindConfigs{}
+	kinds.Register(app.KindPostgres, store)
+	e.svc.WithKindConfigs(kinds)
+	pg := pgConfig()
+	c, err := e.svc.Create(e.admin, app.CreateInput{
+		Name: "shop-db", Kind: app.KindPostgres, Package: "test.m14-kinds", Gateway: e.gateway, AccessMode: app.AccessHeld, Postgres: &pg,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Update(e.admin, app.UpdateInput{ID: c.ID, Revision: c.Revision, Gateway: &bad}); !is(err, app.ErrShape) {
+		t.Fatalf("a refused move: %v", err)
+	}
+	moved, err := e.svc.Update(e.admin, app.UpdateInput{ID: c.ID, Revision: c.Revision, Gateway: &good})
+	if err != nil || moved.GatewayID != good || !slices.Equal(store.checked, []ids.UUID{bad, good}) {
+		t.Fatalf("a move: %v %v checked %v", moved.GatewayID, err, store.checked)
+	}
+}

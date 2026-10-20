@@ -78,3 +78,15 @@ func TestM14_GatewayPermitFailsClosedWithoutChannels(t *testing.T) {
 		t.Fatalf("no PermitChannels: %v", err)
 	}
 }
+
+// TestM14_TheGatewaysDataScopeReachesTheExecution: RecordExecution carries
+// the gateway's data scope counts into the execution (D102).
+func TestM14_TheGatewaysDataScopeReachesTheExecution(t *testing.T) {
+	if dataScopeOf(nil) != nil {
+		t.Fatal("no data scope became one")
+	}
+	got := dataScopeOf(&pantherclawv1.DataScopeApplied{RecordsKey: "customer", Rows: 2, ValuesRedacted: 5, Truncated: true})
+	if got == nil || *got != (finalize.DataScopeApplied{RecordsKey: "customer", Rows: 2, ValuesRedacted: 5, Truncated: true}) {
+		t.Fatalf("data scope %+v", got)
+	}
+}

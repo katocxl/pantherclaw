@@ -37,6 +37,7 @@ func TestHR302_DataScopeRules(t *testing.T) {
 		"records without key": scopeRule(RecordScope, "", "cus_1"),
 		"records quoted key":  scopeRule(RecordScope, "Customer", "cus_1"),
 		"records no values":   scopeRule(RecordScope, "customer"),
+		"records odd value":   scopeRule(RecordScope, "customer", "cus 1"),
 		"classes secret":      scopeRule(DataClasses, "", "public", "secret"),
 		"classes with param":  scopeRule(DataClasses, "customer", "public"),
 		"classes unknown":     scopeRule(DataClasses, "", "confidential"),
