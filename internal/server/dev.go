@@ -61,6 +61,9 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	githubURL := fs.String("github-url", "", "with --gateway-out: also seed pc.github and the connection \"github\" to this GitHub API "+
 		"(pantherclaw-sim github), held by the gateway (seal the GitHub App with pclaw seal --github-app), the gateway as its fact provider, "+
 		"and, with --workload-out, the GitHub operations in the grant")
+	stripeURL := fs.String("stripe-url", "", "with --gateway-out: also seed pc.stripe and the connection \"stripe\" to this Stripe API (pantherclaw-sim stripe), "+
+		"held by the gateway, its facts read by the gateway, refunds over "+devStripeHoldOver+" USD held; seal a restricted test key with pclaw seal")
+	stripePayee := fs.String("stripe-payee", devStripePayee, "with --stripe-url and --workload-out: the connected account the seeded grant may transfer to")
 	workloadOut := fs.String("workload-out", "", "also seed an admitted PAP/1 workload with a grant and a run; write its key file here (0600, never overwritten)")
 	factsOut := fs.String("facts-key-out", "", "with --workload-out: write the API key of the development fact provider here (0600, never overwritten)")
 	holdOver := fs.String("hold-over", "50.00", "publish a policy holding refunds over this amount (grant currency) for an approver; empty for none")
@@ -107,7 +110,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 			return fmt.Errorf("dev seed: %s already exists", out)
 		}
 	}
-	if (*targetURL != "" || *shell || *githubURL != "") && *gatewayOut == "" {
+	if (*targetURL != "" || *shell || *githubURL != "" || *stripeURL != "") && *gatewayOut == "" {
 		return errTargetNeedsGateway
 	}
 	if *access == "" {
@@ -163,6 +166,9 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	if *githubURL != "" {
 		pkgs = append(pkgs, devPackage{pcgithub.Name, pcgithub.Version, pcgithub.Package})
 	}
+	if *stripeURL != "" {
+		pkgs = append(pkgs, devStripePackage())
+	}
 	if err := seedPackages(ctx, pool, org, signer, pkgs...); err != nil {
 		return err
 	}
@@ -203,6 +209,11 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 			_, _ = fmt.Fprintf(stdout, "seeded github connection %s (%s) to %s, its facts read by the gateway; seal the GitHub App with "+
 				"pclaw seal --connection %s --github-app ID --installation N --account LOGIN --from-file KEY.pem\n", c.ID, c.Name, *githubURL, c.ID)
 		}
+		if *stripeURL != "" {
+			if err := seedStripe(ctx, cfg, pool, org, gw, *stripeURL, hold, stdout); err != nil {
+				return err
+			}
+		}
 		if *shell {
 			c, err := seedShellConnection(ctx, cfg, pool, org, gw)
 			if err != nil {
@@ -219,7 +230,10 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	if err != nil {
 		return err
 	}
-	g, err := seedGrant(ctx, pool, org, w, devGrantTerms{MaxPerAction: maxPer, Limit: lim, MaxCount: *maxCount, Shell: *shell, GitHub: *githubURL != ""})
+	g, err := seedGrant(ctx, pool, org, w, devGrantTerms{
+		MaxPerAction: maxPer, Limit: lim, MaxCount: *maxCount, Shell: *shell, GitHub: *githubURL != "", Stripe: *stripeURL != "",
+		StripePayee: *stripePayee,
+	})
 	if err != nil {
 		return err
 	}
