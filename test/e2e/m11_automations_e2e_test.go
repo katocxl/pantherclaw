@@ -633,8 +633,14 @@ func (a *autoStack) reciprocalLoop(t *testing.T) {
 	// pong's work (a grant revoked) comes back to ping: refused, its lineage
 	// holds ping.
 	record("grant.revoked", sa(pong), map[string]string{"execution": second.String(), "automation": pong.ID.String()}, ping)
+	// Under load the new trigger may first wait QUEUED behind ping's own
+	// execution; it is decided when it leaves the queue. Wait for every
+	// trigger of ping to be in a final state, then require the refusal.
+	eventually(t, 60*time.Second, "ping's triggers to reach a final state", func() (bool, error) {
+		return s.row(t, "SELECT count(*)::text FROM pc.automation_triggers WHERE automation_id = $1 AND state = 'QUEUED'", ping.ID) == "0", nil
+	})
 	if n := s.row(t, "SELECT count(*)::text FROM pc.automation_triggers WHERE automation_id = $1 AND state = 'REFUSED_LOOP'", ping.ID); n == "0" {
-		t.Fatal("ping was not refused REFUSED_LOOP")
+		t.Fatalf("ping was not refused REFUSED_LOOP; ping's triggers: %s; pong's: %s", a.triggerStates(t, ping.ID), a.triggerStates(t, pong.ID))
 	}
 	if got := s.row(t, `SELECT ancestry::text FROM pc.automation_triggers WHERE automation_id = $1 AND state IN ('ACCEPTED', 'SHADOW')
 		ORDER BY received_at DESC LIMIT 1`, pong.ID); !strings.Contains(got, ping.ID.String()) {
@@ -649,4 +655,12 @@ func (a *autoStack) reciprocalLoop(t *testing.T) {
 	if n := s.row(t, "SELECT count(*)::text FROM pc.operational_failures WHERE kind = 'automation.loop_stopped'"); n == "0" {
 		t.Fatal("the loop has no owned failure")
 	}
+}
+
+// triggerStates lists an automation's triggers as kind:state:reason, oldest
+// first, for a failure message.
+func (a *autoStack) triggerStates(t *testing.T, automation ids.UUID) string {
+	t.Helper()
+	return a.r.s.row(t, `SELECT coalesce(string_agg(kind || ':' || state || ':' || coalesce(reason, ''), ', ' ORDER BY received_at, id), 'none')
+		FROM pc.automation_triggers WHERE automation_id = $1`, automation)
 }
