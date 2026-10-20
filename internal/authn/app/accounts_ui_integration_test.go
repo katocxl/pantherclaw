@@ -90,12 +90,25 @@ func TestHR353_SwitchingOrgIsAFreshSignIn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// D88: the window is 15 minutes; 11 minutes in, the session still
+	// picks (an org it is not in stays not pickable, not stale).
 	b.d.AdminExec(t, "UPDATE pc.account_sessions SET created_at = now() - interval '11 minutes', expires_at = expires_at - interval '11 minutes', last_seen_at = now() WHERE id = $1", s.Session)
 	s, err = b.browser.AuthenticateAccount(ctx, out.Secret)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := b.browser.PickOrg(ctx, s, b.org, authnapp.ClientMeta{}); !errors.Is(err, authnapp.ErrNotPickable) {
+	if !authnapp.PickerFresh(s) {
+		t.Errorf("an 11-minute-old account session is past the picker window")
+	}
+	if _, err := b.browser.PickOrg(ctx, s, ids.New[ids.Org](), authnapp.ClientMeta{}); !errors.Is(err, authnapp.ErrNotPickable) {
+		t.Errorf("an 11-minute-old account session, foreign org: %v", err)
+	}
+	b.d.AdminExec(t, "UPDATE pc.account_sessions SET created_at = now() - interval '16 minutes', expires_at = expires_at - interval '5 minutes', last_seen_at = now() WHERE id = $1", s.Session)
+	s, err = b.browser.AuthenticateAccount(ctx, out.Secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.browser.PickOrg(ctx, s, b.org, authnapp.ClientMeta{}); !errors.Is(err, authnapp.ErrPickerStale) {
 		t.Errorf("a stale account session picked an org: %v", err)
 	}
 	// The pending sign-in kept only hashes of what it compares.

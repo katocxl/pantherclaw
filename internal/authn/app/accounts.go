@@ -30,8 +30,8 @@ const (
 	// InvitePath is the browser invitation page: /invite/{token}.
 	InvitePath = "/invite"
 	// PickerFreshness is how soon after its sign-in an account session may
-	// pick an org (HR-353: switching orgs later is a fresh sign-in).
-	PickerFreshness = LoginRequestTTL
+	// pick an org (HR-353, D88: switching orgs later is a fresh sign-in).
+	PickerFreshness = 15 * time.Minute
 	// maxOpenAccountLoginRequests caps the pending sign-ins without an org.
 	maxOpenAccountLoginRequests = 50_000
 	// MaxAccountSessions is the most active account sessions per account.
@@ -44,9 +44,17 @@ const (
 	SessionAccount = "account"
 )
 
-// ErrNotPickable: the org is not one of the account's, or the account
-// session is too old to pick one (HR-353).
+// ErrNotPickable: the org is not one of the account's.
 var ErrNotPickable = errors.New("authn: this organization cannot be opened from this session")
+
+// ErrPickerStale: the account session signed in more than PickerFreshness
+// ago; picking an org now takes a fresh sign-in (HR-353, D88).
+var ErrPickerStale = errors.New("authn: this sign-in is too old to open an organization")
+
+// PickerFresh reports whether s may still pick an org (HR-353).
+func PickerFresh(s AccountSession) bool {
+	return !s.CreatedAt.Before(s.Now.Add(-PickerFreshness))
+}
 
 // WithAccounts enables sign-in without an org: store resolves accounts,
 // invites accepts invitations carried by a sign-in, and selfServe opens an
@@ -438,8 +446,8 @@ func (b *Browser) Memberships(ctx context.Context, s AccountSession) ([]accounts
 // PickOrg opens org for an account session that signed in moments ago
 // (HR-353) and ends the account session.
 func (b *Browser) PickOrg(ctx context.Context, s AccountSession, org ids.OrgID, meta ClientMeta) (BrowserSignIn, error) {
-	if s.CreatedAt.Before(s.Now.Add(-PickerFreshness)) {
-		return BrowserSignIn{}, ErrNotPickable
+	if !PickerFresh(s) {
+		return BrowserSignIn{}, ErrPickerStale
 	}
 	ms, err := b.accounts.Memberships(ctx, s.Account)
 	if err != nil {

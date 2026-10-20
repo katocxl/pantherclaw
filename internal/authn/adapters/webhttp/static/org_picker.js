@@ -16,6 +16,13 @@ async function post(path) {
   let data = {};
   try { data = await res.json(); } catch (e) { data = {}; }
   if (!res.ok) {
+    // HR-353: a sign-in too old to pick an org starts a fresh sign-in to
+    // the same org; only a same-origin sign-in path is followed.
+    if (data.error === "sign_in_again" && typeof data.sign_in === "string" &&
+        data.sign_in.startsWith("/login?") && !data.sign_in.startsWith("//")) {
+      window.location.assign(data.sign_in);
+      return new Promise(() => {});
+    }
     throw new Error(data.error || ("http_" + res.status));
   }
   return data;
@@ -27,7 +34,7 @@ function say(text) {
 }
 
 const messages = {
-  not_pickable: "This sign-in is too old to open an organization. Sign in again.",
+  not_pickable: "This organization cannot be opened from this sign-in.",
   unauthenticated: "Your sign-in ended. Sign in again.",
 };
 

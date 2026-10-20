@@ -83,23 +83,29 @@ type Route struct {
 }
 
 // Deps are what the core hands to Validate and Mount.
+//
+// Validate runs before the database is open (D86): it gets only the
+// fields marked "Validate and Mount" and must check configuration only.
+// The fields marked "Mount only" are nil in Validate and set for Mount.
 type Deps struct {
-	Log        *slog.Logger
-	Clock      clock.Clock
-	PublicURL  string
+	// Log: Validate and Mount.
+	Log *slog.Logger
+	// Clock: Validate and Mount.
+	Clock clock.Clock
+	// PublicURL: Validate and Mount.
+	PublicURL string
+	// Deployment: Validate and Mount.
 	Deployment Deployment
-	// Plans writes an org's plan; nil until the core provides it.
+	// Plans writes an org's plan. Mount only.
 	Plans PlanWriter
-	// Accounts reads hosted accounts; nil until the core provides it.
+	// Accounts reads hosted accounts. Mount only.
 	Accounts AccountReader
-	// BillingLinks binds provider subscriptions to orgs; nil until the
-	// core provides it.
+	// BillingLinks binds provider subscriptions to orgs. Mount only.
 	BillingLinks BillingLinks
-	// Authz checks the session principal's permissions; nil until the core
-	// provides it, and while it is nil every session route refuses.
+	// Authz checks the session principal's permissions; while it is nil
+	// every session route refuses. Mount only.
 	Authz Authorizer
-	// Audit records billing events in the org's audit ledger; nil until the
-	// core provides it.
+	// Audit records billing events in the org's audit ledger. Mount only.
 	Audit AuditRecorder
 }
 

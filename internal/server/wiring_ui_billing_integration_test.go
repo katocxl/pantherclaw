@@ -7,6 +7,7 @@ package server
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/extension"
@@ -67,6 +68,12 @@ func TestHR354_ExtensionBillingAuthorityAndAudit(t *testing.T) {
 	}
 
 	au := extAudit{pool: pool}
+	if err := au.Record(ctx, org.String(), "billing.subscription.renewed_2", nil); err != nil {
+		t.Fatalf("a dotted kind was refused: %v", err)
+	}
+	if err := au.Record(ctx, org.String(), "billing."+strings.Repeat("x", 56), nil); err != nil {
+		t.Fatalf("a 64-byte kind was refused: %v", err)
+	}
 	if err := au.Record(as(viewer), org.String(), "billing.checkout_started", map[string]string{"plan_id": "team"}); err != nil {
 		t.Fatal(err)
 	}
@@ -75,6 +82,12 @@ func TestHR354_ExtensionBillingAuthorityAndAudit(t *testing.T) {
 		"secret key":    au.Record(ctx, org.String(), "billing.x", map[string]string{"card_token": "tok"}),
 		"platform org":  au.Record(ctx, ids.PlatformOrg.String(), "billing.x", nil),
 		"not an org id": au.Record(ctx, "acme", "billing.x", nil),
+		"bare prefix":   au.Record(ctx, org.String(), "billing.", nil),
+		"upper case":    au.Record(ctx, org.String(), "billing.X", nil),
+		"empty segment": au.Record(ctx, org.String(), "billing..x", nil),
+		"trailing dot":  au.Record(ctx, org.String(), "billing.x.", nil),
+		"digit first":   au.Record(ctx, org.String(), "billing.1x", nil),
+		"over 64 bytes": au.Record(ctx, org.String(), "billing."+strings.Repeat("x", 57), nil),
 	} {
 		if err == nil {
 			t.Errorf("%s accepted", name)

@@ -27,8 +27,8 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/rpc"
-	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	"github.com/katocxl/pantherclaw/internal/tenancy/adapters/tenancyrpc"
+	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 )
 
 type noBearer struct{}

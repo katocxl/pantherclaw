@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 
 	"github.com/katocxl/pantherclaw/internal/accounts"
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
@@ -123,6 +124,13 @@ func (h *Handler) accountSession(w http.ResponseWriter, r *http.Request) (authna
 
 // orgPicker lists the account's orgs.
 func (h *Handler) orgPicker(w http.ResponseWriter, r *http.Request, s authnapp.AccountSession) {
+	if !authnapp.PickerFresh(s) {
+		// HR-353, D88: an old account session picks nothing; a fresh
+		// sign-in brings the picker back.
+		http.SetCookie(w, h.AccountSessionCookie(""))
+		http.Redirect(w, r, authnapp.LoginPath, http.StatusSeeOther)
+		return
+	}
 	ms, err := h.accounts.Memberships(r.Context(), s)
 	if err != nil {
 		h.fail(w, r, err)
@@ -140,6 +148,13 @@ func (h *Handler) pickOrg(w http.ResponseWriter, r *http.Request, s authnapp.Acc
 	}
 	out, err := h.accounts.PickOrg(r.Context(), s, org, authnapp.ClientMeta{UserAgent: r.UserAgent(), IP: h.clientIP(r)})
 	switch {
+	case errors.Is(err, authnapp.ErrPickerStale):
+		// HR-353, D88: past the picker's window the pick becomes a fresh
+		// sign-in to the same org, landing where the pick would have.
+		http.SetCookie(w, h.AccountSessionCookie(""))
+		q := url.Values{"org": {org.String()}, "next": {authnapp.AccountPath}}
+		h.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign_in_again", "sign_in": authnapp.LoginPath + "?" + q.Encode()})
+		return
 	case errors.Is(err, authnapp.ErrNotPickable):
 		h.jsonError(w, http.StatusNotFound, "not_pickable")
 		return

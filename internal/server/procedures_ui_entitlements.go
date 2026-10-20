@@ -376,7 +376,7 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.RunService/EndRun":                                    entitlements.ClassSafety,
 	"/pantherclaw.v1.RunService/GetRun":                                    entitlements.ClassRead,
 	"/pantherclaw.v1.RunService/ListRuns":                                  entitlements.ClassRead,
-	"/pantherclaw.v1.RunService/StartRun":                                  entitlements.ClassChange,
+	"/pantherclaw.v1.RunService/StartRun":                                  entitlements.ClassSafety, // HR-357 / PN-012.1: agents stay governed; only changes and new agents are blocked, existing agents keep running under enforcement
 	"/pantherclaw.v1.SIEMService/CreateSIEMDestination":                    entitlements.ClassChange,
 	"/pantherclaw.v1.SIEMService/GetSIEMDestination":                       entitlements.ClassRead,
 	"/pantherclaw.v1.SIEMService/ListSIEMBatches":                          entitlements.ClassRead,
