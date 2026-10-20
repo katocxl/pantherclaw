@@ -308,6 +308,9 @@ func (v *Versions) gate(ctx context.Context, p publisher, id ids.UUID, expected 
 	if err != nil {
 		return PublishOutcome{}, err
 	}
+	if err := v.checkScopeEdition(ctx, b); err != nil {
+		return PublishOutcome{}, err
+	}
 	if err := v.compile(ctx, p.org, b); err != nil {
 		return PublishOutcome{}, err
 	}

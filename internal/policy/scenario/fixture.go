@@ -195,6 +195,18 @@ func (f *fixture) buildGrant(g *pdomain.TestGiven) error {
 				b.Targets = &t
 			case pdomain.DestinationSet:
 				b.Destinations = &gdomain.Match{IDs: c.Values}
+			case pdomain.RecordScope, pdomain.DataClasses:
+				// A grant's data scope on the operation (G0 M14 D11).
+				if b.Scope == nil {
+					b.Scope = map[string]gdomain.ScopeBound{}
+				}
+				sb := b.Scope[op]
+				if c.Kind == pdomain.RecordScope {
+					sb.Records = &gdomain.RecordScope{Key: c.Param, Values: slices.Clone(c.Values)}
+				} else {
+					sb.Classes = &gdomain.Match{IDs: slices.Clone(c.Values), Prefixes: []string{}}
+				}
+				b.Scope[op] = sb
 			case pdomain.Verify, pdomain.DisclosureLimits:
 				return caseErr("given.grant: a grant has no %q constraint", c.Kind)
 			default:

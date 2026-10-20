@@ -226,6 +226,9 @@ func (s *Service) IssueForAutomationTx(ctx context.Context, tx db.TenantTx, in A
 		Scope: domain.Scope{Kind: domain.ScopeOrg}, Name: "automation " + c.AutomationName + " ceiling",
 		Bounds: c.Bounds, MinAttestation: c.MinAttestation,
 	})
+	if err := s.checkScopeEdition(ctx, g.Bounds); err != nil {
+		return domain.Grant{}, err
+	}
 	lookup, err := s.lookup(ctx, in.Org, g.Bounds, g.Limits)
 	if err != nil {
 		return domain.Grant{}, err
