@@ -115,4 +115,3 @@ func (a extAudit) Record(ctx context.Context, orgID, kind string, fields map[str
 		return nil
 	})
 }
-
