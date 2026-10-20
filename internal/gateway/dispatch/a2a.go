@@ -275,15 +275,21 @@ func a2aAnswer(binding string, status int, body []byte) (result []byte, peerCode
 	return nil, code, status < 500
 }
 
-// a2aClients caches one egress client per connection revision and peer.
-var a2aClients sync.Map // a2aClientKey → *egress.Client
+// a2aClients caches one egress client per connection (D96 L10): an entry
+// is replaced when the connection's revision or peer changes, so the cache
+// holds at most one client per connection.
+var a2aClients sync.Map // a2aClientKey → a2aClientEntry
 
 type a2aClientKey struct {
-	e        *Engine
-	conn     string
+	e    *Engine
+	conn string
+}
+
+type a2aClientEntry struct {
 	revision int32
 	url      string
 	max      int32
+	client   *egress.Client
 }
 
 func (e *Engine) a2aClient(conn *control.Connection, p A2APeer) (*egress.Client, error) {
@@ -291,9 +297,11 @@ func (e *Engine) a2aClient(conn *control.Connection, p A2APeer) (*egress.Client,
 	if limit <= 0 {
 		limit = conn.GetMaxResponseBytes()
 	}
-	k := a2aClientKey{e: e, conn: conn.GetId(), revision: conn.GetRevision(), url: p.URL, max: limit}
-	if c, ok := a2aClients.Load(k); ok {
-		return c.(*egress.Client), nil //nolint:forcetypeassert // only *egress.Client is stored
+	k := a2aClientKey{e: e, conn: conn.GetId()}
+	if v, ok := a2aClients.Load(k); ok {
+		if c, _ := v.(a2aClientEntry); c.revision == conn.GetRevision() && c.url == p.URL && c.max == limit {
+			return c.client, nil
+		}
 	}
 	timeout := time.Duration(conn.GetTimeoutMs()) * time.Millisecond
 	if timeout <= 0 {
@@ -303,7 +311,7 @@ func (e *Engine) a2aClient(conn *control.Connection, p A2APeer) (*egress.Client,
 	if err != nil {
 		return nil, err
 	}
-	a2aClients.Store(k, c)
+	a2aClients.Store(k, a2aClientEntry{revision: conn.GetRevision(), url: p.URL, max: limit, client: c})
 	return c, nil
 }
 
@@ -317,10 +325,13 @@ func (e *Engine) sendA2A(ctx context.Context, r Result, conn *control.Connection
 		r.Decision = pb.Decision_DECISION_CANNOT_AUTHORIZE
 		return r.fail(CannotAuthorize, CodeKindConfigMissing)
 	}
-	out, buildErr := buildA2A(def, a.Action, want.Txn, peer)
 	if e.A2ACardDrifted(conn) {
-		buildErr = errors.New(CodeA2ACardDrift)
+		// The card changed since it was pinned (HR-322): refused before
+		// anything begins (D96 L9).
+		r.Decision = pb.Decision_DECISION_CANNOT_AUTHORIZE
+		return r.fail(CannotAuthorize, CodeA2ACardDrift)
 	}
+	out, buildErr := buildA2A(def, a.Action, want.Txn, peer)
 	begin := &pb.BeginDispatchRequest{PermitId: want.PermitID, Epoch: want.Epoch}
 	if buildErr == nil {
 		sum := sha256.Sum256(out.body)

@@ -75,19 +75,31 @@ func (e *Engine) CheckA2ACard(ctx context.Context, conn *control.Connection) (*D
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Accept-Encoding", "identity")
+	pinned := c.GetCardDigest()
+	key := driftKey(e, conn)
 	res, err := client.Do(req)
-	if err != nil {
+	if err != nil || res.Status != http.StatusOK {
+		// Unreadable is not drift at once, but a card that stays unreadable
+		// cannot keep a stale pin serving (D96 L2).
+		if n := a2aUnreadable(key, true); n >= MaxA2AUnreadable {
+			a2aDrifted.Store(key, struct{}{})
+			return &Drift{Tool: A2ADriftTool, Expected: hex.EncodeToString(pinned), Observed: "unreadable"}, nil
+		}
+		if err == nil {
+			err = fmt.Errorf("dispatch: card not read: status %d", res.Status)
+		}
 		return nil, err
 	}
+	a2aUnreadable(key, false)
 	mt, _, _ := mime.ParseMediaType(res.ContentType)
-	if res.Status != http.StatusOK || res.Truncated || (mt != "application/json" && mt != wire.ContentType) {
-		return nil, fmt.Errorf("dispatch: card not read: status %d", res.Status)
-	}
 	raw := bytes.TrimSpace(res.Body)
 	observed, err := wire.Digest(raw)
-	pinned := c.GetCardDigest()
 	drift := &Drift{Tool: A2ADriftTool, Expected: hex.EncodeToString(pinned), Observed: hex.EncodeToString(observed[:])}
 	switch {
+	case res.Truncated, mt != "application/json" && mt != wire.ContentType:
+		// An oversize card, or one served as something else, is not the
+		// pinned one (D96 L2).
+		drift.Observed = "invalid"
 	case err != nil:
 		drift.Observed = "invalid"
 	case !bytes.Equal(observed[:], pinned):
@@ -97,6 +109,10 @@ func (e *Engine) CheckA2ACard(ctx context.Context, conn *control.Connection) (*D
 			kerr = wire.VerifySignatures(raw, keys)
 		}
 		if kerr == nil {
+			// The pinned card again: a mark from an earlier read is cleared;
+			// the server keeps a drifted connection quarantined until a new
+			// pin is confirmed (D86).
+			a2aDrifted.Delete(key)
 			return nil, nil
 		}
 		if errors.Is(kerr, wire.ErrKeysInvalid) {
@@ -104,6 +120,27 @@ func (e *Engine) CheckA2ACard(ctx context.Context, conn *control.Connection) (*D
 		}
 		drift.Observed = "signature"
 	}
-	a2aDrifted.Store(driftKey(e, conn), struct{}{})
+	a2aDrifted.Store(key, struct{}{})
 	return drift, nil
+}
+
+// MaxA2AUnreadable is how many reads in a row may fail before an a2a card
+// counts as drifted (at the 10-minute re-read, about an hour).
+const MaxA2AUnreadable = 6
+
+var a2aFailures sync.Map // a2aDriftKey → int
+
+// a2aUnreadable counts a failed read of key (failed) or clears the count,
+// and returns the count.
+func a2aUnreadable(key a2aDriftKey, failed bool) int {
+	if !failed {
+		a2aFailures.Delete(key)
+		return 0
+	}
+	n := 1
+	if v, ok := a2aFailures.Load(key); ok {
+		n += v.(int) //nolint:forcetypeassert // only ints are stored
+	}
+	a2aFailures.Store(key, n)
+	return n
 }

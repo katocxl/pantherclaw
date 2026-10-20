@@ -52,15 +52,18 @@ func (g *Gateway) watchA2ACards(ctx context.Context) error {
 func (g *Gateway) checkA2ACards(ctx context.Context, cfg *control.Config) {
 	for _, id := range slices.Sorted(maps.Keys(cfg.ByID)) {
 		conn := cfg.ByID[id]
-		if conn.GetKind() != "a2a" || conn.GetA2A() == nil || g.engine.A2ACardDrifted(conn) {
+		if conn.GetKind() != "a2a" || conn.GetA2A() == nil {
 			continue
 		}
+		// A drifted connection is read again: it serves again only once its
+		// card is the pinned one; its drift is reported once.
+		was := g.engine.A2ACardDrifted(conn)
 		d, err := g.engine.CheckA2ACard(ctx, conn)
 		if err != nil {
 			g.log.WarnContext(ctx, "gateway.a2a_card_unread", slog.String("connection_id", id), pclog.Err(err))
 			continue
 		}
-		if d != nil {
+		if d != nil && !was {
 			g.drifted(ctx, id, *d)
 		}
 	}

@@ -180,3 +180,26 @@ func (r *a2aRig) call(t *testing.T, method, path, body string, hdr map[string]st
 	b, _ := io.ReadAll(resp.Body)
 	return reply{code: resp.StatusCode, hdr: resp.Header, body: string(b)}
 }
+
+// TestHR322_A2ACardDriftClearsOnlyOnThePinnedCard (D96 L1, L2): an
+// oversize card is drift; once the peer serves the pinned card again, the
+// gateway's own refusal lifts (the server keeps a drifted connection
+// quarantined until a new pin is confirmed), and drift is reported once.
+func TestHR322_A2ACardDriftClearsOnlyOnThePinnedCard(t *testing.T) {
+	r := setupA2A(t, wire.BindingJSONRPC)
+	r.sim.SetFaults(a2asim.Faults{Description: strings.Repeat("x", wire.MaxCardBytes)})
+	r.gw.checkA2ACards(t.Context(), r.gw.config.Current())
+	r.gw.checkA2ACards(t.Context(), r.gw.config.Current())
+	if d := r.driftReports(); len(d) != 1 || !strings.Contains(d[0], "invalid") {
+		t.Fatalf("oversize card: drift reports %v", d)
+	}
+	if got := r.call(t, http.MethodPost, "/a2a/peer", a2aSend, nil); !strings.Contains(got.body, "A2A_CARD_DRIFT") {
+		t.Fatalf("drifted connection served: %s", got.body)
+	}
+	r.sim.SetFaults(a2asim.Faults{})
+	r.gw.checkA2ACards(t.Context(), r.gw.config.Current())
+	got := r.call(t, http.MethodPost, "/a2a/peer", a2aSend, nil)
+	if strings.Contains(got.body, "A2A_CARD_DRIFT") || len(r.sim.Received()) != 1 {
+		t.Fatalf("pinned card again, still refused: %s", got.body)
+	}
+}
