@@ -1,0 +1,22 @@
+{
+  "tests": [
+    {
+      "id": "ar-aggregate", "per": "org",
+      "summary": "an aggregate of orders by status goes through, limited to public and internal columns",
+      "action": {"operation": "postgres.rows.aggregate", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"group_by": ["status"], "measures": ["count:*", "sum:amount"], "limit": "100"}},
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "AGGREGATE_CLASSES"}
+    },
+    {
+      "id": "ar-too-many-groups", "per": "org",
+      "summary": "an aggregate asking for 101 groups is refused",
+      "action": {"operation": "postgres.rows.aggregate", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"group_by": ["status"], "measures": ["count:*"], "limit": "101"}},
+      "expect": {"decision": "DENY", "reason": "AGGREGATE_GROUPS", "rule": "ar-groups"}
+    },
+    {
+      "id": "ar-rows", "per": "org",
+      "summary": "reading rows is refused",
+      "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"columns": ["id", "status"], "limit": "10"}},
+      "expect": {"decision": "DENY", "reason": "ROW_READS_NOT_ALLOWED", "rule": "ar-no-rows"}
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "aggregate-reporting",
+  "summary": "Reporting agents aggregate allow-listed PostgreSQL tables and never read rows: aggregates use public and internal columns only, return at most 100 groups, and small groups are suppressed.",
+  "template": "aggregate-reporting",
+  "baseline_ttl_seconds": 28800,
+  "covers": [
+    "aggregates only: row reads are denied",
+    "data classes: pii and secret columns never reach the agent",
+    "at most 100 groups per aggregate, small groups suppressed by the connection",
+    "a grant baseline covering aggregates and the table list only"
+  ]
+}

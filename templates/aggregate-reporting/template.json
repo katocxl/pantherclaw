@@ -1,0 +1,26 @@
+{
+  "name": "aggregate-reporting",
+  "summary": "Reporting agents aggregate allow-listed PostgreSQL tables and never read rows: aggregates use public and internal columns only, return at most 100 groups, and small groups are suppressed by the connection.",
+  "task_ref": "template:aggregate-reporting",
+  "protects": [
+    "no agent reads rows through pc.postgres: row reads are refused org-wide, for every agent",
+    "aggregates use only public and internal columns: values of pii and secret columns never reach the agent",
+    "an aggregate returns at most 100 groups",
+    "groups smaller than the connection's minimum group size are suppressed by the gateway, and no aggregate returns row values (HR-312)",
+    "the agent's grant covers aggregates and reading the table list only"
+  ],
+  "excludes": [
+    "what the tables hold: only the tables and columns in the connection's manifest can be read at all; review its classes",
+    "inference across many aggregates (differencing): limit the agent's budget or count of queries",
+    "databases reached outside PantherClaw",
+    "data scoping rules need the Team edition",
+    "the limits are examples: change them in a new policy version before relying on them"
+  ],
+  "placeholders": {},
+  "routes": [{"package": "pc.postgres", "route": "postgres-rows-aggregate"}],
+  "grant": "aggregates over the connection's tables and reading the table list",
+  "requires": {
+    "packages": ["pc.postgres"],
+    "connections": ["a pc.postgres connection in enforce mode with a manifest that classes every column"]
+  }
+}

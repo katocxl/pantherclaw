@@ -1,0 +1,5 @@
+{
+  "bounds": {
+    "operations": ["postgres.rows.aggregate", "postgres.tables.read"]
+  }
+}
