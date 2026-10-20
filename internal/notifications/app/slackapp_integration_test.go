@@ -686,33 +686,131 @@ func TestT145_SupersedeAndVoidReachTheCards(t *testing.T) {
 	}
 }
 
-// TestT145_UnclosableCardsAreOrphanedAndRotate: a card Slack will not
-// update is tried again later, behind the others, and after five failed
-// closes it is ORPHANED and shows in the channel's delivery health (D104).
-func TestT145_UnclosableCardsAreOrphanedAndRotate(t *testing.T) {
+// expireUnnoticed ends requests through the approvals janitor (expiry) and
+// cancels their notices, so only the reconciler can close their cards.
+func (s *slackEnv) expireUnnoticed(t *testing.T) {
+	t.Helper()
+	time.Sleep(3 * time.Second)
+	if _, err := approvals.SweepOrg(context.Background(), s.pool, s.svc, s.org); err != nil {
+		t.Fatal(err)
+	}
+	s.exec(t, "UPDATE pc.deliveries SET state = 'CANCELLED', finished_at = now() WHERE state = 'PENDING' AND kind = 'slack_app'") //nolint:misspell // the schema's state name
+}
+
+// health is a channel's failure bookkeeping.
+func (s *slackEnv) health(t *testing.T, channel ids.UUID) string {
+	t.Helper()
+	return s.str(t, `SELECT coalesce(last_failure_code, '') || '/' || consecutive_failures || '/' || (failing_since IS NULL)::text
+		FROM pc.notification_channels WHERE id = $1`, channel)
+}
+
+// TestT145_TransientFailuresDoNotOrphan: a close Slack rate-limits only
+// defers the card, with backoff, however often it happens; once Slack
+// answers, the next run closes it. Five closes Slack will not recover from
+// (the message was deleted) orphan a card, which delivery health shows
+// without feeding the auto-pause clock; a later notice may still close it
+// (D104, D117).
+func TestT145_TransientFailuresDoNotOrphan(t *testing.T) {
 	s := newSlackEnv(t, slackToken)
 	c := s.activate(t, s.channel(t, "approvals", slackApproval, ""))
-	req := s.hold(t, time.Hour)
+	limited := s.hold(t, 2*time.Second)
 	_ = s.deliverAll(t)
-	s.decline(t, req)
-	s.exec(t, "UPDATE pc.deliveries SET state = 'CANCELLED', finished_at = now() WHERE state = 'PENDING' AND kind = 'slack_app'") //nolint:misspell // the schema's state name
-	s.sim.SetFaults(slack.Faults{RateLimit: 100})
+	s.expireUnnoticed(t)
+	s.sim.SetFaults(slack.Faults{RateLimit: 1000, RetryAfter: 1})
+	for i := range 10 {
+		if r, err := s.svc.ReconcileSlack(context.Background(), s.org); err != nil || r.Closed != 0 {
+			t.Fatalf("run %d: %v %+v", i, err, r)
+		}
+		s.d.AdminExec(t, "UPDATE pc.slack_cards SET close_after = now() - interval '1 second' WHERE request_id = $1", limited)
+	}
+	if st := s.cardState(t, limited); st != domain.CardOpen {
+		t.Fatalf("a rate-limited card is %s", st)
+	}
+	s.sim.SetFaults(slack.Faults{})
+	if r, err := s.svc.ReconcileSlack(context.Background(), s.org); err != nil || r.Closed != 1 || s.cardState(t, limited) != domain.CardClosed {
+		t.Fatalf("after the rate limit: %v %+v", err, r)
+	}
+
+	gone := s.hold(t, 2*time.Second)
+	_ = s.deliverAll(t)
+	s.expireUnnoticed(t)
+	s.sim.Delete(slackApproval, *s.cardRow(t, gone).Ts)
 	for i := range 5 {
 		if r, err := s.svc.ReconcileSlack(context.Background(), s.org); err != nil || r.Closed != 0 {
 			t.Fatalf("run %d: %v %+v", i, err, r)
 		}
 	}
-	if st := s.cardState(t, req); st != "ORPHANED" {
-		t.Fatalf("card after five failed closes: %s", st)
+	if st := s.cardState(t, gone); st != "ORPHANED" {
+		t.Fatalf("after five closes Slack refused: %s", st)
 	}
-	v, _, err := s.svc.GetChannel(s.admin(), c.ID)
-	if err != nil || v.LastFailureCode != "slack_card_orphaned" {
-		t.Fatalf("delivery health: %v %+v", err, v)
+	if h := s.health(t, c.ID); h != "slack_card_orphaned/0/true" {
+		t.Fatalf("delivery health: %s (an orphan is not a failed delivery)", h)
 	}
-	s.sim.SetFaults(slack.Faults{})
 	if r, _ := s.svc.ReconcileSlack(context.Background(), s.org); r.Closed != 0 {
 		t.Fatalf("an orphaned card was tried again: %+v", r)
 	}
+}
+
+// TestT145_UnclosableCardsRotate: with more unclosable cards than a run
+// takes, a card whose request just ended is closed on the next run (D104).
+func TestT145_UnclosableCardsRotate(t *testing.T) {
+	s := newSlackEnv(t, slackToken)
+	s.activate(t, s.channel(t, "approvals", slackApproval, ""))
+	var stuck []ids.UUID
+	for range 51 {
+		stuck = append(stuck, s.hold(t, 2*time.Second))
+	}
+	_ = s.deliverAll(t)
+	s.expireUnnoticed(t)
+	for _, r := range stuck {
+		s.sim.Delete(slackApproval, *s.cardRow(t, r).Ts)
+	}
+	if r, err := s.svc.ReconcileSlack(context.Background(), s.org); err != nil || r.Closed != 0 {
+		t.Fatalf("first run: %v %+v", err, r)
+	}
+	healthy := s.hold(t, 2*time.Second)
+	_ = s.deliverAll(t)
+	s.expireUnnoticed(t)
+	if r, err := s.svc.ReconcileSlack(context.Background(), s.org); err != nil || r.Closed != 1 || s.cardState(t, healthy) != domain.CardClosed {
+		t.Fatalf("second run: %v %+v", err, r)
+	}
+}
+
+// TestT145_AnInvalidatedRequestsCardIsClosed: a request the approvals
+// janitor invalidates (its agent was suspended) has its card closed by the
+// reconciler (D104).
+func TestT145_AnInvalidatedRequestsCardIsClosed(t *testing.T) {
+	s := newSlackEnv(t, slackToken)
+	s.activate(t, s.channel(t, "approvals", slackApproval, ""))
+	req := s.hold(t, time.Hour)
+	_ = s.deliverAll(t)
+	s.d.AdminExec(t, "UPDATE pc.agents SET state = 'SUSPENDED', suspended_from = 'CLAIMED' WHERE id = $1", s.agent)
+	if _, err := approvals.SweepOrg(context.Background(), s.pool, s.svc, s.org); err != nil {
+		t.Fatal(err)
+	}
+	if st := s.str(t, "SELECT state FROM pc.approval_requests WHERE id = $1", req); st != "INVALIDATED" {
+		t.Fatalf("request: %s", st)
+	}
+	s.exec(t, "UPDATE pc.deliveries SET state = 'CANCELLED', finished_at = now() WHERE state = 'PENDING' AND kind = 'slack_app'") //nolint:misspell // the schema's state name
+	if r, err := s.svc.ReconcileSlack(context.Background(), s.org); err != nil || r.Closed != 1 {
+		t.Fatalf("reconcile: %v %+v", err, r)
+	}
+	if m := s.card(t, req); !strings.Contains(m.Text, "No longer applies") {
+		t.Fatalf("card: %+v", m)
+	}
+}
+
+func (s *slackEnv) cardRow(t *testing.T, request ids.UUID) dbq.PcSlackCard {
+	t.Helper()
+	var c dbq.PcSlackCard
+	if err := s.pool.InTenantTx(context.Background(), s.org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		c, err = dbq.New(tx).LatestSlackCard(ctx, s.org, request, mustUUIDStr(t, s.str(t, "SELECT channel_record_id::text FROM pc.slack_cards WHERE request_id = $1 LIMIT 1", request)))
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return c
 }
 
 // TestT145_EscalationRepliesAreClaimedBeforeTheyArePosted: a reply Slack

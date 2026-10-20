@@ -25,22 +25,37 @@ import (
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
-// The Slack reconciler (G0 M14 D88). Every minute, for each org, it closes
-// the OPEN cards whose request is final however it ended (a decision, an
-// expiry, an invalidation, a supersession, a void that ended it), so no
-// approvals code has to notify Slack; and it asks Slack again whether each
-// active channel is still internal: a channel shared outside the workspace
-// returns to PENDING_ACTIVATION and the org's admins are told. Both are
-// bounded per run. It runs whatever the edition: closing a card is never a
-// new card (only new cards stop after a downgrade).
+// The Slack reconciler (G0 M14 D88, D104, D117). Every minute, for each
+// org, it closes the OPEN cards whose request is final however it ended (a
+// decision, an expiry, an invalidation, a supersession, a void that ended
+// it), so no approvals code has to notify Slack; and it asks Slack again
+// whether active channels are still internal: a channel shared outside the
+// workspace returns to PENDING_ACTIVATION and the org's admins are told.
+// Each run closes at most slackReconcileBatch cards and checks at most
+// slackRecheckBatch channels, the least recently checked first, within
+// slackReconcileBudget. A close Slack will not recover from counts toward
+// ORPHANED; a 429, a timeout or a 5xx only defers the card, with backoff,
+// and a 429 ends the run's closes. It runs whatever the edition: closing a
+// card is never a new card (only new cards stop after a downgrade).
 
 const (
 	// SlackReconcileInterval is how often the reconciler runs.
 	SlackReconcileInterval = time.Minute
-	// slackReconcileBatch bounds the cards closed and channels checked per
-	// org and run.
+	// slackReconcileBatch bounds the cards closed per org and run.
 	slackReconcileBatch = 50
+	// slackRecheckBatch bounds the channels checked per org and run.
+	slackRecheckBatch = 20
+	// slackReconcileBudget bounds one org's run, below the job's timeout.
+	slackReconcileBudget = 4 * time.Minute
 )
+
+// slackPermanent are Slack's answers to a close that retrying cannot fix:
+// they count toward ORPHANED (D117).
+var slackPermanent = map[string]bool{
+	"slack_invalid_auth": true, "slack_account_inactive": true, "slack_token_revoked": true, "slack_token_expired": true,
+	"slack_channel_not_found": true, "slack_not_in_channel": true, "slack_message_not_found": true,
+	"slack_cant_update_message": true, "slack_is_archived": true, "slack_refused": true, "secret_unavailable": true,
+}
 
 // SlackReconciled counts what one run did for one org.
 type SlackReconciled struct {
@@ -50,6 +65,7 @@ type SlackReconciled struct {
 // ReconcileSlack runs the reconciler for one org.
 func (s *Service) ReconcileSlack(ctx context.Context, org ids.OrgID) (SlackReconciled, error) {
 	var out SlackReconciled
+	deadline := time.Now().Add(slackReconcileBudget)
 	var cards []dbq.SlackCardsToCloseRow
 	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		var err error
@@ -60,36 +76,38 @@ func (s *Service) ReconcileSlack(ctx context.Context, org ids.OrgID) (SlackRecon
 		return out, err
 	}
 	for _, c := range cards {
-		if s.closeSlackCard(ctx, org, c.CardID, c.RequestID, c.ChannelRecordID) {
-			out.Closed++
-		}
-	}
-	// Every active channel, a page at a time (D104).
-	var after *ids.UUID
-	for {
-		var channels []dbq.ActiveSlackAppChannelsRow
-		if err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-			var err error
-			channels, err = dbq.New(tx).ActiveSlackAppChannels(ctx, org, after, slackReconcileBatch)
-			return err
-		}, db.ReadOnly()); err != nil {
-			return out, err
-		}
-		for _, c := range channels {
-			paused, err := s.recheckSlackChannel(ctx, org, c)
-			if err != nil {
-				return out, err
-			}
-			if paused {
-				out.Paused++
-			}
-			id := c.ChannelRecordID
-			after = &id
-		}
-		if len(channels) < slackReconcileBatch {
+		if time.Now().After(deadline) {
 			return out, nil
 		}
+		closed, limited := s.closeSlackCard(ctx, org, c.CardID, c.RequestID, c.ChannelRecordID)
+		if closed {
+			out.Closed++
+		}
+		if limited {
+			break // Slack asked to wait: the rest waits for the next run
+		}
 	}
+	var channels []dbq.ActiveSlackAppChannelsRow
+	if err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		channels, err = dbq.New(tx).ActiveSlackAppChannels(ctx, org, slackRecheckBatch)
+		return err
+	}, db.ReadOnly()); err != nil {
+		return out, err
+	}
+	for _, c := range channels {
+		if time.Now().After(deadline) {
+			return out, nil
+		}
+		paused, err := s.recheckSlackChannel(ctx, org, c)
+		if err != nil {
+			return out, err
+		}
+		if paused {
+			out.Paused++
+		}
+	}
+	return out, nil
 }
 
 // slackToken opens a slack_app channel's bot token.
@@ -98,11 +116,11 @@ func (s *Service) slackToken(ctx context.Context, org ids.OrgID, channel ids.UUI
 	return string(b), err
 }
 
-// closeSlackCard updates one card to its request's final state; it reports
-// whether Slack took the update. A failed close is counted and moves the
-// card to the back of the batch; the fifth makes it ORPHANED, shown in the
-// channel's delivery health (D104).
-func (s *Service) closeSlackCard(ctx context.Context, org ids.OrgID, cardID, request, channel ids.UUID) bool {
+// closeSlackCard updates one card to its request's final state. It reports
+// whether Slack took the update, and whether Slack rate-limited it. A close
+// that cannot recover counts toward ORPHANED (the fifth, D104); any other
+// failure defers the card with backoff (D117).
+func (s *Service) closeSlackCard(ctx context.Context, org ids.OrgID, cardID, request, channel ids.UUID) (closed, limited bool) {
 	var cfg dbq.GetSlackAppChannelRow
 	var facts dbq.SlackCardFactsRow
 	var stored dbq.PcSlackCard
@@ -119,12 +137,12 @@ func (s *Service) closeSlackCard(ctx context.Context, org ids.OrgID, cardID, req
 		return err
 	}, db.ReadOnly())
 	if err != nil || cfg.ChannelState == "DISABLED" || !domain.CardIsClosed(facts.State) {
-		return false
+		return false, false
 	}
 	token, err := s.slackToken(ctx, org, channel, cfg.Secret)
 	if err != nil {
-		s.slackCloseFailed(ctx, org, cardID, channel)
-		return false
+		s.slackCloseFailed(ctx, org, cardID, channel, outcome{code: "secret_unavailable"})
+		return false, false
 	}
 	f := domain.CardFacts{
 		Level: cfg.DataLevel, Kind: facts.SubjectKind, Consequence: facts.Reversibility, State: facts.State,
@@ -132,12 +150,13 @@ func (s *Service) closeSlackCard(ctx context.Context, org ids.OrgID, cardID, req
 		Environment: facts.EnvironmentName,
 	}
 	out := s.slackRefresh(ctx, org, token, stored, f)
-	if !out.ok {
-		s.log.WarnContext(ctx, "notifications.slack_card_not_closed", slog.String("org", org.String()),
-			slog.String("channel", channel.String()), slog.String("code", out.code))
-		s.slackCloseFailed(ctx, org, cardID, channel)
+	if out.ok {
+		return true, false
 	}
-	return out.ok
+	s.log.WarnContext(ctx, "notifications.slack_card_not_closed", slog.String("org", org.String()),
+		slog.String("channel", channel.String()), slog.String("code", out.code))
+	s.slackCloseFailed(ctx, org, cardID, channel, out)
+	return false, out.code == "rate_limited" || out.code == "slack_ratelimited"
 }
 
 // recheckSlackChannel asks Slack whether an active channel is still
@@ -151,6 +170,11 @@ func (s *Service) recheckSlackChannel(ctx context.Context, org ids.OrgID, c dbq.
 		return false, nil // the delivery path reports an unusable token
 	}
 	a, out := s.slackCall(ctx, token, "conversations.info", nil, url.Values{"channel": {c.SlackChannel}})
+	if out.ok || slackRefused(out) {
+		_ = s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+			return dbq.New(tx).MarkSlackChannelChecked(ctx, org, c.ChannelRecordID)
+		})
+	}
 	if !out.ok || !sharedChannel(a, c.SlackChannel) {
 		return false, nil
 	}
@@ -210,6 +234,11 @@ func (SlackReconcileOrgArgs) InsertOpts() river.InsertOpts {
 type slackReconcileOrgWorker struct {
 	river.WorkerDefaults[SlackReconcileOrgArgs]
 	svc *Service
+}
+
+// Timeout leaves room for the run's own budget.
+func (w *slackReconcileOrgWorker) Timeout(*river.Job[SlackReconcileOrgArgs]) time.Duration {
+	return slackReconcileBudget + time.Minute
 }
 
 func (w *slackReconcileOrgWorker) Work(ctx context.Context, job *river.Job[SlackReconcileOrgArgs]) error {
@@ -279,18 +308,29 @@ func sharedChannel(a slackAnswer, channel string) bool {
 	return ch.ExtShared || ch.Shared
 }
 
-// slackCloseFailed counts a failed close of a card; when the card becomes
-// ORPHANED, the channel's delivery health records it.
-func (s *Service) slackCloseFailed(ctx context.Context, org ids.OrgID, cardID, channel ids.UUID) {
+// slackCloseFailed records a failed close. A failure Slack will not
+// recover from counts toward ORPHANED; when the card becomes ORPHANED the
+// channel's delivery health shows it, without feeding the auto-pause clock
+// (D117). Any other failure defers the card with backoff, honouring
+// Retry-After.
+func (s *Service) slackCloseFailed(ctx context.Context, org ids.OrgID, cardID, channel ids.UUID, out outcome) {
 	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		if !slackPermanent[out.code] {
+			return q.DeferSlackCardClose(ctx, int32(out.retryAfter/time.Second), org, cardID) //nolint:gosec // G115: at most an hour
+		}
 		state, err := q.FailSlackCardClose(ctx, org, cardID)
 		if err != nil || state != cardOrphaned {
 			return err
 		}
-		code := "slack_card_orphaned"
-		_, err = q.ChannelFailed(ctx, dbq.ChannelFailedParams{
-			Code: &code, OrgID: org, ID: channel, PauseAfterSeconds: int32(domain.AutoPauseAfter / time.Second),
+		if err := q.NoteChannelFailureCode(ctx, ptr("slack_card_orphaned"), org, channel); err != nil {
+			return err
+		}
+		_, err = audit.Record(ctx, tx, audit.Event{
+			Name: "notification.slack_card_orphaned", Actor: evdomain.Actor{Type: "system", ID: "slack-reconciler"},
+			Outcome: audit.Failure, ReasonCode: "SLACK_CARD_ORPHANED",
+			Object:  &audit.Object{Type: "notification_channel", ID: channel.String()},
+			Details: map[string]string{"card": cardID.String(), "code": out.code},
 		})
 		return err
 	})

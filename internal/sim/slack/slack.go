@@ -174,6 +174,14 @@ func (s *Server) React(channel, ts, name string) bool {
 	return false
 }
 
+// Delete removes a message, as a person deleting it in Slack would: a
+// later chat.update of it answers message_not_found.
+func (s *Server) Delete(channel, ts string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.messages = slices.DeleteFunc(s.messages, func(m Message) bool { return m.Channel == channel && m.TS == ts })
+}
+
 // Tokens returns the bot token of every authorized request, in order.
 func (s *Server) Tokens() []string {
 	s.mu.Lock()

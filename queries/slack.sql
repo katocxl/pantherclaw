@@ -80,22 +80,33 @@ DELETE FROM pc.slack_cards
 WHERE org_id = sqlc.arg(org_id) AND card_id = sqlc.arg(card_id) AND state = 'POSTING';
 
 -- name: SlackCardsToClose :many
--- Open cards of active channels whose request is final, least recently
--- tried first, for the reconciler (D88, D104): bounded, and a card that
--- failed to close moves to the back.
+-- Open cards of active channels whose request is final and whose backoff
+-- has passed, fewest failed tries first, then least recently tried, for
+-- the reconciler (D88, D104, D117): bounded, so unclosable cards move to
+-- the back and never starve the batch.
 SELECT c.card_id, c.request_id, c.channel_record_id
 FROM pc.slack_cards c
 JOIN pc.approval_requests r ON r.org_id = c.org_id AND r.id = c.request_id
 JOIN pc.slack_app_channels a ON a.org_id = c.org_id AND a.channel_record_id = c.channel_record_id
 JOIN pc.notification_channels n ON n.org_id = c.org_id AND n.id = c.channel_record_id
 WHERE c.org_id = sqlc.arg(org_id) AND c.state = 'OPEN' AND a.state = 'ACTIVE' AND n.state <> 'DISABLED'
+  AND (c.close_after IS NULL OR c.close_after <= now())
   AND r.state IN ('APPROVED', 'CONSUMED', 'DECLINED', 'EXPIRED', 'INVALIDATED', 'SUPERSEDED')
-ORDER BY c.updated_at, c.card_id
+ORDER BY c.close_attempts + least(c.close_retries, 1000), c.updated_at, c.card_id
 LIMIT sqlc.arg(batch);
 
+-- name: DeferSlackCardClose :exec
+-- A close that failed for a reason worth retrying (429, a timeout, a 5xx):
+-- the card waits with backoff (1 min doubling to 1 h, at least wait
+-- seconds) and is never orphaned for it (D117).
+UPDATE pc.slack_cards
+SET close_retries = least(close_retries + 1, 100000), updated_at = now(),
+    close_after = now() + make_interval(secs => greatest(least(60 * power(2, least(close_retries, 6)), 3600), sqlc.arg(wait_seconds)::int)::int)
+WHERE org_id = sqlc.arg(org_id) AND card_id = sqlc.arg(card_id) AND state = 'OPEN';
+
 -- name: FailSlackCardClose :one
--- Counts a failed close; the fifth makes the card ORPHANED, so unclosable
--- cards never starve the batch (D104).
+-- Counts a close Slack will not recover from; the fifth makes the card
+-- ORPHANED (D104, D117).
 UPDATE pc.slack_cards
 SET close_attempts = close_attempts + 1, updated_at = now(),
     state = CASE WHEN close_attempts + 1 >= 5 THEN 'ORPHANED' ELSE state END
@@ -103,15 +114,18 @@ WHERE org_id = sqlc.arg(org_id) AND card_id = sqlc.arg(card_id) AND state = 'OPE
 RETURNING state;
 
 -- name: ActiveSlackAppChannels :many
--- Active channels after a cursor, in id order (the re-check pages through
--- all of them, D104).
+-- Active channels, least recently checked first: each run checks a bounded
+-- number, and over runs every channel is checked (D117).
 SELECT a.channel_record_id, a.slack_channel, c.secret
 FROM pc.slack_app_channels a
 JOIN pc.notification_channels c ON c.org_id = a.org_id AND c.id = a.channel_record_id
 WHERE a.org_id = sqlc.arg(org_id) AND a.state = 'ACTIVE' AND c.state <> 'DISABLED'
-  AND (sqlc.narg(after)::uuid IS NULL OR a.channel_record_id > sqlc.narg(after)::uuid)
-ORDER BY a.channel_record_id
+ORDER BY a.last_checked_at NULLS FIRST, a.channel_record_id
 LIMIT sqlc.arg(batch);
+
+-- name: MarkSlackChannelChecked :exec
+UPDATE pc.slack_app_channels SET last_checked_at = now()
+WHERE org_id = sqlc.arg(org_id) AND channel_record_id = sqlc.arg(channel_record_id) AND state = 'ACTIVE';
 
 -- name: MarkSlackSharedExternally :execrows
 -- Slack reports the channel shared outside the workspace: it waits for a
@@ -120,8 +134,9 @@ UPDATE pc.slack_app_channels SET state = 'PENDING_ACTIVATION', shared_externally
 WHERE org_id = sqlc.arg(org_id) AND channel_record_id = sqlc.arg(channel_record_id) AND state = 'ACTIVE';
 
 -- name: SetSlackCardState :exec
+-- An ORPHANED card a later update reached is OPEN or CLOSED again (D117).
 UPDATE pc.slack_cards SET state = sqlc.arg(state), updated_at = now()
-WHERE org_id = sqlc.arg(org_id) AND card_id = sqlc.arg(card_id) AND state IN ('OPEN', 'CLOSED');
+WHERE org_id = sqlc.arg(org_id) AND card_id = sqlc.arg(card_id) AND state IN ('OPEN', 'CLOSED', 'ORPHANED');
 
 -- name: ClaimSlackEscalation :execrows
 -- Claims escalation reply number seen + 1 before it is posted (D104).
@@ -147,3 +162,9 @@ FROM pc.approval_requests r
 LEFT JOIN pc.agents a ON a.org_id = r.org_id AND a.id = r.agent_id
 LEFT JOIN pc.environments e ON e.org_id = a.org_id AND e.id = a.environment_id
 WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(id);
+
+-- name: NoteChannelFailureCode :exec
+-- Shows a problem in a channel's delivery health without counting it as a
+-- failed delivery: the auto-pause clock is left alone (D117).
+UPDATE pc.notification_channels SET last_failure_code = sqlc.arg(code), last_failure_at = now()
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
