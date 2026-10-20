@@ -1,0 +1,258 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for agents that post to Slack (G0 M14 D25, D70;
+# F760 part, founder decision F6). It reaches Slack's Web API through an
+# http connection whose credential PantherClaw holds: a bot token
+# (xoxb-...), checked against credential_pattern before any byte is sent
+# (HR-301). The agent never holds the token.
+#
+# A message goes to one channel, the action's target and its destination,
+# so a grant or policy can bound where an agent may post. Its text is a
+# disclosure param (HR-079) capped at 4000 bytes, and it is type content:
+# text params are never dispatched (HR-023, D70). Before every decision
+# the gateway reads the channel with conversations.info and reports
+# slack.channel.external: whether Slack shares the channel with another
+# workspace or organization. A post to such a channel predicts the
+# consequence slack.message.disclose (external_disclosure), which a policy
+# must allow (HR-316); a channel that cannot be read is a missing fact,
+# never an internal one (HR-160).
+#
+# Slack answers HTTP 200 with "ok": false on refusal; success requires
+# ok == true (D8), else the outcome is FAILED with Slack's error code.
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
+format: 1
+name: pc.slack
+version: 1.0.0
+publisher: pantherclaw
+summary: Post messages to Slack channels and read a channel's sharing
+
+definitions:
+  - operation: slack.message.post
+    summary: Post a message to a Slack channel
+    access: write
+    target:
+      type: slack_channel
+      id_pattern: '^(?P<channel>[CG][A-Z0-9]{8,12})$'
+      account: none
+    params:
+      text:
+        type: content
+        material: true
+        required: true
+        max_length: 4000
+        # The message leaves PantherClaw for Slack and everyone in the
+        # channel: a disclosure param, capped at 4000 bytes.
+        disclosure: true
+        max_bytes: 4000
+      thread_ts:
+        type: identifier
+        material: true
+        pattern: '^[0-9]{10}\.[0-9]{6}$'
+    constraints:
+      - kind: target_set
+      - kind: destination_set
+    effects:
+      - kind: message.send
+        description: Posts a message that everyone in the channel can read
+    reversibility: irreversible
+    dedupe_key: [target.id, params.text]
+    # Read by the gateway before every decision: whether Slack shares the
+    # channel outside the workspace.
+    prerequisites:
+      - fact: slack.channel.external
+        max_age_seconds: 300
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Post a message to Slack channel {target.id}
+      fields:
+        - target.id
+        - params.thread_ts
+        - facts.slack.channel.external
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    mappings:
+      - channel: http
+        method: POST
+        path: /chat.postMessage
+        route: slack-message-post
+        extract:
+          target_id: input.channel
+          params:
+            text: input.text
+            thread_ts: input.?thread_ts
+          destinations:
+            - kind: external
+              id: input.channel
+      - channel: mcp
+        tool: slack_post_message
+        route: slack-message-post
+        description: >-
+          Post a message to a Slack channel, by its channel id (C... or
+          G...). The text is plain text of at most 4000 bytes.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [channel_id, text]
+          properties:
+            channel_id:
+              type: string
+              description: The channel id, such as C0123456789
+              pattern: '^[CG][A-Z0-9]{8,12}$'
+            text:
+              type: string
+              description: The message text
+              maxLength: 4000
+        extract:
+          target_id: input.channel_id
+          params:
+            text: input.text
+          destinations:
+            - kind: external
+              id: input.channel_id
+      - channel: mcp
+        tool: slack_reply_to_thread
+        route: slack-message-post
+        description: >-
+          Reply in a thread of a Slack channel: the channel id (C... or
+          G...) and the thread's parent message timestamp. The text is plain
+          text of at most 4000 bytes.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [channel_id, thread_ts, text]
+          properties:
+            channel_id:
+              type: string
+              description: The channel id, such as C0123456789
+              pattern: '^[CG][A-Z0-9]{8,12}$'
+            thread_ts:
+              type: string
+              description: The parent message's timestamp, such as 1700000000.000100
+              pattern: '^[0-9]{10}\.[0-9]{6}$'
+            text:
+              type: string
+              description: The reply text
+              maxLength: 4000
+        extract:
+          target_id: input.channel_id
+          params:
+            text: input.text
+            thread_ts: input.thread_ts
+          destinations:
+            - kind: external
+              id: input.channel_id
+    dispatch:
+      credential_pattern: '^xoxb-[A-Za-z0-9-]{20,}$'
+      http:
+        method: POST
+        path: /chat.postMessage
+        body:
+          channel: target.id
+          text: params.text
+          thread_ts: params.thread_ts
+        success:
+          field: ok
+          equals: true
+
+  - operation: slack.channel.read
+    summary: Read a Slack channel's name, membership and sharing
+    access: read
+    target:
+      type: slack_channel
+      id_pattern: '^(?P<channel>[CG][A-Z0-9]{8,12})$'
+      account: none
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    mappings:
+      - channel: http
+        method: GET
+        path: /conversations.info
+        route: slack-channel-read
+        extract:
+          target_id: query.channel
+          params: {}
+      - channel: mcp
+        tool: slack_get_channel_info
+        route: slack-channel-read
+        description: >-
+          Read a Slack channel by its id (C... or G...): its name, whether
+          the bot is in it and whether it is shared outside the workspace.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [channel_id]
+          properties:
+            channel_id:
+              type: string
+              description: The channel id, such as C0123456789
+              pattern: '^[CG][A-Z0-9]{8,12}$'
+        extract:
+          target_id: input.channel_id
+          params: {}
+    dispatch:
+      credential_pattern: '^xoxb-[A-Za-z0-9-]{20,}$'
+      http:
+        method: GET
+        path: /conversations.info
+        query:
+          channel: target.id
+        success:
+          field: ok
+          equals: true
+
+  # The consequence of a post to a channel Slack shares outside the
+  # workspace: what is posted reaches people outside the organization. It is
+  # decided, never sent: no mapping reaches it.
+  - operation: slack.message.disclose
+    summary: A message that reaches people outside the workspace
+    access: write
+    target:
+      type: slack_channel
+      id_pattern: '^(?P<channel>[CG][A-Z0-9]{8,12})$'
+      account: none
+    params: {}
+    effects:
+      - kind: external_disclosure
+        description: Discloses the message to people outside the organization
+    reversibility: irreversible
+    dedupe_key: [target.id]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: A message reaches people outside the workspace in Slack channel {target.id}
+      fields:
+        - target.id
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+
+consequences:
+  - id: external-channel-disclosure
+    operation: slack.message.post
+    when: facts.slack_channel_external.external == true
+    requires_facts: [slack.channel.external]
+    consequence:
+      operation: slack.message.disclose
+      effect: external_disclosure
+      description: >-
+        The channel is shared with another workspace or organization, so the
+        message reaches people outside your organization.
+    valid_until: 2027-10-17

@@ -1,0 +1,67 @@
+apiVersion: pantherclaw.range/v1
+id: RT-046
+title: An agent cannot post to a Slack channel shared outside the workspace or outside its destinations
+category: boundary
+suite: platform
+tier: business
+attacker: A1
+threats: [T-146]
+rules: [HR-316]
+requires: [slack.post]
+harness_only: false
+steps:
+  # Control: an internal channel in the grant's destinations is allowed.
+  - id: post-internal
+    do: agent.call
+    with:
+      face: http
+      connection: slack
+      method: POST
+      path: /chat.postMessage
+      body:
+        channel: C0APPROVAL1
+        text: "Build ${fixture.nonce} finished"
+    expect:
+      outcome: ALLOW
+  # The channel is in the grant's destinations, but Slack shares it with
+  # another organization: the post would disclose outside the workspace,
+  # a consequence the grant does not cover.
+  - id: post-shared-channel
+    do: agent.call
+    with:
+      face: mcp
+      connection: slack
+      tool: slack_post_message
+      args:
+        channel_id: C0EXTERNAL1
+        text: "Customer export ${fixture.nonce}"
+    expect:
+      outcome: DENY
+      reason: OPERATION_NOT_GRANTED
+      decisive_control: HR-316
+  # A channel outside the grant's destinations, through either route.
+  - id: post-unlisted-channel-http
+    do: agent.call
+    with:
+      face: http
+      connection: slack
+      method: POST
+      path: /chat.postMessage
+      body:
+        channel: C0OUTSIDE01
+        text: "Customer export ${fixture.nonce}"
+    expect:
+      outcome: DENY
+      reason: DESTINATION_NOT_GRANTED
+  - id: post-unlisted-channel-mcp
+    do: agent.call
+    with:
+      face: mcp
+      connection: slack
+      tool: slack_post_message
+      args:
+        channel_id: C0OUTSIDE01
+        text: "Customer export ${fixture.nonce} again"
+    expect:
+      outcome: DENY
+      reason: DESTINATION_NOT_GRANTED

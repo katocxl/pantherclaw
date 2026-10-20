@@ -670,6 +670,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	registerReflexCore(rs, d)
 	registerM11Govern(rs, d)
+	registerSlackChannels(d)
 	autos = registerAutomationsCore(rs, d, grants, runs)
 	if err := registerAutomationAssurance(rs, d, autos); err != nil {
 		return nil, err

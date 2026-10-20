@@ -2922,6 +2922,36 @@ type PcSiemDestination struct {
 	Retries             int64
 }
 
+type PcSlackAppChannel struct {
+	OrgID               ids.OrgID
+	ChannelRecordID     ids.UUID
+	SlackChannel        string
+	DataLevel           string
+	State               string
+	TeamID              *string
+	BotID               *string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	TokenReplacedBy     *string
+	TokenReplacedAt     *time.Time
+	SharedExternallyAt  *time.Time
+	UpdatedAt           time.Time
+}
+
+type PcSlackCard struct {
+	OrgID           ids.OrgID
+	RequestID       ids.UUID
+	ChannelRecordID ids.UUID
+	SlackChannel    string
+	Ts              *string
+	State           string
+	Escalations     int32
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
 type PcSoarRequest struct {
 	OrgID          ids.OrgID
 	IdempotencyKey string

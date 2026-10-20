@@ -113,10 +113,14 @@ func (q *Queries) ChannelSucceeded(ctx context.Context, orgID ids.OrgID, iD ids.
 }
 
 const channelsForRouting = `-- name: ChannelsForRouting :many
-SELECT id, kind, state, event_types, min_severity, recipient_role
-FROM pc.notification_channels
-WHERE org_id = $1 AND state IN ('ACTIVE', 'PAUSED')
-ORDER BY created_at, id
+SELECT c.id, c.kind, c.state, c.event_types, c.min_severity, c.recipient_role
+FROM pc.notification_channels c
+WHERE c.org_id = $1 AND c.state IN ('ACTIVE', 'PAUSED')
+  -- A slack_app channel gets nothing until it is activated (G0 M14 D66).
+  AND (c.kind <> 'slack_app' OR EXISTS (
+      SELECT 1 FROM pc.slack_app_channels a
+      WHERE a.org_id = c.org_id AND a.channel_record_id = c.id AND a.state = 'ACTIVE'))
+ORDER BY c.created_at, c.id
 `
 
 type ChannelsForRoutingRow struct {

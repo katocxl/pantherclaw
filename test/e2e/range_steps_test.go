@@ -370,6 +370,8 @@ func (d *rangeDriver) simMutate(st domain.Step) (domain.Observation, error) {
 		return d.extra.mutateMCP(d, w.Change, w.Args)
 	case w.Sim == "stripe":
 		return d.mutateStripe(w.Change, w.Args)
+	case w.Sim == "slack":
+		return d.slackMutate(w.Change, w.Args)
 	}
 	return domain.Observation{}, fmt.Errorf("sim.mutate %s %s", w.Sim, w.Change)
 }

@@ -24,6 +24,7 @@ import (
 	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
 	pcshell "github.com/katocxl/pantherclaw/packages/pc-shell"
+	pcslack "github.com/katocxl/pantherclaw/packages/pc-slack"
 )
 
 // devSeedActor records `dev seed` in the audit log.
@@ -68,6 +69,9 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	factsOut := fs.String("facts-key-out", "", "with --workload-out: write the API key of the development fact provider here (0600, never overwritten)")
 	holdOver := fs.String("hold-over", "50.00", "publish a policy holding refunds over this amount (grant currency) for an approver; empty for none")
 	postgresFile := fs.String("postgres", "", "with --gateway-out: also seed pc.postgres and the connection \"warehouse\" to the database a file names as one URL (G0 M14 D21)")
+	slackChannel := fs.String("slack-channel", "", "also seed a PENDING slack_app channel posting approval cards to this Slack channel id (with --slack-token-file; Team edition)")
+	slackToken := fs.String("slack-token-file", "", "with --slack-channel: the file holding the bot token (xoxb-...)")
+	slackURL := fs.String("slack-url", "", "with --gateway-out: also seed pc.slack and the connection \"slack\" to this Slack Web API base (pantherclaw-sim slack: http://127.0.0.1:9095/api), its channel facts read by the gateway")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -111,7 +115,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 			return fmt.Errorf("dev seed: %s already exists", out)
 		}
 	}
-	if (*targetURL != "" || *shell || *githubURL != "" || *stripeURL != "" || *postgresFile != "") && *gatewayOut == "" {
+	if (*targetURL != "" || *shell || *githubURL != "" || *stripeURL != "" || *postgresFile != "" || *slackURL != "") && *gatewayOut == "" {
 		return errTargetNeedsGateway
 	}
 	if *access == "" {
@@ -173,8 +177,16 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	if *postgresFile != "" {
 		pkgs = append(pkgs, devPostgresPackage())
 	}
+	if *slackURL != "" {
+		pkgs = append(pkgs, devPackage{pcslack.Name, pcslack.Version, pcslack.Package})
+	}
 	if err := seedPackages(ctx, pool, org, signer, pkgs...); err != nil {
 		return err
+	}
+	if *slackChannel != "" {
+		if err := seedSlackChannel(ctx, cfg, pool, org, *slackChannel, *slackToken, stdout); err != nil {
+			return err
+		}
 	}
 	_, _ = fmt.Fprintf(stdout, "seeded org %s (%q) with package %s@%s active\n", org, *name, mockpayments.Name, mockpayments.Version)
 	if hold != nil {
@@ -222,6 +234,14 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 			if err := seedPostgresConnection(ctx, cfg, pool, org, gw, *postgresFile, stdout); err != nil {
 				return err
 			}
+		}
+		if *slackURL != "" {
+			c, err := seedSlackAgentConnection(ctx, cfg, pool, org, gw, *slackURL)
+			if err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(stdout, "seeded slack connection %s (%s) to %s, its channel facts read by the gateway; seal the bot token with "+
+				"pclaw seal --connection %s --from-file TOKEN\n", c.ID, c.Name, *slackURL, c.ID)
 		}
 		if *shell {
 			c, err := seedShellConnection(ctx, cfg, pool, org, gw)
