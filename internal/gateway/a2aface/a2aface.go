@@ -535,8 +535,9 @@ func (h *Handler) readSend(c call, params jsontext.Value) (*wire.SendMessageRequ
 	case len(m.Extensions) > 0 || len(m.ReferenceTaskIDs) > 0:
 		return nil, invalidParams(CodeFieldNot, "extensions and referenceTaskIds are not relayed")
 	}
-	if skill, _ := m.Metadata["skill"].(string); len(c.peer.Skills) > 0 && !slices.Contains(c.peer.Skills, skill) {
-		// Only the skills the connection allows (D30), whatever a grant says.
+	if skill, _ := m.Metadata["skill"].(string); !slices.Contains(allowedSkills(c.peer), skill) {
+		// Only the skills the connection allows (D30), whatever a grant says;
+		// with none listed, the pinned card's own (D96 L6).
 		return nil, &faceError{status: http.StatusForbidden, rpc: codeRefused, reason: CodeSkillNot, message: "the connection does not allow this skill"}
 	}
 	w := c.owner()
@@ -560,4 +561,17 @@ func (h *Handler) readSend(c call, params jsontext.Value) (*wire.SendMessageRequ
 		out.Configuration = &wire.SendConfiguration{AcceptedOutputModes: cfg.AcceptedOutputModes, HistoryLength: cfg.HistoryLength, Blocking: cfg.Blocking}
 	}
 	return out, nil
+}
+
+// allowedSkills are the skills a message may ask for: the connection's
+// list, or the pinned card's skills when it lists none.
+func allowedSkills(p Peer) []string {
+	if len(p.Skills) > 0 {
+		return p.Skills
+	}
+	c, err := wire.ParseCard(p.Card)
+	if err != nil {
+		return nil
+	}
+	return c.SkillIDs()
 }

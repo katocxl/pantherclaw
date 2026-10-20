@@ -3,9 +3,10 @@
 
 // Package a2astore keeps a2a connections' pins and the peer runs created
 // for them (G0 M14 D30, D33, D64, D85; migration 00154). A pin is
-// proposed with the connection and serves once an Org Admin confirms it
-// with a fresh step-up; the pin it replaces serves until then. Every
-// function runs in the caller's tenant transaction.
+// proposed with the connection and serves once a person holding
+// connection.manage confirms it with a fresh step-up (D92); the pin it
+// replaces serves until then. Every function runs in the caller's tenant
+// transaction.
 package a2astore
 
 import (

@@ -166,8 +166,21 @@ func TestHR322_PinsServeOnlyOnceConfirmed(t *testing.T) {
 	// A re-pin after the card changed: proposed, while the first serves.
 	sim.SetFaults(a2asim.Faults{Description: "version two"})
 	w.tx(t, func(ctx context.Context, _ *dbq.Queries, tx db.TenantTx) error {
-		_, err := adapter.Save(ctx, tx, w.org, w.conn, 2, cfg)
+		// The base URL stays the serving interface's (D96 L3).
+		base, err := adapter.Save(ctx, tx, w.org, w.conn, 2, cfg)
+		if err == nil && base != iface {
+			t.Errorf("re-pin base URL %q", base)
+		}
 		return err
+	})
+	// A re-pin to another origin is refused: a new peer is a new connection.
+	w.tx(t, func(ctx context.Context, _ *dbq.Queries, tx db.TenantTx) error {
+		moved := *cfg
+		moved.Interface.URL = "http://127.0.0.2:1" + a2asim.JSONRPCPath
+		if _, err := adapter.Save(ctx, tx, w.org, w.conn, 3, &moved); !errors.Is(err, a2astore.ErrInterfaceOrigin) {
+			t.Errorf("re-pin to another origin: %v", err)
+		}
+		return nil
 	})
 	got, _ = pins.Get(w.admin(td.KindUser), w.conn)
 	if got.Proposed == nil || bytes.Equal(got.Proposed.Config.GetCardDigest(), first.Config.GetCardDigest()) ||
@@ -201,6 +214,10 @@ func TestHR322_PinsServeOnlyOnceConfirmed(t *testing.T) {
 		}
 		return nil
 	})
+	// A drifted pin is not served (D96 L1).
+	if served() != nil {
+		t.Fatal("a drifted pin is served")
+	}
 	other := newWorld(t, pool, iface)
 	other.tx(t, func(ctx context.Context, q *dbq.Queries, _ db.TenantTx) error {
 		if _, err := a2astore.Get(ctx, q, other.org, w.conn, a2astore.StateActive); !errors.Is(err, a2astore.ErrNotFound) {

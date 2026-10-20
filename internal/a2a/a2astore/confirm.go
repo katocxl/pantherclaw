@@ -92,6 +92,9 @@ func (s *Pins) Get(ctx context.Context, conn ids.UUID) (Proposal, error) {
 // own keys (su is nil over the API, which refuses). The card is read
 // again and must still be the one proposed, so the person confirms
 // exactly what the page showed; the connection's gateway then gets it.
+// The card is read between two transactions (D96 L4): a slow peer holds
+// no database connection, and the proposal is locked and compared again
+// in the transaction that activates it.
 func (s *Pins) Confirm(ctx context.Context, conn, pin ids.UUID, su *stepup.StepUp) (Pin, error) {
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
@@ -105,6 +108,33 @@ func (s *Pins) Confirm(ctx context.Context, conn, pin ids.UUID, su *stepup.StepU
 	}
 	if su == nil {
 		return Pin{}, stepup.ErrStepUp
+	}
+	var proposed Pin
+	var simulated bool
+	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		w, err := q.GetA2AConnectionWriter(ctx, c.Org, conn)
+		if db.IsNoRows(err) {
+			return ErrNotFound
+		} else if err != nil {
+			return err
+		}
+		simulated = w.Simulated
+		proposed, err = Get(ctx, q, c.Org, conn, StateProposed)
+		if errors.Is(err, ErrNotFound) || (err == nil && proposed.ID != pin) {
+			return ErrNoProposal
+		}
+		return err
+	}, db.ReadOnly())
+	if err != nil {
+		return Pin{}, err
+	}
+	again, err := s.Pinner.Pin(ctx, proposed.Config, simulated)
+	if err != nil {
+		return Pin{}, err
+	}
+	if !bytes.Equal(again.GetCardDigest(), proposed.Config.GetCardDigest()) {
+		return Pin{}, ErrCardChanged
 	}
 	var out Pin
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
@@ -122,30 +152,21 @@ func (s *Pins) Confirm(ctx context.Context, conn, pin ids.UUID, su *stepup.StepU
 		} else if err != nil {
 			return err
 		}
-		proposed, err := Get(ctx, q, c.Org, conn, StateProposed)
-		if errors.Is(err, ErrNotFound) || (err == nil && proposed.ID != pin) {
-			return ErrNoProposal
-		} else if err != nil {
-			return err
-		}
-		again, err := s.Pinner.Pin(ctx, proposed.Config, w.Simulated)
-		if err != nil {
-			return err
-		}
-		if !bytes.Equal(again.GetCardDigest(), proposed.Config.GetCardDigest()) {
-			return ErrCardChanged
-		}
 		var previous string
 		if p, err := Get(ctx, q, c.Org, conn, StateActive); err == nil {
 			previous = p.Digest()
 		} else if !errors.Is(err, ErrNotFound) {
 			return err
 		}
+		// Activate locks the proposal; it must still be the one read.
 		out, err = Activate(ctx, q, c.Org, conn, pin, c.Principal.ID, su.Credential)
 		if errors.Is(err, ErrNotFound) {
 			return ErrNoProposal
 		} else if err != nil {
 			return err
+		}
+		if !bytes.Equal(out.Config.GetCardDigest(), proposed.Config.GetCardDigest()) {
+			return ErrNoProposal
 		}
 		if _, err := q.BumpGatewayConfig(ctx, c.Org, w.GatewayID); err != nil {
 			return err

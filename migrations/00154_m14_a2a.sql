@@ -9,9 +9,9 @@
 -- optional pinned card keys, the interface the gateway calls, the allowed
 -- skills, the answer and stream caps and, for a peer enrolled in the same
 -- org, that agent and the scope its delegated runs get. Creating or
--- changing the connection stores a PROPOSED pin; it serves only once an
--- Org Admin confirms it with a fresh security-key step-up (ACTIVE), and
--- the pin it replaces is SUPERSEDED. A newer proposal voids an older one.
+-- changing the connection stores a PROPOSED pin; it serves only once a
+-- person holding connection.manage confirms it with a fresh security-key
+-- step-up (D92; ACTIVE), and the pin it replaces is SUPERSEDED. A newer proposal voids an older one.
 -- At most one pin of a connection is ACTIVE and one PROPOSED; the gateway
 -- gets the ACTIVE one. A re-read whose digest differs is drift:
 -- drifted_at and observed_digest record it on the ACTIVE pin.

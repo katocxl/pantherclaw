@@ -343,7 +343,7 @@ func Sign(raw []byte, kid string, key crypto.Signer) ([]byte, error) {
 }
 
 // PublicJWKS returns the JWKS of public keys by kid, as a card's owner
-// publishes them and an Org Admin pins them.
+// publishes them and a connection manager pins them.
 func PublicJWKS(keys map[string]crypto.PublicKey) ([]byte, error) {
 	enc := base64.RawURLEncoding
 	set := struct {

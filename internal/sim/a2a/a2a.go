@@ -160,7 +160,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET "+wire.CardPath, s.card)
 	mux.HandleFunc("POST "+JSONRPCPath, s.jsonrpc)
 	mux.HandleFunc(RESTPath+"/", s.rest)
-	mux.HandleFunc("GET "+MessagesPath, func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET "+MessagesPath, func(w http.ResponseWriter, r *http.Request) {
+		if !s.authorized(r) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.MarshalWrite(w, s.Received())
 	})

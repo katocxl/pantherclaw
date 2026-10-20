@@ -53,7 +53,7 @@ func FetchCard(ctx context.Context, client *http.Client, url string) ([]byte, er
 	return bytes.TrimSpace(raw), nil
 }
 
-// PinRequest is what an Org Admin asks to pin (D30).
+// PinRequest is what a connection manager asks to pin (D30, D92).
 type PinRequest struct {
 	CardURL string
 	// Binding and URL are the interface the gateway will call.

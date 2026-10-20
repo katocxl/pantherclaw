@@ -266,3 +266,24 @@ func TestRefusalFacts(t *testing.T) {
 		t.Fatalf("uncertain: %+v", e)
 	}
 }
+
+// TestHR323_SkillsDefaultToTheCards (D96 L6): a connection listing no
+// skills allows only the pinned card's skills, never any skill.
+func TestHR323_SkillsDefaultToTheCards(t *testing.T) {
+	h, conn, _ := testFace(t)
+	c := sendCall(h, conn)
+	c.peer = Peer{Card: []byte(`{"name":"p","supportedInterfaces":[{"url":"https://p","protocolBinding":"JSONRPC"}],` +
+		`"skills":[{"id":"refunds","name":"Refunds","description":"r"}]}`), Binding: wire.BindingJSONRPC}
+	ask := func(skill string) *faceError {
+		_, ferr := h.readSend(c, jsontext.Value(`{"message":{"messageId":"m1","role":"ROLE_USER","parts":[{"text":"x"}],"metadata":{"skill":"`+skill+`"}}}`))
+		return ferr
+	}
+	if ferr := ask("refunds"); ferr != nil {
+		t.Fatalf("a card skill: %+v", ferr)
+	}
+	for _, s := range []string{"transfers", ""} {
+		if ferr := ask(s); ferr == nil || ferr.reason != CodeSkillNot {
+			t.Errorf("skill %q: %+v", s, ferr)
+		}
+	}
+}

@@ -188,24 +188,53 @@ func (a *Adapter) Save(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn 
 	if err != nil {
 		return "", err
 	}
+	active, err := Get(ctx, q, org, conn, StateActive)
+	switch {
+	case errors.Is(err, ErrNotFound):
+	case err != nil:
+		return "", err
+	case origin(active.Config.GetInterface().GetUrl()) != origin(in.Interface.URL):
+		// A re-pin keeps the peer: the base URL (and its simulator
+		// handshake) stays the confirmed interface's origin (D96 L3).
+		return "", ErrInterfaceOrigin
+	}
 	pinned, err := a.Pinner.Pin(ctx, ToProto(in), w.Simulated)
 	if err != nil {
 		return "", err
 	}
-	// A proposal: it serves once an Org Admin confirms it (D85). The
-	// interface URL is the connection's base URL.
+	// A proposal: it serves once a person holding connection.manage
+	// confirms it (D85, D92). The base URL is the interface URL that serves:
+	// the confirmed one while there is one (D96 L3).
 	if _, err := Propose(ctx, q, org, conn, pinned, w.UpdatedBy); err != nil {
 		return "", err
 	}
+	if active.Config != nil {
+		return active.Config.GetInterface().GetUrl(), nil
+	}
 	return in.Interface.URL, nil
+}
+
+// ErrInterfaceOrigin refuses a re-pin to another scheme, host or port: a
+// new peer is a new connection.
+var ErrInterfaceOrigin = pcerr.New(pcerr.FailedPrecondition, "A2A_INTERFACE_ORIGIN",
+	"a re-pin keeps the interface's scheme, host and port; create another connection for another peer")
+
+// origin is a URL's scheme, host and port, or "".
+func origin(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
 }
 
 // Load returns the configuration a gateway serves (*pb.A2AConfig).
 func (a *Adapter) Load(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn ids.UUID) (proto.Message, error) {
 	p, err := Get(ctx, dbq.New(tx), org, conn, StateActive)
-	if errors.Is(err, ErrNotFound) {
-		// Nothing confirmed yet: the gateway gets no configuration and
-		// refuses the connection (KIND_CONFIG_MISSING).
+	if errors.Is(err, ErrNotFound) || (err == nil && p.DriftedAt != nil) {
+		// Nothing confirmed, or the confirmed card drifted (D96 L1): the
+		// gateway gets no configuration and refuses the connection
+		// (KIND_CONFIG_MISSING) until a new pin is confirmed.
 		return nil, nil
 	}
 	if err != nil {
