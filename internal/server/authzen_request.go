@@ -10,6 +10,7 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
+	"mime"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -99,6 +100,8 @@ type azResource struct {
 	Method   string `json:"method"`
 	URL      string `json:"url"`
 	Body     string `json:"body_b64,omitempty"`
+	// ContentType is the Content-Type the enforcement point forwards.
+	ContentType string `json:"content_type,omitempty"`
 }
 
 var errAuthZENRequest = errors.New("authzen: invalid request")
@@ -220,6 +223,7 @@ const (
 	codeRoute       = "UNKNOWN_ROUTE"
 	codeAmbiguous   = "AMBIGUOUS_INPUT"
 	codeMethod      = "MCP_METHOD_REFUSED"
+	codeContentType = "CONTENT_TYPE_REFUSED"
 )
 
 // evaluate decides one evaluation.
@@ -254,6 +258,9 @@ func (e *authzenEndpoint) evaluate(ctx context.Context, p point, conn *boundConn
 	}
 	if len(body) > authzenMaxForwarded {
 		return refusal(codeBody), nil
+	}
+	if !jsonContent(res.ContentType, body) {
+		return refusal(codeContentType), nil
 	}
 	target, rest, ok := withinBase(conn.BaseUrl, res.URL)
 	if !ok {
@@ -547,4 +554,15 @@ func proofOf(ev azEvaluation) string {
 		return ""
 	}
 	return sub.Proof
+}
+
+// jsonContent reports whether a forwarded body is what the mapping reads:
+// none, or JSON declared as such, so the target cannot parse it as
+// something else (D101).
+func jsonContent(contentType string, body []byte) bool {
+	if len(body) == 0 {
+		return true
+	}
+	mt, _, err := mime.ParseMediaType(contentType)
+	return err == nil && (mt == "application/json" || strings.HasSuffix(mt, "+json"))
 }

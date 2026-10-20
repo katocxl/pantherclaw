@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/redteam/domain"
@@ -85,11 +86,15 @@ func (d *rangeDriver) forwardAllowed(r azRequest, actionToken string) error {
 	if actionToken != "" {
 		req.Header.Set("PAP-Action", actionToken)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return err
 	}
-	return resp.Body.Close()
+	_ = resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return fmt.Errorf("the simulator refused an allowed request: %d", resp.StatusCode)
+	}
+	return nil
 }
 
 // stealAuthZEN is an enforcement point misusing what it forwards: an
@@ -108,17 +113,32 @@ func (d *rangeDriver) stealAuthZEN(mode string, w callWith) (domain.Observation,
 		r.Key, r.Token = thief, d.s.token
 		return azObserve(p.evaluate(d.t, p.evaluation(d.t, r))), nil
 	case "proof_replay":
+		// The replay must follow an allow that spent, and spend nothing more.
 		ev := p.evaluation(d.t, r)
-		if first := p.evaluate(d.t, ev); first.Decision {
-			if err := d.forwardAllowed(r, first.Context.PantherClaw.ActionToken); err != nil {
-				return domain.Observation{}, err
-			}
+		first := p.evaluate(d.t, ev)
+		if !first.Decision {
+			return domain.Observation{}, fmt.Errorf("proof_replay: the first evaluation was refused (%s); nothing to replay", first.Context.PantherClaw.Code)
 		}
-		return azObserve(p.evaluate(d.t, ev)), nil
+		if err := d.forwardAllowed(r, first.Context.PantherClaw.ActionToken); err != nil {
+			return domain.Observation{}, err
+		}
+		refunds, spent := d.s.sim.Stats().Refunds, d.delegated()
+		obs := azObserve(p.evaluate(d.t, ev))
+		if d.s.sim.Stats().Refunds != refunds || d.delegated() != spent {
+			return domain.Observation{}, fmt.Errorf("proof_replay: the replay spent again")
+		}
+		return obs, nil
 	case "stale_nonce":
+		live := p.nonce
 		p.nonce = base64.RawURLEncoding.EncodeToString([]byte("stale-stale-stale-stale-stale-0"))
 		obs := azObserve(p.evaluate(d.t, p.evaluation(d.t, r)))
+		p.nonce = live
 		return obs, nil
+	case "other_instance":
+		// The point names, as the subject, an agent other than the one
+		// whose credentials it forwards.
+		r.Agent = ids.NewV7().String()
+		return azObserve(p.evaluate(d.t, p.evaluation(d.t, r))), nil
 	}
 	return domain.Observation{}, fmt.Errorf("agent.steal mode %q on face authzen", mode)
 }
@@ -145,4 +165,9 @@ func azObserve(a azAnswer) domain.Observation {
 		obs.Response = capBytes(raw)
 	}
 	return obs
+}
+
+// delegated counts the org's DELEGATED attempts.
+func (d *rangeDriver) delegated() string {
+	return d.s.row(d.t, "SELECT count(*) FROM pc.execution_attempts WHERE org_id = $1 AND outcome = 'delegated'", d.s.org)
 }

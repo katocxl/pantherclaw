@@ -154,6 +154,9 @@ type azRequest struct {
 	Token string
 	// Agent is the subject id the point names, if any.
 	Agent string
+	// ProofURL, when set, is the URL the proof is signed for instead of the
+	// request's (a proof for another URL).
+	ProofURL string
 }
 
 // evaluation is the AuthZEN evaluation for r with a fresh proof.
@@ -167,6 +170,9 @@ func (p *azPoint) evaluation(t *testing.T, r azRequest) map[string]any {
 	}
 	u := p.base + r.Path
 	htu, _, _ := strings.Cut(u, "?")
+	if r.ProofURL != "" {
+		htu = r.ProofURL
+	}
 	proof, err := pap.NewProof(r.Key, pap.ProofParams{Method: r.Method, URL: htu, Body: r.Body, Token: r.Token, Nonce: p.nonce, Now: time.Now()})
 	if err != nil {
 		t.Fatal(err)
@@ -179,12 +185,14 @@ func (p *azPoint) evaluation(t *testing.T, r azRequest) map[string]any {
 	if r.Agent != "" {
 		subject["id"] = r.Agent
 	}
+	props := map[string]any{"protocol": "http", "method": r.Method, "url": u, "body_b64": base64.StdEncoding.EncodeToString(r.Body)}
+	if len(r.Body) > 0 {
+		props["content_type"] = "application/json"
+	}
 	return map[string]any{
-		"subject": subject,
-		"resource": map[string]any{"type": "pantherclaw:http_request", "id": "payments", "properties": map[string]any{
-			"protocol": "http", "method": r.Method, "url": u, "body_b64": base64.StdEncoding.EncodeToString(r.Body),
-		}},
-		"action": map[string]any{"name": r.Method},
+		"subject":  subject,
+		"resource": map[string]any{"type": "pantherclaw:http_request", "id": "payments", "properties": props},
+		"action":   map[string]any{"name": r.Method},
 	}
 }
 
@@ -198,6 +206,13 @@ func (p *azPoint) liveNonce(t *testing.T) string {
 // post sends a body to an endpoint path with the point's token (bearer
 // overrides it; "-" sends none) and returns the status and raw answer.
 func (p *azPoint) post(t *testing.T, path string, body any, bearer string) (int, []byte) {
+	t.Helper()
+	st, _, raw := p.postH(t, path, body, bearer)
+	return st, raw
+}
+
+// postH is post with the answer's headers.
+func (p *azPoint) postH(t *testing.T, path string, body any, bearer string) (int, http.Header, []byte) {
 	t.Helper()
 	raw, err := json.Marshal(body)
 	if err != nil {
@@ -218,7 +233,7 @@ func (p *azPoint) post(t *testing.T, path string, body any, bearer string) (int,
 	}
 	defer func() { _ = resp.Body.Close() }()
 	out, _ := io.ReadAll(resp.Body)
-	return resp.StatusCode, out
+	return resp.StatusCode, resp.Header, out
 }
 
 // evaluate asks about one request and returns the decision.
