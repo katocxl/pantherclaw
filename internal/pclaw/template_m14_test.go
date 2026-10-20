@@ -109,12 +109,12 @@ func TestM14PayeesAreChecked(t *testing.T) {
 	}
 	r := renderer{o: o, spec: map[string]placeholderSpec{}}
 	for _, s := range []string{"{{payees}}", "{{payee}}", "{{other_payee}}"} {
-		if _, err := r.fill(s, "", true); err == nil {
+		if _, err := r.fill(s, true); err == nil {
 			t.Errorf("%s filled without a declaration", s)
 		}
 	}
 	r.spec = map[string]placeholderSpec{render.KindPayee: {Kind: render.KindPayee, Pattern: "^acct_[A-Za-z0-9]{8,64}$"}}
-	if _, err := r.fill("{{payees}}", "", false); err == nil {
+	if _, err := r.fill("{{payees}}", false); err == nil {
 		t.Error("{{payees}} filled outside a condition")
 	}
 }

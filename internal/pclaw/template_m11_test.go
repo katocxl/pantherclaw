@@ -637,14 +637,14 @@ func TestM11PlaceholdersAreChecked(t *testing.T) {
 	// condition or not, and a condition-only placeholder stays in one.
 	r := renderer{o: base, spec: map[string]placeholderSpec{kindEnvironment: {Kind: kindEnvironment, Pattern: "^[a-z]+$"}}}
 	for _, s := range []string{"{{workspace}}", "{{agent}}", "{{nope}}", "{{repository}}"} {
-		if _, err := r.fill(s, "", true); err == nil {
+		if _, err := r.fill(s, true); err == nil {
 			t.Errorf("%s filled without a declaration", s)
 		}
 	}
-	if got, err := r.fill("env == {{environment}}", "", true); err != nil || got != "env == 'production'" {
+	if got, err := r.fill("env == {{environment}}", true); err != nil || got != "env == 'production'" {
 		t.Errorf("condition: %q %v", got, err)
 	}
-	if got, err := r.fill("for {{environment}}", "", false); err != nil || got != "for production" {
+	if got, err := r.fill("for {{environment}}", false); err != nil || got != "for production" {
 		t.Errorf("text: %q %v", got, err)
 	}
 }

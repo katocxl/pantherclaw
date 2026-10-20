@@ -65,9 +65,9 @@ type renderer struct {
 	spec map[string]placeholderSpec
 }
 
-// fill replaces the placeholders in s.
-func (r renderer) fill(s, repo string, cel bool) (string, error) {
-	return render.Renderer{O: r.o.renderOptions(), Spec: r.spec}.Fill(s, repo, cel)
+// fill replaces the placeholders in s, outside any per-repository item.
+func (r renderer) fill(s string, cel bool) (string, error) {
+	return render.Renderer{O: r.o.renderOptions(), Spec: r.spec}.Fill(s, "", cel)
 }
 
 // renderTemplate reads the template's files and fills in the options.
