@@ -17,6 +17,7 @@ import (
 	"maps"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -228,6 +229,14 @@ func constrain(d *defs.Definition, a actionir.ActionIR, vals defs.Values, r *dom
 		// action when the verifier cannot reach it (G0 M7 design decision 2).
 		res.Obligation = &domain.Obligation{Rule: r.ID, Kind: c.Kind, Level: c.Level, Timing: domain.TimingAfterDispatch}
 		res.Detail = "the effect must be verified at " + string(c.Level) + " level"
+		return res
+	}
+	if c.Kind.ScopeKind() {
+		// Not a limit on the action: the Authority intersects it with the
+		// grant's data scope, and refuses the action when the route cannot
+		// enforce it (G0 M14 D11, pipeline scope.go).
+		res.Obligation = &domain.Obligation{Rule: r.ID, Kind: c.Kind, Param: c.Param, Values: slices.Clone(c.Values), Timing: domain.TimingBeforeExecution}
+		res.Detail = "the answer is limited to " + string(c.Kind) + " " + strings.Join(c.Values, ", ")
 		return res
 	}
 	spec, ok := d.Supports(defs.ConstraintKind(c.Kind), c.Param)

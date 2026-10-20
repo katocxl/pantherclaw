@@ -377,8 +377,8 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	if _, class, code := e.contained(conn); class != "" {
 		return Result{Class: class, Code: code}
 	}
-	if kindNotImplemented(conn.GetKind()) {
-		return Result{Class: CannotAuthorize, Code: CodeKindNotImplemented, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
+	if code := kindRefusal(conn); code != "" {
+		return Result{Class: CannotAuthorize, Code: code, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
 	}
 	if e.breaker.open(ctx, conn) {
 		return Result{Class: EnforcementFailed, Code: CodeCircuitOpen}
