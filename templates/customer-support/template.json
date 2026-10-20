@@ -2,13 +2,14 @@
   "name": "customer-support",
   "summary": "Support agents read their ticket's customer's records in PostgreSQL and refund Stripe payments in test mode: reads are scoped to the named customers and to public and internal columns, an approver releases refunds above 50.00 USD, refunds above 100.00 USD are refused, and the agent's grant refunds at most 500.00 USD a week.",
   "task_ref": "template:customer-support",
+  "requires_agent": true,
   "protects": [
     "every refund above 50.00 USD waits for an independent approver",
     "no refund above 100.00 USD is made, approved or not",
     "the agent's grant refunds at most 500.00 USD a week (its budget)",
     "a refund never exceeds what is left to refund on the payment, read from Stripe within the last 60 seconds",
     "the agent's grant reads support.tickets, shop.customers and shop.orders only for the customers named with --customer: other customers' rows are never returned (record scope); narrow it to one ticket's customer with a delegated child grant",
-    "with --agent: that agent reads only public and internal columns (pii and secret values are redacted), at most 50 rows at a time, and does not aggregate; without --agent these rules are skipped and no grant is issued",
+    "the agent named with --agent (required) reads only public and internal columns (pii and secret values are redacted), at most 50 rows at a time, and does not aggregate",
     "the agent's grant covers creating and reading refunds, reading payments, and reading those three tables only"
   ],
   "excludes": [

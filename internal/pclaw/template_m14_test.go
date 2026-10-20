@@ -9,6 +9,7 @@ import (
 	"io"
 	"maps"
 	"slices"
+	"strings"
 	"testing"
 
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
@@ -144,7 +145,7 @@ func TestM14CustomersAreChecked(t *testing.T) {
 		t.Helper()
 		fs := flag.NewFlagSet("t", flag.ContinueOnError)
 		fs.SetOutput(io.Discard)
-		o := templateOptions{name: "customer-support"}
+		o := templateOptions{name: "customer-support", agent: templateAgent}
 		check := templateFlags(fs, &o)
 		if err := fs.Parse(args); err != nil {
 			return o, err
@@ -185,5 +186,56 @@ func TestM14CustomersAreChecked(t *testing.T) {
 	s := bounds.Scope["postgres.rows.read"]
 	if s.Records.Key != "customer" || !slices.Equal(s.Records.Values, exampleCustomers) || !slices.Equal(s.Classes.IDs, []string{"public", "internal"}) {
 		t.Errorf("grant scope %s", d.Grant.Bounds)
+	}
+}
+
+// TestM14AgentTemplatesNeedAgent (D114): a template whose rules are per
+// agent is refused without --agent, by apply and by the renderer, and
+// renders with one; its rules name only that agent (each such template's
+// scenario tests also show another agent unaffected).
+func TestM14AgentTemplatesNeedAgent(t *testing.T) {
+	args := map[string][]string{
+		"aggregate-reporting": nil,
+		"customer-support":    {"--customer", "cus-1001"},
+		"internal-analysis":   {"--slack-channel", "C0EXAMPLE01"},
+		"research-disclosure": {"--repos", "acme/research"},
+	}
+	for name, extra := range args {
+		info, err := readTemplateInfo(name)
+		if err != nil || !info.RequiresAgent {
+			t.Fatalf("%s: requires_agent %v, %v", name, info.RequiresAgent, err)
+		}
+		parse := func(more ...string) (templateOptions, error) {
+			fs := flag.NewFlagSet("t", flag.ContinueOnError)
+			fs.SetOutput(io.Discard)
+			o := templateOptions{name: name}
+			check := templateFlags(fs, &o)
+			fs.StringVar(&o.agent, "agent", "", "")
+			if err := fs.Parse(append(slices.Clone(extra), more...)); err != nil {
+				return o, err
+			}
+			return o, check()
+		}
+		if _, err := parse(); err == nil || !strings.Contains(err.Error(), "needs --agent") {
+			t.Errorf("%s without --agent: %v", name, err)
+		}
+		o, err := parse("--agent", templateAgent)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		o.environment, o.timeZone = "production", "UTC"
+		d, err := renderTemplate(o)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		for _, r := range d.Rules {
+			if when, _ := r["when"].(string); strings.Contains(when, "run.agent_id") && !strings.Contains(when, "run.agent_id == '"+templateAgent+"'") {
+				t.Errorf("%s %v: %s", name, r["id"], when)
+			}
+		}
+		o.agent = ""
+		if _, err := renderTemplate(o); err == nil {
+			t.Errorf("%s rendered without an agent", name)
+		}
 	}
 }

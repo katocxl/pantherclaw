@@ -9,6 +9,7 @@ import (
 	"context"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
@@ -151,5 +152,14 @@ func TestHR291_ApplyingAPackOnlyDrafts(t *testing.T) {
 	}
 	if len(again.Added) != len(res.Added) {
 		t.Errorf("a second draft from the same published version adds %d, want %d", len(again.Added), len(res.Added))
+	}
+	// D114: a pack whose rules are per agent is refused without an agent.
+	for _, a := range []packs.Apply{
+		{Pack: "aggregate-reporting", Environment: env},
+		{Pack: "support-resolution", Environment: env, Parameters: map[string]string{packs.ParamCustomers: "cus-1001"}},
+	} {
+		if _, err := svc.ApplyPack(as(td.RolePolicyAuthor, td.RoleResponder), a); err == nil || !strings.Contains(err.Error(), "needs agents") {
+			t.Errorf("%s without an agent: %v", a.Pack, err)
+		}
 	}
 }

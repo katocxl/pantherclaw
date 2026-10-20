@@ -250,6 +250,9 @@ type Window struct {
 type Info struct {
 	TaskRef      string          `json:"task_ref"`
 	Placeholders map[string]Spec `json:"placeholders"`
+	// RequiresAgent: the template has per-agent rules, so it renders only for
+	// an agent (G0 M14 D114).
+	RequiresAgent bool `json:"requires_agent,omitzero"`
 }
 
 // Data is a template rendered for its options.
@@ -632,6 +635,9 @@ func Render(o Options) (Data, error) {
 	info, err := ReadInfo(o.Name)
 	if err != nil {
 		return out, err
+	}
+	if info.RequiresAgent && o.Agent == "" {
+		return out, fmt.Errorf("template %s needs %s: its rules are the agent's", o.Name, o.name(KindAgent))
 	}
 	r := Renderer{O: o, Spec: info.Placeholders}
 	if err := r.checkValues(); err != nil {

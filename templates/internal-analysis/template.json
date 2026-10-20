@@ -2,10 +2,11 @@
   "name": "internal-analysis",
   "summary": "Analysis agents query allow-listed PostgreSQL tables and post findings to named internal Slack channels: public and internal columns only, at most 20 rows a read, and nothing posted to a channel shared outside the organization.",
   "task_ref": "template:internal-analysis",
+  "requires_agent": true,
   "protects": [
-    "with --agent: that agent reads and aggregates only public and internal columns (pii and secret values are withheld), and reads at most 20 rows at a time; without --agent these rules are skipped and no grant is issued",
-    "with --agent: that agent posts only to the Slack channels named with --slack-channel; without --slack-channel it posts nowhere",
-    "with --agent: that agent never posts to a channel shared with another workspace or organization, read from Slack within the last 5 minutes",
+    "the agent named with --agent (required) reads and aggregates only public and internal columns (pii and secret values are withheld), and reads at most 20 rows at a time",
+    "the agent named with --agent (required) posts only to the Slack channels named with --slack-channel; without --slack-channel it posts nowhere",
+    "the agent named with --agent (required) never posts to a channel shared with another workspace or organization, read from Slack within the last 5 minutes",
     "the agent's grant covers reads, aggregates and the table list on pc.postgres, and posts to the named channels only"
   ],
   "excludes": [

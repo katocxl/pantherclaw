@@ -184,6 +184,9 @@ func templateFlags(fs *flag.FlagSet, o *templateOptions) func() error {
 				return fmt.Errorf("%s: %q is not an id", name, id)
 			}
 		}
+		if info.RequiresAgent && o.agent == "" {
+			return fmt.Errorf("template %s needs --agent: its rules are the agent's", o.name)
+		}
 		if o.team != "" && o.bu != "" {
 			return errors.New("--team and --bu: give one scope")
 		}
