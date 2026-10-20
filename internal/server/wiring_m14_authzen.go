@@ -49,6 +49,8 @@ func registerAuthZEN(rs *connect.Server, d apiDeps) m14AuthZEN {
 	}
 	if d.m10ops.authn != nil && d.authority != nil {
 		out.endpoint = newAuthZENEndpoint(d.pool, d.m10ops.authn, d.authority, d.publicURL, d.cel, clock.System{}, d.log)
+		probeM14("m14.authzen.endpoint", out.endpoint)
 	}
+	probeM14("m14.authzen.points", points)
 	return out
 }

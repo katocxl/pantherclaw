@@ -50,5 +50,6 @@ func (c *Config) devSlack(n *napp.Service) error {
 func registerSlackChannels(d apiDeps) {
 	if d.web != nil && d.m5 != nil && d.m5.notifications != nil && d.m5.webauthn != nil {
 		d.web.WithSlackChannels(d.m5.notifications)
+		probeM14("m14.slack.page", d.m5.notifications)
 	}
 }

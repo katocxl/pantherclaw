@@ -26,6 +26,7 @@ func wireM14Core(m6 *m6Services) *m14Core {
 		m6.connections.WithKindConfigs(c.kinds)
 		m6.gateways.WithKindConfigs(c.kinds)
 	}
+	probeM14("m14.kinds", c.kinds)
 	return c
 }
 
@@ -36,6 +37,9 @@ func wireM14Process(core *automationsCore, bill *billing.Service) {
 	if core != nil && core.grants != nil && bill != nil {
 		core.grants.Editions = bill
 	}
+	if core != nil {
+		probeM14("m14.grants.process", core.grants)
+	}
 }
 
 // wireM14Grants gates data scope in issued and revised grants by the
@@ -44,6 +48,7 @@ func wireM14Grants(grants *grantsapp.Service, d apiDeps) {
 	if grants != nil && d.billing != nil {
 		grants.Editions = d.billing
 	}
+	probeM14("m14.grants.api", grants)
 }
 
 func init() {
@@ -52,5 +57,6 @@ func init() {
 		if d.billing != nil {
 			v.Editions = d.billing
 		}
+		probeM14("m14.policy.versions", v)
 	})
 }
