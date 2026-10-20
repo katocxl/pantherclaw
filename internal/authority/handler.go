@@ -212,7 +212,8 @@ func (h *Handler) RecordExecution(ctx context.Context, req *pantherclawv1.Record
 	receipt, err := h.svc.RecordExecution(ctx, gw, Execution{
 		Permit: id, Outcome: outcome, TargetStatus: req.GetTargetStatus(),
 		ResponseDigest: req.GetResponseDigest(), DispatchMS: req.GetDispatchMs(), TargetRef: req.GetTargetRef(),
-		Access: accessOf(req.GetCredentialAccess()),
+		Access:    accessOf(req.GetCredentialAccess()),
+		DataScope: dataScopeOf(req.GetDataScope()),
 	})
 	if err != nil {
 		return nil, err

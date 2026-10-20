@@ -402,6 +402,28 @@ message RecordExecutionRequest {
   // What the dispatch's minted credential allowed (G0 M8, ADR-0021 item 5);
   // unset for a credential placed as sealed, or none.
   CredentialAccess credential_access = 8;
+  // What the gateway's data scope did to the answer (G0 M14 D102), counts
+  // only; unset when no data scope applied.
+  DataScopeApplied data_scope = 9;
+}
+
+// DataScopeApplied is what applying a read's data scope did to its answer
+// (G0 M14 D20, D102): never a value, only the record key and counts.
+message DataScopeApplied {
+  // The record scope's key; empty without one.
+  string records_key = 1 [(buf.validate.field).string.pattern = "^([a-z_][a-z0-9_]{0,62})?$"];
+  // Rows (or items) the agent received.
+  int32 rows = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 1000000
+  }];
+  // Values replaced with a redaction marker.
+  int32 values_redacted = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 100000000
+  }];
+  // Whether the answer was cut at its row or byte cap.
+  bool truncated = 4;
 }
 
 // CredentialAccess is what a dispatch's minted credential allowed (G0 M8,

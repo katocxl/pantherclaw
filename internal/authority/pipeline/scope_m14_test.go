@@ -10,6 +10,7 @@ import (
 
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
+	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 )
@@ -121,4 +122,21 @@ func TestM14_ARequiredSetMustBeBound(t *testing.T) {
 }`)
 	f.w.Grants.Put(g)
 	expect(t, f.call(f.newRun(g.ID), "create_refund", refund("ch_1", "10.00")), adomain.Allow, pipeline.ReasonGrantCovers)
+}
+
+// TestM14_ARequiredSetMayBeBoundByAGuardrail: a destination set the agent's
+// guardrail lists satisfies a required set as one the grant lists does
+// (D78 grant or envelope, D103).
+func TestM14_ARequiredSetMayBeBoundByAGuardrail(t *testing.T) {
+	f := newFxWith(t, requiredDestinations, "")
+	b, err := gdomain.DecodeBounds([]byte(`{"destinations": {"ids": ["acct_1"]}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.w.Grants.PutEnvelope(t.Context(), org, gdomain.Envelope{
+		ID: gdomain.NewEnvelopeID(), Org: org, Revision: 1, Scope: gdomain.Scope{Kind: gdomain.ScopeTeam, ID: f.team}, Name: "payees", Bounds: b,
+	}, false, testEvent()); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, f.call(f.run, "create_refund", refund("ch_1", "10.00")), adomain.Allow, pipeline.ReasonGrantCovers)
 }
