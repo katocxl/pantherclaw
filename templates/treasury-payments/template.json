@@ -14,6 +14,7 @@
     "the agent's grant covers creating and reading transfers and reading the balance only"
   ],
   "excludes": [
+    "agents outside the --team or --bu scope: their treasury grants have only their own task budget, not the weekly envelope; apply the template for each scope that sends transfers",
     "payouts from a connected account to its bank: only the transfer to the connected account is decided",
     "transfers in currencies other than USD: the cap fails closed (CANNOT_AUTHORIZE) until you add rules for them",
     "whether a payment is owed: the approvers decide from the payee, the amount and the transfer group",

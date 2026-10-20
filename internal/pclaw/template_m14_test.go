@@ -518,7 +518,7 @@ func TestM14WeeklyCapsAreEnvelopes(t *testing.T) {
 func TestM14MergeBudgets(t *testing.T) {
 	cur := []byte(`{"budgets":[{"id":"other","grouping":"team","operations":["github.*"],"max_count":"9","period":"day"},{"id":"support_weekly_refunds","grouping":"team","operations":["stripe.refund.create"],"currency":"USD","limit":"900.00","period":"week"}],"counters":[{"id":"c","operations":["github.*"],"key":"run","window":"none","max":"1"}]}`)
 	tpl := []byte(`{"budgets":[{"id":"support_weekly_refunds","grouping":"team","operations":["stripe.refund.create"],"currency":"USD","limit":"500.00","period":"week"}]}`)
-	got, err := mergeBudgets(cur, tpl)
+	got, loosened, err := mergeBudgets(cur, tpl, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -529,7 +529,42 @@ func TestM14MergeBudgets(t *testing.T) {
 	if len(l.Budgets) != 2 || l.Budgets[0].ID != "other" || l.Budgets[1].Limit != "500.00" || len(l.Counters) != 1 {
 		t.Errorf("merged %s", got)
 	}
-	if got, err := mergeBudgets(nil, tpl); err != nil || !sameJSON(got, tpl) {
+	if len(loosened) != 0 {
+		t.Errorf("lowering 900.00 to 500.00 loosens: %v", loosened)
+	}
+	// D129 L2: a scope budget stricter than the template's stays, unless
+	// --update raises it, which the plan labels as loosening.
+	strict := []byte(strings.Replace(string(cur), `"900.00"`, `"200.00"`, 1))
+	if got, loosened, err := mergeBudgets(strict, tpl, false); err != nil || !sameJSON(got, strict) || len(loosened) != 0 {
+		t.Errorf("without --update: %s %v %v", got, loosened, err)
+	}
+	if got, loosened, err := mergeBudgets(strict, tpl, true); err != nil || !strings.Contains(string(got), `"500.00"`) || len(loosened) != 1 {
+		t.Errorf("with --update: %s %v %v", got, loosened, err)
+	}
+	weekly := []byte(strings.Replace(string(cur), `"900.00","period":"week"`, `"100.00","period":"month"`, 1))
+	if got, loosened, err := mergeBudgets(weekly, tpl, false); err != nil || !sameJSON(got, weekly) || len(loosened) != 0 {
+		t.Errorf("another period without --update: %s %v %v", got, loosened, err)
+	}
+	if got, _, err := mergeBudgets(nil, tpl, false); err != nil || !sameJSON(got, tpl) {
 		t.Errorf("into none: %s %v", got, err)
+	}
+}
+
+// TestM14EnvelopeCoverage (D129 L1): the operations of a template's grant
+// that a scope's kept envelope bounds leave out are named, so the plan can
+// warn that the grants would be refused when issued.
+func TestM14EnvelopeCoverage(t *testing.T) {
+	d, _ := m14Render(t, "customer-support")
+	missing, err := uncovered([]byte(`{"operations":["github.*"]}`), d.Grant.Bounds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(missing, "stripe.refund.create") || !slices.Contains(missing, "postgres.rows.read") {
+		t.Errorf("missing %v", missing)
+	}
+	for _, env := range []string{`{}`, `{"operations":["stripe.*","postgres.*"]}`} {
+		if missing, err := uncovered([]byte(env), d.Grant.Bounds); err != nil || len(missing) != 0 {
+			t.Errorf("%s: %v %v", env, missing, err)
+		}
 	}
 }

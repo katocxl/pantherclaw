@@ -20,6 +20,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
+	"github.com/katocxl/pantherclaw/internal/platform/money"
 	"github.com/katocxl/pantherclaw/internal/policy/packs/render"
 )
 
@@ -428,11 +430,20 @@ func planEnvelope(ctx context.Context, c clients, o templateOptions, d templateD
 	bounds, limits := d.Envelope.Bounds, d.Envelope.Limits
 	if cur != nil && limits != nil && sameJSON(bounds, []byte("{}")) {
 		bounds = cur.GetBounds()
-		merged, err := mergeBudgets(cur.GetLimits(), limits)
+		merged, loosened, err := mergeBudgets(cur.GetLimits(), limits, o.update)
 		if err != nil {
 			return s, fmt.Errorf("guardrail envelope %s: %w", cur.GetId(), err)
 		}
 		limits = merged
+		for _, l := range loosened {
+			s.notes = append(s.notes, "LOOSENING: "+l)
+		}
+		if missing, err := uncovered(bounds, d.Grant.Bounds); err != nil {
+			return s, fmt.Errorf("guardrail envelope %s: %w", cur.GetId(), err)
+		} else if len(missing) > 0 {
+			s.notes = append(s.notes, "warning: the scope's envelope bounds do not cover "+strings.Join(missing, ", ")+
+				": the template's grants for this scope would be refused when issued")
+		}
 	}
 	switch {
 	case sameJSON(cur.GetBounds(), bounds) && (limits == nil || sameJSON(cur.GetLimits(), limits)):
@@ -456,32 +467,95 @@ func planEnvelope(ctx context.Context, c clients, o templateOptions, d templateD
 	return s, nil
 }
 
-// mergeBudgets adds the template's budgets to an envelope's limits,
-// replacing one of the same id and keeping every other budget and counter.
-func mergeBudgets(cur, tpl []byte) ([]byte, error) {
+// mergeBudgets adds the template's budgets to an envelope's limits, by
+// id, keeping every other budget and counter. Where the scope already has
+// a budget of that id, the stricter one stays (D129 L2): a template budget
+// that would raise or otherwise change it replaces it only with update,
+// and is listed in loosened.
+func mergeBudgets(cur, tpl []byte, update bool) (merged []byte, loosened []string, err error) {
 	limits := map[string]any{}
 	if len(cur) > 0 && string(cur) != "null" {
 		if err := json.Unmarshal(cur, &limits); err != nil {
-			return nil, fmt.Errorf("its limits: %w", err)
+			return nil, nil, fmt.Errorf("its limits: %w", err)
 		}
 	}
 	var add struct {
 		Budgets []map[string]any `json:"budgets"`
 	}
 	if err := json.Unmarshal(tpl, &add); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	have, _ := limits["budgets"].([]any)
 	for _, b := range add.Budgets {
 		i := slices.IndexFunc(have, func(x any) bool { m, _ := x.(map[string]any); return m["id"] == b["id"] })
-		if i >= 0 {
-			have[i] = b
-		} else {
+		switch {
+		case i < 0:
 			have = append(have, b)
+		case notLooser(b, have[i]):
+			have[i] = b
+		case update:
+			loosened = append(loosened, fmt.Sprintf("budget %v changes from %v to %v", b["id"], have[i], b))
+			have[i] = b
 		}
 	}
 	limits["budgets"] = have
-	return json.Marshal(limits, json.Deterministic(true))
+	merged, err = json.Marshal(limits, json.Deterministic(true))
+	return merged, loosened, err
+}
+
+// notLooser reports whether budget b is the same as old except, at most,
+// a lower limit or max_count.
+func notLooser(b map[string]any, oldAny any) bool {
+	old, _ := oldAny.(map[string]any)
+	for _, k := range []string{"grouping", "operations", "currency", "period"} {
+		if !sameJSONValue(b[k], old[k]) {
+			return false
+		}
+	}
+	for _, k := range []string{"limit", "max_count"} {
+		nv, nok := b[k].(string)
+		ov, ook := old[k].(string)
+		switch {
+		case !nok && !ook:
+		case nok != ook:
+			return nok // a new bound where there was none tightens; dropping one does not
+		default:
+			n, err1 := money.Parse(nv)
+			o, err2 := money.Parse(ov)
+			if err1 != nil || err2 != nil || n.Cmp(o) > 0 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func sameJSONValue(a, b any) bool {
+	x, err1 := json.Marshal(a, json.Deterministic(true))
+	y, err2 := json.Marshal(b, json.Deterministic(true))
+	return err1 == nil && err2 == nil && string(x) == string(y)
+}
+
+// uncovered lists the template grant's operations that the envelope
+// bounds leave out (D129 L1).
+func uncovered(envBounds, grantBounds []byte) ([]string, error) {
+	env, err := gdomain.DecodeBounds(envBounds)
+	if err != nil {
+		return nil, err
+	}
+	var grant struct {
+		Operations []string `json:"operations"`
+	}
+	if err := json.Unmarshal(grantBounds, &grant); err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, op := range grant.Operations {
+		if env.Operations != nil && !env.Operations.Matches(op) {
+			out = append(out, op)
+		}
+	}
+	return out, nil
 }
 
 // planPolicy adds the template's rules and scenario tests to the published
