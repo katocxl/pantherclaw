@@ -13,6 +13,8 @@ import (
 
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	"github.com/katocxl/pantherclaw/internal/policy/packs/render"
+	pcpostgres "github.com/katocxl/pantherclaw/packages/pc-postgres"
+	pcslack "github.com/katocxl/pantherclaw/packages/pc-slack"
 	pcstripe "github.com/katocxl/pantherclaw/packages/pc-stripe"
 )
 
@@ -24,22 +26,36 @@ import (
 // publish gate's mutation run with no survivors (HR-044).
 
 // m14Templates are the M14 templates that carry scenario tests.
-var m14Templates = []string{"customer-support", "treasury-payments"}
+var m14Templates = []string{"aggregate-reporting", "customer-support", "treasury-payments"}
 
 // m14Manifests are the business-connector packages the templates require.
-var m14Manifests = [][]byte{pcstripe.Package}
+var m14Manifests = [][]byte{pcstripe.Package, pcpostgres.Package, pcslack.Package}
 
 // m14Facts are the facts the business-connector packages' gateway reads
 // provide (the stripe.* facts of internal/gateway/stripefacts).
 var m14Facts = map[string]fdomain.Type{
 	"stripe.payment.refundable":             fdomain.TypeObject,
 	"stripe.account.payout_details_changed": fdomain.TypeObject,
+	"slack.channel.external":                fdomain.TypeObject,
 }
 
 func init() { maps.Copy(m11Facts, m14Facts) }
 
 // examplePayees are the connected accounts {{payee}} is rendered with.
 var examplePayees = []string{"acct_ExamplePayee01", "acct_ExamplePayee02"}
+
+// Example customers and Slack channels the list kinds are rendered with.
+var (
+	exampleCustomers     = []string{"cus-1001", "cus-1002"}
+	exampleSlackChannels = []string{"C0EXAMPLE01", "C0EXAMPLE02"}
+)
+
+// exampleLists are the list kinds' example values.
+func exampleLists() map[string][]string {
+	return map[string][]string{
+		render.KindPayee: examplePayees, render.KindCustomer: exampleCustomers, render.KindSlackChannel: exampleSlackChannels,
+	}
+}
 
 // TestM14PayeesAreChecked (D97): --payee takes Stripe connected accounts
 // only, never the tests' other payee, and only for a template that
@@ -59,8 +75,8 @@ func TestM14PayeesAreChecked(t *testing.T) {
 		return o, check()
 	}
 	o, err := parse("treasury-payments", "--payee", "acct_ExamplePayee02", "--payee", "acct_ExamplePayee01", "--payee", "acct_ExamplePayee02")
-	if err != nil || !slices.Equal(o.payees, examplePayees) {
-		t.Fatalf("payees %v, %v", o.payees, err)
+	if err != nil || !slices.Equal(o.lists[render.KindPayee], examplePayees) {
+		t.Fatalf("payees %v, %v", o.lists, err)
 	}
 	for _, args := range [][]string{
 		{},

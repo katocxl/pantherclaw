@@ -55,7 +55,7 @@ type templateData struct {
 func (o templateOptions) renderOptions() render.Options {
 	return render.Options{
 		Name: o.name, Repos: o.repos, Defaults: o.defaults, Agent: o.agent, Environment: o.environment,
-		EnvironmentID: o.environmentID, Workspace: o.workspace, TimeZone: o.timeZone, Payees: o.payees,
+		EnvironmentID: o.environmentID, Workspace: o.workspace, TimeZone: o.timeZone, Lists: o.lists,
 	}
 }
 
