@@ -5,8 +5,6 @@ package stream
 
 import (
 	"context"
-	"io"
-	"mime"
 	"net/http"
 	"strings"
 	"time"
@@ -16,20 +14,16 @@ import (
 )
 
 // WithBrowserSessions lets the console open the stream with its session
-// cookie (HR-344), under the same rules as a cookie-authenticated Connect
-// call: POST /v1/operations/stream from a page of the public origin
-// (Sec-Fetch-Site same-origin, or Origin equal to it), with PC-CSRF: 1 and
-// a JSON body (ignored; the resume point is Last-Event-ID or after). A
-// cookie on GET, or with a bearer credential, is refused; the bearer
-// stream stays GET only. No CORS header is sent and no credential is read
-// from the URL. It returns h.
+// cookie (HR-344, G0 UI D67). The stream only reads, so it stays a GET;
+// the cookie is taken only from a page of the public origin (Sec-Fetch-Site
+// same-origin, or an Origin equal to it) that sends PC-CSRF: 1, which a
+// cross-site page cannot send without a CORS preflight this server never
+// answers. A cookie together with a bearer credential is refused. No CORS
+// header is sent and no credential is read from the URL. It returns h.
 func (h *Handler) WithBrowserSessions(s *webguard.Sessions) *Handler {
 	h.sessions = s
 	return h
 }
-
-// maxBrowserBody bounds the console's (ignored) request body.
-const maxBrowserBody = 4 << 10
 
 // authenticate resolves the stream's credential, answering the refusal
 // itself when it returns false. reauth checks the credential again;
@@ -49,9 +43,6 @@ func (h *Handler) authenticate(w http.ResponseWriter, r *http.Request) (
 		return c, nil, expires, false
 	case hasCookie:
 		return h.browser(w, r, cookie)
-	case r.Method != http.MethodGet:
-		http.Error(w, "authentication required", http.StatusUnauthorized)
-		return c, nil, expires, false
 	}
 	bearer, found := strings.CutPrefix(authz, "Bearer ")
 	if !found || bearer == "" {
@@ -77,15 +68,12 @@ func (h *Handler) authenticate(w http.ResponseWriter, r *http.Request) (
 func (h *Handler) browser(w http.ResponseWriter, r *http.Request, cookie string) (
 	tenancy.Caller, func(context.Context) (tenancy.Caller, error), time.Time, bool,
 ) {
-	mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if r.Method != http.MethodPost || err != nil || mt != "application/json" ||
-		r.Header.Get(webguard.CSRFHeader) != "1" || !webguard.SameOrigin(r.Header.Get, h.sessions.PublicOrigin()) {
+	if r.Header.Get(webguard.CSRFHeader) != "1" || !webguard.SameOrigin(r.Header.Get, h.sessions.PublicOrigin()) {
 		h.log.WarnContext(r.Context(), "operations.stream_browser_refused")
-		http.Error(w, "BROWSER_REQUEST_REFUSED: a browser session is accepted only on a same-origin POST with PC-CSRF: 1",
+		http.Error(w, "BROWSER_REQUEST_REFUSED: a browser session is accepted only from the console's own origin with PC-CSRF: 1",
 			http.StatusForbidden)
 		return tenancy.Caller{}, nil, time.Time{}, false
 	}
-	_, _ = io.Copy(io.Discard, http.MaxBytesReader(w, r.Body, maxBrowserBody))
 	s, err := h.sessions.Auth.Authenticate(r.Context(), cookie)
 	if err != nil {
 		http.Error(w, "invalid or expired session", http.StatusUnauthorized)

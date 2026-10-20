@@ -12,54 +12,65 @@ harness_only: false
 steps:
   - id: console-stream
     do: browser.call
-    with: {target: ops_stream, origin: same_origin, csrf: true, method: POST, body: json}
+    with: {target: ops_stream, origin: same_origin, csrf: true, method: GET, body: json}
     expect:
       outcome: ALLOW
-  - id: cross-site-fetch
+  - id: console-stream-origin-only
     do: browser.call
-    with: {target: ops_stream, origin: cross_site, csrf: true, method: POST, body: json}
+    with: {target: ops_stream, origin: origin_only, csrf: true, method: GET, body: json}
     expect:
-      outcome: REFUSED
-      code: BROWSER_REQUEST_REFUSED
-      decisive_control: HR-344
-  - id: old-browser-other-origin
-    do: browser.call
-    with: {target: ops_stream, origin: other_origin, csrf: true, method: POST, body: json}
-    expect:
-      outcome: REFUSED
-      code: BROWSER_REQUEST_REFUSED
-      decisive_control: HR-344
-  - id: event-source-get
+      outcome: ALLOW
+  - id: cross-site-event-source
     do: browser.call
     with: {target: ops_stream, origin: cross_site, method: GET, body: json}
     expect:
       outcome: REFUSED
       code: BROWSER_REQUEST_REFUSED
       decisive_control: HR-344
-  - id: same-origin-get
+  - id: cross-site-fetch
     do: browser.call
-    with: {target: ops_stream, origin: same_origin, csrf: true, method: GET, body: json}
+    with: {target: ops_stream, origin: cross_site, csrf: true, method: GET, body: json}
+    expect:
+      outcome: REFUSED
+      code: BROWSER_REQUEST_REFUSED
+      decisive_control: HR-344
+  - id: sibling-subdomain
+    do: browser.call
+    with: {target: ops_stream, origin: same_site, csrf: true, method: GET, body: json}
+    expect:
+      outcome: REFUSED
+      code: BROWSER_REQUEST_REFUSED
+      decisive_control: HR-344
+  - id: old-browser-other-origin
+    do: browser.call
+    with: {target: ops_stream, origin: other_origin, csrf: true, method: GET, body: json}
+    expect:
+      outcome: REFUSED
+      code: BROWSER_REQUEST_REFUSED
+      decisive_control: HR-344
+  - id: typed-url
+    do: browser.call
+    with: {target: ops_stream, origin: typed_url, method: GET, body: json}
     expect:
       outcome: REFUSED
       code: BROWSER_REQUEST_REFUSED
       decisive_control: HR-344
   - id: no-csrf-header
     do: browser.call
-    with: {target: ops_stream, origin: same_origin, method: POST, body: json}
+    with: {target: ops_stream, origin: same_origin, method: GET, body: json}
     expect:
       outcome: REFUSED
       code: BROWSER_REQUEST_REFUSED
       decisive_control: HR-344
-  - id: simple-text-post
+  - id: simple-post
     do: browser.call
     with: {target: ops_stream, origin: cross_site, method: POST, body: text}
     expect:
       outcome: REFUSED
-      code: BROWSER_REQUEST_REFUSED
       decisive_control: HR-344
   - id: bearer-and-cookie
     do: browser.call
-    with: {target: ops_stream, origin: same_origin, csrf: true, bearer: true, method: POST, body: json}
+    with: {target: ops_stream, origin: same_origin, csrf: true, bearer: true, method: GET, body: json}
     expect:
       outcome: REFUSED
       code: AMBIGUOUS_CREDENTIAL

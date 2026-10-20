@@ -55,8 +55,10 @@ func TestHR347_TheConsoleUsesTheAPIWithItsSession(t *testing.T) {
 	b.signIn(t, org, "alice", "alice@example.test", false)
 
 	code, body := b.connect(t, pantherclawv1connect.AccessServiceWhoAmIProcedure, "{}")
-	for _, want := range []string{`"credential":"browser_session"`, `"sessionKind":"CALLER_SESSION_KIND_ORG_BROWSER"`,
-		`"deployment":"DEPLOYMENT_DEVELOPMENT"`, org} {
+	for _, want := range []string{
+		`"credential":"browser_session"`, `"sessionKind":"CALLER_SESSION_KIND_ORG_BROWSER"`,
+		`"deployment":"DEPLOYMENT_DEVELOPMENT"`, org,
+	} {
 		if code != http.StatusOK || !strings.Contains(body, want) {
 			t.Fatalf("WhoAmI = %d %s, want %s", code, body, want)
 		}

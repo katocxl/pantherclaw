@@ -8,7 +8,7 @@
 // The bearer token is read from the Authorization header only; a request
 // carrying anything that looks like a credential in its URL is refused.
 // The web console opens the same stream with its session cookie as a
-// same-origin POST (browser.go, HR-344).
+// same-origin GET with PC-CSRF: 1 (browser.go, HR-344).
 // Each event's id is its feed sequence number, so Last-Event-ID (or the
 // after parameter) resumes where the viewer left off. Only focus events are
 // sent (live signals, alerts, incidents, containment), each filtered by the
@@ -154,9 +154,6 @@ func New(feed Feed, auth Authenticator, scoper Scoper, expiry func(string) (time
 // Mount adds the stream to mux.
 func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.Handle("GET "+Path, h)
-	if h.sessions != nil {
-		mux.Handle("POST "+Path, h) // the console's fetch stream (browser.go)
-	}
 }
 
 // credentialParams are query parameter names that would put a credential
