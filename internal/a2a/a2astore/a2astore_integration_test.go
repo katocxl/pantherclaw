@@ -7,10 +7,10 @@ package a2astore_test
 
 import (
 	"bytes"
-	"encoding/hex"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"net/http/httptest"
 	"testing"
