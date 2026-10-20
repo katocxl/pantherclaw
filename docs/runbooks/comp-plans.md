@@ -32,7 +32,7 @@ The grant command prints the resulting plan. A member of the organization sees i
 pantherclaw-server org plan revoke --org <org id> --reason "pilot ended"
 ```
 
-Revoking (or reaching the expiry) returns the organization to the plan state it would have without the grant: a paid plan if one is active, otherwise no plan. Without a plan the plan gate answers `PLAN_REQUIRED` for configuration changes and new agents or connections, but **protection never turns off** (HR-357): gateways keep enforcing, decisions keep being made, the kill switch, containment and open approvals keep working, and evidence stays readable. Tell the organization's admins before you revoke.
+Revoking (or reaching the expiry) returns the organization at once to its billing state, which is kept underneath the complimentary plan: payment events that arrived during the grant were applied to it, so a plan the organization paid for meanwhile is active straight away, and with no billing state the organization has no plan. Without a plan the plan gate answers `PLAN_REQUIRED` for configuration changes and new agents or connections, but **protection never turns off** (HR-357): gateways keep enforcing, decisions keep being made, the kill switch, containment and open approvals keep working, and evidence stays readable. Tell the organization's admins before you revoke.
 
 ## 5. Review
 
