@@ -29,3 +29,6 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [authzen.md](authzen.md) | M14 | Register an AuthZEN enforcement point, wire your proxy, read decisions (`PARTIAL` routes) |
 | [a2a.md](a2a.md) | M14 | Connect peer agents over A2A: pinned cards, drift quarantine, enrolled peers with delegated runs, the receiver helper |
 | [frameworks.md](frameworks.md) | M14 | Wrap LangChain/LangGraph, OpenAI Agents SDK, CrewAI, Vercel AI SDK and MCP TypeScript tools; refusal codes and holds |
+| [comp-plans.md](comp-plans.md) | UI | Grant and revoke complimentary plans from the operator command line (hosted deployments) |
+| [billing-webhooks.md](billing-webhooks.md) | UI | Billing webhook failures: a stale plan, refused or out-of-order events; protection is never affected |
+| [hosted-oidc-outage.md](hosted-oidc-outage.md) | UI | Hosted OIDC provider outage: sign-in is down, enforcement is unaffected |

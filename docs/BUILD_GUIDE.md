@@ -404,7 +404,9 @@ Results and the machines they were measured on are recorded in `docs/perf/M1.5.m
 cmd/                     pantherclaw-server, pantherclaw-gateway, pclaw, pantherclaw-sim, pclaw-admin
 proto/pantherclaw/v1/    API contracts (buf)
 internal/gen/            generated Go (committed)
-internal/platform/       config, log, db, crypto, keys, ids, clock, errors, httpx, rpc (also the OpenTelemetry spans), money, extension, edition, version
+internal/platform/       config, log, db, crypto, keys, ids, clock, errors, httpx, rpc (also the OpenTelemetry spans), money, edition, version
+internal/extension/      the extension point (G0 UI, ADR-0030): built console, extra routes under /v1/ext/ and /app/ext/, start-up checks, plan writer
+internal/servercli/      the pantherclaw-server command line, shared by the commercial distribution
 internal/<module>/       {domain, app, adapters} — see §6
 internal/gateway/        mcp, httpproxy, sdk, dispatch, egress, broker, runtime
 migrations/  queries/    goose SQL, sqlc queries
@@ -487,10 +489,12 @@ Each milestone starts with a G0 brief in [GATES_AND_REVIEW.md](security/GATES_AN
 
 ```
 M0 → M1 → M1.5 → M2 → M3 → M4 → M5 → M6 → M7 → M8 → M9 → M12 → v0.1.0 preview
-   → M11.1 → M10 → M11 → M14 → M13 → v1.0 → UI phase
+   → M11.1 → M10 → M11 → M14 → UI → M13 → v1.0
 ```
 
 M11 is split in two (founder, 2026-10-15: "finish up with policies!"): **M11.1**, the policy lifecycle, comes after the preview and before M10; **M11**, governed automations, keeps its place after M10.
+
+The UI phase moves ahead of M13 as milestone **UI** (founder, 2026-10-20; [G0 UI](g0/UI.md)): the web console, hosted accounts and per-organization plans come right after M14, and the hosted control plane's product code is pulled forward with them; M13's production hardening follows, so hosted staging and production are hardened before paid sign-up opens at v1.0.
 
 Releases: `v0.0.x` pre-releases from M1; **v0.1.0 preview after M12** (coding-agent wedge, exit below); **v1.0 after M13**.
 
@@ -642,8 +646,9 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - The coding-agent scenarios of M12 are green and gate the change: locally (`task range`) while EX-004 is active, in CI once it ends.
 
 ### M13 — Commercial & production hardening → v1.0
-**PN:** PN-010, PN-011, PN-012, PN-019.
-- Entitlements & metering per edition, rate limits/quotas, support access (task-bound, customer-approved, audited), data export/deletion, Helm chart, backup/restore + DR drill, FIPS build variant, SLOs met under load (`pantherclaw-sim load`; k6 cannot sign PAP/1), Schemathesis clean, threat-model refresh (G4), docs site.
+**PN:** PN-010, PN-011, PN-012 (except PN-012.2 and PN-012.3, delivered in UI), PN-019.
+- Hosted staging and production infrastructure for the hosted control plane built in UI (infrastructure as code, the managed database, sealed keys, deployment gates G3): a staging deployment (test layer L3) in M13, production (L4) and paid sign-up at v1.0.
+- Rate limits/quotas, support access (task-bound, customer-approved, audited), data export/deletion, Helm chart, backup/restore + DR drill, FIPS build variant, SLOs met under load (`pantherclaw-sim load`; k6 cannot sign PAP/1), Schemathesis clean, threat-model refresh (G4), docs site.
 - The OpenTelemetry exporter (founder decision 2026-10-10, G0 M1 deviation 4): until then spans are API-only and nothing is exported. Choose between the OTLP/HTTP exporter (it pulls in gRPC and grpc-gateway), a small OTLP/HTTP-protobuf exporter of our own, or export through logs; then wire the SDK, and decide on a pgx tracer and metrics (ARCHITECTURE §14).
 
 ### M14 — Framework SDKs & business connectors (delivered after M11, before M13)
@@ -655,8 +660,17 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - Refund scenario as the second-market demo on real Stripe test mode.
 - **Peer agent-to-agent calls** (OWASP ASI07; resolved by the M14 brief, founder decision F1, [ADR-0029](adr/0029-peer-agent-calls-a2a.md)): A2A is mediated by the gateway as a route type (pinned agent cards, `pc.a2a`, requests rebuilt from ActionIR, text parts only) and decided under the requester's grant. For a peer agent enrolled in the same organization, the requester's limits carry over: the peer acts in a child run under a delegated grant bounded by the requester's grant and the route's peer scope. External peers are governed outbound only and labelled `PARTIAL`.
 
-### UI phase (after backend)
-Next.js console over generated Connect clients: seven surfaces (Operations, Agents, Policies, Approvals, Investigations, Connections, Automations) + universal search; accessibility and comprehension tests (F001–F014, F643–F651).
+### UI — Web console, hosted accounts and plans (delivered after M14, before M13)
+**HR:** HR-340..364 · **PN:** PN-010.3 (product code), PN-012.2, PN-012.3, PN-025, PN-026 · **F:** F001, F006, F009, F012, F322, F325, F335 (UI part), F336, F341, F643, F802–F829 · **ADR:** 0030, 0031 · **G0:** [g0/UI.md](g0/UI.md).
+- **Console.** A Vite single-page console over generated Connect clients, built in the commercial distribution and served by the server at `/app/` under a strict content security policy (scripts, styles and connections from the same origin only, Trusted Types required, no inline code; HR-340). The seven surfaces (Operations, Agents, Policies, Approvals, Investigations, Connections, Automations), universal search, role views, scoped navigation in the URL, settings outside daily work; WCAG 2.2 AA (F001–F014, F643–F651). Agent-written text is shown only as untrusted text; the server-rendered confirmation pages stay canonical and the console links to them.
+- **Core changes in the public repository.** The extension point `internal/extension` and `internal/servercli` (the console file system, extra routes under `/v1/ext/` and `/app/ext/`, start-up checks; HR-341; [ADR-0030](adr/0030-web-console-hosted-split-and-extension-point.md)); browser sessions on the Connect API and the operations stream with same-origin, `PC-CSRF: 1`, POST-only checks (HR-342..347); a `deployment` setting (development, staging, production) reported in `WhoAmI`; the server pages restyled to the design tokens.
+- **Hosted control plane (hybrid), product code pulled forward** (PN-010.3; founder decision F1): PantherClaw hosts the control plane and console; customers run the gateway and `pclaw`. Hosted accounts keyed by (issuer, subject), sign-in without an organization, an organization picker, self-serve organization creation behind a configuration switch (off by default), browser invitations bound to the verified email (HR-348..353; [ADR-0031](adr/0031-hosted-accounts-per-org-plans-and-test-seams.md)).
+- **Per-organization plans** (PN-012.2): an organization's plan state written only by the extension's plan writer, the operator's complimentary-plan command or development mode; a `PLAN_REQUIRED` gate with an allow list; plan limits checked on the server; a lapse never weakens enforcement (HR-354..361). Payments go through a merchant-of-record payment provider behind a replaceable port in the commercial distribution.
+- **Test access without payment or real sign-in** (founder decision F9): every seam is an adapter chosen by configuration, visible when active and refused in production (development sign-in providers, billing off or faked; HR-346, HR-359); complimentary plans by operator command (HR-358). Test layers L0 (in-browser fixtures) and L1 (the local stack) run in CI or locally; L2 (local with the providers' sandboxes) is opt-in; L3 hosted staging comes with M13 and L4 production with v1.0.
+- **Onboarding** pulled from M13 (F322, F325, F335 UI part, F336, F341): resumable steps computed on the server from real records (`OnboardingService.GetProgress`; HR-362..364), from sign-in to a first protected path, guided first tests and validation; the 30-minute target is measured on the hosted flow.
+- **Website and interactive demo** (PN-025), in the commercial distribution: a static website and an interactive demo of the real console on simulated data in the browser, on its own origin with no sign-up, no cookies and no API.
+- **Pulled from M13:** PN-012.2 (per-organization entitlements and plan limits), PN-012.3 (invitations accepted in the browser), F322, F325, F335 (UI part), F336, F341. **Stays in M13:** hosted staging and production infrastructure, backups and the DR drill, rate limits and quotas, support access, data export and deletion, the Helm chart, the FIPS build, post-quantum TLS, SLOs under load, Schemathesis, the threat-model refresh (G4), the docs site and the OpenTelemetry exporter.
+- Migrations `00160`–`00163` (`00164`–`00169` spare).
 
 ---
 
