@@ -317,3 +317,33 @@ func random(n int) string {
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
 }
+
+// Lock holds an ACCESS EXCLUSIVE lock on a fixture table, as a migration
+// would, until release: a read of it waits for its lock timeout.
+func (tg *Target) Lock(t testing.TB, table string) (release func()) {
+	t.Helper()
+	cfg := tg.admin.Copy()
+	cfg.Database = tg.Database
+	c, err := pgx.ConnectConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("pgtargettest: connect: %v", err)
+	}
+	ctx := context.Background()
+	if _, err := c.Exec(ctx, "BEGIN"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Exec(ctx, "LOCK TABLE "+table+" IN ACCESS EXCLUSIVE MODE"); err != nil {
+		t.Fatal(err)
+	}
+	return func() {
+		_, _ = c.Exec(ctx, "ROLLBACK")
+		_ = c.Close(ctx)
+	}
+}
+
+// URL is the dev seed --postgres URL of the read-only role (D21): no
+// password, verify-full against the CA written to caFile, internal.
+func (tg *Target) URL(caFile string) string {
+	return "postgres://" + tg.ReadOnly + "@" + Host + ":" + strconv.Itoa(tg.Port) + "/" + tg.Database +
+		"?sslmode=verify-full&internal=true&sslrootcert=" + caFile
+}
