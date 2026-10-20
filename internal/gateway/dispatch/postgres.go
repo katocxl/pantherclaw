@@ -295,13 +295,10 @@ func (e *Engine) pgPool(ctx context.Context, conn *control.Connection, def *defs
 			return nil, err
 		}
 	}
-	// A confirmed manifest changes the configuration, not the revision.
-	raw, err := proto.MarshalOptions{Deterministic: true}.Marshal(pc)
+	key, err := pgKey(conn, pc)
 	if err != nil {
 		return nil, err
 	}
-	sum := sha256.Sum256(raw)
-	key := fmt.Sprintf("%d/%s/%d/%x", conn.GetRevision(), conn.Credential.GetId(), conn.Credential.GetVersion(), sum)
 	pgPools.Lock()
 	defer pgPools.Unlock()
 	pools := pgPools.m[e]
@@ -453,4 +450,33 @@ func (e *Engine) pgSimVerify(ctx context.Context, conn *control.Connection) stri
 	pgSims.ok[key] = time.Now()
 	pgSims.Unlock()
 	return ""
+}
+
+// Configured closes the pools of postgres connections a new configuration
+// no longer serves, or serves with another configuration (D105).
+func (e *Engine) Configured(cfg *control.Config) {
+	pgPools.Lock()
+	defer pgPools.Unlock()
+	for id, ent := range pgPools.m[e] {
+		conn, ok := cfg.ByID[id]
+		if ok && conn.GetKind() == "postgres" && conn.GetPostgres() != nil {
+			if key, err := pgKey(conn, conn.GetPostgres()); err == nil && key == ent.key {
+				continue
+			}
+		}
+		ent.pool.Close()
+		delete(pgPools.m[e], id)
+	}
+}
+
+// pgKey identifies what a pool was opened for: the connection revision,
+// the credential version and the configuration (a confirmed manifest
+// changes the configuration, not the revision).
+func pgKey(conn *control.Connection, pc *pb.PostgresConfig) (string, error) {
+	raw, err := proto.MarshalOptions{Deterministic: true}.Marshal(pc)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(raw)
+	return fmt.Sprintf("%d/%s/%d/%x", conn.GetRevision(), conn.Credential.GetId(), conn.Credential.GetVersion(), sum), nil
 }

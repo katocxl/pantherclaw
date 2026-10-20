@@ -11,9 +11,11 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
+	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
 	"github.com/katocxl/pantherclaw/internal/gateway/pgdispatch"
+	"github.com/katocxl/pantherclaw/internal/gateway/pgtarget"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -154,5 +156,45 @@ func TestHR307_MappingRefusesUnreviewedShapes(t *testing.T) {
 		if _, err := m.MCP(context.Background(), pgContext(), "query_rows", []byte(args)); err == nil {
 			t.Errorf("%s mapped", args)
 		}
+	}
+}
+
+// TestConfigured_ClosesPoolsOfGoneOrChangedConnections (D105): a new
+// configuration closes the pool of a connection it no longer serves, or
+// serves with another configuration, and keeps the others.
+func TestConfigured_ClosesPoolsOfGoneOrChangedConnections(t *testing.T) {
+	e := &Engine{}
+	mk := func(id string, pc *pb.PostgresConfig) *control.Connection {
+		return &control.Connection{GatewayConnection: &pb.GatewayConnection{Id: id, Kind: "postgres", Revision: 1, Postgres: pc}}
+	}
+	open := func(c *control.Connection) *pgEntry {
+		t.Helper()
+		pc := c.GetPostgres()
+		p, err := pgtarget.Open(context.Background(), pgtarget.Config{
+			Endpoint: pgtarget.Endpoint{Host: pc.GetHost(), Database: pc.GetDatabase(), User: pc.GetUser(), SSLMode: pc.GetSslmode()},
+			Manifest: pgManifest(pc),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		key, _ := pgKey(c, pc)
+		return &pgEntry{key: key, pool: p}
+	}
+	kept, gone, changed := mk("a", shopConfig()), mk("b", shopConfig()), mk("c", shopConfig())
+	pgPools.Lock()
+	pgPools.m[e] = map[string]*pgEntry{"a": open(kept), "b": open(gone), "c": open(changed)}
+	pgPools.Unlock()
+	t.Cleanup(func() {
+		pgPools.Lock()
+		delete(pgPools.m, e)
+		pgPools.Unlock()
+	})
+	next := shopConfig()
+	next.MaxRows = 50
+	e.Configured(&control.Config{ByID: map[string]*control.Connection{"a": kept, "c": mk("c", next)}})
+	pgPools.Lock()
+	defer pgPools.Unlock()
+	if _, ok := pgPools.m[e]["a"]; !ok || len(pgPools.m[e]) != 1 {
+		t.Fatalf("pools left %v", pgPools.m[e])
 	}
 }

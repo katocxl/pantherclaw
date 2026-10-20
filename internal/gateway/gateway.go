@@ -244,6 +244,9 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 	if err != nil {
 		return nil, err
 	}
+	if s, ok := d.Configuration.(interface{ Subscribe(func(*control.Config)) }); ok {
+		s.Subscribe(engine.Configured) // D105: pools of gone connections close
+	}
 	if d.Connectors != nil {
 		d.Connectors.WithEgress(engine)
 	}
