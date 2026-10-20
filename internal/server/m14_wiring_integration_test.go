@@ -22,13 +22,14 @@ import (
 // the notifications service with its edition source (Slack cards, D22) in
 // every role; in the API also the API's grants and policy versions (D11),
 // the AuthZEN enforcement points and decision endpoint (D26-D29), the
-// postgres manifest confirm page (D84) and the Slack channel pages (D66).
+// postgres manifest confirm page (D84), the Slack channel pages (D66), and
+// A2A's peer delegation (every role, D33, D89) and pin confirm page (D85).
 var m14Required = map[string][]string{
 	RoleAll: {
 		"m14.kinds", "m14.grants.process", "m14.notifications", "m14.grants.api", "m14.policy.versions", "m14.authzen.points",
-		"m14.authzen.endpoint", "m14.postgres.manifests",
+		"m14.authzen.endpoint", "m14.postgres.manifests", "m14.a2a.peer", "m14.a2a.pins",
 	},
-	RoleWorker: {"m14.kinds", "m14.grants.process", "m14.notifications"},
+	RoleWorker: {"m14.kinds", "m14.grants.process", "m14.notifications", "m14.a2a.peer"},
 }
 
 // m14WithSecurityKeys are wired only when security keys (WebAuthn) are
@@ -38,8 +39,8 @@ var m14Required = map[string][]string{
 var m14WithSecurityKeys = []string{"m14.slack.page"}
 
 // m14Kinds are the connection kinds whose configuration store the M14
-// wiring registers (D64): a2a joins when its stream lands.
-var m14Kinds = []string{capp.KindPostgres}
+// wiring registers (D64).
+var m14Kinds = []string{capp.KindPostgres, capp.KindA2A}
 
 // TestM14_WiringComplete: the real server, started as one process (all)
 // and as a worker-only process, wires every M14 instance its role needs,
@@ -83,7 +84,7 @@ func TestM14_WiringComplete(t *testing.T) {
 					t.Errorf("%s: notifications #%d have no edition source: Slack cards are not gated (D22)", role, i+1)
 				}
 			}
-			for _, kind := range []string{"m14.authzen.endpoint", "m14.authzen.points", "m14.postgres.manifests"} {
+			for _, kind := range []string{"m14.authzen.endpoint", "m14.authzen.points", "m14.postgres.manifests", "m14.a2a.peer", "m14.a2a.pins"} {
 				for i, v := range got[kind] {
 					for _, gap := range m11NilPorts(v) {
 						t.Errorf("%s: %s #%d: %s is nil", role, kind, i+1, gap)

@@ -36,6 +36,7 @@ func wireM14A2APeer(svc *authority.Service, store *pgauthority.Store, autos *aut
 	peer := &authority.Peer{Grants: autos.grants, Pool: pool}
 	store.Peer = peer.Delegate
 	svc.WithPeerCheck(peer.Check)
+	probeM14("m14.a2a.peer", peer)
 }
 
 // mountM14A2A adds the a2a pin confirm page (D85): a proposed card serves
@@ -45,5 +46,7 @@ func mountM14A2A(mux *http.ServeMux, d apiDeps) {
 	if d.web == nil {
 		return
 	}
-	d.web.MountA2APins(mux, &a2astore.Pins{Pool: d.pool, Pinner: a2astore.NewPinner()})
+	pins := &a2astore.Pins{Pool: d.pool, Pinner: a2astore.NewPinner()}
+	d.web.MountA2APins(mux, pins)
+	probeM14("m14.a2a.pins", pins)
 }
