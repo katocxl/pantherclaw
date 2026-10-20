@@ -4,10 +4,12 @@
 package webhttp
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
+	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
 
 // SessionRoute mounts an extension route (internal/extension) that needs a
@@ -36,4 +38,15 @@ func (h *Handler) SessionRoute(mux *http.ServeMux, pattern string, csrf bool,
 		}
 		next(w, r, s)
 	}))
+}
+
+// SessionProfile returns the signed-in person's profile (email and name).
+func (h *Handler) SessionProfile(ctx context.Context, s authnapp.BrowserSession) (authnapp.Profile, error) {
+	return h.b.Profile(ctx, s)
+}
+
+// InternalError answers a JSON 500 and logs err.
+func (h *Handler) InternalError(w http.ResponseWriter, r *http.Request, err error) {
+	h.log.ErrorContext(r.Context(), "web.extension_error", pclog.Err(err))
+	h.jsonError(w, http.StatusInternalServerError, "internal")
 }

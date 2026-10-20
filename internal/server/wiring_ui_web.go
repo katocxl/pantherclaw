@@ -9,15 +9,17 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/webhttp"
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	"github.com/katocxl/pantherclaw/internal/extension"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
+	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 )
 
-// extensionDeps are what the core hands to an extension. Plans and
-// Accounts are nil until the core provides them (G0 UI D20).
+// extensionDeps are what the core hands to an extension. Plans, Accounts
+// and BillingLinks are nil until the core provides them (G0 UI D20, D37).
 func extensionDeps(cfg *Config, log *slog.Logger) extension.Deps {
 	return extension.Deps{
 		Log: log, Clock: clock.System{}, PublicURL: cfg.Auth.PublicURL, Deployment: cfg.deployment(),
@@ -43,12 +45,28 @@ var errExtensionRoute = errors.New("server: extension route refused")
 // wildcard matches one ServeMux wildcard segment.
 var wildcard = regexp.MustCompile(`\{[^}]*\}`)
 
+// consolePattern is the console's own subtree (D10). It leaves /app/ext/
+// to extensions, so an extension route under /app/ext/ never conflicts
+// with it.
+const consolePattern = "GET /app/"
+
+// Limits of AuthNone extension routes, which have no session to bound
+// them: a request body cap and a per-client rate (D48). A handler may cap
+// its body lower.
+const (
+	extBodyLimit = 1 << 20
+	extRateLimit = 600 // per client address per minute
+)
+
 // mountExtension mounts the extension's routes after every core route:
 // each must be under /v1/ext/ or /app/ext/ and must not reach a core
 // route (HR-341); session routes go through the page foundation's session
 // and CSRF checks, and their handler reads the caller with
-// extension.PrincipalFrom.
-func mountExtension(mux *http.ServeMux, ext extension.Set, d extension.Deps, web *webhttp.Handler) error {
+// extension.PrincipalFrom; AuthNone routes get a body cap and a per-client
+// rate limit.
+func mountExtension(mux *http.ServeMux, ext extension.Set, d extension.Deps, web *webhttp.Handler,
+	clientIP httpx.ClientIPFunc,
+) error {
 	if ext.Mount == nil {
 		return nil
 	}
@@ -68,16 +86,18 @@ func mountExtension(mux *http.ServeMux, ext extension.Set, d extension.Deps, web
 			return fmt.Errorf("%w: %q reaches the core route %q", errExtensionRoute, r.Pattern, p)
 		}
 	}
+	limiter := httpx.NewLimiter(extRateLimit, time.Minute, nil).WithClientIP(clientIP)
 	for _, r := range routes {
-		if err := mountRoute(mux, r, web); err != nil {
+		if err := mountRoute(mux, r, web, limiter); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// coreRouteFor returns the pattern of the route mux already has for a
-// request to pattern (wildcards filled in), or "".
+// coreRouteFor returns the pattern of the core route mux already has for
+// a request to pattern (wildcards filled in), or "". The console's subtree
+// does not count: it reserves /app/ext/ for extensions.
 func coreRouteFor(mux *http.ServeMux, pattern string) string {
 	method, path, err := extension.SplitPattern(pattern)
 	if err != nil {
@@ -96,26 +116,40 @@ func coreRouteFor(mux *http.ServeMux, pattern string) string {
 	if err != nil {
 		return ""
 	}
-	_, p := mux.Handler(req)
-	return p
+	if _, p := mux.Handler(req); p != consolePattern {
+		return p
+	}
+	return ""
 }
 
 // mountRoute mounts one checked route; a conflict with another extension
 // route is a start-up error, not a panic.
-func mountRoute(mux *http.ServeMux, r extension.Route, web *webhttp.Handler) (err error) {
+func mountRoute(mux *http.ServeMux, r extension.Route, web *webhttp.Handler, limiter *httpx.Limiter) (err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			err = fmt.Errorf("%w: %q: %v", errExtensionRoute, r.Pattern, p)
 		}
 	}()
+	h := r.Handler
 	switch r.Auth {
 	case extension.AuthNone:
-		mux.Handle(r.Pattern, r.Handler)
+		mux.Handle(r.Pattern, http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if !limiter.AllowRequest(req) {
+				http.Error(w, "too many requests", http.StatusTooManyRequests)
+				return
+			}
+			req.Body = http.MaxBytesReader(w, req.Body, extBodyLimit)
+			h.ServeHTTP(w, req)
+		}))
 	case extension.AuthSession, extension.AuthSessionCSRF:
-		h := r.Handler
 		web.SessionRoute(mux, r.Pattern, r.Auth == extension.AuthSessionCSRF,
 			func(w http.ResponseWriter, req *http.Request, s authnapp.BrowserSession) {
-				h.ServeHTTP(w, req.WithContext(extension.WithPrincipal(req.Context(), principalOf(s))))
+				p, err := principalOf(req, web, s)
+				if err != nil {
+					web.InternalError(w, req, err)
+					return
+				}
+				h.ServeHTTP(w, req.WithContext(extension.WithPrincipal(req.Context(), p)))
 			})
 	default:
 		return fmt.Errorf("%w: %q: unknown auth mode", errExtensionRoute, r.Pattern)
@@ -123,8 +157,13 @@ func mountRoute(mux *http.ServeMux, r extension.Route, web *webhttp.Handler) (er
 	return nil
 }
 
-// principalOf is the extension view of an org browser session. Account
-// sessions and the email arrive with hosted accounts (G0 UI D8).
-func principalOf(s authnapp.BrowserSession) extension.Principal {
-	return extension.Principal{OrgID: s.Org.String(), UserID: s.Principal.ID.String()}
+// principalOf is the extension view of an org browser session, with the
+// person's email. AccountID is set for account sessions (hosted accounts,
+// G0 UI D8).
+func principalOf(r *http.Request, web *webhttp.Handler, s authnapp.BrowserSession) (extension.Principal, error) {
+	prof, err := web.SessionProfile(r.Context(), s)
+	if err != nil {
+		return extension.Principal{}, err
+	}
+	return extension.Principal{OrgID: s.Org.String(), UserID: s.Principal.ID.String(), Email: prof.Email}, nil
 }

@@ -15,7 +15,6 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/oidcrp"
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
-	"github.com/katocxl/pantherclaw/internal/extension"
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/kube"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/config"
@@ -126,10 +125,11 @@ type DBConfig struct {
 func DefaultConfig() Config {
 	d := db.Defaults()
 	return Config{
-		Role:       RoleAll,
-		Deployment: string(extension.DeploymentDevelopment),
-		Log:        LogConfig{Level: "info"},
-		HTTP:       HTTPConfig{Addr: "127.0.0.1:8080"},
+		// Deployment stays empty, which means development, so a build with
+		// an extension can tell that it was never set (config_ui_web.go).
+		Role: RoleAll,
+		Log:  LogConfig{Level: "info"},
+		HTTP: HTTPConfig{Addr: "127.0.0.1:8080"},
 		DB: DBConfig{
 			Host: d.Host, Port: d.Port, Name: d.Database, SSLMode: d.SSLMode,
 			AppUser: db.RoleApp, MigratorUser: db.RoleMigrator, MaxConns: int(d.MaxConns),
