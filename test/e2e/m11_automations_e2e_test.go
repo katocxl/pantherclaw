@@ -10,6 +10,7 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
+	"maps"
 	"net/http"
 	"strings"
 	"testing"
@@ -575,13 +576,18 @@ func (a *autoStack) widen(t *testing.T, automation, published, source ids.UUID, 
 // grouped alert and one owned failure for the root (D21, T-123). The two
 // automations are fixtures in the stack's org, published and in SHADOW (a
 // loop is a trigger refusal, whatever the mode), so the check runs on the
-// real trigger service and engine.
+// real trigger service and engine. Only events carrying this check's marker
+// fire them: grant events of the earlier steps may still be in the feed
+// when the fixtures are created, and would start ping or pong outside the
+// loop (D132).
 func (a *autoStack) reciprocalLoop(t *testing.T) {
 	t.Helper()
 	s, ctx := a.r.s, context.Background()
 	f := &triggerstest.Fixture{Pool: s.pool, Org: s.org, User: a.r.aliceID}
-	ping := f.Automation(t, "loop-ping", f.Definition(`"event":{"on":"grant.revoked"}`, ""), autodomain.RolloutShadow)
-	pong := f.Automation(t, "loop-pong", f.Definition(`"event":{"on":"grant.issued"}`, ""), autodomain.RolloutShadow)
+	marker := ids.NewV7().String()
+	where := `,"where":"event.attrs.?loop_check.orValue('') == '` + marker + `'"`
+	ping := f.Automation(t, "loop-ping", f.Definition(`"event":{"on":"grant.revoked"`+where+`}`, ""), autodomain.RolloutShadow)
+	pong := f.Automation(t, "loop-pong", f.Definition(`"event":{"on":"grant.issued"`+where+`}`, ""), autodomain.RolloutShadow)
 	// feed processes the next batch. The e2e server's own feed job (every
 	// triggers.FeedInterval) moves the same org cursor, so a batch may be
 	// taken by it: ErrCursorMoved is that consumer winning the compare-and-set,
@@ -605,6 +611,11 @@ func (a *autoStack) reciprocalLoop(t *testing.T) {
 	record := func(name string, actor evdomain.Actor, details map[string]string, target triggerstest.Automation) {
 		t.Helper()
 		before := triggers(target)
+		details = maps.Clone(details)
+		if details == nil {
+			details = map[string]string{}
+		}
+		details["loop_check"] = marker
 		if err := s.pool.InTenantTx(ctx, s.org, func(ctx context.Context, tx db.TenantTx) error {
 			_, err := audit.Record(ctx, tx, audit.Event{
 				Name: name, Actor: actor, Outcome: audit.Success,
@@ -661,6 +672,6 @@ func (a *autoStack) reciprocalLoop(t *testing.T) {
 // first, for a failure message.
 func (a *autoStack) triggerStates(t *testing.T, automation ids.UUID) string {
 	t.Helper()
-	return a.r.s.row(t, `SELECT coalesce(string_agg(kind || ':' || state || ':' || coalesce(reason, ''), ', ' ORDER BY received_at, id), 'none')
+	return a.r.s.row(t, `SELECT coalesce(string_agg(kind || ':' || state || ':' || coalesce(reason, '') || ':' || ancestry::text, ', ' ORDER BY received_at, id), 'none')
 		FROM pc.automation_triggers WHERE automation_id = $1`, automation)
 }
