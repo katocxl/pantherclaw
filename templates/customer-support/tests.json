@@ -82,7 +82,7 @@
       "summary": "the support agent reads its ticket's customer's orders, scoped to that customer and to public and internal columns",
       "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"columns": ["id", "customer_id", "amount", "status"], "limit": "50"}},
       "given": {"agent": "{{agent}}", "grant": {"constraints": [{"kind": "record_scope", "param": "customer", "values": ["{{customer}}"]}]}},
-      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "SUPPORT_READ_CLASSES"}
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "SUPPORT_READ_CUSTOMERS"}
     },
     {
       "id": "cs-rows-too-many", "per": "agent",
@@ -103,6 +103,20 @@
       "summary": "another agent's aggregate is not these rules'",
       "action": {"operation": "postgres.rows.aggregate", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"measures": ["count:*"], "limit": "10"}},
       "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "cs-rows-other-customer", "per": "agent",
+      "summary": "a read under a grant that names another customer is still scoped by the template's customer rule (TestM14SupportRecordScope checks the values)",
+      "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"columns": ["id", "customer_id", "amount"], "limit": "10"}},
+      "given": {"agent": "{{agent}}", "grant": {"constraints": [{"kind": "record_scope", "param": "customer", "values": ["{{other_customer}}"]}]}},
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "SUPPORT_READ_CUSTOMERS"}
+    },
+    {
+      "id": "cs-rows-other-table", "per": "agent",
+      "summary": "the support agent's read of another table, under a grant that allows pii, is still limited to public and internal columns",
+      "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.products"}, "params": {"columns": ["id", "name"], "limit": "10"}},
+      "given": {"agent": "{{agent}}", "grant": {"constraints": [{"kind": "data_classes", "values": ["public", "internal", "pii"]}]}},
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "SUPPORT_READ_CLASSES", "rule": "cs-rows-classes--{{agent}}"}
     }
   ]
 }

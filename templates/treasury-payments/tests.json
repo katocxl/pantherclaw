@@ -44,16 +44,16 @@
     },
     {
       "id": "tr-payee-unread", "per": "org",
-      "summary": "a transfer whose payee's bank-detail changes cannot be read is held: its consequence is unknown",
+      "summary": "a transfer whose payee's bank-detail changes cannot be read is refused",
       "action": {"operation": "stripe.transfer.create", "target": {"type": "stripe.account", "id": "{{payee}}"}, "params": {"amount": {"value": "100.00", "currency": "USD"}}},
-      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "CONSEQUENCE_UNKNOWN"}
+      "expect": {"decision": "DENY", "reason": "PAYEE_CHANGES_UNREAD", "rule": "tr-payee-unread"}
     },
     {
       "id": "tr-payee-unread-approved", "per": "org",
-      "summary": "two approvals do not release a transfer whose payee's bank-detail changes cannot be read",
+      "summary": "a transfer whose payee's bank-detail changes cannot be read is refused even approved and stepped up",
       "action": {"operation": "stripe.transfer.create", "target": {"type": "stripe.account", "id": "{{payee}}"}, "params": {"amount": {"value": "100.00", "currency": "USD"}}},
-      "given": {"approval": "approved"},
-      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "CONSEQUENCE_UNKNOWN"}
+      "given": {"approval": "approved", "step_up": "done"},
+      "expect": {"decision": "DENY", "reason": "PAYEE_CHANGES_UNREAD", "rule": "tr-payee-unread"}
     },
     {
       "id": "tr-other-payee", "per": "org",

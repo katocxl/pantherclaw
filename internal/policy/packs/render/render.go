@@ -142,16 +142,13 @@ type ListKind struct {
 	Plural, Other string
 	Re            *regexp.Regexp
 	What          string
-	// Optional kinds render with no value; the rules and tests naming
-	// {{<kind>}} are then skipped. Others need at least one.
-	Optional bool
 }
 
 // ListKinds are the list kinds.
 var ListKinds = map[string]ListKind{
 	KindPayee:        {Plural: "payees", Other: OtherPayee, Re: PayeeRe, What: "a Stripe connected account (acct_...)"},
 	KindCustomer:     {Plural: "customers", Other: OtherCustomer, Re: CustomerRe, What: "a customer id"},
-	KindSlackChannel: {Plural: "slack_channels", Other: OtherSlackChannel, Re: SlackChannelRe, What: "a Slack channel id (C... or G...)", Optional: true},
+	KindSlackChannel: {Plural: "slack_channels", Other: OtherSlackChannel, Re: SlackChannelRe, What: "a Slack channel id (C... or G...)"},
 }
 
 func (k ListKind) check(v string) error {
@@ -253,6 +250,9 @@ type Info struct {
 	// RequiresAgent: the template has per-agent rules, so it renders only for
 	// an agent (G0 M14 D114).
 	RequiresAgent bool `json:"requires_agent,omitzero"`
+	// RequiresScope: the template's envelope carries limits that must exist,
+	// so it renders only for a team or business unit (D120).
+	RequiresScope bool `json:"requires_scope,omitzero"`
 }
 
 // Data is a template rendered for its options.
@@ -263,6 +263,9 @@ type Data struct {
 		Present bool
 		Name    string
 		Bounds  []byte
+		// Limits are the envelope's budgets and counters; nil for none
+		// (G0 M14 D120).
+		Limits []byte
 	}
 	Grant struct {
 		Bounds, Limits []byte
@@ -287,6 +290,9 @@ var placeholderRe = regexp.MustCompile(`\{\{([a-z_]+)\}\}`)
 type Renderer struct {
 	O    Options
 	Spec map[string]Spec
+	// tests: the renderer fills scenario tests, where a list kind's
+	// {{<kind>}} outside a list item is its first value (D119 L5).
+	tests bool
 }
 
 // declared reports whether the template declares a kind.
@@ -398,6 +404,9 @@ func (r Renderer) value(name, repo string, cel bool) (string, error) {
 	case KindTimeZone:
 		v = r.O.TimeZone
 	case KindPayee, KindCustomer, KindSlackChannel:
+		if !r.tests {
+			return "", fmt.Errorf("{{%s}} is one of several values: use it as a list item or {{%s}}", name, ListKinds[name].Plural)
+		}
 		if values := r.O.Lists[name]; len(values) > 0 {
 			v = values[0]
 		}
@@ -415,17 +424,6 @@ func (r Renderer) value(name, repo string, cel bool) (string, error) {
 func (r Renderer) listItem(s string) string {
 	for kind := range ListKinds {
 		if r.declared(kind) && strings.Contains(s, "{{"+kind+"}}") {
-			return kind
-		}
-	}
-	return ""
-}
-
-// emptyOptional is the declared optional list kind with no values that raw
-// names ({{<kind>}}), or "": such an item is skipped.
-func (r Renderer) emptyOptional(raw string) string {
-	for kind, lk := range ListKinds {
-		if lk.Optional && r.declared(kind) && len(r.O.Lists[kind]) == 0 && strings.Contains(raw, "{{"+kind+"}}") {
 			return kind
 		}
 	}
@@ -498,6 +496,7 @@ func (r Renderer) walk(v any, repo string, when bool) (any, error) {
 
 // items renders a policy.json or tests.json list by its "per".
 func (r Renderer) items(list []map[string]any, what string) (out []map[string]any, skipped, reposItems []string, err error) {
+	r.tests = what == "test"
 	for _, item := range list {
 		per, _ := item["per"].(string)
 		base, _ := item["id"].(string)
@@ -506,10 +505,6 @@ func (r Renderer) items(list []map[string]any, what string) (out []map[string]an
 			return nil, nil, nil, err
 		}
 		usesRepos := strings.Contains(string(raw), "{{repos}}")
-		if r.emptyOptional(string(raw)) != "" {
-			skipped = append(skipped, base)
-			continue
-		}
 		one := func(id, repo string) error {
 			v, err := r.walk(item, repo, false)
 			if err != nil {
@@ -592,7 +587,7 @@ func (r Renderer) checkValues() error {
 		case KindTimeZone:
 			values = []string{r.O.TimeZone}
 		case KindPayee, KindCustomer, KindSlackChannel:
-			if values = r.O.Lists[name]; len(values) == 0 && !ListKinds[name].Optional {
+			if values = r.O.Lists[name]; len(values) == 0 {
 				return fmt.Errorf("template %s needs %s", r.O.Name, r.O.name(name))
 			}
 		}
@@ -674,6 +669,7 @@ func Render(o Options) (Data, error) {
 	var env struct {
 		Name   string `json:"name"`
 		Bounds any    `json:"bounds"`
+		Limits any    `json:"limits"`
 	}
 	var grant struct {
 		Bounds any `json:"bounds"`
@@ -714,6 +710,11 @@ func Render(o Options) (Data, error) {
 	out.TaskRef, out.Placeholders, out.Envelope.Name = info.TaskRef, info.Placeholders, env.Name
 	if out.Envelope.Bounds, err = json.Marshal(env.Bounds, json.Deterministic(true)); err != nil {
 		return out, err
+	}
+	if env.Limits != nil {
+		if out.Envelope.Limits, err = json.Marshal(env.Limits, json.Deterministic(true)); err != nil {
+			return out, err
+		}
 	}
 	if out.Grant.Bounds, err = json.Marshal(grant.Bounds, json.Deterministic(true)); err != nil {
 		return out, err

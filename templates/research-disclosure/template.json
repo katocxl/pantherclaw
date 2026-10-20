@@ -1,12 +1,12 @@
 {
   "name": "research-disclosure",
-  "summary": "Research agents read allow-listed PostgreSQL tables, share drafts in named internal Slack channels and open pull requests on the named repositories: public and internal columns only, at most 100 rows a read, nothing posted to channels shared outside the organization, and every pull request to a public destination held for an approver under the disclosure limits.",
+  "summary": "Research agents read allow-listed PostgreSQL tables, share drafts in named internal Slack channels and open pull requests on the named repositories: public and internal columns only, at most 100 rows a read, nothing posted to channels shared outside the organization, and every pull request to a public destination held for an approver.",
   "task_ref": "template:research-disclosure",
   "requires_agent": true,
   "protects": [
     "the agent named with --agent (required) reads only public and internal columns (pii and secret values are withheld), at most 100 rows at a time",
-    "the agent named with --agent (required) posts only to the Slack channels named with --slack-channel, and never to a channel shared with another workspace or organization; without --slack-channel it posts nowhere",
-    "every pull request opened on a named repository through a public destination, by any agent, waits for an independent approver, and its body is checked against the disclosure limits before it is sent",
+    "the agent named with --agent (required) posts only to the Slack channels named with --slack-channel (required), and never to a channel shared with another workspace or organization",
+    "every pull request opened on a named repository through a public destination, by any agent, waits for an independent approver",
     "the agent's grant covers reads and the table list on pc.postgres, posts to the named channels, and reading and opening pull requests on the named repositories only"
   ],
   "excludes": [

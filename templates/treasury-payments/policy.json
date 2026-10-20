@@ -26,8 +26,13 @@
       "approval": {"role": "approver", "count": 2, "independent": true}
     },
     {
+      "id": "tr-payee-unread", "per": "org", "kind": "FORBID",
+      "summary": "a transfer whose payee's bank-detail changes cannot be read is refused, approved or not, until they can be read (HR-306: an unread fact never ALLOWs)",
+      "operations": ["stripe.payee.changed_recently"], "when": "consequence.unknown", "reason": "PAYEE_CHANGES_UNREAD"
+    },
+    {
       "id": "tr-payee-changed", "per": "org", "kind": "REQUIRE_STEP_UP",
-      "summary": "a transfer to a payee whose bank details changed within 7 days, or whose changes cannot be read, also needs the principal's security-key step-up on top of the two approvals",
+      "summary": "a transfer to a payee whose bank details changed within 7 days also needs the principal's security-key step-up on top of the two approvals",
       "operations": ["stripe.payee.changed_recently"], "when": "true", "reason": "PAYEE_CHANGED_RECENTLY",
       "step_up": {"subject": "principal", "method": "webauthn"}
     }

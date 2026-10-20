@@ -20,6 +20,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
+	"github.com/katocxl/pantherclaw/internal/platform/money"
 	"github.com/katocxl/pantherclaw/internal/policy/packs/render"
 )
 
@@ -94,7 +96,7 @@ func templateFlags(fs *flag.FlagSet, o *templateOptions) func() error {
 	for kind, usage := range map[string]string{
 		render.KindPayee:        "a Stripe connected account, acct_..., the template may send funds to (repeatable)",
 		render.KindCustomer:     "a customer whose records the template's grant may read (repeatable)",
-		render.KindSlackChannel: "a Slack channel id, C... or G..., the template may post to (repeatable)",
+		render.KindSlackChannel: "a Slack channel id, C... or G..., the template may post to (repeatable; required by templates that post)",
 	} {
 		lists[kind] = &multi{}
 		fs.Var(lists[kind], strings.TrimPrefix(render.Flags[kind], "--"), usage)
@@ -136,7 +138,7 @@ func templateFlags(fs *flag.FlagSet, o *templateOptions) func() error {
 			}
 			slices.Sort(values)
 			switch {
-			case has(kind) && len(values) == 0 && !lk.Optional:
+			case has(kind) && len(values) == 0:
 				return fmt.Errorf("template %s needs %s", o.name, flagName)
 			case !has(kind) && len(values) > 0:
 				return fmt.Errorf("template %s takes no %s", o.name, flagName)
@@ -186,6 +188,9 @@ func templateFlags(fs *flag.FlagSet, o *templateOptions) func() error {
 		}
 		if info.RequiresAgent && o.agent == "" {
 			return fmt.Errorf("template %s needs --agent: its rules are the agent's", o.name)
+		}
+		if info.RequiresScope && o.team == "" && o.bu == "" {
+			return fmt.Errorf("template %s needs --team or --bu: its weekly cap is that scope's envelope", o.name)
 		}
 		if o.team != "" && o.bu != "" {
 			return errors.New("--team and --bu: give one scope")
@@ -391,6 +396,9 @@ func planEnvelope(ctx context.Context, c clients, o templateOptions, d templateD
 		what:  fmt.Sprintf("guardrail envelope %q on %s %s", d.Envelope.Name, strings.ToLower(strings.TrimPrefix(kind.String(), "GUARDRAIL_SCOPE_KIND_")), id),
 		notes: []string{"every grant of its agents is limited to the GitHub operations on these repositories"},
 	}
+	if d.Envelope.Limits != nil {
+		s.notes = []string{"every grant of its agents shares the envelope's budgets: " + string(d.Envelope.Limits)}
+	}
 	var cur *pantherclawv1.Envelope
 	for token := ""; ; {
 		res, err := c.guardrails.ListEnvelopes(ctx, &pantherclawv1.ListEnvelopesRequest{PageSize: 200, PageToken: token, Kind: kind})
@@ -406,29 +414,148 @@ func planEnvelope(ctx context.Context, c clients, o templateOptions, d templateD
 			break
 		}
 	}
-	switch {
-	case cur == nil:
+	if cur == nil {
 		s.state = stepCreate
 		s.apply = func(ctx context.Context) (string, error) {
 			res, err := c.guardrails.CreateEnvelope(ctx, &pantherclawv1.CreateEnvelopeRequest{
-				Scope: &pantherclawv1.GuardrailScope{Kind: kind, Id: id}, Name: d.Envelope.Name, Bounds: d.Envelope.Bounds,
+				Scope: &pantherclawv1.GuardrailScope{Kind: kind, Id: id}, Name: d.Envelope.Name, Bounds: d.Envelope.Bounds, Limits: d.Envelope.Limits,
 			})
 			return "guardrail envelope " + res.GetEnvelope().GetId() + " created", err
 		}
-	case sameJSON(cur.GetBounds(), d.Envelope.Bounds):
+		return s, nil
+	}
+	// A limits-only envelope (empty bounds, D120) keeps the scope's bounds
+	// and adds its budgets to the scope's, by id: it never widens what
+	// another template's envelope bounds.
+	bounds, limits := d.Envelope.Bounds, d.Envelope.Limits
+	if cur != nil && limits != nil && sameJSON(bounds, []byte("{}")) {
+		bounds = cur.GetBounds()
+		merged, loosened, err := mergeBudgets(cur.GetLimits(), limits, o.update)
+		if err != nil {
+			return s, fmt.Errorf("guardrail envelope %s: %w", cur.GetId(), err)
+		}
+		limits = merged
+		for _, l := range loosened {
+			s.notes = append(s.notes, "LOOSENING: "+l)
+		}
+		if missing, err := uncovered(bounds, d.Grant.Bounds); err != nil {
+			return s, fmt.Errorf("guardrail envelope %s: %w", cur.GetId(), err)
+		} else if len(missing) > 0 {
+			s.notes = append(s.notes, "warning: the scope's envelope bounds do not cover "+strings.Join(missing, ", ")+
+				": the template's grants for this scope would be refused when issued")
+		}
+	}
+	switch {
+	case sameJSON(cur.GetBounds(), bounds) && (limits == nil || sameJSON(cur.GetLimits(), limits)):
 		s.state = stepUnchanged
 	default:
 		s.state = stepDiffers
-		s.notes = append(s.notes, "its bounds now: "+string(cur.GetBounds()), "the template's: "+string(d.Envelope.Bounds))
+		s.notes = append(s.notes, "its bounds now: "+string(cur.GetBounds()), "the template's: "+string(bounds))
+		if limits == nil {
+			limits = cur.GetLimits()
+		} else {
+			s.notes = append(s.notes, "its limits now: "+string(cur.GetLimits()), "the template's: "+string(limits))
+		}
 		s.apply = func(ctx context.Context) (string, error) {
 			res, err := c.guardrails.ReviseEnvelope(ctx, &pantherclawv1.ReviseEnvelopeRequest{
-				Id: cur.GetId(), Revision: cur.GetRevision(), Name: cur.GetName(), Bounds: d.Envelope.Bounds,
-				Requirements: cur.GetRequirements(), Limits: cur.GetLimits(), Settings: cur.GetSettings(), MinAttestationLevel: cur.GetMinAttestationLevel(),
+				Id: cur.GetId(), Revision: cur.GetRevision(), Name: cur.GetName(), Bounds: bounds,
+				Requirements: cur.GetRequirements(), Limits: limits, Settings: cur.GetSettings(), MinAttestationLevel: cur.GetMinAttestationLevel(),
 			})
 			return fmt.Sprintf("guardrail envelope %s revised to %d", cur.GetId(), res.GetEnvelope().GetRevision()), err
 		}
 	}
 	return s, nil
+}
+
+// mergeBudgets adds the template's budgets to an envelope's limits, by
+// id, keeping every other budget and counter. Where the scope already has
+// a budget of that id, the stricter one stays (D129 L2): a template budget
+// that would raise or otherwise change it replaces it only with update,
+// and is listed in loosened.
+func mergeBudgets(cur, tpl []byte, update bool) (merged []byte, loosened []string, err error) {
+	limits := map[string]any{}
+	if len(cur) > 0 && string(cur) != "null" {
+		if err := json.Unmarshal(cur, &limits); err != nil {
+			return nil, nil, fmt.Errorf("its limits: %w", err)
+		}
+	}
+	var add struct {
+		Budgets []map[string]any `json:"budgets"`
+	}
+	if err := json.Unmarshal(tpl, &add); err != nil {
+		return nil, nil, err
+	}
+	have, _ := limits["budgets"].([]any)
+	for _, b := range add.Budgets {
+		i := slices.IndexFunc(have, func(x any) bool { m, _ := x.(map[string]any); return m["id"] == b["id"] })
+		switch {
+		case i < 0:
+			have = append(have, b)
+		case notLooser(b, have[i]):
+			have[i] = b
+		case update:
+			loosened = append(loosened, fmt.Sprintf("budget %v changes from %v to %v", b["id"], have[i], b))
+			have[i] = b
+		}
+	}
+	limits["budgets"] = have
+	merged, err = json.Marshal(limits, json.Deterministic(true))
+	return merged, loosened, err
+}
+
+// notLooser reports whether budget b is the same as old except, at most,
+// a lower limit or max_count.
+func notLooser(b map[string]any, oldAny any) bool {
+	old, _ := oldAny.(map[string]any)
+	for _, k := range []string{"grouping", "operations", "currency", "period"} {
+		if !sameJSONValue(b[k], old[k]) {
+			return false
+		}
+	}
+	for _, k := range []string{"limit", "max_count"} {
+		nv, nok := b[k].(string)
+		ov, ook := old[k].(string)
+		switch {
+		case !nok && !ook:
+		case nok != ook:
+			return nok // a new bound where there was none tightens; dropping one does not
+		default:
+			n, err1 := money.Parse(nv)
+			o, err2 := money.Parse(ov)
+			if err1 != nil || err2 != nil || n.Cmp(o) > 0 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func sameJSONValue(a, b any) bool {
+	x, err1 := json.Marshal(a, json.Deterministic(true))
+	y, err2 := json.Marshal(b, json.Deterministic(true))
+	return err1 == nil && err2 == nil && string(x) == string(y)
+}
+
+// uncovered lists the template grant's operations that the envelope
+// bounds leave out (D129 L1).
+func uncovered(envBounds, grantBounds []byte) ([]string, error) {
+	env, err := gdomain.DecodeBounds(envBounds)
+	if err != nil {
+		return nil, err
+	}
+	var grant struct {
+		Operations []string `json:"operations"`
+	}
+	if err := json.Unmarshal(grantBounds, &grant); err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, op := range grant.Operations {
+		if env.Operations != nil && !env.Operations.Matches(op) {
+			out = append(out, op)
+		}
+	}
+	return out, nil
 }
 
 // planPolicy adds the template's rules and scenario tests to the published

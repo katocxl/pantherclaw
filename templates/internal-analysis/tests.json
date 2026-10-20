@@ -25,29 +25,43 @@
       "id": "ia-post", "per": "agent",
       "summary": "the analysis agent posts to a named internal channel",
       "action": {"operation": "slack.message.post", "target": {"type": "slack_channel", "id": "{{slack_channel}}"}, "params": {"text": "Weekly orders: 1204, refunds 2.1 percent"}},
-      "given": {"agent": "{{agent}}", "facts": {"slack.channel.external": {"value": {"object": {"external": false, "ext_shared": false, "shared": false}}, "age_seconds": 10}}},
+      "given": {"grant": {"constraints": [{"kind": "destination_set", "values": ["{{slack_channel}}"]}]}, "agent": "{{agent}}", "facts": {"slack.channel.external": {"value": {"object": {"external": false, "ext_shared": false, "shared": false}}, "age_seconds": 10}}},
       "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
     },
     {
       "id": "ia-post-elsewhere", "per": "agent",
       "summary": "the analysis agent's post to a channel it was not given is refused",
       "action": {"operation": "slack.message.post", "target": {"type": "slack_channel", "id": "{{other_slack_channel}}"}, "params": {"text": "Weekly orders: 1204"}},
-      "given": {"agent": "{{agent}}", "facts": {"slack.channel.external": {"value": {"object": {"external": false, "ext_shared": false, "shared": false}}, "age_seconds": 10}}},
+      "given": {"grant": {"constraints": [{"kind": "destination_set", "values": ["{{other_slack_channel}}"]}]}, "agent": "{{agent}}", "facts": {"slack.channel.external": {"value": {"object": {"external": false, "ext_shared": false, "shared": false}}, "age_seconds": 10}}},
       "expect": {"decision": "DENY", "reason": "SLACK_CHANNEL_NOT_ALLOWED", "rule": "ia-channels--{{agent}}"}
     },
     {
       "id": "ia-post-external", "per": "agent",
       "summary": "the analysis agent's post to a named channel shared outside the organization is refused",
       "action": {"operation": "slack.message.post", "target": {"type": "slack_channel", "id": "{{slack_channel}}"}, "params": {"text": "Weekly orders: 1204"}},
-      "given": {"agent": "{{agent}}", "facts": {"slack.channel.external": {"value": {"object": {"external": true, "ext_shared": true, "shared": true}}, "age_seconds": 10}}},
+      "given": {"grant": {"constraints": [{"kind": "destination_set", "values": ["{{slack_channel}}"]}]}, "agent": "{{agent}}", "facts": {"slack.channel.external": {"value": {"object": {"external": true, "ext_shared": true, "shared": true}}, "age_seconds": 10}}},
       "expect": {"decision": "DENY", "reason": "EXTERNAL_DISCLOSURE", "rule": "ia-external--{{agent}}"}
     },
     {
       "id": "ia-other-agent", "per": "agent",
       "summary": "another agent's post to another channel is not these rules'",
       "action": {"operation": "slack.message.post", "target": {"type": "slack_channel", "id": "{{other_slack_channel}}"}, "params": {"text": "hello"}},
-      "given": {"facts": {"slack.channel.external": {"value": {"object": {"external": false, "ext_shared": false, "shared": false}}, "age_seconds": 10}}},
+      "given": {"grant": {"constraints": [{"kind": "destination_set", "values": ["{{other_slack_channel}}"]}]}, "facts": {"slack.channel.external": {"value": {"object": {"external": false, "ext_shared": false, "shared": false}}, "age_seconds": 10}}},
       "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "ia-post-unread", "per": "agent",
+      "summary": "a post to a named channel whose sharing cannot be read is refused: it may be external",
+      "action": {"operation": "slack.message.post", "target": {"type": "slack_channel", "id": "{{slack_channel}}"}, "params": {"text": "Weekly orders: 1204"}},
+      "given": {"grant": {"constraints": [{"kind": "destination_set", "values": ["{{slack_channel}}"]}]}, "agent": "{{agent}}"},
+      "expect": {"decision": "DENY", "reason": "EXTERNAL_DISCLOSURE", "rule": "ia-external--{{agent}}"}
+    },
+    {
+      "id": "ia-post-no-destinations", "per": "agent",
+      "summary": "a post under a grant that binds no destination set is refused (D78)",
+      "action": {"operation": "slack.message.post", "target": {"type": "slack_channel", "id": "{{slack_channel}}"}, "params": {"text": "Weekly orders: 1204"}},
+      "given": {"agent": "{{agent}}", "facts": {"slack.channel.external": {"value": {"object": {"external": false, "ext_shared": false, "shared": false}}, "age_seconds": 10}}},
+      "expect": {"decision": "DENY", "reason": "DESTINATION_SET_REQUIRED"}
     }
   ]
 }

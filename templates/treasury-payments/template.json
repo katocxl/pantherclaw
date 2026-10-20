@@ -1,17 +1,20 @@
 {
   "name": "treasury-payments",
-  "summary": "Treasury agents send Stripe transfers in test mode to named connected accounts: two independent approvers release every transfer, a payee whose bank details changed recently also needs the principal's step-up, transfers above 10000.00 USD are refused, and the agent's grant sends at most 50000.00 USD a week.",
+  "summary": "Treasury agents send Stripe transfers in test mode to named connected accounts: two independent approvers release every transfer, a payee whose bank details changed recently also needs the principal's step-up, transfers above 10000.00 USD are refused, and at most 50000.00 USD is sent a week.",
   "task_ref": "template:treasury-payments",
+  "requires_scope": true,
   "protects": [
     "transfers go only to the payees named with --payee: a transfer to any other connected account is refused, org-wide, for every agent, and the agent's grant names only those payees",
     "every transfer waits for two independent approvers",
-    "a transfer to a payee whose bank details were added or changed within 7 days, or whose bank-detail changes cannot be read, also needs the principal's security-key step-up before it is released",
+    "a transfer to a payee whose bank details were added or changed within 7 days also needs the principal's security-key step-up before it is released",
+    "a transfer whose payee's bank-detail changes cannot be read is refused, approved and stepped up or not, until they can be read",
     "no transfer above 10000.00 USD is made, approved or not",
-    "the agent's grant sends at most 50000.00 USD a week (its budget)",
+    "the scope named with --team or --bu (required) sends at most 50000.00 USD a week across all its agents and tasks (its guardrail envelope), and each task grant at most 50000.00 USD a week (its own budget)",
     "every transfer is verified at the domain effect: Stripe reports a transfer to that account for that amount, not reversed",
     "the agent's grant covers creating and reading transfers and reading the balance only"
   ],
   "excludes": [
+    "agents outside the --team or --bu scope: their treasury grants have only their own task budget, not the weekly envelope; apply the template for each scope that sends transfers",
     "payouts from a connected account to its bank: only the transfer to the connected account is decided",
     "transfers in currencies other than USD: the cap fails closed (CANNOT_AUTHORIZE) until you add rules for them",
     "whether a payment is owed: the approvers decide from the payee, the amount and the transfer group",

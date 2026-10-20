@@ -1,6 +1,6 @@
 {
   "bounds": {
-    "operations": ["postgres.rows.read", "postgres.tables.read", "slack.message.post", "slack.channel.read", "github.contents.read", "github.pull.read", "github.pull.create"],
+    "operations": ["postgres.rows.read", "postgres.tables.read", "slack.message.post", "slack.message.disclose", "slack.channel.read", "github.contents.read", "github.pull.read", "github.pull.create"],
     "targets": {
       "slack_channel": {"ids": ["{{slack_channel}}"]},
       "github.repository": {"ids": ["{{repo}}"]},

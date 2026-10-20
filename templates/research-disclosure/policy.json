@@ -24,7 +24,7 @@
     },
     {
       "id": "rs-public-pull", "per": "repo", "kind": "REQUIRE_APPROVAL",
-      "summary": "an independent approver reads every pull request opened on the repository through a public destination before it is sent, under the disclosure limits",
+      "summary": "an independent approver reads every pull request opened on the repository through a public destination before it is sent",
       "operations": ["github.pull.create"], "when": "{{repository}} && action.destination_class == 'public'", "reason": "PUBLIC_DISCLOSURE_NEEDS_APPROVAL",
       "approval": {"role": "approver", "count": 1, "independent": true}
     }

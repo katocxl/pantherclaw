@@ -1,6 +1,6 @@
 {
   "bounds": {
-    "operations": ["postgres.rows.read", "postgres.rows.aggregate", "postgres.tables.read", "slack.message.post", "slack.channel.read"],
+    "operations": ["postgres.rows.read", "postgres.rows.aggregate", "postgres.tables.read", "slack.message.post", "slack.message.disclose", "slack.channel.read"],
     "targets": {
       "slack_channel": {"ids": ["{{slack_channel}}"]}
     },
