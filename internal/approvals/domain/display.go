@@ -379,6 +379,8 @@ func formatValue(v defs.Value, spec defs.ParamSpec) string {
 		return strconv.FormatBool(v.Bool)
 	case defs.TypeIdentifierList:
 		return strings.Join(v.List, ", ")
+	case defs.TypeQueryFilter:
+		return filterText(v.Filter)
 	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath, defs.TypeText:
 		return Clean("", v.Str, 0).Text
 	}
@@ -428,3 +430,24 @@ func fill(title string, field func(string) (Field, error)) (string, error) {
 // Canonical returns the display's RFC 8785 canonical JSON and its SHA-256,
 // the binding's display_hash.
 func (d Display) Canonical() (Binding, error) { return canonical(d) }
+
+// filterText shows a query filter's predicates (G0 M14 D9), each value
+// cleaned like any untrusted text.
+func filterText(ps []defs.Predicate) string {
+	parts := make([]string, 0, len(ps))
+	for _, p := range ps {
+		s := p.Column + " " + p.Op
+		switch {
+		case p.Value != nil:
+			s += " " + Clean("", *p.Value, 0).Text
+		case p.Values != nil:
+			vs := make([]string, len(p.Values))
+			for i, v := range p.Values {
+				vs[i] = Clean("", v, 0).Text
+			}
+			s += " (" + strings.Join(vs, ", ") + ")"
+		}
+		parts = append(parts, s)
+	}
+	return strings.Join(parts, "; ")
+}

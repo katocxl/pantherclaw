@@ -284,7 +284,7 @@ func (d *Definition) validateVerifier() error {
 				return invalid("%s.lookup.match: field %q must be a JSON pointer, once, equal to a param", at, m.Field)
 			}
 			seen[m.Field] = true
-			if err := d.reference(at+".lookup.match", m.Equals, false); err != nil {
+			if err := d.reference(at+".lookup.match", m.Equals, inArgs); err != nil {
 				return err
 			}
 		}
@@ -329,7 +329,7 @@ func (d *Definition) validateVerifier() error {
 		if strings.HasPrefix(e.Equals, "target.id.") {
 			return invalid("%s.expect: %s compares the whole target id, not a part of it", at, e.Field)
 		}
-		if err := d.reference(at+".expect", e.Equals, false); err != nil {
+		if err := d.reference(at+".expect", e.Equals, inArgs); err != nil {
 			return err
 		}
 	}

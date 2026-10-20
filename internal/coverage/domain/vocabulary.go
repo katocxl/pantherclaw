@@ -69,11 +69,19 @@ const (
 	ChannelMCP  Channel = "mcp"
 	ChannelSDK  Channel = "sdk"
 	ChannelHook Channel = "hook"
+	// ChannelAuthZEN is an external enforcement point asking for a decision
+	// (G0 M14 D4): cooperative, like sdk and hook.
+	ChannelAuthZEN Channel = "authzen"
+	// ChannelA2A is a call to a peer agent the gateway mediates (G0 M14 D4).
+	ChannelA2A Channel = "a2a"
 )
 
-// Cooperative reports whether the agent itself calls PantherClaw on the
-// channel and could skip it (HR-024).
-func (c Channel) Cooperative() bool { return c == ChannelSDK || c == ChannelHook }
+// Cooperative reports whether the agent itself, or an enforcement point
+// outside PantherClaw, calls PantherClaw on the channel and could skip it
+// (HR-024): PARTIAL unless a target verifier lifts it.
+func (c Channel) Cooperative() bool {
+	return c == ChannelSDK || c == ChannelHook || c == ChannelAuthZEN
+}
 
 // Scope names one agent, connection and operation.
 type Scope struct {

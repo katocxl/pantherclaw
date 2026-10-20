@@ -99,7 +99,7 @@ var (
 	packagePattern   = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{0,127}$`)
 	semverPattern    = regexp.MustCompile(`^(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})$`)
 	digestPattern    = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-	channels         = []string{"mcp", "http", "sdk", "hook"}
+	channels         = []string{"mcp", "http", "sdk", "hook", "authzen", "a2a"}
 )
 
 func ambiguous(format string, args ...any) error {

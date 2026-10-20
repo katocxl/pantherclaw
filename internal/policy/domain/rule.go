@@ -150,6 +150,13 @@ const (
 	// M10 D56): Max is the byte limit, MaxEntropy the entropy limit. No rule
 	// declares it.
 	DisclosureLimits ConstraintKind = "disclosure_limits"
+	// RecordScope limits a read's answer to the records whose key (Param)
+	// has one of Values, and DataClasses to the data classes in Values
+	// (public, internal, pii); the Authority intersects them with the
+	// grant's scope into obligations the gateway applies (G0 M14 D11).
+	// They only tighten.
+	RecordScope ConstraintKind = "record_scope"
+	DataClasses ConstraintKind = "data_classes"
 )
 
 // Constraint is the limit a CONSTRAIN rule applies. Max is a decimal string
@@ -318,6 +325,19 @@ func (c *Constraint) validate(id string) error {
 		if c.Param != "" || c.Max != "" || c.Currency != "" || len(c.Values) == 0 {
 			return invalid("%s: %s needs values and no param", id, c.Kind)
 		}
+	case RecordScope:
+		if !scopeKeyRe.MatchString(c.Param) || c.Max != "" || c.Currency != "" || len(c.Values) == 0 || len(c.Values) > maxScopeValues {
+			return invalid("%s: record_scope needs a record key as param and 1..%d values", id, maxScopeValues)
+		}
+	case DataClasses:
+		if c.Param != "" || c.Max != "" || c.Currency != "" || len(c.Values) == 0 {
+			return invalid("%s: data_classes needs values and no param", id)
+		}
+		for _, v := range c.Values {
+			if !slices.Contains(scopeClasses, v) {
+				return invalid("%s: data class %q is not one of %v (secret is never allowed)", id, v, scopeClasses)
+			}
+		}
 	case DisclosureLimits:
 		return invalid("%s: disclosure limits come from the definition's disclosure params, never from a rule", id)
 	default:
@@ -348,5 +368,24 @@ func (r *Rule) CoversOperation(operation string) bool {
 	return slices.ContainsFunc(r.Operations, func(op string) bool {
 		prefix, isPrefix := strings.CutSuffix(op, "*")
 		return op == operation || (isPrefix && strings.HasPrefix(operation, prefix))
+	})
+}
+
+// Data scope rules (G0 M14 D11).
+var (
+	scopeKeyRe   = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
+	scopeClasses = []string{"public", "internal", "pii"}
+)
+
+const maxScopeValues = 100
+
+// ScopeKind reports whether k limits a read's data scope.
+func (k ConstraintKind) ScopeKind() bool { return k == RecordScope || k == DataClasses }
+
+// HasScopeRules reports whether the bundle has a data scope rule, which
+// needs the Team edition to publish (D11).
+func (b *Bundle) HasScopeRules() bool {
+	return slices.ContainsFunc(b.Rules, func(r Rule) bool {
+		return r.Kind == Constrain && r.Constraint != nil && r.Constraint.Kind.ScopeKind()
 	})
 }

@@ -140,9 +140,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusBadRequest, Refusal{ErrorClass: string(dispatch.CannotAuthorize), Error: CodeIDsRequired})
 		return
 	}
-	p, err := conn.Mapper.HTTP(ctx, mapping.Context{
+	p, err := conn.Mapper.HTTPRequest(ctx, mapping.Context{
 		Org: cfg.Org, Env: in.Env, RunID: in.Run, ActionID: in.Action, AgentInstance: in.Instance, Connection: conn.GetId(),
-	}, r.Method, rest, r.URL.RawQuery, body)
+	}, r.Method, rest, r.URL.RawQuery, r.Header.Get("Content-Type"), body)
 	switch {
 	case errors.Is(err, mapping.ErrUnmapped):
 		refuse(w, http.StatusNotFound, Refusal{ErrorClass: string(dispatch.CannotAuthorize), Error: CodeUnknownRoute})

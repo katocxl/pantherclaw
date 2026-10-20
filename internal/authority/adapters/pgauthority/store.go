@@ -596,7 +596,11 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		}
 		x := executed(pc, finalize.RecordedByGateway)
 		if o == finalize.Delegated {
-			if pc.Channel == nil || (*pc.Channel != "hook" && *pc.Channel != "sdk") {
+			access := ""
+			if pc.AccessMode != nil {
+				access = *pc.AccessMode
+			}
+			if pc.Channel == nil || !finalize.Delegable(*pc.Channel, access) {
 				return finalize.ErrNotCooperative
 			}
 			x.AccessMode = finalize.AccessAgentHeld // the agent performed it with its own access (HR-186)
@@ -804,4 +808,23 @@ func (s *Store) notifyUnknown(ctx context.Context, tx db.TenantTx, org ids.OrgID
 		DedupeKey: "consequence_unknown_dispatched:" + w.TransactionID.String(), Simulated: w.Eval.Simulated,
 	})
 	return err
+}
+
+// PermitChannel is the channel of a permit's transaction, for the gateway
+// that holds it (G0 M14 D65); empty for a transaction without one.
+func (s *Store) PermitChannel(ctx context.Context, org ids.OrgID, gateway string, permit ids.UUID) (string, error) {
+	var ch string
+	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		pc, err := dbq.New(tx).ExecutionContext(ctx, org, permit, gateway)
+		if db.IsNoRows(err) {
+			return nil // not this gateway's permit: the call reports it
+		} else if err != nil {
+			return err
+		}
+		if pc.Channel != nil {
+			ch = *pc.Channel
+		}
+		return nil
+	})
+	return ch, err
 }

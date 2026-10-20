@@ -82,6 +82,11 @@ type Pipeline struct {
 	// published policy's own limits apply otherwise); zero means
 	// celenv.DefaultLimits. The server sets them from its configuration.
 	Limits celenv.Limits
+	// Peer checks a call through an a2a connection against the requester's
+	// grant (G0 M14 D89; internal/authority/peer.go): a non-empty reason
+	// is DENY DELEGATION_NOT_ALLOWED. Unset, other kinds are unaffected
+	// and an a2a call is CANNOT_AUTHORIZE (fail closed).
+	Peer PeerCheck
 }
 
 // IdentitySummary is the identity part of a decision receipt (ids only).
@@ -388,7 +393,8 @@ func (p *Pipeline) connection(ctx context.Context, s *state, d *defs.Definition)
 	case c.Gateway.String() != s.req.Gateway:
 		return unknown()
 	}
-	if c.Package != s.a.Definition.Package || (c.Kind == "local") != (s.a.Channel == string(defs.ChannelHook)) || !dispatches(c.Kind, d) {
+	if c.Package != s.a.Definition.Package || (c.Kind == "local") != (s.a.Channel == string(defs.ChannelHook)) ||
+		(c.Kind == "a2a") != (s.a.Channel == string(defs.ChannelA2A)) || !dispatches(c.Kind, d) {
 		s.cl.add(StepScope, adomain.CannotAuthorize, ReasonRouteUnknown,
 			"route "+s.a.Route+" of "+d.Operation+" is not served by this connection", "")
 		return false
@@ -403,8 +409,13 @@ func (p *Pipeline) connection(ctx context.Context, s *state, d *defs.Definition)
 
 // gatewayChannels are the channels a gateway serves, whose actions always
 // name their connection (PAP-1 §6): the sdk channel too, since the /sdk
-// face is its only mapper (HR-201) and always names the connection.
-var gatewayChannels = []string{string(defs.ChannelHTTP), string(defs.ChannelMCP), string(defs.ChannelHook), string(defs.ChannelSDK)}
+// face is its only mapper (HR-201) and always names the connection. An
+// authzen action names the connection its enforcement point fronts, and an
+// a2a action the peer agent's connection (G0 M14 D27, D31).
+var gatewayChannels = []string{
+	string(defs.ChannelHTTP), string(defs.ChannelMCP), string(defs.ChannelHook), string(defs.ChannelSDK),
+	string(defs.ChannelAuthZEN), string(defs.ChannelA2A),
+}
 
 // dispatches reports whether a connection of this kind serves the
 // definition: an HTTP or MCP connection (an MCP server over HTTP, or a
@@ -419,6 +430,13 @@ func dispatches(kind string, d *defs.Definition) bool {
 		return d.Dispatch != nil && d.Dispatch.MCP != nil
 	case "local":
 		return true
+	case "a2a":
+		// A peer agent's methods (G0 M14 D9, D64); the gateway dispatches
+		// them only through a registered sender (D75).
+		return d.Dispatch != nil && d.Dispatch.A2A != nil
+	case "postgres":
+		// Structured reads (D9, D64), likewise only through a sender.
+		return d.Dispatch != nil && d.Dispatch.SQL != nil
 	}
 	return false
 }
@@ -735,6 +753,10 @@ func (s *state) bindings() bool {
 		if b == nil {
 			continue
 		}
+		if b.Op == defs.BindLe {
+			ok = s.bindingAtMost(pr) && ok
+			continue
+		}
 		want, have := s.vals[b.Param], memberValue(s.facts[pr.Fact], b.Member)
 		param := want.Str
 		if want.Type == defs.TypeInteger {
@@ -758,6 +780,10 @@ func memberValue(f fdomain.Value, member string) string {
 			return v
 		case int64:
 			return strconv.FormatInt(v, 10)
+		case map[string]any:
+			if m, ok := memberMoney(v); ok {
+				return m.String()
+			}
 		}
 	}
 	return "(none)"
@@ -795,6 +821,7 @@ func (p *Pipeline) boundaries(ctx context.Context, s *state) {
 	}
 	p.policyRules(ctx, s)
 	s.disclosure()
+	p.boundariesM14(ctx, s) // G0 M14 D11, D78, D89 (scope.go)
 	p.consequenceBoundaries(ctx, s)
 	p.budgets(ctx, s)
 	p.repeats(ctx, s)
@@ -1365,7 +1392,8 @@ func (s *state) disclosure() {
 	}
 	slices.Sort(names)
 	ch := defs.Channel(s.a.Channel)
-	mediated := (ch == defs.ChannelMCP || ch == defs.ChannelHTTP) && s.conn.Kind != "local"
+	// The gateway also mediates a call to a peer agent (G0 M14 D96).
+	mediated := (ch == defs.ChannelMCP || ch == defs.ChannelHTTP || ch == defs.ChannelA2A) && s.conn.Kind != "local"
 	for _, name := range names {
 		maxBytes, maxEntropy := s.def.Params[name].DisclosureLimits()
 		entropy := strconv.FormatFloat(maxEntropy, 'f', -1, 64)
