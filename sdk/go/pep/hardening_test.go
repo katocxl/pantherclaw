@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -122,7 +123,7 @@ func (failingToken) Token(context.Context) (string, error) { return "", pep.ErrT
 type refreshing struct{ n atomic.Int32 }
 
 func (r *refreshing) Token(context.Context) (string, error) {
-	return "tok" + string(rune('0'+r.n.Load())), nil
+	return "tok" + strconv.Itoa(int(r.n.Load())), nil
 }
 func (r *refreshing) Invalidate() { r.n.Add(1) }
 

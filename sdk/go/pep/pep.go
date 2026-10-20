@@ -261,7 +261,7 @@ func reply(w http.ResponseWriter, status int, v refusal) {
 // ambiguous reports a request the target could read otherwise than it is
 // evaluated: an encoded body, a method override, or trailers.
 func ambiguous(r *http.Request) bool {
-	if ce := r.Header.Values("Content-Encoding"); len(ce) > 0 && !(len(ce) == 1 && strings.EqualFold(strings.TrimSpace(ce[0]), "identity")) {
+	if ce := r.Header.Values("Content-Encoding"); len(ce) > 0 && (len(ce) != 1 || !strings.EqualFold(strings.TrimSpace(ce[0]), "identity")) {
 		return true
 	}
 	if len(r.Trailer) > 0 || r.Header.Get("Trailer") != "" {
@@ -414,7 +414,7 @@ func (h *Handler) ask(ctx context.Context, requestID string, raw []byte) (Decisi
 	if requestID != "" {
 		req.Header.Set("X-Request-ID", requestID)
 	}
-	resp, err := h.client.Do(req) //nolint:gosec // G704: the operator configures the decision endpoint
+	resp, err := h.client.Do(req)
 	if err != nil {
 		return Decision{}, 0, err
 	}
