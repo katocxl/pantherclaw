@@ -422,10 +422,16 @@ func TestM14WeeklyCapsAreEnvelopes(t *testing.T) {
 		args                []string
 		action              gdomain.Action
 	}{
-		"customer-support": {"team", "500.00", "stripe.refund.create", []string{"--customer", "cus-1001", "--agent", templateAgent},
-			gdomain.Action{Operation: "stripe.refund.create", TargetType: "stripe.payment", TargetID: "pi_Support0001"}},
-		"treasury-payments": {"org", "50000.00", "stripe.transfer.create", []string{"--payee", examplePayees[0]},
-			gdomain.Action{Operation: "stripe.transfer.create", TargetType: "stripe.account", TargetID: examplePayees[0]}},
+		"customer-support": {
+			"team", "500.00", "stripe.refund.create",
+			[]string{"--customer", "cus-1001", "--agent", templateAgent},
+			gdomain.Action{Operation: "stripe.refund.create", TargetType: "stripe.payment", TargetID: "pi_Support0001"},
+		},
+		"treasury-payments": {
+			"org", "50000.00", "stripe.transfer.create",
+			[]string{"--payee", examplePayees[0]},
+			gdomain.Action{Operation: "stripe.transfer.create", TargetType: "stripe.account", TargetID: examplePayees[0]},
+		},
 	} {
 		parse := func(more ...string) (templateOptions, error) {
 			fs := flag.NewFlagSet("t", flag.ContinueOnError)
