@@ -691,7 +691,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	edges.mount(mux)
 	automationTriggers.mount(mux)
 	authzen.mount(mux)
-	mountM14A2A(mux, d)
+	if err := mountM14A2A(mux, d); err != nil {
+		return nil, err
+	}
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)
 	d.oauth.Mount(mux)

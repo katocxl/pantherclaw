@@ -18,6 +18,7 @@ import (
 
 	wire "github.com/katocxl/pantherclaw/internal/a2a"
 	"github.com/katocxl/pantherclaw/internal/gateway"
+	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/redteam/app"
 	"github.com/katocxl/pantherclaw/internal/redteam/domain"
@@ -100,11 +101,16 @@ func observeA2A(status int, raw []byte) domain.Observation {
 //   - act: refund, amount — the peer acts on the message it was sent, in
 //     the run delegated to it: it refunds amount through the payments
 //     connection, and the step observes that refund (RT-049).
+//   - other_run: get_task, task — another run of the requester's agent,
+//     a child run delegated a2a.task.read (a valid grant, so only the
+//     face's ownership check can refuse it), reads task (RT-051).
 func (d *rangeDriver) mutateA2A(change string, args jsontext.Value) (domain.Observation, error) {
 	var a struct {
-		Card   string `json:"card"`
-		Act    string `json:"act"`
-		Amount string `json:"amount"`
+		Card     string `json:"card"`
+		Act      string `json:"act"`
+		Amount   string `json:"amount"`
+		OtherRun string `json:"other_run"`
+		Task     string `json:"task"`
 	}
 	if err := json.Unmarshal(args, &a); err != nil {
 		return domain.Observation{}, err
@@ -130,6 +136,34 @@ func (d *rangeDriver) mutateA2A(change string, args jsontext.Value) (domain.Obse
 			return domain.Observation{Outcome: domain.OutcomeAllow}, nil
 		}
 		return classify(facts{ErrorClass: r.ErrorClass, Error: r.Error, Decision: r.Decision, Reasons: r.Reasons, TransactionID: r.TransactionID}, ""), nil
+	case change == "fault" && a.OtherRun == "get_task":
+		run, err := d.readerRun()
+		if err != nil {
+			return domain.Observation{}, err
+		}
+		params, _ := json.Marshal(map[string]string{"id": a.Task})
+		obs, _, err := d.callOnce(callWith{Face: "a2a", Connection: "peer", Tool: wire.MethodGetTask, Args: params, run: run}, nil, 0)
+		return obs, err
 	}
 	return domain.Observation{}, fmt.Errorf("sim.mutate a2a %s %s", change, args)
+}
+
+// readerRun starts a child run of the seeded run and delegates it a grant
+// over a2a.task.read alone, within the seeded grant, and returns the run.
+func (d *rangeDriver) readerRun() (string, error) {
+	ctx := context.Background()
+	var agent string
+	d.s.query(d.t, "SELECT agent_id::text FROM pc.runs WHERE id = $1", []any{d.s.run}, &agent)
+	wc := d.workloadService()
+	child, err := wc.StartChildRun(ctx, &pantherclawv1.StartChildRunRequest{ParentRunId: d.s.run, AgentId: agent})
+	if err != nil {
+		return "", fmt.Errorf("StartChildRun: %w", err)
+	}
+	run := child.GetRun().GetId()
+	if _, err := wc.DelegateGrant(ctx, &pantherclawv1.DelegateGrantRequest{
+		RunId: d.s.run, ChildRunId: run, Bounds: []byte(`{"operations": ["a2a.task.read"]}`),
+	}); err != nil {
+		return "", fmt.Errorf("DelegateGrant: %w", err)
+	}
+	return run, nil
 }

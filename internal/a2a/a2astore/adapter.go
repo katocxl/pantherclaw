@@ -245,6 +245,47 @@ func (a *Adapter) Load(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn 
 	return p.Config, nil
 }
 
+var _ ports.KindGatewayCheck = (*Adapter)(nil)
+
+// CheckGateway validates the connection's pins for the gateway it moves
+// to, in the move's transaction (D105, D115): the gateway must be active,
+// and a simulated connection's pinned and proposed card and interface URLs
+// must still be loopback literals of one origin, so it reaches nothing but
+// a local simulator from any gateway (HR-221). The pinned URLs do not
+// change with the gateway; the new gateway checks its egress on each call.
+func (a *Adapter) CheckGateway(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn, gateway ids.UUID) error {
+	q := dbq.New(tx)
+	g, err := q.GetGateway(ctx, org, gateway)
+	if db.IsNoRows(err) || (err == nil && g.State != "ACTIVE") {
+		return ErrGatewayInactive
+	} else if err != nil {
+		return err
+	}
+	w, err := q.GetA2AConnectionWriter(ctx, org, conn)
+	if err != nil {
+		return err
+	}
+	if !w.Simulated {
+		return nil
+	}
+	for _, state := range []string{StateActive, StateProposed} {
+		p, err := Get(ctx, q, org, conn, state)
+		if errors.Is(err, ErrNotFound) {
+			continue
+		} else if err != nil {
+			return err
+		}
+		if _, ok := simulatedOrigin(p.Config.GetCardUrl(), p.Config.GetInterface().GetUrl()); !ok {
+			return ErrSimulatedCardURL
+		}
+	}
+	return nil
+}
+
+// ErrGatewayInactive refuses a move to a gateway that is not active.
+var ErrGatewayInactive = pcerr.New(pcerr.FailedPrecondition, "A2A_GATEWAY_INACTIVE",
+	"an a2a connection moves only to an active gateway of its organization")
+
 // ToProto is a validated configuration as the gateway gets it, before the
 // card is pinned.
 func ToProto(c *capp.A2AConfig) *pb.A2AConfig {

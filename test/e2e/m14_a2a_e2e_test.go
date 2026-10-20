@@ -16,6 +16,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -222,7 +223,7 @@ func TestE2E_M14_PeerAgents(t *testing.T) {
 		if code, r := s.peerRefund(t, peerRun, "30.00"); code != http.StatusOK {
 			t.Fatalf("peer refund within the requester's grant: %d %+v", code, r)
 		}
-		if code, r := s.peerRefund(t, peerRun, "5000.00"); code != http.StatusForbidden || r.Decision != "DENY" {
+		if code, r := s.peerRefund(t, peerRun, "500.00"); !overGrant(code, r) {
 			t.Fatalf("peer refund beyond the requester's grant: %d %+v", code, r)
 		}
 	})
@@ -237,7 +238,10 @@ func TestE2E_M14_PeerAgents(t *testing.T) {
 		}
 		defer func() { _ = resp.Body.Close() }()
 		out, _ := io.ReadAll(resp.Body)
-		if !strings.Contains(string(out), "refused") || len(s.a2a.sim.Received()) != before {
+		var refused a2aAnswer
+		_ = json.Unmarshal(out, &refused)
+		if refused.Error == nil || refused.Error.Code != wire.CodeInvalidRequest || !strings.HasPrefix(refused.Error.Message, "refused: ") ||
+			len(s.a2a.sim.Received()) != before {
 			t.Fatalf("direct message: %s", out)
 		}
 	})
@@ -279,7 +283,8 @@ func TestE2E_M14_PeerAgents(t *testing.T) {
 		if err != nil || len(revoked) < 2 {
 			t.Fatalf("revoke: %v %v", revoked, err)
 		}
-		if code, r := s.peerRefund(t, peerRun, "10.00"); code < 400 {
+		code, r := s.peerRefund(t, peerRun, "10.00")
+		if code != http.StatusForbidden || r.Decision != "DENY" || !slices.Contains(r.Reasons, "GRANT_REVOKED") {
 			t.Fatalf("the peer acted after the requester's grant was revoked: %d %+v", code, r)
 		}
 	})
@@ -358,7 +363,7 @@ func TestHR324_PeerGrantIsWithinTheRequestersGrant(t *testing.T) {
 	if err := peer.Within(requester); err != nil {
 		t.Fatalf("the peer's grant is wider than the requester's: %v", err)
 	}
-	if code, r := s.peerRefund(t, run, "5000.00"); code != http.StatusForbidden || r.Decision != "DENY" {
+	if code, r := s.peerRefund(t, run, "500.00"); !overGrant(code, r) {
 		t.Fatalf("refund the peer scope allows but the requester's grant does not: %d %+v", code, r)
 	}
 }
@@ -410,24 +415,42 @@ func TestT148_PeerAgentCannotLaunderAuthority(t *testing.T) {
 	if code, r := s.peerRefund(t, run, "30.00"); code != http.StatusOK {
 		t.Fatalf("refund within the requester's grant: %d %+v", code, r)
 	}
-	if code, r := s.peerRefund(t, run, "5000.00"); code != http.StatusForbidden || r.Decision != "DENY" {
+	if code, r := s.peerRefund(t, run, "500.00"); !overGrant(code, r) {
 		t.Fatalf("refund beyond it: %d %+v", code, r)
 	}
 }
 
 // TestHR324_PeerCallNeedsADelegatingGrant: a requester whose grant cannot
 // delegate is denied a message to a peer agent at decision time
-// (DELEGATION_NOT_ALLOWED), and nothing reaches the peer.
+// (DELEGATION_NOT_ALLOWED), and nothing more reaches the peer; reading a
+// task it already has never consults the peer check (D111), so the read
+// is allowed though the check would refuse.
 func TestHR324_PeerCallNeedsADelegatingGrant(t *testing.T) {
 	s := start(t, options{budget: "1000.00", a2a: true})
 	s.a2aRange(t)
+	a := s.askPeer(t, wire.MethodSendMessage, peerMessage("refund ch_1"))
+	var sent wire.SendMessageResponse
+	if a.Error != nil || json.Unmarshal(a.Result, &sent) != nil || sent.Task == nil {
+		t.Fatalf("send while the grant delegates: %+v %s", a.Error, a.Result)
+	}
 	s.db.AdminExec(t, `UPDATE pc.grant_revisions v SET delegation_depth = 0 FROM pc.runs r
 		WHERE r.org_id = $1 AND r.id = $2 AND v.org_id = r.org_id AND v.grant_id = r.grant_id`, s.org, s.run)
-	a := s.askPeer(t, wire.MethodSendMessage, peerMessage("refund ch_1"))
+	a = s.askPeer(t, wire.MethodSendMessage, peerMessage("refund ch_2"))
 	if a.Error == nil || a.Error.Data["decision"] != "DENY" || a.Error.Data["error"] != "DELEGATION_NOT_ALLOWED" {
 		t.Fatalf("a requester that cannot delegate: %+v", a.Error)
 	}
-	if n := len(s.a2a.sim.Received()); n != 0 {
-		t.Fatalf("the peer received %d messages", n)
+	if n := len(s.a2a.sim.Received()); n != 1 {
+		t.Fatalf("the peer received %d messages, want 1", n)
 	}
+	if a := s.askPeer(t, wire.MethodGetTask, map[string]any{"id": sent.Task.ID}); a.Error != nil {
+		t.Fatalf("a2a.task.read reached the peer check: %+v", a.Error)
+	}
+}
+
+// overGrant reports whether a peer refund was denied for exceeding the
+// requester's per-action maximum (100 USD): 500.00 is within the task
+// budget and the peer scope, and over the hold-over-50 rule, so without
+// the intersection it would be held, not denied (HR-324).
+func overGrant(code int, r reply) bool {
+	return code == http.StatusForbidden && r.Decision == "DENY" && slices.Contains(r.Reasons, "GRANT_LIMIT_EXCEEDED")
 }

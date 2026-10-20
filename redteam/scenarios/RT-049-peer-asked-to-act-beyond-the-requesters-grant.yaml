@@ -43,7 +43,8 @@ steps:
       change: fault
       args:
         act: refund
-        amount: "5000.00"
+        amount: "500.00"
     expect:
       outcome: DENY
-      decisive_control: HR-326
+      reason: GRANT_LIMIT_EXCEEDED
+      decisive_control: HR-324

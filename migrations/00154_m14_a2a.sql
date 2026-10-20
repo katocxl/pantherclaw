@@ -47,7 +47,7 @@ CREATE TABLE pc.a2a_pins (
     proposed_at          timestamptz NOT NULL DEFAULT now(),
     confirmed_by         uuid,
     confirmed_credential uuid,
-    -- Dev seed only: the operator who activated a development pin.
+    -- Dev seed only: the operator who activated a simulated connection's pin.
     confirmed_operator   text        CHECK (char_length(confirmed_operator) BETWEEN 1 AND 100),
     confirmed_at         timestamptz,
     decided_at           timestamptz,
@@ -110,6 +110,13 @@ BEGIN
         NEW.decided_at := now();
         IF NEW.state = 'ACTIVE' THEN
             NEW.confirmed_at := now();
+        END IF;
+        -- Only dev seed activates a pin without a person, and only a
+        -- simulated connection's, which reaches nothing but a local
+        -- simulator (HR-221; simulated is fixed at insert).
+        IF NEW.state = 'ACTIVE' AND NEW.confirmed_operator IS NOT NULL AND NOT EXISTS (
+                SELECT 1 FROM pc.connections c WHERE c.org_id = NEW.org_id AND c.id = NEW.connection_id AND c.simulated) THEN
+            RAISE EXCEPTION 'only a simulated connection''s a2a pin is activated without a person' USING ERRCODE = 'check_violation';
         END IF;
     END IF;
     IF OLD.drifted_at IS NOT NULL AND (NEW.drifted_at IS DISTINCT FROM OLD.drifted_at OR NEW.observed_digest IS DISTINCT FROM OLD.observed_digest) THEN
