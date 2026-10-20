@@ -96,6 +96,7 @@ var manifestErrors = []struct {
 	{pgmanifest.ErrNotFound, http.StatusNotFound, "not_found"},
 	{pgmanifest.ErrNothing, http.StatusConflict, "not_pending"},
 	{pgmanifest.ErrChanged, http.StatusConflict, "not_pending"},
+	{pgmanifest.ErrInternalHosted, http.StatusConflict, "internal_not_allowed"},
 }
 
 func (p manifestPages) confirm(w http.ResponseWriter, r *http.Request, s authnapp.BrowserSession) {

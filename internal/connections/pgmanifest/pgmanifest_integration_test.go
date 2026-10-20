@@ -198,7 +198,19 @@ func TestIntPostgresInternalOnlyOnCustomerHostedGateways(t *testing.T) {
 	if _, err := conns.Update(admin, capp.UpdateInput{ID: c.ID, Revision: c.Revision, Postgres: &wide}); !errors.Is(err, pgmanifest.ErrInternalHosted) {
 		t.Fatalf("internal by update on a hosted gateway: %v", err)
 	}
-	if _, err := conns.Create(admin, in("own-internal", own, true)); err != nil {
+	owned, err := conns.Create(admin, in("own-internal", own, true))
+	if err != nil {
 		t.Fatalf("internal on a customer-hosted gateway: %v", err)
+	}
+	// The confirm page checks the gateway serving it now (D105): here the
+	// gateway became one PantherClaw hosts after the proposal.
+	svc := pgmanifest.New(f.Pool)
+	svc.Hosted = func(g ids.UUID) bool { return g == own }
+	m, err := svc.Get(admin, owned.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Confirm(admin, owned.ID, m.Digest, &stepup.StepUp{Credential: f.Cred, At: time.Now()}); !errors.Is(err, pgmanifest.ErrInternalHosted) {
+		t.Fatalf("confirm on a now hosted gateway: %v", err)
 	}
 }

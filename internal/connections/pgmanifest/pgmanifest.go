@@ -237,9 +237,11 @@ func Widening(current, next capp.PostgresConfig) []string {
 	return out
 }
 
-// Service is the confirm page's use cases.
+// Service is the confirm page's use cases. Hosted reports whether
+// PantherClaw hosts a gateway; nil: none is.
 type Service struct {
-	pool *db.Pool
+	pool   *db.Pool
+	Hosted func(gateway ids.UUID) bool
 }
 
 // New returns a Service.
@@ -360,6 +362,11 @@ func (s *Service) Confirm(ctx context.Context, id ids.UUID, digest string, su *s
 		proposed, err := decode(row.Proposed)
 		if err != nil {
 			return err
+		}
+		// The connection may have moved to another gateway since it was
+		// proposed: internal is checked against the gateway serving it now (D105).
+		if proposed.Internal && s.Hosted != nil && s.Hosted(conn.GatewayID) {
+			return ErrInternalHosted
 		}
 		widening := []string{"first configuration"}
 		if current != nil {
