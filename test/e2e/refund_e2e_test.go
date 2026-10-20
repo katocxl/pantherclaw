@@ -100,6 +100,9 @@ type stack struct {
 	// st is the Stripe simulator and the seeded connection "stripe" to it
 	// (G0 M14, options.stripe).
 	st *stripeSim
+	// slack is the Slack simulator and the seeded connection "slack" to it
+	// (G0 M14, options.slack; m14_slack_e2e_test.go).
+	slack *slackSim
 }
 
 type options struct {
@@ -145,6 +148,10 @@ type options struct {
 	// test:stripe-live).
 	stripeAt    *stripeSim
 	stripePayee string
+	// slack also starts the Slack simulator and seeds pc.slack and the
+	// connection "slack" to it, its bot token held by the gateway (dev seed
+	// --slack-url, G0 M14 D25).
+	slack bool
 }
 
 // freePorts are the ports freeAddr has handed out in this test binary.
@@ -268,6 +275,10 @@ func start(t *testing.T, o options) *stack {
 			args = append(args, "--stripe-payee", o.stripePayee)
 		}
 	}
+	if o.slack {
+		s.slack = startSlackSim(t)
+		args = append(args, "--slack-url", s.slack.url+"/api")
+	}
 	var out, errb bytes.Buffer
 	if code := server.Run(context.Background(), args, &out, &errb, noEnv); code != 0 {
 		t.Fatalf("dev seed: %d %s", code, errb.String())
@@ -286,6 +297,9 @@ func start(t *testing.T, o options) *stack {
 	}
 	if o.stripe {
 		s.stripeSeeded(t, out.String())
+	}
+	if o.slack {
+		s.slack.seeded(t, out.String())
 	}
 	s.pool = s.db.AppPool(t)
 
@@ -344,7 +358,7 @@ func start(t *testing.T, o options) *stack {
 		// GitHub the stack calls (github.api_url).
 		gc.GitHub.APIURL = s.gh.url
 	}
-	if o.access == "pantherclaw_held" || o.github || o.stripe {
+	if o.access == "pantherclaw_held" || o.github || o.stripe || o.slack {
 		// The gateway's broker key, which only it can open credentials with
 		// (HR-061); it registers the public half when it starts.
 		gc.Broker.KEKFiles = []string{filepath.Join(dir, "gateway-kek")}
@@ -379,6 +393,9 @@ func start(t *testing.T, o options) *stack {
 			key = stripeTestKey
 		}
 		s.waitConfig(t, s.sealStripeKey(t, key))
+	}
+	if o.slack {
+		s.waitConfig(t, s.sealFor(t, s.slack.conn, slackBotToken))
 	}
 	return s
 }

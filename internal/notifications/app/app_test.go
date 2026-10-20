@@ -56,7 +56,7 @@ func TestWorkersRegister(t *testing.T) {
 	if err := napp.RegisterWorkers(reg, svc); err != nil {
 		t.Fatal(err)
 	}
-	if len(napp.PeriodicJobs()) != 1 || len(reg.Kinds()) != 3 {
+	if len(napp.PeriodicJobs()) != 2 || len(reg.Kinds()) != 5 { // deliveries, the janitor, the Slack reconciler (G0 M14 D88)
 		t.Fatalf("kinds %v", reg.Kinds())
 	}
 }

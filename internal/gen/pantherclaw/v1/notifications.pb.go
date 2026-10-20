@@ -1183,7 +1183,10 @@ type UpdateChannelRequest struct {
 	// New lowest severity.
 	MinSeverity *NotificationSeverity `protobuf:"varint,4,opt,name=min_severity,json=minSeverity,proto3,enum=pantherclaw.v1.NotificationSeverity,oneof" json:"min_severity,omitempty"`
 	// Pause (true) or resume (false). Resuming clears the failure count.
-	Paused        *bool `protobuf:"varint,5,opt,name=paused,proto3,oneof" json:"paused,omitempty"`
+	Paused *bool `protobuf:"varint,5,opt,name=paused,proto3,oneof" json:"paused,omitempty"`
+	// slack_app channels: a new bot token, input only; puts the channel back
+	// to PENDING_ACTIVATION.
+	SlackBotToken *string `protobuf:"bytes,6,opt,name=slack_bot_token,json=slackBotToken,proto3,oneof" json:"slack_bot_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1251,6 +1254,13 @@ func (x *UpdateChannelRequest) GetPaused() bool {
 		return *x.Paused
 	}
 	return false
+}
+
+func (x *UpdateChannelRequest) GetSlackBotToken() string {
+	if x != nil && x.SlackBotToken != nil {
+		return *x.SlackBotToken
+	}
+	return ""
 }
 
 // UpdateChannelResponse returns the channel.
@@ -1783,7 +1793,7 @@ const file_pantherclaw_v1_notifications_proto_rawDesc = "" +
 	"page_token\x18\x02 \x01(\tB\x19\xbaH\x16r\x14\x18@2\x10^[A-Za-z0-9_-]*$R\tpageToken\"s\n" +
 	"\x14ListChannelsResponse\x123\n" +
 	"\bchannels\x18\x01 \x03(\v2\x17.pantherclaw.v1.ChannelR\bchannels\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xf9\x02\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xe1\x03\n" +
 	"\x14UpdateChannelRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12H\n" +
 	"\x04name\x18\x02 \x01(\tB/\xbaH,r*\x10\x01\x18?2$^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$H\x00R\x04name\x88\x01\x01\x12a\n" +
@@ -1791,10 +1801,12 @@ const file_pantherclaw_v1_notifications_proto_rawDesc = "" +
 	"eventTypes\x12X\n" +
 	"\fmin_severity\x18\x04 \x01(\x0e2$.pantherclaw.v1.NotificationSeverityB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x01R\vminSeverity\x88\x01\x01\x12\x1b\n" +
-	"\x06paused\x18\x05 \x01(\bH\x02R\x06paused\x88\x01\x01B\a\n" +
+	"\x06paused\x18\x05 \x01(\bH\x02R\x06paused\x88\x01\x01\x12R\n" +
+	"\x0fslack_bot_token\x18\x06 \x01(\tB%\xbaH\"r \x18\x80\x022\x1b^xoxb-[A-Za-z0-9-]{20,250}$H\x03R\rslackBotToken\x88\x01\x01B\a\n" +
 	"\x05_nameB\x0f\n" +
 	"\r_min_severityB\t\n" +
-	"\a_paused\"J\n" +
+	"\a_pausedB\x12\n" +
+	"\x10_slack_bot_token\"J\n" +
 	"\x15UpdateChannelResponse\x121\n" +
 	"\achannel\x18\x01 \x01(\v2\x17.pantherclaw.v1.ChannelR\achannel\"0\n" +
 	"\x14DeleteChannelRequest\x12\x18\n" +

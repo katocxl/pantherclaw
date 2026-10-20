@@ -96,6 +96,10 @@ type Service struct {
 	http   *http.Client
 	// editions sets the channel limit (nil: Community).
 	editions Editions
+	// slackBase and slackHTTP reach Slack's Web API (slack_app channels, G0
+	// M14 D22); a simulator only in dev and tests.
+	slackBase string
+	slackHTTP *http.Client
 }
 
 // New returns the service. jc may be an insert-only client (API role).
@@ -107,9 +111,10 @@ func New(pool *db.Pool, jc *jobs.Client, envelope *pccrypto.Envelope, cfg Config
 	if log == nil {
 		log = pclog.Discard()
 	}
+	egress := httpx.NewEgressClient(httpx.EgressConfig{Timeout: RequestTimeout, AllowedPrefixes: cfg.AllowedPrivateRanges})
 	return &Service{
 		pool: pool, jobs: jc, envelope: envelope, cfg: cfg, ownHost: u.Hostname(), clock: clk, log: log,
-		http: httpx.NewEgressClient(httpx.EgressConfig{Timeout: RequestTimeout, AllowedPrefixes: cfg.AllowedPrivateRanges}),
+		http: egress, slackBase: SlackAPI, slackHTTP: egress,
 	}, nil
 }
 

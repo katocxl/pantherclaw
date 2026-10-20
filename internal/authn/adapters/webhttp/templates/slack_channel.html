@@ -1,0 +1,29 @@
+{{template "head" .}}
+<h1>Slack approval channel: {{.Name}}</h1>
+<p>State: <strong>{{if .Pending}}Waiting for activation{{else}}Active{{end}}</strong>{{with .Slack.ActivatedAt}}; activated {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}{{with .Slack.TokenReplacedAt}}; bot token last replaced {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}.</p>
+<dl>
+<dt>Channel</dt><dd><code>{{.ID}}</code></dd>
+<dt>Slack channel</dt><dd><code>{{.Slack.ChannelID}}</code>{{with .Slack.TeamID}} in workspace <code>{{.}}</code>{{end}}</dd>
+<dt>Cards show</dt><dd>{{if .Summary}}The request's kind, consequence, expiry and short reference, plus the approval's title, the agent's name and the environment.{{else}}The request's kind, consequence, expiry and short reference only.{{end}} Never amounts, parameters, the principal or who decided.</dd>
+<dt>Decisions</dt><dd>Cards only link to the approval page. Nothing done in Slack — a button, a reaction or a reply — decides anything.</dd>
+</dl>
+{{if and .CanManage .Pending}}
+<h2>Activate</h2>
+{{with .Found}}
+<p>Slack reports this bot token and channel as:</p>
+<dl>
+<dt>Workspace</dt><dd class="untrusted">{{.TeamName}} (<code>{{.TeamID}}</code>)</dd>
+<dt>Bot</dt><dd class="untrusted">{{.BotName}} (<code>{{.BotID}}</code>)</dd>
+<dt>Channel</dt><dd class="untrusted">#{{.ChannelName}}: internal to the workspace, with the bot in it</dd>
+</dl>
+<p class="note">If this is the workspace and channel you expect, activate it: PantherClaw then posts approval cards there. Activating needs your security key; Slack is asked again first.</p>
+<p><button type="button" class="danger" id="activate" data-path="{{$.ActionPath}}" data-version="{{.Version}}">Activate with your security key</button></p>
+{{else}}
+<p class="note">{{.Problem}}</p>
+{{end}}
+{{else if .Pending}}
+<p class="note">Activating this channel needs notification.manage and a security key.</p>
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/slack_channel.js"></script>
+{{template "foot" .}}

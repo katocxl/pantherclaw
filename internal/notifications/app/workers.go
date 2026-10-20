@@ -147,6 +147,9 @@ func RegisterWorkers(reg *jobs.Registry, svc *Service) error {
 	if err := jobs.Register[JanitorOrgArgs](reg, &janitorOrgWorker{pool: svc.pool, log: svc.log}); err != nil {
 		return err
 	}
+	if err := registerSlackReconciler(reg, svc); err != nil {
+		return err
+	}
 	return jobs.Register[JanitorDispatchArgs](reg, &janitorDispatchWorker{pool: svc.pool})
 }
 
@@ -155,5 +158,6 @@ func PeriodicJobs() []*river.PeriodicJob {
 	return []*river.PeriodicJob{
 		river.NewPeriodicJob(river.PeriodicInterval(JanitorInterval),
 			func() (river.JobArgs, *river.InsertOpts) { return JanitorDispatchArgs{}, nil }, nil),
+		slackReconcilePeriodic(),
 	}
 }

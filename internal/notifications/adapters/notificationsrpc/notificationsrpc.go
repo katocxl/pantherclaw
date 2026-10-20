@@ -92,13 +92,26 @@ func channel(c napp.ChannelView) *pantherclawv1.Channel {
 	if c.State == "PAUSED" {
 		state = pantherclawv1.ChannelState_CHANNEL_STATE_PAUSED
 	}
-	return &pantherclawv1.Channel{
-		Id: c.ID.String(), Name: c.Name, Kind: kindOf(c.Kind), State: state, PauseReason: c.PauseReason,
+	pause := c.PauseReason
+	if c.SlackApp != nil && c.SlackApp.State != napp.SlackActive {
+		// A slack_app channel posts nothing until activated with a step-up.
+		state, pause = pantherclawv1.ChannelState_CHANNEL_STATE_PAUSED, "AWAITING_ACTIVATION"
+	}
+	out := &pantherclawv1.Channel{
+		Id: c.ID.String(), Name: c.Name, Kind: kindOf(c.Kind), State: state, PauseReason: pause,
 		EventTypes: c.EventTypes, MinSeverity: severityOf(c.MinSeverity), RecipientRole: c.RecipientRole, Url: c.URL,
 		Health: healths[c.Health], ConsecutiveFailures: int32(min(c.ConsecutiveFailures, 1<<30)), //nolint:gosec // G115: bounded
 		LastSuccessTime: tsp(c.LastSuccess), LastFailureTime: tsp(c.LastFailure), LastFailureCode: c.LastFailureCode,
 		PreviousSecretExpireTime: tsp(c.PreviousSecretExpiry), CreateTime: ts(c.CreatedAt), UpdateTime: ts(c.UpdatedAt),
 	}
+	if c.SlackApp != nil {
+		level := pantherclawv1.SlackDataLevel_SLACK_DATA_LEVEL_MINIMAL
+		if c.SlackApp.DataLevel == domain.SlackSummary {
+			level = pantherclawv1.SlackDataLevel_SLACK_DATA_LEVEL_SUMMARY
+		}
+		out.SlackApp = &pantherclawv1.SlackAppConfig{ChannelId: c.SlackApp.ChannelID, DataLevel: level, TeamId: c.SlackApp.TeamID}
+	}
+	return out
 }
 
 func deliveries(in []napp.DeliveryView) []*pantherclawv1.Delivery {
@@ -191,6 +204,9 @@ func (h *Handler) UpdateChannel(ctx context.Context, req *pantherclawv1.UpdateCh
 	}
 	if req.Paused != nil {
 		u.Paused = req.Paused
+	}
+	if req.SlackBotToken != nil {
+		u.SlackBotToken = req.SlackBotToken // G0 M14 D66: back to PENDING_ACTIVATION
 	}
 	c, err := h.s.UpdateChannel(ctx, id, u)
 	if err != nil {

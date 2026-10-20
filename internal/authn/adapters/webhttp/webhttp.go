@@ -115,6 +115,9 @@ type Handler struct {
 	// protect is the protected-change step-up pages (G0 M11 D42, D43); nil
 	// when not mounted.
 	protect Protect
+	// slackChannels is the Slack approval channel page (G0 M14 D22); nil when
+	// not mounted.
+	slackChannels SlackChannels
 }
 
 // New returns the handler. publicURL is the server's public URL: its origin
@@ -154,6 +157,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	h.mountChanges(mux)
 	h.mountPromotions(mux)
 	h.mountProtect(mux)
+	h.mountSlackChannels(mux)
 }
 
 // Routes lists the mounted routes.
@@ -473,6 +477,7 @@ func (h *Handler) static(w http.ResponseWriter, r *http.Request) {
 		"promotions.js":           "text/javascript; charset=utf-8",
 		"pc.css":                  "text/css; charset=utf-8",
 		"protect.js":              "text/javascript; charset=utf-8",
+		"slack_channel.js":        "text/javascript; charset=utf-8",
 	}
 	ct, ok := types[name]
 	if !ok {

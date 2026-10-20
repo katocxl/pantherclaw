@@ -23,6 +23,10 @@ type DevConfig struct {
 	// only from this machine (localOnly). It has no environment variable:
 	// only a configuration file turns it on.
 	PackageKeyFile string `json:"package_key_file"`
+	// SlackAPIURL points slack_app channels at a simulated Slack Web API
+	// (pantherclaw-sim slack, G0 M14 D22) instead of https://slack.com/api.
+	// Loopback only, and refused unless the server is local only; file only.
+	SlackAPIURL string `json:"slack_api_url"`
 }
 
 const (
