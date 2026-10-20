@@ -188,15 +188,23 @@ type assertionClaims struct {
 	Exp int64  `json:"exp"`
 }
 
-// noRedirects copies hc (nil: a client with a 10 second timeout) so that
+// noRedirects copies hc (nil: a client with a 10 second timeout that
+// ignores proxy settings) so that
 // it never follows a redirect, which would send the assertion, the token
 // or the agent's credentials elsewhere.
 func noRedirects(hc *http.Client) *http.Client {
-	out := &http.Client{Timeout: 10 * time.Second}
+	out := &http.Client{Timeout: 10 * time.Second, Transport: transport()}
 	if hc != nil {
 		copied := *hc
 		out = &copied
 	}
 	out.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return out
+}
+
+// Invalidate drops the cached token, which the decision endpoint refused.
+func (c *ClientCredentials) Invalidate() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.token, c.expires = "", time.Time{}
 }

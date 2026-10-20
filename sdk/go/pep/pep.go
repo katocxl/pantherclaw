@@ -6,11 +6,15 @@
 // PN-023). Handler is a reverse proxy placed in front of a target: for
 // every request an agent sends it reads the request (at most 64 KiB of
 // body), asks PantherClaw whether it may proceed, with the agent's own
-// PAP/1 token and proof as the subject, and forwards it unchanged only on
-// decision true, adding the action token PantherClaw returns as
-// PAP-Action. On decision false it answers 403 with PantherClaw's reason;
-// when PantherClaw cannot be asked, 503. It never decides anything itself
-// and fails closed.
+// PAP/1 token and proof as the subject, and forwards exactly the evaluated
+// method, URL, content type and body only on decision true, adding the
+// action token PantherClaw returns as PAP-Action. On decision false it
+// answers 403 with PantherClaw's reason; when PantherClaw cannot be asked,
+// 503. It never decides anything itself and fails closed.
+//
+// Only an allow-list of request headers reaches the target; a request that
+// could mean something else to the target than what was evaluated (an
+// encoded body, a method override, trailers) is refused.
 //
 // The enforcement point authenticates as its registered service account
 // (ClientCredentials) and may only ask about the connection it is bound
@@ -25,10 +29,15 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/textproto"
 	"net/url"
+	"slices"
 	"strings"
+	"time"
 )
 
 // Header names.
@@ -51,9 +60,15 @@ const MaxBody = 64 << 10
 // EvaluationPath is the decision endpoint's path on the server.
 const EvaluationPath = "/access/v1/evaluation"
 
+// DefaultForwardHeaders are the request headers forwarded to the target
+// when Config.ForwardHeaders is empty; Content-Type is always forwarded,
+// exactly as evaluated.
+var DefaultForwardHeaders = []string{"Accept", "Accept-Language", "User-Agent", "X-Request-ID"}
+
 // Config configures a Handler.
 type Config struct {
-	// Server is PantherClaw's public URL.
+	// Server is PantherClaw's public URL: https, or http to a loopback
+	// address unless AllowInsecure.
 	Server string
 	// Connection is the name of the connection the enforcement point fronts.
 	Connection string
@@ -62,18 +77,29 @@ type Config struct {
 	// PublicURL is the connection's base URL: where agents send their
 	// requests, and so the URL their proofs name.
 	PublicURL string
-	// Upstream is where allowed requests go: the target itself.
+	// Upstream is where allowed requests go: the target itself, without a
+	// query or fragment.
 	Upstream string
 	// Tokens are the enforcement point's access tokens.
 	Tokens TokenSource
+	// ForwardHeaders are the request headers, besides Content-Type, that
+	// reach the target; empty is DefaultForwardHeaders. PAP-* and PC-*
+	// headers can never be listed.
+	ForwardHeaders []string
 	// CredentialHeader, when set, is the request header carrying the agent's
 	// own target credential (an agent_held connection): it is forwarded as
 	// Authorization, which carries the agent's PAP/1 token here.
 	CredentialHeader string
-	// HTTPClient asks PantherClaw; nil is a client with a 10 second timeout.
+	// AllowInsecure accepts an http Server that is not a loopback address.
+	AllowInsecure bool
+	// HTTPClient asks PantherClaw; nil is a client with a 10 second timeout
+	// that ignores proxy settings. It never follows redirects.
 	HTTPClient *http.Client
-	// Transport sends allowed requests upstream; nil is the default.
+	// Transport sends allowed requests upstream; nil is a transport that
+	// ignores proxy settings and waits at most 30 seconds for headers.
 	Transport http.RoundTripper
+	// Log records upstream errors; nil logs nothing.
+	Log *slog.Logger
 }
 
 // Handler is the enforcement point.
@@ -82,7 +108,37 @@ type Handler struct {
 	public   *url.URL
 	eval     string
 	client   *http.Client
+	forward  []string
 	upstream *httputil.ReverseProxy
+}
+
+// reserved reports a PAP-* or PC-* header in any spelling.
+func reserved(name string) bool {
+	n := strings.ToLower(strings.ReplaceAll(name, "_", "-"))
+	return strings.HasPrefix(n, "pap-") || strings.HasPrefix(n, "pc-")
+}
+
+// loopback reports whether a URL's host is a loopback address or localhost.
+func loopback(u *url.URL) bool {
+	h := u.Hostname()
+	if h == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && ip.IsLoopback()
+}
+
+// transport ignores proxy settings (HR-072) and bounds every phase.
+func transport() *http.Transport {
+	return &http.Transport{
+		Proxy:                 nil,
+		DialContext:           (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+		IdleConnTimeout:       90 * time.Second,
+		MaxIdleConnsPerHost:   16,
+		ForceAttemptHTTP2:     true,
+	}
 }
 
 // New returns an enforcement point.
@@ -97,34 +153,66 @@ func New(cfg Config) (*Handler, error) {
 		return nil, errors.New("pep: a connection and a token source are required")
 	}
 	public, err := url.Parse(strings.TrimSuffix(cfg.PublicURL, "/"))
-	if err != nil || public.Host == "" || (public.Scheme != "https" && public.Scheme != "http") {
-		return nil, errors.New("pep: PublicURL must be an http(s) URL")
+	if err != nil || public.Host == "" || (public.Scheme != "https" && public.Scheme != "http") || public.RawQuery != "" || public.Fragment != "" {
+		return nil, errors.New("pep: PublicURL must be an http(s) URL without a query")
 	}
 	up, err := url.Parse(cfg.Upstream)
-	if err != nil || up.Host == "" {
-		return nil, errors.New("pep: Upstream must be a URL")
+	if err != nil || up.Host == "" || (up.Scheme != "https" && up.Scheme != "http") || up.RawQuery != "" || up.ForceQuery || up.Fragment != "" {
+		return nil, errors.New("pep: Upstream must be an http(s) URL without a query or fragment")
 	}
 	server, err := url.Parse(strings.TrimSuffix(cfg.Server, "/"))
-	if err != nil || server.Host == "" {
-		return nil, errors.New("pep: Server must be a URL")
+	if err != nil || server.Host == "" || (server.Scheme != "https" && server.Scheme != "http") {
+		return nil, errors.New("pep: Server must be an http(s) URL")
 	}
-	client := noRedirects(cfg.HTTPClient)
+	if server.Scheme == "http" && !loopback(server) && !cfg.AllowInsecure {
+		return nil, errors.New("pep: Server must be https unless it is a loopback address")
+	}
+	forward := cfg.ForwardHeaders
+	if len(forward) == 0 {
+		forward = DefaultForwardHeaders
+	}
+	var canon []string
+	for _, f := range forward {
+		if f == "" || strings.ContainsAny(f, "_ \t:") || reserved(f) || strings.EqualFold(f, "Authorization") {
+			return nil, errors.New("pep: ForwardHeaders cannot name " + f)
+		}
+		canon = append(canon, textproto.CanonicalMIMEHeaderKey(f))
+	}
+	log := cfg.Log
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
+	tr := cfg.Transport
+	if tr == nil {
+		tr = transport()
+	}
 	rp := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(up)
 			pr.Out.Host = up.Host
 		},
-		Transport: cfg.Transport,
-		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
+		Transport: tr,
+		// The target cannot speak for PantherClaw.
+		ModifyResponse: func(res *http.Response) error {
+			for k := range res.Header {
+				if reserved(k) {
+					delete(res.Header, k)
+				}
+			}
+			return nil
+		},
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			log.WarnContext(r.Context(), "pep.upstream_failed", slog.String("error", err.Error()))
 			w.WriteHeader(http.StatusBadGateway)
 		},
 	}
-	return &Handler{cfg: cfg, public: public, eval: server.String() + EvaluationPath, client: client, upstream: rp}, nil
+	return &Handler{cfg: cfg, public: public, eval: server.String() + EvaluationPath, client: noRedirects(cfg.HTTPClient), forward: canon, upstream: rp}, nil
 }
 
 // Decision is PantherClaw's answer about one request.
 type Decision struct {
-	Decision bool `json:"decision"`
+	// Decision is required: an answer without it is no answer.
+	Decision *bool `json:"decision"`
 	Context  struct {
 		PantherClaw struct {
 			Outcome       string `json:"outcome"`
@@ -143,6 +231,9 @@ type Decision struct {
 		ReasonUser map[string]string `json:"reason_user,omitempty"`
 	} `json:"context"`
 }
+
+// Allowed reports the decision.
+func (d Decision) Allowed() bool { return d.Decision != nil && *d.Decision }
 
 // refusal is the body of a 403.
 type refusal struct {
@@ -167,8 +258,29 @@ func reply(w http.ResponseWriter, status int, v refusal) {
 	_, _ = w.Write(b)
 }
 
+// ambiguous reports a request the target could read otherwise than it is
+// evaluated: an encoded body, a method override, or trailers.
+func ambiguous(r *http.Request) bool {
+	if ce := r.Header.Values("Content-Encoding"); len(ce) > 0 && !(len(ce) == 1 && strings.EqualFold(strings.TrimSpace(ce[0]), "identity")) {
+		return true
+	}
+	if len(r.Trailer) > 0 || r.Header.Get("Trailer") != "" {
+		return true
+	}
+	for k := range r.Header {
+		if strings.Contains(strings.ToLower(strings.ReplaceAll(k, "_", "-")), "method-override") {
+			return true
+		}
+	}
+	return false
+}
+
 // ServeHTTP asks about one request and forwards it only if allowed.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if ambiguous(r) {
+		reply(w, http.StatusBadRequest, refusal{Outcome: "cannot_authorize", Code: "ambiguous_request"})
+		return
+	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, MaxBody+1))
 	if err != nil {
 		reply(w, http.StatusBadRequest, refusal{Outcome: "cannot_authorize", Code: "invalid_request"})
@@ -192,7 +304,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// The agent signs its next proof with it (PAP/1).
 		w.Header().Set(HeaderNonce, pc.Nonce)
 	}
-	if !d.Decision {
+	if !d.Allowed() {
 		out := refusal{Outcome: pc.Outcome, Code: pc.Code, Reason: d.Context.ReasonUser["en"], TransactionID: pc.TransactionID, ActionID: pc.ActionID}
 		if pc.Wait != nil {
 			out.WaitHandle, out.WaitDeadline = pc.Wait.Handle, pc.Wait.Deadline
@@ -201,15 +313,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := r.Clone(r.Context())
-	out.Body, out.ContentLength = io.NopCloser(bytes.NewReader(body)), int64(len(body))
-	for _, k := range []string{"Authorization", HeaderProof, HeaderRunID, HeaderActionID, HeaderAction} {
-		out.Header.Del(k)
+	out.Body, out.ContentLength, out.Trailer = io.NopCloser(bytes.NewReader(body)), int64(len(body)), nil
+	out.Header = http.Header{}
+	for _, k := range h.forward {
+		if v := r.Header.Values(k); len(v) > 0 {
+			out.Header[k] = slices.Clone(v)
+		}
+	}
+	if ct := r.Header.Get("Content-Type"); ct != "" {
+		out.Header.Set("Content-Type", ct)
 	}
 	if h.cfg.CredentialHeader != "" {
 		if v := r.Header.Get(h.cfg.CredentialHeader); v != "" {
 			out.Header.Set("Authorization", v)
 		}
-		out.Header.Del(h.cfg.CredentialHeader)
 	}
 	if pc.ActionToken != "" {
 		out.Header.Set(HeaderAction, pc.ActionToken)
@@ -231,8 +348,13 @@ type evaluation struct {
 	} `json:"action"`
 }
 
+// invalidator is a token source that can drop a token the server refused.
+type invalidator interface{ Invalidate() }
+
 // Ask asks PantherClaw about a request with this body; an error means it
-// could not be asked, which the enforcement point treats as a refusal.
+// could not be asked, which the enforcement point treats as a refusal. A
+// token the decision endpoint refuses is dropped and the question asked
+// once more with a new one.
 func (h *Handler) Ask(ctx context.Context, r *http.Request, body []byte) (Decision, error) {
 	target := *h.public
 	target.Path, target.RawPath = h.public.Path+r.URL.Path, ""
@@ -247,9 +369,13 @@ func (h *Handler) Ask(ctx context.Context, r *http.Request, body []byte) (Decisi
 	}
 	var ev evaluation
 	ev.Subject = entity{Type: "pantherclaw_workload", Properties: sub}
-	ev.Resource = entity{Type: "pantherclaw:http_request", ID: h.cfg.Connection, Properties: map[string]string{
+	props := map[string]string{
 		"protocol": h.cfg.Protocol, "method": r.Method, "url": target.String(), "body_b64": base64.StdEncoding.EncodeToString(body),
-	}}
+	}
+	if ct := r.Header.Get("Content-Type"); ct != "" {
+		props["content_type"] = ct
+	}
+	ev.Resource = entity{Type: "pantherclaw:http_request", ID: h.cfg.Connection, Properties: props}
 	ev.Action.Name = r.Method
 	if h.cfg.Protocol == "mcp" {
 		var m struct {
@@ -262,30 +388,46 @@ func (h *Handler) Ask(ctx context.Context, r *http.Request, body []byte) (Decisi
 	if err != nil {
 		return Decision{}, err
 	}
+	for attempt := 0; ; attempt++ {
+		d, status, err := h.ask(ctx, r.Header.Get("X-Request-ID"), raw)
+		if status == http.StatusUnauthorized && attempt == 0 {
+			if inv, ok := h.cfg.Tokens.(invalidator); ok {
+				inv.Invalidate()
+				continue
+			}
+		}
+		return d, err
+	}
+}
+
+func (h *Handler) ask(ctx context.Context, requestID string, raw []byte) (Decision, int, error) {
 	bearer, err := h.cfg.Tokens.Token(ctx)
 	if err != nil {
-		return Decision{}, err
+		return Decision{}, 0, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.eval, bytes.NewReader(raw))
 	if err != nil {
-		return Decision{}, err
+		return Decision{}, 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+bearer)
-	if id := r.Header.Get("X-Request-ID"); id != "" {
-		req.Header.Set("X-Request-ID", id)
+	if requestID != "" {
+		req.Header.Set("X-Request-ID", requestID)
 	}
-	resp, err := h.client.Do(req)
+	resp, err := h.client.Do(req) //nolint:gosec // G704: the operator configures the decision endpoint
 	if err != nil {
-		return Decision{}, err
+		return Decision{}, 0, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return Decision{}, errors.New("pep: the decision endpoint answered " + resp.Status)
+		return Decision{}, resp.StatusCode, errors.New("pep: the decision endpoint answered " + resp.Status)
 	}
 	var d Decision
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&d); err != nil {
-		return Decision{}, err
+		return Decision{}, resp.StatusCode, err
 	}
-	return d, nil
+	if d.Decision == nil {
+		return Decision{}, resp.StatusCode, errors.New("pep: the answer has no decision")
+	}
+	return d, resp.StatusCode, nil
 }
