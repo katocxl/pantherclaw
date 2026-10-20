@@ -239,6 +239,9 @@ func TestHR318_SubjectsAndRequestsThatDoNotMatchAreRefused(t *testing.T) {
 		"a pantherclaw_held one":   {azEvaluation{Subject: subject("", good), Resource: resource(nil), Action: post}, &held, codeBindable},
 		"a method that is not one": {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"method": "post"}), Action: &azAction{Name: "post"}}, conn, codeResource},
 		"a form body":              {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"body_b64": "e30=", "content_type": "application/x-www-form-urlencoded"}), Action: post}, conn, codeContentType},
+		"latin-1 JSON":             {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"body_b64": "e30=", "content_type": "application/json; charset=iso-8859-1"}), Action: post}, conn, codeContentType},
+		"merge-patch JSON":         {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"body_b64": "e30=", "content_type": "application/merge-patch+json"}), Action: post}, conn, codeContentType},
+		"another parameter":        {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"body_b64": "e30=", "content_type": "application/json; profile=x"}), Action: post}, conn, codeContentType},
 		"an undeclared body":       {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"body_b64": "e30="}), Action: post}, conn, codeContentType},
 		"an MCP GET":               {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"protocol": "mcp", "method": "GET"}), Action: &azAction{Name: "GET"}}, &mcpConn, codeMethod},
 	} {
@@ -265,6 +268,7 @@ func TestHR321_RequestsAreCapped(t *testing.T) {
 	e.mount(mux)
 	do := func(path, body string) int {
 		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer good")
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, req)
@@ -327,6 +331,7 @@ func TestHR318_OneProofDecidesAtMostOneEvaluation(t *testing.T) {
 	e.mount(mux)
 	sub := `{"type":"pantherclaw_workload","properties":{"pap_token":"t","pap_proof":"same","pap_run_id":"r"}}`
 	req := httptest.NewRequest(http.MethodPost, authzenEvaluationsPath, strings.NewReader(`{"evaluations":[{"subject":`+sub+`},{"subject":`+sub+`}]}`))
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer good")
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
@@ -336,5 +341,50 @@ func TestHR318_OneProofDecidesAtMostOneEvaluation(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil || len(out.Evaluations) != 2 ||
 		out.Evaluations[0].Context.PantherClaw.Code == codeProofUsed || out.Evaluations[1].Context.PantherClaw.Code != codeProofUsed {
 		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+}
+
+// TestHR318_OnlyUTF8JSONIsForwarded: the content types a forwarded body
+// may carry (D113).
+func TestHR318_OnlyUTF8JSONIsForwarded(t *testing.T) {
+	for ct, want := range map[string]bool{
+		"application/json": true, "application/json; charset=utf-8": true, "application/json;charset=UTF-8": true,
+		"application/json; charset=iso-8859-1": false, "application/merge-patch+json": false, "application/vnd.api+json": false,
+		"application/json; profile=x": false, "text/plain": false, "": false,
+	} {
+		if got := jsonContent(ct, []byte(`{}`)); got != want {
+			t.Errorf("%q: %v", ct, got)
+		}
+	}
+	if !jsonContent("", nil) {
+		t.Fatal("no body needs no content type")
+	}
+}
+
+// TestHR321_TheEndpointTakesOnlyJSON: an evaluation request that is not
+// application/json (UTF-8) is 415 (D113).
+func TestHR321_TheEndpointTakesOnlyJSON(t *testing.T) {
+	org := ids.New[ids.Org]()
+	c := tapp.Caller{Subject: td.Subject{
+		Org: org, Principal: td.PrincipalRef{Kind: td.KindServiceAccount, ID: ids.NewV7()},
+		Bindings: []td.Binding{{Role: td.RoleEnforcementPoint, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}},
+	}, Credential: tapp.CredAccessToken}
+	e := newAuthZENEndpoint(nil, fakeAuthn{bearer: "good", caller: c}, failDecider{t}, "https://pc.example.test", celenv.Limits{}, nil, nil)
+	e.pointOf = func(context.Context, tapp.Caller) (point, error) {
+		return point{Org: org, ID: ids.NewV7(), Rate: 50}, nil
+	}
+	mux := http.NewServeMux()
+	e.mount(mux)
+	for _, ct := range []string{"", "text/plain", "application/merge-patch+json", "application/json; charset=latin1"} {
+		req := httptest.NewRequest(http.MethodPost, authzenEvaluationPath, strings.NewReader(`{}`))
+		req.Header.Set("Authorization", "Bearer good")
+		if ct != "" {
+			req.Header.Set("Content-Type", ct)
+		}
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		if w.Code != http.StatusUnsupportedMediaType {
+			t.Errorf("%q: %d", ct, w.Code)
+		}
 	}
 }

@@ -69,7 +69,7 @@ func TestT147_EnforcementPointAbuse(t *testing.T) {
 	cross.ProofURL = p.base + "/v1/charges"
 	refused("a proof for another URL", p.evaluate(t, p.evaluation(t, cross)), "IDENTITY_UNVERIFIED")
 	another := req("ch_t147a")
-	another.Agent = ids.NewV7().String()
+	another.Agent = otherAgent(t, s).String()
 	refused("a subject naming another agent", p.evaluate(t, p.evaluation(t, another)), "SUBJECT_MISMATCH")
 	outside := p.evaluation(t, req("ch_t147a"))
 	outside["resource"].(map[string]any)["properties"].(map[string]any)["url"] = "https://evil.example.test/v1/refunds"

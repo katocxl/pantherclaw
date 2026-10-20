@@ -43,12 +43,14 @@ type ClientCredentials struct {
 	// Key is the account's private key: an ed25519.PrivateKey (EdDSA) or a
 	// P-256 *ecdsa.PrivateKey (ES256).
 	Key crypto.Signer
-	// HTTPClient sends the request; nil is http.DefaultClient.
+	// HTTPClient sends the request; nil is a client with a 10 second
+	// timeout that ignores proxy settings. It never follows redirects.
 	HTTPClient *http.Client
 	// Now is the clock; nil is time.Now.
 	Now func() time.Time
 
 	mu      sync.Mutex
+	hc      *http.Client // built once
 	token   string
 	expires time.Time
 }
@@ -67,6 +69,11 @@ func (c *ClientCredentials) Token(ctx context.Context) (string, error) {
 	if c.token != "" && now().Before(c.expires.Add(-time.Minute)) {
 		return c.token, nil
 	}
+	// Whatever happens next, the old token is not used again (D113).
+	c.token, c.expires = "", time.Time{}
+	if u, err := url.Parse(c.TokenURL); err != nil || u.Host == "" || (u.Scheme != "https" && (u.Scheme != "http" || !loopback(u))) {
+		return "", fmt.Errorf("%w: TokenURL must be https unless it is a loopback address", ErrToken)
+	}
 	assertion, err := c.assertion(now())
 	if err != nil {
 		return "", err
@@ -82,7 +89,10 @@ func (c *ClientCredentials) Token(ctx context.Context) (string, error) {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := noRedirects(c.HTTPClient).Do(req) //nolint:gosec // G704: the operator configures the token endpoint
+	if c.hc == nil {
+		c.hc = noRedirects(c.HTTPClient)
+	}
+	resp, err := c.hc.Do(req) //nolint:gosec // G704: the operator configures the token endpoint
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", ErrToken, err)
 	}
@@ -188,15 +198,18 @@ type assertionClaims struct {
 	Exp int64  `json:"exp"`
 }
 
-// noRedirects copies hc (nil: a client with a 10 second timeout that
-// ignores proxy settings) so that
+// noRedirects copies hc (nil: a client with a 10 second timeout) so that
 // it never follows a redirect, which would send the assertion, the token
-// or the agent's credentials elsewhere.
+// or the agent's credentials elsewhere, and, without a transport of its
+// own, ignores proxy settings.
 func noRedirects(hc *http.Client) *http.Client {
-	out := &http.Client{Timeout: 10 * time.Second, Transport: transport()}
+	out := &http.Client{Timeout: 10 * time.Second}
 	if hc != nil {
 		copied := *hc
 		out = &copied
+	}
+	if out.Transport == nil {
+		out.Transport = transport()
 	}
 	out.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return out

@@ -178,6 +178,12 @@ func New(cfg Config) (*Handler, error) {
 		}
 		canon = append(canon, textproto.CanonicalMIMEHeaderKey(f))
 	}
+	if ch := cfg.CredentialHeader; ch != "" {
+		c := textproto.CanonicalMIMEHeaderKey(ch)
+		if strings.ContainsAny(ch, "_ \t:") || reserved(ch) || c == "Authorization" || c == "Content-Type" || slices.Contains(canon, c) {
+			return nil, errors.New("pep: CredentialHeader cannot be " + ch)
+		}
+	}
 	log := cfg.Log
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
@@ -194,15 +200,21 @@ func New(cfg Config) (*Handler, error) {
 		Transport: tr,
 		// The target cannot speak for PantherClaw.
 		ModifyResponse: func(res *http.Response) error {
-			for k := range res.Header {
-				if reserved(k) {
-					delete(res.Header, k)
+			for _, hdr := range []http.Header{res.Header, res.Trailer} {
+				for k := range hdr {
+					if reserved(k) {
+						delete(hdr, k)
+					}
 				}
 			}
+			// Trailers arrive with the end of the body.
+			res.Body = &trailerFilter{ReadCloser: res.Body, res: res}
+			decidedHeaders(res.Request.Context(), res.Header)
 			return nil
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			log.WarnContext(r.Context(), "pep.upstream_failed", slog.String("error", err.Error()))
+			decidedHeaders(r.Context(), w.Header())
 			w.WriteHeader(http.StatusBadGateway)
 		},
 	}
@@ -261,6 +273,9 @@ func reply(w http.ResponseWriter, status int, v refusal) {
 // ambiguous reports a request the target could read otherwise than it is
 // evaluated: an encoded body, a method override, or trailers.
 func ambiguous(r *http.Request) bool {
+	if len(r.Header.Values("Content-Type")) > 1 {
+		return true
+	}
 	if ce := r.Header.Values("Content-Encoding"); len(ce) > 0 && (len(ce) != 1 || !strings.EqualFold(strings.TrimSpace(ce[0]), "identity")) {
 		return true
 	}
@@ -296,15 +311,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pc := d.Context.PantherClaw
-	if pc.TransactionID != "" {
-		w.Header().Set(HeaderTransaction, pc.TransactionID)
-	}
-	w.Header().Set(HeaderOutcome, pc.Outcome)
-	if pc.Nonce != "" {
-		// The agent signs its next proof with it (PAP/1).
-		w.Header().Set(HeaderNonce, pc.Nonce)
-	}
+	decided := decidedFacts{transaction: pc.TransactionID, outcome: pc.Outcome, nonce: pc.Nonce}
 	if !d.Allowed() {
+		decided.set(w.Header())
 		out := refusal{Outcome: pc.Outcome, Code: pc.Code, Reason: d.Context.ReasonUser["en"], TransactionID: pc.TransactionID, ActionID: pc.ActionID}
 		if pc.Wait != nil {
 			out.WaitHandle, out.WaitDeadline = pc.Wait.Handle, pc.Wait.Deadline
@@ -331,7 +340,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if pc.ActionToken != "" {
 		out.Header.Set(HeaderAction, pc.ActionToken)
 	}
-	h.upstream.ServeHTTP(w, out)
+	// A target's informational (1xx) responses never reach the agent (D113).
+	h.upstream.ServeHTTP(final{w}, out.WithContext(context.WithValue(out.Context(), decidedKey{}, decided))) //nolint:contextcheck // derived from the request's own context
 }
 
 type entity struct {
@@ -430,4 +440,60 @@ func (h *Handler) ask(ctx context.Context, requestID string, raw []byte) (Decisi
 		return Decision{}, resp.StatusCode, errors.New("pep: the answer has no decision")
 	}
 	return d, resp.StatusCode, nil
+}
+
+// final passes only final responses: a 1xx the proxy relays is dropped,
+// with the headers it carried (the proxy clears them after).
+type final struct{ http.ResponseWriter }
+
+func (f final) WriteHeader(code int) {
+	if code >= 100 && code < 200 {
+		return
+	}
+	f.ResponseWriter.WriteHeader(code)
+}
+
+// Unwrap lets the proxy flush through it.
+func (f final) Unwrap() http.ResponseWriter { return f.ResponseWriter }
+
+// decidedFacts are what the enforcement point tells the agent about the
+// decision: set last, over anything the target sent.
+type decidedFacts struct{ transaction, outcome, nonce string }
+
+type decidedKey struct{}
+
+func (f decidedFacts) set(h http.Header) {
+	if f.transaction != "" {
+		h.Set(HeaderTransaction, f.transaction)
+	}
+	h.Set(HeaderOutcome, f.outcome)
+	if f.nonce != "" {
+		// The agent signs its next proof with it (PAP/1).
+		h.Set(HeaderNonce, f.nonce)
+	}
+}
+
+func decidedHeaders(ctx context.Context, h http.Header) {
+	if f, ok := ctx.Value(decidedKey{}).(decidedFacts); ok {
+		f.set(h)
+	}
+}
+
+// trailerFilter drops PAP/PC trailers once the body has been read, before
+// the proxy copies the trailers to the agent (D113).
+type trailerFilter struct {
+	io.ReadCloser
+	res *http.Response
+}
+
+func (f *trailerFilter) Read(p []byte) (int, error) {
+	n, err := f.ReadCloser.Read(p)
+	if errors.Is(err, io.EOF) {
+		for k := range f.res.Trailer {
+			if reserved(k) {
+				delete(f.res.Trailer, k)
+			}
+		}
+	}
+	return n, err
 }
