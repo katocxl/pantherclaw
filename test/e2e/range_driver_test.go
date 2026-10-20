@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -95,10 +96,12 @@ func newRangeDriver(t *testing.T) *rangeDriver {
 
 // Capabilities are what this driver can run.
 func (d *rangeDriver) Capabilities() map[app.Capability]bool {
-	return map[app.Capability]bool{
+	caps := map[app.Capability]bool{
 		app.CapGitHub: true, app.CapPayments: true, app.CapMCP: true, app.CapPerson: true, app.CapSecondOrg: true,
 		app.CapHarness: true, app.CapSandbox: d.extra.available(),
 	}
+	maps.Copy(caps, a2aCapabilities())
+	return caps
 }
 
 func requires(s domain.Scenario, what string) bool { return slices.Contains(s.Requires, what) }
@@ -120,6 +123,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	case "RT-036":
 		o.access, o.actionTokens = capp.AccessTargetEnforced, true
 	}
+	o.a2a = needsA2A(sc)
 	var p idp
 	if requires(sc, "person") || sc.ID == "RT-009" {
 		p = inProcessIdP(t)
@@ -374,6 +378,8 @@ func (d *rangeDriver) callOnce(w callWith, _ []byte, _ int) (domain.Observation,
 		return d.callSDK(conn, w, act)
 	case "hook":
 		return d.callHook(w)
+	case "a2a":
+		return d.callA2A(conn, w, act)
 	}
 	return domain.Observation{}, nil, fmt.Errorf("face %q", w.Face)
 }
