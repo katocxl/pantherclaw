@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/katocxl/pantherclaw/internal/approvals/proof"
+	"github.com/katocxl/pantherclaw/internal/gateway/a2aface"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
 	"github.com/katocxl/pantherclaw/internal/gateway/connectors"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
@@ -63,6 +64,7 @@ type Gateway struct {
 	mcp         *mcp.Handler
 	hook        *hook.Handler
 	sdk         *sdk.Handler
+	a2a         *a2aface.Handler
 	log         *slog.Logger
 	// reportDrift, driftEvery and driftPoll drive the drift checks
 	// (drift.go).
@@ -77,7 +79,7 @@ type Gateway struct {
 }
 
 // Handler returns the gateway's agent-facing HTTP handler: `/mcp/{connection}`
-// (mcp), `/hook/{connection}` (hook), `/sdk/{connection}` (sdk) and
+// (mcp), `/hook/{connection}` (hook), `/sdk/{connection}` (sdk), `/a2a/{connection}` (a2a) and
 // `/{connection}/…` (httpproxy).
 func (g *Gateway) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -91,6 +93,10 @@ func (g *Gateway) Handler() http.Handler {
 		}
 		if _, ok := sdk.Path(r.URL.EscapedPath()); ok {
 			g.sdk.ServeHTTP(w, r)
+			return
+		}
+		if _, _, ok := a2aface.Path(r.URL.EscapedPath()); ok {
+			g.a2a.ServeHTTP(w, r)
 			return
 		}
 		g.http.ServeHTTP(w, r)
@@ -263,6 +269,7 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		mcp:  mcp.New(engine, d.Configuration, cfg.PublicURL, log),
 		hook: hook.New(engine, d.Configuration, cfg.PublicURL, log),
 		sdk:  sdk.New(engine, d.Configuration, cfg.PublicURL, log),
+		a2a:  a2aface.New(engine, d.Configuration, a2aPeer, cfg.PublicURL, log),
 		log:  log, reportDrift: d.ReportDrift, driftEvery: DriftEvery, driftPoll: driftPoll,
 		verifications: d.Verifications, verifyEvery: VerifyEvery, verifyHintGap: verifyHintGap,
 		submitScan: d.SubmitScan,
@@ -280,6 +287,7 @@ func (g *Gateway) Run(ctx context.Context) error {
 		eg.Go(func() error { return f(ctx) })
 	}
 	eg.Go(func() error { return g.watchDrift(ctx) })
+	eg.Go(func() error { return g.watchA2ACards(ctx) })
 	eg.Go(func() error { return g.watchVerifications(ctx) })
 	eg.Go(func() error { <-ctx.Done(); return nil })
 	return eg.Wait()

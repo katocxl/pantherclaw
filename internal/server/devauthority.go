@@ -152,6 +152,9 @@ type devGrantTerms struct {
 	StripePayee string
 	// Postgres also allows the pc.postgres reads (G0 M14 D21).
 	Postgres bool
+	// A2A also allows the pc.a2a operations: messages to the peer agent,
+	// whose runs this grant delegates to (G0 M14 D33).
+	A2A bool
 }
 
 // seedGrant issues a root grant to the seeded agent for its owner: refunds
@@ -181,6 +184,9 @@ func seedGrant(ctx context.Context, pool *db.Pool, org ids.OrgID, w devWorkload,
 	}
 	if t.Postgres {
 		ops = append(ops, postgresOperations...)
+	}
+	if t.A2A {
+		ops = append(ops, devA2AOperations...)
 	}
 	doc := map[string]any{"operations": ops, "params": params}
 	if stripeDests != nil {
@@ -245,8 +251,9 @@ func seedGrant(ctx context.Context, pool *db.Pool, org ids.OrgID, w devWorkload,
 	}
 	defsStore := &defspg.Store{Pool: pool}
 	active := map[string]*defs.Definition{}
-	for _, op := range append(append([]string{"payments.refund.create", shellOperation}, githubOperations...), stripeOperations...) {
-		if (op == shellOperation && !t.Shell) || (slices.Contains(githubOperations, op) && !t.GitHub) || (slices.Contains(stripeOperations, op) && !t.Stripe) {
+	for _, op := range append(append(append([]string{"payments.refund.create", shellOperation}, githubOperations...), stripeOperations...), devA2AOperations...) {
+		if (op == shellOperation && !t.Shell) || (slices.Contains(githubOperations, op) && !t.GitHub) || (slices.Contains(stripeOperations, op) && !t.Stripe) ||
+			(slices.Contains(devA2AOperations, op) && !t.A2A) {
 			continue
 		}
 		d, err := defsStore.Active(ctx, org, op)

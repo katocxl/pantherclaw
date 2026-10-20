@@ -103,6 +103,9 @@ type stack struct {
 	// slack is the Slack simulator and the seeded connection "slack" to it
 	// (G0 M14, options.slack; m14_slack_e2e_test.go).
 	slack *slackSim
+	// a2a is the A2A simulator acting as the peer agent, the seeded a2a
+	// connection "peer" to it and the peer's workload (G0 M14, options.a2a).
+	a2a *a2aPeerSim
 }
 
 type options struct {
@@ -152,6 +155,10 @@ type options struct {
 	// connection "slack" to it, its bot token held by the gateway (dev seed
 	// --slack-url, G0 M14 D25).
 	slack bool
+	// a2a also starts the A2A simulator as a PantherClaw peer agent and seeds
+	// pc.a2a, the peer agent and the connection "peer" (dev seed --a2a-url,
+	// G0 M14 D33).
+	a2a bool
 }
 
 // freePorts are the ports freeAddr has handed out in this test binary.
@@ -258,6 +265,9 @@ func start(t *testing.T, o options) *stack {
 	if o.shell {
 		args = append(args, "--shell")
 	}
+	if o.a2a {
+		args = append(args, s.startA2APeer(t, dir)...)
+	}
 	if o.github {
 		s.gh = o.githubAt
 		if s.gh == nil {
@@ -301,6 +311,9 @@ func start(t *testing.T, o options) *stack {
 	if o.slack {
 		s.slack.seeded(t, out.String())
 	}
+	if o.a2a {
+		s.a2aSeeded(t, out.String())
+	}
 	s.pool = s.db.AppPool(t)
 
 	require := payments.Require{Token: o.token}
@@ -335,6 +348,9 @@ func start(t *testing.T, o options) *stack {
 	s.keyFile = keyFile
 	s.factsKey = factsFile
 	s.workload(t, keyFile)
+	if o.a2a {
+		s.a2aWorkload(t)
+	}
 	refundable(t, "http://"+apiAddr, factsFile, "ch_1")
 
 	gs := httptest.NewUnstartedServer(nil)

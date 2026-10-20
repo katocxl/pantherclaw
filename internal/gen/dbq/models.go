@@ -15,6 +15,44 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
 
+type PcA2aPeerRun struct {
+	OrgID          ids.OrgID
+	RequesterRunID ids.UUID
+	ConnectionID   ids.UUID
+	ContextID      string
+	ChildRunID     ids.UUID
+	ChildGrantID   ids.UUID
+	CreatedAt      time.Time
+}
+
+type PcA2aPin struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	ConnectionID        ids.UUID
+	State               string
+	CardUrl             string
+	Binding             string
+	InterfaceUrl        string
+	PinnedCard          []byte
+	CardDigest          []byte
+	CardKeys            []byte
+	Skills              []string
+	PeerAgentID         *ids.UUID
+	PeerBounds          []byte
+	PeerLimits          []byte
+	MaxAnswerBytes      int32
+	MaxStreamSeconds    int32
+	ProposedBy          string
+	ProposedAt          time.Time
+	ConfirmedBy         *ids.UUID
+	ConfirmedCredential *ids.UUID
+	ConfirmedOperator   *string
+	ConfirmedAt         *time.Time
+	DecidedAt           *time.Time
+	DriftedAt           *time.Time
+	ObservedDigest      []byte
+}
+
 type PcActionDefinition struct {
 	OrgID     ids.OrgID
 	ID        ids.UUID

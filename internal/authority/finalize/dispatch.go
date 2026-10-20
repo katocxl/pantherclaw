@@ -68,14 +68,21 @@ type Dispatching struct {
 	TargetID      string
 	EffectiveHash []byte
 	Now           time.Time
+	// PeerRun and PeerAudience are set for a dispatch to a peer agent of
+	// the org (G0 M14 D33, D89): the child run delegated to it, and the
+	// interface URL its action token is addressed to.
+	PeerRun      *ids.UUID
+	PeerAudience string
 }
 
 // actionToken mints the action token of a target-enforced dispatch (HR-188):
 // audience the connection, at most 60 seconds, a single-use id, and the
 // transaction, effective action hash, body hash, operation and target. It
-// returns no token for any other access mode.
+// returns no token for any other access mode, except a dispatch to a peer
+// agent (G0 M14 D33, D77): its token is addressed to the peer's interface
+// URL and names the delegated run (pc_peer_run).
 func (a *Authority) actionToken(d Dispatching, out Outbound) (string, *ids.UUID, error) {
-	if d.AccessMode != AccessTargetEnforced {
+	if d.AccessMode != AccessTargetEnforced && d.PeerRun == nil {
 		return "", nil, nil
 	}
 	if d.Connection == nil || len(out.BodySHA256) != 32 || out.Method == "" {
@@ -87,6 +94,7 @@ func (a *Authority) actionToken(d Dispatching, out Outbound) (string, *ids.UUID,
 	tok, jti, err := actiontoken.Mint(a.ActionTokens, actiontoken.Token{
 		Issuer: a.issuer(), Audience: *d.Connection, Transaction: d.Transaction, Act: d.EffectiveHash, BodySHA256: out.BodySHA256,
 		Operation: d.Operation, TargetType: d.TargetType, TargetID: d.TargetID, Now: d.Now,
+		PeerAudience: d.PeerAudience, PeerRun: d.PeerRun,
 	})
 	if err != nil {
 		return "", nil, err

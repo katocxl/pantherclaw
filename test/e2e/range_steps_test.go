@@ -375,6 +375,8 @@ func (d *rangeDriver) simMutate(st domain.Step) (domain.Observation, error) {
 		return d.mutateStripe(w.Change, w.Args)
 	case w.Sim == "slack":
 		return d.slackMutate(w.Change, w.Args)
+	case w.Sim == "a2a":
+		return d.mutateA2A(w.Change, w.Args)
 	}
 	return domain.Observation{}, fmt.Errorf("sim.mutate %s %s", w.Sim, w.Change)
 }

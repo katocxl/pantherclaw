@@ -103,6 +103,7 @@ func (d *rangeDriver) Capabilities() map[app.Capability]bool {
 		app.Capability("authzen.evaluate"): true,
 	}
 	maps.Copy(caps, stripeCapabilities())
+	maps.Copy(caps, a2aCapabilities())
 	return caps
 }
 
@@ -126,6 +127,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 		o.access, o.actionTokens = capp.AccessTargetEnforced, true
 	}
 	o.stripe = needsStripe(sc)
+	o.a2a = needsA2A(sc)
 	var p idp
 	if requires(sc, "person") || sc.ID == "RT-009" || slackScenario(sc) {
 		p = inProcessIdP(t)
@@ -389,6 +391,8 @@ func (d *rangeDriver) callOnce(w callWith, _ []byte, _ int) (domain.Observation,
 		return d.callHook(w)
 	case "authzen":
 		return d.callAuthZEN(conn, w, act)
+	case "a2a":
+		return d.callA2A(conn, w, act)
 	}
 	return domain.Observation{}, nil, fmt.Errorf("face %q", w.Face)
 }

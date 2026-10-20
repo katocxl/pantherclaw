@@ -239,6 +239,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		return err
 	}
 	m14core := wireM14Core(m6)
+	wireM14A2A(m14core)
 	_ = m14core // the M14 streams' wiring registers its kinds here (G0 M14 D64)
 	wireM14Data(m14core, m6)
 	// Sealing a GitHub App credential schedules an org scan, and a daily one
@@ -265,6 +266,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	autos, m11protect := newM11Core(pool, bill, cfg.Auth.PublicURL)
 	wireM11Process(autos, m11protect, pool)
 	wireM14Process(autos, bill)
+	wireM14A2APeer(svc, authorityStore, autos, pool)
 	if cfg.Role == RoleAPI || cfg.Role == RoleAll {
 		tokens, err := token.New(reg, cfg.Auth.PublicURL, token.Audience)
 		if err != nil {
@@ -689,6 +691,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	edges.mount(mux)
 	automationTriggers.mount(mux)
 	authzen.mount(mux)
+	mountM14A2A(mux, d)
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)
 	d.oauth.Mount(mux)

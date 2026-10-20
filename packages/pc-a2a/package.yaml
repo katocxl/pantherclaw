@@ -1,0 +1,183 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for peer agents reached over the A2A protocol 1.0
+# (G0 M14 D31, D32). An agent calls a peer through the gateway's A2A face
+# (/a2a/{connection}); every call is decided under the agent's grant, and
+# the gateway rebuilds the request it sends from the action alone: one
+# text part (the message, a disclosure param), a task or context the peer
+# answered to the same run, and nothing else the agent sent. Each A2A
+# method has its own route, which is how the gateway knows the method to
+# call. The peer is the connection's: its target id is always "peer", and
+# the connection (with its pinned card and allowed skills) names which
+# agent it is.
+#
+# The skill a message asks for is taken from the message metadata entry
+# "skill" (A2A messages carry no skill field) and is decided on, never
+# sent: grants and rules constrain it with allowed_values. A peer's answers
+# are untrusted data (HR-327).
+format: 1
+name: pc.a2a
+version: 1.0.0
+publisher: pantherclaw
+summary: Peer agent calls over A2A 1.0 (messages and tasks)
+
+definitions:
+  - operation: a2a.message.send
+    summary: Send a message to a peer agent
+    access: write
+    target:
+      type: a2a.agent
+      id_pattern: '^peer$'
+      account: none
+    params:
+      skill:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+      text:
+        type: content
+        material: true
+        required: true
+        # The message goes to another actor: a disclosure param (HR-079).
+        disclosure: true
+        max_bytes: 32768
+      context_id:
+        type: identifier
+        material: true
+        pattern: '^[A-Za-z0-9._~+=@-]{1,256}$'
+      task_id:
+        type: identifier
+        material: true
+        pattern: '^[A-Za-z0-9._~+=@-]{1,256}$'
+    effects:
+      - kind: request.send
+        description: Asks another agent to act; what it does is its own
+    reversibility: irreversible
+    dedupe_key: [target.id, params.skill, params.text]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Ask the peer agent to use its {params.skill} skill
+      fields: [params.skill, params.context_id, params.task_id]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    dispatch:
+      a2a:
+        method: SendMessage
+    mappings:
+      - channel: a2a
+        method: SendMessage
+        route: a2a-send
+        extract:
+          target_id: "'peer'"
+          params:
+            skill: input.message.metadata.skill
+            text: input.message.parts[0].text
+            context_id: input.message.?contextId
+            task_id: input.message.?taskId
+      - channel: a2a
+        method: SendStreamingMessage
+        route: a2a-stream
+        extract:
+          target_id: "'peer'"
+          params:
+            skill: input.message.metadata.skill
+            text: input.message.parts[0].text
+            context_id: input.message.?contextId
+            task_id: input.message.?taskId
+
+  - operation: a2a.task.read
+    summary: Read a task the peer answered to this run, or list a context's tasks
+    access: read
+    target:
+      type: a2a.agent
+      id_pattern: '^peer$'
+      account: none
+    params:
+      task_id:
+        type: identifier
+        pattern: '^[A-Za-z0-9._~+=@-]{1,256}$'
+      context_id:
+        type: identifier
+        pattern: '^[A-Za-z0-9._~+=@-]{1,256}$'
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    dispatch:
+      a2a:
+        method: GetTask
+    mappings:
+      - channel: a2a
+        method: GetTask
+        route: a2a-task-get
+        extract:
+          target_id: "'peer'"
+          params:
+            task_id: input.id
+      - channel: a2a
+        method: SubscribeToTask
+        route: a2a-task-subscribe
+        extract:
+          target_id: "'peer'"
+          params:
+            task_id: input.id
+      - channel: a2a
+        method: ListTasks
+        route: a2a-task-list
+        extract:
+          target_id: "'peer'"
+          params:
+            context_id: input.contextId
+
+  - operation: a2a.task.cancel
+    summary: Cancel a task the peer answered to this run
+    access: write
+    target:
+      type: a2a.agent
+      id_pattern: '^peer$'
+      account: none
+    params:
+      task_id:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[A-Za-z0-9._~+=@-]{1,256}$'
+    effects:
+      - kind: request.cancel
+        description: Asks the peer agent to stop a task
+    reversibility: irreversible
+    dedupe_key: [target.id, params.task_id]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Cancel the peer agent's task {params.task_id}
+      fields: [params.task_id]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-17
+    dispatch:
+      a2a:
+        method: CancelTask
+    mappings:
+      - channel: a2a
+        method: CancelTask
+        route: a2a-task-cancel
+        extract:
+          target_id: "'peer'"
+          params:
+            task_id: input.id
