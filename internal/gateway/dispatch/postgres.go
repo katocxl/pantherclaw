@@ -39,9 +39,6 @@ const (
 	// CodeTargetMismatch: postgres.tables.read named a pg_database other than
 	// the connection's database (D79).
 	CodeTargetMismatch = "target_mismatch"
-	// CodeKindConfigMissing: the gateway has no postgres configuration for
-	// the connection (D85).
-	CodeKindConfigMissing = "kind_config_missing"
 )
 
 // roleRecheck is how long a passed role check holds before the pool checks
