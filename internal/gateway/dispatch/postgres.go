@@ -108,6 +108,7 @@ func (e *Engine) sendPostgres(ctx context.Context, r Result, conn *control.Conne
 	}
 	start := time.Now()
 	var res pgtarget.Result
+	var applied *pb.DataScopeApplied
 	if query.statement == nil {
 		// postgres.tables.read answers from the manifest alone.
 		body, err := pgdispatch.Describe(query.manifest, query.access)
@@ -145,20 +146,23 @@ func (e *Engine) sendPostgres(ctx context.Context, r Result, conn *control.Conne
 		}
 		e.breaker.record(ctx, conn, pb.Outcome_OUTCOME_ACCEPTED)
 		if s := scopeOf(ctx); s != nil || res.Redacted > 0 {
-			// Counts only, never values (D20); see the receipt question in the PR.
-			key := ""
-			if s != nil && s.records != nil {
-				key = s.records.Key
+			// What the scope did, as counts only, goes on the receipt (D20, D102).
+			applied = &pb.DataScopeApplied{
+				Rows: int32(min(res.Rows, 1_000_000)), ValuesRedacted: int32(min(res.Redacted, 100_000_000)), //nolint:gosec // G115: clamped
+				Truncated: res.Truncated || res.TruncatedValues,
 			}
-			e.log.InfoContext(ctx, "gateway.scope_applied", slog.String("transaction_id", want.Txn), slog.String("records_key", key),
-				slog.Int("rows", res.Rows), slog.Int("values_redacted", res.Redacted), slog.Bool("truncated", res.Truncated))
+			if s != nil && s.records != nil {
+				applied.RecordsKey = s.records.Key
+			}
 		}
 	}
 	elapsed := time.Since(start)
 	t.lap("target")
 	sum := sha256.Sum256(res.Body)
 	r.Response = &egress.Response{Status: 200, Body: res.Body, ContentType: "application/json"}
-	return e.record(ctx, r, want, pb.Outcome_OUTCOME_ACCEPTED, 200, sum[:], elapsed, "", "", t)
+	return e.record(ctx, r, want, pb.Outcome_OUTCOME_ACCEPTED, 200, sum[:], elapsed, "", "", t, func(req *pb.RecordExecutionRequest) {
+		req.DataScope = applied
+	})
 }
 
 // pgClassify is the class and code of a failed check or run: a timeout,

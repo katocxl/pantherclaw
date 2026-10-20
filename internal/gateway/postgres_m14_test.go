@@ -231,6 +231,11 @@ func TestHR310_RecordScopeIsAMandatoryPredicate(t *testing.T) {
 			t.Fatalf("another customer's row %v", row)
 		}
 	}
+	// The receipt records counts only (D20, D102).
+	recs := h.auth.snap().records
+	if ds := recs[len(recs)-1].GetDataScope(); ds.GetRecordsKey() != "customer" || ds.GetRows() != 3 || ds.GetValuesRedacted() != 0 {
+		t.Fatalf("data scope on the record: %v", ds)
+	}
 	// Asking for another customer finds nothing.
 	a, _ = pgRows(t, h, "/payments/v1/query", `{"table":"shop.orders","columns":["id"],"filters":[{"column":"customer_id","op":"eq","value":"1"}]}`)
 	if len(a.Rows) != 0 {
@@ -256,6 +261,10 @@ func TestHR311_ClassesThroughTheGateway(t *testing.T) {
 	a, r := pgRows(t, h, "/payments/v1/query", pgQuery)
 	if r.code != http.StatusOK || a.Rows[0][1] != "[redacted:pii]" || a.Rows[0][2] != "[redacted:secret]" || strings.Contains(r.body, "@example.com") {
 		t.Fatalf("redacted: %d %s", r.code, r.body)
+	}
+	recs := h.auth.snap().records
+	if ds := recs[len(recs)-1].GetDataScope(); ds.GetRecordsKey() != "" || ds.GetRows() != 2 || ds.GetValuesRedacted() != 4 {
+		t.Fatalf("data scope on the record: %v", ds)
 	}
 	for body, code := range map[string]string{
 		`{"table":"shop.customers","columns":["id"],"filters":[{"column":"email","op":"prefix","value":"a"}]}`: "column_not_allowed",

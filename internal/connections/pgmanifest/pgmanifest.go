@@ -395,3 +395,30 @@ func (s *Service) Confirm(ctx context.Context, id ids.UUID, digest string, su *s
 		return err
 	})
 }
+
+// CheckGateway validates a postgres connection's configuration for the
+// gateway it moves to, in the move's transaction (ports.KindGatewayCheck,
+// D105): an internal configuration, serving or proposed, cannot move to a
+// gateway PantherClaw hosts. The operator's private prefixes are the
+// gateway's own and are checked where it dials.
+func (s Store) CheckGateway(ctx context.Context, tx db.TenantTx, org ids.OrgID, connection, gateway ids.UUID) error {
+	if s.Hosted == nil || !s.Hosted(gateway) {
+		return nil
+	}
+	row, err := dbq.New(tx).LockPostgresConnection(ctx, org, connection)
+	if db.IsNoRows(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	for _, raw := range [][]byte{row.Config, row.Proposed} {
+		c, err := decode(raw)
+		if err != nil {
+			return err
+		}
+		if c != nil && c.Internal {
+			return ErrInternalHosted
+		}
+	}
+	return nil
+}

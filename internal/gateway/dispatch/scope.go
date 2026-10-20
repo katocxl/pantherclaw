@@ -64,6 +64,8 @@ func scopeObligation(o *pb.Obligation) bool {
 type dataScope struct {
 	records *pgdispatch.RecordScope
 	classes []pgdispatch.Class
+	// applied is what scopeHTTP did to the answer, for the receipt (D102).
+	applied *pb.DataScopeApplied
 }
 
 type scopeKey struct{}
@@ -143,9 +145,24 @@ func (e *Engine) scopeHTTP(ctx context.Context, conn *control.Connection, def *d
 		return EnforcementFailed, CodeScopeUnenforceable
 	}
 	res.Body = body
-	e.log.InfoContext(ctx, "gateway.scope_applied", slog.String("connection_id", conn.GetId()), slog.String("operation", def.Operation),
-		slog.Int("values_redacted", redacted))
+	items := 1
+	if v := jsontext.Value(body); v.Kind() == jsontext.KindBeginArray {
+		var a []jsontext.Value
+		if json.Unmarshal(v, &a) == nil {
+			items = len(a)
+		}
+	}
+	s.applied = &pb.DataScopeApplied{Rows: int32(min(items, 1_000_000)), ValuesRedacted: int32(min(redacted, 100_000_000))} //nolint:gosec // G115: clamped
 	return class, code
+}
+
+// appliedScope is what the scope engine did to a dispatch's answer, nil
+// when it did nothing.
+func appliedScope(ctx context.Context) *pb.DataScopeApplied {
+	if s := scopeOf(ctx); s != nil {
+		return s.applied
+	}
+	return nil
 }
 
 // scopeJSON redacts every value of a JSON answer whose class the scope
