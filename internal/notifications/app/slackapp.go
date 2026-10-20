@@ -288,9 +288,10 @@ func approvalRequestOf(linkPath string) (ids.UUID, bool) {
 // sendSlackApp delivers one notice to a slack_app channel: the open card
 // for a new request, an update in place when it ends, a thread reply when
 // it is escalated (D23). Every card is rendered from the request as it is
-// now, so a late or repeated delivery shows the current state. Below the
-// Team edition no new card is posted, but cards already posted are still
-// closed (D88).
+// now, so a late or repeated delivery shows the current state; a request
+// that returned to PENDING after its card closed gets a new card (D104).
+// Below the Team edition no new card is posted, but cards already posted
+// are still closed (D88).
 func (s *Service) sendSlackApp(ctx context.Context, org ids.OrgID, d dbq.LoadDeliveryRow, link string) outcome {
 	ev := domain.CardEventOf(d.Type)
 	if d.ChannelID == nil {
@@ -319,7 +320,7 @@ func (s *Service) sendSlackApp(ctx context.Context, org ids.OrgID, d dbq.LoadDel
 		if facts, err = q.SlackCardFacts(ctx, org, request); err != nil {
 			return err
 		}
-		c, err := q.GetSlackCard(ctx, org, request, *d.ChannelID)
+		c, err := q.LatestSlackCard(ctx, org, request, *d.ChannelID)
 		if err == nil {
 			stored = &c
 		} else if !db.IsNoRows(err) {
@@ -353,9 +354,12 @@ func (s *Service) sendSlackApp(ctx context.Context, org ids.OrgID, d dbq.LoadDel
 		ExpiresAt: facts.DeadlineAt, RequestID: request.String(), Link: link, Simulated: simulated,
 		Operation: facts.Operation, Agent: facts.AgentName, Environment: facts.EnvironmentName,
 	}
+	// A request waiting again after its card closed (a voided approval
+	// returned it to PENDING) gets a new card; the closed one stays closed.
+	reopened := stored != nil && stored.State == domain.CardClosed && !domain.CardIsClosed(facts.State)
 	switch ev {
 	case domain.CardPost:
-		if stored != nil {
+		if stored != nil && !reopened {
 			return s.slackExisting(ctx, org, string(token), *stored, f)
 		}
 		if cfg.ActivatedAt == nil || facts.CreatedAt.Before(*cfg.ActivatedAt) {
@@ -365,7 +369,7 @@ func (s *Service) sendSlackApp(ctx context.Context, org ids.OrgID, d dbq.LoadDel
 		}
 		return s.slackNewCard(ctx, org, string(token), cfg, f, request)
 	case domain.CardClose:
-		if stored == nil {
+		if stored == nil || reopened {
 			return outcome{skip: true, code: "no_card"}
 		}
 		return s.slackExisting(ctx, org, string(token), *stored, f)
@@ -373,20 +377,42 @@ func (s *Service) sendSlackApp(ctx context.Context, org ids.OrgID, d dbq.LoadDel
 		if stored == nil || stored.State != domain.CardOpen || stored.Ts == nil {
 			return outcome{skip: true, code: "no_open_card"}
 		}
-		_, out := s.slackPost(ctx, string(token), stored.SlackChannel, *stored.Ts, domain.EscalationReply(int(stored.Escalations)+1))
-		if !out.ok {
-			return out
-		}
-		if err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-			_, err := dbq.New(tx).AddSlackCardEscalation(ctx, org, request, stored.ChannelRecordID)
-			return err
-		}); err != nil {
-			return outcome{code: "store_failed"}
-		}
-		return out
+		return s.slackEscalate(ctx, org, string(token), *stored)
 	case domain.CardTest, domain.CardNone:
 	}
 	return outcome{skip: true, code: "not_a_card"}
+}
+
+// slackEscalate claims the next escalation reply of an open card, then
+// posts it (D104): a concurrent delivery never posts the same step twice;
+// a reply Slack refused releases the claim, a lost answer keeps it.
+func (s *Service) slackEscalate(ctx context.Context, org ids.OrgID, token string, stored dbq.PcSlackCard) outcome {
+	var claimed int64
+	if err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		claimed, err = dbq.New(tx).ClaimSlackEscalation(ctx, org, stored.CardID, stored.Escalations)
+		return err
+	}); err != nil {
+		return outcome{code: "store_failed"}
+	}
+	if claimed == 0 {
+		// Another notice claimed this step: this one is the next step, tried
+		// again with the count it will then read (D117).
+		return outcome{code: "escalation_claimed"}
+	}
+	_, out := s.slackPost(ctx, token, stored.SlackChannel, *stored.Ts, domain.EscalationReply(int(stored.Escalations)+1))
+	if !out.ok && !slackRefused(out) {
+		// The reply may be in Slack: its claim stays and it is never posted
+		// again under another number (D117).
+		return outcome{code: "slack_post_unknown", status: out.status, permanent: true}
+	}
+	if !out.ok && slackRefused(out) {
+		_ = s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+			_, err := dbq.New(tx).ReleaseSlackEscalation(ctx, org, stored.CardID, stored.Escalations+1)
+			return err
+		})
+	}
+	return out
 }
 
 // card renders f as the request is now: open while it waits, closed once
@@ -398,21 +424,23 @@ func card(f domain.CardFacts) (domain.SlackCard, string) {
 	return domain.OpenCard(f), domain.CardOpen
 }
 
-// Card claim states besides OPEN and CLOSED (D88).
+// Card claim states besides OPEN and CLOSED (D88, D104).
 const (
-	cardPosting = "POSTING"
-	cardUnknown = "UNKNOWN"
+	cardPosting  = "POSTING"
+	cardUnknown  = "UNKNOWN"
+	cardOrphaned = "ORPHANED"
 )
 
 // slackExisting handles a notice for a request that already has a card:
 // an OPEN or CLOSED card is updated to the request's current state; a
 // claim found from an earlier attempt, whose answer was lost, is UNKNOWN
-// and never posted again (F167: the approval page is authoritative).
+// and never posted again (F167: the approval page is authoritative). An
+// ORPHANED card is still updated: a later notice may reach it (D117).
 func (s *Service) slackExisting(ctx context.Context, org ids.OrgID, token string, stored dbq.PcSlackCard, f domain.CardFacts) outcome {
 	switch stored.State {
 	case cardPosting:
 		_ = s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-			_, err := dbq.New(tx).MarkSlackCardUnknown(ctx, org, stored.RequestID, stored.ChannelRecordID)
+			_, err := dbq.New(tx).MarkSlackCardUnknown(ctx, org, stored.CardID)
 			return err
 		})
 		return outcome{code: "slack_post_unknown", permanent: true}
@@ -443,11 +471,12 @@ func slackRefused(out outcome) bool {
 // first read and the store found no card to close, so the card is closed
 // here.
 func (s *Service) slackNewCard(ctx context.Context, org ids.OrgID, token string, cfg dbq.GetSlackAppChannelRow, f domain.CardFacts, request ids.UUID) outcome {
+	cardID := ids.NewV7()
 	var claimed int64
 	if err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		var err error
 		claimed, err = dbq.New(tx).ClaimSlackCard(ctx, dbq.ClaimSlackCardParams{
-			OrgID: org, RequestID: request, ChannelRecordID: cfg.ChannelRecordID, SlackChannel: cfg.SlackChannel,
+			OrgID: org, CardID: cardID, RequestID: request, ChannelRecordID: cfg.ChannelRecordID, SlackChannel: cfg.SlackChannel,
 		})
 		return err
 	}); err != nil {
@@ -462,10 +491,10 @@ func (s *Service) slackNewCard(ctx context.Context, org ids.OrgID, token string,
 		_ = s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 			q := dbq.New(tx)
 			if slackRefused(out) {
-				_, err := q.ReleaseSlackCard(ctx, org, request, cfg.ChannelRecordID)
+				_, err := q.ReleaseSlackCard(ctx, org, cardID)
 				return err
 			}
-			_, err := q.MarkSlackCardUnknown(ctx, org, request, cfg.ChannelRecordID)
+			_, err := q.MarkSlackCardUnknown(ctx, org, cardID)
 			return err
 		})
 		if !slackRefused(out) {
@@ -473,13 +502,13 @@ func (s *Service) slackNewCard(ctx context.Context, org ids.OrgID, token string,
 		}
 		return out
 	}
-	stored := dbq.PcSlackCard{OrgID: org, RequestID: request, ChannelRecordID: cfg.ChannelRecordID, SlackChannel: cfg.SlackChannel, Ts: &ts, State: state}
+	stored := dbq.PcSlackCard{
+		OrgID: org, CardID: cardID, RequestID: request, ChannelRecordID: cfg.ChannelRecordID, SlackChannel: cfg.SlackChannel, Ts: &ts, State: state,
+	}
 	var err error
 	for range 3 { // the post is done: storing its ts is retried, never the post
 		if err = s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-			_, err := dbq.New(tx).SetSlackCardPosted(ctx, dbq.SetSlackCardPostedParams{
-				Ts: &ts, State: state, OrgID: org, RequestID: request, ChannelRecordID: cfg.ChannelRecordID,
-			})
+			_, err := dbq.New(tx).SetSlackCardPosted(ctx, dbq.SetSlackCardPostedParams{Ts: &ts, State: state, OrgID: org, CardID: cardID})
 			return err
 		}); err == nil {
 			break
@@ -503,22 +532,38 @@ func (s *Service) slackNewCard(ctx context.Context, org ids.OrgID, token string,
 	return out
 }
 
-// slackRefresh updates a stored card to the request's current state.
+// slackRefresh updates a stored card to the request's current state. It
+// reads the request again after the update: when it changed between open
+// and closed meanwhile (a stale close racing a reopen), the card is updated
+// once more to what is now true (D117).
 func (s *Service) slackRefresh(ctx context.Context, org ids.OrgID, token string, stored dbq.PcSlackCard, f domain.CardFacts) outcome {
 	if stored.Ts == nil {
 		return outcome{skip: true, code: "no_card"}
 	}
-	c, state := card(f)
-	out := s.slackUpdate(ctx, token, stored.SlackChannel, *stored.Ts, c)
-	if !out.ok || state == stored.State {
-		return out
-	}
-	if err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		return dbq.New(tx).SetSlackCardState(ctx, dbq.SetSlackCardStateParams{
-			State: state, OrgID: org, RequestID: stored.RequestID, ChannelRecordID: stored.ChannelRecordID,
-		})
-	}); err != nil {
-		return outcome{code: "store_failed"}
+	var out outcome
+	for range 2 {
+		c, state := card(f)
+		out = s.slackUpdate(ctx, token, stored.SlackChannel, *stored.Ts, c)
+		if !out.ok {
+			return out
+		}
+		if state != stored.State {
+			if err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+				return dbq.New(tx).SetSlackCardState(ctx, state, org, stored.CardID)
+			}); err != nil {
+				return outcome{code: "store_failed"}
+			}
+			stored.State = state
+		}
+		var now string
+		if err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+			r, err := dbq.New(tx).SlackCardFacts(ctx, org, stored.RequestID)
+			now = r.State
+			return err
+		}, db.ReadOnly()); err != nil || domain.CardIsClosed(now) == domain.CardIsClosed(f.State) {
+			return out
+		}
+		f.State = now
 	}
 	return out
 }

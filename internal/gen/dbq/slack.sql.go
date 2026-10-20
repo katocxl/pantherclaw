@@ -56,7 +56,7 @@ SELECT a.channel_record_id, a.slack_channel, c.secret
 FROM pc.slack_app_channels a
 JOIN pc.notification_channels c ON c.org_id = a.org_id AND c.id = a.channel_record_id
 WHERE a.org_id = $1 AND a.state = 'ACTIVE' AND c.state <> 'DISABLED'
-ORDER BY a.channel_record_id
+ORDER BY a.last_checked_at NULLS FIRST, a.channel_record_id
 LIMIT $2
 `
 
@@ -66,6 +66,8 @@ type ActiveSlackAppChannelsRow struct {
 	Secret          []byte
 }
 
+// Active channels, least recently checked first: each run checks a bounded
+// number, and over runs every channel is checked (D117).
 func (q *Queries) ActiveSlackAppChannels(ctx context.Context, orgID ids.OrgID, batch int32) ([]ActiveSlackAppChannelsRow, error) {
 	rows, err := q.db.Query(ctx, activeSlackAppChannels, orgID, batch)
 	if err != nil {
@@ -86,37 +88,26 @@ func (q *Queries) ActiveSlackAppChannels(ctx context.Context, orgID ids.OrgID, b
 	return items, nil
 }
 
-const addSlackCardEscalation = `-- name: AddSlackCardEscalation :one
-UPDATE pc.slack_cards SET escalations = least(escalations + 1, 100), updated_at = now()
-WHERE org_id = $1 AND request_id = $2 AND channel_record_id = $3
-RETURNING escalations
-`
-
-func (q *Queries) AddSlackCardEscalation(ctx context.Context, orgID ids.OrgID, requestID ids.UUID, channelRecordID ids.UUID) (int32, error) {
-	row := q.db.QueryRow(ctx, addSlackCardEscalation, orgID, requestID, channelRecordID)
-	var escalations int32
-	err := row.Scan(&escalations)
-	return escalations, err
-}
-
 const claimSlackCard = `-- name: ClaimSlackCard :execrows
-INSERT INTO pc.slack_cards (org_id, request_id, channel_record_id, slack_channel, state)
-VALUES ($1, $2, $3, $4, 'POSTING')
-ON CONFLICT (org_id, request_id, channel_record_id) DO NOTHING
+INSERT INTO pc.slack_cards (org_id, card_id, request_id, channel_record_id, slack_channel, state)
+VALUES ($1, $2, $3, $4, $5, 'POSTING')
+ON CONFLICT (org_id, request_id, channel_record_id) WHERE state IN ('POSTING', 'OPEN', 'UNKNOWN') DO NOTHING
 `
 
 type ClaimSlackCardParams struct {
 	OrgID           ids.OrgID
+	CardID          ids.UUID
 	RequestID       ids.UUID
 	ChannelRecordID ids.UUID
 	SlackChannel    string
 }
 
-// Claims the one card of a request in a channel before it is posted (D88):
+// Claims a request's live card in a channel before it is posted (D88):
 // 0 rows means another delivery claimed it first.
 func (q *Queries) ClaimSlackCard(ctx context.Context, arg ClaimSlackCardParams) (int64, error) {
 	result, err := q.db.Exec(ctx, claimSlackCard,
 		arg.OrgID,
+		arg.CardID,
 		arg.RequestID,
 		arg.ChannelRecordID,
 		arg.SlackChannel,
@@ -127,8 +118,55 @@ func (q *Queries) ClaimSlackCard(ctx context.Context, arg ClaimSlackCardParams) 
 	return result.RowsAffected(), nil
 }
 
+const claimSlackEscalation = `-- name: ClaimSlackEscalation :execrows
+UPDATE pc.slack_cards SET escalations = escalations + 1, updated_at = now()
+WHERE org_id = $1 AND card_id = $2 AND state = 'OPEN' AND escalations = $3
+  AND escalations < 100
+`
+
+// Claims escalation reply number seen + 1 before it is posted (D104).
+func (q *Queries) ClaimSlackEscalation(ctx context.Context, orgID ids.OrgID, cardID ids.UUID, seen int32) (int64, error) {
+	result, err := q.db.Exec(ctx, claimSlackEscalation, orgID, cardID, seen)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deferSlackCardClose = `-- name: DeferSlackCardClose :exec
+UPDATE pc.slack_cards
+SET close_retries = least(close_retries + 1, 100000), updated_at = now(),
+    close_after = now() + make_interval(secs => greatest(least(60 * power(2, least(close_retries, 6)), 3600), $1::int)::int)
+WHERE org_id = $2 AND card_id = $3 AND state = 'OPEN'
+`
+
+// A close that failed for a reason worth retrying (429, a timeout, a 5xx):
+// the card waits with backoff (1 min doubling to 1 h, at least wait
+// seconds) and is never orphaned for it (D117).
+func (q *Queries) DeferSlackCardClose(ctx context.Context, waitSeconds int32, orgID ids.OrgID, cardID ids.UUID) error {
+	_, err := q.db.Exec(ctx, deferSlackCardClose, waitSeconds, orgID, cardID)
+	return err
+}
+
+const failSlackCardClose = `-- name: FailSlackCardClose :one
+UPDATE pc.slack_cards
+SET close_attempts = close_attempts + 1, updated_at = now(),
+    state = CASE WHEN close_attempts + 1 >= 5 THEN 'ORPHANED' ELSE state END
+WHERE org_id = $1 AND card_id = $2 AND state = 'OPEN'
+RETURNING state
+`
+
+// Counts a close Slack will not recover from; the fifth makes the card
+// ORPHANED (D104, D117).
+func (q *Queries) FailSlackCardClose(ctx context.Context, orgID ids.OrgID, cardID ids.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, failSlackCardClose, orgID, cardID)
+	var state string
+	err := row.Scan(&state)
+	return state, err
+}
+
 const getSlackAppChannel = `-- name: GetSlackAppChannel :one
-SELECT a.org_id, a.channel_record_id, a.slack_channel, a.data_level, a.state, a.team_id, a.bot_id, a.created_at, a.activated_by, a.activated_credential, a.activated_at, a.token_replaced_by, a.token_replaced_at, a.shared_externally_at, a.updated_at, c.secret, c.state AS channel_state, c.name AS channel_name
+SELECT a.org_id, a.channel_record_id, a.slack_channel, a.data_level, a.state, a.team_id, a.bot_id, a.created_at, a.activated_by, a.activated_credential, a.activated_at, a.token_replaced_by, a.token_replaced_at, a.shared_externally_at, a.last_checked_at, a.updated_at, c.secret, c.state AS channel_state, c.name AS channel_name
 FROM pc.slack_app_channels a
 JOIN pc.notification_channels c ON c.org_id = a.org_id AND c.id = a.channel_record_id
 WHERE a.org_id = $1 AND a.channel_record_id = $2
@@ -149,6 +187,7 @@ type GetSlackAppChannelRow struct {
 	TokenReplacedBy     *string
 	TokenReplacedAt     *time.Time
 	SharedExternallyAt  *time.Time
+	LastCheckedAt       *time.Time
 	UpdatedAt           time.Time
 	Secret              []byte
 	ChannelState        string
@@ -173,6 +212,7 @@ func (q *Queries) GetSlackAppChannel(ctx context.Context, orgID ids.OrgID, chann
 		&i.TokenReplacedBy,
 		&i.TokenReplacedAt,
 		&i.SharedExternallyAt,
+		&i.LastCheckedAt,
 		&i.UpdatedAt,
 		&i.Secret,
 		&i.ChannelState,
@@ -181,22 +221,25 @@ func (q *Queries) GetSlackAppChannel(ctx context.Context, orgID ids.OrgID, chann
 	return i, err
 }
 
-const getSlackCard = `-- name: GetSlackCard :one
-SELECT org_id, request_id, channel_record_id, slack_channel, ts, state, escalations, created_at, updated_at FROM pc.slack_cards
-WHERE org_id = $1 AND request_id = $2 AND channel_record_id = $3
+const getSlackCardByID = `-- name: GetSlackCardByID :one
+SELECT org_id, card_id, request_id, channel_record_id, slack_channel, ts, state, escalations, close_attempts, close_retries, close_after, created_at, updated_at FROM pc.slack_cards WHERE org_id = $1 AND card_id = $2
 `
 
-func (q *Queries) GetSlackCard(ctx context.Context, orgID ids.OrgID, requestID ids.UUID, channelRecordID ids.UUID) (PcSlackCard, error) {
-	row := q.db.QueryRow(ctx, getSlackCard, orgID, requestID, channelRecordID)
+func (q *Queries) GetSlackCardByID(ctx context.Context, orgID ids.OrgID, cardID ids.UUID) (PcSlackCard, error) {
+	row := q.db.QueryRow(ctx, getSlackCardByID, orgID, cardID)
 	var i PcSlackCard
 	err := row.Scan(
 		&i.OrgID,
+		&i.CardID,
 		&i.RequestID,
 		&i.ChannelRecordID,
 		&i.SlackChannel,
 		&i.Ts,
 		&i.State,
 		&i.Escalations,
+		&i.CloseAttempts,
+		&i.CloseRetries,
+		&i.CloseAfter,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -230,8 +273,38 @@ func (q *Queries) InsertSlackAppChannel(ctx context.Context, arg InsertSlackAppC
 	return err
 }
 
+const latestSlackCard = `-- name: LatestSlackCard :one
+SELECT org_id, card_id, request_id, channel_record_id, slack_channel, ts, state, escalations, close_attempts, close_retries, close_after, created_at, updated_at FROM pc.slack_cards
+WHERE org_id = $1 AND request_id = $2 AND channel_record_id = $3
+ORDER BY created_at DESC, card_id DESC
+LIMIT 1
+`
+
+// A request's newest card in a channel (a request that returned to
+// PENDING may have a CLOSED card and a newer one, D104).
+func (q *Queries) LatestSlackCard(ctx context.Context, orgID ids.OrgID, requestID ids.UUID, channelRecordID ids.UUID) (PcSlackCard, error) {
+	row := q.db.QueryRow(ctx, latestSlackCard, orgID, requestID, channelRecordID)
+	var i PcSlackCard
+	err := row.Scan(
+		&i.OrgID,
+		&i.CardID,
+		&i.RequestID,
+		&i.ChannelRecordID,
+		&i.SlackChannel,
+		&i.Ts,
+		&i.State,
+		&i.Escalations,
+		&i.CloseAttempts,
+		&i.CloseRetries,
+		&i.CloseAfter,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listSlackAppChannels = `-- name: ListSlackAppChannels :many
-SELECT org_id, channel_record_id, slack_channel, data_level, state, team_id, bot_id, created_at, activated_by, activated_credential, activated_at, token_replaced_by, token_replaced_at, shared_externally_at, updated_at FROM pc.slack_app_channels
+SELECT org_id, channel_record_id, slack_channel, data_level, state, team_id, bot_id, created_at, activated_by, activated_credential, activated_at, token_replaced_by, token_replaced_at, shared_externally_at, last_checked_at, updated_at FROM pc.slack_app_channels
 WHERE org_id = $1 AND channel_record_id = ANY ($2::uuid[])
 `
 
@@ -259,6 +332,7 @@ func (q *Queries) ListSlackAppChannels(ctx context.Context, orgID ids.OrgID, cha
 			&i.TokenReplacedBy,
 			&i.TokenReplacedAt,
 			&i.SharedExternallyAt,
+			&i.LastCheckedAt,
 			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -272,7 +346,7 @@ func (q *Queries) ListSlackAppChannels(ctx context.Context, orgID ids.OrgID, cha
 }
 
 const lockSlackAppChannel = `-- name: LockSlackAppChannel :one
-SELECT a.org_id, a.channel_record_id, a.slack_channel, a.data_level, a.state, a.team_id, a.bot_id, a.created_at, a.activated_by, a.activated_credential, a.activated_at, a.token_replaced_by, a.token_replaced_at, a.shared_externally_at, a.updated_at, c.secret, c.state AS channel_state, c.name AS channel_name
+SELECT a.org_id, a.channel_record_id, a.slack_channel, a.data_level, a.state, a.team_id, a.bot_id, a.created_at, a.activated_by, a.activated_credential, a.activated_at, a.token_replaced_by, a.token_replaced_at, a.shared_externally_at, a.last_checked_at, a.updated_at, c.secret, c.state AS channel_state, c.name AS channel_name
 FROM pc.slack_app_channels a
 JOIN pc.notification_channels c ON c.org_id = a.org_id AND c.id = a.channel_record_id
 WHERE a.org_id = $1 AND a.channel_record_id = $2
@@ -294,6 +368,7 @@ type LockSlackAppChannelRow struct {
 	TokenReplacedBy     *string
 	TokenReplacedAt     *time.Time
 	SharedExternallyAt  *time.Time
+	LastCheckedAt       *time.Time
 	UpdatedAt           time.Time
 	Secret              []byte
 	ChannelState        string
@@ -318,6 +393,7 @@ func (q *Queries) LockSlackAppChannel(ctx context.Context, orgID ids.OrgID, chan
 		&i.TokenReplacedBy,
 		&i.TokenReplacedAt,
 		&i.SharedExternallyAt,
+		&i.LastCheckedAt,
 		&i.UpdatedAt,
 		&i.Secret,
 		&i.ChannelState,
@@ -328,18 +404,27 @@ func (q *Queries) LockSlackAppChannel(ctx context.Context, orgID ids.OrgID, chan
 
 const markSlackCardUnknown = `-- name: MarkSlackCardUnknown :execrows
 UPDATE pc.slack_cards SET state = 'UNKNOWN', updated_at = now()
-WHERE org_id = $1 AND request_id = $2 AND channel_record_id = $3
-  AND state = 'POSTING'
+WHERE org_id = $1 AND card_id = $2 AND state = 'POSTING'
 `
 
 // A claimed card whose post may or may not have reached Slack: never
 // posted again.
-func (q *Queries) MarkSlackCardUnknown(ctx context.Context, orgID ids.OrgID, requestID ids.UUID, channelRecordID ids.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, markSlackCardUnknown, orgID, requestID, channelRecordID)
+func (q *Queries) MarkSlackCardUnknown(ctx context.Context, orgID ids.OrgID, cardID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, markSlackCardUnknown, orgID, cardID)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const markSlackChannelChecked = `-- name: MarkSlackChannelChecked :exec
+UPDATE pc.slack_app_channels SET last_checked_at = now()
+WHERE org_id = $1 AND channel_record_id = $2 AND state = 'ACTIVE'
+`
+
+func (q *Queries) MarkSlackChannelChecked(ctx context.Context, orgID ids.OrgID, channelRecordID ids.UUID) error {
+	_, err := q.db.Exec(ctx, markSlackChannelChecked, orgID, channelRecordID)
+	return err
 }
 
 const markSlackSharedExternally = `-- name: MarkSlackSharedExternally :execrows
@@ -357,15 +442,40 @@ func (q *Queries) MarkSlackSharedExternally(ctx context.Context, orgID ids.OrgID
 	return result.RowsAffected(), nil
 }
 
+const noteChannelFailureCode = `-- name: NoteChannelFailureCode :exec
+UPDATE pc.notification_channels SET last_failure_code = $1, last_failure_at = now()
+WHERE org_id = $2 AND id = $3
+`
+
+// Shows a problem in a channel's delivery health without counting it as a
+// failed delivery: the auto-pause clock is left alone (D117).
+func (q *Queries) NoteChannelFailureCode(ctx context.Context, code *string, orgID ids.OrgID, iD ids.UUID) error {
+	_, err := q.db.Exec(ctx, noteChannelFailureCode, code, orgID, iD)
+	return err
+}
+
 const releaseSlackCard = `-- name: ReleaseSlackCard :execrows
 DELETE FROM pc.slack_cards
-WHERE org_id = $1 AND request_id = $2 AND channel_record_id = $3
-  AND state = 'POSTING'
+WHERE org_id = $1 AND card_id = $2 AND state = 'POSTING'
 `
 
 // Releases a claim whose post Slack refused: nothing was posted.
-func (q *Queries) ReleaseSlackCard(ctx context.Context, orgID ids.OrgID, requestID ids.UUID, channelRecordID ids.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, releaseSlackCard, orgID, requestID, channelRecordID)
+func (q *Queries) ReleaseSlackCard(ctx context.Context, orgID ids.OrgID, cardID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseSlackCard, orgID, cardID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const releaseSlackEscalation = `-- name: ReleaseSlackEscalation :execrows
+UPDATE pc.slack_cards SET escalations = escalations - 1, updated_at = now()
+WHERE org_id = $1 AND card_id = $2 AND escalations = $3
+`
+
+// Releases an escalation claim whose reply Slack refused.
+func (q *Queries) ReleaseSlackEscalation(ctx context.Context, orgID ids.OrgID, cardID ids.UUID, claimed int32) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseSlackEscalation, orgID, cardID, claimed)
 	if err != nil {
 		return 0, err
 	}
@@ -403,26 +513,24 @@ func (q *Queries) SetChannelSecret(ctx context.Context, secret []byte, orgID ids
 
 const setSlackCardPosted = `-- name: SetSlackCardPosted :execrows
 UPDATE pc.slack_cards SET ts = $1, state = $2, updated_at = now()
-WHERE org_id = $3 AND request_id = $4 AND channel_record_id = $5
-  AND state = 'POSTING'
+WHERE org_id = $3 AND card_id = $4 AND state IN ('POSTING', 'UNKNOWN')
 `
 
 type SetSlackCardPostedParams struct {
-	Ts              *string
-	State           string
-	OrgID           ids.OrgID
-	RequestID       ids.UUID
-	ChannelRecordID ids.UUID
+	Ts     *string
+	State  string
+	OrgID  ids.OrgID
+	CardID ids.UUID
 }
 
-// Stores the ts Slack answered for a claimed card.
+// Stores the ts Slack answered for a claimed card, also when a concurrent
+// delivery already marked the claim UNKNOWN (D104): the returned ts wins.
 func (q *Queries) SetSlackCardPosted(ctx context.Context, arg SetSlackCardPostedParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setSlackCardPosted,
 		arg.Ts,
 		arg.State,
 		arg.OrgID,
-		arg.RequestID,
-		arg.ChannelRecordID,
+		arg.CardID,
 	)
 	if err != nil {
 		return 0, err
@@ -432,23 +540,12 @@ func (q *Queries) SetSlackCardPosted(ctx context.Context, arg SetSlackCardPosted
 
 const setSlackCardState = `-- name: SetSlackCardState :exec
 UPDATE pc.slack_cards SET state = $1, updated_at = now()
-WHERE org_id = $2 AND request_id = $3 AND channel_record_id = $4
+WHERE org_id = $2 AND card_id = $3 AND state IN ('OPEN', 'CLOSED', 'ORPHANED')
 `
 
-type SetSlackCardStateParams struct {
-	State           string
-	OrgID           ids.OrgID
-	RequestID       ids.UUID
-	ChannelRecordID ids.UUID
-}
-
-func (q *Queries) SetSlackCardState(ctx context.Context, arg SetSlackCardStateParams) error {
-	_, err := q.db.Exec(ctx, setSlackCardState,
-		arg.State,
-		arg.OrgID,
-		arg.RequestID,
-		arg.ChannelRecordID,
-	)
+// An ORPHANED card a later update reached is OPEN or CLOSED again (D117).
+func (q *Queries) SetSlackCardState(ctx context.Context, state string, orgID ids.OrgID, cardID ids.UUID) error {
+	_, err := q.db.Exec(ctx, setSlackCardState, state, orgID, cardID)
 	return err
 }
 
@@ -497,22 +594,28 @@ func (q *Queries) SlackCardFacts(ctx context.Context, orgID ids.OrgID, iD ids.UU
 }
 
 const slackCardsToClose = `-- name: SlackCardsToClose :many
-SELECT c.request_id, c.channel_record_id
+SELECT c.card_id, c.request_id, c.channel_record_id
 FROM pc.slack_cards c
 JOIN pc.approval_requests r ON r.org_id = c.org_id AND r.id = c.request_id
-WHERE c.org_id = $1 AND c.state = 'OPEN'
+JOIN pc.slack_app_channels a ON a.org_id = c.org_id AND a.channel_record_id = c.channel_record_id
+JOIN pc.notification_channels n ON n.org_id = c.org_id AND n.id = c.channel_record_id
+WHERE c.org_id = $1 AND c.state = 'OPEN' AND a.state = 'ACTIVE' AND n.state <> 'DISABLED'
+  AND (c.close_after IS NULL OR c.close_after <= now())
   AND r.state IN ('APPROVED', 'CONSUMED', 'DECLINED', 'EXPIRED', 'INVALIDATED', 'SUPERSEDED')
-ORDER BY c.updated_at
+ORDER BY c.close_attempts + least(c.close_retries, 1000), c.updated_at, c.card_id
 LIMIT $2
 `
 
 type SlackCardsToCloseRow struct {
+	CardID          ids.UUID
 	RequestID       ids.UUID
 	ChannelRecordID ids.UUID
 }
 
-// Open cards whose request is final, oldest first, for the reconciler
-// (D88): bounded.
+// Open cards of active channels whose request is final and whose backoff
+// has passed, fewest failed tries first, then least recently tried, for
+// the reconciler (D88, D104, D117): bounded, so unclosable cards move to
+// the back and never starve the batch.
 func (q *Queries) SlackCardsToClose(ctx context.Context, orgID ids.OrgID, batch int32) ([]SlackCardsToCloseRow, error) {
 	rows, err := q.db.Query(ctx, slackCardsToClose, orgID, batch)
 	if err != nil {
@@ -522,7 +625,7 @@ func (q *Queries) SlackCardsToClose(ctx context.Context, orgID ids.OrgID, batch 
 	items := []SlackCardsToCloseRow{}
 	for rows.Next() {
 		var i SlackCardsToCloseRow
-		if err := rows.Scan(&i.RequestID, &i.ChannelRecordID); err != nil {
+		if err := rows.Scan(&i.CardID, &i.RequestID, &i.ChannelRecordID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

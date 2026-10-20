@@ -50,9 +50,12 @@ definitions:
         type: identifier
         material: true
         pattern: '^[0-9]{10}\.[0-9]{6}$'
+    # A post needs a destination bound: a grant or envelope that names no
+    # channels lets it post nowhere (D57, D78).
     constraints:
       - kind: target_set
       - kind: destination_set
+        required: true
     effects:
       - kind: message.send
         description: Posts a message that everyone in the channel can read
@@ -152,10 +155,16 @@ definitions:
       http:
         method: POST
         path: /chat.postMessage
+        # A form post (Slack's Web API takes forms), so the literal false
+        # values below are sent as Slack expects them: Slack fetches no link
+        # in the message (D104).
+        encoding: form
         body:
           channel: target.id
           text: params.text
           thread_ts: params.thread_ts
+          unfurl_links: literal.false
+          unfurl_media: literal.false
         success:
           field: ok
           equals: true

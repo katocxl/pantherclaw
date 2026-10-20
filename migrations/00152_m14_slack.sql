@@ -17,7 +17,7 @@
 -- (shared_externally_at). The workspace never changes once known: a token
 -- of another workspace is a new channel.
 --
--- slack_cards keeps at most one card per approval request and slack_app
+-- slack_cards keeps at most one live card per approval request and slack_app
 -- channel (D88): a delivery claims the row (POSTING) before it posts, so a
 -- retry never posts twice; the Slack message ts chat.update needs is stored
 -- once Slack answers (OPEN, CLOSED), and a post whose answer was lost is
@@ -42,6 +42,9 @@ CREATE TABLE pc.slack_app_channels (
     token_replaced_by         text        CHECK (token_replaced_by IS NULL OR char_length(token_replaced_by) BETWEEN 1 AND 128),
     token_replaced_at         timestamptz,
     shared_externally_at      timestamptz,
+    -- When the reconciler last asked Slack whether the channel is still
+    -- internal; it asks the least recently checked first (D117).
+    last_checked_at           timestamptz,
     updated_at                timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (org_id, channel_record_id),
     FOREIGN KEY (org_id, channel_record_id) REFERENCES pc.notification_channels (org_id, id),
@@ -112,21 +115,35 @@ CREATE TRIGGER slack_app_channels_guard BEFORE INSERT OR UPDATE ON pc.slack_app_
 
 CREATE TABLE pc.slack_cards (
     org_id            uuid        NOT NULL REFERENCES pc.orgs (id),
+    card_id           uuid        NOT NULL,
     request_id        uuid        NOT NULL,
     channel_record_id uuid        NOT NULL,
     slack_channel     text        NOT NULL CHECK (slack_channel ~ '^[CG][A-Z0-9]{8,12}$'),
     ts                text        CHECK (ts IS NULL OR ts ~ '^[0-9]{10}\.[0-9]{6}$'),
-    state             text        NOT NULL DEFAULT 'POSTING' CHECK (state IN ('POSTING', 'OPEN', 'CLOSED', 'UNKNOWN')),
+    state             text        NOT NULL DEFAULT 'POSTING'
+                                  CHECK (state IN ('POSTING', 'OPEN', 'CLOSED', 'UNKNOWN', 'ORPHANED')),
     escalations       integer     NOT NULL DEFAULT 0 CHECK (escalations BETWEEN 0 AND 100),
+    -- Failed closes Slack will not recover from (a revoked token, a deleted
+    -- message): the fifth orphans the card (D104, D117).
+    close_attempts    integer     NOT NULL DEFAULT 0 CHECK (close_attempts BETWEEN 0 AND 5),
+    -- Failed closes worth retrying (429, a timeout, a 5xx): the card waits
+    -- until close_after, with backoff, and is never orphaned for them.
+    close_retries     integer     NOT NULL DEFAULT 0 CHECK (close_retries BETWEEN 0 AND 100000),
+    close_after       timestamptz,
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (org_id, request_id, channel_record_id),
+    PRIMARY KEY (org_id, card_id),
     FOREIGN KEY (org_id, request_id) REFERENCES pc.approval_requests (org_id, id),
     FOREIGN KEY (org_id, channel_record_id) REFERENCES pc.slack_app_channels (org_id, channel_record_id),
-    CHECK ((ts IS NOT NULL) = (state IN ('OPEN', 'CLOSED')))
+    CHECK ((ts IS NOT NULL) = (state IN ('OPEN', 'CLOSED', 'ORPHANED')))
 );
+-- At most one live card per request and channel (D88): a request that
+-- returns to PENDING gets a new card once its old one is CLOSED (D104).
+CREATE UNIQUE INDEX slack_cards_live ON pc.slack_cards (org_id, request_id, channel_record_id)
+    WHERE state IN ('POSTING', 'OPEN', 'UNKNOWN');
+CREATE INDEX slack_cards_request ON pc.slack_cards (org_id, request_id, channel_record_id, created_at);
 CREATE INDEX slack_cards_channel ON pc.slack_cards (org_id, channel_record_id);
--- The reconciler's batch: open cards, oldest first.
+-- The reconciler's batch: open cards, least recently tried first.
 CREATE INDEX slack_cards_open ON pc.slack_cards (org_id, updated_at) WHERE state = 'OPEN';
 
 -- +goose StatementBegin
@@ -148,8 +165,8 @@ $$;
 
 GRANT SELECT, INSERT ON pc.slack_app_channels, pc.slack_cards TO pc_app;
 GRANT UPDATE (state, team_id, bot_id, activated_by, activated_credential, activated_at, token_replaced_by, token_replaced_at,
-    shared_externally_at, updated_at) ON pc.slack_app_channels TO pc_app;
-GRANT UPDATE (ts, state, escalations, updated_at) ON pc.slack_cards TO pc_app;
+    shared_externally_at, last_checked_at, updated_at) ON pc.slack_app_channels TO pc_app;
+GRANT UPDATE (ts, state, escalations, close_attempts, close_retries, close_after, updated_at) ON pc.slack_cards TO pc_app;
 -- A claim whose post Slack refused (nothing was posted) is released.
 GRANT DELETE ON pc.slack_cards TO pc_app;
 GRANT SELECT ON pc.slack_app_channels, pc.slack_cards TO pc_audit_ro;

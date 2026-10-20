@@ -16,8 +16,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/approvals/adapters/pgapprovals"
 	approvals "github.com/katocxl/pantherclaw/internal/approvals/app"
 	billingdomain "github.com/katocxl/pantherclaw/internal/billing/domain"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
 	"github.com/katocxl/pantherclaw/internal/notifications/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -617,4 +620,270 @@ func mustUUIDStr(t *testing.T, s string) ids.UUID {
 		t.Fatal(err)
 	}
 	return id
+}
+
+// TestT145_SupersedeAndVoidReachTheCards: a request the Authority
+// supersedes (no notice) is closed by the reconciler; an approval voided
+// back to PENDING (a decider no longer eligible) gets a new card while its
+// closed card stays closed (D104).
+func TestT145_SupersedeAndVoidReachTheCards(t *testing.T) {
+	s := newSlackEnv(t, slackToken)
+	s.activate(t, s.channel(t, "approvals", slackApproval, ""))
+
+	superseded := s.hold(t, time.Hour)
+	_ = s.deliverAll(t)
+	s.d.AdminExec(t, "UPDATE pc.approval_requests SET invalidation_key = 'github.pull.head:acme/payments#7' WHERE id = $1", superseded)
+	if err := s.pool.InTenantTx(context.Background(), s.org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := pgapprovals.SupersedeByKey(ctx, tx, s.org, "github.pull.head:acme/payments#7", evdomain.Actor{Type: "system", ID: "test"})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if r, err := s.svc.ReconcileSlack(context.Background(), s.org); err != nil || r.Closed != 1 {
+		t.Fatalf("reconcile: %v %+v", err, r)
+	}
+	if m := s.card(t, superseded); !strings.Contains(m.Text, "No longer applies") {
+		t.Fatalf("superseded card: %+v", m)
+	}
+
+	voided := s.hold(t, time.Hour)
+	_ = s.deliverAll(t)
+	s.approve(t, voided)
+	_ = s.deliverAll(t)
+	if s.cardState(t, voided) != domain.CardClosed {
+		t.Fatal("approved card not closed")
+	}
+	// Dave is no longer an approver: his approval is voided and the request
+	// waits again, with a new entry the router routes.
+	s.approver(t, "erin") // who decides it next
+	s.d.AdminExec(t, "DELETE FROM pc.role_bindings WHERE org_id = $1 AND user_id = $2", s.org, s.dave.id)
+	if err := s.pool.InTenantTx(context.Background(), s.org, func(ctx context.Context, tx db.TenantTx) error {
+		return pgapprovals.Revalidate(ctx, tx, s.org, voided)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if st := s.str(t, "SELECT state FROM pc.approval_requests WHERE id = $1", voided); st != "PENDING" {
+		t.Fatalf("revalidated request: %s", st)
+	}
+	if _, err := s.router.RouteOrg(context.Background(), s.org); err != nil {
+		t.Fatal(err)
+	}
+	_ = s.deliverAll(t)
+	var cards []slack.Message
+	for _, m := range s.sim.Messages() {
+		if m.ThreadTS == "" && strings.Contains(m.Text, voided.String()[28:]) {
+			cards = append(cards, m)
+		}
+	}
+	if len(cards) != 2 {
+		t.Logf("deliveries: %s", s.str(t, "SELECT string_agg(n.type || '=' || d.state || '/' || coalesce(d.last_error, ''), ', ' ORDER BY d.created_at) FROM pc.deliveries d JOIN pc.notifications n ON n.id = d.notification_id WHERE d.kind = 'slack_app'"))
+	}
+	if len(cards) != 2 || !strings.Contains(cards[0].Text, "Approved") || !strings.Contains(cards[1].Text, "Approval needed") {
+		t.Fatalf("cards of the voided request: %+v", cards)
+	}
+	if n := s.str(t, "SELECT count(*)::text FROM pc.slack_cards WHERE request_id = $1", voided); n != "2" {
+		t.Fatalf("%s card rows", n)
+	}
+}
+
+// expireUnnoticed ends requests through the approvals janitor (expiry) and
+// cancels their notices, so only the reconciler can close their cards.
+func (s *slackEnv) expireUnnoticed(t *testing.T) {
+	t.Helper()
+	time.Sleep(3 * time.Second)
+	if _, err := approvals.SweepOrg(context.Background(), s.pool, s.svc, s.org); err != nil {
+		t.Fatal(err)
+	}
+	s.exec(t, "UPDATE pc.deliveries SET state = 'CANCELLED', finished_at = now() WHERE state = 'PENDING' AND kind = 'slack_app'") //nolint:misspell // the schema's state name
+}
+
+// health is a channel's failure bookkeeping.
+func (s *slackEnv) health(t *testing.T, channel ids.UUID) string {
+	t.Helper()
+	return s.str(t, `SELECT coalesce(last_failure_code, '') || '/' || consecutive_failures || '/' || (failing_since IS NULL)::text
+		FROM pc.notification_channels WHERE id = $1`, channel)
+}
+
+// TestT145_TransientFailuresDoNotOrphan: a close Slack rate-limits only
+// defers the card, with backoff, however often it happens; once Slack
+// answers, the next run closes it. Five closes Slack will not recover from
+// (the message was deleted) orphan a card, which delivery health shows
+// without feeding the auto-pause clock; a later notice may still close it
+// (D104, D117).
+func TestT145_TransientFailuresDoNotOrphan(t *testing.T) {
+	s := newSlackEnv(t, slackToken)
+	c := s.activate(t, s.channel(t, "approvals", slackApproval, ""))
+	limited := s.hold(t, 2*time.Second)
+	_ = s.deliverAll(t)
+	s.expireUnnoticed(t)
+	s.sim.SetFaults(slack.Faults{RateLimit: 1000, RetryAfter: 1})
+	for i := range 10 {
+		if r, err := s.svc.ReconcileSlack(context.Background(), s.org); err != nil || r.Closed != 0 {
+			t.Fatalf("run %d: %v %+v", i, err, r)
+		}
+		s.d.AdminExec(t, "UPDATE pc.slack_cards SET close_after = now() - interval '1 second' WHERE request_id = $1", limited)
+	}
+	if st := s.cardState(t, limited); st != domain.CardOpen {
+		t.Fatalf("a rate-limited card is %s", st)
+	}
+	s.sim.SetFaults(slack.Faults{})
+	if r, err := s.svc.ReconcileSlack(context.Background(), s.org); err != nil || r.Closed != 1 || s.cardState(t, limited) != domain.CardClosed {
+		t.Fatalf("after the rate limit: %v %+v", err, r)
+	}
+
+	gone := s.hold(t, 2*time.Second)
+	_ = s.deliverAll(t)
+	s.expireUnnoticed(t)
+	s.sim.Delete(slackApproval, *s.cardRow(t, gone).Ts)
+	for i := range 5 {
+		if r, err := s.svc.ReconcileSlack(context.Background(), s.org); err != nil || r.Closed != 0 {
+			t.Fatalf("run %d: %v %+v", i, err, r)
+		}
+	}
+	if st := s.cardState(t, gone); st != "ORPHANED" {
+		t.Fatalf("after five closes Slack refused: %s", st)
+	}
+	if h := s.health(t, c.ID); h != "slack_card_orphaned/0/true" {
+		t.Fatalf("delivery health: %s (an orphan is not a failed delivery)", h)
+	}
+	if r, _ := s.svc.ReconcileSlack(context.Background(), s.org); r.Closed != 0 {
+		t.Fatalf("an orphaned card was tried again: %+v", r)
+	}
+}
+
+// TestT145_UnclosableCardsRotate: with more unclosable cards than a run
+// takes, a card whose request just ended is closed on the next run (D104).
+func TestT145_UnclosableCardsRotate(t *testing.T) {
+	s := newSlackEnv(t, slackToken)
+	s.activate(t, s.channel(t, "approvals", slackApproval, ""))
+	var stuck []ids.UUID
+	for range 51 {
+		stuck = append(stuck, s.hold(t, 2*time.Second))
+	}
+	_ = s.deliverAll(t)
+	s.expireUnnoticed(t)
+	for _, r := range stuck {
+		s.sim.Delete(slackApproval, *s.cardRow(t, r).Ts)
+	}
+	if r, err := s.svc.ReconcileSlack(context.Background(), s.org); err != nil || r.Closed != 0 {
+		t.Fatalf("first run: %v %+v", err, r)
+	}
+	healthy := s.hold(t, 2*time.Second)
+	_ = s.deliverAll(t)
+	s.expireUnnoticed(t)
+	if r, err := s.svc.ReconcileSlack(context.Background(), s.org); err != nil || r.Closed != 1 || s.cardState(t, healthy) != domain.CardClosed {
+		t.Fatalf("second run: %v %+v", err, r)
+	}
+}
+
+// TestT145_AnInvalidatedRequestsCardIsClosed: a request the approvals
+// janitor invalidates (its agent was suspended) has its card closed by the
+// reconciler (D104).
+func TestT145_AnInvalidatedRequestsCardIsClosed(t *testing.T) {
+	s := newSlackEnv(t, slackToken)
+	s.activate(t, s.channel(t, "approvals", slackApproval, ""))
+	req := s.hold(t, time.Hour)
+	_ = s.deliverAll(t)
+	s.d.AdminExec(t, "UPDATE pc.agents SET state = 'SUSPENDED', suspended_from = 'CLAIMED' WHERE id = $1", s.agent)
+	if _, err := approvals.SweepOrg(context.Background(), s.pool, s.svc, s.org); err != nil {
+		t.Fatal(err)
+	}
+	if st := s.str(t, "SELECT state FROM pc.approval_requests WHERE id = $1", req); st != "INVALIDATED" {
+		t.Fatalf("request: %s", st)
+	}
+	s.exec(t, "UPDATE pc.deliveries SET state = 'CANCELLED', finished_at = now() WHERE state = 'PENDING' AND kind = 'slack_app'") //nolint:misspell // the schema's state name
+	if r, err := s.svc.ReconcileSlack(context.Background(), s.org); err != nil || r.Closed != 1 {
+		t.Fatalf("reconcile: %v %+v", err, r)
+	}
+	if m := s.card(t, req); !strings.Contains(m.Text, "No longer applies") {
+		t.Fatalf("card: %+v", m)
+	}
+}
+
+func (s *slackEnv) cardRow(t *testing.T, request ids.UUID) dbq.PcSlackCard {
+	t.Helper()
+	var c dbq.PcSlackCard
+	if err := s.pool.InTenantTx(context.Background(), s.org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		c, err = dbq.New(tx).LatestSlackCard(ctx, s.org, request, mustUUIDStr(t, s.str(t, "SELECT channel_record_id::text FROM pc.slack_cards WHERE request_id = $1 LIMIT 1", request)))
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+// TestT145_EscalationRepliesAreClaimedBeforeTheyArePosted: a reply Slack
+// refuses is posted again as the same step; a second notice for a step
+// already posted posts nothing (D104).
+func TestT145_EscalationRepliesAreClaimedBeforeTheyArePosted(t *testing.T) {
+	s := newSlackEnv(t, slackToken)
+	s.activate(t, s.channel(t, "approvals", slackApproval, ""))
+	req := s.hold(t, time.Hour)
+	_ = s.deliverAll(t)
+	escalate := func() {
+		t.Helper()
+		if err := s.pool.InTenantTx(context.Background(), s.org, func(ctx context.Context, tx db.TenantTx) error {
+			_, err := s.svc.Enqueue(ctx, tx, napp.Message{
+				Org: s.org, Type: "approval.escalated", Subject: &napp.Subject{Type: "approval_request", ID: req},
+				Params: map[string]string{"operation": "payments.refund.create", "agent": s.agent.String(), "deadline": "2026-10-17T12:00:00Z", "request": req.String()},
+			})
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	escalate()
+	s.sim.SetFaults(slack.Faults{RateLimit: 1})
+	_ = s.deliverAll(t)
+	_ = s.deliverAll(t)
+	replies := func() []string {
+		var out []string
+		for _, m := range s.sim.Messages() {
+			if m.ThreadTS != "" {
+				out = append(out, m.Text)
+			}
+		}
+		return out
+	}
+	if r := replies(); len(r) != 1 || r[0] != "Escalated (step 1)" {
+		t.Fatalf("replies: %v", r)
+	}
+	escalate()
+	_ = s.deliverAll(t)
+	if r := replies(); len(r) != 2 || r[1] != "Escalated (step 2)" {
+		t.Fatalf("replies: %v", r)
+	}
+}
+
+// TestT145_AReturnedTsWinsOverAnUnknownMark: a delivery that finds another
+// one's claim marks it UNKNOWN; when the first then stores the ts Slack
+// returned, the card is OPEN with it (D104).
+func TestT145_AReturnedTsWinsOverAnUnknownMark(t *testing.T) {
+	s := newSlackEnv(t, slackToken)
+	c := s.activate(t, s.channel(t, "approvals", slackApproval, ""))
+	req := s.hold(t, time.Hour)
+	card := ids.NewV7()
+	ts := "1792240000.000001"
+	if err := s.pool.InTenantTx(context.Background(), s.org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		if _, err := q.ClaimSlackCard(ctx, dbq.ClaimSlackCardParams{
+			OrgID: s.org, CardID: card, RequestID: req, ChannelRecordID: c.ID, SlackChannel: slackApproval,
+		}); err != nil {
+			return err
+		}
+		if _, err := q.MarkSlackCardUnknown(ctx, s.org, card); err != nil {
+			return err
+		}
+		n, err := q.SetSlackCardPosted(ctx, dbq.SetSlackCardPostedParams{Ts: &ts, State: domain.CardOpen, OrgID: s.org, CardID: card})
+		if err == nil && n != 1 {
+			t.Errorf("stored %d rows", n)
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if st := s.cardState(t, req); st != domain.CardOpen {
+		t.Fatalf("card: %s", st)
+	}
 }

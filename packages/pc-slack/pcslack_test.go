@@ -162,3 +162,27 @@ func TestHR316_ASharedChannelPredictsExternalDisclosure(t *testing.T) {
 		}
 	}
 }
+
+// TestHR316_SlackPostRequiresADestinationBound: a post declares a required
+// destination set, so the Authority denies it with DESTINATION_SET_REQUIRED
+// when neither grant nor envelope names channels (D57, D78).
+func TestHR316_SlackPostRequiresADestinationBound(t *testing.T) {
+	post, _ := decode(t).Definition("slack.message.post")
+	for _, c := range post.Constraints {
+		if c.Kind == domain.ConstraintDestinationSet && c.Required {
+			return
+		}
+	}
+	t.Fatalf("constraints: %+v", post.Constraints)
+}
+
+// TestT146_SlackPostsUnfurlNothing: a post is sent as a form with
+// unfurl_links and unfurl_media false, so Slack fetches no link a message
+// names (D104).
+func TestT146_SlackPostsUnfurlNothing(t *testing.T) {
+	post, _ := decode(t).Definition("slack.message.post")
+	h := post.Dispatch.HTTP
+	if h.Encoding != domain.EncodingForm || h.Body["unfurl_links"] != "literal.false" || h.Body["unfurl_media"] != "literal.false" {
+		t.Fatalf("dispatch: %+v", h)
+	}
+}

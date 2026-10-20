@@ -187,7 +187,8 @@ func TestE2E_M14_SlackApprovalCards(t *testing.T) {
 		t.Fatalf("internal post: %+v", obs)
 	}
 	ms := s.slack.sim.Messages()
-	if len(ms) != 1 || ms[0].Channel != slackApprovals || ms[0].Text != "Build e2e finished" {
+	// A form post that tells Slack to fetch no link (D104).
+	if len(ms) != 1 || ms[0].Channel != slackApprovals || ms[0].Text != "Build e2e finished" || ms[0].UnfurlLinks != "false" || ms[0].UnfurlMedia != "false" {
 		t.Fatalf("posted: %+v", ms)
 	}
 	for _, tok := range s.slack.sim.Tokens() {
@@ -218,5 +219,24 @@ func TestE2E_M14_SlackApprovalCards(t *testing.T) {
 	}
 	if n := len(s.slack.sim.Messages()); n != 1 {
 		t.Fatalf("%d messages: only the internal post may reach Slack", n)
+	}
+}
+
+// TestHR316_ASlackPostWithoutADestinationBoundIsDenied: pc.slack requires a
+// destination set (D57, D78): a grant that names the agent's channels as
+// targets but bounds no destinations lets it post nowhere, DENY
+// DESTINATION_SET_REQUIRED, and nothing reaches Slack.
+func TestHR316_ASlackPostWithoutADestinationBoundIsDenied(t *testing.T) {
+	p := inProcessIdP(t)
+	s := start(t, options{budget: "1000.00", people: &p, slack: true})
+	d := newRangeDriver(t)
+	d.s, d.people = s, &m2Stack{url: s.apiURL, cfg: s.serverCfg, idp: p}
+	d.ownGrant(`{"operations": ["slack.message.post"], "targets": {"slack_channel": {"ids": ["`+slackApprovals+`"]}}}`, "")
+	obs := d.slackPost(t, slackApprovals, "Build finished")
+	if obs.Outcome != domain.OutcomeDeny || !slices.Contains(obs.Reasons, "DESTINATION_SET_REQUIRED") {
+		t.Fatalf("a post without a destination bound: %+v", obs)
+	}
+	if n := len(s.slack.sim.Messages()); n != 0 {
+		t.Fatalf("%d messages reached Slack", n)
 	}
 }
