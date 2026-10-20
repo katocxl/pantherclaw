@@ -83,7 +83,7 @@ func TestHR311_JSONAnswersAreRedactedByClass(t *testing.T) {
 	body := `{"id":"pi_1","amount":12345678901234567890,"receipt_email":"a@example.com","billing_details":{"name":"Ada","address":{"city":"London"}},` +
 		`"charges":[{"id":"ch_1","card":{"last4":"4242","fingerprint":"fp"}}],"metadata":{"note":"vip","tag":"x"}}`
 	s := &dataScope{classes: []pgdispatch.Class{pgdispatch.ClassPublic, pgdispatch.ClassInternal}}
-	out, n, ok := scopeJSON([]byte(body), false, spec, s)
+	out, n, _, ok := scopeJSON([]byte(body), false, spec, s)
 	got := string(out)
 	for _, want := range []string{
 		`"amount":12345678901234567890`, `"billing_details":"[redacted:pii]"`, `"receipt_email":"[redacted:pii]"`,
@@ -97,22 +97,22 @@ func TestHR311_JSONAnswersAreRedactedByClass(t *testing.T) {
 		t.Fatalf("ok %v, %d redacted: %s", ok, n, got)
 	}
 	s = &dataScope{classes: []pgdispatch.Class{pgdispatch.ClassPublic}}
-	out, _, _ = scopeJSON([]byte(body), false, spec, s)
+	out, _, _, _ = scopeJSON([]byte(body), false, spec, s)
 	if !strings.Contains(string(out), `"card":"[redacted:internal]"`) || strings.Contains(string(out), "4242") {
 		t.Fatalf("subtree: %s", out)
 	}
 	// The strictest covering class wins even when a nested path is laxer.
 	spec2 := &defs.ResponseSpec{Fields: []defs.ResponseField{{Path: "a", Class: "pii"}, {Path: "a.b", Class: "public"}}}
-	out, _, _ = scopeJSON([]byte(`{"a":{"b":"x"}}`), false, spec2, s)
+	out, _, _, _ = scopeJSON([]byte(`{"a":{"b":"x"}}`), false, spec2, s)
 	if string(out) != `{"a":"[redacted:pii]"}` {
 		t.Fatalf("strictest: %s", out)
 	}
 	for name, b := range map[string]string{"not json": "<html>", "two values": `{} {}`, "duplicate": `{"a":1,"a":2}`, "empty": ` `} {
-		if _, _, ok := scopeJSON([]byte(b), false, spec, s); ok {
+		if _, _, _, ok := scopeJSON([]byte(b), false, spec, s); ok {
 			t.Errorf("%s accepted", name)
 		}
 	}
-	if _, _, ok := scopeJSON([]byte(`{}`), true, spec, s); ok {
+	if _, _, _, ok := scopeJSON([]byte(`{}`), true, spec, s); ok {
 		t.Error("a truncated answer accepted")
 	}
 }
@@ -123,22 +123,29 @@ func TestHR311_JSONAnswersAreRedactedByClass(t *testing.T) {
 func TestHR311_JSONScopeBounds(t *testing.T) {
 	s := &dataScope{classes: []pgdispatch.Class{pgdispatch.ClassPublic}}
 	deep := strings.Repeat("[", maxScopedDepth+2) + "1" + strings.Repeat("]", maxScopedDepth+2)
-	if _, _, ok := scopeJSON([]byte(deep), false, nil, s); ok {
+	if _, _, _, ok := scopeJSON([]byte(deep), false, nil, s); ok {
 		t.Error("a too deep answer was scoped")
 	}
 	ok32 := strings.Repeat("[", maxScopedDepth) + "1" + strings.Repeat("]", maxScopedDepth)
-	if _, _, ok := scopeJSON([]byte(ok32), false, nil, s); !ok {
+	if _, _, _, ok := scopeJSON([]byte(ok32), false, nil, s); !ok {
 		t.Error("an answer within the depth bound was withheld")
 	}
-	if _, _, ok := scopeJSON([]byte(`"`+strings.Repeat("a", maxScopedAnswer)+`"`), false, nil, s); ok {
+	if _, _, _, ok := scopeJSON([]byte(`"`+strings.Repeat("a", maxScopedAnswer)+`"`), false, nil, s); ok {
 		t.Error("a too large answer was scoped")
 	}
 	none := &dataScope{classes: []pgdispatch.Class{}}
-	out, n, ok := scopeJSON([]byte(`"ada@example.com"`), false, nil, none)
+	out, n, _, ok := scopeJSON([]byte(`"ada@example.com"`), false, nil, none)
 	if !ok || n != 1 || string(out) != `"[redacted:public]"` {
 		t.Fatalf("root scalar with no readable class: %s %d %v", out, n, ok)
 	}
-	if out, _, _ := scopeJSON([]byte(`"x"`), false, nil, s); string(out) != `"x"` {
+	if out, _, _, _ := scopeJSON([]byte(`"x"`), false, nil, s); string(out) != `"x"` {
 		t.Fatalf("readable root scalar: %s", out)
+	}
+	// The items come from the one decode: a root array's length, else 1.
+	if _, _, items, _ := scopeJSON([]byte(`[{"a":1},{"a":2},3]`), false, nil, s); items != 3 {
+		t.Fatalf("root array items: %d", items)
+	}
+	if _, _, items, _ := scopeJSON([]byte(`{"a":[1,2]}`), false, nil, s); items != 1 {
+		t.Fatalf("root object items: %d", items)
 	}
 }

@@ -107,8 +107,16 @@ func seedPostgresConnection(ctx context.Context, cfg *Config, pool *db.Pool, org
 	if pc.Internal {
 		class = capp.ClassInternal
 	}
+	hosted, err := cfg.pantherClawHosted()
+	if err != nil {
+		return err
+	}
+	set := map[ids.UUID]bool{}
+	for _, g := range hosted {
+		set[g] = true
+	}
 	kinds := &ports.KindConfigs{}
-	kinds.Register(capp.KindPostgres, pgmanifest.Store{})
+	kinds.Register(capp.KindPostgres, pgmanifest.Store{Hosted: func(g ids.UUID) bool { return set[g] }})
 	c, err := capp.New(pool, nil, cfg.Auth.PublicURL, cfg.GatewayAPI.URL).WithKindConfigs(kinds).Seed(ctx, org, "dev-seed", capp.CreateInput{
 		Name: devPostgresConnectionName, Kind: capp.KindPostgres, Package: pcpostgres.Name, Gateway: gateway,
 		DestinationClass: class, AccessMode: capp.AccessHeld, DefaultMode: "enforce", Postgres: &pc,

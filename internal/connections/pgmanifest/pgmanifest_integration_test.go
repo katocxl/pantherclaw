@@ -25,6 +25,10 @@ import (
 	pcpostgres "github.com/katocxl/pantherclaw/packages/pc-postgres"
 )
 
+// noneHosted is a server whose configuration names no PantherClaw-hosted
+// gateway: a nil Hosted would refuse internal everywhere (D121).
+func noneHosted(ids.UUID) bool { return false }
+
 func config() capp.PostgresConfig {
 	return capp.PostgresConfig{
 		Host: "db.example.test", Database: "shop", User: "reader", SSLMode: capp.SSLVerifyFull,
@@ -51,9 +55,10 @@ func TestIntPostgresManifestConfirmation(t *testing.T) {
 	f.Exec(t, "INSERT INTO pc.package_pins (org_id, package_id, version_id, version, digest) VALUES ($1, $2, $3, $4, $5)",
 		f.Org, pkg, ver, pcpostgres.Version, manifest.FileDigest(raw))
 	kinds := &ports.KindConfigs{}
-	kinds.Register(capp.KindPostgres, pgmanifest.Store{})
+	kinds.Register(capp.KindPostgres, pgmanifest.Store{Hosted: noneHosted})
 	conns := capp.New(f.Pool, nil, "https://pantherclaw.example.test", "https://gw.example.test").WithKindConfigs(kinds)
 	svc := pgmanifest.New(f.Pool)
+	svc.Hosted = noneHosted
 	admin := f.As(td.KindUser, td.RoleGatewayAdmin)
 	fresh := func() *stepup.StepUp { return &stepup.StepUp{Credential: f.Cred, At: time.Now()} }
 
@@ -212,13 +217,35 @@ func TestIntPostgresInternalOnlyOnCustomerHostedGateways(t *testing.T) {
 	// The confirm page checks the gateway serving it now (D105): here the
 	// gateway became one PantherClaw hosts after the proposal.
 	svc := pgmanifest.New(f.Pool)
-	svc.Hosted = func(g ids.UUID) bool { return g == own }
 	m, err := svc.Get(admin, owned.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Without Hosted the page fails closed (D121).
+	if err := svc.Confirm(admin, owned.ID, m.Digest, &stepup.StepUp{Credential: f.Cred, At: time.Now()}); !errors.Is(err, pgmanifest.ErrInternalHosted) {
+		t.Fatalf("confirm without Hosted: %v", err)
+	}
+	svc.Hosted = func(g ids.UUID) bool { return g == own }
 	if err := svc.Confirm(admin, owned.ID, m.Digest, &stepup.StepUp{Credential: f.Cred, At: time.Now()}); !errors.Is(err, pgmanifest.ErrInternalHosted) {
 		t.Fatalf("confirm on a now hosted gateway: %v", err)
+	}
+
+	// A store without Hosted fails closed (D121): internal is refused on a
+	// customer-hosted gateway too, at creation and on a move; a public
+	// configuration is unaffected.
+	other := ids.NewV7()
+	f.Exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'other', 'test')", f.Org, other)
+	nilKinds := &ports.KindConfigs{}
+	nilKinds.Register(capp.KindPostgres, pgmanifest.Store{})
+	nilConns := capp.New(f.Pool, nil, "https://pantherclaw.example.test", "https://gw.example.test").WithKindConfigs(nilKinds)
+	if _, err := nilConns.Create(admin, in("nil-internal", own, true)); !errors.Is(err, pgmanifest.ErrInternalHosted) {
+		t.Fatalf("internal without Hosted: %v", err)
+	}
+	if _, err := nilConns.Create(admin, in("nil-public", own, false)); err != nil {
+		t.Fatalf("public without Hosted: %v", err)
+	}
+	if _, err := nilConns.Update(admin, capp.UpdateInput{ID: owned.ID, Revision: owned.Revision, Gateway: &other}); !errors.Is(err, pgmanifest.ErrInternalHosted) {
+		t.Fatalf("an internal connection moved without Hosted: %v", err)
 	}
 }
 

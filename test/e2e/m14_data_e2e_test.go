@@ -79,6 +79,9 @@ func (s *stack) postgresReady(t *testing.T) {
 	s.sealPostgres(t, s.pg.tg.ReadOnlyPass)
 	admin := s.person(t, "pg-admin-"+ids.NewV7().String()[24:], td.RoleGatewayAdmin)
 	svc := pgmanifest.New(s.pool)
+	// The test stack names no PantherClaw-hosted gateway; a nil Hosted
+	// would refuse the internal fixture (D121).
+	svc.Hosted = func(ids.UUID) bool { return false }
 	m, err := svc.Get(admin.ctx, s.pg.conn)
 	if err != nil || m.Proposed == nil || m.Current != nil {
 		t.Fatalf("proposed manifest: %+v %v", m, err)

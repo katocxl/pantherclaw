@@ -59,10 +59,15 @@ var _ ports.KindGatewayCheck = Store{}
 
 // Store is the postgres kind's configuration store (ports.KindConfig).
 // Hosted reports whether PantherClaw hosts a gateway (the server's
-// configuration); nil: none is.
+// configuration); nil fails closed: internal is refused on every gateway
+// (D121).
 type Store struct {
 	Hosted func(gateway ids.UUID) bool
 }
+
+// hosted reports whether internal is refused on a gateway: PantherClaw
+// hosts it, or nothing says which gateways it hosts.
+func hosted(f func(ids.UUID) bool, gateway ids.UUID) bool { return f == nil || f(gateway) }
 
 // encode is a configuration's canonical JSON and its digest.
 func encode(c *capp.PostgresConfig) ([]byte, []byte, error) {
@@ -99,7 +104,10 @@ func (s Store) Save(ctx context.Context, tx db.TenantTx, org ids.OrgID, connecti
 		return "", err
 	}
 	q := dbq.New(tx)
-	if pc.Internal && s.Hosted != nil {
+	if pc.Internal {
+		if s.Hosted == nil {
+			return "", ErrInternalHosted
+		}
 		conn, err := q.GetConnection(ctx, org, connection)
 		if err != nil {
 			return "", err
@@ -248,7 +256,7 @@ func Widening(current, next capp.PostgresConfig) []string {
 }
 
 // Service is the confirm page's use cases. Hosted reports whether
-// PantherClaw hosts a gateway; nil: none is.
+// PantherClaw hosts a gateway; nil fails closed, as in Store.
 type Service struct {
 	pool   *db.Pool
 	Hosted func(gateway ids.UUID) bool
@@ -375,7 +383,7 @@ func (s *Service) Confirm(ctx context.Context, id ids.UUID, digest string, su *s
 		}
 		// The connection may have moved to another gateway since it was
 		// proposed: internal is checked against the gateway serving it now (D105).
-		if proposed.Internal && s.Hosted != nil && s.Hosted(conn.GatewayID) {
+		if proposed.Internal && hosted(s.Hosted, conn.GatewayID) {
 			return ErrInternalHosted
 		}
 		widening := []string{"first configuration"}
@@ -418,7 +426,7 @@ func (s Store) CheckGateway(ctx context.Context, tx db.TenantTx, org ids.OrgID, 
 	if _, err := tx.Exec(ctx, "SELECT pg_catalog.set_config('pantherclaw.postgres_move', $1, true)", connection.String()+"="+gateway.String()); err != nil {
 		return err
 	}
-	if s.Hosted == nil || !s.Hosted(gateway) {
+	if !hosted(s.Hosted, gateway) {
 		return nil
 	}
 	row, err := dbq.New(tx).LockPostgresConnection(ctx, org, connection)
