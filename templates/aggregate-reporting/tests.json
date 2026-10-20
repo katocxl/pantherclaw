@@ -1,22 +1,31 @@
 {
   "tests": [
     {
-      "id": "ar-aggregate", "per": "org",
-      "summary": "an aggregate of orders by status goes through, limited to public and internal columns",
+      "id": "ar-aggregate", "per": "agent",
+      "summary": "the reporting agent's aggregate of orders by status goes through, limited to public and internal columns",
       "action": {"operation": "postgres.rows.aggregate", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"group_by": ["status"], "measures": ["count:*", "sum:amount"], "limit": "100"}},
+      "given": {"agent": "{{agent}}"},
       "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "AGGREGATE_CLASSES"}
     },
     {
-      "id": "ar-too-many-groups", "per": "org",
-      "summary": "an aggregate asking for 101 groups is refused",
+      "id": "ar-too-many-groups", "per": "agent",
+      "summary": "the reporting agent's aggregate asking for 101 groups is refused",
       "action": {"operation": "postgres.rows.aggregate", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"group_by": ["status"], "measures": ["count:*"], "limit": "101"}},
-      "expect": {"decision": "DENY", "reason": "AGGREGATE_GROUPS", "rule": "ar-groups"}
+      "given": {"agent": "{{agent}}"},
+      "expect": {"decision": "DENY", "reason": "AGGREGATE_GROUPS", "rule": "ar-groups--{{agent}}"}
     },
     {
-      "id": "ar-rows", "per": "org",
-      "summary": "reading rows is refused",
+      "id": "ar-rows", "per": "agent",
+      "summary": "the reporting agent's row read is refused",
       "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"columns": ["id", "status"], "limit": "10"}},
-      "expect": {"decision": "DENY", "reason": "ROW_READS_NOT_ALLOWED", "rule": "ar-no-rows"}
+      "given": {"agent": "{{agent}}"},
+      "expect": {"decision": "DENY", "reason": "ROW_READS_NOT_ALLOWED", "rule": "ar-no-rows--{{agent}}"}
+    },
+    {
+      "id": "ar-other-agent", "per": "agent",
+      "summary": "another agent's row read is not these rules'",
+      "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"columns": ["id", "status"], "limit": "10"}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
     }
   ]
 }

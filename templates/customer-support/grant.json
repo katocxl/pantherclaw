@@ -1,10 +1,17 @@
 {
   "bounds": {
-    "operations": ["stripe.refund.create", "stripe.refund.read", "stripe.payment_intent.read"],
+    "operations": ["stripe.refund.create", "stripe.refund.read", "stripe.payment_intent.read", "postgres.rows.read", "postgres.tables.read"],
     "targets": {
       "stripe.payment": {"prefixes": ["pi_", "ch_"]},
       "stripe.refund": {"prefixes": ["re_"]},
-      "stripe.payment_intent": {"prefixes": ["pi_"]}
+      "stripe.payment_intent": {"prefixes": ["pi_"]},
+      "pg_table": {"ids": ["support.tickets", "shop.customers", "shop.orders"]}
+    },
+    "scope": {
+      "postgres.rows.read": {
+        "records": {"key": "customer", "values": ["{{customer}}"]},
+        "classes": {"ids": ["public", "internal"]}
+      }
     }
   },
   "limits": {

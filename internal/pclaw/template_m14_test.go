@@ -134,3 +134,56 @@ func TestM14PayeesAreChecked(t *testing.T) {
 		t.Error("{{payees}} filled outside a condition")
 	}
 }
+
+// TestM14CustomersAreChecked (D106): customer-support needs --customer,
+// refuses values that are not customer ids, and renders them into the
+// grant's record scope for postgres.rows.read with the classes public and
+// internal.
+func TestM14CustomersAreChecked(t *testing.T) {
+	parse := func(args ...string) (templateOptions, error) {
+		t.Helper()
+		fs := flag.NewFlagSet("t", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		o := templateOptions{name: "customer-support"}
+		check := templateFlags(fs, &o)
+		if err := fs.Parse(args); err != nil {
+			return o, err
+		}
+		return o, check()
+	}
+	for _, args := range [][]string{{}, {"--customer", "cus 1"}, {"--customer", "cus'1"}, {"--customer", render.OtherCustomer}} {
+		if _, err := parse(args...); err == nil {
+			t.Errorf("customer-support %v: accepted", args)
+		}
+	}
+	if _, err := parse("--customer", "cus-1", "--payee", "acct_ExamplePayee01"); err == nil {
+		t.Error("customer-support took --payee")
+	}
+	o, err := parse("--customer", "cus-1002", "--customer", "cus-1001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	o.environment, o.timeZone, o.agent = "production", "UTC", templateAgent
+	d, err := renderTemplate(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bounds struct {
+		Scope map[string]struct {
+			Records struct {
+				Key    string   `json:"key"`
+				Values []string `json:"values"`
+			} `json:"records"`
+			Classes struct {
+				IDs []string `json:"ids"`
+			} `json:"classes"`
+		} `json:"scope"`
+	}
+	if err := json.Unmarshal(d.Grant.Bounds, &bounds); err != nil {
+		t.Fatal(err)
+	}
+	s := bounds.Scope["postgres.rows.read"]
+	if s.Records.Key != "customer" || !slices.Equal(s.Records.Values, exampleCustomers) || !slices.Equal(s.Classes.IDs, []string{"public", "internal"}) {
+		t.Errorf("grant scope %s", d.Grant.Bounds)
+	}
+}
