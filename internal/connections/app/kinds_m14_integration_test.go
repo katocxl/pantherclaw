@@ -262,4 +262,12 @@ func TestM14_AMoveIsValidatedByTheKind(t *testing.T) {
 	if err != nil || moved.GatewayID != good || !slices.Equal(store.checked, []ids.UUID{bad, good}) {
 		t.Fatalf("a move: %v %v checked %v", moved.GatewayID, err, store.checked)
 	}
+
+	// A store that cannot check a gateway refuses every move (D115).
+	plain := &ports.KindConfigs{}
+	plain.Register(app.KindPostgres, &fakeKind{})
+	e.svc.WithKindConfigs(plain)
+	if _, err := e.svc.Update(e.admin, app.UpdateInput{ID: c.ID, Revision: moved.Revision, Gateway: &bad}); !is(err, app.ErrKindGatewayUnchecked) {
+		t.Fatalf("a move without a gateway check: %v", err)
+	}
 }
