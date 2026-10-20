@@ -6,11 +6,14 @@ package a2astore
 import (
 	"bytes"
 	"errors"
+	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	wire "github.com/katocxl/pantherclaw/internal/a2a"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	a2asim "github.com/katocxl/pantherclaw/internal/sim/a2a"
 )
 
@@ -58,4 +61,45 @@ func TestHR322_OnlyTheServersOwnReadIsPinned(t *testing.T) {
 
 func base(c *pb.A2AConfig) *pb.A2AConfig {
 	return &pb.A2AConfig{CardUrl: c.GetCardUrl(), Interface: c.GetInterface(), Skills: c.GetSkills(), CardKeys: c.GetCardKeys()}
+}
+
+// TestHR221_A2ASimulatedCardURLMustBeALocalLiteral (D96 M1): a simulated
+// connection's card URL is fetched only when it is a loopback literal of
+// the interface URL's origin and that origin answers the simulator
+// handshake; a DNS name, another origin, a private address or a server
+// that is not a simulator is refused before any card is read, and the
+// simulated client reaches loopback only.
+func TestHR221_A2ASimulatedCardURLMustBeALocalLiteral(t *testing.T) {
+	sim := httptest.NewServer(a2asim.New(a2asim.Options{}, a2asim.Faults{}, nil).Handler())
+	t.Cleanup(sim.Close)
+	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"name":"x","supportedInterfaces":[{"url":"` + "http://" + r.Host + `/a2a","protocolBinding":"JSONRPC"}]}`))
+	}))
+	t.Cleanup(plain.Close)
+	p := NewPinner()
+	cfg := func(card, iface string) *pb.A2AConfig {
+		return &pb.A2AConfig{CardUrl: card, Interface: &pb.A2AInterface{Protocol: wire.BindingJSONRPC, Url: iface}}
+	}
+	u, _ := url.Parse(sim.URL)
+	for name, c := range map[string]*pb.A2AConfig{
+		"dns name":      cfg("http://localhost:"+u.Port()+wire.CardPath, "http://localhost:"+u.Port()+a2asim.JSONRPCPath),
+		"other origin":  cfg(plain.URL+wire.CardPath, sim.URL+a2asim.JSONRPCPath),
+		"private addr":  cfg("http://10.0.0.5:8443"+wire.CardPath, "http://10.0.0.5:8443/a2a"),
+		"not simulator": cfg(plain.URL+wire.CardPath, plain.URL+"/a2a"),
+	} {
+		if _, err := p.Pin(t.Context(), c, true); !errors.Is(err, ErrSimulatedCardURL) {
+			t.Errorf("%s: %v, want ErrSimulatedCardURL", name, err)
+		}
+	}
+	if _, err := p.Pin(t.Context(), cfg(sim.URL+wire.CardPath, sim.URL+a2asim.JSONRPCPath), true); err != nil {
+		t.Fatalf("simulator on loopback: %v", err)
+	}
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://10.0.0.1:9/", nil)
+	if resp, err := p.Simulated.Do(req); err == nil || !errors.Is(err, httpx.ErrDestinationDenied) {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		t.Fatalf("the simulated client reached 10/8: %v", err)
+	}
 }

@@ -5,9 +5,14 @@ package a2astore
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json/v2"
 	"errors"
+	"io"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"slices"
 	"time"
 
@@ -22,6 +27,7 @@ import (
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/sim/handshake"
 )
 
 // fetchTimeout bounds one card read.
@@ -44,35 +50,48 @@ var (
 )
 
 // Pinner reads and checks a card before its configuration is stored
-// (D30). Public reaches public addresses only; Simulated also reaches a
-// loopback or private address, for a connection marked simulated (HR-221).
+// (D30). Public reaches public addresses only; Simulated reaches loopback
+// only (D96), for a connection marked simulated (HR-221), and only after
+// the simulator answered the handshake.
 type Pinner struct {
 	Public, Simulated *http.Client
 }
 
 // NewPinner returns a Pinner with egress clients (HR-070..074).
 func NewPinner() *Pinner {
-	private := []netip.Prefix{
-		netip.MustParsePrefix("127.0.0.0/8"), netip.MustParsePrefix("::1/128"),
-		netip.MustParsePrefix("10.0.0.0/8"), netip.MustParsePrefix("172.16.0.0/12"), netip.MustParsePrefix("192.168.0.0/16"),
-	}
+	loopback := []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8"), netip.MustParsePrefix("::1/128")}
 	return &Pinner{
 		Public:    httpx.NewEgressClient(httpx.EgressConfig{Timeout: fetchTimeout}),
-		Simulated: httpx.NewEgressClient(httpx.EgressConfig{Timeout: fetchTimeout, AllowedPrefixes: private}),
+		Simulated: httpx.NewEgressClient(httpx.EgressConfig{Timeout: fetchTimeout, AllowedPrefixes: loopback}),
 	}
 }
+
+// ErrSimulatedCardURL refuses a simulated connection's card URL that is
+// not a loopback literal of the interface URL's origin, or whose origin is
+// not a simulator (D96, HR-221): nothing is fetched.
+var ErrSimulatedCardURL = pcerr.New(pcerr.FailedPrecondition, "A2A_SIMULATED_CARD_URL",
+	"a simulated connection's card URL must be a loopback address of the interface URL's origin, answered by a simulator")
 
 // Pin fetches the card at cfg's card URL and checks it against cfg, and
 // returns cfg with the card as fetched and its digest. Whatever pinned
 // card or digest cfg carried is ignored: only a read the server made is
-// pinned.
+// pinned. For a simulated connection the card URL must be a loopback
+// literal of the interface URL's origin, and that origin must answer the
+// simulator handshake before the card is read.
 func (p *Pinner) Pin(ctx context.Context, cfg *pb.A2AConfig, simulated bool) (*pb.A2AConfig, error) {
-	client := p.Public
-	if simulated {
-		client = p.Simulated
-	}
 	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
+	client := p.Public
+	if simulated {
+		origin, ok := simulatedOrigin(cfg.GetCardUrl(), cfg.GetInterface().GetUrl())
+		if !ok {
+			return nil, ErrSimulatedCardURL
+		}
+		client = p.Simulated
+		if err := simHandshake(ctx, client, origin); err != nil {
+			return nil, ErrSimulatedCardURL
+		}
+	}
 	got, err := wire.Pin(ctx, client, wire.PinRequest{
 		CardURL: cfg.GetCardUrl(), Binding: cfg.GetInterface().GetProtocol(), URL: cfg.GetInterface().GetUrl(),
 		Keys: cfg.GetCardKeys(), Skills: cfg.GetSkills(),
@@ -84,6 +103,50 @@ func (p *Pinner) Pin(ctx context.Context, cfg *pb.A2AConfig, simulated bool) (*p
 	out.PinnedCard, out.CardDigest = got.Card, got.Digest[:]
 	out.Skills = slices.Clone(cfg.GetSkills())
 	return out, nil
+}
+
+// simulatedOrigin is the origin of a simulated connection's card URL: a
+// loopback address literal, the same scheme, host and port as the
+// interface URL's.
+func simulatedOrigin(cardURL, iface string) (string, bool) {
+	c, err1 := url.Parse(cardURL)
+	i, err2 := url.Parse(iface)
+	if err1 != nil || err2 != nil || c.Scheme != i.Scheme || c.Host != i.Host || c.User != nil {
+		return "", false
+	}
+	a, err := netip.ParseAddr(c.Hostname())
+	if err != nil || !a.Unmap().IsLoopback() {
+		return "", false
+	}
+	return c.Scheme + "://" + c.Host, true
+}
+
+// simHandshake asks origin whether it is a PantherClaw a2a simulator
+// (HR-221): GET /.well-known/pantherclaw-sim with a fresh nonce must
+// answer that simulator, kind a2a, and the nonce.
+func simHandshake(ctx context.Context, client *http.Client, origin string) error {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return err
+	}
+	nonce := hex.EncodeToString(b)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, origin+handshake.Path+"?nonce="+nonce, nil)
+	if err != nil {
+		return err
+	}
+	c := *client
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, err := c.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var a handshake.Answer
+	if resp.StatusCode != http.StatusOK || json.UnmarshalRead(io.LimitReader(resp.Body, 4096), &a) != nil ||
+		a.Simulator != handshake.Simulator || a.Kind != "a2a" || a.Nonce != nonce {
+		return errors.New("a2astore: not an a2a simulator")
+	}
+	return nil
 }
 
 func pinError(err error) error {

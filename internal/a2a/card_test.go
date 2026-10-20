@@ -9,6 +9,7 @@ import (
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json/v2"
 	"errors"
 	"net/http"
@@ -257,6 +258,35 @@ func TestRoute(t *testing.T) {
 	} {
 		if m, _, ok := Route(bad[0], bad[1]); ok {
 			t.Errorf("%s %s routed to %s", bad[0], bad[1], m)
+		}
+	}
+}
+
+// TestHR322_CardSignatureHeaderIsAllowListed (D96 L5): a signature whose
+// protected header carries crit, jku, jwk or any member beyond alg, kid
+// and typ never verifies, even with the right key.
+func TestHR322_CardSignatureHeaderIsAllowListed(t *testing.T) {
+	k := ed25519Key(t)
+	keys := keysOf(t, map[string]crypto.PublicKey{"k": k.Public()})
+	payload, err := SigningPayload([]byte(testCard))
+	if err != nil {
+		t.Fatal(err)
+	}
+	enc := base64.RawURLEncoding
+	for _, header := range []string{
+		`{"alg":"EdDSA","kid":"k","crit":["exp"],"exp":1}`,
+		`{"alg":"EdDSA","kid":"k","jku":"https://evil.example/jwks"}`,
+		`{"alg":"EdDSA","kid":"k","jwk":{"kty":"OKP"}}`,
+		`{"alg":"EdDSA","kid":"k","x5u":"https://evil.example/cert"}`,
+	} {
+		protected := enc.EncodeToString([]byte(header))
+		sig := ed25519.Sign(k, []byte(protected+"."+enc.EncodeToString(payload)))
+		var m map[string]any
+		_ = json.Unmarshal([]byte(testCard), &m)
+		m["signatures"] = []any{map[string]any{"protected": protected, "signature": enc.EncodeToString(sig)}}
+		signed, _ := json.Marshal(m)
+		if err := VerifySignatures(signed, keys); !errors.Is(err, ErrCardSignature) {
+			t.Errorf("header %s: %v, want ErrCardSignature", header, err)
 		}
 	}
 }

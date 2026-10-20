@@ -260,8 +260,10 @@ func VerifySignatures(raw []byte, keys Keys) error {
 		if err != nil {
 			continue
 		}
+		// Only alg, kid and typ: no crit, and no member that carries or
+		// points at a key (jku, jwk, x5u, x5c); such a signature never counts.
 		var h protectedHeader
-		if json.Unmarshal(hb, &h) != nil {
+		if json.Unmarshal(hb, &h, json.RejectUnknownMembers(true)) != nil || h.Jku != "" {
 			continue
 		}
 		sig, err := enc.Strict().DecodeString(s.Signature)
