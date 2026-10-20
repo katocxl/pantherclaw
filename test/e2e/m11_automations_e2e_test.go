@@ -591,8 +591,10 @@ func (a *autoStack) reciprocalLoop(t *testing.T) {
 	// feed processes the next batch. The e2e server's own feed job (every
 	// triggers.FeedInterval) moves the same org cursor, so a batch may be
 	// taken by it: ErrCursorMoved is that consumer winning the compare-and-set,
-	// as the production worker treats it, and the callers wait for the
-	// trigger itself, whichever consumer fired it.
+	// as the production worker treats it. The server is Community, so its job
+	// moves the cursor without firing anything, by design (D117): record
+	// rewinds the cursor to just before its own event when that happens
+	// (D134).
 	feed := func() {
 		t.Helper()
 		if _, err := ledger.ChainAll(ctx, s.pool, s.org, 1000); err != nil {
@@ -607,7 +609,11 @@ func (a *autoStack) reciprocalLoop(t *testing.T) {
 	}
 	// record writes the event and feeds until target has a new trigger: the
 	// e2e server chains the ledger too, so the event may not be chained when
-	// the test first processes the feed.
+	// the test first processes the feed. Only this test's feed fires (the
+	// server is Community, D117), so once the event is chained, a cursor at or
+	// past it with no new trigger means the server's job skipped it: the
+	// cursor goes back to just before that event, never further, at most
+	// three times (D134).
 	record := func(name string, actor evdomain.Actor, details map[string]string, target triggerstest.Automation) {
 		t.Helper()
 		before := triggers(target)
@@ -616,8 +622,10 @@ func (a *autoStack) reciprocalLoop(t *testing.T) {
 			details = map[string]string{}
 		}
 		details["loop_check"] = marker
+		var entry evdomain.Entry
 		if err := s.pool.InTenantTx(ctx, s.org, func(ctx context.Context, tx db.TenantTx) error {
-			_, err := audit.Record(ctx, tx, audit.Event{
+			var err error
+			entry, err = audit.Record(ctx, tx, audit.Event{
 				Name: name, Actor: actor, Outcome: audit.Success,
 				Object: &audit.Object{Type: "grant", ID: ids.NewV7().String()}, Details: details,
 			})
@@ -625,9 +633,30 @@ func (a *autoStack) reciprocalLoop(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
+		rewinds := 0
 		eventually(t, 15*time.Second, "the feed to take "+name, func() (bool, error) {
 			feed()
-			return triggers(target) != before, nil
+			if triggers(target) != before {
+				return true, nil
+			}
+			seq := s.row(t, "SELECT seq::text FROM pc.ledger_chain WHERE org_id = $1 AND entry_id = $2", s.org, entry.ID)
+			if seq == "" {
+				return false, nil // not chained yet
+			}
+			from := s.row(t, "SELECT seq::text FROM pc.automation_feed_cursors WHERE org_id = $1 AND seq >= $2::bigint", s.org, seq)
+			if from == "" {
+				return false, nil // the cursor has not reached the event yet
+			}
+			if rewinds == 3 {
+				t.Fatalf("%s (ledger seq %s) was passed without a trigger after %d rewinds (cursor %s)", name, seq, rewinds, from)
+			}
+			if to := s.row(t, `UPDATE pc.automation_feed_cursors SET seq = $2::bigint - 1
+				WHERE org_id = $1 AND seq >= $2::bigint RETURNING seq::text`, s.org, seq); to != "" {
+				rewinds++
+				t.Logf("%s (ledger seq %s): the server's feed job moved the cursor to %s without firing; rewound to %s (rewind %d)",
+					name, seq, from, to, rewinds)
+			}
+			return false, nil
 		})
 	}
 	sa := func(x triggerstest.Automation) evdomain.Actor {
