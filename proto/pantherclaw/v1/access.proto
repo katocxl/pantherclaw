@@ -48,6 +48,14 @@ service AccessService {
   // RevokeInvitation revokes a pending invitation.
   // permission: invitation.manage
   rpc RevokeInvitation(RevokeInvitationRequest) returns (RevokeInvitationResponse);
+  // AcceptInvitation accepts an invitation in the browser (G0 UI D8,
+  // HR-352) for the signed-in account: only from an account or org
+  // browser session, once, before it expires, and only when the identity
+  // provider's verified email of the account equals the invitation's
+  // email (INVITATION_EMAIL_MISMATCH otherwise). It returns the org the
+  // account joined; the session moves to that org on a fresh sign-in.
+  // permission: invitations.accept
+  rpc AcceptInvitation(AcceptInvitationRequest) returns (AcceptInvitationResponse);
 
   // ListRoles lists the default roles and their permissions.
   // permission: authenticated
@@ -370,6 +378,23 @@ message RevokeInvitationRequest {
 message RevokeInvitationResponse {
   // The invitation.
   Invitation invitation = 1;
+}
+
+// AcceptInvitationRequest carries the invitation token from the
+// invitation link.
+message AcceptInvitationRequest {
+  // The invitation token (pci_…).
+  string token = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^pci_[0-9a-f]{32}_[0-9A-Za-z]{43}$"
+  }];
+}
+
+// AcceptInvitationResponse names the org the account joined.
+message AcceptInvitationResponse {
+  // Org id.
+  string org_id = 1;
 }
 
 // ListRolesRequest asks for the role catalog.

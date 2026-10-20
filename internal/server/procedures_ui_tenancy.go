@@ -14,8 +14,9 @@ import (
 // creating and listing the account's organizations. Their requirements
 // belong to the signed-in account, never to a role (HR-350).
 var uiTenancyProcedures = map[string]td.Permission{
-	pantherclawv1connect.TenancyServiceCreateOrgProcedure:  td.PermOrgsCreate,
-	pantherclawv1connect.TenancyServiceListMyOrgsProcedure: td.PermOrgsListMine,
+	pantherclawv1connect.TenancyServiceCreateOrgProcedure:       td.PermOrgsCreate,
+	pantherclawv1connect.TenancyServiceListMyOrgsProcedure:      td.PermOrgsListMine,
+	pantherclawv1connect.AccessServiceAcceptInvitationProcedure: td.PermInvitationsAccept,
 }
 
 func init() { maps.Copy(procedurePermissions, uiTenancyProcedures) }
