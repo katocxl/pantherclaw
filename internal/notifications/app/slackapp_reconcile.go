@@ -311,7 +311,7 @@ func sharedChannel(a slackAnswer, channel string) bool {
 // slackCloseFailed records a failed close. A failure Slack will not
 // recover from counts toward ORPHANED; when the card becomes ORPHANED the
 // channel's delivery health shows it, without feeding the auto-pause clock
-// (D117). Any other failure defers the card with backoff, honouring
+// (D117). Any other failure defers the card with backoff, honoring
 // Retry-After.
 func (s *Service) slackCloseFailed(ctx context.Context, org ids.OrgID, cardID, channel ids.UUID, out outcome) {
 	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
