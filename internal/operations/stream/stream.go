@@ -89,6 +89,12 @@ type Config struct {
 	Batch        int           // events read per poll (500)
 }
 
+// DefaultRecheck is how often an open stream authenticates its credential
+// again (D32): at most 30 seconds, so a revoked or ended session, or a
+// browser session that passed its idle or absolute limit (HR-150), closes
+// the stream within it. A browser stream has no other expiry.
+const DefaultRecheck = 30 * time.Second
+
 func (c Config) withDefaults() Config {
 	if c.Poll <= 0 {
 		c.Poll = time.Second
@@ -97,7 +103,7 @@ func (c Config) withDefaults() Config {
 		c.Heartbeat = 15 * time.Second
 	}
 	if c.Recheck <= 0 {
-		c.Recheck = 30 * time.Second
+		c.Recheck = DefaultRecheck
 	}
 	if c.MaxPerCaller <= 0 {
 		c.MaxPerCaller = 5

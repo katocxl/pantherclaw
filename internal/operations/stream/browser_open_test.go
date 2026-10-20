@@ -83,6 +83,31 @@ func TestHR344_ConsoleOpensTheStreamWithItsCookie(t *testing.T) {
 	}
 }
 
+// TestHR344_AnEndedSessionClosesTheStreamWithinTheRecheck: the recheck
+// interval is at most 30 seconds, and a session the server ends while the
+// console's stream is open closes the stream within one interval.
+func TestHR344_AnEndedSessionClosesTheStreamWithinTheRecheck(t *testing.T) {
+	if stream.DefaultRecheck <= 0 || stream.DefaultRecheck > 30*time.Second {
+		t.Fatalf("recheck interval %s", stream.DefaultRecheck)
+	}
+	const recheck = 200 * time.Millisecond
+	w := newCookieWorld(t, stream.Config{Recheck: recheck, Heartbeat: time.Hour})
+	ctx := ctxFor(t)
+	resp := w.consoleOpen(t, ctx, "good", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("open = %d", resp.StatusCode)
+	}
+	frames(t, resp.Body, func(fs []frame) bool { return len(fs) >= 1 }) // the opening comment
+	ended := time.Now()
+	w.cookies.revoke("good")
+	if _, closed := frames(t, resp.Body, func([]frame) bool { return false }); !closed {
+		t.Fatal("ended session: stream still open")
+	}
+	if d := time.Since(ended); d > 2*recheck+time.Second {
+		t.Fatalf("closed %s after the session ended, recheck %s", d, recheck)
+	}
+}
+
 // TestRT061_CrossOriginReadOfTheOpsStream (HR-344): another site cannot
 // open the stream with the viewer's cookie (an EventSource from another
 // page carries the cookie but cannot add PC-CSRF), the cookie never works

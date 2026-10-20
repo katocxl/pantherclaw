@@ -17,6 +17,12 @@ import (
 // is a clean same-origin path: it resolves on PantherClaw's own host to
 // itself, with no scheme, host, query, fragment, escape, backslash, dot
 // segment or control character a browser could read another way.
+//
+// Console paths (HR-345, G0 UI D78) may carry a trailing slash, a plain
+// query and percent-escapes; an accepted one still resolves on PantherClaw's
+// own host under /app/, with no scheme, host, fragment, backslash, "//",
+// control character, or escape a browser would read as a slash, backslash,
+// control character or dot segment.
 func FuzzNextPath(f *testing.F) {
 	for _, s := range []string{
 		"/account", "/containment", "/approvals", "/approvals/0192f3a0-0000-7000-8000-000000000001",
@@ -38,6 +44,10 @@ func FuzzNextPath(f *testing.F) {
 			if !authnapp.ValidReturnPath(next) {
 				return
 			}
+			if strings.HasPrefix(next, "/app/") {
+				checkConsolePath(t, base, next)
+				return
+			}
 			if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.ContainsAny(next, `\%?#@:`) ||
 				strings.ContainsFunc(next, func(r rune) bool { return r <= ' ' || r >= 0x7f }) || path.Clean(next) != next {
 				t.Fatalf("accepted the return path %q", next)
@@ -56,4 +66,32 @@ func FuzzNextPath(f *testing.F) {
 			check(q.Get("next"))
 		}
 	})
+}
+
+// checkConsolePath is FuzzNextPath's invariant for an accepted console
+// path (HR-345).
+func checkConsolePath(t *testing.T, base *url.URL, next string) {
+	t.Helper()
+	if strings.HasPrefix(next, "//") || strings.Contains(next, "//") || strings.ContainsAny(next, `\#@ `) || len(next) > 512 ||
+		strings.ContainsFunc(next, func(r rune) bool { return r < ' ' || r >= 0x7f }) {
+		t.Fatalf("accepted the console path %q", next)
+	}
+	u, err := url.Parse(next)
+	if err != nil || u.Scheme != "" || u.Host != "" || u.User != nil || u.Fragment != "" || u.Opaque != "" {
+		t.Fatalf("accepted %q, which parses as %#v (%v)", next, u, err)
+	}
+	if strings.ContainsAny(u.Path, `\`) || strings.Contains(u.Path, "//") || strings.Contains(u.RawQuery, "/") {
+		t.Fatalf("accepted %q, whose escapes decode to a slash or backslash", next)
+	}
+	if strings.ContainsFunc(u.Path+u.RawQuery, func(r rune) bool { return r < ' ' || r == 0x7f }) {
+		t.Fatalf("accepted %q, whose escapes decode to a control character", next)
+	}
+	for _, seg := range strings.Split(u.Path, "/") {
+		if seg == "." || seg == ".." {
+			t.Fatalf("accepted %q, with a dot segment once decoded", next)
+		}
+	}
+	if r := base.ResolveReference(u); r.Host != base.Host || r.Scheme != base.Scheme || !strings.HasPrefix(r.Path, "/app/") || r.Path != u.Path {
+		t.Fatalf("accepted %q, which a browser opens as %s", next, r)
+	}
 }
