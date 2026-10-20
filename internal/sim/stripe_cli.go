@@ -5,6 +5,7 @@ package sim
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"io"
 	"os"
@@ -32,6 +33,9 @@ func runStripe(ctx context.Context, args []string, stderr io.Writer) error {
 	liveKeyFile := fs.String("livemode-key-file", "", "file holding the live-mode key (instead of --livemode-key)")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *liveKey != "" && *liveKeyFile != "" {
+		return errors.New("--livemode-key and --livemode-key-file are exclusive")
 	}
 	req := stripe.Require{LivemodeKey: *liveKey}
 	if *liveKeyFile != "" {

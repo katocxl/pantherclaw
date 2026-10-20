@@ -30,3 +30,4 @@ steps:
       body: destination=${fixture.stripe_other_payee}&amount=1000&currency=usd
     expect:
       outcome: DENY
+      reason: DESTINATION_NOT_GRANTED
