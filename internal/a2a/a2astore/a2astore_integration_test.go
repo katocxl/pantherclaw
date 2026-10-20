@@ -391,3 +391,54 @@ func TestHR221_AnA2AMoveIsCheckedByTheStore(t *testing.T) {
 		t.Fatalf("a move to an unknown gateway: %v", err)
 	}
 }
+
+// TestHR322_AConfirmedRePinLiftsOnlyACardDriftQuarantine (D86, D118):
+// confirming a new pin lifts the connection's a2a_card_drift quarantine
+// in the same transaction, audited; a manual quarantine stays.
+func TestHR322_AConfirmedRePinLiftsOnlyACardDriftQuarantine(t *testing.T) {
+	sim := a2asim.New(a2asim.Options{}, a2asim.Faults{}, nil)
+	ts := httptest.NewServer(sim.Handler())
+	t.Cleanup(ts.Close)
+	pool := dbtest.New(t).AppPool(t)
+	iface := ts.URL + a2asim.JSONRPCPath
+	w := newWorld(t, pool, iface)
+	adapter := &a2astore.Adapter{Pinner: a2astore.NewPinner()}
+	pins := &a2astore.Pins{Pool: pool, Pinner: adapter.Pinner, Quarantines: capp.New(pool, nil, "https://pc.test", "https://gw.test")}
+	cfg := &capp.A2AConfig{
+		CardURL: ts.URL + wire.CardPath, Interface: capp.A2AInterface{Protocol: wire.BindingJSONRPC, URL: iface},
+		Skills: []string{"refunds"}, MaxAnswerBytes: 1 << 20, MaxStreamSeconds: 300,
+	}
+	repin := func(description, reason string) (state string, restored int) {
+		t.Helper()
+		sim.SetFaults(a2asim.Faults{Description: description})
+		w.tx(t, func(ctx context.Context, _ *dbq.Queries, tx db.TenantTx) error {
+			if _, err := adapter.Save(ctx, tx, w.org, w.conn, 1, cfg); err != nil {
+				return err
+			}
+			_, err := tx.Exec(ctx, "UPDATE pc.connections SET state = 'QUARANTINED', quarantine_reason = $2, revision = revision + 1 WHERE id = $1",
+				w.conn, reason)
+			return err
+		})
+		got, err := pins.Get(w.admin(td.KindUser), w.conn)
+		if err != nil || got.Proposed == nil {
+			t.Fatalf("pins: %+v %v", got, err)
+		}
+		if _, err := pins.Confirm(w.admin(td.KindUser), w.conn, got.Proposed.ID, &stepup.StepUp{Credential: w.key, At: time.Now()}); err != nil {
+			t.Fatalf("confirm: %v", err)
+		}
+		w.tx(t, func(ctx context.Context, _ *dbq.Queries, tx db.TenantTx) error {
+			if err := tx.QueryRow(ctx, "SELECT state FROM pc.connections WHERE id = $1", w.conn).Scan(&state); err != nil {
+				return err
+			}
+			return tx.QueryRow(ctx, "SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.connection.restored'",
+				w.org).Scan(&restored)
+		})
+		return state, restored
+	}
+	if state, restored := repin("version two", capp.ReasonA2ACardDrift); state != capp.StateActive || restored != 1 {
+		t.Fatalf("a card-drift quarantine after the re-pin: %s, %d restorations", state, restored)
+	}
+	if state, restored := repin("version three", "manual"); state != capp.StateQuarantined || restored != 1 {
+		t.Fatalf("a manual quarantine after the re-pin: %s, %d restorations", state, restored)
+	}
+}

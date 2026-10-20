@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -35,6 +36,15 @@ var (
 type Pins struct {
 	Pool   *db.Pool
 	Pinner *Pinner
+	// Quarantines lifts the connection's card-drift quarantine in the
+	// confirming transaction (D86, D118; *capp.Service).
+	Quarantines DriftLifter
+}
+
+// DriftLifter lifts an a2a connection's a2a_card_drift quarantine, and
+// only that one, in the caller's transaction.
+type DriftLifter interface {
+	LiftA2ACardDriftTx(ctx context.Context, tx db.TenantTx, caller tenancy.Caller, conn ids.UUID) (bool, error)
 }
 
 // Proposal is what the page shows of a connection: its name, the pin that
@@ -168,6 +178,14 @@ func (s *Pins) Confirm(ctx context.Context, conn, pin ids.UUID, su *stepup.StepU
 		if !bytes.Equal(out.Config.GetCardDigest(), proposed.Config.GetCardDigest()) {
 			return ErrNoProposal
 		}
+		// The new pin is confirmed: a card-drift quarantine of the old one
+		// lifts with it (D86); another quarantine stays.
+		lifted := false
+		if s.Quarantines != nil {
+			if lifted, err = s.Quarantines.LiftA2ACardDriftTx(ctx, tx, c, conn); err != nil {
+				return err
+			}
+		}
 		if _, err := q.BumpGatewayConfig(ctx, c.Org, w.GatewayID); err != nil {
 			return err
 		}
@@ -178,6 +196,7 @@ func (s *Pins) Confirm(ctx context.Context, conn, pin ids.UUID, su *stepup.StepU
 				"pin_id": pin.String(), "card_digest": out.Digest(), "previous_card_digest": previous,
 				"interface_url": out.Config.GetInterface().GetUrl(), "skills": strings.Join(out.Config.GetSkills(), ","),
 				"peer_agent_id": out.Config.GetPeerAgentId(), "security_key": su.Credential.String(),
+				"drift_quarantine_lifted": strconv.FormatBool(lifted),
 			},
 		})
 		return err

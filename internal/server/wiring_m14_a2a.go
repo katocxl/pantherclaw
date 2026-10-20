@@ -45,5 +45,9 @@ func mountM14A2A(mux *http.ServeMux, d apiDeps) {
 	if d.web == nil {
 		return
 	}
-	d.web.MountA2APins(mux, &a2astore.Pins{Pool: d.pool, Pinner: a2astore.NewPinner()})
+	pins := &a2astore.Pins{Pool: d.pool, Pinner: a2astore.NewPinner()}
+	if d.m6 != nil && d.m6.connections != nil {
+		pins.Quarantines = d.m6.connections
+	}
+	d.web.MountA2APins(mux, pins)
 }
