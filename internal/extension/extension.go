@@ -92,10 +92,55 @@ type Deps struct {
 	Plans PlanWriter
 	// Accounts reads hosted accounts; nil until the core provides it.
 	Accounts AccountReader
+	// BillingLinks binds provider subscriptions to orgs; nil until the
+	// core provides it.
+	BillingLinks BillingLinks
 }
 
+// Present reports whether s adds anything to the core server.
+func (s Set) Present() bool { return s.Console != nil || s.Mount != nil || s.Validate != nil }
+
+// BillingLinks binds billing-provider subscriptions to orgs, only through
+// checkouts the server created (a webhook's own org hint is never
+// trusted). A ref never moves to another org.
+type BillingLinks interface {
+	// RecordCheckout records a pending checkout the server created for
+	// orgID. An existing pending checkout of the same org and provider is
+	// marked expired and its ref returned as superseded (the caller cancels
+	// it at the provider); re-recording the same pending ref is a no-op. It
+	// returns ErrConflict only when the org has a current subscription.
+	RecordCheckout(ctx context.Context, orgID, provider, checkoutRef string, expiresAt time.Time) (superseded string, err error)
+	// BindSubscription binds a subscription to the org of a recorded
+	// checkout and marks the checkout consumed. A checkout still binds
+	// after it expired or was superseded while the org has no current
+	// subscription. The same checkout and subscription return the org again
+	// (idempotent); a checkout consumed by a different subscription returns
+	// ErrConflict; an unknown checkout returns ErrNotFound. When the org
+	// already has a different current subscription, the new one is
+	// recorded as an ended duplicate and BindSubscription returns
+	// (orgID, ErrDuplicate), every time for that pair; the caller cancels
+	// and refunds it.
+	BindSubscription(ctx context.Context, provider, checkoutRef, subscriptionRef, customerRef string) (orgID string, err error)
+	// SubscriptionOrg returns the org of a bound subscription and whether
+	// it is the org's current one; ErrNotFound if unknown.
+	SubscriptionOrg(ctx context.Context, provider, subscriptionRef string) (orgID string, current bool, err error)
+	// EndSubscription marks a subscription ended.
+	EndSubscription(ctx context.Context, provider, subscriptionRef string) error
+	// CurrentSubscription returns the org's current subscription with the
+	// provider, if any.
+	CurrentSubscription(ctx context.Context, orgID, provider string) (subscriptionRef string, ok bool, err error)
+}
+
+// BillingLinks errors. errors.Is(ErrDuplicate, ErrConflict) is true.
+var (
+	ErrNotFound  = errors.New("extension: not found")
+	ErrConflict  = errors.New("extension: conflict")
+	ErrDuplicate = fmt.Errorf("%w: duplicate subscription", ErrConflict)
+)
+
 // Principal is the browser-session caller of an AuthSession or
-// AuthSessionCSRF route. OrgID is empty for account sessions.
+// AuthSessionCSRF route. OrgID and UserID are empty for account sessions;
+// AccountID is empty for org sessions of a person without a hosted account.
 type Principal struct {
 	AccountID, OrgID, UserID, Email string
 }
@@ -207,7 +252,8 @@ func SplitPattern(pattern string) (method, path string, err error) {
 	if rest == "" || strings.HasPrefix(rest, "{") {
 		return "", "", fmt.Errorf("%w: %q: path needs a fixed segment after the prefix", ErrRoute, pattern)
 	}
-	if strings.Contains(path, "//") || strings.Contains(path, "/./") || strings.Contains(path, "..") {
+	if strings.Contains(path, "//") || strings.Contains(path, "/./") || strings.Contains(path, "..") ||
+		strings.HasSuffix(path, "/.") {
 		return "", "", fmt.Errorf("%w: %q: path is not clean", ErrRoute, pattern)
 	}
 	for _, r := range path {
@@ -222,12 +268,20 @@ func SplitPattern(pattern string) (method, path string, err error) {
 }
 
 // ValidateRoute checks one route: its pattern, its auth mode and a handler.
+// AuthSession is only for GET or HEAD routes; a route with any other
+// method, or with none (which matches every method), that takes the
+// session cookie must use AuthSessionCSRF (HR-151, T-160).
 func ValidateRoute(r Route) error {
-	if _, _, err := SplitPattern(r.Pattern); err != nil {
+	method, _, err := SplitPattern(r.Pattern)
+	if err != nil {
 		return err
 	}
 	switch r.Auth {
-	case AuthNone, AuthSession, AuthSessionCSRF:
+	case AuthNone, AuthSessionCSRF:
+	case AuthSession:
+		if method != http.MethodGet && method != http.MethodHead {
+			return fmt.Errorf("%w: %q: a session route that is not GET or HEAD must use AuthSessionCSRF", ErrRoute, r.Pattern)
+		}
 	default:
 		return fmt.Errorf("%w: %q: unknown auth mode %d", ErrRoute, r.Pattern, r.Auth)
 	}

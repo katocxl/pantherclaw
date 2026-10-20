@@ -212,6 +212,9 @@ func RunWith(ctx context.Context, cfg *Config, ext extension.Set) error {
 
 func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart started, ext extension.Set) error {
 	log := newLogger(cfg, stderr)
+	if err := cfg.checkDeploymentFor(ext); err != nil {
+		return err
+	}
 	xdeps := extensionDeps(cfg, log)
 	if err := validateExtension(ext, xdeps); err != nil {
 		return err
@@ -766,7 +769,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	mountM10Ops(mux)
 	// Extension routes come last, so they can be checked against every
 	// core route (HR-341).
-	if err := mountExtension(mux, d.ext, d.extDeps, d.web); err != nil {
+	if err := mountExtension(mux, d.ext, d.extDeps, d.web, d.clientIP); err != nil {
 		return nil, err
 	}
 	return workloadrpc.RawBody(mux, d.clientIP), nil

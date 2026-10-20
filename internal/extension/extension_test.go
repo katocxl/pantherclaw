@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+	"testing/fstest"
 )
 
 // HR-341: extension routes live only under /v1/ext/ and /app/ext/.
@@ -30,7 +31,7 @@ func TestHR341_RoutePrefixes(t *testing.T) {
 		"/pantherclaw.v1.AccessService/WhoAmI", "/login", "/static/pc.css",
 		"example.com/v1/ext/x", "POST example.com/v1/ext/x", "FETCH /v1/ext/x", "post /v1/ext/x",
 		"/v1/ext/a//b", "/v1/ext/a/../b", "/v1/ext/a/./b", "/v1/ext/a\\b", "/v1/ext/a%2fb", "/v1/ext/a?b",
-		"/v1/ext/a b", "GET  /v1/ext/a", " /v1/ext/a", "/v1/ext/ä",
+		"/v1/ext/a b", "GET  /v1/ext/a", " /v1/ext/a", "/v1/ext/ä", "/v1/ext/a/.", "GET /app/ext/a/.",
 	}
 	for _, p := range bad {
 		if _, _, err := SplitPattern(p); !errors.Is(err, ErrRoute) {
@@ -41,13 +42,25 @@ func TestHR341_RoutePrefixes(t *testing.T) {
 
 func TestValidateRoute(t *testing.T) {
 	h := http.NotFoundHandler()
-	if err := ValidateRoute(Route{Pattern: "POST /v1/ext/a", Auth: AuthSessionCSRF, Handler: h}); err != nil {
-		t.Fatal(err)
+	for _, r := range []Route{
+		{Pattern: "POST /v1/ext/a", Auth: AuthSessionCSRF, Handler: h},
+		{Pattern: "/v1/ext/a", Auth: AuthSessionCSRF, Handler: h},
+		{Pattern: "GET /app/ext/a", Auth: AuthSession, Handler: h},
+		{Pattern: "HEAD /app/ext/a", Auth: AuthSession, Handler: h},
+		{Pattern: "POST /v1/ext/hook", Auth: AuthNone, Handler: h},
+	} {
+		if err := ValidateRoute(r); err != nil {
+			t.Errorf("ValidateRoute(%+v) = %v", r, err)
+		}
 	}
 	for _, r := range []Route{
 		{Pattern: "/v1/ext/a", Auth: AuthNone},
 		{Pattern: "/v1/ext/a", Auth: RouteAuth(9), Handler: h},
 		{Pattern: "/v2/ext/a", Auth: AuthNone, Handler: h},
+		// A session route that can change state needs the CSRF check.
+		{Pattern: "POST /app/ext/a", Auth: AuthSession, Handler: h},
+		{Pattern: "DELETE /app/ext/a", Auth: AuthSession, Handler: h},
+		{Pattern: "/app/ext/a", Auth: AuthSession, Handler: h},
 	} {
 		if err := ValidateRoute(r); !errors.Is(err, ErrRoute) {
 			t.Errorf("ValidateRoute(%+v) = %v, want ErrRoute", r, err)
@@ -63,6 +76,24 @@ func TestPrincipalFrom(t *testing.T) {
 	got, ok := PrincipalFrom(WithPrincipal(context.Background(), want))
 	if !ok || got != want {
 		t.Fatalf("PrincipalFrom = %+v, %v", got, ok)
+	}
+}
+
+func TestSentinelsAndPresent(t *testing.T) {
+	if !errors.Is(ErrDuplicate, ErrConflict) || errors.Is(ErrConflict, ErrDuplicate) || errors.Is(ErrNotFound, ErrConflict) {
+		t.Fatal("sentinel relations")
+	}
+	if (Set{}).Present() {
+		t.Fatal("empty set present")
+	}
+	for _, s := range []Set{
+		{Console: fstest.MapFS{}},
+		{Mount: func(Deps) ([]Route, error) { return nil, nil }},
+		{Validate: func(Deps) error { return nil }},
+	} {
+		if !s.Present() {
+			t.Errorf("%+v not present", s)
+		}
 	}
 }
 
