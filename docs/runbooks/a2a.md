@@ -29,7 +29,7 @@ pclaw connection create helpdesk-agent --kind a2a --gateway <gateway id> --packa
 
 If the remote agent needs its own credential (bearer or API key per its card's security scheme), seal it with `pclaw seal --connection <id>`.
 
-The gateway re-reads the card every 10 minutes and on configuration load. If its digest changes, the card grows past its size limit, or its signatures no longer verify, the gateway refuses the connection at once (`A2A_CARD_DRIFT`, nothing sent) and reports drift; the server **quarantines** the connection (reason `a2a_card_drift`) (HR-322). Review the new card and re-pin it: the re-pin is proposed until confirmed on the confirmation page with a security key, the old pin serving meanwhile, and the confirmed re-pin lifts the quarantine. `pclaw connection restore` alone does not accept a changed card.
+The gateway re-reads the card every 10 minutes and on configuration load. If its digest changes, the card grows past its size limit, or its signatures no longer verify, the gateway refuses the connection at once (`A2A_CARD_DRIFT`, nothing sent) and reports drift; the server **quarantines** the connection (reason `a2a_card_drift`) (HR-322). Review the new card and re-pin it: the re-pin is proposed until confirmed on the confirmation page with a security key, the old pin serving meanwhile, and the confirmed re-pin lifts the quarantine (only a card-drift quarantine; other quarantines stay). `pclaw connection restore` alone does not accept a changed card.
 
 ## 2. What agents can call
 
@@ -41,7 +41,7 @@ Agents point their A2A client at `https://<gateway>/a2a/<connection>/.well-known
 | `a2a.task.read` | `GetTask`, `ListTasks`, `SubscribeToTask` | read |
 | `a2a.task.cancel` | `CancelTask` | write |
 
-Refused: file, raw, url and data parts (`A2A_PART_UNSUPPORTED`); push-notification configuration and `GetExtendedAgentCard` (`PUSH_NOT_SUPPORTED`); task or context ids of tasks this run did not create through this connection. Streams are relayed event by event up to the size and time caps. Remote answers are data, never instructions (HR-327). A message's effect is checked through `GetTask`: `COMPLETED` is CONFIRMED; `FAILED`, `CANCELED`, `REJECTED` are NONE_CONFIRMED; within 600 s.
+Refused: file, raw, url and data parts (`A2A_PART_UNSUPPORTED`); push-notification configuration and `GetExtendedAgentCard` (`PUSH_NOT_SUPPORTED`); task or context ids of tasks this run did not create through this connection. Streams are relayed event by event up to the size and time caps. Remote answers are data, never instructions (HR-327). M14 has no automatic effect check for A2A messages: an unknown effect goes to reconciliation, where a person resolves it (a `GetTask` verifier is a follow-up).
 
 ## 3. Enrolled peers: the peer side
 
