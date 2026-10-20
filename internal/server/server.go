@@ -47,6 +47,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/definitions/trust"
 	"github.com/katocxl/pantherclaw/internal/evidence/chainer"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
+	"github.com/katocxl/pantherclaw/internal/extension"
 	"github.com/katocxl/pantherclaw/internal/facts/adapters/factsrpc"
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	factsapp "github.com/katocxl/pantherclaw/internal/facts/app"
@@ -118,8 +119,15 @@ Configuration: JSON file plus PC_* environment variables; secrets only as file p
 // Env reads environment variables (os.LookupEnv in production).
 type Env = config.LookupEnv
 
-// Run executes pantherclaw-server; ctx is canceled on SIGINT/SIGTERM.
+// Run executes pantherclaw-server without extensions; ctx is canceled on
+// SIGINT/SIGTERM.
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer, env Env) int {
+	return RunCommand(ctx, args, stdout, stderr, env, extension.Set{})
+}
+
+// RunCommand executes pantherclaw-server with ext added to `serve`
+// (internal/extension); every other subcommand ignores it.
+func RunCommand(ctx context.Context, args []string, stdout, stderr io.Writer, env Env, ext extension.Set) int {
 	if len(args) == 0 {
 		_, _ = fmt.Fprint(stderr, usage)
 		return 2
@@ -130,7 +138,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, env Env) 
 		_, _ = fmt.Fprintln(stdout, version.Get().String("pantherclaw-server"))
 		return 0
 	case "serve":
-		err = cmdServe(ctx, args[1:], stderr, env, nil)
+		err = cmdServeWith(ctx, args[1:], stderr, env, nil, ext)
 	case "migrate":
 		err = cmdMigrate(ctx, args[1:], stdout, stderr, env)
 	case "db":
@@ -182,7 +190,7 @@ func newLogger(cfg *Config, w io.Writer) *slog.Logger {
 // started reports the bound API address to tests (nil in production).
 type started func(apiAddr string)
 
-func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onStart started) error {
+func cmdServeWith(ctx context.Context, args []string, stderr io.Writer, env Env, onStart started, ext extension.Set) error {
 	cfg, rest, err := loadConfig(args, stderr, env, "serve")
 	if err != nil {
 		return err
@@ -190,7 +198,24 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	if len(rest) != 0 {
 		return errUsage
 	}
+	return runServe(ctx, cfg, stderr, onStart, ext)
+}
+
+// RunWith serves cfg with ext added (internal/extension), logging to
+// stderr, until ctx is canceled. cfg is validated first.
+func RunWith(ctx context.Context, cfg *Config, ext extension.Set) error {
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	return runServe(ctx, cfg, os.Stderr, nil, ext)
+}
+
+func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart started, ext extension.Set) error {
 	log := newLogger(cfg, stderr)
+	xdeps := extensionDeps(cfg, log)
+	if err := validateExtension(ext, xdeps); err != nil {
+		return err
+	}
 	appCfg, err := cfg.dbConfig(cfg.DB.AppUser, cfg.DB.AppPasswordFile, cfg.DB.MaxConns)
 	if err != nil {
 		return err
@@ -345,6 +370,8 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			m10ops:       m10OpsDeps{authn: authn, tokens: tokens},
 			autos:        autos,
 			m11protect:   m11protect,
+			ext:          ext,
+			extDeps:      xdeps,
 		})
 		if err != nil {
 			return err
@@ -583,6 +610,10 @@ type apiDeps struct {
 	m11protect m11Protect
 	// autos is the process's M11 part 2 core (nil: apiHandler builds one).
 	autos *automationsCore
+	// ext is what this build adds (internal/extension; zero: nothing), and
+	// extDeps what it is handed.
+	ext     extension.Set
+	extDeps extension.Deps
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
@@ -602,7 +633,8 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	pantherclawv1connect.RegisterSystemServiceHandler(rs, systemService{})
 	pantherclawv1connect.RegisterAuthorityServiceHandler(rs, authority.NewHandler(d.authority))
 	pantherclawv1connect.RegisterTenancyServiceHandler(rs, tenancyrpc.NewTenancy(tapp.NewHierarchy(pool, d.billing)))
-	pantherclawv1connect.RegisterAccessServiceHandler(rs, tenancyrpc.NewAccess(tapp.NewAccess(pool, log)))
+	pantherclawv1connect.RegisterAccessServiceHandler(rs, tenancyrpc.NewAccess(tapp.NewAccess(pool, log)).
+		WithDeployment(string(d.extDeps.Deployment)))
 	pantherclawv1connect.RegisterServiceAccountServiceHandler(rs, tenancyrpc.NewServiceAccounts(tapp.NewServiceAccounts(pool, d.apiKeyEnv)))
 	// autos is the M11 part 2 core, set below once grants and runs exist;
 	// ListAgents reads it only while serving.
@@ -733,6 +765,11 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	})
 	mountEvidenceKeys(mux, d)
 	mountM10Ops(mux)
+	// Extension routes come last, so they can be checked against every
+	// core route (HR-341).
+	if err := mountExtension(mux, d.ext, d.extDeps, d.web); err != nil {
+		return nil, err
+	}
 	return workloadrpc.RawBody(mux, d.clientIP), nil
 }
 
