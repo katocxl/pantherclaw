@@ -45,26 +45,57 @@ func TestM14_SuccessCheck(t *testing.T) {
 	}
 }
 
-// TestM14_KindSenders: a kind is dispatched only by a registered sender;
-// one without a sender, or an unknown kind, is not implemented and fails
-// closed, while the built-in kinds need none (G0 M14 D75).
+// TestM14_KindSenders: a kind is dispatched only by a registered sender:
+// one without a sender, or an unknown kind, is KIND_NOT_IMPLEMENTED before
+// the Authority is asked; a registered a2a or postgres kind still needs its
+// connection's configuration (KIND_CONFIG_MISSING); the built-in kinds need
+// neither. It holds whichever M14 senders this build registers (G0 M14
+// D75, D94).
 func TestM14_KindSenders(t *testing.T) {
-	for _, k := range []string{"postgres", "a2a", "smtp", ""} {
-		if !kindNotImplemented(k) {
-			t.Errorf("%q is implemented without a sender", k)
+	conn := func(kind string, cfg func(*pb.GatewayConnection)) *control.Connection {
+		g := &pb.GatewayConnection{Kind: kind}
+		if cfg != nil {
+			cfg(g)
 		}
+		return &control.Connection{GatewayConnection: g}
 	}
+	withPG := func(g *pb.GatewayConnection) { g.Postgres = &pb.PostgresConfig{Database: "shop"} }
+	withA2A := func(g *pb.GatewayConnection) { g.A2A = &pb.A2AConfig{CardUrl: "https://peer.example.test/card"} }
 	for _, k := range builtinKinds {
-		if kindNotImplemented(k) {
-			t.Errorf("built-in %q is not implemented", k)
+		if code := kindRefusal(conn(k, nil)); code != "" {
+			t.Errorf("built-in %q: %s", k, code)
 		}
 	}
-	kindSenders["test-kind"] = func(*Engine, context.Context, Result, *control.Connection, *defs.Definition, actionir.Parsed, permitWant, *timer) Result {
+	for _, k := range []string{"smtp", ""} {
+		if code := kindRefusal(conn(k, nil)); code != CodeKindNotImplemented {
+			t.Errorf("%q: %s", k, code)
+		}
+	}
+	for kind, cfg := range map[string]func(*pb.GatewayConnection){"postgres": withPG, "a2a": withA2A} {
+		_, registered := kindSenders[kind]
+		withCfg, without := kindRefusal(conn(kind, cfg)), kindRefusal(conn(kind, nil))
+		switch {
+		case registered && (withCfg != "" || without != CodeKindConfigMissing):
+			t.Errorf("%s, registered: with its configuration %q, without %q", kind, withCfg, without)
+		case !registered && (withCfg != CodeKindNotImplemented || without != CodeKindNotImplemented):
+			t.Errorf("%s, unregistered: %q %q", kind, withCfg, without)
+		}
+	}
+	// Registering a sender makes a kind dispatchable, its configuration
+	// still required; the registry is restored afterwards.
+	prev, had := kindSenders["a2a"]
+	kindSenders["a2a"] = func(*Engine, context.Context, Result, *control.Connection, *defs.Definition, actionir.Parsed, permitWant, *timer) Result {
 		return Result{}
 	}
-	defer delete(kindSenders, "test-kind")
-	if kindNotImplemented("test-kind") {
-		t.Fatal("a registered kind is not implemented")
+	defer func() {
+		if had {
+			kindSenders["a2a"] = prev
+		} else {
+			delete(kindSenders, "a2a")
+		}
+	}()
+	if kindRefusal(conn("a2a", withA2A)) != "" || kindRefusal(conn("a2a", nil)) != CodeKindConfigMissing {
+		t.Fatal("a registered a2a sender")
 	}
 }
 
@@ -80,8 +111,13 @@ func TestM14_CheckCredentialPattern(t *testing.T) {
 		cred string
 		ok   bool
 	}{
-		{nil, "static", "x", true}, {&defs.Definition{}, "static", "x", true}, {&defs.Definition{Dispatch: &defs.Dispatch{}}, "github_app", "", true},
-		{d, "static", "key_abcd", true}, {d, "", "key_abcd", true}, {d, "static", "key_abcde", false}, {d, "static", "", false},
+		{nil, "static", "x", true},
+		{&defs.Definition{}, "static", "x", true},
+		{&defs.Definition{Dispatch: &defs.Dispatch{}}, "github_app", "", true},
+		{d, "static", "key_abcd", true},
+		{d, "", "key_abcd", true},
+		{d, "static", "key_abcde", false},
+		{d, "static", "", false},
 		{d, "github_app", "key_abcd", false},
 	} {
 		if err := CheckCredentialPattern(c.def, c.kind, []byte(c.cred)); (err == nil) != c.ok {

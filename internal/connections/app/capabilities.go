@@ -212,12 +212,18 @@ func declareKind(out *Capabilities, c Connection) {
 		out.Failure = append(out.Failure, "The agent's hook or SDK blocks every mapped call when PantherClaw cannot answer (HR-200).")
 		out.Limits = append(out.Limits, Limit{"COOPERATIVE", "Decisions bind only an agent that asks; coverage is PARTIAL at most."})
 		return
-	case KindPostgres, KindA2A:
-		// G0 M14 D4: defined, not yet served; nothing is dispatched.
-		out.Enforcement = Support{Unsupported, "This build cannot dispatch " + c.Kind + " connections yet: every action " +
-			"through it is refused (KIND_NOT_IMPLEMENTED)."}
-		out.Limits = append(out.Limits, Limit{"KIND_NOT_IMPLEMENTED", "No action can use this connection yet."})
-		return
+	case KindPostgres:
+		// G0 M14 D16, D100.
+		out.Enforcement = Support{Supported, "The gateway builds every query itself from the reviewed manifest: " +
+			"parameterized, in a read-only transaction, with a row cap and a statement timeout (HR-307, HR-308)."}
+	case KindA2A:
+		// G0 M14 D31, D33, D100.
+		out.Enforcement = Support{Supported, "The gateway builds every message to the peer agent itself from the reviewed " +
+			"definition and relays only text parts (HR-323)."}
+		out.Limits = append(out.Limits, Limit{
+			"PEER_AUTHORITY",
+			"A peer agent that is not enrolled in this org acts under its own authority once it has the message (R-41).",
+		})
 	case KindMCP:
 		out.Discovery.Detail += " The upstream server's tools are compared with their reviewed definitions; drift quarantines them (HR-081)."
 		out.Enforcement = Support{Partial, "The gateway calls the remote MCP server for the agent, but what the server " +
