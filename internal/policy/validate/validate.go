@@ -201,6 +201,16 @@ func static(r *pdomain.Rule, in inputs) []pdomain.Finding {
 				}
 				continue
 			}
+			if c.Kind.ScopeKind() {
+				// A data scope rule needs the definition to declare it can
+				// enforce that kind (G0 M14 D11).
+				need := map[pdomain.ConstraintKind]string{pdomain.RecordScope: "records", pdomain.DataClasses: "classes"}[c.Kind]
+				if !slices.Contains(d.Scoping, need) {
+					errf(CodeConstraintUnsupported, "rule %s: %s cannot limit the %s of its answer, so every action it matches would be CANNOT_AUTHORIZE",
+						r.ID, d.Operation, need)
+				}
+				continue
+			}
 			if _, ok := d.Supports(defs.ConstraintKind(c.Kind), c.Param); !ok {
 				errf(CodeConstraintUnsupported, "rule %s: %s does not declare %s on %q, so every action it matches would be CANNOT_AUTHORIZE",
 					r.ID, d.Operation, c.Kind, c.Param)

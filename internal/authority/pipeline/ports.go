@@ -306,3 +306,9 @@ type Snapshotter interface {
 	// database read through it.
 	Snapshot(ctx context.Context, org ids.OrgID, fn func(ctx context.Context, r Reader) error) error
 }
+
+// PeerCheck decides whether the requester's grant lets a call through an
+// a2a connection go to its peer agent (G0 M14 D89): "" allows it, any
+// other reason refuses it. It reads through its own store; the pipeline
+// holds no transaction.
+type PeerCheck func(ctx context.Context, org ids.OrgID, conn Connection, grant gdomain.Grant) (reason string)
