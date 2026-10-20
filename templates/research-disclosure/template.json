@@ -1,0 +1,39 @@
+{
+  "name": "research-disclosure",
+  "summary": "Research agents read allow-listed PostgreSQL tables, share drafts in named internal Slack channels and open pull requests on the named repositories: public and internal columns only, at most 100 rows a read, nothing posted to channels shared outside the organization, and every pull request to a public destination held for an approver under the disclosure limits.",
+  "task_ref": "template:research-disclosure",
+  "requires_agent": true,
+  "protects": [
+    "the agent named with --agent (required) reads only public and internal columns (pii and secret values are withheld), at most 100 rows at a time",
+    "the agent named with --agent (required) posts only to the Slack channels named with --slack-channel, and never to a channel shared with another workspace or organization; without --slack-channel it posts nowhere",
+    "every pull request opened on a named repository through a public destination, by any agent, waits for an independent approver, and its body is checked against the disclosure limits before it is sent",
+    "the agent's grant covers reads and the table list on pc.postgres, posts to the named channels, and reading and opening pull requests on the named repositories only"
+  ],
+  "excludes": [
+    "whether a disclosure is right to make: the approver decides from the pull request",
+    "pull requests on an internal destination are not held: mark the GitHub connection's destination class public to hold them",
+    "merges and pushes: use the coding-to-production template for those",
+    "data scoping needs the Team edition",
+    "people: bind approver yourself (pclaw role bind)",
+    "the limits are examples: change them in a new policy version before relying on them"
+  ],
+  "placeholders": {
+    "repository": {"kind": "repository", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
+    "slack_channel": {"kind": "slack_channel", "pattern": "^[CG][A-Z0-9]{8,12}$"},
+    "agent": {"kind": "agent", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}
+  },
+  "routes": [
+    {"package": "pc.postgres", "route": "postgres-rows-read"},
+    {"package": "pc.slack", "route": "slack-message-post"},
+    {"package": "pc.github", "route": "github-pull-create"}
+  ],
+  "grant": "reads of the connection's tables, public and internal columns only; posts to the named Slack channels; reading and opening pull requests on the named repositories",
+  "requires": {
+    "packages": ["pc.postgres", "pc.slack", "pc.github"],
+    "connections": [
+      "a pc.postgres connection in enforce mode with a manifest that classes every column",
+      "a pc.slack connection with a bot token in enforce mode, which also provides the fact slack.channel.external",
+      "a pc.github connection in enforce mode for the repositories, with destination class public for public repositories"
+    ]
+  }
+}

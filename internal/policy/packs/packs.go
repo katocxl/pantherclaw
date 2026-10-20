@@ -63,6 +63,13 @@ const (
 	ParamDefaultBranch = "default_branch"
 	ParamWorkspace     = "workspace"
 	ParamTimeZone      = "time_zone"
+	// The list parameters, comma-separated (G0 M14 D97, D106, D107): the
+	// Stripe connected accounts a treasury pack may send funds to, the
+	// customers a support pack may read, the Slack channels a pack may post
+	// to (optional).
+	ParamPayees        = "payees"
+	ParamCustomers     = "customers"
+	ParamSlackChannels = "slack_channels"
 )
 
 // paramNames name each placeholder kind's value in errors.
@@ -70,6 +77,8 @@ var paramNames = map[string]string{
 	render.KindRepository: ParamRepos, render.KindDefaultBranch: ParamDefaultBranch, render.KindEnvironment: "environment",
 	render.KindEnvironmentID: "environment", render.KindWorkspace: ParamWorkspace, render.KindAgent: "agents",
 	render.KindTimeZone: ParamTimeZone,
+	render.KindPayee:    ParamPayees,
+	render.KindCustomer: ParamCustomers, render.KindSlackChannel: ParamSlackChannels,
 }
 
 const (
@@ -139,6 +148,8 @@ func (p Pack) Needs() []string {
 			out = append(out, ParamWorkspace)
 		case render.KindTimeZone:
 			out = append(out, ParamTimeZone)
+		case render.KindPayee, render.KindCustomer, render.KindSlackChannel:
+			out = append(out, paramNames[kind])
 		}
 	}
 	slices.Sort(out)
@@ -172,7 +183,7 @@ type Apply struct {
 	Cohort      *ids.UUID
 	// Parameters: repos (comma-separated owner/repo), default_branch (a
 	// branch, or owner/repo=branch entries, comma-separated), workspace,
-	// time_zone.
+	// time_zone, payees, customers and slack_channels (comma-separated).
 	Parameters map[string]string
 }
 
@@ -384,6 +395,21 @@ func (p Pack) options(params map[string]string) (render.Options, error) {
 	o.Workspace = params[ParamWorkspace]
 	if slices.Contains(needs, ParamWorkspace) && o.Workspace == "" {
 		return o, invalid("pack %s needs workspace", p.Name)
+	}
+	o.Lists = map[string][]string{}
+	for kind, lk := range render.ListKinds {
+		param := paramNames[kind]
+		var values []string
+		for _, x := range strings.Split(params[param], ",") {
+			if x = strings.TrimSpace(x); x != "" && !slices.Contains(values, x) {
+				values = append(values, x)
+			}
+		}
+		slices.Sort(values)
+		if slices.Contains(needs, param) && len(values) == 0 && !lk.Optional {
+			return o, invalid("pack %s needs %s", p.Name, param)
+		}
+		o.Lists[kind] = values
 	}
 	o.TimeZone = params[ParamTimeZone]
 	if o.TimeZone == "" {

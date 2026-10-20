@@ -1,0 +1,21 @@
+{
+  "rules": [
+    {
+      "id": "ar-no-rows", "per": "agent", "kind": "FORBID",
+      "summary": "the reporting agent reads no rows: it only aggregates",
+      "operations": ["postgres.rows.read"], "when": "run.agent_id == {{agent}}", "reason": "ROW_READS_NOT_ALLOWED"
+    },
+    {
+      "id": "ar-groups", "per": "agent", "kind": "CONSTRAIN",
+      "summary": "the reporting agent's aggregates return at most 100 groups",
+      "operations": ["postgres.rows.aggregate"], "when": "run.agent_id == {{agent}}", "reason": "AGGREGATE_GROUPS",
+      "constraint": {"kind": "count_max", "param": "limit", "max": "100"}
+    },
+    {
+      "id": "ar-classes", "per": "agent", "kind": "CONSTRAIN",
+      "summary": "the reporting agent's aggregates use only public and internal columns: pii and secret columns are withheld",
+      "operations": ["postgres.rows.aggregate"], "when": "run.agent_id == {{agent}}", "reason": "AGGREGATE_CLASSES",
+      "constraint": {"kind": "data_classes", "values": ["public", "internal"]}
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "rules": [
+    {
+      "id": "cs-refund-cap", "per": "org", "kind": "CONSTRAIN",
+      "summary": "no single support refund above 100.00 USD",
+      "operations": ["stripe.refund.create"], "when": "true", "reason": "REFUND_OVER_CAP",
+      "constraint": {"kind": "amount_max", "param": "amount", "max": "100.00", "currency": "USD"}
+    },
+    {
+      "id": "cs-refund-hold", "per": "org", "kind": "REQUIRE_APPROVAL",
+      "summary": "an independent approver approves every support refund above 50.00 USD",
+      "operations": ["stripe.refund.create"], "when": "action.params.amount > money('50.00', 'USD')", "reason": "REFUND_NEEDS_APPROVAL",
+      "approval": {"role": "approver", "count": 1, "independent": true}
+    },
+    {
+      "id": "cs-rows-count", "per": "agent", "kind": "CONSTRAIN",
+      "summary": "the support agent reads at most 50 rows at a time",
+      "operations": ["postgres.rows.read"], "when": "run.agent_id == {{agent}}", "reason": "SUPPORT_READ_ROWS",
+      "constraint": {"kind": "count_max", "param": "limit", "max": "50"}
+    },
+    {
+      "id": "cs-rows-classes", "per": "agent", "kind": "CONSTRAIN",
+      "summary": "the support agent reads only public and internal columns: pii and secret values are redacted",
+      "operations": ["postgres.rows.read"], "when": "run.agent_id == {{agent}}", "reason": "SUPPORT_READ_CLASSES",
+      "constraint": {"kind": "data_classes", "values": ["public", "internal"]}
+    },
+    {
+      "id": "cs-no-aggregate", "per": "agent", "kind": "FORBID",
+      "summary": "the support agent does not aggregate: it reads its ticket's customer's records only",
+      "operations": ["postgres.rows.aggregate"], "when": "run.agent_id == {{agent}}", "reason": "SUPPORT_AGGREGATE_NOT_ALLOWED"
+    }
+  ]
+}

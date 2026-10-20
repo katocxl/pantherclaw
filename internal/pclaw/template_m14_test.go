@@ -1,0 +1,241 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+package pclaw
+
+import (
+	"encoding/json/v2"
+	"flag"
+	"io"
+	"maps"
+	"slices"
+	"strings"
+	"testing"
+
+	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
+	"github.com/katocxl/pantherclaw/internal/policy/packs/render"
+	pcpostgres "github.com/katocxl/pantherclaw/packages/pc-postgres"
+	pcslack "github.com/katocxl/pantherclaw/packages/pc-slack"
+	pcstripe "github.com/katocxl/pantherclaw/packages/pc-stripe"
+)
+
+// The M14 templates (G0 M14 D40, F172): support and internal analysis,
+// and the treasury, aggregate-reporting and research-disclosure templates
+// the reference packs apply. They go through the same checks as the M11.1
+// templates (template_m11_test.go): a complete disclosure, a policy that
+// compiles against its packages, scenario tests in the D7 format, and the
+// publish gate's mutation run with no survivors (HR-044).
+
+// m14Templates are the M14 templates that carry scenario tests.
+var m14Templates = []string{"aggregate-reporting", "customer-support", "internal-analysis", "research-disclosure", "treasury-payments"}
+
+// m14Manifests are the business-connector packages the templates require.
+var m14Manifests = [][]byte{pcstripe.Package, pcpostgres.Package, pcslack.Package}
+
+// m14Facts are the facts the business-connector packages' gateway reads
+// provide (the stripe.* facts of internal/gateway/stripefacts).
+var m14Facts = map[string]fdomain.Type{
+	"stripe.payment.refundable":             fdomain.TypeObject,
+	"stripe.account.payout_details_changed": fdomain.TypeObject,
+	"slack.channel.external":                fdomain.TypeObject,
+}
+
+func init() { maps.Copy(m11Facts, m14Facts) }
+
+// examplePayees are the connected accounts {{payee}} is rendered with.
+var examplePayees = []string{"acct_ExamplePayee01", "acct_ExamplePayee02"}
+
+// Example customers and Slack channels the list kinds are rendered with.
+var (
+	exampleCustomers     = []string{"cus-1001", "cus-1002"}
+	exampleSlackChannels = []string{"C0EXAMPLE01", "C0EXAMPLE02"}
+)
+
+// exampleLists are the list kinds' example values.
+func exampleLists() map[string][]string {
+	return map[string][]string{
+		render.KindPayee: examplePayees, render.KindCustomer: exampleCustomers, render.KindSlackChannel: exampleSlackChannels,
+	}
+}
+
+// TestM14PayeesAreChecked (D97): --payee takes Stripe connected accounts
+// only, never the tests' other payee, and only for a template that
+// declares the payee placeholder; {{payees}} is a list of quoted literals
+// in conditions, a {{payee}} list item is repeated for each payee, and a
+// template that declares payees renders none without one.
+func TestM14PayeesAreChecked(t *testing.T) {
+	parse := func(name string, args ...string) (templateOptions, error) {
+		t.Helper()
+		fs := flag.NewFlagSet("t", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		o := templateOptions{name: name}
+		check := templateFlags(fs, &o)
+		if err := fs.Parse(args); err != nil {
+			return o, err
+		}
+		return o, check()
+	}
+	o, err := parse("treasury-payments", "--payee", "acct_ExamplePayee02", "--payee", "acct_ExamplePayee01", "--payee", "acct_ExamplePayee02")
+	if err != nil || !slices.Equal(o.lists[render.KindPayee], examplePayees) {
+		t.Fatalf("payees %v, %v", o.lists, err)
+	}
+	for _, args := range [][]string{
+		{},
+		{"--payee", "acct_short"},
+		{"--payee", "acct_Example'Payee01"},
+		{"--payee", "cus_ExamplePayee01"},
+		{"--payee", render.OtherPayee},
+	} {
+		if _, err := parse("treasury-payments", args...); err == nil {
+			t.Errorf("treasury-payments %v: accepted", args)
+		}
+	}
+	if _, err := parse("refunds", "--payee", "acct_ExamplePayee01"); err == nil {
+		t.Error("refunds took --payee")
+	}
+	if _, err := renderTemplate(templateOptions{name: "treasury-payments", environment: "production", timeZone: "UTC"}); err == nil {
+		t.Error("treasury-payments rendered without a payee")
+	}
+	o.environment, o.timeZone = "production", "UTC"
+	d, err := renderTemplate(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bounds struct {
+		Targets map[string]struct {
+			IDs []string `json:"ids"`
+		} `json:"targets"`
+		Destinations struct {
+			IDs []string `json:"ids"`
+		} `json:"destinations"`
+	}
+	if err := json.Unmarshal(d.Grant.Bounds, &bounds); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(bounds.Destinations.IDs, examplePayees) || !slices.Equal(bounds.Targets["stripe.account"].IDs, examplePayees) {
+		t.Errorf("grant bounds %s", d.Grant.Bounds)
+	}
+	var when string
+	for _, r := range d.Rules {
+		if r["id"] == "tr-payees" {
+			when, _ = r["when"].(string)
+		}
+	}
+	if want := "!(action.target.id in ['acct_ExamplePayee01', 'acct_ExamplePayee02'])"; when != want {
+		t.Errorf("tr-payees when %q, want %q", when, want)
+	}
+	r := renderer{o: o, spec: map[string]placeholderSpec{}}
+	for _, s := range []string{"{{payees}}", "{{payee}}", "{{other_payee}}"} {
+		if _, err := r.fill(s, true); err == nil {
+			t.Errorf("%s filled without a declaration", s)
+		}
+	}
+	r.spec = map[string]placeholderSpec{render.KindPayee: {Kind: render.KindPayee, Pattern: "^acct_[A-Za-z0-9]{8,64}$"}}
+	if _, err := r.fill("{{payees}}", false); err == nil {
+		t.Error("{{payees}} filled outside a condition")
+	}
+}
+
+// TestM14CustomersAreChecked (D106): customer-support needs --customer,
+// refuses values that are not customer ids, and renders them into the
+// grant's record scope for postgres.rows.read with the classes public and
+// internal.
+func TestM14CustomersAreChecked(t *testing.T) {
+	parse := func(args ...string) (templateOptions, error) {
+		t.Helper()
+		fs := flag.NewFlagSet("t", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		o := templateOptions{name: "customer-support", agent: templateAgent}
+		check := templateFlags(fs, &o)
+		if err := fs.Parse(args); err != nil {
+			return o, err
+		}
+		return o, check()
+	}
+	for _, args := range [][]string{{}, {"--customer", "cus 1"}, {"--customer", "cus'1"}, {"--customer", render.OtherCustomer}} {
+		if _, err := parse(args...); err == nil {
+			t.Errorf("customer-support %v: accepted", args)
+		}
+	}
+	if _, err := parse("--customer", "cus-1", "--payee", "acct_ExamplePayee01"); err == nil {
+		t.Error("customer-support took --payee")
+	}
+	o, err := parse("--customer", "cus-1002", "--customer", "cus-1001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	o.environment, o.timeZone, o.agent = "production", "UTC", templateAgent
+	d, err := renderTemplate(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bounds struct {
+		Scope map[string]struct {
+			Records struct {
+				Key    string   `json:"key"`
+				Values []string `json:"values"`
+			} `json:"records"`
+			Classes struct {
+				IDs []string `json:"ids"`
+			} `json:"classes"`
+		} `json:"scope"`
+	}
+	if err := json.Unmarshal(d.Grant.Bounds, &bounds); err != nil {
+		t.Fatal(err)
+	}
+	s := bounds.Scope["postgres.rows.read"]
+	if s.Records.Key != "customer" || !slices.Equal(s.Records.Values, exampleCustomers) || !slices.Equal(s.Classes.IDs, []string{"public", "internal"}) {
+		t.Errorf("grant scope %s", d.Grant.Bounds)
+	}
+}
+
+// TestM14AgentTemplatesNeedAgent (D114): a template whose rules are per
+// agent is refused without --agent, by apply and by the renderer, and
+// renders with one; its rules name only that agent (each such template's
+// scenario tests also show another agent unaffected).
+func TestM14AgentTemplatesNeedAgent(t *testing.T) {
+	args := map[string][]string{
+		"aggregate-reporting": nil,
+		"customer-support":    {"--customer", "cus-1001"},
+		"internal-analysis":   {"--slack-channel", "C0EXAMPLE01"},
+		"research-disclosure": {"--repos", "acme/research"},
+	}
+	for name, extra := range args {
+		info, err := readTemplateInfo(name)
+		if err != nil || !info.RequiresAgent {
+			t.Fatalf("%s: requires_agent %v, %v", name, info.RequiresAgent, err)
+		}
+		parse := func(more ...string) (templateOptions, error) {
+			fs := flag.NewFlagSet("t", flag.ContinueOnError)
+			fs.SetOutput(io.Discard)
+			o := templateOptions{name: name}
+			check := templateFlags(fs, &o)
+			fs.StringVar(&o.agent, "agent", "", "")
+			if err := fs.Parse(append(slices.Clone(extra), more...)); err != nil {
+				return o, err
+			}
+			return o, check()
+		}
+		if _, err := parse(); err == nil || !strings.Contains(err.Error(), "needs --agent") {
+			t.Errorf("%s without --agent: %v", name, err)
+		}
+		o, err := parse("--agent", templateAgent)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		o.environment, o.timeZone = "production", "UTC"
+		d, err := renderTemplate(o)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		for _, r := range d.Rules {
+			if when, _ := r["when"].(string); strings.Contains(when, "run.agent_id") && !strings.Contains(when, "run.agent_id == '"+templateAgent+"'") {
+				t.Errorf("%s %v: %s", name, r["id"], when)
+			}
+		}
+		o.agent = ""
+		if _, err := renderTemplate(o); err == nil {
+			t.Errorf("%s rendered without an agent", name)
+		}
+	}
+}

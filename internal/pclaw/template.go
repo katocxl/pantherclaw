@@ -9,6 +9,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"maps"
 	"reflect"
 	"regexp"
 	"slices"
@@ -40,8 +41,11 @@ func init() {
 
 // templateOptions are what a template is applied with.
 type templateOptions struct {
-	name                  string
-	repos                 []string
+	name  string
+	repos []string
+	// lists are the list kinds' values (render.ListKinds): payees,
+	// customers, Slack channels.
+	lists                 map[string][]string
 	defaults              map[string]string // repository → default branch
 	agent, team, bu       string
 	environment, timeZone string
@@ -86,6 +90,15 @@ func templateFlags(fs *flag.FlagSet, o *templateOptions) func() error {
 	repos := fs.String("repos", "", "the GitHub repositories, owner/repo, comma-separated")
 	var defaults multi
 	fs.Var(&defaults, "default-branch", "the default branch to protect (main), or OWNER/REPO=BRANCH for one repository (repeatable)")
+	lists := map[string]*multi{}
+	for kind, usage := range map[string]string{
+		render.KindPayee:        "a Stripe connected account, acct_..., the template may send funds to (repeatable)",
+		render.KindCustomer:     "a customer whose records the template's grant may read (repeatable)",
+		render.KindSlackChannel: "a Slack channel id, C... or G..., the template may post to (repeatable)",
+	} {
+		lists[kind] = &multi{}
+		fs.Var(lists[kind], strings.TrimPrefix(render.Flags[kind], "--"), usage)
+	}
 	fs.StringVar(&o.team, "team", "", "bound the grants of this team's agents to the repositories (a guardrail envelope)")
 	fs.StringVar(&o.bu, "bu", "", "bound the grants of this business unit's agents to the repositories (a guardrail envelope)")
 	fs.StringVar(&o.environment, "environment", "production", "the environment the template's rules and change window are for (its slug)")
@@ -108,6 +121,27 @@ func templateFlags(fs *flag.FlagSet, o *templateOptions) func() error {
 			if !slices.Contains(o.repos, r) {
 				o.repos = append(o.repos, r)
 			}
+		}
+		o.lists = map[string][]string{}
+		for _, kind := range slices.Sorted(maps.Keys(render.ListKinds)) {
+			lk, flagName := render.ListKinds[kind], render.Flags[kind]
+			var values []string
+			for _, v := range *lists[kind] {
+				if !lk.Re.MatchString(v) || v == lk.Other {
+					return fmt.Errorf("%s: %q is not %s", flagName, v, lk.What)
+				}
+				if !slices.Contains(values, v) {
+					values = append(values, v)
+				}
+			}
+			slices.Sort(values)
+			switch {
+			case has(kind) && len(values) == 0 && !lk.Optional:
+				return fmt.Errorf("template %s needs %s", o.name, flagName)
+			case !has(kind) && len(values) > 0:
+				return fmt.Errorf("template %s takes no %s", o.name, flagName)
+			}
+			o.lists[kind] = values
 		}
 		switch {
 		case has(kindRepository) && len(o.repos) == 0:
@@ -149,6 +183,9 @@ func templateFlags(fs *flag.FlagSet, o *templateOptions) func() error {
 			if id != "" && !uuidRe.MatchString(id) {
 				return fmt.Errorf("%s: %q is not an id", name, id)
 			}
+		}
+		if info.RequiresAgent && o.agent == "" {
+			return fmt.Errorf("template %s needs --agent: its rules are the agent's", o.name)
 		}
 		if o.team != "" && o.bu != "" {
 			return errors.New("--team and --bu: give one scope")

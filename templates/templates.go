@@ -11,5 +11,5 @@ import "embed"
 // name, summary, task ref and disclosure), policy.json, the guardrails it
 // sets up and, from M11.1, tests.json (its baseline scenario tests).
 //
-//go:embed coding-to-production/*.json refunds/*.json release-deployment/*.json production-diagnostics/*.json
+//go:embed coding-to-production/*.json refunds/*.json release-deployment/*.json production-diagnostics/*.json customer-support/*.json treasury-payments/*.json aggregate-reporting/*.json internal-analysis/*.json research-disclosure/*.json
 var FS embed.FS

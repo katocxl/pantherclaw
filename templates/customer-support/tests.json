@@ -1,0 +1,108 @@
+{
+  "tests": [
+    {
+      "id": "cs-refund-at-hold", "per": "org",
+      "summary": "a refund of exactly 50.00 USD goes through without a hold",
+      "action": {"operation": "stripe.refund.create", "target": {"type": "stripe.payment", "id": "pi_Support0001"}, "params": {"amount": {"value": "50.00", "currency": "USD"}, "reason": "requested_by_customer"}},
+      "given": {"facts": {"stripe.payment.refundable": {"value": {"object": {"livemode": false, "payment": "ch_Support0001", "remaining": {"value": "150.00", "currency": "USD"}}}, "age_seconds": 10}}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "cs-refund-below-hold", "per": "org",
+      "summary": "a refund of 49.99 USD goes through without a hold",
+      "action": {"operation": "stripe.refund.create", "target": {"type": "stripe.payment", "id": "pi_Support0001"}, "params": {"amount": {"value": "49.99", "currency": "USD"}, "reason": "requested_by_customer"}},
+      "given": {"facts": {"stripe.payment.refundable": {"value": {"object": {"livemode": false, "payment": "ch_Support0001", "remaining": {"value": "150.00", "currency": "USD"}}}, "age_seconds": 10}}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "cs-refund-over-hold", "per": "org",
+      "summary": "a refund of 50.01 USD waits for an approver",
+      "action": {"operation": "stripe.refund.create", "target": {"type": "stripe.payment", "id": "pi_Support0001"}, "params": {"amount": {"value": "50.01", "currency": "USD"}, "reason": "requested_by_customer"}},
+      "given": {"facts": {"stripe.payment.refundable": {"value": {"object": {"livemode": false, "payment": "ch_Support0001", "remaining": {"value": "150.00", "currency": "USD"}}}, "age_seconds": 10}}},
+      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "REFUND_NEEDS_APPROVAL", "rule": "cs-refund-hold"}
+    },
+    {
+      "id": "cs-refund-at-cap", "per": "org",
+      "summary": "a refund of exactly 100.00 USD is under the cap and waits for an approver",
+      "action": {"operation": "stripe.refund.create", "target": {"type": "stripe.payment", "id": "ch_Support0001"}, "params": {"amount": {"value": "100.00", "currency": "USD"}, "reason": "duplicate"}},
+      "given": {"facts": {"stripe.payment.refundable": {"value": {"object": {"livemode": false, "payment": "ch_Support0001", "remaining": {"value": "150.00", "currency": "USD"}}}, "age_seconds": 10}}},
+      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "REFUND_NEEDS_APPROVAL", "rule": "cs-refund-hold"}
+    },
+    {
+      "id": "cs-refund-approved", "per": "org",
+      "summary": "an approved refund of 99.99 USD goes through",
+      "action": {"operation": "stripe.refund.create", "target": {"type": "stripe.payment", "id": "pi_Support0001"}, "params": {"amount": {"value": "99.99", "currency": "USD"}, "reason": "requested_by_customer"}},
+      "given": {"facts": {"stripe.payment.refundable": {"value": {"object": {"livemode": false, "payment": "ch_Support0001", "remaining": {"value": "150.00", "currency": "USD"}}}, "age_seconds": 10}}, "approval": "approved"},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "cs-refund-over-cap", "per": "org",
+      "summary": "a refund of 100.01 USD is refused even when approved",
+      "action": {"operation": "stripe.refund.create", "target": {"type": "stripe.payment", "id": "pi_Support0001"}, "params": {"amount": {"value": "100.01", "currency": "USD"}, "reason": "requested_by_customer"}},
+      "given": {"facts": {"stripe.payment.refundable": {"value": {"object": {"livemode": false, "payment": "ch_Support0001", "remaining": {"value": "150.00", "currency": "USD"}}}, "age_seconds": 10}}, "approval": "approved"},
+      "expect": {"decision": "DENY", "reason": "REFUND_OVER_CAP", "rule": "cs-refund-cap"}
+    },
+    {
+      "id": "cs-refund-other-currency", "per": "org",
+      "summary": "a refund in EUR cannot be authorized: the rules are in USD",
+      "action": {"operation": "stripe.refund.create", "target": {"type": "stripe.payment", "id": "pi_Support0001"}, "params": {"amount": {"value": "10.00", "currency": "EUR"}, "reason": "requested_by_customer"}},
+      "given": {"facts": {"stripe.payment.refundable": {"value": {"object": {"livemode": false, "payment": "ch_Support0001", "remaining": {"value": "150.00", "currency": "EUR"}}}, "age_seconds": 10}}},
+      "expect": {"decision": "CANNOT_AUTHORIZE", "reason": "POLICY_EVALUATION_ERROR"}
+    },
+    {
+      "id": "cs-refund-over-remaining", "per": "org",
+      "summary": "a refund of 40.00 USD on a payment with 30.00 USD left to refund cannot be authorized",
+      "action": {"operation": "stripe.refund.create", "target": {"type": "stripe.payment", "id": "pi_Support0001"}, "params": {"amount": {"value": "40.00", "currency": "USD"}, "reason": "requested_by_customer"}},
+      "given": {"facts": {"stripe.payment.refundable": {"value": {"object": {"livemode": false, "payment": "ch_Support0001", "remaining": {"value": "30.00", "currency": "USD"}}}, "age_seconds": 10}}},
+      "expect": {"decision": "CANNOT_AUTHORIZE", "reason": "AMOUNT_NOT_REFUNDABLE"}
+    },
+    {
+      "id": "cs-refund-stale", "per": "org",
+      "summary": "a refund whose refundable amount was read more than 60 seconds ago cannot be authorized",
+      "action": {"operation": "stripe.refund.create", "target": {"type": "stripe.payment", "id": "pi_Support0001"}, "params": {"amount": {"value": "10.00", "currency": "USD"}, "reason": "requested_by_customer"}},
+      "given": {"facts": {"stripe.payment.refundable": {"value": {"object": {"livemode": false, "payment": "ch_Support0001", "remaining": {"value": "150.00", "currency": "USD"}}}, "age_seconds": 61}}},
+      "expect": {"decision": "CANNOT_AUTHORIZE", "reason": "FACT_STALE"}
+    },
+    {
+      "id": "cs-refund-weekly-cap", "per": "org",
+      "summary": "a refund of 30.00 USD when 480.00 USD of the week's 500.00 USD is spent is refused",
+      "action": {"operation": "stripe.refund.create", "target": {"type": "stripe.payment", "id": "pi_Support0001"}, "params": {"amount": {"value": "30.00", "currency": "USD"}, "reason": "requested_by_customer"}},
+      "given": {"facts": {"stripe.payment.refundable": {"value": {"object": {"livemode": false, "payment": "ch_Support0001", "remaining": {"value": "150.00", "currency": "USD"}}}, "age_seconds": 10}},
+        "budget": {"param": "amount", "currency": "USD", "limit": "500.00", "used": "480.00"}},
+      "expect": {"decision": "DENY", "reason": "BUDGET_EXHAUSTED"}
+    },
+    {
+      "id": "cs-refund-read", "per": "org",
+      "summary": "reading a refund is allowed",
+      "action": {"operation": "stripe.refund.read", "target": {"type": "stripe.refund", "id": "re_Support0001"}, "params": {}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "cs-rows-read", "per": "agent",
+      "summary": "the support agent reads its ticket's customer's orders, scoped to that customer and to public and internal columns",
+      "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"columns": ["id", "customer_id", "amount", "status"], "limit": "50"}},
+      "given": {"agent": "{{agent}}", "grant": {"constraints": [{"kind": "record_scope", "param": "customer", "values": ["{{customer}}"]}]}},
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "SUPPORT_READ_CLASSES"}
+    },
+    {
+      "id": "cs-rows-too-many", "per": "agent",
+      "summary": "the support agent asking for 51 rows gets at most 50 (the read is clamped)",
+      "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "support.tickets"}, "params": {"columns": ["id", "subject"], "limit": "51"}},
+      "given": {"agent": "{{agent}}", "grant": {"constraints": [{"kind": "record_scope", "param": "customer", "values": ["{{customer}}"]}]}},
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "SUPPORT_READ_ROWS", "rule": "cs-rows-count--{{agent}}"}
+    },
+    {
+      "id": "cs-aggregate", "per": "agent",
+      "summary": "the support agent's aggregate is refused",
+      "action": {"operation": "postgres.rows.aggregate", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"measures": ["count:*"], "limit": "10"}},
+      "given": {"agent": "{{agent}}"},
+      "expect": {"decision": "DENY", "reason": "SUPPORT_AGGREGATE_NOT_ALLOWED", "rule": "cs-no-aggregate--{{agent}}"}
+    },
+    {
+      "id": "cs-other-agent", "per": "agent",
+      "summary": "another agent's aggregate is not these rules'",
+      "action": {"operation": "postgres.rows.aggregate", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"measures": ["count:*"], "limit": "10"}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    }
+  ]
+}

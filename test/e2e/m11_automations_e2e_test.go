@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -17,6 +18,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/automations/assurance"
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/templates"
+	"github.com/katocxl/pantherclaw/internal/automations/triggers"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/endpoints"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/triggerstest"
 	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
@@ -580,12 +582,17 @@ func (a *autoStack) reciprocalLoop(t *testing.T) {
 	f := &triggerstest.Fixture{Pool: s.pool, Org: s.org, User: a.r.aliceID}
 	ping := f.Automation(t, "loop-ping", f.Definition(`"event":{"on":"grant.revoked"}`, ""), autodomain.RolloutShadow)
 	pong := f.Automation(t, "loop-pong", f.Definition(`"event":{"on":"grant.issued"}`, ""), autodomain.RolloutShadow)
+	// feed processes the next batch. The e2e server's own feed job (every
+	// triggers.FeedInterval) moves the same org cursor, so a batch may be
+	// taken by it: ErrCursorMoved is that consumer winning the compare-and-set,
+	// as the production worker treats it, and the callers wait for the
+	// trigger itself, whichever consumer fired it.
 	feed := func() {
 		t.Helper()
 		if _, err := ledger.ChainAll(ctx, s.pool, s.org, 1000); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := a.triggers.ProcessFeed(ctx, s.org); err != nil {
+		if _, err := a.triggers.ProcessFeed(ctx, s.org); err != nil && !errors.Is(err, triggers.ErrCursorMoved) {
 			t.Fatal(err)
 		}
 	}

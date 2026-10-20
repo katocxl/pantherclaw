@@ -1,0 +1,53 @@
+{
+  "tests": [
+    {
+      "id": "ia-read", "per": "agent",
+      "summary": "the analysis agent reads 20 rows, limited to public and internal columns",
+      "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"columns": ["id", "amount", "status"], "limit": "20"}},
+      "given": {"agent": "{{agent}}"},
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "ANALYSIS_CLASSES"}
+    },
+    {
+      "id": "ia-read-too-many", "per": "agent",
+      "summary": "the analysis agent asking for 21 rows gets at most 20 (the read is clamped)",
+      "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"columns": ["id", "amount"], "limit": "21"}},
+      "given": {"agent": "{{agent}}"},
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "ANALYSIS_ROWS", "rule": "ia-rows--{{agent}}"}
+    },
+    {
+      "id": "ia-aggregate", "per": "agent",
+      "summary": "the analysis agent aggregates, limited to public and internal columns",
+      "action": {"operation": "postgres.rows.aggregate", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"group_by": ["status"], "measures": ["count:*", "sum:amount"], "limit": "50"}},
+      "given": {"agent": "{{agent}}"},
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "ANALYSIS_CLASSES"}
+    },
+    {
+      "id": "ia-post", "per": "agent",
+      "summary": "the analysis agent posts to a named internal channel",
+      "action": {"operation": "slack.message.post", "target": {"type": "slack_channel", "id": "{{slack_channel}}"}, "params": {"text": "Weekly orders: 1204, refunds 2.1 percent"}},
+      "given": {"agent": "{{agent}}", "facts": {"slack.channel.external": {"value": {"object": {"external": false, "ext_shared": false, "shared": false}}, "age_seconds": 10}}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "ia-post-elsewhere", "per": "agent",
+      "summary": "the analysis agent's post to a channel it was not given is refused",
+      "action": {"operation": "slack.message.post", "target": {"type": "slack_channel", "id": "{{other_slack_channel}}"}, "params": {"text": "Weekly orders: 1204"}},
+      "given": {"agent": "{{agent}}", "facts": {"slack.channel.external": {"value": {"object": {"external": false, "ext_shared": false, "shared": false}}, "age_seconds": 10}}},
+      "expect": {"decision": "DENY", "reason": "SLACK_CHANNEL_NOT_ALLOWED", "rule": "ia-channels--{{agent}}"}
+    },
+    {
+      "id": "ia-post-external", "per": "agent",
+      "summary": "the analysis agent's post to a named channel shared outside the organization is refused",
+      "action": {"operation": "slack.message.post", "target": {"type": "slack_channel", "id": "{{slack_channel}}"}, "params": {"text": "Weekly orders: 1204"}},
+      "given": {"agent": "{{agent}}", "facts": {"slack.channel.external": {"value": {"object": {"external": true, "ext_shared": true, "shared": true}}, "age_seconds": 10}}},
+      "expect": {"decision": "DENY", "reason": "EXTERNAL_DISCLOSURE", "rule": "ia-external--{{agent}}"}
+    },
+    {
+      "id": "ia-other-agent", "per": "agent",
+      "summary": "another agent's post to another channel is not these rules'",
+      "action": {"operation": "slack.message.post", "target": {"type": "slack_channel", "id": "{{other_slack_channel}}"}, "params": {"text": "hello"}},
+      "given": {"facts": {"slack.channel.external": {"value": {"object": {"external": false, "ext_shared": false, "shared": false}}, "age_seconds": 10}}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    }
+  ]
+}

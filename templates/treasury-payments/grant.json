@@ -1,0 +1,14 @@
+{
+  "bounds": {
+    "operations": ["stripe.transfer.create", "stripe.transfer.read", "stripe.balance.read"],
+    "targets": {
+      "stripe.account": {"ids": ["{{payee}}"]},
+      "stripe.transfer": {"prefixes": ["tr_"]},
+      "stripe.balance": {"ids": ["balance"]}
+    },
+    "destinations": {"ids": ["{{payee}}"]}
+  },
+  "limits": {
+    "budgets": [{"id": "weekly_transfers", "grouping": "task", "operations": ["stripe.transfer.create"], "currency": "USD", "limit": "50000.00", "period": "week"}]
+  }
+}

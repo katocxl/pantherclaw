@@ -1,0 +1,60 @@
+{
+  "tests": [
+    {
+      "id": "rs-read", "per": "agent",
+      "summary": "the research agent reads 100 rows, limited to public and internal columns",
+      "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"columns": ["id", "amount", "status"], "limit": "100"}},
+      "given": {"agent": "{{agent}}"},
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "RESEARCH_CLASSES"}
+    },
+    {
+      "id": "rs-read-too-many", "per": "agent",
+      "summary": "the research agent asking for 101 rows gets at most 100 (the read is clamped)",
+      "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"columns": ["id", "amount"], "limit": "101"}},
+      "given": {"agent": "{{agent}}"},
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "RESEARCH_ROWS", "rule": "rs-rows--{{agent}}"}
+    },
+    {
+      "id": "rs-post", "per": "agent",
+      "summary": "the research agent posts to a named internal channel",
+      "action": {"operation": "slack.message.post", "target": {"type": "slack_channel", "id": "{{slack_channel}}"}, "params": {"text": "Draft findings are in the shared notes"}},
+      "given": {"agent": "{{agent}}", "facts": {"slack.channel.external": {"value": {"object": {"external": false, "ext_shared": false, "shared": false}}, "age_seconds": 10}}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "rs-post-elsewhere", "per": "agent",
+      "summary": "the research agent's post to a channel it was not given is refused",
+      "action": {"operation": "slack.message.post", "target": {"type": "slack_channel", "id": "{{other_slack_channel}}"}, "params": {"text": "Draft findings"}},
+      "given": {"agent": "{{agent}}", "facts": {"slack.channel.external": {"value": {"object": {"external": false, "ext_shared": false, "shared": false}}, "age_seconds": 10}}},
+      "expect": {"decision": "DENY", "reason": "SLACK_CHANNEL_NOT_ALLOWED", "rule": "rs-channels--{{agent}}"}
+    },
+    {
+      "id": "rs-post-external", "per": "agent",
+      "summary": "the research agent's post to a named channel shared outside the organization is refused",
+      "action": {"operation": "slack.message.post", "target": {"type": "slack_channel", "id": "{{slack_channel}}"}, "params": {"text": "Draft findings"}},
+      "given": {"agent": "{{agent}}", "facts": {"slack.channel.external": {"value": {"object": {"external": true, "ext_shared": true, "shared": true}}, "age_seconds": 10}}},
+      "expect": {"decision": "DENY", "reason": "EXTERNAL_DISCLOSURE", "rule": "rs-external--{{agent}}"}
+    },
+    {
+      "id": "rs-public-pull", "per": "repo",
+      "summary": "a pull request opened on a public destination waits for an approver",
+      "action": {"operation": "github.pull.create", "target": {"type": "github.repository", "id": "{{repo}}"}, "params": {"title": "Publish study results", "body": "Summary of the aggregate results.", "head": "research/results", "base": "main"}},
+      "given": {"destination_class": "public"},
+      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "PUBLIC_DISCLOSURE_NEEDS_APPROVAL"}
+    },
+    {
+      "id": "rs-internal-pull", "per": "repo",
+      "summary": "a pull request opened on an internal destination goes through",
+      "action": {"operation": "github.pull.create", "target": {"type": "github.repository", "id": "{{repo}}"}, "params": {"title": "Study notes", "body": "Notes.", "head": "research/notes", "base": "main"}},
+      "given": {"destination_class": "internal"},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "rs-other-agent", "per": "agent",
+      "summary": "another agent's post to another channel is not these rules'",
+      "action": {"operation": "slack.message.post", "target": {"type": "slack_channel", "id": "{{other_slack_channel}}"}, "params": {"text": "hello"}},
+      "given": {"facts": {"slack.channel.external": {"value": {"object": {"external": false, "ext_shared": false, "shared": false}}, "age_seconds": 10}}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    }
+  ]
+}
