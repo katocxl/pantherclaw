@@ -96,6 +96,10 @@ type Message struct {
 	// Blocks is the message's Block Kit blocks as sent (raw JSON).
 	Blocks  jsontext.Value `json:"blocks,omitzero"`
 	Updates int            `json:"updates"`
+	// UnfurlLinks and UnfurlMedia are the unfurl arguments as sent ("" when
+	// left out).
+	UnfurlLinks string `json:"unfurl_links,omitzero"`
+	UnfurlMedia string `json:"unfurl_media,omitzero"`
 	// Reactions are the emoji people added to the message in Slack.
 	Reactions []string `json:"reactions,omitzero"`
 }
@@ -318,6 +322,7 @@ func (s *Server) post(w http.ResponseWriter, in input) {
 	m := Message{
 		Channel: c.ID, TS: fmt.Sprintf("%d.%06d", s.now().Unix(), s.seq%1000000), ThreadTS: in.str("thread_ts"),
 		Text: in.str("text"), Blocks: in.raw("blocks"),
+		UnfurlLinks: string(in.raw("unfurl_links")), UnfurlMedia: string(in.raw("unfurl_media")),
 	}
 	s.messages = append(s.messages, m)
 	s.log.Info("sim.slack_posted", slog.String("channel", m.Channel), slog.String("ts", m.TS))

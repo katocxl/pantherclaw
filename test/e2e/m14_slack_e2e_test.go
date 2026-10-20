@@ -187,7 +187,8 @@ func TestE2E_M14_SlackApprovalCards(t *testing.T) {
 		t.Fatalf("internal post: %+v", obs)
 	}
 	ms := s.slack.sim.Messages()
-	if len(ms) != 1 || ms[0].Channel != slackApprovals || ms[0].Text != "Build e2e finished" {
+	// A form post that tells Slack to fetch no link (D104).
+	if len(ms) != 1 || ms[0].Channel != slackApprovals || ms[0].Text != "Build e2e finished" || ms[0].UnfurlLinks != "false" || ms[0].UnfurlMedia != "false" {
 		t.Fatalf("posted: %+v", ms)
 	}
 	for _, tok := range s.slack.sim.Tokens() {

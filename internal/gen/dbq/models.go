@@ -2928,12 +2928,14 @@ type PcSlackAppChannel struct {
 
 type PcSlackCard struct {
 	OrgID           ids.OrgID
+	CardID          ids.UUID
 	RequestID       ids.UUID
 	ChannelRecordID ids.UUID
 	SlackChannel    string
 	Ts              *string
 	State           string
 	Escalations     int32
+	CloseAttempts   int32
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }

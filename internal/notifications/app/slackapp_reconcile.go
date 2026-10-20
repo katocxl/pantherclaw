@@ -51,34 +51,45 @@ type SlackReconciled struct {
 func (s *Service) ReconcileSlack(ctx context.Context, org ids.OrgID) (SlackReconciled, error) {
 	var out SlackReconciled
 	var cards []dbq.SlackCardsToCloseRow
-	var channels []dbq.ActiveSlackAppChannelsRow
 	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
 		var err error
-		if cards, err = q.SlackCardsToClose(ctx, org, slackReconcileBatch); err != nil {
-			return err
-		}
-		channels, err = q.ActiveSlackAppChannels(ctx, org, slackReconcileBatch)
+		cards, err = dbq.New(tx).SlackCardsToClose(ctx, org, slackReconcileBatch)
 		return err
 	}, db.ReadOnly())
 	if err != nil {
 		return out, err
 	}
 	for _, c := range cards {
-		if s.closeSlackCard(ctx, org, c.RequestID, c.ChannelRecordID) {
+		if s.closeSlackCard(ctx, org, c.CardID, c.RequestID, c.ChannelRecordID) {
 			out.Closed++
 		}
 	}
-	for _, c := range channels {
-		paused, err := s.recheckSlackChannel(ctx, org, c)
-		if err != nil {
+	// Every active channel, a page at a time (D104).
+	var after *ids.UUID
+	for {
+		var channels []dbq.ActiveSlackAppChannelsRow
+		if err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+			var err error
+			channels, err = dbq.New(tx).ActiveSlackAppChannels(ctx, org, after, slackReconcileBatch)
+			return err
+		}, db.ReadOnly()); err != nil {
 			return out, err
 		}
-		if paused {
-			out.Paused++
+		for _, c := range channels {
+			paused, err := s.recheckSlackChannel(ctx, org, c)
+			if err != nil {
+				return out, err
+			}
+			if paused {
+				out.Paused++
+			}
+			id := c.ChannelRecordID
+			after = &id
+		}
+		if len(channels) < slackReconcileBatch {
+			return out, nil
 		}
 	}
-	return out, nil
 }
 
 // slackToken opens a slack_app channel's bot token.
@@ -88,8 +99,10 @@ func (s *Service) slackToken(ctx context.Context, org ids.OrgID, channel ids.UUI
 }
 
 // closeSlackCard updates one card to its request's final state; it reports
-// whether Slack took the update.
-func (s *Service) closeSlackCard(ctx context.Context, org ids.OrgID, request, channel ids.UUID) bool {
+// whether Slack took the update. A failed close is counted and moves the
+// card to the back of the batch; the fifth makes it ORPHANED, shown in the
+// channel's delivery health (D104).
+func (s *Service) closeSlackCard(ctx context.Context, org ids.OrgID, cardID, request, channel ids.UUID) bool {
 	var cfg dbq.GetSlackAppChannelRow
 	var facts dbq.SlackCardFactsRow
 	var stored dbq.PcSlackCard
@@ -102,7 +115,7 @@ func (s *Service) closeSlackCard(ctx context.Context, org ids.OrgID, request, ch
 		if facts, err = q.SlackCardFacts(ctx, org, request); err != nil {
 			return err
 		}
-		stored, err = q.GetSlackCard(ctx, org, request, channel)
+		stored, err = q.GetSlackCardByID(ctx, org, cardID)
 		return err
 	}, db.ReadOnly())
 	if err != nil || cfg.ChannelState == "DISABLED" || !domain.CardIsClosed(facts.State) {
@@ -110,6 +123,7 @@ func (s *Service) closeSlackCard(ctx context.Context, org ids.OrgID, request, ch
 	}
 	token, err := s.slackToken(ctx, org, channel, cfg.Secret)
 	if err != nil {
+		s.slackCloseFailed(ctx, org, cardID, channel)
 		return false
 	}
 	f := domain.CardFacts{
@@ -121,6 +135,7 @@ func (s *Service) closeSlackCard(ctx context.Context, org ids.OrgID, request, ch
 	if !out.ok {
 		s.log.WarnContext(ctx, "notifications.slack_card_not_closed", slog.String("org", org.String()),
 			slog.String("channel", channel.String()), slog.String("code", out.code))
+		s.slackCloseFailed(ctx, org, cardID, channel)
 	}
 	return out.ok
 }
@@ -262,4 +277,24 @@ func sharedChannel(a slackAnswer, channel string) bool {
 		return false
 	}
 	return ch.ExtShared || ch.Shared
+}
+
+// slackCloseFailed counts a failed close of a card; when the card becomes
+// ORPHANED, the channel's delivery health records it.
+func (s *Service) slackCloseFailed(ctx context.Context, org ids.OrgID, cardID, channel ids.UUID) {
+	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		state, err := q.FailSlackCardClose(ctx, org, cardID)
+		if err != nil || state != cardOrphaned {
+			return err
+		}
+		code := "slack_card_orphaned"
+		_, err = q.ChannelFailed(ctx, dbq.ChannelFailedParams{
+			Code: &code, OrgID: org, ID: channel, PauseAfterSeconds: int32(domain.AutoPauseAfter / time.Second),
+		})
+		return err
+	})
+	if err != nil && !db.IsNoRows(err) {
+		s.log.WarnContext(ctx, "notifications.slack_close_not_counted", slog.String("org", org.String()), pclog.Err(err))
+	}
 }
