@@ -43,7 +43,7 @@ Subscribe the channel to escalation steps exactly like an email or webhook chann
 
 Never parameters, amounts, the principal, untrusted text or approver identities (HR-314). Channel members can still see this metadata (R-46): choose the channel accordingly.
 
-Lifecycle: the card is posted when the request is PENDING, at most once per request and channel (a card row is claimed before posting; if Slack's answer is lost the card is marked UNKNOWN, shown in delivery health, and never reposted: the approval page is authoritative). A reconciler runs every minute and updates every open card whose request reached a final state (approved, declined, expired, invalidated, cancelled, superseded or voided) to a closed card ("Approved", "Declined", …) without the button and without names, including after an edition downgrade. An escalation adds a thread reply "Escalated (step n)". Deliveries use the normal queue with retries (Slack's 429 `Retry-After` is honoured). A failed delivery never approves, declines or expires anything.
+Lifecycle: the card is posted when the request is PENDING, at most once per request and channel (a card row is claimed before posting; if Slack's answer is lost the card is marked UNKNOWN, shown in delivery health, and never reposted: the approval page is authoritative). A reconciler runs every minute and updates every open card whose request reached a final state (approved, declined, expired, invalidated, cancelled, superseded or voided) to a closed card ("Approved", "Declined", …) without the button and without names, including after an edition downgrade; it handles cards of active channels only, oldest first, and a card whose close fails five times becomes ORPHANED and shows in delivery health. A request that returns to PENDING gets a new card; the old closed card stays closed. An escalation adds a thread reply "Escalated (step n)". Deliveries use the normal queue with retries (Slack's 429 `Retry-After` is honoured). A failed delivery never approves, declines or expires anything.
 
 Reactions, replies and anything posted to the server count for nothing. To approve, open the link and decide on the approval page with your security key.
 
@@ -51,7 +51,7 @@ Reactions, replies and anything posted to the server count for nothing. To appro
 
 | Operation | Call | Notes |
 |---|---|---|
-| `slack.message.post` | `chat.postMessage` (`channel`, `text`, optional `thread_ts`) | irreversible; `text` is a `content` parameter under disclosure limits, at most 4000 bytes; `ok: true` required |
+| `slack.message.post` | `chat.postMessage`, form-encoded (`channel`, `text`, optional `thread_ts`, and always `unfurl_links=false`, `unfurl_media=false`, so Slack fetches no links) | irreversible; `text` is a `content` parameter under disclosure limits, at most 4000 bytes; `ok: true` required |
 | `slack.channel.read` | `conversations.info` | read |
 
 Set up a second Slack app for the agent (scope `chat:write`, plus `channels:read`/`groups:read` for the external-channel fact), then:
@@ -62,7 +62,7 @@ pclaw connection create slack --kind http --gateway <gateway id> --package pc.sl
 pclaw seal --connection <connection id> --from-file agent-bot.token --fingerprint <broker key fingerprint>
 ```
 
-The token must match `^xoxb-[A-Za-z0-9-]{20,}$` or nothing is sent. Every grant (or envelope) for posts must carry a destination bound listing the channel ids; without one, a post is DENIED `DESTINATION_SET_REQUIRED`. Before each post the gateway reads whether the channel is externally shared (`slack.channel.external`, at most 300 s old); a post there is an `external_disclosure` consequence, which the internal-analysis and research-disclosure templates deny.
+The token must match `^xoxb-[A-Za-z0-9-]{20,}$` or nothing is sent. Every grant (or envelope) for posts must carry a destination bound listing the channel ids; without one, a post is DENIED `DESTINATION_SET_REQUIRED`. Before each post the gateway reads whether the channel is externally shared (`slack.channel.external`, at most 300 s old); a post there is an `external_disclosure` consequence, which the internal-analysis and research-disclosure templates deny. The internal-analysis and research-disclosure templates take the channels with `pclaw template apply … --slack-channel C…` (repeatable); other channels are forbidden (`SLACK_CHANNEL_NOT_ALLOWED`), and an unread external-channel fact fails closed.
 
 ## 5. Development
 

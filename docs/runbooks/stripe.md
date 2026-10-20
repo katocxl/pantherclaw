@@ -44,7 +44,7 @@ pclaw seal --connection <connection id> --from-file ~/.pantherclaw/stripe-test.k
 
 Then delete the key file. `pclaw connection test <connection id>` should report the connection ready. To rotate, create a new restricted key, seal it (the new version supersedes the old) and roll the old key in Stripe.
 
-Grant refunds with a money bound and, for transfers, a destination set of `acct_…` payees. The customer-support and treasury-payments templates ([G0 M14](../g0/M14.md) D40) are the starting points.
+Grant refunds with a money bound and, for transfers, a destination set of `acct_…` payees. The templates are the starting points: `pclaw template apply customer-support` (refunds at most USD 100.00, held above USD 50.00 for one independent approver, USD 500.00 a week) and `pclaw template apply treasury-payments --payee acct_…` (repeatable; other payees are forbidden with `PAYEE_NOT_ALLOWED`). Treasury transfers are capped at USD 10 000.00 each and USD 50 000.00 a week (example amounts), and every transfer needs two independent `treasury_approver`s. A transfer to a payee that changed bank details recently, or whose change could not be read, also needs a security-key step-up by the principal; an unread fact never allows a transfer.
 
 ## 4. Development and CI
 
