@@ -238,6 +238,8 @@ func TestHR318_SubjectsAndRequestsThatDoNotMatchAreRefused(t *testing.T) {
 		"a body over 64 KiB":       {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"body_b64": base64.StdEncoding.EncodeToString(make([]byte, authzenMaxForwarded+1))}), Action: post}, conn, codeBody},
 		"a pantherclaw_held one":   {azEvaluation{Subject: subject("", good), Resource: resource(nil), Action: post}, &held, codeBindable},
 		"a method that is not one": {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"method": "post"}), Action: &azAction{Name: "post"}}, conn, codeResource},
+		"a form body":              {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"body_b64": "e30=", "content_type": "application/x-www-form-urlencoded"}), Action: post}, conn, codeContentType},
+		"an undeclared body":       {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"body_b64": "e30="}), Action: post}, conn, codeContentType},
 		"an MCP GET":               {azEvaluation{Subject: subject("", good), Resource: resource(map[string]any{"protocol": "mcp", "method": "GET"}), Action: &azAction{Name: "GET"}}, &mcpConn, codeMethod},
 	} {
 		res, err := e.evaluate(context.Background(), p, tc.conn, tc.ev)
