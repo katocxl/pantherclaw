@@ -191,8 +191,10 @@ func (s *slackEnv) approve(t *testing.T, request ids.UUID) {
 func (s *slackEnv) decline(t *testing.T, request ids.UUID) {
 	t.Helper()
 	ctx := tapp.WithCaller(context.Background(), tapp.Caller{
-		Subject: td.Subject{Org: s.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: s.dave.id},
-			Bindings: []td.Binding{{Role: td.RoleApprover, Scope: td.Scope{Type: td.ScopeOrg, ID: s.org.UUID()}}}},
+		Subject: td.Subject{
+			Org: s.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: s.dave.id},
+			Bindings: []td.Binding{{Role: td.RoleApprover, Scope: td.Scope{Type: td.ScopeOrg, ID: s.org.UUID()}}},
+		},
 		Credential: tapp.CredBrowserSession, Session: s.dave.browser,
 	})
 	if _, err := s.approvals.Decline(ctx, request, "TOO_RISKY", "", ""); err != nil {
