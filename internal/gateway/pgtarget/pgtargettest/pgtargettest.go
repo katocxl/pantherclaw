@@ -26,6 +26,7 @@ import (
 	"net/netip"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -106,11 +107,24 @@ INSERT INTO shop.orders VALUES
 INSERT INTO support.tickets VALUES (100, 1, 'Refund please'), (101, 2, 'Where is my order');
 `
 
+// Option changes a fixture.
+type Option func(*options)
+
+type options struct{ nameOnly bool }
+
+// NameOnly issues the proxy's certificate for Host alone, without the
+// loopback address, so that dialling 127.0.0.1 fails verify-full.
+func NameOnly() Option { return func(o *options) { o.nameOnly = true } }
+
 // New creates a fixture database, its roles and a TLS proxy to it, removed
 // when the test ends. It skips the test when no admin URL is configured
 // (fails when PC_TEST_REQUIRE_DB=1).
-func New(t testing.TB) *Target {
+func New(t testing.TB, opts ...Option) *Target {
 	t.Helper()
+	var o options
+	for _, f := range opts {
+		f(&o)
+	}
 	url := os.Getenv(adminURLEnv)
 	if url == "" {
 		if os.Getenv(requireEnv) == "1" {
@@ -166,7 +180,7 @@ func New(t testing.TB) *Target {
 		"GRANT SELECT ON ALL TABLES IN SCHEMA shop, support TO "+quote(tg.ReadOnly),
 		"GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA shop, support TO "+quote(tg.Writer),
 	)
-	tg.Port, tg.CAPEM = proxy(t, net.JoinHostPort(admin.Host, strconv.Itoa(int(admin.Port))))
+	tg.Port, tg.CAPEM = proxy(t, net.JoinHostPort(admin.Host, strconv.Itoa(int(admin.Port))), o.nameOnly)
 	return tg
 }
 
@@ -211,7 +225,7 @@ func (tg *Target) Config(writer bool) pgtarget.Config {
 // proxy listens on 127.0.0.1 and terminates TLS for the backend: it answers
 // a client's SSLRequest with 'S', completes TLS with a certificate for Host
 // from a fresh CA, and relays the plaintext to the backend.
-func proxy(t testing.TB, backend string) (int, string) {
+func proxy(t testing.TB, backend string, nameOnly bool) (int, string) {
 	t.Helper()
 	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -234,6 +248,9 @@ func proxy(t testing.TB, backend string) (int, string) {
 		SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: Host}, DNSNames: []string{Host},
 		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(24 * time.Hour),
 		KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	if !nameOnly {
+		leaf.IPAddresses = []net.IP{net.IPv4(127, 0, 0, 1)}
 	}
 	leafDER, err := x509.CreateCertificate(rand.Reader, leaf, ca, &key.PublicKey, caKey)
 	if err != nil {
@@ -342,8 +359,25 @@ func (tg *Target) Lock(t testing.TB, table string) (release func()) {
 }
 
 // URL is the dev seed --postgres URL of the read-only role (D21): no
-// password, verify-full against the CA written to caFile, internal.
+// password, the loopback literal (a simulated connection needs one, D110),
+// verify-full against the CA written to caFile, internal.
 func (tg *Target) URL(caFile string) string {
-	return "postgres://" + tg.ReadOnly + "@" + Host + ":" + strconv.Itoa(tg.Port) + "/" + tg.Database +
+	return "postgres://" + tg.ReadOnly + "@127.0.0.1:" + strconv.Itoa(tg.Port) + "/" + tg.Database +
 		"?sslmode=verify-full&internal=true&sslrootcert=" + caFile
+}
+
+// SimHandshake makes the fixture database answer the simulated-connection
+// handshake for connection (D110): the table pantherclaw_sim.handshake,
+// readable by the read-only role, holds ('postgres', connection).
+func (tg *Target) SimHandshake(t testing.TB, connection string) {
+	t.Helper()
+	q := pgx.Identifier{tg.ReadOnly}.Sanitize()
+	tg.AdminExec(t,
+		"CREATE SCHEMA IF NOT EXISTS pantherclaw_sim",
+		"CREATE TABLE IF NOT EXISTS pantherclaw_sim.handshake (kind text NOT NULL, connection text NOT NULL)",
+		"DELETE FROM pantherclaw_sim.handshake",
+		"INSERT INTO pantherclaw_sim.handshake VALUES ('postgres', '"+strings.ReplaceAll(connection, "'", "")+"')",
+		"GRANT USAGE ON SCHEMA pantherclaw_sim TO "+q,
+		"GRANT SELECT ON pantherclaw_sim.handshake TO "+q,
+	)
 }

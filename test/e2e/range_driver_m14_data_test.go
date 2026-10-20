@@ -33,8 +33,11 @@ func needsPostgres(sc domain.Scenario) bool {
 const pgRangeScope = `{"postgres.rows.read": {"records": {"key": "customer", "values": ["2"]}, "classes": {"ids": ["public"]}},
   "postgres.rows.aggregate": {"records": {"key": "customer", "values": ["2"]}, "classes": {"ids": ["public"]}}}`
 
-// setupPostgres gives the scenario a run on the scoped grant.
+// setupPostgres makes the fixture database answer the simulated-connection
+// handshake (D110), since the range marks every connection simulated, and
+// gives the scenario a run on the scoped grant.
 func (d *rangeDriver) setupPostgres() {
+	d.s.pg.tg.SimHandshake(d.t, d.s.pg.conn.String())
 	d.s.scopedRun(d.t, pgRangeScope)
 	d.defaultRun = d.s.run
 }

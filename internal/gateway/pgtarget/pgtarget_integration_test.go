@@ -276,8 +276,9 @@ func TestHR330_TransportAndEgress(t *testing.T) {
 	c = tg.Config(false)
 	c.Allowed = []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}
 	refused("loopback outside the operator's prefixes", c)
-	c = tg.Config(false)
-	c.Endpoint.Host = "127.0.0.1" // not the certificate's name
+	named := pgtargettest.New(t, pgtargettest.NameOnly())
+	c = named.Config(false)
+	c.Endpoint.Host = "127.0.0.1" // not a name its certificate holds
 	refused("wrong host name", c)
 	c = tg.Config(false)
 	c.Endpoint.CAPEM = pgtargettest.New(t).CAPEM // another CA

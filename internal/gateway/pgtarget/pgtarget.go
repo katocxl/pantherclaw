@@ -427,3 +427,21 @@ func (p *Pool) Check(ctx context.Context) ([]string, error) {
 	}
 	return findings, nil
 }
+
+// Handshake reads a simulated database's handshake (G0 M14 D110): the
+// kind and connection pantherclaw_sim.handshake names, in a read-only
+// transaction. A database without one answers an error.
+func (p *Pool) Handshake(ctx context.Context) (kind, connection string, err error) {
+	conn, err := p.pool.Acquire(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	defer conn.Release()
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return "", "", err
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	err = tx.QueryRow(ctx, `SELECT kind, connection FROM pantherclaw_sim.handshake LIMIT 2`).Scan(&kind, &connection)
+	return kind, connection, err
+}

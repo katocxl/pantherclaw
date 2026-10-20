@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway/egress"
 	"github.com/katocxl/pantherclaw/internal/gateway/pgdispatch"
 	"github.com/katocxl/pantherclaw/internal/gateway/pgtarget"
+	"github.com/katocxl/pantherclaw/internal/gateway/simcheck"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
@@ -390,4 +392,48 @@ func (e *Engine) postgresTest(ctx context.Context, conn *control.Connection, ope
 	}
 	sum := sha256.Sum256([]byte(strings.Join(findings, "\n")))
 	return Observation{HTTPStatus: status, Digest: sum[:]}, nil
+}
+
+// pgSims remembers verified simulated postgres connections, as simcheck
+// does for HTTP simulators.
+var pgSims = struct {
+	sync.Mutex
+	ok map[string]time.Time
+}{ok: map[string]time.Time{}}
+
+// pgSimVerify verifies a simulated postgres connection (G0 M14 D110): its
+// host is a loopback literal, and the database, reached with the same TLS
+// and egress rules as any dispatch, answers the handshake with this
+// connection. A success is trusted for simcheck.TTL.
+func (e *Engine) pgSimVerify(ctx context.Context, conn *control.Connection) string {
+	pc := postgresOf(conn)
+	if pc == nil {
+		return CodeSimulatorUnverified
+	}
+	if a, err := netip.ParseAddr(pc.GetHost()); err != nil || !a.Unmap().IsLoopback() {
+		return CodeSimulatorUnverified
+	}
+	key := fmt.Sprintf("%p/%s/%d/%s", e, conn.GetId(), conn.GetRevision(), pc.GetHost())
+	pgSims.Lock()
+	at, ok := pgSims.ok[key]
+	pgSims.Unlock()
+	if ok && time.Since(at) < simcheck.TTL {
+		return ""
+	}
+	ent, err := e.pgPool(ctx, conn, &defs.Definition{Dispatch: &defs.Dispatch{}}, pc)
+	if err != nil {
+		e.log.WarnContext(ctx, "gateway.simulator_unverified", slog.String("connection_id", conn.GetId()), pclog.Err(err))
+		return CodeSimulatorUnverified
+	}
+	hctx, cancel := context.WithTimeout(ctx, pgtarget.ConnectTimeout+5*time.Second)
+	defer cancel()
+	kind, id, err := ent.pool.Handshake(hctx)
+	if err != nil || kind != "postgres" || id != conn.GetId() {
+		e.log.WarnContext(ctx, "gateway.simulator_unverified", slog.String("connection_id", conn.GetId()), pclog.Err(err))
+		return CodeSimulatorUnverified
+	}
+	pgSims.Lock()
+	pgSims.ok[key] = time.Now()
+	pgSims.Unlock()
+	return ""
 }
