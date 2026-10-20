@@ -178,9 +178,9 @@ func TestTreasuryPackPayees(t *testing.T) {
 	}
 }
 
-// TestListPackParameters (D106, D107): support-resolution needs customers;
-// research-disclosure needs repos and takes Slack channels optionally,
-// rendering no channel test without them and allowing no channel.
+// TestListPackParameters (D106, D107, D119): support-resolution needs
+// customers and research-disclosure needs repos and Slack channels; the
+// channels render into the channel rule and its tests.
 func TestListPackParameters(t *testing.T) {
 	sr, err := Get("support-resolution")
 	if err != nil {
@@ -199,7 +199,10 @@ func TestListPackParameters(t *testing.T) {
 	if want := []string{ParamDefaultBranch, ParamRepos, ParamSlackChannels}; !slices.Equal(rs.Needs(), want) {
 		t.Errorf("research-disclosure needs %v, want %v", rs.Needs(), want)
 	}
-	o, err := rs.options(map[string]string{ParamRepos: "acme/research"})
+	if _, err := rs.options(map[string]string{ParamRepos: "acme/research"}); err == nil {
+		t.Error("research-disclosure without slack_channels accepted")
+	}
+	o, err := rs.options(map[string]string{ParamRepos: "acme/research", ParamSlackChannels: "C0EXAMPLE02,C0EXAMPLE01"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,18 +211,13 @@ func TestListPackParameters(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, tc := range d.Tests {
-		if id, _ := tc["id"].(string); id == "rs-post--"+agent || id == "rs-post-external--"+agent {
-			t.Errorf("channel test %s rendered without a channel", id)
-		}
-	}
 	found := false
 	for _, r := range d.Rules {
 		if r["id"] == "rs-channels--"+agent {
-			found = r["when"] == "run.agent_id == '"+agent+"' && !(action.target.id in [])"
+			found = r["when"] == "run.agent_id == '"+agent+"' && !(action.target.id in ['C0EXAMPLE01', 'C0EXAMPLE02'])"
 		}
 	}
 	if !found {
-		t.Error("rs-channels does not refuse every channel without channels")
+		t.Error("rs-channels does not name exactly the channels")
 	}
 }

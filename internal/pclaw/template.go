@@ -94,7 +94,7 @@ func templateFlags(fs *flag.FlagSet, o *templateOptions) func() error {
 	for kind, usage := range map[string]string{
 		render.KindPayee:        "a Stripe connected account, acct_..., the template may send funds to (repeatable)",
 		render.KindCustomer:     "a customer whose records the template's grant may read (repeatable)",
-		render.KindSlackChannel: "a Slack channel id, C... or G..., the template may post to (repeatable)",
+		render.KindSlackChannel: "a Slack channel id, C... or G..., the template may post to (repeatable; required by templates that post)",
 	} {
 		lists[kind] = &multi{}
 		fs.Var(lists[kind], strings.TrimPrefix(render.Flags[kind], "--"), usage)
@@ -136,7 +136,7 @@ func templateFlags(fs *flag.FlagSet, o *templateOptions) func() error {
 			}
 			slices.Sort(values)
 			switch {
-			case has(kind) && len(values) == 0 && !lk.Optional:
+			case has(kind) && len(values) == 0:
 				return fmt.Errorf("template %s needs %s", o.name, flagName)
 			case !has(kind) && len(values) > 0:
 				return fmt.Errorf("template %s takes no %s", o.name, flagName)

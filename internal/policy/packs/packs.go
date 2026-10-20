@@ -66,7 +66,7 @@ const (
 	// The list parameters, comma-separated (G0 M14 D97, D106, D107): the
 	// Stripe connected accounts a treasury pack may send funds to, the
 	// customers a support pack may read, the Slack channels a pack may post
-	// to (optional).
+	// to; each needs at least one (D119).
 	ParamPayees        = "payees"
 	ParamCustomers     = "customers"
 	ParamSlackChannels = "slack_channels"
@@ -397,7 +397,7 @@ func (p Pack) options(params map[string]string) (render.Options, error) {
 		return o, invalid("pack %s needs workspace", p.Name)
 	}
 	o.Lists = map[string][]string{}
-	for kind, lk := range render.ListKinds {
+	for kind := range render.ListKinds {
 		param := paramNames[kind]
 		var values []string
 		for _, x := range strings.Split(params[param], ",") {
@@ -406,7 +406,7 @@ func (p Pack) options(params map[string]string) (render.Options, error) {
 			}
 		}
 		slices.Sort(values)
-		if slices.Contains(needs, param) && len(values) == 0 && !lk.Optional {
+		if slices.Contains(needs, param) && len(values) == 0 {
 			return o, invalid("pack %s needs %s", p.Name, param)
 		}
 		o.Lists[kind] = values
