@@ -37,8 +37,21 @@ type Pins struct {
 	Pool   *db.Pool
 	Pinner *Pinner
 	// Quarantines lifts the connection's card-drift quarantine in the
-	// confirming transaction (D86, D118; *capp.Service).
+	// confirming transaction (D86, D118; *capp.Service). Required: Confirm
+	// refuses without it rather than skip the lift (D122).
 	Quarantines DriftLifter
+}
+
+// ErrPinsWiring: the confirm page was built without a quarantine lifter.
+var ErrPinsWiring = errors.New("a2astore: pins need a pool, a pinner and a drift lifter")
+
+// NewPins returns the confirm page's use cases, refusing them without a
+// drift lifter (D122).
+func NewPins(pool *db.Pool, pinner *Pinner, quarantines DriftLifter) (*Pins, error) {
+	if pool == nil || pinner == nil || quarantines == nil {
+		return nil, ErrPinsWiring
+	}
+	return &Pins{Pool: pool, Pinner: pinner, Quarantines: quarantines}, nil
 }
 
 // DriftLifter lifts an a2a connection's a2a_card_drift quarantine, and
@@ -180,11 +193,12 @@ func (s *Pins) Confirm(ctx context.Context, conn, pin ids.UUID, su *stepup.StepU
 		}
 		// The new pin is confirmed: a card-drift quarantine of the old one
 		// lifts with it (D86); another quarantine stays.
-		lifted := false
-		if s.Quarantines != nil {
-			if lifted, err = s.Quarantines.LiftA2ACardDriftTx(ctx, tx, c, conn); err != nil {
-				return err
-			}
+		if s.Quarantines == nil {
+			return ErrPinsWiring
+		}
+		lifted, err := s.Quarantines.LiftA2ACardDriftTx(ctx, tx, c, conn)
+		if err != nil {
+			return err
 		}
 		if _, err := q.BumpGatewayConfig(ctx, c.Org, w.GatewayID); err != nil {
 			return err

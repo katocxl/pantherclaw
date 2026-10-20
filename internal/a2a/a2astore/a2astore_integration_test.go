@@ -109,7 +109,7 @@ func TestHR322_PinsServeOnlyOnceConfirmed(t *testing.T) {
 	iface := ts.URL + a2asim.JSONRPCPath
 	w := newWorld(t, pool, iface)
 	adapter := &a2astore.Adapter{Pinner: a2astore.NewPinner()}
-	pins := &a2astore.Pins{Pool: pool, Pinner: adapter.Pinner}
+	pins := &a2astore.Pins{Pool: pool, Pinner: adapter.Pinner, Quarantines: capp.New(pool, nil, "https://pc.test", "https://gw.test")}
 	cfg := &capp.A2AConfig{
 		CardURL: ts.URL + wire.CardPath, Interface: capp.A2AInterface{Protocol: wire.BindingJSONRPC, URL: iface},
 		Skills: []string{"refunds"}, MaxAnswerBytes: 1 << 20, MaxStreamSeconds: 300,

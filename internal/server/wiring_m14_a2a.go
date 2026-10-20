@@ -4,6 +4,7 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/katocxl/pantherclaw/internal/a2a/a2astore"
@@ -40,14 +41,20 @@ func wireM14A2APeer(svc *authority.Service, store *pgauthority.Store, autos *aut
 
 // mountM14A2A adds the a2a pin confirm page (D85): a proposed card serves
 // only once a person holding connection.manage confirms it there with a
-// security key (D92).
-func mountM14A2A(mux *http.ServeMux, d apiDeps) {
+// security key (D92), and the confirmation lifts a card-drift quarantine
+// (D118), so the page is never mounted without the connections service
+// (D122).
+func mountM14A2A(mux *http.ServeMux, d apiDeps) error {
 	if d.web == nil {
-		return
+		return nil
 	}
-	pins := &a2astore.Pins{Pool: d.pool, Pinner: a2astore.NewPinner()}
-	if d.m6 != nil && d.m6.connections != nil {
-		pins.Quarantines = d.m6.connections
+	if d.m6 == nil || d.m6.connections == nil {
+		return fmt.Errorf("server: a2a pin page: %w", a2astore.ErrPinsWiring)
+	}
+	pins, err := a2astore.NewPins(d.pool, a2astore.NewPinner(), d.m6.connections)
+	if err != nil {
+		return fmt.Errorf("server: a2a pin page: %w", err)
 	}
 	d.web.MountA2APins(mux, pins)
+	return nil
 }

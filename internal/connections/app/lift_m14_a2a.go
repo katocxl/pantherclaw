@@ -18,8 +18,13 @@ import (
 // (G0 M14 D86, D118): only a quarantine whose reason is a2a_card_drift is
 // lifted, as Restore lifts one (circuits closed, configuration bumped,
 // audited, a weakening notified); any other state or reason is left as it
-// is. It reports whether it lifted one. The caller has checked the person
-// (connection.manage and a fresh security key).
+// is. It reports whether it lifted one.
+//
+// Precondition (D122): it checks no permission itself. Its one caller is the
+// a2a pin confirmation (a2astore.Pins.Confirm), which has verified, in this
+// same tx, that the caller is a person holding connection.manage with a
+// fresh security-key step-up. Exported only for that cross-package caller;
+// call it from nowhere else.
 func (s *Service) LiftA2ACardDriftTx(ctx context.Context, tx db.TenantTx, caller tenancy.Caller, id ids.UUID) (bool, error) {
 	c := actor{Org: caller.Org, By: caller.Principal.String(), Audit: caller.Actor(), Caller: caller}
 	q := dbq.New(tx)
