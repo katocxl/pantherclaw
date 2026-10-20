@@ -50,9 +50,12 @@ definitions:
         type: identifier
         material: true
         pattern: '^[0-9]{10}\.[0-9]{6}$'
+    # A post needs a destination bound: a grant or envelope that names no
+    # channels lets it post nowhere (D57, D78).
     constraints:
       - kind: target_set
       - kind: destination_set
+        required: true
     effects:
       - kind: message.send
         description: Posts a message that everyone in the channel can read
