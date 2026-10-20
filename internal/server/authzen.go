@@ -61,6 +61,7 @@ const (
 	authzenRateLimited  = "rate_limited"
 	authzenTooLarge     = "too_large"
 	authzenInvalid      = "invalid_request"
+	authzenMediaType    = "unsupported_media_type"
 	authzenUnavailable  = "try_again_later"
 )
 
@@ -213,6 +214,11 @@ func (e *authzenEndpoint) serve(w http.ResponseWriter, r *http.Request, batch bo
 	case err != nil:
 		e.log.ErrorContext(ctx, "authzen.authentication_unavailable", pclog.Err(err))
 		authzenRefuse(w, http.StatusServiceUnavailable, authzenUnavailable)
+		return
+	}
+	// The request itself is JSON in UTF-8 and nothing else (D113).
+	if !jsonContent(r.Header.Get("Content-Type"), []byte{0}) || len(r.Header.Values("Content-Type")) != 1 {
+		authzenRefuse(w, http.StatusUnsupportedMediaType, authzenMediaType)
 		return
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, authzenMaxBody))

@@ -557,12 +557,20 @@ func proofOf(ev azEvaluation) string {
 }
 
 // jsonContent reports whether a forwarded body is what the mapping reads:
-// none, or JSON declared as such, so the target cannot parse it as
-// something else (D101).
+// none, or application/json with no parameter but charset=utf-8, so the
+// target cannot read it otherwise than the mapping did (D101, D113).
 func jsonContent(contentType string, body []byte) bool {
 	if len(body) == 0 {
 		return true
 	}
-	mt, _, err := mime.ParseMediaType(contentType)
-	return err == nil && (mt == "application/json" || strings.HasSuffix(mt, "+json"))
+	mt, params, err := mime.ParseMediaType(contentType)
+	if err != nil || mt != "application/json" {
+		return false
+	}
+	for k, v := range params {
+		if k != "charset" || !strings.EqualFold(v, "utf-8") {
+			return false
+		}
+	}
+	return true
 }
