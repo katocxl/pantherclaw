@@ -33,11 +33,13 @@ import (
 // The development peer agent connection (G0 M14 D33): the seeded workload
 // asks the peer agent "dev-peer" at /a2a/peer through the gateway; the
 // peer's runs for those messages are delegated from the workload's grant,
-// within the peer scope below: refunds, every other bound inherited from
-// the workload's grant (its refund maximum carries over, D33).
+// within the peer scope below, intersected with the workload's grant: the
+// scope allows larger refunds than the grant, and the grant's maximum
+// carries over (HR-324).
 const (
 	devA2AConnectionName = "peer"
-	devPeerScope         = `{"operations":["payments.refund.create","payments.refund.get"]}`
+	devPeerScope         = `{"operations":["payments.refund.create","payments.refund.get"],` +
+		`"params":{"payments.refund.create":{"amount":{"max":{"USD":"1000000.00"}}}}}`
 )
 
 // devA2AOperations are the pc.a2a operations the seeded grant allows.

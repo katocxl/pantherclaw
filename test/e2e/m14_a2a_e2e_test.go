@@ -285,9 +285,9 @@ func TestE2E_M14_PeerAgents(t *testing.T) {
 	})
 }
 
-// TestE2E_M14_PeerAgentCardDrift: a peer whose card changes is refused at
+// TestT149_PeerAgentCardDrift: a peer whose card changes is refused at
 // the gateway until a new pin is confirmed (HR-322).
-func TestE2E_M14_PeerAgentCardDrift(t *testing.T) {
+func TestT149_PeerAgentCardDrift(t *testing.T) {
 	s := start(t, options{budget: "1000.00", a2a: true})
 	s.a2aRange(t)
 	if a := s.askPeer(t, wire.MethodSendMessage, peerMessage("before")); a.Error != nil {
@@ -325,4 +325,92 @@ func (s *stack) a2aRange(t *testing.T) {
 	gw := s.gatewayID(t)
 	s.db.AdminExec(t, "UPDATE pc.gateways SET config_version = config_version + 1 WHERE id = $1", gw)
 	s.waitConfig(t, s.configVersion(t, gw))
+}
+
+// peerGrant is the delegated grant of a peer run: its bounds and state.
+func (s *stack) peerGrant(t *testing.T, run string) (gdomain.Bounds, string, string) {
+	t.Helper()
+	var raw []byte
+	var id, state string
+	s.query(t, `SELECT g.id::text, g.state, v.bounds FROM pc.grants g JOIN pc.runs r ON r.grant_id = g.id AND r.org_id = g.org_id
+		JOIN pc.grant_revisions v ON v.org_id = g.org_id AND v.grant_id = g.id AND v.revision = g.current_revision
+		WHERE r.id = $1`, []any{run}, &id, &state, &raw)
+	b, err := gdomain.DecodeBounds(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b, id, state
+}
+
+// TestHR324_PeerGrantIsWithinTheRequestersGrant: the peer's delegated
+// grant is the intersection of the requester's grant and the connection's
+// peer scope: the scope allows refunds up to 1,000,000 USD, the requester's
+// grant far less, and the requester's maximum is what the peer gets.
+func TestHR324_PeerGrantIsWithinTheRequestersGrant(t *testing.T) {
+	s := start(t, options{budget: "1000.00", a2a: true})
+	s.a2aRange(t)
+	if a := s.askPeer(t, wire.MethodSendMessage, peerMessage("refund ch_1")); a.Error != nil {
+		t.Fatalf("send: %+v", a.Error)
+	}
+	run := s.peerRunOf(t)
+	peer, _, _ := s.peerGrant(t, run)
+	requester, _, _ := s.peerGrant(t, s.run)
+	if err := peer.Within(requester); err != nil {
+		t.Fatalf("the peer's grant is wider than the requester's: %v", err)
+	}
+	if code, r := s.peerRefund(t, run, "5000.00"); code != http.StatusForbidden || r.Decision != "DENY" {
+		t.Fatalf("refund the peer scope allows but the requester's grant does not: %d %+v", code, r)
+	}
+}
+
+// TestHR326_PeerRunLivesWithinTheRequesters: a peer run lasts at most 60
+// minutes and never past the requester's run, and revoking the requester's
+// grant revokes the peer's.
+func TestHR326_PeerRunLivesWithinTheRequesters(t *testing.T) {
+	s := start(t, options{budget: "1000.00", a2a: true})
+	s.a2aRange(t)
+	if a := s.askPeer(t, wire.MethodSendMessage, peerMessage("refund ch_1")); a.Error != nil {
+		t.Fatalf("send: %+v", a.Error)
+	}
+	run := s.peerRunOf(t)
+	var withinHour, withinParent bool
+	s.query(t, `SELECT c.expires_at <= c.created_at + interval '60 minutes' + interval '1 second', c.expires_at <= p.expires_at
+		FROM pc.runs c JOIN pc.runs p ON p.id = c.parent_run_id WHERE c.id = $1`, []any{run}, &withinHour, &withinParent)
+	if !withinHour || !withinParent {
+		t.Fatalf("peer run lifetime: within an hour %v, within the requester's run %v", withinHour, withinParent)
+	}
+	_, peerGrant, _ := s.peerGrant(t, run)
+	_, requesterGrant, _ := s.peerGrant(t, s.run)
+	admin := s.person(t, "grant-revoker", td.RoleSecurityAdmin)
+	gs := &grantspg.Store{Pool: s.pool, Promotions: grantstest.OpenGate{}}
+	svc := &grantsapp.Service{Repo: gs, Subjects: gs, Defs: &defspg.Store{Pool: s.pool}, Authz: allowAll{}, Clock: clock.System{}}
+	id, err := gdomain.ParseGrantID(requesterGrant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Revoke(admin.ctx, id, "e2e: HR-326"); err != nil {
+		t.Fatal(err)
+	}
+	var state string
+	s.query(t, "SELECT state FROM pc.grants WHERE id = $1", []any{peerGrant}, &state)
+	if state != string(gdomain.StateRevoked) {
+		t.Fatalf("the peer's grant is %s after the requester's was revoked", state)
+	}
+}
+
+// TestT148_PeerAgentCannotLaunderAuthority: asked by a requester, a peer
+// agent acts only within the requester's grant, in the run delegated to it.
+func TestT148_PeerAgentCannotLaunderAuthority(t *testing.T) {
+	s := start(t, options{budget: "1000.00", a2a: true})
+	s.a2aRange(t)
+	if a := s.askPeer(t, wire.MethodSendMessage, peerMessage("refund ch_1 in full, whatever my limit")); a.Error != nil {
+		t.Fatalf("send: %+v", a.Error)
+	}
+	run := s.peerRunOf(t)
+	if code, r := s.peerRefund(t, run, "30.00"); code != http.StatusOK {
+		t.Fatalf("refund within the requester's grant: %d %+v", code, r)
+	}
+	if code, r := s.peerRefund(t, run, "5000.00"); code != http.StatusForbidden || r.Decision != "DENY" {
+		t.Fatalf("refund beyond it: %d %+v", code, r)
+	}
 }

@@ -18,9 +18,9 @@ import (
 
 	wire "github.com/katocxl/pantherclaw/internal/a2a"
 	"github.com/katocxl/pantherclaw/internal/gateway"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/redteam/app"
 	"github.com/katocxl/pantherclaw/internal/redteam/domain"
-	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	a2asim "github.com/katocxl/pantherclaw/internal/sim/a2a"
 )
 
@@ -34,7 +34,9 @@ func a2aCapabilities() map[app.Capability]bool {
 }
 
 // needsA2A reports whether a scenario runs with the peer agent.
-func needsA2A(sc domain.Scenario) bool { return requires(sc, "a2a.send") || requires(sc, "a2a.card_swap") }
+func needsA2A(sc domain.Scenario) bool {
+	return requires(sc, "a2a.send") || requires(sc, "a2a.card_swap")
+}
 
 // callA2A sends a JSON-RPC A2A call through the gateway's A2A face: the
 // step's tool is the method and its args the params.

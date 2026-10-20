@@ -110,6 +110,24 @@ func (p *Peer) Delegate(ctx context.Context, tx db.TenantTx, org ids.OrgID, d fi
 	if err != nil {
 		return nil, "", ErrPeerDelegation
 	}
+	// The peer may do what both the requester's grant and the connection's
+	// peer scope allow (HR-324): a wider scope narrows to the grant.
+	if gs, ok := p.Grants.Store.(interface {
+		GrantInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, id gdomain.GrantID) (gdomain.Grant, bool, error)
+	}); ok {
+		pg, err := gdomain.ParseGrantID(parent.PcRun.GrantID.String())
+		if err != nil {
+			return nil, "", ErrPeerDelegation
+		}
+		parentGrant, found, err := gs.GrantInTx(ctx, tx, org, pg)
+		if err != nil {
+			return nil, "", err
+		}
+		if !found {
+			return nil, "", ErrPeerDelegation
+		}
+		bounds = bounds.Intersect(parentGrant.Bounds)
+	}
 	var limits gdomain.Limits
 	if raw := pin.Config.GetPeerScope().GetLimits(); len(raw) > 0 {
 		if limits, err = gdomain.DecodeLimits(raw); err != nil {
