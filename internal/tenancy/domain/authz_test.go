@@ -283,8 +283,8 @@ func TestPermissionsListsHeldPermissions(t *testing.T) {
 	got := v.Permissions()
 	want := []domain.Permission{
 		domain.PermOrgRead, domain.PermBusinessUnitRead, domain.PermTeamRead, domain.PermEnvironmentRead,
-		domain.PermIncidentRead, domain.PermOperationsRead, domain.PermAutomationRead,
-	} // Viewer sees incidents, the operations view (G0 M10 D4) and automations (G0 M11 part 2 D12)
+		domain.PermIncidentRead, domain.PermOperationsRead, domain.PermAutomationRead, domain.PermEntitlementsRead,
+	} // Viewer sees incidents, the operations view (G0 M10 D4), automations (G0 M11 part 2 D12) and the plan (G0 UI D35)
 	if !slices.Equal(got, want) {
 		t.Fatalf("Permissions() = %v, want %v", got, want)
 	}

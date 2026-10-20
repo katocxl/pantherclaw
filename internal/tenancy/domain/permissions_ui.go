@@ -3,6 +3,11 @@
 
 package domain
 
+import (
+	"slices"
+	"strings"
+)
+
 // UI phase permissions (G0 UI D8, D9, D15, D21).
 //
 //   - entitlements.read: read the org's plan, limits and usage.
@@ -29,3 +34,35 @@ var uiCatalog = []Permission{PermEntitlementsRead, PermOnboardingRead}
 
 // accountOnly are the account-session requirements (declarable only).
 var accountOnly = []Permission{PermOrgsCreate, PermOrgsListMine, PermInvitationsAccept}
+
+// The UI phase's grants (D35): every role a person holds reads the org's
+// plan; the roles that run onboarding also read its progress. Service-only
+// roles get neither, and neither do the roles service accounts hold to do
+// one job (run launching, fact providing).
+var (
+	planReaders = []RoleName{
+		RoleOrgAdmin, RoleSecurityAdmin, RoleAgentOwner, RolePolicyAuthor, RolePolicyPublisher, RoleApprover,
+		RoleResponder, RoleAuditor, RoleDeveloper, RoleViewer, RoleAgentAdmitter, RoleIdentityPublisher,
+		RoleGrantIssuer, RoleGatewayAdmin, RoleEmergency, RoleReconciler, RoleRecordsManager, RoleCodeReviewer,
+		RoleReleaseApprover, RoleAutomationAuthor, RoleAutomationPublisher, RoleAutomationOperator, RoleFleetManager,
+	}
+	onboardingReaders = []RoleName{RoleOrgAdmin, RoleSecurityAdmin, RoleAgentOwner, RoleDeveloper}
+)
+
+func init() {
+	for i := range roles {
+		r := &roles[i]
+		var reads []string
+		if slices.Contains(planReaders, r.Name) {
+			r.Permissions = append(r.Permissions, PermEntitlementsRead)
+			reads = append(reads, "plan")
+		}
+		if slices.Contains(onboardingReaders, r.Name) {
+			r.Permissions = append(r.Permissions, PermOnboardingRead)
+			reads = append(reads, "onboarding progress")
+		}
+		if len(reads) > 0 {
+			r.Description += " Reads the org's " + strings.Join(reads, " and ") + "."
+		}
+	}
+}
