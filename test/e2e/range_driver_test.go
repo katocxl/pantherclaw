@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -30,6 +31,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authn/webauthntest"
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
 	"github.com/katocxl/pantherclaw/internal/gateway"
+	"github.com/katocxl/pantherclaw/internal/gateway/pgtarget/pgtargettest"
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/redteam/app"
@@ -95,10 +97,12 @@ func newRangeDriver(t *testing.T) *rangeDriver {
 
 // Capabilities are what this driver can run.
 func (d *rangeDriver) Capabilities() map[app.Capability]bool {
-	return map[app.Capability]bool{
+	caps := map[app.Capability]bool{
 		app.CapGitHub: true, app.CapPayments: true, app.CapMCP: true, app.CapPerson: true, app.CapSecondOrg: true,
 		app.CapHarness: true, app.CapSandbox: d.extra.available(),
 	}
+	maps.Copy(caps, pgCapabilities())
+	return caps
 }
 
 func requires(s domain.Scenario, what string) bool { return slices.Contains(s.Requires, what) }
@@ -119,6 +123,9 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 		o.maxCount = 2
 	case "RT-036":
 		o.access, o.actionTokens = capp.AccessTargetEnforced, true
+	}
+	if needsPostgres(sc) {
+		o.postgres = pgtargettest.New(t)
 	}
 	var p idp
 	if requires(sc, "person") || sc.ID == "RT-009" {
@@ -144,6 +151,9 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	}
 	if o.github {
 		d.setupGitHub()
+	}
+	if o.postgres != nil {
+		d.setupPostgres()
 	}
 	if requires(sc, "second_org") {
 		d.other = start(t, options{budget: "1000.00"})

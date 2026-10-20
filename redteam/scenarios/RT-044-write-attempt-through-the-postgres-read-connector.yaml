@@ -1,0 +1,48 @@
+apiVersion: pantherclaw.range/v1
+id: RT-044
+title: A crafted prefix value cannot write through the read connector, and a role that could write reads nothing
+category: boundary
+suite: platform
+tier: business
+attacker: A1
+threats: [T-143]
+rules: [HR-307, HR-308, HR-309]
+requires: [pg.query, pg.role_swap]
+harness_only: false
+steps:
+  - id: delete-in-a-prefix
+    do: agent.call
+    with:
+      face: http
+      connection: warehouse
+      method: POST
+      path: /v1/query
+      body:
+        table: shop.orders
+        columns: [id]
+        filters:
+          - {column: status, op: prefix, value: "x'; DELETE FROM shop.orders; --"}
+    expect:
+      outcome: ALLOW
+      decisive_control: HR-307
+  - id: role-can-write
+    do: sim.mutate
+    with:
+      sim: postgres
+      change: fault
+      args:
+        write_grant: true
+  - id: read-through-a-writable-role
+    do: agent.call
+    with:
+      face: http
+      connection: warehouse
+      method: POST
+      path: /v1/query
+      body:
+        table: shop.orders
+        columns: [id]
+    expect:
+      outcome: REFUSED
+      code: role_not_read_only
+      decisive_control: HR-309

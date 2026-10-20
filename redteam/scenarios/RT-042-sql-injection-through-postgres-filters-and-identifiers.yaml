@@ -1,0 +1,84 @@
+apiVersion: pantherclaw.range/v1
+id: RT-042
+title: SQL smuggled into a postgres read's table, columns, filters or sort never reaches the database
+category: boundary
+suite: platform
+tier: business
+attacker: A1
+threats: [T-143]
+rules: [HR-307]
+requires: [pg.query]
+harness_only: false
+steps:
+  - id: statement-in-the-table
+    do: agent.call
+    with:
+      face: http
+      connection: warehouse
+      method: POST
+      path: /v1/query
+      body:
+        table: "shop.orders; DELETE FROM shop.orders"
+        columns: [id]
+    expect:
+      outcome: REFUSED
+      code: invalid_request
+      decisive_control: HR-307
+  - id: quoted-column
+    do: agent.call
+    with:
+      face: mcp
+      connection: warehouse
+      tool: query_rows
+      args:
+        table: shop.orders
+        columns: ["id\"; DROP TABLE shop.orders; --"]
+    expect:
+      outcome: REFUSED
+      code: invalid_arguments
+      decisive_control: HR-307
+  - id: operator-that-is-sql
+    do: agent.call
+    with:
+      face: http
+      connection: warehouse
+      method: POST
+      path: /v1/query
+      body:
+        table: shop.orders
+        columns: [id]
+        filters:
+          - {column: id, op: "= 1 OR 1 =", value: "1"}
+    expect:
+      outcome: REFUSED
+      code: invalid_request
+      decisive_control: HR-307
+  - id: sort-key-with-a-subquery
+    do: agent.call
+    with:
+      face: http
+      connection: warehouse
+      method: POST
+      path: /v1/query
+      body:
+        table: shop.orders
+        columns: [id]
+        order_by: ["id:asc, (SELECT pg_sleep(5))"]
+    expect:
+      outcome: REFUSED
+      code: invalid_request
+      decisive_control: HR-307
+  - id: catalog-table
+    do: agent.call
+    with:
+      face: http
+      connection: warehouse
+      method: POST
+      path: /v1/query
+      body:
+        table: pg_catalog.pg_authid
+        columns: [id]
+    expect:
+      outcome: REFUSED
+      code: table_not_allowed
+      decisive_control: HR-307
