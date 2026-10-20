@@ -29,19 +29,24 @@ func TestPacksRenderToValidBundles(t *testing.T) {
 	for _, p := range ps {
 		names = append(names, p.Name)
 	}
-	if want := []string{"aggregate-reporting", "coding-to-production", "read-only-diagnostics", "treasury-payments"}; !slices.Equal(names, want) {
+	want := []string{"aggregate-reporting", "coding-to-production", "read-only-diagnostics", "research-disclosure", "support-resolution", "treasury-payments"}
+	if !slices.Equal(names, want) {
 		t.Fatalf("packs %v", ps)
 	}
 	params := map[string]map[string]string{
 		"coding-to-production":  {ParamRepos: "acme/api,acme/web", ParamDefaultBranch: "main,acme/web=develop"},
 		"read-only-diagnostics": {ParamWorkspace: "/srv/app"},
 		"treasury-payments":     {ParamPayees: "acct_ExamplePayee02, acct_ExamplePayee01"},
+		"support-resolution":    {ParamCustomers: "cus-1001"},
+		"research-disclosure":   {ParamRepos: "acme/research", ParamSlackChannels: "C0EXAMPLE01"},
 	}
 	wantDecisions := map[string][]string{
 		"coding-to-production":  {"ALLOW", "DENY", "REQUIRE_APPROVAL"},
 		"read-only-diagnostics": {"ALLOW", "DENY"},
-		"aggregate-reporting":   {"ALLOW_WITH_OBLIGATIONS", "DENY"},
+		"aggregate-reporting":   {"ALLOW", "ALLOW_WITH_OBLIGATIONS", "DENY"},
 		"treasury-payments":     {"ALLOW", "ALLOW_WITH_OBLIGATIONS", "DENY", "REQUIRE_APPROVAL"},
+		"support-resolution":    {"ALLOW", "ALLOW_WITH_OBLIGATIONS", "CANNOT_AUTHORIZE", "DENY", "REQUIRE_APPROVAL"},
+		"research-disclosure":   {"ALLOW", "ALLOW_WITH_OBLIGATIONS", "DENY", "REQUIRE_APPROVAL"},
 	}
 	for _, p := range ps {
 		o, err := p.options(params[p.Name])
@@ -170,5 +175,51 @@ func TestTreasuryPackPayees(t *testing.T) {
 	}
 	if _, err := c2p.options(map[string]string{ParamRepos: "acme/api", ParamPayees: "acct_ExamplePayee01"}); err == nil {
 		t.Error("coding-to-production took payees")
+	}
+}
+
+// TestListPackParameters (D106, D107): support-resolution needs customers;
+// research-disclosure needs repos and takes Slack channels optionally,
+// rendering no channel test without them and allowing no channel.
+func TestListPackParameters(t *testing.T) {
+	sr, err := Get("support-resolution")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(sr.Needs(), []string{ParamCustomers}) {
+		t.Errorf("support-resolution needs %v", sr.Needs())
+	}
+	if _, err := sr.options(map[string]string{}); err == nil {
+		t.Error("support-resolution without customers accepted")
+	}
+	rs, err := Get("research-disclosure")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{ParamDefaultBranch, ParamRepos, ParamSlackChannels}; !slices.Equal(rs.Needs(), want) {
+		t.Errorf("research-disclosure needs %v, want %v", rs.Needs(), want)
+	}
+	o, err := rs.options(map[string]string{ParamRepos: "acme/research"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	o.Environment, o.Agent = "production", agent
+	d, err := render.Render(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range d.Tests {
+		if id, _ := tc["id"].(string); id == "rs-post--"+agent || id == "rs-post-external--"+agent {
+			t.Errorf("channel test %s rendered without a channel", id)
+		}
+	}
+	found := false
+	for _, r := range d.Rules {
+		if r["id"] == "rs-channels--"+agent {
+			found = r["when"] == "run.agent_id == '"+agent+"' && !(action.target.id in [])"
+		}
+	}
+	if !found {
+		t.Error("rs-channels does not refuse every channel without channels")
 	}
 }
