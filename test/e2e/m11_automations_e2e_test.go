@@ -10,6 +10,7 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
+	"maps"
 	"net/http"
 	"strings"
 	"testing"
@@ -575,18 +576,25 @@ func (a *autoStack) widen(t *testing.T, automation, published, source ids.UUID, 
 // grouped alert and one owned failure for the root (D21, T-123). The two
 // automations are fixtures in the stack's org, published and in SHADOW (a
 // loop is a trigger refusal, whatever the mode), so the check runs on the
-// real trigger service and engine.
+// real trigger service and engine. Only events carrying this check's marker
+// fire them: grant events of the earlier steps may still be in the feed
+// when the fixtures are created, and would start ping or pong outside the
+// loop (D132).
 func (a *autoStack) reciprocalLoop(t *testing.T) {
 	t.Helper()
 	s, ctx := a.r.s, context.Background()
 	f := &triggerstest.Fixture{Pool: s.pool, Org: s.org, User: a.r.aliceID}
-	ping := f.Automation(t, "loop-ping", f.Definition(`"event":{"on":"grant.revoked"}`, ""), autodomain.RolloutShadow)
-	pong := f.Automation(t, "loop-pong", f.Definition(`"event":{"on":"grant.issued"}`, ""), autodomain.RolloutShadow)
+	marker := ids.NewV7().String()
+	where := `,"where":"event.attrs.?loop_check.orValue('') == '` + marker + `'"`
+	ping := f.Automation(t, "loop-ping", f.Definition(`"event":{"on":"grant.revoked"`+where+`}`, ""), autodomain.RolloutShadow)
+	pong := f.Automation(t, "loop-pong", f.Definition(`"event":{"on":"grant.issued"`+where+`}`, ""), autodomain.RolloutShadow)
 	// feed processes the next batch. The e2e server's own feed job (every
 	// triggers.FeedInterval) moves the same org cursor, so a batch may be
 	// taken by it: ErrCursorMoved is that consumer winning the compare-and-set,
-	// as the production worker treats it, and the callers wait for the
-	// trigger itself, whichever consumer fired it.
+	// as the production worker treats it. The server is Community, so its job
+	// moves the cursor without firing anything, by design (D117): record
+	// rewinds the cursor to just before its own event when that happens
+	// (D134).
 	feed := func() {
 		t.Helper()
 		if _, err := ledger.ChainAll(ctx, s.pool, s.org, 1000); err != nil {
@@ -601,12 +609,23 @@ func (a *autoStack) reciprocalLoop(t *testing.T) {
 	}
 	// record writes the event and feeds until target has a new trigger: the
 	// e2e server chains the ledger too, so the event may not be chained when
-	// the test first processes the feed.
+	// the test first processes the feed. Only this test's feed fires (the
+	// server is Community, D117), so once the event is chained, a cursor at or
+	// past it with no new trigger means the server's job skipped it: the
+	// cursor goes back to just before that event, never further, at most
+	// three times (D134).
 	record := func(name string, actor evdomain.Actor, details map[string]string, target triggerstest.Automation) {
 		t.Helper()
 		before := triggers(target)
+		details = maps.Clone(details)
+		if details == nil {
+			details = map[string]string{}
+		}
+		details["loop_check"] = marker
+		var entry evdomain.Entry
 		if err := s.pool.InTenantTx(ctx, s.org, func(ctx context.Context, tx db.TenantTx) error {
-			_, err := audit.Record(ctx, tx, audit.Event{
+			var err error
+			entry, err = audit.Record(ctx, tx, audit.Event{
 				Name: name, Actor: actor, Outcome: audit.Success,
 				Object: &audit.Object{Type: "grant", ID: ids.NewV7().String()}, Details: details,
 			})
@@ -614,9 +633,30 @@ func (a *autoStack) reciprocalLoop(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
+		rewinds := 0
 		eventually(t, 15*time.Second, "the feed to take "+name, func() (bool, error) {
 			feed()
-			return triggers(target) != before, nil
+			if triggers(target) != before {
+				return true, nil
+			}
+			seq := s.row(t, "SELECT seq::text FROM pc.ledger_chain WHERE org_id = $1 AND entry_id = $2", s.org, entry.ID)
+			if seq == "" {
+				return false, nil // not chained yet
+			}
+			from := s.row(t, "SELECT seq::text FROM pc.automation_feed_cursors WHERE org_id = $1 AND seq >= $2::bigint", s.org, seq)
+			if from == "" {
+				return false, nil // the cursor has not reached the event yet
+			}
+			if rewinds == 3 {
+				t.Fatalf("%s (ledger seq %s) was passed without a trigger after %d rewinds (cursor %s)", name, seq, rewinds, from)
+			}
+			if to := s.row(t, `UPDATE pc.automation_feed_cursors SET seq = $2::bigint - 1
+				WHERE org_id = $1 AND seq >= $2::bigint RETURNING seq::text`, s.org, seq); to != "" {
+				rewinds++
+				t.Logf("%s (ledger seq %s): the server's feed job moved the cursor to %s without firing; rewound to %s (rewind %d)",
+					name, seq, from, to, rewinds)
+			}
+			return false, nil
 		})
 	}
 	sa := func(x triggerstest.Automation) evdomain.Actor {
@@ -633,8 +673,14 @@ func (a *autoStack) reciprocalLoop(t *testing.T) {
 	// pong's work (a grant revoked) comes back to ping: refused, its lineage
 	// holds ping.
 	record("grant.revoked", sa(pong), map[string]string{"execution": second.String(), "automation": pong.ID.String()}, ping)
+	// Under load the new trigger may first wait QUEUED behind ping's own
+	// execution; it is decided when it leaves the queue. Wait for every
+	// trigger of ping to be in a final state, then require the refusal.
+	eventually(t, 60*time.Second, "ping's triggers to reach a final state", func() (bool, error) {
+		return s.row(t, "SELECT count(*)::text FROM pc.automation_triggers WHERE automation_id = $1 AND state = 'QUEUED'", ping.ID) == "0", nil
+	})
 	if n := s.row(t, "SELECT count(*)::text FROM pc.automation_triggers WHERE automation_id = $1 AND state = 'REFUSED_LOOP'", ping.ID); n == "0" {
-		t.Fatal("ping was not refused REFUSED_LOOP")
+		t.Fatalf("ping was not refused REFUSED_LOOP; ping's triggers: %s; pong's: %s", a.triggerStates(t, ping.ID), a.triggerStates(t, pong.ID))
 	}
 	if got := s.row(t, `SELECT ancestry::text FROM pc.automation_triggers WHERE automation_id = $1 AND state IN ('ACCEPTED', 'SHADOW')
 		ORDER BY received_at DESC LIMIT 1`, pong.ID); !strings.Contains(got, ping.ID.String()) {
@@ -649,4 +695,12 @@ func (a *autoStack) reciprocalLoop(t *testing.T) {
 	if n := s.row(t, "SELECT count(*)::text FROM pc.operational_failures WHERE kind = 'automation.loop_stopped'"); n == "0" {
 		t.Fatal("the loop has no owned failure")
 	}
+}
+
+// triggerStates lists an automation's triggers as kind:state:reason, oldest
+// first, for a failure message.
+func (a *autoStack) triggerStates(t *testing.T, automation ids.UUID) string {
+	t.Helper()
+	return a.r.s.row(t, `SELECT coalesce(string_agg(kind || ':' || state || ':' || coalesce(reason, '') || ':' || ancestry::text, ', ' ORDER BY received_at, id), 'none')
+		FROM pc.automation_triggers WHERE automation_id = $1`, automation)
 }

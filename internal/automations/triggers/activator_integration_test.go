@@ -182,6 +182,24 @@ func TestHR278_PausedAutomationsFollowTheirPolicy(t *testing.T) {
 	}
 }
 
+// TestT123_LoopRefusedBeforeConcurrency: a trigger that closes a loop is
+// refused REFUSED_LOOP while the concurrency limit is full: the loop check
+// comes before the Starter, whose refusal would be REFUSED_CONCURRENCY
+// (D130, D132).
+func TestT123_LoopRefusedBeforeConcurrency(t *testing.T) {
+	h := newHarness(t)
+	f := h.f
+	a := f.Automation(t, "loop-full", f.Definition(`"manual":{}`, ""), autodomain.RolloutFull)
+	h.st.Err = autodomain.ErrConcurrency
+	if out := h.fire(t, a, "manual:busy", nil, Lineage{}); out.State != StateRefusedConcurrency {
+		t.Fatalf("the limit is not full: %+v", out)
+	}
+	loop := Lineage{Root: ids.NewV7(), Ancestry: []ids.UUID{a.ID}, Depth: 2}
+	if out := h.fire(t, a, "manual:loop", nil, loop); out.State != StateRefusedLoop || out.Reason != ReasonLoop {
+		t.Fatalf("a loop-closing trigger with the limit full: %+v", out)
+	}
+}
+
 // TestHR277_OneExecutionPerKey: a base key and a declared parameter key
 // each start at most one execution; duplicates are recorded and never
 // reach the Starter; a refused start gives its keys back.
