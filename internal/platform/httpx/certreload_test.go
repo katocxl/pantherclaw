@@ -191,7 +191,7 @@ func TestHR371_ListenerServesRenewedCertificate(t *testing.T) {
 	go func() { _ = srv.ServeTLS(ln, "", "") }()
 	t.Cleanup(func() { _ = srv.Close() })
 	peer := func() string {
-		d := tls.Dialer{Config: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS13}} //nolint:gosec // the test reads the presented certificate
+		d := tls.Dialer{Config: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS13}}
 		c, err := d.DialContext(context.Background(), "tcp", ln.Addr().String())
 		if err != nil {
 			t.Fatal(err)

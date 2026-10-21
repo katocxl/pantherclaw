@@ -5,7 +5,7 @@ package server
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"log/slog"
 	"net/http"
 	"sync/atomic"
@@ -46,6 +46,8 @@ func checkSchemaAtStart(ctx context.Context, cfg *Config, pool *db.Pool, log *sl
 			return nil
 		}
 		return errSchemaPending
+	case db.SchemaCurrent:
+		return nil
 	default:
 		return nil
 	}
@@ -163,5 +165,7 @@ func (rd readiness) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !body.Ready {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}
-	_ = json.NewEncoder(w).Encode(body)
+	if err := json.MarshalWrite(w, body); err != nil {
+		rd.log.WarnContext(ctx, "server.readyz_write_failed", pclog.Err(err))
+	}
 }
