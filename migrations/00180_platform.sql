@@ -11,6 +11,9 @@
 -- The cross-org lister gains the purpose orgs_all: every org of any state,
 -- for the post-restore epoch bump (D6, HR-373), since suspended and closed
 -- orgs' gateways may still hold cached state.
+--
+-- When the backup role pc_backup exists (D21), it gets SELECT on every
+-- existing table and sequence.
 
 -- +goose Up
 CREATE TABLE pc.schema_info (
@@ -20,6 +23,20 @@ CREATE TABLE pc.schema_info (
 );
 REVOKE ALL ON pc.schema_info FROM PUBLIC;
 GRANT SELECT ON pc.schema_info TO pc_app;
+
+-- The backup role reads every table (G0 M13 D21, HR-378), when `db
+-- bootstrap --backup-password-file` created it; tables created later get
+-- SELECT through the default privileges bootstrap set.
+-- +goose StatementBegin
+DO $$
+BEGIN
+    IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_backup') THEN
+        GRANT SELECT ON ALL TABLES IN SCHEMA pc TO pc_backup;
+        GRANT SELECT ON ALL SEQUENCES IN SCHEMA pc TO pc_backup;
+    END IF;
+END
+$$;
+-- +goose StatementEnd
 
 -- The lister below replaces the whole function, starting from 00164's.
 -- +goose StatementBegin

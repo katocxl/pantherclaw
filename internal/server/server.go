@@ -87,11 +87,18 @@ Usage:
   pantherclaw-server serve [--config FILE]            run the API and/or workers (role from config)
   pantherclaw-server migrate up|status [--config FILE] apply or show schema migrations (as pc_migrator)
   pantherclaw-server db bootstrap --admin-url-file F --app-password-file F --migrator-password-file F --audit-password-file F
-                                 --retention-password-file F
-                                                     create roles and schema once, as the database owner
+                                 --retention-password-file F [--backup-password-file F]
+                                                     create roles and schema once, as the database owner; with
+                                                     --backup-password-file also the read-only backup role pc_backup
   pantherclaw-server keys gen-kek --out FILE          write a new key-encryption key (0600)
   pantherclaw-server keys rotate-gateway-ca --confirm [--config FILE]
                                                      replace the internal gateway CA key; every gateway enrolls again
+  pantherclaw-server keys rotate-receipts --confirm [--config FILE]
+  pantherclaw-server keys rotate-evidence --confirm [--config FILE]
+                                                     new receipts / evidence signing keys; earlier keys stay
+                                                     published and verifying; restart every server instance after
+  pantherclaw-server keys bump-epochs --all --confirm [--config FILE]
+                                                     after a database restore: raise every org's containment epoch
   pantherclaw-server org create --name N [--admin-email E] [--config FILE]
                                                      create an organization and print its one-time admin token
   pantherclaw-server org admin-invite --org ID [--admin-email E] [--config FILE]
@@ -903,6 +910,7 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	migPW := fs.String("migrator-password-file", "", "password file for pc_migrator")
 	auditPW := fs.String("audit-password-file", "", "password file for pc_audit_ro")
 	retentionPW := fs.String("retention-password-file", "", "password file for pc_retention (the retention job's role)")
+	backupPW := fs.String("backup-password-file", "", "optional: password file for pc_backup, the read-only role of the backup job")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -936,17 +944,40 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if err := db.BootstrapRoles(ctx, conn, pw); err != nil {
 		return err
 	}
+	if *backupPW != "" {
+		// Before the database grants, which give an existing pc_backup
+		// its read access (G0 M13 D21).
+		bpw, err := config.ReadSecretFile(*backupPW)
+		if err != nil {
+			return err
+		}
+		if err := db.BootstrapBackupRole(ctx, conn, bpw); err != nil {
+			return err
+		}
+	}
 	if err := db.BootstrapDatabase(ctx, conn); err != nil {
 		return err
 	}
 	_, _ = fmt.Fprintf(stdout, "bootstrapped roles %s, %s, %s, %s, %s and schema %s in database %s\n",
 		db.RoleMigrator, db.RoleApp, db.RoleAuditRO, db.RoleRetention, db.RoleLister, db.Schema, cc.Database)
+	if *backupPW != "" {
+		_, _ = fmt.Fprintf(stdout, "bootstrapped the read-only backup role %s\n", db.RoleBackup)
+	}
 	return nil
 }
 
 func cmdKeys(ctx context.Context, args []string, stdout, stderr io.Writer, env Env) error {
-	if len(args) > 0 && args[0] == "rotate-gateway-ca" {
-		return cmdRotateGatewayCA(ctx, args[1:], stdout, stderr, env)
+	if len(args) > 0 {
+		switch args[0] {
+		case "rotate-gateway-ca":
+			return cmdRotateGatewayCA(ctx, args[1:], stdout, stderr, env)
+		case "rotate-receipts":
+			return cmdRotateSigning(ctx, rotateReceipts, args[1:], stdout, stderr, env)
+		case "rotate-evidence":
+			return cmdRotateSigning(ctx, rotateEvidence, args[1:], stdout, stderr, env)
+		case "bump-epochs":
+			return cmdBumpEpochs(ctx, args[1:], stdout, stderr, env)
+		}
 	}
 	if len(args) == 0 || args[0] != "gen-kek" {
 		_, _ = fmt.Fprint(stderr, usage)
