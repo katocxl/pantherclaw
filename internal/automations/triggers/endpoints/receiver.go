@@ -12,7 +12,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/automations/triggers"
@@ -20,11 +19,11 @@ import (
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
-	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/ratelimit"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 )
 
@@ -50,15 +49,16 @@ const (
 type Receiver struct {
 	s      *Service
 	byIP   *httpx.Limiter
-	source *sourceLimiter
+	source ratelimit.Limiter
 }
 
-// Receiver returns the endpoint's handler.
+// Receiver returns the endpoint's handler. The per-address limit is this
+// replica's; each source's own rate is counted in the shared limiter.
 func (s *Service) Receiver() *Receiver {
 	return &Receiver{
 		s:      s,
 		byIP:   httpx.NewLimiter(IPRateLimit, RateWindow, s.clock).WithClientIP(s.cfg.ClientIP),
-		source: newSourceLimiter(s.clock),
+		source: ratelimit.NewStore(s.pool),
 	}
 }
 
@@ -134,8 +134,48 @@ func receiveActor(src ids.UUID) evdomain.Actor {
 	return evdomain.Actor{Type: "automation_event_source", ID: src.String()}
 }
 
+// verified is what a request's verification found: the source's rate and
+// types, the database time, and the secret generation that signed it.
+type verified struct {
+	rate  int
+	types []string
+	now   time.Time
+	which string
+}
+
+// receive verifies, counts and records one inbound event in three steps,
+// so the shared counter is never asked while a pooled connection is held
+// (G0 M13 D28): the verification in a read-only tenant transaction, the
+// source's rate in the counter's own short global transaction, then the
+// receipt, audit record and triggers in a second tenant transaction,
+// which checks again that the source is still active.
 func (s *Service) receive(ctx context.Context, h *Receiver, org ids.OrgID, src ids.UUID, hdr inbound.Headers, body []byte) (int, string) {
-	status, code := http.StatusAccepted, ""
+	v, status, code, err := s.verify(ctx, org, src, hdr, body)
+	if err == nil && status == 0 {
+		var d ratelimit.Decision
+		d, err = h.source.Take(ctx, scopeSource, org.String()+"/"+src.String(), RateWindow, 1, v.rate)
+		switch {
+		case err != nil:
+			// The shared counter is unavailable: refuse (HR-376).
+			s.log.ErrorContext(ctx, "automations.inbound_rate_unavailable", slog.String("source", src.String()), pclog.Err(err))
+			return http.StatusTooManyRequests, CodeRateLimited
+		case !d.Allowed:
+			status, code = http.StatusTooManyRequests, CodeRateLimited
+		}
+		status, code, err = s.record(ctx, org, src, hdr, body, v, status, code)
+	}
+	if err != nil {
+		s.log.ErrorContext(ctx, "automations.inbound_failed", slog.String("source", src.String()), pclog.Err(err))
+		return http.StatusServiceUnavailable, CodeUnavailable
+	}
+	return status, code
+}
+
+// verify checks the source, the licence, the signature and the timestamp.
+// A non-zero status refuses the request.
+func (s *Service) verify(ctx context.Context, org ids.OrgID, src ids.UUID, hdr inbound.Headers, body []byte) (verified, int, string, error) {
+	var v verified
+	status, code := 0, ""
 	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		row, err := q.LoadEventSourceSecrets(ctx, org, src)
@@ -180,12 +220,36 @@ func (s *Service) receive(ctx context.Context, h *Receiver, org ids.OrgID, src i
 			status, code = http.StatusUnauthorized, CodeUnauthorized
 			return nil
 		}
-		if !h.source.allow(src, int(row.RatePerMinute)) {
-			status, code = http.StatusTooManyRequests, CodeRateLimited
-			return s.rateLimited(ctx, tx, src, int(row.RatePerMinute), now)
+		v = verified{rate: int(row.RatePerMinute), types: row.Types, now: now, which: which}
+		return nil
+	}, db.ReadOnly())
+	return v, status, code, err
+}
+
+// record keeps a counted request: over the rate, the owned failure (429);
+// otherwise the receipt (409 on a replay), the body check, the audit
+// record and the triggers (202). A source disabled since verify is
+// refused like an unknown one.
+func (s *Service) record(ctx context.Context, org ids.OrgID, src ids.UUID, hdr inbound.Headers, body []byte, v verified,
+	status int, code string,
+) (int, string, error) {
+	if status == 0 {
+		status = http.StatusAccepted
+	}
+	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		row, err := q.LoadEventSourceSecrets(ctx, org, src)
+		if db.IsNoRows(err) || (err == nil && row.State != StateActive) {
+			status, code = http.StatusUnauthorized, CodeUnauthorized
+			return nil
+		} else if err != nil {
+			return err
+		}
+		if status == http.StatusTooManyRequests {
+			return s.rateLimited(ctx, tx, src, v.rate, v.now)
 		}
 		digest := inbound.Digest(body)
-		ev, bodyCode := parseBody(body, row.Types)
+		ev, bodyCode := parseBody(body, v.types)
 		typ := ev.Type
 		if bodyCode != "" {
 			typ = "invalid"
@@ -209,47 +273,24 @@ func (s *Service) receive(ctx context.Context, h *Receiver, org ids.OrgID, src i
 			Object: &audit.Object{Type: "automation_event_source", ID: src.String()},
 			Details: map[string]string{
 				"source": src.String(), "type": ev.Type, "webhook_id": hdr.ID, "digest": hex.EncodeToString(digest[:]),
-				"generation": which,
+				"generation": v.which,
 			},
 		}); err != nil {
 			return err
 		}
 		_, err = s.triggers.FireInbound(ctx, tx, triggers.InboundEvent{
-			Source: src, Type: ev.Type, WebhookID: hdr.ID, Secret: which, Body: body, SentAt: time.Unix(hdr.Timestamp, 0).UTC(),
-			ReceivedAt: now,
+			Source: src, Type: ev.Type, WebhookID: hdr.ID, Secret: v.which, Body: body, SentAt: time.Unix(hdr.Timestamp, 0).UTC(),
+			ReceivedAt: v.now,
 		})
 		return err
 	})
-	if err != nil {
-		s.log.ErrorContext(ctx, "automations.inbound_failed", slog.String("source", src.String()), pclog.Err(err))
-		return http.StatusServiceUnavailable, CodeUnavailable
-	}
-	return status, code
+	return status, code, err
 }
 
-// sourceLimiter counts requests per source per minute against each
-// source's own rate (D21).
-type sourceLimiter struct {
-	mu     sync.Mutex
-	clock  clock.Clock
-	start  time.Time
-	counts map[ids.UUID]int
-}
-
-func newSourceLimiter(clk clock.Clock) *sourceLimiter {
-	return &sourceLimiter{clock: clk, counts: map[ids.UUID]int{}}
-}
-
-func (l *sourceLimiter) allow(src ids.UUID, limit int) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	now := l.clock.Now()
-	if now.Sub(l.start) >= RateWindow || len(l.counts) >= 100_000 {
-		l.start, l.counts = now, map[ids.UUID]int{}
-	}
-	l.counts[src]++
-	return l.counts[src] <= limit
-}
+// scopeSource is the shared counter's scope of a source's own rate a
+// minute (D21): counted in PostgreSQL, so it holds across every replica
+// (G0 M13 D9, R-34, HR-376).
+const scopeSource = "automation.source"
 
 // FailureSourceRate is the owned failure of a source sending more than
 // its rate (one per source and hour, HR-278).

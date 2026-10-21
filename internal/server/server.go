@@ -368,6 +368,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			pool: pool, reg: reg, log: log, authority: svc, billing: bill,
 			auth: rpcauth.New(authn, procedurePermissions, nil,
 				rpcauth.WithRefusals(&rpcauth.AuditRefusals{Pool: pool, Log: log}),
+				cfg.APILimits(),
 				rpcauth.WithPlanGate(planGate(entsSvc, cfg.Billing.RequirePlan)),
 				rpcauth.WithBrowserSessions(sessions, log),
 				ui.accountSessions(web, sessions.PublicOrigin())),
@@ -501,6 +502,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		if evidenceJobs, err = registerAutomationAssuranceJobs(evidenceJobs, jreg, autos, bill, log); err != nil {
+			return err
+		}
+		if evidenceJobs, err = registerLimitsJobs(evidenceJobs, jreg, pool, log); err != nil {
 			return err
 		}
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {
@@ -744,6 +748,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerM11Protect(rs, d, autos)
 	authzen := registerAuthZEN(rs, d)
 	registerUITenancy(rs, d)
+	registerUsage(rs, d)
 	mux := http.NewServeMux()
 	edges.mount(mux)
 	automationTriggers.mount(mux)

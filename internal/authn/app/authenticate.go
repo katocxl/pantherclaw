@@ -139,7 +139,7 @@ func (a *Authenticator) apiKey(ctx context.Context, bearer string) (tapp.Caller,
 		}
 		c = tapp.Caller{
 			Subject:    td.Subject{Org: tok.Org(), Principal: p, Bindings: bs, Scopes: scopes},
-			Credential: tapp.CredAPIKey,
+			Credential: tapp.CredAPIKey, CredentialID: k.ID,
 		}
 		return nil
 	})
@@ -199,6 +199,8 @@ func (a *Authenticator) accessToken(ctx context.Context, bearer string) (tapp.Ca
 		}
 		if v.Principal.Kind == td.KindUser {
 			c.Session = v.Session
+		} else {
+			c.CredentialID = v.Session // the service account's key
 		}
 		return nil
 	})

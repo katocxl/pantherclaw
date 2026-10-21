@@ -430,6 +430,9 @@ func checkWith(kind string, with []byte, earlier map[string]bool) error {
 		if ui, ok := uiStepKinds[kind]; ok {
 			return ui(strict)
 		}
+		if m13, ok := m13StepKinds[kind]; ok {
+			return m13(strict)
+		}
 		return fmt.Errorf("unknown step kind %q", kind)
 	}
 	return nil

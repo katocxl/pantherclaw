@@ -467,6 +467,7 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.TriggerService/RotateEventSourceSecret":               entitlements.ClassChange,
 	"/pantherclaw.v1.TriggerService/SetAutomationDestinationState":         entitlements.ClassChange,
 	"/pantherclaw.v1.TriggerService/StartExecution":                        entitlements.ClassChange,
+	"/pantherclaw.v1.UsageService/ListUsage":                               entitlements.ClassRead,
 	"/pantherclaw.v1.WaitlistService/AssignWaitlistEntry":                  entitlements.ClassChange,
 	"/pantherclaw.v1.WaitlistService/DismissAccessRequest":                 entitlements.ClassSafety,
 	"/pantherclaw.v1.WaitlistService/GetEscalationChain":                   entitlements.ClassRead,
