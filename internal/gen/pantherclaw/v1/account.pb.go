@@ -988,6 +988,80 @@ func (*RemoveUserKeyResponse) Descriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_account_proto_rawDescGZIP(), []int{15}
 }
 
+// DeleteAccountRequest is empty: it deletes the caller's own account.
+type DeleteAccountRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteAccountRequest) Reset() {
+	*x = DeleteAccountRequest{}
+	mi := &file_pantherclaw_v1_account_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteAccountRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteAccountRequest) ProtoMessage() {}
+
+func (x *DeleteAccountRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_account_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteAccountRequest.ProtoReflect.Descriptor instead.
+func (*DeleteAccountRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_account_proto_rawDescGZIP(), []int{16}
+}
+
+// DeleteAccountResponse is empty.
+type DeleteAccountResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteAccountResponse) Reset() {
+	*x = DeleteAccountResponse{}
+	mi := &file_pantherclaw_v1_account_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteAccountResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteAccountResponse) ProtoMessage() {}
+
+func (x *DeleteAccountResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_account_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteAccountResponse.ProtoReflect.Descriptor instead.
+func (*DeleteAccountResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_account_proto_rawDescGZIP(), []int{17}
+}
+
 var File_pantherclaw_v1_account_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_account_proto_rawDesc = "" +
@@ -1043,7 +1117,9 @@ const file_pantherclaw_v1_account_proto_rawDesc = "" +
 	"\x14RemoveUserKeyRequest\x12!\n" +
 	"\auser_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06userId\x12\x1f\n" +
 	"\x06key_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x05keyId\"\x17\n" +
-	"\x15RemoveUserKeyResponse*[\n" +
+	"\x15RemoveUserKeyResponse\"\x16\n" +
+	"\x14DeleteAccountRequest\"\x17\n" +
+	"\x15DeleteAccountResponse*[\n" +
 	"\vSessionKind\x12\x1c\n" +
 	"\x18SESSION_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14SESSION_KIND_BROWSER\x10\x01\x12\x14\n" +
@@ -1052,7 +1128,7 @@ const file_pantherclaw_v1_account_proto_rawDesc = "" +
 	"\x15KEY_STATE_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10KEY_STATE_ACTIVE\x10\x01\x12\x17\n" +
 	"\x13KEY_STATE_SUSPENDED\x10\x02\x12\x15\n" +
-	"\x11KEY_STATE_REMOVED\x10\x032\xcb\x05\n" +
+	"\x11KEY_STATE_REMOVED\x10\x032\xa9\x06\n" +
 	"\x0eAccountService\x12d\n" +
 	"\x0eListMySessions\x12%.pantherclaw.v1.ListMySessionsRequest\x1a&.pantherclaw.v1.ListMySessionsResponse\"\x03\x90\x02\x01\x12b\n" +
 	"\x0fRevokeMySession\x12&.pantherclaw.v1.RevokeMySessionRequest\x1a'.pantherclaw.v1.RevokeMySessionResponse\x12X\n" +
@@ -1061,7 +1137,8 @@ const file_pantherclaw_v1_account_proto_rawDesc = "" +
 	"\x10ListUserSessions\x12'.pantherclaw.v1.ListUserSessionsRequest\x1a(.pantherclaw.v1.ListUserSessionsResponse\"\x03\x90\x02\x01\x12^\n" +
 	"\fListUserKeys\x12#.pantherclaw.v1.ListUserKeysRequest\x1a$.pantherclaw.v1.ListUserKeysResponse\"\x03\x90\x02\x01\x12k\n" +
 	"\x12RevokeUserSessions\x12).pantherclaw.v1.RevokeUserSessionsRequest\x1a*.pantherclaw.v1.RevokeUserSessionsResponse\x12\\\n" +
-	"\rRemoveUserKey\x12$.pantherclaw.v1.RemoveUserKeyRequest\x1a%.pantherclaw.v1.RemoveUserKeyResponseB\xc5\x01\n" +
+	"\rRemoveUserKey\x12$.pantherclaw.v1.RemoveUserKeyRequest\x1a%.pantherclaw.v1.RemoveUserKeyResponse\x12\\\n" +
+	"\rDeleteAccount\x12$.pantherclaw.v1.DeleteAccountRequest\x1a%.pantherclaw.v1.DeleteAccountResponseB\xc5\x01\n" +
 	"\x12com.pantherclaw.v1B\fAccountProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -1077,7 +1154,7 @@ func file_pantherclaw_v1_account_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_account_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_pantherclaw_v1_account_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_pantherclaw_v1_account_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_pantherclaw_v1_account_proto_goTypes = []any{
 	(SessionKind)(0),                   // 0: pantherclaw.v1.SessionKind
 	(KeyState)(0),                      // 1: pantherclaw.v1.KeyState
@@ -1097,16 +1174,18 @@ var file_pantherclaw_v1_account_proto_goTypes = []any{
 	(*RevokeUserSessionsResponse)(nil), // 15: pantherclaw.v1.RevokeUserSessionsResponse
 	(*RemoveUserKeyRequest)(nil),       // 16: pantherclaw.v1.RemoveUserKeyRequest
 	(*RemoveUserKeyResponse)(nil),      // 17: pantherclaw.v1.RemoveUserKeyResponse
-	(*timestamppb.Timestamp)(nil),      // 18: google.protobuf.Timestamp
+	(*DeleteAccountRequest)(nil),       // 18: pantherclaw.v1.DeleteAccountRequest
+	(*DeleteAccountResponse)(nil),      // 19: pantherclaw.v1.DeleteAccountResponse
+	(*timestamppb.Timestamp)(nil),      // 20: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_account_proto_depIdxs = []int32{
 	0,  // 0: pantherclaw.v1.Session.kind:type_name -> pantherclaw.v1.SessionKind
-	18, // 1: pantherclaw.v1.Session.create_time:type_name -> google.protobuf.Timestamp
-	18, // 2: pantherclaw.v1.Session.last_seen_time:type_name -> google.protobuf.Timestamp
-	18, // 3: pantherclaw.v1.Session.expire_time:type_name -> google.protobuf.Timestamp
+	20, // 1: pantherclaw.v1.Session.create_time:type_name -> google.protobuf.Timestamp
+	20, // 2: pantherclaw.v1.Session.last_seen_time:type_name -> google.protobuf.Timestamp
+	20, // 3: pantherclaw.v1.Session.expire_time:type_name -> google.protobuf.Timestamp
 	1,  // 4: pantherclaw.v1.SecurityKey.state:type_name -> pantherclaw.v1.KeyState
-	18, // 5: pantherclaw.v1.SecurityKey.create_time:type_name -> google.protobuf.Timestamp
-	18, // 6: pantherclaw.v1.SecurityKey.last_use_time:type_name -> google.protobuf.Timestamp
+	20, // 5: pantherclaw.v1.SecurityKey.create_time:type_name -> google.protobuf.Timestamp
+	20, // 6: pantherclaw.v1.SecurityKey.last_use_time:type_name -> google.protobuf.Timestamp
 	2,  // 7: pantherclaw.v1.ListMySessionsResponse.sessions:type_name -> pantherclaw.v1.Session
 	3,  // 8: pantherclaw.v1.ListMyKeysResponse.keys:type_name -> pantherclaw.v1.SecurityKey
 	2,  // 9: pantherclaw.v1.ListUserSessionsResponse.sessions:type_name -> pantherclaw.v1.Session
@@ -1118,15 +1197,17 @@ var file_pantherclaw_v1_account_proto_depIdxs = []int32{
 	12, // 15: pantherclaw.v1.AccountService.ListUserKeys:input_type -> pantherclaw.v1.ListUserKeysRequest
 	14, // 16: pantherclaw.v1.AccountService.RevokeUserSessions:input_type -> pantherclaw.v1.RevokeUserSessionsRequest
 	16, // 17: pantherclaw.v1.AccountService.RemoveUserKey:input_type -> pantherclaw.v1.RemoveUserKeyRequest
-	5,  // 18: pantherclaw.v1.AccountService.ListMySessions:output_type -> pantherclaw.v1.ListMySessionsResponse
-	7,  // 19: pantherclaw.v1.AccountService.RevokeMySession:output_type -> pantherclaw.v1.RevokeMySessionResponse
-	9,  // 20: pantherclaw.v1.AccountService.ListMyKeys:output_type -> pantherclaw.v1.ListMyKeysResponse
-	11, // 21: pantherclaw.v1.AccountService.ListUserSessions:output_type -> pantherclaw.v1.ListUserSessionsResponse
-	13, // 22: pantherclaw.v1.AccountService.ListUserKeys:output_type -> pantherclaw.v1.ListUserKeysResponse
-	15, // 23: pantherclaw.v1.AccountService.RevokeUserSessions:output_type -> pantherclaw.v1.RevokeUserSessionsResponse
-	17, // 24: pantherclaw.v1.AccountService.RemoveUserKey:output_type -> pantherclaw.v1.RemoveUserKeyResponse
-	18, // [18:25] is the sub-list for method output_type
-	11, // [11:18] is the sub-list for method input_type
+	18, // 18: pantherclaw.v1.AccountService.DeleteAccount:input_type -> pantherclaw.v1.DeleteAccountRequest
+	5,  // 19: pantherclaw.v1.AccountService.ListMySessions:output_type -> pantherclaw.v1.ListMySessionsResponse
+	7,  // 20: pantherclaw.v1.AccountService.RevokeMySession:output_type -> pantherclaw.v1.RevokeMySessionResponse
+	9,  // 21: pantherclaw.v1.AccountService.ListMyKeys:output_type -> pantherclaw.v1.ListMyKeysResponse
+	11, // 22: pantherclaw.v1.AccountService.ListUserSessions:output_type -> pantherclaw.v1.ListUserSessionsResponse
+	13, // 23: pantherclaw.v1.AccountService.ListUserKeys:output_type -> pantherclaw.v1.ListUserKeysResponse
+	15, // 24: pantherclaw.v1.AccountService.RevokeUserSessions:output_type -> pantherclaw.v1.RevokeUserSessionsResponse
+	17, // 25: pantherclaw.v1.AccountService.RemoveUserKey:output_type -> pantherclaw.v1.RemoveUserKeyResponse
+	19, // 26: pantherclaw.v1.AccountService.DeleteAccount:output_type -> pantherclaw.v1.DeleteAccountResponse
+	19, // [19:27] is the sub-list for method output_type
+	11, // [11:19] is the sub-list for method input_type
 	11, // [11:11] is the sub-list for extension type_name
 	11, // [11:11] is the sub-list for extension extendee
 	0,  // [0:11] is the sub-list for field type_name
@@ -1143,7 +1224,7 @@ func file_pantherclaw_v1_account_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_account_proto_rawDesc), len(file_pantherclaw_v1_account_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   16,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

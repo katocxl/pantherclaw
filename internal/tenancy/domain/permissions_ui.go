@@ -36,7 +36,7 @@ const (
 var uiCatalog = []Permission{PermEntitlementsRead, PermOnboardingRead, PermBillingManage}
 
 // accountOnly are the account-session requirements (declarable only).
-var accountOnly = []Permission{PermOrgsCreate, PermOrgsListMine, PermInvitationsAccept}
+var accountOnly = append([]Permission{PermOrgsCreate, PermOrgsListMine, PermInvitationsAccept}, m13DataAccountOnly...)
 
 // The UI phase's grants (D35): every role a person holds reads the org's
 // plan; the roles that run onboarding also read its progress. Service-only

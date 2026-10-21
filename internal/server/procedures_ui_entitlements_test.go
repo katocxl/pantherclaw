@@ -16,7 +16,8 @@ import (
 // gateway and workload procedures (HR-357: protection never depends on the
 // plan) and the account procedures.
 func gateExempt(p td.Permission) bool {
-	exempt := []td.Permission{td.PermPublic, td.PermOrgsCreate, td.PermOrgsListMine, td.PermInvitationsAccept, td.PermGatewayEnroll}
+	exempt := []td.Permission{td.PermPublic, td.PermOrgsCreate, td.PermOrgsListMine, td.PermInvitationsAccept, td.PermGatewayEnroll,
+		td.PermAccountDelete, td.PermDeletionRecordsRead}
 	return slices.Contains(exempt, p) || p.Gateway() || p.Workload()
 }
 
