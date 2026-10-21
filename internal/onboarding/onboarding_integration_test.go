@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -78,11 +79,24 @@ func (f *fixture) agent(t *testing.T, w world, simulated bool, decisions ...stri
 	f.exec(t, w.org, `INSERT INTO pc.runs (org_id, id, agent_id, instance_id, environment_id, principal_source, expires_at, simulated,
 		launcher_user_id, principal_user_id)
 		VALUES ($1, $2, $3, $4, $5, 'launcher', now() + interval '1 hour', $6, $7, $7)`, w.org, run, agent, inst, w.env, simulated, w.user)
+	grant := ids.NewV7()
+	f.exec(t, w.org, `INSERT INTO pc.grants (org_id, id, agent_id, principal_user_id, environment_id, depth, current_revision, grantor_kind,
+		grantor_id, basis) VALUES ($1, $2, $3, $4, $5, 0, 1, 'user', $4, 'test')`, w.org, grant, agent, w.user, w.env)
 	for i, d := range decisions {
 		h := sha256.Sum256([]byte(fmt.Sprintf("%s-%d", run, i)))
+		txn := ids.NewV7()
 		f.exec(t, w.org, `INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code,
-			gateway_id, simulated) VALUES ($1, $2, $3, $4, $5, 'test.op', $6, 'TEST', 'gw', $7)`,
-			w.org, ids.NewV7(), run, ids.NewV7(), h[:], d, simulated)
+			gateway_id, simulated, state) VALUES ($1, $2, $3, $4, $5, 'test.op', $6, 'TEST', 'gw', $7, 'OPEN')`,
+			w.org, txn, run, ids.NewV7(), h[:], d, simulated)
+		if d == "REQUIRE_APPROVAL" {
+			// A hold opens an approval request for the transaction.
+			b := sha256.Sum256(txn[:])
+			f.exec(t, w.org, `INSERT INTO pc.approval_requests (org_id, id, subject_kind, agent_id, transaction_id, evaluation, run_id,
+				grant_id, grant_revision, variant_key, operation, binding, binding_input, requirements, display, display_hash, action_ir,
+				deadline_at) VALUES ($1, $2, 'ACTION', $3, $4, 1, $5, $6, 1, $7, 'test.op', $7, '\x7b7d',
+				'[{"kind":"approval","role":"approver","count":1}]', '{}', $7, '\x7b7d', date_trunc('second', now()) + interval '1 hour')`,
+				w.org, ids.NewV7(), agent, txn, run, grant, b[:])
+		}
 	}
 	f.exec(t, w.org, `INSERT INTO pc.agent_changes (org_id, id, agent_id, kind, actor, reason) VALUES ($1, $2, $3, 'agent.suspended', 'test', 'test')`,
 		w.org, ids.NewV7(), agent)
@@ -125,7 +139,7 @@ func TestHR364_SimulatedRecordsNeverCompleteAStep(t *testing.T) {
 	for id, kinds := range map[onboarding.StepID][]string{
 		onboarding.StepAgentEnrolled: {"agent"}, onboarding.StepFirstDecision: {"decision"},
 		onboarding.StepTestAllowed: {"transaction"}, onboarding.StepTestDenied: {"transaction"},
-		onboarding.StepTestHeld: {"transaction"}, onboarding.StepSuspensionTested: {"suspension"},
+		onboarding.StepTestHeld: {"approval", "transaction"}, onboarding.StepSuspensionTested: {"suspension"},
 	} {
 		st := got[id]
 		if !st.Done() || len(st.Evidence) != len(kinds) || st.Evidence[0].Kind != kinds[0] {
@@ -235,5 +249,64 @@ func TestHR362_OnboardingCompletesWithoutTheFollowUpSteps(t *testing.T) {
 	}
 	if len(got[onboarding.StepTestHeld].Evidence) == 0 {
 		t.Error("TEST_HELD has no evidence once the hold is recorded")
+	}
+}
+
+// TestHR362_ADoneStepStaysDone (D98): what happens to a record afterwards
+// never takes its step back. The held action is approved and executed
+// (its transaction becomes an allowed, final one), the suspension revokes
+// the agent's instances and the person removes the security key: every
+// step stays done with the same evidence and onboarding stays complete.
+// SUSPENSION_TESTED is done on the suspension alone (D97(2)).
+func TestHR362_ADoneStepStaysDone(t *testing.T) {
+	f := &fixture{d: dbtest.New(t)}
+	f.pool = f.d.AppPool(t)
+	s := onboarding.New(f.pool)
+	w := f.world(t)
+	agent := f.agent(t, w, false, "ALLOW", "DENY", "REQUIRE_APPROVAL")
+	f.exec(t, w.org, `INSERT INTO pc.webauthn_credentials (org_id, id, user_id, credential_id, public_key, alg, backup_eligible,
+		backup_state, attestation_fmt, name) VALUES ($1, $2, $3, $4, $5, -7, false, false, 'none', 'key')`,
+		w.org, ids.NewV7(), w.user, []byte("cred-onboarding-stays-0123456789"), []byte("public-key-onboarding-stays-0123456789abcdefghij"))
+	gw := ids.NewV7()
+	f.exec(t, w.org, `INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'gw', 'test')`, w.org, gw)
+	f.exec(t, w.org, `INSERT INTO pc.gateway_certs (org_id, id, gateway_id, serial, key_thumbprint, issued_via, not_before, not_after)
+		VALUES ($1, $2, $3, '\x01', $4, 'ENROLL', now(), now() + interval '1 hour')`, w.org, ids.NewV7(), gw, strings.Repeat("k", 43))
+	before, err := s.GetProgress(w.ctx())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !before.Complete {
+		t.Fatalf("not complete before: %+v", before)
+	}
+
+	// Hold → approve → execute.
+	f.d.AdminExec(t, "UPDATE pc.approval_requests SET state = 'APPROVED', approved_at = now(), consume_by = now() + interval '30 minutes' WHERE org_id = $1 AND transaction_id IS NOT NULL", w.org)
+	f.d.AdminExec(t, "UPDATE pc.transactions SET decision = 'ALLOW', state = 'FINAL' WHERE org_id = $1 AND decision = 'REQUIRE_APPROVAL'", w.org)
+	// A suspension revokes the agent's instances; the key is removed.
+	f.d.AdminExec(t, "UPDATE pc.agent_instances SET state = 'REVOKED', revoke_reason = 'suspended' WHERE org_id = $1 AND agent_id = $2", w.org, agent)
+	f.d.AdminExec(t, "UPDATE pc.webauthn_credentials SET state = 'REMOVED', state_reason = 'USER_REMOVED', changed_at = now(), changed_by = 'test' WHERE org_id = $1", w.org)
+
+	after, err := s.GetProgress(w.ctx())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after.Complete {
+		t.Errorf("complete went back: %+v", after)
+	}
+	for i, st := range before.Steps {
+		got := after.Steps[i]
+		if st.Done() != got.Done() || !slices.Equal(st.Evidence, got.Evidence) {
+			t.Errorf("%s changed: %+v, then %+v", st.ID, st, got)
+		}
+	}
+
+	// The suspension alone completes SUSPENSION_TESTED.
+	other := f.world(t)
+	lone := ids.NewV7()
+	f.exec(t, other.org, `INSERT INTO pc.agents (org_id, id, name, state, created_by) VALUES ($1, $2, 'lone', 'DISCOVERED', 'test')`, other.org, lone)
+	f.exec(t, other.org, `INSERT INTO pc.agent_changes (org_id, id, agent_id, kind, actor, reason) VALUES ($1, $2, $3, 'agent.suspended', 'test', 'test')`,
+		other.org, ids.NewV7(), lone)
+	if st := progress(t, s, other)[onboarding.StepSuspensionTested]; !st.Done() || st.Evidence[0].Kind != onboarding.KindSuspension {
+		t.Errorf("a suspension without a restore: %+v", st)
 	}
 }
