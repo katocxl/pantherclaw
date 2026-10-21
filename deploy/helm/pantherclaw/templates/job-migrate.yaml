@@ -1,0 +1,79 @@
+{{/*
+SPDX-License-Identifier: BUSL-1.1
+Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+`migrate up` before every install and upgrade, as pc_migrator: the only
+workload that gets the migrator's password (D25 H2). Hooks run before the
+chart's other resources exist, so its configuration is a hook too.
+*/}}
+{{- $keys := list (dict "volume" "migrator" "key" "migrator-password" "as" "migrator-password") (dict "volume" "database-ca" "key" "ca.crt" "as" "ca.crt") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "pantherclaw.fullname" . }}-migrate
+  labels:
+    {{- include "pantherclaw.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-10"
+    helm.sh/hook-delete-policy: before-hook-creation
+data:
+  server.json: |
+    {{- include "pantherclaw.serverConfig" (dict "root" . "role" "migrate") | nindent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "pantherclaw.fullname" . }}-migrate
+  labels:
+    {{- include "pantherclaw.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels:
+        {{- include "pantherclaw.labels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        {{- include "pantherclaw.stageSecrets" (dict "root" . "keys" $keys) | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ include "pantherclaw.serverImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["migrate", "up", "--config", "/etc/pantherclaw/server.json"]
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/pantherclaw/server.json
+              subPath: server.json
+              readOnly: true
+            - name: secrets
+              mountPath: /etc/pantherclaw/secrets
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "pantherclaw.fullname" . }}-migrate
+        - name: secrets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: migrator
+          secret:
+            secretName: {{ .Values.database.migratorExistingSecret }}
+        - name: database-ca
+          secret:
+            secretName: {{ .Values.database.caExistingSecret }}

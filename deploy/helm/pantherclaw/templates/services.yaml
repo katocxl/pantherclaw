@@ -1,0 +1,51 @@
+{{/*
+SPDX-License-Identifier: BUSL-1.1
+Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+*/}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "pantherclaw.fullname" . }}
+  labels:
+    {{- include "pantherclaw.labels" . | nindent 4 }}
+automountServiceAccountToken: false
+---
+# The API and the console, for an ingress (or with api.tls, directly).
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pantherclaw.fullname" . }}-api
+  labels:
+    {{- include "pantherclaw.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  type: {{ .Values.api.service.type }}
+  selector:
+    {{- include "pantherclaw.selector" (dict "root" . "component" "api") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.api.service.port }}
+      targetPort: http
+---
+# The server's gateway listener: TCP passed through to the API pods, which
+# terminate the mutual TLS themselves (never terminate it at a proxy).
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pantherclaw.fullname" . }}-gateway-api
+  labels:
+    {{- include "pantherclaw.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+  {{- with .Values.gatewayAPI.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.gatewayAPI.service.type }}
+  selector:
+    {{- include "pantherclaw.selector" (dict "root" . "component" "api") | nindent 4 }}
+  ports:
+    - name: gateway-api
+      port: {{ .Values.gatewayAPI.port }}
+      targetPort: gateway-api
+      protocol: TCP

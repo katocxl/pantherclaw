@@ -134,6 +134,8 @@ jobs:
         run: $TASK lint
       - name: Migrations (squawk, pinned binary checked against its SHA-256)
         run: $TASK lint:migrations
+      - name: Helm chart (helm lint, helm template | kubeconform; pinned tools)
+        run: $TASK helm:check
       - name: Protobuf breaking changes against main (buf breaking)
         run: $TASK proto:breaking
 

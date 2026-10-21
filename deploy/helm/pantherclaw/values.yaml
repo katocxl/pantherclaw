@@ -1,0 +1,124 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# PantherClaw on Kubernetes (G0 M13 D36, D42). Secrets are never values:
+# create the Secrets first and name them here. Install:
+#
+#   helm install pantherclaw deploy/helm/pantherclaw -f my-values.yaml
+#
+# Before the first install, create the database roles once with
+# `pantherclaw-server db bootstrap` (docs/runbooks); every install and
+# upgrade then runs `migrate up` as a hook Job.
+
+image:
+  server:
+    repository: ghcr.io/katocxl/pantherclaw-server
+    # Pin the digest from the release notes; it wins over the tag.
+    digest: ""
+    tag: ""  # default: the chart's appVersion
+  pullPolicy: IfNotPresent
+
+# development, staging or production.
+deployment: production
+
+# The operator's maintenance hold (G0 M13 D26, HR-379): while true, no
+# decision is made from any path. It is set on every API and worker replica
+# (each process holds on its own; platform-3 review L1).
+maintenanceHold: false
+
+# The server's external base URL (https). Replace the example.
+publicURL: https://pantherclaw.example.com
+
+logLevel: info
+
+api:
+  replicas: 2
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 1Gi}
+  service:
+    type: ClusterIP
+    port: 8080
+  # TLS on the API listener from a kubernetes.io/tls Secret. Without it the
+  # listener is plain HTTP for a TLS-terminating ingress or mesh
+  # (http.plaintext_behind_proxy); name the proxies' addresses below.
+  tls:
+    existingSecret: ""
+  trustedProxies: []
+
+worker:
+  replicas: 1
+  concurrency: 10
+  # The worker's health listener (health.addr, HR-397): /livez and /readyz only.
+  healthPort: 8081
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 1Gi}
+
+# The server's gateway listener (mutual TLS with its internal CA). The
+# Service passes TCP through: gateways present their certificates to the
+# server itself, never to a load balancer.
+gatewayAPI:
+  # DNS names gateways use; the first one forms the URL. Replace the example.
+  hostnames: [pantherclaw-gateway.example.com]
+  port: 8443
+  service:
+    type: LoadBalancer
+    annotations: {}
+
+database:
+  host: postgres.example.internal
+  port: 5432
+  name: pantherclaw
+  sslmode: verify-full
+  maxConns: 20
+  # Secret with the keys app-password and retention-password.
+  existingSecret: pantherclaw-database
+  # Secret with the key migrator-password, mounted only into the migrate Job.
+  migratorExistingSecret: pantherclaw-database-migrator
+  # Secret with the key ca.crt: the CA of the database's certificate.
+  caExistingSecret: pantherclaw-database-ca
+
+# Secret with the key kek (pantherclaw-server keys gen-kek --out kek).
+kek:
+  existingSecret: pantherclaw-kek
+
+# People sign in through your OpenID provider(s).
+oidc:
+  providers: []
+  # - name: sso
+  #   issuer: https://idp.example.com
+  #   clientID: pantherclaw
+  #   existingSecret: pantherclaw-oidc   # key client-secret
+
+networkPolicy:
+  enabled: true
+  # Where API (8080) and gateway (8443) clients come from; empty: anywhere.
+  apiFrom: []
+  gatewayFrom: []
+  # Outbound: DNS, the database, HTTPS (identity providers, notifications)
+  # and SMTP submission.
+  egressPorts: [443, 587]
+
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  runAsNonRoot: true
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

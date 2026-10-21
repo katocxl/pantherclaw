@@ -1,0 +1,17 @@
+{{/*
+SPDX-License-Identifier: BUSL-1.1
+Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+*/}}
+{{- range $role := list "api" "worker" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "pantherclaw.fullname" $ }}-{{ $role }}
+  labels:
+    {{- include "pantherclaw.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $role }}
+data:
+  server.json: |
+    {{- include "pantherclaw.serverConfig" (dict "root" $ "role" $role) | nindent 4 }}
+{{- end }}
