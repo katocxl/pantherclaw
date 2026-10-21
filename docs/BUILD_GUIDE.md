@@ -79,7 +79,7 @@ Rules for the AI implementer:
 ## 3. Engineering rules
 
 ### 3.1 Go conventions
-- Go toolchain pinned in `go.mod` (`toolchain go1.27.2`); `GOFLAGS=-mod=readonly`.
+- Go toolchain pinned in `go.mod` (`toolchain go1.27.3`); `GOFLAGS=-mod=readonly`.
 - Formatting: gofumpt (via golangci-lint formatters). Imports grouped std / third-party / local.
 - Packages are nouns (`grants`, `budgets`), no `util`/`common`/`helpers`.
 - **Context first** for anything doing I/O; never store contexts in structs.
@@ -145,7 +145,7 @@ Rules: tests first for security behavior; no sleeps (use clocks/conditions); no 
 
 ## 4. Development environment
 
-**Prerequisites:** Go 1.27 (toolchain auto-downloads 1.27.2), Docker Desktop (WSL2), optional Task (otherwise `go tool -modfile=tools/pins/task/go.mod task`), uv (M8), Node 24 + Corepack (pnpm pinned per package), Git with `core.autocrlf=false` for this repo.
+**Prerequisites:** Go 1.27 (toolchain auto-downloads 1.27.3), Docker Desktop (WSL2), optional Task (otherwise `go tool -modfile=tools/pins/task/go.mod task`), uv (M8), Node 24 + Corepack (pnpm pinned per package), Git with `core.autocrlf=false` for this repo.
 
 **Windows specifics:** LF line endings (`.gitattributes`); servers in tests bind `127.0.0.1`; race/integration/signal tests run in Linux via `task test:linux` (container) — CI is canonical; Postgres uses named volumes; file-permission checks are skipped on NTFS; Claude Code integration must cover both Bash and PowerShell tools.
 

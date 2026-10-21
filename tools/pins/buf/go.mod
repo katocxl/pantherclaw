@@ -2,7 +2,7 @@ module github.com/katocxl/pantherclaw/tools/pins/buf
 
 go 1.27
 
-toolchain go1.27.2
+toolchain go1.27.3
 
 tool (
 	connectrpc.com/connect/v2/cmd/protoc-gen-connect-go
