@@ -23,13 +23,18 @@ const SweepInterval = 15 * time.Second
 // maxDue bounds one org's sweep; the next sweep takes the rest.
 const maxDue = 500
 
-// unique keeps one queued job per args.
+// unique keeps one queued or running job per args. River requires the
+// available, pending, running and scheduled states in ByState, so a sweep's
+// wake is dropped while the execution's job runs (the next sweep wakes it
+// again if it is still due). A wake for an event (a start, a launch claimed
+// or completed) carries its own Wake id, so it is never dropped behind a
+// running job that may have read the state before the event.
 func unique() river.InsertOpts {
 	return river.InsertOpts{UniqueOpts: river.UniqueOpts{
 		ByArgs: true,
 		ByState: []rivertype.JobState{
 			rivertype.JobStateAvailable, rivertype.JobStatePending, rivertype.JobStateRetryable,
-			rivertype.JobStateScheduled,
+			rivertype.JobStateRunning, rivertype.JobStateScheduled,
 		},
 	}}
 }
@@ -40,11 +45,19 @@ type ExecutionKind struct{}
 // KindName implements ids.Kind.
 func (ExecutionKind) KindName() string { return "automation execution" }
 
+// WakeKind is the kind of one event wake's id in job arguments.
+type WakeKind struct{}
+
+// KindName implements ids.Kind.
+func (WakeKind) KindName() string { return "automation wake" }
+
 // ExecutionArgs asks for one execution to be advanced. Job args carry
 // typed ids only (HR-056).
 type ExecutionArgs struct {
 	Org       ids.OrgID             `json:"org"`
 	Execution ids.ID[ExecutionKind] `json:"execution"`
+	// Wake is set on a wake for an event (enqueue) and empty on a sweep's.
+	Wake ids.ID[WakeKind] `json:"wake,omitzero"`
 }
 
 // executionArgs is the job that advances execution id.
