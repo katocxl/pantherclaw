@@ -21,6 +21,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	"github.com/katocxl/pantherclaw/internal/signals/setverify"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -141,6 +142,7 @@ func (h *Receiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tooMany := func() {
+		telemetry.RateLimited(r.Context(), telemetry.ScopeSignals)
 		w.Header().Set("Retry-After", "60")
 		writeError(w, http.StatusTooManyRequests, setverify.CodeInvalidRequest, "too many requests")
 	}

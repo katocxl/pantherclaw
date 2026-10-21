@@ -16,6 +16,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
@@ -191,6 +192,9 @@ func (s *Signup) CreateOrg(ctx context.Context, in NewOrg) (CreatedOrg, error) {
 		return CreatedOrg{}, err
 	}
 	if refusal != nil {
+		if errors.Is(refusal, ErrRateLimited) {
+			telemetry.RateLimited(ctx, telemetry.ScopeSignup)
+		}
 		var pe *pcerr.Error
 		reason := "refused"
 		if errors.As(refusal, &pe) {

@@ -52,6 +52,10 @@ type Config struct {
 	// neither superuser nor BYPASSRLS. Set it for the application pool so a
 	// misconfigured DSN fails closed instead of silently bypassing RLS.
 	RequireUnprivileged bool
+
+	// Tracer, when set, traces every query (telemetry.QueryTracer: spans
+	// named by the sqlc query name only, G0 M13 D30).
+	Tracer pgx.QueryTracer
 }
 
 // Defaults returns a Config with PantherClaw's default limits.
@@ -158,6 +162,7 @@ func (c Config) poolConfig() (*pgxpool.Config, error) {
 		"application_name":                    c.ApplicationName,
 		"row_security":                        "on",
 	}
+	pc.ConnConfig.Tracer = c.Tracer
 	want := c
 	pc.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error { return verifySession(ctx, conn, want) }
 	pc.AfterRelease = func(conn *pgx.Conn) bool {

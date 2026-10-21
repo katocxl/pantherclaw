@@ -28,6 +28,7 @@ import (
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 )
 
 //go:embed templates/*.html
@@ -87,6 +88,7 @@ func (h *Handler) Mount(mux *http.ServeMux, token *oauthhttp.Handler) {
 func (h *Handler) limited(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !h.limiter.AllowRequest(r) {
+			telemetry.RateLimited(r.Context(), telemetry.ScopeSignIn)
 			http.Error(w, "too many requests", http.StatusTooManyRequests)
 			return
 		}

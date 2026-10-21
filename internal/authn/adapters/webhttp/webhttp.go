@@ -36,6 +36,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 )
 
 //go:embed templates/*.html
@@ -207,6 +208,7 @@ func (h *Handler) limited(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pageHeaders(w)
 		if h.limiter != nil && !h.limiter.AllowRequest(r) {
+			telemetry.RateLimited(r.Context(), telemetry.ScopeSignIn)
 			http.Error(w, "too many requests", http.StatusTooManyRequests)
 			return
 		}

@@ -19,6 +19,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 )
 
@@ -162,6 +163,7 @@ func mountRoute(mux *http.ServeMux, r extension.Route, web *webhttp.Handler, lim
 	case extension.AuthNone:
 		mux.Handle(r.Pattern, http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			if !limiter.AllowRequest(req) {
+				telemetry.RateLimited(req.Context(), telemetry.ScopeConsoleWeb)
 				http.Error(w, "too many requests", http.StatusTooManyRequests)
 				return
 			}

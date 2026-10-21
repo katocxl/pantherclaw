@@ -5,11 +5,23 @@
 version: v2
 modules:
   - path: proto
+    excludes:
+      - proto/third_party
+    lint:
+      use:
+        - STANDARD
+    breaking:
+      use:
+        - FILE
+  # The OTLP message files, vendored unchanged from opentelemetry-proto
+  # (Apache-2.0, proto/third_party/otlp/SOURCE): messages only, for our own
+  # OTLP/HTTP exporter (G0 M13 D30). Upstream's style is not ours to lint.
+  - path: proto/third_party/otlp
+    lint:
+      use:
+        - MINIMAL
+    breaking:
+      use:
+        - WIRE
 deps:
   - buf.build/bufbuild/protovalidate
-lint:
-  use:
-    - STANDARD
-breaking:
-  use:
-    - FILE

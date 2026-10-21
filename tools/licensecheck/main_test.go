@@ -54,6 +54,8 @@ func TestCheckReportsAndFixes(t *testing.T) {
 	write(t, root, "README.md", "no header needed\n")
 	write(t, root, "testdata/fixture.go", "package fixture\n")
 	write(t, root, "tools/pins/x/x.go", "package x\n")
+	write(t, root, "proto/third_party/otlp/x.proto", "// Copyright The OpenTelemetry Authors\nsyntax = \"proto3\";\n")
+	write(t, root, "internal/gen/opentelemetry/x/x.pb.go", "package x\n")
 
 	problems, fixed, err := Check(os.DirFS(root), root, false)
 	if err != nil {

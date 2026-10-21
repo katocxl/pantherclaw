@@ -204,6 +204,32 @@ func NewClient(pool *db.Pool, reg *Registry, cfg Config) (*Client, error) {
 	return c, nil
 }
 
+// ObserveOutcomes calls record with the kind of each job a worker of c
+// worked and the state its attempt ended in (completed, retryable,
+// discarded, cancelled, scheduled), until ctx ends (the pc_river_jobs_total
+// metric, G0 M13 D30). River drops events rather than wait for a slow
+// subscriber, so a worker is never held up.
+func ObserveOutcomes(ctx context.Context, c *Client, record func(ctx context.Context, kind, state string)) {
+	events, cancel := c.Subscribe(river.EventKindJobCompleted, river.EventKindJobFailed,
+		river.EventKindJobCancelled, river.EventKindJobSnoozed)
+	go func() {
+		defer cancel()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case e, ok := <-events:
+				if !ok {
+					return
+				}
+				if e != nil && e.Job != nil {
+					record(ctx, e.Job.Kind, string(e.Job.State))
+				}
+			}
+		}
+	}()
+}
+
 // InsertTx enqueues a job in the tenant transaction tx (transactional
 // outbox): the job is visible only if the transaction commits.
 func InsertTx(ctx context.Context, c *Client, tx db.TenantTx, args river.JobArgs, opts *river.InsertOpts) error {

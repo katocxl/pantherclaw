@@ -17,6 +17,7 @@ import (
 	approvals "github.com/katocxl/pantherclaw/internal/approvals/app"
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 )
 
 // WaitPath is the SSE route of wait handles (G0 M5 part 2, HR-174):
@@ -107,6 +108,7 @@ func (s *Workload) WaitStream(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, approvals.ErrNoWait):
 		http.NotFound(w, r)
 	case errors.Is(err, approvals.ErrTooManyWaits):
+		telemetry.RateLimited(r.Context(), telemetry.ScopeWait)
 		w.Header().Set("Retry-After", strconv.Itoa(int(approvals.RetryAfter/time.Second)))
 		http.Error(w, "too many waits", http.StatusTooManyRequests)
 	default:

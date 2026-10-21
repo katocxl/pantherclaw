@@ -74,6 +74,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/platform/rpc"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	"github.com/katocxl/pantherclaw/internal/platform/version"
 	"github.com/katocxl/pantherclaw/internal/runs/adapters/runsrpc"
 	"github.com/katocxl/pantherclaw/internal/tenancy/adapters/tenancyrpc"
@@ -195,7 +196,12 @@ func loadConfig(args []string, stderr io.Writer, env Env, name string) (*Config,
 
 func newLogger(cfg *Config, w io.Writer) *slog.Logger {
 	level, _ := pclog.ParseLevel(cfg.Log.Level)
-	return pclog.New(w, pclog.Options{Service: "pantherclaw-server", Version: version.Get().Version, Level: level})
+	return pclog.New(w, pclog.Options{
+		Service: "pantherclaw-server", Version: version.Get().Version, Level: level,
+		// Records written inside a traced request carry its trace and span
+		// ids (G0 M13 D30).
+		ContextAttrs: []func(context.Context) []slog.Attr{telemetry.LogAttrs},
+	})
 }
 
 // started reports the bound API address to tests (nil in production).
@@ -230,15 +236,25 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err := validateExtension(ext, xdeps); err != nil {
 		return err
 	}
+	tel, err := startTelemetry(cfg, log)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownGrace)
+		defer cancel()
+		_ = tel.Shutdown(sctx)
+	}()
 	appCfg, err := cfg.dbConfig(cfg.DB.AppUser, cfg.DB.AppPasswordFile, cfg.DB.MaxConns)
 	if err != nil {
 		return err
 	}
-	pool, err := db.Open(ctx, appCfg)
+	pool, err := db.Open(ctx, withQueryTracer(appCfg, tel))
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
+	observePool(pool)
 	if err := checkSchemaAtStart(ctx, cfg, pool, log); err != nil {
 		return err
 	}
@@ -315,6 +331,10 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	m6.scans = agentsrpc.NewGatewayScans(aapp.NewInventory(pool, bill))
 
 	g, ctx := errgroup.WithContext(ctx)
+	// The private admin listener, in every role (HR-382).
+	if err := serveAdmin(ctx, g, cfg, tel, log); err != nil {
+		return err
+	}
 	// apiAddr is the bound API address (role api or all).
 	var apiAddr string
 	// autos is the one M11 part 2 core of this process: the API and the
@@ -565,6 +585,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		client.PeriodicJobs().AddMany(evidenceJobs)
+		observeJobs(ctx, client)
 		if err := client.Start(ctx); err != nil {
 			return fmt.Errorf("server: start workers: %w", err)
 		}

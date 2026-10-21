@@ -74,6 +74,10 @@ type Config struct {
 	// (G0 UI D8, D9, D12; config_ui_tenancy.go).
 	Billing BillingConfig `json:"billing"`
 	Signup  SignupConfig  `json:"signup"`
+	// Telemetry and Admin are the OTLP exporter and the private admin
+	// listener (G0 M13 D30; wiring_m13_observability.go).
+	Telemetry TelemetryConfig `json:"telemetry"`
+	Admin     AdminConfig     `json:"admin"`
 }
 
 // IdentityConfig configures workload identity (M3).
@@ -150,8 +154,9 @@ func DefaultConfig() Config {
 			Concurrency: 5,
 			SMTP:        SMTPConfig{Port: 587, TLS: "starttls"},
 		},
-		Waitlist: defaultWaitlist(),
-		CEL:      celenv.DefaultLimits,
+		Waitlist:  defaultWaitlist(),
+		CEL:       celenv.DefaultLimits,
+		Telemetry: defaultTelemetry(),
 	}
 }
 
@@ -197,6 +202,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateGateways()...)
 	errs = append(errs, c.validateDev()...)
 	errs = append(errs, c.validateDevSlack()...)
+	errs = append(errs, c.validateObservability()...)
 	if err := c.CEL.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("cel: %w", err))
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 )
 
 // External decisions (G0 M14 D28; PN-023, ADR-0019; HR-319, HR-320): an
@@ -103,8 +104,17 @@ type ExternalResult struct {
 	Monitor bool
 }
 
-// Decide decides one action an enforcement point asks about.
+// Decide decides one action an enforcement point asks about. Every
+// decision is counted by its outcome (pc_decisions_total, G0 M13 D30).
 func (s *Service) Decide(ctx context.Context, req ExternalRequest) (ExternalResult, error) {
+	res, err := s.decide(ctx, req)
+	if err == nil {
+		telemetry.Decision(ctx, string(res.Decision))
+	}
+	return res, err
+}
+
+func (s *Service) decide(ctx context.Context, req ExternalRequest) (ExternalResult, error) {
 	if s.held {
 		return ExternalResult{}, ErrMaintenanceHold
 	}

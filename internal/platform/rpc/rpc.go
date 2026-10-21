@@ -40,6 +40,7 @@ import (
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 )
 
 // Limits on message sizes.
@@ -129,7 +130,7 @@ func observeInterceptor(log *slog.Logger) connect.ServerInterceptor {
 		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
 			start := time.Now()
 			ctx, span := tracer.Start(ctx, strings.TrimPrefix(spec.Procedure, "/"),
-				trace.WithSpanKind(trace.SpanKindServer), trace.WithAttributes(attribute.String("rpc.system", "connect")))
+				trace.WithSpanKind(trace.SpanKindServer), trace.WithAttributes(attribute.String(telemetry.KeyProcedure, spec.Procedure)))
 			defer span.End()
 			err := next(ctx, spec, stream)
 			code := "ok"
@@ -141,7 +142,8 @@ func observeInterceptor(log *slog.Logger) connect.ServerInterceptor {
 					level = slog.LevelError
 				}
 			}
-			span.SetAttributes(attribute.String("rpc.connect.code", code))
+			span.SetAttributes(attribute.String(telemetry.KeyCode, code))
+			telemetry.RPC(ctx, spec.Procedure, code, time.Since(start))
 			log.Log(ctx, level, "rpc.call", slog.String(pclog.KeyOutcome, code),
 				slog.Int64("duration_ms", time.Since(start).Milliseconds()))
 			return err

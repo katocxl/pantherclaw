@@ -135,6 +135,12 @@ func setFromString(fv reflect.Value, raw string) error {
 			return errors.New("not an integer")
 		}
 		fv.SetInt(n)
+	case reflect.Float64:
+		f, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			return errors.New("not a number")
+		}
+		fv.SetFloat(f)
 	case reflect.Slice:
 		if fv.Type().Elem().Kind() != reflect.String {
 			return fmt.Errorf("unsupported slice type %s", fv.Type())

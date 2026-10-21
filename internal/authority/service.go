@@ -27,6 +27,7 @@ import (
 	iapp "github.com/katocxl/pantherclaw/internal/identity/app"
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 )
 
@@ -108,7 +109,17 @@ type Result struct {
 
 // Authorize decides on raw canonical ActionIR bytes sent with the
 // workload's PAP/1 credentials; without them it is CANNOT_AUTHORIZE.
+// Every decision is counted by its outcome (pc_decisions_total, G0 M13
+// D30).
 func (s *Service) Authorize(ctx context.Context, gw Gateway, raw []byte, creds *Credentials, findings ...pipeline.PayloadFinding) (Result, error) {
+	res, err := s.authorize(ctx, gw, raw, creds, findings...)
+	if err == nil {
+		telemetry.Decision(ctx, string(res.Decision))
+	}
+	return res, err
+}
+
+func (s *Service) authorize(ctx context.Context, gw Gateway, raw []byte, creds *Credentials, findings ...pipeline.PayloadFinding) (Result, error) {
 	if s.held {
 		return Result{}, ErrMaintenanceHold
 	}

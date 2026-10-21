@@ -23,6 +23,7 @@ type dbConfig struct {
 type testConfig struct {
 	Role    string   `json:"role" env:"PC_TEST_ROLE"`
 	Debug   bool     `json:"debug" env:"PC_TEST_DEBUG"`
+	Ratio   float64  `json:"ratio" env:"PC_TEST_RATIO"`
 	Origins []string `json:"origins" env:"PC_TEST_ORIGINS"`
 	DB      dbConfig `json:"db"`
 }
@@ -55,10 +56,13 @@ func TestPrecedenceDefaultsFileEnv(t *testing.T) {
 	path := writeFile(t, "c.json", `{"role":"worker","db":{"host":"db.internal","timeout":"10s"}}`, 0o600)
 	cfg := defaults()
 	err := Load(&cfg, path, envMap(map[string]string{
-		"PC_TEST_DB_PORT": "6543", "PC_TEST_DEBUG": "true", "PC_TEST_ORIGINS": "a, b,,c",
+		"PC_TEST_DB_PORT": "6543", "PC_TEST_DEBUG": "true", "PC_TEST_ORIGINS": "a, b,,c", "PC_TEST_RATIO": "0.25",
 	}))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if cfg.Ratio != 0.25 {
+		t.Fatalf("ratio = %v", cfg.Ratio)
 	}
 	if cfg.Role != "worker" || cfg.DB.Host != "db.internal" || cfg.DB.Port != 6543 || !cfg.Debug {
 		t.Fatalf("unexpected config %+v", cfg)
@@ -92,6 +96,7 @@ func TestEnvErrors(t *testing.T) {
 		"PC_TEST_DB_PORT":    "54x",
 		"PC_TEST_DEBUG":      "yes please",
 		"PC_TEST_DB_TIMEOUT": "5",
+		"PC_TEST_RATIO":      "a tenth",
 	} {
 		cfg := defaults()
 		err := Load(&cfg, "", envMap(map[string]string{k: v}))

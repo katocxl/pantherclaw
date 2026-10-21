@@ -43,6 +43,11 @@ var skipDirs = map[string]bool{
 	".claude": true, // local agent worktrees and settings, never repository code
 }
 
+// thirdPartyDirs hold third-party files vendored unchanged with their own
+// LICENSE (see NOTICE), and the code generated from them: they keep their
+// upstream headers and get none of ours.
+var thirdPartyDirs = []string{"proto/third_party", "internal/gen/opentelemetry"}
+
 // commentPrefix maps source extensions to their line-comment syntax.
 var commentPrefix = map[string]string{
 	".go": "//", ".proto": "//", ".ts": "//", ".tsx": "//", ".mts": "//", ".cts": "//",
@@ -95,7 +100,7 @@ func Check(fsys fs.FS, rootDir string, fix bool) (problems []Problem, fixed []st
 			return walkErr
 		}
 		if d.IsDir() {
-			if p != "." && (skipDirs[d.Name()] || p == "tools/pins") {
+			if p != "." && (skipDirs[d.Name()] || p == "tools/pins" || slices.Contains(thirdPartyDirs, p)) {
 				return fs.SkipDir
 			}
 			return nil

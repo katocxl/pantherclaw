@@ -17,6 +17,7 @@ import (
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -90,6 +91,7 @@ func (s *Service) ReplayDecision(ctx context.Context, txn ids.UUID, evaluation i
 		return ReplayResult{}, ErrReplayUnavailable
 	}
 	if !s.replayLimit.Allow(callerKey(c)) {
+		telemetry.RateLimited(ctx, telemetry.ScopeReplay)
 		return ReplayResult{}, ErrReplayRateLimited
 	}
 	var path td.Path

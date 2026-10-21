@@ -7,10 +7,10 @@
 #                 for `task test:integration`
 #   identity      Keycloak dev realm (M2)
 #   full-demo     PostgreSQL and Keycloak
+#   observability Grafana with an OTLP receiver, Tempo, Prometheus and Loki
+#                 (grafana/otel-lgtm) for the server's OTLP exporter
 # The server, gateway and simulators are not services here: they run with
-# `go run` (BUILD_GUIDE §4). Planned: an observability profile once the
-# OpenTelemetry exporter is decided (M13), and egress-locked agent
-# sandboxes (M9).
+# `go run` (BUILD_GUIDE §4).
 # Ports bind to 127.0.0.1 only. Never use these settings in production.
 name: pantherclaw
 
@@ -103,5 +103,19 @@ services:
       - ../keycloak/realm-pantherclaw.json:/opt/keycloak/data/import/realm-pantherclaw.json:ro
     security_opt:
       - no-new-privileges:true
+
+  # Local observability (G0 M13 D30): point the server at it with
+  # telemetry.otlp.endpoint "http://127.0.0.1:4318" (no headers file) and
+  # open Grafana at http://127.0.0.1:3000 (anonymous admin, local only).
+  # Optionally set admin.addr "127.0.0.1:6060" for pprof and /metrics.
+  otel-lgtm:
+    image: grafana/otel-lgtm:0.36.0@sha256:57c04cbd8e7022f32bb84c4ac005d79baf8b08e2c5be44facf11f5f1f9944ba2
+    profiles: ["observability"]
+    ports:
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:4318:4318"
+    security_opt:
+      - no-new-privileges:true
+
 volumes:
   pgdata:

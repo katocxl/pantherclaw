@@ -21,6 +21,7 @@ import (
 
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 )
 
 // MaxFormBytes bounds a token request body.
@@ -88,6 +89,7 @@ func ParseForm(w http.ResponseWriter, r *http.Request) (url.Values, error) {
 
 func (h *Handler) token(w http.ResponseWriter, r *http.Request) {
 	if !h.limiter.AllowRequest(r) {
+		telemetry.RateLimited(r.Context(), telemetry.ScopeSignIn)
 		WriteError(w, &authnapp.OAuthError{Code: "slow_down", Description: "too many requests", Status: http.StatusTooManyRequests})
 		return
 	}

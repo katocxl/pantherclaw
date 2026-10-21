@@ -23,6 +23,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -236,6 +237,7 @@ func (e *authzenEndpoint) serve(w http.ResponseWriter, r *http.Request, batch bo
 		return
 	}
 	if !e.rates.allow(p.ID, p.Rate, len(evals)) {
+		telemetry.RateLimited(r.Context(), telemetry.ScopeAuthZEN)
 		authzenRefuse(w, http.StatusTooManyRequests, authzenRateLimited)
 		return
 	}
