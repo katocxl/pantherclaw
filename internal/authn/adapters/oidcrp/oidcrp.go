@@ -188,7 +188,7 @@ func (p *Provider) load(ctx context.Context) (*discovered, error) {
 		issParam: meta.IssParam,
 	}
 	if a := p.cfg.SubjectTokenAudience; a != "" {
-		p.disc.subject = prov.VerifierContext(kctx,&oidc.Config{ClientID: a, SupportedSigningAlgs: SigningAlgs})
+		p.disc.subject = prov.VerifierContext(kctx, &oidc.Config{ClientID: a, SupportedSigningAlgs: SigningAlgs})
 	}
 	return p.disc, nil
 }
