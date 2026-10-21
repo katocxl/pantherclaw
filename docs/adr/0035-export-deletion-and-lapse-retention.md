@@ -10,6 +10,7 @@
 3. **Paying again before day 90** restores the organization fully.
 4. **On day 90: verified deletion** of the organization's data, with a **signed deletion record** that is kept.
 5. **Tenant-wide export** of records and evidence is available throughout, so a customer can leave with its evidence.
+6. **Deleted organizations fail closed** (G0 M13 D22). After the day-90 deletion, the organization's gateways and credentials fail closed (denied or unauthenticated), never open. Before day 90 enforcement never weakens (HR-357); after it, nothing the organization's gateways hold can act.
 
 **Consequences.**
 - PRODUCT §7 states 90 days followed by verified deletion instead of "at least 30 days".

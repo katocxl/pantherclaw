@@ -1,6 +1,6 @@
 # Runbook — Deploy hosted staging (G3)
 
-**Milestone:** M13 ([G0 M13](../g0/M13.md) D3, D4, D12–D15; [ADR-0032](../adr/0032-hosted-deployment-kek-custody-and-backups.md); HR-370, HR-371, HR-346). **Audience:** the founder, as operator of hosted staging (test layer L3). The host scripts, the compose stack and the deploy workflow live in the commercial distribution; this runbook is the procedure they implement. Production (L4) follows at v1.0 on a paid host. Command flags follow the brief; the M13 exit status records any change.
+**Milestone:** M13 ([G0 M13](../g0/M13.md) D3, D4, D12–D15, D14 amended, D19; [ADR-0032](../adr/0032-hosted-deployment-kek-custody-and-backups.md); HR-370, HR-371, HR-346). **Audience:** the founder, as operator of hosted staging (test layer L3). The host scripts, the compose stack and the deploy workflow live in the commercial distribution; this runbook is the procedure they implement. Production (L4) follows at v1.0 on a paid host. Command flags follow the brief; the M13 exit status records any change.
 
 ## 1. What runs where
 
@@ -17,7 +17,7 @@
 ## 2. First setup (once)
 
 1. Create the VM with the cloud-init file from the commercial distribution; attach the block volume. Cloud-init installs Docker with the compose plugin, nftables, unattended upgrades and the `pantherclaw` service user, and runs the idempotent bootstrap script (safe to run again).
-2. Bootstrap generates the secrets into a root-only environment file: the database role passwords and the KEK (`pantherclaw-server keys gen-kek`). Nothing secret is ever committed.
+2. Bootstrap generates the secrets into a root-only environment file: the database role passwords (the backup role `pc_backup` included, HR-378) and the KEK (`pantherclaw-server keys gen-kek --out FILE`). Nothing secret is ever committed.
 3. **Escrow the KEK now**, before any data exists ([backup-restore.md](backup-restore.md) §3).
 4. Create the DNS records with the DNS script and the founder's Cloudflare API token.
 5. `certbot` obtains the certificate through the DNS-01 challenge and renews it into `/srv/pantherclaw/certs`; the server picks up a renewal within about a minute without a restart (HR-371).
@@ -26,10 +26,15 @@
 ## 3. Signing in to staging
 
 - **Until the hosted OIDC provider's staging environment exists**, the console and API listener binds to `127.0.0.1` on the VM. Reach it through an SSH tunnel from the founder's machine:
-  ```bash
-  ssh -N -L 9443:127.0.0.1:443 <your admin user>@<staging host>
-  # then open https://localhost:9443/app/ (the certificate is for the staging name; expect a name warning on localhost)
-  ```
+  1. Map the public name to your own machine in your hosts file (`/etc/hosts`, or `C:\Windows\System32\drivers\etc\hosts` on Windows): `127.0.0.1 staging.app.pantherclaw.dev`.
+  2. Forward your local port 443 to the VM's loopback listener (binding local port 443 needs administrator rights):
+     ```bash
+     ssh -N -L 443:127.0.0.1:443 <your admin user>@<staging host IP>
+     ```
+     Use the VM's IP address here, since the name now points at your own machine.
+  3. Open `https://staging.app.pantherclaw.dev/app/`. The origin, the WebAuthn relying-party id and the OIDC redirects then match the public name, and the real certificate validates with no warning.
+
+  Never sign in through `localhost` or another name: the origin checks (HR-342, HR-151), security keys (HR-153) and sign-in redirects are bound to the public name and fail. Remove the hosts entry when the public listener goes live.
   The gateway listener on 8443 is public: gateways authenticate with mutual TLS.
 - **Once the staging provider exists**, its client is configured, the listener binds publicly on 443 and sign-in goes through the provider.
 - Development OIDC providers are never exposed publicly, on staging or anywhere else.
@@ -53,7 +58,7 @@ Deploys run only from the manually started deploy workflow (a deploy key in the 
 | Endpoint | Answers 200 when | Use |
 |---|---|---|
 | `/livez` | the process serves HTTP | restart a hung process |
-| `/readyz` | the database answers, the schema version equals the binary's latest migration, and (roles `worker` and `all`) the job workers have a heartbeat within 30 s (HR-370) | deploy waits, load balancers, monitoring |
+| `/readyz` | the database answers, the schema version in `pc.schema_info` (written by `migrate up`) equals the binary's latest migration, and (roles `worker` and `all`) the job workers have a heartbeat within 30 s (HR-370) | deploy waits, load balancers, monitoring |
 
 The `/readyz` body is a fixed JSON, `{"ready": …, "checks": {"db": …, "schema": …, "workers": …}}`, without versions or error text. To find out why a check fails, read the server's logs on the host, not the endpoint.
 

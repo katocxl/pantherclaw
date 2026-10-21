@@ -420,7 +420,7 @@
 | HR-363 | Onboarding evidence comes only from the caller's organization. | T-003 | UI |
 | HR-364 | Simulated records never complete an onboarding step (F630). | T-071, T-090 | UI |
 
-## Production hardening: platform, limits and metering (G0 M13, wave 1)
+## Production hardening: platform, limits, metering and backups (G0 M13, wave 1)
 
 | ID | Rule | Threats | MS |
 |---|---|---|---|
@@ -432,3 +432,4 @@
 | HR-375 | Authenticated API calls are rate-limited per organization and per credential (`RATE_LIMITED`, `Retry-After`); gateway, workload, enrollment and public procedures are never rate-limited by this layer. | T-170 | M13 |
 | HR-376 | Limits that must hold across replicas (automation inbound per source, AuthZEN per enforcement point, sign-up) are counted in Postgres; a counter error refuses the request. | T-170 | M13 |
 | HR-377 | Usage meters are computed by the server from records, never reported by clients; usage limits are not enforced in M13. | T-163 | M13 |
+| HR-378 | The backup role (`pc_backup`) can only read, bypasses RLS only to dump, and its credential lives only with the backup job; dumps are encrypted with `age` before they leave the host. | T-172 | M13 |

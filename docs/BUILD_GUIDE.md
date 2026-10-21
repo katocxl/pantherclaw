@@ -655,7 +655,7 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - The coding-agent scenarios of M12 are green and gate the change: locally (`task range`) while EX-004 is active, in CI once it ends.
 
 ### M13 — Commercial & production hardening → v1.0
-**HR:** HR-370..377 (wave 1; later waves add theirs) · **PN:** PN-010, PN-011, PN-012 (except PN-012.2 and PN-012.3, delivered in UI), PN-019 · **F:** F523, F594, F597, F598, F773 · **ADR:** 0032, 0033, 0034, 0035 · **G0:** [g0/M13.md](g0/M13.md).
+**HR:** HR-370..378 (wave 1; later waves add theirs) · **PN:** PN-010, PN-011, PN-012 (except PN-012.2 and PN-012.3, delivered in UI), PN-019 · **F:** F523, F594, F597, F598, F773 · **ADR:** 0032, 0033, 0034, 0035 · **G0:** [g0/M13.md](g0/M13.md).
 - Hosted staging and production infrastructure for the hosted control plane built in UI (infrastructure as code, the managed database, sealed keys, deployment gates G3): a staging deployment (test layer L3) in M13, production (L4) and paid sign-up at v1.0.
 - Rate limits/quotas, support access (task-bound, customer-approved, audited), data export/deletion, Helm chart, backup/restore + DR drill, FIPS build variant, SLOs met under load (`pantherclaw-sim load`; k6 cannot sign PAP/1), Schemathesis clean, threat-model refresh (G4), docs site.
 - The OpenTelemetry exporter (founder decision 2026-10-10, G0 M1 deviation 4): until then spans are API-only and nothing is exported. Decided on 2026-10-21 (G0 M13 F5, [ADR-0033](adr/0033-observability-exporter.md)): a small OTLP/HTTP-protobuf exporter of our own, without gRPC, trace ids in logs and a private profiling port, with Grafana Cloud's free plan as the staging backend; the SDK wiring, a pgx tracer and metrics follow in wave 2 (ARCHITECTURE §14).

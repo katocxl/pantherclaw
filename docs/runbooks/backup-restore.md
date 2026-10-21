@@ -1,6 +1,6 @@
 # Runbook — Backup and restore
 
-**Milestone:** M13 ([G0 M13](../g0/M13.md) D2, D6, D16, D17; [ADR-0032](../adr/0032-hosted-deployment-kek-custody-and-backups.md); HR-372, HR-373, T-171). **Audience:** the operator of a hosted or self-hosted deployment. The hosted staging scripts live in the commercial distribution; the steps below are what they do, so a self-hosted operator can follow them by hand. Command flags follow the brief; the M13 exit status records any change.
+**Milestone:** M13 ([G0 M13](../g0/M13.md) D2, D6, D16, D17, D20, D21; [ADR-0032](../adr/0032-hosted-deployment-kek-custody-and-backups.md); HR-372, HR-373, HR-378, T-171, T-172, R-61). **Audience:** the operator of a hosted or self-hosted deployment. The hosted staging scripts live in the commercial distribution; the steps below are what they do, so a self-hosted operator can follow them by hand. Command flags follow the brief; the M13 exit status records any change.
 
 ## 1. Targets
 
@@ -35,7 +35,7 @@ age --passphrase --output kek.age /srv/pantherclaw/secrets/kek    # asks for the
 
 Runs at 02:15 UTC (the `backup` job of the staging stack; a cron entry on a self-hosted node):
 
-1. `pg_dump --format=custom` as a **read-only backup role** (never the application role `pc_app` or the migrator).
+1. `pg_dump --format=custom` as the **backup role `pc_backup`** (HR-378; [G0 M13](../g0/M13.md) D21). Every tenant table forces row-level security, so a dump needs a role that bypasses it: `pc_backup` is `LOGIN NOINHERIT BYPASSRLS` with USAGE on schema `pc` and SELECT on every table and sequence (default privileges cover tables the migrator creates later), and nothing else. `pantherclaw-server db bootstrap` creates it when given the optional `--backup-password-file`; migration `00180` re-grants SELECT on existing tables when the role exists. Its password lives only with the backup job (on staging, the root-only environment file). Never dump as `pc_app` or the migrator.
 2. Encrypt before it leaves the host: `age --recipient <founder's age public key> --output pantherclaw-<UTC timestamp>.dump.age`. The private identity stays offline with the founder; a separate staging drill identity is added as a second recipient on staging only.
 3. Copy with `rclone` to a Backblaze B2 bucket. The B2 application key is scoped to that one bucket.
 4. Retention by the bucket's lifecycle rules: 14 daily and 8 weekly copies.
@@ -47,20 +47,21 @@ Delete the local copy after the upload succeeds.
 
 The drill restores into a **throwaway** database, never over the running one. On staging it runs as a monthly workflow and can be started by hand; production drills are run by the founder by hand with the production identity and KEK.
 
-1. Note the time: the drill's RTO clock starts now.
-2. Fetch the newest dump: `rclone copy b2:<bucket>/<newest> .`; note its timestamp (the RPO is the time between it and the start of the drill, or of the incident in a real restore).
-3. Decrypt: `age --decrypt --identity <drill identity file> --output restore.dump pantherclaw-<timestamp>.dump.age`.
-4. Start a throwaway `postgres:17` container, create the roles and schema once with `pantherclaw-server db bootstrap` (as for a new database, [BUILD_GUIDE](../BUILD_GUIDE.md) §4), and restore the dump into it with `pg_restore`.
-5. Check the schema: `pantherclaw-server migrate status --config <drill config>` shows nothing pending for the binary you will run (HR-370). A newer schema means the binary is too old; a pending one means `migrate up` before serving.
-6. RLS smoke test: as `pc_app`, inside one organization's context, a read of another organization's rows returns nothing.
-7. Sealed rows: with the escrowed KEK in the drill configuration's `kek_files`, open one sealed staging row and confirm it decrypts.
-8. Raise every organization's containment epoch (HR-373):
+**The exact sequence is the commercial distribution's `deploy/oracle/restore-drill.sh`** ([G0 M13](../g0/M13.md) D17, D21). Its commands are copied here once the drill has passed on staging; until then, run the script rather than typing the steps by hand. What the drill does, in order:
+
+1. Notes the time: the drill's RTO clock starts.
+2. Fetches the newest dump from the bucket and notes its timestamp (the RPO is the time between it and the start of the drill, or of the incident in a real restore).
+3. Decrypts it with the staging drill identity.
+4. Restores it into a throwaway `postgres:17` container.
+5. Checks the schema: `pantherclaw-server migrate status` shows the version the binary expects (HR-370). A newer schema means the binary is too old; a pending one means `migrate up` before serving.
+6. RLS smoke test: a cross-organization read returns nothing.
+7. Opens one sealed staging row with the escrowed staging KEK.
+8. Raises every organization's containment epoch (HR-373; [key-rotation.md](key-rotation.md) §8.2):
    ```bash
-   pantherclaw-server keys bump-epochs --all --confirm --config <drill config>
+   pantherclaw-server keys bump-epochs --all --confirm
    ```
-   One transaction raises each organization's epoch by one and audits `containment.epoch_bumped_after_restore` per organization. Without `--confirm` nothing changes.
-9. Evidence: `pclaw verify` on one recent bundle from the restored copy passes with the trust file pinned before the drill (retired keys stay published, HR-372).
-10. Stop the clock: the RTO is the time from step 1 to here. Destroy the throwaway container and the decrypted files.
+   Each organization of any status gets its own tenant transaction; the new epoch is `max(epoch + 1, the current Unix time in milliseconds)`, so it is above any value a gateway cached after the backup; `containment.epoch_bumped_after_restore` is audited per organization. Without `--confirm` nothing changes.
+9. Stops the clock and records the measured RPO and RTO in its summary, then destroys the throwaway container and the decrypted files.
 
 ## 6. Record the result
 
@@ -68,10 +69,17 @@ Write the date, the dump's timestamp, the measured RPO and RTO and any step that
 
 ## 7. A real restore
 
-1. **Contain first** if the cause may be an attack: engage the kill switch ([kill-switch.md](kill-switch.md)) and follow [incident-response.md](incident-response.md).
-2. Stop the server (all roles) so nothing writes to the damaged database.
-3. Restore as in §5 steps 2–7, into the database the server will use (a new volume, not over the damaged one, which you keep for investigation).
-4. Run the epoch bump (§5 step 8) **before any gateway reconnects**. Gateways then load a fresh containment snapshot before serving (HR-010), so nothing is acted on from before the restore.
-5. Start the server and wait for `/readyz` to answer 200 (database, schema and workers; [deploy.md](deploy.md) §5).
-6. Tell users what happened and the RPO: actions decided after the dump's timestamp are not in the restored ledger. The targets' own records are the way to find them; reconcile what matters.
-7. Record a G4 entry with the recovery evidence.
+A restored database is the state at the dump's time: everything revoked or contained after it comes back active (T-171). Gateways must not reconnect until that is undone ([G0 M13](../g0/M13.md) D20, [ADR-0032](../adr/0032-hosted-deployment-kek-custody-and-backups.md) §6).
+
+1. **Contain first** if the cause may be an attack: follow [incident-response.md](incident-response.md).
+2. Stop the server (all roles) so nothing writes to the damaged database. **Close the gateway port (8443) at the firewall.**
+3. Restore as the drill does (§5 steps 2–7), into the database the server will use (a new volume, not over the damaged one, which you keep for investigation).
+4. Start the server with the gateway port still closed and **engage the kill switch for every organization** ([kill-switch.md](kill-switch.md)).
+5. **Re-apply every revocation and containment change logged after the dump's time**, from the shipped structured logs: signing-key revocations, gateway-certificate revocations, API key, credential and grant revocations, containment and kill-switch changes. Anything the logs do not hold comes back as it was at the dump (R-61).
+6. Signing keys created after the dump are lost with it: receipts and evidence they signed stop verifying until their public keys are published again from the logs. Tell verifiers.
+7. Run the epoch bump (§5 step 8; [key-rotation.md](key-rotation.md) §8.2). Gateways then load a fresh containment snapshot before serving (HR-010).
+8. Wait for `/readyz` to answer 200 (database, schema and workers; [deploy.md](deploy.md) §5), reopen the gateway port, and lift the kill switch for each organization once its state is checked.
+9. Tell users what happened and the RPO: actions decided after the dump's timestamp are not in the restored ledger. The targets' own records are the way to find them; reconcile what matters.
+10. Take a fresh backup at once, and record a G4 entry with the recovery evidence.
+
+Take a backup right after any key rotation or revocation as well, so a later restore does not lose it.
