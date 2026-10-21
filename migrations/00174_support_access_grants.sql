@@ -90,7 +90,7 @@ CREATE TABLE pc.support_sessions (
     expires_at       timestamptz NOT NULL,
     ended_at         timestamptz,
     PRIMARY KEY (org_id, id),
-    UNIQUE (secret_hash),
+    UNIQUE (org_id, secret_hash),
     FOREIGN KEY (org_id, grant_id) REFERENCES pc.support_access_grants (org_id, id),
     CHECK (expires_at > created_at),
     CHECK ((state = 'ENDED') = (ended_at IS NOT NULL) AND (ended_at IS NULL) = (end_reason IS NULL))
