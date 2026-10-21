@@ -67,7 +67,7 @@ func (d *rangeDriver) floodServer() (*floodState, error) {
 	fs := &floodState{users: map[string]ids.UUID{}}
 	cfg := server.DefaultConfig()
 	srv, err := rpc.NewServer(rpc.Options{
-		Authenticate: rpcauth.New(floodAuthn{org: d.s.org, users: fs.users}, server.ProcedurePermissions(), nil, cfg.APILimits()),
+		Authenticate: rpcauth.New(floodAuthn{org: d.s.org, users: fs.users}, server.ProcedurePermissions(), nil, cfg.APILimits(d.s.pool, nil)),
 	})
 	if err != nil {
 		return nil, err

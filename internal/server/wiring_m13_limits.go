@@ -7,6 +7,7 @@ import (
 	"context"
 	"log/slog"
 	"maps"
+	"slices"
 	"time"
 
 	"connectrpc.com/connect/v2"
@@ -40,14 +41,37 @@ func init() { maps.Copy(procedurePermissions, m13UsageProcedures) }
 // permission (the range's api.flood step authenticates with it).
 func ProcedurePermissions() map[string]td.Permission { return maps.Clone(procedurePermissions) }
 
-// APILimits is the rpcauth option of limits.api.* (per replica).
-// Procedures the plan gate classes safety or allow skip the per-org limit
-// and are counted per credential only (D27).
-func (c *Config) APILimits() rpcauth.Option {
-	return rpcauth.WithAPILimits(rpcauth.APILimits{
+// ExportProcedures are the export procedures under the per-org export cap
+// limits.api.exports_per_org_per_hour (D45). A stream adding an export
+// procedure appends it here (in an init function of its wiring), as well
+// as classing it in procedureClasses.
+var ExportProcedures = []string{
+	"/pantherclaw.v1.CaseService/ExportCase",
+	"/pantherclaw.v1.EvidenceService/CreateEvidencePack",
+	"/pantherclaw.v1.EvidenceService/DownloadEvidencePack",
+	"/pantherclaw.v1.EvidenceService/ExportBundle",
+	"/pantherclaw.v1.RangeService/ExportAssuranceReport",
+	"/pantherclaw.v1.SearchService/ExportResults",
+}
+
+// isExport reports an export procedure (read at call time, so appends in
+// init functions count).
+func isExport(procedure string) bool { return slices.Contains(ExportProcedures, procedure) }
+
+// APILimits is the rpcauth option of limits.api.*: per org and per
+// credential a minute on this replica, procedures the plan gate classes
+// safety or allow skipping the per-org limit (D27), and the export cap per
+// org an hour counted in the shared store over pool (D45; in memory when
+// pool is nil, tests only).
+func (c *Config) APILimits(pool *db.Pool, log *slog.Logger) rpcauth.Option {
+	l := rpcauth.APILimits{
 		PerOrg: c.Limits.API.PerOrgPerMinute, PerCredential: c.Limits.API.PerCredentialPerMinute,
-		OrgExempt: orgLimitExempt,
-	})
+		OrgExempt: orgLimitExempt, Exports: isExport, PerOrgExportsPerHour: c.Limits.API.ExportsPerOrgPerHour, Log: log,
+	}
+	if pool != nil {
+		l.Shared = ratelimit.NewStore(pool)
+	}
+	return rpcauth.WithAPILimits(l)
 }
 
 // orgLimitExempt reports procedures that skip the per-org API limit: the

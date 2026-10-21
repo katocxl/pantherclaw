@@ -5,6 +5,7 @@ package rpcauth_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -234,5 +235,56 @@ func TestHR375_SafetyCallsSkipTheOrgLimit(t *testing.T) {
 	}
 	if st, _ := call(contain, "key-a"); st != http.StatusTooManyRequests {
 		t.Fatalf("the flooding credential on containment: %d", st)
+	}
+}
+
+// failingShared is a shared counter that cannot be reached.
+type failingShared struct{}
+
+func (failingShared) Take(context.Context, string, string, time.Duration, int, int) (ratelimit.Decision, error) {
+	return ratelimit.Decision{}, errors.New("counter unavailable")
+}
+
+// TestHR375_ExportsAreCappedPerOrg (D45): export procedures are capped per
+// org an hour across all its credentials, even though they skip the
+// per-org minute limit; containment is never counted against the cap; a
+// counter that cannot be reached refuses exports (HR-376) but nothing
+// else.
+func TestHR375_ExportsAreCappedPerOrg(t *testing.T) {
+	export := pantherclawv1connect.AccessServiceListRolesProcedure  // stands in for ExportBundle
+	contain := pantherclawv1connect.AccessServiceListUsersProcedure // stands in for Contain
+	perms := map[string]td.Permission{export: td.PermAuthenticated, contain: td.PermAuthenticated}
+	limits := func(shared ratelimit.Limiter) rpcauth.APILimits {
+		return rpcauth.APILimits{
+			PerOrg: 100, PerCredential: 100, Limiter: ratelimit.NewMemory(nil),
+			OrgExempt:            func(p string) bool { return p == export || p == contain },
+			Exports:              func(p string) bool { return p == export },
+			PerOrgExportsPerHour: 3, Shared: shared,
+		}
+	}
+	call := limitServer(t, perms, nil, limits(ratelimit.NewMemory(nil)), nil)
+	for _, k := range []string{"key-a", "key-b", "key-c"} {
+		if st, _ := call(export, k); st != http.StatusOK {
+			t.Fatalf("export by %s: %d", k, st)
+		}
+	}
+	st, retry := call(export, "key-a")
+	if st != http.StatusTooManyRequests || retry == "" {
+		t.Fatalf("the org's fourth export this hour: %d %q", st, retry)
+	}
+	if st, _ := call(export, "other-a"); st != http.StatusOK {
+		t.Fatalf("another org's export: %d", st)
+	}
+	for range 10 {
+		if st, _ := call(contain, "key-a"); st != http.StatusOK {
+			t.Fatalf("containment with the export cap reached: %d", st)
+		}
+	}
+	broken := limitServer(t, perms, nil, limits(failingShared{}), nil)
+	if st, _ := broken(export, "key-a"); st != http.StatusTooManyRequests {
+		t.Fatalf("export with the counter unavailable: %d", st)
+	}
+	if st, _ := broken(contain, "key-a"); st != http.StatusOK {
+		t.Fatalf("containment with the counter unavailable: %d", st)
 	}
 }

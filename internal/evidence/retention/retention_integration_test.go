@@ -224,6 +224,26 @@ func TestHR198_ChainAndCheckpointsStillVerifyAfterRemoval(t *testing.T) {
 	f.verify(t)
 }
 
+// TestHR377_RemovedLedgerBytesReachTheUsageMeters (G0 M13 D45): the bytes
+// of the ledger bodies a run removes are added to today's usage row, so
+// the stored-bytes running total goes down.
+func TestHR377_RemovedLedgerBytesReachTheUsageMeters(t *testing.T) {
+	f := newFixture(t)
+	old := time.Now().Add(-400 * 24 * time.Hour).UTC().Truncate(time.Microsecond)
+	f.entries(t, "audit.security.thing_changed", old, 3, ids.NewV7().String())
+	f.entries(t, "receipt.decision", old, 2, "x")
+	f.seal(t)
+	before := f.count(t, "SELECT coalesce(sum(octet_length(body)), 0)::int FROM pc.ledger_entries WHERE kind IN ('audit.security.thing_changed', 'receipt.decision')")
+	if _, err := f.remover.Run(context.Background(), f.org); err != nil {
+		t.Fatal(err)
+	}
+	after := f.count(t, "SELECT coalesce(sum(octet_length(body)), 0)::int FROM pc.ledger_entries WHERE kind IN ('audit.security.thing_changed', 'receipt.decision')")
+	removed := f.count(t, "SELECT coalesce(sum(bytes_removed), 0)::int FROM pc.usage_daily WHERE day = (now() AT TIME ZONE 'UTC')::date")
+	if before <= after || removed != before-after {
+		t.Fatalf("bytes_removed = %d, want %d (before %d, after %d)", removed, before-after, before, after)
+	}
+}
+
 // TestHR198_HoldsBlockRemovalAndApplyAtOnce: an org hold keeps everything,
 // a time range hold what it covers, and a hold on an id the audit events
 // that name it; a released hold no longer does.

@@ -15,6 +15,20 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const addUsageBytesRemoved = `-- name: AddUsageBytesRemoved :exec
+INSERT INTO pc.usage_daily (org_id, day, bytes_removed)
+VALUES ($1, (now() AT TIME ZONE 'UTC')::date, $2::bigint)
+ON CONFLICT (org_id, day) DO UPDATE SET bytes_removed = pc.usage_daily.bytes_removed + EXCLUDED.bytes_removed
+`
+
+// After each batch, the retention remover adds (as pc_app) the ledger
+// body bytes the batch removed to today's row, creating it when the meter
+// has not yet.
+func (q *Queries) AddUsageBytesRemoved(ctx context.Context, orgID ids.OrgID, bytes int64) error {
+	_, err := q.db.Exec(ctx, addUsageBytesRemoved, orgID, bytes)
+	return err
+}
+
 const countAdmittedInstances = `-- name: CountAdmittedInstances :one
 
 SELECT count(*)::int FROM pc.agent_instances i
@@ -25,9 +39,11 @@ WHERE i.org_id = $1 AND i.state = 'ADMITTED' AND NOT a.range_agent
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 //
-// Daily usage meters (G0 M13 D10, D11; HR-377), computed by the job
-// usage.meter_daily from the org's own records in its tenant transaction.
-// Days are UTC. The method is documented in migration 00171.
+// Daily usage meters (G0 M13 D10, D11, D45; HR-377), computed by the jobs
+// usage.meter_daily and usage.recount_weekly from the org's own records in
+// its tenant transaction. Days are UTC. The method is documented in
+// migration 00171. Each day reads only that day's rows, through the
+// (org_id, created/occurred) indexes.
 // The instances_peak sample: ADMITTED instances of the org's agents now
 // (range agents excluded).
 func (q *Queries) CountAdmittedInstances(ctx context.Context, orgID ids.OrgID) (int32, error) {
@@ -82,8 +98,25 @@ const meterUsageDay = `-- name: MeterUsageDay :exec
 WITH bounds AS (
     SELECT ($2::date)::timestamp AT TIME ZONE 'UTC' AS day_start,
            ($2::date + 1)::timestamp AT TIME ZONE 'UTC' AS day_end
+), written AS (
+    SELECT ((SELECT coalesce(sum(octet_length(e.body)), 0) FROM pc.ledger_entries e
+             WHERE e.org_id = $1 AND e.body_removed_at IS NULL
+               AND e.occurred_at >= b.day_start AND e.occurred_at < b.day_end)
+          + (SELECT coalesce(sum(octet_length(d.receipt_jws)), 0) FROM pc.decision_receipts d
+             WHERE d.org_id = $1 AND d.body_removed_at IS NULL
+               AND d.created_at >= b.day_start AND d.created_at < b.day_end)
+          + (SELECT coalesce(sum(octet_length(c.content)), 0) FROM pc.payload_captures c
+             WHERE c.org_id = $1 AND c.remove_at > b.day_start AND c.remove_at <= b.day_end + interval '30 days'
+               AND c.created_at >= b.day_start AND c.created_at < b.day_end)
+          + (SELECT coalesce(sum(coalesce(octet_length(p.manifest), 0) + coalesce(octet_length(p.content), 0)), 0)
+             FROM pc.evidence_packs p
+             WHERE p.org_id = $1 AND p.created_at >= b.day_start AND p.created_at < b.day_end))::bigint AS bytes
+    FROM bounds b
+), prev AS (
+    SELECT coalesce((SELECT u.stored_bytes FROM pc.usage_daily u
+                     WHERE u.org_id = $1 AND u.day = $2::date - 1), 0)::bigint AS stored
 )
-INSERT INTO pc.usage_daily (org_id, day, agents, instances_peak, runs, stored_bytes, computed_at)
+INSERT INTO pc.usage_daily (org_id, day, agents, instances_peak, runs, bytes_written, stored_bytes, computed_at)
 SELECT $1, $2::date,
     (SELECT count(*) FROM pc.agents a
      WHERE a.org_id = $1 AND NOT a.range_agent AND a.created_at < b.day_end
@@ -92,28 +125,58 @@ SELECT $1, $2::date,
     (SELECT count(*) FROM pc.runs r
      JOIN pc.agents a ON a.org_id = r.org_id AND a.id = r.agent_id
      WHERE r.org_id = $1 AND NOT a.range_agent AND r.created_at >= b.day_start AND r.created_at < b.day_end)::int,
-    ((SELECT coalesce(sum(octet_length(e.body)), 0) FROM pc.ledger_entries e
-      WHERE e.org_id = $1 AND e.occurred_at < b.day_end)
-     + (SELECT coalesce(sum(octet_length(d.receipt_jws)), 0) FROM pc.decision_receipts d
-        WHERE d.org_id = $1 AND d.created_at < b.day_end)
-     + (SELECT coalesce(sum(octet_length(c.content)), 0) FROM pc.payload_captures c
-        WHERE c.org_id = $1 AND c.created_at < b.day_end)
-     + (SELECT coalesce(sum(coalesce(octet_length(p.manifest), 0) + coalesce(octet_length(p.content), 0)), 0) FROM pc.evidence_packs p
-        WHERE p.org_id = $1 AND p.created_at < b.day_end))::bigint,
+    w.bytes,
+    prev.stored + w.bytes,
     now()
-FROM bounds b
+FROM bounds b, written w, prev
 ON CONFLICT (org_id, day) DO UPDATE SET
     agents = EXCLUDED.agents,
     instances_peak = GREATEST(pc.usage_daily.instances_peak, EXCLUDED.instances_peak),
     runs = EXCLUDED.runs,
-    stored_bytes = EXCLUDED.stored_bytes,
+    bytes_written = EXCLUDED.bytes_written,
+    stored_bytes = GREATEST(EXCLUDED.stored_bytes - pc.usage_daily.bytes_removed, 0),
     computed_at = EXCLUDED.computed_at
 `
 
-// Recomputes one day of the org's meters. instances_peak keeps the highest
-// sample seen for the day: a recomputation passes 0 for a day it cannot
-// sample (yesterday), which keeps the peak recorded.
+// Recomputes one day of the org's meters from that day's rows.
+// instances_peak keeps the highest sample seen for the day: a
+// recomputation passes 0 for a day it cannot sample (yesterday).
+// stored_bytes is the previous day's plus the day's bytes_written minus
+// the day's bytes_removed.
 func (q *Queries) MeterUsageDay(ctx context.Context, orgID ids.OrgID, day pgtype.Date, instancesSample int32) error {
 	_, err := q.db.Exec(ctx, meterUsageDay, orgID, day, instancesSample)
 	return err
+}
+
+const rebaselineStoredBytes = `-- name: RebaselineStoredBytes :execrows
+WITH bounds AS (
+    SELECT ($2::date + 1)::timestamp AT TIME ZONE 'UTC' AS day_end
+), total AS (
+    SELECT ((SELECT coalesce(sum(octet_length(e.body)), 0) FROM pc.ledger_entries e
+             WHERE e.org_id = $1 AND e.body_removed_at IS NULL AND e.occurred_at < b.day_end)
+          + (SELECT coalesce(sum(octet_length(d.receipt_jws)), 0) FROM pc.decision_receipts d
+             WHERE d.org_id = $1 AND d.body_removed_at IS NULL AND d.created_at < b.day_end)
+          + (SELECT coalesce(sum(octet_length(c.content)), 0) FROM pc.payload_captures c
+             WHERE c.org_id = $1 AND c.created_at < b.day_end)
+          + (SELECT coalesce(sum(coalesce(octet_length(p.manifest), 0) + coalesce(octet_length(p.content), 0)), 0)
+             FROM pc.evidence_packs p WHERE p.org_id = $1 AND p.created_at < b.day_end)
+          + (SELECT coalesce(sum(u.bytes_removed), 0) FROM pc.usage_daily u
+             WHERE u.org_id = $1 AND u.day > $2::date))::bigint AS bytes
+    FROM bounds b
+)
+UPDATE pc.usage_daily SET stored_bytes = t.bytes, computed_at = now()
+FROM total t
+WHERE pc.usage_daily.org_id = $1 AND pc.usage_daily.day = $2::date
+`
+
+// The weekly recount: sets a day's stored_bytes from a full sum of the
+// stored byte columns of the rows created before the next day, plus what
+// the remover took out since (on later days' rows), so the following days'
+// running totals end at the true total.
+func (q *Queries) RebaselineStoredBytes(ctx context.Context, orgID ids.OrgID, day pgtype.Date) (int64, error) {
+	result, err := q.db.Exec(ctx, rebaselineStoredBytes, orgID, day)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

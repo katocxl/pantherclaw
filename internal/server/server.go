@@ -368,7 +368,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			pool: pool, reg: reg, log: log, authority: svc, billing: bill,
 			auth: rpcauth.New(authn, procedurePermissions, nil,
 				rpcauth.WithRefusals(&rpcauth.AuditRefusals{Pool: pool, Log: log}),
-				cfg.APILimits(),
+				cfg.APILimits(pool, log),
 				rpcauth.WithPlanGate(planGate(entsSvc, cfg.Billing.RequirePlan)),
 				rpcauth.WithBrowserSessions(sessions, log),
 				ui.accountSessions(web, sessions.PublicOrigin())),

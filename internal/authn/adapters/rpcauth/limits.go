@@ -5,12 +5,14 @@ package rpcauth
 
 import (
 	"context"
+	"log/slog"
 	"strconv"
 	"time"
 
 	"connectrpc.com/connect/v2"
 
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
+	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/platform/ratelimit"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 )
@@ -51,13 +53,32 @@ type APILimits struct {
 	// so credentials flooding an org never lock its people out of
 	// containment (G0 M13 D27). Nil exempts nothing.
 	OrgExempt func(procedure string) bool
+	// Exports reports export procedures; each org may call them at most
+	// PerOrgExportsPerHour times an hour, counted in Shared (G0 M13 D45).
+	// Nil or 0 leaves the cap off.
+	Exports              func(procedure string) bool
+	PerOrgExportsPerHour int
+	// Shared counts the export cap across replicas (the Postgres store);
+	// a Memory limiter when nil. A counter error refuses (HR-376).
+	Shared ratelimit.Limiter
+	// Log records counter errors (optional).
+	Log *slog.Logger
 }
+
+// scopeAPIExport is the shared counter's scope of an org's exports an hour.
+const scopeAPIExport = "api.export"
+
+// ExportWindow is the export cap's window.
+const ExportWindow = time.Hour
 
 // WithAPILimits limits every authenticated org call (HR-375). Limits of 0
 // leave that limit off.
 func WithAPILimits(l APILimits) Option {
 	if l.Limiter == nil {
 		l.Limiter = ratelimit.NewMemory(nil)
+	}
+	if l.Shared == nil {
+		l.Shared = ratelimit.NewMemory(nil)
 	}
 	return func(o *options) { o.limits = &l }
 }
@@ -108,6 +129,23 @@ func (l *APILimits) limit(ctx context.Context, info *connect.CallInfo, c tapp.Ca
 			info.ResponseHeader().Set("Retry-After", strconv.Itoa(ratelimit.RetryAfterSeconds(d.RetryAfter)))
 			return ErrRateLimited
 		}
+	}
+	if l.Exports == nil || l.PerOrgExportsPerHour <= 0 || !l.Exports(procedure) {
+		return nil
+	}
+	// The export cap holds across replicas: it is counted in the shared
+	// store, outside any transaction (D45, D28), and fails closed.
+	d, err := l.Shared.Take(ctx, scopeAPIExport, org, ExportWindow, 1, l.PerOrgExportsPerHour)
+	if err != nil {
+		if l.Log != nil {
+			l.Log.ErrorContext(ctx, "rpc.export_rate_unavailable", slog.String("procedure", procedure), pclog.Err(err))
+		}
+		info.ResponseHeader().Set("Retry-After", "60")
+		return ErrRateLimited
+	}
+	if !d.Allowed {
+		info.ResponseHeader().Set("Retry-After", strconv.Itoa(ratelimit.RetryAfterSeconds(d.RetryAfter)))
+		return ErrRateLimited
 	}
 	return nil
 }

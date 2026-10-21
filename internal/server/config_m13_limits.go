@@ -25,6 +25,10 @@ type APILimitsConfig struct {
 	// an API key, a service-account key, or a person's CLI or browser
 	// session.
 	PerCredentialPerMinute int `json:"per_credential_per_minute" env:"PC_LIMITS_API_PER_CREDENTIAL_PER_MINUTE"`
+	// ExportsPerOrgPerHour (default 30) bounds one organization's export
+	// calls an hour (evidence bundles and packs, search results, cases,
+	// assurance reports), counted across replicas (D45).
+	ExportsPerOrgPerHour int `json:"exports_per_org_per_hour" env:"PC_LIMITS_API_EXPORTS_PER_ORG_PER_HOUR"`
 }
 
 // UsageLimitsConfig is the usage meters' enforcement (HR-377).
@@ -38,12 +42,14 @@ type UsageLimitsConfig struct {
 const (
 	defaultAPIPerOrgPerMinute        = 6000
 	defaultAPIPerCredentialPerMinute = 1200
+	defaultAPIExportsPerOrgPerHour   = 30
 	maxAPILimit                      = 1_000_000
 )
 
 func defaultLimits() LimitsConfig {
 	return LimitsConfig{API: APILimitsConfig{
 		PerOrgPerMinute: defaultAPIPerOrgPerMinute, PerCredentialPerMinute: defaultAPIPerCredentialPerMinute,
+		ExportsPerOrgPerHour: defaultAPIExportsPerOrgPerHour,
 	}}
 }
 
@@ -56,6 +62,7 @@ func (c *Config) validateLimits() []error {
 	}{
 		{"limits.api.per_org_per_minute", c.Limits.API.PerOrgPerMinute},
 		{"limits.api.per_credential_per_minute", c.Limits.API.PerCredentialPerMinute},
+		{"limits.api.exports_per_org_per_hour", c.Limits.API.ExportsPerOrgPerHour},
 	} {
 		if v.n < 1 || v.n > maxAPILimit {
 			errs = append(errs, fmt.Errorf("%s must be 1 to %d", v.name, maxAPILimit))

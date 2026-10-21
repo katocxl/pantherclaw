@@ -3348,6 +3348,8 @@ type PcUsageDaily struct {
 	Agents        int32
 	InstancesPeak int32
 	Runs          int32
+	BytesWritten  int64
+	BytesRemoved  int64
 	StoredBytes   int64
 	ComputedAt    time.Time
 }

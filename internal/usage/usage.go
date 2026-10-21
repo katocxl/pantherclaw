@@ -11,9 +11,13 @@
 // The method (migration 00171): agents that existed during the day and
 // were not retired before it (range agents excluded); the highest number
 // of ADMITTED instances the hourly job sampled during the day; runs
-// created during the day; and the stored byte columns of the org's ledger
-// entries, decision receipts, payload captures and evidence packs created
-// before the day ended.
+// created during the day; and stored bytes as a running total (D45): the
+// previous day's, plus the stored byte columns of the ledger entries,
+// decision receipts, payload captures and evidence packs created that day,
+// minus the ledger bytes the retention remover took out that day. Each
+// hourly run reads only that day's rows; the weekly recount
+// (usage.recount_weekly, Sunday 03:00 UTC, one org at a time) re-baselines
+// from a full sum so drift never accumulates.
 package usage
 
 import (
@@ -119,6 +123,27 @@ func (s *Service) Meter(ctx context.Context, org ids.OrgID) error {
 	})
 }
 
+// Recount re-baselines org's stored bytes (D45): the day before yesterday
+// gets a full sum of the stored byte columns (plus what the remover took
+// out since), then yesterday and today are recomputed on top of it, so the
+// running totals end at the true total. Each step runs within the
+// database's statement timeout.
+func (s *Service) Recount(ctx context.Context, org ids.OrgID) error {
+	now := s.clock.Now().UTC()
+	base := pgDate(now.AddDate(0, 0, -2))
+	if err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		if err := q.MeterUsageDay(ctx, org, base, 0); err != nil {
+			return err
+		}
+		_, err := q.RebaselineStoredBytes(ctx, org, base)
+		return err
+	}); err != nil {
+		return err
+	}
+	return s.Meter(ctx, org)
+}
+
 // MeterInterval is how often usage is recomputed.
 const MeterInterval = time.Hour
 
@@ -147,25 +172,47 @@ func (MeterOrgArgs) InsertOpts() river.InsertOpts {
 	}}
 }
 
+// ListerCap is how many active orgs one fan-out lists; more are skipped
+// with a warning (paging the lister is a shared follow-up, D45).
+const ListerCap = 10000
+
+// activeOrgs lists the active orgs through the audited lister (HR-054),
+// warning when the cap cuts the list short.
+func activeOrgs(ctx context.Context, pool *db.Pool, log *slog.Logger, job string) ([]ids.OrgID, error) {
+	refs, err := pool.CrossOrgList(ctx, db.ListActiveOrgs, ListerCap)
+	if err != nil {
+		return nil, err
+	}
+	if len(refs) >= ListerCap {
+		log.WarnContext(ctx, "usage.lister_cap_reached", slog.String("job", job), slog.Int("cap", ListerCap),
+			slog.String("note", "orgs past the cap are not metered in this run"))
+	}
+	out := make([]ids.OrgID, len(refs))
+	for i, r := range refs {
+		out[i] = r.Org
+	}
+	return out, nil
+}
+
 type meterDailyWorker struct {
 	river.WorkerDefaults[MeterDailyArgs]
 	pool *db.Pool
+	log  *slog.Logger
 }
 
-// Work lists orgs through the audited lister (HR-054) and enqueues one
-// job per org.
+// Work enqueues one meter job per active org.
 func (w *meterDailyWorker) Work(ctx context.Context, _ *river.Job[MeterDailyArgs]) error {
-	refs, err := w.pool.CrossOrgList(ctx, db.ListActiveOrgs, 10000)
-	if err != nil || len(refs) == 0 {
+	orgs, err := activeOrgs(ctx, w.pool, w.log, MeterDailyArgs{}.Kind())
+	if err != nil || len(orgs) == 0 {
 		return err
 	}
 	client, err := river.ClientFromContextSafely[jobs.TxType](ctx)
 	if err != nil {
 		return fmt.Errorf("usage meters: %w", err)
 	}
-	params := make([]river.InsertManyParams, 0, len(refs))
-	for _, r := range refs {
-		params = append(params, river.InsertManyParams{Args: MeterOrgArgs{Org: r.Org}})
+	params := make([]river.InsertManyParams, 0, len(orgs))
+	for _, org := range orgs {
+		params = append(params, river.InsertManyParams{Args: MeterOrgArgs{Org: org}})
 	}
 	_, err = client.InsertMany(ctx, params)
 	return err
@@ -185,21 +232,81 @@ func (w *meterOrgWorker) Work(ctx context.Context, job *river.Job[MeterOrgArgs])
 	return nil
 }
 
+// RecountWeeklyArgs re-baselines every active org's stored bytes, one org
+// at a time (D45).
+type RecountWeeklyArgs struct{}
+
+// Kind implements river.JobArgs.
+func (RecountWeeklyArgs) Kind() string { return "usage.recount_weekly" }
+
+// RecountTimeout bounds one weekly recount run; each org's statements stay
+// within the database's statement timeout.
+const RecountTimeout = 6 * time.Hour
+
+type recountWorker struct {
+	river.WorkerDefaults[RecountWeeklyArgs]
+	svc *Service
+	log *slog.Logger
+}
+
+// Timeout lets the run go through every org.
+func (*recountWorker) Timeout(*river.Job[RecountWeeklyArgs]) time.Duration { return RecountTimeout }
+
+// Work recounts each org in turn; an org whose recount fails (for example
+// past the statement timeout) is logged and skipped.
+func (w *recountWorker) Work(ctx context.Context, _ *river.Job[RecountWeeklyArgs]) error {
+	orgs, err := activeOrgs(ctx, w.svc.pool, w.log, RecountWeeklyArgs{}.Kind())
+	if err != nil {
+		return err
+	}
+	skipped := 0
+	for _, org := range orgs {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := w.svc.Recount(ctx, org); err != nil {
+			skipped++
+			w.log.WarnContext(ctx, "usage.recount_skipped", slog.String("org", org.String()), pclog.Err(err))
+		}
+	}
+	w.log.InfoContext(ctx, "usage.recount_done", slog.Int("orgs", len(orgs)), slog.Int("skipped", skipped))
+	return nil
+}
+
 // Register adds the meter workers to reg.
 func Register(reg *jobs.Registry, svc *Service, log *slog.Logger) error {
 	if log == nil {
 		log = pclog.Discard()
 	}
-	if err := jobs.Register[MeterDailyArgs](reg, &meterDailyWorker{pool: svc.pool}); err != nil {
+	if err := jobs.Register[MeterDailyArgs](reg, &meterDailyWorker{pool: svc.pool, log: log}); err != nil {
+		return err
+	}
+	if err := jobs.Register[RecountWeeklyArgs](reg, &recountWorker{svc: svc, log: log}); err != nil {
 		return err
 	}
 	return jobs.Register[MeterOrgArgs](reg, &meterOrgWorker{svc: svc, log: log})
 }
 
-// PeriodicJobs returns the meters' hourly schedule.
+// weeklyOffPeak is Sunday 03:00 UTC, every week.
+type weeklyOffPeak struct{}
+
+// Next implements river.PeriodicSchedule.
+func (weeklyOffPeak) Next(current time.Time) time.Time {
+	t := current.UTC()
+	next := time.Date(t.Year(), t.Month(), t.Day(), 3, 0, 0, 0, time.UTC).AddDate(0, 0, (7-int(t.Weekday()))%7)
+	if !next.After(t) {
+		next = next.AddDate(0, 0, 7)
+	}
+	return next
+}
+
+// PeriodicJobs returns the meters' hourly schedule and the weekly recount
+// (Sunday 03:00 UTC).
 func PeriodicJobs() []*river.PeriodicJob {
 	return []*river.PeriodicJob{
 		river.NewPeriodicJob(river.PeriodicInterval(MeterInterval),
 			func() (river.JobArgs, *river.InsertOpts) { return MeterDailyArgs{}, nil }, nil),
+		river.NewPeriodicJob(weeklyOffPeak{},
+			func() (river.JobArgs, *river.InsertOpts) { return RecountWeeklyArgs{}, nil }, nil),
 	}
 }

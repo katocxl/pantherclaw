@@ -107,3 +107,59 @@ func TestHR377_UsageIsMeteredFromRecords(t *testing.T) {
 		t.Fatalf("without entitlements.read: %v", err)
 	}
 }
+
+// TestHR377_StoredBytesRunIncrementallyAndRecountRebaselines (D45): each
+// day reads only that day's rows, the remover's bytes come off the running
+// total, and the weekly recount brings in older rows the running total
+// never saw, ending at the true total.
+func TestHR377_StoredBytesRunIncrementallyAndRecountRebaselines(t *testing.T) {
+	d := dbtest.New(t)
+	p := d.AppPool(t)
+	svc := usage.New(p, clock.NewFake(time.Now().UTC()))
+	org := newOrg(t, p)
+	ctx := context.Background()
+	entry := func(age string, n int) {
+		t.Helper()
+		d.AdminExec(t, `INSERT INTO pc.ledger_entries (org_id, id, kind, actor_type, actor_id, body, occurred_at)
+			VALUES ($1, $2, 'audit.test', 'system', 'x', decode(repeat('ab', $3::int), 'hex'), now() - $4::interval)`,
+			org, ids.NewV7(), strconv.Itoa(n), age)
+	}
+	stored := func() int64 {
+		t.Helper()
+		days, err := svc.List(as(org, td.RoleViewer), 1)
+		if err != nil || len(days) != 1 {
+			t.Fatalf("today: %+v %v", days, err)
+		}
+		return days[0].StoredBytes
+	}
+	entry("10 days", 200) // before the meters started: only a recount sees it
+	entry("0 seconds", 100)
+	if err := svc.Meter(ctx, org); err != nil {
+		t.Fatal(err)
+	}
+	if got := stored(); got != 100 {
+		t.Fatalf("stored = %d, want today's 100 only", got)
+	}
+	// The remover took 30 bytes out today.
+	if err := p.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO pc.usage_daily (org_id, day, bytes_removed) VALUES ($1, (now() AT TIME ZONE 'UTC')::date, 30)
+			ON CONFLICT (org_id, day) DO UPDATE SET bytes_removed = pc.usage_daily.bytes_removed + 30`, org)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Meter(ctx, org); err != nil {
+		t.Fatal(err)
+	}
+	if got := stored(); got != 70 {
+		t.Fatalf("stored = %d, want 100 - 30", got)
+	}
+	// The recount: the 200 older bytes, plus the 30 removed (from rows the
+	// full sum no longer sees), re-baseline the day before yesterday.
+	if err := svc.Recount(ctx, org); err != nil {
+		t.Fatal(err)
+	}
+	if got := stored(); got != 300 {
+		t.Fatalf("stored after the recount = %d, want 300", got)
+	}
+}

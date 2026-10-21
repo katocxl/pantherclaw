@@ -150,3 +150,29 @@ func TestHR377_UsageIsReadOnlyThroughTheAPI(t *testing.T) {
 		t.Fatal("ListUsage is not served")
 	}
 }
+
+// TestHR375_ExportProceduresAreCapped (D45): every listed export procedure
+// is served and capped; containment, the kill switch and approvals are not
+// exports; the cap defaults to 30 an hour.
+func TestHR375_ExportProceduresAreCapped(t *testing.T) {
+	for _, p := range ExportProcedures {
+		if _, ok := procedurePermissions[p]; !ok {
+			t.Errorf("%s is listed as an export but not served", p)
+		}
+		if !isExport(p) {
+			t.Errorf("%s is not capped", p)
+		}
+	}
+	for _, p := range []string{
+		"/pantherclaw.v1.ResponseService/Contain", "/pantherclaw.v1.ResponseService/TerminateRun",
+		"/pantherclaw.v1.AgentService/SuspendAgent", "/pantherclaw.v1.ApprovalService/DeclineApprovalRequest",
+		"/pantherclaw.v1.GrantService/RevokeGrant",
+	} {
+		if isExport(p) {
+			t.Errorf("%s is under the export cap", p)
+		}
+	}
+	if c := DefaultConfig(); c.Limits.API.ExportsPerOrgPerHour != 30 {
+		t.Fatalf("exports_per_org_per_hour default = %d", c.Limits.API.ExportsPerOrgPerHour)
+	}
+}
