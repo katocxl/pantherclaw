@@ -165,7 +165,7 @@ func (q *Queries) GetEnvironment(ctx context.Context, orgID ids.OrgID, iD ids.UU
 
 const getOrg = `-- name: GetOrg :one
 
-SELECT id, name, state, created_at, updated_at FROM pc.orgs WHERE id = $1
+SELECT id, name, state, created_at, updated_at, slug, created_by_account FROM pc.orgs WHERE id = $1
 `
 
 // SPDX-License-Identifier: BUSL-1.1
@@ -185,6 +185,8 @@ func (q *Queries) GetOrg(ctx context.Context, orgID ids.OrgID) (PcOrg, error) {
 		&i.State,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Slug,
+		&i.CreatedByAccount,
 	)
 	return i, err
 }
@@ -608,7 +610,7 @@ func (q *Queries) ShareTeam(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (
 }
 
 const shareUser = `-- name: ShareUser :one
-SELECT org_id, id, issuer, subject, email, display_name, state, created_at, updated_at, last_login_at FROM pc.users WHERE org_id = $1 AND id = $2 FOR SHARE
+SELECT org_id, id, issuer, subject, email, display_name, state, created_at, updated_at, last_login_at, account_id FROM pc.users WHERE org_id = $1 AND id = $2 FOR SHARE
 `
 
 func (q *Queries) ShareUser(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcUser, error) {
@@ -625,6 +627,7 @@ func (q *Queries) ShareUser(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastLoginAt,
+		&i.AccountID,
 	)
 	return i, err
 }
@@ -704,7 +707,7 @@ func (q *Queries) UpdateEnvironment(ctx context.Context, arg UpdateEnvironmentPa
 const updateOrgName = `-- name: UpdateOrgName :one
 UPDATE pc.orgs SET name = $1, updated_at = now()
 WHERE id = $2 AND state = 'ACTIVE'
-RETURNING id, name, state, created_at, updated_at
+RETURNING id, name, state, created_at, updated_at, slug, created_by_account
 `
 
 func (q *Queries) UpdateOrgName(ctx context.Context, name string, orgID ids.OrgID) (PcOrg, error) {
@@ -716,6 +719,8 @@ func (q *Queries) UpdateOrgName(ctx context.Context, name string, orgID ids.OrgI
 		&i.State,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Slug,
+		&i.CreatedByAccount,
 	)
 	return i, err
 }

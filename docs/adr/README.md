@@ -32,3 +32,5 @@ Format: Context → Decision → Consequences → Alternatives considered. Statu
 | [0027](0027-governed-automations.md) | Governed automations: execution identity, ceiling-bounded issuance, closed step catalogue, signed inbound events (M11 part 2, proposed 2026-10-15; amends G0 M4 decision 7) |
 | [0028](0028-business-connectors-and-data-scoping.md) | Business connectors and data scoping: Stripe test mode, structured Postgres, scope obligations, Slack bot cards (M14, accepted 2026-10-17) |
 | [0029](0029-peer-agent-calls-a2a.md) | Peer agent calls: A2A mediation and peer delegation (M14, accepted 2026-10-17; OWASP ASI07) |
+| [0030](0030-web-console-hosted-split-and-extension-point.md) | Web console, hosted split and extension point: `internal/extension`, the console at `/app/` under a strict policy, browser sessions on Connect (milestone UI, accepted 2026-10-20) |
+| [0031](0031-hosted-accounts-per-org-plans-and-test-seams.md) | Hosted accounts, per-organization plans and test seams: global accounts, self-serve organizations, the plan gate that keeps protection on, configuration-chosen test adapters (milestone UI, accepted 2026-10-20) |

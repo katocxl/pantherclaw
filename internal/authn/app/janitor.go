@@ -104,6 +104,9 @@ type janitorDispatchWorker struct {
 // Work lists orgs through the audited lister (HR-054) and enqueues one job
 // per org.
 func (w *janitorDispatchWorker) Work(ctx context.Context, _ *river.Job[JanitorDispatchArgs]) error {
+	if err := CleanAccounts(ctx, w.pool); err != nil {
+		return err
+	}
 	refs, err := w.pool.CrossOrgList(ctx, db.ListActiveOrgs, 10000)
 	if err != nil || len(refs) == 0 {
 		return err
@@ -152,4 +155,18 @@ func cleanBrowser(ctx context.Context, q *dbq.Queries, org ids.OrgID, c *Cleaned
 	}
 	c.BrowserSessions, err = q.DeleteOldBrowserSessions(ctx, org)
 	return err
+}
+
+// CleanAccounts removes sign-ins without an org that expired a day ago and
+// account sessions that ended or expired 30 days ago (G0 UI D8), in the
+// accounts purpose.
+func CleanAccounts(ctx context.Context, pool *db.Pool) error {
+	return pool.InGlobalTx(ctx, db.GlobalAccounts, func(ctx context.Context, tx db.GlobalTx) error {
+		q := dbq.New(tx)
+		if _, err := q.DeleteOldAccountLoginRequests(ctx); err != nil {
+			return err
+		}
+		_, err := q.DeleteOldAccountSessions(ctx)
+		return err
+	})
 }

@@ -58,6 +58,9 @@ type Config struct {
 	// AllowInsecureLoopback allows an http:// issuer on a loopback host
 	// (local Keycloak or a test provider). Never for production.
 	AllowInsecureLoopback bool
+	// TokenAuth is how the client authenticates at the token endpoint:
+	// TokenAuthBasic (empty means basic) or TokenAuthPost.
+	TokenAuth string
 	// HTTPClient overrides the default client (tests); it must not follow
 	// redirects or read proxy variables.
 	HTTPClient *http.Client
@@ -92,6 +95,9 @@ func New(cfg Config) (*Provider, error) {
 	}
 	if cfg.ClientID == "" || len(cfg.ClientSecret.Reveal()) == 0 {
 		errs = append(errs, errors.New("client_id and a client secret are required"))
+	}
+	if cfg.TokenAuth != "" && cfg.TokenAuth != TokenAuthBasic && cfg.TokenAuth != TokenAuthPost {
+		errs = append(errs, errors.New("token_auth must be basic or post"))
 	}
 	if len(cfg.SubjectTokenAudience) > 256 {
 		errs = append(errs, errors.New("subject_token_audience is at most 256 characters"))
@@ -176,13 +182,28 @@ func (p *Provider) load(ctx context.Context) (*discovered, error) {
 	p.disc = &discovered{
 		provider: prov,
 		verifier: prov.VerifierContext(octx, &oidc.Config{ClientID: p.cfg.ClientID, SupportedSigningAlgs: SigningAlgs}),
-		endpoint: oauth2.Endpoint{AuthURL: meta.AuthURL, TokenURL: meta.TokenURL, AuthStyle: oauth2.AuthStyleInHeader},
+		endpoint: oauth2.Endpoint{AuthURL: meta.AuthURL, TokenURL: meta.TokenURL, AuthStyle: p.authStyle()},
 		issParam: meta.IssParam,
 	}
 	if a := p.cfg.SubjectTokenAudience; a != "" {
 		p.disc.subject = prov.VerifierContext(octx, &oidc.Config{ClientID: a, SupportedSigningAlgs: SigningAlgs})
 	}
 	return p.disc, nil
+}
+
+// Token endpoint client authentication methods (G0 UI D32): the two
+// standard client-secret methods, nothing else.
+const (
+	TokenAuthBasic = "basic" // client_secret_basic (default)
+	TokenAuthPost  = "post"  // client_secret_post
+)
+
+// authStyle is how the client secret goes to the token endpoint.
+func (p *Provider) authStyle() oauth2.AuthStyle {
+	if p.cfg.TokenAuth == TokenAuthPost {
+		return oauth2.AuthStyleInParams
+	}
+	return oauth2.AuthStyleInHeader
 }
 
 func (p *Provider) oauth(d *discovered, redirectURI string) *oauth2.Config {

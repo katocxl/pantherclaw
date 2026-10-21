@@ -27,7 +27,7 @@ SDK files use `Apache-2.0` and `Copyright 2026 Joshua Kato`.
 |---|---|
 | Core server, gateway, CLI, simulators | SSO/SCIM, multi-org fleet management, HA tooling |
 | PAP/1 spec and SDKs | SIEM/SOAR connectors beyond OCSF export |
-| Extension interfaces (`internal/platform/extension`) | Advanced detection content and threat intelligence |
+| Extension interfaces (`internal/extension`; G0 UI, ADR-0030) | Advanced detection content and threat intelligence |
 | Basic tool packages for simulators | Curated, reviewed tool-package catalog for real providers |
 | Community red-team scenarios | Full adversarial scenario library, compliance packs |
 | | SaaS operations, billing, tenant provisioning, infrastructure as code |

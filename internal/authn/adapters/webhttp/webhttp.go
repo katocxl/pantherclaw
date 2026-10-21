@@ -29,6 +29,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/accounts"
+	"github.com/katocxl/pantherclaw/internal/authn/adapters/webguard"
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	covdomain "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
@@ -49,7 +51,7 @@ const PageCSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-sr
 	"form-action 'self'; frame-ancestors 'none'; base-uri 'none'; require-trusted-types-for 'script'; trusted-types 'none'"
 
 // CSRFHeader must accompany every state-changing browser request.
-const CSRFHeader = "PC-CSRF"
+const CSRFHeader = webguard.CSRFHeader
 
 // maxJSONBody bounds a JSON request body from a page.
 const maxJSONBody = 64 << 10
@@ -118,6 +120,10 @@ type Handler struct {
 	// slackChannels is the Slack approval channel page (G0 M14 D22); nil when
 	// not mounted.
 	slackChannels SlackChannels
+	// accounts is the hosted account pages (G0 UI D8); nil when not
+	// served.
+	accounts  AccountBrowser
+	selfServe bool
 }
 
 // New returns the handler. publicURL is the server's public URL: its origin
@@ -158,12 +164,13 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	h.mountPromotions(mux)
 	h.mountProtect(mux)
 	h.mountSlackChannels(mux)
+	h.mountAccounts(mux)
 }
 
 // Routes lists the mounted routes.
 func (h *Handler) Routes() []Route { return append([]Route(nil), h.routes...) }
 
-func (h *Handler) public(mux *http.ServeMux, method, path string, f http.HandlerFunc) {
+func (h *Handler) public(mux *http.ServeMux, method, path string, f http.HandlerFunc) { //nolint:unparam // every public page is a GET today; the route table records the method
 	h.routes = append(h.routes, Route{Method: method, Path: path})
 	mux.HandleFunc(method+" "+path, h.limited(f))
 }
@@ -222,18 +229,8 @@ func pageHeaders(w http.ResponseWriter) {
 // neither the custom header nor a JSON content type, and cross-site fetches
 // with them need a CORS preflight that this server never answers.
 func (h *Handler) csrfOK(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	switch r.Header.Get("Sec-Fetch-Site") {
-	case "same-origin":
-		if origin != "" && origin != h.origin {
-			return false
-		}
-	case "":
-		if origin != h.origin {
-			return false // no Fetch Metadata: the Origin must prove the page
-		}
-	default:
-		return false // cross-site, same-site (another subdomain) or none (typed URL)
+	if !webguard.SameOrigin(r.Header.Get, h.origin) {
+		return false // cross-site, same-site (another subdomain), none (typed URL) or no proof
 	}
 	if r.Header.Get(CSRFHeader) != "1" {
 		return false
@@ -252,7 +249,7 @@ func (h *Handler) cookieName(base string) string {
 }
 
 const (
-	sessionCookie = "pc_session"
+	sessionCookie = webguard.SessionCookieBase
 	loginCookie   = "pc_login"
 )
 
@@ -313,6 +310,9 @@ type page struct {
 	Keys        []authnapp.CredentialInfo
 	KeysEnabled bool
 	SteppedUp   bool
+	// Orgs and SelfServe are the org picker's (G0 UI D8).
+	Orgs      []accounts.Membership
+	SelfServe bool
 }
 
 func (h *Handler) render(w http.ResponseWriter, status int, name string, p page) {
@@ -379,6 +379,9 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 	case out.Reason != "":
 		h.render(w, http.StatusForbidden, "error.html", page{Title: "Sign in", Message: reasonText[out.Reason]})
 		return
+	case out.Kind == authnapp.SessionAccount:
+		h.accountSignedIn(w, out)
+		return
 	}
 	next := out.Next
 	if !authnapp.ValidReturnPath(next) {
@@ -395,6 +398,11 @@ var reasonText = map[string]string{
 	"USER_DISABLED": "Your account in this organization is disabled.",
 	"IDP_ERROR":     "The identity provider did not complete the sign-in.",
 	"LOGIN_FAILED":  "The sign-in could not be verified. Start again.",
+	// Invitations accepted in the browser (G0 UI D8, HR-352).
+	"INVITATION_INVALID":        "This invitation is invalid, already used or expired. Ask for a new one.",
+	"INVITATION_EMAIL_MISMATCH": "This invitation is for another email address. Sign in with the account your identity provider verified for that address.",
+	"ALREADY_MEMBER":            "Your account is already a member of this organization. Sign in to it instead.",
+	"PLAN_LIMIT":                "The organization's plan allows no more members. Ask an administrator.",
 }
 
 func (h *Handler) signedOut(w http.ResponseWriter, _ *http.Request) {
@@ -478,6 +486,7 @@ func (h *Handler) static(w http.ResponseWriter, r *http.Request) {
 		"pc.css":                  "text/css; charset=utf-8",
 		"protect.js":              "text/javascript; charset=utf-8",
 		"slack_channel.js":        "text/javascript; charset=utf-8",
+		"org_picker.js":           "text/javascript; charset=utf-8",
 	}
 	ct, ok := types[name]
 	if !ok {

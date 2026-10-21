@@ -35,6 +35,7 @@ type Service struct {
 	roots licence.Roots
 	clock clock.Clock
 	log   *slog.Logger
+	orgs  OrgSource
 }
 
 // New returns a Service verifying against roots (normally
@@ -92,8 +93,31 @@ func (s *Service) Install(ctx context.Context, doc []byte, actor evdomain.Actor)
 	return s.evaluate(ctx, claims), nil
 }
 
-// Current returns the entitlements in force now.
+// OrgSource resolves the entitlements of the org a context is for (G0 UI
+// D9, internal/entitlements). ok is false when the context names no org.
+type OrgSource interface {
+	OrgEntitlements(ctx context.Context) (e domain.Entitlements, ok bool, err error)
+}
+
+// UseOrgEntitlements makes Current per org: every gate and limit that reads
+// Current gets the entitlements of the org its context is for, and the
+// licence's otherwise. Call it once at start-up, before serving.
+func (s *Service) UseOrgEntitlements(src OrgSource) { s.orgs = src }
+
+// Current returns the entitlements in force now for the org ctx is for
+// (when UseOrgEntitlements was called), else the installed licence's.
 func (s *Service) Current(ctx context.Context) (domain.Entitlements, error) {
+	if s.orgs != nil {
+		if e, ok, err := s.orgs.OrgEntitlements(ctx); err != nil || ok {
+			return e, err
+		}
+	}
+	return s.Licence(ctx)
+}
+
+// Licence returns the installed licence's entitlements, whatever org ctx is
+// for.
+func (s *Service) Licence(ctx context.Context) (domain.Entitlements, error) {
 	var st dbq.GetLicenceStateRow
 	err := s.pool.InTenantTx(ctx, ids.PlatformOrg, func(ctx context.Context, tx db.TenantTx) error {
 		var err error

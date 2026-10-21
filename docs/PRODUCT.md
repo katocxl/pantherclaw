@@ -173,12 +173,13 @@ Each attempt produces a signed receipt that `pclaw verify` checks offline. This 
 | Stash | Sealed credentials, access modes, GitHub App tokens | — | — | — |
 | Reflex | Core detections, graduated containment, kill switch, search | + cases, breach radius | + advanced and custom detections, OCSF export, SOAR | — |
 | Trail | Signed receipts, `pclaw verify`, replay, community scenarios | + transparency anchoring, evidence packs, assurance reports, CI gate | + full scenario library | — |
-| Root (platform) | Self-hosted single node | + governed automations | — | + FIPS build, HA, hybrid fleet, customer-approved support access |
+| Root (platform) | Self-hosted single node; CLI and API | + governed automations; the hosted control plane and web console (from v1.0) | — | + FIPS build, HA, hybrid fleet, customer-approved support access |
 
 4. **Pricing unit: one agent record counts once, and each edition includes an allowance of running instances.** One accountable agent, such as "Claude Code, engineering" with an instance on every developer laptop and CI job, counts as one governed agent until its instances exceed the edition's allowance. This matches the accountability model (F574) and avoids per-seat pricing. Follow-ups:
    - **Licence wording.** The BSL Additional Use Grant defines an Agent as any distinct "software agent, automated workload, automation, or execution identity". Read literally, every running instance counts toward the Community limit of 5. Aligning the grant with this decision needs an amendment for future versions ([ADR-0007](adr/0007-licensing-bsl-apache-split.md)) and, ideally, legal review. Until it is amended, the licence text governs.
    - **Allowance numbers** per edition are not set yet.
-   - **Metering:** `internal/billing` limits today count agents only (`MaxAgents`); the instance allowance joins the entitlements and metering work in M13 (PN-012.2).
+   - **Hosted plans** (G0 UI, 2026-10-20): on the hosted control plane each organization holds a plan, paid through a merchant-of-record payment provider. A lapsed plan never turns protection off: gateways keep enforcing, safety actions keep working, and evidence stays readable and exportable for at least 30 days (retention after a lapse is decided in M13). Complimentary plans exist only with hosted billing and never override a self-hosted licence.
+   - **Metering:** `internal/billing` limits today count agents only (`MaxAgents`); the instance allowance is a field of the per-organization plan limits delivered in milestone UI (PN-012.2); metering against it beyond agent counts follows in M13.
 
 ## 8. Competitive map
 

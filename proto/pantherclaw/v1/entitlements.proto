@@ -1,0 +1,114 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// EntitlementService reports the caller's organization's plan: what it may
+// use, what it uses, and until when (G0 UI D9). Self-hosted servers derive
+// it from the installed licence; hosted servers from the org's plan, which
+// changes only through the billing extension, the operator's comp command
+// or development mode — never through this API (HR-354). The plan catalog
+// itself is not part of the core.
+service EntitlementService {
+  // GetEntitlements returns the org's plan, status, limits and usage.
+  // permission: entitlements.read
+  rpc GetEntitlements(GetEntitlementsRequest) returns (GetEntitlementsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// PlanStatus is where an org's plan stands. A lapsed or missing plan never
+// weakens enforcement (HR-357): it only blocks changes and new agents.
+enum PlanStatus {
+  PLAN_STATUS_UNSPECIFIED = 0;
+  // No plan yet.
+  PLAN_STATUS_NONE = 1;
+  // In a trial.
+  PLAN_STATUS_TRIALING = 2;
+  // Paid and current.
+  PLAN_STATUS_ACTIVE = 3;
+  // A payment failed; the grace period runs.
+  PLAN_STATUS_PAST_DUE = 4;
+  // Paused by the customer.
+  PLAN_STATUS_PAUSED = 5;
+  // Canceled; access continues until period_end.
+  PLAN_STATUS_CANCELED = 6;
+  // Ended.
+  PLAN_STATUS_LAPSED = 7;
+  // Complimentary plan granted by the operator until comp_until.
+  PLAN_STATUS_COMP = 8;
+  // Development mode: every feature, no billing.
+  PLAN_STATUS_DEV = 9;
+}
+
+// PlanSource says where the plan came from.
+enum PlanSource {
+  PLAN_SOURCE_UNSPECIFIED = 0;
+  // The installed licence (self-hosted).
+  PLAN_SOURCE_LICENCE = 1;
+  // The billing provider, through the billing extension.
+  PLAN_SOURCE_BILLING = 2;
+  // The operator's comp command.
+  PLAN_SOURCE_COMP = 3;
+  // Development mode.
+  PLAN_SOURCE_DEV = 4;
+}
+
+// PlanLimits are the plan's limits; 0 means unlimited.
+message PlanLimits {
+  // Agents.
+  int32 max_agents = 1;
+  // Environments.
+  int32 max_environments = 2;
+  // Evidence retention in days.
+  int32 retention_days = 3;
+  // Agent instances.
+  int32 instance_allowance = 4;
+  // Members.
+  int32 max_members = 5;
+}
+
+// PlanUsage is what the org uses now.
+message PlanUsage {
+  // Agents that are not retired.
+  int32 agents = 1;
+  // Environments that are not archived.
+  int32 environments = 2;
+  // Active members.
+  int32 members = 3;
+}
+
+// Entitlements is the org's plan.
+message Entitlements {
+  // Plan id; empty without a plan.
+  string plan_id = 1;
+  // Edition: community, team, business, enterprise or development.
+  string edition = 2;
+  // Status.
+  PlanStatus status = 3;
+  // Limits.
+  PlanLimits limits = 4;
+  // Feature names the plan includes.
+  repeated string features = 5;
+  // End of the current billing period, when there is one.
+  google.protobuf.Timestamp period_end = 6;
+  // End of a complimentary plan, when there is one.
+  google.protobuf.Timestamp comp_until = 7;
+  // Source.
+  PlanSource source = 8;
+  // Usage.
+  PlanUsage usage = 9;
+}
+
+// GetEntitlementsRequest asks for the caller's org's plan.
+message GetEntitlementsRequest {}
+
+// GetEntitlementsResponse returns it.
+message GetEntitlementsResponse {
+  // The plan.
+  Entitlements entitlements = 1;
+}

@@ -43,6 +43,8 @@ const (
 type Access struct {
 	pool *db.Pool
 	log  *slog.Logger
+	// ents counts invitations against the plan's member limit (nil: none).
+	ents Entitlements
 }
 
 // NewAccess returns the access use cases. log receives security events
@@ -350,6 +352,9 @@ func (a *Access) CreateInvitation(ctx context.Context, email string, roles []td.
 			if err := c.Require(td.PermRoleBind, td.OrgPath(c.Org)); err != nil {
 				return err
 			}
+		}
+		if err := checkMemberLimit(ctx, a.ents, q, c.Org); err != nil {
+			return err
 		}
 		var err error
 		if tok, err = credential.New(credential.Invitation, "", c.Org); err != nil {

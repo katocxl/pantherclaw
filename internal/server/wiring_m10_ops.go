@@ -12,6 +12,7 @@ import (
 
 	"github.com/riverqueue/river"
 
+	"github.com/katocxl/pantherclaw/internal/authn/adapters/webguard"
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	"github.com/katocxl/pantherclaw/internal/authn/token"
 	"github.com/katocxl/pantherclaw/internal/billing"
@@ -30,6 +31,9 @@ import (
 type m10OpsDeps struct {
 	authn  *authnapp.Authenticator
 	tokens *token.Service
+	// sessions lets the console open the stream with its cookie (G0 UI
+	// D11, HR-344); nil: bearer only.
+	sessions *webguard.Sessions
 }
 
 // registerM10Ops registers OperationsService (G0 M10 D33; SearchService:
@@ -56,6 +60,9 @@ func registerM10Ops(rs *connect.Server, d apiDeps) (func(*http.ServeMux), error)
 		clock.System{}, stream.Config{}, d.log)
 	if err != nil {
 		return nil, err
+	}
+	if d.m10ops.sessions != nil {
+		h.WithBrowserSessions(d.m10ops.sessions)
 	}
 	return h.Mount, nil
 }

@@ -33,10 +33,12 @@ const (
 // Config is the pantherclaw-server configuration (JSON file + PC_* env).
 // Secrets are referenced by file path only (SB-7).
 type Config struct {
-	Role string     `json:"role" env:"PC_ROLE"`
-	Log  LogConfig  `json:"log"`
-	HTTP HTTPConfig `json:"http"`
-	DB   DBConfig   `json:"database"`
+	Role string `json:"role" env:"PC_ROLE"`
+	// Deployment is development, staging or production (config_ui_web.go).
+	Deployment string     `json:"deployment" env:"PC_DEPLOYMENT"`
+	Log        LogConfig  `json:"log"`
+	HTTP       HTTPConfig `json:"http"`
+	DB         DBConfig   `json:"database"`
 	// KEKFiles are key-encryption-key files; the first wraps new keys.
 	KEKFiles    []string `json:"kek_files" env:"PC_KEK_FILES"`
 	LicenceFile string   `json:"licence_file" env:"PC_LICENCE_FILE"`
@@ -66,6 +68,10 @@ type Config struct {
 	Gateways GatewaysConfig `json:"gateways"`
 	// Dev holds development-only settings (config_dev.go).
 	Dev DevConfig `json:"dev"`
+	// Billing and Signup are hosted plans and self-serve organizations
+	// (G0 UI D8, D9, D12; config_ui_tenancy.go).
+	Billing BillingConfig `json:"billing"`
+	Signup  SignupConfig  `json:"signup"`
 }
 
 // IdentityConfig configures workload identity (M3).
@@ -119,6 +125,8 @@ type DBConfig struct {
 func DefaultConfig() Config {
 	d := db.Defaults()
 	return Config{
+		// Deployment stays empty, which means development, so a build with
+		// an extension can tell that it was never set (config_ui_web.go).
 		Role: RoleAll,
 		Log:  LogConfig{Level: "info"},
 		HTTP: HTTPConfig{Addr: "127.0.0.1:8080"},
@@ -172,6 +180,8 @@ func (c *Config) Validate() error {
 	if c.WorkerConcurrency < 1 || c.WorkerConcurrency > 1000 {
 		errs = append(errs, errors.New("worker_concurrency must be 1..1000"))
 	}
+	errs = append(errs, c.validateDeployment()...)
+	errs = append(errs, c.validateTenancy()...)
 	errs = append(errs, c.validateAuthority()...)
 	errs = append(errs, c.validateAuth()...)
 	errs = append(errs, c.validateOIDC()...)
@@ -315,6 +325,13 @@ type OIDCProviderConfig struct {
 	// 8693 subject tokens at StartRun when their aud contains it, so a run
 	// can represent a signed-in user (HR-145). Leave it empty otherwise.
 	SubjectTokenAudience string `json:"subject_token_audience"`
+	// TokenAuth is how the client secret goes to the token endpoint:
+	// basic (client_secret_basic, the default) or post
+	// (client_secret_post) (G0 UI D32).
+	TokenAuth string `json:"token_auth"`
+	// Dev marks a development identity provider (a mock server or a local
+	// Keycloak realm); a production deployment refuses it (HR-346).
+	Dev bool `json:"dev"`
 }
 
 func (c *Config) validateOIDC() []error {
@@ -331,7 +348,7 @@ func (c *Config) validateOIDC() []error {
 		}
 		if _, err := oidcrp.New(oidcrp.Config{
 			Name: p.Name, Issuer: p.Issuer, ClientID: p.ClientID, ClientSecret: pclog.NewSecret([]byte("x")),
-			AllowInsecureLoopback: p.AllowInsecureLoopback, SubjectTokenAudience: p.SubjectTokenAudience,
+			AllowInsecureLoopback: p.AllowInsecureLoopback, SubjectTokenAudience: p.SubjectTokenAudience, TokenAuth: p.TokenAuth,
 		}); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", at, err))
 		}
@@ -349,7 +366,7 @@ func (c *Config) oidcProviders() ([]*oidcrp.Provider, error) {
 		}
 		prov, err := oidcrp.New(oidcrp.Config{
 			Name: p.Name, Issuer: p.Issuer, ClientID: p.ClientID, ClientSecret: secret, Scopes: p.Scopes,
-			TrustEmail: p.TrustEmail, AllowInsecureLoopback: p.AllowInsecureLoopback, SubjectTokenAudience: p.SubjectTokenAudience,
+			TrustEmail: p.TrustEmail, AllowInsecureLoopback: p.AllowInsecureLoopback, SubjectTokenAudience: p.SubjectTokenAudience, TokenAuth: p.TokenAuth,
 		})
 		if err != nil {
 			return nil, err

@@ -57,7 +57,7 @@ PantherClaw is itself a mitigation product for these risks; this table maps what
 |---|---|---|---|
 | V1 Encoding & Sanitization | L2 | gateway, approval page | Planned |
 | V2 Validation & Business Logic | L2 | authority, budgets, approvals | Planned |
-| V3 Web Frontend Security | L2 (approval page only until UI phase) | authn | Planned |
+| V3 Web Frontend Security | L2 (console and approval page) | authn, server (console mount, cookie sessions on Connect) | Planned (milestone UI; HR-340..347) |
 | V4 API & Web Service | L2 | all Connect services | Planned |
 | V5 File Handling | L2 | evidence packs, package import | Planned |
 | V6 Authentication | **L3** | authn, identity | Planned |

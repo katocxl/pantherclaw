@@ -44,6 +44,9 @@ const (
 	// AccessServiceRevokeInvitationProcedure is the procedure name of the AccessService's
 	// RevokeInvitation RPC.
 	AccessServiceRevokeInvitationProcedure = "/pantherclaw.v1.AccessService/RevokeInvitation"
+	// AccessServiceAcceptInvitationProcedure is the procedure name of the AccessService's
+	// AcceptInvitation RPC.
+	AccessServiceAcceptInvitationProcedure = "/pantherclaw.v1.AccessService/AcceptInvitation"
 	// AccessServiceListRolesProcedure is the procedure name of the AccessService's ListRoles RPC.
 	AccessServiceListRolesProcedure = "/pantherclaw.v1.AccessService/ListRoles"
 	// AccessServiceListRoleBindingsProcedure is the procedure name of the AccessService's
@@ -111,6 +114,13 @@ var (
 			Procedure:  AccessServiceRevokeInvitationProcedure,
 		}
 	})
+	accessServiceAcceptInvitationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_access_proto.Services().ByName("AccessService").Methods().ByName("AcceptInvitation"),
+			Procedure:  AccessServiceAcceptInvitationProcedure,
+		}
+	})
 	accessServiceListRolesSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType:       connect.StreamTypeUnary,
@@ -169,6 +179,14 @@ type AccessServiceClient interface {
 	// RevokeInvitation revokes a pending invitation.
 	// permission: invitation.manage
 	RevokeInvitation(context.Context, *v1.RevokeInvitationRequest) (*v1.RevokeInvitationResponse, error)
+	// AcceptInvitation accepts an invitation in the browser (G0 UI D8,
+	// HR-352) for the signed-in account: only from an account or org
+	// browser session, once, before it expires, and only when the identity
+	// provider's verified email of the account equals the invitation's
+	// email (INVITATION_EMAIL_MISMATCH otherwise). It returns the org the
+	// account joined; the session moves to that org on a fresh sign-in.
+	// permission: invitations.accept
+	AcceptInvitation(context.Context, *v1.AcceptInvitationRequest) (*v1.AcceptInvitationResponse, error)
 	// ListRoles lists the default roles and their permissions.
 	// permission: authenticated
 	ListRoles(context.Context, *v1.ListRolesRequest) (*v1.ListRolesResponse, error)
@@ -215,6 +233,14 @@ type AccessServiceHandler interface {
 	// RevokeInvitation revokes a pending invitation.
 	// permission: invitation.manage
 	RevokeInvitation(context.Context, *v1.RevokeInvitationRequest) (*v1.RevokeInvitationResponse, error)
+	// AcceptInvitation accepts an invitation in the browser (G0 UI D8,
+	// HR-352) for the signed-in account: only from an account or org
+	// browser session, once, before it expires, and only when the identity
+	// provider's verified email of the account equals the invitation's
+	// email (INVITATION_EMAIL_MISMATCH otherwise). It returns the org the
+	// account joined; the session moves to that org on a fresh sign-in.
+	// permission: invitations.accept
+	AcceptInvitation(context.Context, *v1.AcceptInvitationRequest) (*v1.AcceptInvitationResponse, error)
 	// ListRoles lists the default roles and their permissions.
 	// permission: authenticated
 	ListRoles(context.Context, *v1.ListRolesRequest) (*v1.ListRolesResponse, error)
@@ -241,6 +267,7 @@ func RegisterAccessServiceHandler(server *connect.Server, svc AccessServiceHandl
 		connect.Method{Spec: accessServiceCreateInvitationSpec(), Handler: adapter.createInvitation},
 		connect.Method{Spec: accessServiceListInvitationsSpec(), Handler: adapter.listInvitations},
 		connect.Method{Spec: accessServiceRevokeInvitationSpec(), Handler: adapter.revokeInvitation},
+		connect.Method{Spec: accessServiceAcceptInvitationSpec(), Handler: adapter.acceptInvitation},
 		connect.Method{Spec: accessServiceListRolesSpec(), Handler: adapter.listRoles},
 		connect.Method{Spec: accessServiceListRoleBindingsSpec(), Handler: adapter.listRoleBindings},
 		connect.Method{Spec: accessServiceCreateRoleBindingSpec(), Handler: adapter.createRoleBinding},
@@ -277,6 +304,10 @@ func (UnimplementedAccessServiceHandler) ListInvitations(context.Context, *v1.Li
 
 func (UnimplementedAccessServiceHandler) RevokeInvitation(context.Context, *v1.RevokeInvitationRequest) (*v1.RevokeInvitationResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.AccessService.RevokeInvitation is not implemented")
+}
+
+func (UnimplementedAccessServiceHandler) AcceptInvitation(context.Context, *v1.AcceptInvitationRequest) (*v1.AcceptInvitationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.AccessService.AcceptInvitation is not implemented")
 }
 
 func (UnimplementedAccessServiceHandler) ListRoles(context.Context, *v1.ListRolesRequest) (*v1.ListRolesResponse, error) {
@@ -350,6 +381,14 @@ func (c *accessServiceClient) ListInvitations(ctx context.Context, req *v1.ListI
 func (c *accessServiceClient) RevokeInvitation(ctx context.Context, req *v1.RevokeInvitationRequest) (*v1.RevokeInvitationResponse, error) {
 	var res v1.RevokeInvitationResponse
 	if err := c.client.CallUnary(ctx, accessServiceRevokeInvitationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessServiceClient) AcceptInvitation(ctx context.Context, req *v1.AcceptInvitationRequest) (*v1.AcceptInvitationResponse, error) {
+	var res v1.AcceptInvitationResponse
+	if err := c.client.CallUnary(ctx, accessServiceAcceptInvitationSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -467,6 +506,18 @@ func (h accessServiceHandler) revokeInvitation(ctx context.Context, _ connect.Sp
 		return err
 	}
 	res, err := h.svc.RevokeInvitation(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessServiceHandler) acceptInvitation(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.AcceptInvitationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.AcceptInvitation(ctx, &req)
 	if err != nil {
 		return err
 	}

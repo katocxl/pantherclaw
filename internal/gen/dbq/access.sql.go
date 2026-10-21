@@ -138,7 +138,7 @@ func (q *Queries) GetRoleBinding(ctx context.Context, orgID ids.OrgID, iD ids.UU
 }
 
 const getUser = `-- name: GetUser :one
-SELECT org_id, id, issuer, subject, email, display_name, state, created_at, updated_at, last_login_at FROM pc.users WHERE org_id = $1 AND id = $2
+SELECT org_id, id, issuer, subject, email, display_name, state, created_at, updated_at, last_login_at, account_id FROM pc.users WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetUser(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcUser, error) {
@@ -155,6 +155,7 @@ func (q *Queries) GetUser(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (Pc
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastLoginAt,
+		&i.AccountID,
 	)
 	return i, err
 }
@@ -163,7 +164,7 @@ const insertInvitation = `-- name: InsertInvitation :one
 INSERT INTO pc.invitations (org_id, id, kind, email, roles, token_hash, created_by, expires_at)
 VALUES ($1, $2, $3, $4, $5::text[], $6,
         $7, now() + make_interval(hours => $8::int))
-RETURNING org_id, id, kind, email, roles, token_hash, state, created_by, created_at, expires_at, accepted_at, accepted_user_id, revoked_at, CASE WHEN state = 'PENDING' AND expires_at <= now() THEN 'EXPIRED' ELSE state END::text AS effective_state
+RETURNING org_id, id, kind, email, roles, token_hash, state, created_by, created_at, expires_at, accepted_at, accepted_user_id, revoked_at, accepted_account_id, accepted_via, CASE WHEN state = 'PENDING' AND expires_at <= now() THEN 'EXPIRED' ELSE state END::text AS effective_state
 `
 
 type InsertInvitationParams struct {
@@ -178,20 +179,22 @@ type InsertInvitationParams struct {
 }
 
 type InsertInvitationRow struct {
-	OrgID          ids.OrgID
-	ID             ids.UUID
-	Kind           string
-	Email          string
-	Roles          []string
-	TokenHash      []byte
-	State          string
-	CreatedBy      string
-	CreatedAt      time.Time
-	ExpiresAt      time.Time
-	AcceptedAt     *time.Time
-	AcceptedUserID *ids.UUID
-	RevokedAt      *time.Time
-	EffectiveState string
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	Kind              string
+	Email             string
+	Roles             []string
+	TokenHash         []byte
+	State             string
+	CreatedBy         string
+	CreatedAt         time.Time
+	ExpiresAt         time.Time
+	AcceptedAt        *time.Time
+	AcceptedUserID    *ids.UUID
+	RevokedAt         *time.Time
+	AcceptedAccountID *ids.UUID
+	AcceptedVia       *string
+	EffectiveState    string
 }
 
 func (q *Queries) InsertInvitation(ctx context.Context, arg InsertInvitationParams) (InsertInvitationRow, error) {
@@ -220,6 +223,8 @@ func (q *Queries) InsertInvitation(ctx context.Context, arg InsertInvitationPara
 		&i.AcceptedAt,
 		&i.AcceptedUserID,
 		&i.RevokedAt,
+		&i.AcceptedAccountID,
+		&i.AcceptedVia,
 		&i.EffectiveState,
 	)
 	return i, err
@@ -297,7 +302,7 @@ func (q *Queries) InvitationExists(ctx context.Context, orgID ids.OrgID, iD ids.
 }
 
 const listInvitations = `-- name: ListInvitations :many
-SELECT org_id, id, kind, email, roles, token_hash, state, created_by, created_at, expires_at, accepted_at, accepted_user_id, revoked_at, CASE WHEN state = 'PENDING' AND expires_at <= now() THEN 'EXPIRED' ELSE state END::text AS effective_state
+SELECT org_id, id, kind, email, roles, token_hash, state, created_by, created_at, expires_at, accepted_at, accepted_user_id, revoked_at, accepted_account_id, accepted_via, CASE WHEN state = 'PENDING' AND expires_at <= now() THEN 'EXPIRED' ELSE state END::text AS effective_state
 FROM pc.invitations
 WHERE org_id = $1 AND id > coalesce($2::uuid, '00000000-0000-0000-0000-000000000000')
   AND ($3::bool OR (state = 'PENDING' AND expires_at > now()))
@@ -313,20 +318,22 @@ type ListInvitationsParams struct {
 }
 
 type ListInvitationsRow struct {
-	OrgID          ids.OrgID
-	ID             ids.UUID
-	Kind           string
-	Email          string
-	Roles          []string
-	TokenHash      []byte
-	State          string
-	CreatedBy      string
-	CreatedAt      time.Time
-	ExpiresAt      time.Time
-	AcceptedAt     *time.Time
-	AcceptedUserID *ids.UUID
-	RevokedAt      *time.Time
-	EffectiveState string
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	Kind              string
+	Email             string
+	Roles             []string
+	TokenHash         []byte
+	State             string
+	CreatedBy         string
+	CreatedAt         time.Time
+	ExpiresAt         time.Time
+	AcceptedAt        *time.Time
+	AcceptedUserID    *ids.UUID
+	RevokedAt         *time.Time
+	AcceptedAccountID *ids.UUID
+	AcceptedVia       *string
+	EffectiveState    string
 }
 
 func (q *Queries) ListInvitations(ctx context.Context, arg ListInvitationsParams) ([]ListInvitationsRow, error) {
@@ -357,6 +364,8 @@ func (q *Queries) ListInvitations(ctx context.Context, arg ListInvitationsParams
 			&i.AcceptedAt,
 			&i.AcceptedUserID,
 			&i.RevokedAt,
+			&i.AcceptedAccountID,
+			&i.AcceptedVia,
 			&i.EffectiveState,
 		); err != nil {
 			return nil, err
@@ -425,7 +434,7 @@ func (q *Queries) ListRoleBindings(ctx context.Context, arg ListRoleBindingsPara
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT org_id, id, issuer, subject, email, display_name, state, created_at, updated_at, last_login_at FROM pc.users
+SELECT org_id, id, issuer, subject, email, display_name, state, created_at, updated_at, last_login_at, account_id FROM pc.users
 WHERE org_id = $1 AND id > coalesce($2::uuid, '00000000-0000-0000-0000-000000000000')
 ORDER BY id
 LIMIT $3
@@ -451,6 +460,7 @@ func (q *Queries) ListUsers(ctx context.Context, orgID ids.OrgID, after ids.UUID
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.LastLoginAt,
+			&i.AccountID,
 		); err != nil {
 			return nil, err
 		}
@@ -495,24 +505,26 @@ func (q *Queries) RevokeBootstrapInvitations(ctx context.Context, orgID ids.OrgI
 const revokeInvitation = `-- name: RevokeInvitation :one
 UPDATE pc.invitations SET state = 'REVOKED', revoked_at = now()
 WHERE org_id = $1 AND id = $2 AND state = 'PENDING'
-RETURNING org_id, id, kind, email, roles, token_hash, state, created_by, created_at, expires_at, accepted_at, accepted_user_id, revoked_at, 'REVOKED'::text AS effective_state
+RETURNING org_id, id, kind, email, roles, token_hash, state, created_by, created_at, expires_at, accepted_at, accepted_user_id, revoked_at, accepted_account_id, accepted_via, 'REVOKED'::text AS effective_state
 `
 
 type RevokeInvitationRow struct {
-	OrgID          ids.OrgID
-	ID             ids.UUID
-	Kind           string
-	Email          string
-	Roles          []string
-	TokenHash      []byte
-	State          string
-	CreatedBy      string
-	CreatedAt      time.Time
-	ExpiresAt      time.Time
-	AcceptedAt     *time.Time
-	AcceptedUserID *ids.UUID
-	RevokedAt      *time.Time
-	EffectiveState string
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	Kind              string
+	Email             string
+	Roles             []string
+	TokenHash         []byte
+	State             string
+	CreatedBy         string
+	CreatedAt         time.Time
+	ExpiresAt         time.Time
+	AcceptedAt        *time.Time
+	AcceptedUserID    *ids.UUID
+	RevokedAt         *time.Time
+	AcceptedAccountID *ids.UUID
+	AcceptedVia       *string
+	EffectiveState    string
 }
 
 func (q *Queries) RevokeInvitation(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (RevokeInvitationRow, error) {
@@ -532,6 +544,8 @@ func (q *Queries) RevokeInvitation(ctx context.Context, orgID ids.OrgID, iD ids.
 		&i.AcceptedAt,
 		&i.AcceptedUserID,
 		&i.RevokedAt,
+		&i.AcceptedAccountID,
+		&i.AcceptedVia,
 		&i.EffectiveState,
 	)
 	return i, err
@@ -553,7 +567,7 @@ func (q *Queries) RevokeUserSessions(ctx context.Context, reason *string, orgID 
 const setUserState = `-- name: SetUserState :one
 UPDATE pc.users SET state = $1, updated_at = now()
 WHERE org_id = $2 AND id = $3
-RETURNING org_id, id, issuer, subject, email, display_name, state, created_at, updated_at, last_login_at
+RETURNING org_id, id, issuer, subject, email, display_name, state, created_at, updated_at, last_login_at, account_id
 `
 
 func (q *Queries) SetUserState(ctx context.Context, state string, orgID ids.OrgID, iD ids.UUID) (PcUser, error) {
@@ -570,6 +584,7 @@ func (q *Queries) SetUserState(ctx context.Context, state string, orgID ids.OrgI
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastLoginAt,
+		&i.AccountID,
 	)
 	return i, err
 }

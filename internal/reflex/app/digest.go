@@ -19,6 +19,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
+	"github.com/katocxl/pantherclaw/internal/platform/tenantctx"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 )
@@ -45,6 +46,7 @@ const DigestEnqueued = "ENQUEUED"
 // Send records and sends org's digest for the previous UTC day, once. It
 // reports whether it sent one. Without Team it does nothing.
 func (d *Digests) Send(ctx context.Context, org ids.OrgID) (bool, error) {
+	ctx = tenantctx.WithOrg(ctx, org) // the org's entitlements (G0 UI D9)
 	if d.Ents == nil || d.Notify == nil {
 		return false, nil
 	}

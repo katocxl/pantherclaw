@@ -47,6 +47,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/definitions/trust"
 	"github.com/katocxl/pantherclaw/internal/evidence/chainer"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
+	"github.com/katocxl/pantherclaw/internal/extension"
 	"github.com/katocxl/pantherclaw/internal/facts/adapters/factsrpc"
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	factsapp "github.com/katocxl/pantherclaw/internal/facts/app"
@@ -95,6 +96,10 @@ Usage:
                                                      create an organization and print its one-time admin token
   pantherclaw-server org admin-invite --org ID [--admin-email E] [--config FILE]
                                                      issue a new one-time admin token (recovery)
+  pantherclaw-server org plan grant --org ID --plan P --until RFC3339 --reason TEXT [--edition E] [--config FILE]
+                                                     give an org a complimentary plan (at most a year; audited)
+  pantherclaw-server org plan revoke --org ID --reason TEXT [--config FILE]
+                                                     end an org's complimentary plan now
   pantherclaw-server evidence integrity reset --org ID --reason TEXT --confirm [--config FILE]
                                                      resume checkpointing of an org whose evidence integrity FAILED,
                                                      after investigating; its ledger is checked again
@@ -118,8 +123,15 @@ Configuration: JSON file plus PC_* environment variables; secrets only as file p
 // Env reads environment variables (os.LookupEnv in production).
 type Env = config.LookupEnv
 
-// Run executes pantherclaw-server; ctx is canceled on SIGINT/SIGTERM.
+// Run executes pantherclaw-server without extensions; ctx is canceled on
+// SIGINT/SIGTERM.
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer, env Env) int {
+	return RunCommand(ctx, args, stdout, stderr, env, extension.Set{})
+}
+
+// RunCommand executes pantherclaw-server with ext added to `serve`
+// (internal/extension); every other subcommand ignores it.
+func RunCommand(ctx context.Context, args []string, stdout, stderr io.Writer, env Env, ext extension.Set) int {
 	if len(args) == 0 {
 		_, _ = fmt.Fprint(stderr, usage)
 		return 2
@@ -130,7 +142,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, env Env) 
 		_, _ = fmt.Fprintln(stdout, version.Get().String("pantherclaw-server"))
 		return 0
 	case "serve":
-		err = cmdServe(ctx, args[1:], stderr, env, nil)
+		err = cmdServeWith(ctx, args[1:], stderr, env, nil, ext)
 	case "migrate":
 		err = cmdMigrate(ctx, args[1:], stdout, stderr, env)
 	case "db":
@@ -182,7 +194,7 @@ func newLogger(cfg *Config, w io.Writer) *slog.Logger {
 // started reports the bound API address to tests (nil in production).
 type started func(apiAddr string)
 
-func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onStart started) error {
+func cmdServeWith(ctx context.Context, args []string, stderr io.Writer, env Env, onStart started, ext extension.Set) error {
 	cfg, rest, err := loadConfig(args, stderr, env, "serve")
 	if err != nil {
 		return err
@@ -190,7 +202,27 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	if len(rest) != 0 {
 		return errUsage
 	}
+	return runServe(ctx, cfg, stderr, onStart, ext)
+}
+
+// RunWith serves cfg with ext added (internal/extension), logging to
+// stderr, until ctx is canceled. cfg is validated first.
+func RunWith(ctx context.Context, cfg *Config, ext extension.Set) error {
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	return runServe(ctx, cfg, os.Stderr, nil, ext)
+}
+
+func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart started, ext extension.Set) error {
 	log := newLogger(cfg, stderr)
+	if err := cfg.checkDeploymentFor(ext); err != nil {
+		return err
+	}
+	xdeps := extensionDeps(cfg, log)
+	if err := validateExtension(ext, xdeps); err != nil {
+		return err
+	}
 	appCfg, err := cfg.dbConfig(cfg.DB.AppUser, cfg.DB.AppPasswordFile, cfg.DB.MaxConns)
 	if err != nil {
 		return err
@@ -209,6 +241,11 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	if err != nil {
 		return err
 	}
+	entsSvc, err := newEntitlements(cfg, pool, bill, log)
+	if err != nil {
+		return err
+	}
+	ui := newUITenancy(cfg, pool, entsSvc)
 	ents, err := bill.Current(ctx)
 	if err != nil {
 		return err
@@ -232,6 +269,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	if err != nil {
 		return err
 	}
+	ui.wireInvitationEmails(cfg, m5.notifications)
 	// A monitor-mode action with an unknown consequence notifies (HR-206).
 	authorityStore.Notify = m5.notifications
 	m6, err := newM6(cfg, pool, reg, m5.notifications, log)
@@ -312,6 +350,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if err != nil {
 			return err
 		}
+		ui.wireBrowser(m5.browser, web)
 		m6.mountPages(web)
 		m5p2.mountPages(web, m5)
 		mountM7Pages(web, pool, verification, m5)
@@ -321,10 +360,17 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if err != nil {
 			return err
 		}
+		sessions, err := browserSessions(cfg, pool, idps, log)
+		if err != nil {
+			return err
+		}
 		handler, err := apiHandler(apiDeps{
 			pool: pool, reg: reg, log: log, authority: svc, billing: bill,
 			auth: rpcauth.New(authn, procedurePermissions, nil,
-				rpcauth.WithRefusals(&rpcauth.AuditRefusals{Pool: pool, Log: log})),
+				rpcauth.WithRefusals(&rpcauth.AuditRefusals{Pool: pool, Log: log}),
+				rpcauth.WithPlanGate(planGate(entsSvc, cfg.Billing.RequirePlan)),
+				rpcauth.WithBrowserSessions(sessions, log),
+				ui.accountSessions(web, sessions.PublicOrigin())),
 			apiKeyEnv: credential.Env(cfg.Auth.APIKeyEnv),
 			cel:       cfg.CEL,
 			oauth: oauthhttp.New(authnapp.NewOAuth(pool, tokens, cfg.Auth.PublicURL, clock.System{}, log),
@@ -342,9 +388,12 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			verification: verification,
 			kp:           kp,
 			freshness:    freshnessOf(cfg),
-			m10ops:       m10OpsDeps{authn: authn, tokens: tokens},
+			m10ops:       m10OpsDeps{authn: authn, tokens: tokens, sessions: sessions},
 			autos:        autos,
 			m11protect:   m11protect,
+			ext:          ext,
+			extDeps:      ui.extensionDeps(xdeps),
+			ui:           ui,
 		})
 		if err != nil {
 			return err
@@ -581,8 +630,15 @@ type apiDeps struct {
 	m10ops m10OpsDeps
 	// M11 protect: the protected-change Gate and compromised publishers.
 	m11protect m11Protect
+	// ui is the UI phase's core services (wiring_ui_tenancy.go); nil in
+	// tests that do not need them.
+	ui *uiTenancy
 	// autos is the process's M11 part 2 core (nil: apiHandler builds one).
 	autos *automationsCore
+	// ext is what this build adds (internal/extension; zero: nothing), and
+	// extDeps what it is handed.
+	ext     extension.Set
+	extDeps extension.Deps
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
@@ -601,8 +657,8 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	pantherclawv1connect.RegisterSystemServiceHandler(rs, systemService{})
 	pantherclawv1connect.RegisterAuthorityServiceHandler(rs, authority.NewHandler(d.authority))
-	pantherclawv1connect.RegisterTenancyServiceHandler(rs, tenancyrpc.NewTenancy(tapp.NewHierarchy(pool, d.billing)))
-	pantherclawv1connect.RegisterAccessServiceHandler(rs, tenancyrpc.NewAccess(tapp.NewAccess(pool, log)))
+	pantherclawv1connect.RegisterTenancyServiceHandler(rs, tenancyHandler(tenancyrpc.NewTenancy(tapp.NewHierarchy(pool, d.billing)), d.ui))
+	pantherclawv1connect.RegisterAccessServiceHandler(rs, accessHandler(tenancyrpc.NewAccess(tapp.NewAccess(pool, log).WithEntitlements(d.billing)).WithDeployment(string(d.extDeps.Deployment)), d.ui, d.extDeps.Deployment))
 	pantherclawv1connect.RegisterServiceAccountServiceHandler(rs, tenancyrpc.NewServiceAccounts(tapp.NewServiceAccounts(pool, d.apiKeyEnv)))
 	// autos is the M11 part 2 core, set below once grants and runs exist;
 	// ListAgents reads it only while serving.
@@ -687,6 +743,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	registerM11Protect(rs, d, autos)
 	authzen := registerAuthZEN(rs, d)
+	registerUITenancy(rs, d)
 	mux := http.NewServeMux()
 	edges.mount(mux)
 	automationTriggers.mount(mux)
@@ -732,7 +789,17 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	})
 	mountEvidenceKeys(mux, d)
 	mountM10Ops(mux)
-	return workloadrpc.RawBody(mux, d.clientIP), nil
+	// Extension routes come last, so they can be checked against every
+	// core route (HR-341).
+	if err := mountConsole(mux, d.ext); err != nil {
+		return nil, err
+	}
+	if err := mountExtension(mux, d.ext, d.extDeps, d.web, d.clientIP); err != nil {
+		return nil, err
+	}
+	// The client address goes into every request's context for the account
+	// procedures' per-IP limits (G0 UI D85).
+	return httpx.ClientIPMiddleware(workloadrpc.RawBody(mux, d.clientIP), d.clientIP), nil
 }
 
 // attestTimeout bounds one call to an issuer or a cluster API server.

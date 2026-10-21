@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/accounts"
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
@@ -86,7 +87,78 @@ var (
 // on the fixed list, one approval request's page or one reconciliation's
 // page, matched exactly.
 func ValidReturnPath(p string) bool {
-	return slices.Contains(returnPaths, p) || approvalPath.MatchString(p) || reconciliationPath.MatchString(p)
+	return slices.Contains(returnPaths, p) || approvalPath.MatchString(p) || reconciliationPath.MatchString(p) ||
+		ValidConsolePath(p)
+}
+
+// ConsolePath is the web console's root (G0 UI D10).
+const ConsolePath = "/app/"
+
+// maxConsolePath bounds a console return path.
+const maxConsolePath = 512
+
+// ValidConsolePath reports whether p is a console page a sign-in may
+// return to (HR-345, a prefix rule beside the fixed list of HR-152; G0 UI
+// D78): exactly /app/ or /app/<path>, with an optional query. Characters
+// are limited to letters, digits, "-._~,:=&" and "/" in the path, plus
+// percent-escapes; an escape never encodes a slash, backslash, control
+// character or (in the path) a dot. No scheme or host, "//", backslash,
+// fragment or dot segment; at most 512 bytes. The vectors in
+// testdata/console_paths.json are shared with the console.
+func ValidConsolePath(p string) bool {
+	if len(p) > maxConsolePath || !strings.HasPrefix(p, ConsolePath) {
+		return false
+	}
+	pth, query, _ := strings.Cut(p, "?")
+	if strings.Contains(pth, "//") || !consoleChars(pth, true) || !consoleChars(query, false) {
+		return false
+	}
+	for seg := range strings.SplitSeq(pth, "/") {
+		if seg == "." || seg == ".." {
+			return false
+		}
+	}
+	return true
+}
+
+// consoleChars checks one part of a console path; inPath also forbids "/"
+// in the query and encoded dots in the path.
+func consoleChars(s string, inPath bool) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', strings.IndexByte("-._~,:=&", c) >= 0:
+		case c == '/' && inPath:
+		case c == '%':
+			if i+2 >= len(s) || !isHex(s[i+1]) || !isHex(s[i+2]) {
+				return false
+			}
+			v := unhex(s[i+1])<<4 | unhex(s[i+2])
+			// An encoded % could be decoded twice into any of the others.
+			if v < 0x20 || v == 0x7f || v == '/' || v == '\\' || v == '%' || (inPath && v == '.') {
+				return false
+			}
+			i += 2
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func isHex(c byte) bool {
+	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+}
+
+func unhex(c byte) byte {
+	switch {
+	case c >= '0' && c <= '9':
+		return c - '0'
+	case c >= 'a' && c <= 'f':
+		return c - 'a' + 10
+	default:
+		return c - 'A' + 10
+	}
 }
 
 // Browser implements browser sign-in (OIDC authorization code with PKCE)
@@ -97,6 +169,10 @@ type Browser struct {
 	idps   map[string]IdP
 	clock  clock.Clock
 	log    *slog.Logger
+	// Hosted accounts (accounts.go); nil: every sign-in names an org.
+	accounts  *accounts.Store
+	invites   *accounts.Invitations
+	selfServe bool
 }
 
 // NewBrowser returns the browser sign-in use cases. issuer is the server's
@@ -130,15 +206,15 @@ type BrowserStart struct {
 	Org, Provider, Next string
 	Recent              bool
 	ClientIP            string
+	// Invitation is an invitation token to accept after a sign-in without
+	// an org (the /invite page; G0 UI D8).
+	Invitation string
 }
 
 // Start records a pending sign-in and returns the provider URL and the
-// browser binding, which the caller sets as an HttpOnly cookie.
+// browser binding, which the caller sets as an HttpOnly cookie. Without an
+// org it is a sign-in without an org (hosted accounts, when enabled).
 func (b *Browser) Start(ctx context.Context, in BrowserStart) (Redirect, error) {
-	org, err := ids.Parse[ids.Org](in.Org)
-	if err != nil {
-		return Redirect{}, ErrSignInUnavailable
-	}
 	idp, ok := b.provider(in.Provider)
 	if !ok {
 		return Redirect{}, ErrSignInUnavailable
@@ -148,6 +224,16 @@ func (b *Browser) Start(ctx context.Context, in BrowserStart) (Redirect, error) 
 		next = AccountPath
 	}
 	if !ValidReturnPath(next) {
+		return Redirect{}, ErrSignInUnavailable
+	}
+	if in.Org == "" {
+		return b.startAccount(ctx, idp, next, in.Invitation, in.ClientIP, in.Recent)
+	}
+	if in.Invitation != "" {
+		return Redirect{}, ErrSignInUnavailable
+	}
+	org, err := ids.Parse[ids.Org](in.Org)
+	if err != nil {
 		return Redirect{}, ErrSignInUnavailable
 	}
 	state, err := credential.New(credential.LoginState, "", org)
@@ -210,6 +296,15 @@ type BrowserSignIn struct {
 	Secret  string
 	Next    string
 	Reason  string
+	// Kind is SessionOrg (Secret is an org session cookie) or
+	// SessionAccount (an account session cookie, G0 UI D8); "" is an org
+	// session too.
+	Kind string
+	// Account is the hosted account, when the sign-in had none of an org.
+	Account ids.UUID
+	// Return is the page the sign-in asked to return to, kept for the org
+	// picker when Next is the picker (HR-353, D88); not yet validated.
+	Return string
 }
 
 // Callback completes a browser sign-in. The state is consumed first (single
@@ -220,6 +315,9 @@ func (b *Browser) Callback(ctx context.Context, providerName string, params url.
 	idp, ok := b.idps[providerName]
 	if !ok {
 		return BrowserSignIn{}, ErrBadCallback
+	}
+	if strings.HasPrefix(params.Get("state"), string(credential.AccountLoginState)+"_") {
+		return b.accountCallback(ctx, idp, providerName, params, binding, meta)
 	}
 	state, err := credential.Parse(credential.LoginState, params.Get("state"))
 	if err != nil {
@@ -359,6 +457,18 @@ func (s BrowserSession) User() ids.UUID { return s.Principal.ID }
 // session (theft signal). A session whose user's role bindings changed is
 // rotated. Every failure returns ErrUnauthenticated; the reason is logged.
 func (b *Browser) Authenticate(ctx context.Context, cookie string) (BrowserSession, error) {
+	return b.authenticate(ctx, cookie, true)
+}
+
+// Recheck is Authenticate without rotation, for a long response that can
+// no longer set a cookie (the live stream, HR-344): the session is checked
+// and its bindings reloaded, but a role change never replaces the secret
+// the browser holds. The next ordinary request rotates it.
+func (b *Browser) Recheck(ctx context.Context, cookie string) (BrowserSession, error) {
+	return b.authenticate(ctx, cookie, false)
+}
+
+func (b *Browser) authenticate(ctx context.Context, cookie string, rotate bool) (BrowserSession, error) {
 	tok, err := credential.Parse(credential.BrowserSession, cookie)
 	if err != nil {
 		return b.authFailed(ctx, reject("session_malformed"))
@@ -400,6 +510,11 @@ func (b *Browser) Authenticate(ctx context.Context, cookie string) (BrowserSessi
 			return nil
 		}
 		switch {
+		case !s.Current && !s.WithinGrace && !rotate:
+			// A recheck holds the secret the stream opened with; another
+			// request rotated it since. That is no theft signal: the check
+			// fails (the stream closes) and the session lives on.
+			return reject("session_secret_replaced")
 		case !s.Current && !s.WithinGrace:
 			return end("REUSE", "session_secret_reused")
 		case !s.WithinLifetime:
@@ -431,7 +546,7 @@ func (b *Browser) Authenticate(ctx context.Context, cookie string) (BrowserSessi
 		}
 		// A role change rotates the secret (SB-2). A request carrying the
 		// previous secret inside the grace never rotates again.
-		if digest := rolesDigest(bs); s.Current && string(digest) != string(s.RolesDigest) {
+		if digest := rolesDigest(bs); rotate && s.Current && string(digest) != string(s.RolesDigest) {
 			secret, err := rotateSession(ctx, q, org, s.ID, tok.Hash(), digest)
 			if err != nil {
 				return err

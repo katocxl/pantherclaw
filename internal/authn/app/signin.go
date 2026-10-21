@@ -18,9 +18,10 @@ import (
 // apart (G0 M5 design decision 6).
 
 // IsBrowserState reports whether a callback's state belongs to a browser
-// sign-in (pcl_) rather than a device login (pcs_).
+// sign-in (pcl_, or pcm_ without an org) rather than a device login (pcs_).
 func IsBrowserState(params url.Values) bool {
-	return strings.HasPrefix(params.Get("state"), string(credential.LoginState)+"_")
+	s := params.Get("state")
+	return strings.HasPrefix(s, string(credential.LoginState)+"_") || strings.HasPrefix(s, string(credential.AccountLoginState)+"_")
 }
 
 // authTimeSkew is the clock difference tolerated on auth_time.
@@ -31,6 +32,7 @@ type pendingSignIn struct {
 	provider    string
 	bindingHash []byte
 	nonce       *string
+	nonceHash   []byte
 	verifier    *string
 	// maxAge is set when the request asked for a recent sign-in.
 	maxAge time.Duration
@@ -75,7 +77,13 @@ func verifySignIn(ctx context.Context, idp IdP, redirectURI, providerName string
 	if err != nil {
 		return fail("LOGIN_FAILED", "code exchange or ID token", err)
 	}
-	if p.nonce == nil || subtle.ConstantTimeCompare([]byte(claims.Nonce), []byte(*p.nonce)) != 1 {
+	switch {
+	case p.nonceHash != nil:
+		// Sign-ins without an org keep only the nonce's hash (D41).
+		if subtle.ConstantTimeCompare(credential.HashString(claims.Nonce), p.nonceHash) != 1 {
+			return fail("LOGIN_FAILED", "nonce", nil)
+		}
+	case p.nonce == nil || subtle.ConstantTimeCompare([]byte(claims.Nonce), []byte(*p.nonce)) != 1:
 		return fail("LOGIN_FAILED", "nonce", nil)
 	}
 	if p.maxAge > 0 && (claims.AuthTime.IsZero() || claims.AuthTime.Before(now.Add(-p.maxAge-authTimeSkew))) {

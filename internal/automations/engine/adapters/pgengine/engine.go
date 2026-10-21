@@ -220,6 +220,8 @@ func (e *Engine) enqueue(ctx context.Context, tx pgx.Tx, org ids.OrgID, id ids.U
 	if err != nil {
 		return err
 	}
+	// Never deduplicated against a running job of the execution (jobs.go).
+	args.Wake = ids.New[WakeKind]()
 	if _, err := e.Client.InsertTx(ctx, tx, args, nil); err != nil {
 		return fmt.Errorf("pgengine: enqueue %s: %w", id, err)
 	}

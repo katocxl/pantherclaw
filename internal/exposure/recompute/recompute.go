@@ -28,6 +28,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/tenantctx"
 	poapp "github.com/katocxl/pantherclaw/internal/posture/app"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/reflex/feed"
@@ -86,6 +87,7 @@ type Result struct {
 
 // Run reads the org's feed and recomputes when needed.
 func (s *Service) Run(ctx context.Context, org ids.OrgID) (Result, error) {
+	ctx = tenantctx.WithOrg(ctx, org) // the org's entitlements (G0 UI D9)
 	var res Result
 	if err := exapp.Entitled(ctx, s.Ents); err != nil {
 		// A lapsed edition stops quietly and records one failure (D5);

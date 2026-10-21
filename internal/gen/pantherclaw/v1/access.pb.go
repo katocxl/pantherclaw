@@ -241,6 +241,116 @@ func (InvitationState) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{3}
 }
 
+// Deployment is the kind of deployment a server runs as.
+type Deployment int32
+
+const (
+	Deployment_DEPLOYMENT_UNSPECIFIED Deployment = 0
+	Deployment_DEPLOYMENT_DEVELOPMENT Deployment = 1
+	Deployment_DEPLOYMENT_STAGING     Deployment = 2
+	Deployment_DEPLOYMENT_PRODUCTION  Deployment = 3
+)
+
+// Enum value maps for Deployment.
+var (
+	Deployment_name = map[int32]string{
+		0: "DEPLOYMENT_UNSPECIFIED",
+		1: "DEPLOYMENT_DEVELOPMENT",
+		2: "DEPLOYMENT_STAGING",
+		3: "DEPLOYMENT_PRODUCTION",
+	}
+	Deployment_value = map[string]int32{
+		"DEPLOYMENT_UNSPECIFIED": 0,
+		"DEPLOYMENT_DEVELOPMENT": 1,
+		"DEPLOYMENT_STAGING":     2,
+		"DEPLOYMENT_PRODUCTION":  3,
+	}
+)
+
+func (x Deployment) Enum() *Deployment {
+	p := new(Deployment)
+	*p = x
+	return p
+}
+
+func (x Deployment) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Deployment) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_access_proto_enumTypes[4].Descriptor()
+}
+
+func (Deployment) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_access_proto_enumTypes[4]
+}
+
+func (x Deployment) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Deployment.Descriptor instead.
+func (Deployment) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{4}
+}
+
+// CallerSessionKind is how a WhoAmI caller is signed in (SessionKind in
+// account.proto is how one session was created).
+type CallerSessionKind int32
+
+const (
+	CallerSessionKind_CALLER_SESSION_KIND_UNSPECIFIED CallerSessionKind = 0
+	// An access token or an API key (Authorization: Bearer).
+	CallerSessionKind_CALLER_SESSION_KIND_BEARER CallerSessionKind = 1
+	// A browser session in one org.
+	CallerSessionKind_CALLER_SESSION_KIND_ORG_BROWSER CallerSessionKind = 2
+	// A browser session of a hosted account, before choosing an org.
+	CallerSessionKind_CALLER_SESSION_KIND_ACCOUNT_BROWSER CallerSessionKind = 3
+)
+
+// Enum value maps for CallerSessionKind.
+var (
+	CallerSessionKind_name = map[int32]string{
+		0: "CALLER_SESSION_KIND_UNSPECIFIED",
+		1: "CALLER_SESSION_KIND_BEARER",
+		2: "CALLER_SESSION_KIND_ORG_BROWSER",
+		3: "CALLER_SESSION_KIND_ACCOUNT_BROWSER",
+	}
+	CallerSessionKind_value = map[string]int32{
+		"CALLER_SESSION_KIND_UNSPECIFIED":     0,
+		"CALLER_SESSION_KIND_BEARER":          1,
+		"CALLER_SESSION_KIND_ORG_BROWSER":     2,
+		"CALLER_SESSION_KIND_ACCOUNT_BROWSER": 3,
+	}
+)
+
+func (x CallerSessionKind) Enum() *CallerSessionKind {
+	p := new(CallerSessionKind)
+	*p = x
+	return p
+}
+
+func (x CallerSessionKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CallerSessionKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_access_proto_enumTypes[5].Descriptor()
+}
+
+func (CallerSessionKind) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_access_proto_enumTypes[5]
+}
+
+func (x CallerSessionKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CallerSessionKind.Descriptor instead.
+func (CallerSessionKind) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{5}
+}
+
 // Principal identifies a user or a service account.
 type Principal struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -839,8 +949,17 @@ type WhoAmIResponse struct {
 	Bindings []*RoleBinding `protobuf:"bytes,4,rep,name=bindings,proto3" json:"bindings,omitempty"`
 	// Permissions held somewhere in the org (after API key scopes).
 	Permissions []string `protobuf:"bytes,5,rep,name=permissions,proto3" json:"permissions,omitempty"`
-	// How the caller authenticated: "access_token" or "api_key".
-	Credential    string `protobuf:"bytes,6,opt,name=credential,proto3" json:"credential,omitempty"`
+	// How the caller authenticated: "access_token", "api_key" or
+	// "browser_session".
+	Credential string `protobuf:"bytes,6,opt,name=credential,proto3" json:"credential,omitempty"`
+	// The kind of deployment the server runs as (config `deployment`); a
+	// console shows a permanent banner outside production (HR-346).
+	Deployment Deployment `protobuf:"varint,7,opt,name=deployment,proto3,enum=pantherclaw.v1.Deployment" json:"deployment,omitempty"`
+	// Whether the caller holds a bearer credential or a browser session, and
+	// which kind of session.
+	SessionKind CallerSessionKind `protobuf:"varint,8,opt,name=session_kind,json=sessionKind,proto3,enum=pantherclaw.v1.CallerSessionKind" json:"session_kind,omitempty"`
+	// The hosted account of an account browser session; empty otherwise.
+	AccountId     string `protobuf:"bytes,9,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -913,6 +1032,27 @@ func (x *WhoAmIResponse) GetPermissions() []string {
 func (x *WhoAmIResponse) GetCredential() string {
 	if x != nil {
 		return x.Credential
+	}
+	return ""
+}
+
+func (x *WhoAmIResponse) GetDeployment() Deployment {
+	if x != nil {
+		return x.Deployment
+	}
+	return Deployment_DEPLOYMENT_UNSPECIFIED
+}
+
+func (x *WhoAmIResponse) GetSessionKind() CallerSessionKind {
+	if x != nil {
+		return x.SessionKind
+	}
+	return CallerSessionKind_CALLER_SESSION_KIND_UNSPECIFIED
+}
+
+func (x *WhoAmIResponse) GetAccountId() string {
+	if x != nil {
+		return x.AccountId
 	}
 	return ""
 }
@@ -1550,6 +1690,99 @@ func (x *RevokeInvitationResponse) GetInvitation() *Invitation {
 	return nil
 }
 
+// AcceptInvitationRequest carries the invitation token from the
+// invitation link.
+type AcceptInvitationRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The invitation token (pci_…).
+	Token         string `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AcceptInvitationRequest) Reset() {
+	*x = AcceptInvitationRequest{}
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AcceptInvitationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AcceptInvitationRequest) ProtoMessage() {}
+
+func (x *AcceptInvitationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AcceptInvitationRequest.ProtoReflect.Descriptor instead.
+func (*AcceptInvitationRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *AcceptInvitationRequest) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+// AcceptInvitationResponse names the org the account joined.
+type AcceptInvitationResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Org id.
+	OrgId         string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AcceptInvitationResponse) Reset() {
+	*x = AcceptInvitationResponse{}
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AcceptInvitationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AcceptInvitationResponse) ProtoMessage() {}
+
+func (x *AcceptInvitationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AcceptInvitationResponse.ProtoReflect.Descriptor instead.
+func (*AcceptInvitationResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *AcceptInvitationResponse) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
 // ListRolesRequest asks for the role catalog.
 type ListRolesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1559,7 +1792,7 @@ type ListRolesRequest struct {
 
 func (x *ListRolesRequest) Reset() {
 	*x = ListRolesRequest{}
-	mi := &file_pantherclaw_v1_access_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1571,7 +1804,7 @@ func (x *ListRolesRequest) String() string {
 func (*ListRolesRequest) ProtoMessage() {}
 
 func (x *ListRolesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_access_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1584,7 +1817,7 @@ func (x *ListRolesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRolesRequest.ProtoReflect.Descriptor instead.
 func (*ListRolesRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{20}
+	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{22}
 }
 
 // ListRolesResponse is the role catalog.
@@ -1598,7 +1831,7 @@ type ListRolesResponse struct {
 
 func (x *ListRolesResponse) Reset() {
 	*x = ListRolesResponse{}
-	mi := &file_pantherclaw_v1_access_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1610,7 +1843,7 @@ func (x *ListRolesResponse) String() string {
 func (*ListRolesResponse) ProtoMessage() {}
 
 func (x *ListRolesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_access_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1623,7 +1856,7 @@ func (x *ListRolesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRolesResponse.ProtoReflect.Descriptor instead.
 func (*ListRolesResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{21}
+	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ListRolesResponse) GetRoles() []*Role {
@@ -1650,7 +1883,7 @@ type ListRoleBindingsRequest struct {
 
 func (x *ListRoleBindingsRequest) Reset() {
 	*x = ListRoleBindingsRequest{}
-	mi := &file_pantherclaw_v1_access_proto_msgTypes[22]
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1662,7 +1895,7 @@ func (x *ListRoleBindingsRequest) String() string {
 func (*ListRoleBindingsRequest) ProtoMessage() {}
 
 func (x *ListRoleBindingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_access_proto_msgTypes[22]
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1675,7 +1908,7 @@ func (x *ListRoleBindingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRoleBindingsRequest.ProtoReflect.Descriptor instead.
 func (*ListRoleBindingsRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{22}
+	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ListRoleBindingsRequest) GetPageSize() int32 {
@@ -1719,7 +1952,7 @@ type ListRoleBindingsResponse struct {
 
 func (x *ListRoleBindingsResponse) Reset() {
 	*x = ListRoleBindingsResponse{}
-	mi := &file_pantherclaw_v1_access_proto_msgTypes[23]
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1731,7 +1964,7 @@ func (x *ListRoleBindingsResponse) String() string {
 func (*ListRoleBindingsResponse) ProtoMessage() {}
 
 func (x *ListRoleBindingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_access_proto_msgTypes[23]
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1744,7 +1977,7 @@ func (x *ListRoleBindingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRoleBindingsResponse.ProtoReflect.Descriptor instead.
 func (*ListRoleBindingsResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{23}
+	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ListRoleBindingsResponse) GetBindings() []*RoleBinding {
@@ -1778,7 +2011,7 @@ type CreateRoleBindingRequest struct {
 
 func (x *CreateRoleBindingRequest) Reset() {
 	*x = CreateRoleBindingRequest{}
-	mi := &file_pantherclaw_v1_access_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1790,7 +2023,7 @@ func (x *CreateRoleBindingRequest) String() string {
 func (*CreateRoleBindingRequest) ProtoMessage() {}
 
 func (x *CreateRoleBindingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_access_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1803,7 +2036,7 @@ func (x *CreateRoleBindingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRoleBindingRequest.ProtoReflect.Descriptor instead.
 func (*CreateRoleBindingRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{24}
+	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *CreateRoleBindingRequest) GetRole() string {
@@ -1847,7 +2080,7 @@ type CreateRoleBindingResponse struct {
 
 func (x *CreateRoleBindingResponse) Reset() {
 	*x = CreateRoleBindingResponse{}
-	mi := &file_pantherclaw_v1_access_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1859,7 +2092,7 @@ func (x *CreateRoleBindingResponse) String() string {
 func (*CreateRoleBindingResponse) ProtoMessage() {}
 
 func (x *CreateRoleBindingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_access_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1872,7 +2105,7 @@ func (x *CreateRoleBindingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRoleBindingResponse.ProtoReflect.Descriptor instead.
 func (*CreateRoleBindingResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{25}
+	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *CreateRoleBindingResponse) GetBinding() *RoleBinding {
@@ -1900,7 +2133,7 @@ type DeleteRoleBindingRequest struct {
 
 func (x *DeleteRoleBindingRequest) Reset() {
 	*x = DeleteRoleBindingRequest{}
-	mi := &file_pantherclaw_v1_access_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1912,7 +2145,7 @@ func (x *DeleteRoleBindingRequest) String() string {
 func (*DeleteRoleBindingRequest) ProtoMessage() {}
 
 func (x *DeleteRoleBindingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_access_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1925,7 +2158,7 @@ func (x *DeleteRoleBindingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRoleBindingRequest.ProtoReflect.Descriptor instead.
 func (*DeleteRoleBindingRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{26}
+	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *DeleteRoleBindingRequest) GetId() string {
@@ -1944,7 +2177,7 @@ type DeleteRoleBindingResponse struct {
 
 func (x *DeleteRoleBindingResponse) Reset() {
 	*x = DeleteRoleBindingResponse{}
-	mi := &file_pantherclaw_v1_access_proto_msgTypes[27]
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1956,7 +2189,7 @@ func (x *DeleteRoleBindingResponse) String() string {
 func (*DeleteRoleBindingResponse) ProtoMessage() {}
 
 func (x *DeleteRoleBindingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_access_proto_msgTypes[27]
+	mi := &file_pantherclaw_v1_access_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1969,7 +2202,7 @@ func (x *DeleteRoleBindingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRoleBindingResponse.ProtoReflect.Descriptor instead.
 func (*DeleteRoleBindingResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{27}
+	return file_pantherclaw_v1_access_proto_rawDescGZIP(), []int{29}
 }
 
 var File_pantherclaw_v1_access_proto protoreflect.FileDescriptor
@@ -2032,7 +2265,7 @@ const file_pantherclaw_v1_access_proto_rawDesc = "" +
 	"created_by\x18\x05 \x01(\tR\tcreatedBy\x12;\n" +
 	"\vcreate_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\"\x0f\n" +
-	"\rWhoAmIRequest\"\xf6\x01\n" +
+	"\rWhoAmIRequest\"\x97\x03\n" +
 	"\x0eWhoAmIResponse\x127\n" +
 	"\tprincipal\x18\x01 \x01(\v2\x19.pantherclaw.v1.PrincipalR\tprincipal\x12\x15\n" +
 	"\x06org_id\x18\x02 \x01(\tR\x05orgId\x12\x19\n" +
@@ -2041,7 +2274,13 @@ const file_pantherclaw_v1_access_proto_rawDesc = "" +
 	"\vpermissions\x18\x05 \x03(\tR\vpermissions\x12\x1e\n" +
 	"\n" +
 	"credential\x18\x06 \x01(\tR\n" +
-	"credential\"u\n" +
+	"credential\x12:\n" +
+	"\n" +
+	"deployment\x18\a \x01(\x0e2\x1a.pantherclaw.v1.DeploymentR\n" +
+	"deployment\x12D\n" +
+	"\fsession_kind\x18\b \x01(\x0e2!.pantherclaw.v1.CallerSessionKindR\vsessionKind\x12\x1d\n" +
+	"\n" +
+	"account_id\x18\t \x01(\tR\taccountId\"u\n" +
 	"\x10ListUsersRequest\x12'\n" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x128\n" +
@@ -2084,7 +2323,11 @@ const file_pantherclaw_v1_access_proto_rawDesc = "" +
 	"\x18RevokeInvitationResponse\x12:\n" +
 	"\n" +
 	"invitation\x18\x01 \x01(\v2\x1a.pantherclaw.v1.InvitationR\n" +
-	"invitation\"\x12\n" +
+	"invitation\"_\n" +
+	"\x17AcceptInvitationRequest\x12D\n" +
+	"\x05token\x18\x01 \x01(\tB.\xbaH+r)\x10\x01\x18\x80\x012\"^pci_[0-9a-f]{32}_[0-9A-Za-z]{43}$R\x05token\"1\n" +
+	"\x18AcceptInvitationResponse\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"\x12\n" +
 	"\x10ListRolesRequest\"?\n" +
 	"\x11ListRolesResponse\x12*\n" +
 	"\x05roles\x18\x01 \x03(\v2\x14.pantherclaw.v1.RoleR\x05roles\"\xfc\x01\n" +
@@ -2130,7 +2373,18 @@ const file_pantherclaw_v1_access_proto_rawDesc = "" +
 	"\x18INVITATION_STATE_PENDING\x10\x01\x12\x1d\n" +
 	"\x19INVITATION_STATE_ACCEPTED\x10\x02\x12\x1c\n" +
 	"\x18INVITATION_STATE_REVOKED\x10\x03\x12\x1c\n" +
-	"\x18INVITATION_STATE_EXPIRED\x10\x042\xae\b\n" +
+	"\x18INVITATION_STATE_EXPIRED\x10\x04*w\n" +
+	"\n" +
+	"Deployment\x12\x1a\n" +
+	"\x16DEPLOYMENT_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16DEPLOYMENT_DEVELOPMENT\x10\x01\x12\x16\n" +
+	"\x12DEPLOYMENT_STAGING\x10\x02\x12\x19\n" +
+	"\x15DEPLOYMENT_PRODUCTION\x10\x03*\xa6\x01\n" +
+	"\x11CallerSessionKind\x12#\n" +
+	"\x1fCALLER_SESSION_KIND_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aCALLER_SESSION_KIND_BEARER\x10\x01\x12#\n" +
+	"\x1fCALLER_SESSION_KIND_ORG_BROWSER\x10\x02\x12'\n" +
+	"#CALLER_SESSION_KIND_ACCOUNT_BROWSER\x10\x032\x95\t\n" +
 	"\rAccessService\x12L\n" +
 	"\x06WhoAmI\x12\x1d.pantherclaw.v1.WhoAmIRequest\x1a\x1e.pantherclaw.v1.WhoAmIResponse\"\x03\x90\x02\x01\x12U\n" +
 	"\tListUsers\x12 .pantherclaw.v1.ListUsersRequest\x1a!.pantherclaw.v1.ListUsersResponse\"\x03\x90\x02\x01\x12O\n" +
@@ -2138,7 +2392,8 @@ const file_pantherclaw_v1_access_proto_rawDesc = "" +
 	"\fSetUserState\x12#.pantherclaw.v1.SetUserStateRequest\x1a$.pantherclaw.v1.SetUserStateResponse\x12e\n" +
 	"\x10CreateInvitation\x12'.pantherclaw.v1.CreateInvitationRequest\x1a(.pantherclaw.v1.CreateInvitationResponse\x12g\n" +
 	"\x0fListInvitations\x12&.pantherclaw.v1.ListInvitationsRequest\x1a'.pantherclaw.v1.ListInvitationsResponse\"\x03\x90\x02\x01\x12e\n" +
-	"\x10RevokeInvitation\x12'.pantherclaw.v1.RevokeInvitationRequest\x1a(.pantherclaw.v1.RevokeInvitationResponse\x12U\n" +
+	"\x10RevokeInvitation\x12'.pantherclaw.v1.RevokeInvitationRequest\x1a(.pantherclaw.v1.RevokeInvitationResponse\x12e\n" +
+	"\x10AcceptInvitation\x12'.pantherclaw.v1.AcceptInvitationRequest\x1a(.pantherclaw.v1.AcceptInvitationResponse\x12U\n" +
 	"\tListRoles\x12 .pantherclaw.v1.ListRolesRequest\x1a!.pantherclaw.v1.ListRolesResponse\"\x03\x90\x02\x01\x12j\n" +
 	"\x10ListRoleBindings\x12'.pantherclaw.v1.ListRoleBindingsRequest\x1a(.pantherclaw.v1.ListRoleBindingsResponse\"\x03\x90\x02\x01\x12h\n" +
 	"\x11CreateRoleBinding\x12(.pantherclaw.v1.CreateRoleBindingRequest\x1a).pantherclaw.v1.CreateRoleBindingResponse\x12h\n" +
@@ -2157,100 +2412,108 @@ func file_pantherclaw_v1_access_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_access_proto_rawDescData
 }
 
-var file_pantherclaw_v1_access_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_pantherclaw_v1_access_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_pantherclaw_v1_access_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_pantherclaw_v1_access_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_pantherclaw_v1_access_proto_goTypes = []any{
 	(PrincipalType)(0),                // 0: pantherclaw.v1.PrincipalType
 	(AccountState)(0),                 // 1: pantherclaw.v1.AccountState
 	(ScopeType)(0),                    // 2: pantherclaw.v1.ScopeType
 	(InvitationState)(0),              // 3: pantherclaw.v1.InvitationState
-	(*Principal)(nil),                 // 4: pantherclaw.v1.Principal
-	(*Scope)(nil),                     // 5: pantherclaw.v1.Scope
-	(*User)(nil),                      // 6: pantherclaw.v1.User
-	(*Invitation)(nil),                // 7: pantherclaw.v1.Invitation
-	(*Role)(nil),                      // 8: pantherclaw.v1.Role
-	(*RoleBinding)(nil),               // 9: pantherclaw.v1.RoleBinding
-	(*WhoAmIRequest)(nil),             // 10: pantherclaw.v1.WhoAmIRequest
-	(*WhoAmIResponse)(nil),            // 11: pantherclaw.v1.WhoAmIResponse
-	(*ListUsersRequest)(nil),          // 12: pantherclaw.v1.ListUsersRequest
-	(*ListUsersResponse)(nil),         // 13: pantherclaw.v1.ListUsersResponse
-	(*GetUserRequest)(nil),            // 14: pantherclaw.v1.GetUserRequest
-	(*GetUserResponse)(nil),           // 15: pantherclaw.v1.GetUserResponse
-	(*SetUserStateRequest)(nil),       // 16: pantherclaw.v1.SetUserStateRequest
-	(*SetUserStateResponse)(nil),      // 17: pantherclaw.v1.SetUserStateResponse
-	(*CreateInvitationRequest)(nil),   // 18: pantherclaw.v1.CreateInvitationRequest
-	(*CreateInvitationResponse)(nil),  // 19: pantherclaw.v1.CreateInvitationResponse
-	(*ListInvitationsRequest)(nil),    // 20: pantherclaw.v1.ListInvitationsRequest
-	(*ListInvitationsResponse)(nil),   // 21: pantherclaw.v1.ListInvitationsResponse
-	(*RevokeInvitationRequest)(nil),   // 22: pantherclaw.v1.RevokeInvitationRequest
-	(*RevokeInvitationResponse)(nil),  // 23: pantherclaw.v1.RevokeInvitationResponse
-	(*ListRolesRequest)(nil),          // 24: pantherclaw.v1.ListRolesRequest
-	(*ListRolesResponse)(nil),         // 25: pantherclaw.v1.ListRolesResponse
-	(*ListRoleBindingsRequest)(nil),   // 26: pantherclaw.v1.ListRoleBindingsRequest
-	(*ListRoleBindingsResponse)(nil),  // 27: pantherclaw.v1.ListRoleBindingsResponse
-	(*CreateRoleBindingRequest)(nil),  // 28: pantherclaw.v1.CreateRoleBindingRequest
-	(*CreateRoleBindingResponse)(nil), // 29: pantherclaw.v1.CreateRoleBindingResponse
-	(*DeleteRoleBindingRequest)(nil),  // 30: pantherclaw.v1.DeleteRoleBindingRequest
-	(*DeleteRoleBindingResponse)(nil), // 31: pantherclaw.v1.DeleteRoleBindingResponse
-	(*timestamppb.Timestamp)(nil),     // 32: google.protobuf.Timestamp
+	(Deployment)(0),                   // 4: pantherclaw.v1.Deployment
+	(CallerSessionKind)(0),            // 5: pantherclaw.v1.CallerSessionKind
+	(*Principal)(nil),                 // 6: pantherclaw.v1.Principal
+	(*Scope)(nil),                     // 7: pantherclaw.v1.Scope
+	(*User)(nil),                      // 8: pantherclaw.v1.User
+	(*Invitation)(nil),                // 9: pantherclaw.v1.Invitation
+	(*Role)(nil),                      // 10: pantherclaw.v1.Role
+	(*RoleBinding)(nil),               // 11: pantherclaw.v1.RoleBinding
+	(*WhoAmIRequest)(nil),             // 12: pantherclaw.v1.WhoAmIRequest
+	(*WhoAmIResponse)(nil),            // 13: pantherclaw.v1.WhoAmIResponse
+	(*ListUsersRequest)(nil),          // 14: pantherclaw.v1.ListUsersRequest
+	(*ListUsersResponse)(nil),         // 15: pantherclaw.v1.ListUsersResponse
+	(*GetUserRequest)(nil),            // 16: pantherclaw.v1.GetUserRequest
+	(*GetUserResponse)(nil),           // 17: pantherclaw.v1.GetUserResponse
+	(*SetUserStateRequest)(nil),       // 18: pantherclaw.v1.SetUserStateRequest
+	(*SetUserStateResponse)(nil),      // 19: pantherclaw.v1.SetUserStateResponse
+	(*CreateInvitationRequest)(nil),   // 20: pantherclaw.v1.CreateInvitationRequest
+	(*CreateInvitationResponse)(nil),  // 21: pantherclaw.v1.CreateInvitationResponse
+	(*ListInvitationsRequest)(nil),    // 22: pantherclaw.v1.ListInvitationsRequest
+	(*ListInvitationsResponse)(nil),   // 23: pantherclaw.v1.ListInvitationsResponse
+	(*RevokeInvitationRequest)(nil),   // 24: pantherclaw.v1.RevokeInvitationRequest
+	(*RevokeInvitationResponse)(nil),  // 25: pantherclaw.v1.RevokeInvitationResponse
+	(*AcceptInvitationRequest)(nil),   // 26: pantherclaw.v1.AcceptInvitationRequest
+	(*AcceptInvitationResponse)(nil),  // 27: pantherclaw.v1.AcceptInvitationResponse
+	(*ListRolesRequest)(nil),          // 28: pantherclaw.v1.ListRolesRequest
+	(*ListRolesResponse)(nil),         // 29: pantherclaw.v1.ListRolesResponse
+	(*ListRoleBindingsRequest)(nil),   // 30: pantherclaw.v1.ListRoleBindingsRequest
+	(*ListRoleBindingsResponse)(nil),  // 31: pantherclaw.v1.ListRoleBindingsResponse
+	(*CreateRoleBindingRequest)(nil),  // 32: pantherclaw.v1.CreateRoleBindingRequest
+	(*CreateRoleBindingResponse)(nil), // 33: pantherclaw.v1.CreateRoleBindingResponse
+	(*DeleteRoleBindingRequest)(nil),  // 34: pantherclaw.v1.DeleteRoleBindingRequest
+	(*DeleteRoleBindingResponse)(nil), // 35: pantherclaw.v1.DeleteRoleBindingResponse
+	(*timestamppb.Timestamp)(nil),     // 36: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_access_proto_depIdxs = []int32{
 	0,  // 0: pantherclaw.v1.Principal.type:type_name -> pantherclaw.v1.PrincipalType
 	2,  // 1: pantherclaw.v1.Scope.type:type_name -> pantherclaw.v1.ScopeType
 	1,  // 2: pantherclaw.v1.User.state:type_name -> pantherclaw.v1.AccountState
-	32, // 3: pantherclaw.v1.User.create_time:type_name -> google.protobuf.Timestamp
-	32, // 4: pantherclaw.v1.User.update_time:type_name -> google.protobuf.Timestamp
-	32, // 5: pantherclaw.v1.User.last_login_time:type_name -> google.protobuf.Timestamp
+	36, // 3: pantherclaw.v1.User.create_time:type_name -> google.protobuf.Timestamp
+	36, // 4: pantherclaw.v1.User.update_time:type_name -> google.protobuf.Timestamp
+	36, // 5: pantherclaw.v1.User.last_login_time:type_name -> google.protobuf.Timestamp
 	3,  // 6: pantherclaw.v1.Invitation.state:type_name -> pantherclaw.v1.InvitationState
-	32, // 7: pantherclaw.v1.Invitation.create_time:type_name -> google.protobuf.Timestamp
-	32, // 8: pantherclaw.v1.Invitation.expire_time:type_name -> google.protobuf.Timestamp
-	32, // 9: pantherclaw.v1.Invitation.accept_time:type_name -> google.protobuf.Timestamp
+	36, // 7: pantherclaw.v1.Invitation.create_time:type_name -> google.protobuf.Timestamp
+	36, // 8: pantherclaw.v1.Invitation.expire_time:type_name -> google.protobuf.Timestamp
+	36, // 9: pantherclaw.v1.Invitation.accept_time:type_name -> google.protobuf.Timestamp
 	2,  // 10: pantherclaw.v1.Role.scope_types:type_name -> pantherclaw.v1.ScopeType
-	4,  // 11: pantherclaw.v1.RoleBinding.principal:type_name -> pantherclaw.v1.Principal
-	5,  // 12: pantherclaw.v1.RoleBinding.scope:type_name -> pantherclaw.v1.Scope
-	32, // 13: pantherclaw.v1.RoleBinding.create_time:type_name -> google.protobuf.Timestamp
-	4,  // 14: pantherclaw.v1.WhoAmIResponse.principal:type_name -> pantherclaw.v1.Principal
-	9,  // 15: pantherclaw.v1.WhoAmIResponse.bindings:type_name -> pantherclaw.v1.RoleBinding
-	6,  // 16: pantherclaw.v1.ListUsersResponse.users:type_name -> pantherclaw.v1.User
-	6,  // 17: pantherclaw.v1.GetUserResponse.user:type_name -> pantherclaw.v1.User
-	1,  // 18: pantherclaw.v1.SetUserStateRequest.state:type_name -> pantherclaw.v1.AccountState
-	6,  // 19: pantherclaw.v1.SetUserStateResponse.user:type_name -> pantherclaw.v1.User
-	7,  // 20: pantherclaw.v1.CreateInvitationResponse.invitation:type_name -> pantherclaw.v1.Invitation
-	7,  // 21: pantherclaw.v1.ListInvitationsResponse.invitations:type_name -> pantherclaw.v1.Invitation
-	7,  // 22: pantherclaw.v1.RevokeInvitationResponse.invitation:type_name -> pantherclaw.v1.Invitation
-	8,  // 23: pantherclaw.v1.ListRolesResponse.roles:type_name -> pantherclaw.v1.Role
-	0,  // 24: pantherclaw.v1.ListRoleBindingsRequest.principal_type:type_name -> pantherclaw.v1.PrincipalType
-	9,  // 25: pantherclaw.v1.ListRoleBindingsResponse.bindings:type_name -> pantherclaw.v1.RoleBinding
-	0,  // 26: pantherclaw.v1.CreateRoleBindingRequest.principal_type:type_name -> pantherclaw.v1.PrincipalType
-	5,  // 27: pantherclaw.v1.CreateRoleBindingRequest.scope:type_name -> pantherclaw.v1.Scope
-	9,  // 28: pantherclaw.v1.CreateRoleBindingResponse.binding:type_name -> pantherclaw.v1.RoleBinding
-	10, // 29: pantherclaw.v1.AccessService.WhoAmI:input_type -> pantherclaw.v1.WhoAmIRequest
-	12, // 30: pantherclaw.v1.AccessService.ListUsers:input_type -> pantherclaw.v1.ListUsersRequest
-	14, // 31: pantherclaw.v1.AccessService.GetUser:input_type -> pantherclaw.v1.GetUserRequest
-	16, // 32: pantherclaw.v1.AccessService.SetUserState:input_type -> pantherclaw.v1.SetUserStateRequest
-	18, // 33: pantherclaw.v1.AccessService.CreateInvitation:input_type -> pantherclaw.v1.CreateInvitationRequest
-	20, // 34: pantherclaw.v1.AccessService.ListInvitations:input_type -> pantherclaw.v1.ListInvitationsRequest
-	22, // 35: pantherclaw.v1.AccessService.RevokeInvitation:input_type -> pantherclaw.v1.RevokeInvitationRequest
-	24, // 36: pantherclaw.v1.AccessService.ListRoles:input_type -> pantherclaw.v1.ListRolesRequest
-	26, // 37: pantherclaw.v1.AccessService.ListRoleBindings:input_type -> pantherclaw.v1.ListRoleBindingsRequest
-	28, // 38: pantherclaw.v1.AccessService.CreateRoleBinding:input_type -> pantherclaw.v1.CreateRoleBindingRequest
-	30, // 39: pantherclaw.v1.AccessService.DeleteRoleBinding:input_type -> pantherclaw.v1.DeleteRoleBindingRequest
-	11, // 40: pantherclaw.v1.AccessService.WhoAmI:output_type -> pantherclaw.v1.WhoAmIResponse
-	13, // 41: pantherclaw.v1.AccessService.ListUsers:output_type -> pantherclaw.v1.ListUsersResponse
-	15, // 42: pantherclaw.v1.AccessService.GetUser:output_type -> pantherclaw.v1.GetUserResponse
-	17, // 43: pantherclaw.v1.AccessService.SetUserState:output_type -> pantherclaw.v1.SetUserStateResponse
-	19, // 44: pantherclaw.v1.AccessService.CreateInvitation:output_type -> pantherclaw.v1.CreateInvitationResponse
-	21, // 45: pantherclaw.v1.AccessService.ListInvitations:output_type -> pantherclaw.v1.ListInvitationsResponse
-	23, // 46: pantherclaw.v1.AccessService.RevokeInvitation:output_type -> pantherclaw.v1.RevokeInvitationResponse
-	25, // 47: pantherclaw.v1.AccessService.ListRoles:output_type -> pantherclaw.v1.ListRolesResponse
-	27, // 48: pantherclaw.v1.AccessService.ListRoleBindings:output_type -> pantherclaw.v1.ListRoleBindingsResponse
-	29, // 49: pantherclaw.v1.AccessService.CreateRoleBinding:output_type -> pantherclaw.v1.CreateRoleBindingResponse
-	31, // 50: pantherclaw.v1.AccessService.DeleteRoleBinding:output_type -> pantherclaw.v1.DeleteRoleBindingResponse
-	40, // [40:51] is the sub-list for method output_type
-	29, // [29:40] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	6,  // 11: pantherclaw.v1.RoleBinding.principal:type_name -> pantherclaw.v1.Principal
+	7,  // 12: pantherclaw.v1.RoleBinding.scope:type_name -> pantherclaw.v1.Scope
+	36, // 13: pantherclaw.v1.RoleBinding.create_time:type_name -> google.protobuf.Timestamp
+	6,  // 14: pantherclaw.v1.WhoAmIResponse.principal:type_name -> pantherclaw.v1.Principal
+	11, // 15: pantherclaw.v1.WhoAmIResponse.bindings:type_name -> pantherclaw.v1.RoleBinding
+	4,  // 16: pantherclaw.v1.WhoAmIResponse.deployment:type_name -> pantherclaw.v1.Deployment
+	5,  // 17: pantherclaw.v1.WhoAmIResponse.session_kind:type_name -> pantherclaw.v1.CallerSessionKind
+	8,  // 18: pantherclaw.v1.ListUsersResponse.users:type_name -> pantherclaw.v1.User
+	8,  // 19: pantherclaw.v1.GetUserResponse.user:type_name -> pantherclaw.v1.User
+	1,  // 20: pantherclaw.v1.SetUserStateRequest.state:type_name -> pantherclaw.v1.AccountState
+	8,  // 21: pantherclaw.v1.SetUserStateResponse.user:type_name -> pantherclaw.v1.User
+	9,  // 22: pantherclaw.v1.CreateInvitationResponse.invitation:type_name -> pantherclaw.v1.Invitation
+	9,  // 23: pantherclaw.v1.ListInvitationsResponse.invitations:type_name -> pantherclaw.v1.Invitation
+	9,  // 24: pantherclaw.v1.RevokeInvitationResponse.invitation:type_name -> pantherclaw.v1.Invitation
+	10, // 25: pantherclaw.v1.ListRolesResponse.roles:type_name -> pantherclaw.v1.Role
+	0,  // 26: pantherclaw.v1.ListRoleBindingsRequest.principal_type:type_name -> pantherclaw.v1.PrincipalType
+	11, // 27: pantherclaw.v1.ListRoleBindingsResponse.bindings:type_name -> pantherclaw.v1.RoleBinding
+	0,  // 28: pantherclaw.v1.CreateRoleBindingRequest.principal_type:type_name -> pantherclaw.v1.PrincipalType
+	7,  // 29: pantherclaw.v1.CreateRoleBindingRequest.scope:type_name -> pantherclaw.v1.Scope
+	11, // 30: pantherclaw.v1.CreateRoleBindingResponse.binding:type_name -> pantherclaw.v1.RoleBinding
+	12, // 31: pantherclaw.v1.AccessService.WhoAmI:input_type -> pantherclaw.v1.WhoAmIRequest
+	14, // 32: pantherclaw.v1.AccessService.ListUsers:input_type -> pantherclaw.v1.ListUsersRequest
+	16, // 33: pantherclaw.v1.AccessService.GetUser:input_type -> pantherclaw.v1.GetUserRequest
+	18, // 34: pantherclaw.v1.AccessService.SetUserState:input_type -> pantherclaw.v1.SetUserStateRequest
+	20, // 35: pantherclaw.v1.AccessService.CreateInvitation:input_type -> pantherclaw.v1.CreateInvitationRequest
+	22, // 36: pantherclaw.v1.AccessService.ListInvitations:input_type -> pantherclaw.v1.ListInvitationsRequest
+	24, // 37: pantherclaw.v1.AccessService.RevokeInvitation:input_type -> pantherclaw.v1.RevokeInvitationRequest
+	26, // 38: pantherclaw.v1.AccessService.AcceptInvitation:input_type -> pantherclaw.v1.AcceptInvitationRequest
+	28, // 39: pantherclaw.v1.AccessService.ListRoles:input_type -> pantherclaw.v1.ListRolesRequest
+	30, // 40: pantherclaw.v1.AccessService.ListRoleBindings:input_type -> pantherclaw.v1.ListRoleBindingsRequest
+	32, // 41: pantherclaw.v1.AccessService.CreateRoleBinding:input_type -> pantherclaw.v1.CreateRoleBindingRequest
+	34, // 42: pantherclaw.v1.AccessService.DeleteRoleBinding:input_type -> pantherclaw.v1.DeleteRoleBindingRequest
+	13, // 43: pantherclaw.v1.AccessService.WhoAmI:output_type -> pantherclaw.v1.WhoAmIResponse
+	15, // 44: pantherclaw.v1.AccessService.ListUsers:output_type -> pantherclaw.v1.ListUsersResponse
+	17, // 45: pantherclaw.v1.AccessService.GetUser:output_type -> pantherclaw.v1.GetUserResponse
+	19, // 46: pantherclaw.v1.AccessService.SetUserState:output_type -> pantherclaw.v1.SetUserStateResponse
+	21, // 47: pantherclaw.v1.AccessService.CreateInvitation:output_type -> pantherclaw.v1.CreateInvitationResponse
+	23, // 48: pantherclaw.v1.AccessService.ListInvitations:output_type -> pantherclaw.v1.ListInvitationsResponse
+	25, // 49: pantherclaw.v1.AccessService.RevokeInvitation:output_type -> pantherclaw.v1.RevokeInvitationResponse
+	27, // 50: pantherclaw.v1.AccessService.AcceptInvitation:output_type -> pantherclaw.v1.AcceptInvitationResponse
+	29, // 51: pantherclaw.v1.AccessService.ListRoles:output_type -> pantherclaw.v1.ListRolesResponse
+	31, // 52: pantherclaw.v1.AccessService.ListRoleBindings:output_type -> pantherclaw.v1.ListRoleBindingsResponse
+	33, // 53: pantherclaw.v1.AccessService.CreateRoleBinding:output_type -> pantherclaw.v1.CreateRoleBindingResponse
+	35, // 54: pantherclaw.v1.AccessService.DeleteRoleBinding:output_type -> pantherclaw.v1.DeleteRoleBindingResponse
+	43, // [43:55] is the sub-list for method output_type
+	31, // [31:43] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_access_proto_init() }
@@ -2263,8 +2526,8 @@ func file_pantherclaw_v1_access_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_access_proto_rawDesc), len(file_pantherclaw_v1_access_proto_rawDesc)),
-			NumEnums:      4,
-			NumMessages:   28,
+			NumEnums:      6,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

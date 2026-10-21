@@ -1,6 +1,6 @@
 # PantherClaw — Product Features (revised)
 
-PantherClaw is an AI Agent Identity & Runtime Authorization Firewall. It gives every agent workload a verifiable identity and binds each consequential action to an explicit task grant and a deterministic policy decision. It routes that action through a gateway that dispatches only what was authorized, and keeps signed, independently verifiable evidence of what was decided, what was dispatched and what actually happened. This document turns all 802 catalog requirements (F001–F802) into consolidated, testable backend capabilities grouped into 20 commercially framed pillars, which roll up into seven product components ([PRODUCT.md](PRODUCT.md)). It also adds new PantherClaw features (PN-001–PN-024). Version 1.0 is a Go backend with a Connect-RPC API and the `pclaw` CLI. The UI comes later, so each row states what the backend must deliver, and the later UI will expose it. Everything here is planned scope, not a claim that the behaviour is built. Behaviour detail lives in the catalog ([`reference/PantherClaw_Feature_Catalog_F001-F802.md`](reference/PantherClaw_Feature_Catalog_F001-F802.md)), [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`protocol/PAP-1.md`](protocol/PAP-1.md); where they are more specific, they take precedence.
+PantherClaw is an AI Agent Identity & Runtime Authorization Firewall. It gives every agent workload a verifiable identity and binds each consequential action to an explicit task grant and a deterministic policy decision. It routes that action through a gateway that dispatches only what was authorized, and keeps signed, independently verifiable evidence of what was decided, what was dispatched and what actually happened. This document turns all 802 catalog requirements (F001–F802) into consolidated, testable backend capabilities grouped into 20 commercially framed pillars, which roll up into seven product components ([PRODUCT.md](PRODUCT.md)). It also adds new PantherClaw features (PN-001–PN-026) and the web console, hosted-account and plan rows F803–F830 of milestone UI. Version 1.0 is a Go backend with a Connect-RPC API and the `pclaw` CLI, plus the web console of milestone UI. Each backend row states what the backend must deliver, and the console exposes it. Everything here is planned scope, not a claim that the behaviour is built. Behaviour detail lives in the catalog ([`reference/PantherClaw_Feature_Catalog_F001-F802.md`](reference/PantherClaw_Feature_Catalog_F001-F802.md)), [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`protocol/PAP-1.md`](protocol/PAP-1.md); where they are more specific, they take precedence.
 
 ## How to read this
 
@@ -8,7 +8,7 @@ Each pillar table has the columns `ID | Feature | What the backend delivers | Ph
 
 **Phase**
 
-- `MVP`: in the v1.0 backend (milestones M1–M14, delivered in the order given below the milestone table).
+- `MVP`: in v1.0 (milestones M1–M14 and UI, delivered in the order given below the milestone table).
 - `Next`: planned after 1.0.
 - `Later`: wanted, but not scheduled.
 
@@ -38,10 +38,10 @@ Each pillar table has the columns `ID | Feature | What the backend delivers | Ph
 | M12 | Adversarial red-team range |
 | M13 | Commercial & production hardening |
 | M14 | Framework SDKs & business connectors (framework wrappers, Stripe test mode, Slack, Postgres) |
-| UI phase | User interface, built after the backend |
+| UI | Web console, hosted accounts, self-serve organizations, per-organization plans, onboarding, website and interactive demo ([G0 UI](g0/UI.md)) |
 | post-1.0 | Not yet scheduled to a milestone |
 
-Milestone numbers are identifiers, not delivery order. Delivery order ([ADR-0017](adr/0017-coding-agents-first-and-proven-coverage.md)): M1 … M9, M12, then the v0.1.0 preview, then M11.1, M10, M11, M14, M13 and v1.0.
+Milestone numbers are identifiers, not delivery order. Delivery order ([ADR-0017](adr/0017-coding-agents-first-and-proven-coverage.md)): M1 … M9, M12, then the v0.1.0 preview, then M11.1, M10, M11, M14, UI, M13 and v1.0 (UI moved ahead of M13 by the founder on 2026-10-20).
 
 **Component**
 
@@ -79,7 +79,7 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | SIEM export (OCSF 1.9) & SOAR response requests | — | — | Yes | Yes |
 | Threat detections | Core built-ins | Core built-ins | Advanced built-ins + custom rules | Advanced built-ins + custom rules |
 | Red-team range | Community scenarios | Community scenarios | Full library (≥ 30 scenarios) | Full library (≥ 30 scenarios) |
-| Deployment | Self-hosted single node | + SaaS / hybrid (post-1.0) | + SaaS / hybrid (post-1.0) | + hybrid fleet management, multi-org |
+| Deployment | Self-hosted single node | + hybrid (hosted control plane, from v1.0); SaaS post-1.0 | + hybrid (hosted control plane, from v1.0); SaaS post-1.0 | + hybrid fleet management, multi-org |
 | FIPS 140-3 build | — | — | — | Yes |
 | Customer-approved support access | — | — | — | Yes |
 | High availability | — | — | — | Yes (post-1.0) |
@@ -606,7 +606,7 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | --- | --- | --- | --- | --- | --- | --- |
 | PN-010.1 | Self-hosted single node | `pclaw up` starts server, worker, gateway and PostgreSQL through Docker Compose profiles, using signed, distroless, non-root images. Supports Community production within licence limits. | MVP | Community | M1 | new |
 | PN-010.2 | Customer-run gateway | The gateway runs inside the customer network with no database access and outbound-only mTLS. Target credentials and payloads never leave that network. | MVP | Community | M6 | new |
-| PN-010.3 | Hybrid (hosted control plane) | A PantherClaw-hosted control plane with customer-run gateways; this is the intended commercial default. | Next | Team | post-1.0 | new |
+| PN-010.3 | Hybrid (hosted control plane) | A PantherClaw-hosted control plane and console with customer-run gateways; this is the intended commercial default. Product code in UI; general availability at v1.0 after M13 hardening. | MVP | Team | UI | new |
 | PN-010.4 | SaaS | Multi-tenant hosted control plane and gateways. No third-party MCP servers run in multi-tenant gateways. | Next | Team | post-1.0 | new |
 | PN-010.5 | Agent deployment inventory | Tracks where each agent runs (environment, image digest, host, release) from enrollment and attestation. A new digest or host triggers identity-drift reassessment. | MVP | Community | M3 | F028, F033 |
 | PN-010.6 | Hybrid fleet management | Register, version and health-check many customer gateways across multiple orgs. | Next | Enterprise | post-1.0 | new |
@@ -642,18 +642,18 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | PN-022.2 | Walking skeleton | An end-to-end thin slice (enrolled workload, MCP call, decision, permit, dispatch to a simulator, signed receipt) that runs in CI and sets the first latency baselines. | MVP | Community | M1.5 | new |
 | PN-021 | Tenant isolation & service auth | Every tenant row carries `org_id` under forced row-level security, and cross-tenant IDs return not-found. Services use `private_key_jwt` or scoped `pck_` keys that can never approve; gateways use mTLS. | MVP | Community | M2 | new |
 | PN-012.1 | Editions & offline licence keys | Ed25519-signed licence documents (org, edition, agent limit, expiry, features) are verified offline against an embedded key. Licence expiry never disables enforcement or evidence. | MVP | Community | M13 | new |
-| PN-012.2 | Entitlements, metering & plan limits | Meters governed agents, orgs and retention against entitlements. At the limit, new agent admission is refused with a clear error, while existing protection continues. | MVP | Community | M13 | new |
-| PN-012.3 | Invitations & membership | Single-use, expiring invitations add users to organisation and team roles. Membership changes are audited. | MVP | Community | M13 | new |
+| PN-012.2 | Entitlements, metering & plan limits | Meters governed agents, orgs and retention against entitlements. At the limit, new agent admission is refused with a clear error, while existing protection continues. | MVP | Community | UI | new |
+| PN-012.3 | Invitations & membership | Single-use, expiring invitations add users to organisation and team roles. Membership changes are audited. | MVP | Community | UI | new |
 | PN-012.4 | Customer-approved support access | Support access is requested for a named task and duration, approved by the customer, visible in scope and audited. Support has no standing access to credentials or restricted payloads. | MVP | Enterprise | M13 | F597, F598 |
 | PN-012.5 | Data export & deletion | Tenant-wide export of records and evidence, and verified tenant deletion that keeps a deletion record. | MVP | Community | M13 | new |
 | PN-012.6 | Effortless installation | The installer verifies release signatures and attestations. `pclaw up` starts a node, and `pclaw init` detects and configures MCP clients, SDKs and Claude Code hooks. Helm chart for Kubernetes. | MVP | Community | M13 | new |
 | F014 | Plain-language API vocabulary | The API and docs use task grant, action definition, reviewed tool package, protection boundary, coverage evidence and transaction evidence. Formal names appear only in advanced evidence fields. | MVP | Community | M1 | F014 |
-| F322 | One-workflow developer onboarding | Start from one agent, owner and dev environment: verify identity, list tools and uncovered paths, choose a template, and name resources, operations, limits and duration. | MVP | Community | M13 | F322, F323, F324 |
-| F325 | Guided first tests | Run a safe action, a permitted action and an out-of-scope action. Then enforce one named path and confirm that the prohibited test is stopped. | MVP | Community | M13 | F325, F326, F327 |
+| F322 | One-workflow developer onboarding | Start from one agent, owner and dev environment: verify identity, list tools and uncovered paths, choose a template, and name resources, operations, limits and duration. | MVP | Community | UI | F322, F323, F324 |
+| F325 | Guided first tests | Run a safe action, a permitted action and an out-of-scope action. Then enforce one named path and confirm that the prohibited test is stopped. | MVP | Community | UI | F325, F326, F327 |
 | F330 | Developer debugging | Denials return the decision ID, failed boundary, redacted request, effective grant and policy, failing category (identity, scope, approval, context, connection) and recovery links. A case opens with one call. | MVP | Community | M4 | F330, F331, F332 |
-| F335 | 30-minute onboarding target | Measured goal: one verified insight and one verified protected path in about 30 minutes, for a supported integration with credentials available. Not a guarantee. | MVP | Community | M13 | F335 |
-| F336 | Security-team onboarding | Start from one owner, consequential tool and task. Confirm ownership, compare credential reach with authority, connect identity and classification sources, review representative work and simulate a restriction. | MVP | Team | M13 | F336–F340 |
-| F341 | Onboarding validation | Verify an enforced deny, a working approval and a suspension. Completion requires ownership, usable authority, decision explanation and stopping capability, shown on the customer's own workflow. | MVP | Team | M13 | F341, F342, F345 |
+| F335 | 30-minute onboarding target | Measured goal: one verified insight and one verified protected path in about 30 minutes, for a supported integration with credentials available. Not a guarantee. | MVP | Community | UI | F335 |
+| F336 | Security-team onboarding | Start from one owner, consequential tool and task. Confirm ownership, compare credential reach with authority, connect identity and classification sources, review representative work and simulate a restriction. | MVP | Team | UI | F336–F340 |
+| F341 | Onboarding validation | Verify an enforced deny, a working approval and a suspension. Completion requires ownership, usable authority, decision explanation and stopping capability, shown on the customer's own workflow. | MVP | Team | UI | F341, F342, F345 |
 | F343 | Dependency-led recommendations | Recommends identity, classification, approval and incident connections based on discovered needs, stating what each enables and what stays unsupported. | Next | Team | post-1.0 | F343, F344 |
 | F573 | Organisation hierarchy | Organisation → business unit → team → environment. Small tenants use only organisation and environments; business units are Business, and multiple organisations are Enterprise. | MVP | Community | M2 | F573 |
 | F581 | Roles & separation of duties | Default roles: Agent Owner, Policy Author, Policy Publisher, Approver, Responder and Auditor. Platform administration never implies business approval rights or payload access. | MVP | Community | M2 | F581, F583 |
@@ -662,11 +662,48 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | F594 | Break-glass access | Emergency access is narrow, time-limited, step-up authenticated and separately audited. It never waives invariants or fabricates verification. | MVP | Business | M13 | F594 |
 | F647 | Material limits always returned | Responses never omit gaps, grant scope, expiry, cumulative budgets, decision reasons, unknown outcomes or requested vs confirmed containment. Every record answers who, what, why, how certain and what next. | MVP | Community | M4 | F647, F651 |
 | F774 | Outcome metrics | Time to protected work, to understanding a decision and to containment. Also coverage, bypass closure, change assurance, friction, outcome assurance, automation usefulness and operating effort; raw volume is never claimed as value. | Next | Business | post-1.0 | F774–F785 |
-| F001 | Work surfaces | Operations, Agents, Policies, Approvals, Investigations, Connections and Automations, with universal search. Posture sits inside Operations, workbenches are embedded in their surfaces, and settings stay outside daily work. | Next | Community | UI phase | F001, F002, F008 |
-| F006 | Role views & pinned entries | Saved views per role (developer, SOC, security, IAM, platform, CISO, auditor, approver) and pinned Work, Protect, Configure, Operations and Audit entries, all over the same records and permissions. | Next | Team | UI phase | F006, F007 |
-| F009 | Stable, scoped navigation | Org, team, environment and time range are always visible. Drill-down keeps filters and selection, and live updates never reorder items under review. | Next | Community | UI phase | F009, F010, F011 |
-| F012 | Accessibility & formats | Keyboard operation and accessible status text; meaning is never carried by colour alone. Tables for ranking, timelines for sequence; fast-comprehension goals are usability targets. | Next | Community | UI phase | F012, F223, F303 |
-| F643 | Progressive disclosure | One-agent setup comes first. Repeated-work, team and enterprise governance controls appear as needed, with role-appropriate next steps and a layout organised around tasks and consequences. | Next | Community | UI phase | F643–F646, F649, F650 |
+| F001 | Work surfaces | Operations, Agents, Policies, Approvals, Investigations, Connections and Automations, with universal search. Posture sits inside Operations, workbenches are embedded in their surfaces, and settings stay outside daily work. | MVP | Team | UI | F001, F002, F008 |
+| F006 | Role views & pinned entries | Saved views per role (developer, SOC, security, IAM, platform, CISO, auditor, approver) and pinned Work, Protect, Configure, Operations and Audit entries, all over the same records and permissions. | MVP | Team | UI | F006, F007 |
+| F009 | Stable, scoped navigation | Org, team, environment and time range are always visible. Drill-down keeps filters and selection, and live updates never reorder items under review. | MVP | Team | UI | F009, F010, F011 |
+| F012 | Accessibility & formats | Keyboard operation and accessible status text; meaning is never carried by colour alone. Tables for ranking, timelines for sequence; fast-comprehension goals are usability targets. | MVP | Team | UI | F012, F223, F303 |
+| F643 | Progressive disclosure | One-agent setup comes first. Repeated-work, team and enterprise governance controls appear as needed, with role-appropriate next steps and a layout organised around tasks and consequences. | MVP | Team | UI | F643–F646, F649, F650 |
+
+**Edition note (F001, F006, F009, F012, F643).** These rows describe the web console, which is part of the paid hosted offering (Team; founder decision F2 of G0 UI). The server-rendered approval and confirmation pages, the CLI and the API stay Community.
+
+**Web console, hosted accounts and plans (milestone UI; [G0 UI](g0/UI.md)).** The console, the website and the demo are built in the commercial distribution from the core plus the extension point; the core rows below (accounts, plans, the gate, onboarding progress, test seams) are in this repository.
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| PN-025 | Website and interactive demo | A static public website and an interactive demo of the real console on simulated data in the browser: no sign-up, no server, its own origin, no cookies. | MVP | Community | UI | new |
+| PN-026 | Hosted accounts, self-serve organizations and paid plans | On the hosted control plane people sign in through a hosted OIDC provider, create an organization, choose a plan through a merchant-of-record payment provider and invite teammates. A lapse never weakens enforcement. | MVP | Team | UI | new |
+| F803 | Public website | Product, how it works, security, pricing, early access, privacy and terms pages; claims stay within stated boundaries; no third-party scripts or cookies; visits counted from edge logs only, without a script. | MVP | Community | UI | new |
+| F804 | Early-access sign-up | A minimal form (email, name, company, role, consent text version) protected without a third-party bot check (honeypot, minimum fill time, rate limit); no raw IP stored; nothing else collected; deleted on request. | MVP | Community | UI | new |
+| F805 | Book a demo | A link to an external booking page; no third-party script runs on PantherClaw's pages. | MVP | Community | UI | new |
+| F806 | Guided demo tour | A skippable, resumable keyboard tour: a held merge approved by a simulated key, the same merge by direct API call, a found token failing, receipts, the kill switch, a case; each step shown as its role. | MVP | Community | UI | new |
+| F807 | Demo isolation | A permanent "Interactive demo · SIMULATED data" banner; state kept in memory only and reset on request; the demo runs on its own origin and calls no API. | MVP | Community | UI | new |
+| F808 | Console shell | Operations, Agents, Policies, Approvals, Investigations, Connections and Automations, with universal search and a command menu; settings sit outside daily work. Served by the server at `/app/` under a strict content security policy. | MVP | Team | UI | new |
+| F809 | Scope bar and stable lists | Organization, team, environment and time range kept in the URL; drill-down keeps filters; live lists show a "new items" notice instead of reordering items under review. | MVP | Team | UI | new |
+| F810 | Role landing views | A default landing page and pinned entries for each role (developer, SOC, security, IAM, platform, CISO, auditor, approver); visibility follows the caller's permissions, and authorization stays on the server. | MVP | Team | UI | new |
+| F811 | Approvals in the console | Queue, detail with the binding summary and an untrusted-text box, approve or decline with a security-key binding challenge, batch review; the server confirmation page stays canonical. | MVP | Team | UI | new |
+| F812 | Agents surface | Inventory, owners, lifecycle, the admission waitlist, enrollment, runs, grants, cohorts and the promotion gate. | MVP | Team | UI | new |
+| F813 | Operations surface | Live feed, posture, the coverage card and the kill switch behind a step-up; designed empty, loading and error states. | MVP | Team | UI | new |
+| F814 | Connections surface | Gateways, connections, routes, coverage, packages and credential metadata only; secrets are never shown. | MVP | Team | UI | new |
+| F815 | Policies surface | Drafts and publication, validation, scenario tests, simulation, shadow and pilot rollout, exceptions, templates and packs. | MVP | Team | UI | new |
+| F816 | Investigations surface | Alerts, incidents, cases, breach radius, containment, reconciliation, the evidence explorer and evidence packs. | MVP | Team | UI | new |
+| F817 | Automations surface | Definitions, versions, triggers, the execution inspector and shadow mode. | MVP | Team | UI | new |
+| F818 | Untrusted text display | Agent-written text is shown only as text: bidirectional controls stripped, mixed scripts flagged, length clamped, in a labelled box; unsafe rendering is banned by lint rules. | MVP | Team | UI | new |
+| F819 | Step-up in the console | High-consequence actions ask for a fresh security-key step-up before the call; no optimistic updates on security actions. | MVP | Team | UI | new |
+| F820 | Themes and accessibility | Dark and light themes; WCAG 2.2 AA with no serious or critical automated findings; keyboard-only paths for approvals, the kill switch and onboarding; status always icon, word and colour. | MVP | Team | UI | new |
+| F821 | Console settings | Organization, members and roles, sign-in and SSO, security keys, API keys and service accounts, notifications, plan and billing. | MVP | Team | UI | new |
+| F822 | Hosted sign-in and organization picker | Signing in without naming an organization: no membership gives an account session (when self-serve is on), one opens it, several show a picker; switching organization signs in again. | MVP | Team | UI | new |
+| F823 | Self-serve organization creation | A signed-in account with a verified email creates an organization within per-account limits and rate limits, becomes its admin and records the terms and data-processing versions accepted. | MVP | Team | UI | new |
+| F824 | Browser invitations | An invitation link is accepted in the browser after sign-in, only when the verified email equals the invitation's; single use, with expiry. | MVP | Community | UI | new |
+| F825 | Plan and usage view | Plan, status, limits, usage (agents, environments, members), period end and complimentary-plan expiry for the caller's organization. | MVP | Community | UI | new |
+| F826 | Plan gate that keeps protection on | Without an active plan, configuration changes and new agents or connections answer `PLAN_REQUIRED`; enforcement, safety actions and open approvals keep working, and evidence stays exportable for at least 30 days. | MVP | Team | UI | new |
+| F827 | Checkout and billing portal | Choosing a plan opens checkout with a merchant-of-record payment provider; the plan activates from the provider's signed events; invoices and cancellation through the provider's portal. | MVP | Team | UI | new |
+| F828 | Complimentary plans | With hosted billing, an operator grants or revokes a complimentary plan from the command line, with a reason and an expiry of at most one year; audited, shown, never overriding a self-hosted licence. | MVP | Community | UI | new |
+| F829 | Test access and deployment banner | Development sign-in providers, billing off or faked, and the console's mock mode are adapters chosen by configuration, shown by a permanent banner and refused in production. | MVP | Community | UI | new |
+| F830 | Guided hosted onboarding | Resumable steps from sign-in to a first protected path, guided tests and validation, computed on the server from real records; simulated records never complete a step. | MVP | Team | UI | F322, F325, F335, F336, F341 |
 
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
@@ -704,7 +741,7 @@ These boundaries constrain every pillar above. A feature request that conflicts 
 | Proof | Trail | 15 | PN-007.1–PN-007.4, F461 | Integrity ≠ completeness ≠ business effect |
 | Breach radius | Reflex | 14 | F253, F256, F262 | Possible reach is kept separate from observed impact |
 | Waitlist | Pass | 7 | PN-004.1–PN-004.5, PN-020.1 | Expiry means deny |
-| Deployed | Root | 18 | PN-010.1–PN-010.7 | Hybrid and SaaS are post-1.0 |
+| Deployed | Root | 18 | PN-010.1–PN-010.7 | Hybrid from v1.0 (product code in UI); SaaS post-1.0 |
 | Session | Reflex | 9 | F224, F284, PN-002.5 | No transcripts required |
 | Performance | Root | 19 | PN-011.1–PN-011.5 | SLOs are published with their test conditions |
 | Management | Root | 20 | PN-012.1–PN-012.5, F573, F581 | Licence expiry never disables enforcement |
@@ -720,9 +757,9 @@ These boundaries constrain every pillar above. A feature request that conflicts 
 
 ## Coverage verification
 
-Checked on 2026-10-09 by a script that parsed every table row with a Source column and expanded the ranges, after ADR-0017, ADR-0018 and ADR-0019 added PN-002.8, PN-016.3, PN-023 and PN-024 and moved four rows to M14.
+Checked on 2026-10-09 by a script that parsed every table row with a Source column and expanded the ranges, after ADR-0017, ADR-0018 and ADR-0019 added PN-002.8, PN-016.3, PN-023 and PN-024 and moved four rows to M14; row counts updated on 2026-10-20 after G0 UI added PN-025, PN-026 and the new rows F803–F830.
 
-- **Rows:** 340 in total: 330 pillar rows (79 of them PN rows covering 24 new features, PN-001–PN-024) and 10 boundary rows.
+- **Rows:** 370 in total: 360 pillar rows (81 of them PN rows covering 26 new features, PN-001–PN-026; 28 new-feature rows F803–F830) and 10 boundary rows.
 - **Coverage:** 802 of 802 catalog IDs (F001–F802) appear in at least one Source cell. None are missing and none are out of range.
 - **Format checks:** every row ID matches its convention, and no row ID repeats. Every Phase, Edition and Milestone value is valid. Every "What the backend delivers" cell is ≤ 36 words.
 

@@ -5,17 +5,12 @@
 package main
 
 import (
-	"context"
 	"os"
-	"os/signal"
-	"syscall"
 
-	"github.com/katocxl/pantherclaw/internal/server"
+	"github.com/katocxl/pantherclaw/internal/extension"
+	"github.com/katocxl/pantherclaw/internal/servercli"
 )
 
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	code := server.Run(ctx, os.Args[1:], os.Stdout, os.Stderr, os.LookupEnv)
-	stop()
-	os.Exit(code)
+	os.Exit(servercli.Main(os.Args[1:], extension.Set{}))
 }

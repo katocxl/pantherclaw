@@ -22,6 +22,20 @@ service TenancyService {
   // UpdateOrg renames the organization.
   // permission: org.update
   rpc UpdateOrg(UpdateOrgRequest) returns (UpdateOrgResponse);
+  // CreateOrg creates an organization for the signed-in account (hosted
+  // self-serve, D8): only from an account browser session with a verified
+  // email while self-serve sign-up is on (else SIGNUP_DISABLED), within the
+  // per-account limits (ACCOUNT_ORG_LIMIT) and rate limits. The account
+  // becomes the org's first user with Org Admin, the accepted terms and DPA
+  // versions are recorded, and the session is rotated into the new org.
+  // permission: orgs.create
+  rpc CreateOrg(CreateOrgRequest) returns (CreateOrgResponse);
+  // ListMyOrgs lists the organizations the signed-in account is an active
+  // member of, through the audited cross-org lister (HR-349).
+  // permission: orgs.list_mine
+  rpc ListMyOrgs(ListMyOrgsRequest) returns (ListMyOrgsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // CreateBusinessUnit creates a business unit (Business edition).
   // permission: business_unit.manage
@@ -216,6 +230,48 @@ message UpdateOrgRequest {
 message UpdateOrgResponse {
   // The org.
   Org org = 1;
+}
+
+// CreateOrgRequest creates an organization.
+message CreateOrgRequest {
+  // Display name.
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+  // Short label: lowercase letters, digits and hyphens. It is shown, never
+  // looked up, and need not be unique across organizations (no existence
+  // oracle, T-164).
+  string slug = 2 [(buf.validate.field).string.pattern = "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"];
+  // Version of the terms of service the person accepted.
+  string terms_version = 3 [(buf.validate.field).string.pattern = "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"];
+  // Version of the data processing agreement the person accepted.
+  string dpa_version = 4 [(buf.validate.field).string.pattern = "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"];
+}
+
+// CreateOrgResponse returns the new organization.
+message CreateOrgResponse {
+  // The org.
+  Org org = 1;
+}
+
+// ListMyOrgsRequest asks for the account's organizations.
+message ListMyOrgsRequest {}
+
+// OrgSummary is one organization the account belongs to.
+message OrgSummary {
+  // Org id.
+  string org_id = 1;
+  // Display name.
+  string name = 2;
+  // Short label.
+  string slug = 3;
+}
+
+// ListMyOrgsResponse lists the account's organizations by name.
+message ListMyOrgsResponse {
+  // The organizations.
+  repeated OrgSummary orgs = 1;
 }
 
 // CreateBusinessUnitRequest creates a business unit.

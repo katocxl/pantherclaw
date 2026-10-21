@@ -7,6 +7,8 @@
 //
 // The bearer token is read from the Authorization header only; a request
 // carrying anything that looks like a credential in its URL is refused.
+// The web console opens the same stream with its session cookie as a
+// same-origin GET with PC-CSRF: 1 (browser.go, HR-344).
 // Each event's id is its feed sequence number, so Last-Event-ID (or the
 // after parameter) resumes where the viewer left off. Only focus events are
 // sent (live signals, alerts, incidents, containment), each filtered by the
@@ -29,6 +31,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/authn/adapters/webguard"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
@@ -86,6 +89,12 @@ type Config struct {
 	Batch        int           // events read per poll (500)
 }
 
+// DefaultRecheck is how often an open stream authenticates its credential
+// again (D32): at most 30 seconds, so a revoked or ended session, or a
+// browser session that passed its idle or absolute limit (HR-150), closes
+// the stream within it. A browser stream has no other expiry.
+const DefaultRecheck = 30 * time.Second
+
 func (c Config) withDefaults() Config {
 	if c.Poll <= 0 {
 		c.Poll = time.Second
@@ -94,7 +103,7 @@ func (c Config) withDefaults() Config {
 		c.Heartbeat = 15 * time.Second
 	}
 	if c.Recheck <= 0 {
-		c.Recheck = 30 * time.Second
+		c.Recheck = DefaultRecheck
 	}
 	if c.MaxPerCaller <= 0 {
 		c.MaxPerCaller = 5
@@ -116,6 +125,9 @@ type Handler struct {
 	clk    clock.Clock
 	cfg    Config
 	log    *slog.Logger
+	// sessions, when set, lets the console open the stream with its
+	// session cookie (browser.go, HR-344).
+	sessions *webguard.Sessions
 
 	mu sync.Mutex
 	// active counts open streams per principal in this process: the
@@ -216,17 +228,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	bearer, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if !ok || bearer == "" {
-		w.Header().Set("WWW-Authenticate", "Bearer")
-		http.Error(w, "authentication required", http.StatusUnauthorized)
-		return
-	}
 	ctx := r.Context()
-	c, err := h.auth.Authenticate(ctx, bearer)
-	if err != nil {
-		w.Header().Set("WWW-Authenticate", "Bearer")
-		http.Error(w, "invalid or expired credentials", http.StatusUnauthorized)
+	c, reauth, expires, ok := h.authenticate(w, r)
+	if !ok {
 		return
 	}
 	if !c.CanAnywhere(PermOperations) {
@@ -254,11 +258,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s := &session{
-		h: h, w: w, rc: http.NewResponseController(w), bearer: bearer, caller: c, scopes: scopes, cursor: after,
-		checked: h.clk.Now(),
-	}
-	if exp, ok := h.expiry(bearer); ok {
-		s.expires = exp
+		h: h, w: w, rc: http.NewResponseController(w), reauth: reauth, caller: c, scopes: scopes, cursor: after,
+		checked: h.clk.Now(), expires: expires,
 	}
 	hd := w.Header()
 	hd.Set("Content-Type", "text/event-stream")
@@ -284,10 +285,12 @@ func (h *Handler) scopes(ctx context.Context, c tenancy.Caller) (map[td.Permissi
 
 // session is one open stream.
 type session struct {
-	h       *Handler
-	w       http.ResponseWriter
-	rc      *http.ResponseController
-	bearer  string
+	h  *Handler
+	w  http.ResponseWriter
+	rc *http.ResponseController
+	// reauth authenticates the stream's credential again (never rotating
+	// a browser session's secret, which this response can no longer set).
+	reauth  func(context.Context) (tenancy.Caller, error)
 	caller  tenancy.Caller
 	scopes  map[td.Permission]Scope
 	cursor  int64
@@ -358,7 +361,7 @@ func (s *session) run(ctx context.Context) string {
 // scopes: a revoked session, a disabled principal or a removed role closes
 // the stream, a narrowed role narrows what it sends next.
 func (s *session) recheck(ctx context.Context) string {
-	c, err := s.h.auth.Authenticate(ctx, s.bearer)
+	c, err := s.reauth(ctx)
 	if err != nil {
 		return closedRevoked
 	}

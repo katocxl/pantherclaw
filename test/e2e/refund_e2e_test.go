@@ -143,6 +143,9 @@ type options struct {
 	// claimTimeout is the server's coverage.claim_timeout; zero is its
 	// default (G0 M9).
 	claimTimeout time.Duration
+	// billing runs the server with hosted plans and the plan gate
+	// (billing.mode external, require_plan; G0 UI D9).
+	billing bool
 	// stripe also starts the Stripe simulator with stripeFaults and seeds
 	// pc.stripe and the connection "stripe" to it, held by the gateway with
 	// stripeKey sealed (the e2e test key when empty; dev seed --stripe-url,
@@ -243,6 +246,9 @@ func start(t *testing.T, o options) *stack {
 	if o.claimTimeout > 0 {
 		cfg["coverage"] = map[string]any{"claim_timeout": o.claimTimeout.String()}
 	}
+	if o.billing {
+		cfg["billing"] = map[string]any{"mode": "external", "require_plan": true}
+	}
 	write := func(name string) string {
 		b, err := json.Marshal(cfg)
 		if err != nil {
@@ -308,6 +314,9 @@ func start(t *testing.T, o options) *stack {
 		t.Fatalf("dev seed output %q", out.String())
 	}
 	s.org, s.conn = ids.MustParse[ids.Org](m[1]), mustUUID(t, c[1])
+	if o.billing {
+		activePlan(t, s.db.AppPool(t), s.org) // before anything calls the API (G0 UI D9)
+	}
 	if o.github {
 		g := seededGitHub.FindStringSubmatch(out.String())
 		if g == nil {
