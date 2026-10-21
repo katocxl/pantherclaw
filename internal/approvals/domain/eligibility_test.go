@@ -283,3 +283,77 @@ func TestCompromisedPersonNeverApproves(t *testing.T) {
 	ok, code := domain.Check(r, p, c, ids.UUID{})
 	wantCode(t, "compromised", ok, code, domain.IneligibleCompromised)
 }
+
+// TestHR035_EligibleFromIsWhenTheLastCooldownEnds (D81): a person whose
+// response counts toward nothing only because of their own cooldowns
+// learns when the last of them ends (the account, the role binding or the
+// key, whichever ends last), and Check accepts them from exactly then.
+// Nothing is reported when they are eligible now or when waiting never
+// makes them eligible.
+func TestHR035_EligibleFromIsWhenTheLastCooldownEnds(t *testing.T) {
+	c := ctx()
+	at := func(name string, r domain.Requirement, p domain.Person, c domain.Context, want time.Time) {
+		t.Helper()
+		got, ok := domain.EligibleFrom(r, p, c)
+		if want.IsZero() {
+			if ok {
+				t.Errorf("%s: eligible from %v, want nothing", name, got)
+			}
+			return
+		}
+		if !ok || !got.Equal(want) {
+			t.Errorf("%s: eligible from %v (%v), want %v", name, got, ok, want)
+			return
+		}
+		// Check agrees: yes from that time, no a moment before.
+		later, before := c, c
+		later.Now, before.Now = got, got.Add(-time.Nanosecond)
+		if ok, code := domain.Check(r, p, later, ids.UUID{}); !ok {
+			t.Errorf("%s: Check refuses at %v: %s", name, got, code)
+		}
+		if ok, _ := domain.Check(r, p, before, ids.UUID{}); ok {
+			t.Errorf("%s: Check accepts before %v", name, got)
+		}
+	}
+	at("a veteran", approver(2, false), veteran(), c, time.Time{})
+
+	young := veteran()
+	young.JoinedAt = now.Add(-6 * day)
+	young.Bindings[0].CreatedAt = now.Add(-time.Hour)
+	young.Credentials[0].CreatedAt = now.Add(-30 * time.Minute)
+	at("the account ends last", approver(2, false), young, c, now.Add(day))
+	at("one approver needs none of them", approver(1, false), young, c, time.Time{})
+	young.JoinedAt = now.Add(-30 * day)
+	at("the key ends last", approver(2, false), young, c, now.Add(day-30*time.Minute))
+	young.Credentials = append(young.Credentials, domain.Credential{ID: ids.NewV7(), CreatedAt: now.Add(-30 * day)})
+	at("an older key does, so the role ends last", approver(2, false), young, c, now.Add(day-time.Hour))
+
+	self := veteran()
+	self.Bindings[0] = domain.RoleBinding{Role: "approver", CreatedAt: now.Add(-time.Hour), SelfGranted: true}
+	at("a self-granted role", approver(1, false), self, c, now.Add(day-time.Hour))
+	self.Bindings = append(self.Bindings, domain.RoleBinding{Role: "approver", CreatedAt: now.Add(-30 * day)})
+	at("another binding already counts", approver(1, false), self, c, time.Time{})
+
+	lengthened := c
+	lengthened.Cooldowns.AccountAge = 60 * day
+	at("a lengthened account cooldown", approver(2, false), veteran(), lengthened, now.Add(30*day))
+
+	// Waiting never helps: these say nothing, whatever their cooldowns.
+	fresh := veteran()
+	fresh.JoinedAt = now.Add(-time.Hour)
+	launcher := c
+	launcher.Run.Launcher = userP(fresh.UserID)
+	at("the launcher", approver(2, false), fresh, launcher, time.Time{})
+	owner := c
+	owner.Owners = []ids.UUID{fresh.UserID}
+	at("an owner, independent", approver(2, true), fresh, owner, time.Time{})
+	noKey := fresh
+	noKey.Credentials = nil
+	at("no key", approver(2, false), noKey, c, time.Time{})
+	noRole := fresh
+	noRole.Bindings = []domain.RoleBinding{{Role: "viewer", CreatedAt: now.Add(-time.Hour)}}
+	at("no approval role", approver(2, false), noRole, c, time.Time{})
+	disabled := fresh
+	disabled.Enabled = false
+	at("disabled", approver(2, false), disabled, c, time.Time{})
+}

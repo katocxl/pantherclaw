@@ -282,6 +282,13 @@ message ApprovalEligibility {
   // Why not, as a stable code (for example LAUNCHER_EXCLUDED,
   // ROLE_COOLDOWN, NO_ACTIVE_CREDENTIAL, ALREADY_RESPONDED).
   string reason = 4;
+  // When the caller's own approver cooldowns end (account age, role
+  // binding age and security key age, whichever ends last): from then on
+  // their response would count toward a requirement if nothing else
+  // changes. Unset when it already counts toward one, and when waiting
+  // alone never makes it count (an exclusion, no approval role, no active
+  // security key). Only ever the caller's own (D81).
+  google.protobuf.Timestamp eligible_from = 5;
 }
 
 // ListApprovalRequestsRequest pages through requests.

@@ -257,6 +257,40 @@ func Check(r Requirement, p Person, c Context, cred ids.UUID) (bool, string) {
 	return credentialOK(p, cred, minAge, c.Now)
 }
 
+// EligibleFrom reports when p's own cooldowns for r end (D81): the earliest
+// time after c.Now from which Check accepts p with one of their active
+// credentials if nothing but time changes. It reports false when Check
+// accepts p now, and when waiting alone never makes p eligible (an
+// exclusion, no role, no active credential). It asks Check itself at each
+// time a cooldown of p's ends, so it states no rule of its own: Check only
+// compares ages with cooldowns, so its answer changes only at those times
+// and, once yes, stays yes.
+func EligibleFrom(r Requirement, p Person, c Context) (time.Time, bool) {
+	if ok, _ := Check(r, p, c, ids.UUID{}); ok {
+		return time.Time{}, false
+	}
+	cd := c.Cooldowns.AtLeastMinimum()
+	ends := []time.Time{p.JoinedAt.Add(cd.AccountAge)}
+	for _, b := range p.Bindings {
+		ends = append(ends, b.CreatedAt.Add(cd.RoleAge), b.CreatedAt.Add(cd.SelfGrantDelay))
+	}
+	for _, k := range p.Credentials {
+		ends = append(ends, k.CreatedAt.Add(cd.CredentialAge))
+	}
+	slices.SortFunc(ends, time.Time.Compare)
+	for _, t := range ends {
+		if !t.After(c.Now) {
+			continue
+		}
+		later := c
+		later.Now = t
+		if ok, _ := Check(r, p, later, ids.UUID{}); ok {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
 // checkRestore checks a restoration's decider (decision 11): not the
 // requester, holding a role with agent.restore where the agent lives (a
 // self-granted one only after the self-grant delay), with an active key.

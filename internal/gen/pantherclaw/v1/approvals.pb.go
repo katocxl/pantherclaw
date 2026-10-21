@@ -1071,7 +1071,14 @@ type ApprovalEligibility struct {
 	Requirements []int32 `protobuf:"varint,3,rep,packed,name=requirements,proto3" json:"requirements,omitempty"`
 	// Why not, as a stable code (for example LAUNCHER_EXCLUDED,
 	// ROLE_COOLDOWN, NO_ACTIVE_CREDENTIAL, ALREADY_RESPONDED).
-	Reason        string `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	Reason string `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	// When the caller's own approver cooldowns end (account age, role
+	// binding age and security key age, whichever ends last): from then on
+	// their response would count toward a requirement if nothing else
+	// changes. Unset when it already counts toward one, and when waiting
+	// alone never makes it count (an exclusion, no approval role, no active
+	// security key). Only ever the caller's own (D81).
+	EligibleFrom  *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=eligible_from,json=eligibleFrom,proto3" json:"eligible_from,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1132,6 +1139,13 @@ func (x *ApprovalEligibility) GetReason() string {
 		return x.Reason
 	}
 	return ""
+}
+
+func (x *ApprovalEligibility) GetEligibleFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EligibleFrom
+	}
+	return nil
 }
 
 // ListApprovalRequestsRequest pages through requests.
@@ -2128,14 +2142,15 @@ const file_pantherclaw_v1_approvals_proto_rawDesc = "" +
 	"\x0etransaction_id\x18\x02 \x01(\tR\rtransactionId\x123\n" +
 	"\x05state\x18\x03 \x01(\x0e2\x1d.pantherclaw.v1.ApprovalStateR\x05state\x12;\n" +
 	"\vcreate_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"\x93\x01\n" +
+	"createTime\"\xd4\x01\n" +
 	"\x13ApprovalEligibility\x12\x1f\n" +
 	"\vcan_approve\x18\x01 \x01(\bR\n" +
 	"canApprove\x12\x1f\n" +
 	"\vcan_respond\x18\x02 \x01(\bR\n" +
 	"canRespond\x12\"\n" +
 	"\frequirements\x18\x03 \x03(\x05R\frequirements\x12\x16\n" +
-	"\x06reason\x18\x04 \x01(\tR\x06reason\"\xda\x02\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\x12?\n" +
+	"\religible_from\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\feligibleFrom\"\xda\x02\n" +
 	"\x1bListApprovalRequestsRequest\x12'\n" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x128\n" +
@@ -2316,45 +2331,46 @@ var file_pantherclaw_v1_approvals_proto_depIdxs = []int32{
 	26, // 15: pantherclaw.v1.ApprovalEvidence.create_time:type_name -> google.protobuf.Timestamp
 	0,  // 16: pantherclaw.v1.ApprovalVariant.state:type_name -> pantherclaw.v1.ApprovalState
 	26, // 17: pantherclaw.v1.ApprovalVariant.create_time:type_name -> google.protobuf.Timestamp
-	0,  // 18: pantherclaw.v1.ListApprovalRequestsRequest.states:type_name -> pantherclaw.v1.ApprovalState
-	7,  // 19: pantherclaw.v1.ListApprovalRequestsResponse.requests:type_name -> pantherclaw.v1.ApprovalRequest
-	7,  // 20: pantherclaw.v1.GetApprovalRequestResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
-	9,  // 21: pantherclaw.v1.GetApprovalRequestResponse.evidence:type_name -> pantherclaw.v1.ApprovalEvidence
-	8,  // 22: pantherclaw.v1.GetApprovalRequestResponse.responses:type_name -> pantherclaw.v1.DeciderResponse
-	10, // 23: pantherclaw.v1.GetApprovalRequestResponse.variants:type_name -> pantherclaw.v1.ApprovalVariant
-	11, // 24: pantherclaw.v1.GetApprovalRequestResponse.eligibility:type_name -> pantherclaw.v1.ApprovalEligibility
-	3,  // 25: pantherclaw.v1.DeclineApprovalRequestRequest.reason:type_name -> pantherclaw.v1.DeclineReason
-	4,  // 26: pantherclaw.v1.DeclineApprovalRequestRequest.alternative:type_name -> pantherclaw.v1.SaferAlternative
-	7,  // 27: pantherclaw.v1.DeclineApprovalRequestResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
-	5,  // 28: pantherclaw.v1.RequestApprovalEvidenceRequest.question:type_name -> pantherclaw.v1.EvidenceQuestion
-	26, // 29: pantherclaw.v1.RequestApprovalEvidenceRequest.evidence_deadline_time:type_name -> google.protobuf.Timestamp
-	7,  // 30: pantherclaw.v1.RequestApprovalEvidenceResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
-	7,  // 31: pantherclaw.v1.ProposeNarrowerActionResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
-	27, // 32: pantherclaw.v1.ProposeNarrowerActionResponse.simulated_decision:type_name -> pantherclaw.v1.Decision
-	28, // 33: pantherclaw.v1.ProposeNarrowerActionResponse.simulated_reasons:type_name -> pantherclaw.v1.Reason
-	9,  // 34: pantherclaw.v1.SubmitApprovalEvidenceResponse.evidence:type_name -> pantherclaw.v1.ApprovalEvidence
-	7,  // 35: pantherclaw.v1.SubmitApprovalEvidenceResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
-	3,  // 36: pantherclaw.v1.DeclineApprovalBatchRequest.reason:type_name -> pantherclaw.v1.DeclineReason
-	7,  // 37: pantherclaw.v1.DeclineApprovalBatchResponse.requests:type_name -> pantherclaw.v1.ApprovalRequest
-	12, // 38: pantherclaw.v1.ApprovalService.ListApprovalRequests:input_type -> pantherclaw.v1.ListApprovalRequestsRequest
-	14, // 39: pantherclaw.v1.ApprovalService.GetApprovalRequest:input_type -> pantherclaw.v1.GetApprovalRequestRequest
-	16, // 40: pantherclaw.v1.ApprovalService.DeclineApprovalRequest:input_type -> pantherclaw.v1.DeclineApprovalRequestRequest
-	18, // 41: pantherclaw.v1.ApprovalService.RequestApprovalEvidence:input_type -> pantherclaw.v1.RequestApprovalEvidenceRequest
-	20, // 42: pantherclaw.v1.ApprovalService.ProposeNarrowerAction:input_type -> pantherclaw.v1.ProposeNarrowerActionRequest
-	22, // 43: pantherclaw.v1.ApprovalService.SubmitApprovalEvidence:input_type -> pantherclaw.v1.SubmitApprovalEvidenceRequest
-	24, // 44: pantherclaw.v1.ApprovalService.DeclineApprovalBatch:input_type -> pantherclaw.v1.DeclineApprovalBatchRequest
-	13, // 45: pantherclaw.v1.ApprovalService.ListApprovalRequests:output_type -> pantherclaw.v1.ListApprovalRequestsResponse
-	15, // 46: pantherclaw.v1.ApprovalService.GetApprovalRequest:output_type -> pantherclaw.v1.GetApprovalRequestResponse
-	17, // 47: pantherclaw.v1.ApprovalService.DeclineApprovalRequest:output_type -> pantherclaw.v1.DeclineApprovalRequestResponse
-	19, // 48: pantherclaw.v1.ApprovalService.RequestApprovalEvidence:output_type -> pantherclaw.v1.RequestApprovalEvidenceResponse
-	21, // 49: pantherclaw.v1.ApprovalService.ProposeNarrowerAction:output_type -> pantherclaw.v1.ProposeNarrowerActionResponse
-	23, // 50: pantherclaw.v1.ApprovalService.SubmitApprovalEvidence:output_type -> pantherclaw.v1.SubmitApprovalEvidenceResponse
-	25, // 51: pantherclaw.v1.ApprovalService.DeclineApprovalBatch:output_type -> pantherclaw.v1.DeclineApprovalBatchResponse
-	45, // [45:52] is the sub-list for method output_type
-	38, // [38:45] is the sub-list for method input_type
-	38, // [38:38] is the sub-list for extension type_name
-	38, // [38:38] is the sub-list for extension extendee
-	0,  // [0:38] is the sub-list for field type_name
+	26, // 18: pantherclaw.v1.ApprovalEligibility.eligible_from:type_name -> google.protobuf.Timestamp
+	0,  // 19: pantherclaw.v1.ListApprovalRequestsRequest.states:type_name -> pantherclaw.v1.ApprovalState
+	7,  // 20: pantherclaw.v1.ListApprovalRequestsResponse.requests:type_name -> pantherclaw.v1.ApprovalRequest
+	7,  // 21: pantherclaw.v1.GetApprovalRequestResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
+	9,  // 22: pantherclaw.v1.GetApprovalRequestResponse.evidence:type_name -> pantherclaw.v1.ApprovalEvidence
+	8,  // 23: pantherclaw.v1.GetApprovalRequestResponse.responses:type_name -> pantherclaw.v1.DeciderResponse
+	10, // 24: pantherclaw.v1.GetApprovalRequestResponse.variants:type_name -> pantherclaw.v1.ApprovalVariant
+	11, // 25: pantherclaw.v1.GetApprovalRequestResponse.eligibility:type_name -> pantherclaw.v1.ApprovalEligibility
+	3,  // 26: pantherclaw.v1.DeclineApprovalRequestRequest.reason:type_name -> pantherclaw.v1.DeclineReason
+	4,  // 27: pantherclaw.v1.DeclineApprovalRequestRequest.alternative:type_name -> pantherclaw.v1.SaferAlternative
+	7,  // 28: pantherclaw.v1.DeclineApprovalRequestResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
+	5,  // 29: pantherclaw.v1.RequestApprovalEvidenceRequest.question:type_name -> pantherclaw.v1.EvidenceQuestion
+	26, // 30: pantherclaw.v1.RequestApprovalEvidenceRequest.evidence_deadline_time:type_name -> google.protobuf.Timestamp
+	7,  // 31: pantherclaw.v1.RequestApprovalEvidenceResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
+	7,  // 32: pantherclaw.v1.ProposeNarrowerActionResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
+	27, // 33: pantherclaw.v1.ProposeNarrowerActionResponse.simulated_decision:type_name -> pantherclaw.v1.Decision
+	28, // 34: pantherclaw.v1.ProposeNarrowerActionResponse.simulated_reasons:type_name -> pantherclaw.v1.Reason
+	9,  // 35: pantherclaw.v1.SubmitApprovalEvidenceResponse.evidence:type_name -> pantherclaw.v1.ApprovalEvidence
+	7,  // 36: pantherclaw.v1.SubmitApprovalEvidenceResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
+	3,  // 37: pantherclaw.v1.DeclineApprovalBatchRequest.reason:type_name -> pantherclaw.v1.DeclineReason
+	7,  // 38: pantherclaw.v1.DeclineApprovalBatchResponse.requests:type_name -> pantherclaw.v1.ApprovalRequest
+	12, // 39: pantherclaw.v1.ApprovalService.ListApprovalRequests:input_type -> pantherclaw.v1.ListApprovalRequestsRequest
+	14, // 40: pantherclaw.v1.ApprovalService.GetApprovalRequest:input_type -> pantherclaw.v1.GetApprovalRequestRequest
+	16, // 41: pantherclaw.v1.ApprovalService.DeclineApprovalRequest:input_type -> pantherclaw.v1.DeclineApprovalRequestRequest
+	18, // 42: pantherclaw.v1.ApprovalService.RequestApprovalEvidence:input_type -> pantherclaw.v1.RequestApprovalEvidenceRequest
+	20, // 43: pantherclaw.v1.ApprovalService.ProposeNarrowerAction:input_type -> pantherclaw.v1.ProposeNarrowerActionRequest
+	22, // 44: pantherclaw.v1.ApprovalService.SubmitApprovalEvidence:input_type -> pantherclaw.v1.SubmitApprovalEvidenceRequest
+	24, // 45: pantherclaw.v1.ApprovalService.DeclineApprovalBatch:input_type -> pantherclaw.v1.DeclineApprovalBatchRequest
+	13, // 46: pantherclaw.v1.ApprovalService.ListApprovalRequests:output_type -> pantherclaw.v1.ListApprovalRequestsResponse
+	15, // 47: pantherclaw.v1.ApprovalService.GetApprovalRequest:output_type -> pantherclaw.v1.GetApprovalRequestResponse
+	17, // 48: pantherclaw.v1.ApprovalService.DeclineApprovalRequest:output_type -> pantherclaw.v1.DeclineApprovalRequestResponse
+	19, // 49: pantherclaw.v1.ApprovalService.RequestApprovalEvidence:output_type -> pantherclaw.v1.RequestApprovalEvidenceResponse
+	21, // 50: pantherclaw.v1.ApprovalService.ProposeNarrowerAction:output_type -> pantherclaw.v1.ProposeNarrowerActionResponse
+	23, // 51: pantherclaw.v1.ApprovalService.SubmitApprovalEvidence:output_type -> pantherclaw.v1.SubmitApprovalEvidenceResponse
+	25, // 52: pantherclaw.v1.ApprovalService.DeclineApprovalBatch:output_type -> pantherclaw.v1.DeclineApprovalBatchResponse
+	46, // [46:53] is the sub-list for method output_type
+	39, // [39:46] is the sub-list for method input_type
+	39, // [39:39] is the sub-list for extension type_name
+	39, // [39:39] is the sub-list for extension extendee
+	0,  // [0:39] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_approvals_proto_init() }

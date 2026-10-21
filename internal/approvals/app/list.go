@@ -136,12 +136,15 @@ type Variant struct {
 
 // Eligibility says whether the caller may decide a request now: approve
 // (CanApprove), or decline, ask for evidence and propose (CanRespond); the
-// requirements a response of theirs would count toward; and, when they may
-// not approve, a stable code saying why.
+// requirements a response of theirs would count toward; when they may not
+// approve, a stable code saying why; and, when their response counts toward
+// no requirement only because their own cooldowns have not ended, when the
+// last of them ends (D81; zero otherwise).
 type Eligibility struct {
 	CanApprove, CanRespond bool
 	Requirements           []int
 	Reason                 string
+	EligibleFrom           time.Time
 }
 
 // eligibility computes the caller's eligibility for a request.
@@ -159,6 +162,13 @@ func eligibility(ctx context.Context, q *dbq.Queries, c tenancy.Caller, l locked
 			out.Requirements = append(out.Requirements, i)
 		} else if out.Reason == "" {
 			out.Reason = code
+		}
+	}
+	if len(out.Requirements) == 0 {
+		for _, r := range l.elig.Requirements {
+			if t, ok := apdomain.EligibleFrom(r, me, l.elig.Context); ok && (out.EligibleFrom.IsZero() || t.Before(out.EligibleFrom)) {
+				out.EligibleFrom = t
+			}
 		}
 	}
 	err := approvable(ctx, q, c.Org, l.row, c.Principal.ID)

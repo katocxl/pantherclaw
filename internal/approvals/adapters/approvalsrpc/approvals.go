@@ -204,6 +204,9 @@ func (s *Approvals) GetApprovalRequest(ctx context.Context, req *pantherclawv1.G
 	for _, i := range v.Eligibility.Requirements {
 		out.Eligibility.Requirements = append(out.Eligibility.Requirements, int32(i)) //nolint:gosec // < 16
 	}
+	if !v.Eligibility.EligibleFrom.IsZero() {
+		out.Eligibility.EligibleFrom = timestamppb.New(v.Eligibility.EligibleFrom)
+	}
 	for _, e := range v.Evidence {
 		out.Evidence = append(out.Evidence, evidenceProto(e))
 	}

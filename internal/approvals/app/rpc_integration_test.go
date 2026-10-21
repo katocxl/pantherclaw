@@ -10,6 +10,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/approvals/adapters/approvalsrpc"
 	approvals "github.com/katocxl/pantherclaw/internal/approvals/app"
@@ -142,5 +143,39 @@ func TestHR035_TheRequestShowsTheCooldownThatHolds(t *testing.T) {
 	if err != nil || !v.MayRespond || v.MayApprove || v.Eligibility.CanApprove || len(v.Eligibility.Requirements) != 0 ||
 		v.Eligibility.Reason != apdomain.IneligibleSelfGrant {
 		t.Fatalf("the approval page: %v %v %+v, %v", v.MayRespond, v.MayApprove, v.Eligibility, err)
+	}
+}
+
+// TestHR035_TheRequestSaysWhenTheReadersCooldownsEnd (D81): for a request
+// needing two approvers, a reader whose account is 6 days old, whose
+// Approver binding is an hour old and whose key is 30 minutes old is told
+// when the last of their own cooldowns ends, by the database clock: their
+// account's, a day from now. A reader who counts now, and the run's
+// launcher, whom waiting never makes eligible, are told nothing.
+func TestHR035_TheRequestSaysWhenTheReadersCooldownsEnd(t *testing.T) {
+	f := newFx(t, 2)
+	req := f.request(2)
+	f.displayed(req)
+	f.d.AdminExec(t, "UPDATE pc.users SET created_at = date_trunc('second', now()) - interval '6 days' WHERE id = $1", f.carol.id)
+	f.d.AdminExec(t, "UPDATE pc.webauthn_credentials SET created_at = now() - interval '30 minutes' WHERE id = $1", f.carol.cred)
+	f.exec(`INSERT INTO pc.role_bindings (org_id, id, role, user_id, scope_type, created_by, created_at)
+		VALUES ($1, $2, 'approver', $3, 'ORG', $4, now() - interval '1 hour')`, f.org, ids.NewV7(), f.carol.id, "user:"+f.alice.id.String())
+	var joined time.Time
+	f.d.AdminQueryRow(t, "SELECT created_at FROM pc.users WHERE id = $1", []any{f.carol.id}, &joined)
+	h := approvalsrpc.NewApprovals(f.svc)
+
+	got, err := h.GetApprovalRequest(f.as(f.carol, orgRole(f, td.RoleApprover)), &pantherclawv1.GetApprovalRequestRequest{Id: req.String()})
+	e := got.GetEligibility()
+	if err != nil || e.GetCanApprove() || len(e.GetRequirements()) != 0 || e.GetReason() != apdomain.IneligibleRoleCooldown ||
+		!e.GetEligibleFrom().AsTime().Equal(joined.Add(apdomain.DefaultCooldowns().AccountAge)) {
+		t.Fatalf("a new approver's eligibility: %v, %v (joined %v)", e, err, joined)
+	}
+	got, err = h.GetApprovalRequest(f.as(f.bob, orgRole(f, td.RoleApprover)), &pantherclawv1.GetApprovalRequestRequest{Id: req.String()})
+	if err != nil || !got.GetEligibility().GetCanApprove() || got.GetEligibility().GetEligibleFrom() != nil {
+		t.Fatalf("an eligible approver's eligibility: %v, %v", got.GetEligibility(), err)
+	}
+	got, err = h.GetApprovalRequest(f.as(f.alice), &pantherclawv1.GetApprovalRequestRequest{Id: req.String()})
+	if err != nil || got.GetEligibility().GetReason() != apdomain.IneligibleLauncher || got.GetEligibility().GetEligibleFrom() != nil {
+		t.Fatalf("the launcher's eligibility: %v, %v", got.GetEligibility(), err)
 	}
 }
