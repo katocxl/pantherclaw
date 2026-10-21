@@ -232,6 +232,10 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		return err
 	}
 	defer pool.Close()
+	if err := checkSchemaAtStart(ctx, cfg, pool, log); err != nil {
+		return err
+	}
+	workers := newWorkerHeartbeat(cfg.Role)
 
 	kp, err := keys.NewFileProvider(cfg.KEKFiles)
 	if err != nil {
@@ -394,6 +398,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			ext:          ext,
 			extDeps:      ui.extensionDeps(xdeps),
 			ui:           ui,
+			workers:      workers,
 		})
 		if err != nil {
 			return err
@@ -545,6 +550,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return fmt.Errorf("server: start workers: %w", err)
 		}
 		log.InfoContext(ctx, "server.workers_started", slog.Int("concurrency", cfg.WorkerConcurrency))
+		workers.serve(ctx, g, client)
 		g.Go(func() error {
 			<-ctx.Done()
 			sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownGrace)
@@ -641,6 +647,9 @@ type apiDeps struct {
 	// extDeps what it is handed.
 	ext     extension.Set
 	extDeps extension.Deps
+	// workers is the job workers' heartbeat that /readyz requires (role
+	// all); nil when this process runs no workers.
+	workers *workerHeartbeat
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
@@ -765,20 +774,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, "ok\n")
 	})
-	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-		defer cancel()
-		err := pool.InGlobalTx(ctx, db.GlobalHealth, func(ctx context.Context, tx db.GlobalTx) error {
-			var one int
-			return tx.QueryRow(ctx, "SELECT 1").Scan(&one)
-		}, db.ReadOnly())
-		if err != nil {
-			log.WarnContext(ctx, "server.not_ready", pclog.Err(err))
-			http.Error(w, "not ready", http.StatusServiceUnavailable)
-			return
-		}
-		_, _ = io.WriteString(w, "ready\n")
-	})
+	mux.Handle("GET /readyz", readiness{pool: pool, workers: d.workers, log: log})
 	mux.HandleFunc("GET /.well-known/pantherclaw/jwks.json", func(w http.ResponseWriter, _ *http.Request) {
 		b, err := reg.JWKS()
 		if err != nil {
