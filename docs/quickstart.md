@@ -4,6 +4,31 @@
 
 The 30 minutes are a target, measured and not guaranteed. The founder's timed run is recorded in [perf/onboarding.md](perf/onboarding.md).
 
+## Install a local node instead (`pclaw up`)
+
+This guide runs the simulated demo from a checkout. To run PantherClaw itself on one machine, from a release:
+
+1. **Install `pclaw`, checked.** On Linux or macOS:
+
+   ```bash
+   curl -fsSLO https://raw.githubusercontent.com/katocxl/pantherclaw/main/install.sh
+   sh install.sh            # --version vX.Y.Z, --dir DIR, --all for every binary
+   ```
+
+   The script downloads the release archive and `checksums.txt`, refuses an archive whose SHA-256 does not match, and, when the GitHub CLI is installed, refuses one whose build provenance does not verify (`gh attestation verify <archive> --repo katocxl/pantherclaw`). Without `gh` it prints that command for you to run. On Windows, download the `.zip` and `checksums.txt` from the release page and check them the same way.
+
+2. **Start the node** (needs Docker 28 or later with Compose v2):
+
+   ```bash
+   pclaw up --oidc-issuer https://idp.example.com --oidc-client-id pantherclaw --oidc-client-secret-file ./client.secret
+   ```
+
+   `pclaw up` writes a Docker Compose project to `~/.pantherclaw/node` (`--dir` elsewhere): PostgreSQL 17 (over TLS, with the node's own CA), the server image this `pclaw` release names by digest, and the gateway. It generates the database passwords and the key-encryption keys, runs `db bootstrap`, `migrate up` and `org create`, waits for `/readyz`, and prints the server's URL (`http://localhost:8080`, published on 127.0.0.1 only) and a one-time `pclaw login … --invitation pci_…` line. People sign in through your own OpenID provider: register `http://localhost:8080/oauth2/callback/sso` there as the redirect URI. Without `--oidc-*` the node still starts and tells you how to add one. `--github-client-id` and `--github-client-secret-file` add a GitHub sign-in App, which people use to link their GitHub accounts (not to sign in). The node is a production deployment; `pclaw up --dev` makes a development one for a try-out (for a sign-in without your own provider, run the server from a checkout with `go run ./test/devoidc`, [BUILD_GUIDE.md](BUILD_GUIDE.md) §4).
+
+3. **Sign in, then enroll the gateway.** Run the printed `pclaw login` line, give yourself `gateway_admin` (`pclaw role bind --role gateway_admin --user <your user id>`), and run `pclaw up` again: it creates the gateway `local` with your session, enrolls it and starts it on `http://localhost:8090`.
+
+`pclaw status` shows the containers and readiness, `pclaw down` stops the node (its data stays in Docker volumes), and `pclaw up` starts it again. On Kubernetes use the Helm chart in [deploy/helm/pantherclaw](../deploy/helm/pantherclaw/values.yaml) instead.
+
 ## What you need
 
 - Windows (Git Bash), Linux or macOS, with Go 1.27, Docker 28 or later, `openssl` and `curl`. On Windows run every command from **Git Bash**, not PowerShell.
