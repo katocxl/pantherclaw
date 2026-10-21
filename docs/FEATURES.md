@@ -611,7 +611,7 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | PN-010.5 | Agent deployment inventory | Tracks where each agent runs (environment, image digest, host, release) from enrollment and attestation. A new digest or host triggers identity-drift reassessment. | MVP | Community | M3 | F028, F033 |
 | PN-010.6 | Hybrid fleet management | Register, version and health-check many customer gateways across multiple orgs. | Next | Enterprise | post-1.0 | new |
 | PN-010.7 | High availability | Redundant control plane and gateways on managed HA PostgreSQL. No single point of failure on the decision path; until then, database loss means a fail-closed outage. | Next | Enterprise | post-1.0 | new |
-| PN-019.1 | FIPS 140-3 build | A build variant with `GOFIPS140=certified`, using standard-library cryptography only. | MVP | Enterprise | M13 | new |
+| PN-019.1 | FIPS 140-3 build | A build variant with `GOFIPS140=v1.0.0` (the pinned validated module, reproducible; G0 M13 D35), using standard-library cryptography only. | MVP | Enterprise | M13 | new |
 | PN-019.2 | Post-quantum TLS by default | TLS 1.3 with post-quantum hybrid key exchange, on by default for all listeners and outbound connections. | MVP | Community | M13 | new |
 | F523 | Honest residency commitments | Residency and retention commitments match what each deployment mode actually supports. | MVP | Community | M13 | F523 |
 
