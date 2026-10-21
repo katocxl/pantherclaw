@@ -3211,6 +3211,8 @@ type PcSupportAccessRequest struct {
 	OrgID             ids.OrgID
 	ID                ids.UUID
 	RequesterAccount  ids.UUID
+	RequesterIssuer   string
+	RequesterSubject  string
 	RequesterEmail    string
 	RequesterName     string
 	StaffOrg          ids.UUID

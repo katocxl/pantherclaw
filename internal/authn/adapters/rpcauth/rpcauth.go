@@ -100,6 +100,14 @@ func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authentica
 		case hasAccount && !hasCookie:
 			// An account session (G0 UI D8): the allow list only (HR-350).
 			return o.accountCall(ctx, info, spec, accountCookie)
+		case hasCookie && isSupportCookie(cookie):
+			if o.support == nil {
+				return nil, errAuthRequired
+			}
+			var err error
+			if ctx, c, err = o.supportCall(ctx, info, spec, cookie); err != nil {
+				return nil, err
+			}
 		case hasCookie:
 			var err error
 			if c, err = o.browser(ctx, info, spec, cookie); err != nil {
@@ -201,7 +209,10 @@ type options struct {
 	accounts      AccountSessions
 	accountCookie string
 	accountOrigin string
-	log           *slog.Logger
+	// Support sessions (support.go).
+	support         SupportSessions
+	supportReadOnly func(procedure string) bool
+	log             *slog.Logger
 }
 
 // RefusalRecorder records a non-human caller refused a human-only

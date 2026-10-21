@@ -28,12 +28,19 @@ const (
 	// CredBrowserSession is a browser session of PantherClaw's own pages
 	// (G0 M5).
 	CredBrowserSession Credential = "browser_session"
+	// CredSupportSession is a support session of the operator's support
+	// staff inside the org, under an approved grant (G0 M13 D32, D38).
+	CredSupportSession Credential = "support_session"
 )
 
 // Caller is an authenticated principal with its current bindings.
 type Caller struct {
 	domain.Subject
 	Credential Credential
+	// SupportGrant is the support grant a support session runs under
+	// (CredSupportSession only; G0 M13 D32): every call names it in the
+	// org's audit ledger (HR-388).
+	SupportGrant ids.UUID
 	// Session is the CLI session a user's access token belongs to, or the
 	// browser session of a page request (zero for API keys and service
 	// accounts): the human session an approval response records (G0 M5

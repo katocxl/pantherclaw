@@ -19,7 +19,11 @@ CREATE TABLE pc.support_access_requests (
     id                 uuid        NOT NULL,
     -- Who asked: their hosted account, and as what the staff org knew them.
     requester_account  uuid        NOT NULL,
-    requester_email    text        NOT NULL DEFAULT '' CHECK (char_length(requester_email) <= 320),
+    -- The account's identity, checked against the staff list at every
+    -- authentication of a support session.
+    requester_issuer   text        NOT NULL CHECK (char_length(requester_issuer) BETWEEN 1 AND 512),
+    requester_subject  text        NOT NULL CHECK (char_length(requester_subject) BETWEEN 1 AND 255),
+    requester_email   text        NOT NULL DEFAULT '' CHECK (char_length(requester_email) <= 320),
     requester_name     text        NOT NULL DEFAULT '' CHECK (char_length(requester_name) <= 200),
     staff_org          uuid        NOT NULL,
     staff_user         uuid        NOT NULL,
@@ -57,6 +61,8 @@ BEGIN
     END IF;
     IF NEW.org_id IS DISTINCT FROM OLD.org_id OR NEW.id IS DISTINCT FROM OLD.id
         OR NEW.requester_account IS DISTINCT FROM OLD.requester_account
+        OR NEW.requester_issuer IS DISTINCT FROM OLD.requester_issuer
+        OR NEW.requester_subject IS DISTINCT FROM OLD.requester_subject
         OR NEW.requester_email IS DISTINCT FROM OLD.requester_email
         OR NEW.requester_name IS DISTINCT FROM OLD.requester_name
         OR NEW.staff_org IS DISTINCT FROM OLD.staff_org OR NEW.staff_user IS DISTINCT FROM OLD.staff_user

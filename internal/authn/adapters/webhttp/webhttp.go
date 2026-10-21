@@ -124,6 +124,9 @@ type Handler struct {
 	// served.
 	accounts  AccountBrowser
 	selfServe bool
+	// support is the support access pages (G0 M13 D38); nil when not
+	// served.
+	support SupportAccess
 }
 
 // New returns the handler. publicURL is the server's public URL: its origin
@@ -487,6 +490,7 @@ func (h *Handler) static(w http.ResponseWriter, r *http.Request) {
 		"protect.js":              "text/javascript; charset=utf-8",
 		"slack_channel.js":        "text/javascript; charset=utf-8",
 		"org_picker.js":           "text/javascript; charset=utf-8",
+		"support_access.js":       "text/javascript; charset=utf-8",
 	}
 	ct, ok := types[name]
 	if !ok {
