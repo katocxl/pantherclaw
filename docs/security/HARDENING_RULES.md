@@ -433,3 +433,4 @@
 | HR-376 | Limits that must hold across replicas (automation inbound per source, AuthZEN per enforcement point, sign-up) are counted in Postgres; a counter error refuses the request. | T-170 | M13 |
 | HR-377 | Usage meters are computed by the server from records, never reported by clients; usage limits are not enforced in M13. | T-163 | M13 |
 | HR-378 | The backup role (`pc_backup`) can only read, bypasses RLS only to dump, and its credential lives only with the backup job; dumps are encrypted with `age` before they leave the host. | T-172 | M13 |
+| HR-379 | While the maintenance hold (`maintenance.hold`) is on, no decision is made from any path: gateway control and stream, workload, `Authorize`, hooks, `/sdk`, MCP faces and AuthZEN refuse with `MAINTENANCE_HOLD` (gateways fail closed); the management API and the operator command line keep working; turning it on and off is audited and `/readyz` reports not ready while it is on. | T-171 | M13 |

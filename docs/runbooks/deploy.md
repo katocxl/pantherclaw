@@ -1,17 +1,17 @@
 # Runbook — Deploy hosted staging (G3)
 
-**Milestone:** M13 ([G0 M13](../g0/M13.md) D3, D4, D12–D15, D14 amended, D19; [ADR-0032](../adr/0032-hosted-deployment-kek-custody-and-backups.md); HR-370, HR-371, HR-346). **Audience:** the founder, as operator of hosted staging (test layer L3). The host scripts, the compose stack and the deploy workflow live in the commercial distribution; this runbook is the procedure they implement. Production (L4) follows at v1.0 on a paid host. Command flags follow the brief; the M13 exit status records any change.
+**Milestone:** M13 ([G0 M13](../g0/M13.md) D3, D4, D12–D15, D14 amended, D19, D24–D26; [ADR-0032](../adr/0032-hosted-deployment-kek-custody-and-backups.md); HR-370, HR-371, HR-346, HR-379). **Audience:** the founder, as operator of hosted staging (test layer L3). The host scripts, the compose stack and the deploy workflow live in the commercial distribution; this runbook is the procedure they implement. Production (L4) follows at v1.0 on a paid host. Command flags follow the brief; the M13 exit status records any change.
 
 ## 1. What runs where
 
 | Piece | Where |
 |---|---|
-| Host | Oracle Cloud Always Free Arm VM, Ubuntu 24.04; nftables allows SSH only from the founder's addresses, 443 and 8443 |
+| Host | Oracle Cloud Always Free Arm VM, Ubuntu 24.04; nftables allows SSH only from the founder's addresses, 443, 8443, and 80 for certificate issuance (opened in the Oracle security list as well) |
 | Console and API | `staging.app.pantherclaw.dev:443`, TLS terminated by the server (certificates reloaded from disk, HR-371) |
 | Gateway endpoint | the same host on 8443, mutual TLS terminated by the server |
 | Database | `postgres:17` in the compose stack, data on the block volume |
 | DNS | Cloudflare, DNS only (not proxied: client addresses and client certificates must reach the server) |
-| Backups | nightly to Backblaze B2 ([backup-restore.md](backup-restore.md)) |
+| Backups | nightly to Backblaze B2 under Object Lock (at least 60 days, compliance mode; [backup-restore.md](backup-restore.md)) |
 | Directories | `/srv/pantherclaw/{config,secrets,certs,pgdata,backups}` and `/srv/pantherclaw/deploy/previous` (the previous image digest) |
 
 ## 2. First setup (once)
@@ -19,8 +19,8 @@
 1. Create the VM with the cloud-init file from the commercial distribution; attach the block volume. Cloud-init installs Docker with the compose plugin, nftables, unattended upgrades and the `pantherclaw` service user, and runs the idempotent bootstrap script (safe to run again).
 2. Bootstrap generates the secrets into a root-only environment file: the database role passwords (the backup role `pc_backup` included, HR-378) and the KEK (`pantherclaw-server keys gen-kek --out FILE`). Nothing secret is ever committed.
 3. **Escrow the KEK now**, before any data exists ([backup-restore.md](backup-restore.md) §3).
-4. Create the DNS records with the DNS script and the founder's Cloudflare API token.
-5. `certbot` obtains the certificate through the DNS-01 challenge and renews it into `/srv/pantherclaw/certs`; the server picks up a renewal within about a minute without a restart (HR-371).
+4. Create the DNS records with the DNS script, run **on the founder's machine** with the founder's Cloudflare API token. No DNS token is ever stored on the VM.
+5. Certificates come from ACME HTTP-01 ([G0 M13](../g0/M13.md) D25): `certbot --standalone` listens on port 80 only while it issues or renews, and writes into `/srv/pantherclaw/certs`. A daily systemd timer (`pantherclaw-certbot.timer`) runs `certbot renew`; there is no long-running certbot container. The server picks up a renewed pair within about a minute, without a restart (HR-371).
 6. The configuration sets `deployment: staging`. The server shows the staging banner from `WhoAmI` and refuses development seams only in production (HR-346, HR-359); on staging, billing is the faked adapter until the payment provider's sandbox account exists.
 
 ## 3. Signing in to staging
@@ -47,7 +47,7 @@ Deploys run only from the manually started deploy workflow (a deploy key in the 
 2. The workflow connects over SSH and:
    1. saves the running digest to `/srv/pantherclaw/deploy/previous`;
    2. `docker compose pull` of the new digest;
-   3. runs the one-shot `migrate` service (`pantherclaw-server migrate up` as `pc_migrator`);
+   3. runs the one-shot `migrate` service (`pantherclaw-server migrate up` as `pc_migrator`). The migrator password is mounted only into this service; the server's own configuration has no migrator password file;
    4. `docker compose up -d`;
    5. waits up to 5 minutes for `/readyz` to answer 200 (§5), checked from the host over SSH.
 3. **If readiness does not come**, it rolls back: the previous digest is started again and the result is recorded as a failed deploy. A migration is never rolled back automatically: an older binary refuses a newer schema (`SCHEMA_NEWER`, HR-370), so a failed deploy after a migration needs the operator (§6).
@@ -62,7 +62,13 @@ Deploys run only from the manually started deploy workflow (a deploy key in the 
 
 The `/readyz` body is a fixed JSON, `{"ready": …, "checks": {"db": …, "schema": …, "workers": …}}`, without versions or error text. To find out why a check fails, read the server's logs on the host, not the endpoint.
 
-`serve` itself refuses to start with `SCHEMA_NEWER` (the binary is older than the database) or `SCHEMA_PENDING` (migrations not applied; only a warning in `deployment: development`). The images are distroless with no shell or curl (HR-374), so health is checked from outside the container.
+`serve` itself refuses to start with `SCHEMA_NEWER` (the binary is older than the database) or `SCHEMA_PENDING` (migrations not applied, including a database from before `00180` that has no `pc.schema_info`; only a warning in `deployment: development`).
+
+Further notes ([G0 M13](../g0/M13.md) D24, D26):
+- **Worker heartbeat.** The `workers` check means the River client is running.
+- **Worker-only processes.** A process with role `worker` has no `/readyz` listener; the wave 2 installers add a health listener for it (Helm probes).
+- **Rolling deploys** (Helm or a paid host with several replicas). Once `migrate up` has run, replicas still on the old binary answer 503 until they are replaced. Expect this; it is not a failure of the new release.
+- **Maintenance hold.** While `maintenance.hold` is on (a restore, [backup-restore.md](backup-restore.md) §7), `/readyz` reports not ready and every decision path refuses `MAINTENANCE_HOLD` (HR-379). The images are distroless with no shell or curl (HR-374), so health is checked from outside the container.
 
 ## 6. Roll back by hand
 
@@ -73,5 +79,5 @@ The `/readyz` body is a fixed JSON, `{"ready": …, "checks": {"db": …, "schem
 
 ## 7. Certificates
 
-- Renewal is automatic (certbot, DNS-01). The server re-reads the certificate files every 60 s and swaps only to a pair that parses and whose leaf is currently valid; a bad pair keeps the last good one and logs `tls.reload_failed` without key material (HR-371).
+- Renewal is automatic (certbot standalone, HTTP-01, from the daily systemd timer; port 80 must stay open in nftables and the Oracle security list). The server re-reads the certificate files every 60 s and swaps only to a pair that parses and whose leaf is currently valid; a bad pair keeps the last good one and logs `tls.reload_failed` without key material (HR-371).
 - If `tls.reload_failed` appears, check the files in `/srv/pantherclaw/certs` (key and certificate match, not expired); the server keeps serving the old certificate until it expires.
