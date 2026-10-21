@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
+	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
