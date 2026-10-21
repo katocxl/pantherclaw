@@ -176,6 +176,12 @@ tasks:
       - echo "probe $(docker build --quiet --pull=false --network none --file deploy/sandbox/probe.Dockerfile bin/sandbox)"
       - echo "pantherclaw-demo-agent $(docker build --quiet --pull=false --network none --file deploy/sandbox/demo-agent.Dockerfile bin/sandbox)"
 
+  images:
+    desc: Build the server and gateway images for this machine from deploy/docker as pantherclaw-server:dev and pantherclaw-gateway:dev, which a development build of pclaw up uses (G0 M13 D36)
+    cmds:
+      - docker build --file deploy/docker/server.Dockerfile --build-arg VERSION=dev --tag pantherclaw-server:dev .
+      - docker build --file deploy/docker/gateway.Dockerfile --build-arg VERSION=dev --tag pantherclaw-gateway:dev .
+
   test:linux:
     desc: Run race-enabled tests inside a pinned Linux container (use on Windows)
     cmds:
