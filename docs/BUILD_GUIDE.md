@@ -486,7 +486,7 @@ docs/                    this guide and companions
 | M11 | `policy_tests`, `policy_simulations`, `policy_rollouts`, `exceptions`, `automations`, `automation_versions`, `schedules`, `triggers`, `executions`, `step_executions` |
 | M12 | `redteam_runs`, `redteam_results` |
 | M14 | `connections` gain kinds `postgres` (manifest of tables, columns and classes) and `a2a` (pinned agent card); channels `authzen` and `a2a` on `transactions` and the coverage tables; grant bounds gain data scope; `notification_channels` gain kind `slack_app`, with `slack_cards`; `enforcement_points` and `decided_via` on transactions and receipts; `a2a_peer_runs`. Migrations `00150`–`00154` (`00155`, `00156` reserved; [g0/M14.md](g0/M14.md)) |
-| M13 | Entitlements were delivered in milestone UI (`org_entitlements`, `entitlement_events`, migration `00161`). M13 wave 1: `rate_counters` (UNLOGGED, global, keys carry the org id; `00170`) and `usage_daily` (`00171`); wave 2: `support_access_requests`, `support_access_grants` and break-glass (`00173`–`00175`), `data_requests`, `data_request_parts`, `org_entitlements.lapsed_at` and the `pc_deleter` role (`00176`–`00179`); `schema_info` (`00180`; [g0/M13.md](g0/M13.md)) |
+| M13 | Entitlements were delivered in milestone UI (`org_entitlements`, `entitlement_events`, migration `00161`). M13 wave 1: `rate_counters` (UNLOGGED, global, keys carry the org id; `00170`) and `usage_daily` (`00171`); wave 2: `support_access_requests`, `support_access_grants` and break-glass (`00173`–`00175`), `data_requests`, `data_request_parts`, `org_entitlements.lapsed_at` and the `pc_deleter` role (`00176`–`00179`); `schema_info` (`00169`; [g0/M13.md](g0/M13.md)) |
 
 ---
 

@@ -1,6 +1,6 @@
 # Runbook — Installation: `install.sh`, `pclaw up` and the Helm chart
 
-**Milestone:** M13 wave 2 ([G0 M13](../g0/M13.md) D35, D36; HR-374, HR-396..398, T-179; PN-010.1, PN-012.6). **Audience:** anyone installing PantherClaw themselves. Commands and values follow the brief; the M13 exit status records any change. For a guided first 30 minutes on the demo stack, see [quickstart.md](../quickstart.md).
+**Milestone:** M13 wave 2 ([G0 M13](../g0/M13.md) D35, D36, D39; HR-374, HR-396..398, T-179; PN-010.1, PN-012.6). **Audience:** anyone installing PantherClaw themselves. Commands and values follow the brief; the M13 exit status records any change. For a guided first 30 minutes on the demo stack, see [quickstart.md](../quickstart.md).
 
 ## 1. Get a verified release (`install.sh`)
 
@@ -19,20 +19,32 @@ Images are verified the same way: the server and gateway images are published wi
 
 ## 2. A single node on your machine (`pclaw up`)
 
+`pclaw up` needs Docker and writes its stack to `~/.pantherclaw/node` ([G0 M13](../g0/M13.md) D36, D39). By default it is a **production** node (Community production), so it needs your own sign-in provider: an OIDC provider, GitHub, or both.
+
 ```bash
-pclaw up        # needs Docker; writes ~/.pantherclaw/node
+pclaw up --oidc-issuer https://idp.example.com --oidc-client-id pantherclaw \
+         --oidc-client-secret-file ./oidc.secret [--oidc-name corp]
+# or: --github-client-id <id> --github-client-secret-file ./github.secret
 pclaw status
 pclaw down
 ```
 
-`pclaw up` does the following:
-1. generates a Docker Compose stack: Postgres 17, the server image at the digest embedded in your `pclaw` release, and a gateway;
+The first `pclaw up`:
+1. generates a Docker Compose stack: Postgres 17 and the server image at the digest embedded in your `pclaw` release;
 2. generates a KEK. **Escrow it** ([backup-restore.md](backup-restore.md) §3);
-3. runs `db bootstrap` and `migrate`;
+3. runs `db bootstrap` and `migrate` through `docker compose run --rm server …`;
 4. creates an organization and an admin invitation;
-5. prints the URL.
+5. prints the URL and the login line.
 
-It refuses to run without Docker.
+Without a sign-in flag the node still starts and prints how to add one.
+
+**Then enroll the gateway.** Run `pclaw login`, then `pclaw up` again. It creates the gateway "local" with your session, writes its enrollment into `~/.pantherclaw/node` and starts it.
+
+**Listeners.** The server is published on `127.0.0.1:8080` only (plaintext behind the loopback publish), and so is the gateway's agent-facing listener. The gateway reaches the server over mTLS with the internal CA. To serve other machines, put a TLS-terminating proxy in front, or use the Helm chart.
+
+**Trying it out (`--dev`).** `pclaw up --dev` sets `deployment: development` and takes the same sign-in flags. It bundles no identity provider. For a throwaway sign-in, run the server on your host and the development OIDC provider next to it with `go run ./test/devoidc` (see [BUILD_GUIDE](../BUILD_GUIDE.md) §4). Never expose a development node.
+
+Containers run as your own uid:gid on Unix.
 
 ## 3. Kubernetes (Helm)
 

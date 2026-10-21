@@ -81,7 +81,7 @@ Deploys and the restore drill run on a **GitHub self-hosted runner installed on 
 
 The `/readyz` body is a fixed JSON, `{"ready": …, "checks": {"db": …, "schema": …, "workers": …}}`, without versions or error text. To find out why a check fails, read the server's logs on the host, not the endpoint.
 
-`serve` itself refuses to start with `SCHEMA_NEWER` (the binary is older than the database) or `SCHEMA_PENDING` (migrations not applied, including a database from before `00180` that has no `pc.schema_info`; only a warning in `deployment: development`).
+`serve` itself refuses to start with `SCHEMA_NEWER` (the binary is older than the database) or `SCHEMA_PENDING` (migrations not applied, including a database from before `00169` that has no `pc.schema_info`; only a warning in `deployment: development`).
 
 Further notes ([G0 M13](../g0/M13.md) D24, D26):
 - **Worker heartbeat.** The `workers` check means the River client is running.
