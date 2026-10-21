@@ -199,7 +199,9 @@ func serve(ctx context.Context, args []string, stderr io.Writer, env config.Look
 		}
 		tlsConf = httpx.ServerTLSConfig(cert)
 	}
-	srv, err := httpx.NewServer(httpx.ServerConfig{Addr: cfg.Listen, Handler: g.Handler(), TLS: tlsConf, Logger: log})
+	srv, err := httpx.NewServer(httpx.ServerConfig{Addr: cfg.Listen, Handler: g.Handler(), TLS: tlsConf, Logger: log,
+		// Published on the host's loopback only (validated with public_url).
+		PlaintextBehindProxy: cfg.PlaintextPublishedLoopback})
 	if err != nil {
 		return err
 	}

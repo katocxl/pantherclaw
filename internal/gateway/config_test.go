@@ -61,3 +61,35 @@ func TestConfigValidation(t *testing.T) {
 		}
 	}
 }
+
+// TestConfigPlaintextPublishedLoopback: `pclaw up`'s gateway listens on all
+// addresses inside its container in plain HTTP only with
+// plaintext_published_loopback, only without TLS files, and only with a
+// public_url on a loopback host (G0 M13 D39).
+func TestConfigPlaintextPublishedLoopback(t *testing.T) {
+	base := DefaultConfig()
+	base.Control.CASHA256 = testPin
+	base.Listen = "0.0.0.0:8090"
+	if err := base.Validate(); err == nil {
+		t.Fatal("a plain listener on all addresses accepted without the flag")
+	}
+	base.PlaintextPublishedLoopback = true
+	for _, u := range []string{"http://localhost:8090", "http://127.0.0.1:8090", "http://[::1]:8090", "http://localhost"} {
+		c := base
+		c.PublicURL = u
+		if err := c.Validate(); err != nil {
+			t.Errorf("public_url %s refused: %v", u, err)
+		}
+	}
+	for name, mutate := range map[string]func(*Config){
+		"public url off loopback": func(c *Config) { c.PublicURL = "http://gateway.example.com:8090" },
+		"public url on a LAN ip":  func(c *Config) { c.PublicURL = "http://192.168.1.5:8090" },
+		"with tls files":          func(c *Config) { c.TLS.CertFile, c.TLS.KeyFile = "cert.pem", "key.pem" },
+	} {
+		c := base
+		mutate(&c)
+		if err := c.Validate(); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

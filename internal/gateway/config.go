@@ -33,7 +33,12 @@ type Config struct {
 	// Listen is the agent-facing address. Plain HTTP only on loopback;
 	// otherwise set tls.cert_file and tls.key_file.
 	Listen string `json:"listen" env:"PC_GW_LISTEN"`
-	TLS    struct {
+	// PlaintextPublishedLoopback allows plain HTTP on a non-loopback listen
+	// address inside a container whose port is published on the host's
+	// loopback only (`pclaw up`, G0 M13 D39). public_url must then be on a
+	// loopback host, so agents reach the gateway only from this machine.
+	PlaintextPublishedLoopback bool `json:"plaintext_published_loopback" env:"PC_GW_PLAINTEXT_PUBLISHED_LOOPBACK"`
+	TLS                        struct {
 		CertFile string `json:"cert_file" env:"PC_GW_TLS_CERT_FILE"`
 		KeyFile  string `json:"key_file" env:"PC_GW_TLS_KEY_FILE"`
 	} `json:"tls"`
@@ -133,8 +138,16 @@ func (c *Config) Validate() error {
 	if (c.TLS.CertFile == "") != (c.TLS.KeyFile == "") {
 		errs = append(errs, errors.New("tls.cert_file and tls.key_file must be set together"))
 	}
-	if c.TLS.CertFile == "" && !loopback(c.Listen) {
+	if c.TLS.CertFile == "" && !loopback(c.Listen) && !c.PlaintextPublishedLoopback {
 		errs = append(errs, errors.New("listen must be a loopback address unless tls.cert_file and tls.key_file are set"))
+	}
+	if c.PlaintextPublishedLoopback {
+		if c.TLS.CertFile != "" {
+			errs = append(errs, errors.New("plaintext_published_loopback and tls.cert_file exclude each other"))
+		}
+		if u, err := baseURL(c.PublicURL); err == nil && !loopback(u.Host) && !loopback(u.Host+":80") {
+			errs = append(errs, errors.New("plaintext_published_loopback needs a public_url on a loopback host (the port is published on the host's loopback only)"))
+		}
 	}
 	if c.Control.IdentityDir == "" {
 		errs = append(errs, errors.New("control.identity_dir is required"))
