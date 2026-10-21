@@ -152,8 +152,25 @@ func TestHR350_ASignInWithoutAnOrgOpensAnOrgOrAnAccountSession(t *testing.T) {
 	}
 	b.withAccounts(t, true)
 	out = b.signInWithoutOrg(t, "")
-	if out.Reason != "" || out.Kind != authnapp.SessionAccount {
+	// D94: nothing to pick, so the console's create-org page, not the picker.
+	if out.Reason != "" || out.Kind != authnapp.SessionAccount || out.Next != authnapp.WelcomePath {
 		t.Fatalf("no org, self-serve on: %+v", out)
+	}
+	// A console page the sign-in asked for is kept; anything else lands on
+	// the create-org page.
+	for next, want := range map[string]string{
+		"/app/settings/billing": "/app/settings/billing",
+		authnapp.ConsolePath:    authnapp.WelcomePath,
+		"/approvals":            authnapp.WelcomePath,
+	} {
+		red, err := b.browser.Start(ctx, authnapp.BrowserStart{Next: next, ClientIP: "192.0.2.1"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := b.browser.Callback(ctx, "test", b.authorize(t, red.URL), red.Binding, authnapp.ClientMeta{IP: "192.0.2.1"})
+		if err != nil || got.Kind != authnapp.SessionAccount || got.Next != want {
+			t.Errorf("no org, next %q: %+v, %v", next, got, err)
+		}
 	}
 	s, err := b.browser.AuthenticateAccount(ctx, out.Secret)
 	if err != nil || s.Account != out.Account {
