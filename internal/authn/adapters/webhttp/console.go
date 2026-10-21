@@ -48,22 +48,58 @@ func consoleHeaders(w http.ResponseWriter, cache string) {
 // /app/: files by path, hashed /app/assets/* as immutable, and every other
 // path under /app/ as index.html (the single-page app routes it), never
 // cached. Nothing under /app/ext/ is answered: those paths belong to
-// extension routes.
+// extension routes. The bundle is read once, when the console is made:
+// every file and its .br/.gz siblings are held in memory with their ETags,
+// so a bundle changed on disk later is never served, nor mixed with the
+// one loaded.
 type Console struct {
-	fsys  fs.FS
-	index []byte
+	files map[string]consoleFile
+	index consoleFile
 }
 
-// NewConsole checks the bundle has an index.html.
+// consoleFile is one file of the bundle as loaded.
+type consoleFile struct {
+	body []byte
+	etag string
+}
+
+// maxConsoleBytes bounds the bundle held in memory.
+const maxConsoleBytes = 64 << 20
+
+// NewConsole loads the bundle, which must have an index.html.
 func NewConsole(fsys fs.FS) (*Console, error) {
 	if fsys == nil {
 		return nil, errors.New("webhttp: console bundle required")
 	}
-	index, err := fs.ReadFile(fsys, "index.html")
+	c := &Console{files: map[string]consoleFile{}}
+	total := 0
+	err := fs.WalkDir(fsys, ".", func(name string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		b, err := fs.ReadFile(fsys, name)
+		if err != nil {
+			return err
+		}
+		if total += len(b); total > maxConsoleBytes {
+			return errors.New("webhttp: console bundle larger than 64 MiB")
+		}
+		sum := sha256.Sum256(b)
+		c.files[name] = consoleFile{body: b, etag: `"` + hex.EncodeToString(sum[:16]) + `"`}
+		return nil
+	})
 	if err != nil {
+		return nil, err
+	}
+	index, ok := c.files["index.html"]
+	if !ok {
 		return nil, errors.New("webhttp: console bundle has no index.html")
 	}
-	return &Console{fsys: fsys, index: index}, nil
+	c.index = index
+	return c, nil
 }
 
 // Mount installs GET /app/ (which also answers HEAD), the /app redirect
@@ -91,8 +127,8 @@ func (c *Console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(p, consoleAssets) {
 		// A missing asset is a 404, never the app shell: a stale page would
 		// otherwise run index.html as a script.
-		if b, ok := c.file(name); ok {
-			c.write(w, r, name, b, immutable)
+		if f, ok := c.file(name); ok {
+			c.write(w, r, name, f, immutable)
 			return
 		}
 		consoleHeaders(w, "no-store")
@@ -100,25 +136,21 @@ func (c *Console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if name != "" && name != "index.html" {
-		if b, ok := c.file(name); ok {
-			c.write(w, r, name, b, "no-store")
+		if f, ok := c.file(name); ok {
+			c.write(w, r, name, f, "no-store")
 			return
 		}
 	}
 	c.write(w, r, "index.html", c.index, "no-store")
 }
 
-// file reads one regular file of the bundle.
-func (c *Console) file(name string) ([]byte, bool) {
+// file is one loaded file of the bundle.
+func (c *Console) file(name string) (consoleFile, bool) {
 	if !fs.ValidPath(name) {
-		return nil, false
+		return consoleFile{}, false
 	}
-	st, err := fs.Stat(c.fsys, name)
-	if err != nil || !st.Mode().IsRegular() {
-		return nil, false
-	}
-	b, err := fs.ReadFile(c.fsys, name)
-	return b, err == nil
+	f, ok := c.files[name]
+	return f, ok
 }
 
 // consoleTypes are the media types the bundle may contain; anything else
@@ -140,7 +172,7 @@ var compressible = map[string]bool{
 // preference: name.br, then name.gz. Nothing is compressed on the fly.
 var encodings = []struct{ coding, suffix string }{{"br", ".br"}, {"gzip", ".gz"}}
 
-func (c *Console) write(w http.ResponseWriter, r *http.Request, name string, b []byte, cache string) {
+func (c *Console) write(w http.ResponseWriter, r *http.Request, name string, f consoleFile, cache string) {
 	consoleHeaders(w, cache)
 	ext := strings.ToLower(path.Ext(name))
 	ct, ok := consoleTypes[ext]
@@ -156,14 +188,14 @@ func (c *Console) write(w http.ResponseWriter, r *http.Request, name string, b [
 		accept := parseAcceptEncoding(r.Header.Values("Accept-Encoding"))
 		// The most acceptable sibling; on equal weights the earlier one (br).
 		best, bestQ := "", 0.0
-		var body []byte
+		var sibling consoleFile
 		for _, e := range encodings {
 			q := accept.q(e.coding)
 			if q <= bestQ {
 				continue
 			}
 			if enc, ok := c.file(name + e.suffix); ok {
-				best, bestQ, body = e.coding, q, enc
+				best, bestQ, sibling = e.coding, q, enc
 			}
 		}
 		identity := accept.q("identity")
@@ -171,27 +203,26 @@ func (c *Console) write(w http.ResponseWriter, r *http.Request, name string, b [
 		case best != "" && bestQ >= identity:
 			// A sibling at least as acceptable as the plain file wins.
 			hd.Set("Content-Encoding", best)
-			b = body
+			f = sibling
 		case identity > 0:
 		case best != "":
 			hd.Set("Content-Encoding", best)
-			b = body
+			f = sibling
 		default:
 			// Identity refused and no acceptable sibling.
 			http.Error(w, "no acceptable content encoding", http.StatusNotAcceptable)
 			return
 		}
 	}
-	sum := sha256.Sum256(b)
-	hd.Set("ETag", `"`+hex.EncodeToString(sum[:16])+`"`)
+	hd.Set("ETag", f.etag)
 	if hd.Get("Content-Encoding") != "" {
 		// ServeContent leaves the length out of an encoded response; an
 		// encoded body is always sent whole (no ranges).
-		hd.Set("Content-Length", strconv.Itoa(len(b)))
+		hd.Set("Content-Length", strconv.Itoa(len(f.body)))
 		r = r.Clone(r.Context())
 		r.Header.Del("Range")
 	}
-	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(b))
+	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(f.body))
 }
 
 // acceptEncoding is a parsed Accept-Encoding header: q-values by coding
@@ -236,7 +267,7 @@ func parseAcceptEncoding(lines []string) acceptEncoding {
 				k, v, ok := strings.Cut(strings.TrimSpace(p), "=")
 				if ok && strings.EqualFold(strings.TrimSpace(k), "q") {
 					f, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
-					if err != nil || f < 0 || f > 1 {
+					if err != nil || !(f >= 0 && f <= 1) { // also NaN
 						f = 0 // an unreadable weight never selects a coding
 					}
 					q = f
