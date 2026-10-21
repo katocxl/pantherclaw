@@ -72,7 +72,7 @@ func run(args []string, stderr io.Writer) int {
 	}
 	var secret []byte
 	if err == nil {
-		secret, err = os.ReadFile(*secretFile)
+		secret, err = os.ReadFile(*secretFile) //nolint:gosec // G304: the developer's own secret file, named on the command line
 		secret = []byte(strings.TrimSpace(string(secret)))
 		if err == nil && len(secret) == 0 {
 			err = errors.New("the client secret file is empty")
@@ -300,8 +300,10 @@ func (p *provider) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "a username is 1 to 64 letters, digits or . _ @ -", http.StatusBadRequest)
 		return
 	}
-	who := person{Subject: user, Email: strings.TrimSpace(r.PostForm.Get("email")), Name: strings.TrimSpace(r.PostForm.Get("name")),
-		Verified: r.PostForm.Get("verified") != ""}
+	who := person{
+		Subject: user, Email: strings.TrimSpace(r.PostForm.Get("email")), Name: strings.TrimSpace(r.PostForm.Get("name")),
+		Verified: r.PostForm.Get("verified") != "",
+	}
 	if who.Email == "" {
 		who.Email = user
 		if !strings.Contains(user, "@") {
@@ -320,8 +322,10 @@ func (p *provider) login(w http.ResponseWriter, r *http.Request) {
 	p.mu.Lock()
 	p.sessions[id] = s
 	p.mu.Unlock()
-	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: id, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
-		MaxAge: int(sessionTTL / time.Second)})
+	http.SetCookie(w, &http.Cookie{
+		Name: sessionCookie, Value: id, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
+		MaxAge: int(sessionTTL / time.Second),
+	})
 	p.issue(w, r, req, s)
 }
 
