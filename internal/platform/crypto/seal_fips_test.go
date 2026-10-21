@@ -100,12 +100,12 @@ func TestHR396_XWingRefusedInFIPSMode(t *testing.T) {
 	priv, privBytes, pubBytes, v2, v1 := xwingFixture(t)
 	setFIPS(t, true)
 	for name, try := range map[string]func() error{
-		"open v1":     func() error { _, err := Open(priv, []byte("info"), []byte("aad"), v1); return err },
-		"open v2":     func() error { _, err := Open(priv, []byte("info"), []byte("aad"), v2); return err },
-		"parse priv":  func() error { _, err := ParseSealPrivateKey(privBytes); return err },
-		"parse pub":   func() error { _, err := ParseSealPublicKey(pubBytes); return err },
-		"seal":        func() error { _, err := Seal(priv.PublicKey(), []byte("info"), nil, []byte("x")); return err },
-		"generate":    func() error { _, err := GenerateSealKeySuite(SuiteXWing); return err },
+		"open v1":    func() error { _, err := Open(priv, []byte("info"), []byte("aad"), v1); return err },
+		"open v2":    func() error { _, err := Open(priv, []byte("info"), []byte("aad"), v2); return err },
+		"parse priv": func() error { _, err := ParseSealPrivateKey(privBytes); return err },
+		"parse pub":  func() error { _, err := ParseSealPublicKey(pubBytes); return err },
+		"seal":       func() error { _, err := Seal(priv.PublicKey(), []byte("info"), nil, []byte("x")); return err },
+		"generate":   func() error { _, err := GenerateSealKeySuite(SuiteXWing); return err },
 	} {
 		err := try()
 		if !errors.Is(err, ErrSealSuiteNotFIPS) || pcerr.ReasonOf(err) != "SEAL_SUITE_NOT_FIPS" {

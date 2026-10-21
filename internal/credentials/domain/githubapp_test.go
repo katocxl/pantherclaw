@@ -64,7 +64,7 @@ func TestHR204_GitHubAppContent(t *testing.T) {
 	}
 	good := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
 	bad := map[string]domain.GitHubApp{
-		"not PEM":    {V: 1, Issuer: "1", Installation: 7, Account: "acme", PrivateKey: []byte("ghp_not_a_key")},
+		"not PEM":      {V: 1, Issuer: "1", Installation: 7, Account: "acme", PrivateKey: []byte("ghp_not_a_key")},
 		"uppercase":    {V: 1, Issuer: "1", Installation: 7, Account: "Acme", PrivateKey: good},
 		"bad issuer":   {V: 1, Issuer: "app", Installation: 7, Account: "acme", PrivateKey: good},
 		"installation": {V: 1, Issuer: "1", Account: "acme", PrivateKey: good},
