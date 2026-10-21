@@ -401,10 +401,15 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err := m6.serveGateways(ctx, g, cfg, svc, log, nil); err != nil {
 			return err
 		}
-		srv, ln, err := listen(ctx, cfg, handler, log)
+		certs, err := publicCertReloader(cfg, log)
 		if err != nil {
 			return err
 		}
+		srv, ln, err := listen(ctx, cfg, handler, certs, log)
+		if err != nil {
+			return err
+		}
+		serveCertReloads(ctx, g, certs)
 		if onStart != nil {
 			onStart(ln.Addr().String())
 		}
@@ -552,14 +557,11 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	return err
 }
 
-func listen(ctx context.Context, cfg *Config, handler http.Handler, log *slog.Logger) (*http.Server, net.Listener, error) {
+func listen(ctx context.Context, cfg *Config, handler http.Handler, certs *httpx.CertReloader, log *slog.Logger) (*http.Server, net.Listener, error) {
 	var tlsConf *tls.Config
-	if cfg.HTTP.TLSCertFile != "" {
-		cert, err := tls.LoadX509KeyPair(cfg.HTTP.TLSCertFile, cfg.HTTP.TLSKeyFile)
-		if err != nil {
-			return nil, nil, fmt.Errorf("server: TLS key pair: %w", err)
-		}
-		tlsConf = httpx.ServerTLSConfig(cert)
+	if certs != nil {
+		// The pair is re-read from disk when it changes (HR-371).
+		tlsConf = httpx.ReloadingServerTLSConfig(certs)
 	}
 	srv, err := httpx.NewServer(httpx.ServerConfig{
 		Addr: cfg.HTTP.Addr, Handler: handler, TLS: tlsConf,
