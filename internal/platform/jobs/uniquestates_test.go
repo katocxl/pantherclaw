@@ -8,6 +8,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -19,20 +20,23 @@ import (
 // list lacking one fails ("missing: running").
 var riverRequiredStates = []string{"JobStateAvailable", "JobStatePending", "JobStateRunning", "JobStateScheduled"}
 
-// TestUniqueByStateHoldsRiversRequiredStates: every river.UniqueOpts in the
-// product code that sets ByState sets it as a literal list holding the
-// available, pending, running and scheduled states, so no job's inserts
-// fail at run time (G0 UI D94).
+// TestUniqueByStateHoldsRiversRequiredStates: every river.UniqueOpts that
+// sets ByState, anywhere under the module root (every Go file outside
+// vendor, testdata, node_modules and dot directories, tests excepted), sets
+// it as a literal list holding the available, pending, running and
+// scheduled states, so no job's inserts fail at run time (G0 UI D94).
 func TestUniqueByStateHoldsRiversRequiredStates(t *testing.T) {
 	fset := token.NewFileSet()
 	found := 0
-	for _, root := range []string{"../..", "../../../cmd"} {
+	for _, root := range []string{moduleRoot(t)} {
 		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
 			if d.IsDir() {
-				if d.Name() == "gen" || d.Name() == "testdata" {
+				switch name := d.Name(); {
+				case path == root:
+				case name == "vendor", name == "testdata", name == "node_modules", strings.HasPrefix(name, "."):
 					return filepath.SkipDir
 				}
 				return nil
@@ -86,6 +90,25 @@ func TestUniqueByStateHoldsRiversRequiredStates(t *testing.T) {
 	}
 	if found < 30 {
 		t.Fatalf("found %d ByState lists; the scan is not reading the product code", found)
+	}
+}
+
+// moduleRoot is the directory of the nearest go.mod above the test's.
+func moduleRoot(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.Abs(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("no go.mod above the test")
+		}
+		dir = parent
 	}
 }
 
