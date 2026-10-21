@@ -416,6 +416,6 @@
 | HR-359 | A production deployment refuses to start with billing turned off or faked; an error from an extension's start-up validation stops the server. | T-166 | UI |
 | HR-360 | Plan limits (agents, environments, members) are checked on the server when the record is created. | T-163 | UI |
 | HR-361 | The complimentary and development statuses are never set through the extension's plan writer. | T-163 | UI |
-| HR-362 | Onboarding progress is computed on the server from records (gateways, agents, decisions, approvals, suspensions), never from flags a client sets. | T-071 | UI |
+| HR-362 | Onboarding progress is computed on the server from records (gateways, agents, decisions, approvals, suspensions), never from flags a client sets; a step done from a real record stays done, whatever happens to that record afterwards. | T-071 | UI |
 | HR-363 | Onboarding evidence comes only from the caller's organization. | T-003 | UI |
 | HR-364 | Simulated records never complete an onboarding step (F630). | T-071, T-090 | UI |
