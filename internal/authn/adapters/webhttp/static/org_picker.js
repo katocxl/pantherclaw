@@ -38,10 +38,15 @@ const messages = {
   unauthenticated: "Your sign-in ended. Sign in again.",
 };
 
+// The page the sign-in asked to return to; the server validates it again.
+const list = document.querySelector("ul.orgs");
+const next = list && list.dataset.next ? list.dataset.next : "";
+
 for (const b of document.querySelectorAll("button.pick-org")) {
   b.addEventListener("click", async () => {
     try {
-      const out = await post("/login/orgs/" + encodeURIComponent(b.dataset.org));
+      const q = next ? "?next=" + encodeURIComponent(next) : "";
+      const out = await post("/login/orgs/" + encodeURIComponent(b.dataset.org) + q);
       window.location.assign(out.next && out.next.startsWith("/") && !out.next.startsWith("//") ? out.next : "/account");
     } catch (e) {
       say(messages[e.message] || ("Something went wrong (" + e.message + ")."));
