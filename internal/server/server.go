@@ -87,9 +87,10 @@ Usage:
   pantherclaw-server serve [--config FILE]            run the API and/or workers (role from config)
   pantherclaw-server migrate up|status [--config FILE] apply or show schema migrations (as pc_migrator)
   pantherclaw-server db bootstrap --admin-url-file F --app-password-file F --migrator-password-file F --audit-password-file F
-                                 --retention-password-file F [--backup-password-file F]
+                                 --retention-password-file F [--backup-password-file F] [--deleter-password-file F]
                                                      create roles and schema once, as the database owner; with
-                                                     --backup-password-file also the read-only backup role pc_backup
+                                                     --backup-password-file also the read-only backup role pc_backup;
+                                                     --deleter-password-file also the org deletion role pc_deleter
   pantherclaw-server keys gen-kek --out FILE          write a new key-encryption key (0600)
   pantherclaw-server keys rotate-gateway-ca --confirm [--config FILE]
                                                      replace the internal gateway CA key; every gateway enrolls again
@@ -928,6 +929,7 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	auditPW := fs.String("audit-password-file", "", "password file for pc_audit_ro")
 	retentionPW := fs.String("retention-password-file", "", "password file for pc_retention (the retention job's role)")
 	backupPW := fs.String("backup-password-file", "", "optional: password file for pc_backup, the read-only role of the backup job")
+	deleterPW := fs.String("deleter-password-file", "", "optional: password file for pc_deleter, the role of the org deletion job")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -972,6 +974,17 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 	}
+	if *deleterPW != "" {
+		// Before the database grants, which give an existing pc_deleter
+		// its org tables (G0 M13 D34).
+		dpw, err := config.ReadSecretFile(*deleterPW)
+		if err != nil {
+			return err
+		}
+		if err := db.BootstrapDeleterRole(ctx, conn, dpw); err != nil {
+			return err
+		}
+	}
 	if err := db.BootstrapDatabase(ctx, conn); err != nil {
 		return err
 	}
@@ -979,6 +992,9 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		db.RoleMigrator, db.RoleApp, db.RoleAuditRO, db.RoleRetention, db.RoleLister, db.Schema, cc.Database)
 	if *backupPW != "" {
 		_, _ = fmt.Fprintf(stdout, "bootstrapped the read-only backup role %s\n", db.RoleBackup)
+	}
+	if *deleterPW != "" {
+		_, _ = fmt.Fprintf(stdout, "bootstrapped the org deletion role %s\n", db.RoleDeleter)
 	}
 	return nil
 }

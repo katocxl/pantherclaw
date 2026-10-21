@@ -92,6 +92,9 @@ func (s *Service) NonceExpiry(ctx context.Context, org ids.OrgID) (string, time.
 	var minute int64
 	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		if err := orgActive(ctx, q, org); err != nil {
+			return err
+		}
 		var err error
 		if minute, err = q.CurrentMinute(ctx); err != nil {
 			return err
@@ -121,6 +124,9 @@ func (s *Service) NonceExpiry(ctx context.Context, org ids.OrgID) (string, time.
 func (s *Service) Consume(ctx context.Context, org ids.OrgID, c pap.Checked) error {
 	return s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		if err := orgActive(ctx, q, org); err != nil {
+			return err
+		}
 		minute, err := q.LiveNonceMinute(ctx, org, c.Nonce())
 		if db.IsNoRows(err) {
 			return pap.Err(pap.CodeUseNonce)
@@ -201,4 +207,19 @@ func usableAgent(ctx context.Context, q *dbq.Queries, org ids.OrgID, agent ids.U
 		return a, ErrAgentUnusable
 	}
 	return a, nil
+}
+
+// orgActive refuses every workload request of an org that is not ACTIVE:
+// a DELETED org (D22) fails closed on the workload path as on every other
+// (HR-392). Every workload request takes a nonce and has its proof
+// consumed, so the check sits in both, before anything is written.
+func orgActive(ctx context.Context, q *dbq.Queries, org ids.OrgID) error {
+	state, err := q.OrgState(ctx, org)
+	switch {
+	case db.IsNoRows(err), err == nil && state != "ACTIVE":
+		return pap.Err(pap.CodeInvalidToken)
+	case err != nil:
+		return err
+	}
+	return nil
 }

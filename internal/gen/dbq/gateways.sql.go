@@ -29,10 +29,11 @@ func (q *Queries) BumpGatewayConfig(ctx context.Context, orgID ids.OrgID, iD ids
 }
 
 const gatewayCertAuth = `-- name: GatewayCertAuth :one
-SELECT c.id, c.gateway_id, c.state, c.not_before, c.not_after, c.superseded_at, g.state AS gateway_state,
+SELECT c.id, c.gateway_id, c.state, c.not_before, c.not_after, c.superseded_at, g.state AS gateway_state, o.state AS org_state,
        now()::timestamptz AS db_now
 FROM pc.gateway_certs c
 JOIN pc.gateways g ON g.org_id = c.org_id AND g.id = c.gateway_id
+JOIN pc.orgs o ON o.id = c.org_id
 WHERE c.org_id = $1 AND c.id = $2
 `
 
@@ -44,11 +45,13 @@ type GatewayCertAuthRow struct {
 	NotAfter     time.Time
 	SupersededAt *time.Time
 	GatewayState string
+	OrgState     string
 	DbNow        time.Time
 }
 
 // GatewayCertAuth is what the gateway listener checks on every call
-// (HR-181): the certificate row, its gateway's state and the database time.
+// (HR-181): the certificate row, its gateway's state, its org's state (a
+// DELETED org fails closed, HR-392) and the database time.
 func (q *Queries) GatewayCertAuth(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (GatewayCertAuthRow, error) {
 	row := q.db.QueryRow(ctx, gatewayCertAuth, orgID, iD)
 	var i GatewayCertAuthRow
@@ -60,6 +63,7 @@ func (q *Queries) GatewayCertAuth(ctx context.Context, orgID ids.OrgID, iD ids.U
 		&i.NotAfter,
 		&i.SupersededAt,
 		&i.GatewayState,
+		&i.OrgState,
 		&i.DbNow,
 	)
 	return i, err

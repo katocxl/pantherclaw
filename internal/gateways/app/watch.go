@@ -40,6 +40,11 @@ const (
 // MaxStreamsPerCert streams.
 var ErrTooManyStreams = errors.New("gateways: too many containment streams for this certificate")
 
+// errOrgInactive stops confirming the containment state of an org that is
+// not ACTIVE: its open streams go quiet and its gateways stop dispatching
+// within 2 seconds (D22, HR-392).
+var errOrgInactive = errors.New("gateways: the org is not active")
+
 // Containment is what a gateway is told: its org's epoch and kill switch,
 // its own configuration version and state, and the states of the
 // connections it serves.
@@ -178,7 +183,7 @@ func (h *Hub) poll(ctx context.Context, org ids.OrgID, w *orgWatch) {
 	t := time.NewTicker(PollEvery)
 	defer t.Stop()
 	for {
-		if err := h.read(ctx, org, w); err != nil && ctx.Err() == nil {
+		if err := h.read(ctx, org, w); err != nil && ctx.Err() == nil && !errors.Is(err, errOrgInactive) {
 			h.log.WarnContext(ctx, "gateways.containment_read_failed", slog.String("org_id", org.String()), pclog.Err(err))
 		}
 		select {
@@ -194,6 +199,11 @@ func (h *Hub) read(ctx context.Context, org ids.OrgID, w *orgWatch) error {
 	next := map[ids.UUID]Containment{}
 	err := h.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		if state, err := q.OrgState(ctx, org); db.IsNoRows(err) || (err == nil && state != "ACTIVE") {
+			return errOrgInactive
+		} else if err != nil {
+			return err
+		}
 		c, err := q.GetContainmentNow(ctx, org)
 		if db.IsNoRows(err) {
 			// No containment row yet: epoch 1 and no kill switch (the defaults).

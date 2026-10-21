@@ -57,6 +57,10 @@ var (
 	}
 )
 
+// harnessOnlyKinds do what a range never does to real state: only
+// harness-only scenarios use them.
+var harnessOnlyKinds = []string{"operator.kill_switch"}
+
 // StepKinds is the closed `do` catalog.
 var StepKinds = []string{
 	"agent.call", "agent.direct", "agent.child", "agent.steal", "sandbox.probe",
@@ -212,8 +216,8 @@ func (s *Scenario) Validate() error {
 		if !slices.Contains(StepKinds, st.Do) {
 			return invalid("%s: unknown step kind %q", at, st.Do)
 		}
-		if st.Do == "operator.kill_switch" && !s.HarnessOnly {
-			return invalid("%s: operator.kill_switch needs harness_only: true", at)
+		if slices.Contains(harnessOnlyKinds, st.Do) && !s.HarnessOnly {
+			return invalid("%s: %s needs harness_only: true", at, st.Do)
 		}
 		if st.Do == "browser.call" && !slices.Contains(s.Requires, "browser") {
 			return invalid("%s: browser.call needs requires: [browser]", at)
