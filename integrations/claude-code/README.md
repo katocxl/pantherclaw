@@ -23,7 +23,7 @@ The plugin adds a `PreToolUse` hook for every command a tool runs in a shell: **
 ### Setup (per developer, opt-in)
 
 1. Enroll this machine as a desktop workload and start a run ([workload identity runbook](../../docs/runbooks/workload-identity.md)).
-2. Ask your gateway admin for a `kind: local` connection serving the `pc.shell` package.
+2. Ask your gateway admin for a `kind: local` connection serving the `pc.shell` package (`pclaw init` below creates it when you hold `connection.manage`).
 3. Set these in your own environment, never in a repository's shared configuration:
    ```bash
    export PANTHERCLAW_GATEWAY=https://gateway.example.com
@@ -43,6 +43,7 @@ pclaw init --gateway https://gateway.example.com --connection shell --key-file ~
 `pclaw init`:
 - reports the Claude Code settings it finds (user, project, local and managed), the MCP servers that go around PantherClaw, and agent-framework projects;
 - when the key file is not an enrolled workload key, creates it (mode 0600; on Windows with permissions of its own, not its folder's, so only you, SYSTEM and Administrators may read it) and enrolls it as `--agent`, signed in as you: an enrollment token is issued to you and used at once, never written, and the instance is admitted with the key fingerprint it showed you (HR-094). `--yes` asks nothing, so it also needs `--fingerprint` with the fingerprint you checked: create the key first with `pclaw workload init --key-file FILE`, which shows it. A key file other users can read is refused: on Windows, one whose owner or permissions let in anyone but you, SYSTEM and Administrators, including through entries inherited from its folder (init says how to remove them);
+- when the org has no connection named `--connection`, creates it first: `kind: local`, serving `pc.shell`, every route enforced, no credential, on the org's only active gateway (or the one `--gateway-id` names), shown in the plan like every other change; creating it needs `connection.manage`. When `pc.shell` is not imported and active, it prints the `pclaw package import` and `pclaw package transition … --to active` commands an Org Admin runs first and changes nothing. A connection of that name that is not `kind: local` is refused, and when init cannot read the org's connections (signed out, or without `connection.read`) it says so and prints the `pclaw connection create` command;
 - adds the same hook, in exec form with `onFailure: "block"`, to `.claude/settings.local.json`. Choose another file with `--scope project` or `--scope user`; `CLAUDE_CONFIG_DIR` moves the user one.
 
 It only adds (HR-208):
