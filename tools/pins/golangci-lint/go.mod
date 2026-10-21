@@ -2,7 +2,7 @@ module github.com/katocxl/pantherclaw/tools/pins/golangci-lint
 
 go 1.27
 
-toolchain go1.27.2
+toolchain go1.27.3
 
 tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 

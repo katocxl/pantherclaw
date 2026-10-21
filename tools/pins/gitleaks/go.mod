@@ -2,7 +2,7 @@ module github.com/katocxl/pantherclaw/tools/pins/gitleaks
 
 go 1.27
 
-toolchain go1.27.2
+toolchain go1.27.3
 
 tool github.com/zricethezav/gitleaks/v8
 

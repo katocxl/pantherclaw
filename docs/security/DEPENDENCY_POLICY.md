@@ -94,7 +94,7 @@ Unreachable vulnerabilities: tracked, fixed at next routine update. Released ver
 
 ## 6. Build integrity
 
-- Builds are reproducible from a tag: `-trimpath`, `-buildvcs=true`, pinned toolchain (`toolchain go1.27.2`), `CGO_ENABLED=0` for release binaries.
+- Builds are reproducible from a tag: `-trimpath`, `-buildvcs=true`, pinned toolchain (`toolchain go1.27.3`), `CGO_ENABLED=0` for release binaries.
 - Release artifacts: SBOM (SPDX + CycloneDX via syft), GitHub artifact attestations (build provenance) for binaries, checksums, SBOMs and images; container images also signed with cosign (keyless, Sigstore bundle).
 - Release images (edge and probe, GHCR) use `docker/setup-buildx-action`, `docker/login-action` and `docker/build-push-action` (SHA-pinned; Docker Inc., official; used only in the `images` job of `release.yml`, the one job with `packages: write`) and `actions/download-artifact` to receive the binaries GoReleaser built; the images are attested per digest with `actions/attest-build-provenance`.
 - Publishing uses OIDC trusted publishing (PyPI, npm) bound to the protected `release` environment; no long-lived registry tokens exist.
