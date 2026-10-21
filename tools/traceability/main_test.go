@@ -70,6 +70,24 @@ func TestM11PartOneComesBetweenM12AndM10(t *testing.T) {
 	}
 }
 
+func TestUIComesBetweenM14AndM13(t *testing.T) {
+	// G0 UI (founder, 2026-10-20): the UI phase lands after M14 and before
+	// M13, so its rules are due after M14's and before M13's.
+	if i := milestoneIndex("UI"); i < 0 || i <= milestoneIndex("M14") || i >= milestoneIndex("M13") {
+		t.Fatalf("milestone order %v: want M14 < UI < M13", milestones)
+	}
+	rules := []Item{{ID: "HR-300", Due: "M14"}, {ID: "HR-340", Due: "UI"}, {ID: "HR-130", Due: "M13"}}
+	if got := Missing(rules, nil, map[string]bool{}, "M14"); len(got) != 1 || !strings.HasPrefix(got[0], "HR-300") {
+		t.Fatalf("through M14: %v, want only HR-300", got)
+	}
+	if got := Missing(rules, nil, map[string]bool{}, "UI"); len(got) != 2 || !strings.HasPrefix(got[1], "HR-340") {
+		t.Fatalf("through UI: %v, want HR-300 and HR-340", got)
+	}
+	if got := Missing(rules, nil, map[string]bool{}, "M13"); len(got) != 3 {
+		t.Fatalf("through M13: %v, want all three", got)
+	}
+}
+
 // TestCollectsSDKTests: the SDKs' Python and TypeScript tests count under
 // the Go test names (G0 M8); other files and names do not.
 func TestCollectsSDKTests(t *testing.T) {

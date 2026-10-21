@@ -70,7 +70,7 @@ flowchart LR
 | `pantherclaw-sim` | Simulated payments / CRM / git+deploy targets with fault injection (timeout, unknown outcome, partial, drift, forged acceptance) | Test-only; every receipt marked `SIMULATED` |
 | `sdk/go`, `sdk/python`, `sdk/typescript` (Apache-2.0) | PAP/1 client, DPoP, ActionIR types + canonicalizer, wait handles, framework wrappers, **target-side verifier middleware** | Untrusted side of TB1 |
 | `integrations/claude-code` (Apache-2.0) | Claude Code plugin (PreToolUse for Bash and PowerShell tools, Windows path normalization), Agent SDK `canUseTool` | Cooperative ⇒ coverage PARTIAL unless creds are in custody |
-| Private `pantherclaw-enterprise` (later) | SSO/SCIM, multi-org fleet, SIEM connectors, advanced detections/content, compliance packs, HA, SaaS ops | Builds `pantherclaw-server-ee` importing the public module through `internal/platform/extension` |
+| Private `pantherclaw-enterprise` (later) | SSO/SCIM, multi-org fleet, SIEM connectors, advanced detections/content, compliance packs, HA, SaaS ops | Builds `pantherclaw-server-ee` importing the public module through `internal/extension` (G0 UI, ADR-0030) |
 
 ## 4. Layering and module rules
 
@@ -80,7 +80,8 @@ internal/<module>/adapters  sqlc repositories, Connect handlers, external client
 internal/<module>/app       use cases, transaction boundaries, caller authorization, events
 internal/<module>/domain    pure types, invariants, state machines — no I/O, no time.Now(), no randomness
 internal/platform/*         config, log (slog + redaction), db, crypto, keys, ids, clock, errors,
-                            httpx (hardened servers/clients), rpc (also OpenTelemetry spans), extension, edition, version
+                            httpx (hardened servers/clients), rpc (also OpenTelemetry spans), edition, version
+internal/extension          the extension point for the commercial distribution (console, extra routes, start-up checks; G0 UI)
 ```
 
 Enforced by golangci-lint `depguard` + an architecture test:

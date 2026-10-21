@@ -22,6 +22,19 @@ for await (const message of query({
 }
 ```
 
+## Install from the repository
+
+The package is not on npm yet (see Status). A package with the same name on npm is not ours; do not install it. Install from a clone of this repository instead:
+
+```sh
+git clone https://github.com/katocxl/pantherclaw.git
+npm install ./pantherclaw/integrations/claude-agent-sdk/typescript
+```
+
+Run `npm install` from your agent's project, with the clone next to it (adjust the path otherwise), and install `@anthropic-ai/claude-agent-sdk` yourself (a peer dependency, 0.3.286 or later, below 0.4).
+
+## Options
+
 `options()` must see the whole query options (`permissionMode`, `allowedTools`, `settingSources`, `mcpServers`, your own `canUseTool` and hooks) to know when a hold may be asked, so pass them through it rather than taking the hook alone. A hold is asked only with `settingSources: []`: when it is omitted the SDK loads every settings source, whose allow rules the integration cannot see.
 
 ## How it decides
