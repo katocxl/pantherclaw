@@ -176,8 +176,10 @@ func TestHR371_ListenerServesRenewedCertificate(t *testing.T) {
 	if conf.MinVersion != tls.VersionTLS13 || conf.CurvePreferences[0] != tls.X25519MLKEM768 || len(conf.Certificates) != 0 {
 		t.Fatalf("profile changed: %+v", conf)
 	}
-	srv, err := NewServer(ServerConfig{Addr: "127.0.0.1:0", TLS: conf,
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })})
+	srv, err := NewServer(ServerConfig{
+		Addr: "127.0.0.1:0", TLS: conf,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) }),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
