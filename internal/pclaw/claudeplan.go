@@ -27,7 +27,9 @@ import (
 // initPlan is everything `pclaw init` would change. All of it is shown,
 // and none of it is done until the person confirms (HR-208).
 type initPlan struct {
-	enroll *enrollment
+	// connection is the hook connection to create, when the org has none.
+	connection *hookConnectionPlan
+	enroll     *enrollment
 	// edits are the files init adds to, their documents changed in place.
 	edits []*claudeSettings
 	// done is printed once the changes are made.
@@ -106,10 +108,11 @@ func unchanged(writes []initWrite, done string) error {
 	return nil
 }
 
-// apply shows the plan, asks, and carries it out: the enrollment first, so
-// a hook never names a key that is not enrolled, then each file, unless it
-// changed since the plan was made, backed up and replaced through a
-// temporary file.
+// apply shows the plan, asks, and carries it out: the hook connection and
+// the enrollment first, so a hook never names a connection that does not
+// exist or a key that is not enrolled, then each file, unless it changed
+// since the plan was made, backed up and replaced through a temporary
+// file.
 func (f initFlags) apply(ctx context.Context, a *app, p *initPlan) error {
 	var writes []initWrite
 	for _, s := range p.edits {
@@ -140,6 +143,9 @@ func (f initFlags) apply(ctx context.Context, a *app, p *initPlan) error {
 		}
 		writes = append(writes, initWrite{s.path, s.raw, after})
 	}
+	if p.connection != nil {
+		_, _ = fmt.Fprintln(a.stdout, p.connection.line())
+	}
 	if e := p.enroll; e != nil {
 		key := "the workload key in " + e.path
 		if e.create {
@@ -149,7 +155,7 @@ func (f initFlags) apply(ctx context.Context, a *app, p *initPlan) error {
 			key, e.agent, e.fingerprint)
 	}
 	switch {
-	case p.enroll == nil && len(writes) == 0:
+	case p.connection == nil && p.enroll == nil && len(writes) == 0:
 		_, err := fmt.Fprintln(a.stdout, "Nothing to change.")
 		return err
 	case f.dryRun:
@@ -158,21 +164,36 @@ func (f initFlags) apply(ctx context.Context, a *app, p *initPlan) error {
 	case !f.yes && !confirm(a, "Make these changes?"):
 		return &exitError{code: 1, msg: "pclaw init: not confirmed; nothing was changed"}
 	}
-	done := "nothing was changed"
+	// A file that changed while the person read the plan stops everything,
+	// the connection and the enrollment (which writes the key file) too. A
+	// file that changed during their calls is still left as it is, but
+	// what they did stays done.
+	var did []string
+	done := func() string {
+		if len(did) == 0 {
+			return "nothing was changed"
+		}
+		return strings.Join(did, " and ") + ", but no settings file was written"
+	}
+	if p.connection != nil {
+		if err := unchanged(writes, done()); err != nil {
+			return err
+		}
+		if err := p.connection.create(ctx, a); err != nil {
+			return err
+		}
+		did = append(did, "the connection "+p.connection.req.GetName()+" is created")
+	}
 	if p.enroll != nil {
-		// A file that changed while the person read the plan stops
-		// everything, the enrollment (which writes the key file) too.
-		if err := unchanged(writes, done); err != nil {
+		if err := unchanged(writes, done()); err != nil {
 			return err
 		}
 		if err := p.enroll.run(ctx, a); err != nil {
 			return err
 		}
-		// A file that changed during the enrollment's calls is still left
-		// as it is, but the key is enrolled by then.
-		done = "the key in " + p.enroll.path + " is enrolled and admitted, but no settings file was written"
+		did = append(did, "the key in "+p.enroll.path+" is enrolled and admitted")
 	}
-	if err := unchanged(writes, done); err != nil {
+	if err := unchanged(writes, done()); err != nil {
 		return err
 	}
 	for _, w := range writes {

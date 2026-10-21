@@ -317,6 +317,15 @@ go run ./cmd/pclaw channel test <channel id> && go run ./cmd/pclaw delivery list
 go run ./cmd/pclaw user revoke-sessions <user id>                                                                             # sign a person out everywhere
 ```
 
+**A development sign-in with a real `auth_time` (UI D95).** The Keycloak realm sends `auth_time`, but the compose stack's `mock-oauth2-server` (`task up PROFILE=test`, kept for the integration tests) cannot send a current one, so a sign-in through it is never recent and adding a first security key fails closed (HR-155). To sign in through the browser as any username and still pass that check, run the development provider instead. It listens only on loopback and sets `auth_time` to the moment you submit its form. When the server asks for a fresh sign-in (`max_age`, or `prompt=login`), it shows the form again. It is never built into `bin/` or a release (`TestDevOIDC_IsInNoBuildOutput`), and a production configuration refuses it like every provider marked `dev`.
+
+```bash
+openssl rand -hex 24 > deploy/dev/secrets/devoidc.secret
+go run ./test/devoidc --client-secret-file deploy/dev/secrets/devoidc.secret   # issuer http://127.0.0.1:8282, client pantherclaw
+# in your server config, add to "auth": "oidc_providers": [{"name": "dev", "issuer": "http://127.0.0.1:8282",
+#   "client_id": "pantherclaw", "client_secret_file": "deploy/dev/secrets/devoidc.secret", "allow_insecure_loopback": true, "dev": true}]
+```
+
 Browser sessions last 30 idle minutes and 12 hours at most. Adding or removing a key needs a sign-in at most 5 minutes old (the page sends you back to your identity provider) or a step-up with a key you already have, and the user is emailed about it. Webhooks are signed per Standard Webhooks: any `standardwebhooks` library verifies them with the `whsec_` secret. Slack and email messages only link back to PantherClaw; nothing in a channel can approve anything. Community allows 3 channels. Without `notifications.smtp.host`, email deliveries are skipped and shown as such in `pclaw delivery list`.
 
 **Approvals and the Agent Waitlist (M5 part 2):** `dev seed` publishes the policy `dev-holds`, so a refund over `--hold-over` (default 50.00) is held for one Approver. The gateway answers a held call with its transaction id, which is the wait handle. A person approves only on the approval page, with a security key bound to that exact action (decision 1); `pclaw` declines, asks for evidence or proposes a narrower action, and opens the page to approve.

@@ -29,7 +29,9 @@ import (
 // shown before), and installs the PreToolUse hook that asks the gateway
 // before every command a tool runs in a shell (Bash, PowerShell and
 // Monitor; HR-186) with `pclaw hook claude-code`, in the settings file of
-// the chosen scope.
+// the chosen scope. When the org has no connection of the hook's name, it
+// creates it, serving pc.shell, or says what must happen first
+// (claudeconn.go).
 //
 // It only adds: it never removes or changes an existing deny rule, hook or
 // server entry, and it never writes a secret (only the gateway's URL, the
@@ -43,7 +45,7 @@ import (
 
 func init() {
 	commands["init"] = command{
-		usage: "init --gateway URL --connection NAME --key-file FILE [--agent ID] [--mcp NAME=CONNECTION...] [--run ID] [--project DIR] " +
+		usage: "init --gateway URL --connection NAME --key-file FILE [--gateway-id ID] [--agent ID] [--mcp NAME=CONNECTION...] [--run ID] [--project DIR] " +
 			"[--scope local|project|user] [--dry-run | --yes [--fingerprint FP]] [--managed-settings FILE] [--template NAME --repos OWNER/REPO[,…] [--yes-template] [template apply options]]",
 		run: claudeInit,
 	}
@@ -250,8 +252,8 @@ func counts(doc *jsonNode) string {
 
 // initFlags are init's options.
 type initFlags struct {
-	gateway, connection, keyFile, run, project, scope, managed, agent, fingerprint string
-	dryRun, yes                                                                    bool
+	gateway, gatewayID, connection, keyFile, run, project, scope, managed, agent, fingerprint string
+	dryRun, yes                                                                               bool
 }
 
 func claudeInit(ctx context.Context, a *app, args []string) error {
@@ -259,7 +261,8 @@ func claudeInit(ctx context.Context, a *app, args []string) error {
 	fs.SetOutput(a.stderr)
 	var f initFlags
 	fs.StringVar(&f.gateway, "gateway", "", "the gateway's public URL")
-	fs.StringVar(&f.connection, "connection", "", "the kind-local connection serving pc.shell")
+	fs.StringVar(&f.connection, "connection", "", "the kind-local connection serving pc.shell (created when the org has none)")
+	fs.StringVar(&f.gatewayID, "gateway-id", "", "the gateway to create the connection on, when the org has several (default: its only one)")
 	fs.StringVar(&f.keyFile, "key-file", "", "the desktop workload key file (created and enrolled with --agent when it is not enrolled)")
 	fs.StringVar(&f.agent, "agent", "", "the agent to enroll the key file as, signed in as yourself, when it is not enrolled yet")
 	fs.StringVar(&f.run, "run", "", "the run (default: the key file's)")
@@ -299,6 +302,9 @@ func claudeInit(ctx context.Context, a *app, args []string) error {
 	}
 	hook, err := f.hookEntry()
 	if err != nil {
+		return err
+	}
+	if err := validGatewayID(f.gatewayID); err != nil {
 		return err
 	}
 	p := &initPlan{}
@@ -360,6 +366,9 @@ func claudeInit(ctx context.Context, a *app, args []string) error {
 	target := settings[slices.IndexFunc(settings, func(s claudeSettings) bool { return s.scope == f.scope })]
 	if err := hookBlocked(managed, settings, target); err != nil {
 		return &exitError{code: 1, msg: "pclaw init: " + err.Error()}
+	}
+	if p.connection, err = f.hookConnection(ctx, a); err != nil {
+		return err
 	}
 	if slices.ContainsFunc(managed, func(s claudeSettings) bool { return hookRuns(s.doc) }) || hookRuns(target.doc) {
 		_, _ = fmt.Fprintln(a.stdout, "The PantherClaw hook is already installed.")

@@ -76,7 +76,9 @@ services:
 
   # Mock OpenID provider for integration tests (navikt/mock-oauth2-server):
   # issuer http://127.0.0.1:8181/default, any client secret, a login form
-  # that accepts any subject and claims. Test use only.
+  # that accepts any subject and claims. Test use only. It sends no current
+  # auth_time, so a sign-in through it never counts as recent (HR-155); for
+  # that locally, run go run ./test/devoidc (docs/BUILD_GUIDE.md §4).
   mock-oidc:
     image: ghcr.io/navikt/mock-oauth2-server:6.0.4@sha256:47374fe063995d9b6d39ebb6ea21eb5f765025bf0aa08b61b08b439eb91adaf0
     profiles: ["test"]
