@@ -1,6 +1,6 @@
 # Runbook — Deploy hosted staging (G3)
 
-**Milestone:** M13 ([G0 M13](../g0/M13.md) D3, D4, D12–D15, D14 amended, D19, D23–D26, D29, F10; [ADR-0032](../adr/0032-hosted-deployment-kek-custody-and-backups.md); HR-370, HR-371, HR-346, HR-379, R-62). **Audience:** the founder, as operator of hosted staging (test layer L3). The host scripts, the compose stack and the deploy workflow live in the commercial distribution; this runbook is the procedure they implement. Production (L4) follows at v1.0 on a paid host. Command flags follow the brief; the M13 exit status records any change.
+**Milestone:** M13 ([G0 M13](../g0/M13.md) D3, D4, D12–D15, D14 amended, D19, D23–D26, D29, D37, F10; [ADR-0032](../adr/0032-hosted-deployment-kek-custody-and-backups.md); HR-370, HR-371, HR-346, HR-379, R-62). **Audience:** the founder, as operator of hosted staging (test layer L3). The host scripts, the compose stack and the deploy workflow live in the commercial distribution; this runbook is the procedure they implement. Production (L4) follows at v1.0 on a paid host. Command flags follow the brief; the M13 exit status records any change.
 
 ## 1. What runs where
 
@@ -50,7 +50,13 @@ Deploys and the restore drill run on a **GitHub self-hosted runner installed on 
   - **No secrets in jobs.** The drill reads its `age` identity and the staging KEK from root-only files on the VM, so no job receives secrets.
   - **Root-owned runner.** The installation is root-owned except its work and diagnostics directories, and is started with `--disableupdate`. To upgrade it, bump the pinned version and SHA-256 in the repository and re-run bootstrap.
   - **Workflow check.** A GitHub-hosted check fails any change that adds `self-hosted` to a workflow other than the deploy and drill workflows. Those two run only on `main`, and the drill also runs monthly.
-  - **What remains.** A pushed branch can still run code as the unprivileged runner user, with no docker group, no secrets and no sudo beyond the verified deploy (R-62).
+  - **Cleanup around every job** (D37). Runner job hooks, which are root-owned scripts, call a root-owned cleanup script through a sudoers entry that takes no arguments, before and after every job. The script kills every runner-user process outside the runner service's cgroup, clears the runner user's cron and `at` jobs, and resets its home and work directories (except the current checkout at job start). The service uses `KillMode=control-group`.
+  - **Authoritative G3 records.** The deploy script writes them root-only on the VM, in `/srv/pantherclaw/deploy/g3/<ts>.json`; the workflow only prints them back. The staging tag is a convenience only, because the VM re-verifies the signature on every deploy.
+  - **The guard is a merge gate, not a runtime control.** A pushed branch's job runs before CI does. The guard parses the workflow YAML with a pinned `yq`:
+    - every `runs-on` must be a literal `ubuntu-*`;
+    - the two allowed jobs are the exception, and they must be exactly `[self-hosted, pantherclaw-staging]` with the exact main-only condition;
+    - job-level `uses:` and `${{` in `runs-on` are refused.
+  - **What remains.** A pushed branch can still run code as the unprivileged runner user, with no docker group, no secrets and no sudo beyond the verified deploy and the cleanup (R-62). This is accepted for $0 staging, which holds no customer data. Just-in-time ephemeral runners, minted per job through a GitHub App, follow the GitHub organization move.
 
   Never enable a self-hosted runner like this on a public repository.
 - **Fallback.** Run the setup script over SSH by hand, with the digest to deploy.
@@ -64,7 +70,7 @@ Deploys and the restore drill run on a **GitHub self-hosted runner installed on 
    5. `docker compose up -d`;
    6. waits up to 5 minutes for `/readyz` to answer 200 (§5), checked on the host.
 3. **If readiness does not come**, it rolls back: the previous digest is started again and the result is recorded as a failed deploy. A migration is never rolled back automatically: an older binary refuses a newer schema (`SCHEMA_NEWER`, HR-370), so a failed deploy after a migration needs the operator (§6).
-4. **G3 record.** Every run writes the artifact digest, the configuration hash, the previous digest, the operator, the time and the result to the job summary and as an artifact. The G3 rows are copied to [GATES_AND_REVIEW §7](../security/GATES_AND_REVIEW.md#7-gate-decision-log) at landing.
+4. **G3 record.** Every run writes the artifact digest, the configuration hash, the previous digest, the operator, the time and the result. The authoritative copy is root-only on the VM (`/srv/pantherclaw/deploy/g3/<ts>.json`, D37); the job summary and artifact only print it back. The G3 rows are copied to [GATES_AND_REVIEW §7](../security/GATES_AND_REVIEW.md#7-gate-decision-log) at landing.
 
 ## 5. Health and readiness
 
