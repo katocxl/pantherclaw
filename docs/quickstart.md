@@ -11,6 +11,8 @@ The 30 minutes are a target, measured and not guaranteed. The founder's timed ru
 - A browser, and a security key or a platform authenticator (Windows Hello, Touch ID) for the approval in step 9.
 - About 3 GB of free disk space and some patience on the first run: the first `task demo:up` takes several minutes while Go builds and Docker pulls PostgreSQL and Keycloak.
 
+This quickstart runs the demo stack from a source checkout. To install a release instead, verified with `install.sh`, as a single node with `pclaw up`, or on Kubernetes with the Helm chart, see [runbooks/installation.md](runbooks/installation.md) (M13).
+
 `pclaw` prints JSON. Where a step needs an id, copy it from the output; the `pcid` helper that `. .demo/env.sh` defines prints the first `"id"` of its input, so the commands below do that for you.
 
 ## 1. Start the demo (`task demo:up`)
