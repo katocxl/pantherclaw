@@ -48,7 +48,7 @@ const (
 	StepId_STEP_ID_TEST_DENIED StepId = 8
 	// A person decided an approval with a security key.
 	StepId_STEP_ID_APPROVAL_DECIDED StepId = 9
-	// An agent was suspended and restored.
+	// An agent was suspended.
 	StepId_STEP_ID_SUSPENSION_TESTED StepId = 10
 )
 

@@ -16,10 +16,19 @@ import (
 )
 
 const onboardingAgentInstance = `-- name: OnboardingAgentInstance :one
-SELECT i.agent_id, coalesce(i.decided_at, i.created_at)::timestamptz AS at FROM pc.agent_instances i
-JOIN pc.agents a ON a.org_id = i.org_id AND a.id = i.agent_id
-WHERE i.org_id = $1 AND i.state = 'ADMITTED' AND NOT a.range_agent
-ORDER BY 2, i.id LIMIT 1
+SELECT e.agent_id, e.at FROM (
+    SELECT i.agent_id, coalesce(i.decided_at, i.created_at)::timestamptz AS at, i.id AS ref FROM pc.agent_instances i
+    WHERE i.org_id = $1 AND i.state = 'ADMITTED'
+    UNION ALL
+    SELECT c.agent_id, c.created_at, c.id FROM pc.agent_changes c
+    WHERE c.org_id = $1 AND c.kind = 'instance.admitted'
+    UNION ALL
+    SELECT r.agent_id, r.created_at, r.id FROM pc.runs r
+    WHERE r.org_id = $1 AND r.instance_id IS NOT NULL AND NOT r.simulated
+) e
+JOIN pc.agents a ON a.org_id = $1 AND a.id = e.agent_id
+WHERE NOT a.range_agent
+ORDER BY e.at, e.ref LIMIT 1
 `
 
 type OnboardingAgentInstanceRow struct {
@@ -27,6 +36,9 @@ type OnboardingAgentInstanceRow struct {
 	At      time.Time
 }
 
+// An instance admitted now, or one admitted before and revoked since (a
+// suspension revokes the agent's instances): its admission change, or a
+// real run it took part in.
 func (q *Queries) OnboardingAgentInstance(ctx context.Context, orgID ids.OrgID) (OnboardingAgentInstanceRow, error) {
 	row := q.db.QueryRow(ctx, onboardingAgentInstance, orgID)
 	var i OnboardingAgentInstanceRow
@@ -97,15 +109,14 @@ func (q *Queries) OnboardingGateway(ctx context.Context, orgID ids.OrgID) (Onboa
 }
 
 const onboardingHeld = `-- name: OnboardingHeld :one
-SELECT t.id, t.created_at,
-       (SELECT q.id FROM pc.approval_requests q WHERE q.org_id = t.org_id AND q.transaction_id = t.id
-        ORDER BY q.created_at, q.id LIMIT 1)::uuid AS request_id
-FROM pc.transactions t
+SELECT t.id, q.created_at, q.id AS request_id
+FROM pc.approval_requests q
+JOIN pc.transactions t ON t.org_id = q.org_id AND t.id = q.transaction_id
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 JOIN pc.agents a ON a.org_id = r.org_id AND a.id = r.agent_id
-WHERE t.org_id = $1 AND NOT t.simulated AND NOT r.simulated AND NOT a.range_agent
-  AND t.decision = 'REQUIRE_APPROVAL'
-ORDER BY t.created_at, t.id LIMIT 1
+WHERE q.org_id = $1 AND q.subject_kind = 'ACTION'
+  AND NOT t.simulated AND NOT r.simulated AND NOT a.range_agent
+ORDER BY q.created_at, q.id LIMIT 1
 `
 
 type OnboardingHeldRow struct {
@@ -114,7 +125,9 @@ type OnboardingHeldRow struct {
 	RequestID ids.UUID
 }
 
-// The first real action held for approval, with its approval request.
+// The first real action held for approval: its approval request, which
+// stays whatever happens to the action afterwards (approved and executed,
+// declined, expired), and the transaction it holds (D98).
 func (q *Queries) OnboardingHeld(ctx context.Context, orgID ids.OrgID) (OnboardingHeldRow, error) {
 	row := q.db.QueryRow(ctx, onboardingHeld, orgID)
 	var i OnboardingHeldRow
@@ -143,7 +156,7 @@ func (q *Queries) OnboardingInvitation(ctx context.Context, orgID ids.OrgID) (On
 const onboardingSecurityKey = `-- name: OnboardingSecurityKey :one
 
 SELECT id, created_at FROM pc.webauthn_credentials
-WHERE org_id = $1 AND user_id = $2 AND state = 'ACTIVE'
+WHERE org_id = $1 AND user_id = $2
 ORDER BY created_at, id LIMIT 1
 `
 
@@ -158,7 +171,9 @@ type OnboardingSecurityKeyRow struct {
 // Onboarding progress (G0 UI D15; HR-362..364): each step's first record,
 // read in the caller's org's tenant transaction (HR-363). Simulated
 // records — range agents and simulated transactions — never count
-// (HR-364, F630).
+// (HR-364, F630). A step done from a real record stays done (D98): each
+// query reads a record that later changes do not take away — a removed
+// key, a revoked instance or an executed held action still count.
 func (q *Queries) OnboardingSecurityKey(ctx context.Context, orgID ids.OrgID, userID ids.UUID) (OnboardingSecurityKeyRow, error) {
 	row := q.db.QueryRow(ctx, onboardingSecurityKey, orgID, userID)
 	var i OnboardingSecurityKeyRow
@@ -167,16 +182,11 @@ func (q *Queries) OnboardingSecurityKey(ctx context.Context, orgID ids.OrgID, us
 }
 
 const onboardingSuspension = `-- name: OnboardingSuspension :one
-SELECT r.agent_id, r.created_at,
-       (SELECT s.id FROM pc.agent_changes s
-        WHERE s.org_id = r.org_id AND s.agent_id = r.agent_id AND s.kind = 'agent.suspended' AND s.created_at <= r.created_at
-        ORDER BY s.created_at DESC, s.id DESC LIMIT 1)::uuid AS suspension_id
-FROM pc.agent_changes r
-JOIN pc.agents a ON a.org_id = r.org_id AND a.id = r.agent_id
-WHERE r.org_id = $1 AND r.kind = 'agent.restored' AND NOT a.range_agent
-  AND EXISTS (SELECT 1 FROM pc.agent_changes s WHERE s.org_id = r.org_id AND s.agent_id = r.agent_id
-              AND s.kind = 'agent.suspended' AND s.created_at <= r.created_at)
-ORDER BY r.created_at, r.id LIMIT 1
+SELECT s.agent_id, s.created_at, s.id AS suspension_id
+FROM pc.agent_changes s
+JOIN pc.agents a ON a.org_id = s.org_id AND a.id = s.agent_id
+WHERE s.org_id = $1 AND s.kind = 'agent.suspended' AND NOT a.range_agent
+ORDER BY s.created_at, s.id LIMIT 1
 `
 
 type OnboardingSuspensionRow struct {
@@ -185,7 +195,7 @@ type OnboardingSuspensionRow struct {
 	SuspensionID ids.UUID
 }
 
-// An agent restored after it was suspended.
+// An agent was suspended (D97(2)); restoring it is an optional follow-up.
 func (q *Queries) OnboardingSuspension(ctx context.Context, orgID ids.OrgID) (OnboardingSuspensionRow, error) {
 	row := q.db.QueryRow(ctx, onboardingSuspension, orgID)
 	var i OnboardingSuspensionRow

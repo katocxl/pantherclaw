@@ -44,7 +44,7 @@ enum StepId {
   STEP_ID_TEST_DENIED = 8;
   // A person decided an approval with a security key.
   STEP_ID_APPROVAL_DECIDED = 9;
-  // An agent was suspended and restored.
+  // An agent was suspended.
   STEP_ID_SUSPENSION_TESTED = 10;
 }
 
