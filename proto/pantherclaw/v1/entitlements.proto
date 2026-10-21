@@ -6,6 +6,7 @@ syntax = "proto3";
 package pantherclaw.v1;
 
 import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/datarequests.proto";
 
 // EntitlementService reports the caller's organization's plan: what it may
 // use, what it uses, and until when (G0 UI D9). Self-hosted servers derive
@@ -102,6 +103,27 @@ message Entitlements {
   PlanSource source = 8;
   // Usage.
   PlanUsage usage = 9;
+  // When the plan lapsed (LAPSED, PAUSED, or CANCELED past its period
+  // end, without a comp plan in force); unset while it has not (G0 M13
+  // D34, F2). Reminders go out on days 0, 30, 60 and 83 after it.
+  google.protobuf.Timestamp lapsed_at = 10;
+  // When the org is deleted: the pending deletion's execute time, else
+  // lapsed_at + 90 days; unset when neither applies.
+  google.protobuf.Timestamp deletion_due_at = 11;
+  // The org's open deletion request, if any.
+  PendingDeletion pending_deletion = 12;
+}
+
+// PendingDeletion is an org's open deletion request (G0 M13 D34).
+message PendingDeletion {
+  // When it was requested.
+  google.protobuf.Timestamp requested_at = 1;
+  // When the deletion runs (the end of its cancellation window).
+  google.protobuf.Timestamp execute_at = 2;
+  // Why.
+  DeletionReason reason = 3;
+  // Whether an org admin can still cancel it (inside its window).
+  bool cancellable = 4;
 }
 
 // GetEntitlementsRequest asks for the caller's org's plan.
