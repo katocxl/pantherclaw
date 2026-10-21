@@ -477,6 +477,21 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.WaitlistService/RequestAccess":                        entitlements.ClassChange,
 	"/pantherclaw.v1.WaitlistService/SetEscalationChain":                   entitlements.ClassChange,
 	"/pantherclaw.v1.WaitlistService/UpdateWaitlistSettings":               entitlements.ClassChange,
+	"/pantherclaw.v1.SupportAccessService/RequestSupportAccess":            entitlements.ClassChange,
+	"/pantherclaw.v1.SupportAccessService/OpenSupportSession":              entitlements.ClassChange,
+	"/pantherclaw.v1.SupportAccessService/GetCurrentSupportSession":        entitlements.ClassRead,
+	"/pantherclaw.v1.SupportAccessService/ListSupportRequests":             entitlements.ClassRead,
+	"/pantherclaw.v1.SupportAccessService/GetSupportRequest":               entitlements.ClassRead,
+	"/pantherclaw.v1.SupportAccessService/ApproveSupportRequest":           entitlements.ClassChange,
+	"/pantherclaw.v1.SupportAccessService/DenySupportRequest":              entitlements.ClassSafety,
+	"/pantherclaw.v1.SupportAccessService/ListSupportGrants":               entitlements.ClassRead,
+	"/pantherclaw.v1.SupportAccessService/RevokeSupportGrant":              entitlements.ClassSafety,
+	"/pantherclaw.v1.BreakGlassService/ListBreakGlassHolders":              entitlements.ClassRead,
+	"/pantherclaw.v1.BreakGlassService/SetBreakGlassHolders":               entitlements.ClassChange,
+	"/pantherclaw.v1.BreakGlassService/ActivateBreakGlass":                 entitlements.ClassChange,
+	"/pantherclaw.v1.BreakGlassService/EndBreakGlass":                      entitlements.ClassSafety,
+	"/pantherclaw.v1.BreakGlassService/GetMyBreakGlass":                    entitlements.ClassRead,
+	"/pantherclaw.v1.BreakGlassService/ListBreakGlassActivations":          entitlements.ClassRead,
 }
 
 // ProcedureClass is the plan-gate class of a procedure (D43), for the

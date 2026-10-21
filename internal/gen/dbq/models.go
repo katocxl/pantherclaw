@@ -2999,6 +2999,12 @@ type PcSavedQuery struct {
 	UpdatedAt   time.Time
 }
 
+type PcSchemaInfo struct {
+	ID        int16
+	Version   int64
+	AppliedAt time.Time
+}
+
 type PcServiceAccount struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID
@@ -3184,6 +3190,58 @@ type PcSsfTransmitter struct {
 	EventsRefused       int64
 	LastRefusalAt       *time.Time
 	LastRefusalCode     *string
+}
+
+type PcSupportAccessGrant struct {
+	OrgID              ids.OrgID
+	ID                 ids.UUID
+	RequestID          ids.UUID
+	AccountID          ids.UUID
+	Scope              string
+	ApprovedBy         ids.UUID
+	ApprovedCredential ids.UUID
+	StartsAt           time.Time
+	ExpiresAt          time.Time
+	RevokedAt          *time.Time
+	RevokedByType      *string
+	RevokedByID        *string
+}
+
+type PcSupportAccessRequest struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	RequesterAccount  ids.UUID
+	RequesterEmail    string
+	RequesterName     string
+	StaffOrg          ids.UUID
+	StaffUser         ids.UUID
+	StaffCredential   ids.UUID
+	Task              string
+	Scope             string
+	DurationHours     int32
+	State             string
+	CreatedAt         time.Time
+	ExpiresAt         time.Time
+	DecidedBy         *ids.UUID
+	DecidedCredential *ids.UUID
+	DecidedAt         *time.Time
+}
+
+type PcSupportSession struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	GrantID         ids.UUID
+	AccountID       ids.UUID
+	StaffCredential ids.UUID
+	SecretHash      []byte
+	State           string
+	EndReason       *string
+	UserAgent       string
+	ClientIp        string
+	CreatedAt       time.Time
+	LastSeenAt      time.Time
+	ExpiresAt       time.Time
+	EndedAt         *time.Time
 }
 
 type PcSuppression struct {
