@@ -13,7 +13,7 @@ vars:
   GITLEAKS: go tool -modfile={{.PINS}}/gitleaks/go.mod gitleaks
   GOVULNCHECK: go tool -modfile={{.PINS}}/govulncheck/go.mod govulncheck
   GO_MODULES: ". sdk/go sdk/go/internal/sqltest tools"
-  GOLANG_IMAGE: golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61
+  GOLANG_IMAGE: golang:1.27.3-bookworm@sha256:21ade014faf952365b9ecbd8dbdb87176fbacb82fac9fb132d9f2a7b8cc3f132
   COMPOSE: docker compose -f deploy/compose/compose.yaml
 
 tasks:

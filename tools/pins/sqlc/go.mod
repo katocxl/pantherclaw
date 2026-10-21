@@ -2,7 +2,7 @@ module github.com/katocxl/pantherclaw/tools/pins/sqlc
 
 go 1.27
 
-toolchain go1.27.2
+toolchain go1.27.3
 
 tool github.com/sqlc-dev/sqlc/cmd/sqlc
 
