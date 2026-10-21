@@ -64,46 +64,88 @@ func newDevFixture(t *testing.T) *devFixture {
 
 var requestField = regexp.MustCompile(`name="request" value="([^"]+)"`)
 
+// answer is a response, read and closed.
+type answer struct {
+	status int
+	header http.Header
+	body   string
+}
+
+// location is the answer's redirect, parsed.
+func (a answer) location() *url.URL {
+	u, err := url.Parse(a.header.Get("Location"))
+	if err != nil {
+		return &url.URL{}
+	}
+	return u
+}
+
+// do sends r from the browser.
+func (f *devFixture) do(t *testing.T, r *http.Request) answer {
+	t.Helper()
+	res, err := f.browser.Do(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return answer{status: res.StatusCode, header: res.Header, body: string(body)}
+}
+
+func (f *devFixture) get(t *testing.T, u string) answer {
+	t.Helper()
+	r, err := http.NewRequestWithContext(context.Background(), http.MethodGet, u, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f.do(t, r)
+}
+
+func (f *devFixture) post(t *testing.T, u string, form url.Values, basicSecret string) answer {
+	t.Helper()
+	r, err := http.NewRequestWithContext(context.Background(), http.MethodPost, u, strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if basicSecret != "" {
+		r.SetBasicAuth("pantherclaw", basicSecret)
+	}
+	return f.do(t, r)
+}
+
 // start begins a sign-in as the server does (state, nonce, PKCE, max_age)
 // with extra parameters, and returns the request and the browser's answer.
-func (f *devFixture) start(t *testing.T, maxAge time.Duration, extra string) (authnapp.AuthRequest, *http.Response, string) {
+func (f *devFixture) start(t *testing.T, maxAge time.Duration, extra string) (authnapp.AuthRequest, answer) {
 	t.Helper()
 	req := authnapp.AuthRequest{State: rand.Text(), Nonce: rand.Text(), Verifier: rand.Text() + rand.Text(), RedirectURI: callback, MaxAge: maxAge}
 	u, err := f.rp.AuthCodeURL(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := f.browser.Get(u + extra)
-	if err != nil {
-		t.Fatal(err)
-	}
-	body, _ := io.ReadAll(res.Body)
-	_ = res.Body.Close()
-	return req, res, string(body)
+	return req, f.get(t, u+extra)
 }
 
 // submit signs in as user on the form in page.
-func (f *devFixture) submit(t *testing.T, page, user string) *http.Response {
+func (f *devFixture) submit(t *testing.T, page answer, user string) answer {
 	t.Helper()
-	m := requestField.FindStringSubmatch(page)
+	m := requestField.FindStringSubmatch(page.body)
 	if m == nil {
-		t.Fatalf("no sign-in form:\n%s", page)
+		t.Fatalf("no sign-in form: %d\n%s", page.status, page.body)
 	}
-	res, err := f.browser.PostForm(f.p.issuer+"/login", url.Values{"request": {m[1]}, "username": {user}, "verified": {"1"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = res.Body.Close()
-	return res
+	return f.post(t, f.p.issuer+"/login", url.Values{"request": {m[1]}, "username": {user}, "verified": {"1"}}, "")
 }
 
 // finish checks the redirect to the server and exchanges its code as the
 // server does.
-func (f *devFixture) finish(t *testing.T, req authnapp.AuthRequest, res *http.Response) authnapp.IDClaims {
+func (f *devFixture) finish(t *testing.T, req authnapp.AuthRequest, a answer) authnapp.IDClaims {
 	t.Helper()
-	loc, err := url.Parse(res.Header.Get("Location"))
-	if res.StatusCode != http.StatusFound || err != nil || !strings.HasPrefix(loc.String(), callback+"?") {
-		t.Fatalf("not sent back to the server: %d %s", res.StatusCode, res.Header.Get("Location"))
+	loc := a.location()
+	if a.status != http.StatusFound || !strings.HasPrefix(loc.String(), callback+"?") {
+		t.Fatalf("not sent back to the server: %d %s", a.status, loc)
 	}
 	q := loc.Query()
 	if q.Get("state") != req.State || q.Get("iss") != f.p.issuer || q.Get("code") == "" {
@@ -127,10 +169,10 @@ func (f *devFixture) finish(t *testing.T, req authnapp.AuthRequest, res *http.Re
 // show the form again, and the new auth_time is the new submit.
 func TestDevOIDC_AuthTimeIsTheSignInAndMaxAgeAsksAgain(t *testing.T) {
 	f := newDevFixture(t)
-	req, res, page := f.start(t, 5*time.Minute, "")
-	if res.StatusCode != http.StatusOK || !strings.Contains(page, "DEVELOPMENT ONLY") ||
-		!strings.Contains(res.Header.Get("Content-Security-Policy"), "default-src 'none'") {
-		t.Fatalf("the form: %d %s", res.StatusCode, page)
+	req, page := f.start(t, 5*time.Minute, "")
+	if page.status != http.StatusOK || !strings.Contains(page.body, "DEVELOPMENT ONLY") ||
+		!strings.Contains(page.header.Get("Content-Security-Policy"), "default-src 'none'") {
+		t.Fatalf("the form: %d %s", page.status, page.body)
 	}
 	before := time.Now().Truncate(time.Second)
 	claims := f.finish(t, req, f.submit(t, page, "alice"))
@@ -147,23 +189,23 @@ func TestDevOIDC_AuthTimeIsTheSignInAndMaxAgeAsksAgain(t *testing.T) {
 		f.p.sessions[k] = s
 	}
 	f.p.mu.Unlock()
-	req, res, _ = f.start(t, 0, "")
-	if claims := f.finish(t, req, res); !claims.AuthTime.Equal(first.Add(-10 * time.Minute)) {
+	req, back := f.start(t, 0, "")
+	if claims := f.finish(t, req, back); !claims.AuthTime.Equal(first.Add(-10 * time.Minute)) {
 		t.Fatalf("without max_age the session's auth_time is kept: %v, want %v", claims.AuthTime, first.Add(-10*time.Minute))
 	}
-	req, res, page = f.start(t, 5*time.Minute, "")
-	if res.StatusCode != http.StatusOK || !strings.Contains(page, "asked for a fresh sign-in") {
-		t.Fatalf("max_age older than the session shows no form: %d", res.StatusCode)
+	req, page = f.start(t, 5*time.Minute, "")
+	if page.status != http.StatusOK || !strings.Contains(page.body, "asked for a fresh sign-in") {
+		t.Fatalf("max_age older than the session shows no form: %d", page.status)
 	}
 	before = time.Now().Truncate(time.Second)
 	if claims := f.finish(t, req, f.submit(t, page, "alice")); claims.AuthTime.Before(before) {
 		t.Fatalf("auth_time after signing in again: %v, want at least %v", claims.AuthTime, before)
 	}
-	if _, res, page := f.start(t, 5*time.Minute, ""); res.StatusCode != http.StatusFound {
-		t.Fatalf("a fresh session within max_age asks again: %d %s", res.StatusCode, page)
+	if _, a := f.start(t, 5*time.Minute, ""); a.status != http.StatusFound {
+		t.Fatalf("a fresh session within max_age asks again: %d %s", a.status, a.body)
 	}
-	if _, res, page := f.start(t, 5*time.Minute, "&prompt=login"); res.StatusCode != http.StatusOK || !requestField.MatchString(page) {
-		t.Fatalf("prompt=login shows no form: %d", res.StatusCode)
+	if _, a := f.start(t, 5*time.Minute, "&prompt=login"); a.status != http.StatusOK || !requestField.MatchString(a.body) {
+		t.Fatalf("prompt=login shows no form: %d", a.status)
 	}
 }
 
@@ -173,20 +215,11 @@ func TestDevOIDC_AuthTimeIsTheSignInAndMaxAgeAsksAgain(t *testing.T) {
 // session answers login_required; userinfo needs the access token.
 func TestDevOIDC_RefusesWhatARealProviderRefuses(t *testing.T) {
 	f := newDevFixture(t)
-	get := func(q url.Values) *http.Response {
-		t.Helper()
-		res, err := f.browser.Get(f.p.issuer + "/authorize?" + q.Encode())
-		if err != nil {
-			t.Fatal(err)
-		}
-		_ = res.Body.Close()
-		return res
-	}
 	good := url.Values{
 		"client_id": {"pantherclaw"}, "response_type": {"code"}, "scope": {"openid email"}, "redirect_uri": {callback},
 		"state": {"s"}, "nonce": {"n"}, "code_challenge": {"c"}, "code_challenge_method": {"S256"},
 	}
-	with := func(k, v string) url.Values {
+	with := func(k, v string) string {
 		q := url.Values{}
 		for kk, vv := range good {
 			q[kk] = vv
@@ -196,41 +229,31 @@ func TestDevOIDC_RefusesWhatARealProviderRefuses(t *testing.T) {
 		} else {
 			q.Set(k, v)
 		}
-		return q
+		return f.p.issuer + "/authorize?" + q.Encode()
 	}
-	for name, q := range map[string]url.Values{
+	for name, u := range map[string]string{
 		"another client": with("client_id", "other"), "a remote redirect": with("redirect_uri", "https://evil.example/cb"),
 	} {
-		if res := get(q); res.StatusCode != http.StatusBadRequest {
-			t.Errorf("%s: %d", name, res.StatusCode)
+		if a := f.get(t, u); a.status != http.StatusBadRequest {
+			t.Errorf("%s: %d", name, a.status)
 		}
 	}
-	for name, q := range map[string]url.Values{
+	for name, u := range map[string]string{
 		"no PKCE": with("code_challenge", ""), "plain PKCE": with("code_challenge_method", "plain"), "no nonce": with("nonce", ""),
 		"prompt=none, signed out": with("prompt", "none"), "bad max_age": with("max_age", "-1"),
 	} {
-		res := get(q)
-		loc, _ := url.Parse(res.Header.Get("Location"))
-		if res.StatusCode != http.StatusFound || loc.Query().Get("error") == "" || loc.Query().Get("code") != "" {
-			t.Errorf("%s: %d %s", name, res.StatusCode, res.Header.Get("Location"))
+		a := f.get(t, u)
+		if q := a.location().Query(); a.status != http.StatusFound || q.Get("error") == "" || q.Get("code") != "" {
+			t.Errorf("%s: %d %s", name, a.status, a.location())
 		}
 	}
 
-	req, _, page := f.start(t, 0, "")
-	res := f.submit(t, page, "bob")
-	code := strings.TrimPrefix(regexp.MustCompile(`code=[^&]+`).FindString(res.Header.Get("Location")), "code=")
+	req, page := f.start(t, 0, "")
+	code := f.submit(t, page, "bob").location().Query().Get("code")
 	token := func(secret, verifier string) int {
 		t.Helper()
 		form := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {callback}, "code_verifier": {verifier}}
-		r, _ := http.NewRequest(http.MethodPost, f.p.issuer+"/token", strings.NewReader(form.Encode()))
-		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		r.SetBasicAuth("pantherclaw", secret)
-		res, err := http.DefaultClient.Do(r)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_ = res.Body.Close()
-		return res.StatusCode
+		return f.post(t, f.p.issuer+"/token", form, secret).status
 	}
 	if got := token("wrong", req.Verifier); got != http.StatusUnauthorized {
 		t.Errorf("a wrong secret: %d", got)
@@ -241,12 +264,13 @@ func TestDevOIDC_RefusesWhatARealProviderRefuses(t *testing.T) {
 	if got := token(testSecret, req.Verifier); got != http.StatusBadRequest {
 		t.Errorf("a code used (by the wrong verifier) is gone: %d", got)
 	}
-	r, _ := http.NewRequest(http.MethodGet, f.p.issuer+"/userinfo", nil)
+	r, err := http.NewRequestWithContext(context.Background(), http.MethodGet, f.p.issuer+"/userinfo", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	r.Header.Set("Authorization", "Bearer nope")
-	if res, err := http.DefaultClient.Do(r); err != nil || res.StatusCode != http.StatusUnauthorized {
-		t.Errorf("userinfo with an unknown token: %v %v", res, err)
-	} else {
-		_ = res.Body.Close()
+	if a := f.do(t, r); a.status != http.StatusUnauthorized {
+		t.Errorf("userinfo with an unknown token: %d", a.status)
 	}
 }
 

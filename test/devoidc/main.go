@@ -7,7 +7,7 @@
 // through it never counts as recent and what needs one (a first security
 // key, HR-155) fails closed. This provider signs in any username at once,
 // like the mock, and reports auth_time as the time the person submitted
-// its form. It honours max_age and prompt=login by showing the form again
+// its form. It honors max_age and prompt=login by showing the form again
 // when its own session is older or a fresh sign-in is asked for, as a real
 // provider does, so the server's recent sign-in checks run for real.
 //
@@ -72,7 +72,7 @@ func run(args []string, stderr io.Writer) int {
 	}
 	var secret []byte
 	if err == nil {
-		secret, err = os.ReadFile(*secretFile) //nolint:gosec // G304: the developer's own secret file, named on the command line
+		secret, err = os.ReadFile(*secretFile)
 		secret = []byte(strings.TrimSpace(string(secret)))
 		if err == nil && len(secret) == 0 {
 			err = errors.New("the client secret file is empty")
@@ -322,7 +322,8 @@ func (p *provider) login(w http.ResponseWriter, r *http.Request) {
 	p.mu.Lock()
 	p.sessions[id] = s
 	p.mu.Unlock()
-	http.SetCookie(w, &http.Cookie{
+	// Not Secure: the provider serves plain http, on loopback only.
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124: HttpOnly and SameSite are set; Secure cannot be over http
 		Name: sessionCookie, Value: id, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
 		MaxAge: int(sessionTTL / time.Second),
 	})
@@ -369,7 +370,7 @@ func (p *provider) back(w http.ResponseWriter, r *http.Request, req authRequest,
 	if strings.Contains(req.redirect, "?") {
 		sep = "&"
 	}
-	http.Redirect(w, r, req.redirect+sep+v.Encode(), http.StatusFound) //nolint:gosec // G710: only to a loopback redirect_uri (loopbackURL)
+	http.Redirect(w, r, req.redirect+sep+v.Encode(), http.StatusFound) // only to a loopback redirect_uri (loopbackURL)
 }
 
 // expire drops what has outlived its lifetime; p.mu is held.
