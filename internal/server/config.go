@@ -72,6 +72,9 @@ type Config struct {
 	// (G0 UI D8, D9, D12; config_ui_tenancy.go).
 	Billing BillingConfig `json:"billing"`
 	Signup  SignupConfig  `json:"signup"`
+	// Limits is the API rate limits and usage meters (G0 M13 D8, D10;
+	// config_m13_limits.go).
+	Limits LimitsConfig `json:"limits"`
 }
 
 // IdentityConfig configures workload identity (M3).
@@ -150,6 +153,7 @@ func DefaultConfig() Config {
 		},
 		Waitlist: defaultWaitlist(),
 		CEL:      celenv.DefaultLimits,
+		Limits:   defaultLimits(),
 	}
 }
 
@@ -195,6 +199,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateGateways()...)
 	errs = append(errs, c.validateDev()...)
 	errs = append(errs, c.validateDevSlack()...)
+	errs = append(errs, c.validateLimits()...)
 	if err := c.CEL.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("cel: %w", err))
 	}

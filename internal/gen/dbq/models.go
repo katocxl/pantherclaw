@@ -2723,6 +2723,13 @@ type PcProtectedChangeSetting struct {
 	UpdatedAt time.Time
 }
 
+type PcRateCounter struct {
+	Scope       string
+	Key         string
+	WindowStart time.Time
+	Count       int32
+}
+
 type PcReconciliationTask struct {
 	OrgID             ids.OrgID
 	ID                ids.UUID
@@ -3333,6 +3340,16 @@ type PcUnreceiptedEffect struct {
 	AcknowledgedBy  *string
 	AcknowledgedAt  *time.Time
 	FirstSeenAt     time.Time
+}
+
+type PcUsageDaily struct {
+	OrgID         ids.OrgID
+	Day           pgtype.Date
+	Agents        int32
+	InstancesPeak int32
+	Runs          int32
+	StoredBytes   int64
+	ComputedAt    time.Time
 }
 
 type PcUser struct {

@@ -86,9 +86,14 @@ const (
 	// policies show their rows only in this purpose (app.purpose) or in
 	// the account's own context (app.account_id).
 	GlobalAccounts GlobalPurpose = "accounts"
+	// GlobalRateLimit is the shared rate limiter's pc.rate_counters (G0
+	// M13 D9, HR-376): counters only, keyed by opaque ids, no tenant data.
+	GlobalRateLimit GlobalPurpose = "rate_limit"
 )
 
-var globalPurposes = []GlobalPurpose{GlobalLicence, GlobalJobs, GlobalCrossOrgList, GlobalHealth, GlobalAnchors, GlobalAccounts}
+var globalPurposes = []GlobalPurpose{
+	GlobalLicence, GlobalJobs, GlobalCrossOrgList, GlobalHealth, GlobalAnchors, GlobalAccounts, GlobalRateLimit,
+}
 
 // TxOption customizes a transaction.
 type TxOption func(*pgx.TxOptions)

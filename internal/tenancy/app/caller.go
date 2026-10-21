@@ -39,6 +39,10 @@ type Caller struct {
 	// accounts): the human session an approval response records (G0 M5
 	// part 2, HR-172).
 	Session ids.UUID
+	// CredentialID is the API key or service-account key the call
+	// authenticated with (zero otherwise; Session names a person's): the
+	// key of the per-credential API rate limit (G0 M13 D8, HR-375).
+	CredentialID ids.UUID
 }
 
 // Actor returns the audit actor for the caller.
