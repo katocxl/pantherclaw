@@ -743,7 +743,7 @@ These boundaries constrain every pillar above. A feature request that conflicts 
 | Waitlist | Pass | 7 | PN-004.1–PN-004.5, PN-020.1 | Expiry means deny |
 | Deployed | Root | 18 | PN-010.1–PN-010.7 | Hybrid from v1.0 (product code in UI); SaaS post-1.0 |
 | Session | Reflex | 9 | F224, F284, PN-002.5 | No transcripts required |
-| Performance | Root | 19 | PN-011.1–PN-011.5 | SLOs are published with their test conditions |
+| Performance | Root | 19 | PN-011.1–PN-011.5 | SLOs are targets: M13 optimises with a fixed effort on the staging server and publishes the measured numbers with their test conditions; v1.0 is not blocked on reaching them (G0 M13 F7) |
 | Management | Root | 20 | PN-012.1–PN-012.5, F573, F581 | Licence expiry never disables enforcement |
 | Bypass-resistant enforcement | Checkpoint | 16 (with 6, 10) | F435, F443, PN-008.2 | Per route, with current, expiring evidence |
 | Adversarial sandbox | Trail | 17 | PN-009.1–PN-009.5 | Simulated targets only; separate from the containment sandbox (PN-008) |
