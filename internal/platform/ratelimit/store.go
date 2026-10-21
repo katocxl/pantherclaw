@@ -16,7 +16,6 @@ import (
 	"github.com/riverqueue/river/rivertype"
 
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
-	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
@@ -24,13 +23,18 @@ import (
 
 // Store is a Limiter in PostgreSQL (pc.rate_counters, purpose
 // rate_limit): every replica counts in the same window (HR-376).
+//
+// Take opens its own short global transaction on a pooled connection.
+// Never call it while holding another connection of the same pool (inside
+// a transaction): a burst of such requests would each hold one connection
+// and wait for a second, exhausting the pool for the whole server (G0 M13
+// D28). Count between transactions instead.
 type Store struct {
-	pool  *db.Pool
-	clock clock.Clock
+	pool *db.Pool
 }
 
 // NewStore returns the shared limiter over pool.
-func NewStore(pool *db.Pool) *Store { return &Store{pool: pool, clock: clock.System{}} }
+func NewStore(pool *db.Pool) *Store { return &Store{pool: pool} }
 
 // Errors of Take.
 var (
@@ -58,27 +62,25 @@ func (s *Store) Take(ctx context.Context, scope, key string, window time.Duratio
 	case window < time.Second || window > MaxWindow || window%time.Second != 0 || limit < 1 || limit > math.MaxInt32 || n < 1:
 		return Decision{}, ErrWindow
 	}
-	refused := Decision{RetryAfter: retryAfter(s.clock.Now(), window)}
 	if n > limit {
-		return refused, nil
+		// Never fits; asking again after a whole window is the honest hint.
+		return Decision{RetryAfter: window}, nil
 	}
-	var fits bool
+	var row dbq.TakeRateCounterRow
 	err := s.pool.InGlobalTx(ctx, db.GlobalRateLimit, func(ctx context.Context, tx db.GlobalTx) error {
-		_, err := dbq.New(tx).TakeRateCounter(ctx, dbq.TakeRateCounterParams{
+		var err error
+		row, err = dbq.New(tx).TakeRateCounter(ctx, dbq.TakeRateCounterParams{
 			Scope: scope, Key: key, WindowSeconds: window.Seconds(),
 			N: int32(n), MaxCount: int32(limit), //nolint:gosec // G115: 1 ≤ n ≤ limit ≤ MaxInt32, checked above
 		})
-		if db.IsNoRows(err) {
-			return nil
-		}
-		fits = err == nil
 		return err
 	})
 	if err != nil {
 		return Decision{}, fmt.Errorf("ratelimit: %w", err)
 	}
-	if !fits {
-		return refused, nil
+	if row.Count == 0 {
+		// The window's end on the database's clock (D28).
+		return Decision{RetryAfter: time.Duration(row.RetrySeconds * float64(time.Second))}, nil
 	}
 	return Decision{Allowed: true}, nil
 }

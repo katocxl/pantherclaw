@@ -118,7 +118,7 @@ func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authentica
 		}
 		if actx, handled, err := o.orgAccountCall(ctx, c, perm); handled {
 			if err == nil {
-				err = o.limits.limit(ctx, info, c)
+				err = o.limits.limit(ctx, info, c, spec.Procedure)
 			}
 			if err != nil {
 				return nil, err
@@ -137,7 +137,7 @@ func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authentica
 		// The API limits (G0 M13 D8, HR-375) count calls the caller may
 		// make, before the plan gate: gateway, workload and enrollment
 		// procedures returned above and are never counted.
-		if err := o.limits.limit(ctx, info, c); err != nil {
+		if err := o.limits.limit(ctx, info, c, spec.Procedure); err != nil {
 			return nil, err
 		}
 		if o.gate != nil {

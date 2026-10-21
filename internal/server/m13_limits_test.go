@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/entitlements"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/ratelimit"
@@ -99,5 +100,53 @@ func TestHR375_LimitsConfig(t *testing.T) {
 		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "limits.") {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+}
+
+// TestHR375_ContainmentSkipsTheOrgLimit (D27): the server exempts exactly
+// the plan gate's safety and allow procedures from the per-org API limit,
+// so a flooded org's people can still contain; changes and reads are not
+// exempt.
+func TestHR375_ContainmentSkipsTheOrgLimit(t *testing.T) {
+	for proc, want := range map[string]bool{
+		"/pantherclaw.v1.ResponseService/Contain":            true,
+		"/pantherclaw.v1.ResponseService/TerminateRun":       true,
+		"/pantherclaw.v1.AgentService/SuspendAgent":          true,
+		"/pantherclaw.v1.GrantService/RevokeGrant":           true,
+		"/pantherclaw.v1.AccessService/WhoAmI":               true,
+		"/pantherclaw.v1.AgentService/CreateAgent":           false,
+		"/pantherclaw.v1.AgentService/ListAgents":            false,
+		"/pantherclaw.v1.UsageService/ListUsage":             false,
+		"/pantherclaw.v1.NoSuchService/Unknown":              false,
+		"/pantherclaw.v1.EntitlementService/GetEntitlements": true,
+	} {
+		if got := orgLimitExempt(proc); got != want {
+			t.Errorf("orgLimitExempt(%s) = %v, want %v", proc, got, want)
+		}
+	}
+	for proc, c := range procedureClasses {
+		if orgLimitExempt(proc) != (c == entitlements.ClassSafety || c == entitlements.ClassAllow) {
+			t.Errorf("%s (%s): exemption does not follow its class", proc, c)
+		}
+	}
+}
+
+// TestHR377_UsageIsReadOnlyThroughTheAPI: UsageService serves only
+// ListUsage, under entitlements.read and plan class read; no procedure
+// lets a client report usage.
+func TestHR377_UsageIsReadOnlyThroughTheAPI(t *testing.T) {
+	for proc, perm := range procedurePermissions {
+		if !strings.HasPrefix(proc, "/pantherclaw.v1.UsageService/") {
+			continue
+		}
+		if proc != "/pantherclaw.v1.UsageService/ListUsage" {
+			t.Errorf("%s: UsageService serves only ListUsage", proc)
+		}
+		if perm != td.PermEntitlementsRead || procedureClasses[proc] != entitlements.ClassRead {
+			t.Errorf("%s: %s, class %s; want entitlements.read, read", proc, perm, procedureClasses[proc])
+		}
+	}
+	if _, ok := procedurePermissions["/pantherclaw.v1.UsageService/ListUsage"]; !ok {
+		t.Fatal("ListUsage is not served")
 	}
 }

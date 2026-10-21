@@ -35,6 +35,11 @@ type keyAuthn struct {
 }
 
 func (k keyAuthn) Authenticate(_ context.Context, bearer string) (tapp.Caller, error) {
+	cred := tapp.CredAPIKey
+	if base, ok := strings.CutSuffix(bearer, "-token"); ok {
+		// An access token of the same service-account key.
+		bearer, cred = base, tapp.CredAccessToken
+	}
 	id, ok := k.keys[bearer]
 	if !ok {
 		return tapp.Caller{}, pcerr.New(pcerr.Unauthenticated, "UNAUTHENTICATED", "invalid or expired credentials")
@@ -46,7 +51,7 @@ func (k keyAuthn) Authenticate(_ context.Context, bearer string) (tapp.Caller, e
 	return tapp.Caller{Subject: td.Subject{
 		Org: org, Principal: td.PrincipalRef{Kind: td.KindServiceAccount, ID: k.sa},
 		Bindings: []td.Binding{{Role: td.RoleViewer, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}},
-	}, Credential: tapp.CredAPIKey, CredentialID: id}, nil
+	}, Credential: cred, CredentialID: id}, nil
 }
 
 // limitServer serves AccessService with perms under limits, and returns a
@@ -190,7 +195,44 @@ func TestT170_AFloodingCredentialIsContained(t *testing.T) {
 	if allowed != 12 {
 		t.Fatalf("the flooding key made %d calls, want 12", allowed)
 	}
+	// The same key through its access token shares the key's bucket (D28).
+	if st, _ := call(who, "key-a-token"); st != http.StatusTooManyRequests {
+		t.Fatalf("the flooding key's access token: %d", st)
+	}
 	if st, _ := call(who, "key-b"); st != http.StatusOK {
 		t.Fatalf("another key of the org: %d", st)
+	}
+}
+
+// TestHR375_SafetyCallsSkipTheOrgLimit (D27): credentials flooding an org
+// exhaust its per-org limit, yet another credential still reaches a
+// procedure exempt from the org limit (containment), while the flooding
+// credential stays limited by its own limit.
+func TestHR375_SafetyCallsSkipTheOrgLimit(t *testing.T) {
+	who := pantherclawv1connect.AccessServiceWhoAmIProcedure
+	contain := pantherclawv1connect.AccessServiceListRolesProcedure // stands in for a safety procedure
+	limits := rpcauth.APILimits{
+		PerOrg: 4, PerCredential: 2, Limiter: ratelimit.NewMemory(nil),
+		OrgExempt: func(p string) bool { return p == contain },
+	}
+	perms := map[string]td.Permission{who: td.PermAuthenticated, contain: td.PermAuthenticated}
+	call := limitServer(t, perms, nil, limits, nil)
+	for _, k := range []string{"key-a", "key-a", "key-b", "key-b"} {
+		if st, _ := call(who, k); st != http.StatusOK {
+			t.Fatalf("filling the org: %d", st)
+		}
+	}
+	if st, _ := call(who, "key-c"); st != http.StatusTooManyRequests {
+		t.Fatalf("the org's limit: %d", st)
+	}
+	// key-c's refused call above used one of its own two calls.
+	if st, _ := call(contain, "key-c"); st != http.StatusOK {
+		t.Fatalf("containment with the org exhausted: %d", st)
+	}
+	if st, _ := call(contain, "key-c"); st != http.StatusTooManyRequests {
+		t.Fatalf("containment past the credential's own limit: %d", st)
+	}
+	if st, _ := call(contain, "key-a"); st != http.StatusTooManyRequests {
+		t.Fatalf("the flooding credential on containment: %d", st)
 	}
 }

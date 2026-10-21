@@ -67,6 +67,17 @@ func TestMemoryBound(t *testing.T) {
 	if d, _ := m.Take(ctx, "s", "a", time.Minute, 1, 1); d.Allowed {
 		t.Fatal("a current window was reset")
 	}
+	// Full of current windows: a new key evicts only the oldest (a); b
+	// and c keep their counts (D28).
+	_, _ = m.Take(ctx, "s", "d", time.Minute, 1, 1)
+	if len(m.windows) != 3 {
+		t.Fatalf("%d windows kept, want 3", len(m.windows))
+	}
+	for _, k := range []string{"b", "c", "d"} {
+		if d, _ := m.Take(ctx, "s", k, time.Minute, 1, 1); d.Allowed {
+			t.Fatalf("%s's window was reset", k)
+		}
+	}
 }
 
 func TestRetryAfterSeconds(t *testing.T) {
@@ -78,7 +89,7 @@ func TestRetryAfterSeconds(t *testing.T) {
 }
 
 func TestStoreRefusesBadArguments(t *testing.T) {
-	s := &Store{clock: clock.System{}} // no pool: every case below returns before it
+	s := &Store{} // no pool: every case below returns before it
 	ctx := context.Background()
 	for name, f := range map[string]func() error{
 		"scope":  func() error { _, err := s.Take(ctx, "Bad Scope", "k", time.Minute, 1, 1); return err },

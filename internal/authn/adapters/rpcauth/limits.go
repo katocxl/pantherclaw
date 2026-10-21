@@ -20,7 +20,9 @@ import (
 // the permission check and before the plan gate. Gateway, workload,
 // gateway-enrollment and public procedures return before this layer, so
 // enforcement is never throttled. The counters are in memory: the limits
-// hold per replica.
+// hold per replica. Procedures the plan gate classes safety or allow
+// (containment, revocations, WhoAmI) skip the per-org limit and are
+// counted per credential only (D27).
 
 // APIWindow is the API limits' window.
 const APIWindow = time.Minute
@@ -44,6 +46,11 @@ type APILimits struct {
 	PerCredential int
 	// Limiter counts the calls (ratelimit.NewMemory when nil).
 	Limiter ratelimit.Limiter
+	// OrgExempt reports procedures that skip the per-org limit (still
+	// counted per credential): the plan gate's safety and allow classes,
+	// so credentials flooding an org never lock its people out of
+	// containment (G0 M13 D27). Nil exempts nothing.
+	OrgExempt func(procedure string) bool
 }
 
 // WithAPILimits limits every authenticated org call (HR-375). Limits of 0
@@ -56,12 +63,13 @@ func WithAPILimits(l APILimits) Option {
 }
 
 // credentialKey names the credential of a call: the key for API keys and
-// service-account keys, the session for a person's access token or browser
-// session, the principal otherwise.
+// service-account keys (one bucket whether the key is used directly or
+// through its access token, D28), the session for a person's access token
+// or browser session, the principal otherwise.
 func credentialKey(c tapp.Caller) string {
 	switch {
 	case !c.CredentialID.IsZero():
-		return string(c.Credential) + ":" + c.CredentialID.String()
+		return "key:" + c.CredentialID.String()
 	case !c.Session.IsZero():
 		return string(c.Credential) + ":" + c.Session.String()
 	default:
@@ -71,18 +79,23 @@ func credentialKey(c tapp.Caller) string {
 
 // limit counts one call of c; over a limit it sets Retry-After and
 // returns ErrRateLimited. The credential is counted first, so a credential
-// over its own limit does not use up its org's.
-func (l *APILimits) limit(ctx context.Context, info *connect.CallInfo, c tapp.Caller) error {
+// over its own limit does not use up its org's; an org-exempt procedure
+// is counted per credential only.
+func (l *APILimits) limit(ctx context.Context, info *connect.CallInfo, c tapp.Caller, procedure string) error {
 	if l == nil {
 		return nil
 	}
 	org := c.Org.String()
+	perOrg := l.PerOrg
+	if l.OrgExempt != nil && l.OrgExempt(procedure) {
+		perOrg = 0
+	}
 	for _, k := range []struct {
 		scope, key string
 		limit      int
 	}{
 		{scopeAPICredential, org + "/" + credentialKey(c), l.PerCredential},
-		{scopeAPIOrg, org, l.PerOrg},
+		{scopeAPIOrg, org, perOrg},
 	} {
 		if k.limit <= 0 {
 			continue

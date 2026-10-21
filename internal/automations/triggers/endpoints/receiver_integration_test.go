@@ -427,3 +427,48 @@ func TestHR376_SourceRateHoldsAcrossReplicasAndFailsClosed(t *testing.T) {
 		t.Fatalf("%d receipts stored while the counter was unavailable", n)
 	}
 }
+
+// TestHR376_InboundBurstNeverStarvesThePool (D28): the receiver counts a
+// source's rate between its transactions, never while holding a pooled
+// connection, so a burst of signed events larger than the pool all
+// finish.
+func TestHR376_InboundBurstNeverStarvesThePool(t *testing.T) {
+	f := newInboundFixture(t, 50, "ping")
+	if _, err := f.svc.ActivateEventSource(f.author(), f.source.ID, f.stepUp()); err != nil {
+		t.Fatal(err)
+	}
+	cfg := f.DB.App
+	cfg.MaxConns = 2
+	small := f.DB.Pool(t, cfg)
+	trig := triggers.New(triggers.Deps{Pool: small, Starter: f.st, Editions: triggerstest.Team})
+	svc, err := New(small, f.Envelope, trig, triggerstest.Team, Config{PublicURL: "https://pc.example.com"}, f.clk, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	svc.Receiver().Mount(mux)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	url := srv.URL + "/v1/automations/events/" + f.Org.String() + "/" + f.source.ID.String()
+	now := time.Now()
+	statuses := make([]int, 4)
+	done := make(chan struct{})
+	go func() {
+		var wg sync.WaitGroup
+		for i := range statuses {
+			wg.Go(func() { statuses[i], _ = f.post(t, url, "burst"+strconv.Itoa(i), now, `{"type":"ping"}`, f.secret) })
+		}
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("a burst of 4 signed events on a pool of 2 did not finish")
+	}
+	for i, st := range statuses {
+		if st != http.StatusAccepted {
+			t.Errorf("request %d: %d", i, st)
+		}
+	}
+}

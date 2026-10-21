@@ -35,7 +35,7 @@ var globalTables = []string{
 	"cross_org_list_audit", // audit of the cross-org lister; no pc_app access
 	"goose_db_version",     // migration bookkeeping; no pc_app access
 	"licence_state",        // single global row: the installed licence (no tenant data)
-	"rate_counters",        // the shared rate limiter's counters: opaque keys, no tenant data (G0 M13 D9, HR-376)
+	"rate_counters",        // the shared rate limiter's counters: opaque keys, no tenant data; rows only in purpose rate_limit (G0 M13 D9, D28, HR-376)
 }
 
 func createOrg(t *testing.T, p *db.Pool, name string) ids.OrgID {

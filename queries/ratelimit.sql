@@ -6,16 +6,22 @@
 -- database's clock, so every replica counts in the same window.
 
 -- name: TakeRateCounter :one
--- Adds n events to the key's current window if they fit within the limit
--- and returns the new count; no row means they do not fit (nothing is
--- added). The caller refuses n > limit before asking.
-INSERT INTO pc.rate_counters AS c (scope, key, window_start, count)
-VALUES (sqlc.arg(scope), sqlc.arg(key),
-        date_bin(make_interval(secs => sqlc.arg(window_seconds)::float8), now(), timestamptz '1970-01-01 00:00:00+00'),
-        sqlc.arg(n)::int)
-ON CONFLICT (scope, key, window_start) DO UPDATE SET count = c.count + EXCLUDED.count
-WHERE c.count + EXCLUDED.count <= sqlc.arg(max_count)::int
-RETURNING c.count;
+-- Adds n events to the key's current window if they fit within the limit.
+-- count is the new count, 0 when they do not fit (nothing is added);
+-- retry_seconds is the time left in the window on the database's clock.
+-- The caller refuses n > limit before asking.
+WITH w AS (
+    SELECT date_bin(make_interval(secs => sqlc.arg(window_seconds)::float8), now(), timestamptz '1970-01-01 00:00:00+00') AS start
+), ins AS (
+    INSERT INTO pc.rate_counters AS c (scope, key, window_start, count)
+    SELECT sqlc.arg(scope), sqlc.arg(key), w.start, sqlc.arg(n)::int FROM w
+    ON CONFLICT (scope, key, window_start) DO UPDATE SET count = c.count + EXCLUDED.count
+    WHERE c.count + EXCLUDED.count <= sqlc.arg(max_count)::int
+    RETURNING c.count
+)
+SELECT coalesce((SELECT ins.count FROM ins), 0)::int AS count,
+       extract(epoch FROM w.start + make_interval(secs => sqlc.arg(window_seconds)::float8) - now())::float8 AS retry_seconds
+FROM w;
 
 -- name: DeleteOldRateCounters :execrows
 -- The janitor: windows that started more than two hours ago.
