@@ -74,6 +74,9 @@ JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 JOIN pc.agents a ON a.org_id = r.org_id AND a.id = r.agent_id
 WHERE t.org_id = $1 AND NOT t.simulated AND NOT r.simulated AND NOT a.range_agent
   AND t.decision = ANY($2::text[])
+  AND (NOT $3::boolean OR NOT EXISTS (
+      SELECT 1 FROM pc.approval_requests q
+      WHERE q.org_id = t.org_id AND q.transaction_id = t.id AND q.subject_kind = 'ACTION'))
 ORDER BY t.created_at, t.id LIMIT 1
 `
 
@@ -82,9 +85,12 @@ type OnboardingDecisionRow struct {
 	CreatedAt time.Time
 }
 
-// The first real decision of any of the given kinds.
-func (q *Queries) OnboardingDecision(ctx context.Context, orgID ids.OrgID, decisions []string) (OnboardingDecisionRow, error) {
-	row := q.db.QueryRow(ctx, onboardingDecision, orgID, decisions)
+// The first real decision of any of the given kinds. With unheld, an
+// action that was held for approval never counts: an approved hold that
+// became ALLOW, or a declined one that became DENY, is the held test, not
+// the allowed or denied one (D98).
+func (q *Queries) OnboardingDecision(ctx context.Context, orgID ids.OrgID, decisions []string, unheld bool) (OnboardingDecisionRow, error) {
+	row := q.db.QueryRow(ctx, onboardingDecision, orgID, decisions, unheld)
 	var i OnboardingDecisionRow
 	err := row.Scan(&i.ID, &i.CreatedAt)
 	return i, err

@@ -130,12 +130,13 @@ func (s *Service) GetProgress(ctx context.Context) (Progress, error) {
 			id        StepID
 			kind      string
 			decisions []string
+			unheld    bool // a held action is the held test, not this one (D98)
 		}{
-			{StepFirstDecision, KindDecision, []string{"ALLOW", "ALLOW_WITH_OBLIGATIONS", "REQUIRE_APPROVAL", "REQUIRE_STEP_UP", "DENY", "CANNOT_AUTHORIZE"}},
-			{StepTestAllowed, KindTransaction, []string{"ALLOW", "ALLOW_WITH_OBLIGATIONS"}},
-			{StepTestDenied, KindTransaction, []string{"DENY"}},
+			{StepFirstDecision, KindDecision, []string{"ALLOW", "ALLOW_WITH_OBLIGATIONS", "REQUIRE_APPROVAL", "REQUIRE_STEP_UP", "DENY", "CANNOT_AUTHORIZE"}, false},
+			{StepTestAllowed, KindTransaction, []string{"ALLOW", "ALLOW_WITH_OBLIGATIONS"}, true},
+			{StepTestDenied, KindTransaction, []string{"DENY"}, true},
 		} {
-			r, err := q.OnboardingDecision(ctx, org, d.decisions)
+			r, err := q.OnboardingDecision(ctx, org, d.decisions, d.unheld)
 			if err := set(d.id, d.kind, r.ID, r.CreatedAt, err); err != nil {
 				return err
 			}

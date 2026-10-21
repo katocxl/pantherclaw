@@ -42,12 +42,18 @@ WHERE NOT a.range_agent
 ORDER BY e.at, e.ref LIMIT 1;
 
 -- name: OnboardingDecision :one
--- The first real decision of any of the given kinds.
+-- The first real decision of any of the given kinds. With unheld, an
+-- action that was held for approval never counts: an approved hold that
+-- became ALLOW, or a declined one that became DENY, is the held test, not
+-- the allowed or denied one (D98).
 SELECT t.id, t.created_at FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 JOIN pc.agents a ON a.org_id = r.org_id AND a.id = r.agent_id
 WHERE t.org_id = sqlc.arg(org_id) AND NOT t.simulated AND NOT r.simulated AND NOT a.range_agent
   AND t.decision = ANY(sqlc.arg(decisions)::text[])
+  AND (NOT sqlc.arg(unheld)::boolean OR NOT EXISTS (
+      SELECT 1 FROM pc.approval_requests q
+      WHERE q.org_id = t.org_id AND q.transaction_id = t.id AND q.subject_kind = 'ACTION'))
 ORDER BY t.created_at, t.id LIMIT 1;
 
 -- name: OnboardingApprovalDecided :one
