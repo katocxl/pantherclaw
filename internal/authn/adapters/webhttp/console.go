@@ -5,11 +5,14 @@ package webhttp
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io/fs"
 	"mime"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -127,14 +130,127 @@ var consoleTypes = map[string]string{
 	".woff2": "font/woff2", ".woff": "font/woff", ".txt": "text/plain; charset=utf-8", ".map": "application/json",
 }
 
+// compressible are the extensions whose precompressed siblings are served.
+var compressible = map[string]bool{
+	".html": true, ".js": true, ".mjs": true, ".css": true, ".json": true, ".webmanifest": true, ".svg": true,
+	".txt": true, ".map": true,
+}
+
+// encodings are the precompressed siblings the console serves, in order of
+// preference: name.br, then name.gz. Nothing is compressed on the fly.
+var encodings = []struct{ coding, suffix string }{{"br", ".br"}, {"gzip", ".gz"}}
+
 func (c *Console) write(w http.ResponseWriter, r *http.Request, name string, b []byte, cache string) {
 	consoleHeaders(w, cache)
-	ct, ok := consoleTypes[strings.ToLower(path.Ext(name))]
+	ext := strings.ToLower(path.Ext(name))
+	ct, ok := consoleTypes[ext]
 	if !ok {
 		if ct = mime.TypeByExtension(path.Ext(name)); ct == "" || strings.HasPrefix(ct, "text/html") {
 			ct = "application/octet-stream"
 		}
 	}
-	w.Header().Set("Content-Type", ct)
+	hd := w.Header()
+	hd.Set("Content-Type", ct)
+	if compressible[ext] {
+		hd.Set("Vary", "Accept-Encoding")
+		accept := parseAcceptEncoding(r.Header.Values("Accept-Encoding"))
+		// The most acceptable sibling; on equal weights the earlier one (br).
+		best, bestQ := "", 0.0
+		var body []byte
+		for _, e := range encodings {
+			q := accept.q(e.coding)
+			if q <= bestQ {
+				continue
+			}
+			if enc, ok := c.file(name + e.suffix); ok {
+				best, bestQ, body = e.coding, q, enc
+			}
+		}
+		identity := accept.q("identity")
+		switch {
+		case best != "" && bestQ >= identity:
+			// A sibling at least as acceptable as the plain file wins.
+			hd.Set("Content-Encoding", best)
+			b = body
+		case identity > 0:
+		case best != "":
+			hd.Set("Content-Encoding", best)
+			b = body
+		default:
+			// Identity refused and no acceptable sibling.
+			http.Error(w, "no acceptable content encoding", http.StatusNotAcceptable)
+			return
+		}
+	}
+	sum := sha256.Sum256(b)
+	hd.Set("ETag", `"`+hex.EncodeToString(sum[:16])+`"`)
+	if hd.Get("Content-Encoding") != "" {
+		// ServeContent leaves the length out of an encoded response; an
+		// encoded body is always sent whole (no ranges).
+		hd.Set("Content-Length", strconv.Itoa(len(b)))
+		r = r.Clone(r.Context())
+		r.Header.Del("Range")
+	}
 	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(b))
+}
+
+// acceptEncoding is a parsed Accept-Encoding header: q-values by coding
+// (lower case) and the * entry.
+type acceptEncoding struct {
+	q8      map[string]float64
+	star    float64
+	hasStar bool
+}
+
+// q is coding's acceptability (RFC 9110 §12.5.3): its own entry, else
+// *'s, else 0 for a content coding and identityDefault for identity:
+// the plain file is acceptable unless excluded, but a coding the client
+// accepts is preferred to it unless identity is weighted. Without the
+// header, only identity is acceptable.
+const identityDefault = 0.001
+
+func (a acceptEncoding) q(coding string) float64 {
+	if v, ok := a.q8[coding]; ok {
+		return v
+	}
+	if a.hasStar {
+		return a.star
+	}
+	if coding == "identity" {
+		return identityDefault
+	}
+	return 0
+}
+
+func parseAcceptEncoding(lines []string) acceptEncoding {
+	a := acceptEncoding{q8: map[string]float64{}}
+	for _, line := range lines {
+		for part := range strings.SplitSeq(line, ",") {
+			coding, params, _ := strings.Cut(strings.TrimSpace(part), ";")
+			coding = strings.ToLower(strings.TrimSpace(coding))
+			if coding == "" {
+				continue
+			}
+			q := 1.0
+			for p := range strings.SplitSeq(params, ";") {
+				k, v, ok := strings.Cut(strings.TrimSpace(p), "=")
+				if ok && strings.EqualFold(strings.TrimSpace(k), "q") {
+					f, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+					if err != nil || f < 0 || f > 1 {
+						f = 0 // an unreadable weight never selects a coding
+					}
+					q = f
+				}
+			}
+			if coding == "*" {
+				a.star, a.hasStar = q, true
+				continue
+			}
+			if coding == "x-gzip" {
+				coding = "gzip"
+			}
+			a.q8[coding] = q
+		}
+	}
+	return a
 }
