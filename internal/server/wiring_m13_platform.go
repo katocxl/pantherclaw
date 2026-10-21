@@ -129,7 +129,7 @@ func auditMaintenanceHold(ctx context.Context, pool *db.Pool, held bool, log *sl
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		name := ""
+		var name string
 		switch {
 		case held:
 			name = holdOnEvent
