@@ -141,7 +141,16 @@ func (r *CertReloader) reload() error {
 			return err
 		}
 	}
-	if now := r.now(); now.Before(leaf.NotBefore) || now.After(leaf.NotAfter) {
+	now := r.now()
+	if now.Before(leaf.NotBefore) {
+		// A renewal issued for a moment ahead of this clock becomes valid
+		// soon: read it again on the next poll (G0 M13 D24).
+		r.mu.Lock()
+		r.seen = [2]fileStamp{}
+		r.mu.Unlock()
+		return fmt.Errorf("certificate is not valid yet (valid from %s); retrying", leaf.NotBefore.UTC().Format(time.RFC3339))
+	}
+	if now.After(leaf.NotAfter) {
 		return fmt.Errorf("certificate is not valid now (valid %s to %s)",
 			leaf.NotBefore.UTC().Format(time.RFC3339), leaf.NotAfter.UTC().Format(time.RFC3339))
 	}

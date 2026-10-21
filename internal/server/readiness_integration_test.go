@@ -73,6 +73,15 @@ func TestHR370_ReadyzRequiresDBSchemaAndWorkers(t *testing.T) {
 	d.AdminExec(t, "DELETE FROM pc.schema_info")
 	check("no schema row", rd, http.StatusServiceUnavailable, `{"ready":false,"checks":{"db":"ok","schema":"fail","workers":"ok"}}`)
 
+	// A database migrated before 00180 has no pc.schema_info (D24).
+	d.AdminExec(t, "DROP TABLE pc.schema_info")
+	check("no schema table", rd, http.StatusServiceUnavailable, `{"ready":false,"checks":{"db":"ok","schema":"fail","workers":"ok"}}`)
+	for dep, want := range map[string]error{"": nil, "staging": errSchemaPending, "production": errSchemaPending} {
+		if err := checkSchemaAtStart(context.Background(), &Config{Deployment: dep}, pool, pclog.Discard()); !errors.Is(err, want) {
+			t.Errorf("no schema table, deployment %q: start = %v, want %v", dep, err, want)
+		}
+	}
+
 	down := d.Pool(t, d.App)
 	down.Close()
 	check("database down", readiness{pool: down, log: pclog.Discard()}, http.StatusServiceUnavailable,

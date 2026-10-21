@@ -208,3 +208,39 @@ func TestHR371_ListenerServesRenewedCertificate(t *testing.T) {
 		t.Fatalf("presented %q after renewal, want second", got)
 	}
 }
+
+// TestHR371_NotYetValidPairIsRetried: a pair rejected only because its
+// leaf is not valid yet is read again on the next poll, without a file
+// change, and served once it is valid; an expired pair is not re-read.
+func TestHR371_NotYetValidPairIsRetried(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	writePair(t, dir, "first", now.Add(-time.Hour), now.Add(time.Hour), now.Add(-time.Hour))
+	var logs bytes.Buffer
+	r, err := NewCertReloader(filepath.Join(dir, "cert.pem"), filepath.Join(dir, "key.pem"), slog.New(slog.NewJSONHandler(&logs, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := now
+	r.now = func() time.Time { return clock }
+	ctx := context.Background()
+	writePair(t, dir, "early", now.Add(2*time.Minute), now.Add(time.Hour), now.Add(-30*time.Minute))
+	if r.Reload(ctx) || servedCN(r) != "first" {
+		t.Fatalf("swapped to a pair that is not valid yet (served %q)", servedCN(r))
+	}
+	clock = now.Add(time.Minute)
+	if r.Reload(ctx) || servedCN(r) != "first" {
+		t.Fatalf("swapped before the pair became valid (served %q)", servedCN(r))
+	}
+	clock = now.Add(3 * time.Minute)
+	if !r.Reload(ctx) || servedCN(r) != "early" {
+		t.Fatalf("a pair that became valid was not picked up on the next poll (served %q)", servedCN(r))
+	}
+
+	writePair(t, dir, "expired", now.Add(-48*time.Hour), now.Add(-24*time.Hour), now.Add(-20*time.Minute))
+	r.Reload(ctx)
+	logs.Reset()
+	if r.Reload(ctx) || logs.Len() != 0 || servedCN(r) != "early" {
+		t.Errorf("an unchanged expired pair was read again: %s", logs.String())
+	}
+}
