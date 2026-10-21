@@ -1,6 +1,6 @@
 # Runbook — Deploy hosted staging (G3)
 
-**Milestone:** M13 ([G0 M13](../g0/M13.md) D3, D4, D12–D15, D14 amended, D19, D24–D26; [ADR-0032](../adr/0032-hosted-deployment-kek-custody-and-backups.md); HR-370, HR-371, HR-346, HR-379). **Audience:** the founder, as operator of hosted staging (test layer L3). The host scripts, the compose stack and the deploy workflow live in the commercial distribution; this runbook is the procedure they implement. Production (L4) follows at v1.0 on a paid host. Command flags follow the brief; the M13 exit status records any change.
+**Milestone:** M13 ([G0 M13](../g0/M13.md) D3, D4, D12–D15, D14 amended, D19, D23–D26; [ADR-0032](../adr/0032-hosted-deployment-kek-custody-and-backups.md); HR-370, HR-371, HR-346, HR-379). **Audience:** the founder, as operator of hosted staging (test layer L3). The host scripts, the compose stack and the deploy workflow live in the commercial distribution; this runbook is the procedure they implement. Production (L4) follows at v1.0 on a paid host. Command flags follow the brief; the M13 exit status records any change.
 
 ## 1. What runs where
 
@@ -41,15 +41,20 @@
 
 ## 4. Deploy
 
-Deploys run only from the manually started deploy workflow (a deploy key in the repository's secrets; nothing deploys on push).
+Deploys and the restore drill run on a **GitHub self-hosted runner installed on the VM** ([G0 M13](../g0/M13.md) D23):
+- **Connection.** The runner connects outbound to GitHub only and carries the repository-level label `pantherclaw-staging`. GitHub never opens an inbound SSH connection; SSH (22) stays limited to the founder's addresses.
+- **Runner user.** The runner runs as an unprivileged user. Its sudo is limited to the installed `/srv/pantherclaw/bin/deploy.sh`, by a sudoers entry for that path only.
+- **Workflows.** The workflows that touch the VM are `workflow_dispatch` only (nothing deploys on push) and run with `runs-on: [self-hosted, pantherclaw-staging]`. The image is pulled with the job's own token (read access to packages).
+- **Why it is acceptable.** Repository code that runs on the runner is trusted only because the private repository accepts pushes from the founder alone. Never enable a self-hosted runner like this on a public repository.
+- **Fallback.** Run the setup script over SSH by hand, with the digest to deploy.
 
-1. Start the workflow with the image digest to deploy (or let it build and publish the image and use the new digest).
-2. The workflow connects over SSH and:
+1. Start the deploy workflow with the image digest to deploy (or let it build and publish the image and use the new digest).
+2. The job runs on the VM's runner, which calls the deploy script and:
    1. saves the running digest to `/srv/pantherclaw/deploy/previous`;
    2. `docker compose pull` of the new digest;
    3. runs the one-shot `migrate` service (`pantherclaw-server migrate up` as `pc_migrator`). The migrator password is mounted only into this service; the server's own configuration has no migrator password file;
    4. `docker compose up -d`;
-   5. waits up to 5 minutes for `/readyz` to answer 200 (§5), checked from the host over SSH.
+   5. waits up to 5 minutes for `/readyz` to answer 200 (§5), checked on the host.
 3. **If readiness does not come**, it rolls back: the previous digest is started again and the result is recorded as a failed deploy. A migration is never rolled back automatically: an older binary refuses a newer schema (`SCHEMA_NEWER`, HR-370), so a failed deploy after a migration needs the operator (§6).
 4. **G3 record.** Every run writes the artifact digest, the configuration hash, the previous digest, the operator, the time and the result to the job summary and as an artifact. The G3 rows are copied to [GATES_AND_REVIEW §7](../security/GATES_AND_REVIEW.md#7-gate-decision-log) at landing.
 
