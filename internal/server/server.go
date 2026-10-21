@@ -261,6 +261,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	applyFIPSMode(ctx, cfg, log)
 	if err := cfg.checkEvidenceEdition(ents); err != nil {
 		return err
 	}

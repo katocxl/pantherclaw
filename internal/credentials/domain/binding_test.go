@@ -5,7 +5,9 @@ package domain_test
 
 import (
 	"bytes"
+	"crypto/fips140"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/credentials/domain"
@@ -71,18 +73,45 @@ func TestHR060_ASealedCredentialOpensOnlyForItsBinding(t *testing.T) {
 }
 
 func TestSealedFormatIsChecked(t *testing.T) {
-	key, _ := pccrypto.GenerateSealKey()
+	for _, suite := range []pccrypto.SealSuite{pccrypto.SuiteXWing, pccrypto.SuiteMLKEM768P256} {
+		if suite == pccrypto.SuiteXWing && fips140.Enabled() {
+			continue // no X-Wing in FIPS mode (D35)
+		}
+		t.Run(suite.String(), func(t *testing.T) { testSealedFormat(t, suite) })
+	}
+}
+
+func testSealedFormat(t *testing.T, suite pccrypto.SealSuite) {
+	key, _ := pccrypto.GenerateSealKeySuite(suite)
 	sealed, _ := pccrypto.Seal(key.PublicKey(), binding().Info(), domain.AAD, []byte("x"))
-	if len(sealed) != domain.MinSealed || domain.CheckFormat(sealed) != nil {
+	enc := domain.EncLen
+	if suite == pccrypto.SuiteMLKEM768P256 {
+		enc = domain.EncLenP256
+	}
+	if len(sealed) != 5+enc+16+1 || domain.CheckFormat(sealed) != nil {
 		t.Fatalf("a one-byte credential is %d bytes", len(sealed))
 	}
-	for name, blob := range map[string][]byte{
+	blobs := map[string][]byte{
 		"empty":          nil,
 		"short":          sealed[:len(sealed)-1],
-		"wrong version":  append([]byte{0x02}, sealed[1:]...),
-		"wrong enc size": append([]byte{0x01, 0x04, 0x61}, sealed[3:]...),
+		"wrong version":  append([]byte{0x03}, sealed[1:]...),
+		"unknown suite":  append([]byte{0x02, 0x00, 0x20}, sealed[3:]...),
+		"wrong enc size": append(slices.Clone(sealed[:3]), append([]byte{0x04, 0x61}, sealed[5:]...)...),
 		"too long":       make([]byte, domain.MaxSealed+1),
-	} {
+	}
+	if suite == pccrypto.SuiteXWing {
+		// A version 1 blob (before M13) has the smallest shape.
+		v1 := append([]byte{0x01}, sealed[3:]...)
+		if len(v1) != domain.MinSealed || domain.CheckFormat(v1) != nil {
+			t.Fatalf("a one-byte version 1 credential is %d bytes", len(v1))
+		}
+		blobs["v1 short"] = v1[:len(v1)-1]
+		blobs["v1 wrong enc size"] = append([]byte{0x01, 0x04, 0x61}, v1[3:]...)
+	} else {
+		// The suite and the encapsulation size must agree.
+		blobs["suite and size disagree"] = append([]byte{0x02, 0x64, 0x7a}, sealed[3:]...)
+	}
+	for name, blob := range blobs {
 		if err := domain.CheckFormat(blob); !errors.Is(err, domain.ErrFormat) {
 			t.Errorf("%s: %v", name, err)
 		}

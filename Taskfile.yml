@@ -80,6 +80,17 @@ tasks:
       - for: { var: GO_MODULES }
         cmd: go -C "{{.ITEM}}" test -shuffle=on -count=1 ./...
 
+  test:fips:
+    desc: The crypto, sealing, keys, authn, evidence, TLS and gateway tests in FIPS 140-only mode (GODEBUG=fips140=only; G0 M13 D35, HR-396)
+    env:
+      GODEBUG: fips140=only
+    cmds:
+      - >-
+        go test -shuffle=on -count=1
+        ./internal/platform/crypto/... ./internal/platform/keys/... ./internal/keystore/...
+        ./internal/credentials/domain/... ./internal/authn/... ./internal/evidence/...
+        ./internal/platform/httpx/... ./internal/gateway/... ./internal/sandbox/edge/...
+
   test:race:
     desc: Tests with the race detector (needs cgo; Linux/macOS — CI runs this)
     platforms: [linux, darwin]

@@ -750,7 +750,7 @@ message GetSealingKeyResponse {
   int32 version = 3;
   // Broker key id.
   string broker_key_id = 4;
-  // X-Wing public key.
+  // Seal public key: X-Wing, or MLKEM768-P256 from a FIPS gateway.
   bytes public_key = 5;
   // Its fingerprint, to show before sealing.
   string fingerprint = 6;

@@ -56,14 +56,52 @@ builds:
     main: ./cmd/pantherclaw-probe
     binary: pantherclaw-probe
     goos: [linux]
+  # FIPS build set (G0 M13 D35, PN-019.1): the same programs built on the
+  # validated Go Cryptographic Module v1.0.0 (CMVP #5247), FIPS 140-3 mode on
+  # by default. Released as their own *-fips binaries and archives.
+  - &fips
+    <<: *build
+    id: pantherclaw-server-fips
+    main: ./cmd/pantherclaw-server
+    binary: pantherclaw-server-fips
+    env:
+      - CGO_ENABLED=0
+      - GOFIPS140=v1.0.0
+  - <<: *fips
+    id: pantherclaw-gateway-fips
+    main: ./cmd/pantherclaw-gateway
+    binary: pantherclaw-gateway-fips
+  - <<: *fips
+    id: pclaw-fips
+    main: ./cmd/pclaw
+    binary: pclaw-fips
+  - <<: *fips
+    id: pantherclaw-edge-fips
+    main: ./cmd/pantherclaw-edge
+    binary: pantherclaw-edge-fips
+    goos: [linux]
 
 archives:
   - id: default
+    ids: [pantherclaw-server, pantherclaw-gateway, pclaw, pantherclaw-sim, pclaw-admin, pantherclaw-edge, pantherclaw-probe]
     formats: [tar.gz]
     format_overrides:
       - goos: windows
         formats: [zip]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - NOTICE
+      - README.md
+      - COMMERCIAL_LICENSE.md
+      - TRADEMARKS.md
+  - id: fips
+    ids: [pantherclaw-server-fips, pantherclaw-gateway-fips, pclaw-fips, pantherclaw-edge-fips]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_fips_{{ .Os }}_{{ .Arch }}"
     files:
       - LICENSE
       - NOTICE

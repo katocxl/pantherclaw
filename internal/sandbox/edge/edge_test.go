@@ -17,6 +17,7 @@ import (
 	"encoding/json/v2"
 	"encoding/pem"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -26,6 +27,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -369,6 +371,53 @@ func TestTheGatewayCAPinIsEnforced(t *testing.T) {
 	}
 	if _, err := gatewayTLS("md5:abc"); err == nil {
 		t.Fatal("a malformed pin was accepted")
+	}
+}
+
+// TestHR395_TheEdgeReachesTheGatewayOnlyOverAHybridKeyExchange: a gateway
+// that offers only classical key exchanges gets no request from the edge;
+// one with Go's defaults (the gateway's listener profile) is reached over a
+// hybrid post-quantum group, and the edge logs which (G0 M13 D35, T-178).
+func TestHR395_TheEdgeReachesTheGatewayOnlyOverAHybridKeyExchange(t *testing.T) {
+	var reached atomic.Int32
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		reached.Add(1)
+		w.WriteHeader(http.StatusTeapot)
+	})
+	for name, classical := range map[string]bool{"classical": true, "default": false} {
+		reached.Store(0)
+		gw := httptest.NewUnstartedServer(handler)
+		gw.TLS = &tls.Config{MinVersion: tls.VersionTLS13}
+		if classical {
+			gw.TLS.CurvePreferences = []tls.CurveID{tls.X25519, tls.CurveP256, tls.CurveP384}
+		}
+		gw.StartTLS()
+		ca := gw.TLS.Certificates[0]
+		issuer, err := x509.ParseCertificate(ca.Certificate[len(ca.Certificate)-1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(issuer.Raw)
+		var logs bytes.Buffer
+		_, key, _ := ed25519.GenerateKey(rand.Reader)
+		e, err := New(Options{
+			GatewayURL: gw.URL, GatewayCAPin: "sha256:" + hex.EncodeToString(sum[:]), Hosts: map[string]string{"payments.example": "payments"},
+			Run: ids.NewV7().String(), Key: key, Token: func() string { return "t" },
+			Log: slog.New(slog.NewJSONHandler(&logs, nil)),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		w := httptest.NewRecorder()
+		e.forward(w, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/x", nil), "payments.example", "payments")
+		gw.Close()
+		switch {
+		case classical && (w.Code != http.StatusBadGateway || reached.Load() != 0):
+			t.Errorf("%s gateway: %d, %d requests reached it", name, w.Code, reached.Load())
+		case !classical && (w.Code != http.StatusTeapot || !strings.Contains(logs.String(), `"link":"edge-gateway","group":"X25519MLKEM768"`) &&
+			!strings.Contains(logs.String(), `"link":"edge-gateway","group":"SecP256r1MLKEM768"`)):
+			t.Errorf("%s gateway: %d, logs %s", name, w.Code, logs.String())
+		}
 	}
 }
 
