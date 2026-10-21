@@ -368,4 +368,16 @@ BEGIN
 END;
 $$;
 -- +goose StatementEnd
+-- Undo the backup role's grants of the Up migration; `db bootstrap
+-- --backup-password-file` grants them again.
+-- +goose StatementBegin
+DO $$
+BEGIN
+    IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_backup') THEN
+        REVOKE SELECT ON ALL TABLES IN SCHEMA pc FROM pc_backup;
+        REVOKE SELECT ON ALL SEQUENCES IN SCHEMA pc FROM pc_backup;
+    END IF;
+END
+$$;
+-- +goose StatementEnd
 DROP TABLE pc.schema_info;

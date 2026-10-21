@@ -63,6 +63,9 @@ type m6Services struct {
 	// rpID is the WebAuthn relying party approver keys are exported for
 	// (HR-038); "" when security keys are off.
 	rpID string
+	// hold is the operator's maintenance hold: the gateway listener refuses
+	// every procedure (G0 M13 D26, HR-379).
+	hold bool
 }
 
 // newM6 builds the M6 services; notify (M5 notifications) may be nil.
@@ -112,7 +115,8 @@ func (m *m6Services) mountPages(web *webhttp.Handler) {
 // organization scan (G0 M8), every call authenticated by its client
 // certificate (HR-181, HR-020).
 func (m *m6Services) gatewayHandler(svc *authority.Service, log *slog.Logger) (http.Handler, error) {
-	rs, err := rpc.NewServer(rpc.Options{Logger: log, Authenticate: gatewaysrpc.Authenticator(m.gateways, gatewayListenerPermissions())})
+	rs, err := rpc.NewServer(rpc.Options{Logger: log, Authenticate: holdAuthenticator(m.hold, heldOnGatewayListener,
+		gatewaysrpc.Authenticator(m.gateways, gatewayListenerPermissions()))})
 	if err != nil {
 		return nil, err
 	}

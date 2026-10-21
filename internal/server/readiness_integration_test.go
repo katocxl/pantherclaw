@@ -54,28 +54,28 @@ func TestHR370_ReadyzRequiresDBSchemaAndWorkers(t *testing.T) {
 			t.Errorf("%s: body carries a number: %s", name, body)
 		}
 	}
-	check("ready", rd, http.StatusOK, `{"ready":true,"checks":{"db":"ok","schema":"ok","workers":"ok"}}`)
+	check("ready", rd, http.StatusOK, `{"ready":true,"checks":{"db":"ok","schema":"ok","workers":"ok","hold":"ok"}}`)
 	check("api role", readiness{pool: pool, log: pclog.Discard()}, http.StatusOK,
-		`{"ready":true,"checks":{"db":"ok","schema":"ok","workers":"skip"}}`)
+		`{"ready":true,"checks":{"db":"ok","schema":"ok","workers":"skip","hold":"ok"}}`)
 
 	// Workers that stopped beating more than 30 s ago.
 	now = now.Add(workerHeartbeatMaxAge + time.Second)
-	check("stale workers", rd, http.StatusServiceUnavailable, `{"ready":false,"checks":{"db":"ok","schema":"ok","workers":"fail"}}`)
+	check("stale workers", rd, http.StatusServiceUnavailable, `{"ready":false,"checks":{"db":"ok","schema":"ok","workers":"fail","hold":"ok"}}`)
 	beat.beat()
 	unstarted := readiness{pool: pool, workers: &workerHeartbeat{now: time.Now}, log: pclog.Discard()}
 	check("workers not started", unstarted, http.StatusServiceUnavailable,
-		`{"ready":false,"checks":{"db":"ok","schema":"ok","workers":"fail"}}`)
+		`{"ready":false,"checks":{"db":"ok","schema":"ok","workers":"fail","hold":"ok"}}`)
 
 	for name, v := range map[string]int64{"newer schema": latest + 1, "pending schema": latest - 1} {
 		d.AdminExec(t, "UPDATE pc.schema_info SET version = $1", v)
-		check(name, rd, http.StatusServiceUnavailable, `{"ready":false,"checks":{"db":"ok","schema":"fail","workers":"ok"}}`)
+		check(name, rd, http.StatusServiceUnavailable, `{"ready":false,"checks":{"db":"ok","schema":"fail","workers":"ok","hold":"ok"}}`)
 	}
 	d.AdminExec(t, "DELETE FROM pc.schema_info")
-	check("no schema row", rd, http.StatusServiceUnavailable, `{"ready":false,"checks":{"db":"ok","schema":"fail","workers":"ok"}}`)
+	check("no schema row", rd, http.StatusServiceUnavailable, `{"ready":false,"checks":{"db":"ok","schema":"fail","workers":"ok","hold":"ok"}}`)
 
 	// A database migrated before 00180 has no pc.schema_info (D24).
 	d.AdminExec(t, "DROP TABLE pc.schema_info")
-	check("no schema table", rd, http.StatusServiceUnavailable, `{"ready":false,"checks":{"db":"ok","schema":"fail","workers":"ok"}}`)
+	check("no schema table", rd, http.StatusServiceUnavailable, `{"ready":false,"checks":{"db":"ok","schema":"fail","workers":"ok","hold":"ok"}}`)
 	for dep, want := range map[string]error{"": nil, "staging": errSchemaPending, "production": errSchemaPending} {
 		if err := checkSchemaAtStart(context.Background(), &Config{Deployment: dep}, pool, pclog.Discard()); !errors.Is(err, want) {
 			t.Errorf("no schema table, deployment %q: start = %v, want %v", dep, err, want)
@@ -85,7 +85,7 @@ func TestHR370_ReadyzRequiresDBSchemaAndWorkers(t *testing.T) {
 	down := d.Pool(t, d.App)
 	down.Close()
 	check("database down", readiness{pool: down, log: pclog.Discard()}, http.StatusServiceUnavailable,
-		`{"ready":false,"checks":{"db":"fail","schema":"fail","workers":"skip"}}`)
+		`{"ready":false,"checks":{"db":"fail","schema":"fail","workers":"skip","hold":"ok"}}`)
 }
 
 // TestHR370_ServeRefusesNewerSchemaAndPendingOutsideDevelopment: serve

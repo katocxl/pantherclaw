@@ -274,6 +274,11 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	// The operator's maintenance hold: no decision from any path (HR-379).
+	svc.WithMaintenanceHold(cfg.Maintenance.Hold)
+	if err := auditMaintenanceHold(ctx, pool, cfg.Maintenance.Hold, log); err != nil {
+		return err
+	}
 	captures := newCaptures(pool, kp, log)
 	svc.WithCaptures(captures.recorder)
 	m5, err := newM5(ctx, cfg, pool, kp, bill, log)
@@ -287,6 +292,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	m6.hold = cfg.Maintenance.Hold
 	m14core := wireM14Core(m6)
 	wireM14A2A(m14core)
 	_ = m14core // the M14 streams' wiring registers its kinds here (G0 M14 D64)
@@ -408,6 +414,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			extDeps:      ui.extensionDeps(xdeps),
 			ui:           ui,
 			workers:      workers,
+			hold:         cfg.Maintenance.Hold,
 		})
 		if err != nil {
 			return err
@@ -665,6 +672,8 @@ type apiDeps struct {
 	// workers is the job workers' heartbeat that /readyz requires (role
 	// all); nil when this process runs no workers.
 	workers *workerHeartbeat
+	// hold is the operator's maintenance hold (HR-379).
+	hold bool
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
@@ -676,7 +685,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	rs, err := rpc.NewServer(rpc.Options{
 		Logger:       log,
 		Public:       publicProcedures(),
-		Authenticate: d.auth,
+		Authenticate: holdAuthenticator(d.hold, heldOnAPI, d.auth),
 	})
 	if err != nil {
 		return nil, err
@@ -789,7 +798,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, "ok\n")
 	})
-	mux.Handle("GET /readyz", readiness{pool: pool, workers: d.workers, log: log})
+	mux.Handle("GET /readyz", readiness{pool: pool, workers: d.workers, held: d.hold, log: log})
 	mux.HandleFunc("GET /.well-known/pantherclaw/jwks.json", func(w http.ResponseWriter, _ *http.Request) {
 		b, err := reg.JWKS()
 		if err != nil {
@@ -812,7 +821,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	// The client address goes into every request's context for the account
 	// procedures' per-IP limits (G0 UI D85).
-	return httpx.ClientIPMiddleware(workloadrpc.RawBody(mux, d.clientIP), d.clientIP), nil
+	return httpx.ClientIPMiddleware(workloadrpc.RawBody(holdHTTP(d.hold, heldHTTPPath, mux), d.clientIP), d.clientIP), nil
 }
 
 // attestTimeout bounds one call to an issuer or a cluster API server.

@@ -2,11 +2,17 @@
 # Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 #
 # Build context of server.Dockerfile (BuildKit reads <Dockerfile>.dockerignore).
+# Nothing secret and nothing only tests need goes into the build stage.
 .git
 .claude
 **/node_modules
 bin
 dist
-deploy/compose/.env
+deploy/dev/secrets/
+**/secrets/
+**/.env
+**/.env.*
+**/*.pw
 **/*.pem
 **/*.key
+**/testdata/

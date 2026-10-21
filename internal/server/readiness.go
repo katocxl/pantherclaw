@@ -122,20 +122,27 @@ type readyChecks struct {
 	DB      string `json:"db"`
 	Schema  string `json:"schema"`
 	Workers string `json:"workers"`
+	// Hold fails while the operator's maintenance hold is on (HR-379).
+	Hold string `json:"hold"`
 }
 
 // readiness serves /readyz: 200 only when the database answers, its schema
-// is this binary's, and (role all) the workers beat; 503 otherwise.
+// is this binary's, (role all) the workers beat and no maintenance hold is
+// on; 503 otherwise.
 type readiness struct {
 	pool    *db.Pool
 	workers *workerHeartbeat
+	held    bool
 	log     *slog.Logger
 }
 
 func (rd readiness) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
-	c := readyChecks{DB: checkFailed, Schema: checkFailed, Workers: checkSkipped}
+	c := readyChecks{DB: checkFailed, Schema: checkFailed, Workers: checkSkipped, Hold: checkOK}
+	if rd.held {
+		c.Hold = checkFailed
+	}
 	err := rd.pool.InGlobalTx(ctx, db.GlobalHealth, func(ctx context.Context, tx db.GlobalTx) error {
 		var one int
 		return tx.QueryRow(ctx, "SELECT 1").Scan(&one)
@@ -160,7 +167,7 @@ func (rd readiness) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			rd.log.WarnContext(ctx, "server.not_ready", slog.String("check", "workers"))
 		}
 	}
-	body := readyBody{Ready: c.DB == checkOK && c.Schema == checkOK && c.Workers != checkFailed, Checks: c}
+	body := readyBody{Ready: c.DB == checkOK && c.Schema == checkOK && c.Workers != checkFailed && c.Hold == checkOK, Checks: c}
 	w.Header().Set("Content-Type", "application/json")
 	if !body.Ready {
 		w.WriteHeader(http.StatusServiceUnavailable)

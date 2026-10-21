@@ -167,4 +167,10 @@ func TestHR372_RotateReceiptsAndEvidenceKeepEarlierKeysVerifying(t *testing.T) {
 	if retiring != 3 || operator != 3 {
 		t.Errorf("retiring audits = %d (%d by the operator), want 3", retiring, operator)
 	}
+	var created int
+	d.AdminQueryRow(t, `SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.signing_key.created'
+		AND actor_type = 'operator' AND actor_id LIKE 'cli:%'`, []any{ids.PlatformOrg}, &created)
+	if created != 3 {
+		t.Errorf("created audits by the operator = %d, want 3", created)
+	}
 }

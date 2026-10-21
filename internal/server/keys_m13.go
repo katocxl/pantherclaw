@@ -119,12 +119,13 @@ func cmdRotateSigning(ctx context.Context, r rotation, args []string, stdout, st
 		}
 	}
 	actor := evdomain.Actor{Type: "operator", ID: operatorName()}
-	for _, p := range purposes {
-		kid, err := keystore.RotateSigningKey(ctx, pool, kp, p, actor)
-		if err != nil {
-			return fmt.Errorf("%s: %s: %w", r.name, p, err)
-		}
-		_, _ = fmt.Fprintf(stdout, "rotated %s: new key %s; the previous key is retiring and keeps verifying\n", p, kid)
+	// Every purpose rotates in one transaction: all or none.
+	kids, err := keystore.RotateSigningKeys(ctx, pool, kp, purposes, actor)
+	if err != nil {
+		return fmt.Errorf("%s: nothing rotated: %w", r.name, err)
+	}
+	for i, p := range purposes {
+		_, _ = fmt.Fprintf(stdout, "rotated %s: new key %s; the previous key is retiring and keeps verifying\n", p, kids[i])
 	}
 	_, _ = fmt.Fprintln(stdout, "next: restart every server instance so it signs with the new keys (docs/runbooks/key-rotation.md)")
 	return nil
