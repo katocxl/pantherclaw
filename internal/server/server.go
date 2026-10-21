@@ -309,6 +309,8 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	m6.scans = agentsrpc.NewGatewayScans(aapp.NewInventory(pool, bill))
 
 	g, ctx := errgroup.WithContext(ctx)
+	// apiAddr is the bound API address (role api or all).
+	var apiAddr string
 	// autos is the one M11 part 2 core of this process: the API and the
 	// jobs share it, so every port set on it reaches both (D91 K6).
 	// protect sets its ports on it in every role (D110 P1).
@@ -422,8 +424,11 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		serveCertReloads(ctx, g, certs)
-		if onStart != nil {
-			onStart(ln.Addr().String())
+		// Tests learn the address once the process can be ready: with the
+		// workers in this process, after they started (HR-370).
+		apiAddr = ln.Addr().String()
+		if onStart != nil && cfg.Role != RoleAll {
+			onStart(apiAddr)
 		}
 		log.InfoContext(ctx, "server.listening", slog.String("addr", ln.Addr().String()), slog.String("role", cfg.Role))
 		m5p2.serveWaits(ctx, g)
@@ -558,6 +563,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		}
 		log.InfoContext(ctx, "server.workers_started", slog.Int("concurrency", cfg.WorkerConcurrency))
 		workers.serve(ctx, g, client)
+		if onStart != nil && cfg.Role == RoleAll {
+			onStart(apiAddr)
+		}
 		g.Go(func() error {
 			<-ctx.Done()
 			sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownGrace)
