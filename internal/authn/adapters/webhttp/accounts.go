@@ -136,6 +136,11 @@ func (h *Handler) orgPicker(w http.ResponseWriter, r *http.Request, s authnapp.A
 		h.fail(w, r, err)
 		return
 	}
+	if len(ms) == 0 && h.selfServe {
+		// D94: the picker only when there is something to pick.
+		http.Redirect(w, r, authnapp.NoOrgLanding(pickerReturn(r)), http.StatusSeeOther)
+		return
+	}
 	h.render(w, http.StatusOK, "org_picker.html", page{Title: "Choose an organization", Orgs: ms, SelfServe: h.selfServe, Next: pickerReturn(r)})
 }
 
@@ -224,6 +229,12 @@ func (h *Handler) invite(w http.ResponseWriter, r *http.Request) {
 // accountSignedIn finishes a sign-in that opened an account session.
 func (h *Handler) accountSignedIn(w http.ResponseWriter, out authnapp.BrowserSignIn) {
 	http.SetCookie(w, h.AccountSessionCookie(out.Secret))
+	if out.Next != authnapp.OrgPickerPath {
+		// D94: an account without an org has nothing to pick; it goes to
+		// the console to create one (only a valid console path).
+		h.render(w, http.StatusOK, "continue.html", page{Title: "Signed in", Next: authnapp.NoOrgLanding(out.Next)})
+		return
+	}
 	next := authnapp.OrgPickerPath
 	if out.Return != authnapp.AccountPath && authnapp.ValidReturnPath(out.Return) {
 		// The picker keeps the page the sign-in asked for (D88).

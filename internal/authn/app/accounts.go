@@ -29,6 +29,9 @@ const (
 	OrgPickerPath = "/login/orgs"
 	// InvitePath is the browser invitation page: /invite/{token}.
 	InvitePath = "/invite"
+	// WelcomePath is the console's create-an-organization page, where an
+	// account without an org lands after signing in (D94).
+	WelcomePath = ConsolePath + "welcome"
 	// PickerFreshness is how soon after its sign-in an account session may
 	// pick an org (HR-353, D88: switching orgs later is a fresh sign-in).
 	PickerFreshness = 15 * time.Minute
@@ -50,6 +53,17 @@ var ErrNotPickable = errors.New("authn: this organization cannot be opened from 
 // ErrPickerStale: the account session signed in more than PickerFreshness
 // ago; picking an org now takes a fresh sign-in (HR-353, D88).
 var ErrPickerStale = errors.New("authn: this sign-in is too old to open an organization")
+
+// NoOrgLanding is where an account session without any org goes after
+// its sign-in (D94): the console page the sign-in asked for when it is a
+// valid console path below the root, else the create-an-organization page.
+// There is nothing to pick, so it never goes to the org picker.
+func NoOrgLanding(next string) string {
+	if next != ConsolePath && ValidConsolePath(next) {
+		return next
+	}
+	return WelcomePath
+}
 
 // PickerFresh reports whether s may still pick an org (HR-353).
 func PickerFresh(s AccountSession) bool {
@@ -214,9 +228,11 @@ func (b *Browser) accountCallback(ctx context.Context, idp IdP, providerName str
 	if err != nil {
 		return BrowserSignIn{}, err
 	}
-	next := row.NextPath
-	if len(ms) > 1 {
-		next = OrgPickerPath
+	// D94: the picker only when there is something to pick; an account
+	// without an org goes to the console to create one.
+	next := OrgPickerPath
+	if len(ms) == 0 {
+		next = NoOrgLanding(row.NextPath)
 	}
 	return BrowserSignIn{Session: id, Secret: secret, Next: next, Kind: SessionAccount, Account: acct.ID, Return: row.NextPath}, nil
 }

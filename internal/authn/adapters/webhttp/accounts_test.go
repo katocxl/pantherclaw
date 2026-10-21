@@ -31,11 +31,16 @@ func (f *fakeAccounts) AuthenticateAccount(_ context.Context, cookie string) (au
 		return authnapp.AccountSession{CreatedAt: now.Add(-time.Minute), Now: now}, nil
 	case "stale":
 		return authnapp.AccountSession{CreatedAt: now.Add(-16 * time.Minute), Now: now}, nil
+	case "no-org":
+		return authnapp.AccountSession{CreatedAt: now.Add(-time.Minute), Now: now, Email: "none@example.test"}, nil
 	}
 	return authnapp.AccountSession{}, authnapp.ErrUnauthenticated
 }
 
-func (f *fakeAccounts) Memberships(context.Context, authnapp.AccountSession) ([]accounts.Membership, error) {
+func (f *fakeAccounts) Memberships(_ context.Context, s authnapp.AccountSession) ([]accounts.Membership, error) {
+	if s.Email == "none@example.test" {
+		return nil, nil
+	}
 	return []accounts.Membership{{Org: testOrg, Name: "Acme", Slug: "acme"}}, nil
 }
 
@@ -150,6 +155,74 @@ func TestHR353_AStalePickerStartsAFreshSignInToTheSameOrg(t *testing.T) {
 		res = do(t, mux, withAccount(get(authnapp.OrgPickerPath+q), "fresh"))
 		if res.StatusCode != http.StatusOK || !strings.Contains(res.Body, `data-next="`+html.EscapeString(tc.want)+`"`) {
 			t.Errorf("fresh picker, next %q: the page does not carry %q", tc.next, tc.want)
+		}
+	}
+}
+
+// accountBrowser completes every sign-in as an account session with the
+// Next and Return the sign-in use case would give.
+type accountBrowser struct {
+	fakeBrowser
+	next, ret string
+}
+
+func (f *accountBrowser) Callback(context.Context, string, url.Values, string, authnapp.ClientMeta) (authnapp.BrowserSignIn, error) {
+	return authnapp.BrowserSignIn{Kind: authnapp.SessionAccount, Secret: "account-session", Next: f.next, Return: f.ret}, nil
+}
+
+// TestHR353_AnAccountWithoutAnOrgGoesToTheConsoleNotThePicker (D94): after an
+// account sign-in that found no org, the browser continues to the
+// console's create-org page (or the console page the sign-in asked for),
+// never to an empty picker; the picker itself sends such an account there
+// too, and shows only when there is something to pick.
+func TestHR353_AnAccountWithoutAnOrgGoesToTheConsoleNotThePicker(t *testing.T) {
+	ab := &accountBrowser{}
+	h, err := webhttp.New(ab, origin, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.WithAccounts(&fakeAccounts{}, true)
+	mux := http.NewServeMux()
+	h.Mount(mux)
+	mux.HandleFunc("GET /oauth2/callback/{provider}", h.Callback)
+
+	continueTo := func(res result) string {
+		const marker = `<a href="`
+		i := strings.Index(res.Body, marker)
+		if i < 0 {
+			return ""
+		}
+		rest := res.Body[i+len(marker):]
+		return html.UnescapeString(rest[:strings.IndexByte(rest, '"')])
+	}
+	for _, tc := range []struct{ next, ret, want string }{
+		{authnapp.WelcomePath, authnapp.AccountPath, authnapp.WelcomePath},
+		{"/app/settings/billing", "/app/settings/billing", "/app/settings/billing"},
+		{"https://evil.example/app/x", "https://evil.example/app/x", authnapp.WelcomePath},
+		{authnapp.OrgPickerPath, authnapp.AccountPath, authnapp.OrgPickerPath},
+		{authnapp.OrgPickerPath, "/app/agents", authnapp.OrgPickerPath + "?next=%2Fapp%2Fagents"},
+	} {
+		ab.next, ab.ret = tc.next, tc.ret
+		res := do(t, mux, get("/oauth2/callback/test?code=x&state=y"))
+		if res.StatusCode != http.StatusOK || continueTo(res) != tc.want {
+			t.Errorf("sign-in with next %q: %d, continues to %q, want %q", tc.next, res.StatusCode, continueTo(res), tc.want)
+		}
+	}
+
+	noOrg := func(path string) *http.Request {
+		r := get(path)
+		r.AddCookie(&http.Cookie{Name: h.AccountCookieName(), Value: "no-org"})
+		return r
+	}
+	for path, want := range map[string]string{
+		authnapp.OrgPickerPath:                              authnapp.WelcomePath,
+		authnapp.OrgPickerPath + "?next=%2Fapp%2Fagents":    "/app/agents",
+		authnapp.OrgPickerPath + "?next=%2Fapprovals":       authnapp.WelcomePath,
+		authnapp.OrgPickerPath + "?next=https%3A%2F%2Fevil": authnapp.WelcomePath,
+	} {
+		res := do(t, mux, noOrg(path))
+		if res.StatusCode != http.StatusSeeOther || res.Header.Get("Location") != want {
+			t.Errorf("picker without an org, %s: %d %q, want %q", path, res.StatusCode, res.Header.Get("Location"), want)
 		}
 	}
 }
