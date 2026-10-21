@@ -6,8 +6,10 @@ package webhttp_test
 import (
 	"context"
 	"encoding/json"
+	"html"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,7 +92,7 @@ func TestHR353_AStalePickerStartsAFreshSignInToTheSameOrg(t *testing.T) {
 
 	// Stale picker page: a redirect to the sign-in start.
 	res := do(t, mux, withAccount(get(authnapp.OrgPickerPath), "stale"))
-	if res.StatusCode != http.StatusSeeOther || res.Header.Get("Location") != authnapp.LoginPath || !cleared(res) {
+	if res.StatusCode != http.StatusSeeOther || res.Header.Get("Location") != authnapp.LoginPath+"?next=%2Faccount" || !cleared(res) {
 		t.Errorf("stale picker: %d %q cleared=%v", res.StatusCode, res.Header.Get("Location"), cleared(res))
 	}
 
@@ -112,6 +114,42 @@ func TestHR353_AStalePickerStartsAFreshSignInToTheSameOrg(t *testing.T) {
 	for _, c := range res.Cookies() {
 		if c.Name == h.SessionCookieName() && c.Value != "" {
 			t.Errorf("a stale pick set an org session cookie")
+		}
+	}
+
+	// The page the sign-in asked for survives the picker (reviewer LOW on
+	// D88): a valid return path is kept, anything else becomes /account.
+	const console = "/app/agents?tab=runs"
+	for _, tc := range []struct{ next, want string }{
+		{console, console},
+		{"/approvals", "/approvals"},
+		{"https://evil.example/x", authnapp.AccountPath},
+		{"//evil.example", authnapp.AccountPath},
+		{"/app/../account", authnapp.AccountPath},
+		{"", authnapp.AccountPath},
+	} {
+		q := "?" + url.Values{"next": {tc.next}}.Encode()
+		pick := post(authnapp.OrgPickerPath + "/" + testOrg.String() + q)
+
+		res = do(t, mux, withAccount(get(authnapp.OrgPickerPath+q), "stale"))
+		if u, err := url.Parse(res.Header.Get("Location")); err != nil || u.Query().Get("next") != tc.want {
+			t.Errorf("stale picker, next %q: %q", tc.next, res.Header.Get("Location"))
+		}
+		res = do(t, mux, withAccount(pick, "stale"))
+		body = nil
+		_ = json.Unmarshal([]byte(res.Body), &body)
+		if u, err := url.Parse(body["sign_in"]); err != nil || u.Query().Get("next") != tc.want || u.Query().Get("org") != testOrg.String() {
+			t.Errorf("stale pick, next %q: %s", tc.next, res.Body)
+		}
+		res = do(t, mux, withAccount(post(authnapp.OrgPickerPath+"/"+testOrg.String()+q), "fresh"))
+		body = nil
+		_ = json.Unmarshal([]byte(res.Body), &body)
+		if res.StatusCode != http.StatusOK || body["next"] != tc.want {
+			t.Errorf("fresh pick, next %q: %s", tc.next, res.Body)
+		}
+		res = do(t, mux, withAccount(get(authnapp.OrgPickerPath+q), "fresh"))
+		if res.StatusCode != http.StatusOK || !strings.Contains(res.Body, `data-next="`+html.EscapeString(tc.want)+`"`) {
+			t.Errorf("fresh picker, next %q: the page does not carry %q", tc.next, tc.want)
 		}
 	}
 }

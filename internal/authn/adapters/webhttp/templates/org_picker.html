@@ -2,7 +2,7 @@
 <h1>Choose an organization</h1>
 {{if .Orgs}}
 <p>Your account belongs to these organizations. Opening one signs you in to it; to switch later, sign in again.</p>
-<ul class="orgs">
+<ul class="orgs" data-next="{{.Next}}">
 {{range .Orgs}}
 <li><button type="button" class="pick-org" data-org="{{.Org}}">{{.Name}}</button>{{if .Slug}} <span class="note">{{.Slug}}</span>{{end}} <code>{{.Org}}</code></li>
 {{end}}

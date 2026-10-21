@@ -128,7 +128,7 @@ func (h *Handler) orgPicker(w http.ResponseWriter, r *http.Request, s authnapp.A
 		// HR-353, D88: an old account session picks nothing; a fresh
 		// sign-in brings the picker back.
 		http.SetCookie(w, h.AccountSessionCookie(""))
-		http.Redirect(w, r, authnapp.LoginPath, http.StatusSeeOther)
+		http.Redirect(w, r, authnapp.LoginPath+"?"+url.Values{"next": {pickerReturn(r)}}.Encode(), http.StatusSeeOther)
 		return
 	}
 	ms, err := h.accounts.Memberships(r.Context(), s)
@@ -136,7 +136,7 @@ func (h *Handler) orgPicker(w http.ResponseWriter, r *http.Request, s authnapp.A
 		h.fail(w, r, err)
 		return
 	}
-	h.render(w, http.StatusOK, "org_picker.html", page{Title: "Choose an organization", Orgs: ms, SelfServe: h.selfServe})
+	h.render(w, http.StatusOK, "org_picker.html", page{Title: "Choose an organization", Orgs: ms, SelfServe: h.selfServe, Next: pickerReturn(r)})
 }
 
 // pickOrg opens one of the account's orgs and ends the account session.
@@ -146,13 +146,14 @@ func (h *Handler) pickOrg(w http.ResponseWriter, r *http.Request, s authnapp.Acc
 		h.jsonError(w, http.StatusNotFound, "not_pickable")
 		return
 	}
+	rt := pickerReturn(r)
 	out, err := h.accounts.PickOrg(r.Context(), s, org, authnapp.ClientMeta{UserAgent: r.UserAgent(), IP: h.clientIP(r)})
 	switch {
 	case errors.Is(err, authnapp.ErrPickerStale):
 		// HR-353, D88: past the picker's window the pick becomes a fresh
 		// sign-in to the same org, landing where the pick would have.
 		http.SetCookie(w, h.AccountSessionCookie(""))
-		q := url.Values{"org": {org.String()}, "next": {authnapp.AccountPath}}
+		q := url.Values{"org": {org.String()}, "next": {rt}}
 		h.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign_in_again", "sign_in": authnapp.LoginPath + "?" + q.Encode()})
 		return
 	case errors.Is(err, authnapp.ErrNotPickable):
@@ -168,7 +169,21 @@ func (h *Handler) pickOrg(w http.ResponseWriter, r *http.Request, s authnapp.Acc
 	}
 	http.SetCookie(w, h.OrgSessionCookie(out.Secret))
 	http.SetCookie(w, h.AccountSessionCookie(""))
-	h.writeJSON(w, http.StatusOK, map[string]string{"next": out.Next, "org": out.Org.String()})
+	next := out.Next
+	if rt != authnapp.AccountPath {
+		next = rt
+	}
+	h.writeJSON(w, http.StatusOK, map[string]string{"next": next, "org": out.Org.String()})
+}
+
+// pickerReturn is the page the account's sign-in asked to return to, as
+// the picker carries it in ?next=: only a valid return path (HR-152,
+// HR-345), else the account page (D88).
+func pickerReturn(r *http.Request) string {
+	if rt := r.URL.Query().Get("next"); authnapp.ValidReturnPath(rt) {
+		return rt
+	}
+	return authnapp.AccountPath
 }
 
 func (h *Handler) accountSignOut(w http.ResponseWriter, r *http.Request, s authnapp.AccountSession) {
@@ -209,5 +224,10 @@ func (h *Handler) invite(w http.ResponseWriter, r *http.Request) {
 // accountSignedIn finishes a sign-in that opened an account session.
 func (h *Handler) accountSignedIn(w http.ResponseWriter, out authnapp.BrowserSignIn) {
 	http.SetCookie(w, h.AccountSessionCookie(out.Secret))
-	h.render(w, http.StatusOK, "continue.html", page{Title: "Signed in", Next: authnapp.OrgPickerPath})
+	next := authnapp.OrgPickerPath
+	if out.Return != authnapp.AccountPath && authnapp.ValidReturnPath(out.Return) {
+		// The picker keeps the page the sign-in asked for (D88).
+		next += "?" + url.Values{"next": {out.Return}}.Encode()
+	}
+	h.render(w, http.StatusOK, "continue.html", page{Title: "Signed in", Next: next})
 }

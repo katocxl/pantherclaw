@@ -60,8 +60,17 @@ func TestHR353_SwitchingOrgIsAFreshSignIn(t *testing.T) {
 		second, ids.NewV7(), b.idp.Issuer())
 	ctx := context.Background()
 	out := b.signInWithoutOrg(t, "")
-	if out.Reason != "" || out.Kind != authnapp.SessionAccount || out.Next != authnapp.OrgPickerPath {
+	if out.Reason != "" || out.Kind != authnapp.SessionAccount || out.Next != authnapp.OrgPickerPath || out.Return != authnapp.AccountPath {
 		t.Fatalf("sign-in = %+v", out)
+	}
+	// D88: the page a sign-in asked for is kept for the picker.
+	red, err := b.browser.Start(ctx, authnapp.BrowserStart{Next: "/app/agents", ClientIP: "192.0.2.1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	withNext, err := b.browser.Callback(ctx, "test", b.authorize(t, red.URL), red.Binding, authnapp.ClientMeta{IP: "192.0.2.1"})
+	if err != nil || withNext.Next != authnapp.OrgPickerPath || withNext.Return != "/app/agents" {
+		t.Fatalf("sign-in with a return path = %+v, %v", withNext, err)
 	}
 	s, err := b.browser.AuthenticateAccount(ctx, out.Secret)
 	if err != nil {

@@ -218,7 +218,7 @@ func (b *Browser) accountCallback(ctx context.Context, idp IdP, providerName str
 	if len(ms) > 1 {
 		next = OrgPickerPath
 	}
-	return BrowserSignIn{Session: id, Secret: secret, Next: next, Kind: SessionAccount, Account: acct.ID}, nil
+	return BrowserSignIn{Session: id, Secret: secret, Next: next, Kind: SessionAccount, Account: acct.ID, Return: row.NextPath}, nil
 }
 
 // reasonOfCode returns the stable reason of a refusal error from the

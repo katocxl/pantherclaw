@@ -302,6 +302,9 @@ type BrowserSignIn struct {
 	Kind string
 	// Account is the hosted account, when the sign-in had none of an org.
 	Account ids.UUID
+	// Return is the page the sign-in asked to return to, kept for the org
+	// picker when Next is the picker (HR-353, D88); not yet validated.
+	Return string
 }
 
 // Callback completes a browser sign-in. The state is consumed first (single
