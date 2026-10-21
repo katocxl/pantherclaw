@@ -49,7 +49,9 @@ func (d Deployment) Valid() bool {
 // Set is what a build adds to the core server. The zero Set adds nothing.
 type Set struct {
 	// Console is the built console (index.html at its root); nil means no
-	// console is served.
+	// console is served. It is read once, at start: every file and its
+	// precompressed .br/.gz siblings are held in memory (at most 64 MiB in
+	// all) and a change to it afterwards is never served.
 	Console fs.FS
 	// Mount returns extra routes; it is called after the core wiring. Nil
 	// means none.
