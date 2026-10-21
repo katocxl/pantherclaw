@@ -655,6 +655,9 @@ func publishedBundle(ctx context.Context, c clients) (map[string]any, string, er
 		return bundle, "", nil
 	case err != nil:
 		return nil, "", err
+	case res.GetVersion() == nil:
+		// The server answers an empty response when nothing is published.
+		return bundle, "", nil
 	}
 	if err := json.Unmarshal(res.GetVersion().GetBundle(), &bundle); err != nil {
 		return nil, "", fmt.Errorf("the published policy: %w", err)
