@@ -727,7 +727,7 @@ These boundaries constrain every pillar above. A feature request that conflicts 
 | Sales term | Component | Pillar | Anchor features | Claim boundary |
 | --- | --- | --- | --- | --- |
 | Inventory of agents | Badge | 1 | F003, F016, F017, PN-010.5 | Covers discovered and enrolled agents only |
-| Effortless installation | Root | 20 | PN-012.6, PN-010.1, F322, F325 | The 30-minute target is measured, not guaranteed |
+| Effortless installation | Root | 20 | PN-012.6, PN-010.1, F322, F325 | The 30-minute target is measured, not guaranteed; from M13 `install.sh` verifies checksums and, with `gh`, the build attestation, and `pclaw up` and the Helm chart install a node (G0 M13 D36) |
 | Lifecycle | Badge | 3 | F020, F023, F563 | Restoring is a governed action, never automatic |
 | Agent controls | Guardrails | 8 | F110, F114, F120, F104 | Enforced on mediated routes |
 | Discovery | Badge | 2 | PN-001.1, PN-001.2, F015 | "Not observed" is not "absent" |
@@ -744,7 +744,7 @@ These boundaries constrain every pillar above. A feature request that conflicts 
 | Deployed | Root | 18 | PN-010.1–PN-010.7 | Hybrid from v1.0 (product code in UI); SaaS post-1.0 |
 | Session | Reflex | 9 | F224, F284, PN-002.5 | No transcripts required |
 | Performance | Root | 19 | PN-011.1–PN-011.5 | SLOs are targets: M13 optimises with a fixed effort on the staging server and publishes the measured numbers with their test conditions; v1.0 is not blocked on reaching them (G0 M13 F7) |
-| Management | Root | 20 | PN-012.1–PN-012.5, F573, F581 | Licence expiry never disables enforcement |
+| Management | Root | 20 | PN-012.1–PN-012.5, F573, F581 | Licence expiry never disables enforcement; support access needs the customer's approval every time and never reads credentials; deletion is verified and recorded in a signed deletion record (G0 M13 D32, D34) |
 | Bypass-resistant enforcement | Checkpoint | 16 (with 6, 10) | F435, F443, PN-008.2 | Per route, with current, expiring evidence |
 | Adversarial sandbox | Trail | 17 | PN-009.1–PN-009.5 | Simulated targets only; separate from the containment sandbox (PN-008) |
 

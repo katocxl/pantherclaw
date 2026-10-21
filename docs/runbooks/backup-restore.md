@@ -1,6 +1,6 @@
 # Runbook — Backup and restore
 
-**Milestone:** M13 ([G0 M13](../g0/M13.md) D2, D6, D16, D17, D20, D21, D24–D26; [ADR-0032](../adr/0032-hosted-deployment-kek-custody-and-backups.md); HR-372, HR-373, HR-378, HR-379, T-171, T-172, R-61). **Audience:** the operator of a hosted or self-hosted deployment. The hosted staging scripts live in the commercial distribution; the steps below are what they do, so a self-hosted operator can follow them by hand. Command flags follow the brief; the M13 exit status records any change.
+**Milestone:** M13 ([G0 M13](../g0/M13.md) D2, D6, D16, D17, D20, D21, D24–D26, D31; [ADR-0032](../adr/0032-hosted-deployment-kek-custody-and-backups.md); HR-372, HR-373, HR-378, HR-379, HR-383, HR-384, T-171, T-172, R-61). **Audience:** the operator of a hosted or self-hosted deployment. The hosted staging scripts live in the commercial distribution; the steps below are what they do, so a self-hosted operator can follow them by hand. Command flags follow the brief; the M13 exit status records any change.
 
 ## 1. Targets
 
@@ -61,7 +61,7 @@ Start the clock now. The RTO runs from here to step 9; the RPO is the age of the
    - As `pc_app` with `app.org_id` set to the platform organization, other organizations count 0.
    - As the superuser, at least one organization exists.
 7. **KEK check.** A sealed platform key exists, and `pantherclaw-server serve` (role `api`) starts with the escrowed KEK in `kek_files`: at start it unwraps every platform signing key and fails closed if it cannot. In a drill (a throwaway database, no gateways) it runs without the hold and `/readyz` answers 200. In a real restore it runs with the maintenance hold on (§7), and `/readyz` reports not ready by design until step 10.
-8. **Re-apply post-dump changes (D20, D26).** The server runs with the maintenance hold (`maintenance.hold: true`, HR-379): no decision is made from any path, while the management API and the operator command line keep working. The gateway port stays closed. Re-apply every revocation and containment change logged after the dump's time, from the shipped structured logs (§7).
+8. **Re-apply post-dump changes (D20, D26).** The server runs with the maintenance hold (`maintenance.hold: true`, HR-379): no decision is made from any path, while the management API and the operator command line keep working. The gateway port stays closed. Re-apply every revocation and containment change logged after the dump's time, from the shipped `security_event` lines with `restore reapply` (§7 step 5; HR-384).
 9. **Epoch bump.** Raise every organization's containment epoch (HR-373; [key-rotation.md](key-rotation.md) §8.2):
    ```bash
    pantherclaw-server keys bump-epochs --all --confirm --config <file>
@@ -84,7 +84,15 @@ A restored database is the state at the dump's time: everything revoked or conta
 2. Stop the server (all roles) so nothing writes to the damaged database. **Close the gateway port (8443)**: at the firewall and the cloud security list; on staging, Docker-published ports bypass nftables, so bind the gateway port to loopback in the stack's configuration.
 3. Set `maintenance.hold: true` (or `PC_MAINTENANCE_HOLD`) in the server's configuration **before its first start on the restored database** (HR-379; [G0 M13](../g0/M13.md) D26). While the hold is on, no decision is made from any path: gateway control and stream, workload, `Authorize`, hooks, `/sdk`, MCP faces and AuthZEN all refuse `MAINTENANCE_HOLD`, and gateways fail closed. The management API and the operator command line keep working. The start is audited (`platform.maintenance_hold_on`).
 4. Follow §5 steps 1–7, restoring into the database the server will use. Use a new volume, not the damaged one, which you keep for investigation.
-5. **Re-apply every revocation and containment change logged after the dump's time**, from the shipped structured logs: signing-key revocations, gateway-certificate revocations, API key, credential and grant revocations, containment and kill-switch changes. Until M13 wave 2 this is done by hand through the management API and the operator command line. Wave 2 adds `pantherclaw-server restore reapply --from <ndjson> --confirm`, which re-applies that closed set idempotently and is audited as an operator action. Anything the logs do not hold comes back as it was at the dump (R-61).
+5. **Re-apply every revocation and containment change logged after the dump's time.** The source is the shipped `security_event` log lines ([observability.md](observability.md) §4; HR-383): signing-key, gateway-certificate, API key, credential and grant revocations, disablements, containment and kill-switch changes. Export them as NDJSON from your log store and run:
+   ```bash
+   pantherclaw-server restore reapply --from security-events.ndjson --since <dump time> --confirm --config <file>
+   ```
+   - It applies only tightening events, idempotently, one organization per transaction.
+   - It is audited as `restore.reapplied`.
+   - It refuses unless the hold is on, and it reports unknown kinds (HR-384).
+   - Without `--confirm` nothing changes.
+   - Anything the logs do not hold comes back as it was at the dump (R-61). Re-apply such changes by hand through the management API.
 6. Signing keys created after the dump are lost with it: receipts and evidence they signed stop verifying until their public keys are published again from the logs. Tell verifiers.
 7. Run the epoch bump (§5 step 9; [key-rotation.md](key-rotation.md) §8.2). Gateways then load a fresh containment snapshot before serving (HR-010).
 8. Remove the hold and restart the server; the first start without it is audited (`platform.maintenance_hold_off`). Wait for `/readyz` to answer 200 (database, schema and workers; [deploy.md](deploy.md) §5), then reopen the gateway port.

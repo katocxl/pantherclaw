@@ -434,3 +434,27 @@
 | HR-377 | Usage meters are computed by the server from records, never reported by clients; usage limits are not enforced in M13. | T-163 | M13 |
 | HR-378 | The backup role (`pc_backup`) can only read, bypasses RLS only to dump, and its credential lives only with the backup job; dumps are encrypted with `age` before they leave the host. | T-172 | M13 |
 | HR-379 | While the maintenance hold (`maintenance.hold`) is on, no decision is made from any path: gateway control and stream, workload, `Authorize`, hooks, `/sdk`, MCP faces and AuthZEN refuse with `MAINTENANCE_HOLD` (gateways fail closed); the management API and the operator command line keep working; turning it on and off is audited and `/readyz` reports not ready while it is on. | T-171 | M13 |
+
+## Production hardening, wave 2: observability, support access, data requests, FIPS, post-quantum and installers (G0 M13)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
+| HR-380 | Span and metric attributes come from one fixed allow-list (procedure, code, org id, decision outcome, durations, sizes), applied by a single attribute filter; payloads, secrets, emails, tokens and SQL arguments are never exported. | T-041 | M13 |
+| HR-381 | The telemetry exporter never blocks a request: a bounded queue (spans 2048, batch 512, 5 s) drops and counts on overflow or export error. | T-041 | M13 |
+| HR-382 | The admin listener (`admin.addr`: pprof and `/metrics`) is off by default and refuses any non-loopback address. | T-041 | M13 |
+| HR-383 | After commit, exactly one structured `security_event` log line is emitted per ledger entry whose kind is in the closed security set, with {ts, org, ledger_seq, kind, direction, object{type,id}, actor{type,id}} and no secrets or free text. | T-173 | M13 |
+| HR-384 | `restore reapply` re-applies only `direction=tighten` events, idempotently, one tenant transaction per organization, audited `restore.reapplied` with the operator actor; it refuses unless the maintenance hold is on, and reports unknown kinds instead of guessing. | T-173, T-171 | M13 |
+| HR-385 | There is no standing support access: only an approved, unexpired, unrevoked grant authenticates a support session, and expiry is enforced at every authentication. | T-174, T-175 | M13 |
+| HR-386 | A support access request is approved only by an organization admin with a step-up, and never by the requesting account, even when it is also an organization admin. | T-174 | M13 |
+| HR-387 | Support sessions never write and never read credentials, sealed material, payload captures, exports or restricted payloads; only a `READ_ONLY_PLUS_EVIDENCE` grant adds `evidence.read_restricted`. | T-174, T-175 | M13 |
+| HR-388 | Every call in a support session is audited in the customer's ledger with the actor `support/<account id>` and the grant id. | T-174 | M13 |
+| HR-389 | Break-glass access is pre-designated by organization admins (at most 3 holders, never the org admin role), activated with a step-up for at most 60 minutes, notified to every other organization admin at once, audited separately with the activation id on every call, and never waives two-person rules, approvals or invariants. | T-174 | M13 |
+| HR-390 | An organization deletion is verified (zero rows remain in every organization table, the organization's DEKs destroyed) and recorded in a deletion record signed with the receipts key in the platform organization's ledger. | T-176 | M13 |
+| HR-391 | Only the `pc_deleter` role deletes organization data, only from the deletion job, and only for an organization already in state DELETED; organization-scoped legal holds block deletion (`DELETION_HELD`). | T-176 | M13 |
+| HR-392 | A DELETED organization fails closed on every path: authentication, gateway mTLS and workload authentication refuse it. | T-176 | M13 |
+| HR-393 | A lapse deletes nothing before day 90: reminders go to the organization's admins on days 0, 30, 60 and 83, enforcement, reads and export keep working, and only on day 90 or later is the lapse deletion request created; recovery before then clears the lapse. | T-176 | M13 |
+| HR-394 | Deleting an account is refused while it is the last org admin of any active organization (`LAST_ADMIN`); otherwise its per-organization users are disabled and pseudonymised, its personal data scrubbed and its sessions revoked, while evidence keeps opaque ids. | T-176 | M13 |
+| HR-395 | Links between PantherClaw components (gateway to server control, edge to gateway) negotiate a hybrid post-quantum key exchange (X25519MLKEM768, SecP256r1MLKEM768 or SecP384r1MLKEM1024) or fail; server listeners keep Go's post-quantum-first defaults and never set an explicit curve list. | T-178 | M13 |
+| HR-396 | A FIPS build uses only approved algorithms: the `GODEBUG=fips140=only` test job is green, sealing uses HPKE MLKEM768-P256, X-Wing blobs refuse to open (`SEAL_SUITE_NOT_FIPS`), ML-DSA co-signing is off and RSA keys under 2048 bits are refused. | T-178 | M13 |
+| HR-397 | The worker role serves `/livez` and `/readyz` on its health listener (`health.addr`). | T-171 | M13 |
+| HR-398 | Helm chart defaults run non-root with a read-only root file system, no privilege escalation and all capabilities dropped. | T-179 | M13 |

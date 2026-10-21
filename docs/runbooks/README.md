@@ -33,3 +33,7 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [billing-webhooks.md](billing-webhooks.md) | UI | Billing webhook failures: a stale plan, refused or out-of-order events; protection is never affected |
 | [hosted-oidc-outage.md](hosted-oidc-outage.md) | UI | Hosted OIDC provider outage: sign-in is down, enforcement is unaffected |
 | [deploy.md](deploy.md) | M13 | Deploy hosted staging (L3): host layout, sign-in through an SSH tunnel, deploy with a readiness wait and rollback, the G3 record, health and certificates |
+| [observability.md](observability.md) | M13 | Export traces and metrics over OTLP/HTTP, the loopback admin listener, security-event log lines and `restore reapply` |
+| [support-access.md](support-access.md) | M13 | Customer-approved support access (hosted, Enterprise) and break-glass (Business and above) |
+| [data-requests.md](data-requests.md) | M13 | Export an organization, delete it with a 7-day window and a signed deletion record, the lapse lifecycle, account deletion |
+| [installation.md](installation.md) | M13 | Verified releases with `install.sh`, a single node with `pclaw up`, the Helm chart, FIPS builds |
