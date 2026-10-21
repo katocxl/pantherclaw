@@ -54,7 +54,8 @@ After every committed ledger entry whose kind is in the closed security set, the
   - revocations: signing keys, gateways and gateway certificates, API keys, service-account keys, credentials and sealed credentials, grants, sessions, invitations, organization package-signing keys;
   - disablements: service accounts, users, identity issuers;
   - WebAuthn suspensions and removals;
-  - the kill switch, containment, quarantine and agent suspension.
+  - the kill switch, containment, quarantine and agent suspension;
+  - organization and account deletions (`org.deleted`, `account.deleted`). These are written in the platform organization's ledger, and their lines also carry the deletion record's digest (D41).
 - **Loosening kinds:** the restore counterparts of the tightening kinds carry `direction: loosen`.
 - The line never holds secrets or free text, only ids.
 

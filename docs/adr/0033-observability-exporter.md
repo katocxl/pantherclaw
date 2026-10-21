@@ -37,7 +37,7 @@ All of this has to run on a free monitoring plan.
    - Log lines carry `trace_id` and `span_id`.
 5. **A private admin listener (HR-382).** `admin.addr` serves pprof and `/metrics` as text. It is off by default and refuses any address that is not loopback.
 6. **Security events as log lines (HR-383, HR-384).**
-   - After commit, the evidence chainer emits one structured `security_event` line for every ledger entry whose kind is in a closed security set: revocations, disablements, suspensions, the kill switch, containment and quarantine, and their restore counterparts.
+   - After commit, the evidence chainer emits one structured `security_event` line for every ledger entry whose kind is in a closed security set: revocations, disablements, suspensions, the kill switch, containment and quarantine, organization and account deletions (D41), and their restore counterparts.
    - Each line has the fields {ts, org, ledger_seq, kind, direction, object{type,id}, actor{type,id}}, with no secrets and no free text.
    - Shipped off the host with the other logs, these lines are what `pantherclaw-server restore reapply --from <ndjson> --confirm` re-applies after a restore. It applies only tightening events, idempotently, one organization per transaction, audited, and only under the maintenance hold.
 7. **Local use.** A compose `observability` profile runs grafana/otel-lgtm.

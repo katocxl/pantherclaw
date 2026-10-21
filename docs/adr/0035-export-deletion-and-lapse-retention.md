@@ -1,6 +1,6 @@
 # ADR-0035 — Export, deletion and retention after a lapsed plan
 
-**Status:** Accepted (2026-10-21; G0 M13 founder decision F2 and coordinator decisions D22 and D34; the [G0 M13 brief](../g0/M13.md) records them). It answers the follow-up "retention after a plan lapses" left by milestone UI ([ADR-0031](0031-hosted-accounts-per-org-plans-and-test-seams.md), D85). Operating procedure: [data-requests.md](../runbooks/data-requests.md).
+**Status:** Accepted (2026-10-21; G0 M13 founder decision F2 and coordinator decisions D22, D34 and D41; the [G0 M13 brief](../g0/M13.md) records them). It answers the follow-up "retention after a plan lapses" left by milestone UI ([ADR-0031](0031-hosted-accounts-per-org-plans-and-test-seams.md), D85). Operating procedure: [data-requests.md](../runbooks/data-requests.md).
 
 **Context.** PN-012.5 requires two things:
 - a tenant-wide export of records and evidence;
@@ -34,9 +34,17 @@ Milestone UI decided that a lapsed plan never turns protection off and that evid
      5. verifies that no rows remain in any organization table.
 5. **The deletion record** (HR-390).
    - It is written in the platform organization's ledger and signed with the receipts key.
-   - It holds the organization, the reason, the requester, the window, start and completion times, per-table counts, the verification result and the date the last backup holding the data expires (at most 60 days, under Object Lock).
+   - It holds the organization, the reason, the requester, the window, start and completion times, per-table counts, the verification result and the date the last backup holding the data expires, from the configured backup retention (`backups.retention_days`, default 60, under Object Lock).
    - The requesting account can fetch it afterwards.
-6. **Account deletion** (HR-394).
+6. **Restores never bring deletions back** (D41).
+   - Organization and account deletions are written in the platform organization's ledger as the tightening kinds `org.deleted` and `account.deleted`.
+   - Their `security_event` lines are shipped off the host and carry the deletion record's digest.
+   - After a restore from an earlier dump, `restore reapply` (HR-384):
+     - sets the organization DELETED again, which fails closed at once;
+     - requeues its deletion;
+     - writes a new deletion record that notes it was re-applied, citing the original record's digest;
+     - pseudonymises deleted accounts again and revokes their sessions.
+7. **Account deletion** (HR-394).
    - A person deletes their own hosted account after a recent sign-in.
    - It is refused while the account is the last org admin of any active organization (`LAST_ADMIN`).
    - Otherwise:

@@ -1,6 +1,6 @@
 # Runbook — Backup and restore
 
-**Milestone:** M13 ([G0 M13](../g0/M13.md) D2, D6, D16, D17, D20, D21, D24–D26, D31; [ADR-0032](../adr/0032-hosted-deployment-kek-custody-and-backups.md); HR-372, HR-373, HR-378, HR-379, HR-383, HR-384, T-171, T-172, R-61). **Audience:** the operator of a hosted or self-hosted deployment. The hosted staging scripts live in the commercial distribution; the steps below are what they do, so a self-hosted operator can follow them by hand. Command flags follow the brief; the M13 exit status records any change.
+**Milestone:** M13 ([G0 M13](../g0/M13.md) D2, D6, D16, D17, D20, D21, D24–D26, D31, D41; [ADR-0032](../adr/0032-hosted-deployment-kek-custody-and-backups.md); HR-372, HR-373, HR-378, HR-379, HR-383, HR-384, T-171, T-172, R-61). **Audience:** the operator of a hosted or self-hosted deployment. The hosted staging scripts live in the commercial distribution; the steps below are what they do, so a self-hosted operator can follow them by hand. Command flags follow the brief; the M13 exit status records any change.
 
 ## 1. Targets
 
@@ -84,11 +84,12 @@ A restored database is the state at the dump's time: everything revoked or conta
 2. Stop the server (all roles) so nothing writes to the damaged database. **Close the gateway port (8443)**: at the firewall and the cloud security list; on staging, Docker-published ports bypass nftables, so bind the gateway port to loopback in the stack's configuration.
 3. Set `maintenance.hold: true` (or `PC_MAINTENANCE_HOLD`) in the server's configuration **before its first start on the restored database** (HR-379; [G0 M13](../g0/M13.md) D26). While the hold is on, no decision is made from any path: gateway control and stream, workload, `Authorize`, hooks, `/sdk`, MCP faces and AuthZEN all refuse `MAINTENANCE_HOLD`, and gateways fail closed. The management API and the operator command line keep working. The start is audited (`platform.maintenance_hold_on`).
 4. Follow §5 steps 1–7, restoring into the database the server will use. Use a new volume, not the damaged one, which you keep for investigation.
-5. **Re-apply every revocation and containment change logged after the dump's time.** The source is the shipped `security_event` log lines ([observability.md](observability.md) §4; HR-383): signing-key, gateway-certificate, API key, credential and grant revocations, disablements, containment and kill-switch changes. Export them as NDJSON from your log store and run:
+5. **Re-apply every revocation and containment change logged after the dump's time.** The source is the shipped `security_event` log lines ([observability.md](observability.md) §4; HR-383): signing-key, gateway-certificate, API key, credential and grant revocations, disablements, containment and kill-switch changes, and organization and account deletions (D41). Export them as NDJSON from your log store and run:
    ```bash
    pantherclaw-server restore reapply --from security-events.ndjson --since <dump time> --confirm --config <file>
    ```
    - It applies only tightening events, idempotently, one organization per transaction.
+   - A deleted organization is set to DELETED again at once and fails closed; its deletion is requeued, and a new deletion record refers to the original. Deleted accounts are pseudonymised again and their sessions revoked ([data-requests.md](data-requests.md) §5).
    - It is audited as `restore.reapplied`.
    - It refuses unless the hold is on, and it reports unknown kinds (HR-384).
    - Without `--confirm` nothing changes.

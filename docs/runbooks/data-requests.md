@@ -24,7 +24,7 @@
    3. it destroys the organization's encryption keys;
    4. it reduces the organization record to a tombstone;
    5. it verifies that no rows remain.
-5. **The deletion record** (HR-390) is signed with the receipts key and kept in the platform organization's ledger. It holds the organization, the reason, the requester, the window, the times, the per-table counts, the verification result, and the date the last backup holding the data expires (at most 60 days, under Object Lock). The requesting account can fetch it with `GetDeletionRecord`.
+5. **The deletion record** (HR-390) is signed with the receipts key and kept in the platform organization's ledger. It holds the organization, the reason, the requester, the window, the times, the per-table counts, the verification result, and the date the last backup holding the data expires, from the configured backup retention (`backups.retention_days`, default 60, under Object Lock). The requesting account can fetch it with `GetDeletionRecord`.
 
 ## 3. Lapsed plans (hosted)
 
@@ -51,5 +51,12 @@ Operator checks: the daily lapse job sends at most one reminder per organization
 
 ## 5. If something goes wrong
 
-- **A deletion you did not expect:** any org admin can cancel it during the window. After the window, the organization cannot be restored from the database. A backup restore brings it back only for the whole deployment, and only within the backup's retention ([backup-restore.md](backup-restore.md)). Treat an unexpected request as an incident (T-176).
+- **A deletion you did not expect:** any org admin can cancel it during the window. After the window, the organization cannot be brought back. Treat an unexpected request as an incident (T-176).
+- **A database restore after a deletion** (operator; D41). A restore from a dump taken before the deletion brings the organization back in the restored copy. But deletions are `security_event` kinds (`org.deleted`, `account.deleted`), so `restore reapply` performs them again:
+  - the organization is set to DELETED at once and fails closed;
+  - its deletion is requeued;
+  - a new deletion record notes "re-applied after restore" with the original record's digest;
+  - deleted accounts are pseudonymised again and their sessions revoked.
+
+  This is part of the restore procedure ([backup-restore.md](backup-restore.md) §7). Do not lift the maintenance hold until it has run.
 - **A deletion job that stops:** the organization stays DELETED and keeps failing closed. The job resumes on retry; the deletion record is written only once verification succeeds.

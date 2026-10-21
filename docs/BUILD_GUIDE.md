@@ -679,7 +679,7 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Onboarding** pulled from M13 (F322, F325, F335 UI part, F336, F341): resumable steps computed on the server from real records (`OnboardingService.GetProgress`; HR-362..364), from sign-in to a first protected path, guided first tests and validation; the 30-minute target is measured on the hosted flow.
 - **Website and interactive demo** (PN-025), in the commercial distribution: a static website and an interactive demo of the real console on simulated data in the browser, on its own origin with no sign-up, no cookies and no API.
 - **Pulled from M13:** PN-012.2 (per-organization entitlements and plan limits), PN-012.3 (invitations accepted in the browser), F322, F325, F335 (UI part), F336, F341. **Stays in M13:** hosted staging and production infrastructure, backups and the DR drill, rate limits and quotas, support access, data export and deletion, the Helm chart, the FIPS build, post-quantum TLS, SLOs under load, Schemathesis, the threat-model refresh (G4), the docs site and the OpenTelemetry exporter.
-- Migrations `00160`–`00164`, the last one `pc.billing_links` (server-recorded checkouts and subscriptions, one current subscription per organization) (`00165`–`00169` spare).
+- Migrations `00160`–`00164`, the last one `pc.billing_links` (server-recorded checkouts and subscriptions, one current subscription per organization) (`00165`–`00168` spare; `00169` became M13's platform migration, G0 M13 D40).
 
 ---
 
