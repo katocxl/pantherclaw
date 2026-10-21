@@ -573,6 +573,14 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if onStart != nil && cfg.Role == RoleAll {
 			onStart(apiAddr)
 		}
+		// Role worker: /livez and /readyz on the health listener (HR-397).
+		healthAddr, err := serveHealth(ctx, g, cfg, pool, workers, log)
+		if err != nil {
+			return err
+		}
+		if onStart != nil && healthAddr != "" {
+			onStart(healthAddr)
+		}
 		g.Go(func() error {
 			<-ctx.Done()
 			sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownGrace)

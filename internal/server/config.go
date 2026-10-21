@@ -38,9 +38,11 @@ type Config struct {
 	Deployment string `json:"deployment" env:"PC_DEPLOYMENT"`
 	// Maintenance is the operator's maintenance hold (wiring_m13_platform.go).
 	Maintenance MaintenanceConfig `json:"maintenance"`
-	Log         LogConfig         `json:"log"`
-	HTTP        HTTPConfig        `json:"http"`
-	DB          DBConfig          `json:"database"`
+	// Health is the worker role's health listener (wiring_m13_install.go).
+	Health HealthConfig `json:"health"`
+	Log    LogConfig    `json:"log"`
+	HTTP   HTTPConfig   `json:"http"`
+	DB     DBConfig     `json:"database"`
 	// KEKFiles are key-encryption-key files; the first wraps new keys.
 	KEKFiles    []string `json:"kek_files" env:"PC_KEK_FILES"`
 	LicenceFile string   `json:"licence_file" env:"PC_LICENCE_FILE"`
@@ -183,6 +185,7 @@ func (c *Config) Validate() error {
 		errs = append(errs, errors.New("worker_concurrency must be 1..1000"))
 	}
 	errs = append(errs, c.validateDeployment()...)
+	errs = append(errs, c.validateHealth()...)
 	errs = append(errs, c.validateTenancy()...)
 	errs = append(errs, c.validateAuthority()...)
 	errs = append(errs, c.validateAuth()...)
