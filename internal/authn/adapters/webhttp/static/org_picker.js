@@ -7,10 +7,12 @@
 "use strict";
 
 // sameOrigin is the client side of the server's return-path rule: a path
-// on this origin, never "//" (another host) and never a backslash, which
-// browsers may read as a slash.
+// on this origin, never "//" (another host), never a backslash, which
+// browsers may read as a slash, and never a control character (C0 or DEL;
+// browsers drop tab, CR and LF from URLs, which can join "/" and "/").
 function sameOrigin(p, prefix) {
-  return typeof p === "string" && p.startsWith(prefix) && !p.startsWith("//") && !p.includes("\\");
+  return typeof p === "string" && p.startsWith(prefix) && !p.startsWith("//") && !p.includes("\\") &&
+    !/[\u0000-\u001f\u007f]/.test(p);
 }
 
 async function post(path) {

@@ -69,16 +69,30 @@ func (w world) ctx() context.Context {
 // instance, a run and one transaction per decision; it returns the agent.
 func (f *fixture) agent(t *testing.T, w world, simulated bool, decisions ...string) ids.UUID {
 	t.Helper()
+	return f.agentWith(t, w, sim{agent: simulated, run: simulated, txn: simulated}, decisions...)
+}
+
+// sim says which records are simulated: the agent (a range agent), its
+// run, its transactions. revoked leaves the instance revoked, so only the
+// run shows it was admitted.
+type sim struct{ agent, run, txn, revoked bool }
+
+func (f *fixture) agentWith(t *testing.T, w world, s sim, decisions ...string) ids.UUID {
+	t.Helper()
 	f.n++
 	agent, inst, run := ids.NewV7(), ids.NewV7(), ids.NewV7()
 	f.exec(t, w.org, `INSERT INTO pc.agents (org_id, id, name, state, created_by, range_agent) VALUES ($1, $2, $3, 'DISCOVERED', 'test', $4)`,
-		w.org, agent, fmt.Sprintf("agent-%d", f.n), simulated)
+		w.org, agent, fmt.Sprintf("agent-%d", f.n), s.agent)
 	jkt := strings.Repeat("A", 42) + string(rune('a'+f.n))
+	state := "ADMITTED"
+	if s.revoked {
+		state = "REVOKED"
+	}
 	f.exec(t, w.org, `INSERT INTO pc.agent_instances (org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, decided_at)
-		VALUES ($1, $2, $3, $4, '{}', 'ADMITTED', 'discovery', now())`, w.org, inst, agent, jkt)
+		VALUES ($1, $2, $3, $4, '{}', $5, 'discovery', now())`, w.org, inst, agent, jkt, state)
 	f.exec(t, w.org, `INSERT INTO pc.runs (org_id, id, agent_id, instance_id, environment_id, principal_source, expires_at, simulated,
 		launcher_user_id, principal_user_id)
-		VALUES ($1, $2, $3, $4, $5, 'launcher', now() + interval '1 hour', $6, $7, $7)`, w.org, run, agent, inst, w.env, simulated, w.user)
+		VALUES ($1, $2, $3, $4, $5, 'launcher', now() + interval '1 hour', $6, $7, $7)`, w.org, run, agent, inst, w.env, s.run, w.user)
 	grant := ids.NewV7()
 	f.exec(t, w.org, `INSERT INTO pc.grants (org_id, id, agent_id, principal_user_id, environment_id, depth, current_revision, grantor_kind,
 		grantor_id, basis) VALUES ($1, $2, $3, $4, $5, 0, 1, 'user', $4, 'test')`, w.org, grant, agent, w.user, w.env)
@@ -87,7 +101,7 @@ func (f *fixture) agent(t *testing.T, w world, simulated bool, decisions ...stri
 		txn := ids.NewV7()
 		f.exec(t, w.org, `INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code,
 			gateway_id, simulated, state) VALUES ($1, $2, $3, $4, $5, 'test.op', $6, 'TEST', 'gw', $7, 'OPEN')`,
-			w.org, txn, run, ids.NewV7(), h[:], d, simulated)
+			w.org, txn, run, ids.NewV7(), h[:], d, s.txn)
 		if d == "REQUIRE_APPROVAL" {
 			// A hold opens an approval request for the transaction.
 			b := sha256.Sum256(txn[:])
@@ -152,6 +166,69 @@ func TestHR364_SimulatedRecordsNeverCompleteAStep(t *testing.T) {
 	for _, id := range []onboarding.StepID{onboarding.StepSecurityKey, onboarding.StepInviteTeam, onboarding.StepGatewayEnrolled, onboarding.StepApprovalDecided} {
 		if got[id].Done() {
 			t.Errorf("%s done without its record", id)
+		}
+	}
+}
+
+// TestHR364_EachSimulationFilterHoldsOnItsOwn: one vector per filter, each
+// in its own org, so dropping any single filter fails here — a range agent
+// with real runs and transactions, a simulated run of a real agent, a
+// simulated transaction in a real run, and an instance.admitted change of a
+// range agent.
+func TestHR364_EachSimulationFilterHoldsOnItsOwn(t *testing.T) {
+	f := &fixture{d: dbtest.New(t)}
+	f.pool = f.d.AppPool(t)
+	s := onboarding.New(f.pool)
+	decisionSteps := []onboarding.StepID{onboarding.StepFirstDecision, onboarding.StepTestAllowed, onboarding.StepTestDenied, onboarding.StepTestHeld}
+	all := append([]onboarding.StepID{onboarding.StepAgentEnrolled, onboarding.StepSuspensionTested}, decisionSteps...)
+	for name, tc := range map[string]struct {
+		s       sim
+		notDone []onboarding.StepID
+	}{
+		"range agent only": {sim{agent: true}, all},
+		// The instance is revoked, so only the simulated run could show
+		// an admission.
+		"simulated run only":         {sim{run: true, revoked: true}, append([]onboarding.StepID{onboarding.StepAgentEnrolled}, decisionSteps...)},
+		"simulated transaction only": {sim{txn: true}, decisionSteps},
+	} {
+		w := f.world(t)
+		f.agentWith(t, w, tc.s, "ALLOW", "DENY", "REQUIRE_APPROVAL")
+		got := progress(t, s, w)
+		for _, id := range tc.notDone {
+			if got[id].Done() {
+				t.Errorf("%s: %s done: %+v", name, id, got[id].Evidence)
+			}
+		}
+	}
+	w := f.world(t)
+	ranged := ids.NewV7()
+	f.exec(t, w.org, `INSERT INTO pc.agents (org_id, id, name, state, created_by, range_agent) VALUES ($1, $2, 'ranged', 'DISCOVERED', 'test', true)`, w.org, ranged)
+	f.exec(t, w.org, `INSERT INTO pc.agent_changes (org_id, id, agent_id, kind, actor, reason) VALUES ($1, $2, $3, 'instance.admitted', 'test', 'test')`,
+		w.org, ids.NewV7(), ranged)
+	if st := progress(t, s, w)[onboarding.StepAgentEnrolled]; st.Done() {
+		t.Errorf("a range agent's instance.admitted change: %+v", st.Evidence)
+	}
+}
+
+// TestHR362_AHeldActionIsNotTheAllowedOrDeniedTest (D98): an approved hold
+// that became ALLOW, or a declined one that became DENY, does not complete
+// TEST_ALLOWED or TEST_DENIED; FIRST_DECISION still counts it.
+func TestHR362_AHeldActionIsNotTheAllowedOrDeniedTest(t *testing.T) {
+	f := &fixture{d: dbtest.New(t)}
+	f.pool = f.d.AppPool(t)
+	s := onboarding.New(f.pool)
+	for _, final := range []string{"ALLOW", "DENY"} {
+		w := f.world(t)
+		f.agent(t, w, false, "REQUIRE_APPROVAL")
+		f.d.AdminExec(t, "UPDATE pc.transactions SET decision = $2, state = 'FINAL' WHERE org_id = $1", w.org, final)
+		got := progress(t, s, w)
+		if got[onboarding.StepTestAllowed].Done() || got[onboarding.StepTestDenied].Done() {
+			t.Errorf("a hold finalized as %s completed a test step: allowed %+v, denied %+v", final,
+				got[onboarding.StepTestAllowed], got[onboarding.StepTestDenied])
+		}
+		if !got[onboarding.StepFirstDecision].Done() || !got[onboarding.StepTestHeld].Done() {
+			t.Errorf("a hold finalized as %s: first decision %+v, held %+v", final,
+				got[onboarding.StepFirstDecision], got[onboarding.StepTestHeld])
 		}
 	}
 }
