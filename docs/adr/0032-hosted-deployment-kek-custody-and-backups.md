@@ -15,8 +15,8 @@
 **Paid host (later; not built in M13).** Researched on 2026-10-21 and kept as the target once there is a budget: an application host that passes raw TCP so the server terminates TLS and mTLS itself (for example Fly.io without HTTP handlers, which then needs the PROXY protocol to see client addresses), a managed Postgres with direct session connections for River (LISTEN and session advisory locks) and point-in-time recovery (RPO ≤ 5 min, RTO ≤ 4 h; ≤ 24 h for a rebuild after losing the provider), never connecting as the database owner role so RLS stays forced; a KMS-wrapped KEK reached through the host's workload identity, with the offline escrow kept; nightly encrypted dumps to a second provider with object lock; OpenTofu with encrypted state for the database, DNS and KMS. Each of these is a follow-up of the M13 brief.
 
 **Consequences.**
-- Staging costs nothing and is a single point of failure: losing the VM is a fail-closed outage until a rebuild from the latest dump, and up to 24 hours of staging data can be lost (a residual risk recorded at the G4 refresh).
-- The KEK is protected by file permissions and disk encryption rather than a KMS; its compromise needs root on the VM.
+- Staging costs nothing and is a single point of failure: losing the VM is a fail-closed outage until a rebuild from the latest dump, and up to 24 hours of staging data can be lost (R-56).
+- The KEK is protected by file permissions and disk encryption rather than a KMS; its compromise needs root on the VM (R-57).
 - The same image, configuration and runbooks move to a paid host by configuration; only the provisioning scripts differ.
 
 **Alternatives.** Free platforms that terminate TLS in front of the application (no client certificates reach the server, so gateways cannot use mTLS); a self-run OpenBao for the KEK (too heavy for one VM); storing the KEK with the backups (one leak would expose both); no backups until production (the restore procedure would be untested at v1.0).

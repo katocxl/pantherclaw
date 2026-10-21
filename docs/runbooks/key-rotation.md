@@ -111,7 +111,7 @@ pantherclaw-server keys rotate-evidence --confirm --config server.json   # check
 1. Each command creates a new active key and retires the previous one (`not_after` = now). New receipts or evidence are signed with the new key at once; there is no overlap period in which both sign.
 2. The retired public key **stays published** in `/.well-known/pantherclaw/evidence-keys.json` and is accepted for verification of everything it signed while it was active, for as long as that evidence is kept (§7).
 3. Each rotation is audited with the actor `cli:<user>@<host>`. Without `--confirm` nothing changes.
-4. **Tell users to refresh their trust file** (`pclaw evidence trust`) and give them the new fingerprint through another channel than the deployment itself (§7). A trust file pinned before the rotation fails the new key's signatures.
+4. **Tell users to refresh their trust file** (`pclaw evidence trust`) and give them the new fingerprint through another channel than the deployment itself (§7). Every verifier that keeps a saved trust bundle (a `pclaw evidence trust` file, an offline verifier, a CI gate with a pinned file) must refresh it after a rotation: a trust file pinned before the rotation fails the new key's signatures. Receipts and evidence signed before the rotation keep verifying, with old and refreshed trust files alike, because the retired key stays published (HR-372).
 5. Rotation is not revocation: on suspicion of compromise, revoke the key as in §7 and treat it as an incident.
 
 ### 8.2 Raise every organization's epoch after a restore
