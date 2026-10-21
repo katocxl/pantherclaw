@@ -7,10 +7,14 @@
 -- once. Its sessions end with the reason ACCOUNT_DELETED and the deletion
 -- is an account event. Its users in each org are disabled and
 -- pseudonymised by the server through the existing column grants.
+--
+-- The accounts tables are small (one row per person, their sessions and
+-- events), so their constraints are checked at once.
 
 -- +goose Up
 ALTER TABLE pc.accounts
     ADD COLUMN deleted_at timestamptz,
+    -- squawk-ignore constraint-missing-not-valid
     ADD CONSTRAINT accounts_deleted_scrubbed CHECK (deleted_at IS NULL OR (email = '' AND display_name = ''
                                                                             AND NOT email_verified));
 
@@ -34,10 +38,12 @@ GRANT UPDATE (deleted_at) ON pc.accounts TO pc_app;
 
 ALTER TABLE pc.account_sessions
     DROP CONSTRAINT account_sessions_end_reason_check,
+    -- squawk-ignore constraint-missing-not-valid
     ADD CONSTRAINT account_sessions_end_reason_check CHECK (end_reason IS NULL OR end_reason IN
         ('LOGOUT', 'REVOKED', 'IDLE', 'EXPIRED', 'REUSE', 'SESSION_LIMIT', 'ORG_SELECTED', 'ACCOUNT_DELETED'));
 ALTER TABLE pc.account_events
     DROP CONSTRAINT account_events_kind_check,
+    -- squawk-ignore constraint-missing-not-valid
     ADD CONSTRAINT account_events_kind_check CHECK (kind IN ('SIGNED_IN', 'SESSION_STARTED', 'SESSION_ENDED',
         'ORG_CREATED', 'ORG_CREATE_REFUSED', 'INVITATION_ACCEPTED', 'INVITATION_REFUSED', 'ACCOUNT_DELETED'));
 

@@ -27,8 +27,11 @@
 -- when backups may still hold it.
 
 -- +goose Up
+-- The new column is NULL in every row, so the check holds at once; orgs is
+-- a small table.
 ALTER TABLE pc.orgs
     ADD COLUMN deleted_at timestamptz,
+    -- squawk-ignore constraint-missing-not-valid
     ADD CONSTRAINT orgs_deleted CHECK (state = 'DELETED' OR deleted_at IS NULL);
 
 -- +goose StatementBegin
