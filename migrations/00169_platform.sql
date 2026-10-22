@@ -51,7 +51,7 @@ BEGIN
     IF found IS DISTINCT FROM ARRAY['account_memberships', 'billing_link_lookup', 'budget_settle', 'checkpoints_due',
                                     'coverage_reassess', 'integrity_due', 'ledger_unchained', 'orgs', 'permits_sweep',
                                     'policy_rollouts_due', 'retention_due', 'verifications_due'] THEN
-        RAISE EXCEPTION '00180_platform: pc.cross_org_list has purposes %; carry the new ones into this migration', found;
+        RAISE EXCEPTION '00169_platform: pc.cross_org_list has purposes %; carry the new ones into this migration', found;
     END IF;
 END
 $$;
