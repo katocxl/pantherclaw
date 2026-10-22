@@ -313,8 +313,10 @@ func TestHR386_ApprovalNeedsAnOrgAdminsStepUpAndNeverTheRequester(t *testing.T) 
 	if _, _, err := f.svc.Decide(f.adminCtx(), r.ID, true, fresh(f.twinKey)); !errors.Is(err, stepup.ErrStepUp) {
 		t.Fatalf("another person's key: %v", err)
 	}
-	svcCaller := tapp.Caller{Subject: td.Subject{Org: f.custOrg, Principal: td.PrincipalRef{Kind: td.KindServiceAccount, ID: f.service},
-		Bindings: []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: f.custOrg.UUID()}}}}}
+	svcCaller := tapp.Caller{Subject: td.Subject{
+		Org: f.custOrg, Principal: td.PrincipalRef{Kind: td.KindServiceAccount, ID: f.service},
+		Bindings: []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: f.custOrg.UUID()}}},
+	}}
 	if _, _, err := f.svc.Decide(f.as(svcCaller), r.ID, true, fresh(f.adminKey)); !errors.Is(err, support.ErrHuman) {
 		t.Fatalf("service account: %v", err)
 	}

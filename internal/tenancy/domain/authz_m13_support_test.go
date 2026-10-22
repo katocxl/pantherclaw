@@ -58,8 +58,10 @@ func TestHR387_SupportRolesOnlyReadAndAreNeverBindable(t *testing.T) {
 	if sup.Human() || !sup.Person() {
 		t.Error("a support subject is a person only for human-only checks")
 	}
-	for _, p := range []domain.Permission{domain.PermUserManage, domain.PermApprovalRespond, domain.PermCredentialSeal,
-		domain.PermEvidenceExport, domain.PermSupportManage, domain.PermContainmentKillSwitch} {
+	for _, p := range []domain.Permission{
+		domain.PermUserManage, domain.PermApprovalRespond, domain.PermCredentialSeal,
+		domain.PermEvidenceExport, domain.PermSupportManage, domain.PermContainmentKillSwitch,
+	} {
 		if sup.CanAnywhere(p) {
 			t.Errorf("a support subject holds %s", p)
 		}
