@@ -61,7 +61,7 @@ func TestHR370_SchemaInfoRecordsTheAppliedVersion(t *testing.T) {
 	if st, err := app.CheckSchema(ctx); err != nil || st != db.SchemaCurrent {
 		t.Errorf("after migrate up: CheckSchema = %v, %v, want current", st, err)
 	}
-	// A database migrated before 00180 has no pc.schema_info: nothing is
+	// A database migrated before 00169 has no pc.schema_info: nothing is
 	// recorded, so the schema is pending, never an error (D24).
 	d.AdminExec(t, "DROP TABLE pc.schema_info")
 	if v, ok, err := app.SchemaVersion(ctx); err != nil || ok || v != 0 {

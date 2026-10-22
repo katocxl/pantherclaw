@@ -73,7 +73,7 @@ func TestHR370_ReadyzRequiresDBSchemaAndWorkers(t *testing.T) {
 	d.AdminExec(t, "DELETE FROM pc.schema_info")
 	check("no schema row", rd, http.StatusServiceUnavailable, `{"ready":false,"checks":{"db":"ok","schema":"fail","workers":"ok","hold":"ok"}}`)
 
-	// A database migrated before 00180 has no pc.schema_info (D24).
+	// A database migrated before 00169 has no pc.schema_info (D24).
 	d.AdminExec(t, "DROP TABLE pc.schema_info")
 	check("no schema table", rd, http.StatusServiceUnavailable, `{"ready":false,"checks":{"db":"ok","schema":"fail","workers":"ok","hold":"ok"}}`)
 	for dep, want := range map[string]error{"": nil, "staging": errSchemaPending, "production": errSchemaPending} {
