@@ -83,6 +83,12 @@ func InsertAction(ctx context.Context, tx db.TenantTx, org ids.OrgID, a Action) 
 // the containment epoch (HR-248), and records the new epoch on the action.
 // expires may be nil.
 func AddControl(ctx context.Context, tx db.TenantTx, org ids.OrgID, a Action, expires *time.Time) (Added, error) {
+	return AddControlWithID(ctx, tx, org, a, ids.NewV7(), expires)
+}
+
+// AddControlWithID preserves a shipped control's identity during a held
+// restore. The caller validates its metadata and checks for prior replay.
+func AddControlWithID(ctx context.Context, tx db.TenantTx, org ids.OrgID, a Action, controlID ids.UUID, expires *time.Time) (Added, error) {
 	if a.Kind != rdomain.KindContain {
 		return Added{}, fmt.Errorf("pgresponse: a control comes from a CONTAIN action, not %s", a.Kind)
 	}
@@ -99,7 +105,7 @@ func AddControl(ctx context.Context, tx db.TenantTx, org ids.OrgID, a Action, ex
 	if _, err := InsertAction(ctx, tx, org, a); err != nil {
 		return Added{}, err
 	}
-	out := Added{ActionID: a.ID, ControlID: ids.NewV7()}
+	out := Added{ActionID: a.ID, ControlID: controlID}
 	at, err := q.InsertContainmentControl(ctx, dbq.InsertContainmentControlParams{
 		OrgID: org, ID: out.ControlID, ActionID: a.ID, ScopeType: a.ScopeType, ScopeID: a.ScopeID, Control: a.Control,
 		Operation: opt(a.Operation), Reason: a.Reason, CaseID: a.CaseID, IncidentID: a.IncidentID, CreatedBy: a.Actor,
