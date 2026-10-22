@@ -73,8 +73,10 @@ func TestHR204_GitHubAppContent(t *testing.T) {
 	// A 1024-bit key cannot even be generated in FIPS 140-only mode (task
 	// test:fips); everywhere else the short key must be refused.
 	if short, err := rsa.GenerateKey(rand.Reader, 1024); err == nil {
-		bad["short key"] = domain.GitHubApp{V: 1, Issuer: "1", Installation: 7, Account: "acme",
-			PrivateKey: pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(short)})}
+		bad["short key"] = domain.GitHubApp{
+			V: 1, Issuer: "1", Installation: 7, Account: "acme",
+			PrivateKey: pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(short)}),
+		}
 	} else if !fips140.Enabled() {
 		t.Fatal(err)
 	}

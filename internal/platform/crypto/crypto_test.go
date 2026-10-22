@@ -312,8 +312,10 @@ func testSealOpen(t *testing.T, suite SealSuite) {
 			t.Errorf("%s: err = %v, want ErrDecrypt", name, err)
 		}
 	}
-	for name, b := range map[string][]byte{"empty": nil, "bad version": {0x09, 0, 0}, "short enc": {0x01, 0xff, 0xff, 1},
-		"short v2 enc": {0x02, 0x00, 0x50, 0xff, 0xff, 1}, "unknown suite": {0x02, 0x00, 0x20, 0, 0}} {
+	for name, b := range map[string][]byte{
+		"empty": nil, "bad version": {0x09, 0, 0}, "short enc": {0x01, 0xff, 0xff, 1},
+		"short v2 enc": {0x02, 0x00, 0x50, 0xff, 0xff, 1}, "unknown suite": {0x02, 0x00, 0x20, 0, 0},
+	} {
 		if _, err := Open(priv, info, nil, b); !errors.Is(err, ErrSealedFormat) {
 			t.Errorf("%s: err = %v, want ErrSealedFormat", name, err)
 		}

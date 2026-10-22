@@ -134,7 +134,7 @@ func TestHR395_AClassicalOnlyPeerCannotJoinAComponentLink(t *testing.T) {
 	}
 
 	// The refusal is ErrClassicalKeyExchange even when the group list
-	// itself would let a classical group through (defence in depth).
+	// itself would let a classical group through (defense in depth).
 	loose := ComponentLinkTLS(&tls.Config{RootCAs: pool, ServerName: "127.0.0.1"}, "test-loose", log)
 	loose.CurvePreferences = []tls.CurveID{tls.CurveP256} // P-256: allowed in FIPS mode too
 	if _, _, cerr := handshake(t, classicalServer, loose); !errors.Is(cerr, ErrClassicalKeyExchange) {
