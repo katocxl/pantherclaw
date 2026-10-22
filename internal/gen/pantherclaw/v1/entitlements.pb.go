@@ -332,9 +332,18 @@ type Entitlements struct {
 	// Source.
 	Source PlanSource `protobuf:"varint,8,opt,name=source,proto3,enum=pantherclaw.v1.PlanSource" json:"source,omitempty"`
 	// Usage.
-	Usage         *PlanUsage `protobuf:"bytes,9,opt,name=usage,proto3" json:"usage,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Usage *PlanUsage `protobuf:"bytes,9,opt,name=usage,proto3" json:"usage,omitempty"`
+	// When the plan lapsed (LAPSED, PAUSED, or CANCELED past its period
+	// end, without a comp plan in force); unset while it has not (G0 M13
+	// D34, F2). Reminders go out on days 0, 30, 60 and 83 after it.
+	LapsedAt *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=lapsed_at,json=lapsedAt,proto3" json:"lapsed_at,omitempty"`
+	// When the org is deleted: the pending deletion's execute time, else
+	// lapsed_at + 90 days; unset when neither applies.
+	DeletionDueAt *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=deletion_due_at,json=deletionDueAt,proto3" json:"deletion_due_at,omitempty"`
+	// The org's open deletion request, if any.
+	PendingDeletion *PendingDeletion `protobuf:"bytes,12,opt,name=pending_deletion,json=pendingDeletion,proto3" json:"pending_deletion,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Entitlements) Reset() {
@@ -430,6 +439,100 @@ func (x *Entitlements) GetUsage() *PlanUsage {
 	return nil
 }
 
+func (x *Entitlements) GetLapsedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LapsedAt
+	}
+	return nil
+}
+
+func (x *Entitlements) GetDeletionDueAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DeletionDueAt
+	}
+	return nil
+}
+
+func (x *Entitlements) GetPendingDeletion() *PendingDeletion {
+	if x != nil {
+		return x.PendingDeletion
+	}
+	return nil
+}
+
+// PendingDeletion is an org's open deletion request (G0 M13 D34).
+type PendingDeletion struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// When it was requested.
+	RequestedAt *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=requested_at,json=requestedAt,proto3" json:"requested_at,omitempty"`
+	// When the deletion runs (the end of its cancellation window).
+	ExecuteAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=execute_at,json=executeAt,proto3" json:"execute_at,omitempty"`
+	// Why.
+	Reason DeletionReason `protobuf:"varint,3,opt,name=reason,proto3,enum=pantherclaw.v1.DeletionReason" json:"reason,omitempty"`
+	// Whether an org admin can still cancel it (inside its window).
+	Cancellable   bool `protobuf:"varint,4,opt,name=cancellable,proto3" json:"cancellable,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PendingDeletion) Reset() {
+	*x = PendingDeletion{}
+	mi := &file_pantherclaw_v1_entitlements_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PendingDeletion) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PendingDeletion) ProtoMessage() {}
+
+func (x *PendingDeletion) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_entitlements_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PendingDeletion.ProtoReflect.Descriptor instead.
+func (*PendingDeletion) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_entitlements_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *PendingDeletion) GetRequestedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RequestedAt
+	}
+	return nil
+}
+
+func (x *PendingDeletion) GetExecuteAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExecuteAt
+	}
+	return nil
+}
+
+func (x *PendingDeletion) GetReason() DeletionReason {
+	if x != nil {
+		return x.Reason
+	}
+	return DeletionReason_DELETION_REASON_UNSPECIFIED
+}
+
+func (x *PendingDeletion) GetCancellable() bool {
+	if x != nil {
+		return x.Cancellable
+	}
+	return false
+}
+
 // GetEntitlementsRequest asks for the caller's org's plan.
 type GetEntitlementsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -439,7 +542,7 @@ type GetEntitlementsRequest struct {
 
 func (x *GetEntitlementsRequest) Reset() {
 	*x = GetEntitlementsRequest{}
-	mi := &file_pantherclaw_v1_entitlements_proto_msgTypes[3]
+	mi := &file_pantherclaw_v1_entitlements_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -451,7 +554,7 @@ func (x *GetEntitlementsRequest) String() string {
 func (*GetEntitlementsRequest) ProtoMessage() {}
 
 func (x *GetEntitlementsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_entitlements_proto_msgTypes[3]
+	mi := &file_pantherclaw_v1_entitlements_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -464,7 +567,7 @@ func (x *GetEntitlementsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEntitlementsRequest.ProtoReflect.Descriptor instead.
 func (*GetEntitlementsRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_entitlements_proto_rawDescGZIP(), []int{3}
+	return file_pantherclaw_v1_entitlements_proto_rawDescGZIP(), []int{4}
 }
 
 // GetEntitlementsResponse returns it.
@@ -478,7 +581,7 @@ type GetEntitlementsResponse struct {
 
 func (x *GetEntitlementsResponse) Reset() {
 	*x = GetEntitlementsResponse{}
-	mi := &file_pantherclaw_v1_entitlements_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_entitlements_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -490,7 +593,7 @@ func (x *GetEntitlementsResponse) String() string {
 func (*GetEntitlementsResponse) ProtoMessage() {}
 
 func (x *GetEntitlementsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_entitlements_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_entitlements_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -503,7 +606,7 @@ func (x *GetEntitlementsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEntitlementsResponse.ProtoReflect.Descriptor instead.
 func (*GetEntitlementsResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_entitlements_proto_rawDescGZIP(), []int{4}
+	return file_pantherclaw_v1_entitlements_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetEntitlementsResponse) GetEntitlements() *Entitlements {
@@ -517,7 +620,7 @@ var File_pantherclaw_v1_entitlements_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_entitlements_proto_rawDesc = "" +
 	"\n" +
-	"!pantherclaw/v1/entitlements.proto\x12\x0epantherclaw.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcd\x01\n" +
+	"!pantherclaw/v1/entitlements.proto\x12\x0epantherclaw.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a!pantherclaw/v1/datarequests.proto\"\xcd\x01\n" +
 	"\n" +
 	"PlanLimits\x12\x1d\n" +
 	"\n" +
@@ -530,7 +633,7 @@ const file_pantherclaw_v1_entitlements_proto_rawDesc = "" +
 	"\tPlanUsage\x12\x16\n" +
 	"\x06agents\x18\x01 \x01(\x05R\x06agents\x12\"\n" +
 	"\fenvironments\x18\x02 \x01(\x05R\fenvironments\x12\x18\n" +
-	"\amembers\x18\x03 \x01(\x05R\amembers\"\xa0\x03\n" +
+	"\amembers\x18\x03 \x01(\x05R\amembers\"\xe9\x04\n" +
 	"\fEntitlements\x12\x17\n" +
 	"\aplan_id\x18\x01 \x01(\tR\x06planId\x12\x18\n" +
 	"\aedition\x18\x02 \x01(\tR\aedition\x122\n" +
@@ -542,7 +645,17 @@ const file_pantherclaw_v1_entitlements_proto_rawDesc = "" +
 	"\n" +
 	"comp_until\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcompUntil\x122\n" +
 	"\x06source\x18\b \x01(\x0e2\x1a.pantherclaw.v1.PlanSourceR\x06source\x12/\n" +
-	"\x05usage\x18\t \x01(\v2\x19.pantherclaw.v1.PlanUsageR\x05usage\"\x18\n" +
+	"\x05usage\x18\t \x01(\v2\x19.pantherclaw.v1.PlanUsageR\x05usage\x127\n" +
+	"\tlapsed_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\blapsedAt\x12B\n" +
+	"\x0fdeletion_due_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\rdeletionDueAt\x12J\n" +
+	"\x10pending_deletion\x18\f \x01(\v2\x1f.pantherclaw.v1.PendingDeletionR\x0fpendingDeletion\"\xe5\x01\n" +
+	"\x0fPendingDeletion\x12=\n" +
+	"\frequested_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vrequestedAt\x129\n" +
+	"\n" +
+	"execute_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texecuteAt\x126\n" +
+	"\x06reason\x18\x03 \x01(\x0e2\x1e.pantherclaw.v1.DeletionReasonR\x06reason\x12 \n" +
+	"\vcancellable\x18\x04 \x01(\bR\vcancellable\"\x18\n" +
 	"\x16GetEntitlementsRequest\"[\n" +
 	"\x17GetEntitlementsResponse\x12@\n" +
 	"\fentitlements\x18\x01 \x01(\v2\x1c.pantherclaw.v1.EntitlementsR\fentitlements*\x80\x02\n" +
@@ -582,32 +695,40 @@ func file_pantherclaw_v1_entitlements_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_entitlements_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_pantherclaw_v1_entitlements_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_pantherclaw_v1_entitlements_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_pantherclaw_v1_entitlements_proto_goTypes = []any{
 	(PlanStatus)(0),                 // 0: pantherclaw.v1.PlanStatus
 	(PlanSource)(0),                 // 1: pantherclaw.v1.PlanSource
 	(*PlanLimits)(nil),              // 2: pantherclaw.v1.PlanLimits
 	(*PlanUsage)(nil),               // 3: pantherclaw.v1.PlanUsage
 	(*Entitlements)(nil),            // 4: pantherclaw.v1.Entitlements
-	(*GetEntitlementsRequest)(nil),  // 5: pantherclaw.v1.GetEntitlementsRequest
-	(*GetEntitlementsResponse)(nil), // 6: pantherclaw.v1.GetEntitlementsResponse
-	(*timestamppb.Timestamp)(nil),   // 7: google.protobuf.Timestamp
+	(*PendingDeletion)(nil),         // 5: pantherclaw.v1.PendingDeletion
+	(*GetEntitlementsRequest)(nil),  // 6: pantherclaw.v1.GetEntitlementsRequest
+	(*GetEntitlementsResponse)(nil), // 7: pantherclaw.v1.GetEntitlementsResponse
+	(*timestamppb.Timestamp)(nil),   // 8: google.protobuf.Timestamp
+	(DeletionReason)(0),             // 9: pantherclaw.v1.DeletionReason
 }
 var file_pantherclaw_v1_entitlements_proto_depIdxs = []int32{
-	0, // 0: pantherclaw.v1.Entitlements.status:type_name -> pantherclaw.v1.PlanStatus
-	2, // 1: pantherclaw.v1.Entitlements.limits:type_name -> pantherclaw.v1.PlanLimits
-	7, // 2: pantherclaw.v1.Entitlements.period_end:type_name -> google.protobuf.Timestamp
-	7, // 3: pantherclaw.v1.Entitlements.comp_until:type_name -> google.protobuf.Timestamp
-	1, // 4: pantherclaw.v1.Entitlements.source:type_name -> pantherclaw.v1.PlanSource
-	3, // 5: pantherclaw.v1.Entitlements.usage:type_name -> pantherclaw.v1.PlanUsage
-	4, // 6: pantherclaw.v1.GetEntitlementsResponse.entitlements:type_name -> pantherclaw.v1.Entitlements
-	5, // 7: pantherclaw.v1.EntitlementService.GetEntitlements:input_type -> pantherclaw.v1.GetEntitlementsRequest
-	6, // 8: pantherclaw.v1.EntitlementService.GetEntitlements:output_type -> pantherclaw.v1.GetEntitlementsResponse
-	8, // [8:9] is the sub-list for method output_type
-	7, // [7:8] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	0,  // 0: pantherclaw.v1.Entitlements.status:type_name -> pantherclaw.v1.PlanStatus
+	2,  // 1: pantherclaw.v1.Entitlements.limits:type_name -> pantherclaw.v1.PlanLimits
+	8,  // 2: pantherclaw.v1.Entitlements.period_end:type_name -> google.protobuf.Timestamp
+	8,  // 3: pantherclaw.v1.Entitlements.comp_until:type_name -> google.protobuf.Timestamp
+	1,  // 4: pantherclaw.v1.Entitlements.source:type_name -> pantherclaw.v1.PlanSource
+	3,  // 5: pantherclaw.v1.Entitlements.usage:type_name -> pantherclaw.v1.PlanUsage
+	8,  // 6: pantherclaw.v1.Entitlements.lapsed_at:type_name -> google.protobuf.Timestamp
+	8,  // 7: pantherclaw.v1.Entitlements.deletion_due_at:type_name -> google.protobuf.Timestamp
+	5,  // 8: pantherclaw.v1.Entitlements.pending_deletion:type_name -> pantherclaw.v1.PendingDeletion
+	8,  // 9: pantherclaw.v1.PendingDeletion.requested_at:type_name -> google.protobuf.Timestamp
+	8,  // 10: pantherclaw.v1.PendingDeletion.execute_at:type_name -> google.protobuf.Timestamp
+	9,  // 11: pantherclaw.v1.PendingDeletion.reason:type_name -> pantherclaw.v1.DeletionReason
+	4,  // 12: pantherclaw.v1.GetEntitlementsResponse.entitlements:type_name -> pantherclaw.v1.Entitlements
+	6,  // 13: pantherclaw.v1.EntitlementService.GetEntitlements:input_type -> pantherclaw.v1.GetEntitlementsRequest
+	7,  // 14: pantherclaw.v1.EntitlementService.GetEntitlements:output_type -> pantherclaw.v1.GetEntitlementsResponse
+	14, // [14:15] is the sub-list for method output_type
+	13, // [13:14] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_entitlements_proto_init() }
@@ -615,13 +736,14 @@ func file_pantherclaw_v1_entitlements_proto_init() {
 	if File_pantherclaw_v1_entitlements_proto != nil {
 		return
 	}
+	file_pantherclaw_v1_datarequests_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_entitlements_proto_rawDesc), len(file_pantherclaw_v1_entitlements_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

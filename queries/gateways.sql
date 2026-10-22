@@ -56,12 +56,14 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(gateway_id), sqlc.arg(serial), 
         sqlc.arg(issued_via), sqlc.narg(previous_id), sqlc.arg(not_before), sqlc.arg(not_after));
 
 -- GatewayCertAuth is what the gateway listener checks on every call
--- (HR-181): the certificate row, its gateway's state and the database time.
+-- (HR-181): the certificate row, its gateway's state, its org's state (a
+-- DELETED org fails closed, HR-392) and the database time.
 -- name: GatewayCertAuth :one
-SELECT c.id, c.gateway_id, c.state, c.not_before, c.not_after, c.superseded_at, g.state AS gateway_state,
+SELECT c.id, c.gateway_id, c.state, c.not_before, c.not_after, c.superseded_at, g.state AS gateway_state, o.state AS org_state,
        now()::timestamptz AS db_now
 FROM pc.gateway_certs c
 JOIN pc.gateways g ON g.org_id = c.org_id AND g.id = c.gateway_id
+JOIN pc.orgs o ON o.id = c.org_id
 WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(id);
 
 -- name: LockGatewayCert :one

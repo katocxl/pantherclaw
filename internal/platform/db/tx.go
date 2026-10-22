@@ -230,6 +230,9 @@ const (
 	// ListBillingLink finds the (org, link) of one billing ref (G0 UI D37).
 	// It takes the ref as the ListerParams Billing*.
 	ListBillingLink ListerPurpose = "billing_link_lookup"
+	// ListLapsedOrgs lists the active orgs whose hosted plan lapsed, for
+	// the daily reminder and day-90 deletion job (G0 M13 D34, HR-393).
+	ListLapsedOrgs ListerPurpose = "orgs_lapsed"
 )
 
 // ListerParams are the inputs of the parameterized lister purposes, set

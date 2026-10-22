@@ -22,7 +22,8 @@ var errInvalidID = pcerr.New(pcerr.InvalidArgument, "INVALID_ID", "invalid id")
 
 // Handler implements AccountServiceHandler.
 type Handler struct {
-	a *authnapp.Account
+	a   *authnapp.Account
+	del AccountDeleter
 }
 
 // New returns the handler.
