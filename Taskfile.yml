@@ -193,6 +193,8 @@ tasks:
     cmds:
       - go tool -modfile={{.PINS}}/buf/go.mod buf lint
       - go tool -modfile={{.PINS}}/buf/go.mod buf generate
+      # The vendored OTLP messages, their own buf workspace (G0 M13 D30).
+      - cd proto/third_party/otlp && go tool -modfile={{.PINS}}/buf/go.mod buf lint && go tool -modfile={{.PINS}}/buf/go.mod buf generate
       - go tool -modfile={{.PINS}}/sqlc/go.mod sqlc generate
       - go -C tools run ./licensecheck -root .. -fix
 

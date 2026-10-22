@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# OTLP messages for our own exporter (G0 M13 D30): protoc-gen-go only, no
+# gRPC or Connect stubs. Run from this directory (`task gen` does).
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/katocxl/pantherclaw/internal/gen
+plugins:
+  - local: ["go", "tool", "-modfile=../../../tools/pins/buf/go.mod", "protoc-gen-go"]
+    out: ../../../internal/gen
+    opt: paths=source_relative
