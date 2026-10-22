@@ -65,7 +65,7 @@ func recordSchemaVersion(ctx context.Context, sqlDB *sql.DB, version int64) erro
 
 // SchemaVersion reads the schema version `migrate up` recorded; ok is false
 // when none is recorded, also when pc.schema_info does not exist yet (a
-// database migrated by a binary before 00180, G0 M13 D24).
+// database migrated by a binary before 00169, G0 M13 D24).
 func (p *Pool) SchemaVersion(ctx context.Context) (v int64, ok bool, err error) {
 	err = p.InGlobalTx(ctx, GlobalHealth, func(ctx context.Context, tx GlobalTx) error {
 		var exists bool
