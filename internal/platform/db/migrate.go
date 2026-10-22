@@ -22,7 +22,8 @@ type MigrationResult struct {
 }
 
 // Migrate applies all pending migrations as pc_migrator (c.User must be the
-// migrator role). Migrations are embedded in the binary.
+// migrator role). Migrations are embedded in the binary. At the end it
+// records the applied version in pc.schema_info (G0 M13 D19).
 func Migrate(ctx context.Context, c Config) ([]MigrationResult, error) {
 	return migrateFS(ctx, c, migrations.FS)
 }
@@ -43,6 +44,13 @@ func migrateFS(ctx context.Context, c Config, fsys fs.FS) ([]MigrationResult, er
 	res, err := p.Up(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("db: migrate up: %w", err)
+	}
+	v, err := p.GetDBVersion(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("db: migrate up: %w", err)
+	}
+	if err := recordSchemaVersion(ctx, sqlDB, v); err != nil {
+		return nil, err
 	}
 	out := make([]MigrationResult, 0, len(res))
 	for _, r := range res {

@@ -35,6 +35,7 @@ var globalTables = []string{
 	"cross_org_list_audit", // audit of the cross-org lister; no pc_app access
 	"goose_db_version",     // migration bookkeeping; no pc_app access
 	"licence_state",        // single global row: the installed licence (no tenant data)
+	"schema_info",          // single global row: the applied schema version; pc_app reads it (G0 M13 D19, HR-370)
 }
 
 func createOrg(t *testing.T, p *db.Pool, name string) ids.OrgID {

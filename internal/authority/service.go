@@ -59,6 +59,8 @@ type Service struct {
 	// observations records tool observations (observations.go).
 	captures     CaptureRecorder
 	observations ToolObservations
+	// held is the operator's maintenance hold (hold.go): no decision.
+	held bool
 }
 
 // Config configures the Service.
@@ -107,6 +109,9 @@ type Result struct {
 // Authorize decides on raw canonical ActionIR bytes sent with the
 // workload's PAP/1 credentials; without them it is CANNOT_AUTHORIZE.
 func (s *Service) Authorize(ctx context.Context, gw Gateway, raw []byte, creds *Credentials, findings ...pipeline.PayloadFinding) (Result, error) {
+	if s.held {
+		return Result{}, ErrMaintenanceHold
+	}
 	p, perr := actionir.Parse(raw)
 	if perr != nil {
 		// Unparseable input cannot be bound to an org or action id: the answer
@@ -165,6 +170,9 @@ var (
 // records out and returns the action token of a target-enforced dispatch
 // (HR-188).
 func (s *Service) BeginDispatch(ctx context.Context, gw Gateway, permit ids.UUID, epoch int64, out Outbound) (string, error) {
+	if s.held {
+		return "", ErrMaintenanceHold
+	}
 	return s.decider.BeginDispatch(ctx, gw.final(), permit, epoch, out)
 }
 
@@ -326,6 +334,9 @@ var ErrAgentUnusable = errors.New("authority: the agent is suspended or retired"
 // the instance may not use is a *pap.Error; a suspended or retired agent
 // is ErrAgentUnusable.
 func (s *Service) Verify(ctx context.Context, gw Gateway, c *Credentials, run ids.UUID) (Verified, error) {
+	if s.held {
+		return Verified{}, ErrMaintenanceHold
+	}
 	if c == nil {
 		return Verified{}, &pap.Error{Code: pap.CodeInvalidToken}
 	}

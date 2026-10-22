@@ -209,7 +209,10 @@ type ListerPurpose string
 
 // Lister purposes (extended by later migrations).
 const (
-	ListActiveOrgs      ListerPurpose = "orgs"
+	ListActiveOrgs ListerPurpose = "orgs"
+	// ListAllOrgs lists every org whatever its state, for the post-restore
+	// epoch bump (G0 M13 D6, HR-373).
+	ListAllOrgs         ListerPurpose = "orgs_all"
 	ListLedgerUnchained ListerPurpose = "ledger_unchained" // orgs with entries above their chain watermark
 	// ListVerificationsDue lists orgs with verification tasks past their
 	// deadline or with expired leases (G0 M7, HR-190).

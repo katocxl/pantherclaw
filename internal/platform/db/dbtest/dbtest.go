@@ -148,6 +148,29 @@ func (d *DB) AdminExec(t testing.TB, sql string, args ...any) {
 	}
 }
 
+// AdminDo runs fn with a superuser connection to this database (for
+// bootstrap code that takes a connection).
+func (d *DB) AdminDo(t testing.TB, fn func(*pgx.Conn) error) {
+	t.Helper()
+	if err := withDB(context.Background(), d.admin, d.Name, fn); err != nil {
+		t.Fatalf("dbtest: admin: %v", err)
+	}
+}
+
+// ConnectAs opens a plain connection to this database as user (a role the
+// test bootstrapped itself), closed when the test ends.
+func (d *DB) ConnectAs(t testing.TB, user string, password []byte) *pgx.Conn {
+	t.Helper()
+	cfg := d.admin.Copy()
+	cfg.Database, cfg.User, cfg.Password = d.Name, user, string(password)
+	conn, err := pgx.ConnectConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("dbtest: connect as %s: %v", user, err)
+	}
+	t.Cleanup(func() { _ = conn.Close(context.Background()) })
+	return conn
+}
+
 // AdminQueryRow runs a single-row query as the superuser in this database.
 func (d *DB) AdminQueryRow(t testing.TB, sql string, args []any, dest ...any) {
 	t.Helper()

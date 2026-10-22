@@ -34,6 +34,9 @@ func (s *Service) WithToolObservations(o ToolObservations) *Service {
 func (s *Service) ObserveTool(ctx context.Context, gw Gateway, c *Credentials, run, conn ids.UUID, tool string, input []byte) (Verified,
 	ids.UUID, error,
 ) {
+	if s.held {
+		return Verified{}, ids.UUID{}, ErrMaintenanceHold
+	}
 	if s.observations == nil {
 		return Verified{}, ids.UUID{}, errors.New("authority: tool observations are not configured")
 	}

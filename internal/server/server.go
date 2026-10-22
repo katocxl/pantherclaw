@@ -87,11 +87,18 @@ Usage:
   pantherclaw-server serve [--config FILE]            run the API and/or workers (role from config)
   pantherclaw-server migrate up|status [--config FILE] apply or show schema migrations (as pc_migrator)
   pantherclaw-server db bootstrap --admin-url-file F --app-password-file F --migrator-password-file F --audit-password-file F
-                                 --retention-password-file F
-                                                     create roles and schema once, as the database owner
+                                 --retention-password-file F [--backup-password-file F]
+                                                     create roles and schema once, as the database owner; with
+                                                     --backup-password-file also the read-only backup role pc_backup
   pantherclaw-server keys gen-kek --out FILE          write a new key-encryption key (0600)
   pantherclaw-server keys rotate-gateway-ca --confirm [--config FILE]
                                                      replace the internal gateway CA key; every gateway enrolls again
+  pantherclaw-server keys rotate-receipts --confirm [--config FILE]
+  pantherclaw-server keys rotate-evidence --confirm [--config FILE]
+                                                     new receipts / evidence signing keys; earlier keys stay
+                                                     published and verifying; restart every server instance after
+  pantherclaw-server keys bump-epochs --all --confirm [--config FILE]
+                                                     after a database restore: raise every org's containment epoch
   pantherclaw-server org create --name N [--admin-email E] [--config FILE]
                                                      create an organization and print its one-time admin token
   pantherclaw-server org admin-invite --org ID [--admin-email E] [--config FILE]
@@ -232,6 +239,10 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		return err
 	}
 	defer pool.Close()
+	if err := checkSchemaAtStart(ctx, cfg, pool, log); err != nil {
+		return err
+	}
+	workers := newWorkerHeartbeat(cfg.Role)
 
 	kp, err := keys.NewFileProvider(cfg.KEKFiles)
 	if err != nil {
@@ -263,6 +274,11 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	// The operator's maintenance hold: no decision from any path (HR-379).
+	svc.WithMaintenanceHold(cfg.Maintenance.Hold)
+	if err := auditMaintenanceHold(ctx, pool, cfg.Maintenance.Hold, log); err != nil {
+		return err
+	}
 	captures := newCaptures(pool, kp, log)
 	svc.WithCaptures(captures.recorder)
 	m5, err := newM5(ctx, cfg, pool, kp, bill, log)
@@ -276,6 +292,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	m6.hold = cfg.Maintenance.Hold
 	m14core := wireM14Core(m6)
 	wireM14A2A(m14core)
 	_ = m14core // the M14 streams' wiring registers its kinds here (G0 M14 D64)
@@ -298,6 +315,8 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	m6.scans = agentsrpc.NewGatewayScans(aapp.NewInventory(pool, bill))
 
 	g, ctx := errgroup.WithContext(ctx)
+	// apiAddr is the bound API address (role api or all).
+	var apiAddr string
 	// autos is the one M11 part 2 core of this process: the API and the
 	// jobs share it, so every port set on it reaches both (D91 K6).
 	// protect sets its ports on it in every role (D110 P1).
@@ -394,6 +413,8 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			ext:          ext,
 			extDeps:      ui.extensionDeps(xdeps),
 			ui:           ui,
+			workers:      workers,
+			hold:         cfg.Maintenance.Hold,
 		})
 		if err != nil {
 			return err
@@ -401,12 +422,20 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err := m6.serveGateways(ctx, g, cfg, svc, log, nil); err != nil {
 			return err
 		}
-		srv, ln, err := listen(ctx, cfg, handler, log)
+		certs, err := publicCertReloader(cfg, log)
 		if err != nil {
 			return err
 		}
-		if onStart != nil {
-			onStart(ln.Addr().String())
+		srv, ln, err := listen(ctx, cfg, handler, certs, log)
+		if err != nil {
+			return err
+		}
+		serveCertReloads(ctx, g, certs)
+		// Tests learn the address once the process can be ready: with the
+		// workers in this process, after they started (HR-370).
+		apiAddr = ln.Addr().String()
+		if onStart != nil && cfg.Role != RoleAll {
+			onStart(apiAddr)
 		}
 		log.InfoContext(ctx, "server.listening", slog.String("addr", ln.Addr().String()), slog.String("role", cfg.Role))
 		m5p2.serveWaits(ctx, g)
@@ -540,6 +569,10 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return fmt.Errorf("server: start workers: %w", err)
 		}
 		log.InfoContext(ctx, "server.workers_started", slog.Int("concurrency", cfg.WorkerConcurrency))
+		workers.serve(ctx, g, client)
+		if onStart != nil && cfg.Role == RoleAll {
+			onStart(apiAddr)
+		}
 		g.Go(func() error {
 			<-ctx.Done()
 			sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownGrace)
@@ -552,14 +585,11 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	return err
 }
 
-func listen(ctx context.Context, cfg *Config, handler http.Handler, log *slog.Logger) (*http.Server, net.Listener, error) {
+func listen(ctx context.Context, cfg *Config, handler http.Handler, certs *httpx.CertReloader, log *slog.Logger) (*http.Server, net.Listener, error) {
 	var tlsConf *tls.Config
-	if cfg.HTTP.TLSCertFile != "" {
-		cert, err := tls.LoadX509KeyPair(cfg.HTTP.TLSCertFile, cfg.HTTP.TLSKeyFile)
-		if err != nil {
-			return nil, nil, fmt.Errorf("server: TLS key pair: %w", err)
-		}
-		tlsConf = httpx.ServerTLSConfig(cert)
+	if certs != nil {
+		// The pair is re-read from disk when it changes (HR-371).
+		tlsConf = httpx.ReloadingServerTLSConfig(certs)
 	}
 	srv, err := httpx.NewServer(httpx.ServerConfig{
 		Addr: cfg.HTTP.Addr, Handler: handler, TLS: tlsConf,
@@ -639,6 +669,11 @@ type apiDeps struct {
 	// extDeps what it is handed.
 	ext     extension.Set
 	extDeps extension.Deps
+	// workers is the job workers' heartbeat that /readyz requires (role
+	// all); nil when this process runs no workers.
+	workers *workerHeartbeat
+	// hold is the operator's maintenance hold (HR-379).
+	hold bool
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
@@ -650,7 +685,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	rs, err := rpc.NewServer(rpc.Options{
 		Logger:       log,
 		Public:       publicProcedures(),
-		Authenticate: d.auth,
+		Authenticate: holdAuthenticator(d.hold, heldOnAPI, d.auth),
 	})
 	if err != nil {
 		return nil, err
@@ -763,20 +798,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, "ok\n")
 	})
-	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-		defer cancel()
-		err := pool.InGlobalTx(ctx, db.GlobalHealth, func(ctx context.Context, tx db.GlobalTx) error {
-			var one int
-			return tx.QueryRow(ctx, "SELECT 1").Scan(&one)
-		}, db.ReadOnly())
-		if err != nil {
-			log.WarnContext(ctx, "server.not_ready", pclog.Err(err))
-			http.Error(w, "not ready", http.StatusServiceUnavailable)
-			return
-		}
-		_, _ = io.WriteString(w, "ready\n")
-	})
+	mux.Handle("GET /readyz", readiness{pool: pool, workers: d.workers, held: d.hold, log: log})
 	mux.HandleFunc("GET /.well-known/pantherclaw/jwks.json", func(w http.ResponseWriter, _ *http.Request) {
 		b, err := reg.JWKS()
 		if err != nil {
@@ -799,7 +821,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	// The client address goes into every request's context for the account
 	// procedures' per-IP limits (G0 UI D85).
-	return httpx.ClientIPMiddleware(workloadrpc.RawBody(mux, d.clientIP), d.clientIP), nil
+	return httpx.ClientIPMiddleware(workloadrpc.RawBody(holdHTTP(d.hold, heldHTTPPath, mux), d.clientIP), d.clientIP), nil
 }
 
 // attestTimeout bounds one call to an issuer or a cluster API server.
@@ -905,6 +927,7 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	migPW := fs.String("migrator-password-file", "", "password file for pc_migrator")
 	auditPW := fs.String("audit-password-file", "", "password file for pc_audit_ro")
 	retentionPW := fs.String("retention-password-file", "", "password file for pc_retention (the retention job's role)")
+	backupPW := fs.String("backup-password-file", "", "optional: password file for pc_backup, the read-only role of the backup job")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -938,17 +961,40 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if err := db.BootstrapRoles(ctx, conn, pw); err != nil {
 		return err
 	}
+	if *backupPW != "" {
+		// Before the database grants, which give an existing pc_backup
+		// its read access (G0 M13 D21).
+		bpw, err := config.ReadSecretFile(*backupPW)
+		if err != nil {
+			return err
+		}
+		if err := db.BootstrapBackupRole(ctx, conn, bpw); err != nil {
+			return err
+		}
+	}
 	if err := db.BootstrapDatabase(ctx, conn); err != nil {
 		return err
 	}
 	_, _ = fmt.Fprintf(stdout, "bootstrapped roles %s, %s, %s, %s, %s and schema %s in database %s\n",
 		db.RoleMigrator, db.RoleApp, db.RoleAuditRO, db.RoleRetention, db.RoleLister, db.Schema, cc.Database)
+	if *backupPW != "" {
+		_, _ = fmt.Fprintf(stdout, "bootstrapped the read-only backup role %s\n", db.RoleBackup)
+	}
 	return nil
 }
 
 func cmdKeys(ctx context.Context, args []string, stdout, stderr io.Writer, env Env) error {
-	if len(args) > 0 && args[0] == "rotate-gateway-ca" {
-		return cmdRotateGatewayCA(ctx, args[1:], stdout, stderr, env)
+	if len(args) > 0 {
+		switch args[0] {
+		case "rotate-gateway-ca":
+			return cmdRotateGatewayCA(ctx, args[1:], stdout, stderr, env)
+		case "rotate-receipts":
+			return cmdRotateSigning(ctx, rotateReceipts, args[1:], stdout, stderr, env)
+		case "rotate-evidence":
+			return cmdRotateSigning(ctx, rotateEvidence, args[1:], stdout, stderr, env)
+		case "bump-epochs":
+			return cmdBumpEpochs(ctx, args[1:], stdout, stderr, env)
+		}
 	}
 	if len(args) == 0 || args[0] != "gen-kek" {
 		_, _ = fmt.Fprint(stderr, usage)

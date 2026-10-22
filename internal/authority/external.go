@@ -105,6 +105,9 @@ type ExternalResult struct {
 
 // Decide decides one action an enforcement point asks about.
 func (s *Service) Decide(ctx context.Context, req ExternalRequest) (ExternalResult, error) {
+	if s.held {
+		return ExternalResult{}, ErrMaintenanceHold
+	}
 	gw, p := req.Gateway, req.Action
 	refuse := func(d domain.Decision, reasons []domain.Reason) ExternalResult {
 		out := ExternalResult{Outcome: outcomeOf(d), Decision: d, ActionHash: p.HashHex(), Nonce: s.nonce(ctx, gw)}
