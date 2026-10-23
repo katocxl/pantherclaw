@@ -2999,6 +2999,21 @@ type PcSavedQuery struct {
 	UpdatedAt   time.Time
 }
 
+type PcSchemaInfo struct {
+	ID        int16
+	Version   int64
+	AppliedAt time.Time
+}
+
+type PcSecurityEventOutbox struct {
+	OrgID          ids.OrgID
+	LedgerSeq      int64
+	Payload        []byte
+	Attempts       int32
+	LastEmittedAt  *time.Time
+	AcknowledgedAt *time.Time
+}
+
 type PcServiceAccount struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID

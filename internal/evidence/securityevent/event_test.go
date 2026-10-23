@@ -124,3 +124,21 @@ func TestHR383_DeletionIntentsUseBoundedDistinctProvenance(t *testing.T) {
 		})
 	}
 }
+
+func TestHR383_IntentReadinessRejectsInvalidInputsBeforeDatabaseAccess(t *testing.T) {
+	for _, test := range []struct {
+		kind   string
+		target ids.UUID
+		digest string
+	}{
+		{"org.deleted", ids.NewV7(), strings.Repeat("a", 64)},
+		{"unknown", ids.NewV7(), strings.Repeat("a", 64)},
+		{"org.deletion_started", ids.UUID{}, strings.Repeat("a", 64)},
+		{"account.deletion_started", ids.NewV7(), "not-a-digest"},
+		{"account.deletion_started", ids.NewV7(), strings.Repeat("A", 64)},
+	} {
+		if ready, err := IntentAcknowledged(context.Background(), nil, test.kind, test.target, test.digest); err == nil || ready {
+			t.Fatalf("invalid readiness accepted: %+v", test)
+		}
+	}
+}
