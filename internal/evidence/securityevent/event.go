@@ -33,6 +33,8 @@ type Event struct {
 	Direction        string       `json:"direction"`
 	Object           Object       `json:"object"`
 	Actor            domain.Actor `json:"actor"`
+	RequestID        ids.UUID     `json:"request_id,omitzero"`
+	JournalDigest    string       `json:"journal_digest,omitempty"`
 	RecordDigest     string       `json:"record_digest,omitempty"`
 	Containment      *Containment `json:"containment,omitempty"`
 	RevocationReason string       `json:"revocation_reason,omitempty"`
@@ -71,6 +73,7 @@ var kinds = map[string]rule{
 	"authn.session_revoked":              {"tighten", "session", ""},
 	"authn.session_ended":                {"tighten", "session", ""},
 	"authn.sessions_revoked":             {"tighten", "user_sessions", ""},
+	"response.credential_revoked":        {"tighten", "sealed_credential", "version"},
 	"connection.sealed_revoked":          {"tighten", "sealed_credential", "version"},
 	"connection.quarantined":             {"tighten", "connection", ""},
 	"connection.restored":                {"loosen", "connection", ""},
@@ -81,6 +84,7 @@ var kinds = map[string]rule{
 	"agents.agent_restored":              {"loosen", "agent", ""},
 	"security.kill_switch_engaged":       {"tighten", "org", ""},
 	"security.kill_switch_restored":      {"loosen", "org", ""},
+	"org.deletion_started":               {"tighten", "org", ""},
 	"org.deleted":                        {"tighten", "org", ""},
 	"account.deleted":                    {"tighten", "account", ""},
 }
@@ -115,7 +119,9 @@ func FromEntry(entry domain.Entry, seq int64) (Event, bool, error) {
 	}
 	if r.detail != "" {
 		obj.ID = body.Details[r.detail]
-		if kind == "connection.sealed_revoked" {
+		if kind == "response.credential_revoked" {
+			obj.ID = body.Details["connection"] + "/" + obj.ID
+		} else if kind == "connection.sealed_revoked" {
 			obj.ID = body.Object.ID + "/" + obj.ID
 		}
 	}
@@ -125,6 +131,14 @@ func FromEntry(entry domain.Entry, seq int64) (Event, bool, error) {
 	e := Event{Timestamp: entry.OccurredAt, Org: entry.Org, LedgerSeq: seq, Kind: kind, Direction: r.direction, Object: obj, Actor: entry.Actor}
 	if kind == "org.deleted" || kind == "account.deleted" {
 		e.RecordDigest = body.Details["record_digest"]
+	}
+	if kind == "org.deletion_started" {
+		request, err := ids.ParseUUID(body.Details["request_id"])
+		if err != nil {
+			return Event{}, false, fmt.Errorf("security event: invalid deletion intent request")
+		}
+		e.RequestID = request
+		e.JournalDigest = body.Details["journal_digest"]
 	}
 	if kind == "package.signing_key.revoked" {
 		e.RevocationReason = body.Details["reason"]
@@ -140,6 +154,9 @@ func FromEntry(entry domain.Entry, seq int64) (Event, bool, error) {
 		}
 		e.Containment = &Containment{ActionID: action, ControlID: control, ScopeType: body.Details["scope_type"], ScopeID: body.Details["scope"], Control: body.Details["control"], Operation: body.Details["operation"], Source: body.Details["source"]}
 	}
+	if err := Validate(e); err != nil {
+		return Event{}, false, err
+	}
 	return e, true, nil
 }
 
@@ -151,6 +168,9 @@ func Emit(ctx context.Context, log *slog.Logger, e Event) {
 		slog.String("kind", e.Kind), slog.String("direction", e.Direction),
 		slog.Group("object", slog.String("type", e.Object.Type), slog.String("id", e.Object.ID)),
 		slog.Group("actor", slog.String("type", e.Actor.Type), slog.String("id", e.Actor.ID)),
+	}
+	if !e.RequestID.IsZero() {
+		attrs = append(attrs, slog.String("request_id", e.RequestID.String()), slog.String("journal_digest", e.JournalDigest))
 	}
 	if e.RecordDigest != "" {
 		attrs = append(attrs, slog.String("record_digest", e.RecordDigest))

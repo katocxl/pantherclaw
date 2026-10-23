@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -17,61 +16,6 @@ import (
 	rapp "github.com/katocxl/pantherclaw/internal/response/app"
 	rdomain "github.com/katocxl/pantherclaw/internal/response/domain"
 )
-
-var machineID = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
-
-func validateObject(e Event) error {
-	if e.Kind == "security.kill_switch_engaged" && e.Object.ID != e.Org.String() {
-		return errors.New("restore: kill switch object is another organization")
-	}
-	if e.Kind == "package.signing_key.revoked" {
-		if e.RevocationReason != "ROTATED" && e.RevocationReason != "COMPROMISED" {
-			return errors.New("restore: invalid package key revocation reason")
-		}
-	} else if e.RevocationReason != "" {
-		return errors.New("restore: unexpected revocation reason")
-	}
-	switch e.Object.Type {
-	case "signing_key", "package_signing_key":
-		if !machineID.MatchString(e.Object.ID) {
-			return errors.New("restore: invalid signing key id")
-		}
-	case "sealed_credential":
-		conn, version, ok := strings.Cut(e.Object.ID, "/")
-		if !ok {
-			return errors.New("restore: invalid sealed credential id")
-		}
-		if _, err := ids.ParseUUID(conn); err != nil {
-			return errors.New("restore: invalid connection id")
-		}
-		v, err := strconv.ParseInt(version, 10, 32)
-		if err != nil || v < 1 || strconv.FormatInt(v, 10) != version {
-			return errors.New("restore: invalid credential version")
-		}
-	default:
-		if _, err := ids.ParseUUID(e.Object.ID); err != nil {
-			return fmt.Errorf("restore: invalid %s id", e.Object.Type)
-		}
-	}
-	if e.Kind != "response.contain" {
-		if e.Containment != nil {
-			return errors.New("restore: unexpected containment metadata")
-		}
-		return nil
-	}
-	c := e.Containment
-	if c == nil || c.ActionID.IsZero() || c.ControlID.IsZero() || c.ControlID.String() != e.Object.ID || len(c.ScopeID) > 300 || len(c.Operation) > 200 {
-		return errors.New("restore: missing or invalid containment metadata")
-	}
-	if c.Source != "PERSON" && c.Source != "SOAR" && c.Source != "PLAYBOOK" {
-		return errors.New("restore: invalid containment source")
-	}
-	control, err := (rdomain.Control{ScopeType: c.ScopeType, ScopeID: c.ScopeID, Control: c.Control, Operation: c.Operation, Reason: "re-applied after restore"}).Canonical()
-	if err != nil || control.ScopeID != c.ScopeID {
-		return errors.New("restore: invalid or noncanonical containment scope")
-	}
-	return nil
-}
 
 func registerCore(r *Registry) {
 	// All statements are fixed, tenant-filtered, conditional tightening
@@ -114,14 +58,16 @@ func registerCore(r *Registry) {
 		if err != nil {
 			return err
 		}
-		_, err = dbq.New(tx).RevokeGrantTree(ctx, "re-applied after restore", tx.OrgID(), id)
+		reason := "re-applied after restore"
+		_, err = dbq.New(tx).RevokeGrantTree(ctx, &reason, tx.OrgID(), id)
 		return err
 	}
 	r.handlers["connection.sealed_revoked"] = func(ctx context.Context, tx db.TenantTx, e Event) error {
 		connection, version, _ := strings.Cut(e.Object.ID, "/")
-		_, err := tx.Exec(ctx, `UPDATE pc.credentials SET state='REVOKED',revoked_at=now(),revoked_by='operator:restore' WHERE org_id=$1 AND connection_id=$2::uuid AND version=$3::integer AND state<>'REVOKED'`, tx.OrgID(), connection, version)
+		_, err := tx.Exec(ctx, `UPDATE pc.credentials SET state='REVOKED',superseded_at=NULL,revoked_at=now(),revoked_by='operator:restore' WHERE org_id=$1 AND connection_id=$2::uuid AND version=$3::integer AND state<>'REVOKED'`, tx.OrgID(), connection, version)
 		return err
 	}
+	r.handlers["response.credential_revoked"] = r.handlers["connection.sealed_revoked"]
 	r.handlers["security.kill_switch_engaged"] = func(ctx context.Context, tx db.TenantTx, e Event) error {
 		if e.Object.ID != tx.OrgID().String() {
 			return errors.New("restore: kill switch object is another organization")
@@ -145,4 +91,16 @@ func endSession(ctx context.Context, tx db.TenantTx, e Event) error {
 	}
 	_, err := tx.Exec(ctx, sql, tx.OrgID(), e.Object.ID)
 	return err
+}
+
+func validateContainment(e Event) error {
+	if e.Containment == nil {
+		return nil
+	}
+	c := e.Containment
+	control, err := (rdomain.Control{ScopeType: c.ScopeType, ScopeID: c.ScopeID, Control: c.Control, Operation: c.Operation, Reason: "re-applied after restore"}).Canonical()
+	if err != nil || control.ScopeID != c.ScopeID {
+		return errors.New("restore: invalid or noncanonical containment scope")
+	}
+	return nil
 }
