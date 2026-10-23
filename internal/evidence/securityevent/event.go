@@ -165,8 +165,8 @@ func FromEntry(entry domain.Entry, seq int64) (Event, bool, error) {
 	return e, true, nil
 }
 
-// Emit writes one structured line. The ledger chainer calls it after its
-// linking transaction commits; arbitrary audit details never reach logs.
+// Emit writes one structured line. The outbox worker calls it after its
+// attempt transaction commits; arbitrary audit details never reach logs.
 func Emit(ctx context.Context, log *slog.Logger, e Event) {
 	attrs := []slog.Attr{
 		slog.String("org", e.Org.String()), slog.Int64("ledger_seq", e.LedgerSeq),

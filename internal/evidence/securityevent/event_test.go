@@ -64,6 +64,17 @@ func TestHR383_ClosedSecuritySetCopiesOnlyMachineFields(t *testing.T) {
 			if decoded.Kind != kind || decoded.LedgerSeq != 7 || !decoded.Timestamp.Equal(at) || decoded.Direction != rule.direction {
 				t.Fatalf("wrong line: %s", output.String())
 			}
+			stored, err := json.Marshal(e)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var roundTrip Event
+			if err := json.Unmarshal(stored, &roundTrip); err != nil || roundTrip.RequestID != decoded.RequestID {
+				t.Fatalf("outbox and log UUID contracts differ: %s %v", stored, err)
+			}
+			if e.Containment != nil && (roundTrip.Containment.ActionID != decoded.Containment.ActionID || roundTrip.Containment.ControlID != decoded.Containment.ControlID || !bytes.Contains(stored, []byte(e.Containment.ActionID.String()))) {
+				t.Fatal("containment UUID transport changed")
+			}
 		})
 	}
 }

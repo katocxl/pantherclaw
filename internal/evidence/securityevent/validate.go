@@ -74,7 +74,7 @@ func validateObject(e Event) error {
 		if !ok {
 			return errors.New("restore: invalid sealed credential id")
 		}
-		if _, err := ids.ParseUUID(conn); err != nil {
+		if id, err := ids.ParseUUID(conn); err != nil || id.IsZero() {
 			return errors.New("restore: invalid connection id")
 		}
 		v, err := strconv.ParseInt(version, 10, 32)
@@ -82,7 +82,7 @@ func validateObject(e Event) error {
 			return errors.New("restore: invalid credential version")
 		}
 	default:
-		if _, err := ids.ParseUUID(e.Object.ID); err != nil {
+		if id, err := ids.ParseUUID(e.Object.ID); err != nil || id.IsZero() {
 			return fmt.Errorf("restore: invalid %s id", e.Object.Type)
 		}
 	}
