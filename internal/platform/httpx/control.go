@@ -6,6 +6,7 @@ package httpx
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -19,9 +20,15 @@ type ControlConfig struct {
 	// Wrap decorates the transport, for example to add credentials.
 	Wrap func(http.RoundTripper) http.RoundTripper
 	// ClientCertificate presents a client certificate (the gateway's mTLS
-	// identity, HR-181). With it the client requires TLS 1.3. Egress
-	// clients never carry one (HR-074).
+	// identity, HR-181). With it the client is one end of a link between
+	// PantherClaw components: TLS 1.3 and a hybrid post-quantum key
+	// exchange only (ComponentLinkTLS, HR-395). Egress clients never carry
+	// one (HR-074).
 	ClientCertificate func(*tls.CertificateRequestInfo) (*tls.Certificate, error)
+	// Link names the component link in the tls.link log line; Log receives
+	// it (nil: not logged). Used only with ClientCertificate.
+	Link string
+	Log  *slog.Logger
 }
 
 // NewControlClient returns the client for PantherClaw's own control plane
@@ -40,9 +47,8 @@ func NewControlClient(cfg ControlConfig) *http.Client {
 		tlsConf.RootCAs = cfg.RootCAs
 	}
 	if cfg.ClientCertificate != nil {
-		tlsConf.MinVersion = tls.VersionTLS13
 		tlsConf.GetClientCertificate = cfg.ClientCertificate
-		tlsConf.CurvePreferences = []tls.CurveID{tls.X25519MLKEM768, tls.X25519, tls.CurveP256}
+		ComponentLinkTLS(tlsConf, cfg.Link, cfg.Log)
 	}
 	var rt http.RoundTripper = &http.Transport{
 		Proxy:                 nil, // HR-072

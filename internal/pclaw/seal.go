@@ -129,7 +129,7 @@ func seal(ctx context.Context, a *app, args []string) error {
 	}
 	pub, err := pccrypto.ParseSealPublicKey(k.GetPublicKey())
 	if err != nil {
-		return fmt.Errorf("the broker key is not an X-Wing key: %w", err)
+		return fmt.Errorf("the broker key is not a usable seal key (X-Wing, or MLKEM768-P256 in FIPS mode): %w", err)
 	}
 	_, _ = fmt.Fprintf(a.stderr, "Sealing version %d for connection %s to broker key %s of gateway %s.\n"+
 		"It will be sent only to %s, in the %s header%s.\n",

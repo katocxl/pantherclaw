@@ -77,7 +77,7 @@ func newM6Env(t *testing.T) *m6Env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := &http.Server{Handler: h, TLSConfig: m6.gatewayTLS(cfg.GatewayAPI.Hostnames), ReadHeaderTimeout: 5 * time.Second}
+	srv := &http.Server{Handler: h, TLSConfig: m6.gatewayTLS(cfg.GatewayAPI.Hostnames, nil), ReadHeaderTimeout: 5 * time.Second}
 	go func() { _ = srv.ServeTLS(ln, "", "") }()
 	t.Cleanup(func() { _ = srv.Close() })
 

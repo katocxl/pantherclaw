@@ -173,7 +173,7 @@ func TestHR371_ListenerServesRenewedCertificate(t *testing.T) {
 		t.Fatal(err)
 	}
 	conf := ReloadingServerTLSConfig(r)
-	if conf.MinVersion != tls.VersionTLS13 || conf.CurvePreferences[0] != tls.X25519MLKEM768 || len(conf.Certificates) != 0 {
+	if conf.MinVersion != tls.VersionTLS13 || conf.CurvePreferences != nil || len(conf.Certificates) != 0 {
 		t.Fatalf("profile changed: %+v", conf)
 	}
 	srv, err := NewServer(ServerConfig{

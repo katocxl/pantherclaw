@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
+	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
@@ -177,6 +178,9 @@ func New(o Options) (*Edge, error) {
 	if log == nil {
 		log = pclog.Discard()
 	}
+	// The edge-to-gateway link is between PantherClaw components: a hybrid
+	// post-quantum key exchange or no connection (G0 M13 D35, HR-395).
+	httpx.ComponentLinkTLS(tlsConf, "edge-gateway", log)
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
 	base := &http.Transport{
 		Proxy: nil, // the edge never takes a proxy from its environment (HR-072)

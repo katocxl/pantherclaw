@@ -2690,7 +2690,7 @@ type GetSealingKeyResponse struct {
 	Version int32 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
 	// Broker key id.
 	BrokerKeyId string `protobuf:"bytes,4,opt,name=broker_key_id,json=brokerKeyId,proto3" json:"broker_key_id,omitempty"`
-	// X-Wing public key.
+	// Seal public key: X-Wing, or MLKEM768-P256 from a FIPS gateway.
 	PublicKey []byte `protobuf:"bytes,5,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
 	// Its fingerprint, to show before sealing.
 	Fingerprint string `protobuf:"bytes,6,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`

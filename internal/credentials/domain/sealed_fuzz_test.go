@@ -41,15 +41,13 @@ func FuzzSealedCredential(f *testing.F) {
 	f.Add(append([]byte{0x01, 0x00, 0x00}, sealed[3:]...), b.Org+"\nconnection="+b.Connection, "", b.AllowedHosts[0], b.Header, int32(-3))
 	f.Add([]byte{}, b.Org, b.Connection, b.AllowedHosts[0], "X-Api-Key", int32(4))
 	f.Fuzz(func(t *testing.T, blob []byte, org, connection, host, header string, version int32) {
-		if domain.CheckFormat(blob) == nil {
-			if len(blob) < domain.MinSealed || len(blob) > domain.MaxSealed || blob[0] != 0x01 ||
-				binary.BigEndian.Uint16(blob[1:3]) != domain.EncLen {
-				t.Fatalf("the format check accepted %d bytes starting %x", len(blob), blob[:min(3, len(blob))])
-			}
+		if domain.CheckFormat(blob) == nil && !sealedShape(blob) {
+			t.Fatalf("the format check accepted %d bytes starting %x", len(blob), blob[:min(5, len(blob))])
 		}
 		if got, err := pccrypto.Open(key, b.Info(), domain.AAD, blob); err == nil && (!bytes.Equal(blob, sealed) || !bytes.Equal(got, secret)) {
 			t.Fatalf("another blob opened for the binding: %x", blob)
-		} else if err != nil && !errors.Is(err, pccrypto.ErrDecrypt) && !errors.Is(err, pccrypto.ErrSealedFormat) {
+		} else if err != nil && !errors.Is(err, pccrypto.ErrDecrypt) && !errors.Is(err, pccrypto.ErrSealedFormat) &&
+			!errors.Is(err, pccrypto.ErrSealSuiteNotFIPS) {
 			t.Fatalf("opening failed outside its errors: %v", err)
 		}
 		other := domain.Binding{
@@ -67,4 +65,23 @@ func FuzzSealedCredential(f *testing.F) {
 			t.Fatalf("two bindings share one info:\n%+v\n%+v", other, b)
 		}
 	})
+}
+
+// sealedShape restates the sealed formats independently of CheckFormat:
+// version 1 (X-Wing, enc 1120) or version 2 with the X-Wing (enc 1120) or
+// MLKEM768-P256 (enc 1153) suite, at least one ciphertext byte past the
+// tag, at most MaxSealed bytes.
+func sealedShape(blob []byte) bool {
+	if len(blob) < domain.MinSealed || len(blob) > domain.MaxSealed {
+		return false
+	}
+	switch {
+	case blob[0] == 0x01:
+		return binary.BigEndian.Uint16(blob[1:3]) == domain.EncLen && len(blob) >= 3+domain.EncLen+17
+	case blob[0] == 0x02 && binary.BigEndian.Uint16(blob[1:3]) == 0x647a:
+		return binary.BigEndian.Uint16(blob[3:5]) == domain.EncLen && len(blob) >= 5+domain.EncLen+17
+	case blob[0] == 0x02 && binary.BigEndian.Uint16(blob[1:3]) == 0x0050:
+		return binary.BigEndian.Uint16(blob[3:5]) == domain.EncLenP256 && len(blob) >= 5+domain.EncLenP256+17
+	}
+	return false
 }

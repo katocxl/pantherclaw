@@ -25,7 +25,7 @@ import (
 
 // Errors of gateway calls.
 var (
-	ErrBrokerKey       = pcerr.New(pcerr.InvalidArgument, "BROKER_KEY_INVALID", "the broker key is not an X-Wing public key")
+	ErrBrokerKey       = pcerr.New(pcerr.InvalidArgument, "BROKER_KEY_INVALID", "the broker key is not an X-Wing or MLKEM768-P256 public key")
 	ErrBrokerKeyReused = pcerr.New(pcerr.FailedPrecondition, "BROKER_KEY_REUSED", "a retired broker key cannot be registered again")
 	ErrRenewal         = pcerr.New(pcerr.FailedPrecondition, "GATEWAY_RENEWAL_REFUSED",
 		"only the gateway's current certificate can be renewed; enroll again")
@@ -169,12 +169,15 @@ func (s *Service) Renew(ctx context.Context, id Identity, csr []byte) (Enrolled,
 	return out, err
 }
 
-// RegisterBrokerKey registers the gateway's X-Wing public key, over its own
-// mTLS identity only (HR-182). The active key registered again changes
+// RegisterBrokerKey registers the gateway's seal public key (X-Wing, or
+// MLKEM768-P256 from a FIPS gateway; a FIPS server refuses X-Wing, D35),
+// over its own mTLS identity only (HR-182). The active key registered again changes
 // nothing; a new key becomes the active version and the configuration
 // version moves, so credentials sealed to the old key must be sealed again.
 func (s *Service) RegisterBrokerKey(ctx context.Context, id Identity, public []byte) (dbq.PcBrokerKey, error) {
-	if _, err := pccrypto.ParseSealPublicKey(public); err != nil {
+	if _, err := pccrypto.ParseSealPublicKey(public); errors.Is(err, pccrypto.ErrSealSuiteNotFIPS) {
+		return dbq.PcBrokerKey{}, err // an X-Wing key at a FIPS server (D35)
+	} else if err != nil {
 		return dbq.PcBrokerKey{}, ErrBrokerKey
 	}
 	fp := Fingerprint(public)

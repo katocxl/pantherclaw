@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/fips140"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -37,8 +38,16 @@ func TestSHA256KnownAnswer(t *testing.T) {
 }
 
 func TestHMACSHA256KnownAnswer(t *testing.T) {
+	// RFC 4231 test case 1 (a 160-bit key, valid in FIPS 140-only mode).
+	got := hex.EncodeToString(HMACSHA256(bytes.Repeat([]byte{0x0b}, 20), []byte("Hi There")))
+	if got != "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7" {
+		t.Fatalf("HMAC = %s", got)
+	}
+	if fips140.Enabled() {
+		return // test case 2's 32-bit key is refused in FIPS 140-only mode
+	}
 	// RFC 4231 test case 2.
-	got := hex.EncodeToString(HMACSHA256([]byte("Jefe"), []byte("what do ya want for nothing?")))
+	got = hex.EncodeToString(HMACSHA256([]byte("Jefe"), []byte("what do ya want for nothing?")))
 	if got != "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843" {
 		t.Fatalf("HMAC = %s", got)
 	}
@@ -68,10 +77,15 @@ func TestAESGCMKnownAnswer(t *testing.T) {
 	nonce := make([]byte, 12)
 	pt := make([]byte, 16)
 	want := mustHex(t, "cea7403d4d606b6e074ec5d3baf39d18"+"d0d1c8a799996bf0265b98b5d48ab919")
-	block, _ := aes.NewCipher(key)
-	gcm, _ := cipher.NewGCM(block)
-	if got := gcm.Seal(nil, nonce, pt, nil); !bytes.Equal(got, want) {
-		t.Fatalf("reference GCM = %x, want %x", got, want)
+	// FIPS 140-only mode refuses GCM with caller-chosen nonces, so the
+	// reference cross-check runs outside it; the vector check below runs in
+	// both.
+	if !fips140.Enabled() {
+		block, _ := aes.NewCipher(key)
+		gcm, _ := cipher.NewGCM(block)
+		if got := gcm.Seal(nil, nonce, pt, nil); !bytes.Equal(got, want) {
+			t.Fatalf("reference GCM = %x, want %x", got, want)
+		}
 	}
 	// Our AEAD's wire format is nonce ‖ ciphertext ‖ tag: it must open the vector.
 	a, err := NewAEAD(key)
@@ -246,8 +260,14 @@ func TestEnvelopeRequiresCompleteContext(t *testing.T) {
 	}
 }
 
-func TestSealOpenXWing(t *testing.T) {
-	priv, err := GenerateSealKey()
+func TestSealOpen(t *testing.T) {
+	for _, suite := range availableSuites() {
+		t.Run(suite.String(), func(t *testing.T) { testSealOpen(t, suite) })
+	}
+}
+
+func testSealOpen(t *testing.T, suite SealSuite) {
+	priv, err := GenerateSealKeySuite(suite)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +293,7 @@ func TestSealOpenXWing(t *testing.T) {
 	if err != nil || string(pt) != "sk_test_not_real" {
 		t.Fatalf("Open = %q, %v", pt, err)
 	}
-	other, _ := GenerateSealKey()
+	other, _ := GenerateSealKeySuite(suite)
 	for name, try := range map[string]func() error{
 		"wrong key": func() error { _, err := Open(other, info, []byte("aad"), sealed); return err },
 		"wrong info": func() error {
@@ -292,7 +312,10 @@ func TestSealOpenXWing(t *testing.T) {
 			t.Errorf("%s: err = %v, want ErrDecrypt", name, err)
 		}
 	}
-	for name, b := range map[string][]byte{"empty": nil, "bad version": {0x09, 0, 0}, "short enc": {0x01, 0xff, 0xff, 1}} {
+	for name, b := range map[string][]byte{
+		"empty": nil, "bad version": {0x09, 0, 0}, "short enc": {0x01, 0xff, 0xff, 1},
+		"short v2 enc": {0x02, 0x00, 0x50, 0xff, 0xff, 1}, "unknown suite": {0x02, 0x00, 0x20, 0, 0},
+	} {
 		if _, err := Open(priv, info, nil, b); !errors.Is(err, ErrSealedFormat) {
 			t.Errorf("%s: err = %v, want ErrSealedFormat", name, err)
 		}

@@ -179,14 +179,16 @@ func (p *Provider) load(ctx context.Context) (*discovered, error) {
 	if len(meta.PKCEMethods) > 0 && !slices.Contains(meta.PKCEMethods, "S256") {
 		return nil, fmt.Errorf("oidc %s: provider does not support PKCE S256", p.cfg.Name)
 	}
+	// The key set's client drops RSA keys under 2048 bits in FIPS mode (D35).
+	kctx := oidc.ClientContext(context.WithoutCancel(ctx), keysClient(p.client))
 	p.disc = &discovered{
 		provider: prov,
-		verifier: prov.VerifierContext(octx, &oidc.Config{ClientID: p.cfg.ClientID, SupportedSigningAlgs: SigningAlgs}),
+		verifier: prov.VerifierContext(kctx, &oidc.Config{ClientID: p.cfg.ClientID, SupportedSigningAlgs: SigningAlgs}),
 		endpoint: oauth2.Endpoint{AuthURL: meta.AuthURL, TokenURL: meta.TokenURL, AuthStyle: p.authStyle()},
 		issParam: meta.IssParam,
 	}
 	if a := p.cfg.SubjectTokenAudience; a != "" {
-		p.disc.subject = prov.VerifierContext(octx, &oidc.Config{ClientID: a, SupportedSigningAlgs: SigningAlgs})
+		p.disc.subject = prov.VerifierContext(kctx, &oidc.Config{ClientID: a, SupportedSigningAlgs: SigningAlgs})
 	}
 	return p.disc, nil
 }
