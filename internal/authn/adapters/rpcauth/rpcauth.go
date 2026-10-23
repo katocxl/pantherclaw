@@ -124,6 +124,13 @@ func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authentica
 				return nil, err
 			}
 		}
+		if o.breakGlass != nil {
+			var err error
+			c, err = o.breakGlass.BreakGlassCall(ctx, c, spec.Procedure)
+			if err != nil {
+				return nil, err
+			}
+		}
 		if actx, handled, err := o.orgAccountCall(ctx, c, perm); handled {
 			return actx, err
 		}
@@ -212,6 +219,7 @@ type options struct {
 	// Support sessions (support.go).
 	support         SupportSessions
 	supportReadOnly func(procedure string) bool
+	breakGlass      BreakGlassCalls
 	log             *slog.Logger
 }
 

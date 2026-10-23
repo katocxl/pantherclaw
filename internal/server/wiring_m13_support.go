@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"connectrpc.com/connect/v2"
+	"github.com/riverqueue/river"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/rpcauth"
@@ -28,6 +29,8 @@ import (
 
 // supportService is the process's support access service.
 type supportService = *support.Service
+
+func supportPeriodicJobs() []*river.PeriodicJob { return support.PeriodicJobs() }
 
 // newSupport builds the support access service; it is off unless
 // support.staff_org and support.staff_accounts are set.
@@ -61,28 +64,24 @@ func supportMayCall(procedure string) bool {
 // supportSessions accepts support sessions on the API when support access
 // is on.
 func supportSessions(s *support.Service) rpcauth.Option {
-	if !s.Enabled() {
-		return rpcauth.WithSupportSessions(nil, nil)
-	}
-	return rpcauth.WithSupportSessions(s, supportMayCall)
+	return rpcauth.WithSupportAndBreakGlass(s, supportMayCall)
 }
 
 // mountSupport adds the support access pages.
 func mountSupport(mux *http.ServeMux, d apiDeps) {
-	if d.web == nil || !d.support.Enabled() {
+	if d.web == nil || d.support == nil {
 		return
 	}
-	d.web.MountSupportAccess(mux, d.support)
+	d.web.MountBreakGlass(mux, d.support)
+	if d.support.Enabled() {
+		d.web.MountSupportAccess(mux, d.support)
+	}
 }
 
 // registerSupport serves SupportAccessService and BreakGlassService.
 func registerSupport(rs *connect.Server, d apiDeps) {
 	pantherclawv1connect.RegisterSupportAccessServiceHandler(rs, supportAccessHandler{s: d.support})
-	pantherclawv1connect.RegisterBreakGlassServiceHandler(rs, breakGlassHandler{})
-}
-
-type breakGlassHandler struct {
-	pantherclawv1connect.UnimplementedBreakGlassServiceHandler
+	pantherclawv1connect.RegisterBreakGlassServiceHandler(rs, breakGlassHandler{s: d.support})
 }
 
 // supportAccessHandler serves SupportAccessService.

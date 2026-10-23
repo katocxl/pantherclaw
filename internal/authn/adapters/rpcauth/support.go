@@ -38,6 +38,27 @@ func WithSupportSessions(s SupportSessions, readOnly func(procedure string) bool
 	return func(o *options) { o.support, o.supportReadOnly = s, readOnly }
 }
 
+// BreakGlassCalls adds the holder's currently active emergency role and
+// records the call before the permission check (HR-389).
+type BreakGlassCalls interface {
+	BreakGlassCall(context.Context, tapp.Caller, string) (tapp.Caller, error)
+}
+
+// WithBreakGlass audits calls under an emergency activation. It applies
+// independently of the hosted support staff feature.
+func WithBreakGlass(b BreakGlassCalls) Option { return func(o *options) { o.breakGlass = b } }
+
+// WithSupportAndBreakGlass configures both M13 authentication paths.
+func WithSupportAndBreakGlass(s interface {
+	SupportSessions
+	BreakGlassCalls
+}, readOnly func(string) bool) Option {
+	return func(o *options) {
+		WithSupportSessions(s, readOnly)(o)
+		WithBreakGlass(s)(o)
+	}
+}
+
 // isSupportCookie reports whether the cookie holds a support session.
 func isSupportCookie(v string) bool {
 	_, err := credential.Parse(credential.SupportSession, v)

@@ -463,6 +463,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	}
 	if cfg.Role == RoleWorker || cfg.Role == RoleAll {
 		jreg := jobs.NewRegistry()
+		if err := newSupport(cfg, pool, entsSvc, m5.notifications, log).Register(jreg); err != nil {
+			return err
+		}
 		if err := chainer.Register(jreg, pool); err != nil {
 			return err
 		}
@@ -567,6 +570,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err != nil {
 			return err
 		}
+		client.PeriodicJobs().AddMany(supportPeriodicJobs())
 		client.PeriodicJobs().AddMany(evidenceJobs)
 		if err := client.Start(ctx); err != nil {
 			return fmt.Errorf("server: start workers: %w", err)

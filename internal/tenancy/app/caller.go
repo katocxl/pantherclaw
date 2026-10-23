@@ -41,6 +41,9 @@ type Caller struct {
 	// (CredSupportSession only; G0 M13 D32): every call names it in the
 	// org's audit ledger (HR-388).
 	SupportGrant ids.UUID
+	// BreakGlassActivation identifies the separately audited emergency role
+	// in force for this call (HR-389).
+	BreakGlassActivation ids.UUID
 	// Session is the CLI session a user's access token belongs to, or the
 	// browser session of a page request (zero for API keys and service
 	// accounts): the human session an approval response records (G0 M5
