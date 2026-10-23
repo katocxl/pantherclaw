@@ -8,7 +8,6 @@ package restore
 import (
 	"bufio"
 	"context"
-	"encoding/hex"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -63,7 +62,7 @@ func (r *Registry) Register(kind string, h Handler) error {
 	return nil
 }
 
-// RegisterScoped adds only org.deleted or account.deleted. No extension
+// RegisterScoped adds only org.deletion_started, org.deleted or account.deleted. No extension
 // can introduce another cross-tenant operation through this registry.
 func (r *Registry) RegisterScoped(kind string, h ScopedHandler) error {
 	if !deletion(kind) || h == nil {
@@ -76,7 +75,9 @@ func (r *Registry) RegisterScoped(kind string, h ScopedHandler) error {
 	return nil
 }
 
-func deletion(kind string) bool { return kind == "org.deleted" || kind == "account.deleted" }
+func deletion(kind string) bool {
+	return kind == "org.deleted" || kind == "account.deleted" || kind == "org.deletion_started"
+}
 
 // Parse validates the entire bounded input before any state changes. Input
 // may be extracted security lines or full operational logs: a line with
@@ -148,29 +149,11 @@ func (r *Registry) Parse(input io.Reader, since time.Time) ([]Event, error) {
 }
 
 func (r *Registry) validate(e Event) error {
-	dir, typ, ok := securityevent.Rule(e.Kind)
-	if !ok {
-		return fmt.Errorf("unknown security kind %q", e.Kind)
+	if err := securityevent.Validate(e); err != nil {
+		return err
 	}
-	validType := e.Object.Type == typ || typ == "session" && (e.Object.Type == "browser_session" || e.Object.Type == "cli_session")
-	if e.Direction != dir || !validType {
-		return fmt.Errorf("restore: direction or object type disagrees with %s", e.Kind)
-	}
-	if e.Timestamp.IsZero() || e.Org.IsZero() || e.LedgerSeq < 1 || e.Object.ID == "" || len(e.Object.ID) > 256 || e.Actor.Type == "" || len(e.Actor.Type) > 32 || e.Actor.ID == "" || len(e.Actor.ID) > 256 {
-		return errors.New("restore: missing or oversized event fields")
-	}
-	if deletion(e.Kind) {
-		if e.Org != ids.PlatformOrg {
-			return errors.New("restore: deletion must come from the platform ledger")
-		}
-		if len(e.RecordDigest) != 64 {
-			return errors.New("restore: deletion requires the record digest")
-		}
-		if _, err := hex.DecodeString(e.RecordDigest); err != nil {
-			return errors.New("restore: invalid deletion record digest")
-		}
-	} else if e.RecordDigest != "" {
-		return errors.New("restore: unexpected record digest")
+	if err := validateContainment(e); err != nil {
+		return err
 	}
 	if e.Direction == "tighten" {
 		if deletion(e.Kind) {
@@ -181,7 +164,7 @@ func (r *Registry) validate(e Event) error {
 			return fmt.Errorf("restore: no handler for %s", e.Kind)
 		}
 	}
-	return validateObject(e)
+	return nil
 }
 
 // Reapply validates every record again, then applies ordinary changes in
@@ -244,7 +227,27 @@ func Audit(ctx context.Context, tx db.TenantTx, entries []Event, operator domain
 		first = min(first, e.LedgerSeq)
 		last = max(last, e.LedgerSeq)
 	}
-	_, err := audit.Record(ctx, tx, audit.Event{Name: "restore.reapplied", Actor: operator, Outcome: audit.Success,
-		Object: &audit.Object{Type: "org", ID: tx.OrgID().String()}, Details: map[string]string{"count": strconv.Itoa(len(entries)), "first_seq": strconv.FormatInt(first, 10), "last_seq": strconv.FormatInt(last, 10)}})
+	details := map[string]string{"count": strconv.Itoa(len(entries)), "first_seq": strconv.FormatInt(first, 10), "last_seq": strconv.FormatInt(last, 10)}
+	local, noLocal := 0, 0
+	for _, e := range entries {
+		if e.Kind != "response.credential_revoked" {
+			continue
+		}
+		connection, version, _ := strings.Cut(e.Object.ID, "/")
+		var exists bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pc.credentials WHERE org_id=$1 AND connection_id=$2::uuid AND version=$3::integer)`, tx.OrgID(), connection, version).Scan(&exists); err != nil {
+			return err
+		}
+		if exists {
+			local++
+		} else {
+			noLocal++
+		}
+	}
+	if local+noLocal > 0 {
+		details["credential_local"] = strconv.Itoa(local)
+		details["credential_no_local_material"] = strconv.Itoa(noLocal)
+	}
+	_, err := audit.Record(ctx, tx, audit.Event{Name: "restore.reapplied", Actor: operator, Outcome: audit.Success, Object: &audit.Object{Type: "org", ID: tx.OrgID().String()}, Details: details})
 	return err
 }
