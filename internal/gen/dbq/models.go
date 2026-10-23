@@ -775,6 +775,29 @@ type PcBillingLink struct {
 	UpdatedAt   time.Time
 }
 
+type PcBreakglassActivation struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	UserID      ids.UUID
+	Role        string
+	Reason      string
+	Credential  ids.UUID
+	StartedAt   time.Time
+	ExpiresAt   time.Time
+	EndedAt     *time.Time
+	EndedByType *string
+	EndedByID   *string
+	EndReason   *string
+}
+
+type PcBreakglassHolder struct {
+	OrgID        ids.OrgID
+	UserID       ids.UUID
+	Role         string
+	DesignatedBy ids.UUID
+	DesignatedAt time.Time
+}
+
 type PcBrokerKey struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID
