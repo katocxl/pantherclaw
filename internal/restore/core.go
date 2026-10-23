@@ -6,8 +6,6 @@ package restore
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"

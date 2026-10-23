@@ -42,7 +42,7 @@ type Registry struct {
 }
 
 // NewRegistry installs the core security handlers. Data deletion supplies
-// the two D41 scoped handlers before a command starts replaying.
+// the D41/D56 scoped handlers before a command starts replaying.
 func NewRegistry() *Registry {
 	r := &Registry{handlers: map[string]Handler{}, scoped: map[string]ScopedHandler{}}
 	registerCore(r)
@@ -62,7 +62,7 @@ func (r *Registry) Register(kind string, h Handler) error {
 	return nil
 }
 
-// RegisterScoped adds only org.deletion_started, org.deleted or account.deleted. No extension
+// RegisterScoped adds only the org/account deletion intent and completion kinds. No extension
 // can introduce another cross-tenant operation through this registry.
 func (r *Registry) RegisterScoped(kind string, h ScopedHandler) error {
 	if !deletion(kind) || h == nil {
@@ -76,7 +76,7 @@ func (r *Registry) RegisterScoped(kind string, h ScopedHandler) error {
 }
 
 func deletion(kind string) bool {
-	return kind == "org.deleted" || kind == "account.deleted" || kind == "org.deletion_started"
+	return kind == "org.deleted" || kind == "account.deleted" || kind == "org.deletion_started" || kind == "account.deletion_started"
 }
 
 // Parse validates the entire bounded input before any state changes. Input

@@ -40,7 +40,7 @@ func TestHR383_ClosedSecuritySetCopiesOnlyMachineFields(t *testing.T) {
 			if kind == "security.kill_switch_engaged" {
 				entry.Org, _ = ids.Parse[ids.Org](object)
 			}
-			if kind == "org.deleted" || kind == "account.deleted" || kind == "org.deletion_started" {
+			if kind == "org.deleted" || kind == "account.deleted" || kind == "org.deletion_started" || kind == "account.deletion_started" {
 				entry.Org = ids.PlatformOrg
 			}
 			e, ok, err := FromEntry(entry, 7)
@@ -89,5 +89,38 @@ func TestHR383_MalformedMachineMetadataFailsClosed(t *testing.T) {
 	entry := domain.Entry{Org: ids.New[ids.Org](), Kind: "audit.package.signing_key.revoked", OccurredAt: time.Now(), Actor: domain.Actor{Type: "user", ID: ids.NewV7().String()}, Body: body}
 	if _, ok, err := FromEntry(entry, 1); err == nil || ok {
 		t.Fatal("accepted unbounded reason")
+	}
+}
+
+func TestHR383_DeletionIntentsUseBoundedDistinctProvenance(t *testing.T) {
+	for _, kind := range []string{"org.deletion_started", "account.deletion_started"} {
+		t.Run(kind, func(t *testing.T) {
+			_, typ, _ := Rule(kind)
+			e := Event{Timestamp: time.Now(), Org: ids.PlatformOrg, LedgerSeq: 1, Kind: kind, Direction: "tighten", Object: Object{Type: typ, ID: ids.NewV7().String()}, Actor: domain.Actor{Type: "system", ID: "deletion"}, JournalDigest: strings.Repeat("a", 64)}
+			if kind == "org.deletion_started" {
+				e.RequestID = ids.NewV7()
+			}
+			if err := Validate(e); err != nil {
+				t.Fatal(err)
+			}
+			for _, change := range []func(*Event){
+				func(e *Event) { e.Org = ids.New[ids.Org]() },
+				func(e *Event) { e.JournalDigest = "not-a-digest" },
+				func(e *Event) { e.RecordDigest = strings.Repeat("b", 64) },
+				func(e *Event) {
+					if kind == "account.deletion_started" {
+						e.RequestID = ids.NewV7()
+					} else {
+						e.RequestID = ids.UUID{}
+					}
+				},
+			} {
+				bad := e
+				change(&bad)
+				if err := Validate(bad); err == nil {
+					t.Fatalf("accepted invalid intent: %+v", bad)
+				}
+			}
+		})
 	}
 }
