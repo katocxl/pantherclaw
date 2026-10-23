@@ -140,7 +140,7 @@ var errTooManyOrgs = errors.New("keys bump-epochs: the lister returned its maxim
 
 // cmdBumpEpochs implements `keys bump-epochs --all --confirm` (G0 M13 D6,
 // HR-373), run after a database restore and before gateways reconnect:
-// every org, whatever its state, gets the containment epoch max(epoch + 1,
+// Every non-DELETED org gets the containment epoch max(epoch + 1,
 // the database clock in Unix milliseconds) in its own transaction with the
 // audit event containment.epoch_bumped_after_restore, so the epoch is above
 // anything a gateway cached after the backup was taken. An org without a
@@ -173,22 +173,38 @@ func cmdBumpEpochs(ctx context.Context, args []string, stdout, stderr io.Writer,
 		return errTooManyOrgs
 	}
 	actor := evdomain.Actor{Type: "operator", ID: operatorName()}
+	skipped := 0
 	for i, o := range orgs {
 		from, to, err := bumpEpochAfterRestore(ctx, pool, o.Org, actor)
 		if err != nil {
 			return fmt.Errorf("%s: org %s (%d of %d done): %w", name, o.Org, i, len(orgs), err)
 		}
+		if from == "deleted" {
+			skipped++
+			_, _ = fmt.Fprintf(stdout, "org %s: skipped irreversible DELETED organization (no writes)\n", o.Org)
+			continue
+		}
 		_, _ = fmt.Fprintf(stdout, "org %s: epoch %s -> %d\n", o.Org, from, to)
 	}
-	_, _ = fmt.Fprintf(stdout, "raised the containment epoch of %d organization(s)\n", len(orgs))
+	_, _ = fmt.Fprintf(stdout, "raised the containment epoch of %d organization(s)\n", len(orgs)-skipped)
+	_, _ = fmt.Fprintf(stdout, "skipped %d irreversible DELETED organization(s)\n", skipped)
 	return nil
 }
 
 // bumpEpochAfterRestore raises one org's epoch and audits it in one
-// transaction. from is "none" for an org that had no containment row.
+// transaction. from is "none" for a missing containment row, or "deleted"
+// when an irreversible DELETED org was read without writing anything.
 func bumpEpochAfterRestore(ctx context.Context, pool *db.Pool, org ids.OrgID, actor evdomain.Actor) (from string, to int64, err error) {
 	err = pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		from = "none"
+		var state string
+		if err := tx.QueryRow(ctx, "SELECT state FROM pc.orgs WHERE id=$1", org).Scan(&state); err != nil {
+			return err
+		}
+		if state == "DELETED" {
+			from = "deleted"
+			return nil
+		}
 		var prev int64
 		err := tx.QueryRow(ctx, "SELECT epoch FROM pc.org_containment WHERE org_id = $1 FOR UPDATE", org).Scan(&prev)
 		switch {

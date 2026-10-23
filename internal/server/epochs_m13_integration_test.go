@@ -26,7 +26,7 @@ func newEpochOrgs(t *testing.T, d *dbtest.DB) epochOrgs {
 	for org, st := range map[ids.OrgID]string{o.active: "ACTIVE", o.suspended: "SUSPENDED", o.deleted: "DELETED", o.bare: "ACTIVE"} {
 		d.AdminExec(t, "INSERT INTO pc.orgs (id, name, state) VALUES ($1, 'org', $2)", org, st)
 	}
-	for _, org := range []ids.OrgID{o.active, o.suspended, o.deleted} {
+	for _, org := range []ids.OrgID{o.active, o.suspended} {
 		d.AdminExec(t, "INSERT INTO pc.org_containment (org_id, epoch) VALUES ($1, 7)", org)
 	}
 	d.AdminExec(t, "UPDATE pc.org_containment SET kill_switch = true, engaged_at = now(), engaged_by = 'test' WHERE org_id = $1", o.suspended)
@@ -48,13 +48,13 @@ func (o epochOrgs) audits(t *testing.T, org ids.OrgID) int {
 	return n
 }
 
-func (o epochOrgs) all() []ids.OrgID { return []ids.OrgID{o.active, o.suspended, o.deleted, o.bare} }
+func (o epochOrgs) all() []ids.OrgID { return []ids.OrgID{o.active, o.suspended, o.bare} }
 
 // TestHR373_BumpEpochsRaisesEveryOrgAndAudits: without --all or --confirm
-// nothing changes; with them every org of any state, and one without a
+// nothing changes; with them ACTIVE/SUSPENDED orgs, and one without a
 // containment row, gets max(epoch + 1, now in ms) with one audit event in
 // its own transaction, the kill switch untouched; a second run raises
-// every epoch again.
+// every eligible epoch again. DELETED organisations receive no writes (D57).
 func TestHR373_BumpEpochsRaisesEveryOrgAndAudits(t *testing.T) {
 	d := dbtest.New(t)
 	cfgPath := testConfig(t, d, RoleAPI)
@@ -73,6 +73,9 @@ func TestHR373_BumpEpochsRaisesEveryOrgAndAudits(t *testing.T) {
 	code, out, errs := runKeys(t, cfgPath, "bump-epochs", "--all", "--confirm")
 	if code != 0 {
 		t.Fatalf("bump-epochs = %d %s %s", code, out, errs)
+	}
+	if !strings.Contains(out, "skipped 1 irreversible DELETED organization(s)") || o.epoch(t, o.deleted) != 0 || o.audits(t, o.deleted) != 0 {
+		t.Fatalf("DELETED org changed or skip not reported: %s", out)
 	}
 	first := map[ids.OrgID]int64{}
 	for _, org := range o.all() {
@@ -102,7 +105,7 @@ func TestHR373_BumpEpochsRaisesEveryOrgAndAudits(t *testing.T) {
 	if e := o.epoch(t, o.active); e != int64(1)<<60+1 {
 		t.Errorf("a high epoch became %d, want +1", e)
 	}
-	for _, org := range []ids.OrgID{o.suspended, o.deleted, o.bare} {
+	for _, org := range []ids.OrgID{o.suspended, o.bare} {
 		if e := o.epoch(t, org); e <= first[org] {
 			t.Errorf("org %s: second run left epoch at %d (was %d)", org, e, first[org])
 		}
