@@ -27,13 +27,16 @@ CREATE TABLE pc.data_requests (
                                                              'PENDING', 'CANCELED', 'HELD', 'DELETING')),
     -- The person who asked; NULL for a lapse deletion.
     created_by         uuid,
-    -- The hosted account of that person, when linked (GetDeletionRecord).
+    -- The hosted account of that person, when linked.
     created_by_account uuid,
     -- Deletion: why, and the end of its window (created_at for a lapse).
     reason             text        CHECK (reason IS NULL OR reason IN ('requested', 'lapse_90d')),
     window_end         timestamptz,
     -- Deletion of a lapsed plan: the lapse it was created for.
     lapsed_at          timestamptz,
+    -- Deletion: the accounts linked to the org's admins when it was
+    -- requested (a lapse: when it runs); they may fetch the deletion record.
+    admin_accounts     uuid[]      NOT NULL DEFAULT '{}' CHECK (cardinality(admin_accounts) <= 10000),
     canceled_by        uuid,
     canceled_at        timestamptz,
     -- Export: when it became ready and when its parts go.
@@ -100,7 +103,8 @@ $$;
 -- +goose StatementEnd
 
 GRANT SELECT, INSERT ON pc.data_requests TO pc_app;
-GRANT UPDATE (state, canceled_by, canceled_at, ready_at, expires_at, parts, total_size, manifest, error_code, updated_at)
+GRANT UPDATE (state, admin_accounts, canceled_by, canceled_at, ready_at, expires_at, parts, total_size, manifest, error_code,
+              updated_at)
     ON pc.data_requests TO pc_app;
 -- Expired parts are removed by the server; nothing else deletes them.
 GRANT SELECT, INSERT, DELETE ON pc.data_request_parts TO pc_app;

@@ -139,18 +139,25 @@ $function$;
 
 CREATE TABLE pc.deletion_records (
     -- Always the platform org.
-    org_id               uuid        NOT NULL REFERENCES pc.orgs (id),
+    org_id               uuid        NOT NULL REFERENCES pc.orgs (id)
+        CHECK (org_id = '00000000-0000-7000-8000-000000000001'::uuid),
     id                   uuid        NOT NULL,
     deleted_org_id       uuid        NOT NULL,
     reason               text        NOT NULL CHECK (reason IN ('requested', 'lapse_90d')),
     requested_by_account uuid,
+    -- The accounts that may fetch the record (G0 M13 D47): those linked to
+    -- the org's admins when the deletion was requested (a lapse: when it ran).
+    accounts             uuid[]      NOT NULL DEFAULT '{}' CHECK (cardinality(accounts) <= 10000),
+    -- A record written again after a restore re-applied the deletion
+    -- (D41) names the digest of the original record.
+    reapplied_from       bytea       CHECK (reapplied_from IS NULL OR octet_length(reapplied_from) = 32),
     -- The record as canonical JSON, and signed (compact JWS, receipts key).
     record               jsonb       NOT NULL CHECK (jsonb_typeof(record) = 'object'),
     signed_record        text        NOT NULL CHECK (char_length(signed_record) BETWEEN 1 AND 1048576),
     created_at           timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (org_id, id),
-    UNIQUE (org_id, deleted_org_id)
+    PRIMARY KEY (org_id, id)
 );
+CREATE INDEX deletion_records_org ON pc.deletion_records (org_id, deleted_org_id, created_at DESC);
 ALTER TABLE pc.deletion_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pc.deletion_records FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON pc.deletion_records
