@@ -427,6 +427,9 @@ func checkWith(kind string, with []byte, earlier map[string]bool) error {
 			return fmt.Errorf("body must be one of %v", browserBodies)
 		}
 	default:
+		if kind == "support.probe" {
+			return supportStep(strict)
+		}
 		if ui, ok := uiStepKinds[kind]; ok {
 			return ui(strict)
 		}
