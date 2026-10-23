@@ -24,7 +24,8 @@ type Object struct {
 }
 
 // Event is the public security_event NDJSON contract. RecordDigest is
-// present only for D41 deletion records; no reasons or bodies are copied.
+// present only for D41 completion records; D56 intents use their own
+// request/journal provenance. No reasons or bodies are copied.
 type Event struct {
 	Timestamp        time.Time    `json:"ts"`
 	Org              ids.OrgID    `json:"org"`
@@ -86,6 +87,7 @@ var kinds = map[string]rule{
 	"security.kill_switch_restored":      {"loosen", "org", ""},
 	"org.deletion_started":               {"tighten", "org", ""},
 	"org.deleted":                        {"tighten", "org", ""},
+	"account.deletion_started":           {"tighten", "account", ""},
 	"account.deleted":                    {"tighten", "account", ""},
 }
 
@@ -140,6 +142,9 @@ func FromEntry(entry domain.Entry, seq int64) (Event, bool, error) {
 		e.RequestID = request
 		e.JournalDigest = body.Details["journal_digest"]
 	}
+	if kind == "account.deletion_started" {
+		e.JournalDigest = body.Details["journal_digest"]
+	}
 	if kind == "package.signing_key.revoked" {
 		e.RevocationReason = body.Details["reason"]
 	}
@@ -170,7 +175,10 @@ func Emit(ctx context.Context, log *slog.Logger, e Event) {
 		slog.Group("actor", slog.String("type", e.Actor.Type), slog.String("id", e.Actor.ID)),
 	}
 	if !e.RequestID.IsZero() {
-		attrs = append(attrs, slog.String("request_id", e.RequestID.String()), slog.String("journal_digest", e.JournalDigest))
+		attrs = append(attrs, slog.String("request_id", e.RequestID.String()))
+	}
+	if e.JournalDigest != "" {
+		attrs = append(attrs, slog.String("journal_digest", e.JournalDigest))
 	}
 	if e.RecordDigest != "" {
 		attrs = append(attrs, slog.String("record_digest", e.RecordDigest))

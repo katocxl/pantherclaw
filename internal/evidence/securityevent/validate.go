@@ -38,9 +38,9 @@ func Validate(e Event) error {
 	} else if e.RecordDigest != "" {
 		return errors.New("security event: unexpected record digest")
 	}
-	if e.Kind == "org.deletion_started" {
-		if e.Org != ids.PlatformOrg || e.RequestID.IsZero() || len(e.JournalDigest) != 64 {
-			return errors.New("security event: deletion intent requires platform ledger, request and journal digest")
+	if e.Kind == "org.deletion_started" || e.Kind == "account.deletion_started" {
+		if e.Org != ids.PlatformOrg || len(e.JournalDigest) != 64 || (e.Kind == "org.deletion_started" && e.RequestID.IsZero()) || (e.Kind == "account.deletion_started" && !e.RequestID.IsZero()) {
+			return errors.New("security event: invalid deletion intent provenance")
 		}
 		if _, err := hex.DecodeString(e.JournalDigest); err != nil {
 			return errors.New("security event: invalid journal digest")
