@@ -19,8 +19,9 @@ type Usage struct {
 
 // View is an org's plan and usage (EntitlementService.GetEntitlements).
 type View struct {
-	Plan  Plan
-	Usage Usage
+	Plan            Plan
+	Usage           Usage
+	PendingDeletion *dbq.PcDataRequest
 }
 
 // Get returns the caller's org's plan and usage (entitlements.read).
@@ -43,6 +44,12 @@ func (s *Service) Get(ctx context.Context) (View, error) {
 			return err
 		}
 		out.Usage = Usage{Agents: int(u.Agents), Environments: int(u.Environments), Members: int(u.Members)}
+		pending, err := dbq.New(tx).OpenDeletionRequest(ctx, c.Org)
+		if err == nil {
+			out.PendingDeletion = &pending
+		} else if !db.IsNoRows(err) {
+			return err
+		}
 		return nil
 	}, db.ReadOnly())
 	return out, err

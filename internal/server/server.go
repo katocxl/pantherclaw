@@ -41,6 +41,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/billing"
 	"github.com/katocxl/pantherclaw/internal/billing/licence"
 	coverage "github.com/katocxl/pantherclaw/internal/coverage/domain"
+	"github.com/katocxl/pantherclaw/internal/datarequests"
 	"github.com/katocxl/pantherclaw/internal/definitions/adapters/packagesrpc"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	defsapp "github.com/katocxl/pantherclaw/internal/definitions/app"
@@ -286,6 +287,10 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	dataRequests, err := newDataRequests(cfg, pool, reg, m5, log)
+	if err != nil {
+		return err
+	}
 	ui.wireInvitationEmails(cfg, m5.notifications)
 	// A monitor-mode action with an unknown consequence notifies (HR-206).
 	authorityStore.Notify = m5.notifications
@@ -416,6 +421,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			ui:           ui,
 			workers:      workers,
 			hold:         cfg.Maintenance.Hold,
+			data:         dataRequests,
 		})
 		if err != nil {
 			return err
@@ -461,6 +467,11 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	}
 	if cfg.Role == RoleWorker || cfg.Role == RoleAll {
 		jreg := jobs.NewRegistry()
+		dataJobs, closeData, err := registerDataWorkers(ctx, jreg, cfg, dataRequests, log)
+		if err != nil {
+			return err
+		}
+		defer closeData()
 		if err := chainer.Register(jreg, pool); err != nil {
 			return err
 		}
@@ -566,6 +577,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		client.PeriodicJobs().AddMany(evidenceJobs)
+		client.PeriodicJobs().AddMany(dataJobs)
 		if err := client.Start(ctx); err != nil {
 			return fmt.Errorf("server: start workers: %w", err)
 		}
@@ -617,6 +629,7 @@ func publicProcedures() []string {
 // service accounts and API keys. Gateway procedures are refused here: gateways
 // call the Authority only on the mTLS gateway listener (HR-181).
 type apiDeps struct {
+	data *datarequests.Service
 	pool *db.Pool
 	// cel are the configured CEL limits (cel).
 	cel       celenv.Limits
@@ -780,6 +793,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerM11Protect(rs, d, autos)
 	authzen := registerAuthZEN(rs, d)
 	registerUITenancy(rs, d)
+	registerDataRequests(rs, d)
 	mux := http.NewServeMux()
 	edges.mount(mux)
 	automationTriggers.mount(mux)
@@ -794,6 +808,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if d.web != nil {
 		d.web.Mount(mux)
 	}
+	mountDataRequests(mux, d)
 	mountM14Data(mux, d)
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

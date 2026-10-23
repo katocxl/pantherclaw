@@ -74,6 +74,7 @@ type Config struct {
 	// (G0 UI D8, D9, D12; config_ui_tenancy.go).
 	Billing BillingConfig `json:"billing"`
 	Signup  SignupConfig  `json:"signup"`
+	Backups BackupsConfig `json:"backups"`
 }
 
 // IdentityConfig configures workload identity (M3).
@@ -117,6 +118,7 @@ type DBConfig struct {
 	// reports ROLE_UNAVAILABLE (config_retention.go).
 	RetentionUser         string          `json:"retention_user" env:"PC_DB_RETENTION_USER"`
 	RetentionPasswordFile string          `json:"retention_password_file" env:"PC_DB_RETENTION_PASSWORD_FILE"`
+	DeleterPasswordFile   string          `json:"deleter_password_file" env:"PC_DB_DELETER_PASSWORD_FILE"`
 	MaxConns              int             `json:"max_conns" env:"PC_DB_MAX_CONNS"`
 	StatementTimeout      config.Duration `json:"statement_timeout" env:"PC_DB_STATEMENT_TIMEOUT"`
 	LockTimeout           config.Duration `json:"lock_timeout" env:"PC_DB_LOCK_TIMEOUT"`
@@ -139,6 +141,7 @@ func DefaultConfig() Config {
 			IdleInTxTimeout: config.Duration(d.IdleInTxTimeout),
 		},
 		WorkerConcurrency: 10,
+		Backups:           BackupsConfig{RetentionDays: 60},
 		Authority: AuthorityConfig{
 			GrantMaxPerAction: "100", GrantCurrency: "USD", BudgetName: "dev-refunds",
 			PermitTTL: config.Duration(5 * time.Second), StaleDispatch: config.Duration(30 * time.Second),
@@ -193,6 +196,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateM8()...)
 	errs = append(errs, c.validateEvidence()...)
 	errs = append(errs, c.validateRetention()...)
+	errs = append(errs, c.validateDataRequests()...)
 	errs = append(errs, c.validateCoverage()...)
 	errs = append(errs, c.validateGateways()...)
 	errs = append(errs, c.validateDev()...)
