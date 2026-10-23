@@ -416,9 +416,23 @@ func (e chained) bundleEntry(labels map[ids.UUID]string) bundle.Entry {
 // entries the latest checkpoint does not cover yet have no proof, which
 // `pclaw verify` reports as not available, as it reports a missing anchor.
 func (s *Service) ExportBundle(ctx context.Context, sel Selection, consistencyFrom uint64) (Export, error) {
+	return s.exportBundle(ctx, sel, consistencyFrom, nil)
+}
+
+// ExportBundleTx preserves the caller's fixed tenant snapshot and uses no
+// second pooled connection. It applies the same selection and authority
+// checks as ExportBundle and refuses a transaction for another tenant.
+func (s *Service) ExportBundleTx(ctx context.Context, tx db.TenantTx, sel Selection, consistencyFrom uint64) (Export, error) {
+	return s.exportBundle(ctx, sel, consistencyFrom, &tx)
+}
+
+func (s *Service) exportBundle(ctx context.Context, sel Selection, consistencyFrom uint64, scoped *db.TenantTx) (Export, error) {
 	c, err := reader(ctx)
 	if err != nil {
 		return Export{}, err
+	}
+	if scoped != nil && scoped.OrgID() != c.Org {
+		return Export{}, db.ErrNoTenant
 	}
 	byTxn, byClosure, byRuns := len(sel.Transactions) > 0, len(sel.Closures) > 0, len(sel.ProbeRuns) > 0
 	switch {
@@ -438,7 +452,7 @@ func (s *Service) ExportBundle(ctx context.Context, sel Selection, consistencyFr
 	}
 	b := &bundle.Bundle{Format: bundle.Format, Org: c.Org.String(), Origin: s.Origin(c.Org)}
 	var out Export
-	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+	build := func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		var entries []chained
 		var err error
@@ -535,7 +549,12 @@ func (s *Service) ExportBundle(ctx context.Context, sel Selection, consistencyFr
 			b.Consistency = append(b.Consistency, bundle.Consistency{From: p[0], To: p[1], Proof: hashes(proof)})
 		}
 		return nil
-	}, db.ReadOnly(), db.RepeatableRead())
+	}
+	if scoped == nil {
+		err = s.pool.InTenantTx(ctx, c.Org, build, db.ReadOnly(), db.RepeatableRead())
+	} else {
+		err = build(ctx, *scoped)
+	}
 	if err != nil {
 		return Export{}, err
 	}
