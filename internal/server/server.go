@@ -128,6 +128,9 @@ Usage:
   pantherclaw-server dev connection --org ID --target-url URL [--config FILE] [--gateway NAME] [--name N] [--mode M]
                              [--access-mode M]
                                                      DEVELOPMENT ONLY: a payments connection for an existing gateway
+  pantherclaw-server secrets stage --from DIR --to DIR
+                                                     copy each regular file of DIR as a 0400 secret file
+                                                     (Kubernetes init container; symlinks and others refused)
   pantherclaw-server version
 
 Configuration: JSON file plus PC_* environment variables; secrets only as file paths.
@@ -172,6 +175,9 @@ func RunCommand(ctx context.Context, args []string, stdout, stderr io.Writer, en
 		err = cmdEvidence(ctx, args[1:], stdout, stderr, env)
 	case "dev":
 		err = cmdDev(ctx, args[1:], stdout, stderr, env)
+	case "secrets":
+		// The Helm chart's init container (G0 M13 D42).
+		err = config.StageSecretsCommand("pantherclaw-server", args[1:], stdout, stderr)
 	default:
 		_, _ = fmt.Fprint(stderr, usage)
 		return 2
@@ -603,6 +609,14 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		workers.serve(ctx, g, client)
 		if onStart != nil && cfg.Role == RoleAll {
 			onStart(apiAddr)
+		}
+		// Role worker: /livez and /readyz on the health listener (HR-397).
+		healthAddr, err := serveHealth(ctx, g, cfg, pool, workers, log)
+		if err != nil {
+			return err
+		}
+		if onStart != nil && healthAddr != "" {
+			onStart(healthAddr)
 		}
 		g.Go(func() error {
 			<-ctx.Done()

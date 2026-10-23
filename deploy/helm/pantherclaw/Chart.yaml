@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+apiVersion: v2
+name: pantherclaw
+description: PantherClaw control plane (API and workers) on Kubernetes - G0 M13 D36
+type: application
+# The chart's own version; appVersion is the PantherClaw release whose
+# images it runs (set image.*.digest from that release's notes).
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/katocxl/pantherclaw
+sources:
+  - https://github.com/katocxl/pantherclaw
+kubeVersion: ">=1.29.0-0"

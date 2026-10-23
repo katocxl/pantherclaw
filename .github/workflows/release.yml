@@ -8,12 +8,15 @@
 #   2. `verify` fails unless the tagged commit is on `main` and its `ci-ok`
 #      check run succeeded, then re-runs the core gate on the tagged commit.
 #   3. `release` waits for approval of the protected `release` environment
-#      (gates G2/G3), builds the 7 binaries with GoReleaser into a DRAFT release
-#      and attests every artifact (SLSA provenance via GitHub OIDC).
+#      (gates G2/G3), builds the server and gateway images from deploy/docker
+#      (linux/amd64 + arm64), pushes them to GHCR by digest and attests them,
+#      then builds the 7 binaries with GoReleaser into a DRAFT release (pclaw
+#      embeds the two image digests for `pclaw up`, G0 M13 D39) and attests
+#      every artifact (SLSA provenance via GitHub OIDC).
 #   4. `images` builds the edge and probe sandbox images (linux/amd64 + arm64),
-#      pushes them to GHCR by version tag, attests each image digest, appends the
-#      digests to the release notes, then publishes the draft (immutable once
-#      published).
+#      pushes them to GHCR, attests each image digest, tags all four images by
+#      version, appends the digests to the release notes, then publishes the
+#      draft (immutable once published).
 name: release
 
 on:
@@ -75,14 +78,21 @@ jobs:
     name: build, attest, publish
     needs: verify
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     environment:
       name: release
       url: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}
     permissions:
       contents: write # create the draft release and upload assets
+      packages: write # push the server and gateway images by digest (pclaw embeds them; G0 M13 D39)
       id-token: write # Sigstore OIDC for artifact attestations
       attestations: write
+    env:
+      SERVER_IMAGE: ghcr.io/katocxl/pantherclaw-server
+      GATEWAY_IMAGE: ghcr.io/katocxl/pantherclaw-gateway
+    outputs:
+      server-digest: ${{ steps.server.outputs.digest }}
+      gateway-digest: ${{ steps.gateway.outputs.digest }}
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
@@ -107,6 +117,13 @@ jobs:
             rekor.sigstore.dev:443
             tuf-repo-cdn.sigstore.dev:443
             timestamp.sigstore.dev:443
+            ghcr.io:443
+            pkg-containers.githubusercontent.com:443
+            gcr.io:443
+            registry-1.docker.io:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+            *.r2.cloudflarestorage.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -115,6 +132,75 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      # The server and gateway images (G0 M13 D7, D36, D39): built from
+      # deploy/docker (distroless, nonroot, linux/amd64 + arm64), pushed by
+      # digest only (the images job tags them once the release is complete)
+      # and attested, before GoReleaser, so that pclaw names them by digest.
+      - name: Image build arguments
+        id: meta
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          {
+            echo "version=${TAG#v}"
+            echo "date=$(git log -1 --format=%cI)"
+          } >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push the server image (by digest)
+        id: server
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/docker/server.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            COMMIT=${{ github.sha }}
+            DATE=${{ steps.meta.outputs.date }}
+          provenance: false
+          sbom: false
+          outputs: type=image,name=${{ env.SERVER_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+      - name: Build and push the gateway image (by digest)
+        id: gateway
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/docker/gateway.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            COMMIT=${{ github.sha }}
+            DATE=${{ steps.meta.outputs.date }}
+          provenance: false
+          sbom: false
+          outputs: type=image,name=${{ env.GATEWAY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+      - name: Check the image digests
+        env:
+          SERVER_DIGEST: ${{ steps.server.outputs.digest }}
+          GATEWAY_DIGEST: ${{ steps.gateway.outputs.digest }}
+        run: |
+          set -euo pipefail
+          for d in "$SERVER_DIGEST" "$GATEWAY_DIGEST"; do
+            [[ "$d" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no image digest ($d)"; exit 1; }
+          done
+      - name: Attest server image provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.SERVER_IMAGE }}
+          subject-digest: ${{ steps.server.outputs.digest }}
+          push-to-registry: true
+      - name: Attest gateway image provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.GATEWAY_IMAGE }}
+          subject-digest: ${{ steps.gateway.outputs.digest }}
+          push-to-registry: true
       - uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
       - name: GoReleaser (draft release)
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
@@ -124,6 +210,9 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # pclaw up runs these images (.goreleaser.yaml ldflags).
+          PC_SERVER_IMAGE: ${{ env.SERVER_IMAGE }}@${{ steps.server.outputs.digest }}
+          PC_GATEWAY_IMAGE: ${{ env.GATEWAY_IMAGE }}@${{ steps.gateway.outputs.digest }}
       - name: Attest build provenance for every released file
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
@@ -151,7 +240,7 @@ jobs:
           retention-days: 1
 
   images:
-    name: sandbox images, publish
+    name: sandbox images, tags, publish
     needs: release
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -163,6 +252,10 @@ jobs:
     env:
       EDGE_IMAGE: ghcr.io/katocxl/pantherclaw-edge
       PROBE_IMAGE: ghcr.io/katocxl/pantherclaw-probe
+      SERVER_IMAGE: ghcr.io/katocxl/pantherclaw-server
+      GATEWAY_IMAGE: ghcr.io/katocxl/pantherclaw-gateway
+      SERVER_DIGEST: ${{ needs.release.outputs.server-digest }}
+      GATEWAY_DIGEST: ${{ needs.release.outputs.gateway-digest }}
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
@@ -266,6 +359,15 @@ jobs:
             "${EDGE_IMAGE}@${EDGE_AMD64}" "${EDGE_IMAGE}@${EDGE_ARM64}"
           docker buildx imagetools create --tag "${PROBE_IMAGE}:${version}" \
             "${PROBE_IMAGE}@${PROBE_AMD64}" "${PROBE_IMAGE}@${PROBE_ARM64}"
+          # The server and gateway were pushed and attested by digest in the
+          # release job; the version tag points at that same index.
+          docker buildx imagetools create --tag "${SERVER_IMAGE}:${version}" "${SERVER_IMAGE}@${SERVER_DIGEST}"
+          docker buildx imagetools create --tag "${GATEWAY_IMAGE}:${version}" "${GATEWAY_IMAGE}@${GATEWAY_DIGEST}"
+          for img in "${SERVER_IMAGE}" "${GATEWAY_IMAGE}"; do
+            got=$(docker buildx imagetools inspect "${img}:${version}" --format '{{.Manifest.Digest}}')
+            want=$SERVER_DIGEST; [ "$img" = "$GATEWAY_IMAGE" ] && want=$GATEWAY_DIGEST
+            [ "$got" = "$want" ] || { echo "::error::${img}:${version} is ${got}, not ${want}"; exit 1; }
+          done
           edge=$(docker buildx imagetools inspect "${EDGE_IMAGE}:${version}" --format '{{.Manifest.Digest}}')
           probe=$(docker buildx imagetools inspect "${PROBE_IMAGE}:${version}" --format '{{.Manifest.Digest}}')
           case "$edge$probe" in sha256:*sha256:*) ;; *) echo "::error::no image digest"; exit 1 ;; esac
@@ -300,5 +402,12 @@ jobs:
             echo "- \`${PROBE_IMAGE}@${PROBE_DIGEST}\`"
             echo
             echo "Verify: \`gh attestation verify oci://${EDGE_IMAGE}@${EDGE_DIGEST} --repo ${GITHUB_REPOSITORY}\`"
+            echo
+            echo "**Server and gateway images** (linux/amd64, linux/arm64; distroless, non-root; \`pclaw up\` of this release runs exactly these, and the Helm chart takes them by digest):"
+            echo
+            echo "- \`${SERVER_IMAGE}@${SERVER_DIGEST}\`"
+            echo "- \`${GATEWAY_IMAGE}@${GATEWAY_DIGEST}\`"
+            echo
+            echo "Verify: \`gh attestation verify oci://${SERVER_IMAGE}@${SERVER_DIGEST} --repo ${GITHUB_REPOSITORY}\`"
           } >> notes.md
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md --draft=false

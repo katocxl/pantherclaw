@@ -4,7 +4,8 @@
 # GoReleaser v2 — reproducible, static, trimmed binaries + SBOMs + checksums.
 # The sandbox's edge and probe images (distroless, multi-arch) are built from the
 # static linux builds below by release.yml, which also creates the provenance
-# attestations.
+# attestations. The server and gateway images are built by release.yml from
+# deploy/docker before GoReleaser runs; pclaw embeds their digests.
 version: 2
 
 project_name: pantherclaw
@@ -38,6 +39,16 @@ builds:
     id: pclaw
     main: ./cmd/pclaw
     binary: pclaw
+    # pclaw up runs the server and gateway images release.yml pushed by
+    # digest just before (G0 M13 D39); empty outside release.yml, where pclaw
+    # falls back to locally built images.
+    ldflags:
+      - -s -w
+      - -X github.com/katocxl/pantherclaw/internal/platform/version.version={{ .Version }}
+      - -X github.com/katocxl/pantherclaw/internal/platform/version.commit={{ .FullCommit }}
+      - -X github.com/katocxl/pantherclaw/internal/platform/version.date={{ .CommitDate }}
+      - -X github.com/katocxl/pantherclaw/internal/pclaw.nodeServerImage={{ index .Env "PC_SERVER_IMAGE" }}
+      - -X github.com/katocxl/pantherclaw/internal/pclaw.nodeGatewayImage={{ index .Env "PC_GATEWAY_IMAGE" }}
   - <<: *build
     id: pantherclaw-sim
     main: ./cmd/pantherclaw-sim

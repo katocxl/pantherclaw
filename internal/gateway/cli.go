@@ -93,6 +93,7 @@ Usage:
   pantherclaw-gateway enroll --config FILE --token-file FILE
   pantherclaw-gateway broker-key generate --out FILE --kek-file FILE
   pantherclaw-gateway serve [--config FILE] [--enroll-file FILE]
+  pantherclaw-gateway secrets stage --from DIR --to DIR
   pantherclaw-gateway version
 
 Configuration: JSON file plus PC_GW_* environment variables; secrets only as file paths.
@@ -115,6 +116,9 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, env confi
 		err = cmdBrokerKey(ctx, args[1:], stdout, stderr)
 	case "enroll":
 		err = cmdEnroll(ctx, args[1:], stdout, stderr, env)
+	case "secrets":
+		// A Kubernetes init container (G0 M13 D42).
+		err = config.StageSecretsCommand("pantherclaw-gateway", args[1:], stdout, stderr)
 	default:
 		_, _ = fmt.Fprint(stderr, usage)
 		return 2
@@ -199,7 +203,11 @@ func serve(ctx context.Context, args []string, stderr io.Writer, env config.Look
 		}
 		tlsConf = httpx.ServerTLSConfig(cert)
 	}
-	srv, err := httpx.NewServer(httpx.ServerConfig{Addr: cfg.Listen, Handler: g.Handler(), TLS: tlsConf, Logger: log})
+	srv, err := httpx.NewServer(httpx.ServerConfig{
+		Addr: cfg.Listen, Handler: g.Handler(), TLS: tlsConf, Logger: log,
+		// Published on the host's loopback only (validated with public_url).
+		PlaintextBehindProxy: cfg.PlaintextPublishedLoopback,
+	})
 	if err != nil {
 		return err
 	}

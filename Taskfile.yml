@@ -38,6 +38,7 @@ tasks:
       - task: lint
       - task: lint:workflows
       - task: lint:migrations
+      - task: helm:check
       - task: proto:breaking
       - task: test
       - task: secrets
@@ -63,6 +64,13 @@ tasks:
     desc: Lint GitHub Actions workflows (actionlint)
     cmds:
       - go tool -modfile={{.PINS}}/actionlint/go.mod actionlint -color=false
+
+  helm:check:
+    desc: Lint the Helm chart deploy/helm/pantherclaw and validate what it renders against the Kubernetes schemas (pinned helm and kubeconform; kubeconform fetches the schemas)
+    cmds:
+      - go tool -modfile={{.PINS}}/helm/go.mod helm lint --strict deploy/helm/pantherclaw
+      - go tool -modfile={{.PINS}}/helm/go.mod helm template pc deploy/helm/pantherclaw --set maintenanceHold=true --set api.tls.existingSecret=pc-tls --set 'oidc.providers[0].name=sso' --set 'oidc.providers[0].issuer=https://idp.example.com' --set 'oidc.providers[0].clientID=pc' --set 'oidc.providers[0].existingSecret=pc-oidc' > /dev/null
+      - go tool -modfile={{.PINS}}/helm/go.mod helm template pc deploy/helm/pantherclaw | go tool -modfile={{.PINS}}/kubeconform/go.mod kubeconform -strict -summary -kubernetes-version 1.31.0
 
   lint:migrations:
     desc: Lint the migrations added since the baseline with squawk (ADR-0003; pinned binary checked against its SHA-256 in tools/squawk, config .squawk.toml)
@@ -186,6 +194,12 @@ tasks:
       - echo "edge  $(docker build --quiet --pull=false --network none --file deploy/sandbox/edge.Dockerfile bin/sandbox)"
       - echo "probe $(docker build --quiet --pull=false --network none --file deploy/sandbox/probe.Dockerfile bin/sandbox)"
       - echo "pantherclaw-demo-agent $(docker build --quiet --pull=false --network none --file deploy/sandbox/demo-agent.Dockerfile bin/sandbox)"
+
+  images:
+    desc: Build the server and gateway images for this machine from deploy/docker as pantherclaw-server:dev and pantherclaw-gateway:dev, which a development build of pclaw up uses (G0 M13 D36)
+    cmds:
+      - docker build --file deploy/docker/server.Dockerfile --build-arg VERSION=dev --tag pantherclaw-server:dev .
+      - docker build --file deploy/docker/gateway.Dockerfile --build-arg VERSION=dev --tag pantherclaw-gateway:dev .
 
   test:linux:
     desc: Run race-enabled tests inside a pinned Linux container (use on Windows)
