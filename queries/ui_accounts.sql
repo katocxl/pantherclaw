@@ -10,7 +10,8 @@
 -- One account per (issuer, subject); email and name are refreshed from the
 -- ID token at each sign-in (HR-348: never matched by email).
 INSERT INTO pc.accounts (id, issuer, subject, email, email_verified, display_name, last_sign_in_at)
-VALUES (sqlc.arg(id), sqlc.arg(issuer), sqlc.arg(subject), sqlc.arg(email), sqlc.arg(email_verified), sqlc.arg(display_name), now())
+SELECT sqlc.arg(id), sqlc.arg(issuer), sqlc.arg(subject), sqlc.arg(email), sqlc.arg(email_verified), sqlc.arg(display_name), now()
+WHERE pc.identity_available(sqlc.arg(issuer),sqlc.arg(subject),true)
 ON CONFLICT (issuer, subject) DO UPDATE
 SET email = EXCLUDED.email, email_verified = EXCLUDED.email_verified, display_name = EXCLUDED.display_name,
     last_sign_in_at = now()
@@ -45,25 +46,25 @@ ORDER BY id;
 -- Creates a pending sign-in without an org unless max_open of them are
 -- pending (unauthenticated requests create these rows).
 INSERT INTO pc.account_login_requests (id, state_hash, binding_hash, nonce_hash, pkce_verifier, provider, next_path, max_age,
-                                       requested_ip, expires_at, invitation_org_id, invitation_token_hash)
+                                       requested_ip, expires_at, invitation_org_id, invitation_token_hash, deletion_account_id)
 SELECT sqlc.arg(id)::uuid, sqlc.arg(state_hash)::bytea, sqlc.arg(binding_hash)::bytea, sqlc.arg(nonce_hash)::bytea,
        sqlc.arg(pkce_verifier)::text, sqlc.arg(provider)::text, sqlc.arg(next_path)::text, sqlc.narg(max_age)::int,
        sqlc.arg(requested_ip)::text, now() + make_interval(secs => sqlc.arg(ttl_seconds)::int),
-       sqlc.narg(invitation_org_id)::uuid, sqlc.narg(invitation_token_hash)::bytea
+       sqlc.narg(invitation_org_id)::uuid, sqlc.narg(invitation_token_hash)::bytea, sqlc.narg(deletion_account_id)::uuid
 WHERE (SELECT count(*) FROM pc.account_login_requests WHERE state = 'PENDING' AND expires_at > now()) < sqlc.arg(max_open)::int;
 
 -- name: ConsumeAccountLoginState :one
 UPDATE pc.account_login_requests r
 SET state = 'CONSUMED', consumed_at = now(), state_hash = NULL, binding_hash = NULL, nonce_hash = NULL, pkce_verifier = NULL,
-    invitation_org_id = NULL, invitation_token_hash = NULL
+    invitation_org_id = NULL, invitation_token_hash = NULL, deletion_account_id = NULL
 FROM (SELECT c.id, c.binding_hash, c.nonce_hash, c.pkce_verifier, c.provider, c.next_path, c.max_age, c.invitation_org_id,
-             c.invitation_token_hash
+             c.invitation_token_hash, c.deletion_account_id, c.created_at
       FROM pc.account_login_requests c
       WHERE c.state_hash = sqlc.arg(state_hash) AND c.state = 'PENDING' AND c.expires_at > now()
       FOR UPDATE) old
 WHERE r.id = old.id
 RETURNING old.id, old.binding_hash, old.nonce_hash, old.pkce_verifier, old.provider, old.next_path, old.max_age,
-          old.invitation_org_id, old.invitation_token_hash;
+          old.invitation_org_id, old.invitation_token_hash, old.deletion_account_id, old.created_at;
 
 -- name: InsertAccountSession :one
 INSERT INTO pc.account_sessions (id, account_id, secret_hash, provider, auth_time, user_agent, client_ip, expires_at)
@@ -78,10 +79,11 @@ SELECT s.id, s.account_id, s.state, s.auth_time, s.provider, s.created_at,
        (s.expires_at > now())::bool AS within_lifetime,
        (s.last_seen_at > now() - make_interval(secs => sqlc.arg(idle_seconds)::int))::bool AS within_idle,
        (s.last_seen_at < now() - interval '1 minute')::bool AS touch,
-       a.email, a.email_verified, a.display_name, now()::timestamptz AS db_now
+       a.email, a.email_verified, a.display_name, now()::timestamptz AS db_now, s.deletion_reauthenticated_at
 FROM pc.account_sessions s
 JOIN pc.accounts a ON a.id = s.account_id
-WHERE s.secret_hash = sqlc.arg(secret_hash) OR s.prev_secret_hash = sqlc.arg(secret_hash);
+WHERE (s.secret_hash = sqlc.arg(secret_hash) OR s.prev_secret_hash = sqlc.arg(secret_hash))
+AND a.deleted_at IS NULL AND pc.identity_available(a.issuer,a.subject,false);
 
 -- name: TouchAccountSession :exec
 UPDATE pc.account_sessions SET last_seen_at = now() WHERE id = sqlc.arg(id) AND state = 'ACTIVE';

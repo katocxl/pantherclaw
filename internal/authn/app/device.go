@@ -63,6 +63,8 @@ type IDClaims struct {
 type AuthRequest struct {
 	State, Nonce, Verifier, RedirectURI string
 	MaxAge                              time.Duration
+	// ForceLogin asks for prompt=login and explicit max_age=0.
+	ForceLogin bool
 }
 
 // SubjectClaims are the verified claims of an RFC 8693 subject token

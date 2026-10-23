@@ -35,7 +35,7 @@ type AccountSessions interface {
 
 // accountOnly are the procedures' requirements that belong to an account,
 // not to a role (declarable only).
-var accountOnly = []td.Permission{td.PermOrgsCreate, td.PermOrgsListMine, td.PermInvitationsAccept}
+var accountOnly = []td.Permission{td.PermOrgsCreate, td.PermOrgsListMine, td.PermInvitationsAccept, td.PermAccountDelete, td.PermDeletionRecordsRead}
 
 // WithAccountSessions accepts account sessions (cookie cookieName) and
 // gives org browser sessions their account for the account procedures.
