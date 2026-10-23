@@ -99,11 +99,12 @@ Usage:
                                                      new receipts / evidence signing keys; earlier keys stay
                                                      published and verifying; restart every server instance after
   pantherclaw-server keys bump-epochs --all --confirm [--config FILE]
+                                                     after restore: raise every non-DELETED org's containment epoch
   pantherclaw-server security-log export --org ID --out FILE [--after SEQ] [--limit 1..500] [--config FILE]
   pantherclaw-server security-log ack --org ID --through SEQ --confirm [--config FILE]
                                                      ACK only after verifying the prefix has a durable external copy
   pantherclaw-server restore reapply --from FILE [--since RFC3339] --confirm [--config FILE]
-                                                     after a database restore: raise every org's containment epoch
+                                                     re-apply shipped tightening events while maintenance hold is on
   pantherclaw-server org create --name N [--admin-email E] [--config FILE]
                                                      create an organization and print its one-time admin token
   pantherclaw-server org admin-invite --org ID [--admin-email E] [--config FILE]
