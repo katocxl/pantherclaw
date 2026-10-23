@@ -99,6 +99,10 @@ Usage:
                                                      new receipts / evidence signing keys; earlier keys stay
                                                      published and verifying; restart every server instance after
   pantherclaw-server keys bump-epochs --all --confirm [--config FILE]
+  pantherclaw-server security-log export --org ID --out FILE [--after SEQ] [--limit 1..500] [--config FILE]
+  pantherclaw-server security-log ack --org ID --through SEQ --confirm [--config FILE]
+                                                     ACK only after verifying the prefix has a durable external copy
+  pantherclaw-server restore reapply --from FILE [--since RFC3339] --confirm [--config FILE]
                                                      after a database restore: raise every org's containment epoch
   pantherclaw-server org create --name N [--admin-email E] [--config FILE]
                                                      create an organization and print its one-time admin token
@@ -157,6 +161,10 @@ func RunCommand(ctx context.Context, args []string, stdout, stderr io.Writer, en
 		err = cmdDB(ctx, args[1:], stdout, stderr)
 	case "keys":
 		err = cmdKeys(ctx, args[1:], stdout, stderr, env)
+	case "security-log":
+		err = cmdSecurityLog(ctx, args[1:], stdout, stderr, env)
+	case "restore":
+		err = cmdRestore(ctx, args[1:], stdout, stderr, env)
 	case "org":
 		err = cmdOrg(ctx, args[1:], stdout, stderr, env)
 	case "evidence":
@@ -480,7 +488,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	}
 	if cfg.Role == RoleWorker || cfg.Role == RoleAll {
 		jreg := jobs.NewRegistry()
-		if err := chainer.Register(jreg, pool); err != nil {
+		if err := chainer.Register(jreg, pool, log); err != nil {
 			return err
 		}
 		if err := authority.RegisterSweeper(jreg, pool, svc, cfg.Authority.StaleDispatch.D()); err != nil {
