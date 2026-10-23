@@ -82,7 +82,7 @@ func TestHR384_TighteningIsTenantScopedIdempotentAndAudited(t *testing.T) {
 		}
 	}
 	var audits int
-	d.AdminQueryRow(t, `SELECT count(*) FROM pc.ledger_entries WHERE org_id=$1 AND kind='audit.restore.reapplied' AND actor_type='operator' AND body->'details'->>'count'='4'`, []any{org}, &audits)
+	d.AdminQueryRow(t, `SELECT count(*) FROM pc.ledger_entries WHERE org_id=$1 AND kind='audit.restore.reapplied' AND actor_type='operator' AND convert_from(body,'UTF8')::jsonb->'details'->>'count'='4'`, []any{org}, &audits)
 	if audits != 2 {
 		t.Fatalf("audits=%d, want 2", audits)
 	}
@@ -177,7 +177,7 @@ func TestHR384_AgentHeldRevocationNeverFabricatesLocalMaterial(t *testing.T) {
 	if n != 0 {
 		t.Fatal("invented local credential")
 	}
-	d.AdminQueryRow(t, `SELECT count(*) FROM pc.ledger_entries WHERE org_id=$1 AND kind='audit.restore.reapplied' AND body->'details'->>'credential_no_local_material'='1' AND body->'details'->>'credential_local'='0'`, []any{org}, &n)
+	d.AdminQueryRow(t, `SELECT count(*) FROM pc.ledger_entries WHERE org_id=$1 AND kind='audit.restore.reapplied' AND convert_from(body,'UTF8')::jsonb->'details'->>'no_local_material'='1' AND convert_from(body,'UTF8')::jsonb->'details'->>'local_material'='0'`, []any{org}, &n)
 	if n != 2 {
 		t.Fatalf("no-local-material audits=%d", n)
 	}

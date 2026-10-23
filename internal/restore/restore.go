@@ -245,8 +245,8 @@ func Audit(ctx context.Context, tx db.TenantTx, entries []Event, operator domain
 		}
 	}
 	if local+noLocal > 0 {
-		details["credential_local"] = strconv.Itoa(local)
-		details["credential_no_local_material"] = strconv.Itoa(noLocal)
+		details["local_material"] = strconv.Itoa(local)
+		details["no_local_material"] = strconv.Itoa(noLocal)
 	}
 	_, err := audit.Record(ctx, tx, audit.Event{Name: "restore.reapplied", Actor: operator, Outcome: audit.Success, Object: &audit.Object{Type: "org", ID: tx.OrgID().String()}, Details: details})
 	return err
