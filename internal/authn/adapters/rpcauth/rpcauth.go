@@ -117,7 +117,13 @@ func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authentica
 			}
 		}
 		if actx, handled, err := o.orgAccountCall(ctx, c, perm); handled {
-			return actx, err
+			if err == nil {
+				err = o.limits.limit(ctx, info, c, spec.Procedure)
+			}
+			if err != nil {
+				return nil, err
+			}
+			return actx, nil
 		}
 		if perm != td.PermAuthenticated && !c.CanAnywhere(perm) {
 			if o.refusals != nil && perm.HumanOnly() && (!c.Human() || c.Credential == tapp.CredAPIKey) {
@@ -127,6 +133,12 @@ func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authentica
 				o.refusals.HumanOnlyRefused(ctx, c, spec.Procedure, perm)
 			}
 			return nil, td.ErrPermissionDenied(perm)
+		}
+		// The API limits (G0 M13 D8, HR-375) count calls the caller may
+		// make, before the plan gate: gateway, workload and enrollment
+		// procedures returned above and are never counted.
+		if err := o.limits.limit(ctx, info, c, spec.Procedure); err != nil {
+			return nil, err
 		}
 		if o.gate != nil {
 			// The plan gate (G0 UI D9, D43, HR-356) runs after the
@@ -196,6 +208,7 @@ type Option func(*options)
 type options struct {
 	refusals RefusalRecorder
 	gate     PlanGate
+	limits   *APILimits
 	sessions *webguard.Sessions
 	// Hosted accounts (accounts.go).
 	accounts      AccountSessions

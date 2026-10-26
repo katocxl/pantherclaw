@@ -56,6 +56,9 @@ type batch struct {
 	cutoff time.Time
 	sealed int64
 	max    int32
+	// bytes sums the ledger body bytes the batch removed (the usage
+	// meters subtract them, G0 M13 D45).
+	bytes *int64
 }
 
 // ledgerStep removes the bodies of chained, checkpointed ledger entries
@@ -63,10 +66,16 @@ type batch struct {
 // nothing).
 func ledgerStep(c Category, like, notLike string) step {
 	return step{category: c, items: "ledger_entries", remove: func(ctx context.Context, q *dbq.Queries, b batch) ([]time.Time, error) {
-		return q.RemoveLedgerBodies(ctx, dbq.RemoveLedgerBodiesParams{
+		rows, err := q.RemoveLedgerBodies(ctx, dbq.RemoveLedgerBodiesParams{
 			PolicyID: &b.policy, OrgID: b.org, Cutoff: b.cutoff, KindLike: like, KindNotLike: notLike, SealedSeq: b.sealed,
 			MaxRows: b.max,
 		})
+		times := make([]time.Time, len(rows))
+		for i, r := range rows {
+			times[i] = r.OccurredAt
+			*b.bytes += r.Bytes
+		}
+		return times, err
 	}}
 }
 
@@ -210,7 +219,9 @@ func (r *Remover) run(ctx context.Context, org ids.OrgID, res *Result) error {
 // it.
 func (r *Remover) batch(ctx context.Context, org ids.OrgID, s step, size int) (int, error) {
 	var n int
+	var bytes int64
 	err := r.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		bytes = 0
 		q := dbq.New(tx)
 		if err := q.LockRetention(ctx, org.UUID()); err != nil {
 			return err
@@ -234,7 +245,8 @@ func (r *Remover) batch(ctx context.Context, org ids.OrgID, s step, size int) (i
 		}
 		times, err := s.remove(ctx, q, batch{
 			org: org, policy: cur.ID, now: now, cutoff: now.Add(-time.Duration(cur.Days) * 24 * time.Hour), sealed: sealed,
-			max: int32(size), //nolint:gosec // G115: a small batch size
+			max:   int32(size), //nolint:gosec // G115: a small batch size
+			bytes: &bytes,
 		})
 		if err != nil || len(times) == 0 {
 			return err
@@ -260,5 +272,16 @@ func (r *Remover) batch(ctx context.Context, org ids.OrgID, s step, size int) (i
 		})
 		return err
 	})
+	if err == nil && bytes > 0 {
+		// The usage meters subtract the removed bytes from the day's stored
+		// total (G0 M13 D45), recorded as pc_app after the batch committed:
+		// pc_retention has no grant on the meters (HR-198). A failure here
+		// only delays the decrease to the weekly recount.
+		if uerr := r.App.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+			return dbq.New(tx).AddUsageBytesRemoved(ctx, org, bytes)
+		}); uerr != nil && r.Log != nil {
+			r.Log.WarnContext(ctx, "evidence.retention_usage_unrecorded", slog.String("org", org.String()), slog.Int64("bytes", bytes))
+		}
+	}
 	return n, err
 }

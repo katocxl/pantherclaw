@@ -1,0 +1,51 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+
+// UsageService reports what the caller's organization used, per UTC day
+// (G0 M13 D10, D11; HR-377). The server computes the numbers hourly from
+// the org's own records; no client reports them, and nothing enforces
+// them yet.
+service UsageService {
+  // ListUsage returns the org's last days days, today included, newest
+  // first. Days the server has not metered are left out.
+  // permission: entitlements.read
+  rpc ListUsage(ListUsageRequest) returns (ListUsageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// DailyUsage is one UTC day of an organization's usage.
+message DailyUsage {
+  // YYYY-MM-DD (UTC).
+  string day = 1;
+  // Agents that existed during the day and were not retired before it.
+  int32 agents = 2;
+  // The highest number of admitted agent instances sampled during the day.
+  int32 instances_peak = 3;
+  // Runs started during the day.
+  int32 runs = 4;
+  // Approximate stored data at the end of the day, in bytes: evidence
+  // ledger entries, decision receipts, payload captures and evidence packs.
+  int64 stored_bytes = 5;
+}
+
+// ListUsageRequest asks for the last days days.
+message ListUsageRequest {
+  // 1 to 90.
+  int32 days = 1 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 90
+  }];
+}
+
+// ListUsageResponse returns them.
+message ListUsageResponse {
+  // Newest first.
+  repeated DailyUsage days = 1;
+}

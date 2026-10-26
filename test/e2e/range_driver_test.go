@@ -76,6 +76,8 @@ type rangeDriver struct {
 
 	// planEvents counts the plan events reported (G0 UI range steps).
 	planEvents int
+	// flood is the api.flood steps' API layer, shared by a scenario's steps (M13).
+	flood *floodState
 }
 
 type reviewer struct {

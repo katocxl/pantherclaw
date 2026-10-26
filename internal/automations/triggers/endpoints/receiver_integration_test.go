@@ -8,6 +8,7 @@ package endpoints
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -26,6 +27,7 @@ import (
 	ndomain "github.com/katocxl/pantherclaw/internal/notifications/domain"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/ratelimit"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
 )
@@ -369,5 +371,104 @@ func TestHR275_UnusableSourcesVerifyAgainstTheDummyKey(t *testing.T) {
 	status, _ := f.post(t, f.url(f.Org, f.source.ID), "msg_badsig", time.Now(), body, []byte("not-the-source-secret-at-all"))
 	if status != http.StatusUnauthorized || taken() != 0 {
 		t.Fatalf("a bad signature on a usable source: %d", status)
+	}
+}
+
+// failingCounter is a shared counter that cannot be reached.
+type failingCounter struct{}
+
+func (failingCounter) Take(context.Context, string, string, time.Duration, int, int) (ratelimit.Decision, error) {
+	return ratelimit.Decision{}, errors.New("counter unavailable")
+}
+
+// TestHR376_SourceRateHoldsAcrossReplicasAndFailsClosed (R-34): a
+// source's rate is counted in PostgreSQL, so two replicas together admit
+// no more than the rate; a replica that cannot reach the counter refuses
+// (429) and stores nothing.
+func TestHR376_SourceRateHoldsAcrossReplicasAndFailsClosed(t *testing.T) {
+	f := newInboundFixture(t, 2, "ping")
+	if _, err := f.svc.ActivateEventSource(f.author(), f.source.ID, f.stepUp()); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	f.svc.Receiver().Mount(mux) // a second replica
+	replica2 := httptest.NewServer(mux)
+	t.Cleanup(replica2.Close)
+	path := "/v1/automations/events/" + f.Org.String() + "/" + f.source.ID.String()
+	now := time.Now()
+	for i, c := range []struct {
+		base string
+		want int
+	}{{f.srv.URL, http.StatusAccepted}, {replica2.URL, http.StatusAccepted}, {f.srv.URL, http.StatusTooManyRequests}, {replica2.URL, http.StatusTooManyRequests}} {
+		if st, _ := f.post(t, c.base+path, "s"+strconv.Itoa(i), now, `{"type":"ping"}`, f.secret); st != c.want {
+			t.Fatalf("request %d: %d, want %d", i, st, c.want)
+		}
+	}
+
+	created, err := f.svc.CreateEventSource(f.author(), NewSource{Name: "other", Types: []string{"ping"}, RatePerMinute: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.ActivateEventSource(f.author(), created.Source.ID, f.stepUp()); err != nil {
+		t.Fatal(err)
+	}
+	broken := f.svc.Receiver()
+	broken.source = failingCounter{}
+	mux = http.NewServeMux()
+	broken.Mount(mux)
+	replica3 := httptest.NewServer(mux)
+	t.Cleanup(replica3.Close)
+	st, body := f.post(t, replica3.URL+"/v1/automations/events/"+f.Org.String()+"/"+created.Source.ID.String(), "x1", now,
+		`{"type":"ping"}`, decodeSecret(t, created.Secret))
+	if st != http.StatusTooManyRequests || !strings.Contains(body, CodeRateLimited) {
+		t.Fatalf("counter unavailable: %d %s", st, body)
+	}
+	if n := f.Count(t, "SELECT count(*) FROM pc.automation_event_receipts WHERE org_id = $1 AND source_id = '"+created.Source.ID.String()+"'"); n != 0 {
+		t.Fatalf("%d receipts stored while the counter was unavailable", n)
+	}
+}
+
+// TestHR376_InboundBurstNeverStarvesThePool (D28): the receiver counts a
+// source's rate between its transactions, never while holding a pooled
+// connection, so a burst of signed events larger than the pool all
+// finish.
+func TestHR376_InboundBurstNeverStarvesThePool(t *testing.T) {
+	f := newInboundFixture(t, 50, "ping")
+	if _, err := f.svc.ActivateEventSource(f.author(), f.source.ID, f.stepUp()); err != nil {
+		t.Fatal(err)
+	}
+	cfg := f.DB.App
+	cfg.MaxConns = 2
+	small := f.DB.Pool(t, cfg)
+	trig := triggers.New(triggers.Deps{Pool: small, Starter: f.st, Editions: triggerstest.Team})
+	svc, err := New(small, f.Envelope, trig, triggerstest.Team, Config{PublicURL: "https://pc.example.com"}, f.clk, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	svc.Receiver().Mount(mux)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	url := srv.URL + "/v1/automations/events/" + f.Org.String() + "/" + f.source.ID.String()
+	now := time.Now()
+	statuses := make([]int, 4)
+	done := make(chan struct{})
+	go func() {
+		var wg sync.WaitGroup
+		for i := range statuses {
+			wg.Go(func() { statuses[i], _ = f.post(t, url, "burst"+strconv.Itoa(i), now, `{"type":"ping"}`, f.secret) })
+		}
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("a burst of 4 signed events on a pool of 2 did not finish")
+	}
+	for i, st := range statuses {
+		if st != http.StatusAccepted {
+			t.Errorf("request %d: %d", i, st)
+		}
 	}
 }

@@ -87,8 +87,10 @@ SELECT last_attempt_at, last_run_at, last_error, removed FROM pc.retention_statu
 SELECT coalesce(max(tree_size), 0)::bigint AS seq FROM pc.checkpoints WHERE org_id = sqlc.arg(org_id);
 
 -- name: RemoveLedgerBodies :many
+-- Returns each removed entry's time and its body's bytes (the usage meters
+-- subtract them, G0 M13 D45).
 WITH due AS (
-    SELECT e.org_id, e.id
+    SELECT e.org_id, e.id, octet_length(e.body)::bigint AS bytes
     FROM pc.ledger_entries e
     JOIN pc.ledger_chain l ON l.org_id = e.org_id AND l.entry_id = e.id
     WHERE e.org_id = sqlc.arg(org_id) AND e.body_removed_at IS NULL AND e.occurred_at < sqlc.arg(cutoff)
@@ -106,7 +108,7 @@ UPDATE pc.ledger_entries u
 SET body = NULL, body_removed_at = now(), removed_by_policy = sqlc.arg(policy_id)
 FROM due
 WHERE u.org_id = due.org_id AND u.id = due.id
-RETURNING u.occurred_at;
+RETURNING u.occurred_at, due.bytes;
 
 -- name: RemoveDecisionReceiptBodies :many
 WITH due AS (

@@ -80,6 +80,9 @@ type Config struct {
 	// listener (G0 M13 D30; wiring_m13_observability.go).
 	Telemetry TelemetryConfig `json:"telemetry"`
 	Admin     AdminConfig     `json:"admin"`
+	// Limits is the API rate limits and usage meters (G0 M13 D8, D10;
+	// config_m13_limits.go).
+	Limits LimitsConfig `json:"limits"`
 }
 
 // IdentityConfig configures workload identity (M3).
@@ -159,6 +162,7 @@ func DefaultConfig() Config {
 		Waitlist:  defaultWaitlist(),
 		CEL:       celenv.DefaultLimits,
 		Telemetry: defaultTelemetry(),
+		Limits:   defaultLimits(),
 	}
 }
 
@@ -206,6 +210,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateDev()...)
 	errs = append(errs, c.validateDevSlack()...)
 	errs = append(errs, c.validateObservability()...)
+	errs = append(errs, c.validateLimits()...)
 	if err := c.CEL.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("cel: %w", err))
 	}
