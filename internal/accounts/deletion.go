@@ -192,15 +192,9 @@ func (d *Deletion) Resume(ctx context.Context, account ids.UUID) error {
 						return e
 					}
 					if u.State == "ACTIVE" && o.State == "ACTIVE" {
-						bs, e := q.BindingsOfUser(ctx, r.Org, &r.ID)
+						admin, e := q.AccountUserIsOrgAdmin(ctx, r.Org, &r.ID)
 						if e != nil {
 							return e
-						}
-						admin := false
-						for _, b := range bs {
-							if b.Role == "org_admin" && b.ScopeType == "ORG" {
-								admin = true
-							}
 						}
 						if admin {
 							n, e := q.CountActiveOrgAdmins(ctx, r.Org)
@@ -286,6 +280,12 @@ func (d *Deletion) tenant(ctx context.Context, account ids.UUID, r db.OrgRef, st
 		}
 		if got != state {
 			return nil
+		}
+		// The deletion freezer takes this barrier before the organisation
+		// row. Keep the same order rather than holding the admin row while
+		// waiting for the freezer's exclusive write barrier.
+		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock_shared(hashtextextended('pc.org.write/' || $1::text, 0))", r.Org.String()); err != nil {
+			return err
 		}
 		if err := q.LockOrgAdmins(ctx, r.Org); err != nil {
 			return err
@@ -398,7 +398,7 @@ func (d *Deletion) ResumePending(ctx context.Context) error {
 	}
 	var errs []error
 	for _, account := range pending {
-		if err := d.Resume(ctx, account); err != nil && !errors.Is(err, ErrLastAdmin) {
+		if err := d.Resume(ctx, account); err != nil && !errors.Is(err, ErrLastAdmin) && pcerr.ReasonOf(err) != "DELETION_AWAITING_SECURITY_COPY" {
 			errs = append(errs, err)
 		}
 	}

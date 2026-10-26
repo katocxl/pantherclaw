@@ -70,6 +70,15 @@ func TestHR394_AccountDeletionIntentBeforeErasureAndRetry(t *testing.T) {
 	if _, err := f.store.Resolve(context.Background(), accounts.Identity{Issuer: issuer, Subject: "delete-me"}, ""); err == nil {
 		t.Fatal("pending identity signed in")
 	}
+	third := f.org(t, "late-legacy-user")
+	err := f.pool.InTenantTx(context.Background(), third, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO pc.users(org_id,id,issuer,subject,state)
+                               VALUES($1,$2,$3,'delete-me','DISABLED')`, third, ids.NewV7(), issuer)
+		return err
+	})
+	if !db.IsCheckViolation(err) {
+		t.Fatalf("disabled legacy identity bypassed pending guard: %v", err)
+	}
 	// The same journal resumes after a restart, without replaying erased steps.
 	d = accounts.NewDeletion(f.store, noopRecorder, func(ctx context.Context, id ids.UUID, h string, actor evd.Actor) error {
 		stopped = nil
@@ -158,6 +167,28 @@ func TestHR394_AccountDeletionCompletionDeliveryIsRetryable(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Fatalf("completion deliveries: %d", calls)
+	}
+}
+
+func TestHR394_LastAdminAfterFiveHundredBindingsStillBlocksDeletion(t *testing.T) {
+	f := newFixture(t, entitlements.ModeExternal)
+	a := f.account(t, "many-bindings", "admin@example.test", true)
+	org := f.org(t, "many-bindings")
+	u := f.user(t, org, "many-bindings")
+	f.exec(t, org, `WITH teams AS (
+        INSERT INTO pc.teams(org_id,id,slug,name)
+        SELECT $1,format('00000000-0000-7000-8000-%s',lpad(n::text,12,'0'))::uuid,
+               'team-' || n::text,'Team ' || n::text FROM generate_series(1,500) n RETURNING id
+    ) INSERT INTO pc.role_bindings(org_id,id,user_id,role,scope_type,team_id,created_by)
+      SELECT $1,id,$2,'auditor','TEAM',id,'test' FROM teams`, org, u)
+	f.exec(t, org, `INSERT INTO pc.role_bindings(org_id,id,user_id,role,scope_type,created_by)
+                   VALUES($1,'ffffffff-ffff-4fff-8fff-ffffffffffff',$2,'org_admin','ORG','test')`, org, u)
+	d := accounts.NewDeletion(f.store, noopRecorder, noopRecorder)
+	if err := d.Begin(context.Background(), a.ID); !errors.Is(err, accounts.ErrLastAdmin) {
+		t.Fatalf("last admin outside display page was not protected: %v", err)
+	}
+	if n := f.count(t, org, `SELECT count(*) FROM pc.users WHERE org_id=$1 AND id=$2 AND state='ACTIVE' AND subject='many-bindings'`, org, u); n != 1 {
+		t.Fatal("last administrator was altered")
 	}
 }
 

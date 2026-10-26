@@ -47,6 +47,11 @@ INSERT INTO pc.account_deletion_steps(org_id,id,user_id,state) VALUES(sqlc.arg(o
 -- name: AccountUserDeletionStep :one
 SELECT * FROM pc.account_deletion_steps WHERE org_id=sqlc.arg(org_id) AND id=sqlc.arg(account_id);
 
+-- name: AccountUserIsOrgAdmin :one
+-- Safety decisions must never depend on the bounded display binding list.
+SELECT EXISTS(SELECT FROM pc.role_bindings WHERE org_id=sqlc.arg(org_id) AND user_id=sqlc.arg(user_id)
+              AND role='org_admin' AND scope_type='ORG');
+
 -- name: RemoveAccountUserReservation :exec
 DELETE FROM pc.account_deletion_steps WHERE org_id=sqlc.arg(org_id) AND id=sqlc.arg(account_id) AND state='PREPARED';
 

@@ -5,7 +5,8 @@
 -- D47 account pseudonymisation and F20 personal sign-in metadata erasure.
 -- Invoker guards permit these writes only in the accounts purpose while
 -- the journal is DELETING, reached after F19 confirms the external copy.
-ALTER TABLE pc.accounts ADD COLUMN deleted_at timestamptz;
+-- Migration 00179 owns deleted_at, identity-column grants and the
+-- ACCOUNT_DELETED audit kind. This migration adds the journal guard only.
 CREATE TABLE pc.account_deletions (
     account_id uuid PRIMARY KEY REFERENCES pc.accounts(id),
     journal_id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -37,7 +38,6 @@ BEGIN
 END $$;
 -- +goose StatementEnd
 CREATE TRIGGER account_tombstone_guard BEFORE UPDATE OF issuer,subject,deleted_at ON pc.accounts FOR EACH ROW EXECUTE FUNCTION pc.account_tombstone_guard();
-GRANT UPDATE(issuer,subject,deleted_at) ON pc.accounts TO pc_app;
 
 -- +goose StatementBegin
 CREATE FUNCTION pc.account_personal_metadata_guard() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog,pc AS $$
@@ -57,8 +57,6 @@ CREATE TRIGGER account_personal_metadata_guard BEFORE UPDATE OF client_ip,user_a
 CREATE TRIGGER account_personal_metadata_guard BEFORE UPDATE OF client_ip ON pc.account_events FOR EACH ROW EXECUTE FUNCTION pc.account_personal_metadata_guard();
 GRANT UPDATE(user_agent,client_ip) ON pc.account_sessions TO pc_app;
 GRANT UPDATE(client_ip) ON pc.account_events TO pc_app;
-ALTER TABLE pc.account_events DROP CONSTRAINT account_events_kind_check;
-ALTER TABLE pc.account_events ADD CONSTRAINT account_events_kind_check CHECK(kind IN ('SIGNED_IN','SESSION_STARTED','SESSION_ENDED','ORG_CREATED','ORG_CREATE_REFUSED','INVITATION_ACCEPTED','INVITATION_REFUSED','ACCOUNT_DELETED'));
 
 CREATE TABLE pc.account_deletion_steps (
     org_id uuid NOT NULL REFERENCES pc.orgs(id),
@@ -120,7 +118,19 @@ CREATE FUNCTION pc.account_identity_guard() RETURNS trigger LANGUAGE plpgsql SET
 DECLARE issuer_value text; subject_value text; account_value uuid; previous text;
 BEGIN
     IF TG_TABLE_NAME = 'users' THEN
-        IF NEW.state <> 'ACTIVE' THEN RETURN NEW; END IF;
+        -- The deletion worker first disables/links the legacy user while
+        -- its original identity still matches the immutable account link.
+        -- It may not change personal fields through this narrow path.
+        -- New disabled users still consult the hash guard below.
+        IF TG_OP='UPDATE' AND NEW.state='DISABLED'
+           AND NEW.account_id IS NOT NULL
+           AND (OLD.account_id IS NULL OR OLD.account_id=NEW.account_id)
+           AND (NEW.issuer,NEW.subject,NEW.email,NEW.display_name)
+               IS NOT DISTINCT FROM (OLD.issuer,OLD.subject,OLD.email,OLD.display_name)
+           AND NEW.account_id=NULLIF(current_setting('app.account_id',true),'')::uuid
+           AND EXISTS(SELECT FROM pc.account_deletions WHERE account_id=NEW.account_id AND state='DELETING') THEN
+            RETURN NEW;
+        END IF;
         issuer_value := NEW.issuer; subject_value := NEW.subject; account_value := NEW.account_id;
     ELSIF TG_TABLE_NAME = 'account_sessions' THEN
         IF NEW.state <> 'ACTIVE' THEN RETURN NEW; END IF;
@@ -529,11 +539,5 @@ DROP TRIGGER account_personal_metadata_guard ON pc.account_sessions;
 DROP TRIGGER account_personal_metadata_guard ON pc.account_events;
 DROP FUNCTION pc.account_personal_metadata_guard();
 DROP TABLE pc.account_deletions;
-REVOKE UPDATE(issuer,subject,deleted_at) ON pc.accounts FROM pc_app;
 REVOKE UPDATE(user_agent,client_ip) ON pc.account_sessions FROM pc_app;
 REVOKE UPDATE(client_ip) ON pc.account_events FROM pc_app;
-ALTER TABLE pc.accounts DROP COLUMN deleted_at;
--- Existing deletion audit rows deliberately make downgrade fail closed;
--- a migration never deletes audit history to satisfy an older enum.
-ALTER TABLE pc.account_events DROP CONSTRAINT account_events_kind_check;
-ALTER TABLE pc.account_events ADD CONSTRAINT account_events_kind_check CHECK(kind IN ('SIGNED_IN','SESSION_STARTED','SESSION_ENDED','ORG_CREATED','ORG_CREATE_REFUSED','INVITATION_ACCEPTED','INVITATION_REFUSED'));
