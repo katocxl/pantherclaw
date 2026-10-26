@@ -269,7 +269,7 @@ func (q *Queries) EndExcessAccountSessions(ctx context.Context, accountID ids.UU
 }
 
 const getAccount = `-- name: GetAccount :one
-SELECT id, issuer, subject, email, email_verified, display_name, created_at, last_sign_in_at FROM pc.accounts WHERE id = $1
+SELECT id, issuer, subject, email, email_verified, display_name, created_at, last_sign_in_at, deleted_at FROM pc.accounts WHERE id = $1
 `
 
 func (q *Queries) GetAccount(ctx context.Context, id ids.UUID) (PcAccount, error) {
@@ -284,6 +284,7 @@ func (q *Queries) GetAccount(ctx context.Context, id ids.UUID) (PcAccount, error
 		&i.DisplayName,
 		&i.CreatedAt,
 		&i.LastSignInAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -491,7 +492,7 @@ func (q *Queries) LinkUserAccount(ctx context.Context, accountID *ids.UUID, orgI
 }
 
 const lockAccount = `-- name: LockAccount :one
-SELECT id, issuer, subject, email, email_verified, display_name, created_at, last_sign_in_at FROM pc.accounts WHERE id = $1 FOR UPDATE
+SELECT id, issuer, subject, email, email_verified, display_name, created_at, last_sign_in_at, deleted_at FROM pc.accounts WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockAccount(ctx context.Context, id ids.UUID) (PcAccount, error) {
@@ -506,6 +507,7 @@ func (q *Queries) LockAccount(ctx context.Context, id ids.UUID) (PcAccount, erro
 		&i.DisplayName,
 		&i.CreatedAt,
 		&i.LastSignInAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -628,7 +630,7 @@ VALUES ($1, $2, $3, $4, $5, $6, now())
 ON CONFLICT (issuer, subject) DO UPDATE
 SET email = EXCLUDED.email, email_verified = EXCLUDED.email_verified, display_name = EXCLUDED.display_name,
     last_sign_in_at = now()
-RETURNING id, issuer, subject, email, email_verified, display_name, created_at, last_sign_in_at
+RETURNING id, issuer, subject, email, email_verified, display_name, created_at, last_sign_in_at, deleted_at
 `
 
 type UpsertAccountParams struct {
@@ -668,6 +670,7 @@ func (q *Queries) UpsertAccount(ctx context.Context, arg UpsertAccountParams) (P
 		&i.DisplayName,
 		&i.CreatedAt,
 		&i.LastSignInAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }

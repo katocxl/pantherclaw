@@ -41,6 +41,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/billing"
 	"github.com/katocxl/pantherclaw/internal/billing/licence"
 	coverage "github.com/katocxl/pantherclaw/internal/coverage/domain"
+	"github.com/katocxl/pantherclaw/internal/datarequests"
 	"github.com/katocxl/pantherclaw/internal/definitions/adapters/packagesrpc"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	defsapp "github.com/katocxl/pantherclaw/internal/definitions/app"
@@ -88,9 +89,10 @@ Usage:
   pantherclaw-server serve [--config FILE]            run the API and/or workers (role from config)
   pantherclaw-server migrate up|status [--config FILE] apply or show schema migrations (as pc_migrator)
   pantherclaw-server db bootstrap --admin-url-file F --app-password-file F --migrator-password-file F --audit-password-file F
-                                 --retention-password-file F [--backup-password-file F]
+                                 --retention-password-file F [--backup-password-file F] [--deleter-password-file F]
                                                      create roles and schema once, as the database owner; with
-                                                     --backup-password-file also the read-only backup role pc_backup
+                                                     --backup-password-file also the read-only backup role pc_backup;
+                                                     --deleter-password-file also the org deletion role pc_deleter
   pantherclaw-server keys gen-kek --out FILE          write a new key-encryption key (0600)
   pantherclaw-server keys rotate-gateway-ca --confirm [--config FILE]
                                                      replace the internal gateway CA key; every gateway enrolls again
@@ -317,6 +319,10 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	dataRequests, err := newDataRequests(cfg, pool, reg, m5, log)
+	if err != nil {
+		return err
+	}
 	ui.wireInvitationEmails(cfg, m5.notifications)
 	// A monitor-mode action with an unknown consequence notifies (HR-206).
 	authorityStore.Notify = m5.notifications
@@ -452,6 +458,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			ui:           ui,
 			workers:      workers,
 			hold:         cfg.Maintenance.Hold,
+			data:         dataRequests,
 		})
 		if err != nil {
 			return err
@@ -497,6 +504,11 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	}
 	if cfg.Role == RoleWorker || cfg.Role == RoleAll {
 		jreg := jobs.NewRegistry()
+		dataJobs, closeData, err := registerDataWorkers(ctx, jreg, cfg, dataRequests, log)
+		if err != nil {
+			return err
+		}
+		defer closeData()
 		if err := chainer.Register(jreg, pool, log); err != nil {
 			return err
 		}
@@ -606,6 +618,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		}
 		client.PeriodicJobs().AddMany(evidenceJobs)
 		observeJobs(ctx, client)
+		client.PeriodicJobs().AddMany(dataJobs)
 		if err := client.Start(ctx); err != nil {
 			return fmt.Errorf("server: start workers: %w", err)
 		}
@@ -665,6 +678,7 @@ func publicProcedures() []string {
 // service accounts and API keys. Gateway procedures are refused here: gateways
 // call the Authority only on the mTLS gateway listener (HR-181).
 type apiDeps struct {
+	data *datarequests.Service
 	pool *db.Pool
 	// cel are the configured CEL limits (cel).
 	cel       celenv.Limits
@@ -829,6 +843,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	authzen := registerAuthZEN(rs, d)
 	registerUITenancy(rs, d)
 	registerUsage(rs, d)
+	registerDataRequests(rs, d)
 	mux := http.NewServeMux()
 	edges.mount(mux)
 	automationTriggers.mount(mux)
@@ -843,6 +858,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if d.web != nil {
 		d.web.Mount(mux)
 	}
+	mountDataRequests(mux, d)
 	mountM14Data(mux, d)
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -978,6 +994,7 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	auditPW := fs.String("audit-password-file", "", "password file for pc_audit_ro")
 	retentionPW := fs.String("retention-password-file", "", "password file for pc_retention (the retention job's role)")
 	backupPW := fs.String("backup-password-file", "", "optional: password file for pc_backup, the read-only role of the backup job")
+	deleterPW := fs.String("deleter-password-file", "", "optional: password file for pc_deleter, the role of the org deletion job")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -1022,6 +1039,17 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 	}
+	if *deleterPW != "" {
+		// Before the database grants, which give an existing pc_deleter
+		// its org tables (G0 M13 D34).
+		dpw, err := config.ReadSecretFile(*deleterPW)
+		if err != nil {
+			return err
+		}
+		if err := db.BootstrapDeleterRole(ctx, conn, dpw); err != nil {
+			return err
+		}
+	}
 	if err := db.BootstrapDatabase(ctx, conn); err != nil {
 		return err
 	}
@@ -1029,6 +1057,9 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		db.RoleMigrator, db.RoleApp, db.RoleAuditRO, db.RoleRetention, db.RoleLister, db.Schema, cc.Database)
 	if *backupPW != "" {
 		_, _ = fmt.Fprintf(stdout, "bootstrapped the read-only backup role %s\n", db.RoleBackup)
+	}
+	if *deleterPW != "" {
+		_, _ = fmt.Fprintf(stdout, "bootstrapped the org deletion role %s\n", db.RoleDeleter)
 	}
 	return nil
 }

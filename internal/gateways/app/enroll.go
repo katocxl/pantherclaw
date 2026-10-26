@@ -62,6 +62,12 @@ func (s *Service) Enroll(ctx context.Context, token string, csr []byte) (Enrolle
 	var out Enrolled
 	err = s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		// A gateway never enrolls into an org that is not ACTIVE (HR-392).
+		if state, err := q.OrgState(ctx, org); db.IsNoRows(err) || (err == nil && state != "ACTIVE") {
+			return ErrEnrollment
+		} else if err != nil {
+			return err
+		}
 		t, err := q.LockGatewayEnrollmentToken(ctx, org, tok.Hash())
 		switch {
 		case db.IsNoRows(err):
@@ -245,7 +251,10 @@ func (s *Service) Authenticate(ctx context.Context, id Identity) error {
 		}
 		now := r.DbNow
 		live := r.State == "ACTIVE" || (r.State == "SUPERSEDED" && r.SupersededAt != nil && now.Before(r.SupersededAt.Add(SupersededGrace)))
-		ok = r.GatewayID == id.Gateway && r.GatewayState == "ACTIVE" && live && !now.Before(r.NotBefore) && now.Before(r.NotAfter)
+		// A gateway of an org that is not ACTIVE (DELETED, D22) fails closed
+		// (HR-392), like person and API-key sign-ins.
+		ok = r.GatewayID == id.Gateway && r.GatewayState == "ACTIVE" && r.OrgState == "ACTIVE" && live &&
+			!now.Before(r.NotBefore) && now.Before(r.NotAfter)
 		return nil
 	})
 	if err != nil {

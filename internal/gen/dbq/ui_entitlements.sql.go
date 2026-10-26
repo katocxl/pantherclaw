@@ -47,7 +47,7 @@ func (q *Queries) EntitlementUsage(ctx context.Context, orgID ids.OrgID) (Entitl
 
 const getOrgEntitlements = `-- name: GetOrgEntitlements :one
 
-SELECT org_id, plan_id, edition, limits, features, status, source, period_end, last_event_at, comp_plan_id, comp_edition, comp_until, comp_reason, comp_by, comp_at, version, created_at, updated_at FROM pc.org_entitlements WHERE org_id = $1
+SELECT org_id, plan_id, edition, limits, features, status, source, period_end, last_event_at, comp_plan_id, comp_edition, comp_until, comp_reason, comp_by, comp_at, version, created_at, updated_at, lapsed_at FROM pc.org_entitlements WHERE org_id = $1
 `
 
 // SPDX-License-Identifier: BUSL-1.1
@@ -77,6 +77,7 @@ func (q *Queries) GetOrgEntitlements(ctx context.Context, orgID ids.OrgID) (PcOr
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LapsedAt,
 	)
 	return i, err
 }
@@ -111,7 +112,7 @@ func (q *Queries) InsertEntitlementEvent(ctx context.Context, arg InsertEntitlem
 }
 
 const lockOrgEntitlements = `-- name: LockOrgEntitlements :one
-SELECT org_id, plan_id, edition, limits, features, status, source, period_end, last_event_at, comp_plan_id, comp_edition, comp_until, comp_reason, comp_by, comp_at, version, created_at, updated_at FROM pc.org_entitlements WHERE org_id = $1 FOR UPDATE
+SELECT org_id, plan_id, edition, limits, features, status, source, period_end, last_event_at, comp_plan_id, comp_edition, comp_until, comp_reason, comp_by, comp_at, version, created_at, updated_at, lapsed_at FROM pc.org_entitlements WHERE org_id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockOrgEntitlements(ctx context.Context, orgID ids.OrgID) (PcOrgEntitlement, error) {
@@ -136,6 +137,7 @@ func (q *Queries) LockOrgEntitlements(ctx context.Context, orgID ids.OrgID) (PcO
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LapsedAt,
 	)
 	return i, err
 }

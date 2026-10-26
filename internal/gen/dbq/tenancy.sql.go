@@ -165,7 +165,7 @@ func (q *Queries) GetEnvironment(ctx context.Context, orgID ids.OrgID, iD ids.UU
 
 const getOrg = `-- name: GetOrg :one
 
-SELECT id, name, state, created_at, updated_at, slug, created_by_account FROM pc.orgs WHERE id = $1
+SELECT id, name, state, created_at, updated_at, slug, created_by_account, deleted_at FROM pc.orgs WHERE id = $1
 `
 
 // SPDX-License-Identifier: BUSL-1.1
@@ -187,6 +187,7 @@ func (q *Queries) GetOrg(ctx context.Context, orgID ids.OrgID) (PcOrg, error) {
 		&i.UpdatedAt,
 		&i.Slug,
 		&i.CreatedByAccount,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -707,7 +708,7 @@ func (q *Queries) UpdateEnvironment(ctx context.Context, arg UpdateEnvironmentPa
 const updateOrgName = `-- name: UpdateOrgName :one
 UPDATE pc.orgs SET name = $1, updated_at = now()
 WHERE id = $2 AND state = 'ACTIVE'
-RETURNING id, name, state, created_at, updated_at, slug, created_by_account
+RETURNING id, name, state, created_at, updated_at, slug, created_by_account, deleted_at
 `
 
 func (q *Queries) UpdateOrgName(ctx context.Context, name string, orgID ids.OrgID) (PcOrg, error) {
@@ -721,6 +722,7 @@ func (q *Queries) UpdateOrgName(ctx context.Context, name string, orgID ids.OrgI
 		&i.UpdatedAt,
 		&i.Slug,
 		&i.CreatedByAccount,
+		&i.DeletedAt,
 	)
 	return i, err
 }

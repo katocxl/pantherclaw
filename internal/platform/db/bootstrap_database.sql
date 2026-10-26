@@ -41,3 +41,31 @@ BEGIN
     END IF;
 END
 $$;
+
+-- The deleter role, when `db bootstrap --deleter-password-file` created it
+-- (G0 M13 D34, HR-391): connect, and SELECT and DELETE on every org table
+-- (the tables under the tenant_isolation policy) but the platform's
+-- deletion records, and only the tombstone columns of pc.orgs. It never
+-- bypasses RLS. Tables created later get the same from their migrations
+-- or from running this bootstrap again; the deletion job refuses to start
+-- while any org table lacks them.
+DO $$
+DECLARE
+    t text;
+BEGIN
+    IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_deleter') THEN
+        EXECUTE format('GRANT CONNECT ON DATABASE %I TO pc_deleter', current_database());
+        GRANT USAGE ON SCHEMA pc TO pc_deleter;
+        FOR t IN SELECT p.tablename FROM pg_policies p
+                 WHERE p.schemaname = 'pc' AND p.policyname = 'tenant_isolation'
+                   AND p.tablename NOT IN ('orgs', 'deletion_records')
+        LOOP
+            EXECUTE format('GRANT SELECT, DELETE ON pc.%I TO pc_deleter', t);
+        END LOOP;
+        IF to_regclass('pc.orgs') IS NOT NULL THEN
+            GRANT SELECT ON pc.orgs TO pc_deleter;
+            GRANT UPDATE (name, slug, created_by_account, updated_at) ON pc.orgs TO pc_deleter;
+        END IF;
+    END IF;
+END
+$$;

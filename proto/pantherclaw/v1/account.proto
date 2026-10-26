@@ -48,6 +48,16 @@ service AccountService {
   // can never add one for someone else. The user is told by email.
   // permission: user.manage
   rpc RemoveUserKey(RemoveUserKeyRequest) returns (RemoveUserKeyResponse);
+
+  // DeleteAccount deletes the signed-in hosted account (G0 M13 D34,
+  // HR-394): only from an account session whose sign-in is recent
+  // (RECENT_SIGN_IN_REQUIRED otherwise), and refused while the account is
+  // the last org admin of any active org (LAST_ADMIN). Its users in every
+  // org are disabled and pseudonymised ("deleted user <short id>"), its
+  // email and name are removed, and its sessions end. Evidence keeps
+  // opaque ids only.
+  // permission: account.delete
+  rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse);
 }
 
 // SessionKind says how a session was created.
@@ -188,3 +198,9 @@ message RemoveUserKeyRequest {
 
 // RemoveUserKeyResponse is empty.
 message RemoveUserKeyResponse {}
+
+// DeleteAccountRequest is empty: it deletes the caller's own account.
+message DeleteAccountRequest {}
+
+// DeleteAccountResponse is empty.
+message DeleteAccountResponse {}
