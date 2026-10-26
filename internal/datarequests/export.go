@@ -34,6 +34,7 @@ const (
 	ExportFormat        = "pantherclaw.export/v1"
 	ExportJWSType       = "pap-export+jwt"
 	ExportCosignContext = "pantherclaw.export/v1"
+	maxExportFiles      = 20_000
 )
 
 type ExportPart struct {
@@ -77,7 +78,7 @@ type archiveBuilder struct {
 }
 
 func (b *archiveBuilder) add(ctx context.Context, name string, content []byte) error {
-	if len(content) > MaxPartBytes-4096 {
+	if len(content) > MaxPartBytes-4096 || len(b.manifest.Files) >= maxExportFiles {
 		return ErrTooLarge
 	}
 	if b.zip != nil && b.buf.Len()+len(content)+4096 > MaxPartBytes {
