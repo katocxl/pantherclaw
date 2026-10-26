@@ -21,8 +21,14 @@ SELECT * FROM pc.account_deletions WHERE account_id=sqlc.arg(account_id) FOR UPD
 SELECT state FROM pc.account_deletions WHERE account_id=sqlc.arg(account_id) FOR SHARE;
 
 -- name: PendingAccountDeletions :many
-SELECT account_id FROM pc.account_deletions WHERE state IN ('PREPARING','ROLLING_BACK','INTENT_PENDING','DELETING') OR (state='DONE' AND NOT event_recorded)
-ORDER BY account_id LIMIT 100;
+WITH pending AS (
+    SELECT account_id FROM pc.account_deletions
+    WHERE state IN ('PREPARING','ROLLING_BACK','INTENT_PENDING','DELETING') OR (state='DONE' AND NOT event_recorded)
+    ORDER BY updated_at,account_id LIMIT 100 FOR UPDATE SKIP LOCKED
+)
+UPDATE pc.account_deletions d SET updated_at=clock_timestamp()
+FROM pending WHERE d.account_id=pending.account_id
+RETURNING d.account_id;
 
 -- name: SetAccountDeletionState :exec
 UPDATE pc.account_deletions SET state=sqlc.arg(state),updated_at=now() WHERE account_id=sqlc.arg(account_id) AND state=sqlc.arg(expected);

@@ -16,6 +16,8 @@ CREATE TABLE pc.account_deletions (
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE INDEX account_deletions_pending ON pc.account_deletions(updated_at,account_id)
+ WHERE state IN ('PREPARING','ROLLING_BACK','INTENT_PENDING','DELETING') OR (state='DONE' AND NOT event_recorded);
 ALTER TABLE pc.account_deletions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pc.account_deletions FORCE ROW LEVEL SECURITY;
 CREATE POLICY account_context ON pc.account_deletions

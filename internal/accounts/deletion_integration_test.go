@@ -8,6 +8,7 @@ package accounts_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/entitlements"
 	evd "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -189,6 +191,45 @@ func TestHR394_LastAdminAfterFiveHundredBindingsStillBlocksDeletion(t *testing.T
 	}
 	if n := f.count(t, org, `SELECT count(*) FROM pc.users WHERE org_id=$1 AND id=$2 AND state='ACTIVE' AND subject='many-bindings'`, org, u); n != 1 {
 		t.Fatal("last administrator was altered")
+	}
+}
+
+func TestHR394_PendingIntentDoesNotStarveLaterAcknowledgedDeletion(t *testing.T) {
+	f := newFixture(t, entitlements.ModeExternal)
+	var queue []ids.UUID
+	for n := range 101 {
+		a := f.account(t, fmt.Sprintf("queue-%03d", n), "queue@example.test", true)
+		queue = append(queue, a.ID)
+	}
+	err := f.pool.InGlobalTx(t.Context(), db.GlobalAccounts, func(ctx context.Context, tx db.GlobalTx) error {
+		for _, account := range queue {
+			if _, err := tx.Exec(ctx, `INSERT INTO pc.account_deletions(account_id,state,updated_at)
+                                       VALUES($1,'INTENT_PENDING',clock_timestamp())`, account); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	acked := queue[len(queue)-1]
+	intent := func(_ context.Context, account ids.UUID, _ string, _ evd.Actor) error {
+		if account == acked {
+			return nil
+		}
+		return pcerr.New(pcerr.FailedPrecondition, "DELETION_AWAITING_SECURITY_COPY", "waiting")
+	}
+	d := accounts.NewDeletion(f.store, noopRecorder, intent)
+	for range 2 {
+		if err := d.ResumePending(t.Context()); err != nil {
+			t.Fatal("expected pending intents to remain retryable:", err)
+		}
+	}
+	var complete bool
+	f.d.AdminQueryRow(t, `SELECT state='DONE' AND event_recorded FROM pc.account_deletions WHERE account_id=$1`, []any{acked}, &complete)
+	if !complete {
+		t.Fatal("first hundred pending intents starved the later acknowledged deletion")
 	}
 }
 
