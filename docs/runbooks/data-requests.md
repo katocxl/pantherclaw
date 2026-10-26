@@ -4,18 +4,18 @@
 
 ## 1. Export an organization (org admin)
 
-1. In Settings › Data, or with `DataRequestService.CreateExport`, start an export. It needs your step-up.
+1. In Settings › Data & deletion, choose **Request an export**. The canonical `/data/export` page confirms your organization and needs your security-key step-up. The Connect `CreateExport` RPC refuses `STEP_UP_REQUIRED`.
 2. A background job builds the export:
    - one canonical JSONL file per table, for a curated list of organization tables;
    - the evidence bundle for the whole range, with its proofs.
    Wrapped keys and DEKs, sealed credentials, token and secret hashes, and session secrets are never included (T-177).
 3. The manifest is signed with the `evidence_packs` key, plus an ML-DSA co-signature on Enterprise. Verify it, and the bundle, offline with `pclaw verify` ([evidence-verification.md](evidence-verification.md)).
 4. Download the parts (each at most 64 MiB) within **7 days**; after that they expire. Every download is audited before its first byte.
-5. Exports larger than 2 GiB are refused with `EXPORT_TOO_LARGE`. Narrow the range, or contact support.
+5. Exports larger than 2 GiB are refused with `EXPORT_TOO_LARGE`. There is no user-selected range for an organization export; larger exports need the future object-storage path.
 
 ## 2. Delete an organization (org admin)
 
-1. Request deletion (Settings › Data, or `RequestDeletion`). It needs your step-up.
+1. In Settings › Data & deletion, choose **Request organization deletion**. The canonical `/data/delete` page needs your security-key step-up. The Connect `RequestDeletion` RPC refuses `STEP_UP_REQUIRED`.
 2. **A 7-day cancellation window** opens. Every org admin is notified, and any admin can cancel during the window. Take an export first if you need one (§1).
 3. **Legal holds:** an organization-scoped legal hold blocks deletion (`DELETION_HELD`) until it is released ([retention.md](retention.md)).
 4. When the window ends, the deletion job runs as the `pc_deleter` role (HR-391):
@@ -41,13 +41,15 @@ Operator checks: the daily lapse job sends at most one reminder per organization
 
 ## 4. Delete your account (any hosted account)
 
-1. Sign in again (a recent sign-in is required), then delete your account in Account settings.
+1. Open `/account/delete` (also linked from Settings › Data & deletion). It forces a new provider sign-in with `prompt=login` and `max_age=0` before confirmation. A recent existing session is insufficient. The Connect `DeleteAccount` RPC refuses `REAUTH_REQUIRED`.
 2. Deletion is refused with `LAST_ADMIN` while you are the last org admin of any active organization. Add another admin, or delete that organization first.
 3. Otherwise (HR-394):
    - your users in every organization are disabled and renamed "deleted user <short id>";
    - your account's personal data is removed;
    - your sessions are revoked.
    Evidence keeps opaque ids, so receipts and audit trails stay verifiable.
+
+Deletion is resumable. Sign-in is blocked while the durable journal prepares each organization's changes. The last-administrator checks and reservations use the same per-org locks as role changes. If any organization refuses deletion, preparation rolls back before sign-in is available again; previously revoked sessions remain revoked. Once the journal enters irreversible deletion, retries finish every linked user and the account tombstone. Older unlinked users are covered by the restricted hashed-identity guard as well. The procedure never changes tenant context inside a transaction and adds no SECURITY DEFINER function.
 
 ## 5. If something goes wrong
 
