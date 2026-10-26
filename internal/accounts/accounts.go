@@ -92,6 +92,7 @@ var allowed = []string{
 	"/pantherclaw.v1.AccessService/AcceptInvitation",
 	"/pantherclaw.v1.TenancyService/CreateOrg",
 	"/pantherclaw.v1.TenancyService/ListMyOrgs",
+	"/pantherclaw.v1.DataRequestService/GetDeletionRecord",
 }
 
 // AllowedProcedure reports whether an account session may call procedure.
@@ -135,6 +136,9 @@ func (s *Store) Resolve(ctx context.Context, id Identity, clientIP string) (Acco
 			ID: ids.NewV7(), Issuer: id.Issuer, Subject: id.Subject, Email: email, EmailVerified: verified,
 			DisplayName: td.SanitizeClaim(id.Name, td.MaxNameLen),
 		})
+		if db.IsNoRows(err) {
+			return ErrDeletionPending
+		}
 		if err != nil {
 			return err
 		}

@@ -13,7 +13,8 @@ SELECT id FROM pc.orgs WHERE id = sqlc.arg(org_id) FOR NO KEY UPDATE;
 SELECT count(DISTINCT rb.user_id)
 FROM pc.role_bindings rb
 JOIN pc.users u ON u.org_id = rb.org_id AND u.id = rb.user_id
-WHERE rb.org_id = sqlc.arg(org_id) AND rb.role = 'org_admin' AND rb.scope_type = 'ORG' AND u.state = 'ACTIVE';
+WHERE rb.org_id = sqlc.arg(org_id) AND rb.role = 'org_admin' AND rb.scope_type = 'ORG' AND u.state = 'ACTIVE'
+  AND NOT EXISTS (SELECT FROM pc.account_deletion_steps ds WHERE ds.org_id=u.org_id AND ds.user_id=u.id);
 
 -- name: GetUser :one
 SELECT * FROM pc.users WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);

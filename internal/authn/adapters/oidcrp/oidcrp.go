@@ -233,7 +233,9 @@ func (p *Provider) AuthCodeURL(ctx context.Context, req authnapp.AuthRequest) (s
 		return "", err
 	}
 	opts := []oauth2.AuthCodeOption{oidc.Nonce(req.Nonce), oauth2.S256ChallengeOption(req.Verifier)}
-	if req.MaxAge > 0 {
+	if req.ForceLogin {
+		opts = append(opts, oauth2.SetAuthURLParam("prompt", "login"), oauth2.SetAuthURLParam("max_age", "0"))
+	} else if req.MaxAge > 0 {
 		opts = append(opts, oauth2.SetAuthURLParam("max_age", strconv.Itoa(int(req.MaxAge/time.Second))))
 	}
 	return p.oauth(d, req.RedirectURI).AuthCodeURL(req.State, opts...), nil

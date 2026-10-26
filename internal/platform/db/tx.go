@@ -232,6 +232,8 @@ const (
 	// account's active memberships (G0 UI D8, HR-349). It takes the account
 	// as the ListerParams AccountID.
 	ListAccountMemberships ListerPurpose = "account_memberships"
+	// ListAccountUsers includes disabled users and organisations for deletion.
+	ListAccountUsers ListerPurpose = "account_users"
 	// ListBillingLink finds the (org, link) of one billing ref (G0 UI D37).
 	// It takes the ref as the ListerParams Billing*.
 	ListBillingLink ListerPurpose = "billing_link_lookup"

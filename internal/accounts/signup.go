@@ -132,6 +132,20 @@ func (s *Signup) CreateOrg(ctx context.Context, in NewOrg) (CreatedOrg, error) {
 	var refusal error
 	err = s.store.pool.InGlobalTx(ctx, db.GlobalAccounts, func(ctx context.Context, tx db.GlobalTx) error {
 		q := dbq.New(tx)
+		identity, err := q.GetAccount(ctx, c.Account)
+		if db.IsNoRows(err) {
+			return ErrNoAccount
+		}
+		if err != nil {
+			return err
+		}
+		available, err := q.AccountIdentityShared(ctx, identity.Issuer, identity.Subject)
+		if err != nil {
+			return err
+		}
+		if !available || identity.DeletedAt != nil {
+			return ErrDeletionPending
+		}
 		a, err := q.LockAccount(ctx, c.Account)
 		if db.IsNoRows(err) {
 			return ErrNoAccount

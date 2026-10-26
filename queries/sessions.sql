@@ -65,7 +65,7 @@ SELECT s.id, s.user_id, s.state, s.auth_time, s.roles_digest, s.step_up_at, s.st
        u.state AS user_state, now()::timestamptz AS db_now
 FROM pc.sessions s
 JOIN pc.users u ON u.org_id = s.org_id AND u.id = s.user_id
-WHERE s.org_id = sqlc.arg(org_id) AND (s.secret_hash = sqlc.arg(secret_hash) OR s.prev_secret_hash = sqlc.arg(secret_hash));
+WHERE s.org_id = sqlc.arg(org_id) AND (s.secret_hash = sqlc.arg(secret_hash) OR s.prev_secret_hash = sqlc.arg(secret_hash)) AND pc.identity_available(u.issuer,u.subject,false);
 
 -- name: TouchBrowserSession :exec
 UPDATE pc.sessions SET last_seen_at = now()

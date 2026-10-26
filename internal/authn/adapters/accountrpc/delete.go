@@ -29,8 +29,5 @@ func (h *Handler) DeleteAccount(ctx context.Context, _ *pantherclawv1.DeleteAcco
 	if h.del == nil {
 		return nil, errNoAccounts
 	}
-	if err := h.del.DeleteAccount(ctx); err != nil {
-		return nil, err
-	}
-	return &pantherclawv1.DeleteAccountResponse{}, nil
+	return nil, pcerr.New(pcerr.FailedPrecondition, "REAUTH_REQUIRED", "confirm account deletion on /account/delete after signing in again")
 }
