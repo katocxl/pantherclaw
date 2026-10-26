@@ -24,6 +24,13 @@ Excluded: **Trivy and `aquasecurity/trivy-action`** (supply-chain compromise, Ma
 
 ## 3. Approved direct dependencies (Go core)
 
+Build-only documentation renderer: `github.com/yuin/goldmark` **v1.8.5**, MIT,
+in the separate `tools` module. This reuses the existing OSV tool pin rather
+than adopting a newer release. It renders CommonMark/GFM tables and heading
+anchors without raw HTML or dangerous URLs. A handwritten Markdown parser
+would break the repository's existing links, code fences and tables. It has
+no transitive dependencies and is never linked into product binaries.
+
 | Module | Purpose | Licence | Justification |
 |---|---|---|---|
 | `github.com/jackc/pgx/v5` | PostgreSQL driver + pool | MIT | De-facto standard; needed for COPY-free, typed, context-aware access |
