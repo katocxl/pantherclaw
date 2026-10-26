@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json/v2"
 	"errors"
 	"strings"
 	"testing"
@@ -122,6 +123,32 @@ func TestT176_OrgIntentReplaysWhenCompletionNeverExisted(t *testing.T) {
 		t.Fatalf("replay journal=%d state=%s", n, state)
 	}
 	finishDeletion(t, s, org, id)
+}
+
+func TestT176_FrozenBackupReplayKeepsCompletionChronology(t *testing.T) {
+	d, s, org := setup(t)
+	d.AdminExec(t, `UPDATE pc.orgs SET state='DELETED',deleted_at=now()-interval '1 day' WHERE id=$1`, org)
+	sum := sha256.Sum256([]byte("external intent after frozen backup"))
+	e := restore.Event{Org: ids.PlatformOrg, Kind: "org.deletion_started", Object: securityevent.Object{Type: "org", ID: org.String()}, RequestID: ids.NewV7(), JournalDigest: hex.EncodeToString(sum[:]), LedgerSeq: 1, Direction: "tighten", Timestamp: time.Now(), Actor: evdomain.Actor{Type: "system", ID: "test"}}
+	r := restore.NewRegistry()
+	if err := s.RegisterRestore(r); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Reapply(t.Context(), s.Pool, []restore.Event{e}, true, evdomain.Actor{Type: "operator", ID: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	var id ids.UUID
+	d.AdminQueryRow(t, "SELECT id FROM pc.org_deletion_journal WHERE deleted_org_id=$1", []any{org}, &id)
+	finishDeletion(t, s, org, id)
+	var raw []byte
+	d.AdminQueryRow(t, "SELECT record FROM pc.deletion_records WHERE deleted_org_id=$1", []any{org}, &raw)
+	var record DeletionRecord
+	if err := json.Unmarshal(raw, &record); err != nil {
+		t.Fatal(err)
+	}
+	if record.StartTime.Before(record.WindowEndTime) || record.CompleteTime.Before(record.StartTime) {
+		t.Fatalf("replayed record has invalid chronology: %+v", record)
+	}
 }
 
 func TestHR391_LegalHoldCommittedBeforeFreezeWins(t *testing.T) {

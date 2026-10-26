@@ -87,13 +87,9 @@ func (s *Service) reapplyOrg(ctx context.Context, _ *db.Pool, e restore.Event, a
 				return err
 			}
 		}
-		d, err := q.OrgDeletedAt(ctx, org)
-		if err != nil {
-			return err
-		}
-		if d.DeletedAt != nil {
-			snap.Record.StartTime = *d.DeletedAt
-		}
+		// This is a new replay attempt, even when the backup already held
+		// the irreversible tombstone. Its erasure starts now; using an old
+		// deleted_at would put start_time before this request's window.
 		admins, err := deletionAdmins(ctx, q, org)
 		if err != nil {
 			return err
