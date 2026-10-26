@@ -59,6 +59,10 @@ const (
 	// routing value, and the hash is looked up only in the account tables.
 	AccountSession    Kind = "pcu"
 	AccountLoginState Kind = "pcm"
+	// SupportSession is a support session's cookie (G0 M13 D32, D38): the
+	// console's session cookie for a member of the support staff inside a
+	// customer org under an approved grant; its <org> is that org.
+	SupportSession Kind = "pcp"
 )
 
 // Env labels API keys by deployment, so that a key made for one deployment
@@ -210,7 +214,7 @@ func (k Kind) valid() bool {
 	switch k {
 	case APIKey, Invitation, DeviceCode, RefreshToken, OAuthState, EnrollmentToken:
 		return true
-	case BrowserSession, LoginState, GatewayEnrollmentToken, AccountSession, AccountLoginState:
+	case BrowserSession, LoginState, GatewayEnrollmentToken, AccountSession, AccountLoginState, SupportSession:
 		return true
 	}
 	return false

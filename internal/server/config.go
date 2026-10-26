@@ -43,6 +43,8 @@ type Config struct {
 	Log    LogConfig    `json:"log"`
 	HTTP   HTTPConfig   `json:"http"`
 	DB     DBConfig     `json:"database"`
+	// Support is customer-approved support access (config_m13_support.go).
+	Support SupportConfig `json:"support"`
 	// KEKFiles are key-encryption-key files; the first wraps new keys.
 	KEKFiles    []string `json:"kek_files" env:"PC_KEK_FILES"`
 	LicenceFile string   `json:"licence_file" env:"PC_LICENCE_FILE"`
@@ -198,6 +200,7 @@ func (c *Config) Validate() error {
 	}
 	errs = append(errs, c.validateDeployment()...)
 	errs = append(errs, c.validateHealth()...)
+	errs = append(errs, c.validateSupport()...)
 	errs = append(errs, c.validateTenancy()...)
 	errs = append(errs, c.validateAuthority()...)
 	errs = append(errs, c.validateAuth()...)

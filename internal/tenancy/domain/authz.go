@@ -72,6 +72,21 @@ func (r PrincipalRef) String() string { return string(r.Kind) + ":" + r.ID.Strin
 type Binding struct {
 	Role  RoleName
 	Scope Scope
+	// BreakGlass is the break-glass activation this binding comes from
+	// (G0 M13 D33): set only on a holder's emergency role while their
+	// activation is in force; zero for stored bindings.
+	BreakGlass ids.UUID
+}
+
+// BreakGlassActivation returns the break-glass activation among the
+// subject's bindings, if one is in force.
+func (s Subject) BreakGlassActivation() (ids.UUID, bool) {
+	for _, b := range s.Bindings {
+		if !b.BreakGlass.IsZero() {
+			return b.BreakGlass, true
+		}
+	}
+	return ids.UUID{}, false
 }
 
 // Subject is an authenticated principal with its bindings, ready for
@@ -95,9 +110,9 @@ func (s Subject) eligible(p Permission) bool {
 	switch {
 	case !p.Known():
 		return false
-	case p.HumanOnly() && !s.Human():
+	case p.HumanOnly() && !s.Person():
 		return false
-	case p.ServiceOnly() && s.Human():
+	case p.ServiceOnly() && s.Person():
 		return false
 	case s.Scopes != nil && !slices.Contains(s.Scopes, p):
 		return false
@@ -112,7 +127,7 @@ func (s Subject) Can(p Permission, path Path) bool {
 		return false
 	}
 	for _, b := range s.Bindings {
-		if r, ok := LookupRole(b.Role); ok && r.Has(p) && path.Contains(b.Scope) {
+		if r, ok := s.roleForCheck(b.Role); ok && r.Has(p) && path.Contains(b.Scope) {
 			return true
 		}
 	}
@@ -127,7 +142,7 @@ func (s Subject) CanAnywhere(p Permission) bool {
 		return false
 	}
 	for _, b := range s.Bindings {
-		if r, ok := LookupRole(b.Role); ok && r.Has(p) {
+		if r, ok := s.roleForCheck(b.Role); ok && r.Has(p) {
 			return true
 		}
 	}

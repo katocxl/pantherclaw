@@ -1,0 +1,490 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// SupportAccessService is customer-approved support access (G0 M13 D32,
+// D38; ADR-0034; HR-385..388; Enterprise, hosted servers only).
+//
+// A member of the operator's support staff (a user of the staff org whose
+// linked account is listed in support.staff_accounts) asks an
+// organization for read-only access for a named task, for at most 72
+// hours, on the server page /support-access/request after a security-key
+// step-up. An org admin of that organization approves or denies it on its
+// confirm page, /support-access/{id}, with a security-key step-up; the
+// person who asked can never approve, even when they are also an org
+// admin there. Any org admin can revoke a grant at any time; it ends at
+// its expiry. There is no standing access: only an approved, unexpired,
+// unrevoked grant opens a support session, and every call in it is
+// recorded in the organization's audit ledger. A support session only
+// reads, and never reads credentials, sealed material or restricted
+// payloads unless the grant's scope adds restricted evidence.
+//
+// The actions that need a step-up (asking, approving, denying and opening
+// a session) answer STEP_UP_REQUIRED over the API: the console links to
+// their server pages, which show exactly what is approved.
+service SupportAccessService {
+  // RequestSupportAccess asks an organization for support access. It needs
+  // a step-up, so over the API it answers STEP_UP_REQUIRED (staff use the
+  // page /support-access/request); a caller who is not support staff gets
+  // PERMISSION_DENIED.
+  // permission: authenticated
+  rpc RequestSupportAccess(RequestSupportAccessRequest) returns (RequestSupportAccessResponse);
+  // OpenSupportSession opens a support session under an approved grant.
+  // It needs a step-up, so over the API it answers STEP_UP_REQUIRED (staff
+  // use the request's page); a caller who is not support staff gets
+  // PERMISSION_DENIED.
+  // permission: authenticated
+  rpc OpenSupportSession(OpenSupportSessionRequest) returns (OpenSupportSessionResponse);
+  // GetCurrentSupportSession describes the caller's support session, for
+  // the console's banner; any other caller gets NOT_A_SUPPORT_SESSION.
+  // permission: authenticated
+  rpc GetCurrentSupportSession(GetCurrentSupportSessionRequest) returns (GetCurrentSupportSessionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListSupportRequests lists the organization's support requests, newest
+  // first.
+  // permission: support.read
+  rpc ListSupportRequests(ListSupportRequestsRequest) returns (ListSupportRequestsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetSupportRequest returns one support request with its grant, if any.
+  // permission: support.read
+  rpc GetSupportRequest(GetSupportRequestRequest) returns (GetSupportRequestResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ApproveSupportRequest approves a pending request. It needs a step-up,
+  // so over the API it answers STEP_UP_REQUIRED (use confirm_url).
+  // permission: support.manage
+  rpc ApproveSupportRequest(ApproveSupportRequestRequest) returns (ApproveSupportRequestResponse);
+  // DenySupportRequest denies a pending request. It needs a step-up, so
+  // over the API it answers STEP_UP_REQUIRED (use confirm_url).
+  // permission: support.manage
+  rpc DenySupportRequest(DenySupportRequestRequest) returns (DenySupportRequestResponse);
+  // ListSupportGrants lists the organization's support grants, newest
+  // first.
+  // permission: support.read
+  rpc ListSupportGrants(ListSupportGrantsRequest) returns (ListSupportGrantsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // RevokeSupportGrant ends a grant now, and every support session under
+  // it. Revoking only removes access, so it needs no step-up.
+  // permission: support.manage
+  rpc RevokeSupportGrant(RevokeSupportGrantRequest) returns (RevokeSupportGrantResponse);
+}
+
+// SupportScope is what a support grant lets staff read.
+enum SupportScope {
+  SUPPORT_SCOPE_UNSPECIFIED = 0;
+  // Every ordinary read: never restricted evidence, credentials, sealed
+  // material or payload captures, and never a change. The default.
+  SUPPORT_SCOPE_READ_ONLY = 1;
+  // READ_ONLY plus restricted evidence (evidence.read_restricted).
+  SUPPORT_SCOPE_READ_ONLY_PLUS_EVIDENCE = 2;
+}
+
+// SupportRequestState is where a support request stands.
+enum SupportRequestState {
+  SUPPORT_REQUEST_STATE_UNSPECIFIED = 0;
+  // Waiting for an org admin.
+  SUPPORT_REQUEST_STATE_PENDING = 1;
+  // Approved: it has a grant.
+  SUPPORT_REQUEST_STATE_APPROVED = 2;
+  // Denied by an org admin.
+  SUPPORT_REQUEST_STATE_DENIED = 3;
+  // Nobody decided within seven days.
+  SUPPORT_REQUEST_STATE_EXPIRED = 4;
+}
+
+// SupportGrantState is where a support grant stands.
+enum SupportGrantState {
+  SUPPORT_GRANT_STATE_UNSPECIFIED = 0;
+  // In force: support sessions may be opened under it.
+  SUPPORT_GRANT_STATE_ACTIVE = 1;
+  // Past its expiry.
+  SUPPORT_GRANT_STATE_EXPIRED = 2;
+  // Revoked by an org admin.
+  SUPPORT_GRANT_STATE_REVOKED = 3;
+}
+
+// SupportStaff is who asked: the staff member's account, as the support
+// staff list names it.
+message SupportStaff {
+  // The staff member's hosted account id.
+  string account_id = 1;
+  // The account's email address, as its identity provider said.
+  string email = 2;
+  // The account's display name (untrusted).
+  string display_name = 3;
+}
+
+// SupportRequest is a request for support access.
+message SupportRequest {
+  // Request id.
+  string id = 1;
+  // Who asked.
+  SupportStaff requester = 2;
+  // The task, as the staff member wrote it (untrusted plain text).
+  string task = 3;
+  // What it asks to read.
+  SupportScope scope = 4;
+  // How long the access would last once approved, in hours (1..72).
+  int32 duration_hours = 5;
+  // Where it stands.
+  SupportRequestState state = 6;
+  // When it was asked.
+  google.protobuf.Timestamp created_at = 7;
+  // Undecided requests expire at this time.
+  google.protobuf.Timestamp expires_at = 8;
+  // The org user who approved or denied it.
+  string decided_by = 9;
+  // When it was approved or denied.
+  google.protobuf.Timestamp decided_at = 10;
+  // The grant an approval created.
+  string grant_id = 11;
+  // The page where an org admin approves or denies it.
+  string confirm_url = 12;
+}
+
+// SupportGrant is approved support access.
+message SupportGrant {
+  // Grant id.
+  string id = 1;
+  // The request it approves.
+  string request_id = 2;
+  // Who may open support sessions under it.
+  SupportStaff staff = 3;
+  // The task (untrusted plain text).
+  string task = 4;
+  // What it lets staff read.
+  SupportScope scope = 5;
+  // Where it stands.
+  SupportGrantState state = 6;
+  // The org admin who approved it.
+  string approved_by = 7;
+  // When it was approved; access starts then.
+  google.protobuf.Timestamp starts_at = 8;
+  // When access ends.
+  google.protobuf.Timestamp expires_at = 9;
+  // When it was revoked.
+  google.protobuf.Timestamp revoked_at = 10;
+  // Who revoked it ("user:<id>" or "service_account:<id>").
+  string revoked_by = 11;
+  // Support sessions opened under it.
+  int32 sessions_opened = 12;
+}
+
+// RequestSupportAccessRequest asks an organization for support access.
+message RequestSupportAccessRequest {
+  // The organization.
+  string org_id = 1 [(buf.validate.field).string.uuid = true];
+  // The named task: plain text, at most 200 characters.
+  string task = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+  // What to read; unspecified is READ_ONLY.
+  SupportScope scope = 3;
+  // How long, in hours (1..72).
+  int32 duration_hours = 4 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 72
+  }];
+}
+
+// RequestSupportAccessResponse is never returned over the API.
+message RequestSupportAccessResponse {
+  // The request.
+  SupportRequest request = 1;
+}
+
+// OpenSupportSessionRequest opens a support session.
+message OpenSupportSessionRequest {
+  // The organization.
+  string org_id = 1 [(buf.validate.field).string.uuid = true];
+  // The approved request.
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+// OpenSupportSessionResponse is never returned over the API.
+message OpenSupportSessionResponse {}
+
+// GetCurrentSupportSessionRequest asks about the caller's support session.
+message GetCurrentSupportSessionRequest {}
+
+// GetCurrentSupportSessionResponse describes a support session.
+message GetCurrentSupportSessionResponse {
+  // The session id.
+  string session_id = 1;
+  // The grant it runs under.
+  SupportGrant grant = 2;
+  // When the session ends at the latest.
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+// ListSupportRequestsRequest lists support requests.
+message ListSupportRequestsRequest {
+  // Only requests in this state; unspecified lists all.
+  SupportRequestState state = 1;
+  // Page size (default 50, at most 200).
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // From a previous response.
+  string page_token = 3 [(buf.validate.field).string.max_len = 200];
+}
+
+// ListSupportRequestsResponse is one page of support requests.
+message ListSupportRequestsResponse {
+  // Requests, newest first.
+  repeated SupportRequest requests = 1;
+  // The next page, empty at the end.
+  string next_page_token = 2;
+}
+
+// GetSupportRequestRequest returns one request.
+message GetSupportRequestRequest {
+  // Request id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetSupportRequestResponse is one request.
+message GetSupportRequestResponse {
+  // The request.
+  SupportRequest request = 1;
+  // Its grant, when approved.
+  SupportGrant grant = 2;
+}
+
+// ApproveSupportRequestRequest approves a request.
+message ApproveSupportRequestRequest {
+  // Request id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ApproveSupportRequestResponse is never returned over the API.
+message ApproveSupportRequestResponse {
+  // The grant.
+  SupportGrant grant = 1;
+}
+
+// DenySupportRequestRequest denies a request.
+message DenySupportRequestRequest {
+  // Request id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// DenySupportRequestResponse is never returned over the API.
+message DenySupportRequestResponse {}
+
+// ListSupportGrantsRequest lists support grants.
+message ListSupportGrantsRequest {
+  // Only grants in force now.
+  bool active_only = 1;
+  // Page size (default 50, at most 200).
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // From a previous response.
+  string page_token = 3 [(buf.validate.field).string.max_len = 200];
+}
+
+// ListSupportGrantsResponse is one page of support grants.
+message ListSupportGrantsResponse {
+  // Grants, newest first.
+  repeated SupportGrant grants = 1;
+  // The next page, empty at the end.
+  string next_page_token = 2;
+}
+
+// RevokeSupportGrantRequest revokes a grant.
+message RevokeSupportGrantRequest {
+  // Grant id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// RevokeSupportGrantResponse is the revoked grant.
+message RevokeSupportGrantResponse {
+  // The grant.
+  SupportGrant grant = 1;
+}
+
+// BreakGlassService is the organization's own emergency access (G0 M13
+// D33, D38; HR-389; Business edition and above). Org admins designate at
+// most three members as break-glass holders, each with one emergency role
+// (any role bindable at the organization except org_admin). A holder
+// activates it on the page /break-glass/activate with a security-key
+// step-up and a reason, for at most 60 minutes: the role applies to them
+// at the organization until then, every other org admin is notified at
+// once, and every call they make meanwhile is audited with the
+// activation. It never waives a two-person rule, an approval or an
+// invariant. Activating needs a step-up, so over the API it answers
+// STEP_UP_REQUIRED.
+service BreakGlassService {
+  // ListBreakGlassHolders lists the designated holders.
+  // permission: breakglass.read
+  rpc ListBreakGlassHolders(ListBreakGlassHoldersRequest) returns (ListBreakGlassHoldersResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SetBreakGlassHolders replaces the designated holders (at most three).
+  // A removed holder's activation ends at once.
+  // permission: breakglass.manage
+  rpc SetBreakGlassHolders(SetBreakGlassHoldersRequest) returns (SetBreakGlassHoldersResponse);
+  // ActivateBreakGlass activates the caller's emergency role. It needs a
+  // step-up, so over the API it answers STEP_UP_REQUIRED (use the page
+  // /break-glass/activate).
+  // permission: authenticated
+  rpc ActivateBreakGlass(ActivateBreakGlassRequest) returns (ActivateBreakGlassResponse);
+  // EndBreakGlass ends an activation early: the holder's own, or any one
+  // for a caller holding breakglass.manage.
+  // permission: authenticated
+  rpc EndBreakGlass(EndBreakGlassRequest) returns (EndBreakGlassResponse);
+  // GetMyBreakGlass says whether the caller is a holder and whether their
+  // activation is in force, for the console's banner.
+  // permission: authenticated
+  rpc GetMyBreakGlass(GetMyBreakGlassRequest) returns (GetMyBreakGlassResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListBreakGlassActivations lists activations, newest first.
+  // permission: breakglass.read
+  rpc ListBreakGlassActivations(ListBreakGlassActivationsRequest) returns (ListBreakGlassActivationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// BreakGlassHolder is a member designated for break-glass access.
+message BreakGlassHolder {
+  // The org user.
+  string user_id = 1;
+  // The role an activation gives them at the organization.
+  string role = 2;
+  // Who designated them.
+  string designated_by = 3;
+  // When.
+  google.protobuf.Timestamp designated_at = 4;
+}
+
+// BreakGlassActivation is one activation.
+message BreakGlassActivation {
+  // Activation id.
+  string id = 1;
+  // The holder.
+  string user_id = 2;
+  // The role it gives.
+  string role = 3;
+  // Why, as the holder wrote it (untrusted plain text).
+  string reason = 4;
+  // When it started.
+  google.protobuf.Timestamp started_at = 5;
+  // When it ends at the latest.
+  google.protobuf.Timestamp expires_at = 6;
+  // When it was ended early.
+  google.protobuf.Timestamp ended_at = 7;
+  // Who ended it early.
+  string ended_by = 8;
+  // Whether it is in force now.
+  bool active = 9;
+}
+
+// ListBreakGlassHoldersRequest lists the holders.
+message ListBreakGlassHoldersRequest {}
+
+// ListBreakGlassHoldersResponse is the holders.
+message ListBreakGlassHoldersResponse {
+  // At most three.
+  repeated BreakGlassHolder holders = 1;
+}
+
+// BreakGlassDesignation names one holder and their emergency role.
+message BreakGlassDesignation {
+  // The org user.
+  string user_id = 1 [(buf.validate.field).string.uuid = true];
+  // A role bindable at the organization, never org_admin.
+  string role = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+  }];
+}
+
+// SetBreakGlassHoldersRequest replaces the holders.
+message SetBreakGlassHoldersRequest {
+  // At most three, each user once.
+  repeated BreakGlassDesignation holders = 1 [(buf.validate.field).repeated.max_items = 3];
+}
+
+// SetBreakGlassHoldersResponse is the holders now.
+message SetBreakGlassHoldersResponse {
+  // The holders.
+  repeated BreakGlassHolder holders = 1;
+}
+
+// ActivateBreakGlassRequest activates the caller's emergency role.
+message ActivateBreakGlassRequest {
+  // Why: plain text, at most 500 characters.
+  string reason = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+  // How long, in minutes (1..60; 0 is 60).
+  int32 duration_minutes = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 60
+  }];
+}
+
+// ActivateBreakGlassResponse is never returned over the API.
+message ActivateBreakGlassResponse {
+  // The activation.
+  BreakGlassActivation activation = 1;
+}
+
+// EndBreakGlassRequest ends an activation.
+message EndBreakGlassRequest {
+  // Activation id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// EndBreakGlassResponse is the ended activation.
+message EndBreakGlassResponse {
+  // The activation.
+  BreakGlassActivation activation = 1;
+}
+
+// GetMyBreakGlassRequest asks about the caller.
+message GetMyBreakGlassRequest {}
+
+// GetMyBreakGlassResponse describes the caller's break-glass access.
+message GetMyBreakGlassResponse {
+  // Whether the caller is a designated holder.
+  bool holder = 1;
+  // Their emergency role.
+  string role = 2;
+  // Their activation in force, if any.
+  BreakGlassActivation active = 3;
+}
+
+// ListBreakGlassActivationsRequest lists activations.
+message ListBreakGlassActivationsRequest {
+  // Page size (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // From a previous response.
+  string page_token = 2 [(buf.validate.field).string.max_len = 200];
+}
+
+// ListBreakGlassActivationsResponse is one page of activations.
+message ListBreakGlassActivationsResponse {
+  // Activations, newest first.
+  repeated BreakGlassActivation activations = 1;
+  // The next page, empty at the end.
+  string next_page_token = 2;
+}

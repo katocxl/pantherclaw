@@ -1,0 +1,26 @@
+apiVersion: pantherclaw.range/v1
+id: RT-067
+title: Break glass requires a designated holder and that holder's fresh key
+category: boundary
+suite: platform
+tier: business
+attacker: A8
+threats: [T-175]
+rules: [HR-389]
+requires: [payments, billing]
+harness_only: true
+steps:
+  - id: undesignated-person
+    do: support.probe
+    with: {attack: unregistered_holder}
+    expect:
+      outcome: REFUSED
+      reason: NOT_BREAKGLASS_HOLDER
+      decisive_control: HR-389
+  - id: stale-security-key
+    do: support.probe
+    with: {attack: stale_key}
+    expect:
+      outcome: REFUSED
+      reason: STEP_UP_REQUIRED
+      decisive_control: HR-389

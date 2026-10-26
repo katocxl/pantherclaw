@@ -125,6 +125,10 @@ type Handler struct {
 	// served.
 	accounts  AccountBrowser
 	selfServe bool
+	// support is the support access pages (G0 M13 D38); nil when not
+	// served.
+	support    SupportAccess
+	breakGlass BreakGlass
 }
 
 // New returns the handler. publicURL is the server's public URL: its origin
@@ -283,6 +287,14 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request) (authnapp.Brow
 	}
 	if s.Rotated != "" {
 		h.setCookie(w, sessionCookie, s.Rotated, authnapp.BrowserSessionLifetime, http.SameSiteStrictMode)
+	}
+	if h.breakGlass != nil {
+		c, err := h.breakGlass.BreakGlassCall(r.Context(), s.Caller, r.Method+" "+r.Pattern)
+		if err != nil {
+			h.log.ErrorContext(r.Context(), "web.breakglass_audit", pclog.Err(err))
+			return authnapp.BrowserSession{}, false
+		}
+		s.Caller = c
 	}
 	return s, true
 }
@@ -489,6 +501,7 @@ func (h *Handler) static(w http.ResponseWriter, r *http.Request) {
 		"protect.js":              "text/javascript; charset=utf-8",
 		"slack_channel.js":        "text/javascript; charset=utf-8",
 		"org_picker.js":           "text/javascript; charset=utf-8",
+		"support_access.js":       "text/javascript; charset=utf-8",
 	}
 	ct, ok := types[name]
 	if !ok {

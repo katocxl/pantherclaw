@@ -328,6 +328,8 @@ func (d *rangeDriver) Do(ctx context.Context, sc domain.Scenario, st domain.Step
 		return d.killSwitch()
 	case "browser.call":
 		return d.browserCall(st)
+	case "support.probe":
+		return d.supportProbe(st)
 	case "sandbox.probe":
 		return d.extra.probe(d, st, vars)
 	}

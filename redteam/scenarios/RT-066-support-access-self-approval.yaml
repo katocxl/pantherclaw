@@ -1,0 +1,26 @@
+apiVersion: pantherclaw.range/v1
+id: RT-066
+title: Support cannot approve its own request or reuse a revoked session
+category: boundary
+suite: platform
+tier: business
+attacker: A8
+threats: [T-174]
+rules: [HR-385, HR-386, HR-388]
+requires: [payments, billing]
+harness_only: true
+steps:
+  - id: approve-own-request
+    do: support.probe
+    with: {attack: self_approval}
+    expect:
+      outcome: REFUSED
+      reason: SELF_APPROVAL
+      decisive_control: HR-386
+  - id: reuse-revoked-session
+    do: support.probe
+    with: {attack: revoked_session}
+    expect:
+      outcome: REFUSED
+      reason: UNAUTHENTICATED
+      decisive_control: HR-385

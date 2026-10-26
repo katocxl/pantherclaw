@@ -425,6 +425,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err != nil {
 			return err
 		}
+		sup := newSupport(cfg, pool, entsSvc, m5.notifications, log)
 		handler, err := apiHandler(apiDeps{
 			pool: pool, reg: reg, log: log, authority: svc, billing: bill,
 			auth: rpcauth.New(authn, procedurePermissions, nil,
@@ -432,7 +433,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 				cfg.APILimits(pool, log),
 				rpcauth.WithPlanGate(planGate(entsSvc, cfg.Billing.RequirePlan)),
 				rpcauth.WithBrowserSessions(sessions, log),
-				ui.accountSessions(web, sessions.PublicOrigin())),
+				ui.accountSessions(web, sessions.PublicOrigin()),
+				supportSessions(sup)),
+			support:   sup,
 			apiKeyEnv: credential.Env(cfg.Auth.APIKeyEnv),
 			cel:       cfg.CEL,
 			oauth: oauthhttp.New(authnapp.NewOAuth(pool, tokens, cfg.Auth.PublicURL, clock.System{}, log),
@@ -509,6 +512,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		defer closeData()
+		if err := newSupport(cfg, pool, entsSvc, m5.notifications, log).Register(jreg); err != nil {
+			return err
+		}
 		if err := chainer.Register(jreg, pool, log); err != nil {
 			return err
 		}
@@ -616,6 +622,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err != nil {
 			return err
 		}
+		client.PeriodicJobs().AddMany(supportPeriodicJobs())
 		client.PeriodicJobs().AddMany(evidenceJobs)
 		observeJobs(ctx, client)
 		client.PeriodicJobs().AddMany(dataJobs)
@@ -737,6 +744,9 @@ type apiDeps struct {
 	workers *workerHeartbeat
 	// hold is the operator's maintenance hold (HR-379).
 	hold bool
+	// support is customer-approved support access (wiring_m13_support.go);
+	// nil or off when not configured.
+	support supportService
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
@@ -844,6 +854,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerUITenancy(rs, d)
 	registerUsage(rs, d)
 	registerDataRequests(rs, d)
+	registerSupport(rs, d)
 	mux := http.NewServeMux()
 	edges.mount(mux)
 	automationTriggers.mount(mux)
@@ -857,6 +868,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	d.device.Mount(mux, d.oauth)
 	if d.web != nil {
 		d.web.Mount(mux)
+		mountSupport(mux, d)
 	}
 	mountDataRequests(mux, d)
 	mountM14Data(mux, d)

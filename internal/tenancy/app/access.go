@@ -165,6 +165,8 @@ func Bindings(ctx context.Context, q *dbq.Queries, org ids.OrgID, p td.Principal
 		rows, err = q.BindingsOfUser(ctx, org, &p.ID)
 	case td.KindServiceAccount:
 		rows, err = q.BindingsOfServiceAccount(ctx, org, &p.ID)
+	case td.KindSupport:
+		return SupportBindings(ctx, q, org, p.ID)
 	default:
 		return nil, nil
 	}
