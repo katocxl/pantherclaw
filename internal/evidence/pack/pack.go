@@ -397,6 +397,21 @@ type Signed struct {
 // ParseJWS splits a compact manifest JWS and checks its header: EdDSA,
 // type pap-pack+jwt, a kid, nothing else.
 func ParseJWS(compact string) (Signed, error) {
+	return parseJWS(compact, JWSType)
+}
+
+// ParseDataJWS parses an M13 data document with a pinned, closed JOSE type.
+// It validates the header and encoding, but callers must verify the signature.
+func ParseDataJWS(compact, typ string) (Signed, error) {
+	switch typ {
+	case "pap-export+jwt", "pap-deletion+jwt", "pap-deletion-intent+jwt":
+		return parseJWS(compact, typ)
+	default:
+		return Signed{}, invalid("unsupported data document type")
+	}
+}
+
+func parseJWS(compact, typ string) (Signed, error) {
 	if len(compact) > MaxManifestBytes {
 		return Signed{}, invalid("the manifest is larger than %d bytes", MaxManifestBytes)
 	}
@@ -413,8 +428,8 @@ func ParseJWS(compact string) (Signed, error) {
 	if err := json.Unmarshal(rawHeader, &h, json.RejectUnknownMembers(true)); err != nil {
 		return Signed{}, invalid("manifest header: %v", err)
 	}
-	if h.Alg != "EdDSA" || h.Typ != JWSType || h.Kid == "" || len(h.Kid) > 128 {
-		return Signed{}, invalid("the manifest header must be EdDSA, typ %s, with a kid", JWSType)
+	if h.Alg != "EdDSA" || h.Typ != typ || h.Kid == "" || len(h.Kid) > 128 {
+		return Signed{}, invalid("the manifest header must be EdDSA, typ %s, with a kid", typ)
 	}
 	payload, err := enc.DecodeString(parts[1])
 	if err != nil {

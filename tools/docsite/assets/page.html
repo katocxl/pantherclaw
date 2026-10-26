@@ -1,0 +1,25 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: BUSL-1.1 -->
+<!-- Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' https://github.com; base-uri 'none'; form-action 'none'">
+  <title>{{.Title}} · PantherClaw</title>
+  <link rel="stylesheet" href="{{.Prefix}}site.css">
+  <script src="{{.Prefix}}search.js" defer data-index="{{.Prefix}}search.json" data-root="{{.Prefix}}"></script>
+</head>
+<body>
+  <a class="skip" href="#content">Skip to content</a>
+  <header><a href="{{.Prefix}}index.html">PantherClaw <span>Documentation</span></a><a href="https://github.com/katocxl/pantherclaw">Source</a></header>
+  <div class="layout">
+    <aside aria-label="Documentation navigation">
+      <form role="search"><label for="search">Search documentation</label><input id="search" type="search" autocomplete="off" placeholder="Search runbooks and guides"></form>
+      <p id="search-status" role="status"></p><ul id="results" hidden></ul>
+      <details open><summary>Guides and reference</summary><nav><ul>{{range .Pages}}<li><a href="{{$.Prefix}}{{.URL}}">{{.Title}}</a></li>{{end}}</ul></nav></details>
+    </aside>
+    <main id="content" tabindex="-1"><article>{{.Body}}</article>{{if .Source}}<footer><a href="{{.Source}}">Read this page in the repository</a></footer>{{end}}</main>
+  </div>
+</body>
+</html>

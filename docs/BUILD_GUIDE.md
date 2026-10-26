@@ -486,7 +486,7 @@ docs/                    this guide and companions
 | M11 | `policy_tests`, `policy_simulations`, `policy_rollouts`, `exceptions`, `automations`, `automation_versions`, `schedules`, `triggers`, `executions`, `step_executions` |
 | M12 | `redteam_runs`, `redteam_results` |
 | M14 | `connections` gain kinds `postgres` (manifest of tables, columns and classes) and `a2a` (pinned agent card); channels `authzen` and `a2a` on `transactions` and the coverage tables; grant bounds gain data scope; `notification_channels` gain kind `slack_app`, with `slack_cards`; `enforcement_points` and `decided_via` on transactions and receipts; `a2a_peer_runs`. Migrations `00150`–`00154` (`00155`, `00156` reserved; [g0/M14.md](g0/M14.md)) |
-| M13 | `entitlements`, `usage_meters`, `support_access_grants`, `data_requests` |
+| M13 | Entitlements were delivered in milestone UI (`org_entitlements`, `entitlement_events`, migration `00161`). M13 wave 1: `rate_counters` (UNLOGGED, global, keys carry the org id; `00170`) and `usage_daily` (`00171`); wave 2: `support_access_requests`, `support_access_grants` and break-glass (`00173`–`00175`), `data_requests`, `data_request_parts`, `org_entitlements.lapsed_at` and the `pc_deleter` role (`00176`–`00179`); `schema_info` (`00169`; [g0/M13.md](g0/M13.md)) |
 
 ---
 
@@ -655,10 +655,10 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - The coding-agent scenarios of M12 are green and gate the change: locally (`task range`) while EX-004 is active, in CI once it ends.
 
 ### M13 — Commercial & production hardening → v1.0
-**PN:** PN-010, PN-011, PN-012 (except PN-012.2 and PN-012.3, delivered in UI), PN-019.
+**HR:** HR-370..398 (waves 1 and 2; wave 3 adds its own) · **PN:** PN-010, PN-011, PN-012 (except PN-012.2 and PN-012.3, delivered in UI), PN-019 · **F:** F523, F594, F597, F598, F773 · **ADR:** 0032, 0033, 0034, 0035 · **G0:** [g0/M13.md](g0/M13.md).
 - Hosted staging and production infrastructure for the hosted control plane built in UI (infrastructure as code, the managed database, sealed keys, deployment gates G3): a staging deployment (test layer L3) in M13, production (L4) and paid sign-up at v1.0.
 - Rate limits/quotas, support access (task-bound, customer-approved, audited), data export/deletion, Helm chart, backup/restore + DR drill, FIPS build variant, SLOs met under load (`pantherclaw-sim load`; k6 cannot sign PAP/1), Schemathesis clean, threat-model refresh (G4), docs site.
-- The OpenTelemetry exporter (founder decision 2026-10-10, G0 M1 deviation 4): until then spans are API-only and nothing is exported. Choose between the OTLP/HTTP exporter (it pulls in gRPC and grpc-gateway), a small OTLP/HTTP-protobuf exporter of our own, or export through logs; then wire the SDK, and decide on a pgx tracer and metrics (ARCHITECTURE §14).
+- The OpenTelemetry exporter (founder decision 2026-10-10, G0 M1 deviation 4): until then spans are API-only and nothing is exported. Decided on 2026-10-21 (G0 M13 F5, [ADR-0033](adr/0033-observability-exporter.md)): a small OTLP/HTTP-protobuf exporter of our own, without gRPC, trace ids in logs and a private profiling port, with Grafana Cloud's free plan as the staging backend; the SDK wiring, a pgx tracer and metrics follow in wave 2 (ARCHITECTURE §14).
 
 ### M14 — Framework SDKs & business connectors (delivered after M11, before M13)
 **HR:** HR-300..330 · **PN:** PN-016.3, PN-017.2, PN-017.3, PN-017.4, PN-023 · **F:** F101–F103, F164–F167, F172, F758, F759, F760 (part), F762, F763, F765, F766 · **ADR:** 0017, 0019 (implementation note), 0028, 0029 · **G0:** [g0/M14.md](g0/M14.md).
@@ -679,7 +679,7 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Onboarding** pulled from M13 (F322, F325, F335 UI part, F336, F341): resumable steps computed on the server from real records (`OnboardingService.GetProgress`; HR-362..364), from sign-in to a first protected path, guided first tests and validation; the 30-minute target is measured on the hosted flow.
 - **Website and interactive demo** (PN-025), in the commercial distribution: a static website and an interactive demo of the real console on simulated data in the browser, on its own origin with no sign-up, no cookies and no API.
 - **Pulled from M13:** PN-012.2 (per-organization entitlements and plan limits), PN-012.3 (invitations accepted in the browser), F322, F325, F335 (UI part), F336, F341. **Stays in M13:** hosted staging and production infrastructure, backups and the DR drill, rate limits and quotas, support access, data export and deletion, the Helm chart, the FIPS build, post-quantum TLS, SLOs under load, Schemathesis, the threat-model refresh (G4), the docs site and the OpenTelemetry exporter.
-- Migrations `00160`–`00164`, the last one `pc.billing_links` (server-recorded checkouts and subscriptions, one current subscription per organization) (`00165`–`00169` spare).
+- Migrations `00160`–`00164`, the last one `pc.billing_links` (server-recorded checkouts and subscriptions, one current subscription per organization) (`00165`–`00168` spare; `00169` became M13's platform migration, G0 M13 D40).
 
 ---
 
