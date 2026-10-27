@@ -223,24 +223,24 @@ type LocalRefusalReporter func(ctx context.Context, connection, code, operation,
 
 // Engine dispatches mapped actions.
 type Engine struct {
-	org         string
-	authority   pantherclawv1connect.AuthorityServiceClient
-	permits     *permitVerifier
-	containment Containment
-	broker      Opener
-	allowed     []netip.Prefix
-	breaker     *breaker
-	log         *slog.Logger
-	nonces      nonces
-	onDrift     func(ctx context.Context, connection string, d Drift)
-	approvers   Approvers
-	connectors  Connectors
-	reportFacts FactReporter
-	factTimeout time.Duration
-	revocations RevocationReporter
+	org           string
+	authority     pantherclawv1connect.AuthorityServiceClient
+	permits       *permitVerifier
+	containment   Containment
+	broker        Opener
+	allowed       []netip.Prefix
+	breaker       *breaker
+	log           *slog.Logger
+	nonces        nonces
+	onDrift       func(ctx context.Context, connection string, d Drift)
+	approvers     Approvers
+	connectors    Connectors
+	reportFacts   FactReporter
+	factTimeout   time.Duration
+	revocations   RevocationReporter
 	localRefusals LocalRefusalReporter
-	sims        *simcheck.Checker
-	githubAPI   string
+	sims          *simcheck.Checker
+	githubAPI     string
 
 	mu      sync.Mutex
 	clients map[string]clientEntry
