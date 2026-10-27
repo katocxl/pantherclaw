@@ -72,8 +72,8 @@ CREATE INDEX account_deletion_steps_user ON pc.account_deletion_steps(org_id,use
 ALTER TABLE pc.account_deletion_steps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pc.account_deletion_steps FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON pc.account_deletion_steps
- USING (org_id = NULLIF(current_setting('app.org_id',true),'')::uuid)
- WITH CHECK (org_id = NULLIF(current_setting('app.org_id',true),'')::uuid);
+ USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
+ WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
 GRANT SELECT,INSERT,UPDATE,DELETE ON pc.account_deletion_steps TO pc_app;
 
 -- No identity, account ID or tenant data: the digest is not an identifier

@@ -31,6 +31,12 @@ var globalTables = []string{
 	"account_login_requests",
 	"account_sessions",
 	"accounts",
+	// Account deletion spans orgs by design (G0 M13 D49, F12; migration
+	// 00180): the global account's deletion journal, readable only by its
+	// own account or the accounts purpose, and the identity guards, keyed
+	// by an identity digest with no account id or tenant data.
+	"account_deletions",
+	"identity_deletion_guards",
 	"anchors",              // the anchored global roots: blinded leaves only, no tenant data (G0 M7, HR-195)
 	"cross_org_list_audit", // audit of the cross-org lister; no pc_app access
 	"goose_db_version",     // migration bookkeeping; no pc_app access
