@@ -613,6 +613,13 @@ func (b *builder) captures() error {
 			continue
 		}
 		files, err := b.s.Captures.Captures(b.ctx, b.org, b.r.id, ev.Transaction.ID)
+		if errors.Is(err, pack.ErrCaptureUnavailable) {
+			// One capture that cannot be opened is a gap of its
+			// transaction; the others it read are kept.
+			b.gap("captures of "+ev.Transaction.ID.String(), pack.GapNotCaptured, "a payload capture could not be opened (%s)",
+				strings.TrimPrefix(err.Error(), pack.ErrCaptureUnavailable.Error()+": "))
+			err = nil
+		}
 		if pcerr.CodeOf(err) == pcerr.PermissionDenied {
 			// The audited read refused the creator (HR-199: a person,
 			// never an automation's identity): a gap, not a failed pack.

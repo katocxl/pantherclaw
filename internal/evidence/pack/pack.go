@@ -79,6 +79,11 @@ const (
 	GapNotFound          = "not_found"
 )
 
+// ErrCaptureUnavailable reports a payload capture that exists but cannot
+// be opened; a pack records it as a not_captured gap of its transaction
+// rather than failing.
+var ErrCaptureUnavailable = errors.New("pack: a payload capture cannot be opened")
+
 // Item kinds.
 const (
 	KindTransaction = "transaction"
