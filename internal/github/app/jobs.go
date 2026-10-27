@@ -63,7 +63,7 @@ type dailyScanDispatcher struct {
 }
 
 func (w *dailyScanDispatcher) Work(ctx context.Context, _ *river.Job[DailyScanDispatchArgs]) error {
-	refs, err := w.pool.CrossOrgList(ctx, db.ListActiveOrgs, maxOrgsPerDispatch)
+	refs, err := w.pool.CrossOrgListAll(ctx, db.ListActiveOrgs, maxOrgsPerDispatch)
 	if err != nil || len(refs) == 0 {
 		return err
 	}

@@ -107,7 +107,7 @@ func (w *janitorDispatchWorker) Work(ctx context.Context, _ *river.Job[JanitorDi
 	if err := CleanAccounts(ctx, w.pool); err != nil {
 		return err
 	}
-	refs, err := w.pool.CrossOrgList(ctx, db.ListActiveOrgs, 10000)
+	refs, err := w.pool.CrossOrgListAll(ctx, db.ListActiveOrgs, db.ListerPageSize)
 	if err != nil || len(refs) == 0 {
 		return err
 	}

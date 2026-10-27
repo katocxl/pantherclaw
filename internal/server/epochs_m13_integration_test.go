@@ -115,6 +115,43 @@ func TestHR373_BumpEpochsRaisesEveryOrgAndAudits(t *testing.T) {
 	}
 }
 
+// TestHR373_BumpEpochsPagesThroughEveryOrg (D45, D57): with a lister page
+// smaller than the number of orgs, the bump still lists every org in
+// audited pages and raises every non-DELETED one; the DELETED org gets no
+// writes. It used to refuse at the lister's 10,000-org bound.
+func TestHR373_BumpEpochsPagesThroughEveryOrg(t *testing.T) {
+	d := dbtest.New(t)
+	cfgPath := testConfig(t, d, RoleAPI)
+	o := newEpochOrgs(t, d)
+	var orgs int
+	d.AdminQueryRow(t, "SELECT count(*) FROM pc.orgs", nil, &orgs)
+	old := epochPageSize
+	epochPageSize = 2
+	t.Cleanup(func() { epochPageSize = old })
+
+	code, out, errs := runKeys(t, cfgPath, "bump-epochs", "--all", "--confirm")
+	if code != 0 {
+		t.Fatalf("bump-epochs = %d %s %s", code, out, errs)
+	}
+	for _, org := range o.all() {
+		if n := o.audits(t, org); n != 1 {
+			t.Errorf("org %s: %d audit events, want 1", org, n)
+		}
+	}
+	if o.epoch(t, o.deleted) != 0 || o.audits(t, o.deleted) != 0 {
+		t.Error("the DELETED org was written")
+	}
+	if !strings.Contains(out, "skipped 1 irreversible DELETED organization(s)") {
+		t.Errorf("skip not reported: %s", out)
+	}
+	var pages, cursors int
+	d.AdminQueryRow(t, "SELECT count(*), count(subject) FROM pc.cross_org_list_audit WHERE purpose = 'orgs_all' AND max_rows = 2",
+		nil, &pages, &cursors)
+	if want := orgs/2 + 1; pages != want || cursors != want-1 {
+		t.Errorf("lister pages = %d (%d with a cursor) for %d orgs, want %d (%d)", pages, cursors, orgs, want, want-1)
+	}
+}
+
 // TestT171_RestoredDatabaseNeverReusesACachedEpoch: a restored database
 // carries the epochs of its backup, below what gateways saw after it was
 // taken; after the bump every org's epoch is above any of those values, so
