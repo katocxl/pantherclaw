@@ -12861,6 +12861,65 @@
         }
       }
     },
+    "/pantherclaw.v1.GatewayService/ReportLocalRefusal": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.GatewayService"
+        ],
+        "summary": "ReportLocalRefusal",
+        "description": "ReportLocalRefusal reports an action the gateway refused on its own\n before asking the Authority, as a security signal for detections\n (G0 M12, HR-225): only machine metadata (the connection, the refusal\n code, the operation and the run), never the payload or the secret. The\n server records connection.secret_in_payload_refused for a connection\n the gateway serves.\n permission: gateway.observe",
+        "operationId": "pantherclaw.v1.GatewayService.ReportLocalRefusal",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ReportLocalRefusalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ReportLocalRefusalResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.RunService/StartRun": {
       "post": {
         "tags": [
@@ -51867,6 +51926,47 @@
         "title": "ReportDriftResponse",
         "additionalProperties": false,
         "description": "ReportDriftResponse says what the server did."
+      },
+      "pantherclaw.v1.ReportLocalRefusalRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "Connection id: one the calling gateway serves."
+          },
+          "code": {
+            "type": "string",
+            "title": "code",
+            "enum": [
+              "secret_in_payload"
+            ],
+            "description": "The refusal code."
+          },
+          "operation": {
+            "type": "string",
+            "title": "operation",
+            "maxLength": 128,
+            "pattern": "^([a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7})?$",
+            "description": "The refused action's operation."
+          },
+          "runId": {
+            "type": "string",
+            "title": "run_id",
+            "pattern": "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$",
+            "description": "The refused action's run id; empty when it named none."
+          }
+        },
+        "title": "ReportLocalRefusalRequest",
+        "additionalProperties": false,
+        "description": "ReportLocalRefusalRequest reports an action the gateway refused locally."
+      },
+      "pantherclaw.v1.ReportLocalRefusalResponse": {
+        "type": "object",
+        "title": "ReportLocalRefusalResponse",
+        "additionalProperties": false,
+        "description": "ReportLocalRefusalResponse is empty."
       },
       "pantherclaw.v1.ReportObservationRequest": {
         "type": "object",

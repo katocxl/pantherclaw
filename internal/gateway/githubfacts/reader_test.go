@@ -342,3 +342,54 @@ func TestHR160_ChecksReadStatusesAndClassicProtection(t *testing.T) {
 		t.Fatalf("protection on but unreadable: %v", c)
 	}
 }
+
+// TestHR160_TheDefaultBranchIsReadFromGitHub (G0 M8 follow-up, C4): the
+// repository's default branch is a fact read from GitHub each time, so a
+// rename is seen without anything applied again; whether the subject's
+// branch (a pull request's base, a branch written) is it comes with it; a
+// failed read is left out, never guessed.
+func TestHR160_TheDefaultBranchIsReadFromGitHub(t *testing.T) {
+	w := newGHWorld(t)
+	ctx := context.Background()
+	pr := Subject{Owner: "acme", Repo: "payments", Number: 1}
+	branch := Subject{Owner: "acme", Repo: "payments", Branch: "fix/a"}
+	if d := facts(Read(ctx, w.get, pr, []string{RepoDefaultBranch}))[RepoDefaultBranch]; d["branch"] != "main" || d["subject_is_default"] != true {
+		t.Fatalf("pull request: %v", d)
+	}
+	if d := facts(Read(ctx, w.get, branch, []string{RepoDefaultBranch}))[RepoDefaultBranch]; d["branch"] != "main" || d["subject_is_default"] != false {
+		t.Fatalf("branch: %v", d)
+	}
+
+	// The default branch is renamed on GitHub: the next read follows it.
+	w.sim.AddToken("ghp_admin", "admin", []string{"acme/payments"}, map[string]string{"administration": "write", "metadata": "read"})
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPatch, w.srv.URL+"/repos/acme/payments", strings.NewReader(`{"default_branch":"fix/a"}`))
+	req.Header.Set("Authorization", "token ghp_admin")
+	res, err := w.srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("rename: %d", res.StatusCode)
+	}
+	if d := facts(Read(ctx, w.get, branch, []string{RepoDefaultBranch}))[RepoDefaultBranch]; d["branch"] != "fix/a" || d["subject_is_default"] != true {
+		t.Fatalf("after the rename: %v", d)
+	}
+
+	failing := func(ctx context.Context, path string) (egress.Response, error) {
+		if path == "/repos/acme/payments" {
+			return egress.Response{Status: http.StatusInternalServerError}, nil
+		}
+		return w.get(ctx, path)
+	}
+	read, unread := ReadAll(ctx, failing, branch, []string{RepoDefaultBranch})
+	if len(read) != 0 || !strings.HasPrefix(unread[RepoDefaultBranch], "not read: ") {
+		t.Fatalf("a failed read: %v %v", read, unread)
+	}
+	empty := func(context.Context, string) (egress.Response, error) {
+		return egress.Response{Status: http.StatusOK, Body: []byte(`{"default_branch":"bad\nname"}`)}, nil
+	}
+	if read := Read(ctx, empty, branch, []string{RepoDefaultBranch}); len(read) != 0 {
+		t.Fatalf("an unusable name was read: %v", read)
+	}
+}

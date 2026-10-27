@@ -415,6 +415,9 @@ type harness struct {
 	// revocations records the tokens the gateway reported not revoked
 	// (under circuitMu): connection, purpose and repository.
 	revocations []string
+	// refusals records the local refusals the gateway reported (under
+	// circuitMu): connection, code, operation and run.
+	refusals []string
 	// githubAPI, when set, is the gateway's github.api_url.
 	githubAPI string
 	// log, when set, is the gateway's logger instead of a discarding one.
@@ -535,6 +538,12 @@ func setup(t *testing.T, opts ...func(*harness)) *harness {
 			h.circuitMu.Lock()
 			defer h.circuitMu.Unlock()
 			h.revocations = append(h.revocations, conn+" "+purpose+" "+a.Repository)
+			return nil
+		},
+		ReportLocalRefusal: func(_ context.Context, conn, code, operation, run string) error {
+			h.circuitMu.Lock()
+			defer h.circuitMu.Unlock()
+			h.refusals = append(h.refusals, conn+" "+code+" "+operation+" "+run)
 			return nil
 		},
 		Org: testOrg, GatewayID: "gw-test",

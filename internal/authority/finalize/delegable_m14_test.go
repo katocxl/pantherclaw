@@ -37,3 +37,17 @@ func TestM14_AuthZENDelegatedRefusedOnHeldConnection(t *testing.T) {
 		}
 	}
 }
+
+// TestHR186_DelegatedOnTargetEnforcedRecordsTargetEnforced: a delegated
+// execution is recorded agent_held, or target_enforced when the
+// connection's target verifies action tokens (HR-024, G0 M8 decision 9).
+func TestHR186_DelegatedOnTargetEnforcedRecordsTargetEnforced(t *testing.T) {
+	for access, want := range map[string]string{
+		"target_enforced": "target_enforced", "agent_held": "agent_held",
+		"none": "agent_held", "pantherclaw_held": "agent_held", "": "agent_held",
+	} {
+		if got := finalize.DelegatedAccess(access); got != want {
+			t.Errorf("delegated through %q recorded %q, want %q", access, got, want)
+		}
+	}
+}

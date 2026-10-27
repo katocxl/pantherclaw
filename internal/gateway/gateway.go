@@ -141,6 +141,9 @@ type Deps struct {
 	// ReportRevocation tells the server a token minted for a read or a scan
 	// could not be revoked (ADR-0021 item 6); nil only logs it.
 	ReportRevocation dispatch.RevocationReporter
+	// ReportLocalRefusal tells the server of a secret_in_payload refusal (G0
+	// M12, HR-225); nil only logs it.
+	ReportLocalRefusal dispatch.LocalRefusalReporter
 	// SubmitScan sends an organization scan's findings to the server (G0 M8,
 	// HR-209); nil submits none.
 	SubmitScan ScanSubmitter
@@ -202,6 +205,12 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 			_, err := ctl.Gateway.ReportRevocationFailure(ctx, req)
 			return err
 		},
+		ReportLocalRefusal: func(ctx context.Context, conn, code, operation, run string) error {
+			_, err := ctl.Gateway.ReportLocalRefusal(ctx, &pb.ReportLocalRefusalRequest{
+				ConnectionId: conn, Code: code, Operation: operation, RunId: run,
+			})
+			return err
+		},
 	}
 	if cfg.Broker.KeyFile != "" {
 		key, err := broker.Load(ctx, cfg.Broker.KeyFile, cfg.Broker.KEKFiles)
@@ -240,7 +249,7 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		Org: d.Org, GatewayID: d.GatewayID, Authority: d.Authority, JWKSURL: d.JWKSURL, JWKSClient: d.JWKSClient,
 		Containment: d.Containment, AllowedPrefixes: prefixes, ReportCircuit: d.ReportCircuit, ReportCircuitReason: d.ReportCircuitReason, Log: log,
 		Approvers:   proof.NewPinned(cfg.Approvals.ApproverKeysFile, d.Org),
-		ReportFacts: d.ReportFacts, FactTimeout: cfg.GitHub.FactTimeout.D(), ReportRevocation: d.ReportRevocation,
+		ReportFacts: d.ReportFacts, FactTimeout: cfg.GitHub.FactTimeout.D(), ReportRevocation: d.ReportRevocation, ReportLocalRefusal: d.ReportLocalRefusal,
 		GitHubAPIURL: cfg.GitHub.APIURL,
 	}
 	if d.Connectors != nil {

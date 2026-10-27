@@ -390,7 +390,7 @@ func (w *World) RecordExecution(_ context.Context, _ ids.OrgID, gatewayID string
 		if !finalize.Delegable(p.channel, p.dispatch.AccessMode) {
 			return "", finalize.ErrNotCooperative
 		}
-		x.AccessMode = finalize.AccessAgentHeld
+		x.AccessMode = finalize.DelegatedAccess(p.dispatch.AccessMode)
 	}
 	r, err := sign.Execution(x, w.Cont.Now)
 	if err != nil {

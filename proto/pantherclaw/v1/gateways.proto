@@ -130,6 +130,14 @@ service GatewayService {
   // R-18). A dispatch's token is reported with its outcome instead.
   // permission: gateway.observe
   rpc ReportRevocationFailure(ReportRevocationFailureRequest) returns (ReportRevocationFailureResponse);
+  // ReportLocalRefusal reports an action the gateway refused on its own
+  // before asking the Authority, as a security signal for detections
+  // (G0 M12, HR-225): only machine metadata (the connection, the refusal
+  // code, the operation and the run), never the payload or the secret. The
+  // server records connection.secret_in_payload_refused for a connection
+  // the gateway serves.
+  // permission: gateway.observe
+  rpc ReportLocalRefusal(ReportLocalRefusalRequest) returns (ReportLocalRefusalResponse);
 }
 
 // GatewayState is whether a gateway may act.
@@ -696,6 +704,26 @@ message ReportRevocationFailureRequest {
 
 // ReportRevocationFailureResponse is empty.
 message ReportRevocationFailureResponse {}
+
+// ReportLocalRefusalRequest reports an action the gateway refused locally.
+message ReportLocalRefusalRequest {
+  // Connection id: one the calling gateway serves.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  // The refusal code.
+  string code = 2 [(buf.validate.field).string = {
+    in: ["secret_in_payload"]
+  }];
+  // The refused action's operation.
+  string operation = 3 [(buf.validate.field).string = {
+    max_len: 128
+    pattern: "^([a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7})?$"
+  }];
+  // The refused action's run id; empty when it named none.
+  string run_id = 4 [(buf.validate.field).string.pattern = "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$"];
+}
+
+// ReportLocalRefusalResponse is empty.
+message ReportLocalRefusalResponse {}
 
 // ClaimVerificationsRequest asks for due verification tasks.
 message ClaimVerificationsRequest {

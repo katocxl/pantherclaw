@@ -124,11 +124,15 @@ RETURNING *;
 -- finished before the connection's latest revision (base URL, hosts,
 -- access, routes; updated_at moves with every revision), before its active
 -- credential was sealed, or before its package pin last moved vouches for
--- a connection that is no longer there, and is not read (HR-211).
+-- a connection that is no longer there, and is not read (HR-211). So is a
+-- test requested against another revision than the connection's current
+-- one, even if it finished after the change (00185), and one recorded
+-- before tests recorded their revision.
 SELECT t.state, t.result, t.finished_at FROM pc.connection_tests t
 JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
 WHERE t.org_id = sqlc.arg(org_id) AND t.connection_id = sqlc.arg(connection_id) AND t.kind = 'target_verifier'
     AND t.operation = sqlc.arg(operation) AND t.finished_at IS NOT NULL AND t.finished_at > c.updated_at
+    AND t.connection_revision = c.revision
     AND NOT EXISTS (SELECT 1 FROM pc.credentials cr WHERE cr.org_id = t.org_id AND cr.connection_id = t.connection_id
         AND cr.state = 'ACTIVE' AND cr.created_at >= t.finished_at)
     AND NOT EXISTS (SELECT 1 FROM pc.tool_packages tp JOIN pc.package_pins p ON p.org_id = tp.org_id AND p.package_id = tp.id
