@@ -12873,16 +12873,8 @@
           {
             "name": "Connect-Protocol-Version",
             "in": "header",
-            "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -12916,6 +12908,9 @@
                 }
               }
             }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
           }
         }
       }
@@ -51945,22 +51940,46 @@
             "description": "The refusal code."
           },
           "operation": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "title": "operation",
             "maxLength": 128,
-            "pattern": "^([a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7})?$",
-            "description": "The refused action's operation."
+            "description": "The refused action's operation.",
+            "anyOf": [
+              {
+                "pattern": "^([a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7})?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
           },
           "runId": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "title": "run_id",
-            "pattern": "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$",
-            "description": "The refused action's run id; empty when it named none."
+            "description": "The refused action's run id; empty when it named none.",
+            "anyOf": [
+              {
+                "pattern": "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
           }
         },
         "title": "ReportLocalRefusalRequest",
         "additionalProperties": false,
-        "description": "ReportLocalRefusalRequest reports an action the gateway refused locally."
+        "description": "ReportLocalRefusalRequest reports an action the gateway refused locally.",
+        "required": [
+          "connectionId",
+          "code"
+        ]
       },
       "pantherclaw.v1.ReportLocalRefusalResponse": {
         "type": "object",
