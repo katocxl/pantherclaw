@@ -169,6 +169,10 @@ type options struct {
 	// postgres also seeds pc.postgres and the connection "warehouse" to this
 	// fixture database (dev seed --postgres, G0 M14 D21).
 	postgres *pgtargettest.Target
+	// apiPerCredential, when set, is the server's
+	// limits.api.per_credential_per_minute (default 1200), so a test
+	// reaches the API rate limit with a few calls (G0 M13 D8).
+	apiPerCredential int
 }
 
 // freePorts are the ports freeAddr has handed out in this test binary.
@@ -248,6 +252,9 @@ func start(t *testing.T, o options) *stack {
 	}
 	if o.billing {
 		cfg["billing"] = map[string]any{"mode": "external", "require_plan": true}
+	}
+	if o.apiPerCredential > 0 {
+		cfg["limits"] = map[string]any{"api": map[string]any{"per_credential_per_minute": o.apiPerCredential}}
 	}
 	write := func(name string) string {
 		b, err := json.Marshal(cfg)

@@ -1,0 +1,38 @@
+apiVersion: pantherclaw.range/v1
+id: RT-069
+title: Another org's export, an expired export and a tampered export part are refused
+category: boundary
+suite: platform
+tier: business
+attacker: A8
+threats: [T-177]
+rules: [HR-399, HR-053, HR-196]
+requires: [payments]
+harness_only: true
+steps:
+  - id: own-export
+    do: data.probe
+    with: {attack: own_export}
+    expect:
+      outcome: ALLOW
+  - id: other-org-export
+    do: data.probe
+    with: {attack: other_org}
+    expect:
+      outcome: REFUSED
+      reason: DATA_REQUEST_NOT_FOUND
+      decisive_control: HR-399
+  - id: expired-export
+    do: data.probe
+    with: {attack: expired_export}
+    expect:
+      outcome: REFUSED
+      reason: EXPORT_UNAVAILABLE
+      decisive_control: HR-399
+  - id: tampered-part
+    do: data.probe
+    with: {attack: tampered_part}
+    expect:
+      outcome: REFUSED
+      reason: EXPORT_VERIFY_FAILED
+      decisive_control: HR-196
