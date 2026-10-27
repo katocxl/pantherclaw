@@ -219,7 +219,7 @@ func build(root, out string) error {
 		if err := os.MkdirAll(filepath.Dir(name), 0o750); err != nil {
 			return err
 		}
-		return os.WriteFile(name, b, 0o600)
+		return os.WriteFile(name, b, 0o600) //nolint:gosec // G703: names are the embedded assets and the validated manifest pages, under the new output directory
 	}
 	for _, name := range []string{"site.css", "search.js", "_headers"} {
 		b, err := assets.ReadFile("assets/" + name)
