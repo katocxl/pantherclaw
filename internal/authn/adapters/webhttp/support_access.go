@@ -63,12 +63,8 @@ func (h *Handler) MountSupportAccess(mux *http.ServeMux, sa SupportAccess) {
 	h.withSession(mux, http.MethodGet, "/support-access/requests/{org}/{id}", p.staffRequest)
 	h.withSession(mux, http.MethodPost, "/support-access/requests/{org}/{id}/open", p.open)
 	h.withSession(mux, http.MethodGet, "/support-access/{id}", p.confirm)
-	h.withSession(mux, http.MethodPost, "/support-access/{id}/approve", func(w http.ResponseWriter, r *http.Request, s authnapp.BrowserSession) {
-		p.decide(w, r, s, true)
-	})
-	h.withSession(mux, http.MethodPost, "/support-access/{id}/deny", func(w http.ResponseWriter, r *http.Request, s authnapp.BrowserSession) {
-		p.decide(w, r, s, false)
-	})
+	h.withSession(mux, http.MethodPost, "/support-access/{id}/approve", p.approve)
+	h.withSession(mux, http.MethodPost, "/support-access/{id}/deny", p.deny)
 	// Signing a support session out needs no browser session: the cookie
 	// holds the support session, which the pages never accept.
 	h.routes = append(h.routes, Route{Method: http.MethodPost, Path: "/support-access/logout", CSRF: true})
@@ -257,12 +253,20 @@ func (p supportPages) confirm(w http.ResponseWriter, r *http.Request, s authnapp
 	}
 }
 
+func (p supportPages) approve(w http.ResponseWriter, r *http.Request, s authnapp.BrowserSession) {
+	p.decide(w, r, s, true)
+}
+
+func (p supportPages) deny(w http.ResponseWriter, r *http.Request, s authnapp.BrowserSession) {
+	p.decide(w, r, s, false)
+}
+
 func (p supportPages) decide(w http.ResponseWriter, r *http.Request, s authnapp.BrowserSession, approve bool) {
 	id, ok := p.h.requestID(w, r)
 	if !ok {
 		return
 	}
-	req, _, err := p.sa.Decide(callerContext(r, s), id, approve, stepUpPtr(s)) //nolint:contextcheck // callerContext derives from the request's context
+	req, _, err := p.sa.Decide(callerContext(r, s), id, approve, stepUpPtr(s))
 	if err != nil {
 		p.jsonFail(w, r, err)
 		return

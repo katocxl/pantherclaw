@@ -253,7 +253,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err := validateExtension(ext, xdeps); err != nil {
 		return err
 	}
-	tel, err := startTelemetry(cfg, log)
+	tel, err := startTelemetry(cfg, log) //nolint:contextcheck // the span exporter goroutine outlives this call by design; Shutdown bounds it
 	if err != nil {
 		return err
 	}
