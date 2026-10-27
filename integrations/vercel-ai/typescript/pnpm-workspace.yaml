@@ -7,3 +7,8 @@
 minimumReleaseAge: 10080
 onlyBuiltDependencies: []
 strictDepBuilds: false
+
+# Advisory fixes in transitive development dependencies (osv-scanner):
+# GHSA-4qv8-2p9j-2685, GHSA-f72v-6w45-q472 and GHSA-xjj6-f33q-929c (undici).
+overrides:
+  undici: 7.30.1

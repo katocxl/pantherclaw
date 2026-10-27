@@ -7,3 +7,19 @@
 minimumReleaseAge: 10080
 onlyBuiltDependencies: []
 strictDepBuilds: false
+
+# Exception EX-008 (docs/security/GATES_AND_REVIEW.md §4): body-parser 2.4.0
+# fixes GHSA-27r3-jxmh-p828 inside the cooldown. Remove this once it is 7
+# days old (2026-10-29).
+minimumReleaseAgeExclude:
+  - body-parser@2.4.0
+
+# Advisory fixes in transitive development dependencies (osv-scanner):
+# GHSA-27r3-jxmh-p828 (body-parser), GHSA-333x-w4r6-6crp, GHSA-w74x-v6f9-j3xg,
+# GHSA-wjr9-j795-jxcr, GHSA-xhq7-xmqj-769h (fast-uri), GHSA-rxp7-6hxx-x8q5
+# (ip-address) and GHSA-mrhx-c7xc-m3w5 (zod).
+overrides:
+  body-parser: 2.4.0
+  fast-uri: 3.1.9
+  ip-address: 10.7.4
+  zod: 4.6.6
