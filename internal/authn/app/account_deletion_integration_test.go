@@ -40,12 +40,16 @@ func TestAccountDeletionForcesAccountBoundSingleUseAuthentication(t *testing.T) 
 		}
 		return red
 	}
-	for _, user := range []oidctest.User{
-		{Subject: "alice", OmitAuthTime: true},
-		{Subject: "alice", AuthTime: time.Now().Add(-time.Hour)},
-		{Subject: "different-user"},
+	for _, tc := range []struct {
+		user  oidctest.User
+		knobs oidctest.Knobs
+	}{
+		{oidctest.User{Subject: "alice"}, oidctest.Knobs{OmitAuthTime: true}},
+		{oidctest.User{Subject: "alice"}, oidctest.Knobs{AuthTime: time.Now().Add(-time.Hour)}},
+		{oidctest.User{Subject: "different-user"}, oidctest.Knobs{}},
 	} {
-		b.idp.SignIn(user)
+		b.idp.SignIn(tc.user)
+		b.idp.Set(tc.knobs)
 		red := begin()
 		out, err := b.browser.Callback(ctx, "test", b.authorize(t, red.URL), red.Binding, authnapp.ClientMeta{})
 		if err != nil {
@@ -55,6 +59,7 @@ func TestAccountDeletionForcesAccountBoundSingleUseAuthentication(t *testing.T) 
 			t.Fatalf("invalid forced authentication: %+v", out)
 		}
 	}
+	b.idp.Set(oidctest.Knobs{})
 	b.idp.SignIn(oidctest.User{Subject: "alice", Email: "alice@example.test"})
 	red := begin()
 	out, err := b.browser.Callback(ctx, "test", b.authorize(t, red.URL), red.Binding, authnapp.ClientMeta{})
