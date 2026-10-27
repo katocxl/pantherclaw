@@ -383,3 +383,135 @@ func TestCommittedSchemaIsFixed(t *testing.T) {
 		t.Fatal("docs/api/pantherclaw.openapi.json is stale; run task api:schema")
 	}
 }
+
+const shared = `{
+  "paths": {
+    "/x.v1.S/Put": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/x.v1.PutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/x.v1.Item"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "x.v1.Kind": {
+        "type": "string",
+        "enum": [
+          "KIND_A"
+        ]
+      },
+      "x.v1.Tag": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          }
+        }
+      },
+      "x.v1.Item": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/x.v1.Kind"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/x.v1.Tag"
+            }
+          }
+        }
+      },
+      "x.v1.PutRequest": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/x.v1.Item"
+          }
+        }
+      }
+    }
+  }
+}`
+
+func TestFixCopiesSharedSchemasForRequests(t *testing.T) {
+	out, err := Fix([]byte(shared), Facts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Paths      map[string]map[string]any
+		Components struct{ Schemas map[string]map[string]any }
+	}
+	if err := json.Unmarshal(out, &doc); err != nil {
+		t.Fatal(err)
+	}
+	schemas := doc.Components.Schemas
+	encode := func(v any) string {
+		b, err := json.Marshal(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	prop := func(schema, name string) string {
+		props, _ := schemas[schema]["properties"].(map[string]any)
+		return encode(props[name])
+	}
+	for _, c := range []struct{ schema, prop, want string }{
+		{"x.v1.Item", "name", `{"type":"string"}`},
+		{"x.v1.Item", "kind", `{"$ref":"#/components/schemas/x.v1.Kind"}`},
+		{"x.v1.Item", "tags", `{"items":{"$ref":"#/components/schemas/x.v1.Tag"},"type":"array"}`},
+		{"x.v1.Tag", "label", `{"type":"string"}`},
+		{"x.v1.ItemInput", "name", `{"type":["string","null"]}`},
+		{"x.v1.ItemInput", "kind", `{"anyOf":[{"$ref":"#/components/schemas/x.v1.Kind"},{"type":"null"}]}`},
+		{"x.v1.ItemInput", "tags", `{"items":{"$ref":"#/components/schemas/x.v1.TagInput"},"type":["array","null"]}`},
+		{"x.v1.TagInput", "label", `{"type":["string","null"]}`},
+		{"x.v1.PutRequest", "item", `{"anyOf":[{"$ref":"#/components/schemas/x.v1.ItemInput"},{"type":"null"}]}`},
+	} {
+		if got := prop(c.schema, c.prop); got != c.want {
+			t.Errorf("%s.%s = %s, want %s", c.schema, c.prop, got, c.want)
+		}
+	}
+	if _, ok := schemas["x.v1.KindInput"]; ok {
+		t.Error("an enum nothing changes was copied")
+	}
+	if _, ok := schemas["x.v1.PutRequestInput"]; ok {
+		t.Error("a request-only schema was copied")
+	}
+	if got := schemas["x.v1.ItemInput"][copyOf]; got != "x.v1.Item" {
+		t.Errorf("ItemInput %s = %v", copyOf, got)
+	}
+	if got := encode(doc.Paths["/x.v1.S/Put"]["post"].(map[string]any)["responses"]); !strings.Contains(got, `"$ref":"#/components/schemas/x.v1.Item"}`) {
+		t.Errorf("the response no longer points at the original: %s", got)
+	}
+	again, err := Fix(out, Facts{})
+	if err != nil || string(again) != string(out) {
+		t.Fatalf("Fix is not idempotent: %v", err)
+	}
+	if _, err := Fix([]byte(strings.Replace(shared, `"x.v1.Kind": {`, `"x.v1.ItemInput": {}, "x.v1.Kind": {`, 1)), Facts{}); err == nil {
+		t.Error("a copy replaced an existing schema")
+	}
+}

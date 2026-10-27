@@ -26995,7 +26995,7 @@
           "scope": {
             "title": "scope",
             "description": "Where the role applies.",
-            "$ref": "#/components/schemas/pantherclaw.v1.Scope"
+            "$ref": "#/components/schemas/pantherclaw.v1.ScopeInput"
           }
         },
         "title": "CreateRoleBindingRequest",
@@ -27508,6 +27508,30 @@
         "type": "object",
         "properties": {
           "type": {
+            "not": {
+              "enum": [
+                0
+              ]
+            },
+            "title": "type",
+            "description": "Scope type.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ScopeType"
+          },
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Business unit, team or environment id; empty for the org scope."
+          }
+        },
+        "title": "Scope",
+        "additionalProperties": false,
+        "description": "Scope is where a role binding applies: the org, or one business unit,\n team or environment and everything below it."
+      },
+      "pantherclaw.v1.ScopeInput": {
+        "type": "object",
+        "properties": {
+          "type": {
             "title": "type",
             "description": "Scope type.",
             "$ref": "#/components/schemas/pantherclaw.v1.ScopeType",
@@ -27537,6 +27561,7 @@
         "title": "Scope",
         "additionalProperties": false,
         "description": "Scope is where a role binding applies: the org, or one business unit,\n team or environment and everything below it.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.Scope",
         "required": [
           "type"
         ]
@@ -32785,13 +32810,93 @@
           }
         },
         "title": "AutomationStepStub",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.AutomationStepStubInput": {
+        "type": "object",
+        "properties": {
+          "stepId": {
+            "type": "string",
+            "title": "step_id",
+            "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.AutomationStubResultInput"
+            },
+            "title": "results",
+            "maxItems": 10,
+            "minItems": 1
+          }
+        },
+        "title": "AutomationStepStub",
         "additionalProperties": false,
+        "x-pantherclaw-input-of": "pantherclaw.v1.AutomationStepStub",
         "required": [
           "stepId",
           "results"
         ]
       },
       "pantherclaw.v1.AutomationStubResult": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "title": "state",
+            "enum": [
+              "RUNNING",
+              "WAITING",
+              "DONE",
+              "FAILED",
+              "SKIPPED",
+              "UNKNOWN"
+            ],
+            "description": "RUNNING, WAITING, DONE, FAILED, SKIPPED or UNKNOWN."
+          },
+          "effect": {
+            "type": "string",
+            "title": "effect",
+            "enum": [
+              "",
+              "CHANGED",
+              "UNCHANGED",
+              "UNKNOWN",
+              "NONE"
+            ],
+            "description": "CHANGED, UNCHANGED, UNKNOWN or NONE (default NONE)."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "pattern": "^([A-Z][A-Z0-9_]{0,63})?$"
+          },
+          "output": {
+            "type": "object",
+            "title": "output",
+            "maxProperties": 16,
+            "additionalProperties": {
+              "type": "string",
+              "title": "value",
+              "maxLength": 512
+            }
+          },
+          "evidence": {
+            "type": "boolean",
+            "title": "evidence",
+            "description": "evidence: the result carries completion evidence (a finish condition\n on this step can be met)."
+          },
+          "wait": {
+            "title": "wait",
+            "description": "wait: a WAITING result wakes after this long (default 15 s).",
+            "$ref": "#/components/schemas/google.protobuf.Duration"
+          }
+        },
+        "title": "AutomationStubResult",
+        "additionalProperties": false,
+        "description": "AutomationStubResult is what one attempt of a stubbed step returns."
+      },
+      "pantherclaw.v1.AutomationStubResultInput": {
         "type": "object",
         "properties": {
           "state": {
@@ -32875,6 +32980,7 @@
         "title": "AutomationStubResult",
         "additionalProperties": false,
         "description": "AutomationStubResult is what one attempt of a stubbed step returns.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.AutomationStubResult",
         "required": [
           "state"
         ]
@@ -32917,6 +33023,59 @@
             "description": "NORMAL, DENIED, TIMEOUT, DUPLICATE, PARTIAL, UNKNOWN or CUSTOM."
           },
           "params": {
+            "type": "object",
+            "title": "params",
+            "maxProperties": 16,
+            "additionalProperties": {
+              "type": "string",
+              "title": "value",
+              "maxLength": 256
+            },
+            "description": "The trigger's parameters, as text, converted by their declarations."
+          },
+          "stubs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.AutomationStepStub"
+            },
+            "title": "stubs",
+            "maxItems": 20
+          },
+          "expect": {
+            "title": "expect",
+            "$ref": "#/components/schemas/pantherclaw.v1.AutomationTestExpectation"
+          }
+        },
+        "title": "AutomationTestCase",
+        "required": [
+          "expect"
+        ],
+        "additionalProperties": false,
+        "description": "AutomationTestCase is one scenario test (D34)."
+      },
+      "pantherclaw.v1.AutomationTestCaseInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "enum": [
+              "NORMAL",
+              "DENIED",
+              "TIMEOUT",
+              "DUPLICATE",
+              "PARTIAL",
+              "UNKNOWN",
+              "CUSTOM"
+            ],
+            "description": "NORMAL, DENIED, TIMEOUT, DUPLICATE, PARTIAL, UNKNOWN or CUSTOM."
+          },
+          "params": {
             "type": [
               "object",
               "null"
@@ -32936,14 +33095,14 @@
               "null"
             ],
             "items": {
-              "$ref": "#/components/schemas/pantherclaw.v1.AutomationStepStub"
+              "$ref": "#/components/schemas/pantherclaw.v1.AutomationStepStubInput"
             },
             "title": "stubs",
             "maxItems": 20
           },
           "expect": {
             "title": "expect",
-            "$ref": "#/components/schemas/pantherclaw.v1.AutomationTestExpectation"
+            "$ref": "#/components/schemas/pantherclaw.v1.AutomationTestExpectationInput"
           }
         },
         "title": "AutomationTestCase",
@@ -32953,7 +33112,8 @@
           "kind"
         ],
         "additionalProperties": false,
-        "description": "AutomationTestCase is one scenario test (D34)."
+        "description": "AutomationTestCase is one scenario test (D34).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.AutomationTestCase"
       },
       "pantherclaw.v1.AutomationTestCase.ParamsEntry": {
         "type": "object",
@@ -32971,6 +33131,40 @@
         "additionalProperties": false
       },
       "pantherclaw.v1.AutomationTestExpectation": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "title": "state",
+            "enum": [
+              "SUCCEEDED",
+              "PARTIALLY_COMPLETED",
+              "FAILED",
+              "CANCELLED",
+              "NEEDS_RECONCILIATION"
+            ],
+            "description": "The final execution state."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "pattern": "^([A-Z][A-Z0-9_]{0,63})?$"
+          },
+          "steps": {
+            "type": "object",
+            "title": "steps",
+            "maxProperties": 20,
+            "additionalProperties": {
+              "type": "string",
+              "title": "value"
+            },
+            "description": "Expected final state of named steps (step id -\u003e state)."
+          }
+        },
+        "title": "AutomationTestExpectation",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.AutomationTestExpectationInput": {
         "type": "object",
         "properties": {
           "state": {
@@ -33016,6 +33210,7 @@
         },
         "title": "AutomationTestExpectation",
         "additionalProperties": false,
+        "x-pantherclaw-input-of": "pantherclaw.v1.AutomationTestExpectation",
         "required": [
           "state"
         ]
@@ -33815,7 +34010,7 @@
               "null"
             ],
             "items": {
-              "$ref": "#/components/schemas/pantherclaw.v1.AutomationTestCase"
+              "$ref": "#/components/schemas/pantherclaw.v1.AutomationTestCaseInput"
             },
             "title": "cases",
             "maxItems": 50
@@ -36866,7 +37061,7 @@
           "entry": {
             "title": "entry",
             "description": "The entry.",
-            "$ref": "#/components/schemas/pantherclaw.v1.CaseEntryDraft"
+            "$ref": "#/components/schemas/pantherclaw.v1.CaseEntryDraftInput"
           }
         },
         "title": "AppendCaseEntryRequest",
@@ -37080,6 +37275,141 @@
             "description": "FACT, HYPOTHESIS, QUESTION, ANSWER, NOTE, IMPACT, LINK, OWNER or STATE."
           },
           "text": {
+            "type": "string",
+            "title": "text",
+            "maxLength": 4000,
+            "description": "The statement (untrusted text) of a fact, hypothesis, question,\n answer, note or impact."
+          },
+          "basis": {
+            "type": "string",
+            "title": "basis",
+            "maxLength": 16,
+            "description": "OBSERVED, RULE_MATCH or INFERRED for a fact; HYPOTHESIS for a\n hypothesis."
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.CaseEvidenceRef"
+            },
+            "title": "evidence",
+            "maxItems": 32,
+            "description": "A fact's evidence (1 to 32), or an impact's."
+          },
+          "confidence": {
+            "type": "string",
+            "title": "confidence",
+            "maxLength": 8,
+            "description": "LOW, MEDIUM or HIGH for a hypothesis."
+          },
+          "alternatives": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 500,
+              "minLength": 1,
+              "maxItems": 8
+            },
+            "title": "alternatives",
+            "maxItems": 8,
+            "description": "A hypothesis's alternatives."
+          },
+          "questionId": {
+            "type": "string",
+            "title": "question_id",
+            "format": "uuid",
+            "description": "The question an answer answers.",
+            "nullable": true
+          },
+          "unresolved": {
+            "type": "boolean",
+            "title": "unresolved",
+            "description": "An answer that leaves the question open."
+          },
+          "ownerId": {
+            "type": "string",
+            "title": "owner_id",
+            "format": "uuid",
+            "description": "The owner a question or an owner entry names.",
+            "nullable": true
+          },
+          "ownerRole": {
+            "type": "string",
+            "title": "owner_role",
+            "maxLength": 16,
+            "description": "OWNER or FOLLOW_UP for an owner entry."
+          },
+          "impact": {
+            "type": "string",
+            "title": "impact",
+            "maxLength": 16,
+            "description": "OBSERVED or POTENTIAL for an impact."
+          },
+          "ref": {
+            "title": "ref",
+            "description": "What a link links.",
+            "$ref": "#/components/schemas/pantherclaw.v1.CaseSubject"
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "maxLength": 16,
+            "description": "OPEN, CONTAINED or CLOSED for a state entry."
+          },
+          "noContainmentNeeded": {
+            "type": "boolean",
+            "title": "no_containment_needed",
+            "description": "Containing without a containment action: no containment is needed."
+          },
+          "disposition": {
+            "type": "string",
+            "title": "disposition",
+            "maxLength": 32,
+            "description": "The disposition when closing."
+          },
+          "caseImpact": {
+            "type": "string",
+            "title": "case_impact",
+            "maxLength": 32,
+            "description": "The case impact when closing."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 1000,
+            "description": "Why (untrusted text), for a state or link entry."
+          },
+          "supersedes": {
+            "type": "string",
+            "title": "supersedes",
+            "format": "uuid",
+            "description": "The entry this one supersedes.",
+            "nullable": true
+          }
+        },
+        "title": "CaseEntryDraft",
+        "additionalProperties": false,
+        "description": "CaseEntryDraft is an entry to add. Only the fields of its kind may be\n set."
+      },
+      "pantherclaw.v1.CaseEntryDraftInput": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "enum": [
+              "FACT",
+              "HYPOTHESIS",
+              "QUESTION",
+              "ANSWER",
+              "NOTE",
+              "IMPACT",
+              "LINK",
+              "OWNER",
+              "STATE"
+            ],
+            "description": "FACT, HYPOTHESIS, QUESTION, ANSWER, NOTE, IMPACT, LINK, OWNER or STATE."
+          },
+          "text": {
             "type": [
               "string",
               "null"
@@ -37103,7 +37433,7 @@
               "null"
             ],
             "items": {
-              "$ref": "#/components/schemas/pantherclaw.v1.CaseEvidenceRef"
+              "$ref": "#/components/schemas/pantherclaw.v1.CaseEvidenceRefInput"
             },
             "title": "evidence",
             "maxItems": 32,
@@ -37184,7 +37514,7 @@
             "description": "What a link links.",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.CaseSubject"
+                "$ref": "#/components/schemas/pantherclaw.v1.CaseSubjectInput"
               },
               {
                 "type": "null"
@@ -37249,6 +37579,7 @@
         "title": "CaseEntryDraft",
         "additionalProperties": false,
         "description": "CaseEntryDraft is an entry to add. Only the fields of its kind may be\n set.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.CaseEntryDraft",
         "required": [
           "kind"
         ]
@@ -37277,7 +37608,34 @@
         },
         "title": "CaseEvidenceRef",
         "additionalProperties": false,
+        "description": "CaseEvidenceRef points at recorded evidence."
+      },
+      "pantherclaw.v1.CaseEvidenceRefInput": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "enum": [
+              "ledger",
+              "transaction",
+              "run",
+              "receipt",
+              "case_entry"
+            ],
+            "description": "\"ledger\", \"transaction\", \"run\", \"receipt\" or \"case_entry\"."
+          },
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Evidence id."
+          }
+        },
+        "title": "CaseEvidenceRef",
+        "additionalProperties": false,
         "description": "CaseEvidenceRef points at recorded evidence.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.CaseEvidenceRef",
         "required": [
           "kind",
           "id"
@@ -37344,7 +37702,30 @@
         },
         "title": "CaseSubject",
         "additionalProperties": false,
+        "description": "CaseSubject is one thing a case is about."
+      },
+      "pantherclaw.v1.CaseSubjectInput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "type",
+            "maxLength": 32,
+            "minLength": 1,
+            "description": "Subject type: agent, run, transaction, grant, connection, credential,\n alert, incident, … (reflex subject types)."
+          },
+          "id": {
+            "type": "string",
+            "title": "id",
+            "maxLength": 256,
+            "minLength": 1,
+            "description": "Subject id."
+          }
+        },
+        "title": "CaseSubject",
+        "additionalProperties": false,
         "description": "CaseSubject is one thing a case is about.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.CaseSubject",
         "required": [
           "type",
           "id"
@@ -37413,7 +37794,7 @@
             "description": "An agent, run or transaction the case links; unset: all of them.",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.CaseSubject"
+                "$ref": "#/components/schemas/pantherclaw.v1.CaseSubjectInput"
               },
               {
                 "type": "null"
@@ -37696,7 +38077,7 @@
               "null"
             ],
             "items": {
-              "$ref": "#/components/schemas/pantherclaw.v1.CaseSubject"
+              "$ref": "#/components/schemas/pantherclaw.v1.CaseSubjectInput"
             },
             "title": "subjects",
             "maxItems": 32,
@@ -38718,7 +39099,7 @@
             "title": "rule",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.FleetCohortRule"
+                "$ref": "#/components/schemas/pantherclaw.v1.FleetCohortRuleInput"
               },
               {
                 "type": "null"
@@ -38770,6 +39151,29 @@
         "type": "object",
         "properties": {
           "teamId": {
+            "type": "string",
+            "title": "team_id",
+            "format": "uuid"
+          },
+          "environmentId": {
+            "type": "string",
+            "title": "environment_id",
+            "format": "uuid"
+          },
+          "taskType": {
+            "type": "string",
+            "title": "task_type",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$"
+          }
+        },
+        "title": "FleetCohortRule",
+        "additionalProperties": false,
+        "description": "FleetCohortRule matches agents by every field it gives (at least one)."
+      },
+      "pantherclaw.v1.FleetCohortRuleInput": {
+        "type": "object",
+        "properties": {
+          "teamId": {
             "type": [
               "string",
               "null"
@@ -38817,7 +39221,8 @@
         },
         "title": "FleetCohortRule",
         "additionalProperties": false,
-        "description": "FleetCohortRule matches agents by every field it gives (at least one)."
+        "description": "FleetCohortRule matches agents by every field it gives (at least one).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.FleetCohortRule"
       },
       "pantherclaw.v1.GetCohortChangesRequest": {
         "type": "object",
@@ -39256,6 +39661,35 @@
         "type": "object",
         "properties": {
           "memoryMib": {
+            "type": "integer",
+            "title": "memory_mib",
+            "maximum": 8192,
+            "minimum": 0,
+            "format": "int32"
+          },
+          "milliCpus": {
+            "type": "integer",
+            "title": "milli_cpus",
+            "maximum": 8000,
+            "minimum": 0,
+            "format": "int32"
+          },
+          "pids": {
+            "type": "integer",
+            "title": "pids",
+            "maximum": 4096,
+            "minimum": 0,
+            "format": "int32"
+          }
+        },
+        "title": "ConnectorLimits",
+        "additionalProperties": false,
+        "description": "ConnectorLimits caps a connector's container; zero takes the default\n (512 MiB, 1000 milli-CPUs, 256 processes)."
+      },
+      "pantherclaw.v1.ConnectorLimitsInput": {
+        "type": "object",
+        "properties": {
+          "memoryMib": {
             "type": [
               "integer",
               "null"
@@ -39288,9 +39722,78 @@
         },
         "title": "ConnectorLimits",
         "additionalProperties": false,
-        "description": "ConnectorLimits caps a connector's container; zero takes the default\n (512 MiB, 1000 milli-CPUs, 256 processes)."
+        "description": "ConnectorLimits caps a connector's container; zero takes the default\n (512 MiB, 1000 milli-CPUs, 256 processes).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.ConnectorLimits"
       },
       "pantherclaw.v1.ConnectorSpec": {
+        "type": "object",
+        "properties": {
+          "image": {
+            "type": "string",
+            "title": "image",
+            "pattern": "^([a-z0-9][a-z0-9._/:-]{0,254}@)?sha256:[0-9a-f]{64}$",
+            "description": "image is pinned by digest: repo@sha256:\u003chex\u003e, or a local image id."
+          },
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "minLength": 1,
+              "maxItems": 32,
+              "minItems": 1
+            },
+            "title": "command",
+            "maxItems": 32,
+            "minItems": 1,
+            "description": "command is the program and its arguments, run as given (no shell)."
+          },
+          "environment": {
+            "type": "object",
+            "title": "environment",
+            "maxProperties": 64,
+            "additionalProperties": {
+              "type": "string",
+              "title": "value",
+              "maxLength": 1024
+            },
+            "description": "environment holds non-secret values only; a value that looks like a\n credential is refused."
+          },
+          "credentialPlaceholders": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z_][A-Z0-9_]{0,63}$",
+              "maxItems": 16,
+              "uniqueItems": true
+            },
+            "title": "credential_placeholders",
+            "maxItems": 16,
+            "uniqueItems": true,
+            "description": "credential_placeholders are environment names the gateway sets to a\n placeholder: the credential is placed on the connector's mediated\n egress, never in the container."
+          },
+          "egressConnectionId": {
+            "type": "string",
+            "title": "egress_connection_id",
+            "format": "uuid",
+            "description": "egress_connection_id is the http connection of the same gateway that\n mediates the connector's egress; empty means no egress at all."
+          },
+          "limits": {
+            "title": "limits",
+            "$ref": "#/components/schemas/pantherclaw.v1.ConnectorLimits"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "revision",
+            "format": "int32",
+            "description": "revision is the connection revision this spec was set at."
+          }
+        },
+        "title": "ConnectorSpec",
+        "additionalProperties": false,
+        "description": "ConnectorSpec is a connector's container. Changing it weakens\n enforcement (HR-183)."
+      },
+      "pantherclaw.v1.ConnectorSpecInput": {
         "type": "object",
         "properties": {
           "image": {
@@ -39363,7 +39866,7 @@
             "title": "limits",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.ConnectorLimits"
+                "$ref": "#/components/schemas/pantherclaw.v1.ConnectorLimitsInput"
               },
               {
                 "type": "null"
@@ -39383,6 +39886,7 @@
         "title": "ConnectorSpec",
         "additionalProperties": false,
         "description": "ConnectorSpec is a connector's container. Changing it weakens\n enforcement (HR-183).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.ConnectorSpec",
         "required": [
           "image",
           "command"
@@ -39707,6 +40211,64 @@
           "accountId": {
             "type": [
               "integer",
+              "string"
+            ],
+            "title": "account_id",
+            "format": "int64",
+            "description": "The account's GitHub id, once read."
+          },
+          "permissions": {
+            "type": "object",
+            "title": "permissions",
+            "additionalProperties": {
+              "type": "string",
+              "title": "value"
+            },
+            "description": "The installation's permissions as last read, by name (\"contents\":\n \"write\")."
+          },
+          "repositorySelection": {
+            "type": "string",
+            "title": "repository_selection",
+            "description": "\"all\" or \"selected\", as last read; empty before the first read."
+          },
+          "readTime": {
+            "title": "read_time",
+            "description": "When the permissions and selection were read.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "GitHubInstallation",
+        "additionalProperties": false,
+        "description": "GitHubInstallation is the GitHub App installation behind a connection\n (G0 M8 decision 3, ADR-0021). It is configuration, never a secret: the\n App's key stays sealed to the gateway. An action's repository must belong\n to the account; any other is CANNOT_AUTHORIZE WRONG_ACCOUNT. The\n permissions and repository selection are what was last read from GitHub,\n with when (M9 F048 compares them with what operations use)."
+      },
+      "pantherclaw.v1.GitHubInstallationInput": {
+        "type": "object",
+        "properties": {
+          "appClientId": {
+            "type": "string",
+            "title": "app_client_id",
+            "pattern": "^[A-Za-z0-9._-]{1,64}$",
+            "description": "The App's client id (the App JWT's issuer)."
+          },
+          "installationId": {
+            "exclusiveMinimum": 0,
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "installation_id",
+            "format": "int64",
+            "description": "The installation id."
+          },
+          "accountLogin": {
+            "type": "string",
+            "title": "account_login",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,38}$",
+            "description": "The account it is installed on: a lowercase GitHub login."
+          },
+          "accountId": {
+            "type": [
+              "integer",
               "string",
               "null"
             ],
@@ -39750,6 +40312,7 @@
         "title": "GitHubInstallation",
         "additionalProperties": false,
         "description": "GitHubInstallation is the GitHub App installation behind a connection\n (G0 M8 decision 3, ADR-0021). It is configuration, never a secret: the\n App's key stays sealed to the gateway. An action's repository must belong\n to the account; any other is CANNOT_AUTHORIZE WRONG_ACCOUNT. The\n permissions and repository selection are what was last read from GitHub,\n with when (M9 F048 compares them with what operations use).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.GitHubInstallation",
         "required": [
           "appClientId",
           "installationId",
@@ -40298,6 +40861,88 @@
             "description": "Where the agent card is read (https; loopback only in development)."
           },
           "pinnedCard": {
+            "type": "string",
+            "title": "pinned_card",
+            "maxLength": 262144,
+            "format": "byte",
+            "description": "The card as fetched when it was pinned (JSON)."
+          },
+          "cardDigest": {
+            "type": "string",
+            "title": "card_digest",
+            "maxLength": 32,
+            "format": "byte",
+            "description": "SHA-256 of the card's JCS form; set by the server."
+          },
+          "interface": {
+            "title": "interface",
+            "description": "The interface the gateway calls: one the card declares.",
+            "$ref": "#/components/schemas/pantherclaw.v1.A2AInterface"
+          },
+          "cardKeys": {
+            "type": "string",
+            "title": "card_keys",
+            "maxLength": 65536,
+            "format": "byte",
+            "description": "Optional pinned JWKS: when the card carries signatures, one must\n verify with a key from it."
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1,
+              "maxItems": 64,
+              "uniqueItems": true
+            },
+            "title": "skills",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "description": "Skill ids agents may use, a subset of the card's."
+          },
+          "peerAgentId": {
+            "type": "string",
+            "title": "peer_agent_id",
+            "format": "uuid",
+            "description": "An enrolled agent of this org that the peer endpoint belongs to; its\n runs for requests through this connection are delegated (D33)."
+          },
+          "peerScope": {
+            "title": "peer_scope",
+            "description": "The bounds and limits the peer may use for requests from this route;\n required with peer_agent_id.",
+            "$ref": "#/components/schemas/pantherclaw.v1.A2APeerScope"
+          },
+          "maxAnswerBytes": {
+            "type": "integer",
+            "title": "max_answer_bytes",
+            "maximum": 8388608,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Answer cap in bytes (default 1 MiB, at most 8 MiB)."
+          },
+          "maxStreamSeconds": {
+            "type": "integer",
+            "title": "max_stream_seconds",
+            "maximum": 3600,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Longest a relayed stream may run, in seconds (default 300, at most\n 3600)."
+          }
+        },
+        "title": "A2AConfig",
+        "additionalProperties": false,
+        "description": "A2AConfig is an a2a connection (G0 M14 D30): the peer agent's pinned\n agent card and the interface the gateway calls. Creating it and\n refreshing the pin need a step-up; a card whose digest changes is drift\n and quarantines the connection until it is pinned again (HR-322)."
+      },
+      "pantherclaw.v1.A2AConfigInput": {
+        "type": "object",
+        "properties": {
+          "cardUrl": {
+            "type": "string",
+            "title": "card_url",
+            "maxLength": 2048,
+            "minLength": 9,
+            "description": "Where the agent card is read (https; loopback only in development)."
+          },
+          "pinnedCard": {
             "type": [
               "string",
               "null"
@@ -40322,7 +40967,7 @@
             "description": "The interface the gateway calls: one the card declares.",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.A2AInterface"
+                "$ref": "#/components/schemas/pantherclaw.v1.A2AInterfaceInput"
               },
               {
                 "type": "null"
@@ -40377,7 +41022,7 @@
             "description": "The bounds and limits the peer may use for requests from this route;\n required with peer_agent_id.",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.A2APeerScope"
+                "$ref": "#/components/schemas/pantherclaw.v1.A2APeerScopeInput"
               },
               {
                 "type": "null"
@@ -40410,6 +41055,7 @@
         "title": "A2AConfig",
         "additionalProperties": false,
         "description": "A2AConfig is an a2a connection (G0 M14 D30): the peer agent's pinned\n agent card and the interface the gateway calls. Creating it and\n refreshing the pin need a step-up; a card whose digest changes is drift\n and quarantines the connection until it is pinned again (HR-322).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.A2AConfig",
         "required": [
           "cardUrl"
         ]
@@ -40436,13 +41082,61 @@
         },
         "title": "A2AInterface",
         "additionalProperties": false,
+        "description": "A2AInterface is one interface of an agent card."
+      },
+      "pantherclaw.v1.A2AInterfaceInput": {
+        "type": "object",
+        "properties": {
+          "protocol": {
+            "type": "string",
+            "title": "protocol",
+            "enum": [
+              "JSONRPC",
+              "HTTP+JSON"
+            ],
+            "description": "\"JSONRPC\" or \"HTTP+JSON\"; gRPC is refused."
+          },
+          "url": {
+            "type": "string",
+            "title": "url",
+            "maxLength": 2048,
+            "minLength": 9,
+            "description": "Its URL."
+          }
+        },
+        "title": "A2AInterface",
+        "additionalProperties": false,
         "description": "A2AInterface is one interface of an agent card.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.A2AInterface",
         "required": [
           "protocol",
           "url"
         ]
       },
       "pantherclaw.v1.A2APeerScope": {
+        "type": "object",
+        "properties": {
+          "bounds": {
+            "type": "string",
+            "title": "bounds",
+            "maxLength": 65536,
+            "minLength": 2,
+            "format": "byte",
+            "description": "Bounds (grant bounds v1, JSON)."
+          },
+          "limits": {
+            "type": "string",
+            "title": "limits",
+            "maxLength": 65536,
+            "format": "byte",
+            "description": "Limits (grant limits v1, JSON); empty for none."
+          }
+        },
+        "title": "A2APeerScope",
+        "additionalProperties": false,
+        "description": "A2APeerScope bounds what a peer agent may do for a requester (D33)."
+      },
+      "pantherclaw.v1.A2APeerScopeInput": {
         "type": "object",
         "properties": {
           "bounds": {
@@ -40467,6 +41161,7 @@
         "title": "A2APeerScope",
         "additionalProperties": false,
         "description": "A2APeerScope bounds what a peer agent may do for a requester (D33).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.A2APeerScope",
         "required": [
           "bounds"
         ]
@@ -41347,7 +42042,7 @@
             "description": "connector is required for, and only for, an mcp_container connection.",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.ConnectorSpec"
+                "$ref": "#/components/schemas/pantherclaw.v1.ConnectorSpecInput"
               },
               {
                 "type": "null"
@@ -41367,7 +42062,7 @@
             "description": "postgres is required for, and only for, a postgres connection.",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.PostgresConfig"
+                "$ref": "#/components/schemas/pantherclaw.v1.PostgresConfigInput"
               },
               {
                 "type": "null"
@@ -41379,7 +42074,7 @@
             "description": "a2a is required for, and only for, an a2a connection.",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.A2AConfig"
+                "$ref": "#/components/schemas/pantherclaw.v1.A2AConfigInput"
               },
               {
                 "type": "null"
@@ -41739,7 +42434,48 @@
         },
         "title": "PostgresColumn",
         "additionalProperties": false,
+        "description": "PostgresColumn is one column of a manifest table."
+      },
+      "pantherclaw.v1.PostgresColumnInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Column name."
+          },
+          "type": {
+            "type": "string",
+            "title": "type",
+            "enum": [
+              "text",
+              "int",
+              "bigint",
+              "numeric",
+              "bool",
+              "date",
+              "timestamptz",
+              "uuid"
+            ],
+            "description": "Type: text, int, bigint, numeric, bool, date, timestamptz or uuid."
+          },
+          "class": {
+            "type": "string",
+            "title": "class",
+            "enum": [
+              "public",
+              "internal",
+              "pii",
+              "secret"
+            ],
+            "description": "Data class: public, internal, pii or secret."
+          }
+        },
+        "title": "PostgresColumn",
+        "additionalProperties": false,
         "description": "PostgresColumn is one column of a manifest table.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.PostgresColumn",
         "required": [
           "name",
           "type",
@@ -41747,6 +42483,104 @@
         ]
       },
       "pantherclaw.v1.PostgresConfig": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "title": "host",
+            "maxLength": 253,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9]([A-Za-z0-9.:-]{0,251}[A-Za-z0-9])?$",
+            "description": "Database host name or address."
+          },
+          "port": {
+            "type": "integer",
+            "title": "port",
+            "maximum": 65535,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Port (default 5432)."
+          },
+          "database": {
+            "type": "string",
+            "title": "database",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Database name."
+          },
+          "user": {
+            "type": "string",
+            "title": "user",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Role the gateway logs in as."
+          },
+          "sslmode": {
+            "type": "string",
+            "title": "sslmode",
+            "enum": [
+              "verify-full",
+              "require"
+            ],
+            "description": "\"verify-full\" (required), or \"require\" only with internal and a pinned\n CA."
+          },
+          "caPem": {
+            "type": "string",
+            "title": "ca_pem",
+            "maxLength": 16384,
+            "description": "Optional pinned CA certificate (PEM)."
+          },
+          "internal": {
+            "type": "boolean",
+            "title": "internal",
+            "description": "Allows a private address; set only with a step-up."
+          },
+          "tables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PostgresTable"
+            },
+            "title": "tables",
+            "maxItems": 64,
+            "minItems": 1,
+            "description": "Tables the gateway may read."
+          },
+          "maxRows": {
+            "type": "integer",
+            "title": "max_rows",
+            "maximum": 1000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Row cap per query (default 200, at most 1000)."
+          },
+          "statementTimeoutMs": {
+            "type": "integer",
+            "title": "statement_timeout_ms",
+            "maximum": 30000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Statement timeout in milliseconds (default 5000, at most 30000)."
+          },
+          "maxResultBytes": {
+            "type": "integer",
+            "title": "max_result_bytes",
+            "maximum": 4194304,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Answer cap in bytes (default 1 MiB, at most 4 MiB)."
+          },
+          "minGroupSize": {
+            "type": "integer",
+            "title": "min_group_size",
+            "maximum": 1000000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Smallest group an aggregate returns (default 5, at least 2)."
+          }
+        },
+        "title": "PostgresConfig",
+        "additionalProperties": false,
+        "description": "PostgresConfig is a postgres connection (G0 M14 D15): where the database\n is and the reviewed manifest of what the gateway may read. Its password\n is the connection's sealed static credential. Identifiers are lower-case\n and never quoted. A widening change of the manifest (a new table or\n column, a class lowered, a limit raised) needs a step-up."
+      },
+      "pantherclaw.v1.PostgresConfigInput": {
         "type": "object",
         "properties": {
           "host": {
@@ -41809,7 +42643,7 @@
           "tables": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/pantherclaw.v1.PostgresTable"
+              "$ref": "#/components/schemas/pantherclaw.v1.PostgresTableInput"
             },
             "title": "tables",
             "maxItems": 64,
@@ -41864,6 +42698,7 @@
         "title": "PostgresConfig",
         "additionalProperties": false,
         "description": "PostgresConfig is a postgres connection (G0 M14 D15): where the database\n is and the reviewed manifest of what the gateway may read. Its password\n is the connection's sealed static credential. Identifiers are lower-case\n and never quoted. A widening change of the manifest (a new table or\n column, a class lowered, a limit raised) needs a step-up.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.PostgresConfig",
         "required": [
           "host",
           "database",
@@ -41873,6 +42708,56 @@
         ]
       },
       "pantherclaw.v1.PostgresTable": {
+        "type": "object",
+        "properties": {
+          "schema": {
+            "type": "string",
+            "title": "schema",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Schema."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Table name."
+          },
+          "scopeKey": {
+            "type": "string",
+            "title": "scope_key",
+            "pattern": "^([a-z_][a-z0-9_]{0,62})?$",
+            "description": "The record scope key this table answers to (D20); empty for none."
+          },
+          "scopeColumn": {
+            "type": "string",
+            "title": "scope_column",
+            "pattern": "^([a-z_][a-z0-9_]{0,62})?$",
+            "description": "The column a record scope filters on; set together with scope_key."
+          },
+          "maxRows": {
+            "type": "integer",
+            "title": "max_rows",
+            "maximum": 1000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Row cap for this table; zero takes the connection's."
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PostgresColumn"
+            },
+            "title": "columns",
+            "maxItems": 128,
+            "minItems": 1,
+            "description": "Columns the gateway may read."
+          }
+        },
+        "title": "PostgresTable",
+        "additionalProperties": false,
+        "description": "PostgresTable is one table of a postgres manifest."
+      },
+      "pantherclaw.v1.PostgresTableInput": {
         "type": "object",
         "properties": {
           "schema": {
@@ -41933,7 +42818,7 @@
           "columns": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/pantherclaw.v1.PostgresColumn"
+              "$ref": "#/components/schemas/pantherclaw.v1.PostgresColumnInput"
             },
             "title": "columns",
             "maxItems": 128,
@@ -41944,6 +42829,7 @@
         "title": "PostgresTable",
         "additionalProperties": false,
         "description": "PostgresTable is one table of a postgres manifest.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.PostgresTable",
         "required": [
           "schema",
           "name",
@@ -42038,7 +42924,7 @@
             "description": "Required for a github_app credential, refused for a static one: the\n installation it was sealed for, recorded as the connection's. The\n gateway refuses a seal that holds another.",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.GitHubInstallation"
+                "$ref": "#/components/schemas/pantherclaw.v1.GitHubInstallationInput"
               },
               {
                 "type": "null"
@@ -42454,7 +43340,7 @@
             "description": "connector replaces an mcp_container connection's spec (weakens; moving\n one to another gateway needs it).",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.ConnectorSpec"
+                "$ref": "#/components/schemas/pantherclaw.v1.ConnectorSpecInput"
               },
               {
                 "type": "null"
@@ -42466,7 +43352,7 @@
             "description": "postgres replaces a postgres connection's configuration (a widening\n manifest change weakens).",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.PostgresConfig"
+                "$ref": "#/components/schemas/pantherclaw.v1.PostgresConfigInput"
               },
               {
                 "type": "null"
@@ -42478,7 +43364,7 @@
             "description": "a2a replaces an a2a connection's configuration, or pins its card again\n (weakens).",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.A2AConfig"
+                "$ref": "#/components/schemas/pantherclaw.v1.A2AConfigInput"
               },
               {
                 "type": "null"
@@ -43432,7 +44318,35 @@
         },
         "title": "CoverageScope",
         "additionalProperties": false,
+        "description": "CoverageScope names one agent, connection and operation."
+      },
+      "pantherclaw.v1.CoverageScopeInput": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "title": "agent_id",
+            "format": "uuid",
+            "description": "Agent id."
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "Connection id."
+          },
+          "operation": {
+            "type": "string",
+            "title": "operation",
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7}$",
+            "description": "Operation, e.g. \"github.pulls.merge\"."
+          }
+        },
+        "title": "CoverageScope",
+        "additionalProperties": false,
         "description": "CoverageScope names one agent, connection and operation.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.CoverageScope",
         "required": [
           "agentId",
           "connectionId",
@@ -43682,7 +44596,7 @@
           "scope": {
             "title": "scope",
             "description": "Scope.",
-            "$ref": "#/components/schemas/pantherclaw.v1.CoverageScope"
+            "$ref": "#/components/schemas/pantherclaw.v1.CoverageScopeInput"
           }
         },
         "title": "GetCoverageRequest",
@@ -44160,7 +45074,7 @@
           "scope": {
             "title": "scope",
             "description": "The scope.",
-            "$ref": "#/components/schemas/pantherclaw.v1.CoverageScope"
+            "$ref": "#/components/schemas/pantherclaw.v1.CoverageScopeInput"
           },
           "pageSize": {
             "type": [
@@ -46003,7 +46917,7 @@
           "include": {
             "title": "include",
             "description": "What to include.",
-            "$ref": "#/components/schemas/pantherclaw.v1.PackContents"
+            "$ref": "#/components/schemas/pantherclaw.v1.PackContentsInput"
           }
         },
         "title": "CreateEvidencePackRequest",
@@ -46707,6 +47621,39 @@
         "type": "object",
         "properties": {
           "receipts": {
+            "type": "boolean",
+            "title": "receipts",
+            "description": "Receipts (decision, execution, effect) and their verify bundles."
+          },
+          "versions": {
+            "type": "boolean",
+            "title": "versions",
+            "description": "The policy, definition, grant, guardrail, connection and approval\n revisions the decisions applied."
+          },
+          "approvals": {
+            "type": "boolean",
+            "title": "approvals",
+            "description": "The approval requests that held the transactions, and their responses."
+          },
+          "containment": {
+            "type": "boolean",
+            "title": "containment",
+            "description": "Containment and restoration events."
+          },
+          "captures": {
+            "type": "boolean",
+            "title": "captures",
+            "description": "Payload captures: only for a creator holding evidence.read_restricted."
+          }
+        },
+        "title": "PackContents",
+        "additionalProperties": false,
+        "description": "PackContents is what a pack holds besides each transaction's states."
+      },
+      "pantherclaw.v1.PackContentsInput": {
+        "type": "object",
+        "properties": {
+          "receipts": {
             "type": [
               "boolean",
               "null"
@@ -46749,7 +47696,8 @@
         },
         "title": "PackContents",
         "additionalProperties": false,
-        "description": "PackContents is what a pack holds besides each transaction's states."
+        "description": "PackContents is what a pack holds besides each transaction's states.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.PackContents"
       },
       "pantherclaw.v1.PackTimeRange": {
         "type": "object",
@@ -49293,6 +50241,46 @@
             "description": "Fact name, for example payments.charge.refundable."
           },
           "type": {
+            "not": {
+              "enum": [
+                0
+              ]
+            },
+            "title": "type",
+            "description": "Value type.",
+            "$ref": "#/components/schemas/pantherclaw.v1.FactType"
+          },
+          "subjectType": {
+            "type": "string",
+            "title": "subject_type",
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){0,7}$",
+            "description": "Target type the fact is about, for example payments.charge."
+          },
+          "maxLag": {
+            "title": "max_lag",
+            "description": "How old an observation may be when it is recorded.",
+            "$ref": "#/components/schemas/google.protobuf.Duration"
+          }
+        },
+        "title": "FactDeclaration",
+        "required": [
+          "maxLag"
+        ],
+        "additionalProperties": false,
+        "description": "FactDeclaration is one fact a provider may write."
+      },
+      "pantherclaw.v1.FactDeclarationInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*){1,7}$",
+            "description": "Fact name, for example payments.charge.refundable."
+          },
+          "type": {
             "title": "type",
             "description": "Value type.",
             "$ref": "#/components/schemas/pantherclaw.v1.FactType",
@@ -49323,7 +50311,8 @@
           "subjectType"
         ],
         "additionalProperties": false,
-        "description": "FactDeclaration is one fact a provider may write."
+        "description": "FactDeclaration is one fact a provider may write.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.FactDeclaration"
       },
       "pantherclaw.v1.FactObservation": {
         "type": "object",
@@ -49603,7 +50592,7 @@
           "facts": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/pantherclaw.v1.FactDeclaration"
+              "$ref": "#/components/schemas/pantherclaw.v1.FactDeclarationInput"
             },
             "title": "facts",
             "maxItems": 64,
@@ -51469,6 +52458,24 @@
         "type": "object",
         "properties": {
           "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "\"user\", \"service_account\" or \"instance\"."
+          },
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Its id."
+          }
+        },
+        "title": "Actor",
+        "additionalProperties": false,
+        "description": "Actor is one party in a run's actor chain."
+      },
+      "pantherclaw.v1.ActorInput": {
+        "type": "object",
+        "properties": {
+          "kind": {
             "type": [
               "string",
               "null"
@@ -51487,7 +52494,8 @@
         },
         "title": "Actor",
         "additionalProperties": false,
-        "description": "Actor is one party in a run's actor chain."
+        "description": "Actor is one party in a run's actor chain.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.Actor"
       },
       "pantherclaw.v1.EndRunRequest": {
         "type": "object",
@@ -51859,7 +52867,7 @@
           "scope": {
             "title": "scope",
             "description": "Scope; it must not have a guardrail yet.",
-            "$ref": "#/components/schemas/pantherclaw.v1.GuardrailScope"
+            "$ref": "#/components/schemas/pantherclaw.v1.GuardrailScopeInput"
           },
           "name": {
             "type": "string",
@@ -51901,7 +52909,7 @@
             "description": "Settings.",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.GuardrailSettings"
+                "$ref": "#/components/schemas/pantherclaw.v1.GuardrailSettingsInput"
               },
               {
                 "type": "null"
@@ -52055,6 +53063,36 @@
         "type": "object",
         "properties": {
           "kind": {
+            "not": {
+              "enum": [
+                0
+              ]
+            },
+            "title": "kind",
+            "description": "Kind.",
+            "$ref": "#/components/schemas/pantherclaw.v1.GuardrailScopeKind"
+          },
+          "id": {
+            "type": "string",
+            "title": "id",
+            "maxLength": 36,
+            "pattern": "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$",
+            "description": "Business unit, team or environment id."
+          },
+          "principal": {
+            "title": "principal",
+            "description": "The principal (\"user\" or \"service_account\"), for a principal scope.",
+            "$ref": "#/components/schemas/pantherclaw.v1.Actor"
+          }
+        },
+        "title": "GuardrailScope",
+        "additionalProperties": false,
+        "description": "GuardrailScope is a guardrail's scope.\nan org scope names nothing, a principal scope names a principal, other scopes name an id:\n```\nthis.kind == 1 ? (this.id == '' \u0026\u0026 !has(this.principal)) : this.kind == 5 ? (this.id == '' \u0026\u0026 has(this.principal)) : (this.id != '' \u0026\u0026 !has(this.principal))\n```\n\n"
+      },
+      "pantherclaw.v1.GuardrailScopeInput": {
+        "type": "object",
+        "properties": {
+          "kind": {
             "title": "kind",
             "description": "Kind.",
             "$ref": "#/components/schemas/pantherclaw.v1.GuardrailScopeKind",
@@ -52086,7 +53124,7 @@
             "description": "The principal (\"user\" or \"service_account\"), for a principal scope.",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.Actor"
+                "$ref": "#/components/schemas/pantherclaw.v1.ActorInput"
               },
               {
                 "type": "null"
@@ -52097,11 +53135,48 @@
         "title": "GuardrailScope",
         "additionalProperties": false,
         "description": "GuardrailScope is a guardrail's scope.\nan org scope names nothing, a principal scope names a principal, other scopes name an id:\n```\nthis.kind == 1 ? (this.id == '' \u0026\u0026 !has(this.principal)) : this.kind == 5 ? (this.id == '' \u0026\u0026 has(this.principal)) : (this.id != '' \u0026\u0026 !has(this.principal))\n```\n\n",
+        "x-pantherclaw-input-of": "pantherclaw.v1.GuardrailScope",
         "required": [
           "kind"
         ]
       },
       "pantherclaw.v1.GuardrailSettings": {
+        "type": "object",
+        "properties": {
+          "maxDepth": {
+            "type": "integer",
+            "title": "max_depth",
+            "maximum": 4,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Delegation depth (default 2, at most 4).",
+            "nullable": true
+          },
+          "maxChildren": {
+            "type": "integer",
+            "title": "max_children",
+            "maximum": 50,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Active children per grant (default 10, at most 50).",
+            "nullable": true
+          },
+          "maxRootLifetime": {
+            "title": "max_root_lifetime",
+            "description": "Lifetime of a grant issued by a person (default 7 days, at most 90).",
+            "$ref": "#/components/schemas/google.protobuf.Duration"
+          },
+          "repeatWindow": {
+            "title": "repeat_window",
+            "description": "How long an accepted irreversible action blocks an identical one\n (default 24 hours, from 1 hour to 30 days). Only the org guardrail sets\n it.",
+            "$ref": "#/components/schemas/google.protobuf.Duration"
+          }
+        },
+        "title": "GuardrailSettings",
+        "additionalProperties": false,
+        "description": "GuardrailSettings are the delegation, lifetime and repeat-protection\n settings of a guardrail (decisions 5 and 6). Unset fields keep the\n defaults, or the stricter setting of another guardrail that applies."
+      },
+      "pantherclaw.v1.GuardrailSettingsInput": {
         "type": "object",
         "properties": {
           "maxDepth": {
@@ -52155,7 +53230,8 @@
         },
         "title": "GuardrailSettings",
         "additionalProperties": false,
-        "description": "GuardrailSettings are the delegation, lifetime and repeat-protection\n settings of a guardrail (decisions 5 and 6). Unset fields keep the\n defaults, or the stricter setting of another guardrail that applies."
+        "description": "GuardrailSettings are the delegation, lifetime and repeat-protection\n settings of a guardrail (decisions 5 and 6). Unset fields keep the\n defaults, or the stricter setting of another guardrail that applies.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.GuardrailSettings"
       },
       "pantherclaw.v1.ListEnvelopesRequest": {
         "type": "object",
@@ -52282,7 +53358,7 @@
             "description": "Settings.",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.GuardrailSettings"
+                "$ref": "#/components/schemas/pantherclaw.v1.GuardrailSettingsInput"
               },
               {
                 "type": "null"
@@ -52633,6 +53709,30 @@
         "type": "object",
         "properties": {
           "depth": {
+            "type": "integer",
+            "title": "depth",
+            "maximum": 4,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Further levels allowed below this grant; 0 means it cannot delegate."
+          },
+          "maxChildren": {
+            "type": "integer",
+            "title": "max_children",
+            "maximum": 50,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Most active children at once."
+          }
+        },
+        "title": "GrantDelegation",
+        "additionalProperties": false,
+        "description": "GrantDelegation says whether and how far a grant can be handed down\n (HR-047, decision 5)."
+      },
+      "pantherclaw.v1.GrantDelegationInput": {
+        "type": "object",
+        "properties": {
+          "depth": {
             "type": [
               "integer",
               "null"
@@ -52657,7 +53757,8 @@
         },
         "title": "GrantDelegation",
         "additionalProperties": false,
-        "description": "GrantDelegation says whether and how far a grant can be handed down\n (HR-047, decision 5)."
+        "description": "GrantDelegation says whether and how far a grant can be handed down\n (HR-047, decision 5).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.GrantDelegation"
       },
       "pantherclaw.v1.GuardrailVersion": {
         "type": "object",
@@ -52705,7 +53806,7 @@
           "principal": {
             "title": "principal",
             "description": "The represented principal: \"user\" or \"service_account\".",
-            "$ref": "#/components/schemas/pantherclaw.v1.Actor"
+            "$ref": "#/components/schemas/pantherclaw.v1.ActorInput"
           },
           "taskRef": {
             "type": [
@@ -52766,7 +53867,7 @@
             "description": "Delegation settings (default: no delegation).",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.GrantDelegation"
+                "$ref": "#/components/schemas/pantherclaw.v1.GrantDelegationInput"
               },
               {
                 "type": "null"
@@ -52967,7 +54068,7 @@
             "description": "Delegation settings.",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.GrantDelegation"
+                "$ref": "#/components/schemas/pantherclaw.v1.GrantDelegationInput"
               },
               {
                 "type": "null"
@@ -53370,6 +54471,81 @@
             "description": "Numeric repository owner id."
           },
           "jobType": {
+            "not": {
+              "enum": [
+                0
+              ]
+            },
+            "title": "job_type",
+            "description": "Which workflow claim the entry binds on.",
+            "$ref": "#/components/schemas/pantherclaw.v1.GithubJobType"
+          },
+          "workflowRefs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 512,
+              "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/[^@\\s]+@refs/(heads|tags)/[^\\s]+$",
+              "maxItems": 20,
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "title": "workflow_refs",
+            "maxItems": 20,
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "Accepted workflow refs, each \"owner/repo/path@refs/heads/…\" or\n \"…@refs/tags/…\"."
+          },
+          "workflowShas": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$",
+              "maxItems": 20,
+              "uniqueItems": true
+            },
+            "title": "workflow_shas",
+            "maxItems": 20,
+            "uniqueItems": true,
+            "description": "Optional exact revisions (workflow_sha or job_workflow_sha)."
+          },
+          "environment": {
+            "type": "string",
+            "title": "environment",
+            "maxLength": 255,
+            "description": "Optional deployment environment."
+          },
+          "runnerEnvironment": {
+            "type": "string",
+            "title": "runner_environment",
+            "enum": [
+              "",
+              "github-hosted",
+              "self-hosted"
+            ],
+            "description": "Optional runner environment (\"github-hosted\" or \"self-hosted\")."
+          }
+        },
+        "title": "GithubBinding",
+        "additionalProperties": false,
+        "description": "GithubBinding binds GitHub Actions tokens to one agent (HR-093)."
+      },
+      "pantherclaw.v1.GithubBindingInput": {
+        "type": "object",
+        "properties": {
+          "repositoryId": {
+            "type": "string",
+            "title": "repository_id",
+            "pattern": "^[1-9][0-9]{0,19}$",
+            "description": "Numeric repository id (names can be reused; ids cannot)."
+          },
+          "repositoryOwnerId": {
+            "type": "string",
+            "title": "repository_owner_id",
+            "pattern": "^[1-9][0-9]{0,19}$",
+            "description": "Numeric repository owner id."
+          },
+          "jobType": {
             "title": "job_type",
             "description": "Which workflow claim the entry binds on.",
             "$ref": "#/components/schemas/pantherclaw.v1.GithubJobType",
@@ -53438,6 +54614,7 @@
         "title": "GithubBinding",
         "additionalProperties": false,
         "description": "GithubBinding binds GitHub Actions tokens to one agent (HR-093).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.GithubBinding",
         "required": [
           "repositoryId",
           "repositoryOwnerId",
@@ -53677,6 +54854,65 @@
             "description": "Service account UID (a recreated account with the same name has a new\n UID and does not match)."
           },
           "imageRepositories": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 255,
+              "pattern": "^[a-z0-9]+([._-][a-z0-9]+)*(:[0-9]+)?(/[a-z0-9]+([._-][a-z0-9]+)*)+$",
+              "maxItems": 20,
+              "uniqueItems": true
+            },
+            "title": "image_repositories",
+            "maxItems": 20,
+            "uniqueItems": true,
+            "description": "Optional allowed image repositories (for example ghcr.io/acme/agent)."
+          },
+          "imageDigests": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "maxItems": 50,
+              "uniqueItems": true
+            },
+            "title": "image_digests",
+            "maxItems": 50,
+            "uniqueItems": true,
+            "description": "Optional allowed image digests."
+          }
+        },
+        "title": "KubernetesBinding",
+        "additionalProperties": false,
+        "description": "KubernetesBinding binds Kubernetes service-account tokens to one agent\n (HR-144)."
+      },
+      "pantherclaw.v1.KubernetesBindingInput": {
+        "type": "object",
+        "properties": {
+          "cluster": {
+            "type": "string",
+            "title": "cluster",
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+            "description": "Cluster name from the server configuration (identity.kubernetes_clusters)."
+          },
+          "namespace": {
+            "type": "string",
+            "title": "namespace",
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+            "description": "Namespace."
+          },
+          "serviceAccountName": {
+            "type": "string",
+            "title": "service_account_name",
+            "pattern": "^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$",
+            "description": "Service account name."
+          },
+          "serviceAccountUid": {
+            "type": "string",
+            "title": "service_account_uid",
+            "format": "uuid",
+            "description": "Service account UID (a recreated account with the same name has a new\n UID and does not match)."
+          },
+          "imageRepositories": {
             "type": [
               "array",
               "null"
@@ -53713,6 +54949,7 @@
         "title": "KubernetesBinding",
         "additionalProperties": false,
         "description": "KubernetesBinding binds Kubernetes service-account tokens to one agent\n (HR-144).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.KubernetesBinding",
         "required": [
           "cluster",
           "namespace",
@@ -53879,7 +55116,7 @@
               "github": {
                 "title": "github",
                 "description": "GitHub Actions.",
-                "$ref": "#/components/schemas/pantherclaw.v1.GithubBinding"
+                "$ref": "#/components/schemas/pantherclaw.v1.GithubBindingInput"
               }
             },
             "title": "github",
@@ -53892,7 +55129,7 @@
               "kubernetes": {
                 "title": "kubernetes",
                 "description": "Kubernetes.",
-                "$ref": "#/components/schemas/pantherclaw.v1.KubernetesBinding"
+                "$ref": "#/components/schemas/pantherclaw.v1.KubernetesBindingInput"
               }
             },
             "title": "kubernetes",
@@ -54403,7 +55640,7 @@
               "null"
             ],
             "items": {
-              "$ref": "#/components/schemas/pantherclaw.v1.ReflexSubject"
+              "$ref": "#/components/schemas/pantherclaw.v1.ReflexSubjectInput"
             },
             "title": "subjects",
             "maxItems": 32,
@@ -55154,6 +56391,24 @@
         "type": "object",
         "properties": {
           "type": {
+            "type": "string",
+            "title": "type",
+            "description": "\"agent\", \"run\", \"transaction\", \"connection\", …"
+          },
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Its id."
+          }
+        },
+        "title": "ReflexSubject",
+        "additionalProperties": false,
+        "description": "ReflexSubject is what an alert, incident or failure is about."
+      },
+      "pantherclaw.v1.ReflexSubjectInput": {
+        "type": "object",
+        "properties": {
+          "type": {
             "type": [
               "string",
               "null"
@@ -55172,7 +56427,8 @@
         },
         "title": "ReflexSubject",
         "additionalProperties": false,
-        "description": "ReflexSubject is what an alert, incident or failure is about."
+        "description": "ReflexSubject is what an alert, incident or failure is about.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.ReflexSubject"
       },
       "pantherclaw.v1.ResolveFailureRequest": {
         "type": "object",
@@ -56550,7 +57806,7 @@
             "description": "slack_app channels: the configuration, with the bot token. Required\n for, and only for, a slack_app channel.",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.SlackAppConfig"
+                "$ref": "#/components/schemas/pantherclaw.v1.SlackAppConfigInput"
               },
               {
                 "type": "null"
@@ -56911,6 +58167,39 @@
           "dataLevel": {
             "title": "data_level",
             "description": "How much a card shows (default MINIMAL).",
+            "$ref": "#/components/schemas/pantherclaw.v1.SlackDataLevel"
+          },
+          "teamId": {
+            "type": "string",
+            "title": "team_id",
+            "maxLength": 32,
+            "pattern": "^(T[A-Z0-9]{4,30})?$",
+            "description": "The workspace id, from auth.test; read-only."
+          },
+          "botToken": {
+            "type": "string",
+            "title": "bot_token",
+            "maxLength": 256,
+            "pattern": "^(xoxb-[A-Za-z0-9-]{20,250})?$",
+            "description": "The bot token (xoxb-...); input only, never returned."
+          }
+        },
+        "title": "SlackAppConfig",
+        "additionalProperties": false,
+        "description": "SlackAppConfig is a slack_app channel's configuration (G0 M14 D22). The\n bot token is input only: it is stored encrypted and never returned."
+      },
+      "pantherclaw.v1.SlackAppConfigInput": {
+        "type": "object",
+        "properties": {
+          "channelId": {
+            "type": "string",
+            "title": "channel_id",
+            "pattern": "^[CG][A-Z0-9]{8,12}$",
+            "description": "Slack channel id the cards are posted to."
+          },
+          "dataLevel": {
+            "title": "data_level",
+            "description": "How much a card shows (default MINIMAL).",
             "anyOf": [
               {
                 "$ref": "#/components/schemas/pantherclaw.v1.SlackDataLevel"
@@ -56958,6 +58247,7 @@
         "title": "SlackAppConfig",
         "additionalProperties": false,
         "description": "SlackAppConfig is a slack_app channel's configuration (G0 M14 D22). The\n bot token is input only: it is stored encrypted and never returned.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.SlackAppConfig",
         "required": [
           "channelId"
         ]
@@ -57281,6 +58571,88 @@
         "type": "object",
         "properties": {
           "transactionId": {
+            "type": "string",
+            "title": "transaction_id",
+            "format": "uuid",
+            "nullable": true
+          },
+          "agentId": {
+            "type": "string",
+            "title": "agent_id",
+            "format": "uuid",
+            "nullable": true
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "nullable": true
+          },
+          "principalUserId": {
+            "type": "string",
+            "title": "principal_user_id",
+            "format": "uuid",
+            "nullable": true
+          },
+          "principalServiceAccountId": {
+            "type": "string",
+            "title": "principal_service_account_id",
+            "format": "uuid",
+            "nullable": true
+          },
+          "effect": {
+            "type": "string",
+            "title": "effect",
+            "maxLength": 200
+          },
+          "targetType": {
+            "type": "string",
+            "title": "target_type",
+            "maxLength": 200
+          },
+          "days": {
+            "type": "integer",
+            "title": "days",
+            "maximum": 365,
+            "minimum": 0,
+            "format": "int32"
+          },
+          "startTime": {
+            "title": "start_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "endTime": {
+            "title": "end_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "resource": {
+            "type": "string",
+            "title": "resource",
+            "maxLength": 200,
+            "description": "A resource group (who_can_write)."
+          },
+          "incidentId": {
+            "type": "string",
+            "title": "incident_id",
+            "format": "uuid",
+            "description": "An incident or a case (incident_correlation).",
+            "nullable": true
+          },
+          "caseId": {
+            "type": "string",
+            "title": "case_id",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "title": "BuiltinParams",
+        "additionalProperties": false,
+        "description": "BuiltinParams are a built-in query's parameters; each query takes only\n its own."
+      },
+      "pantherclaw.v1.BuiltinParamsInput": {
+        "type": "object",
+        "properties": {
+          "transactionId": {
             "type": [
               "string",
               "null"
@@ -57404,7 +58776,8 @@
         },
         "title": "BuiltinParams",
         "additionalProperties": false,
-        "description": "BuiltinParams are a built-in query's parameters; each query takes only\n its own."
+        "description": "BuiltinParams are a built-in query's parameters; each query takes only\n its own.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.BuiltinParams"
       },
       "pantherclaw.v1.BuiltinQuery": {
         "type": "object",
@@ -57418,9 +58791,28 @@
           },
           "params": {
             "title": "params",
+            "$ref": "#/components/schemas/pantherclaw.v1.BuiltinParams"
+          }
+        },
+        "title": "BuiltinQuery",
+        "additionalProperties": false,
+        "description": "BuiltinQuery is one built-in query with its parameters."
+      },
+      "pantherclaw.v1.BuiltinQueryInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z_]+$"
+          },
+          "params": {
+            "title": "params",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.BuiltinParams"
+                "$ref": "#/components/schemas/pantherclaw.v1.BuiltinParamsInput"
               },
               {
                 "type": "null"
@@ -57431,6 +58823,7 @@
         "title": "BuiltinQuery",
         "additionalProperties": false,
         "description": "BuiltinQuery is one built-in query with its parameters.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.BuiltinQuery",
         "required": [
           "name"
         ]
@@ -58065,9 +59458,46 @@
           },
           "filters": {
             "title": "filters",
+            "$ref": "#/components/schemas/pantherclaw.v1.SearchFilters"
+          }
+        },
+        "title": "Query",
+        "additionalProperties": false,
+        "description": "Query is one structured query."
+      },
+      "pantherclaw.v1.QueryInput": {
+        "type": "object",
+        "properties": {
+          "entity": {
+            "type": "string",
+            "title": "entity",
+            "enum": [
+              "transactions",
+              "runs",
+              "agents",
+              "grants",
+              "grant_changes",
+              "connections",
+              "approvals",
+              "audit",
+              "operations",
+              "alerts",
+              "incidents",
+              "cases",
+              "findings",
+              "policy_versions",
+              "packages",
+              "gateways",
+              "automations",
+              "automation_executions"
+            ],
+            "description": "\"transactions\", \"runs\", \"agents\", \"grants\", \"grant_changes\",\n \"connections\", \"approvals\", \"audit\", \"operations\", \"alerts\",\n \"incidents\", \"cases\", \"findings\", \"policy_versions\", \"packages\",\n \"gateways\", \"automations\" or \"automation_executions\"."
+          },
+          "filters": {
+            "title": "filters",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.SearchFilters"
+                "$ref": "#/components/schemas/pantherclaw.v1.SearchFiltersInput"
               },
               {
                 "type": "null"
@@ -58078,6 +59508,7 @@
         "title": "Query",
         "additionalProperties": false,
         "description": "Query is one structured query.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.Query",
         "required": [
           "entity"
         ]
@@ -58087,7 +59518,7 @@
         "properties": {
           "query": {
             "title": "query",
-            "$ref": "#/components/schemas/pantherclaw.v1.BuiltinQuery"
+            "$ref": "#/components/schemas/pantherclaw.v1.BuiltinQueryInput"
           },
           "pageSize": {
             "type": [
@@ -58313,7 +59744,7 @@
             "description": "Exactly one of query and builtin.",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.Query"
+                "$ref": "#/components/schemas/pantherclaw.v1.QueryInput"
               },
               {
                 "type": "null"
@@ -58324,7 +59755,7 @@
             "title": "builtin",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.BuiltinQuery"
+                "$ref": "#/components/schemas/pantherclaw.v1.BuiltinQueryInput"
               },
               {
                 "type": "null"
@@ -58341,6 +59772,220 @@
         ]
       },
       "pantherclaw.v1.SearchFilters": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "nullable": true
+          },
+          "agentId": {
+            "type": "string",
+            "title": "agent_id",
+            "format": "uuid",
+            "nullable": true
+          },
+          "runId": {
+            "type": "string",
+            "title": "run_id",
+            "format": "uuid",
+            "nullable": true
+          },
+          "grantId": {
+            "type": "string",
+            "title": "grant_id",
+            "format": "uuid",
+            "nullable": true
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "nullable": true
+          },
+          "gatewayId": {
+            "type": "string",
+            "title": "gateway_id",
+            "format": "uuid",
+            "nullable": true
+          },
+          "teamId": {
+            "type": "string",
+            "title": "team_id",
+            "format": "uuid",
+            "nullable": true
+          },
+          "principalUserId": {
+            "type": "string",
+            "title": "principal_user_id",
+            "format": "uuid",
+            "nullable": true
+          },
+          "principalServiceAccountId": {
+            "type": "string",
+            "title": "principal_service_account_id",
+            "format": "uuid",
+            "nullable": true
+          },
+          "usedConnectionId": {
+            "type": "string",
+            "title": "used_connection_id",
+            "format": "uuid",
+            "description": "Agents that used this connection in the range.",
+            "nullable": true
+          },
+          "operation": {
+            "type": "string",
+            "title": "operation",
+            "maxLength": 200,
+            "description": "An exact operation."
+          },
+          "operationPrefix": {
+            "type": "string",
+            "title": "operation_prefix",
+            "maxLength": 200,
+            "description": "An operation prefix (\"payments.\")."
+          },
+          "targetType": {
+            "type": "string",
+            "title": "target_type",
+            "maxLength": 200
+          },
+          "effectPrefix": {
+            "type": "string",
+            "title": "effect_prefix",
+            "maxLength": 200,
+            "description": "An effect kind prefix (\"funds.\")."
+          },
+          "kindPrefix": {
+            "type": "string",
+            "title": "kind_prefix",
+            "maxLength": 200,
+            "description": "An audit kind prefix (\"audit.grant.\")."
+          },
+          "actor": {
+            "type": "string",
+            "title": "actor",
+            "maxLength": 200
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 16
+            },
+            "title": "decisions",
+            "maxItems": 16
+          },
+          "modes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 16
+            },
+            "title": "modes",
+            "maxItems": 16
+          },
+          "states": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 16
+            },
+            "title": "states",
+            "maxItems": 16
+          },
+          "kinds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 16
+            },
+            "title": "kinds",
+            "maxItems": 16
+          },
+          "accessModes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 16
+            },
+            "title": "access_modes",
+            "maxItems": 16
+          },
+          "environmentKinds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 16
+            },
+            "title": "environment_kinds",
+            "maxItems": 16
+          },
+          "unusedSince": {
+            "title": "unused_since",
+            "description": "Grants with no recorded use since then.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "widensOnly": {
+            "type": "boolean",
+            "title": "widens_only",
+            "description": "Grant changes: only new grants and widening revisions."
+          },
+          "startTime": {
+            "title": "start_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "endTime": {
+            "title": "end_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "alertId": {
+            "type": "string",
+            "title": "alert_id",
+            "format": "uuid",
+            "nullable": true
+          },
+          "incidentId": {
+            "type": "string",
+            "title": "incident_id",
+            "format": "uuid",
+            "nullable": true
+          },
+          "severities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 16
+            },
+            "title": "severities",
+            "maxItems": 16,
+            "description": "Alert, incident and finding severities (LOW, MEDIUM, HIGH, CRITICAL)."
+          },
+          "effectStates": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 16
+            },
+            "title": "effect_states",
+            "maxItems": 16,
+            "description": "Transaction effect states (CONFIRMED, NONE_CONFIRMED, PARTIAL, UNKNOWN, ...)."
+          },
+          "automationId": {
+            "type": "string",
+            "title": "automation_id",
+            "format": "uuid",
+            "description": "Automation executions of this automation.",
+            "nullable": true
+          }
+        },
+        "title": "SearchFilters",
+        "additionalProperties": false,
+        "description": "SearchFilters are the typed filters of a structured query. Each entity\n accepts only its own; anything else is refused."
+      },
+      "pantherclaw.v1.SearchFiltersInput": {
         "type": "object",
         "properties": {
           "id": {
@@ -58657,7 +60302,8 @@
         },
         "title": "SearchFilters",
         "additionalProperties": false,
-        "description": "SearchFilters are the typed filters of a structured query. Each entity\n accepts only its own; anything else is refused."
+        "description": "SearchFilters are the typed filters of a structured query. Each entity\n accepts only its own; anything else is refused.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.SearchFilters"
       },
       "pantherclaw.v1.SearchItem": {
         "type": "object",
@@ -58719,7 +60365,7 @@
         "properties": {
           "query": {
             "title": "query",
-            "$ref": "#/components/schemas/pantherclaw.v1.Query"
+            "$ref": "#/components/schemas/pantherclaw.v1.QueryInput"
           },
           "pageSize": {
             "type": [
@@ -58846,7 +60492,7 @@
             "title": "query",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.Query"
+                "$ref": "#/components/schemas/pantherclaw.v1.QueryInput"
               },
               {
                 "type": "null"
@@ -58857,7 +60503,7 @@
             "title": "builtin",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.BuiltinQuery"
+                "$ref": "#/components/schemas/pantherclaw.v1.BuiltinQueryInput"
               },
               {
                 "type": "null"
@@ -64178,6 +65824,42 @@
             ]
           },
           "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_.:-]*$"
+          },
+          "code": {
+            "type": "string",
+            "title": "code",
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_.:-]*$"
+          }
+        },
+        "title": "RangeExpect",
+        "additionalProperties": false,
+        "description": "RangeExpect is what a step expects, or what it observed. Outcome is one\n of ALLOW, DENY, HOLD, CANNOT_AUTHORIZE, REFUSED, BLOCKED, TARGET_REFUSED,\n NOT_FOUND, CONFIRMED, UNKNOWN. Reason and code may be empty (expected:\n not checked; observed: none)."
+      },
+      "pantherclaw.v1.RangeExpectInput": {
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "title": "outcome",
+            "enum": [
+              "ALLOW",
+              "DENY",
+              "HOLD",
+              "CANNOT_AUTHORIZE",
+              "REFUSED",
+              "BLOCKED",
+              "TARGET_REFUSED",
+              "NOT_FOUND",
+              "CONFIRMED",
+              "UNKNOWN"
+            ]
+          },
+          "reason": {
             "type": [
               "string",
               "null"
@@ -64213,6 +65895,7 @@
         "title": "RangeExpect",
         "additionalProperties": false,
         "description": "RangeExpect is what a step expects, or what it observed. Outcome is one\n of ALLOW, DENY, HOLD, CANNOT_AUTHORIZE, REFUSED, BLOCKED, TARGET_REFUSED,\n NOT_FOUND, CONFIRMED, UNKNOWN. Reason and code may be empty (expected:\n not checked; observed: none).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.RangeExpect",
         "required": [
           "outcome"
         ]
@@ -64301,6 +65984,63 @@
             ]
           },
           "title": {
+            "type": "string",
+            "title": "title",
+            "maxLength": 200
+          },
+          "stepCount": {
+            "type": "integer",
+            "title": "step_count",
+            "maximum": 40,
+            "minimum": 1,
+            "format": "int32",
+            "description": "step_count is how many steps the scenario has: a PASS records exactly\n that many (FAIL and ERROR may record fewer)."
+          }
+        },
+        "title": "RangeScenarioDecl",
+        "additionalProperties": false,
+        "description": "RangeScenarioDecl declares a scenario of the set a range runs. The\n digest is the SHA-256 (lowercase hex) of the scenario's canonical form."
+      },
+      "pantherclaw.v1.RangeScenarioDeclInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "pattern": "^RT-[0-9]{3}$"
+          },
+          "digest": {
+            "type": "string",
+            "title": "digest",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "tier": {
+            "type": "string",
+            "title": "tier",
+            "enum": [
+              "community",
+              "business"
+            ]
+          },
+          "category": {
+            "type": "string",
+            "title": "category",
+            "enum": [
+              "functional",
+              "boundary",
+              "recovery",
+              "explanation"
+            ]
+          },
+          "suite": {
+            "type": "string",
+            "title": "suite",
+            "enum": [
+              "coding-agent",
+              "platform"
+            ]
+          },
+          "title": {
             "type": [
               "string",
               "null"
@@ -64320,6 +66060,7 @@
         "title": "RangeScenarioDecl",
         "additionalProperties": false,
         "description": "RangeScenarioDecl declares a scenario of the set a range runs. The\n digest is the SHA-256 (lowercase hex) of the scenario's canonical form.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.RangeScenarioDecl",
         "required": [
           "id",
           "digest",
@@ -64399,11 +66140,11 @@
           },
           "expect": {
             "title": "expect",
-            "$ref": "#/components/schemas/pantherclaw.v1.RangeExpect"
+            "$ref": "#/components/schemas/pantherclaw.v1.RangeExpectInput"
           },
           "observed": {
             "title": "observed",
-            "$ref": "#/components/schemas/pantherclaw.v1.RangeExpect"
+            "$ref": "#/components/schemas/pantherclaw.v1.RangeExpectInput"
           },
           "transactionId": {
             "type": [
@@ -64562,7 +66303,7 @@
           "scenarios": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/pantherclaw.v1.RangeScenarioDecl"
+              "$ref": "#/components/schemas/pantherclaw.v1.RangeScenarioDeclInput"
             },
             "title": "scenarios",
             "maxItems": 200,
@@ -64719,7 +66460,7 @@
               "null"
             ],
             "items": {
-              "$ref": "#/components/schemas/pantherclaw.v1.WeeklyEntry"
+              "$ref": "#/components/schemas/pantherclaw.v1.WeeklyEntryInput"
             },
             "title": "weekly",
             "maxItems": 32
@@ -64730,7 +66471,7 @@
               "null"
             ],
             "items": {
-              "$ref": "#/components/schemas/pantherclaw.v1.TimeSpan"
+              "$ref": "#/components/schemas/pantherclaw.v1.TimeSpanInput"
             },
             "title": "one_off",
             "maxItems": 32
@@ -64741,7 +66482,7 @@
               "null"
             ],
             "items": {
-              "$ref": "#/components/schemas/pantherclaw.v1.TimeSpan"
+              "$ref": "#/components/schemas/pantherclaw.v1.TimeSpanInput"
             },
             "title": "freezes",
             "maxItems": 32
@@ -64913,6 +66654,27 @@
         "additionalProperties": false,
         "description": "TimeSpan is a one-off window or a freeze, from its start up to its end."
       },
+      "pantherclaw.v1.TimeSpanInput": {
+        "type": "object",
+        "properties": {
+          "startTime": {
+            "title": "start_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "endTime": {
+            "title": "end_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "TimeSpan",
+        "required": [
+          "startTime",
+          "endTime"
+        ],
+        "additionalProperties": false,
+        "description": "TimeSpan is a one-off window or a freeze, from its start up to its end.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.TimeSpan"
+      },
       "pantherclaw.v1.WeeklyEntry": {
         "type": "object",
         "properties": {
@@ -64939,7 +66701,36 @@
         },
         "title": "WeeklyEntry",
         "additionalProperties": false,
+        "description": "WeeklyEntry opens a window every week on a day, from a local start time,\n for a number of minutes (possibly past midnight)."
+      },
+      "pantherclaw.v1.WeeklyEntryInput": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "title": "day",
+            "pattern": "^(mon|tue|wed|thu|fri|sat|sun)$",
+            "description": "mon, tue, wed, thu, fri, sat or sun."
+          },
+          "start": {
+            "type": "string",
+            "title": "start",
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            "description": "HH:MM in the window's time zone."
+          },
+          "minutes": {
+            "type": "integer",
+            "title": "minutes",
+            "maximum": 1440,
+            "minimum": 1,
+            "format": "int32",
+            "description": "1 to 1440."
+          }
+        },
+        "title": "WeeklyEntry",
+        "additionalProperties": false,
         "description": "WeeklyEntry opens a window every week on a day, from a local start time,\n for a number of minutes (possibly past midnight).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.WeeklyEntry",
         "required": [
           "day",
           "start",
@@ -64998,7 +66789,7 @@
         "properties": {
           "scope": {
             "title": "scope",
-            "$ref": "#/components/schemas/pantherclaw.v1.ResponseSubject"
+            "$ref": "#/components/schemas/pantherclaw.v1.ResponseSubjectInput"
           },
           "control": {
             "type": "string",
@@ -65564,7 +67355,7 @@
             "description": "Only actions on this scope (a user or service account is its\n principal scope).",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.ResponseSubject"
+                "$ref": "#/components/schemas/pantherclaw.v1.ResponseSubjectInput"
               },
               {
                 "type": "null"
@@ -65600,7 +67391,7 @@
         "properties": {
           "scope": {
             "title": "scope",
-            "$ref": "#/components/schemas/pantherclaw.v1.ResponseSubject"
+            "$ref": "#/components/schemas/pantherclaw.v1.ResponseSubjectInput"
           },
           "control": {
             "type": "string",
@@ -65799,7 +67590,7 @@
         "properties": {
           "subject": {
             "title": "subject",
-            "$ref": "#/components/schemas/pantherclaw.v1.ResponseSubject"
+            "$ref": "#/components/schemas/pantherclaw.v1.ResponseSubjectInput"
           }
         },
         "title": "ProposeResponseRequest",
@@ -65837,7 +67628,7 @@
           "scope": {
             "title": "scope",
             "description": "A run, agent, grant or connection.",
-            "$ref": "#/components/schemas/pantherclaw.v1.ResponseSubject"
+            "$ref": "#/components/schemas/pantherclaw.v1.ResponseSubjectInput"
           },
           "control": {
             "type": "string",
@@ -66239,7 +68030,40 @@
         },
         "title": "ResponseSubject",
         "additionalProperties": false,
+        "description": "ResponseSubject is what a control or proposal is about."
+      },
+      "pantherclaw.v1.ResponseSubjectInput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "type",
+            "enum": [
+              "agent",
+              "run",
+              "grant",
+              "connection",
+              "resource",
+              "user",
+              "service_account",
+              "transaction",
+              "alert",
+              "incident"
+            ],
+            "description": "\"agent\", \"run\", \"grant\", \"connection\", \"resource\", \"user\",\n \"service_account\", \"transaction\", \"alert\" or \"incident\"."
+          },
+          "id": {
+            "type": "string",
+            "title": "id",
+            "maxLength": 256,
+            "minLength": 1,
+            "description": "A uuid, or for a resource \"\u003ctarget type\u003e:\u003ctarget id\u003e\" where a trailing\n * matches a prefix."
+          }
+        },
+        "title": "ResponseSubject",
+        "additionalProperties": false,
         "description": "ResponseSubject is what a control or proposal is about.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.ResponseSubject",
         "required": [
           "type",
           "id"
@@ -66333,7 +68157,7 @@
               "null"
             ],
             "items": {
-              "$ref": "#/components/schemas/pantherclaw.v1.RestorationTestAction"
+              "$ref": "#/components/schemas/pantherclaw.v1.RestorationTestActionInput"
             },
             "title": "tests",
             "maxItems": 20
@@ -66373,7 +68197,37 @@
         },
         "title": "RestorationTestAction",
         "additionalProperties": false,
+        "description": "RestorationTestAction is a recorded evaluation re-decided, dry run."
+      },
+      "pantherclaw.v1.RestorationTestActionInput": {
+        "type": "object",
+        "properties": {
+          "transactionId": {
+            "type": "string",
+            "title": "transaction_id",
+            "format": "uuid"
+          },
+          "evaluation": {
+            "type": "integer",
+            "title": "evaluation",
+            "maximum": 64,
+            "minimum": 1,
+            "format": "int32"
+          },
+          "expect": {
+            "type": "string",
+            "title": "expect",
+            "enum": [
+              "PERMITTED",
+              "PROHIBITED"
+            ],
+            "description": "\"PERMITTED\" or \"PROHIBITED\"."
+          }
+        },
+        "title": "RestorationTestAction",
+        "additionalProperties": false,
         "description": "RestorationTestAction is a recorded evaluation re-decided, dry run.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.RestorationTestAction",
         "required": [
           "transactionId",
           "evaluation",
@@ -66780,6 +68634,36 @@
             ]
           },
           "desktop": {
+            "type": "boolean",
+            "title": "desktop"
+          }
+        },
+        "title": "SandboxEngine",
+        "additionalProperties": false,
+        "description": "SandboxEngine is the Docker engine a session runs on (HR-218)."
+      },
+      "pantherclaw.v1.SandboxEngineInput": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "version",
+            "pattern": "^[0-9A-Za-z.+_-]{1,64}$"
+          },
+          "apiVersion": {
+            "type": "string",
+            "title": "api_version",
+            "pattern": "^[0-9]{1,3}\\.[0-9]{1,3}$"
+          },
+          "runtime": {
+            "type": "string",
+            "title": "runtime",
+            "enum": [
+              "runc",
+              "runsc"
+            ]
+          },
+          "desktop": {
             "type": [
               "boolean",
               "null"
@@ -66790,6 +68674,7 @@
         "title": "SandboxEngine",
         "additionalProperties": false,
         "description": "SandboxEngine is the Docker engine a session runs on (HR-218).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.SandboxEngine",
         "required": [
           "version",
           "apiVersion",
@@ -66817,7 +68702,31 @@
         },
         "title": "SandboxImages",
         "additionalProperties": false,
+        "description": "SandboxImages are the digests of a session's images."
+      },
+      "pantherclaw.v1.SandboxImagesInput": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string",
+            "title": "agent",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "edge": {
+            "type": "string",
+            "title": "edge",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "probe": {
+            "type": "string",
+            "title": "probe",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "title": "SandboxImages",
+        "additionalProperties": false,
         "description": "SandboxImages are the digests of a session's images.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.SandboxImages",
         "required": [
           "agent",
           "edge",
@@ -66993,7 +68902,7 @@
           },
           "images": {
             "title": "images",
-            "$ref": "#/components/schemas/pantherclaw.v1.SandboxImages"
+            "$ref": "#/components/schemas/pantherclaw.v1.SandboxImagesInput"
           },
           "configDigest": {
             "type": "string",
@@ -67017,7 +68926,7 @@
           },
           "engine": {
             "title": "engine",
-            "$ref": "#/components/schemas/pantherclaw.v1.SandboxEngine"
+            "$ref": "#/components/schemas/pantherclaw.v1.SandboxEngineInput"
           },
           "ttl": {
             "title": "ttl",
@@ -72793,6 +74702,47 @@
         "type": "object",
         "properties": {
           "atPercent": {
+            "type": "integer",
+            "title": "at_percent",
+            "maximum": 99,
+            "minimum": 0,
+            "format": "int32",
+            "description": "When, in percent of the time between creation and deadline (0-99)."
+          },
+          "scope": {
+            "not": {
+              "enum": [
+                0
+              ]
+            },
+            "title": "scope",
+            "description": "The widest scope whose eligible deciders are notified.",
+            "$ref": "#/components/schemas/pantherclaw.v1.EscalationScope"
+          },
+          "remind": {
+            "type": "boolean",
+            "title": "remind",
+            "description": "Remind deciders already notified."
+          },
+          "notifyOwners": {
+            "type": "boolean",
+            "title": "notify_owners",
+            "description": "Also notify the agent's owner and backup owner (no vote unless they\n are eligible)."
+          },
+          "notifyChannels": {
+            "type": "boolean",
+            "title": "notify_channels",
+            "description": "Also notify channels subscribed to the entry's event."
+          }
+        },
+        "title": "EscalationStep",
+        "additionalProperties": false,
+        "description": "EscalationStep is one step of a chain, taken at a fraction of the\n deadline."
+      },
+      "pantherclaw.v1.EscalationStepInput": {
+        "type": "object",
+        "properties": {
+          "atPercent": {
             "type": [
               "integer",
               "null"
@@ -72841,6 +74791,7 @@
         "title": "EscalationStep",
         "additionalProperties": false,
         "description": "EscalationStep is one step of a chain, taken at a fraction of the\n deadline.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.EscalationStep",
         "required": [
           "scope"
         ]
@@ -73204,7 +75155,7 @@
           "steps": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/pantherclaw.v1.EscalationStep"
+              "$ref": "#/components/schemas/pantherclaw.v1.EscalationStepInput"
             },
             "title": "steps",
             "maxItems": 5,
@@ -73248,7 +75199,7 @@
           "settings": {
             "title": "settings",
             "description": "The new settings; zero values mean the default.",
-            "$ref": "#/components/schemas/pantherclaw.v1.WaitlistSettings"
+            "$ref": "#/components/schemas/pantherclaw.v1.WaitlistSettingsInput"
           }
         },
         "title": "UpdateWaitlistSettingsRequest",
@@ -73524,6 +75475,132 @@
         "type": "object",
         "properties": {
           "batchCeilings": {
+            "type": "object",
+            "title": "batch_ceilings",
+            "maxProperties": 16,
+            "additionalProperties": {
+              "type": "string",
+              "title": "value",
+              "maxLength": 27,
+              "pattern": "^(0|[1-9][0-9]{0,17})(\\.[0-9]{1,8})?$"
+            },
+            "description": "Batch approval ceiling per ISO currency code, as a canonical decimal\n (for example {\"USD\": \"100.00\"}); empty means batch approval is off."
+          },
+          "holdDeadlineSeconds": {
+            "type": "integer",
+            "title": "hold_deadline_seconds",
+            "maximum": 3600,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Default hold deadline in seconds (300-3600; default 3600)."
+          },
+          "consumeWindowSeconds": {
+            "type": "integer",
+            "title": "consume_window_seconds",
+            "maximum": 900,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Time to use an approval in seconds (60-900; default 900)."
+          },
+          "accessRequestDeadlineSeconds": {
+            "type": "integer",
+            "title": "access_request_deadline_seconds",
+            "maximum": 604800,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Access request deadline in seconds (at most 7 days)."
+          },
+          "toolReviewDeadlineSeconds": {
+            "type": "integer",
+            "title": "tool_review_deadline_seconds",
+            "maximum": 2592000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Tool review deadline in seconds (at most 30 days)."
+          },
+          "restorationDeadlineSeconds": {
+            "type": "integer",
+            "title": "restoration_deadline_seconds",
+            "maximum": 86400,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Restoration deadline in seconds (at most 24 hours)."
+          },
+          "reconciliationDeadlineSeconds": {
+            "type": "integer",
+            "title": "reconciliation_deadline_seconds",
+            "maximum": 259200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Reconciliation escalation deadline in seconds (at most 72 hours)."
+          },
+          "maxHoldsPerGrant": {
+            "type": "integer",
+            "title": "max_holds_per_grant",
+            "maximum": 100,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Pending holds per grant (1-100; default 20)."
+          },
+          "maxHoldsPerRun": {
+            "type": "integer",
+            "title": "max_holds_per_run",
+            "maximum": 5,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Pending holds per run (1-5; default 5)."
+          },
+          "minAccountAgeSeconds": {
+            "type": "integer",
+            "title": "min_account_age_seconds",
+            "maximum": 31536000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Minimum account age for multi-person approvals in seconds (at least 7\n days)."
+          },
+          "minRoleAgeSeconds": {
+            "type": "integer",
+            "title": "min_role_age_seconds",
+            "maximum": 31536000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Minimum age of the role binding that makes a decider eligible, for\n multi-person approvals, in seconds (at least 24 hours)."
+          },
+          "minCredentialAgeSeconds": {
+            "type": "integer",
+            "title": "min_credential_age_seconds",
+            "maximum": 31536000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Minimum credential age for multi-person approvals in seconds (at least\n 24 hours)."
+          },
+          "selfGrantDelaySeconds": {
+            "type": "integer",
+            "title": "self_grant_delay_seconds",
+            "maximum": 31536000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "How long a role a person granted themselves waits before it counts, in\n seconds (at least 24 hours)."
+          },
+          "updatedBy": {
+            "type": "string",
+            "title": "updated_by",
+            "description": "Who changed them last (read only)."
+          },
+          "updateTime": {
+            "title": "update_time",
+            "description": "When (read only).",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "WaitlistSettings",
+        "additionalProperties": false,
+        "description": "WaitlistSettings are an org's waitlist settings. A zero or empty value\n in an update means the default."
+      },
+      "pantherclaw.v1.WaitlistSettingsInput": {
+        "type": "object",
+        "properties": {
+          "batchCeilings": {
             "type": [
               "object",
               "null"
@@ -73693,7 +75770,8 @@
         },
         "title": "WaitlistSettings",
         "additionalProperties": false,
-        "description": "WaitlistSettings are an org's waitlist settings. A zero or empty value\n in an update means the default."
+        "description": "WaitlistSettings are an org's waitlist settings. A zero or empty value\n in an update means the default.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.WaitlistSettings"
       },
       "pantherclaw.v1.WaitlistSettings.BatchCeilingsEntry": {
         "type": "object",
@@ -73818,7 +75896,7 @@
             "description": "Delegation settings; depth below the parent's.",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/pantherclaw.v1.GrantDelegation"
+                "$ref": "#/components/schemas/pantherclaw.v1.GrantDelegationInput"
               },
               {
                 "type": "null"

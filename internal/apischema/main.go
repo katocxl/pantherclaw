@@ -57,6 +57,9 @@ const (
 	timeoutHeader, timeoutSchema = "Connect-Timeout-Ms", "connect-timeout-header"
 	// versionHeader is documented but not required.
 	versionHeader = "Connect-Protocol-Version"
+	// inputSuffix names the request-only copy of a schema that requests and
+	// responses share; copyOf marks the copy with the original's name.
+	inputSuffix, copyOf = "Input", "x-pantherclaw-input-of"
 )
 
 func main() {
@@ -305,14 +308,23 @@ func Fix(doc []byte, facts Facts) ([]byte, error) {
 		}
 	}
 	schemas.obj = slices.DeleteFunc(schemas.obj, func(m member) bool { return m.key == timeoutSchema })
+	if err := splitShared(paths, schemas); err != nil {
+		return nil, err
+	}
 	for _, name := range requestSchemas(paths, schemas) {
-		props := schemas.get(name).get("properties")
+		s := schemas.get(name)
+		props := s.get("properties")
 		if props == nil {
 			continue // An enum, a well-known type or a message without fields.
 		}
-		s := schemas.get(name)
+		message := name
+		if of := s.get(copyOf); of != nil {
+			if err := json.Unmarshal(of.raw, &message); err != nil {
+				return nil, fmt.Errorf("%s: %w", name, err)
+			}
+		}
 		for _, prop := range props.obj {
-			f := field{name, prop.key}
+			f := field{message, prop.key}
 			if r, ok := facts.Enums[f]; ok {
 				target := prop.value
 				if items := target.get("items"); items != nil {
@@ -358,40 +370,147 @@ func fixHeaders(op *node) {
 	}
 }
 
-// requestSchemas lists, sorted, the component schemas a request body can
-// reach through $ref.
-func requestSchemas(paths, schemas *node) []string {
-	const prefix = "#/components/schemas/"
+const refPrefix = "#/components/schemas/"
+
+// refName is the component a $ref member points at, "" for any other.
+func refName(m member) string {
+	var ref string
+	if m.key != "$ref" || json.Unmarshal(m.value.raw, &ref) != nil || len(ref) <= len(refPrefix) || ref[:len(refPrefix)] != refPrefix {
+		return ""
+	}
+	return ref[len(refPrefix):]
+}
+
+// eachRef calls fn with every $ref member under n, in place.
+func eachRef(n *node, fn func(m *member)) {
+	if n == nil {
+		return
+	}
+	for i := range n.obj {
+		if n.obj[i].key == "$ref" {
+			fn(&n.obj[i])
+			continue
+		}
+		eachRef(n.obj[i].value, fn)
+	}
+	for _, v := range n.arr {
+		eachRef(v, fn)
+	}
+}
+
+// reachable is the set of component schemas the roots reach through $ref.
+func reachable(schemas *node, roots []*node) map[string]bool {
 	seen := map[string]bool{}
 	var walk func(n *node)
 	walk = func(n *node) {
-		if n == nil {
-			return
-		}
-		for _, m := range n.obj {
-			if m.key == "$ref" {
-				var ref string
-				if json.Unmarshal(m.value.raw, &ref) == nil && len(ref) > len(prefix) && ref[:len(prefix)] == prefix {
-					if name := ref[len(prefix):]; !seen[name] {
-						seen[name] = true
-						walk(schemas.get(name))
-					}
+		eachRef(n, func(m *member) {
+			if name := refName(*m); name != "" && !seen[name] {
+				seen[name] = true
+				walk(schemas.get(name))
+			}
+		})
+	}
+	for _, r := range roots {
+		walk(r)
+	}
+	return seen
+}
+
+// operationRoots splits every operation into its request body and the
+// rest (responses and parameters).
+func operationRoots(paths *node) (request, response []*node) {
+	if paths == nil {
+		return nil, nil
+	}
+	for _, item := range paths.obj {
+		for _, op := range item.value.obj {
+			for _, m := range op.value.obj {
+				if m.key == "requestBody" {
+					request = append(request, m.value)
+				} else {
+					response = append(response, m.value)
 				}
+			}
+		}
+	}
+	return request, response
+}
+
+// splitShared gives each schema that both a request body and a response
+// reach a request-only copy, named with inputSuffix and marked copyOf, and
+// points the request side at the copies, so the request loosening never
+// reaches a response schema. A shared schema is copied when it has
+// properties or refers to a copy; enums and the like stay shared, since
+// nothing changes them. On a fixed document nothing is shared any more.
+func splitShared(paths, schemas *node) error {
+	reqRoots, respRoots := operationRoots(paths)
+	req, resp := reachable(schemas, reqRoots), reachable(schemas, respRoots)
+	copies := map[string]string{}
+	for changed := true; changed; {
+		changed = false
+		for name := range req {
+			if !resp[name] || copies[name] != "" {
 				continue
 			}
-			walk(m.value)
-		}
-		for _, v := range n.arr {
-			walk(v)
-		}
-	}
-	if paths != nil {
-		for _, item := range paths.obj {
-			for _, op := range item.value.obj {
-				walk(op.value.get("requestBody"))
+			s := schemas.get(name)
+			refers := false
+			eachRef(s, func(m *member) { refers = refers || copies[refName(*m)] != "" })
+			if s.get("properties") != nil || refers {
+				copies[name] = name + inputSuffix
+				changed = true
 			}
 		}
 	}
+	if len(copies) == 0 {
+		return nil
+	}
+	out := make([]member, 0, len(schemas.obj)+len(copies))
+	for _, m := range schemas.obj {
+		out = append(out, m)
+		if c := copies[m.key]; c != "" {
+			if schemas.get(c) != nil {
+				return fmt.Errorf("copy of %s: %s already exists", m.key, c)
+			}
+			cp := m.value.clone()
+			cp.obj = append(cp.obj, member{copyOf, &node{raw: quote(m.key)}})
+			out = append(out, member{c, cp})
+		}
+	}
+	schemas.obj = out
+	repoint := func(m *member) {
+		if c := copies[refName(*m)]; c != "" {
+			m.value = &node{raw: quote(refPrefix + c)}
+		}
+	}
+	for _, r := range reqRoots {
+		eachRef(r, repoint)
+	}
+	for name := range req {
+		if c := copies[name]; c != "" {
+			name = c
+		}
+		eachRef(schemas.get(name), repoint)
+	}
+	return nil
+}
+
+// clone is a deep copy of n.
+func (n *node) clone() *node {
+	c := &node{raw: slices.Clone(n.raw), isObj: n.isObj, isArr: n.isArr}
+	for _, m := range n.obj {
+		c.obj = append(c.obj, member{m.key, m.value.clone()})
+	}
+	for _, v := range n.arr {
+		c.arr = append(c.arr, v.clone())
+	}
+	return c
+}
+
+// requestSchemas lists, sorted, the component schemas a request body can
+// reach through $ref.
+func requestSchemas(paths, schemas *node) []string {
+	reqRoots, _ := operationRoots(paths)
+	seen := reachable(schemas, reqRoots)
 	names := make([]string, 0, len(seen))
 	for name := range seen {
 		names = append(names, name)
