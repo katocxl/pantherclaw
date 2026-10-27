@@ -399,7 +399,7 @@ const insertCredentialTest = `-- name: InsertCredentialTest :one
 INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, state, result, checks, requested_by, finished_at)
 VALUES ($1, $2, $3, 'credential', 'DONE', $4, $5,
     $6, now())
-RETURNING org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, tokens_attempt, result, checks, detail_sha256, requested_by, created_at, finished_at
+RETURNING org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, tokens_attempt, result, checks, detail_sha256, requested_by, created_at, finished_at, connection_revision
 `
 
 type InsertCredentialTestParams struct {
@@ -438,6 +438,7 @@ func (q *Queries) InsertCredentialTest(ctx context.Context, arg InsertCredential
 		&i.RequestedBy,
 		&i.CreatedAt,
 		&i.FinishedAt,
+		&i.ConnectionRevision,
 	)
 	return i, err
 }
@@ -446,7 +447,7 @@ const insertLeasedConnectionTest = `-- name: InsertLeasedConnectionTest :one
 INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, verification_id, operation, requested_by)
 VALUES ($1, $2, $3, $4, $5, $6,
     $7)
-RETURNING org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, tokens_attempt, result, checks, detail_sha256, requested_by, created_at, finished_at
+RETURNING org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, tokens_attempt, result, checks, detail_sha256, requested_by, created_at, finished_at, connection_revision
 `
 
 type InsertLeasedConnectionTestParams struct {
@@ -487,6 +488,7 @@ func (q *Queries) InsertLeasedConnectionTest(ctx context.Context, arg InsertLeas
 		&i.RequestedBy,
 		&i.CreatedAt,
 		&i.FinishedAt,
+		&i.ConnectionRevision,
 	)
 	return i, err
 }
@@ -529,7 +531,7 @@ func (q *Queries) InsertToolObservation(ctx context.Context, arg InsertToolObser
 }
 
 const latestConnectionTest = `-- name: LatestConnectionTest :one
-SELECT org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, tokens_attempt, result, checks, detail_sha256, requested_by, created_at, finished_at FROM pc.connection_tests
+SELECT org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, tokens_attempt, result, checks, detail_sha256, requested_by, created_at, finished_at, connection_revision FROM pc.connection_tests
 WHERE org_id = $1 AND connection_id = $2 AND state IN ('DONE', 'FAILED')
     AND (NOT $3::boolean OR result = 'PASSED')
 ORDER BY finished_at DESC, id DESC
@@ -556,6 +558,7 @@ func (q *Queries) LatestConnectionTest(ctx context.Context, orgID ids.OrgID, con
 		&i.RequestedBy,
 		&i.CreatedAt,
 		&i.FinishedAt,
+		&i.ConnectionRevision,
 	)
 	return i, err
 }
@@ -565,6 +568,7 @@ SELECT t.state, t.result, t.finished_at FROM pc.connection_tests t
 JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
 WHERE t.org_id = $1 AND t.connection_id = $2 AND t.kind = 'target_verifier'
     AND t.operation = $3 AND t.finished_at IS NOT NULL AND t.finished_at > c.updated_at
+    AND t.connection_revision = c.revision
     AND NOT EXISTS (SELECT 1 FROM pc.credentials cr WHERE cr.org_id = t.org_id AND cr.connection_id = t.connection_id
         AND cr.state = 'ACTIVE' AND cr.created_at >= t.finished_at)
     AND NOT EXISTS (SELECT 1 FROM pc.tool_packages tp JOIN pc.package_pins p ON p.org_id = tp.org_id AND p.package_id = tp.id
@@ -586,7 +590,10 @@ type LatestTargetVerifierTestRow struct {
 // finished before the connection's latest revision (base URL, hosts,
 // access, routes; updated_at moves with every revision), before its active
 // credential was sealed, or before its package pin last moved vouches for
-// a connection that is no longer there, and is not read (HR-211).
+// a connection that is no longer there, and is not read (HR-211). So is a
+// test requested against another revision than the connection's current
+// one, even if it finished after the change (00185), and one recorded
+// before tests recorded their revision.
 func (q *Queries) LatestTargetVerifierTest(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID, operation *string) (LatestTargetVerifierTestRow, error) {
 	row := q.db.QueryRow(ctx, latestTargetVerifierTest, orgID, connectionID, operation)
 	var i LatestTargetVerifierTestRow
