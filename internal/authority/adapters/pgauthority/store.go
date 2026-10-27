@@ -615,7 +615,7 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 			if pc.Channel == nil || !finalize.Delegable(*pc.Channel, access) {
 				return finalize.ErrNotCooperative
 			}
-			x.AccessMode = finalize.AccessAgentHeld // the agent performed it with its own access (HR-186)
+			x.AccessMode = finalize.DelegatedAccess(access) // the agent performed it (HR-186)
 		}
 		to := "DISPATCHED"
 		if o == finalize.Unknown {
