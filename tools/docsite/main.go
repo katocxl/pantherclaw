@@ -30,8 +30,10 @@ import (
 //go:embed assets/*
 var assets embed.FS
 
-const sourceBase = "https://github.com/katocxl/pantherclaw/blob/main/"
-const imageBase = "https://raw.githubusercontent.com/katocxl/pantherclaw/main/"
+const (
+	sourceBase = "https://github.com/katocxl/pantherclaw/blob/main/"
+	imageBase  = "https://raw.githubusercontent.com/katocxl/pantherclaw/main/"
+)
 
 type entry struct {
 	Title string `json:"title"`
