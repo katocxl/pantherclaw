@@ -9,6 +9,8 @@
 #   full-demo     PostgreSQL and Keycloak
 #   observability Grafana with an OTLP receiver, Tempo, Prometheus and Loki
 #                 (grafana/otel-lgtm) for the server's OTLP exporter
+#   mail          Mailpit: a local SMTP relay on 1025 that catches email,
+#                 with a web inbox on 8025
 # The server, gateway and simulators are not services here: they run with
 # `go run` (BUILD_GUIDE §4).
 # Ports bind to 127.0.0.1 only. Never use these settings in production.
@@ -114,6 +116,20 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
       - "127.0.0.1:4318:4318"
+    security_opt:
+      - no-new-privileges:true
+
+  # Local email (G0 M5 follow-up): Mailpit catches every message the server
+  # sends and shows it at http://127.0.0.1:8025; nothing is delivered. Its
+  # SMTP listener is 127.0.0.1:1025 without TLS or authentication, which the
+  # server accepts only for a loopback relay. deploy/dev/server.example.json
+  # points notifications.smtp at it.
+  mailpit:
+    image: axllent/mailpit:v1.31.5@sha256:94f6b70c1436defae6799d9ac7ff0eeff9540465b842026d5cdb018f1c0234ea
+    profiles: ["mail"]
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
     security_opt:
       - no-new-privileges:true
 
