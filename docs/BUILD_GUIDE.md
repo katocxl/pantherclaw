@@ -307,6 +307,7 @@ To let a service start runs on behalf of a signed-in user (M3), add `"subject_to
 # in your server config: "auth": {"public_url": "http://localhost:8080", ...}
 # email: task up PROFILE=mail starts Mailpit (SMTP 127.0.0.1:1025, inbox http://127.0.0.1:8025), which deploy/dev/server.example.json
 # already names: "notifications": {"smtp": {"host": "127.0.0.1", "port": 1025, "tls": "none", "from": "pantherclaw@localhost"}}
+# deploy/dev/server.example.json now points notifications at Mailpit, so start the stack with PROFILE=mail; without it, email deliveries fail at send time, which is harmless.
 go run ./cmd/pantherclaw-server serve --config deploy/dev/server.local.json
 # open http://localhost:8080/account?org=<org id>, sign in, then "Add a security key or passkey"
 go run ./cmd/pclaw login --server http://localhost:8080 --org <org id>
