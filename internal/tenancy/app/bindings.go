@@ -39,6 +39,11 @@ func (a *Access) ListRoleBindings(ctx context.Context, pr page.Request, principa
 				arg.UserID = &id
 			case td.KindServiceAccount:
 				arg.ServiceAccountID = &id
+			case td.KindSupport:
+				// Support roles are never bound (G0 M13 D38), so a support
+				// principal has no binding rows; never fall through to an
+				// unfiltered listing of every binding.
+				return nil
 			}
 		}
 		rows, err := q.ListRoleBindings(ctx, arg)
@@ -122,6 +127,9 @@ func checkPrincipal(ctx context.Context, q *dbq.Queries, org ids.OrgID, p td.Pri
 			return ErrPrincipalDisabled
 		}
 		arg.ServiceAccountID = &id
+	case td.KindSupport:
+		// Nothing can be bound to a support principal (G0 M13 D38).
+		return td.ErrUnknownRole
 	default:
 		return td.ErrUnknownRole
 	}

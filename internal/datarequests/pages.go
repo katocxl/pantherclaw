@@ -63,7 +63,7 @@ func MountPages(mux *http.ServeMux, h *webhttp.Handler, s *Service) {
 			}
 			if err != nil {
 				status := http.StatusConflict
-				switch pcerr.CodeOf(err) {
+				switch pcerr.CodeOf(err) { //nolint:exhaustive // the rest are conflicts
 				case pcerr.PermissionDenied:
 					status = http.StatusForbidden
 				case pcerr.Unauthenticated:

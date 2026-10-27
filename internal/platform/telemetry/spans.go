@@ -220,6 +220,8 @@ func tracesData(res *resourcev1.Resource, spans []sdktrace.ReadOnlySpan) *tracev
 
 func spanKind(k trace.SpanKind) tracev1.Span_SpanKind {
 	switch k {
+	case trace.SpanKindUnspecified:
+		return tracev1.Span_SPAN_KIND_UNSPECIFIED
 	case trace.SpanKindInternal:
 		return tracev1.Span_SPAN_KIND_INTERNAL
 	case trace.SpanKindServer:
@@ -237,6 +239,8 @@ func spanKind(k trace.SpanKind) tracev1.Span_SpanKind {
 
 func statusCode(c codes.Code) tracev1.Status_StatusCode {
 	switch c {
+	case codes.Unset:
+		return tracev1.Status_STATUS_CODE_UNSET
 	case codes.Ok:
 		return tracev1.Status_STATUS_CODE_OK
 	case codes.Error:

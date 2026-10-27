@@ -127,7 +127,7 @@ func BreakGlassRoleAllowed(n RoleName) bool {
 func init() {
 	for i := range roles {
 		r := &roles[i]
-		switch r.Name {
+		switch r.Name { //nolint:exhaustive // only these roles gain the M13 support permissions
 		case RoleOrgAdmin:
 			r.Permissions = append(r.Permissions, m13SupportCatalog...)
 			r.Description += " Approves, denies and revokes the support staff's access requests (approving and denying with a security key) and designates the break-glass holders."

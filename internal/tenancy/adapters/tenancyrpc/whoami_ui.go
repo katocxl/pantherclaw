@@ -28,6 +28,10 @@ func sessionKindOf(c app.Credential) pantherclawv1.CallerSessionKind {
 	switch c {
 	case app.CredBrowserSession:
 		return pantherclawv1.CallerSessionKind_CALLER_SESSION_KIND_ORG_BROWSER
+	case app.CredSupportSession:
+		// Display only: a support session is a browser organization session
+		// (G0 M13 D38). Its read-only limits come from its support roles.
+		return pantherclawv1.CallerSessionKind_CALLER_SESSION_KIND_ORG_BROWSER
 	case app.CredAccessToken, app.CredAPIKey:
 		return pantherclawv1.CallerSessionKind_CALLER_SESSION_KIND_BEARER
 	}

@@ -186,6 +186,10 @@ func (a *Authenticator) accessToken(ctx context.Context, bearer string) (tapp.Ca
 			case !s.Live:
 				return reject("key_expired")
 			}
+		case td.KindSupport:
+			// A support session authenticates only with its own session
+			// credential (G0 M13 D32, D38); an access token never carries one.
+			return reject("principal_kind")
 		default:
 			return reject("principal_kind")
 		}

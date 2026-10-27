@@ -46,7 +46,7 @@ func Filter(kv attribute.KeyValue) bool {
 	if !allowed[string(kv.Key)] {
 		return false
 	}
-	switch kv.Value.Type() {
+	switch kv.Value.Type() { //nolint:exhaustive // only scalars pass; slices, maps and empty values are dropped (HR-380)
 	case attribute.STRING:
 		return len(kv.Value.AsString()) <= maxValueBytes
 	case attribute.BOOL, attribute.INT64, attribute.FLOAT64:

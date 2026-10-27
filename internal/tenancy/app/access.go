@@ -212,6 +212,14 @@ func (a *Access) WhoAmI(ctx context.Context) (Identity, error) {
 			if err != nil {
 				return err
 			}
+		case td.KindSupport:
+			// A support session has no user row and no binding rows: its
+			// support roles come from the live grant (G0 M13 D32, D38), and
+			// are shown read-only here so the console can display them.
+			out.DisplayName = c.Principal.String()
+			for _, b := range c.Bindings {
+				out.Bindings = append(out.Bindings, RoleBinding{Role: b.Role, Principal: c.Principal, Scope: b.Scope})
+			}
 		}
 		for _, r := range rows {
 			out.Bindings = append(out.Bindings, bindingView(c.Org, r))
