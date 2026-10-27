@@ -21,6 +21,8 @@ tasks:
     desc: Generate the Connect JSON OpenAPI 3.1 schema from protobuf
     cmds:
       - go tool -modfile={{.PINS}}/buf/go.mod buf generate --template buf.openapi.gen.yaml
+      # Restores what the pinned generator drops (zero minimums, the bodiless 415).
+      - go run ./internal/apischema docs/api/pantherclaw.openapi.json
 
   api:check:
     desc: Run authenticated schema property checks on a disposable database

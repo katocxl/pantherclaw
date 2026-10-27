@@ -2,7 +2,12 @@
 
 `task api:schema` generates `docs/api/pantherclaw.openapi.json` from the
 repository protobuf API, using the local pinned Connect OpenAPI plugin.
-Generated files are reviewed and committed. The nightly workflow regenerates
+`internal/apischema` then restores what the pinned generator loses:
+`minimum: 0` for every protovalidate `gte: 0` numeric field, and the
+bodiless 415 that Connect returns for a missing or unsupported Content-Type
+on every operation with a request body. `tools/api/openapi.override.yaml`
+types the Connect headers as the strings they are on the wire. Generated
+files are reviewed and committed. The nightly workflow regenerates
 them and rejects drift. The schema describes Connect JSON and translated
 Protovalidate rules; the server still owns authorization, tenant isolation,
 plan checks, step-up and cross-field validation. The source includes the full
