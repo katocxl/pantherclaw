@@ -31,6 +31,7 @@ import (
 	"buf.build/go/protovalidate"
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
+	"connectrpc.com/connect/v2/connectproto"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -90,9 +91,12 @@ func NewServer(opts Options) (*connect.Server, error) {
 }
 
 // Mount installs the server's procedures on mux with message size limits.
-// Every route answers POST only.
+// Every route answers POST only, and JSON requests with unknown fields are
+// refused (strictJSON).
 func Mount(mux *http.ServeMux, s *connect.Server) {
-	connecthttp.Mount(postOnly{mux}, s, connecthttp.WithReadMaxBytes(MaxRequestBytes), connecthttp.WithSendMaxBytes(MaxResponseBytes))
+	connecthttp.Mount(postOnly{mux}, s,
+		connecthttp.WithCodecs(connectproto.NewBinaryCodec(), newStrictJSON()),
+		connecthttp.WithReadMaxBytes(MaxRequestBytes), connecthttp.WithSendMaxBytes(MaxResponseBytes))
 }
 
 // postOnly registers each Connect route behind a POST check. Connect would

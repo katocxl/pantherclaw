@@ -22,7 +22,8 @@ const sample = `{
         "parameters": [
           {
             "name": "Connect-Protocol-Version",
-            "in": "header"
+            "in": "header",
+            "required": true
           },
           {
             "name": "Connect-Timeout-Ms",
@@ -30,7 +31,13 @@ const sample = `{
           }
         ],
         "requestBody": {
-          "content": {}
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/x.v1.Req"
+              }
+            }
+          }
         },
         "responses": {
           "200": {
@@ -60,6 +67,25 @@ const sample = `{
       "connect-timeout-header": {
         "type": "number"
       },
+      "x.v1.Sub": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "A"
+            ]
+          }
+        }
+      },
+      "x.v1.Resp": {
+        "type": "object",
+        "properties": {
+          "n": {
+            "type": "string"
+          }
+        }
+      },
       "x.v1.Req": {
         "type": "object",
         "properties": {
@@ -74,6 +100,10 @@ const sample = `{
             "title": "days",
             "minimum": 1
           },
+          "parent": {
+            "$ref": "#/components/schemas/x.v1.Sub",
+            "title": "parent"
+          },
           "note": {
             "type": "string",
             "description": "a \u003cb\u003e \u0026 c"
@@ -85,7 +115,7 @@ const sample = `{
 }`
 
 func TestFixAddsZeroMinimumAnd415AndDropsTheTimeout(t *testing.T) {
-	out, err := Fix([]byte(sample), map[field]bool{{"x.v1.Req", "pageSize"}: true, {"x.v1.Absent", "n"}: true})
+	out, err := Fix([]byte(sample), map[field]bool{{"x.v1.Req", "pageSize"}: true, {"x.v1.Absent", "n"}: true}, map[field]bool{{"x.v1.Req", "days"}: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,6 +126,14 @@ func TestFixAddsZeroMinimumAnd415AndDropsTheTimeout(t *testing.T) {
 		}
 	}
 	if err := json.Unmarshal(out, &doc); err != nil {
+		t.Fatal(err)
+	}
+	var raw struct {
+		Components struct {
+			Schemas map[string]struct{ Properties map[string]map[string]any }
+		}
+	}
+	if err := json.Unmarshal(out, &raw); err != nil {
 		t.Fatal(err)
 	}
 	props := doc.Components.Schemas["x.v1.Req"].Properties
@@ -114,9 +152,27 @@ func TestFixAddsZeroMinimumAnd415AndDropsTheTimeout(t *testing.T) {
 	if _, ok := doc.Paths["/x.v1.S/Get"]["get"].Responses["415"]; ok {
 		t.Fatal("an operation without a request body gained a 415")
 	}
+	types := func(schema, prop string) string {
+		b, _ := json.Marshal(map[string]any{"type": raw.Components.Schemas[schema].Properties[prop]["type"], "enum": raw.Components.Schemas[schema].Properties[prop]["enum"], "anyOf": raw.Components.Schemas[schema].Properties[prop]["anyOf"]})
+		return string(b)
+	}
+	for _, c := range []struct{ schema, prop, want string }{
+		{"x.v1.Req", "pageSize", `{"anyOf":null,"enum":null,"type":["integer","null"]}`},
+		{"x.v1.Req", "days", `{"anyOf":null,"enum":null,"type":"integer"}`},
+		{"x.v1.Req", "parent", `{"anyOf":[{"$ref":"#/components/schemas/x.v1.Sub"},{"type":"null"}],"enum":null,"type":null}`},
+		{"x.v1.Sub", "kind", `{"anyOf":null,"enum":["A",null],"type":["string","null"]}`},
+		{"x.v1.Resp", "n", `{"anyOf":null,"enum":null,"type":"string"}`},
+	} {
+		if got := types(c.schema, c.prop); got != c.want {
+			t.Errorf("%s.%s = %s, want %s", c.schema, c.prop, got, c.want)
+		}
+	}
 	if s := string(out); strings.Contains(s, "Connect-Timeout-Ms") || strings.Contains(s, "connect-timeout-header") ||
 		!strings.Contains(s, "Connect-Protocol-Version") {
 		t.Fatalf("Connect-Timeout-Ms not dropped alone:\n%s", s)
+	}
+	if strings.Contains(string(out), `"required": true`) {
+		t.Fatalf("Connect-Protocol-Version is still required:\n%s", out)
 	}
 	if strings.Count(string(out), `"parameters"`) != 1 {
 		t.Fatalf("an emptied parameters list was kept:\n%s", out)
@@ -126,7 +182,7 @@ func TestFixAddsZeroMinimumAnd415AndDropsTheTimeout(t *testing.T) {
             "format": "int32"`) {
 		t.Fatalf("minimum not placed after maximum:\n%s", out)
 	}
-	again, err := Fix(out, map[field]bool{{"x.v1.Req", "pageSize"}: true})
+	again, err := Fix(out, map[field]bool{{"x.v1.Req", "pageSize"}: true}, map[field]bool{{"x.v1.Req", "days"}: true})
 	if err != nil || string(again) != string(out) {
 		t.Fatalf("Fix is not idempotent: %v", err)
 	}
@@ -143,7 +199,7 @@ func TestFixKeepsFormatting(t *testing.T) {
     null
   ]
 }`
-	out, err := Fix([]byte(`{"components":{"schemas":{}}}`), nil)
+	out, err := Fix([]byte(`{"components":{"schemas":{}}}`), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,10 +218,10 @@ func TestFixKeepsFormatting(t *testing.T) {
 }
 
 func TestFixRejectsMissingOrContradictingProperty(t *testing.T) {
-	if _, err := Fix([]byte(sample), map[field]bool{{"x.v1.Req", "gone"}: true}); err == nil {
+	if _, err := Fix([]byte(sample), map[field]bool{{"x.v1.Req", "gone"}: true}, nil); err == nil {
 		t.Fatal("a missing property was accepted")
 	}
-	if _, err := Fix([]byte(sample), map[field]bool{{"x.v1.Req", "days"}: true}); err == nil {
+	if _, err := Fix([]byte(sample), map[field]bool{{"x.v1.Req", "days"}: true}, nil); err == nil {
 		t.Fatal("a minimum contradicting gte 0 was accepted")
 	}
 }
@@ -192,6 +248,25 @@ func TestGteZero(t *testing.T) {
 	}
 }
 
+// The real descriptors: a uuid without IGNORE_IF_ZERO_VALUE refuses its
+// default, a plain page token and an optional id do not.
+func TestZeroInvalidFromProtovalidate(t *testing.T) {
+	got, err := zeroInvalid(protoregistry.GlobalFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for f, want := range map[field]bool{
+		{"pantherclaw.v1.ListAgentsRequest", "pageToken"}:     false,
+		{"pantherclaw.v1.ListAgentsRequest", "teamId"}:        false,
+		{"pantherclaw.v1.ListTeamsRequest", "businessUnitId"}: false,
+		{"pantherclaw.v1.ListUsageRequest", "days"}:           true,
+	} {
+		if got[f] != want {
+			t.Errorf("%v zero invalid = %v, want %v", f, got[f], want)
+		}
+	}
+}
+
 // The real descriptors: page_size has `gte: 0` and days has `gte: 1`.
 func TestZeroMinimumsFromProtovalidate(t *testing.T) {
 	got := zeroMinimums(protoregistry.GlobalFiles)
@@ -214,7 +289,11 @@ func TestCommittedSchemaIsFixed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := Fix(doc, zeroMinimums(protoregistry.GlobalFiles))
+	invalid, err := zeroInvalid(protoregistry.GlobalFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := Fix(doc, zeroMinimums(protoregistry.GlobalFiles), invalid)
 	if err != nil {
 		t.Fatal(err)
 	}
