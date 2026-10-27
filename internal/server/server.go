@@ -1145,7 +1145,7 @@ func registerAuthorityAdmin(rs *connect.Server, d apiDeps, grants *grantsapp.Ser
 	}
 	pantherclawv1connect.RegisterPackageServiceHandler(rs, packagesrpc.New(protectPackages(&defsapp.Admin{
 		Importer: &defsapp.Importer{Roots: roots, Repo: defs, Keys: defs, Clock: clock.System{}}, Reads: defs, Authz: authz,
-		Ents: d.billing,
+		Ents: d.billing, Checks: activationChecks(d.pool, d.cel), Pool: d.pool,
 	}, d)))
 	registerPolicyGate(rs, d)
 	return nil
