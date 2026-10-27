@@ -518,7 +518,7 @@ func TestM14WeeklyCapsAreEnvelopes(t *testing.T) {
 func TestM14MergeBudgets(t *testing.T) {
 	cur := []byte(`{"budgets":[{"id":"other","grouping":"team","operations":["github.*"],"max_count":"9","period":"day"},{"id":"support_weekly_refunds","grouping":"team","operations":["stripe.refund.create"],"currency":"USD","limit":"900.00","period":"week"}],"counters":[{"id":"c","operations":["github.*"],"key":"run","window":"none","max":"1"}]}`)
 	tpl := []byte(`{"budgets":[{"id":"support_weekly_refunds","grouping":"team","operations":["stripe.refund.create"],"currency":"USD","limit":"500.00","period":"week"}]}`)
-	got, loosened, err := mergeBudgets(cur, tpl, false)
+	got, loosened, kept, err := mergeBudgets(cur, tpl, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -529,23 +529,29 @@ func TestM14MergeBudgets(t *testing.T) {
 	if len(l.Budgets) != 2 || l.Budgets[0].ID != "other" || l.Budgets[1].Limit != "500.00" || len(l.Counters) != 1 {
 		t.Errorf("merged %s", got)
 	}
-	if len(loosened) != 0 {
-		t.Errorf("lowering 900.00 to 500.00 loosens: %v", loosened)
+	if len(loosened) != 0 || len(kept) != 0 {
+		t.Errorf("lowering 900.00 to 500.00 loosens %v or keeps %v", loosened, kept)
 	}
 	// D129 L2: a scope budget stricter than the template's stays, unless
-	// --update raises it, which the plan labels as loosening.
+	// --update raises it, which the plan labels as loosening. Without
+	// --update the plan warns, naming the budget, that the template's is
+	// not applied (D131).
 	strict := []byte(strings.Replace(string(cur), `"900.00"`, `"200.00"`, 1))
-	if got, loosened, err := mergeBudgets(strict, tpl, false); err != nil || !sameJSON(got, strict) || len(loosened) != 0 {
+	got, loosened, kept, err = mergeBudgets(strict, tpl, false)
+	if err != nil || !sameJSON(got, strict) || len(loosened) != 0 {
 		t.Errorf("without --update: %s %v %v", got, loosened, err)
 	}
-	if got, loosened, err := mergeBudgets(strict, tpl, true); err != nil || !strings.Contains(string(got), `"500.00"`) || len(loosened) != 1 {
-		t.Errorf("with --update: %s %v %v", got, loosened, err)
+	if len(kept) != 1 || !strings.Contains(kept[0], "budget support_weekly_refunds is not applied") || !strings.Contains(kept[0], "--update") {
+		t.Errorf("without --update, kept %v", kept)
+	}
+	if got, loosened, kept, err := mergeBudgets(strict, tpl, true); err != nil || !strings.Contains(string(got), `"500.00"`) || len(loosened) != 1 || len(kept) != 0 {
+		t.Errorf("with --update: %s %v %v %v", got, loosened, kept, err)
 	}
 	weekly := []byte(strings.Replace(string(cur), `"900.00","period":"week"`, `"100.00","period":"month"`, 1))
-	if got, loosened, err := mergeBudgets(weekly, tpl, false); err != nil || !sameJSON(got, weekly) || len(loosened) != 0 {
-		t.Errorf("another period without --update: %s %v %v", got, loosened, err)
+	if got, loosened, kept, err := mergeBudgets(weekly, tpl, false); err != nil || !sameJSON(got, weekly) || len(loosened) != 0 || len(kept) != 1 {
+		t.Errorf("another period without --update: %s %v %v %v", got, loosened, kept, err)
 	}
-	if got, _, err := mergeBudgets(nil, tpl, false); err != nil || !sameJSON(got, tpl) {
+	if got, _, _, err := mergeBudgets(nil, tpl, false); err != nil || !sameJSON(got, tpl) {
 		t.Errorf("into none: %s %v", got, err)
 	}
 }
@@ -566,5 +572,20 @@ func TestM14EnvelopeCoverage(t *testing.T) {
 		if missing, err := uncovered([]byte(env), d.Grant.Bounds); err != nil || len(missing) != 0 {
 			t.Errorf("%s: %v %v", env, missing, err)
 		}
+	}
+}
+
+// TestM14CustomerSupportExcludesOtherReads (D131): customer-support's
+// disclosure says its record and column scope does not reach reads
+// outside the three support tables under other grants.
+func TestM14CustomerSupportExcludesOtherReads(t *testing.T) {
+	info, err := readTemplateInfo("customer-support")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(info.Excludes, func(l string) bool {
+		return strings.HasPrefix(l, "reads outside support.tickets, shop.customers and shop.orders under the agent's other grants")
+	}) {
+		t.Errorf("customer-support's excludes leave out reads outside the support tables: %q", info.Excludes)
 	}
 }

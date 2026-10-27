@@ -89,7 +89,7 @@ type janitorDispatchWorker struct {
 
 // Work lists orgs through the audited lister (HR-054, D3).
 func (w *janitorDispatchWorker) Work(ctx context.Context, _ *river.Job[JanitorDispatchArgs]) error {
-	refs, err := w.pool.CrossOrgList(ctx, db.ListActiveOrgs, 10000)
+	refs, err := w.pool.CrossOrgListAll(ctx, db.ListActiveOrgs, db.ListerPageSize)
 	if err != nil || len(refs) == 0 {
 		return err
 	}

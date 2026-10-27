@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	tdomain "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -319,5 +321,53 @@ func TestHR176_ARevisionAnswersAnAccessRequest(t *testing.T) {
 		AccessRequest: entry.ID,
 	}); !errors.Is(err, app.ErrAccessRequestNotOpen) {
 		t.Fatalf("a closed access request: %v", err)
+	}
+}
+
+// TestHR206_AnActivationThatLeavesALimitThatNeverCountsIsRefused (G0 M8):
+// a budget or counter on an operation no package defined yet is accepted;
+// once an activation would define that operation as only ever a
+// consequence, the activation check refuses it, for a live grant and for
+// a guardrail. A revoked grant's limits are not checked: they decide
+// nothing any more.
+func TestHR206_AnActivationThatLeavesALimitThatNeverCountsIsRefused(t *testing.T) {
+	w := newWorld(t, dbtest.New(t).AppPool(t))
+	payout := &defs.Definition{Operation: "payments.payout.trigger", Access: defs.AccessWrite}
+	check := app.ActivationCheck{Limits: w.store}
+	activate := func(active ...*defs.Definition) error {
+		return w.pool.InTenantTx(context.Background(), w.org, func(ctx context.Context, tx db.TenantTx) error {
+			return check.CheckActivation(ctx, tx, active)
+		})
+	}
+	counter, err := domain.DecodeLimits([]byte(`{"counters": [{"id": "payouts", "operations": ["payments.payout.trigger"], "key": "run", "window": "day", "max": "1"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := domain.DecodeBounds([]byte(`{"operations": ["payments.*"]}`))
+	g, err := w.svc.Issue(w.ctx, app.IssueRequest{
+		AgentID: w.agent, Principal: domain.Principal{Kind: domain.PrincipalUser, ID: w.alice}, TaskRef: "payouts",
+		ExpiresAt: time.Now().Add(48 * time.Hour), Bounds: b, Limits: counter,
+	})
+	if err != nil {
+		t.Fatalf("a limit on an operation no package defines is accepted: %v", err)
+	}
+	if err := activate(payout); pcerr.ReasonOf(err) != app.ReasonPackageLimitNeverCounts || !strings.Contains(err.Error(), "grant "+g.ID.String()) {
+		t.Fatalf("the grant's counter would never count: %v", err)
+	}
+	dispatched := &defs.Definition{Operation: payout.Operation, Access: defs.AccessWrite, Mappings: []defs.Mapping{{}}}
+	if err := activate(dispatched); err != nil {
+		t.Fatalf("a dispatched operation keeps its limit: %v", err)
+	}
+	if _, err := w.svc.Revoke(w.ctx, g.ID, "done"); err != nil {
+		t.Fatal(err)
+	}
+	if err := activate(payout); err != nil {
+		t.Fatalf("a revoked grant's limits are not checked: %v", err)
+	}
+	if _, _, err := w.svc.PutEnvelope(w.ctx, app.EnvelopeRequest{Scope: domain.Scope{Kind: domain.ScopeOrg}, Name: "org", Limits: counter}); err != nil {
+		t.Fatal(err)
+	}
+	if err := activate(payout); pcerr.ReasonOf(err) != app.ReasonPackageLimitNeverCounts || !strings.Contains(err.Error(), "guardrail") {
+		t.Fatalf("the guardrail's counter would never count: %v", err)
 	}
 }

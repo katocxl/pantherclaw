@@ -407,3 +407,10 @@ func slicesContainsJSON[T any](list []T, v T) bool {
 	}
 	return false
 }
+
+// CheckDispatched is checkDispatched for a grant or guardrail stored
+// earlier: a package activation re-checks every live one against the
+// definitions it makes active (G0 M8).
+func (l Limits) CheckDispatched(lookup func(op string) *defs.Definition) error {
+	return l.checkDispatched(lookup)
+}

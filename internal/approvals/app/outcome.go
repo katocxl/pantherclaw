@@ -7,6 +7,9 @@ import (
 	"context"
 	"strings"
 
+	pgapprovals "github.com/katocxl/pantherclaw/internal/approvals/adapters/pgapprovals"
+	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	notifapp "github.com/katocxl/pantherclaw/internal/notifications/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -95,4 +98,16 @@ func gateNotice(ctx context.Context, q *dbq.Queries, org ids.OrgID, row dbq.PcAp
 	}
 	return "automation.gate_" + strings.TrimPrefix(typ, "approval."),
 		map[string]string{"automation": name, "step": step, "request": row.ID.String()}, nil
+}
+
+// ExpireAtUse expires a request at use, in the finalization that found it
+// past a deadline (HR-039), and tells its outcome there, as the janitor
+// tells the expiries it finds (slice 211c, HR-173): approval.expired, once
+// per request, to the people it was routed to and the person who asked.
+// Without a notifier it only expires the request.
+func ExpireAtUse(ctx context.Context, tx db.TenantTx, n Notifier, org ids.OrgID, request ids.UUID, actor evdomain.Actor) error {
+	if err := pgapprovals.Expire(ctx, tx, org, request, actor); err != nil {
+		return err
+	}
+	return tell(ctx, tx, n, org, request, string(apdomain.StateExpired), "approval.expired", nil)
 }

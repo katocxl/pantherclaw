@@ -18,6 +18,7 @@
     "refunds in currencies other than USD: the rules fail closed (CANNOT_AUTHORIZE) until you add rules for them",
     "whether a refund is justified: the approver decides from the payment and the reason the agent gives",
     "whether the refunded payment belongs to the ticket's customer: the approver checks it",
+    "reads outside support.tickets, shop.customers and shop.orders under the agent's other grants or by other agents: the customer and column scope binds this template's grant on those three tables only",
     "refunds made outside PantherClaw (the Stripe dashboard, another integration, a person with the API key) are not seen or limited",
     "Stripe live mode: pc.stripe refuses live keys",
     "data scoping needs the Team edition",
