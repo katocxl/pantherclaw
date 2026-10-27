@@ -325,8 +325,10 @@ func m13SupportAccess(t *testing.T, s *stack) {
 		s.db.AdminExec(t, "INSERT INTO pc.role_bindings(org_id,id,role,user_id,scope_type,created_by) VALUES($1,$2,'org_admin',$3,'ORG','exit')", u.org, ids.NewV7(), u.user)
 	}
 	person := func(org ids.OrgID, user ids.UUID) tapp.Caller {
-		return tapp.Caller{Subject: td.Subject{Org: org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: user},
-			Bindings: []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}}}, Credential: tapp.CredBrowserSession, Session: ids.NewV7()}
+		return tapp.Caller{Subject: td.Subject{
+			Org: org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: user},
+			Bindings: []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}},
+		}, Credential: tapp.CredBrowserSession, Session: ids.NewV7()}
 	}
 	adminCtx := tapp.WithCaller(ctx, person(s.org, admin))
 	fresh := func(key ids.UUID) *stepup.StepUp { return &stepup.StepUp{Credential: key, At: time.Now()} }
