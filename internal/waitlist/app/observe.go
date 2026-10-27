@@ -97,7 +97,7 @@ type observeWorker struct {
 // through the audited lister (HR-054), and records them without the org.
 // A retry may record a window's earlier orgs twice.
 func (w *observeWorker) Work(ctx context.Context, job *river.Job[ObserveArgs]) error {
-	refs, err := w.pool.CrossOrgList(ctx, db.ListActiveOrgs, 10000)
+	refs, err := w.pool.CrossOrgListAll(ctx, db.ListActiveOrgs, db.ListerPageSize)
 	if err != nil {
 		return err
 	}

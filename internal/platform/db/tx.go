@@ -4,6 +4,7 @@
 package db
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -247,10 +248,19 @@ const (
 type ListerParams struct {
 	AccountID                                ids.UUID
 	BillingProvider, BillingKind, BillingRef string
+	// After is the paging cursor of the org-keyed purposes: only orgs
+	// above it are returned (G0 M13 D45). Zero starts at the first org.
+	After ids.OrgID
 }
 
 func (lp ListerParams) settings() [][2]string {
-	var out [][2]string
+	// The cursor is always set, so a second call in the same transaction
+	// never inherits an earlier page's cursor.
+	after := ""
+	if !lp.After.IsZero() {
+		after = lp.After.String()
+	}
+	out := [][2]string{{"app.lister_after", after}}
 	if !lp.AccountID.IsZero() {
 		out = append(out, [2]string{"app.account_id", lp.AccountID.String()})
 	}
@@ -299,6 +309,50 @@ func CrossOrgListIn(ctx context.Context, tx DBTX, purpose ListerPurpose, maxRows
 		out = append(out, ref)
 	}
 	return out, rows.Err()
+}
+
+// ListerPageSize is the page size CrossOrgPages callers use: the lister's
+// maximum, so a deployment under 10,000 orgs still makes one call.
+const ListerPageSize = 10000
+
+// CrossOrgPages pages through every row of an org-keyed lister purpose
+// (G0 M13 D45). Each page is its own audited lister call in its own global
+// transaction (HR-054), keyed after the last org of the previous page, and
+// fn runs between pages, outside any lister transaction, so the caller
+// processes each org in its own InTenantTx (HR-051). It stops at the first
+// error, and after a page shorter than pageSize.
+func (p *Pool) CrossOrgPages(ctx context.Context, purpose ListerPurpose, pageSize int, fn func(page []OrgRef) error) error {
+	var after ids.OrgID
+	for {
+		page, err := p.CrossOrgListWith(ctx, purpose, pageSize, ListerParams{After: after})
+		if err != nil {
+			return err
+		}
+		if len(page) > 0 {
+			if err := fn(page); err != nil {
+				return err
+			}
+			last := page[len(page)-1].Org
+			if lu, au := last.UUID(), after.UUID(); !after.IsZero() && bytes.Compare(lu[:], au[:]) <= 0 {
+				return fmt.Errorf("db: cross-org list %q: the cursor did not advance", purpose)
+			}
+			after = last
+		}
+		if len(page) < pageSize {
+			return nil
+		}
+	}
+}
+
+// CrossOrgListAll returns every row of an org-keyed lister purpose,
+// listed in pages (CrossOrgPages).
+func (p *Pool) CrossOrgListAll(ctx context.Context, purpose ListerPurpose, pageSize int) ([]OrgRef, error) {
+	var out []OrgRef
+	err := p.CrossOrgPages(ctx, purpose, pageSize, func(page []OrgRef) error {
+		out = append(out, page...)
+		return nil
+	})
+	return out, err
 }
 
 // CrossOrgList calls the single audited cross-org lister (HR-053, HR-054).
