@@ -157,3 +157,42 @@ func TestHR186_DelegatedSettlesOnlyCooperativeChannelsInPostgres(t *testing.T) {
 		t.Fatalf("a refused delegated left the permit %s", st)
 	}
 }
+
+// TestHR186_DelegatedSDKOnTargetEnforcedRecordsTargetEnforcedInPostgres: a
+// delegated sdk action through a connection whose target verifies action
+// tokens is recorded with access mode target_enforced, not agent_held
+// (HR-024, G0 M8 decision 9).
+func TestHR186_DelegatedSDKOnTargetEnforcedRecordsTargetEnforcedInPostgres(t *testing.T) {
+	w := newWorld(t)
+	w.refundable("ch_1")
+	g := w.grant("500")
+	run := w.run(g.ID, ids.UUID{})
+	conn := w.withAccess(pipeline.ModeEnforce, finalize.AccessTargetEnforced)
+	w.actionTokens()
+	ctx := context.Background()
+
+	req := w.through(conn, run, "ch_1", "30.00")
+	a := req.Action.Action
+	a.Channel = "sdk"
+	p, err := actionir.Encode(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Action = p
+	res := w.authorize(req)
+	if !res.Decision.Permits() {
+		t.Fatalf("authorize: %s (%s)", res.Decision, decisive(res))
+	}
+	sum := sha256.Sum256([]byte(`{"amount":"30.00","charge":"ch_1","currency":"USD","reason":"duplicate"}`))
+	out := finalize.Outbound{Method: "POST", URL: "https://payments.example.test/v1/refunds", BodySHA256: sum[:]}
+	if tok, err := w.auth.BeginDispatch(ctx, w.gw, res.PermitID, res.Epoch, out); err != nil || tok == "" {
+		t.Fatalf("begin dispatch: %q %v", tok, err)
+	}
+	if _, err := w.auth.RecordExecution(ctx, w.gw, finalize.Execution{Permit: res.PermitID, Outcome: finalize.Delegated, DispatchMS: -1}); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.scalar(`SELECT a.outcome || '/' || a.access_mode || '/' || p.state FROM pc.execution_attempts a
+		JOIN pc.permits p ON p.org_id = a.org_id AND p.id = a.permit_id WHERE a.permit_id = $1`, res.PermitID); got != "delegated/target_enforced/DISPATCHED" {
+		t.Fatalf("delegated on target_enforced records %q", got)
+	}
+}

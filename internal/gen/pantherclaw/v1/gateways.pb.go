@@ -3058,6 +3058,116 @@ func (*ReportRevocationFailureResponse) Descriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{39}
 }
 
+// ReportLocalRefusalRequest reports an action the gateway refused locally.
+type ReportLocalRefusalRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Connection id: one the calling gateway serves.
+	ConnectionId string `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// The refusal code.
+	Code string `protobuf:"bytes,2,opt,name=code,proto3" json:"code,omitempty"`
+	// The refused action's operation.
+	Operation string `protobuf:"bytes,3,opt,name=operation,proto3" json:"operation,omitempty"`
+	// The refused action's run id; empty when it named none.
+	RunId         string `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReportLocalRefusalRequest) Reset() {
+	*x = ReportLocalRefusalRequest{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReportLocalRefusalRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReportLocalRefusalRequest) ProtoMessage() {}
+
+func (x *ReportLocalRefusalRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReportLocalRefusalRequest.ProtoReflect.Descriptor instead.
+func (*ReportLocalRefusalRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *ReportLocalRefusalRequest) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *ReportLocalRefusalRequest) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *ReportLocalRefusalRequest) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
+}
+
+func (x *ReportLocalRefusalRequest) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+// ReportLocalRefusalResponse is empty.
+type ReportLocalRefusalResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReportLocalRefusalResponse) Reset() {
+	*x = ReportLocalRefusalResponse{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReportLocalRefusalResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReportLocalRefusalResponse) ProtoMessage() {}
+
+func (x *ReportLocalRefusalResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReportLocalRefusalResponse.ProtoReflect.Descriptor instead.
+func (*ReportLocalRefusalResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{41}
+}
+
 // ClaimVerificationsRequest asks for due verification tasks.
 type ClaimVerificationsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -3069,7 +3179,7 @@ type ClaimVerificationsRequest struct {
 
 func (x *ClaimVerificationsRequest) Reset() {
 	*x = ClaimVerificationsRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[40]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3081,7 +3191,7 @@ func (x *ClaimVerificationsRequest) String() string {
 func (*ClaimVerificationsRequest) ProtoMessage() {}
 
 func (x *ClaimVerificationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[40]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3094,7 +3204,7 @@ func (x *ClaimVerificationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimVerificationsRequest.ProtoReflect.Descriptor instead.
 func (*ClaimVerificationsRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{40}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ClaimVerificationsRequest) GetMaxTasks() int32 {
@@ -3131,7 +3241,7 @@ type VerificationLease struct {
 
 func (x *VerificationLease) Reset() {
 	*x = VerificationLease{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[41]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3143,7 +3253,7 @@ func (x *VerificationLease) String() string {
 func (*VerificationLease) ProtoMessage() {}
 
 func (x *VerificationLease) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[41]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3156,7 +3266,7 @@ func (x *VerificationLease) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerificationLease.ProtoReflect.Descriptor instead.
 func (*VerificationLease) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{41}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *VerificationLease) GetTaskId() string {
@@ -3226,7 +3336,7 @@ type ClaimVerificationsResponse struct {
 
 func (x *ClaimVerificationsResponse) Reset() {
 	*x = ClaimVerificationsResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[42]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3238,7 +3348,7 @@ func (x *ClaimVerificationsResponse) String() string {
 func (*ClaimVerificationsResponse) ProtoMessage() {}
 
 func (x *ClaimVerificationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[42]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3251,7 +3361,7 @@ func (x *ClaimVerificationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimVerificationsResponse.ProtoReflect.Descriptor instead.
 func (*ClaimVerificationsResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{42}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ClaimVerificationsResponse) GetLeases() []*VerificationLease {
@@ -3274,7 +3384,7 @@ type MintTestActionTokensRequest struct {
 
 func (x *MintTestActionTokensRequest) Reset() {
 	*x = MintTestActionTokensRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[43]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3286,7 +3396,7 @@ func (x *MintTestActionTokensRequest) String() string {
 func (*MintTestActionTokensRequest) ProtoMessage() {}
 
 func (x *MintTestActionTokensRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[43]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3299,7 +3409,7 @@ func (x *MintTestActionTokensRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MintTestActionTokensRequest.ProtoReflect.Descriptor instead.
 func (*MintTestActionTokensRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{43}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *MintTestActionTokensRequest) GetTaskId() string {
@@ -3329,7 +3439,7 @@ type MintTestActionTokensResponse struct {
 
 func (x *MintTestActionTokensResponse) Reset() {
 	*x = MintTestActionTokensResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[44]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3341,7 +3451,7 @@ func (x *MintTestActionTokensResponse) String() string {
 func (*MintTestActionTokensResponse) ProtoMessage() {}
 
 func (x *MintTestActionTokensResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[44]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3354,7 +3464,7 @@ func (x *MintTestActionTokensResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MintTestActionTokensResponse.ProtoReflect.Descriptor instead.
 func (*MintTestActionTokensResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{44}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *MintTestActionTokensResponse) GetToken() string {
@@ -3406,7 +3516,7 @@ type ReportObservationRequest struct {
 
 func (x *ReportObservationRequest) Reset() {
 	*x = ReportObservationRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[45]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3418,7 +3528,7 @@ func (x *ReportObservationRequest) String() string {
 func (*ReportObservationRequest) ProtoMessage() {}
 
 func (x *ReportObservationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[45]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3431,7 +3541,7 @@ func (x *ReportObservationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportObservationRequest.ProtoReflect.Descriptor instead.
 func (*ReportObservationRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{45}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *ReportObservationRequest) GetTaskId() string {
@@ -3520,7 +3630,7 @@ type TargetLogItem struct {
 
 func (x *TargetLogItem) Reset() {
 	*x = TargetLogItem{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[46]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3532,7 +3642,7 @@ func (x *TargetLogItem) String() string {
 func (*TargetLogItem) ProtoMessage() {}
 
 func (x *TargetLogItem) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[46]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3545,7 +3655,7 @@ func (x *TargetLogItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TargetLogItem.ProtoReflect.Descriptor instead.
 func (*TargetLogItem) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{46}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *TargetLogItem) GetObjectRef() string {
@@ -3584,7 +3694,7 @@ type ReportObservationResponse struct {
 
 func (x *ReportObservationResponse) Reset() {
 	*x = ReportObservationResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[47]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3596,7 +3706,7 @@ func (x *ReportObservationResponse) String() string {
 func (*ReportObservationResponse) ProtoMessage() {}
 
 func (x *ReportObservationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[47]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3609,7 +3719,7 @@ func (x *ReportObservationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportObservationResponse.ProtoReflect.Descriptor instead.
 func (*ReportObservationResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{47}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ReportObservationResponse) GetObservationId() string {
@@ -3868,7 +3978,13 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"repository\x12;\n" +
 	"\vexpire_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"expireTime\"!\n" +
-	"\x1fReportRevocationFailureResponse\"C\n" +
+	"\x1fReportRevocationFailureResponse\"\xaa\x02\n" +
+	"\x19ReportLocalRefusalRequest\x12-\n" +
+	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12,\n" +
+	"\x04code\x18\x02 \x01(\tB\x18\xbaH\x15r\x13R\x11secret_in_payloadR\x04code\x12O\n" +
+	"\toperation\x18\x03 \x01(\tB1\xbaH.r,\x18\x80\x012'^([a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7})?$R\toperation\x12_\n" +
+	"\x06run_id\x18\x04 \x01(\tBH\xbaHErC2A^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$R\x05runId\"\x1c\n" +
+	"\x1aReportLocalRefusalResponse\"C\n" +
 	"\x19ClaimVerificationsRequest\x12&\n" +
 	"\tmax_tasks\x18\x01 \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x10(\x01R\bmaxTasks\"\xf1\x01\n" +
 	"\x11VerificationLease\x12\x17\n" +
@@ -3939,8 +4055,7 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"GetGateway\x12!.pantherclaw.v1.GetGatewayRequest\x1a\".pantherclaw.v1.GetGatewayResponse\"\x03\x90\x02\x01\x12\\\n" +
 	"\rRevokeGateway\x12$.pantherclaw.v1.RevokeGatewayRequest\x1a%.pantherclaw.v1.RevokeGatewayResponse\x12}\n" +
 	"\x18RevokeGatewayCertificate\x12/.pantherclaw.v1.RevokeGatewayCertificateRequest\x1a0.pantherclaw.v1.RevokeGatewayCertificateResponse\x12j\n" +
-	"\x10ListApproverKeys\x12'.pantherclaw.v1.ListApproverKeysRequest\x1a(.pantherclaw.v1.ListApproverKeysResponse\"\x03\x90\x02\x012\xe2\n" +
-	"\n" +
+	"\x10ListApproverKeys\x12'.pantherclaw.v1.ListApproverKeysRequest\x1a(.pantherclaw.v1.ListApproverKeysResponse\"\x03\x90\x02\x012\xcf\v\n" +
 	"\x0eGatewayService\x12c\n" +
 	"\x06Enroll\x12+.pantherclaw.v1.GatewayServiceEnrollRequest\x1a,.pantherclaw.v1.GatewayServiceEnrollResponse\x12e\n" +
 	"\x10RenewCertificate\x12'.pantherclaw.v1.RenewCertificateRequest\x1a(.pantherclaw.v1.RenewCertificateResponse\x12h\n" +
@@ -3954,7 +4069,8 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\x14MintTestActionTokens\x12+.pantherclaw.v1.MintTestActionTokensRequest\x1a,.pantherclaw.v1.MintTestActionTokensResponse\x12h\n" +
 	"\x11ReportObservation\x12(.pantherclaw.v1.ReportObservationRequest\x1a).pantherclaw.v1.ReportObservationResponse\x12V\n" +
 	"\vReportFacts\x12\".pantherclaw.v1.ReportFactsRequest\x1a#.pantherclaw.v1.ReportFactsResponse\x12z\n" +
-	"\x17ReportRevocationFailure\x12..pantherclaw.v1.ReportRevocationFailureRequest\x1a/.pantherclaw.v1.ReportRevocationFailureResponseB\xc6\x01\n" +
+	"\x17ReportRevocationFailure\x12..pantherclaw.v1.ReportRevocationFailureRequest\x1a/.pantherclaw.v1.ReportRevocationFailureResponse\x12k\n" +
+	"\x12ReportLocalRefusal\x12).pantherclaw.v1.ReportLocalRefusalRequest\x1a*.pantherclaw.v1.ReportLocalRefusalResponseB\xc6\x01\n" +
 	"\x12com.pantherclaw.v1B\rGatewaysProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -3970,7 +4086,7 @@ func file_pantherclaw_v1_gateways_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_gateways_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_pantherclaw_v1_gateways_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
+var file_pantherclaw_v1_gateways_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
 var file_pantherclaw_v1_gateways_proto_goTypes = []any{
 	(GatewayState)(0),                            // 0: pantherclaw.v1.GatewayState
 	(GatewayCertificateState)(0),                 // 1: pantherclaw.v1.GatewayCertificateState
@@ -4015,41 +4131,43 @@ var file_pantherclaw_v1_gateways_proto_goTypes = []any{
 	(*ReportDriftResponse)(nil),                  // 40: pantherclaw.v1.ReportDriftResponse
 	(*ReportRevocationFailureRequest)(nil),       // 41: pantherclaw.v1.ReportRevocationFailureRequest
 	(*ReportRevocationFailureResponse)(nil),      // 42: pantherclaw.v1.ReportRevocationFailureResponse
-	(*ClaimVerificationsRequest)(nil),            // 43: pantherclaw.v1.ClaimVerificationsRequest
-	(*VerificationLease)(nil),                    // 44: pantherclaw.v1.VerificationLease
-	(*ClaimVerificationsResponse)(nil),           // 45: pantherclaw.v1.ClaimVerificationsResponse
-	(*MintTestActionTokensRequest)(nil),          // 46: pantherclaw.v1.MintTestActionTokensRequest
-	(*MintTestActionTokensResponse)(nil),         // 47: pantherclaw.v1.MintTestActionTokensResponse
-	(*ReportObservationRequest)(nil),             // 48: pantherclaw.v1.ReportObservationRequest
-	(*TargetLogItem)(nil),                        // 49: pantherclaw.v1.TargetLogItem
-	(*ReportObservationResponse)(nil),            // 50: pantherclaw.v1.ReportObservationResponse
-	nil,                                          // 51: pantherclaw.v1.ReportObservationRequest.FieldsEntry
-	nil,                                          // 52: pantherclaw.v1.ReportObservationRequest.InstallationPermissionsEntry
-	(*timestamppb.Timestamp)(nil),                // 53: google.protobuf.Timestamp
-	(GatewayHosting)(0),                          // 54: pantherclaw.v1.GatewayHosting
-	(*ConnectorSpec)(nil),                        // 55: pantherclaw.v1.ConnectorSpec
-	(*GitHubInstallation)(nil),                   // 56: pantherclaw.v1.GitHubInstallation
-	(*PostgresConfig)(nil),                       // 57: pantherclaw.v1.PostgresConfig
-	(*A2AConfig)(nil),                            // 58: pantherclaw.v1.A2AConfig
-	(*ReportConnectorStateRequest)(nil),          // 59: pantherclaw.v1.ReportConnectorStateRequest
-	(*ReportFactsRequest)(nil),                   // 60: pantherclaw.v1.ReportFactsRequest
-	(*ReportConnectorStateResponse)(nil),         // 61: pantherclaw.v1.ReportConnectorStateResponse
-	(*ReportFactsResponse)(nil),                  // 62: pantherclaw.v1.ReportFactsResponse
+	(*ReportLocalRefusalRequest)(nil),            // 43: pantherclaw.v1.ReportLocalRefusalRequest
+	(*ReportLocalRefusalResponse)(nil),           // 44: pantherclaw.v1.ReportLocalRefusalResponse
+	(*ClaimVerificationsRequest)(nil),            // 45: pantherclaw.v1.ClaimVerificationsRequest
+	(*VerificationLease)(nil),                    // 46: pantherclaw.v1.VerificationLease
+	(*ClaimVerificationsResponse)(nil),           // 47: pantherclaw.v1.ClaimVerificationsResponse
+	(*MintTestActionTokensRequest)(nil),          // 48: pantherclaw.v1.MintTestActionTokensRequest
+	(*MintTestActionTokensResponse)(nil),         // 49: pantherclaw.v1.MintTestActionTokensResponse
+	(*ReportObservationRequest)(nil),             // 50: pantherclaw.v1.ReportObservationRequest
+	(*TargetLogItem)(nil),                        // 51: pantherclaw.v1.TargetLogItem
+	(*ReportObservationResponse)(nil),            // 52: pantherclaw.v1.ReportObservationResponse
+	nil,                                          // 53: pantherclaw.v1.ReportObservationRequest.FieldsEntry
+	nil,                                          // 54: pantherclaw.v1.ReportObservationRequest.InstallationPermissionsEntry
+	(*timestamppb.Timestamp)(nil),                // 55: google.protobuf.Timestamp
+	(GatewayHosting)(0),                          // 56: pantherclaw.v1.GatewayHosting
+	(*ConnectorSpec)(nil),                        // 57: pantherclaw.v1.ConnectorSpec
+	(*GitHubInstallation)(nil),                   // 58: pantherclaw.v1.GitHubInstallation
+	(*PostgresConfig)(nil),                       // 59: pantherclaw.v1.PostgresConfig
+	(*A2AConfig)(nil),                            // 60: pantherclaw.v1.A2AConfig
+	(*ReportConnectorStateRequest)(nil),          // 61: pantherclaw.v1.ReportConnectorStateRequest
+	(*ReportFactsRequest)(nil),                   // 62: pantherclaw.v1.ReportFactsRequest
+	(*ReportConnectorStateResponse)(nil),         // 63: pantherclaw.v1.ReportConnectorStateResponse
+	(*ReportFactsResponse)(nil),                  // 64: pantherclaw.v1.ReportFactsResponse
 }
 var file_pantherclaw_v1_gateways_proto_depIdxs = []int32{
 	0,  // 0: pantherclaw.v1.Gateway.state:type_name -> pantherclaw.v1.GatewayState
-	53, // 1: pantherclaw.v1.Gateway.create_time:type_name -> google.protobuf.Timestamp
-	53, // 2: pantherclaw.v1.Gateway.revoke_time:type_name -> google.protobuf.Timestamp
-	54, // 3: pantherclaw.v1.Gateway.hosting:type_name -> pantherclaw.v1.GatewayHosting
+	55, // 1: pantherclaw.v1.Gateway.create_time:type_name -> google.protobuf.Timestamp
+	55, // 2: pantherclaw.v1.Gateway.revoke_time:type_name -> google.protobuf.Timestamp
+	56, // 3: pantherclaw.v1.Gateway.hosting:type_name -> pantherclaw.v1.GatewayHosting
 	1,  // 4: pantherclaw.v1.GatewayCertificate.state:type_name -> pantherclaw.v1.GatewayCertificateState
-	53, // 5: pantherclaw.v1.GatewayCertificate.not_before:type_name -> google.protobuf.Timestamp
-	53, // 6: pantherclaw.v1.GatewayCertificate.not_after:type_name -> google.protobuf.Timestamp
-	53, // 7: pantherclaw.v1.BrokerKey.register_time:type_name -> google.protobuf.Timestamp
+	55, // 5: pantherclaw.v1.GatewayCertificate.not_before:type_name -> google.protobuf.Timestamp
+	55, // 6: pantherclaw.v1.GatewayCertificate.not_after:type_name -> google.protobuf.Timestamp
+	55, // 7: pantherclaw.v1.BrokerKey.register_time:type_name -> google.protobuf.Timestamp
 	3,  // 8: pantherclaw.v1.CreateGatewayResponse.gateway:type_name -> pantherclaw.v1.Gateway
-	53, // 9: pantherclaw.v1.CreateGatewayEnrollmentTokenResponse.expire_time:type_name -> google.protobuf.Timestamp
+	55, // 9: pantherclaw.v1.CreateGatewayEnrollmentTokenResponse.expire_time:type_name -> google.protobuf.Timestamp
 	3,  // 10: pantherclaw.v1.ListGatewaysResponse.gateways:type_name -> pantherclaw.v1.Gateway
 	14, // 11: pantherclaw.v1.ListApproverKeysResponse.keys:type_name -> pantherclaw.v1.ApproverKey
-	53, // 12: pantherclaw.v1.ApproverKey.create_time:type_name -> google.protobuf.Timestamp
+	55, // 12: pantherclaw.v1.ApproverKey.create_time:type_name -> google.protobuf.Timestamp
 	3,  // 13: pantherclaw.v1.GetGatewayResponse.gateway:type_name -> pantherclaw.v1.Gateway
 	4,  // 14: pantherclaw.v1.GetGatewayResponse.certificates:type_name -> pantherclaw.v1.GatewayCertificate
 	5,  // 15: pantherclaw.v1.GetGatewayResponse.broker_keys:type_name -> pantherclaw.v1.BrokerKey
@@ -4059,20 +4177,20 @@ var file_pantherclaw_v1_gateways_proto_depIdxs = []int32{
 	32, // 19: pantherclaw.v1.GetConfigurationResponse.packages:type_name -> pantherclaw.v1.GatewayPackage
 	33, // 20: pantherclaw.v1.GetConfigurationResponse.credentials:type_name -> pantherclaw.v1.SealedCredential
 	29, // 21: pantherclaw.v1.GetConfigurationResponse.capture_profiles:type_name -> pantherclaw.v1.GatewayCaptureProfile
-	53, // 22: pantherclaw.v1.GatewayCaptureProfile.expire_time:type_name -> google.protobuf.Timestamp
+	55, // 22: pantherclaw.v1.GatewayCaptureProfile.expire_time:type_name -> google.protobuf.Timestamp
 	31, // 23: pantherclaw.v1.GatewayConnection.routes:type_name -> pantherclaw.v1.RouteModeSetting
-	55, // 24: pantherclaw.v1.GatewayConnection.connector:type_name -> pantherclaw.v1.ConnectorSpec
-	56, // 25: pantherclaw.v1.GatewayConnection.github:type_name -> pantherclaw.v1.GitHubInstallation
-	57, // 26: pantherclaw.v1.GatewayConnection.postgres:type_name -> pantherclaw.v1.PostgresConfig
-	58, // 27: pantherclaw.v1.GatewayConnection.a2a:type_name -> pantherclaw.v1.A2AConfig
+	57, // 24: pantherclaw.v1.GatewayConnection.connector:type_name -> pantherclaw.v1.ConnectorSpec
+	58, // 25: pantherclaw.v1.GatewayConnection.github:type_name -> pantherclaw.v1.GitHubInstallation
+	59, // 26: pantherclaw.v1.GatewayConnection.postgres:type_name -> pantherclaw.v1.PostgresConfig
+	60, // 27: pantherclaw.v1.GatewayConnection.a2a:type_name -> pantherclaw.v1.A2AConfig
 	2,  // 28: pantherclaw.v1.WatchContainmentResponse.kind:type_name -> pantherclaw.v1.ContainmentStateKind
 	36, // 29: pantherclaw.v1.WatchContainmentResponse.connections:type_name -> pantherclaw.v1.ConnectionStateEntry
-	53, // 30: pantherclaw.v1.WatchContainmentResponse.as_of:type_name -> google.protobuf.Timestamp
-	53, // 31: pantherclaw.v1.ReportRevocationFailureRequest.expire_time:type_name -> google.protobuf.Timestamp
-	44, // 32: pantherclaw.v1.ClaimVerificationsResponse.leases:type_name -> pantherclaw.v1.VerificationLease
-	51, // 33: pantherclaw.v1.ReportObservationRequest.fields:type_name -> pantherclaw.v1.ReportObservationRequest.FieldsEntry
-	49, // 34: pantherclaw.v1.ReportObservationRequest.items:type_name -> pantherclaw.v1.TargetLogItem
-	52, // 35: pantherclaw.v1.ReportObservationRequest.installation_permissions:type_name -> pantherclaw.v1.ReportObservationRequest.InstallationPermissionsEntry
+	55, // 30: pantherclaw.v1.WatchContainmentResponse.as_of:type_name -> google.protobuf.Timestamp
+	55, // 31: pantherclaw.v1.ReportRevocationFailureRequest.expire_time:type_name -> google.protobuf.Timestamp
+	46, // 32: pantherclaw.v1.ClaimVerificationsResponse.leases:type_name -> pantherclaw.v1.VerificationLease
+	53, // 33: pantherclaw.v1.ReportObservationRequest.fields:type_name -> pantherclaw.v1.ReportObservationRequest.FieldsEntry
+	51, // 34: pantherclaw.v1.ReportObservationRequest.items:type_name -> pantherclaw.v1.TargetLogItem
+	54, // 35: pantherclaw.v1.ReportObservationRequest.installation_permissions:type_name -> pantherclaw.v1.ReportObservationRequest.InstallationPermissionsEntry
 	6,  // 36: pantherclaw.v1.GatewayAdminService.CreateGateway:input_type -> pantherclaw.v1.CreateGatewayRequest
 	8,  // 37: pantherclaw.v1.GatewayAdminService.CreateGatewayEnrollmentToken:input_type -> pantherclaw.v1.CreateGatewayEnrollmentTokenRequest
 	10, // 38: pantherclaw.v1.GatewayAdminService.ListGateways:input_type -> pantherclaw.v1.ListGatewaysRequest
@@ -4085,36 +4203,38 @@ var file_pantherclaw_v1_gateways_proto_depIdxs = []int32{
 	25, // 45: pantherclaw.v1.GatewayService.RegisterBrokerKey:input_type -> pantherclaw.v1.RegisterBrokerKeyRequest
 	27, // 46: pantherclaw.v1.GatewayService.GetConfiguration:input_type -> pantherclaw.v1.GetConfigurationRequest
 	34, // 47: pantherclaw.v1.GatewayService.WatchContainment:input_type -> pantherclaw.v1.WatchContainmentRequest
-	59, // 48: pantherclaw.v1.GatewayService.ReportConnectorState:input_type -> pantherclaw.v1.ReportConnectorStateRequest
+	61, // 48: pantherclaw.v1.GatewayService.ReportConnectorState:input_type -> pantherclaw.v1.ReportConnectorStateRequest
 	37, // 49: pantherclaw.v1.GatewayService.ReportCircuit:input_type -> pantherclaw.v1.ReportCircuitRequest
 	39, // 50: pantherclaw.v1.GatewayService.ReportDrift:input_type -> pantherclaw.v1.ReportDriftRequest
-	43, // 51: pantherclaw.v1.GatewayService.ClaimVerifications:input_type -> pantherclaw.v1.ClaimVerificationsRequest
-	46, // 52: pantherclaw.v1.GatewayService.MintTestActionTokens:input_type -> pantherclaw.v1.MintTestActionTokensRequest
-	48, // 53: pantherclaw.v1.GatewayService.ReportObservation:input_type -> pantherclaw.v1.ReportObservationRequest
-	60, // 54: pantherclaw.v1.GatewayService.ReportFacts:input_type -> pantherclaw.v1.ReportFactsRequest
+	45, // 51: pantherclaw.v1.GatewayService.ClaimVerifications:input_type -> pantherclaw.v1.ClaimVerificationsRequest
+	48, // 52: pantherclaw.v1.GatewayService.MintTestActionTokens:input_type -> pantherclaw.v1.MintTestActionTokensRequest
+	50, // 53: pantherclaw.v1.GatewayService.ReportObservation:input_type -> pantherclaw.v1.ReportObservationRequest
+	62, // 54: pantherclaw.v1.GatewayService.ReportFacts:input_type -> pantherclaw.v1.ReportFactsRequest
 	41, // 55: pantherclaw.v1.GatewayService.ReportRevocationFailure:input_type -> pantherclaw.v1.ReportRevocationFailureRequest
-	7,  // 56: pantherclaw.v1.GatewayAdminService.CreateGateway:output_type -> pantherclaw.v1.CreateGatewayResponse
-	9,  // 57: pantherclaw.v1.GatewayAdminService.CreateGatewayEnrollmentToken:output_type -> pantherclaw.v1.CreateGatewayEnrollmentTokenResponse
-	11, // 58: pantherclaw.v1.GatewayAdminService.ListGateways:output_type -> pantherclaw.v1.ListGatewaysResponse
-	16, // 59: pantherclaw.v1.GatewayAdminService.GetGateway:output_type -> pantherclaw.v1.GetGatewayResponse
-	18, // 60: pantherclaw.v1.GatewayAdminService.RevokeGateway:output_type -> pantherclaw.v1.RevokeGatewayResponse
-	20, // 61: pantherclaw.v1.GatewayAdminService.RevokeGatewayCertificate:output_type -> pantherclaw.v1.RevokeGatewayCertificateResponse
-	13, // 62: pantherclaw.v1.GatewayAdminService.ListApproverKeys:output_type -> pantherclaw.v1.ListApproverKeysResponse
-	22, // 63: pantherclaw.v1.GatewayService.Enroll:output_type -> pantherclaw.v1.GatewayServiceEnrollResponse
-	24, // 64: pantherclaw.v1.GatewayService.RenewCertificate:output_type -> pantherclaw.v1.RenewCertificateResponse
-	26, // 65: pantherclaw.v1.GatewayService.RegisterBrokerKey:output_type -> pantherclaw.v1.RegisterBrokerKeyResponse
-	28, // 66: pantherclaw.v1.GatewayService.GetConfiguration:output_type -> pantherclaw.v1.GetConfigurationResponse
-	35, // 67: pantherclaw.v1.GatewayService.WatchContainment:output_type -> pantherclaw.v1.WatchContainmentResponse
-	61, // 68: pantherclaw.v1.GatewayService.ReportConnectorState:output_type -> pantherclaw.v1.ReportConnectorStateResponse
-	38, // 69: pantherclaw.v1.GatewayService.ReportCircuit:output_type -> pantherclaw.v1.ReportCircuitResponse
-	40, // 70: pantherclaw.v1.GatewayService.ReportDrift:output_type -> pantherclaw.v1.ReportDriftResponse
-	45, // 71: pantherclaw.v1.GatewayService.ClaimVerifications:output_type -> pantherclaw.v1.ClaimVerificationsResponse
-	47, // 72: pantherclaw.v1.GatewayService.MintTestActionTokens:output_type -> pantherclaw.v1.MintTestActionTokensResponse
-	50, // 73: pantherclaw.v1.GatewayService.ReportObservation:output_type -> pantherclaw.v1.ReportObservationResponse
-	62, // 74: pantherclaw.v1.GatewayService.ReportFacts:output_type -> pantherclaw.v1.ReportFactsResponse
-	42, // 75: pantherclaw.v1.GatewayService.ReportRevocationFailure:output_type -> pantherclaw.v1.ReportRevocationFailureResponse
-	56, // [56:76] is the sub-list for method output_type
-	36, // [36:56] is the sub-list for method input_type
+	43, // 56: pantherclaw.v1.GatewayService.ReportLocalRefusal:input_type -> pantherclaw.v1.ReportLocalRefusalRequest
+	7,  // 57: pantherclaw.v1.GatewayAdminService.CreateGateway:output_type -> pantherclaw.v1.CreateGatewayResponse
+	9,  // 58: pantherclaw.v1.GatewayAdminService.CreateGatewayEnrollmentToken:output_type -> pantherclaw.v1.CreateGatewayEnrollmentTokenResponse
+	11, // 59: pantherclaw.v1.GatewayAdminService.ListGateways:output_type -> pantherclaw.v1.ListGatewaysResponse
+	16, // 60: pantherclaw.v1.GatewayAdminService.GetGateway:output_type -> pantherclaw.v1.GetGatewayResponse
+	18, // 61: pantherclaw.v1.GatewayAdminService.RevokeGateway:output_type -> pantherclaw.v1.RevokeGatewayResponse
+	20, // 62: pantherclaw.v1.GatewayAdminService.RevokeGatewayCertificate:output_type -> pantherclaw.v1.RevokeGatewayCertificateResponse
+	13, // 63: pantherclaw.v1.GatewayAdminService.ListApproverKeys:output_type -> pantherclaw.v1.ListApproverKeysResponse
+	22, // 64: pantherclaw.v1.GatewayService.Enroll:output_type -> pantherclaw.v1.GatewayServiceEnrollResponse
+	24, // 65: pantherclaw.v1.GatewayService.RenewCertificate:output_type -> pantherclaw.v1.RenewCertificateResponse
+	26, // 66: pantherclaw.v1.GatewayService.RegisterBrokerKey:output_type -> pantherclaw.v1.RegisterBrokerKeyResponse
+	28, // 67: pantherclaw.v1.GatewayService.GetConfiguration:output_type -> pantherclaw.v1.GetConfigurationResponse
+	35, // 68: pantherclaw.v1.GatewayService.WatchContainment:output_type -> pantherclaw.v1.WatchContainmentResponse
+	63, // 69: pantherclaw.v1.GatewayService.ReportConnectorState:output_type -> pantherclaw.v1.ReportConnectorStateResponse
+	38, // 70: pantherclaw.v1.GatewayService.ReportCircuit:output_type -> pantherclaw.v1.ReportCircuitResponse
+	40, // 71: pantherclaw.v1.GatewayService.ReportDrift:output_type -> pantherclaw.v1.ReportDriftResponse
+	47, // 72: pantherclaw.v1.GatewayService.ClaimVerifications:output_type -> pantherclaw.v1.ClaimVerificationsResponse
+	49, // 73: pantherclaw.v1.GatewayService.MintTestActionTokens:output_type -> pantherclaw.v1.MintTestActionTokensResponse
+	52, // 74: pantherclaw.v1.GatewayService.ReportObservation:output_type -> pantherclaw.v1.ReportObservationResponse
+	64, // 75: pantherclaw.v1.GatewayService.ReportFacts:output_type -> pantherclaw.v1.ReportFactsResponse
+	42, // 76: pantherclaw.v1.GatewayService.ReportRevocationFailure:output_type -> pantherclaw.v1.ReportRevocationFailureResponse
+	44, // 77: pantherclaw.v1.GatewayService.ReportLocalRefusal:output_type -> pantherclaw.v1.ReportLocalRefusalResponse
+	57, // [57:78] is the sub-list for method output_type
+	36, // [36:57] is the sub-list for method input_type
 	36, // [36:36] is the sub-list for extension type_name
 	36, // [36:36] is the sub-list for extension extendee
 	0,  // [0:36] is the sub-list for field type_name
@@ -4136,7 +4256,7 @@ func file_pantherclaw_v1_gateways_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_gateways_proto_rawDesc), len(file_pantherclaw_v1_gateways_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   50,
+			NumMessages:   52,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

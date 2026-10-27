@@ -28,6 +28,10 @@ const (
 	BranchRules    = "github.branch.rules"
 	RepoTriggers   = "github.repo.deploy_triggers"
 	BranchTriggers = "github.branch.deploy_triggers"
+	// RepoDefaultBranch is the repository's default branch as GitHub
+	// reports it now, so a rule about the default branch follows a rename
+	// (G0 M8 follow-up, C4).
+	RepoDefaultBranch = "github.repo.default_branch"
 )
 
 // Scopes are the read-only permissions a fact read's token is minted
@@ -185,6 +189,8 @@ func (r *reader) fact(ctx context.Context, name string) (map[string]any, error) 
 		return r.triggers(ctx, base, at, true)
 	case BranchTriggers:
 		return r.triggers(ctx, r.s.Branch, r.s.At, false)
+	case RepoDefaultBranch:
+		return r.defaultBranch(ctx)
 	}
 	return nil, fmt.Errorf("no reader for %s", name)
 }
@@ -548,6 +554,40 @@ func (r *reader) rules(ctx context.Context) (map[string]any, error) {
 		kinds = []any{}
 	}
 	return map[string]any{"branch": base, "required_approvals": approvals, "required_checks": checks, "rules": kinds, "protection": classic}, nil
+}
+
+// maxBranchName bounds a branch name a fact carries (Git refs have no
+// fixed limit; GitHub's are far shorter).
+const maxBranchName = 255
+
+// defaultBranch reads the repository's default branch, and whether the
+// subject's branch (the pull request's base, or the branch an action
+// writes) is it. A name that is empty, too long or not printable is not
+// read, never guessed (HR-160).
+func (r *reader) defaultBranch(ctx context.Context) (map[string]any, error) {
+	var repo struct {
+		DefaultBranch string `json:"default_branch"`
+	}
+	if err := r.json(ctx, r.repo, &repo); err != nil {
+		return nil, err
+	}
+	name := repo.DefaultBranch
+	if name == "" || len(name) > maxBranchName || !utf8.ValidString(name) || strings.ContainsFunc(name, unicode.IsControl) {
+		return nil, fmt.Errorf("GET %s gave no usable default branch", r.repo)
+	}
+	v := map[string]any{"branch": name}
+	branch := r.s.Branch
+	if r.s.Number != 0 {
+		p, err := r.pullRequest(ctx)
+		if err != nil {
+			return nil, err
+		}
+		branch = str(p, "base", "ref")
+	}
+	if branch != "" {
+		v["subject_is_default"] = branch == name
+	}
+	return v, nil
 }
 
 func listOf(v any) []any {

@@ -192,7 +192,7 @@ const (
 
 // Executed is what the store established about a recorded attempt, for
 // the execution receipt: the transaction, how the credential reached the
-// target (the connection's access mode; agent_held for delegated;
+// target (the connection's access mode; agent_held, or target_enforced on such a connection, for delegated;
 // pantherclaw_held for an action without a connection), and whether the
 // permit was a monitor-mode one.
 type Executed struct {

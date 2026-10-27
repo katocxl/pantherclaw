@@ -575,6 +575,18 @@ func Delegable(channel, accessMode string) bool {
 	return false
 }
 
+// DelegatedAccess is the access mode a delegated execution is recorded
+// with: target_enforced when the connection's target verifies action
+// tokens (HR-024), because the target refuses anything without the token,
+// and agent_held otherwise, the agent having acted with its own access
+// (HR-186, G0 M8 decision 9).
+func DelegatedAccess(connectionAccess string) string {
+	if connectionAccess == AccessTargetEnforced {
+		return AccessTargetEnforced
+	}
+	return AccessAgentHeld
+}
+
 func (a *Authority) log(context.Context) *slog.Logger {
 	if a.Log == nil {
 		return slog.New(slog.DiscardHandler)
