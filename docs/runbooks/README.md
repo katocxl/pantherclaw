@@ -37,3 +37,5 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [support-access.md](support-access.md) | M13 | Customer-approved support access (hosted, Enterprise) and break-glass (Business and above) |
 | [data-requests.md](data-requests.md) | M13 | Export an organization, delete it with a 7-day window and a signed deletion record, the lapse lifecycle, account deletion |
 | [installation.md](installation.md) | M13 | Verified releases with `install.sh`, a single node with `pclaw up`, the Helm chart, FIPS builds |
+| [m13-exit.md](m13-exit.md) | M13 | Run the M13 exit journey: locally on every change, and once on hosted staging for the exit (`PC_E2E_STAGING_URL`) |
+| [org-move.md](org-move.md) | M13 | Move the repositories to the GitHub organization: rewrite the module path, the repository links and the image names in one change (F8) |
