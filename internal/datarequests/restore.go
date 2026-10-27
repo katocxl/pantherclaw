@@ -104,7 +104,7 @@ func (s *Service) reapplyOrg(ctx context.Context, _ *db.Pool, e restore.Event, a
 		}
 		for _, t := range tables {
 			var n int64
-			if err := tx.QueryRow(ctx, "SELECT count(*) FROM "+pgx.Identifier{"pc", t}.Sanitize()+" WHERE org_id=$1", org).Scan(&n); err != nil {
+			if err := tx.QueryRow(ctx, "SELECT count(*) FROM "+pgx.Identifier{"pc", t}.Sanitize()+" WHERE org_id=$1", org).Scan(&n); err != nil { // nosemgrep: pc-sql-built-with-sprintf -- table names from the pg_catalog policy list (migrations only), quoted by pgx.Identifier; org is a parameter
 				return err
 			}
 			snap.Record.Tables = append(snap.Record.Tables, TableCount{Table: t, Rows: n})
