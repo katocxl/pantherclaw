@@ -6,10 +6,10 @@ package datarequests
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json/v2"
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/securityevent"

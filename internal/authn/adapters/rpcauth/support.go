@@ -52,7 +52,8 @@ func WithBreakGlass(b BreakGlassCalls) Option { return func(o *options) { o.brea
 func WithSupportAndBreakGlass(s interface {
 	SupportSessions
 	BreakGlassCalls
-}, readOnly func(string) bool) Option {
+}, readOnly func(string) bool,
+) Option {
 	return func(o *options) {
 		WithSupportSessions(s, readOnly)(o)
 		WithBreakGlass(s)(o)

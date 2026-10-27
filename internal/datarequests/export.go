@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
 	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/pack"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -100,6 +101,7 @@ func (b *archiveBuilder) add(ctx context.Context, name string, content []byte) e
 	b.manifest.Files = append(b.manifest.Files, ExportFile{Path: name, Part: int32(len(b.manifest.Parts) + 1), Size: int64(len(content)), SHA256: hex.EncodeToString(h[:])})
 	return nil
 }
+
 func (b *archiveBuilder) flush(ctx context.Context) error {
 	if b.zip == nil {
 		return nil
@@ -210,8 +212,10 @@ func (s *Service) Build(ctx context.Context, org ids.OrgID, id ids.UUID) error {
 		if err != nil {
 			return err
 		}
-		m := ExportManifest{Format: ExportFormat, RegistryVersion: 1, Org: org.String(), Request: id.String(), CreatedAt: now, ExpiresAt: now.Add(7 * 24 * time.Hour), LedgerThrough: through,
-			Excluded: []string{"credentials and sealed material", "DEKs and wrapped keys", "tokens and secret hashes", "browser and CLI session storage", "provider client secrets and connection authentication", "payload captures and raw evaluation inputs", "tables and columns outside the explicit projection registry"}}
+		m := ExportManifest{
+			Format: ExportFormat, RegistryVersion: 1, Org: org.String(), Request: id.String(), CreatedAt: now, ExpiresAt: now.Add(7 * 24 * time.Hour), LedgerThrough: through,
+			Excluded: []string{"credentials and sealed material", "DEKs and wrapped keys", "tokens and secret hashes", "browser and CLI session storage", "provider client secrets and connection authentication", "payload captures and raw evaluation inputs", "tables and columns outside the explicit projection registry"},
+		}
 		b := archiveBuilder{q: q, org: org, id: id, manifest: &m}
 		for _, t := range exportTables {
 			m.Projections = append(m.Projections, Projection{Table: t.Name, Columns: t.Columns})
@@ -352,6 +356,7 @@ func exportTableRows(ctx context.Context, tx db.TenantTx, b *archiveBuilder, t e
 	}
 	return nil
 }
+
 func (s *Service) failExport(ctx context.Context, org ids.OrgID, id ids.UUID, code string) error {
 	return s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		_, err := dbq.New(tx).FailDataRequest(ctx, &code, org, id)

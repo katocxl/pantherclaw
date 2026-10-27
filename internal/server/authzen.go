@@ -23,8 +23,8 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
-	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	"github.com/katocxl/pantherclaw/internal/platform/ratelimit"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )

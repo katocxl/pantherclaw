@@ -72,7 +72,7 @@ const authUserSession = `-- name: AuthUserSession :one
 SELECT u.state AS user_state, s.state AS session_state, (s.expires_at > now())::bool AS live
 FROM pc.users u
 JOIN pc.cli_sessions s ON s.org_id = u.org_id AND s.user_id = u.id
-WHERE u.org_id = $1 AND u.id = $2 AND s.id = $3
+WHERE u.org_id = $1 AND u.id = $2 AND s.id = $3 AND pc.identity_available(u.issuer,u.subject,false)
 `
 
 type AuthUserSessionRow struct {

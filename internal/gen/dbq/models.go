@@ -62,6 +62,32 @@ type PcAccount struct {
 	DisplayName   string
 	CreatedAt     time.Time
 	LastSignInAt  *time.Time
+	DeletedAt     *time.Time
+}
+
+type PcAccountDeletion struct {
+	AccountID     ids.UUID
+	JournalID     ids.UUID
+	State         string
+	RecordDigest  string
+	EventRecorded bool
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type PcAccountDeletionEvent struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	AccountID    ids.UUID
+	Kind         string
+	RecordDigest []byte
+}
+
+type PcAccountDeletionStep struct {
+	OrgID  ids.OrgID
+	ID     ids.UUID
+	UserID ids.UUID
+	State  string
 }
 
 type PcAccountEvent struct {
@@ -90,25 +116,27 @@ type PcAccountLoginRequest struct {
 	ConsumedAt          *time.Time
 	InvitationOrgID     *ids.UUID
 	InvitationTokenHash []byte
+	DeletionAccountID   *ids.UUID
 }
 
 type PcAccountSession struct {
-	ID             ids.UUID
-	AccountID      ids.UUID
-	SecretHash     []byte
-	PrevSecretHash []byte
-	RotatedAt      *time.Time
-	Generation     int32
-	Provider       string
-	AuthTime       *time.Time
-	UserAgent      string
-	ClientIp       string
-	State          string
-	EndReason      *string
-	CreatedAt      time.Time
-	LastSeenAt     time.Time
-	ExpiresAt      time.Time
-	EndedAt        *time.Time
+	ID                        ids.UUID
+	AccountID                 ids.UUID
+	SecretHash                []byte
+	PrevSecretHash            []byte
+	RotatedAt                 *time.Time
+	Generation                int32
+	Provider                  string
+	AuthTime                  *time.Time
+	UserAgent                 string
+	ClientIp                  string
+	State                     string
+	EndReason                 *string
+	CreatedAt                 time.Time
+	LastSeenAt                time.Time
+	ExpiresAt                 time.Time
+	EndedAt                   *time.Time
+	DeletionReauthenticatedAt *time.Time
 }
 
 type PcActionDefinition struct {
@@ -1382,6 +1410,38 @@ type PcCustomDetectionRuleTest struct {
 	CreatedAt time.Time
 }
 
+type PcDataRequest struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	Kind             string
+	State            string
+	CreatedBy        *ids.UUID
+	CreatedByAccount *ids.UUID
+	Reason           *string
+	WindowEnd        *time.Time
+	LapsedAt         *time.Time
+	AdminAccounts    []ids.UUID
+	CanceledBy       *ids.UUID
+	CanceledAt       *time.Time
+	ReadyAt          *time.Time
+	ExpiresAt        *time.Time
+	Parts            int32
+	TotalSize        int64
+	Manifest         *string
+	ErrorCode        *string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+type PcDataRequestPart struct {
+	OrgID     ids.OrgID
+	RequestID ids.UUID
+	Number    int32
+	Content   []byte
+	Sha256    []byte
+	CreatedAt time.Time
+}
+
 type PcDecisionConsequence struct {
 	OrgID         ids.OrgID
 	TransactionID ids.UUID
@@ -1426,6 +1486,19 @@ type PcDek struct {
 	KekID      string
 	State      string
 	CreatedAt  time.Time
+}
+
+type PcDeletionRecord struct {
+	OrgID              ids.OrgID
+	ID                 ids.UUID
+	DeletedOrgID       ids.UUID
+	Reason             string
+	RequestedByAccount *ids.UUID
+	Accounts           []ids.UUID
+	ReappliedFrom      []byte
+	Record             []byte
+	SignedRecord       string
+	CreatedAt          time.Time
 }
 
 type PcDelivery struct {
@@ -1998,6 +2071,11 @@ type PcHoldSlot struct {
 	UpdatedAt time.Time
 }
 
+type PcIdentityDeletionGuard struct {
+	IdentityHash []byte
+	State        string
+}
+
 type PcIdentityPlaybook struct {
 	OrgID     ids.OrgID
 	Enabled   bool
@@ -2293,6 +2371,7 @@ type PcOrg struct {
 	UpdatedAt        time.Time
 	Slug             *string
 	CreatedByAccount *ids.UUID
+	DeletedAt        *time.Time
 }
 
 type PcOrgContainment struct {
@@ -2303,6 +2382,16 @@ type PcOrgContainment struct {
 	EngagedBy    *string
 	EngagedAt    *time.Time
 	EngageReason *string
+}
+
+type PcOrgDeletionJournal struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	DeletedOrgID ids.UUID
+	Snapshot     []byte
+	SignedIntent string
+	Complete     bool
+	CreatedAt    time.Time
 }
 
 type PcOrgEntitlement struct {
@@ -2324,6 +2413,7 @@ type PcOrgEntitlement struct {
 	Version     int64
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+	LapsedAt    *time.Time
 }
 
 type PcOrgTermsAcceptance struct {

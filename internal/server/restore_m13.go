@@ -9,16 +9,39 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/accounts"
 	"github.com/katocxl/pantherclaw/internal/evidence/domain"
+	"github.com/katocxl/pantherclaw/internal/keystore"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/keys"
 	"github.com/katocxl/pantherclaw/internal/restore"
 )
 
-func newRestoreRegistry(_ *Config, _ *db.Pool) (*restore.Registry, error) {
-	return restore.NewRegistry(), nil
+func newRestoreRegistry(ctx context.Context, cfg *Config, pool *db.Pool) (*restore.Registry, error) {
+	kp, err := keys.NewFileProvider(cfg.KEKFiles)
+	if err != nil {
+		return nil, err
+	}
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	applyFIPSMode(ctx, cfg, log)
+	reg := keys.NewRegistry()
+	if err := keystore.LoadSigningKeys(ctx, pool, kp, reg, cfg.evidenceKeyPurposes()...); err != nil {
+		return nil, err
+	}
+	data, err := newDataRequests(cfg, pool, reg, nil, log)
+	if err != nil {
+		return nil, err
+	}
+	newAccountDeletion(accounts.NewStore(pool), data)
+	r := restore.NewRegistry()
+	if err := data.RegisterRestore(r); err != nil {
+		return nil, err
+	}
+	return r, nil
 }
 
 func cmdRestore(ctx context.Context, args []string, stdout, stderr io.Writer, env Env) error {
@@ -65,7 +88,7 @@ func cmdRestore(ctx context.Context, args []string, stdout, stderr io.Writer, en
 		return err
 	}
 	defer pool.Close()
-	registry, err := newRestoreRegistry(cfg, pool)
+	registry, err := newRestoreRegistry(ctx, cfg, pool)
 	if err != nil {
 		return err
 	}

@@ -23,8 +23,8 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
-	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	"github.com/katocxl/pantherclaw/internal/platform/ratelimit"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 )
 

@@ -18,8 +18,10 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
 )
 
-const dataOrg = "0192aaaa-bbbb-7ccc-8ddd-000000000001"
-const dataRequest = "0192aaaa-bbbb-7ccc-8ddd-000000000002"
+const (
+	dataOrg     = "0192aaaa-bbbb-7ccc-8ddd-000000000001"
+	dataRequest = "0192aaaa-bbbb-7ccc-8ddd-000000000002"
+)
 
 func dataTestSigner(t *testing.T, purpose string) (*jws.Signer, Options) {
 	t.Helper()

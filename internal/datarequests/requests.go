@@ -99,8 +99,10 @@ func stepped(ctx context.Context, q *dbq.Queries, c tapp.Caller) error {
 }
 
 func requestAudit(ctx context.Context, tx db.TenantTx, c tapp.Caller, kind string, id ids.UUID) error {
-	_, err := audit.Record(ctx, tx, audit.Event{Name: kind, Actor: c.Actor(), Outcome: audit.Success,
-		Object: &audit.Object{Type: "data_request", ID: id.String()}})
+	_, err := audit.Record(ctx, tx, audit.Event{
+		Name: kind, Actor: c.Actor(), Outcome: audit.Success,
+		Object: &audit.Object{Type: "data_request", ID: id.String()},
+	})
 	return err
 }
 

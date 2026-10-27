@@ -19,8 +19,10 @@ import (
 )
 
 func endedAudit(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, id ids.UUID, reason string) error {
-	_, err := audit.Record(ctx, tx, audit.Event{Name: "breakglass.ended", Actor: actor, Outcome: audit.Success, ReasonCode: reason,
-		Object: &audit.Object{Type: "breakglass_activation", ID: id.String()}, Details: map[string]string{"activation": id.String()}})
+	_, err := audit.Record(ctx, tx, audit.Event{
+		Name: "breakglass.ended", Actor: actor, Outcome: audit.Success, ReasonCode: reason,
+		Object: &audit.Object{Type: "breakglass_activation", ID: id.String()}, Details: map[string]string{"activation": id.String()},
+	})
 	return err
 }
 

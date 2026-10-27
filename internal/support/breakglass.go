@@ -61,8 +61,10 @@ func holderOf(h dbq.PcBreakglassHolder) Holder {
 }
 
 func activationOf(a dbq.PcBreakglassActivation, active bool) Activation {
-	out := Activation{ID: a.ID, User: a.UserID, Role: td.RoleName(a.Role), Reason: a.Reason,
-		StartedAt: a.StartedAt, ExpiresAt: a.ExpiresAt, EndedAt: a.EndedAt, Active: active}
+	out := Activation{
+		ID: a.ID, User: a.UserID, Role: td.RoleName(a.Role), Reason: a.Reason,
+		StartedAt: a.StartedAt, ExpiresAt: a.ExpiresAt, EndedAt: a.EndedAt, Active: active,
+	}
 	if a.EndedByType != nil && a.EndedByID != nil {
 		out.EndedBy = *a.EndedByType + ":" + *a.EndedByID
 	}
@@ -175,7 +177,8 @@ func (s *Service) endHolder(ctx context.Context, tx db.TenantTx, c tapp.Caller, 
 	typ, id := string(c.Principal.Kind), c.Principal.ID.String()
 	reason := "HOLDER_REMOVED"
 	ended, err := dbq.New(tx).EndBreakGlassOfUser(ctx, dbq.EndBreakGlassOfUserParams{
-		OrgID: c.Org, UserID: user, EndReason: &reason, EndedByType: &typ, EndedByID: &id})
+		OrgID: c.Org, UserID: user, EndReason: &reason, EndedByType: &typ, EndedByID: &id,
+	})
 	if err != nil {
 		return err
 	}
@@ -267,8 +270,10 @@ func (s *Service) ActivateBreakGlass(ctx context.Context, reason string, minutes
 		if err != nil {
 			return err
 		}
-		if _, err := audit.Record(ctx, tx, audit.Event{Name: "breakglass.activated", Actor: c.Actor(), Outcome: audit.Success,
-			Object: &audit.Object{Type: "breakglass_activation", ID: a.ID.String()}, Details: map[string]string{"role": h.Role, "reason": trim(reason, 512), "until": a.ExpiresAt.UTC().Format(time.RFC3339), "webauthn_key": su.Credential.String()}}); err != nil {
+		if _, err := audit.Record(ctx, tx, audit.Event{
+			Name: "breakglass.activated", Actor: c.Actor(), Outcome: audit.Success,
+			Object: &audit.Object{Type: "breakglass_activation", ID: a.ID.String()}, Details: map[string]string{"role": h.Role, "reason": trim(reason, 512), "until": a.ExpiresAt.UTC().Format(time.RFC3339), "webauthn_key": su.Credential.String()},
+		}); err != nil {
 			return err
 		}
 		if s.notify != nil {
@@ -283,8 +288,10 @@ func (s *Service) ActivateBreakGlass(ctx context.Context, reason string, minutes
 				}
 			}
 			if len(others) > 0 {
-				if _, err := s.notify.Enqueue(ctx, tx, napp.Message{Org: c.Org, Type: "breakglass.activated", Personal: others,
-					Params: map[string]string{"activation": a.ID.String(), "user": c.Principal.ID.String(), "role": h.Role, "until": a.ExpiresAt.UTC().Format(time.RFC3339)}}); err != nil {
+				if _, err := s.notify.Enqueue(ctx, tx, napp.Message{
+					Org: c.Org, Type: "breakglass.activated", Personal: others,
+					Params: map[string]string{"activation": a.ID.String(), "user": c.Principal.ID.String(), "role": h.Role, "until": a.ExpiresAt.UTC().Format(time.RFC3339)},
+				}); err != nil {
 					return err
 				}
 			}
@@ -375,8 +382,10 @@ func (s *Service) EndBreakGlass(ctx context.Context, id ids.UUID) (Activation, e
 }
 
 func activationRow(a dbq.GetBreakGlassActivationRow) dbq.PcBreakglassActivation {
-	return dbq.PcBreakglassActivation{OrgID: a.OrgID, ID: a.ID, UserID: a.UserID, Role: a.Role, Reason: a.Reason, Credential: a.Credential,
-		StartedAt: a.StartedAt, ExpiresAt: a.ExpiresAt, EndedAt: a.EndedAt, EndReason: a.EndReason, EndedByType: a.EndedByType, EndedByID: a.EndedByID}
+	return dbq.PcBreakglassActivation{
+		OrgID: a.OrgID, ID: a.ID, UserID: a.UserID, Role: a.Role, Reason: a.Reason, Credential: a.Credential,
+		StartedAt: a.StartedAt, ExpiresAt: a.ExpiresAt, EndedAt: a.EndedAt, EndReason: a.EndReason, EndedByType: a.EndedByType, EndedByID: a.EndedByID,
+	}
 }
 
 // ActivationPage is a cursor page of the org's activations.
@@ -440,8 +449,10 @@ func (s *Service) BreakGlassCall(ctx context.Context, c tapp.Caller, procedure s
 		if !td.BreakGlassRoleAllowed(td.RoleName(a.Role)) {
 			return nil
 		}
-		if _, err := audit.Record(ctx, tx, audit.Event{Name: "breakglass.call", Actor: c.Actor(), Outcome: audit.Success,
-			Object: &audit.Object{Type: "breakglass_activation", ID: a.ID.String()}, Details: map[string]string{"activation": a.ID.String(), "procedure": trim(procedure, 200)}}); err != nil {
+		if _, err := audit.Record(ctx, tx, audit.Event{
+			Name: "breakglass.call", Actor: c.Actor(), Outcome: audit.Success,
+			Object: &audit.Object{Type: "breakglass_activation", ID: a.ID.String()}, Details: map[string]string{"activation": a.ID.String(), "procedure": trim(procedure, 200)},
+		}); err != nil {
 			return err
 		}
 		c.Bindings = append(c.Bindings, td.Binding{Role: td.RoleName(a.Role), Scope: td.Scope{Type: td.ScopeOrg, ID: c.Org.UUID()}})

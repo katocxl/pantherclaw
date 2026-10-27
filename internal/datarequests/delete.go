@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/pack"
@@ -24,8 +25,10 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
 )
 
-const DeletionJWSType = "pap-deletion+jwt"
-const DeletionIntentJWSType = "pap-deletion-intent+jwt"
+const (
+	DeletionJWSType       = "pap-deletion+jwt"
+	DeletionIntentJWSType = "pap-deletion-intent+jwt"
+)
 
 // DeletionIntent proves the durable pre-erasure snapshot. It makes no
 // assertion that data removal is complete or verified.

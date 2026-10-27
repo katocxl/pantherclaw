@@ -199,6 +199,7 @@ func TestTenancy_breakglass_holders(t *testing.T) { testBreakGlassTenancy(t, "br
 func TestTenancy_breakglass_activations(t *testing.T) {
 	testBreakGlassTenancy(t, "breakglass_activations")
 }
+
 func testBreakGlassTenancy(t *testing.T, table string) {
 	f := newFixture(t)
 	if _, err := f.svc.SetHolders(f.adminCtx(), []support.Designation{{User: f.twin, Role: td.RoleAuditor}}); err != nil {

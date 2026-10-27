@@ -16,7 +16,7 @@ import (
 )
 
 const browserSessionBySecret = `-- name: BrowserSessionBySecret :one
-SELECT s.id, s.user_id, s.state, s.auth_time, s.roles_digest, s.step_up_at, s.step_up_credential_id,
+SELECT s.id, s.user_id, s.state, s.provider, s.auth_time, s.roles_digest, s.step_up_at, s.step_up_credential_id,
        (s.secret_hash = $1)::bool AS current,
        (s.rotated_at IS NOT NULL AND s.rotated_at > now() - make_interval(secs => $2::int))::bool AS within_grace,
        (s.expires_at > now())::bool AS within_lifetime,
@@ -25,7 +25,7 @@ SELECT s.id, s.user_id, s.state, s.auth_time, s.roles_digest, s.step_up_at, s.st
        u.state AS user_state, now()::timestamptz AS db_now
 FROM pc.sessions s
 JOIN pc.users u ON u.org_id = s.org_id AND u.id = s.user_id
-WHERE s.org_id = $4 AND (s.secret_hash = $1 OR s.prev_secret_hash = $1)
+WHERE s.org_id = $4 AND (s.secret_hash = $1 OR s.prev_secret_hash = $1) AND pc.identity_available(u.issuer,u.subject,false)
 `
 
 type BrowserSessionBySecretParams struct {
@@ -39,6 +39,7 @@ type BrowserSessionBySecretRow struct {
 	ID                 ids.UUID
 	UserID             ids.UUID
 	State              string
+	Provider           string
 	AuthTime           *time.Time
 	RolesDigest        []byte
 	StepUpAt           *time.Time
@@ -66,6 +67,7 @@ func (q *Queries) BrowserSessionBySecret(ctx context.Context, arg BrowserSession
 		&i.ID,
 		&i.UserID,
 		&i.State,
+		&i.Provider,
 		&i.AuthTime,
 		&i.RolesDigest,
 		&i.StepUpAt,

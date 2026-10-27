@@ -5,8 +5,10 @@ package datarequests
 
 import (
 	"encoding/json/v2"
+	"errors"
 	"html/template"
 	"net/http"
+	"strconv"
 
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/webhttp"
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
@@ -68,6 +70,12 @@ func MountPages(mux *http.ServeMux, h *webhttp.Handler, s *Service) {
 					status = http.StatusUnauthorized
 				case pcerr.Internal:
 					status = http.StatusInternalServerError
+				case pcerr.ResourceExhausted:
+					status = http.StatusTooManyRequests
+				}
+				var retry interface{ RetryAfterSeconds() int }
+				if errors.As(err, &retry) {
+					w.Header().Set("Retry-After", strconv.Itoa(max(1, retry.RetryAfterSeconds())))
 				}
 				if status == http.StatusInternalServerError {
 					h.InternalError(w, r, err)

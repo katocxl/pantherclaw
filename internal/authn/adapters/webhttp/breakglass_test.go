@@ -27,10 +27,12 @@ type fakeBreakGlass struct {
 func (f *fakeBreakGlass) MyBreakGlass(context.Context) (*support.Holder, *support.Activation, error) {
 	return &support.Holder{Role: td.RoleAuditor}, nil, nil
 }
+
 func (f *fakeBreakGlass) BreakGlassCall(_ context.Context, c tapp.Caller, _ string) (tapp.Caller, error) {
 	f.calls++
 	return c, nil
 }
+
 func (f *fakeBreakGlass) ActivateBreakGlass(_ context.Context, _ string, _ int, su *stepup.StepUp) (support.Activation, error) {
 	f.su = append(f.su, su)
 	if su == nil {

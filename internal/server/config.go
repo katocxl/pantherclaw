@@ -84,7 +84,7 @@ type Config struct {
 	Admin     AdminConfig     `json:"admin"`
 	// Limits is the API rate limits and usage meters (G0 M13 D8, D10;
 	// config_m13_limits.go).
-	Limits LimitsConfig `json:"limits"`
+	Limits  LimitsConfig  `json:"limits"`
 	Backups BackupsConfig `json:"backups"`
 }
 
@@ -167,7 +167,7 @@ func DefaultConfig() Config {
 		Waitlist:  defaultWaitlist(),
 		CEL:       celenv.DefaultLimits,
 		Telemetry: defaultTelemetry(),
-		Limits:   defaultLimits(),
+		Limits:    defaultLimits(),
 	}
 }
 

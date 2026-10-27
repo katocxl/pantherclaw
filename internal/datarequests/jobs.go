@@ -8,11 +8,12 @@ import (
 	"errors"
 	"time"
 
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
+
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
-	"github.com/riverqueue/river"
-	"github.com/riverqueue/river/rivertype"
 )
 
 type RequestID struct{}
@@ -51,6 +52,7 @@ func unique() river.InsertOpts {
 		rivertype.JobStateAvailable, rivertype.JobStatePending, rivertype.JobStateRunning, rivertype.JobStateScheduled, rivertype.JobStateRetryable,
 	}}}
 }
+
 func enqueue(ctx context.Context, jc *jobs.Client, tx db.TenantTx, org ids.OrgID, id ids.UUID, del bool, at time.Time) error {
 	if jc == nil {
 		return errors.New("datarequests: jobs unavailable")
@@ -128,6 +130,7 @@ type orgWorker struct {
 func (w *orgWorker) Work(ctx context.Context, j *river.Job[OrgArgs]) error {
 	return w.s.Daily(ctx, j.Args.Org)
 }
+
 func Register(reg *jobs.Registry, s *Service) error {
 	if err := jobs.Register[ExportArgs](reg, &exportWorker{s: s}); err != nil {
 		return err
@@ -140,6 +143,7 @@ func Register(reg *jobs.Registry, s *Service) error {
 	}
 	return jobs.Register[OrgArgs](reg, &orgWorker{s: s})
 }
+
 func PeriodicJobs() []*river.PeriodicJob {
 	return []*river.PeriodicJob{river.NewPeriodicJob(river.PeriodicInterval(24*time.Hour), func() (river.JobArgs, *river.InsertOpts) { return DailyArgs{}, nil }, &river.PeriodicJobOpts{RunOnStart: true})}
 }

@@ -6,6 +6,7 @@ package pclaw
 import (
 	"bytes"
 	"context"
+	"crypto/fips140"
 	"errors"
 	"flag"
 	"fmt"
@@ -48,6 +49,7 @@ func init() {
 var (
 	nodeServerImage  string
 	nodeGatewayImage string
+	nodeFIPSEnabled  = fips140.Enabled
 )
 
 // Development fallbacks: `task images` builds them.
@@ -182,6 +184,9 @@ func nodeUp(ctx context.Context, a *app, args []string) error {
 	}
 	if fs.NArg() != 0 {
 		return errUsage
+	}
+	if nodeFIPSEnabled() {
+		return errors.New("FIPS mode: pclaw up has no released FIPS container images; run the released FIPS server and gateway binaries directly")
 	}
 	n, err := newNode(a, f.dir)
 	if err != nil {

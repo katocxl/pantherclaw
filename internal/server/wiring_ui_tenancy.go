@@ -22,6 +22,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/tenancy/adapters/tenancyrpc"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // Hosted accounts and self-serve organizations (G0 UI D8): accounts, sign-in
@@ -35,6 +36,7 @@ type uiTenancy struct {
 	signup     *accounts.Signup
 	invites    *accounts.Invitations
 	onboarding *onboarding.Service
+	deletion   *accounts.Deletion
 	// browser and web are set once the browser pages exist (API role).
 	browser *authnapp.Browser
 	web     *webhttp.Handler
@@ -202,7 +204,8 @@ func (h uiAccessHandler) WhoAmI(ctx context.Context, req *pantherclawv1.WhoAmIRe
 		if a, ok := accounts.CallerFrom(ctx); ok {
 			return &pantherclawv1.WhoAmIResponse{
 				Deployment: h.deployment, SessionKind: pantherclawv1.CallerSessionKind_CALLER_SESSION_KIND_ACCOUNT_BROWSER,
-				AccountId: a.Account.String(),
+				AccountId:   a.Account.String(),
+				Permissions: []string{string(td.PermAccountDelete), string(td.PermDeletionRecordsRead), string(td.PermInvitationsAccept), string(td.PermOrgsCreate), string(td.PermOrgsListMine)},
 			}, nil
 		}
 	}

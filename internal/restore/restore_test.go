@@ -19,6 +19,7 @@ import (
 func sample() Event {
 	return Event{Timestamp: time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC), Org: ids.New[ids.Org](), LedgerSeq: 3, Kind: "access.api_key_revoked", Direction: "tighten", Object: securityevent.Object{Type: "api_key", ID: ids.NewV7().String()}, Actor: domain.Actor{Type: "user", ID: ids.NewV7().String()}}
 }
+
 func line(t *testing.T, e Event) string {
 	t.Helper()
 	b, err := json.Marshal(e)

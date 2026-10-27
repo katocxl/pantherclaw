@@ -25,8 +25,10 @@ func holderProto(h support.Holder) *pantherclawv1.BreakGlassHolder {
 }
 
 func activationProto(a support.Activation) *pantherclawv1.BreakGlassActivation {
-	out := &pantherclawv1.BreakGlassActivation{Id: a.ID.String(), UserId: a.User.String(), Role: string(a.Role), Reason: a.Reason,
-		StartedAt: timestamppb.New(a.StartedAt), ExpiresAt: timestamppb.New(a.ExpiresAt), Active: a.Active, EndedBy: a.EndedBy}
+	out := &pantherclawv1.BreakGlassActivation{
+		Id: a.ID.String(), UserId: a.User.String(), Role: string(a.Role), Reason: a.Reason,
+		StartedAt: timestamppb.New(a.StartedAt), ExpiresAt: timestamppb.New(a.ExpiresAt), Active: a.Active, EndedBy: a.EndedBy,
+	}
 	if a.EndedAt != nil {
 		out.EndedAt = timestamppb.New(*a.EndedAt)
 	}

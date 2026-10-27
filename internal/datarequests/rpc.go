@@ -8,13 +8,14 @@ import (
 	"encoding/base64"
 	"encoding/json/v2"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type RPC struct {
@@ -26,6 +27,7 @@ type RPC struct {
 func (r RPC) CreateExport(context.Context, *pb.CreateExportRequest) (*pb.CreateExportResponse, error) {
 	return nil, ErrStepUp
 }
+
 func (r RPC) RequestDeletion(context.Context, *pb.RequestDeletionRequest) (*pb.RequestDeletionResponse, error) {
 	return nil, ErrStepUp
 }
@@ -79,6 +81,7 @@ func (r RPC) requestProto(ctx context.Context, v dbq.PcDataRequest) (*pb.DataReq
 	}
 	return out, nil
 }
+
 func parseRequestID(s string) (ids.UUID, error) {
 	id, err := ids.ParseUUID(s)
 	if err != nil {
@@ -86,6 +89,7 @@ func parseRequestID(s string) (ids.UUID, error) {
 	}
 	return id, nil
 }
+
 func (r RPC) GetDataRequest(ctx context.Context, in *pb.GetDataRequestRequest) (*pb.GetDataRequestResponse, error) {
 	id, err := parseRequestID(in.GetId())
 	if err != nil {
@@ -98,6 +102,7 @@ func (r RPC) GetDataRequest(ctx context.Context, in *pb.GetDataRequestRequest) (
 	out, err := r.requestProto(ctx, v)
 	return &pb.GetDataRequestResponse{Request: out}, err
 }
+
 func (r RPC) ListDataRequests(ctx context.Context, in *pb.ListDataRequestsRequest) (*pb.ListDataRequestsResponse, error) {
 	var before ids.UUID
 	if in.GetPageToken() != "" {
@@ -131,6 +136,7 @@ func (r RPC) ListDataRequests(ctx context.Context, in *pb.ListDataRequestsReques
 	}
 	return out, nil
 }
+
 func (r RPC) CancelDeletion(ctx context.Context, in *pb.CancelDeletionRequest) (*pb.CancelDeletionResponse, error) {
 	id, err := parseRequestID(in.GetId())
 	if err != nil {
@@ -143,6 +149,7 @@ func (r RPC) CancelDeletion(ctx context.Context, in *pb.CancelDeletionRequest) (
 	p, err := r.requestProto(ctx, v)
 	return &pb.CancelDeletionResponse{Request: p}, err
 }
+
 func (r RPC) DownloadExport(ctx context.Context, in *pb.DownloadExportRequest, stream pantherclawv1connect.DataRequestServiceDownloadExportServerStream) error {
 	id, err := parseRequestID(in.GetId())
 	if err != nil {
@@ -160,6 +167,7 @@ func (r RPC) DownloadExport(ctx context.Context, in *pb.DownloadExportRequest, s
 	}
 	return nil
 }
+
 func (r RPC) GetDeletionRecord(ctx context.Context, in *pb.GetDeletionRecordRequest) (*pb.GetDeletionRecordResponse, error) {
 	org, err := ids.Parse[ids.Org](in.GetOrgId())
 	if err != nil {

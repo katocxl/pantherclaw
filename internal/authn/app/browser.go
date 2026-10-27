@@ -432,7 +432,9 @@ type BrowserSession struct {
 	// AuthTime is when the provider last authenticated the person (zero when
 	// the provider did not say); StepUpAt and StepUpCredential record the
 	// last WebAuthn step-up on this session.
-	AuthTime         time.Time
+	AuthTime time.Time
+	// Provider is the identity provider the person signed in with.
+	Provider         string
 	StepUpAt         time.Time
 	StepUpCredential ids.UUID
 	// Now is the database clock at authentication, for age checks.
@@ -543,7 +545,7 @@ func (b *Browser) authenticate(ctx context.Context, cookie string, rotate bool) 
 			Caller: tapp.Caller{
 				Subject: td.Subject{Org: org, Principal: p, Bindings: bs}, Credential: CredBrowserSession, Session: s.ID,
 			},
-			ID: s.ID, Now: s.DbNow,
+			ID: s.ID, Now: s.DbNow, Provider: s.Provider,
 		}
 		if s.AuthTime != nil {
 			out.AuthTime = *s.AuthTime

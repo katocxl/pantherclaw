@@ -108,9 +108,11 @@ func validDigest(s string) bool {
 	return err == nil && len(b) == sha256.Size && hex.EncodeToString(b) == s
 }
 
-var dataName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,62}$`)
-var tableFile = regexp.MustCompile(`^tables/([a-z][a-z0-9_]{0,62})/[0-9]{6}\.jsonl$`)
-var evidenceFile = regexp.MustCompile(`^evidence/[0-9]{6}\.json$`)
+var (
+	dataName     = regexp.MustCompile(`^[a-z][a-z0-9_]{0,62}$`)
+	tableFile    = regexp.MustCompile(`^tables/([a-z][a-z0-9_]{0,62})/[0-9]{6}\.jsonl$`)
+	evidenceFile = regexp.MustCompile(`^evidence/[0-9]{6}\.json$`)
+)
 
 // VerifyExport checks a signed manifest, every ZIP part and each embedded
 // evidence bundle offline. Part files are named part-001.zip, part-002.zip, ...

@@ -93,6 +93,7 @@ SELECT count(DISTINCT rb.user_id)
 FROM pc.role_bindings rb
 JOIN pc.users u ON u.org_id = rb.org_id AND u.id = rb.user_id
 WHERE rb.org_id = $1 AND rb.role = 'org_admin' AND rb.scope_type = 'ORG' AND u.state = 'ACTIVE'
+  AND NOT EXISTS (SELECT FROM pc.account_deletion_steps ds WHERE ds.org_id=u.org_id AND ds.user_id=u.id)
 `
 
 func (q *Queries) CountActiveOrgAdmins(ctx context.Context, orgID ids.OrgID) (int64, error) {

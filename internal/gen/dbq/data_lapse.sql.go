@@ -20,11 +20,39 @@ SELECT DISTINCT u.id FROM pc.users u
 JOIN pc.role_bindings r ON r.org_id = u.org_id AND r.user_id = u.id
 WHERE u.org_id = $1 AND u.state = 'ACTIVE'
   AND r.role = 'org_admin' AND r.scope_type = 'ORG'
-ORDER BY u.id
+ORDER BY u.id LIMIT 10001
 `
 
 func (q *Queries) DataRequestAdmins(ctx context.Context, orgID ids.OrgID) ([]ids.UUID, error) {
 	rows, err := q.db.Query(ctx, dataRequestAdmins, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const dataRequestAdminsPage = `-- name: DataRequestAdminsPage :many
+SELECT DISTINCT u.id FROM pc.users u
+JOIN pc.role_bindings r ON r.org_id = u.org_id AND r.user_id = u.id
+WHERE u.org_id = $1 AND u.state = 'ACTIVE'
+  AND u.id > $2 AND r.role = 'org_admin' AND r.scope_type = 'ORG'
+ORDER BY u.id LIMIT 1000
+`
+
+func (q *Queries) DataRequestAdminsPage(ctx context.Context, orgID ids.OrgID, afterID ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, dataRequestAdminsPage, orgID, afterID)
 	if err != nil {
 		return nil, err
 	}

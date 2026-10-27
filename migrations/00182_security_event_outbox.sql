@@ -25,14 +25,13 @@ CREATE INDEX security_event_outbox_due ON pc.security_event_outbox (org_id, last
 CREATE INDEX security_event_outbox_intent ON pc.security_event_outbox
     (org_id, (payload->>'kind'), (payload->'object'->>'id'), (payload->>'journal_digest'))
     WHERE payload->>'kind' IN ('org.deletion_started', 'account.deletion_started');
--- The verified deletion role is introduced in 00178; keep this migration
--- usable on isolated ops branches while granting it when present.
+-- 00181 is required: never silently omit the tenant write freeze.
+CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.security_event_outbox
+    FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
+-- The login role is optional until db bootstrap --deleter-password-file.
+-- Bootstrap grants it all tenant tables when it is configured later.
 -- +goose StatementBegin
 DO $$ BEGIN
-    IF to_regprocedure('pc.org_write_guard()') IS NOT NULL THEN
-        CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.security_event_outbox
-            FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
-    END IF;
     IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_deleter') THEN
         GRANT SELECT, DELETE ON pc.security_event_outbox TO pc_deleter;
     END IF;

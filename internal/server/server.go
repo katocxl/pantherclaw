@@ -323,6 +323,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	ui.deletion = newAccountDeletion(ui.store, dataRequests)
 	ui.wireInvitationEmails(cfg, m5.notifications)
 	// A monitor-mode action with an unknown consequence notifies (HR-206).
 	authorityStore.Notify = m5.notifications
@@ -512,6 +513,10 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		defer closeData()
+		accountJobs, err := registerAccountDeletion(jreg, ui.deletion)
+		if err != nil {
+			return err
+		}
 		if err := newSupport(cfg, pool, entsSvc, m5.notifications, log).Register(jreg); err != nil {
 			return err
 		}
@@ -626,6 +631,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		client.PeriodicJobs().AddMany(evidenceJobs)
 		observeJobs(ctx, client)
 		client.PeriodicJobs().AddMany(dataJobs)
+		client.PeriodicJobs().AddMany(accountJobs)
 		if err := client.Start(ctx); err != nil {
 			return fmt.Errorf("server: start workers: %w", err)
 		}
@@ -795,7 +801,11 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		return nil, err
 	}
 	if d.m5 != nil {
-		pantherclawv1connect.RegisterAccountServiceHandler(rs, accountrpc.New(authnapp.NewAccount(pool, d.m5.webauthn, d.m5.notifications)))
+		account := accountrpc.New(authnapp.NewAccount(pool, d.m5.webauthn, d.m5.notifications))
+		if d.ui != nil && d.ui.deletion != nil {
+			account.WithAccountDeleter(d.ui.deletion)
+		}
+		pantherclawv1connect.RegisterAccountServiceHandler(rs, account)
 		pantherclawv1connect.RegisterNotificationServiceHandler(rs, notificationsrpc.New(d.m5.notifications))
 	}
 	d.m6.registerPublic(rs)
@@ -871,6 +881,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		mountSupport(mux, d)
 	}
 	mountDataRequests(mux, d)
+	if d.web != nil && d.ui != nil && d.ui.deletion != nil {
+		d.web.MountAccountDeletion(mux, d.ui.deletion)
+	}
 	mountM14Data(mux, d)
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

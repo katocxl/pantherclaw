@@ -56,7 +56,7 @@ RETURNING created_at, expires_at;
 -- name: BrowserSessionBySecret :one
 -- Finds the session whose current or previous secret has this hash, with
 -- its limits judged by the database clock.
-SELECT s.id, s.user_id, s.state, s.auth_time, s.roles_digest, s.step_up_at, s.step_up_credential_id,
+SELECT s.id, s.user_id, s.state, s.provider, s.auth_time, s.roles_digest, s.step_up_at, s.step_up_credential_id,
        (s.secret_hash = sqlc.arg(secret_hash))::bool AS current,
        (s.rotated_at IS NOT NULL AND s.rotated_at > now() - make_interval(secs => sqlc.arg(grace_seconds)::int))::bool AS within_grace,
        (s.expires_at > now())::bool AS within_lifetime,

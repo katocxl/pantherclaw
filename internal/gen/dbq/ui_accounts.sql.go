@@ -75,28 +75,30 @@ SELECT s.id, s.account_id, s.state, s.auth_time, s.provider, s.created_at,
        (s.expires_at > now())::bool AS within_lifetime,
        (s.last_seen_at > now() - make_interval(secs => $3::int))::bool AS within_idle,
        (s.last_seen_at < now() - interval '1 minute')::bool AS touch,
-       a.email, a.email_verified, a.display_name, now()::timestamptz AS db_now
+       a.email, a.email_verified, a.display_name, now()::timestamptz AS db_now, s.deletion_reauthenticated_at
 FROM pc.account_sessions s
 JOIN pc.accounts a ON a.id = s.account_id
-WHERE s.secret_hash = $1 OR s.prev_secret_hash = $1
+WHERE (s.secret_hash = $1 OR s.prev_secret_hash = $1)
+AND a.deleted_at IS NULL AND pc.identity_available(a.issuer,a.subject,false)
 `
 
 type AccountSessionBySecretRow struct {
-	ID             ids.UUID
-	AccountID      ids.UUID
-	State          string
-	AuthTime       *time.Time
-	Provider       string
-	CreatedAt      time.Time
-	Current        bool
-	WithinGrace    bool
-	WithinLifetime bool
-	WithinIdle     bool
-	Touch          bool
-	Email          string
-	EmailVerified  bool
-	DisplayName    string
-	DbNow          time.Time
+	ID                        ids.UUID
+	AccountID                 ids.UUID
+	State                     string
+	AuthTime                  *time.Time
+	Provider                  string
+	CreatedAt                 time.Time
+	Current                   bool
+	WithinGrace               bool
+	WithinLifetime            bool
+	WithinIdle                bool
+	Touch                     bool
+	Email                     string
+	EmailVerified             bool
+	DisplayName               string
+	DbNow                     time.Time
+	DeletionReauthenticatedAt *time.Time
 }
 
 func (q *Queries) AccountSessionBySecret(ctx context.Context, secretHash []byte, graceSeconds int32, idleSeconds int32) (AccountSessionBySecretRow, error) {
@@ -118,6 +120,7 @@ func (q *Queries) AccountSessionBySecret(ctx context.Context, secretHash []byte,
 		&i.EmailVerified,
 		&i.DisplayName,
 		&i.DbNow,
+		&i.DeletionReauthenticatedAt,
 	)
 	return i, err
 }
@@ -125,15 +128,15 @@ func (q *Queries) AccountSessionBySecret(ctx context.Context, secretHash []byte,
 const consumeAccountLoginState = `-- name: ConsumeAccountLoginState :one
 UPDATE pc.account_login_requests r
 SET state = 'CONSUMED', consumed_at = now(), state_hash = NULL, binding_hash = NULL, nonce_hash = NULL, pkce_verifier = NULL,
-    invitation_org_id = NULL, invitation_token_hash = NULL
+    invitation_org_id = NULL, invitation_token_hash = NULL, deletion_account_id = NULL
 FROM (SELECT c.id, c.binding_hash, c.nonce_hash, c.pkce_verifier, c.provider, c.next_path, c.max_age, c.invitation_org_id,
-             c.invitation_token_hash
+             c.invitation_token_hash, c.deletion_account_id, c.created_at
       FROM pc.account_login_requests c
       WHERE c.state_hash = $1 AND c.state = 'PENDING' AND c.expires_at > now()
       FOR UPDATE) old
 WHERE r.id = old.id
 RETURNING old.id, old.binding_hash, old.nonce_hash, old.pkce_verifier, old.provider, old.next_path, old.max_age,
-          old.invitation_org_id, old.invitation_token_hash
+          old.invitation_org_id, old.invitation_token_hash, old.deletion_account_id, old.created_at
 `
 
 type ConsumeAccountLoginStateRow struct {
@@ -146,6 +149,8 @@ type ConsumeAccountLoginStateRow struct {
 	MaxAge              *int32
 	InvitationOrgID     *ids.UUID
 	InvitationTokenHash []byte
+	DeletionAccountID   *ids.UUID
+	CreatedAt           time.Time
 }
 
 func (q *Queries) ConsumeAccountLoginState(ctx context.Context, stateHash []byte) (ConsumeAccountLoginStateRow, error) {
@@ -161,6 +166,8 @@ func (q *Queries) ConsumeAccountLoginState(ctx context.Context, stateHash []byte
 		&i.MaxAge,
 		&i.InvitationOrgID,
 		&i.InvitationTokenHash,
+		&i.DeletionAccountID,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -315,12 +322,12 @@ func (q *Queries) InsertAccountEvent(ctx context.Context, arg InsertAccountEvent
 
 const insertAccountLoginRequest = `-- name: InsertAccountLoginRequest :execrows
 INSERT INTO pc.account_login_requests (id, state_hash, binding_hash, nonce_hash, pkce_verifier, provider, next_path, max_age,
-                                       requested_ip, expires_at, invitation_org_id, invitation_token_hash)
+                                       requested_ip, expires_at, invitation_org_id, invitation_token_hash, deletion_account_id)
 SELECT $1::uuid, $2::bytea, $3::bytea, $4::bytea,
        $5::text, $6::text, $7::text, $8::int,
        $9::text, now() + make_interval(secs => $10::int),
-       $11::uuid, $12::bytea
-WHERE (SELECT count(*) FROM pc.account_login_requests WHERE state = 'PENDING' AND expires_at > now()) < $13::int
+       $11::uuid, $12::bytea, $13::uuid
+WHERE (SELECT count(*) FROM pc.account_login_requests WHERE state = 'PENDING' AND expires_at > now()) < $14::int
 `
 
 type InsertAccountLoginRequestParams struct {
@@ -336,6 +343,7 @@ type InsertAccountLoginRequestParams struct {
 	TtlSeconds          int32
 	InvitationOrgID     *ids.UUID
 	InvitationTokenHash []byte
+	DeletionAccountID   *ids.UUID
 	MaxOpen             int32
 }
 
@@ -355,6 +363,7 @@ func (q *Queries) InsertAccountLoginRequest(ctx context.Context, arg InsertAccou
 		arg.TtlSeconds,
 		arg.InvitationOrgID,
 		arg.InvitationTokenHash,
+		arg.DeletionAccountID,
 		arg.MaxOpen,
 	)
 	if err != nil {
@@ -626,7 +635,8 @@ func (q *Queries) TouchAccountSession(ctx context.Context, id ids.UUID) error {
 const upsertAccount = `-- name: UpsertAccount :one
 
 INSERT INTO pc.accounts (id, issuer, subject, email, email_verified, display_name, last_sign_in_at)
-VALUES ($1, $2, $3, $4, $5, $6, now())
+SELECT $1, $2, $3, $4, $5, $6, now()
+WHERE pc.identity_available($2,$3,true)
 ON CONFLICT (issuer, subject) DO UPDATE
 SET email = EXCLUDED.email, email_verified = EXCLUDED.email_verified, display_name = EXCLUDED.display_name,
     last_sign_in_at = now()

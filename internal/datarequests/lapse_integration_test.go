@@ -6,8 +6,9 @@
 package datarequests
 
 import (
-	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"testing"
+
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
 func TestHR393_LapseUsesHostedModeAndRecoveryBeforeFreezeWins(t *testing.T) {
