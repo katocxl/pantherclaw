@@ -854,7 +854,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err := registerAutomationsEngine(rs, d, workload, autos); err != nil {
 		return nil, err
 	}
-	registerAutomationTemplates(rs, d, autos)
+	if err := registerAutomationTemplates(rs, d, autos); err != nil {
+		return nil, err
+	}
 	automationTriggers, err := registerAutomationTriggers(rs, d, autos)
 	if err != nil {
 		return nil, err
