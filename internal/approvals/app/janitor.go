@@ -78,10 +78,7 @@ func SweepOrg(ctx context.Context, pool *db.Pool, n Notifier, org ids.OrgID) (Sw
 	}
 	for _, id := range overdue {
 		if err := each(func(ctx context.Context, tx db.TenantTx) error {
-			if err := pgapprovals.Expire(ctx, tx, org, id, system); err != nil {
-				return err
-			}
-			return tell(ctx, tx, n, org, id, string(apdomain.StateExpired), "approval.expired", nil)
+			return ExpireAtUse(ctx, tx, n, org, id, system)
 		}); err != nil {
 			return out, err
 		}

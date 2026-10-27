@@ -183,3 +183,18 @@ WHERE e.org_id = sqlc.arg(org_id) AND e.id > coalesce(sqlc.narg(after)::uuid, '0
   AND (sqlc.arg(scope_kind)::text = '' OR e.scope_kind = sqlc.arg(scope_kind)::text)
 ORDER BY e.id
 LIMIT sqlc.arg(page_limit);
+
+-- LiveLimits returns the limits of the org's active, unexpired grants and
+-- of its guardrails, at their current revisions, when they set any; a
+-- package activation re-checks them (G0 M8).
+-- name: LiveLimits :many
+SELECT 'grant'::text AS kind, g.id, r.limits
+FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+WHERE g.org_id = sqlc.arg(org_id) AND g.state = 'ACTIVE' AND r.expires_at > now() AND octet_length(r.limits) > 2
+UNION ALL
+SELECT 'guardrail'::text AS kind, e.id, r.limits
+FROM pc.envelopes e
+JOIN pc.envelope_revisions r ON r.org_id = e.org_id AND r.envelope_id = e.id AND r.revision = e.current_revision
+WHERE e.org_id = sqlc.arg(org_id) AND octet_length(r.limits) > 2
+ORDER BY kind, id;

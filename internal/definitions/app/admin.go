@@ -90,6 +90,29 @@ type Admin struct {
 	// Protect holds activations for a distinct publisher (G0 M11 D42); nil
 	// holds none.
 	Protect ActivationGate
+	// Checks re-check, in the activating transaction, what was accepted
+	// against the definitions active before it: the published policy (G0
+	// M4) and the grant and guardrail limits (G0 M8). Any error refuses the
+	// activation, which then changes nothing.
+	Checks []ActivationCheck
+	// Pool runs an activation with Checks in one transaction when Protect
+	// is nil. Without it such an activation is refused.
+	Pool *db.Pool
+}
+
+// ActivationCheck re-checks one thing that depends on the org's active
+// definitions when a package version is activated. It runs in the
+// activating transaction once the version is ACTIVE there, with the
+// active definitions as they are after the activation; an error refuses
+// the activation.
+type ActivationCheck interface {
+	CheckActivation(ctx context.Context, tx db.TenantTx, active []*domain.Definition) error
+}
+
+// ActiveDefinitionsTx reads the org's active definitions in tx; a
+// Repository needs it to run activation checks.
+type ActiveDefinitionsTx interface {
+	ActiveDefinitionsInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID) ([]*domain.Definition, error)
 }
 
 // apiError maps import and lifecycle errors to API errors. The messages
@@ -180,6 +203,17 @@ func (a *Admin) Transition(ctx context.Context, name, version string, to domain.
 		}
 		return a.version(ctx, c.Org, name, version)
 	}
+	if to == domain.StateActive && len(a.Checks) > 0 {
+		if a.Pool == nil {
+			return VersionInfo{}, errNoActivationChecks
+		}
+		if err := a.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+			return a.activateTx(ctx, tx, c, name, version)
+		}); err != nil {
+			return VersionInfo{}, apiError(notFound(err))
+		}
+		return a.version(ctx, c.Org, name, version)
+	}
 	from, err := a.Importer.Repo.State(ctx, c.Org, name, version)
 	if err != nil {
 		return VersionInfo{}, notFound(err)
@@ -260,8 +294,28 @@ func (a *Admin) activateTx(ctx context.Context, tx db.TenantTx, c tapp.Caller, n
 	if errors.Is(err, db.ErrLostRace) {
 		return ErrConflict
 	}
-	return err
+	if err != nil || len(a.Checks) == 0 {
+		return err
+	}
+	// Fail closed at activation, not only at decision time: the version is
+	// ACTIVE in tx, so the checks see the definitions as they will be.
+	reads, ok := a.Importer.Repo.(ActiveDefinitionsTx)
+	if !ok {
+		return errNoActivationChecks
+	}
+	active, err := reads.ActiveDefinitionsInTx(ctx, tx, c.Org)
+	if err != nil {
+		return err
+	}
+	for _, check := range a.Checks {
+		if err := check.CheckActivation(ctx, tx, active); err != nil {
+			return err
+		}
+	}
+	return nil
 }
+
+var errNoActivationChecks = pcerr.New(pcerr.Unavailable, "PACKAGE_CHECKS_UNAVAILABLE", "package activation checks are not available on this server")
 
 var errNoTxRepository = pcerr.New(pcerr.Unavailable, "PROTECTED_CHANGES_UNAVAILABLE", "protected package activation is not available on this server")
 
