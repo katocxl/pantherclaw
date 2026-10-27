@@ -144,7 +144,7 @@ def test_opaque_page_tokens_are_strict(path, api_session):
     """A made-up cursor is refused, never treated as a valid page."""
     response = api_session.post(
         BASE + path,
-        json={"pageSize": 5, "pageToken": "bm90LWEtdG9rZW4"},
+        json={"pageSize": 5, "pageToken": "not-a-token"},
         headers={**HEADERS, "Connect-Protocol-Version": "1"},
         timeout=10,
         allow_redirects=False,
