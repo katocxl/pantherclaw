@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+[project]
+name = "pantherclaw-api-assurance"
+version = "0.0.0"
+requires-python = ">=3.12"
+dependencies = ["schemathesis>=4,<5", "pytest>=8,<10"]
+
+[tool.uv]
+exclude-newer = "7 days"
+
+[tool.pytest.ini_options]
+addopts = "-q"

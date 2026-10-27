@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+# Build-only local plugin, isolated from the product dependency graph.
+version: v2
+plugins:
+  - local: ["go", "tool", "-modfile=tools/pins/connect-openapi/go.mod", "protoc-gen-connect-openapi"]
+    out: docs/api
+    strategy: all
+    opt:
+      - format=json
+      - path=pantherclaw.openapi.json
+      - content-types=json
+      - base=tools/api/openapi.base.yaml

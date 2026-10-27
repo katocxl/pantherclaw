@@ -31,6 +31,16 @@ anchors without raw HTML or dangerous URLs. A handwritten Markdown parser
 would break the repository's existing links, code fences and tables. It has
 no transitive dependencies and is never linked into product binaries.
 
+Build-only API assurance: `github.com/sudorandom/protoc-gen-connect-openapi`
+**v0.19.1** (MIT, released 2025-08-07) is isolated under
+`tools/pins/connect-openapi`. It translates Connect JSON protobuf descriptors
+and their Protovalidate rules to OpenAPI 3.1; a handwritten schema would drift
+from the served contract. The tool's transitive modules stay out of the product
+module. `schemathesis` **4.31.1** (MIT, uploaded 2026-10-14) and `pytest` are
+locked with hashes in `tools/api/uv.lock`, using the same seven-day cooldown as
+the SDKs. They generate positive and negative read-only cases against a
+disposable local server. No Python dependency is shipped or used by a server.
+
 | Module | Purpose | Licence | Justification |
 |---|---|---|---|
 | `github.com/jackc/pgx/v5` | PostgreSQL driver + pool | MIT | De-facto standard; needed for COPY-free, typed, context-aware access |

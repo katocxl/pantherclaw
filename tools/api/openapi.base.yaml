@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+openapi: 3.1.0
+info:
+  title: PantherClaw Connect JSON API
+  version: v1
+  description: >-
+    Generated from the checked-in protobuf API. This describes the Connect
+    JSON wire shape. Runtime authorization, plan state, step-up, tenant RLS
+    and cross-field validation remain authoritative on the server. Gateway
+    mTLS and streaming protocols need their dedicated integration tests.

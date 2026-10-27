@@ -31,6 +31,7 @@ import (
 var assets embed.FS
 
 const sourceBase = "https://github.com/katocxl/pantherclaw/blob/main/"
+const imageBase = "https://raw.githubusercontent.com/katocxl/pantherclaw/main/"
 
 type entry struct {
 	Title string `json:"title"`
@@ -57,7 +58,7 @@ func main() {
 }
 
 func selected(root string) ([]string, error) {
-	b, err := os.ReadFile(filepath.Join(root, "docs/site.json"))
+	b, err := os.ReadFile(filepath.Join(root, "docs/site.json")) //nolint:gosec // The caller explicitly selects the repository root.
 	if err != nil {
 		return nil, err
 	}
@@ -130,12 +131,19 @@ func render(name string, source []byte, published map[string]bool) (entry, []byt
 		switch n := n.(type) {
 		case *ast.Heading:
 			if n.Level == 1 {
-				title = string(n.Text(source))
+				title = headingText(n, source)
 			}
 		case *ast.Link:
 			n.Destination = []byte(destination(name, string(n.Destination), published))
 		case *ast.Image:
-			n.Destination = []byte(destination(name, string(n.Destination), published))
+			target := destination(name, string(n.Destination), nil)
+			n.Destination = []byte(strings.Replace(target, sourceBase, imageBase, 1))
+		case *ast.FencedCodeBlock, *ast.CodeBlock:
+			for i := range n.Lines().Len() {
+				line := n.Lines().At(i)
+				text.Write(line.Value(source))
+				text.WriteByte(' ')
+			}
 		case *ast.Text:
 			text.Write(n.Segment.Value(source))
 			text.WriteByte(' ')
@@ -155,6 +163,22 @@ func render(name string, source []byte, published map[string]bool) (entry, []byt
 	return entry{Title: title, URL: strings.TrimSuffix(name, ".md") + ".html", Text: strings.Join(strings.Fields(text.String()), " ")}, html.Bytes(), nil
 }
 
+func headingText(node ast.Node, source []byte) string {
+	var text strings.Builder
+	_ = ast.Walk(node, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if entering {
+			switch n := n.(type) {
+			case *ast.Text:
+				text.Write(n.Segment.Value(source))
+			case *ast.String:
+				text.Write(n.Value)
+			}
+		}
+		return ast.WalkContinue, nil
+	})
+	return text.String()
+}
+
 func build(root, out string) error {
 	names, err := selected(root)
 	if err != nil {
@@ -171,7 +195,7 @@ func build(root, out string) error {
 	pages := make([]entry, 0, len(names))
 	bodies := make([][]byte, 0, len(names))
 	for _, name := range names {
-		source, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
+		source, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name))) //nolint:gosec // selected validates the public manifest paths and rejects symlinks.
 		if err != nil {
 			return err
 		}
@@ -182,18 +206,18 @@ func build(root, out string) error {
 		pages, bodies = append(pages, item), append(bodies, body)
 	}
 	// Refuse stale output and never recursively remove a caller's directory.
-	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(out), 0o750); err != nil {
 		return err
 	}
-	if err := os.Mkdir(out, 0o755); err != nil {
+	if err := os.Mkdir(out, 0o750); err != nil {
 		return fmt.Errorf("output must be a new directory: %w", err)
 	}
 	write := func(name string, b []byte) error {
 		name = filepath.Join(out, filepath.FromSlash(name))
-		if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(name), 0o750); err != nil {
 			return err
 		}
-		return os.WriteFile(name, b, 0o644)
+		return os.WriteFile(name, b, 0o600)
 	}
 	for _, name := range []string{"site.css", "search.js", "_headers"} {
 		b, err := assets.ReadFile("assets/" + name)
@@ -228,6 +252,6 @@ func build(root, out string) error {
 	if err := write("index.html", index.Bytes()); err != nil {
 		return err
 	}
-	fmt.Printf("docs: built %d pages in %s\n", len(pages), out)
+	_, _ = fmt.Fprintf(os.Stdout, "docs: built %d pages in %s\n", len(pages), out)
 	return nil
 }
