@@ -22,11 +22,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"path"
 	"regexp"
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	_ "time/tzdata" // timezone parameters name IANA zones; do not depend on the host's zone files
 
@@ -162,27 +164,39 @@ func (e *entry) param(name string) (Param, bool) {
 var (
 	idFormat    = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 	paramFormat = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
-	library     = mustLoad()
+	// library loads the embedded templates once, on first use. A template
+	// that does not load is a build defect; it is an error, never a panic
+	// (G0 M11 D120): Load returns it to the server's start-up, which then
+	// does not start, as it does without the engine's guard environment.
+	library = sync.OnceValues(func() (map[string]*entry, error) { return load(files) })
 )
 
-func mustLoad() map[string]*entry {
-	lib, err := load(files)
-	if err != nil {
-		panic(err)
-	}
-	return lib
+// Load loads and checks every embedded template and returns the first
+// defect. The server calls it at start-up; while it fails, List and Get
+// find no template and Render returns its error.
+func Load() error {
+	_, err := library()
+	return err
 }
 
-// load reads and checks every embedded template. A template that does not
-// load is a build defect, so mustLoad panics on it.
-func load(fsys embed.FS) (map[string]*entry, error) {
-	names, err := fsys.ReadDir(".")
+// loaded is the library, empty when it did not load.
+func loaded() map[string]*entry {
+	l, err := library()
+	if err != nil {
+		return nil
+	}
+	return l
+}
+
+// load reads and checks every embedded template.
+func load(fsys fs.FS) (map[string]*entry, error) {
+	names, err := fs.ReadDir(fsys, ".")
 	if err != nil {
 		return nil, err
 	}
 	lib := map[string]*entry{}
 	for _, n := range names {
-		raw, err := fsys.ReadFile(n.Name())
+		raw, err := fs.ReadFile(fsys, n.Name())
 		if err != nil {
 			return nil, err
 		}
@@ -477,8 +491,9 @@ func decodeCond(n *yaml.Node) (cond, error) {
 
 // List returns every template, sorted by id.
 func List() []Template {
-	out := make([]Template, 0, len(library))
-	for _, e := range library {
+	l := loaded()
+	out := make([]Template, 0, len(l))
+	for _, e := range l {
 		out = append(out, e.t.clone())
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
@@ -487,7 +502,7 @@ func List() []Template {
 
 // Get returns the template with id.
 func Get(id string) (Template, bool) {
-	e, ok := library[id]
+	e, ok := loaded()[id]
 	if !ok {
 		return Template{}, false
 	}
@@ -498,7 +513,7 @@ func Get(id string) (Template, bool) {
 // declarations, the definition with its placeholders and directives, and
 // its baseline tests.
 func Source(id string) ([]byte, bool) {
-	e, ok := library[id]
+	e, ok := loaded()[id]
 	if !ok {
 		return nil, false
 	}

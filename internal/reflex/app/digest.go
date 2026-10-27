@@ -130,7 +130,7 @@ type digestDispatchWorker struct {
 }
 
 func (w *digestDispatchWorker) Work(ctx context.Context, _ *river.Job[DigestDispatchArgs]) error {
-	refs, err := w.pool.CrossOrgList(ctx, db.ListActiveOrgs, 10000)
+	refs, err := w.pool.CrossOrgListAll(ctx, db.ListActiveOrgs, db.ListerPageSize)
 	if err != nil || len(refs) == 0 {
 		return err
 	}

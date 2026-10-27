@@ -50,7 +50,7 @@ func (b *Bootstrap) CreateOrg(ctx context.Context, name, adminEmail string) (ids
 			return ids.OrgID{}, credential.Token{}, err
 		}
 	}
-	refs, err := b.pool.CrossOrgList(ctx, db.ListActiveOrgs, 10000)
+	refs, err := b.pool.CrossOrgListAll(ctx, db.ListActiveOrgs, db.ListerPageSize)
 	if err != nil {
 		return ids.OrgID{}, credential.Token{}, err
 	}

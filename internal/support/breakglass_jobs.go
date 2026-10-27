@@ -5,7 +5,6 @@ package support
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
 	"github.com/riverqueue/river"
@@ -55,12 +54,9 @@ type breakGlassSweepWorker struct {
 }
 
 func (w *breakGlassSweepWorker) Work(ctx context.Context, _ *river.Job[breakGlassSweepArgs]) error {
-	refs, err := w.s.pool.CrossOrgList(ctx, db.ListAllOrgs, 10000)
+	refs, err := w.s.pool.CrossOrgListAll(ctx, db.ListAllOrgs, db.ListerPageSize)
 	if err != nil {
 		return err
-	}
-	if len(refs) == 10000 {
-		w.s.log.WarnContext(ctx, "support.breakglass_sweep_cap", slog.Int("orgs", len(refs)))
 	}
 	for _, r := range refs {
 		if err := w.s.ExpireBreakGlass(ctx, r.Org); err != nil {

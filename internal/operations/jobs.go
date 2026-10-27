@@ -71,7 +71,7 @@ type metricsDispatcher struct {
 // Work lists orgs through the audited lister (HR-054) and enqueues one job
 // per org (D3).
 func (w *metricsDispatcher) Work(ctx context.Context, _ *river.Job[MetricsDispatchArgs]) error {
-	refs, err := w.pool.CrossOrgList(ctx, db.ListActiveOrgs, 10000)
+	refs, err := w.pool.CrossOrgListAll(ctx, db.ListActiveOrgs, db.ListerPageSize)
 	if err != nil || len(refs) == 0 {
 		return err
 	}

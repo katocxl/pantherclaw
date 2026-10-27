@@ -20,7 +20,10 @@ import (
 // connections due their daily org scan; a connection is due once a day.
 const DailyScanEvery = time.Hour
 
-const maxOrgsPerDispatch = 1000
+// dispatchPageSize is how many orgs one lister page of the daily-scan
+// dispatcher lists and one InsertMany enqueues; the dispatcher pages
+// through every active org (D45).
+const dispatchPageSize = 1000
 
 // DailyScanOrgArgs asks for one org's daily org scans to be scheduled.
 type DailyScanOrgArgs struct {
@@ -60,25 +63,42 @@ func (DailyScanDispatchArgs) Kind() string { return "github.daily_scans_dispatch
 type dailyScanDispatcher struct {
 	river.WorkerDefaults[DailyScanDispatchArgs]
 	pool *db.Pool
+	// pageSize is the lister page size and so the bound of one InsertMany;
+	// zero means dispatchPageSize. insert enqueues one page; nil means the
+	// River client of the job's context. Tests set both.
+	pageSize int
+	insert   func(ctx context.Context, params []river.InsertManyParams) error
 }
 
+// Work lists the active orgs in pages through the audited lister (HR-054,
+// D45) and enqueues each page's scans with one InsertMany, so no insert
+// is larger than a page.
 func (w *dailyScanDispatcher) Work(ctx context.Context, _ *river.Job[DailyScanDispatchArgs]) error {
-	refs, err := w.pool.CrossOrgList(ctx, db.ListActiveOrgs, maxOrgsPerDispatch)
-	if err != nil || len(refs) == 0 {
-		return err
+	insert := w.insert
+	if insert == nil {
+		client, err := river.ClientFromContextSafely[jobs.TxType](ctx)
+		if err != nil {
+			return fmt.Errorf("github scans: %w", err)
+		}
+		insert = func(ctx context.Context, params []river.InsertManyParams) error {
+			_, err := client.InsertMany(ctx, params)
+			return err
+		}
 	}
-	client, err := river.ClientFromContextSafely[jobs.TxType](ctx)
-	if err != nil {
-		return fmt.Errorf("github scans: %w", err)
+	size := w.pageSize
+	if size == 0 {
+		size = dispatchPageSize
 	}
-	params := make([]river.InsertManyParams, 0, len(refs))
-	for _, r := range refs {
-		params = append(params, river.InsertManyParams{Args: DailyScanOrgArgs{Org: r.Org}})
-	}
-	if _, err := client.InsertMany(ctx, params); err != nil {
-		return fmt.Errorf("github scans: enqueue: %w", err)
-	}
-	return nil
+	return w.pool.CrossOrgPages(ctx, db.ListActiveOrgs, size, func(page []db.OrgRef) error {
+		params := make([]river.InsertManyParams, 0, len(page))
+		for _, r := range page {
+			params = append(params, river.InsertManyParams{Args: DailyScanOrgArgs{Org: r.Org}})
+		}
+		if err := insert(ctx, params); err != nil {
+			return fmt.Errorf("github scans: enqueue: %w", err)
+		}
+		return nil
+	})
 }
 
 // Register adds the daily-scan workers to reg.

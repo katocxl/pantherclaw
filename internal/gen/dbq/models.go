@@ -1138,21 +1138,22 @@ type PcConnectionRoute struct {
 }
 
 type PcConnectionTest struct {
-	OrgID          ids.OrgID
-	ID             ids.UUID
-	ConnectionID   ids.UUID
-	Kind           string
-	Operation      *string
-	State          string
-	GatewayID      *ids.UUID
-	VerificationID *ids.UUID
-	TokensAttempt  *int32
-	Result         *string
-	Checks         []byte
-	DetailSha256   []byte
-	RequestedBy    string
-	CreatedAt      time.Time
-	FinishedAt     *time.Time
+	OrgID              ids.OrgID
+	ID                 ids.UUID
+	ConnectionID       ids.UUID
+	Kind               string
+	Operation          *string
+	State              string
+	GatewayID          *ids.UUID
+	VerificationID     *ids.UUID
+	TokensAttempt      *int32
+	Result             *string
+	Checks             []byte
+	DetailSha256       []byte
+	RequestedBy        string
+	CreatedAt          time.Time
+	FinishedAt         *time.Time
+	ConnectionRevision *int32
 }
 
 type PcConnectorInstance struct {

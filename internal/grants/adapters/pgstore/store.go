@@ -240,6 +240,23 @@ func (s *Store) Envelopes(ctx context.Context, org ids.OrgID, scopes []domain.Sc
 	return out, err
 }
 
+// LiveLimitsInTx implements app.LiveLimitsTx.
+func (s *Store) LiveLimitsInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID) ([]app.StoredLimits, error) {
+	rows, err := dbq.New(tx).LiveLimits(ctx, org)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]app.StoredLimits, 0, len(rows))
+	for _, r := range rows {
+		lim, err := domain.DecodeLimits(r.Limits)
+		if err != nil {
+			return nil, fmt.Errorf("grants: stored limits of %s %s: %w", r.Kind, r.ID, err)
+		}
+		out = append(out, app.StoredLimits{Kind: r.Kind, ID: r.ID, Limits: lim})
+	}
+	return out, nil
+}
+
 // EnvelopesInTx is Envelopes inside the caller's transaction.
 func (s *Store) EnvelopesInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, scopes []domain.Scope) ([]domain.Envelope, error) {
 	keys := make([]string, 0, len(scopes))

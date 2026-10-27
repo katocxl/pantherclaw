@@ -854,7 +854,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err := registerAutomationsEngine(rs, d, workload, autos); err != nil {
 		return nil, err
 	}
-	registerAutomationTemplates(rs, d, autos)
+	if err := registerAutomationTemplates(rs, d, autos); err != nil {
+		return nil, err
+	}
 	automationTriggers, err := registerAutomationTriggers(rs, d, autos)
 	if err != nil {
 		return nil, err
@@ -1143,7 +1145,7 @@ func registerAuthorityAdmin(rs *connect.Server, d apiDeps, grants *grantsapp.Ser
 	}
 	pantherclawv1connect.RegisterPackageServiceHandler(rs, packagesrpc.New(protectPackages(&defsapp.Admin{
 		Importer: &defsapp.Importer{Roots: roots, Repo: defs, Keys: defs, Clock: clock.System{}}, Reads: defs, Authz: authz,
-		Ents: d.billing,
+		Ents: d.billing, Checks: activationChecks(d.pool, d.cel), Pool: d.pool,
 	}, d)))
 	registerPolicyGate(rs, d)
 	return nil

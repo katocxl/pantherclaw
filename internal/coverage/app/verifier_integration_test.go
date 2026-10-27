@@ -220,6 +220,30 @@ func TestHR210_TheServersVerifierLiftsTheTestedRead(t *testing.T) {
 	}
 }
 
+// TestHR211_ATestRequestedBeforeAChangeNeverVouches (v0.1.0 known limit,
+// migration 00185): a target-verifier test records the connection revision
+// it was requested against, so one requested before a new revision but
+// finished after it does not vouch for the changed connection; a test
+// requested after the change does.
+func TestHR211_ATestRequestedBeforeAChangeNeverVouches(t *testing.T) {
+	const op = "payments.refund.get"
+	f := newFixture(t)
+	f.boundAnHourAgo(t)
+	open := ids.NewV7()
+	f.exec(t, `INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, operation, requested_by, verification_id)
+		VALUES ($1, $2, $3, 'target_verifier', $4, 'test', $5)`, f.org, open, f.conn, op, f.verificationTask(t, f.conn, op))
+	f.exec(t, "UPDATE pc.connections SET base_url = 'https://api2.example.com', revision = revision + 1, updated_at = now() WHERE id = $1", f.conn)
+	f.exec(t, `UPDATE pc.connection_tests SET state = 'DONE', result = 'PASSED', finished_at = now() + interval '1 second' WHERE id = $1`, open)
+	if at := f.lastPassed(t, f.conn, op); at != nil {
+		t.Fatalf("a test requested before the change vouches: %v", at)
+	}
+	after := f.dbNow(t).Add(2 * time.Second)
+	f.addTest(t, f.conn, "target_verifier", op, "DONE", "PASSED", after)
+	if at := f.lastPassed(t, f.conn, op); at == nil || !at.Equal(after.Truncate(time.Microsecond)) {
+		t.Fatalf("a test requested after the change: %v, want %v", at, after)
+	}
+}
+
 // TestHR211_AChangedConnectionDropsTheVerifierLift: a passing
 // target-verifier test vouches only for the connection it ran against. A
 // new revision of the connection (its base URL here), a newly sealed

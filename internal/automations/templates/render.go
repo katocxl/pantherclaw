@@ -208,7 +208,11 @@ func (v *values) substitute(name string) *yaml.Node {
 // template's baseline tests for that document. Unknown, missing or invalid
 // parameters are an ErrParams error listing each one.
 func Render(id string, params map[string]string) ([]byte, []TestCase, error) {
-	e, ok := library[id]
+	l, err := library()
+	if err != nil {
+		return nil, nil, err
+	}
+	e, ok := l[id]
 	if !ok {
 		return nil, nil, fmt.Errorf("%w %q", ErrUnknown, id)
 	}
