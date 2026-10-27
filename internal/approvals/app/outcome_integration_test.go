@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	approvals "github.com/katocxl/pantherclaw/internal/approvals/app"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	notifapp "github.com/katocxl/pantherclaw/internal/notifications/app"
 	notifdomain "github.com/katocxl/pantherclaw/internal/notifications/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -99,5 +100,40 @@ func TestHR173_TheOutcomeIsToldOnce(t *testing.T) {
 	}
 	if m := n.of("approval.multi_person_completed"); len(m) != 1 || !slices.Equal(m[0].Personal, []ids.UUID{f.carol.id}) {
 		t.Fatalf("multi-person notice %+v", m)
+	}
+}
+
+// TestHR039_ARequestExpiredAtUseIsTold (slice 211c): a request the
+// finalization finds past its deadline is expired there and its outcome
+// told in the same transaction, once, as the janitor's expiry is; the
+// janitor then finds nothing more to tell. A request still live is left
+// alone and told nothing.
+func TestHR039_ARequestExpiredAtUseIsTold(t *testing.T) {
+	f := newFx(t, 1)
+	n := &notes{}
+	gateway := evdomain.Actor{Type: "gateway", ID: "gw-1"}
+	expireAtUse := func(id ids.UUID) {
+		t.Helper()
+		if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+			return approvals.ExpireAtUse(ctx, tx, n, f.org, id, gateway)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	late := f.request(1)
+	expireAtUse(late)
+	if e := n.of("approval.expired"); len(e) != 0 {
+		t.Fatalf("a live request was told it expired: %+v", e)
+	}
+	f.d.AdminExec(t, `UPDATE pc.approval_requests SET created_at = now() - interval '2 hours', deadline_at = date_trunc('second', now()) - interval '1 minute'
+		WHERE id = $1`, late)
+	expireAtUse(late)
+	e := n.of("approval.expired")
+	if len(e) != 1 || e[0].Params["request"] != late.String() || !slices.Equal(e[0].Personal, []ids.UUID{f.alice.id}) {
+		t.Fatalf("expiry at use notice %+v", e)
+	}
+	expireAtUse(late)
+	if _, err := approvals.SweepOrg(context.Background(), f.p, n, f.org); err != nil || len(n.of("approval.expired")) != 1 {
+		t.Fatalf("an expiry at use was told again: %v", err)
 	}
 }

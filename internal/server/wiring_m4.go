@@ -12,8 +12,10 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	covapp "github.com/katocxl/pantherclaw/internal/coverage/app"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
+	defsapp "github.com/katocxl/pantherclaw/internal/definitions/app"
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
+	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
@@ -58,5 +60,15 @@ func authorityReader(pool *db.Pool, limits celenv.Limits) *pgauthority.Reader {
 		Pool: pool, Definitions: &defspg.Store{Pool: pool}, Policies: &polpg.Store{Pool: pool},
 		FactStore: &factspg.Store{Pool: pool}, Grants: &grantspg.Store{Pool: pool},
 		Limits: limits, Budget: policyapp.DefaultBudget,
+	}
+}
+
+// activationChecks re-check, when a package version is activated, the
+// published policy (G0 M4) and the limits of live grants and guardrails
+// (G0 M8) against the definitions as they will be.
+func activationChecks(pool *db.Pool, limits celenv.Limits) []defsapp.ActivationCheck {
+	return []defsapp.ActivationCheck{
+		policyapp.ActivationCheck{Policies: &polpg.Store{Pool: pool}, Facts: &factspg.Store{Pool: pool}, Limits: limits},
+		grantsapp.ActivationCheck{Limits: &grantspg.Store{Pool: pool}},
 	}
 }

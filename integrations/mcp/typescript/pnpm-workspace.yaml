@@ -17,8 +17,9 @@ minimumReleaseAgeExclude:
 # Advisory fixes in transitive development dependencies (osv-scanner):
 # GHSA-27r3-jxmh-p828 (body-parser), GHSA-333x-w4r6-6crp, GHSA-w74x-v6f9-j3xg,
 # GHSA-wjr9-j795-jxcr, GHSA-xhq7-xmqj-769h (fast-uri) and GHSA-rxp7-6hxx-x8q5
-# (ip-address).
+# (ip-address), GHSA-6pq8-jhm2-2vcw (qs).
 overrides:
   body-parser: 2.4.0
   fast-uri: 3.1.9
   ip-address: 10.7.4
+  qs: 6.16.1

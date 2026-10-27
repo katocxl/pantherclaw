@@ -775,6 +775,48 @@ func (q *Queries) ListGrants(ctx context.Context, arg ListGrantsParams) ([]ListG
 	return items, nil
 }
 
+const liveLimits = `-- name: LiveLimits :many
+SELECT 'grant'::text AS kind, g.id, r.limits
+FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+WHERE g.org_id = $1 AND g.state = 'ACTIVE' AND r.expires_at > now() AND octet_length(r.limits) > 2
+UNION ALL
+SELECT 'guardrail'::text AS kind, e.id, r.limits
+FROM pc.envelopes e
+JOIN pc.envelope_revisions r ON r.org_id = e.org_id AND r.envelope_id = e.id AND r.revision = e.current_revision
+WHERE e.org_id = $1 AND octet_length(r.limits) > 2
+ORDER BY kind, id
+`
+
+type LiveLimitsRow struct {
+	Kind   string
+	ID     ids.UUID
+	Limits []byte
+}
+
+// LiveLimits returns the limits of the org's active, unexpired grants and
+// of its guardrails, at their current revisions, when they set any; a
+// package activation re-checks them (G0 M8).
+func (q *Queries) LiveLimits(ctx context.Context, orgID ids.OrgID) ([]LiveLimitsRow, error) {
+	rows, err := q.db.Query(ctx, liveLimits, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LiveLimitsRow{}
+	for rows.Next() {
+		var i LiveLimitsRow
+		if err := rows.Scan(&i.Kind, &i.ID, &i.Limits); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockGrant = `-- name: LockGrant :one
 SELECT state, current_revision, children_total
 FROM pc.grants
