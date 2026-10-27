@@ -19,6 +19,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/evidence/adapters/evidencerpc"
 	"github.com/katocxl/pantherclaw/internal/evidence/anchor"
 	"github.com/katocxl/pantherclaw/internal/evidence/anchoring"
+	"github.com/katocxl/pantherclaw/internal/evidence/capture"
 	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/checkpoints"
 	"github.com/katocxl/pantherclaw/internal/evidence/keydocs"
@@ -45,7 +46,7 @@ func mountEvidenceKeys(mux *http.ServeMux, d apiDeps) {
 // registerEvidenceWorkers adds the checkpoint and daily verification jobs
 // (G0 M7 design decision 8, HR-194) and returns their schedules.
 func registerEvidenceWorkers(reg *jobs.Registry, cfg *Config, pool *db.Pool, keyReg *keys.Registry,
-	notify checkpoints.Notifier, autos *automationsCore, bill *billing.Service, log *slog.Logger,
+	notify checkpoints.Notifier, autos *automationsCore, bill *billing.Service, captures *captureServices, log *slog.Logger,
 ) ([]*river.PeriodicJob, error) {
 	svc := &checkpoints.Service{
 		Pool: pool, Keys: keyReg, LogOrigin: cfg.logOrigin(), Cosign: cfg.Evidence.MLDSACosign, Notify: notify, Log: log,
@@ -57,6 +58,9 @@ func registerEvidenceWorkers(reg *jobs.Registry, cfg *Config, pool *db.Pool, key
 	if err != nil {
 		return nil, err
 	}
+	// A pack's payload captures are opened through the audited read, as its
+	// creator (HR-199).
+	packs.Captures = capture.PackSource{Service: captures.service(pool)}
 	if err := packbuild.Register(reg, packs); err != nil {
 		return nil, err
 	}
@@ -157,9 +161,8 @@ func registerEvidence(rs *connect.Server, d apiDeps) (*evapp.Service, error) {
 
 // newPackBuilder builds evidence packs in the worker (design decision 15):
 // signed with the evidence_packs key, co-signed with ML-DSA-65 when
-// evidence.mldsa_cosign is on. Payload captures plug in when capture
-// (migration 00073) is in; until then a pack that asks for them records the
-// gap.
+// evidence.mldsa_cosign is on. registerEvidenceWorkers plugs in payload
+// captures.
 func newPackBuilder(cfg *Config, pool *db.Pool, keyReg *keys.Registry, autos *automationsCore, bill *billing.Service,
 	log *slog.Logger,
 ) (*packbuild.Service, error) {

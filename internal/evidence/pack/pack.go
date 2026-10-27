@@ -99,6 +99,10 @@ const (
 	// KindAutomation is an automation execution's record (G0 M11 part 2 D30):
 	// the execution, its grants, runs and gates.
 	KindAutomation = "automation"
+	// KindCapture is an opened payload capture (HR-199):
+	// captures/<transaction>/<direction>.bin, the body as captured, only
+	// in a pack whose creator holds evidence.read_restricted and asked.
+	KindCapture = "capture"
 )
 
 // Scope kinds (design decision 15).

@@ -612,8 +612,13 @@ func (b *builder) captures() error {
 			b.gap("captures of "+ev.Transaction.ID.String(), pack.GapOutsidePermission, "evidence.read_restricted is not held where its agent lives")
 			continue
 		}
-		files, err := b.s.Captures.Captures(b.ctx, b.org, ev.Transaction.ID)
-		if err != nil {
+		files, err := b.s.Captures.Captures(b.ctx, b.org, b.r.id, ev.Transaction.ID)
+		if pcerr.CodeOf(err) == pcerr.PermissionDenied {
+			// The audited read refused the creator (HR-199: a person,
+			// never an automation's identity): a gap, not a failed pack.
+			b.gap("captures of "+ev.Transaction.ID.String(), pack.GapOutsidePermission, "the audited capture read refused the pack's creator")
+			continue
+		} else if err != nil {
 			return err
 		}
 		for _, f := range files {

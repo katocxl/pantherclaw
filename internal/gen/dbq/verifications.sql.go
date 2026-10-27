@@ -935,6 +935,50 @@ func (q *Queries) TransactionEffect(ctx context.Context, orgID ids.OrgID, iD ids
 	return i, err
 }
 
+const unknownConsequences = `-- name: UnknownConsequences :many
+SELECT c.position, c.operation, c.target_type, c.target_id
+FROM pc.decision_consequences c
+WHERE c.org_id = $1 AND c.transaction_id = $2 AND c.state = 'UNKNOWN'
+  AND c.evaluation = (SELECT max(d.evaluation) FROM pc.decision_consequences d
+                      WHERE d.org_id = c.org_id AND d.transaction_id = c.transaction_id)
+ORDER BY c.position
+`
+
+type UnknownConsequencesRow struct {
+	Position   int32
+	Operation  string
+	TargetType string
+	TargetID   string
+}
+
+// UnknownConsequences are the consequences the transaction's latest
+// evaluation could not rule out (UNKNOWN). They name no environment, so
+// none is looked up; each is audited as not verified (G0 M8, W1c).
+func (q *Queries) UnknownConsequences(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID) ([]UnknownConsequencesRow, error) {
+	rows, err := q.db.Query(ctx, unknownConsequences, orgID, transactionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UnknownConsequencesRow{}
+	for rows.Next() {
+		var i UnknownConsequencesRow
+		if err := rows.Scan(
+			&i.Position,
+			&i.Operation,
+			&i.TargetType,
+			&i.TargetID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const verifierTestBasis = `-- name: VerifierTestBasis :one
 SELECT c.state AS connection_state, c.access_mode, c.package, k.kill_switch
 FROM pc.connection_tests t

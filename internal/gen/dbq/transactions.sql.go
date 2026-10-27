@@ -418,17 +418,20 @@ FROM pc.reconciliation_tasks k
 JOIN pc.transactions t ON t.org_id = k.org_id AND t.id = k.transaction_id
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 WHERE k.org_id = $1
-  AND (coalesce($2::uuid, '00000000-0000-0000-0000-000000000000') = '00000000-0000-0000-0000-000000000000'
-       OR k.id < $2::uuid)
-  AND (cardinality($3::text[]) = 0 OR k.state = ANY ($3::text[]))
-  AND (cardinality($4::text[]) = 0 OR k.kind = ANY ($4::text[]))
-  AND ($5::uuid IS NULL OR k.transaction_id = $5::uuid)
+  AND ($2::bool OR r.agent_id = ANY ($3::text[]::uuid[]))
+  AND (coalesce($4::uuid, '00000000-0000-0000-0000-000000000000') = '00000000-0000-0000-0000-000000000000'
+       OR k.id < $4::uuid)
+  AND (cardinality($5::text[]) = 0 OR k.state = ANY ($5::text[]))
+  AND (cardinality($6::text[]) = 0 OR k.kind = ANY ($6::text[]))
+  AND ($7::uuid IS NULL OR k.transaction_id = $7::uuid)
 ORDER BY k.id DESC
-LIMIT $6
+LIMIT $8
 `
 
 type ListReconciliationsParams struct {
 	OrgID         ids.OrgID
+	AllAgents     bool
+	VisibleAgents []string
 	Before        ids.UUID
 	States        []string
 	Kinds         []string
@@ -453,9 +456,14 @@ type ListReconciliationsRow struct {
 }
 
 // Reconciliation (G0 M7 design decisions 3 and 4, HR-192, HR-193).
+// ListReconciliations pages only reconciliations the viewer may read (G0
+// M10 D60): every one with all_agents, otherwise those whose run's agent
+// is in visible_agents.
 func (q *Queries) ListReconciliations(ctx context.Context, arg ListReconciliationsParams) ([]ListReconciliationsRow, error) {
 	rows, err := q.db.Query(ctx, listReconciliations,
 		arg.OrgID,
+		arg.AllAgents,
+		arg.VisibleAgents,
 		arg.Before,
 		arg.States,
 		arg.Kinds,
@@ -517,15 +525,16 @@ WITH x AS (
     LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
     LEFT JOIN pc.execution_attempts a ON a.org_id = p.org_id AND a.permit_id = p.id
     WHERE t.org_id = $3
-      AND (coalesce($4::uuid, '00000000-0000-0000-0000-000000000000') = '00000000-0000-0000-0000-000000000000'
-           OR t.id < $4::uuid)
-      AND ($5::uuid IS NULL OR t.run_id = $5::uuid)
-      AND ($6::uuid IS NULL OR r.agent_id = $6::uuid)
-      AND ($7::uuid IS NULL OR t.connection_id = $7::uuid)
-      AND (cardinality($8::text[]) = 0 OR t.decision = ANY ($8::text[]))
-      AND (cardinality($9::text[]) = 0 OR t.effect_state = ANY ($9::text[]))
-      AND ($10::timestamptz IS NULL OR t.created_at >= $10::timestamptz)
-      AND ($11::timestamptz IS NULL OR t.created_at < $11::timestamptz)
+      AND ($4::bool OR r.agent_id = ANY ($5::text[]::uuid[]))
+      AND (coalesce($6::uuid, '00000000-0000-0000-0000-000000000000') = '00000000-0000-0000-0000-000000000000'
+           OR t.id < $6::uuid)
+      AND ($7::uuid IS NULL OR t.run_id = $7::uuid)
+      AND ($8::uuid IS NULL OR r.agent_id = $8::uuid)
+      AND ($9::uuid IS NULL OR t.connection_id = $9::uuid)
+      AND (cardinality($10::text[]) = 0 OR t.decision = ANY ($10::text[]))
+      AND (cardinality($11::text[]) = 0 OR t.effect_state = ANY ($11::text[]))
+      AND ($12::timestamptz IS NULL OR t.created_at >= $12::timestamptz)
+      AND ($13::timestamptz IS NULL OR t.created_at < $13::timestamptz)
 )
 SELECT id, run_id, agent_id, operation, connection_id, decision, reason_code, effect_state, effect_level_required, effect_level_achieved, mode, evaluations, created_at, permit_state, outcome, execution_state FROM x
 WHERE cardinality($1::text[]) = 0 OR x.execution_state = ANY ($1::text[])
@@ -537,6 +546,8 @@ type ListTransactionsParams struct {
 	ExecutionStates []string
 	PageLimit       int32
 	OrgID           ids.OrgID
+	AllAgents       bool
+	VisibleAgents   []string
 	Before          ids.UUID
 	RunID           *ids.UUID
 	AgentID         *ids.UUID
@@ -573,12 +584,16 @@ type ListTransactionsRow struct {
 // org's tenant transaction; the caller's scope is checked per agent.
 // ListTransactions lists transactions newest first. execution_state
 // mirrors transactions/domain.Execution (a test keeps them equal) so the
-// filter applies before the page is cut.
+// filter applies before the page is cut. Only transactions the viewer may
+// read are paged (G0 M10 D60): every one with all_agents, otherwise those
+// whose run's agent is in visible_agents.
 func (q *Queries) ListTransactions(ctx context.Context, arg ListTransactionsParams) ([]ListTransactionsRow, error) {
 	rows, err := q.db.Query(ctx, listTransactions,
 		arg.ExecutionStates,
 		arg.PageLimit,
 		arg.OrgID,
+		arg.AllAgents,
+		arg.VisibleAgents,
 		arg.Before,
 		arg.RunID,
 		arg.AgentID,

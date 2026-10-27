@@ -103,6 +103,17 @@ WHERE c.org_id = sqlc.arg(org_id) AND c.transaction_id = sqlc.arg(transaction_id
                       WHERE d.org_id = c.org_id AND d.transaction_id = c.transaction_id)
 ORDER BY c.position;
 
+-- UnknownConsequences are the consequences the transaction's latest
+-- evaluation could not rule out (UNKNOWN). They name no environment, so
+-- none is looked up; each is audited as not verified (G0 M8, W1c).
+-- name: UnknownConsequences :many
+SELECT c.position, c.operation, c.target_type, c.target_id
+FROM pc.decision_consequences c
+WHERE c.org_id = sqlc.arg(org_id) AND c.transaction_id = sqlc.arg(transaction_id) AND c.state = 'UNKNOWN'
+  AND c.evaluation = (SELECT max(d.evaluation) FROM pc.decision_consequences d
+                      WHERE d.org_id = c.org_id AND d.transaction_id = c.transaction_id)
+ORDER BY c.position;
+
 -- InsertConsequenceTransaction records a consequence of parent as its own
 -- transaction: the parent's run, gateway, connection, grant and mode,
 -- decided with it (ALLOW), never dispatched.

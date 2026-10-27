@@ -90,13 +90,14 @@ var orgEventKinds = []string{
 	"audit.security.kill_switch_engaged", "audit.security.kill_switch_restored",
 }
 
-// CaptureSource reads the payload captures of transactions for a pack. It
-// is nil until payload capture (migration 00073, slice B9) is in; a pack
-// that asks for captures then records the gap "not_captured".
+// CaptureSource reads the payload captures of transactions for a pack
+// (capture.PackSource). Without one, a pack that asks for captures records
+// the gap "not_captured".
 type CaptureSource interface {
 	// Captures returns the opened captures of txn as pack files under
-	// captures/<txn>/, after an audited read (HR-199).
-	Captures(ctx context.Context, org ids.OrgID, txn ids.UUID) ([]pack.File, error)
+	// captures/<txn>/, each after an audited read (HR-199) by the caller
+	// in ctx, the pack's creator, naming pack packID.
+	Captures(ctx context.Context, org ids.OrgID, packID, txn ids.UUID) ([]pack.File, error)
 }
 
 // Service builds packs.
@@ -431,8 +432,11 @@ func (b *builder) scopeIDs() ([]ids.UUID, bool, error) {
 		slices.SortFunc(out, func(x, y ids.UUID) int { return strings.Compare(x.String(), y.String()) })
 		return slices.Compact(out), true, nil
 	}
+	// Every transaction of the scope is listed; each is then read as the
+	// creator, and what they may not read is recorded as a gap.
 	p := dbq.ListTransactionsParams{
-		OrgID: b.org, Decisions: []string{}, ExecutionStates: []string{}, EffectStates: []string{}, PageLimit: pageRows,
+		OrgID: b.org, AllAgents: true, VisibleAgents: []string{}, Decisions: []string{}, ExecutionStates: []string{},
+		EffectStates: []string{}, PageLimit: pageRows,
 	}
 	var err error
 	if sc.Run != "" {

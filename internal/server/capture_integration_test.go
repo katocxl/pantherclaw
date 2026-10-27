@@ -13,12 +13,14 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/capture"
+	"github.com/katocxl/pantherclaw/internal/evidence/pack"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/keystore"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	pccrypto "github.com/katocxl/pantherclaw/internal/platform/crypto"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -134,5 +136,38 @@ func TestHR199_CapturesTravelFromTheGatewayToAnAuditedRead(t *testing.T) {
 	}
 	if _, err := svc.ReadCapture(as(manager, td.RoleRecordsManager), txn, capture.Request, "curious"); err == nil {
 		t.Fatal("whoever configures capture read it")
+	}
+
+	// An evidence pack's captures (G0 M7 deviation 4) go through the same
+	// audited read, as the pack's creator, naming the pack: the request
+	// that was kept, never the response that was dropped.
+	reads := func(reason string) int {
+		var n int
+		if err := p.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+			return tx.QueryRow(ctx, `SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.evidence.payload_read'
+				AND convert_from(body, 'UTF8')::jsonb #>> '{details,reason}' = $1
+				AND convert_from(body, 'UTF8')::jsonb #>> '{details,transaction}' = $2`, reason, txn.String()).Scan(&n)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	src, packID := capture.PackSource{Service: svc}, ids.NewV7()
+	if _, err := src.Captures(as(manager, td.RoleRecordsManager), org, packID, txn); pcerr.CodeOf(err) != pcerr.PermissionDenied {
+		t.Fatalf("a pack by whoever configures capture: %v", err)
+	}
+	if _, err := src.Captures(as(auditor, td.RoleAuditor), ids.New[ids.Org](), packID, txn); pcerr.CodeOf(err) != pcerr.PermissionDenied {
+		t.Fatalf("a pack of another org: %v", err)
+	}
+	if n := reads(capture.PackReason(packID)); n != 0 {
+		t.Fatalf("%d pack reads audited before one was allowed", n)
+	}
+	files, err := src.Captures(as(auditor, td.RoleAuditor), org, packID, txn)
+	if err != nil || len(files) != 1 || files[0].Path != "captures/"+txn.String()+"/request.bin" || files[0].Kind != pack.KindCapture ||
+		string(files[0].Data) != sent {
+		t.Fatalf("the pack's captures = %+v, %v", files, err)
+	}
+	if n := reads(capture.PackReason(packID)); n != 1 {
+		t.Fatalf("%d pack reads audited, want the request's", n)
 	}
 }
