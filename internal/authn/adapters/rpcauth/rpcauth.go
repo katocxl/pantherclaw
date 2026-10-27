@@ -169,7 +169,7 @@ func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authentica
 	return func(ctx context.Context, info *connect.CallInfo, spec connect.Spec) (context.Context, error) {
 		actx, err := authenticate(ctx, info, spec)
 		if err != nil {
-			// A call whose deadline passed or that the client cancelled
+			// A call whose deadline passed or that the client canceled
 			// failed for that reason, not for its credential: answering
 			// 401 would tell a valid session to sign in again.
 			if cerr := contextError(ctx); cerr != nil {

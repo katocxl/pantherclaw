@@ -192,7 +192,10 @@ func TestFixAddsZeroMinimumAnd415AndDropsTheTimeout(t *testing.T) {
 		t.Fatal("an operation without a request body gained a 415")
 	}
 	types := func(schema, prop string) string {
-		b, _ := json.Marshal(map[string]any{"type": raw.Components.Schemas[schema].Properties[prop]["type"], "enum": raw.Components.Schemas[schema].Properties[prop]["enum"], "anyOf": raw.Components.Schemas[schema].Properties[prop]["anyOf"]})
+		b, err := json.Marshal(map[string]any{"type": raw.Components.Schemas[schema].Properties[prop]["type"], "enum": raw.Components.Schemas[schema].Properties[prop]["enum"], "anyOf": raw.Components.Schemas[schema].Properties[prop]["anyOf"]})
+		if err != nil {
+			t.Fatal(err)
+		}
 		return string(b)
 	}
 	for _, c := range []struct{ schema, prop, want string }{
@@ -207,7 +210,10 @@ func TestFixAddsZeroMinimumAnd415AndDropsTheTimeout(t *testing.T) {
 		}
 	}
 	prop := func(name string) string {
-		b, _ := json.Marshal(raw.Components.Schemas["x.v1.Req"].Properties[name])
+		b, err := json.Marshal(raw.Components.Schemas["x.v1.Req"].Properties[name])
+		if err != nil {
+			t.Fatal(err)
+		}
 		return string(b)
 	}
 	for name, want := range map[string]string{

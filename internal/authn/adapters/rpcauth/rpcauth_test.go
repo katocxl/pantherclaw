@@ -156,7 +156,7 @@ func TestHR180_GatewayEnrollmentReachesItsHandlerWithoutAPrincipal(t *testing.T)
 }
 
 // TestAFinishedCallIsNotUnauthenticated: a credential lookup that fails
-// because the call's deadline passed or the client cancelled gives
+// because the call's deadline passed or the client canceled gives
 // deadline_exceeded or canceled, never 401, so a client with a valid
 // session is not sent to sign in again.
 func TestAFinishedCallIsNotUnauthenticated(t *testing.T) {
@@ -175,10 +175,10 @@ func TestAFinishedCallIsNotUnauthenticated(t *testing.T) {
 	if err := call(expired, "forged"); code(err) != connect.CodeDeadlineExceeded {
 		t.Errorf("expired call = %v, want deadline_exceeded", err)
 	}
-	cancelled, cancel := context.WithCancel(context.Background())
+	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := call(cancelled, "forged"); code(err) != connect.CodeCanceled {
-		t.Errorf("cancelled call = %v, want canceled", err)
+	if err := call(canceled, "forged"); code(err) != connect.CodeCanceled {
+		t.Errorf("canceled call = %v, want canceled", err)
 	}
 	// A live call with a bad credential is still unauthenticated.
 	if err := call(context.Background(), "forged"); pcerr.CodeOf(err) != pcerr.Unauthenticated {

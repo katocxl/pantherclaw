@@ -31,7 +31,8 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -537,70 +538,69 @@ func (n *node) scalar() string {
 }
 
 func parse(doc []byte) (*node, error) {
-	dec := json.NewDecoder(bytes.NewReader(doc))
-	dec.UseNumber()
+	dec := jsontext.NewDecoder(bytes.NewReader(doc))
 	n, err := parseValue(dec)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+	if _, err := dec.ReadToken(); !errors.Is(err, io.EOF) {
 		return nil, errors.New("trailing data after the schema")
 	}
 	return n, nil
 }
 
-func parseValue(dec *json.Decoder) (*node, error) {
-	tok, err := dec.Token()
+// parseValue keeps scalars as the exact bytes read, so rewriting the file
+// changes nothing it did not mean to.
+func parseValue(dec *jsontext.Decoder) (*node, error) {
+	switch dec.PeekKind() { //nolint:exhaustive // Only containers are walked; every other kind is a raw value.
+	case '{':
+		if _, err := dec.ReadToken(); err != nil {
+			return nil, err
+		}
+		n := &node{isObj: true}
+		for dec.PeekKind() != '}' {
+			k, err := dec.ReadToken()
+			if err != nil {
+				return nil, err
+			}
+			key := k.String() // The token is void after the next read.
+			v, err := parseValue(dec)
+			if err != nil {
+				return nil, err
+			}
+			n.obj = append(n.obj, member{key, v})
+		}
+		_, err := dec.ReadToken()
+		return n, err
+	case '[':
+		if _, err := dec.ReadToken(); err != nil {
+			return nil, err
+		}
+		n := &node{isArr: true}
+		for dec.PeekKind() != ']' {
+			v, err := parseValue(dec)
+			if err != nil {
+				return nil, err
+			}
+			n.arr = append(n.arr, v)
+		}
+		_, err := dec.ReadToken()
+		return n, err
+	}
+	v, err := dec.ReadValue()
 	if err != nil {
 		return nil, err
 	}
-	switch t := tok.(type) {
-	case json.Delim:
-		switch t {
-		case '{':
-			n := &node{isObj: true}
-			for dec.More() {
-				k, err := dec.Token()
-				if err != nil {
-					return nil, err
-				}
-				v, err := parseValue(dec)
-				if err != nil {
-					return nil, err
-				}
-				n.obj = append(n.obj, member{k.(string), v})
-			}
-			_, err := dec.Token()
-			return n, err
-		case '[':
-			n := &node{isArr: true}
-			for dec.More() {
-				v, err := parseValue(dec)
-				if err != nil {
-					return nil, err
-				}
-				n.arr = append(n.arr, v)
-			}
-			_, err := dec.Token()
-			return n, err
-		}
-		return nil, fmt.Errorf("unexpected %v", t)
-	case string:
-		return &node{raw: quote(t)}, nil
-	case json.Number:
-		return &node{raw: []byte(t)}, nil
-	case bool:
-		return &node{raw: []byte(fmt.Sprint(t))}, nil
-	case nil:
-		return &node{raw: []byte("null")}, nil
-	}
-	return nil, fmt.Errorf("unexpected token %v", tok)
+	return &node{raw: bytes.Clone(v)}, nil
 }
 
-// quote encodes a string the way encoding/json does by default, which is
-// how the generator writes the schema.
+// quote encodes a string the way the generator writes the schema
+// (encoding/json defaults, which escape <, > and &).
 func quote(s string) []byte {
-	b, _ := json.Marshal(s) //nolint:errchkjson // A string always encodes.
+	b, err := json.Marshal(s, jsontext.EscapeForHTML(true))
+	if err != nil {
+		panic(err) // A string always encodes.
+	}
 	return b
 }
 
