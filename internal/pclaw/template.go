@@ -430,13 +430,16 @@ func planEnvelope(ctx context.Context, c clients, o templateOptions, d templateD
 	bounds, limits := d.Envelope.Bounds, d.Envelope.Limits
 	if cur != nil && limits != nil && sameJSON(bounds, []byte("{}")) {
 		bounds = cur.GetBounds()
-		merged, loosened, err := mergeBudgets(cur.GetLimits(), limits, o.update)
+		merged, loosened, kept, err := mergeBudgets(cur.GetLimits(), limits, o.update)
 		if err != nil {
 			return s, fmt.Errorf("guardrail envelope %s: %w", cur.GetId(), err)
 		}
 		limits = merged
 		for _, l := range loosened {
 			s.notes = append(s.notes, "LOOSENING: "+l)
+		}
+		for _, k := range kept {
+			s.notes = append(s.notes, "warning: "+k)
 		}
 		if missing, err := uncovered(bounds, d.Grant.Bounds); err != nil {
 			return s, fmt.Errorf("guardrail envelope %s: %w", cur.GetId(), err)
@@ -471,19 +474,20 @@ func planEnvelope(ctx context.Context, c clients, o templateOptions, d templateD
 // id, keeping every other budget and counter. Where the scope already has
 // a budget of that id, the stricter one stays (D129 L2): a template budget
 // that would raise or otherwise change it replaces it only with update,
-// and is listed in loosened.
-func mergeBudgets(cur, tpl []byte, update bool) (merged []byte, loosened []string, err error) {
+// and is listed in loosened; without update it is not applied and is
+// listed in kept, so the plan says so (D131).
+func mergeBudgets(cur, tpl []byte, update bool) (merged []byte, loosened, kept []string, err error) {
 	limits := map[string]any{}
 	if len(cur) > 0 && string(cur) != "null" {
 		if err := json.Unmarshal(cur, &limits); err != nil {
-			return nil, nil, fmt.Errorf("its limits: %w", err)
+			return nil, nil, nil, fmt.Errorf("its limits: %w", err)
 		}
 	}
 	var add struct {
 		Budgets []map[string]any `json:"budgets"`
 	}
 	if err := json.Unmarshal(tpl, &add); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	have, _ := limits["budgets"].([]any)
 	for _, b := range add.Budgets {
@@ -496,11 +500,16 @@ func mergeBudgets(cur, tpl []byte, update bool) (merged []byte, loosened []strin
 		case update:
 			loosened = append(loosened, fmt.Sprintf("budget %v changes from %v to %v", b["id"], have[i], b))
 			have[i] = b
+		default:
+			old, _ := json.Marshal(have[i], json.Deterministic(true))
+			tplB, _ := json.Marshal(b, json.Deterministic(true))
+			kept = append(kept, fmt.Sprintf("the template's budget %v is not applied: the scope's own budget with that id wins and is kept (%s; the template's: %s). "+
+				"Pass --update to replace it, a loosening", b["id"], old, tplB))
 		}
 	}
 	limits["budgets"] = have
 	merged, err = json.Marshal(limits, json.Deterministic(true))
-	return merged, loosened, err
+	return merged, loosened, kept, err
 }
 
 // notLooser reports whether budget b is the same as old except, at most,
