@@ -27,8 +27,11 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/rootkey"
+	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
+	tdomain "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 type fixture struct {
@@ -255,4 +258,64 @@ func TestHR177_AnImportedVersionWaitsForReview(t *testing.T) {
 	if got := f.reviews(org); !slices.Equal(got, []string{"1.0.0 APPROVED 4", "1.1.0 REJECTED 4"}) {
 		t.Fatalf("after activating 1.0.0 and retiring 1.1.0: %v", got)
 	}
+}
+
+type allowAll struct{}
+
+func (allowAll) Require(tapp.Caller, tdomain.Permission, tdomain.Path) error { return nil }
+
+// refuseRefunds is an activation check that refuses once
+// payments.refund.create is active, recording what it was shown.
+type refuseRefunds struct{ saw []string }
+
+var errRefused = pcerr.New(pcerr.FailedPrecondition, "TEST_REFUSED", "refused")
+
+func (r *refuseRefunds) CheckActivation(_ context.Context, _ db.TenantTx, active []*domain.Definition) error {
+	r.saw = r.saw[:0]
+	for _, d := range active {
+		r.saw = append(r.saw, d.Operation)
+	}
+	if slices.Contains(r.saw, "payments.refund.create") {
+		return errRefused
+	}
+	return nil
+}
+
+// TestHR206_ActivationChecksRunInTheActivatingTransaction (G0 M4 policy
+// compilation, G0 M8 limits): an activation runs its checks in its own
+// transaction, with the version already ACTIVE there, so a check sees the
+// definitions as they will be; a refusal leaves the version REVIEWED. Without a pool to run them in, an activation with checks is
+// refused rather than let through unchecked.
+func TestHR206_ActivationChecksRunInTheActivatingTransaction(t *testing.T) {
+	f := setup(t)
+	org := newOrg(t, f.pool)
+	ctx := tapp.WithCaller(context.Background(), tapp.Caller{Subject: tdomain.Subject{Org: org, Principal: tdomain.PrincipalRef{Kind: tdomain.KindUser, ID: ids.NewV7()}}})
+	if _, err := f.im.Import(ctx, org, "pc.mock-payments", "1.0.0", f.targets(1, "1.0.0"), f.files["1.0.0"], nil); err != nil {
+		t.Fatal(err)
+	}
+	check := &refuseRefunds{}
+	admin := &app.Admin{Importer: f.im, Reads: f.store, Authz: allowAll{}, Checks: []app.ActivationCheck{check}}
+	if _, err := admin.Transition(ctx, "pc.mock-payments", "1.0.0", domain.StateActive); pcerr.ReasonOf(err) != "PACKAGE_CHECKS_UNAVAILABLE" {
+		t.Fatalf("checks without a pool: %v", err)
+	}
+	admin.Pool = f.pool
+	if _, err := admin.Transition(ctx, "pc.mock-payments", "1.0.0", domain.StateActive); !errors.Is(err, errRefused) {
+		t.Fatalf("a refusing check: %v", err)
+	}
+	if !slices.Contains(check.saw, "payments.refund.create") {
+		t.Fatalf("the check saw the definitions before the activation: %v", check.saw)
+	}
+	if st, err := f.store.State(context.Background(), org, "pc.mock-payments", "1.0.0"); err != nil || st != domain.StateReviewed {
+		t.Fatalf("a refused activation changed the state to %s: %v", st, err)
+	}
+	admin.Checks = []app.ActivationCheck{&refuseNothing{}}
+	if v, err := admin.Transition(ctx, "pc.mock-payments", "1.0.0", domain.StateActive); err != nil || v.State != domain.StateActive {
+		t.Fatalf("a passing check: %+v %v", v, err)
+	}
+}
+
+type refuseNothing struct{}
+
+func (*refuseNothing) CheckActivation(context.Context, db.TenantTx, []*domain.Definition) error {
+	return nil
 }

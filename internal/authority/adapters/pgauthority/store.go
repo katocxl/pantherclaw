@@ -17,6 +17,7 @@ import (
 	"time"
 
 	pgapprovals "github.com/katocxl/pantherclaw/internal/approvals/adapters/pgapprovals"
+	approvalsapp "github.com/katocxl/pantherclaw/internal/approvals/app"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
@@ -137,7 +138,8 @@ func (s *Store) Finalize(ctx context.Context, org ids.OrgID, w finalize.Write) e
 			}
 		}
 		if h := ev.Hold; h != nil && h.Expire && h.Request != nil && ev.Decision == adomain.Deny {
-			if err := pgapprovals.Expire(ctx, tx, org, h.Request.ID, actor); err != nil {
+			// An expiry at use is told like the janitor's (slice 211c).
+			if err := approvalsapp.ExpireAtUse(ctx, tx, s.Notify, org, h.Request.ID, actor); err != nil {
 				return err
 			}
 		}
