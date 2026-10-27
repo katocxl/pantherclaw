@@ -115,5 +115,4 @@ func TestParseControlProxy(t *testing.T) {
 	if _, err := ParseControlProxy("http://user:secret@[::1"); err == nil || strings.Contains(err.Error(), "secret") {
 		t.Errorf("error leaks the password: %v", err)
 	}
-
 }
