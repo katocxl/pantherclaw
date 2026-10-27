@@ -281,7 +281,7 @@ func (d *Deletion) tenant(ctx context.Context, account ids.UUID, r db.OrgRef, st
 		if got != state {
 			return nil
 		}
-		// The deletion freezer takes this barrier before the organisation
+		// The deletion freezer takes this barrier before the organization
 		// row. Keep the same order rather than holding the admin row while
 		// waiting for the freezer's exclusive write barrier.
 		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock_shared(hashtextextended('pc.org.write/' || $1::text, 0))", r.Org.String()); err != nil {

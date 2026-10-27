@@ -261,7 +261,7 @@ func verifyDataPart(parts fs.FS, name string, part dataPart, files map[string]da
 				return err
 			}
 			if bundle.Org != org {
-				return errors.New("evidence bundle belongs to another organisation")
+				return errors.New("evidence bundle belongs to another organization")
 			}
 			sub := Verify(bundle, o)
 			for _, check := range sub.Checks {

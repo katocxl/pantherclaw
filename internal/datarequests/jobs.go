@@ -109,7 +109,7 @@ func (w *dailyWorker) Work(ctx context.Context, _ *river.Job[DailyArgs]) error {
 		return err
 	}
 	if len(refs) >= 10000 {
-		return errors.New("datarequests: organisation lister reached its cap")
+		return errors.New("datarequests: organization lister reached its cap")
 	}
 	for _, r := range refs {
 		if r.Org == ids.PlatformOrg {

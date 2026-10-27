@@ -206,7 +206,7 @@ func NewClient(pool *db.Pool, reg *Registry, cfg Config) (*Client, error) {
 
 // ObserveOutcomes calls record with the kind of each job a worker of c
 // worked and the state its attempt ended in (completed, retryable,
-// discarded, cancelled, scheduled), until ctx ends (the pc_river_jobs_total
+// discarded, canceled, scheduled), until ctx ends (the pc_river_jobs_total
 // metric, G0 M13 D30). River drops events rather than wait for a slow
 // subscriber, so a worker is never held up.
 func ObserveOutcomes(ctx context.Context, c *Client, record func(ctx context.Context, kind, state string)) {

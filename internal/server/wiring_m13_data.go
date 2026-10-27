@@ -104,7 +104,7 @@ func mountDataRequests(mux *http.ServeMux, d apiDeps) {
 func registerDataWorkers(ctx context.Context, reg *jobs.Registry, cfg *Config, s *datarequests.Service, log *slog.Logger) ([]*river.PeriodicJob, func(), error) {
 	closePool := func() {}
 	if cfg.DB.DeleterPasswordFile == "" {
-		log.WarnContext(ctx, "organisation erasure is waiting for the dedicated deletion role", slog.String("code", "DATA_DELETER_UNCONFIGURED"))
+		log.WarnContext(ctx, "organization erasure is waiting for the dedicated deletion role", slog.String("code", "DATA_DELETER_UNCONFIGURED"))
 	}
 	if cfg.DB.DeleterPasswordFile != "" {
 		c, err := cfg.dbConfig(db.RoleDeleter, cfg.DB.DeleterPasswordFile, 2)

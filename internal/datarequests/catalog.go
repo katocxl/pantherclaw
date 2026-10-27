@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
-// Package datarequests implements organisation exports and verified deletion.
+// Package datarequests implements organization exports and verified deletion.
 package datarequests
 
 // exportTable is an explicit projection, not a deny-list. Adding a column

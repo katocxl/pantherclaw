@@ -29,15 +29,15 @@ const Window = 7 * 24 * time.Hour
 var (
 	ErrStepUp               = pcerr.New(pcerr.FailedPrecondition, "STEP_UP_REQUIRED", "confirm on the server's security-key page")
 	ErrNotFound             = pcerr.New(pcerr.NotFound, "DATA_REQUEST_NOT_FOUND", "unknown data request")
-	ErrHeld                 = pcerr.New(pcerr.FailedPrecondition, "DELETION_HELD", "an organisation legal hold blocks deletion")
+	ErrHeld                 = pcerr.New(pcerr.FailedPrecondition, "DELETION_HELD", "an organization legal hold blocks deletion")
 	ErrPending              = pcerr.New(pcerr.FailedPrecondition, "DELETION_PENDING", "a deletion is already pending")
 	ErrBuilding             = pcerr.New(pcerr.FailedPrecondition, "EXPORT_IN_PROGRESS", "an export is already building")
 	ErrWindow               = pcerr.New(pcerr.FailedPrecondition, "CANCELLATION_WINDOW_ENDED", "the deletion cancellation window has ended")
 	ErrExportUnavailable    = pcerr.New(pcerr.FailedPrecondition, "EXPORT_UNAVAILABLE", "the export is not ready or has expired")
 	ErrTooLarge             = pcerr.New(pcerr.ResourceExhausted, "EXPORT_TOO_LARGE", "the export exceeds 2 GiB")
-	ErrRole                 = pcerr.New(pcerr.FailedPrecondition, "ROLE_UNAVAILABLE", "the organisation deletion role is not configured")
+	ErrRole                 = pcerr.New(pcerr.FailedPrecondition, "ROLE_UNAVAILABLE", "the organization deletion role is not configured")
 	ErrAwaitingSecurityCopy = pcerr.New(pcerr.FailedPrecondition, "DELETION_AWAITING_SECURITY_COPY", "deletion intent is awaiting confirmation of a durable external security log copy")
-	ErrAdminLimit           = pcerr.New(pcerr.ResourceExhausted, "DELETION_ADMIN_LIMIT", "deletion supports at most 10000 organisation administrators")
+	ErrAdminLimit           = pcerr.New(pcerr.ResourceExhausted, "DELETION_ADMIN_LIMIT", "deletion supports at most 10000 organization administrators")
 )
 
 // Service owns only the application's pool; Deleter is the separately
