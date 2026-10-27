@@ -172,20 +172,12 @@ func (MeterOrgArgs) InsertOpts() river.InsertOpts {
 	}}
 }
 
-// ListerCap is how many active orgs one fan-out lists; more are skipped
-// with a warning (paging the lister is a shared follow-up, D45).
-const ListerCap = 10000
-
-// activeOrgs lists the active orgs through the audited lister (HR-054),
-// warning when the cap cuts the list short.
-func activeOrgs(ctx context.Context, pool *db.Pool, log *slog.Logger, job string) ([]ids.OrgID, error) {
-	refs, err := pool.CrossOrgList(ctx, db.ListActiveOrgs, ListerCap)
+// activeOrgs lists every active org through the audited lister (HR-054),
+// in pages, so no org is skipped however many there are (D45).
+func activeOrgs(ctx context.Context, pool *db.Pool) ([]ids.OrgID, error) {
+	refs, err := pool.CrossOrgListAll(ctx, db.ListActiveOrgs, db.ListerPageSize)
 	if err != nil {
 		return nil, err
-	}
-	if len(refs) >= ListerCap {
-		log.WarnContext(ctx, "usage.lister_cap_reached", slog.String("job", job), slog.Int("cap", ListerCap),
-			slog.String("note", "orgs past the cap are not metered in this run"))
 	}
 	out := make([]ids.OrgID, len(refs))
 	for i, r := range refs {
@@ -202,7 +194,7 @@ type meterDailyWorker struct {
 
 // Work enqueues one meter job per active org.
 func (w *meterDailyWorker) Work(ctx context.Context, _ *river.Job[MeterDailyArgs]) error {
-	orgs, err := activeOrgs(ctx, w.pool, w.log, MeterDailyArgs{}.Kind())
+	orgs, err := activeOrgs(ctx, w.pool)
 	if err != nil || len(orgs) == 0 {
 		return err
 	}
@@ -255,7 +247,7 @@ func (*recountWorker) Timeout(*river.Job[RecountWeeklyArgs]) time.Duration { ret
 // Work recounts each org in turn; an org whose recount fails (for example
 // past the statement timeout) is logged and skipped.
 func (w *recountWorker) Work(ctx context.Context, _ *river.Job[RecountWeeklyArgs]) error {
-	orgs, err := activeOrgs(ctx, w.svc.pool, w.log, RecountWeeklyArgs{}.Kind())
+	orgs, err := activeOrgs(ctx, w.svc.pool)
 	if err != nil {
 		return err
 	}

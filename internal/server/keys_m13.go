@@ -131,12 +131,9 @@ func cmdRotateSigning(ctx context.Context, r rotation, args []string, stdout, st
 	return nil
 }
 
-// maxEpochOrgs bounds the orgs one epoch bump lists.
-const maxEpochOrgs = 10000
-
-// errTooManyOrgs reports a lister result at its bound: some orgs may be
-// missing, so nothing is claimed to be complete.
-var errTooManyOrgs = errors.New("keys bump-epochs: the lister returned its maximum of 10000 orgs; some may be missing")
+// epochPageSize is how many orgs one lister page of an epoch bump lists;
+// the bump pages through every org (D45). Tests lower it.
+var epochPageSize = db.ListerPageSize
 
 // cmdBumpEpochs implements `keys bump-epochs --all --confirm` (G0 M13 D6,
 // HR-373), run after a database restore and before gateways reconnect:
@@ -165,12 +162,9 @@ func cmdBumpEpochs(ctx context.Context, args []string, stdout, stderr io.Writer,
 		return err
 	}
 	defer pool.Close()
-	orgs, err := pool.CrossOrgList(ctx, db.ListAllOrgs, maxEpochOrgs)
+	orgs, err := pool.CrossOrgListAll(ctx, db.ListAllOrgs, epochPageSize)
 	if err != nil {
 		return err
-	}
-	if len(orgs) >= maxEpochOrgs {
-		return errTooManyOrgs
 	}
 	actor := evdomain.Actor{Type: "operator", ID: operatorName()}
 	skipped := 0

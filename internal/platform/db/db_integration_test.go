@@ -473,6 +473,97 @@ func TestHR054_CrossOrgListerIsAuditedAndRestricted(t *testing.T) {
 	}
 }
 
+// TestHR054_CrossOrgListerPagesWithAnAuditedCursor (G0 M13 D45): with a
+// page smaller than the number of orgs, CrossOrgPages returns every org
+// exactly once in org-id order; every page is its own audited call, and
+// the pages after the first record their cursor. The purposes keyed by an
+// account or a billing ref refuse a cursor, a malformed cursor is refused,
+// and a cursor set by one call in a transaction never carries into the
+// next call there.
+func TestHR054_CrossOrgListerPagesWithAnAuditedCursor(t *testing.T) {
+	d := dbtest.New(t)
+	p := d.AppPool(t)
+	ctx := context.Background()
+	for _, name := range []string{"a", "b", "c", "d", "e"} {
+		createOrg(t, p, name)
+	}
+	whole, err := p.CrossOrgList(ctx, db.ListActiveOrgs, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pages [][]db.OrgRef
+	if err := p.CrossOrgPages(ctx, db.ListActiveOrgs, 2, func(page []db.OrgRef) error {
+		pages = append(pages, page)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var paged []db.OrgRef
+	for _, pg := range pages {
+		if len(pg) > 2 {
+			t.Errorf("page of %d rows, want at most 2", len(pg))
+		}
+		paged = append(paged, pg...)
+	}
+	if !slices.Equal(paged, whole) || len(whole) < 6 {
+		t.Fatalf("paged %v, want %v (6 or more orgs)", paged, whole)
+	}
+	all, err := p.CrossOrgListAll(ctx, db.ListActiveOrgs, 2)
+	if err != nil || !slices.Equal(all, whole) {
+		t.Fatalf("CrossOrgListAll = %v %v, want %v", all, err, whole)
+	}
+
+	var first int
+	d.AdminQueryRow(t, "SELECT count(*) FROM pc.cross_org_list_audit WHERE purpose = 'orgs' AND max_rows = 2 AND subject IS NULL", nil, &first)
+	if first != 2 {
+		t.Errorf("first-page audit rows = %d, want 2 (one per paging run)", first)
+	}
+	for _, pg := range pages {
+		if len(pg) < 2 {
+			continue
+		}
+		var n int
+		d.AdminQueryRow(t, "SELECT count(*) FROM pc.cross_org_list_audit WHERE purpose = 'orgs' AND max_rows = 2 AND subject = $1",
+			[]any{"after:" + pg[len(pg)-1].Org.String()}, &n)
+		if n != 2 {
+			t.Errorf("audit rows with the cursor after %s = %d, want 2", pg[len(pg)-1].Org, n)
+		}
+	}
+
+	after := whole[0].Org
+	for _, purpose := range []db.ListerPurpose{db.ListAccountMemberships, db.ListAccountUsers, db.ListBillingLink} {
+		if _, err := p.CrossOrgListWith(ctx, purpose, 10, db.ListerParams{After: after}); err == nil {
+			t.Errorf("purpose %s accepted a cursor", purpose)
+		}
+	}
+	err = p.InGlobalTx(ctx, db.GlobalCrossOrgList, func(ctx context.Context, tx db.GlobalTx) error {
+		if _, err := tx.Exec(ctx, "SELECT set_config('app.lister_after', 'not-a-uuid', true)"); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, "SELECT * FROM pc.cross_org_list('orgs', 10)")
+		return err
+	})
+	if err == nil {
+		t.Error("a malformed cursor was accepted")
+	}
+	err = p.InGlobalTx(ctx, db.GlobalCrossOrgList, func(ctx context.Context, tx db.GlobalTx) error {
+		if _, err := db.CrossOrgListIn(ctx, tx, db.ListActiveOrgs, 10, db.ListerParams{After: whole[len(whole)-1].Org}); err != nil {
+			return err
+		}
+		again, err := db.CrossOrgListIn(ctx, tx, db.ListActiveOrgs, 100, db.ListerParams{})
+		if err != nil {
+			return err
+		}
+		if !slices.Equal(again, whole) {
+			t.Errorf("second call in the transaction = %v, want every org %v", again, whole)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestHR004_ConditionalTransitionHasOneWinner(t *testing.T) {
 	d := dbtest.New(t)
 	p := d.AppPool(t)

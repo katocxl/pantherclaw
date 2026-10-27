@@ -9,7 +9,8 @@
 // Authentication: `pclaw login` stores a CLI session (ADR-0016); every
 // command refreshes the access token when needed, signing the refresh with
 // the device key. Automation can instead set PANTHERCLAW_SERVER and
-// PANTHERCLAW_API_KEY (a pck_ key). The `workload` commands run
+// PANTHERCLAW_API_KEY (a pck_ key). PANTHERCLAW_HTTPS_PROXY, when set,
+// sends the server requests through that proxy. The `workload` commands run
 // inside a workload and authenticate with its key file (PAP/1), never with
 // a user session.
 package pclaw
@@ -81,8 +82,28 @@ func usageText() string {
 	for _, n := range names {
 		b.WriteString("  pclaw " + commands[n].usage + "\n")
 	}
-	b.WriteString("  pclaw version\n\nAutomation: set PANTHERCLAW_SERVER and PANTHERCLAW_API_KEY instead of logging in.\n")
+	b.WriteString("  pclaw version\n\nAutomation: set PANTHERCLAW_SERVER and PANTHERCLAW_API_KEY instead of logging in.\n" +
+		"Proxy: set PANTHERCLAW_HTTPS_PROXY=http://HOST:PORT to reach the server through a proxy; HTTPS_PROXY is ignored.\n")
 	return b.String()
+}
+
+// envHTTPSProxy opts pclaw's control-plane client into a proxy (G0 M2
+// follow-up). It is off by default: HTTPS_PROXY, HTTP_PROXY and NO_PROXY
+// stay ignored (HR-072), and no gateway or egress client reads it.
+const envHTTPSProxy = "PANTHERCLAW_HTTPS_PROXY"
+
+// controlClient is pclaw's client for the configured server, through the
+// proxy PANTHERCLAW_HTTPS_PROXY names, if any (not for loopback servers).
+func controlClient(env Env) (*http.Client, error) {
+	cfg := httpx.ControlConfig{Timeout: 30 * time.Second}
+	if raw, ok := env(envHTTPSProxy); ok && raw != "" {
+		p, err := httpx.ParseControlProxy(raw)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", envHTTPSProxy, err)
+		}
+		cfg.Proxy = p
+	}
+	return httpx.NewControlClient(cfg), nil
 }
 
 // Run executes pclaw and returns the exit code.
@@ -96,7 +117,12 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, env Env, 
 	}
 	if a.http == nil {
 		// Only the configured server is contacted; no redirects (HR-070).
-		a.http = httpx.NewControlClient(httpx.ControlConfig{Timeout: 30 * time.Second})
+		hc, err := controlClient(env)
+		if err != nil {
+			_, _ = fmt.Fprintln(stderr, err)
+			return 2
+		}
+		a.http = hc
 	}
 	if len(args) == 0 {
 		_, _ = fmt.Fprint(stderr, usageText())

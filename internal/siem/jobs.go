@@ -131,7 +131,7 @@ type exportDispatchWorker struct {
 // Work lists orgs through the audited lister (HR-054, D3) and enqueues one
 // job per org; an org without destinations exits at once.
 func (w *exportDispatchWorker) Work(ctx context.Context, _ *river.Job[ExportDispatchArgs]) error {
-	refs, err := w.pool.CrossOrgList(ctx, db.ListActiveOrgs, 10000)
+	refs, err := w.pool.CrossOrgListAll(ctx, db.ListActiveOrgs, db.ListerPageSize)
 	if err != nil || len(refs) == 0 {
 		return err
 	}

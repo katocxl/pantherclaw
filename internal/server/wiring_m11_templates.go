@@ -40,10 +40,16 @@ import (
 
 // registerAutomationTemplates serves TemplateService and ProposalService.
 // Creating from a template creates the automation, its version and its
-// baseline tests in one transaction (D96, D103 T1).
-func registerAutomationTemplates(rs *connect.Server, d apiDeps, core *automationsCore) {
+// baseline tests in one transaction (D96, D103 T1). A built-in template
+// that does not load is an error that reaches cmdServe, so the server does
+// not start (D120).
+func registerAutomationTemplates(rs *connect.Server, d apiDeps, core *automationsCore) error {
+	if err := templates.Load(); err != nil {
+		return fmt.Errorf("automation templates: %w", err)
+	}
 	pantherclawv1connect.RegisterTemplateServiceHandler(rs, templateHandler(d, core))
 	pantherclawv1connect.RegisterProposalServiceHandler(rs, &templatesrpc.ProposalHandler{Pool: d.pool})
+	return nil
 }
 
 // templateHandler creates through core's CreateDraftTx and assurance's

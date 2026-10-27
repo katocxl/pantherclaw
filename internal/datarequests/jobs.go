@@ -104,12 +104,9 @@ type dailyWorker struct {
 }
 
 func (w *dailyWorker) Work(ctx context.Context, _ *river.Job[DailyArgs]) error {
-	refs, err := w.s.Pool.CrossOrgList(ctx, db.ListAllOrgs, 10000)
+	refs, err := w.s.Pool.CrossOrgListAll(ctx, db.ListAllOrgs, db.ListerPageSize)
 	if err != nil {
 		return err
-	}
-	if len(refs) >= 10000 {
-		return errors.New("datarequests: organization lister reached its cap")
 	}
 	for _, r := range refs {
 		if r.Org == ids.PlatformOrg {
