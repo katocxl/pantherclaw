@@ -44,6 +44,7 @@ const (
 	KeyActor      = "actor"
 	KeyRequestID  = "request_id"
 	KeyTraceID    = "trace_id"
+	KeySpanID     = "span_id"
 	KeyTxnID      = "txn_id"
 	KeyOutcome    = "outcome"
 	KeyReasonCode = "reason_code"

@@ -165,6 +165,8 @@ func Bindings(ctx context.Context, q *dbq.Queries, org ids.OrgID, p td.Principal
 		rows, err = q.BindingsOfUser(ctx, org, &p.ID)
 	case td.KindServiceAccount:
 		rows, err = q.BindingsOfServiceAccount(ctx, org, &p.ID)
+	case td.KindSupport:
+		return SupportBindings(ctx, q, org, p.ID)
 	default:
 		return nil, nil
 	}
@@ -209,6 +211,14 @@ func (a *Access) WhoAmI(ctx context.Context) (Identity, error) {
 			rows, err = q.BindingsOfServiceAccount(ctx, c.Org, &c.Principal.ID)
 			if err != nil {
 				return err
+			}
+		case td.KindSupport:
+			// A support session has no user row and no binding rows: its
+			// support roles come from the live grant (G0 M13 D32, D38), and
+			// are shown read-only here so the console can display them.
+			out.DisplayName = c.Principal.String()
+			for _, b := range c.Bindings {
+				out.Bindings = append(out.Bindings, RoleBinding{Role: b.Role, Principal: c.Principal, Scope: b.Scope})
 			}
 		}
 		for _, r := range rows {

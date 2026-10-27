@@ -152,6 +152,14 @@ func TestHR222_00098DownCollapsesTheConnectionScopesAndUpAppliesAgain(t *testing
 		t.Fatalf("%d connection columns before Down, want 2", columns())
 	}
 
+	// A real rollback runs 00181's Down, which drops the org write guards,
+	// before it reaches 00098; this test runs 00098 alone on the full
+	// schema, so it sets the guards on its two tables aside meanwhile.
+	guards := func(op string) {
+		t.Helper()
+		exec("ALTER TABLE pc.facts " + op + " TRIGGER org_write_guard; ALTER TABLE pc.fact_declarations " + op + " TRIGGER org_write_guard")
+	}
+	guards("DISABLE")
 	exec(down)
 	if columns() != 0 {
 		t.Fatalf("%d connection columns after Down", columns())
@@ -167,6 +175,7 @@ func TestHR222_00098DownCollapsesTheConnectionScopesAndUpAppliesAgain(t *testing
 	}
 
 	exec(up)
+	guards("ENABLE")
 	if columns() != 2 {
 		t.Fatalf("%d connection columns after Up again", columns())
 	}

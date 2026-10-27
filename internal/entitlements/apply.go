@@ -181,6 +181,9 @@ func (s *Service) ApplyPlan(ctx context.Context, org ids.OrgID, snap Snapshot) e
 			return err
 		}
 		details["version"] = strconv.FormatInt(version, 10)
+		if _, err := q.RefreshPlanLapse(ctx, org); err != nil {
+			return err
+		}
 		if f := strings.Join(features, ","); len(f) <= 500 {
 			details["features"] = f
 		} else {

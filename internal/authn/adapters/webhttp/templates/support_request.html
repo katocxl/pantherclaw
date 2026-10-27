@@ -1,0 +1,32 @@
+{{template "head" .}}
+{{if .Request.ID.IsZero}}
+<h1>Request support access</h1>
+<p class="note">Ask a customer organization for read-only access for one named task. An org admin there approves or denies it with a security key; nothing is accessible until then, and every call you make under it is recorded in their audit log.</p>
+<form id="support-request" data-path="/support-access/request">
+<p><label>Organization id <input name="org" required value="{{.Org}}" autocomplete="off"></label></p>
+<p><label>Task (at most 200 characters) <input name="task" required maxlength="200" autocomplete="off"></label></p>
+<p><label>Scope <select name="scope">
+<option value="READ_ONLY" selected>Read only</option>
+<option value="READ_ONLY_PLUS_EVIDENCE">Read only, plus restricted evidence</option>
+</select></label></p>
+<p><label>Hours (1 to 72) <input name="hours" type="number" min="1" max="72" value="4" required></label></p>
+<p><button type="submit">Ask with your security key</button></p>
+</form>
+{{else}}
+<h1>Support access request</h1>
+<p>State: <strong>{{.Request.State}}</strong>. Asked at {{.Request.CreatedAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{if eq .Request.State "PENDING"}}; expires unanswered at {{.Request.ExpiresAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}.</p>
+<dl>
+<dt>Organization</dt><dd><code>{{.Org}}</code></dd>
+<dt>Request</dt><dd><code>{{.Request.ID}}</code></dd>
+<dt>Task</dt><dd class="untrusted">{{.Request.Task}}</dd>
+<dt>Scope</dt><dd>{{.Request.Scope}}</dd>
+<dt>Duration</dt><dd>{{.Request.Hours}} hours from the approval</dd>
+</dl>
+{{if eq .Request.State "APPROVED"}}
+<p class="note">Opening a support session replaces this browser's session with a read-only session in the customer's organization, until the grant ends. It needs your security key.</p>
+<p><button type="button" data-action="open" data-path="/support-access/requests/{{.Org}}/{{.Request.ID}}/open">Open a support session with your security key</button></p>
+{{end}}
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/support_access.js"></script>
+{{template "foot" .}}

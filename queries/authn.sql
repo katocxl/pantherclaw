@@ -25,7 +25,7 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id)
 SELECT u.state AS user_state, s.state AS session_state, (s.expires_at > now())::bool AS live
 FROM pc.users u
 JOIN pc.cli_sessions s ON s.org_id = u.org_id AND s.user_id = u.id
-WHERE u.org_id = sqlc.arg(org_id) AND u.id = sqlc.arg(user_id) AND s.id = sqlc.arg(session_id);
+WHERE u.org_id = sqlc.arg(org_id) AND u.id = sqlc.arg(user_id) AND s.id = sqlc.arg(session_id) AND pc.identity_available(u.issuer,u.subject,false);
 
 -- name: AuthServiceAccountKey :one
 SELECT sa.state AS account_state, k.state AS key_state, (k.expires_at > now())::bool AS live

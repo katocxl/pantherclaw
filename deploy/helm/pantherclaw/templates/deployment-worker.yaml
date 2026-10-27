@@ -1,0 +1,99 @@
+{{/*
+SPDX-License-Identifier: BUSL-1.1
+Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+*/}}
+{{- $keys := list (dict "volume" "database" "key" "app-password" "as" "app-password") (dict "volume" "database" "key" "retention-password" "as" "retention-password") (dict "volume" "database-ca" "key" "ca.crt" "as" "ca.crt") (dict "volume" "kek" "key" "kek" "as" "kek") -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pantherclaw.fullname" . }}-worker
+  labels:
+    {{- include "pantherclaw.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels:
+      {{- include "pantherclaw.selector" (dict "root" . "component" "worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pantherclaw.labels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+      annotations:
+        checksum/config: {{ include "pantherclaw.serverConfig" (dict "root" . "role" "worker") | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "pantherclaw.fullname" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        {{- include "pantherclaw.stageSecrets" (dict "root" . "keys" $keys) | nindent 8 }}
+      containers:
+        - name: server
+          image: {{ include "pantherclaw.serverImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["serve", "--config", "/etc/pantherclaw/server.json"]
+          env:
+            {{- include "pantherclaw.env" . | nindent 12 }}
+          ports:
+            # health.addr: /livez and /readyz only (HR-397).
+            - name: health
+              containerPort: {{ .Values.worker.healthPort }}
+          livenessProbe:
+            httpGet: {path: /livez, port: health}
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: {path: /readyz, port: health}
+            periodSeconds: 10
+            failureThreshold: 3
+          startupProbe:
+            httpGet: {path: /livez, port: health}
+            periodSeconds: 2
+            failureThreshold: 90
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/pantherclaw/server.json
+              subPath: server.json
+              readOnly: true
+            - name: secrets
+              mountPath: /etc/pantherclaw/secrets
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "pantherclaw.fullname" . }}-worker
+        - name: secrets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: database
+          secret:
+            secretName: {{ .Values.database.existingSecret }}
+        - name: database-ca
+          secret:
+            secretName: {{ .Values.database.caExistingSecret }}
+        - name: kek
+          secret:
+            secretName: {{ .Values.kek.existingSecret }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

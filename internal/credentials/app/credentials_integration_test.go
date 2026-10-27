@@ -261,7 +261,7 @@ func TestHR182_UploadsMustMatchTheCurrentBinding(t *testing.T) {
 	_, in := e.seal(t, "x")
 
 	bad := in
-	bad.Sealed = append([]byte{0x02}, in.Sealed[1:]...)
+	bad.Sealed = append([]byte{0x03}, in.Sealed[1:]...) // no such blob version (1 and 2 exist, D35)
 	if _, err := e.svc.PutCredential(e.sealer, bad); !is(err, app.ErrFormat) {
 		t.Errorf("format: %v", err)
 	}

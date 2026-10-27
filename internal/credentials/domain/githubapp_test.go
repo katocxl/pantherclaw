@@ -5,6 +5,7 @@ package domain_test
 
 import (
 	"bytes"
+	"crypto/fips140"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -61,16 +62,25 @@ func TestHR204_GitHubAppContent(t *testing.T) {
 			t.Fatal("Clear left the key")
 		}
 	}
-	short, _ := rsa.GenerateKey(rand.Reader, 1024)
 	good := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
-	for name, g := range map[string]domain.GitHubApp{
-		"short key":    {V: 1, Issuer: "1", Installation: 7, Account: "acme", PrivateKey: pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(short)})},
+	bad := map[string]domain.GitHubApp{
 		"not PEM":      {V: 1, Issuer: "1", Installation: 7, Account: "acme", PrivateKey: []byte("ghp_not_a_key")},
 		"uppercase":    {V: 1, Issuer: "1", Installation: 7, Account: "Acme", PrivateKey: good},
 		"bad issuer":   {V: 1, Issuer: "app", Installation: 7, Account: "acme", PrivateKey: good},
 		"installation": {V: 1, Issuer: "1", Account: "acme", PrivateKey: good},
 		"version":      {V: 2, Issuer: "1", Installation: 7, Account: "acme", PrivateKey: good},
-	} {
+	}
+	// A 1024-bit key cannot even be generated in FIPS 140-only mode (task
+	// test:fips); everywhere else the short key must be refused.
+	if short, err := rsa.GenerateKey(rand.Reader, 1024); err == nil {
+		bad["short key"] = domain.GitHubApp{
+			V: 1, Issuer: "1", Installation: 7, Account: "acme",
+			PrivateKey: pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(short)}),
+		}
+	} else if !fips140.Enabled() {
+		t.Fatal(err)
+	}
+	for name, g := range bad {
 		if _, err := g.Encode(); !errors.Is(err, domain.ErrGitHubApp) {
 			t.Errorf("%s: %v", name, err)
 		}

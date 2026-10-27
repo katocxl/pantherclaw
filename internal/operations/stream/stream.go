@@ -35,6 +35,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/reflex/feed"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -245,6 +246,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	principal := c.Org.String() + "/" + c.Principal.String()
 	if !h.acquire(principal) {
+		telemetry.RateLimited(r.Context(), telemetry.ScopeOpsStream)
 		w.Header().Set("Retry-After", "30")
 		http.Error(w, "too many streams", http.StatusTooManyRequests)
 		return

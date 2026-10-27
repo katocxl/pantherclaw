@@ -11,12 +11,14 @@ package chainer
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
+
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
@@ -53,12 +55,17 @@ func (ChainOrgArgs) InsertOpts() river.InsertOpts {
 type ChainOrgWorker struct {
 	river.WorkerDefaults[ChainOrgArgs]
 	Pool *db.Pool
+	Log  *slog.Logger
 }
 
 // Work implements river.Worker.
 func (w *ChainOrgWorker) Work(ctx context.Context, job *river.Job[ChainOrgArgs]) error {
-	_, err := ledger.ChainAll(ctx, w.Pool, job.Args.Org, Batch)
-	return err
+	for {
+		n, err := ledger.ChainOrg(ctx, w.Pool, job.Args.Org, Batch)
+		if err != nil || n < Batch {
+			return err
+		}
+	}
 }
 
 // DispatchArgs asks for chain jobs to be enqueued for every org with
@@ -98,16 +105,27 @@ func (w *DispatchWorker) Work(ctx context.Context, _ *river.Job[DispatchArgs]) e
 }
 
 // Register adds the chainer workers to reg.
-func Register(reg *jobs.Registry, pool *db.Pool) error {
-	if err := jobs.Register[ChainOrgArgs](reg, &ChainOrgWorker{Pool: pool}); err != nil {
+func Register(reg *jobs.Registry, pool *db.Pool, logs ...*slog.Logger) error {
+	log := slog.Default()
+	if len(logs) > 0 && logs[0] != nil {
+		log = logs[0]
+	}
+	if err := jobs.Register[ChainOrgArgs](reg, &ChainOrgWorker{Pool: pool, Log: log}); err != nil {
 		return err
 	}
-	return jobs.Register[DispatchArgs](reg, &DispatchWorker{Pool: pool})
+	if err := jobs.Register[DispatchArgs](reg, &DispatchWorker{Pool: pool}); err != nil {
+		return err
+	}
+	if err := jobs.Register[SecurityOrgArgs](reg, &SecurityOrgWorker{Pool: pool, Log: log}); err != nil {
+		return err
+	}
+	return jobs.Register[SecurityDispatchArgs](reg, &SecurityDispatchWorker{Pool: pool, Log: log})
 }
 
 // PeriodicJobs returns the dispatcher schedule for the worker client.
 func PeriodicJobs() []*river.PeriodicJob {
 	return []*river.PeriodicJob{
+		river.NewPeriodicJob(river.PeriodicInterval(time.Minute), func() (river.JobArgs, *river.InsertOpts) { return SecurityDispatchArgs{}, nil }, &river.PeriodicJobOpts{RunOnStart: true}),
 		river.NewPeriodicJob(
 			river.PeriodicInterval(DispatchInterval),
 			func() (river.JobArgs, *river.InsertOpts) { return DispatchArgs{}, nil },

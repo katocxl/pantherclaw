@@ -16,6 +16,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
@@ -131,6 +132,20 @@ func (s *Signup) CreateOrg(ctx context.Context, in NewOrg) (CreatedOrg, error) {
 	var refusal error
 	err = s.store.pool.InGlobalTx(ctx, db.GlobalAccounts, func(ctx context.Context, tx db.GlobalTx) error {
 		q := dbq.New(tx)
+		identity, err := q.GetAccount(ctx, c.Account)
+		if db.IsNoRows(err) {
+			return ErrNoAccount
+		}
+		if err != nil {
+			return err
+		}
+		available, err := q.AccountIdentityShared(ctx, identity.Issuer, identity.Subject)
+		if err != nil {
+			return err
+		}
+		if !available || identity.DeletedAt != nil {
+			return ErrDeletionPending
+		}
 		a, err := q.LockAccount(ctx, c.Account)
 		if db.IsNoRows(err) {
 			return ErrNoAccount
@@ -191,6 +206,9 @@ func (s *Signup) CreateOrg(ctx context.Context, in NewOrg) (CreatedOrg, error) {
 		return CreatedOrg{}, err
 	}
 	if refusal != nil {
+		if errors.Is(refusal, ErrRateLimited) {
+			telemetry.RateLimited(ctx, telemetry.ScopeSignup)
+		}
 		var pe *pcerr.Error
 		reason := "refused"
 		if errors.As(refusal, &pe) {

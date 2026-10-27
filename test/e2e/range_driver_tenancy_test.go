@@ -44,6 +44,12 @@ func (d *rangeDriver) uiStep(st domain.Step) (domain.Observation, bool, error) {
 	case "config.check":
 		obs, err := d.configCheck(st)
 		return obs, true, err
+	case "api.flood":
+		obs, err := d.apiFlood(st)
+		return obs, true, err
+	case "operator.delete_org":
+		obs, err := d.deleteOrg()
+		return obs, true, err
 	}
 	return domain.Observation{}, false, nil
 }

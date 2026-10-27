@@ -1,0 +1,16 @@
+PantherClaw {{ .Chart.AppVersion }} ({{ .Values.deployment }}) is installing.
+
+- API: service {{ include "pantherclaw.fullname" . }}-api port {{ .Values.api.service.port }}{{ if not .Values.api.tls.existingSecret }} (plain HTTP: put a TLS-terminating ingress in front and set api.trustedProxies){{ end }}; public URL {{ .Values.publicURL }}
+- Gateways connect to https://{{ first .Values.gatewayAPI.hostnames }}:{{ .Values.gatewayAPI.port }} (service {{ include "pantherclaw.fullname" . }}-gateway-api, TCP passthrough)
+- Maintenance hold: {{ .Values.maintenanceHold }} on every API and worker replica
+{{- if contains "example." (printf "%s %s %s" .Values.publicURL .Values.database.host (first .Values.gatewayAPI.hostnames)) }}
+
+WARNING: publicURL, database.host or gatewayAPI.hostnames still hold the chart's example values.
+{{- end }}
+{{- if not .Values.image.server.digest }}
+
+Pin image.server.digest from the release notes (gh attestation verify oci://{{ .Values.image.server.repository }}@<digest> --repo katocxl/pantherclaw).
+{{- end }}
+
+The images have no shell: create the first organization with a one-off Job that runs
+`pantherclaw-server org create --name NAME --config /etc/pantherclaw/server.json` with the API's configuration and secrets.

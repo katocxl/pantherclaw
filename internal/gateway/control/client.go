@@ -85,7 +85,7 @@ func NewClient(id *Identity, dir, baseURL string, timeout time.Duration, log *sl
 	c := &Client{dir: dir, log: log, now: time.Now, baseURL: strings.TrimSuffix(baseURL, "/")}
 	c.cur.Store(id)
 	c.hc = httpx.NewControlClient(httpx.ControlConfig{
-		Timeout: timeout, RootCAs: id.Roots(),
+		Timeout: timeout, RootCAs: id.Roots(), Link: "gateway-control", Log: log,
 		ClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 			cert := c.cur.Load().TLSCertificate()
 			return &cert, nil

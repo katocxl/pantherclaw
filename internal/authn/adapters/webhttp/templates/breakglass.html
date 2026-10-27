@@ -1,0 +1,18 @@
+{{template "head" .}}
+<h1>Activate break-glass access</h1>
+{{if .Active}}
+<p role="status">Your break-glass access is active as {{.Active.Role}} until {{.Active.ExpiresAt.UTC.Format "2006-01-02 15:04:05 UTC"}}. Every call is recorded with activation <code>{{.Active.ID}}</code>.</p>
+{{else if .Holder}}
+<p>You are designated to activate the <strong>{{.Holder.Role}}</strong> role at your organization for at most 60 minutes. Every other org admin will be notified immediately, and every call you make will be recorded in the audit log with this activation.</p>
+<p class="note">Two-person rules, approvals and security invariants continue to apply. Your normal permissions remain in force. An org admin can end the activation early.</p>
+<form data-path="/break-glass/activate">
+<label>Reason <input name="reason" required maxlength="500" autocomplete="off"></label>
+<label>Minutes <input name="minutes" type="number" min="1" max="60" value="60" required></label>
+<button type="submit" class="danger">Activate with your security key</button>
+</form>
+{{else}}
+<p>You are not a designated break-glass holder. An org admin must designate holders before they need emergency access.</p>
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/support_access.js"></script>
+{{template "foot" .}}

@@ -1,0 +1,297 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// DataRequestService exports a whole org and deletes it (G0 M13 D34,
+// F2, PN-012.5, ADR-0035; HR-390..393, T-176, T-177).
+//
+// An export is a signed copy of the org's data: canonical JSONL per table
+// for a fixed allow-list of org tables (no secret material: wrapped keys,
+// sealed credentials, token and secret hashes, session secrets) and the
+// full-range evidence bundle with its proofs, in ZIP parts of at most
+// 64 MiB, listed in a manifest signed with the evidence pack key. A job
+// builds it; it can be downloaded for 7 days, and every download is
+// audited before the first byte. An export over 2 GiB fails with
+// EXPORT_TOO_LARGE.
+//
+// A deletion request opens a 7-day window in which any org admin can
+// cancel it; every org admin is told. Then the org is set DELETED (its
+// sign-ins, API keys, gateways and workloads fail closed at once), every
+// row of every org table is removed and the removal verified, the org's
+// data keys are destroyed, and a deletion record signed with the receipts
+// key is kept in the platform's ledger. A plan lapsed for 90 days is
+// deleted the same way, without a window (the reminders came first). An
+// active legal hold of the whole org blocks deletion (DELETION_HELD) until
+// it is released.
+//
+// Creating an export and requesting a deletion need a security-key
+// step-up of the browser session made right before on the page; over the
+// API they answer STEP_UP_REQUIRED.
+service DataRequestService {
+  // CreateExport asks for an export of the whole org. Human only;
+  // audited; a fresh step-up of this browser session is required
+  // (STEP_UP_REQUIRED otherwise). At most one export is building at a
+  // time (EXPORT_IN_PROGRESS).
+  // permission: data.export
+  rpc CreateExport(CreateExportRequest) returns (CreateExportResponse);
+  // GetDataRequest returns an export or a deletion request.
+  // permission: data_requests.read
+  rpc GetDataRequest(GetDataRequestRequest) returns (GetDataRequestResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListDataRequests lists the org's exports and deletion requests, newest
+  // first.
+  // permission: data_requests.read
+  rpc ListDataRequests(ListDataRequestsRequest) returns (ListDataRequestsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // DownloadExport streams one part of a ready export (a ZIP of at most
+  // 64 MiB) for 7 days after it is ready. Every download is audited
+  // before the first byte. `pclaw verify` checks the manifest and parts.
+  // permission: data.export
+  rpc DownloadExport(DownloadExportRequest) returns (stream DownloadExportResponse);
+  // RequestDeletion asks for the deletion of the whole org, after a 7-day
+  // window in which any org admin can cancel it. Human only; audited; a
+  // fresh step-up of this browser session is required (STEP_UP_REQUIRED
+  // otherwise). Refused while an org-wide legal hold is active
+  // (DELETION_HELD) or while another deletion request is open
+  // (DELETION_PENDING).
+  // permission: org.delete
+  rpc RequestDeletion(RequestDeletionRequest) returns (RequestDeletionResponse);
+  // CancelDeletion cancels a deletion request inside its window. Human
+  // only; audited; every org admin is told.
+  // permission: org.delete
+  rpc CancelDeletion(CancelDeletionRequest) returns (CancelDeletionResponse);
+  // GetDeletionRecord returns the signed record of a deleted org to the
+  // hosted account that requested the deletion (account sessions only).
+  // permission: deletion_records.read
+  rpc GetDeletionRecord(GetDeletionRecordRequest) returns (GetDeletionRecordResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// DataRequestKind says what a data request is.
+enum DataRequestKind {
+  DATA_REQUEST_KIND_UNSPECIFIED = 0;
+  // An export of the whole org.
+  DATA_REQUEST_KIND_EXPORT = 1;
+  // The deletion of the whole org.
+  DATA_REQUEST_KIND_DELETION = 2;
+}
+
+// DataRequestState is where a data request stands.
+enum DataRequestState {
+  DATA_REQUEST_STATE_UNSPECIFIED = 0;
+  // Export: the job is building it.
+  DATA_REQUEST_STATE_BUILDING = 1;
+  // Export: signed and downloadable until its expiry.
+  DATA_REQUEST_STATE_READY = 2;
+  // Export or deletion: it failed; error_code says why.
+  DATA_REQUEST_STATE_FAILED = 3;
+  // Export: its 7 days are over and its parts were removed.
+  DATA_REQUEST_STATE_EXPIRED = 4;
+  // Deletion: inside its cancellation window.
+  DATA_REQUEST_STATE_PENDING = 5;
+  // Deletion: cancelled inside its window.
+  DATA_REQUEST_STATE_CANCELED = 6;
+  // Deletion: waiting for an org-wide legal hold to be released.
+  DATA_REQUEST_STATE_HELD = 7;
+  // Deletion: the org is DELETED and its data is being removed.
+  DATA_REQUEST_STATE_DELETING = 8;
+}
+
+// DeletionReason says why an org is deleted.
+enum DeletionReason {
+  DELETION_REASON_UNSPECIFIED = 0;
+  // An org admin asked for it.
+  DELETION_REASON_REQUESTED = 1;
+  // The plan lapsed 90 days ago (F2).
+  DELETION_REASON_LAPSE_90D = 2;
+}
+
+// ExportPart is one ZIP part of an export.
+message ExportPart {
+  // Part number, from 1.
+  int32 number = 1;
+  // Size in bytes.
+  int64 size = 2;
+  // SHA-256 of the part.
+  bytes sha256 = 3;
+}
+
+// DataRequest is an export or a deletion request.
+message DataRequest {
+  // Id.
+  string id = 1;
+  // Kind.
+  DataRequestKind kind = 2;
+  // State.
+  DataRequestState state = 3;
+  // The person who asked for it; empty for a lapse deletion.
+  string created_by = 4;
+  // When it was asked for.
+  google.protobuf.Timestamp create_time = 5;
+  // Export: when it became ready.
+  google.protobuf.Timestamp ready_time = 6;
+  // Export: when its parts are removed (7 days after ready).
+  google.protobuf.Timestamp expire_time = 7;
+  // Export: its parts, when ready.
+  repeated ExportPart parts = 8;
+  // Export: total size of its parts.
+  int64 total_size = 9;
+  // Export: the signed manifest (compact JWS, typ pap-export+jwt), when
+  // ready.
+  string manifest = 10;
+  // For FAILED: why (for example EXPORT_TOO_LARGE).
+  string error_code = 11;
+  // Deletion: why.
+  DeletionReason reason = 12;
+  // Deletion: the end of the cancellation window; equal to create_time
+  // when there is none (lapse).
+  google.protobuf.Timestamp window_end_time = 13;
+  // Deletion: who cancelled it, when CANCELED.
+  string canceled_by = 14;
+  // Deletion: when it was cancelled.
+  google.protobuf.Timestamp cancel_time = 15;
+}
+
+// CreateExportRequest is empty: an export is always of the whole org.
+message CreateExportRequest {}
+
+// CreateExportResponse returns the new export, BUILDING.
+message CreateExportResponse {
+  // The export.
+  DataRequest request = 1;
+}
+
+// GetDataRequestRequest names a data request.
+message GetDataRequestRequest {
+  // Id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetDataRequestResponse returns it.
+message GetDataRequestResponse {
+  // The request.
+  DataRequest request = 1;
+}
+
+// ListDataRequestsRequest pages through the org's data requests.
+message ListDataRequestsRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListDataRequestsResponse returns a page.
+message ListDataRequestsResponse {
+  // Requests, newest first.
+  repeated DataRequest requests = 1;
+  // Token for the next page; empty on the last.
+  string next_page_token = 2;
+}
+
+// DownloadExportRequest names an export and one of its parts.
+message DownloadExportRequest {
+  // Export id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // Part number, from 1.
+  int32 part = 2 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 64
+  }];
+}
+
+// DownloadExportResponse is one piece of the part, in order.
+message DownloadExportResponse {
+  // Up to 1 MiB of the part.
+  bytes chunk = 1;
+  // Its offset in the part.
+  int64 offset = 2;
+  // The part's size (every message).
+  int64 total_size = 3;
+  // The part's SHA-256 (every message).
+  bytes sha256 = 4;
+}
+
+// RequestDeletionRequest is empty: a deletion is always of the whole org.
+message RequestDeletionRequest {}
+
+// RequestDeletionResponse returns the new request, PENDING.
+message RequestDeletionResponse {
+  // The deletion request.
+  DataRequest request = 1;
+}
+
+// CancelDeletionRequest names a deletion request.
+message CancelDeletionRequest {
+  // Id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// CancelDeletionResponse returns the request, CANCELED.
+message CancelDeletionResponse {
+  // The deletion request.
+  DataRequest request = 1;
+}
+
+// GetDeletionRecordRequest names a deleted org.
+message GetDeletionRecordRequest {
+  // Org id.
+  string org_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// DeletionTableCount is how many rows of one table were removed.
+message DeletionTableCount {
+  // Table name (schema pc).
+  string table = 1;
+  // Rows removed.
+  int64 rows = 2;
+}
+
+// DeletionRecord is what the platform keeps of a deleted org.
+message DeletionRecord {
+  // The deleted org.
+  string org_id = 1;
+  // Why.
+  DeletionReason reason = 2;
+  // The account that requested it; empty for a lapse deletion.
+  string requested_by_account = 3;
+  // When it was requested.
+  google.protobuf.Timestamp request_time = 4;
+  // The end of the cancellation window.
+  google.protobuf.Timestamp window_end_time = 5;
+  // When the removal started (the org became DELETED).
+  google.protobuf.Timestamp start_time = 6;
+  // When the removal was verified.
+  google.protobuf.Timestamp complete_time = 7;
+  // Rows removed per table.
+  repeated DeletionTableCount tables = 8;
+  // Whether zero rows remained in every org table afterwards.
+  bool verified = 9;
+  // The last day a backup may still hold the org's data (at most 60 days
+  // after complete_time).
+  google.protobuf.Timestamp backup_expire_time = 10;
+  // The record signed with the receipts key (compact JWS, typ
+  // pap-deletion+jwt); its payload is this record as canonical JSON.
+  string signed_record = 11;
+}
+
+// GetDeletionRecordResponse returns the record.
+message GetDeletionRecordResponse {
+  // The record.
+  DeletionRecord record = 1;
+}

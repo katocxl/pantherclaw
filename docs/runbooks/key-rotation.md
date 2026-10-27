@@ -1,11 +1,11 @@
 # Runbook — Key rotation
 
-**Status:** broker keys, sealed credentials and the internal gateway CA are tested procedures (M6). The publication of the evidence keys with their validity and revocation is tested (M7, §7); their rotation, like the other rows, is an outline for the milestones named.
+**Status:** broker keys, sealed credentials and the internal gateway CA are tested procedures (M6). The publication of the evidence keys with their validity and revocation is tested (M7, §7). Rotating the receipts and evidence signing keys, and raising every organization's epoch after a restore, are operator commands from M13 (§8; [G0 M13](../g0/M13.md) D5, D6; HR-372, HR-373); the other rows are outlines for the milestones named.
 
 | Key | Rotation | Procedure | In code today |
 |---|---|---|---|
-| Authority signing keys (receipts, permits, workload tokens, action tokens) | 90 days, ≥ 7-day overlap | new key published in JWKS as `next` → promote to `active` → old key `verify-only` for 7 days → retire; the ledger records each step | Key-store support only; no operator command yet |
-| Evidence signing keys (M7): `checkpoints` (Ed25519, signed checkpoints), `anchors` (ECDSA P-256, the anchored global root), `evidence_packs` (Ed25519, pack manifests), `checkpoints_pq` (ML-DSA-65, optional co-signatures, created only with `evidence.mldsa_cosign`) | 90 days, ≥ 7-day overlap, like the Authority keys | as the Authority keys, and §7 | Key-store support and publication (`evidence-keys.json`, `revoked-keys.json`); no operator command yet |
+| Authority signing keys (receipts, permits, workload tokens, action tokens) | 90 days | receipts: §8 (a new active key; the previous one retired and kept published for verification); permits, workload tokens and action tokens: outline (new key published in JWKS as `next` → promote to `active` → old key `verify-only` for 7 days → retire; the ledger records each step) | receipts: `pantherclaw-server keys rotate-receipts --confirm` (M13); the others: key-store support only, no operator command yet |
+| Evidence signing keys (M7): `checkpoints` (Ed25519, signed checkpoints), `anchors` (ECDSA P-256, the anchored global root), `evidence_packs` (Ed25519, pack manifests), `checkpoints_pq` (ML-DSA-65, optional co-signatures, created only with `evidence.mldsa_cosign`) | 90 days | §8 and §7 | `pantherclaw-server keys rotate-evidence --confirm` (M13) for `checkpoints`, `evidence_packs` and `checkpoints_pq`; `anchors` has its own ceremony (HR-195); publication in `evidence-keys.json` and `revoked-keys.json` (M7) |
 | Envelope DEKs (per org/purpose; M7 adds `evaluation_inputs`, the sealed replay inputs, and `payload_captures`) | yearly or on suspicion | create a new DEK version; new writes use it; a River job re-encrypts rows in batches; destroy the old version after verification | outline; sealed rows name their DEK version, so old rows stay readable while their version exists |
 | KEK (key-encryption key files) | provider policy / on suspicion | rewrap all DEKs with the new KEK; verify decryption of samples; disable the old KEK | `pantherclaw-server keys gen-kek`; the gateway's `broker.kek_files` accepts old and new (§5) |
 | Gateway broker keys | on suspicion, or when a gateway host is replaced | §5 | yes (M6) |
@@ -95,4 +95,36 @@ Four platform signing keys sign evidence, besides the `receipts` key (G0 M7 desi
 - **Anchors stay checkable.** An anchor names the `anchors` key that signed it, and the log entry carries its public key; a rotation changes neither.
 - **On compromise**, revoke the key (it appears in `revoked-keys.json`) and treat it as an incident: a holder of the `checkpoints` key can re-sign a rewritten history, which only a checkpoint saved earlier (`pclaw verify --previous`) or an anchored root exposes ([evidence-verification.md](evidence-verification.md)).
 
-Rotation has no operator command yet, as for the Authority keys (the table above). The per-org DEKs of `evaluation_inputs` (sealed replay inputs) and `payload_captures` follow the envelope DEK row: every sealed row names its DEK version, so rows sealed before a rotation stay readable while that version exists, and retention removes them on its own schedule ([retention.md](retention.md)).
+Rotation is the M13 operator command in §8. The per-org DEKs of `evaluation_inputs` (sealed replay inputs) and `payload_captures` follow the envelope DEK row: every sealed row names its DEK version, so rows sealed before a rotation stay readable while that version exists, and retention removes them on its own schedule ([retention.md](retention.md)).
+
+## 8. Receipts and evidence signing keys, and the epoch bump (M13)
+
+Commands from M13 ([G0 M13](../g0/M13.md) D5, D6; HR-372, HR-373). Command flags follow the brief; the M13 exit status records any change.
+
+### 8.1 Rotate
+
+```bash
+pantherclaw-server keys rotate-receipts --confirm --config server.json   # decision, execution and effect receipts
+pantherclaw-server keys rotate-evidence --confirm --config server.json   # checkpoints and evidence packs (and checkpoints_pq when an active one exists)
+```
+
+The `anchors` key is not rotated by these commands: the anchored global root has its own ceremony (HR-195, [anchoring.md](anchoring.md)).
+
+1. Each command moves the active key to retiring and creates a new active key; the time of the change is the old key's `not_after`. There is no overlap period in which both sign.
+2. **Restart every server instance.** Each instance holds its signing keys in memory, so an instance that is not restarted keeps signing with the retired key. As with `rotate-gateway-ca`, the command prints this reminder.
+3. The retired public key **stays published** in `/.well-known/pantherclaw/evidence-keys.json` and is accepted for verification of everything it signed while it was active, for as long as that evidence is kept (§7).
+4. Each rotation is audited with the actor `cli:<user>@<host>`. Without `--confirm` nothing changes.
+5. **Tell users to refresh their trust file** (`pclaw evidence trust`) and give them the new fingerprint through another channel than the deployment itself (§7). Every verifier that keeps a saved trust bundle (a `pclaw evidence trust` file, an offline verifier, a CI gate with a pinned file) must refresh it after a rotation: a trust file pinned before the rotation fails the new key's signatures. Receipts and evidence signed before the rotation keep verifying, with old and refreshed trust files alike, because the retired key stays published (HR-372).
+6. Rotation is not revocation: on suspicion of compromise, revoke the key as in §7 and treat it as an incident.
+
+### 8.2 Raise every organization's epoch after a restore
+
+```bash
+pantherclaw-server keys bump-epochs --all --confirm --config server.json
+```
+
+Raises the containment epoch (the one the kill switch and containment use) of every organization of any status, suspended and closed included, each in its own tenant transaction: the new epoch is `max(epoch + 1, the current Unix time in milliseconds)`, so it is above any value a gateway cached after the backup was taken; an organization without a containment row gets one at that value; `containment.epoch_bumped_after_restore` is audited in the same transaction. Any failure stops the command with a non-zero exit; running it again is safe (it raises again). Run it after any database restore, once revocations made after the dump are re-applied ([backup-restore.md](backup-restore.md) §7), and **before gateways reconnect**: gateways then load a fresh containment snapshot (HR-010), and permits issued before the restore fail `BeginDispatch` (HR-001). It is a step of [backup-restore.md](backup-restore.md) §5 and §7. Without `--confirm` nothing changes.
+
+### 8.3 KEK escrow
+
+A new KEK (`pantherclaw-server keys gen-kek --out FILE`) is escrowed offline the same day ([backup-restore.md](backup-restore.md) §3). On hosted staging the KEK is a file on the VM, mode 0400, owned by the service user, never in the backup bucket ([ADR-0032](../adr/0032-hosted-deployment-kek-custody-and-backups.md)).

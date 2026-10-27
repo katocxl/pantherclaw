@@ -1,0 +1,21 @@
+{{template "head" .}}
+<h1>Support access request</h1>
+<p>State: <strong>{{.Request.State}}</strong>. Asked at {{.Request.CreatedAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{if eq .Request.State "PENDING"}}; expires unanswered at {{.Request.ExpiresAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}.</p>
+<dl>
+<dt>Request</dt><dd><code>{{.Request.ID}}</code></dd>
+<dt>Asked by</dt><dd class="untrusted">{{.Request.Email}}{{with .Request.Name}} ({{.}}){{end}}, PantherClaw support (account <code>{{.Request.Account}}</code>)</dd>
+<dt>Task</dt><dd class="untrusted">{{.Request.Task}}</dd>
+<dt>Scope</dt><dd>{{if eq .Request.Scope "READ_ONLY_PLUS_EVIDENCE"}}Read only, plus restricted evidence (captured payloads included){{else}}Read only: never restricted evidence, credentials, sealed material or captured payloads{{end}}</dd>
+<dt>Duration</dt><dd>{{.Request.Hours}} hours from the approval</dd>
+{{with .Grant}}<dt>Grant</dt><dd><code>{{.ID}}</code>: {{.State}}, until {{.ExpiresAt.UTC.Format "2006-01-02 15:04:05 UTC"}}; {{.Sessions}} support sessions opened</dd>{{end}}
+</dl>
+<p class="note">Approving lets the person above read your organization, and only read, for the duration, through support sessions in which every call is recorded in your audit log. Any org admin can revoke it at any time. Nobody can approve their own request.</p>
+{{if .CanDecide}}
+<p><button type="button" class="danger" data-action="approve" data-path="/support-access/{{.Request.ID}}/approve">Approve with your security key</button>
+<button type="button" data-action="deny" data-path="/support-access/{{.Request.ID}}/deny">Deny with your security key</button></p>
+{{else if eq .Request.State "PENDING"}}
+<p class="note">You cannot decide this: that needs support.manage and a security key.</p>
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/support_access.js"></script>
+{{template "foot" .}}

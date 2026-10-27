@@ -44,9 +44,10 @@ const (
 	// start a sign-in, so their rows must be bounded.
 	maxOpenLoginRequests = 10_000
 
-	LoginPath   = "/login"
-	LogoutPath  = "/logout"
-	AccountPath = "/account"
+	LoginPath         = "/login"
+	LogoutPath        = "/logout"
+	AccountPath       = "/account"
+	AccountDeletePath = "/account/delete"
 	// ContainmentPath is the emergency-stop page (G0 M6, response/app).
 	ContainmentPath = "/containment"
 )
@@ -73,7 +74,7 @@ const ApprovalsPath = "/approvals"
 const ReconciliationsPath = "/reconciliations"
 
 // returnPaths are the pages a sign-in may return to (HR-152).
-var returnPaths = []string{AccountPath, ContainmentPath, ApprovalsPath}
+var returnPaths = []string{AccountPath, AccountDeletePath, ContainmentPath, ApprovalsPath}
 
 // approvalPath is one approval request's page, and reconciliationPath one
 // reconciliation's, matched exactly: the id in its canonical lower-case
@@ -209,6 +210,9 @@ type BrowserStart struct {
 	// Invitation is an invitation token to accept after a sign-in without
 	// an org (the /invite page; G0 UI D8).
 	Invitation string
+	// DeletionAccount binds a forced reauthentication to the current account.
+	// Only the authenticated canonical page sets it.
+	DeletionAccount ids.UUID
 }
 
 // Start records a pending sign-in and returns the provider URL and the
@@ -227,7 +231,13 @@ func (b *Browser) Start(ctx context.Context, in BrowserStart) (Redirect, error) 
 		return Redirect{}, ErrSignInUnavailable
 	}
 	if in.Org == "" {
-		return b.startAccount(ctx, idp, next, in.Invitation, in.ClientIP, in.Recent)
+		if (next == AccountDeletePath) != !in.DeletionAccount.IsZero() {
+			return Redirect{}, ErrSignInUnavailable
+		}
+		return b.startAccount(ctx, idp, next, in.Invitation, in.ClientIP, in.Recent, in.DeletionAccount)
+	}
+	if !in.DeletionAccount.IsZero() {
+		return Redirect{}, ErrSignInUnavailable
 	}
 	if in.Invitation != "" {
 		return Redirect{}, ErrSignInUnavailable
@@ -422,7 +432,9 @@ type BrowserSession struct {
 	// AuthTime is when the provider last authenticated the person (zero when
 	// the provider did not say); StepUpAt and StepUpCredential record the
 	// last WebAuthn step-up on this session.
-	AuthTime         time.Time
+	AuthTime time.Time
+	// Provider is the identity provider the person signed in with.
+	Provider         string
 	StepUpAt         time.Time
 	StepUpCredential ids.UUID
 	// Now is the database clock at authentication, for age checks.
@@ -533,7 +545,7 @@ func (b *Browser) authenticate(ctx context.Context, cookie string, rotate bool) 
 			Caller: tapp.Caller{
 				Subject: td.Subject{Org: org, Principal: p, Bindings: bs}, Credential: CredBrowserSession, Session: s.ID,
 			},
-			ID: s.ID, Now: s.DbNow,
+			ID: s.ID, Now: s.DbNow, Provider: s.Provider,
 		}
 		if s.AuthTime != nil {
 			out.AuthTime = *s.AuthTime

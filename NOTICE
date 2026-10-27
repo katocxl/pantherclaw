@@ -33,6 +33,11 @@ repository under the Business Source License 1.1.
 
 Third-party software
 ====================
+proto/third_party/otlp/ holds the OpenTelemetry protocol message definitions
+(opentelemetry-proto, Copyright The OpenTelemetry Authors), vendored
+unchanged under the Apache License, Version 2.0 (see the LICENSE and SOURCE
+files there); internal/gen/opentelemetry/ is the Go code generated from them.
+
 Third-party dependencies are listed in go.mod/go.sum and the SDK lockfiles,
 and in the SBOM attached to every official release. Their licenses are
 reproduced in release artifacts as required.

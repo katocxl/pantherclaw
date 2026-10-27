@@ -85,7 +85,7 @@ func accountRouting() ids.OrgID { return ids.PlatformOrg }
 
 // startAccount records a pending sign-in without an org; invitation, when
 // set, is an invitation token to accept after it (only its hash is kept).
-func (b *Browser) startAccount(ctx context.Context, idp IdP, next, invitation, clientIP string, recent bool) (Redirect, error) {
+func (b *Browser) startAccount(ctx context.Context, idp IdP, next, invitation, clientIP string, recent bool, deletionAccount ids.UUID) (Redirect, error) {
 	if b.accounts == nil {
 		return Redirect{}, ErrSignInUnavailable
 	}
@@ -116,12 +116,20 @@ func (b *Browser) startAccount(ctx context.Context, idp IdP, next, invitation, c
 		s := int32(RecentSignIn / time.Second)
 		maxAge = &s
 	}
+	var deleting *ids.UUID
+	if !deletionAccount.IsZero() {
+		req.ForceLogin = true
+		zero := int32(0)
+		maxAge = &zero
+		deleting = &deletionAccount
+	}
 	err = b.pool.InGlobalTx(ctx, db.GlobalAccounts, func(ctx context.Context, tx db.GlobalTx) error {
 		n, err := dbq.New(tx).InsertAccountLoginRequest(ctx, dbq.InsertAccountLoginRequestParams{
 			ID: ids.NewV7(), StateHash: state.Hash(), BindingHash: credential.HashString(binding),
 			NonceHash: credential.HashString(nonce), PkceVerifier: verifier, Provider: idp.Name(), NextPath: next,
 			MaxAge: maxAge, RequestedIp: trim(clientIP, 64), TtlSeconds: int32(LoginRequestTTL / time.Second),
 			InvitationOrgID: invOrg, InvitationTokenHash: invHash, MaxOpen: maxOpenAccountLoginRequests,
+			DeletionAccountID: deleting,
 		})
 		if err != nil {
 			return err
@@ -188,6 +196,9 @@ func (b *Browser) accountCallback(ctx context.Context, idp IdP, providerName str
 	if failed != nil {
 		return refuse(failed.reason, failed.detail, failed.err)
 	}
+	if row.DeletionAccountID != nil && (claims.AuthTime.IsZero() || claims.AuthTime.Before(row.CreatedAt.Truncate(time.Second)) || claims.AuthTime.After(b.clock.Now().Add(authTimeSkew))) {
+		return refuse("LOGIN_FAILED", "fresh account deletion authentication required", nil)
+	}
 	acct, err := b.accounts.Resolve(ctx, accounts.Identity{
 		Issuer: claims.Issuer, Subject: claims.Subject, Email: claims.Email,
 		EmailVerified: claims.EmailVerified || idp.TrustEmail(), Name: claims.Name,
@@ -196,6 +207,22 @@ func (b *Browser) accountCallback(ctx context.Context, idp IdP, providerName str
 		return BrowserSignIn{}, err
 	}
 	authTime := claims.AuthTime
+	if row.DeletionAccountID != nil {
+		if acct.ID != *row.DeletionAccountID {
+			return refuse("LOGIN_FAILED", "account changed during reauthentication", nil)
+		}
+		secret, session, err := b.openAccountSession(ctx, acct.ID, providerName, authTime, meta)
+		if err != nil {
+			return BrowserSignIn{}, err
+		}
+		err = b.pool.InGlobalTx(ctx, db.GlobalAccounts, func(ctx context.Context, tx db.GlobalTx) error {
+			return dbq.New(tx).SetDeletionReauthentication(ctx, session, acct.ID)
+		})
+		if err != nil {
+			return BrowserSignIn{}, err
+		}
+		return BrowserSignIn{Secret: secret, Session: session, Account: acct.ID, Kind: SessionAccount, Next: AccountDeletePath}, nil
+	}
 	recent := row.MaxAge != nil
 	if row.InvitationOrgID != nil && row.InvitationTokenHash != nil {
 		if b.invites == nil {
@@ -374,6 +401,8 @@ type AccountSession struct {
 	CreatedAt     time.Time
 	// Now is the database clock at authentication.
 	Now time.Time
+	// DeletionReauthenticatedAt is set only by the account-bound forced callback.
+	DeletionReauthenticatedAt *time.Time
 }
 
 // AuthenticateAccount resolves an account session cookie (HR-150 limits
@@ -416,6 +445,7 @@ func (b *Browser) AuthenticateAccount(ctx context.Context, cookie string) (Accou
 		out = AccountSession{
 			Caller: accounts.Caller{Account: s.AccountID, Session: s.ID, Provider: s.Provider},
 			Email:  s.Email, EmailVerified: s.EmailVerified, DisplayName: s.DisplayName, CreatedAt: s.CreatedAt, Now: s.DbNow,
+			DeletionReauthenticatedAt: s.DeletionReauthenticatedAt,
 		}
 		if s.AuthTime != nil {
 			out.AuthTime = *s.AuthTime

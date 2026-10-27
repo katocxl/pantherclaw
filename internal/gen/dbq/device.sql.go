@@ -483,7 +483,7 @@ const sessionByRefresh = `-- name: SessionByRefresh :one
 SELECT s.id, s.user_id, s.device_jkt, s.device_jwk, s.state, (s.expires_at > now())::bool AS live, u.state AS user_state
 FROM pc.cli_sessions s
 JOIN pc.users u ON u.org_id = s.org_id AND u.id = s.user_id
-WHERE s.org_id = $1 AND s.refresh_hash = $2
+WHERE s.org_id = $1 AND s.refresh_hash = $2 AND pc.identity_available(u.issuer,u.subject,false)
 FOR UPDATE OF s
 `
 
@@ -513,7 +513,8 @@ func (q *Queries) SessionByRefresh(ctx context.Context, orgID ids.OrgID, refresh
 }
 
 const userByIdentity = `-- name: UserByIdentity :one
-SELECT org_id, id, issuer, subject, email, display_name, state, created_at, updated_at, last_login_at, account_id FROM pc.users WHERE org_id = $1 AND issuer = $2 AND subject = $3 FOR UPDATE
+SELECT org_id, id, issuer, subject, email, display_name, state, created_at, updated_at, last_login_at, account_id FROM pc.users WHERE org_id = $1 AND issuer = $2 AND subject = $3
+AND pc.identity_available(issuer,subject,true) FOR UPDATE
 `
 
 func (q *Queries) UserByIdentity(ctx context.Context, orgID ids.OrgID, issuer string, subject string) (PcUser, error) {

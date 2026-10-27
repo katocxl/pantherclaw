@@ -233,7 +233,10 @@ func TestServerHeadersBodyLimitAndRecovery(t *testing.T) {
 
 func TestServerTLSConfigIsTLS13WithPQ(t *testing.T) {
 	c := ServerTLSConfig(tls.Certificate{})
-	if c.MinVersion != tls.VersionTLS13 || c.CurvePreferences[0] != tls.X25519MLKEM768 {
+	// Go's defaults (nil) put the hybrid post-quantum group first (D35);
+	// TestHR395_ServerListenersNegotiateHybridWithDefaultClients checks
+	// the handshake.
+	if c.MinVersion != tls.VersionTLS13 || c.CurvePreferences != nil {
 		t.Fatalf("TLS profile = %+v", c)
 	}
 }

@@ -31,10 +31,18 @@ var globalTables = []string{
 	"account_login_requests",
 	"account_sessions",
 	"accounts",
+	// Account deletion spans orgs by design (G0 M13 D49, F12; migration
+	// 00180): the global account's deletion journal, readable only by its
+	// own account or the accounts purpose, and the identity guards, keyed
+	// by an identity digest with no account id or tenant data.
+	"account_deletions",
+	"identity_deletion_guards",
 	"anchors",              // the anchored global roots: blinded leaves only, no tenant data (G0 M7, HR-195)
 	"cross_org_list_audit", // audit of the cross-org lister; no pc_app access
 	"goose_db_version",     // migration bookkeeping; no pc_app access
 	"licence_state",        // single global row: the installed licence (no tenant data)
+	"schema_info",          // single global row: the applied schema version; pc_app reads it (G0 M13 D19, HR-370)
+	"rate_counters",        // the shared rate limiter's counters: opaque keys, no tenant data; rows only in purpose rate_limit (G0 M13 D9, D28, HR-376)
 }
 
 func createOrg(t *testing.T, p *db.Pool, name string) ids.OrgID {

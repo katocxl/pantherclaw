@@ -134,6 +134,8 @@ jobs:
         run: $TASK lint
       - name: Migrations (squawk, pinned binary checked against its SHA-256)
         run: $TASK lint:migrations
+      - name: Helm chart (helm lint, helm template | kubeconform; pinned tools)
+        run: $TASK helm:check
       - name: Protobuf breaking changes against main (buf breaking)
         run: $TASK proto:breaking
 
@@ -371,6 +373,34 @@ jobs:
           PC_TEST_PG_ADMIN_URL: postgres://postgres:pc-ci-${{ github.run_id }}-${{ github.run_attempt }}@127.0.0.1:5433/postgres?sslmode=disable
           PC_TEST_MOCK_OIDC_URL: http://127.0.0.1:8181
         run: go test -tags integration -count=1 -timeout 30m -run TestRange_Scenarios ./test/e2e/
+
+  go-fips:
+    name: go / FIPS 140-only tests and FIPS builds
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            **/go.sum
+      - name: Crypto, sealing, keys, authn, evidence, TLS and gateway tests with GODEBUG=fips140=only (HR-396)
+        run: $TASK test:fips
+      - name: The *-fips binaries build on the validated module (GOFIPS140=v1.0.0, as .goreleaser.yaml)
+        env:
+          CGO_ENABLED: "0"
+          GOFIPS140: v1.0.0
+        run: go build -o /dev/null ./cmd/pantherclaw-server ./cmd/pantherclaw-gateway ./cmd/pclaw ./cmd/pantherclaw-edge
 
   go-vuln:
     name: go / govulncheck
@@ -613,6 +643,7 @@ jobs:
       - e2e
       - sandbox
       - range
+      - go-fips
       - go-vuln
       - secrets
       - semgrep

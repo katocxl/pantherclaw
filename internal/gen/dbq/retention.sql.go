@@ -582,7 +582,7 @@ func (q *Queries) RemoveExecutionReceiptBodies(ctx context.Context, arg RemoveEx
 
 const removeLedgerBodies = `-- name: RemoveLedgerBodies :many
 WITH due AS (
-    SELECT e.org_id, e.id
+    SELECT e.org_id, e.id, octet_length(e.body)::bigint AS bytes
     FROM pc.ledger_entries e
     JOIN pc.ledger_chain l ON l.org_id = e.org_id AND l.entry_id = e.id
     WHERE e.org_id = $2 AND e.body_removed_at IS NULL AND e.occurred_at < $3
@@ -600,7 +600,7 @@ UPDATE pc.ledger_entries u
 SET body = NULL, body_removed_at = now(), removed_by_policy = $1
 FROM due
 WHERE u.org_id = due.org_id AND u.id = due.id
-RETURNING u.occurred_at
+RETURNING u.occurred_at, due.bytes
 `
 
 type RemoveLedgerBodiesParams struct {
@@ -613,7 +613,14 @@ type RemoveLedgerBodiesParams struct {
 	MaxRows     int32
 }
 
-func (q *Queries) RemoveLedgerBodies(ctx context.Context, arg RemoveLedgerBodiesParams) ([]time.Time, error) {
+type RemoveLedgerBodiesRow struct {
+	OccurredAt time.Time
+	Bytes      int64
+}
+
+// Returns each removed entry's time and its body's bytes (the usage meters
+// subtract them, G0 M13 D45).
+func (q *Queries) RemoveLedgerBodies(ctx context.Context, arg RemoveLedgerBodiesParams) ([]RemoveLedgerBodiesRow, error) {
 	rows, err := q.db.Query(ctx, removeLedgerBodies,
 		arg.PolicyID,
 		arg.OrgID,
@@ -627,13 +634,13 @@ func (q *Queries) RemoveLedgerBodies(ctx context.Context, arg RemoveLedgerBodies
 		return nil, err
 	}
 	defer rows.Close()
-	items := []time.Time{}
+	items := []RemoveLedgerBodiesRow{}
 	for rows.Next() {
-		var occurred_at time.Time
-		if err := rows.Scan(&occurred_at); err != nil {
+		var i RemoveLedgerBodiesRow
+		if err := rows.Scan(&i.OccurredAt, &i.Bytes); err != nil {
 			return nil, err
 		}
-		items = append(items, occurred_at)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

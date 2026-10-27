@@ -100,6 +100,14 @@ func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authentica
 		case hasAccount && !hasCookie:
 			// An account session (G0 UI D8): the allow list only (HR-350).
 			return o.accountCall(ctx, info, spec, accountCookie)
+		case hasCookie && isSupportCookie(cookie):
+			if o.support == nil {
+				return nil, errAuthRequired
+			}
+			var err error
+			if ctx, c, err = o.supportCall(ctx, info, spec, cookie); err != nil {
+				return nil, err
+			}
 		case hasCookie:
 			var err error
 			if c, err = o.browser(ctx, info, spec, cookie); err != nil {
@@ -116,8 +124,21 @@ func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authentica
 				return nil, err
 			}
 		}
+		if o.breakGlass != nil {
+			var err error
+			c, err = o.breakGlass.BreakGlassCall(ctx, c, spec.Procedure)
+			if err != nil {
+				return nil, err
+			}
+		}
 		if actx, handled, err := o.orgAccountCall(ctx, c, perm); handled {
-			return actx, err
+			if err == nil {
+				err = o.limits.limit(ctx, info, c, spec.Procedure)
+			}
+			if err != nil {
+				return nil, err
+			}
+			return actx, nil
 		}
 		if perm != td.PermAuthenticated && !c.CanAnywhere(perm) {
 			if o.refusals != nil && perm.HumanOnly() && (!c.Human() || c.Credential == tapp.CredAPIKey) {
@@ -127,6 +148,12 @@ func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authentica
 				o.refusals.HumanOnlyRefused(ctx, c, spec.Procedure, perm)
 			}
 			return nil, td.ErrPermissionDenied(perm)
+		}
+		// The API limits (G0 M13 D8, HR-375) count calls the caller may
+		// make, before the plan gate: gateway, workload and enrollment
+		// procedures returned above and are never counted.
+		if err := o.limits.limit(ctx, info, c, spec.Procedure); err != nil {
+			return nil, err
 		}
 		if o.gate != nil {
 			// The plan gate (G0 UI D9, D43, HR-356) runs after the
@@ -196,12 +223,17 @@ type Option func(*options)
 type options struct {
 	refusals RefusalRecorder
 	gate     PlanGate
+	limits   *APILimits
 	sessions *webguard.Sessions
 	// Hosted accounts (accounts.go).
 	accounts      AccountSessions
 	accountCookie string
 	accountOrigin string
-	log           *slog.Logger
+	// Support sessions (support.go).
+	support         SupportSessions
+	supportReadOnly func(procedure string) bool
+	breakGlass      BreakGlassCalls
+	log             *slog.Logger
 }
 
 // RefusalRecorder records a non-human caller refused a human-only

@@ -1,0 +1,58 @@
+apiVersion: pantherclaw.range/v1
+id: RT-065
+title: A credential flooding the management API is rate-limited while containment and the gateway's decisions keep working
+category: boundary
+suite: platform
+tier: business
+attacker: A8
+threats: [T-170]
+rules: [HR-375, HR-357]
+requires: [payments]
+harness_only: true
+steps:
+  - id: refund-before-the-flood
+    do: agent.call
+    with:
+      face: mcp
+      connection: payments
+      tool: create_refund
+      args:
+        charge: ch_${fixture.nonce}rt065a
+        amount: "20.00"
+        currency: USD
+        reason: duplicate
+    expect:
+      outcome: ALLOW
+  - id: credential-floods-the-api
+    do: api.flood
+    with:
+      procedure: /pantherclaw.v1.AgentService/ListAgents
+      as: developer
+      calls: 2500
+    expect:
+      outcome: REFUSED
+      reason: RATE_LIMITED
+      decisive_control: HR-375
+  - id: containment-still-works
+    do: api.flood
+    with:
+      procedure: /pantherclaw.v1.ResponseService/Contain
+      as: responder
+      calls: 1
+    expect:
+      outcome: ALLOW
+      decisive_control: HR-375
+  - id: refund-after-the-flood
+    do: agent.call
+    with:
+      face: mcp
+      connection: payments
+      tool: create_refund
+      args:
+        charge: ch_${fixture.nonce}rt065b
+        amount: "20.00"
+        currency: USD
+        reason: duplicate
+    expect:
+      outcome: ALLOW
+      decisive_control: HR-357

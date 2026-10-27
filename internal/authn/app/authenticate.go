@@ -139,7 +139,7 @@ func (a *Authenticator) apiKey(ctx context.Context, bearer string) (tapp.Caller,
 		}
 		c = tapp.Caller{
 			Subject:    td.Subject{Org: tok.Org(), Principal: p, Bindings: bs, Scopes: scopes},
-			Credential: tapp.CredAPIKey,
+			Credential: tapp.CredAPIKey, CredentialID: k.ID,
 		}
 		return nil
 	})
@@ -186,6 +186,10 @@ func (a *Authenticator) accessToken(ctx context.Context, bearer string) (tapp.Ca
 			case !s.Live:
 				return reject("key_expired")
 			}
+		case td.KindSupport:
+			// A support session authenticates only with its own session
+			// credential (G0 M13 D32, D38); an access token never carries one.
+			return reject("principal_kind")
 		default:
 			return reject("principal_kind")
 		}
@@ -199,6 +203,8 @@ func (a *Authenticator) accessToken(ctx context.Context, bearer string) (tapp.Ca
 		}
 		if v.Principal.Kind == td.KindUser {
 			c.Session = v.Session
+		} else {
+			c.CredentialID = v.Session // the service account's key
 		}
 		return nil
 	})

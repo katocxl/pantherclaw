@@ -96,6 +96,10 @@ func (s *Service) GrantComp(ctx context.Context, org ids.OrgID, g CompGrant) err
 				"version": strconv.FormatInt(version, 10),
 			},
 		})
+		if err != nil {
+			return err
+		}
+		_, err = q.RefreshPlanLapse(ctx, org)
 		return err
 	})
 }
@@ -124,6 +128,10 @@ func (s *Service) RevokeComp(ctx context.Context, org ids.OrgID, reason, operato
 			Object:  &audit.Object{Type: "org", ID: org.String()},
 			Details: map[string]string{"reason": reason, "version": strconv.FormatInt(version, 10)},
 		})
+		if err != nil {
+			return err
+		}
+		_, err = q.RefreshPlanLapse(ctx, org)
 		return err
 	})
 }

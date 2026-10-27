@@ -21,6 +21,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	"github.com/katocxl/pantherclaw/internal/signals/setverify"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -140,15 +141,11 @@ func (h *Receiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, setverify.CodeInvalidRequest, "unknown transmitter")
 		return
 	}
-	tooMany := func() {
-		w.Header().Set("Retry-After", "60")
-		writeError(w, http.StatusTooManyRequests, setverify.CodeInvalidRequest, "too many requests")
-	}
 	// A source address is limited before anything is read; a transmitter's
 	// budget counts only well-formed tokens, so junk from others cannot
 	// spend it (D64 L2).
 	if !h.byIP.AllowRequest(r) {
-		tooMany()
+		tooMany(w, r)
 		return
 	}
 	if mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mt != ContentType {
@@ -171,7 +168,7 @@ func (h *Receiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !h.limiter.Allow(org.String() + "/" + tid.String()) {
-		tooMany()
+		tooMany(w, r)
 		return
 	}
 	status, code, desc := h.s.receive(r.Context(), org, tid, token)
@@ -342,4 +339,11 @@ func matchUser(ctx context.Context, q *dbq.Queries, org ids.OrgID, issuer string
 		return ids.UUID{}, "", err
 	}
 	return found[0], basis, nil
+}
+
+// tooMany answers 429 and counts the refusal.
+func tooMany(w http.ResponseWriter, r *http.Request) {
+	telemetry.RateLimited(r.Context(), telemetry.ScopeSignals)
+	w.Header().Set("Retry-After", "60")
+	writeError(w, http.StatusTooManyRequests, setverify.CodeInvalidRequest, "too many requests")
 }

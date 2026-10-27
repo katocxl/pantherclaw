@@ -71,7 +71,8 @@ UPDATE pc.device_codes SET state = 'CONSUMED', consumed_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'APPROVED' AND expires_at > now();
 
 -- name: UserByIdentity :one
-SELECT * FROM pc.users WHERE org_id = sqlc.arg(org_id) AND issuer = sqlc.arg(issuer) AND subject = sqlc.arg(subject) FOR UPDATE;
+SELECT * FROM pc.users WHERE org_id = sqlc.arg(org_id) AND issuer = sqlc.arg(issuer) AND subject = sqlc.arg(subject)
+AND pc.identity_available(issuer,subject,true) FOR UPDATE;
 
 -- name: RecordLogin :exec
 UPDATE pc.users SET email = sqlc.arg(email), display_name = sqlc.arg(display_name), last_login_at = now(), updated_at = now()
@@ -99,7 +100,7 @@ RETURNING expires_at;
 SELECT s.id, s.user_id, s.device_jkt, s.device_jwk, s.state, (s.expires_at > now())::bool AS live, u.state AS user_state
 FROM pc.cli_sessions s
 JOIN pc.users u ON u.org_id = s.org_id AND u.id = s.user_id
-WHERE s.org_id = sqlc.arg(org_id) AND s.refresh_hash = sqlc.arg(refresh_hash)
+WHERE s.org_id = sqlc.arg(org_id) AND s.refresh_hash = sqlc.arg(refresh_hash) AND pc.identity_available(u.issuer,u.subject,false)
 FOR UPDATE OF s;
 
 -- name: SessionByPreviousRefresh :one

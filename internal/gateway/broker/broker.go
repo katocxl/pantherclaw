@@ -3,8 +3,8 @@
 
 // Package broker is the gateway's credential broker (G0 M6 design decision
 // 8, HR-060, HR-061, HR-182). The gateway operator generates a broker key
-// (X-Wing) once; its private half is stored wrapped with a key-encryption
-// key file (AES-256-GCM, with the key's fingerprint as associated data).
+// (X-Wing; MLKEM768-P256 in FIPS mode, G0 M13 D35) once; its private half is
+// stored wrapped with a key-encryption key file (AES-256-GCM, with the key's fingerprint as associated data).
 // The gateway registers the public half over its mTLS identity at start.
 // A sealed credential opens only inside one dispatch, with the binding the
 // gateway rebuilds from its own view, and only for a request to one of the
@@ -58,7 +58,7 @@ func Fingerprint(public []byte) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-// PublicKey is the X-Wing public key to register.
+// PublicKey is the seal public key to register.
 func (k *Key) PublicKey() []byte { return k.public }
 
 // Fingerprint is the key's fingerprint.
@@ -126,6 +126,10 @@ func Load(ctx context.Context, path string, kekFiles []string) (*Key, error) {
 	}
 	defer clear(raw)
 	priv, err := pccrypto.ParseSealPrivateKey(raw)
+	if errors.Is(err, pccrypto.ErrSealSuiteNotFIPS) {
+		// An X-Wing key in a FIPS build: a FIPS install starts fresh (D35).
+		return nil, fmt.Errorf("%w: %w", ErrKeyFile, err)
+	}
 	if err != nil || Fingerprint(priv.PublicKey().Bytes()) != f.Fingerprint {
 		return nil, ErrKeyFile
 	}
@@ -161,6 +165,9 @@ func (k *Key) Open(org, connection string, allowedHosts []string, ownKey string,
 		Header: s.Header, Scheme: s.Scheme, Kind: s.Kind,
 	}
 	pt, err := pccrypto.Open(k.priv, b.Info(), domain.AAD, s.Blob)
+	if errors.Is(err, pccrypto.ErrSealSuiteNotFIPS) {
+		return nil, fmt.Errorf("%w: %w", ErrOpen, err)
+	}
 	if err != nil {
 		return nil, ErrOpen
 	}

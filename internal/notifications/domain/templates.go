@@ -62,6 +62,9 @@ var (
 // templates are the part-1 notification types. Part 2 adds the approval
 // types. Every type and parameter is listed here; nothing else renders.
 var templates = []Template{
+	{Type: "billing.lapse_reminder", Severity: Warning, Params: []string{"days_left"}, Title: "Your PantherClaw plan has lapsed", Body: "Your organization keeps enforcement, reads and export for {days_left} more days. Renew before the deletion deadline to keep your data.", Link: "/app/settings/billing"},
+	{Type: "data.deletion_requested", Severity: Warning, Title: "Organization deletion requested", Body: "An administrator requested deletion. Any organization administrator can cancel during the next seven days.", Link: "/app/settings/data"},
+	{Type: "data.deletion_canceled", Severity: Info, Title: "Organization deletion canceled", Body: "An administrator canceled the organization deletion request.", Link: "/app/settings/data"},
 	{
 		Type: "channel.test", Severity: Info, Params: []string{"channel"},
 		Title: "Test notification from PantherClaw",

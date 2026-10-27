@@ -88,13 +88,14 @@ func loopbackAddr(addr string) bool {
 	return err == nil && a.IsLoopback()
 }
 
-// ServerTLSConfig returns the external TLS profile: TLS 1.3 only, hybrid
-// post-quantum key exchange preferred (SB-3).
+// ServerTLSConfig returns the external TLS profile: TLS 1.3 only, with Go's
+// default key exchanges (CurvePreferences nil: hybrid post-quantum first,
+// and in FIPS mode only approved groups; SB-3, G0 M13 D35). A listener that
+// only PantherClaw components reach adds ComponentLinkTLS.
 func ServerTLSConfig(cert tls.Certificate) *tls.Config {
 	return &tls.Config{
-		MinVersion:       tls.VersionTLS13,
-		Certificates:     []tls.Certificate{cert},
-		CurvePreferences: []tls.CurveID{tls.X25519MLKEM768, tls.X25519, tls.CurveP256},
+		MinVersion:   tls.VersionTLS13,
+		Certificates: []tls.Certificate{cert},
 	}
 }
 

@@ -25,7 +25,7 @@ import (
 
 // Errors of gateway calls.
 var (
-	ErrBrokerKey       = pcerr.New(pcerr.InvalidArgument, "BROKER_KEY_INVALID", "the broker key is not an X-Wing public key")
+	ErrBrokerKey       = pcerr.New(pcerr.InvalidArgument, "BROKER_KEY_INVALID", "the broker key is not an X-Wing or MLKEM768-P256 public key")
 	ErrBrokerKeyReused = pcerr.New(pcerr.FailedPrecondition, "BROKER_KEY_REUSED", "a retired broker key cannot be registered again")
 	ErrRenewal         = pcerr.New(pcerr.FailedPrecondition, "GATEWAY_RENEWAL_REFUSED",
 		"only the gateway's current certificate can be renewed; enroll again")
@@ -62,6 +62,12 @@ func (s *Service) Enroll(ctx context.Context, token string, csr []byte) (Enrolle
 	var out Enrolled
 	err = s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		// A gateway never enrolls into an org that is not ACTIVE (HR-392).
+		if state, err := q.OrgState(ctx, org); db.IsNoRows(err) || (err == nil && state != "ACTIVE") {
+			return ErrEnrollment
+		} else if err != nil {
+			return err
+		}
 		t, err := q.LockGatewayEnrollmentToken(ctx, org, tok.Hash())
 		switch {
 		case db.IsNoRows(err):
@@ -169,12 +175,15 @@ func (s *Service) Renew(ctx context.Context, id Identity, csr []byte) (Enrolled,
 	return out, err
 }
 
-// RegisterBrokerKey registers the gateway's X-Wing public key, over its own
-// mTLS identity only (HR-182). The active key registered again changes
+// RegisterBrokerKey registers the gateway's seal public key (X-Wing, or
+// MLKEM768-P256 from a FIPS gateway; a FIPS server refuses X-Wing, D35),
+// over its own mTLS identity only (HR-182). The active key registered again changes
 // nothing; a new key becomes the active version and the configuration
 // version moves, so credentials sealed to the old key must be sealed again.
 func (s *Service) RegisterBrokerKey(ctx context.Context, id Identity, public []byte) (dbq.PcBrokerKey, error) {
-	if _, err := pccrypto.ParseSealPublicKey(public); err != nil {
+	if _, err := pccrypto.ParseSealPublicKey(public); errors.Is(err, pccrypto.ErrSealSuiteNotFIPS) {
+		return dbq.PcBrokerKey{}, err // an X-Wing key at a FIPS server (D35)
+	} else if err != nil {
 		return dbq.PcBrokerKey{}, ErrBrokerKey
 	}
 	fp := Fingerprint(public)
@@ -242,7 +251,10 @@ func (s *Service) Authenticate(ctx context.Context, id Identity) error {
 		}
 		now := r.DbNow
 		live := r.State == "ACTIVE" || (r.State == "SUPERSEDED" && r.SupersededAt != nil && now.Before(r.SupersededAt.Add(SupersededGrace)))
-		ok = r.GatewayID == id.Gateway && r.GatewayState == "ACTIVE" && live && !now.Before(r.NotBefore) && now.Before(r.NotAfter)
+		// A gateway of an org that is not ACTIVE (DELETED, D22) fails closed
+		// (HR-392), like person and API-key sign-ins.
+		ok = r.GatewayID == id.Gateway && r.GatewayState == "ACTIVE" && r.OrgState == "ACTIVE" && live &&
+			!now.Before(r.NotBefore) && now.Before(r.NotAfter)
 		return nil
 	})
 	if err != nil {

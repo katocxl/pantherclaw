@@ -1647,7 +1647,8 @@ func (x *RenewCertificateResponse) GetCaCertificate() []byte {
 // RegisterBrokerKeyRequest registers a broker public key.
 type RegisterBrokerKeyRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// X-Wing (MLKEM768-X25519) public key, 1,216 bytes.
+	// Seal public key: X-Wing (MLKEM768-X25519), 1,216 bytes, or
+	// MLKEM768-P256 from a FIPS gateway, 1,249 bytes (G0 M13 D35).
 	PublicKey     []byte `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3751,10 +3752,11 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\xbaH\az\x05\x10@\x18\x80 R\x03csr\"c\n" +
 	"\x18RenewCertificateResponse\x12 \n" +
 	"\vcertificate\x18\x01 \x01(\fR\vcertificate\x12%\n" +
-	"\x0eca_certificate\x18\x02 \x01(\fR\rcaCertificate\"C\n" +
-	"\x18RegisterBrokerKeyRequest\x12'\n" +
+	"\x0eca_certificate\x18\x02 \x01(\fR\rcaCertificate\"\xda\x01\n" +
+	"\x18RegisterBrokerKeyRequest\x12\xbd\x01\n" +
 	"\n" +
-	"public_key\x18\x01 \x01(\fB\b\xbaH\x05z\x03h\xc0\tR\tpublicKey\"U\n" +
+	"public_key\x18\x01 \x01(\fB\x9d\x01\xbaH\x99\x01\xba\x01\x95\x01\n" +
+	"\x0fbroker_key_size\x12Xthe broker key must be an X-Wing (1,216 bytes) or MLKEM768-P256 (1,249 bytes) public key\x1a(size(this) == 1216 || size(this) == 1249R\tpublicKey\"U\n" +
 	"\x19RegisterBrokerKeyResponse\x128\n" +
 	"\n" +
 	"broker_key\x18\x01 \x01(\v2\x19.pantherclaw.v1.BrokerKeyR\tbrokerKey\"G\n" +

@@ -1,0 +1,11 @@
+{
+  "sources": [
+    "docs/quickstart.md",
+    "docs/ARCHITECTURE.md",
+    "docs/UPGRADES.md",
+    "docs/runbooks",
+    "docs/protocol",
+    "docs/adr",
+    "docs/perf"
+  ]
+}

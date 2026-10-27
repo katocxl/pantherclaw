@@ -179,14 +179,16 @@ func (p *Provider) load(ctx context.Context) (*discovered, error) {
 	if len(meta.PKCEMethods) > 0 && !slices.Contains(meta.PKCEMethods, "S256") {
 		return nil, fmt.Errorf("oidc %s: provider does not support PKCE S256", p.cfg.Name)
 	}
+	// The key set's client drops RSA keys under 2048 bits in FIPS mode (D35).
+	kctx := oidc.ClientContext(context.WithoutCancel(ctx), keysClient(p.client))
 	p.disc = &discovered{
 		provider: prov,
-		verifier: prov.VerifierContext(octx, &oidc.Config{ClientID: p.cfg.ClientID, SupportedSigningAlgs: SigningAlgs}),
+		verifier: prov.VerifierContext(kctx, &oidc.Config{ClientID: p.cfg.ClientID, SupportedSigningAlgs: SigningAlgs}),
 		endpoint: oauth2.Endpoint{AuthURL: meta.AuthURL, TokenURL: meta.TokenURL, AuthStyle: p.authStyle()},
 		issParam: meta.IssParam,
 	}
 	if a := p.cfg.SubjectTokenAudience; a != "" {
-		p.disc.subject = prov.VerifierContext(octx, &oidc.Config{ClientID: a, SupportedSigningAlgs: SigningAlgs})
+		p.disc.subject = prov.VerifierContext(kctx, &oidc.Config{ClientID: a, SupportedSigningAlgs: SigningAlgs})
 	}
 	return p.disc, nil
 }
@@ -231,7 +233,9 @@ func (p *Provider) AuthCodeURL(ctx context.Context, req authnapp.AuthRequest) (s
 		return "", err
 	}
 	opts := []oauth2.AuthCodeOption{oidc.Nonce(req.Nonce), oauth2.S256ChallengeOption(req.Verifier)}
-	if req.MaxAge > 0 {
+	if req.ForceLogin {
+		opts = append(opts, oauth2.SetAuthURLParam("prompt", "login"), oauth2.SetAuthURLParam("max_age", "0"))
+	} else if req.MaxAge > 0 {
 		opts = append(opts, oauth2.SetAuthURLParam("max_age", strconv.Itoa(int(req.MaxAge/time.Second))))
 	}
 	return p.oauth(d, req.RedirectURI).AuthCodeURL(req.State, opts...), nil

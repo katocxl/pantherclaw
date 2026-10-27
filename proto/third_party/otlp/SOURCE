@@ -1,0 +1,15 @@
+OpenTelemetry protocol (OTLP) message definitions, vendored unchanged.
+
+Upstream:  https://github.com/open-telemetry/opentelemetry-proto
+Release:   v1.11.1 (commit b3f75588eb23c5fca62264edd05d382de49beb1a, 2026-09-29)
+Licence:   Apache License 2.0 (LICENSE in this directory); copyright The OpenTelemetry Authors
+Files:     opentelemetry/proto/{common,resource,trace,metrics}/v1/*.proto
+
+Only message files are vendored: no collector service definitions, so `task gen`
+generates Go messages (protoc-gen-go) and no gRPC or Connect stubs (G0 M13 D30).
+PantherClaw's own OTLP/HTTP exporter (internal/platform/telemetry) posts
+TracesData and MetricsData, which are wire-compatible with the collector's
+ExportTraceServiceRequest and ExportMetricsServiceRequest.
+
+To update: copy the four files from a newer release (outside the 7-day cooldown,
+docs/security/DEPENDENCY_POLICY.md), update this file, and run `task gen`.

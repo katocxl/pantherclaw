@@ -138,6 +138,7 @@ type Plan struct {
 	CompReason  string
 	Version     int64
 	LastEventAt *time.Time
+	LapsedAt    *time.Time
 }
 
 // Licence is the installed licence (billing.Service.Licence, adapted with
@@ -259,7 +260,15 @@ func (s *Service) Plan(ctx context.Context, org ids.OrgID) (Plan, error) {
 	if !found {
 		return Plan{Org: org, Edition: string(billing.Community), Status: StatusNone, Source: SourceBilling}, nil
 	}
-	return effectivePlan(row, s.clock.Now())
+	p, err := effectivePlan(row, s.clock.Now())
+	p.LapsedAt = row.LapsedAt
+	if p.LapsedAt == nil && (p.Status == StatusLapsed || p.Status == StatusPaused) {
+		p.LapsedAt = row.PeriodEnd
+		if row.CompUntil != nil && row.Source != string(SourceBilling) {
+			p.LapsedAt = row.CompUntil
+		}
+	}
+	return p, err
 }
 
 func fromLicence(n int) int {

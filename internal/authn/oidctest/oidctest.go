@@ -78,7 +78,14 @@ type grant struct {
 // New starts a provider; it is closed when the test ends.
 func New(t testing.TB) *Provider {
 	t.Helper()
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	return NewWithKeyBits(t, 2048)
+}
+
+// NewWithKeyBits starts a provider whose RSA signing key has bits bits
+// (FIPS mode refuses keys under 2048 bits, G0 M13 D35).
+func NewWithKeyBits(t testing.TB, bits int) *Provider {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, bits)
 	if err != nil {
 		t.Fatal(err)
 	}

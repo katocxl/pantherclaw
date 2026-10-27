@@ -1,0 +1,42 @@
+apiVersion: pantherclaw.range/v1
+id: RT-068
+title: A deleted org's gateway stops at once and its agents are refused
+category: recovery
+suite: platform
+tier: business
+attacker: A1
+threats: [T-176]
+rules: [HR-392]
+requires: [payments]
+harness_only: true
+steps:
+  - id: refund-before
+    do: agent.call
+    with:
+      face: mcp
+      connection: payments
+      tool: create_refund
+      args:
+        charge: ch_${fixture.nonce}rt068
+        amount: "30.00"
+        currency: USD
+        reason: duplicate
+    expect:
+      outcome: ALLOW
+  - id: delete
+    do: operator.delete_org
+    with: {}
+  - id: refund-after
+    do: agent.call
+    with:
+      face: mcp
+      connection: payments
+      tool: create_refund
+      args:
+        charge: ch_${fixture.nonce}rt068b
+        amount: "30.00"
+        currency: USD
+        reason: duplicate
+    expect:
+      outcome: REFUSED
+      decisive_control: HR-392

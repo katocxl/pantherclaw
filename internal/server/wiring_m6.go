@@ -63,6 +63,9 @@ type m6Services struct {
 	// rpID is the WebAuthn relying party approver keys are exported for
 	// (HR-038); "" when security keys are off.
 	rpID string
+	// hold is the operator's maintenance hold: the gateway listener refuses
+	// every procedure (G0 M13 D26, HR-379).
+	hold bool
 }
 
 // newM6 builds the M6 services; notify (M5 notifications) may be nil.
@@ -112,7 +115,8 @@ func (m *m6Services) mountPages(web *webhttp.Handler) {
 // organization scan (G0 M8), every call authenticated by its client
 // certificate (HR-181, HR-020).
 func (m *m6Services) gatewayHandler(svc *authority.Service, log *slog.Logger) (http.Handler, error) {
-	rs, err := rpc.NewServer(rpc.Options{Logger: log, Authenticate: gatewaysrpc.Authenticator(m.gateways, gatewayListenerPermissions())})
+	rs, err := rpc.NewServer(rpc.Options{Logger: log, Authenticate: holdAuthenticator(m.hold, heldOnGatewayListener,
+		gatewaysrpc.Authenticator(m.gateways, gatewayListenerPermissions()))})
 	if err != nil {
 		return nil, err
 	}
@@ -178,17 +182,18 @@ func (l *listenerCerts) get(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 	return l.cert, nil
 }
 
-// gatewayTLS is the gateway listener's TLS profile: TLS 1.3, hybrid key
-// exchange preferred, and a client certificate that chains to the internal
-// CA required on every connection.
-func (m *m6Services) gatewayTLS(names []string) *tls.Config {
+// gatewayTLS is the gateway listener's TLS profile: a link between
+// PantherClaw components (TLS 1.3 and a hybrid post-quantum key exchange
+// only, the negotiated group logged; HR-395), and a client certificate that
+// chains to the internal CA required on every connection.
+func (m *m6Services) gatewayTLS(names []string, log *slog.Logger) *tls.Config {
 	certs := &listenerCerts{ca: m.ca, names: names, clk: clock.System{}}
 	conf := httpx.ServerTLSConfig(tls.Certificate{})
 	conf.Certificates = nil
 	conf.GetCertificate = certs.get
 	conf.ClientAuth = tls.RequireAndVerifyClientCert
 	conf.ClientCAs = m.ca.Pool()
-	return conf
+	return httpx.ComponentLinkTLS(conf, "gateway-api", log)
 }
 
 // serveGateways starts the gateway listener when gateway_api.addr is set.
@@ -202,7 +207,7 @@ func (m *m6Services) serveGateways(ctx context.Context, g *errgroup.Group, cfg *
 	if err != nil {
 		return err
 	}
-	srv, err := httpx.NewServer(httpx.ServerConfig{Addr: cfg.GatewayAPI.Addr, Handler: handler, TLS: m.gatewayTLS(cfg.GatewayAPI.Hostnames), Logger: log})
+	srv, err := httpx.NewServer(httpx.ServerConfig{Addr: cfg.GatewayAPI.Addr, Handler: handler, TLS: m.gatewayTLS(cfg.GatewayAPI.Hostnames, log), Logger: log})
 	if err != nil {
 		return err
 	}

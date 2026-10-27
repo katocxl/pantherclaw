@@ -70,6 +70,9 @@ func ResponderFrom(c tenancy.Caller) (Responder, error) {
 	case tenancy.CredBrowserSession:
 		return Responder{User: c.Principal.ID, Browser: c.Session}, nil
 	case tenancy.CredAPIKey:
+	case tenancy.CredSupportSession:
+		// A support session is read-only and is never an approver (G0 M13
+		// D32), whatever its principal.
 	}
 	return Responder{}, ErrHumanSession
 }

@@ -41,6 +41,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/billing"
 	"github.com/katocxl/pantherclaw/internal/billing/licence"
 	coverage "github.com/katocxl/pantherclaw/internal/coverage/domain"
+	"github.com/katocxl/pantherclaw/internal/datarequests"
 	"github.com/katocxl/pantherclaw/internal/definitions/adapters/packagesrpc"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	defsapp "github.com/katocxl/pantherclaw/internal/definitions/app"
@@ -74,6 +75,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/platform/rpc"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	"github.com/katocxl/pantherclaw/internal/platform/version"
 	"github.com/katocxl/pantherclaw/internal/runs/adapters/runsrpc"
 	"github.com/katocxl/pantherclaw/internal/tenancy/adapters/tenancyrpc"
@@ -87,11 +89,24 @@ Usage:
   pantherclaw-server serve [--config FILE]            run the API and/or workers (role from config)
   pantherclaw-server migrate up|status [--config FILE] apply or show schema migrations (as pc_migrator)
   pantherclaw-server db bootstrap --admin-url-file F --app-password-file F --migrator-password-file F --audit-password-file F
-                                 --retention-password-file F
-                                                     create roles and schema once, as the database owner
+                                 --retention-password-file F [--backup-password-file F] [--deleter-password-file F]
+                                                     create roles and schema once, as the database owner; with
+                                                     --backup-password-file also the read-only backup role pc_backup;
+                                                     --deleter-password-file also the org deletion role pc_deleter
   pantherclaw-server keys gen-kek --out FILE          write a new key-encryption key (0600)
   pantherclaw-server keys rotate-gateway-ca --confirm [--config FILE]
                                                      replace the internal gateway CA key; every gateway enrolls again
+  pantherclaw-server keys rotate-receipts --confirm [--config FILE]
+  pantherclaw-server keys rotate-evidence --confirm [--config FILE]
+                                                     new receipts / evidence signing keys; earlier keys stay
+                                                     published and verifying; restart every server instance after
+  pantherclaw-server keys bump-epochs --all --confirm [--config FILE]
+                                                     after restore: raise every non-DELETED org's containment epoch
+  pantherclaw-server security-log export --org ID --out FILE [--after SEQ] [--limit 1..500] [--config FILE]
+  pantherclaw-server security-log ack --org ID --through SEQ --confirm [--config FILE]
+                                                     ACK only after verifying the prefix has a durable external copy
+  pantherclaw-server restore reapply --from FILE [--since RFC3339] --confirm [--config FILE]
+                                                     re-apply shipped tightening events while maintenance hold is on
   pantherclaw-server org create --name N [--admin-email E] [--config FILE]
                                                      create an organization and print its one-time admin token
   pantherclaw-server org admin-invite --org ID [--admin-email E] [--config FILE]
@@ -115,6 +130,9 @@ Usage:
   pantherclaw-server dev connection --org ID --target-url URL [--config FILE] [--gateway NAME] [--name N] [--mode M]
                              [--access-mode M]
                                                      DEVELOPMENT ONLY: a payments connection for an existing gateway
+  pantherclaw-server secrets stage --from DIR --to DIR
+                                                     copy each regular file of DIR as a 0400 secret file
+                                                     (Kubernetes init container; symlinks and others refused)
   pantherclaw-server version
 
 Configuration: JSON file plus PC_* environment variables; secrets only as file paths.
@@ -149,12 +167,19 @@ func RunCommand(ctx context.Context, args []string, stdout, stderr io.Writer, en
 		err = cmdDB(ctx, args[1:], stdout, stderr)
 	case "keys":
 		err = cmdKeys(ctx, args[1:], stdout, stderr, env)
+	case "security-log":
+		err = cmdSecurityLog(ctx, args[1:], stdout, stderr, env)
+	case "restore":
+		err = cmdRestore(ctx, args[1:], stdout, stderr, env)
 	case "org":
 		err = cmdOrg(ctx, args[1:], stdout, stderr, env)
 	case "evidence":
 		err = cmdEvidence(ctx, args[1:], stdout, stderr, env)
 	case "dev":
 		err = cmdDev(ctx, args[1:], stdout, stderr, env)
+	case "secrets":
+		// The Helm chart's init container (G0 M13 D42).
+		err = config.StageSecretsCommand("pantherclaw-server", args[1:], stdout, stderr)
 	default:
 		_, _ = fmt.Fprint(stderr, usage)
 		return 2
@@ -188,7 +213,12 @@ func loadConfig(args []string, stderr io.Writer, env Env, name string) (*Config,
 
 func newLogger(cfg *Config, w io.Writer) *slog.Logger {
 	level, _ := pclog.ParseLevel(cfg.Log.Level)
-	return pclog.New(w, pclog.Options{Service: "pantherclaw-server", Version: version.Get().Version, Level: level})
+	return pclog.New(w, pclog.Options{
+		Service: "pantherclaw-server", Version: version.Get().Version, Level: level,
+		// Records written inside a traced request carry its trace and span
+		// ids (G0 M13 D30).
+		ContextAttrs: []func(context.Context) []slog.Attr{telemetry.LogAttrs},
+	})
 }
 
 // started reports the bound API address to tests (nil in production).
@@ -223,15 +253,29 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err := validateExtension(ext, xdeps); err != nil {
 		return err
 	}
+	tel, err := startTelemetry(cfg, log) //nolint:contextcheck // the span exporter goroutine outlives this call by design; Shutdown bounds it
+	if err != nil {
+		return err
+	}
+	defer func() {
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownGrace)
+		defer cancel()
+		_ = tel.Shutdown(sctx)
+	}()
 	appCfg, err := cfg.dbConfig(cfg.DB.AppUser, cfg.DB.AppPasswordFile, cfg.DB.MaxConns)
 	if err != nil {
 		return err
 	}
-	pool, err := db.Open(ctx, appCfg)
+	pool, err := db.Open(ctx, withQueryTracer(appCfg, tel))
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
+	observePool(pool)
+	if err := checkSchemaAtStart(ctx, cfg, pool, log); err != nil {
+		return err
+	}
+	workers := newWorkerHeartbeat(cfg.Role)
 
 	kp, err := keys.NewFileProvider(cfg.KEKFiles)
 	if err != nil {
@@ -250,6 +294,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	applyFIPSMode(ctx, cfg, log)
 	if err := cfg.checkEvidenceEdition(ents); err != nil {
 		return err
 	}
@@ -263,12 +308,22 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	// The operator's maintenance hold: no decision from any path (HR-379).
+	svc.WithMaintenanceHold(cfg.Maintenance.Hold)
+	if err := auditMaintenanceHold(ctx, pool, cfg.Maintenance.Hold, log); err != nil {
+		return err
+	}
 	captures := newCaptures(pool, kp, log)
 	svc.WithCaptures(captures.recorder)
 	m5, err := newM5(ctx, cfg, pool, kp, bill, log)
 	if err != nil {
 		return err
 	}
+	dataRequests, err := newDataRequests(cfg, pool, reg, m5, log)
+	if err != nil {
+		return err
+	}
+	ui.deletion = newAccountDeletion(ui.store, dataRequests)
 	ui.wireInvitationEmails(cfg, m5.notifications)
 	// A monitor-mode action with an unknown consequence notifies (HR-206).
 	authorityStore.Notify = m5.notifications
@@ -276,6 +331,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	m6.hold = cfg.Maintenance.Hold
 	m14core := wireM14Core(m6)
 	wireM14A2A(m14core)
 	_ = m14core // the M14 streams' wiring registers its kinds here (G0 M14 D64)
@@ -298,6 +354,12 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	m6.scans = agentsrpc.NewGatewayScans(aapp.NewInventory(pool, bill))
 
 	g, ctx := errgroup.WithContext(ctx)
+	// The private admin listener, in every role (HR-382).
+	if err := serveAdmin(ctx, g, cfg, tel, log); err != nil {
+		return err
+	}
+	// apiAddr is the bound API address (role api or all).
+	var apiAddr string
 	// autos is the one M11 part 2 core of this process: the API and the
 	// jobs share it, so every port set on it reaches both (D91 K6).
 	// protect sets its ports on it in every role (D110 P1).
@@ -364,13 +426,17 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err != nil {
 			return err
 		}
+		sup := newSupport(cfg, pool, entsSvc, m5.notifications, log)
 		handler, err := apiHandler(apiDeps{
 			pool: pool, reg: reg, log: log, authority: svc, billing: bill,
 			auth: rpcauth.New(authn, procedurePermissions, nil,
 				rpcauth.WithRefusals(&rpcauth.AuditRefusals{Pool: pool, Log: log}),
+				cfg.APILimits(pool, log),
 				rpcauth.WithPlanGate(planGate(entsSvc, cfg.Billing.RequirePlan)),
 				rpcauth.WithBrowserSessions(sessions, log),
-				ui.accountSessions(web, sessions.PublicOrigin())),
+				ui.accountSessions(web, sessions.PublicOrigin()),
+				supportSessions(sup)),
+			support:   sup,
 			apiKeyEnv: credential.Env(cfg.Auth.APIKeyEnv),
 			cel:       cfg.CEL,
 			oauth: oauthhttp.New(authnapp.NewOAuth(pool, tokens, cfg.Auth.PublicURL, clock.System{}, log),
@@ -394,6 +460,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			ext:          ext,
 			extDeps:      ui.extensionDeps(xdeps),
 			ui:           ui,
+			workers:      workers,
+			hold:         cfg.Maintenance.Hold,
+			data:         dataRequests,
 		})
 		if err != nil {
 			return err
@@ -401,12 +470,20 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err := m6.serveGateways(ctx, g, cfg, svc, log, nil); err != nil {
 			return err
 		}
-		srv, ln, err := listen(ctx, cfg, handler, log)
+		certs, err := publicCertReloader(cfg, log)
 		if err != nil {
 			return err
 		}
-		if onStart != nil {
-			onStart(ln.Addr().String())
+		srv, ln, err := listen(ctx, cfg, handler, certs, log)
+		if err != nil {
+			return err
+		}
+		serveCertReloads(ctx, g, certs)
+		// Tests learn the address once the process can be ready: with the
+		// workers in this process, after they started (HR-370).
+		apiAddr = ln.Addr().String()
+		if onStart != nil && cfg.Role != RoleAll {
+			onStart(apiAddr)
 		}
 		log.InfoContext(ctx, "server.listening", slog.String("addr", ln.Addr().String()), slog.String("role", cfg.Role))
 		m5p2.serveWaits(ctx, g)
@@ -431,7 +508,19 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	}
 	if cfg.Role == RoleWorker || cfg.Role == RoleAll {
 		jreg := jobs.NewRegistry()
-		if err := chainer.Register(jreg, pool); err != nil {
+		dataJobs, closeData, err := registerDataWorkers(ctx, jreg, cfg, dataRequests, log)
+		if err != nil {
+			return err
+		}
+		defer closeData()
+		accountJobs, err := registerAccountDeletion(jreg, ui.deletion)
+		if err != nil {
+			return err
+		}
+		if err := newSupport(cfg, pool, entsSvc, m5.notifications, log).Register(jreg); err != nil {
+			return err
+		}
+		if err := chainer.Register(jreg, pool, log); err != nil {
 			return err
 		}
 		if err := authority.RegisterSweeper(jreg, pool, svc, cfg.Authority.StaleDispatch.D()); err != nil {
@@ -503,6 +592,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if evidenceJobs, err = registerAutomationAssuranceJobs(evidenceJobs, jreg, autos, bill, log); err != nil {
 			return err
 		}
+		if evidenceJobs, err = registerLimitsJobs(evidenceJobs, jreg, pool, log); err != nil {
+			return err
+		}
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {
 			return err
 		}
@@ -535,11 +627,27 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err != nil {
 			return err
 		}
+		client.PeriodicJobs().AddMany(supportPeriodicJobs())
 		client.PeriodicJobs().AddMany(evidenceJobs)
+		observeJobs(ctx, client)
+		client.PeriodicJobs().AddMany(dataJobs)
+		client.PeriodicJobs().AddMany(accountJobs)
 		if err := client.Start(ctx); err != nil {
 			return fmt.Errorf("server: start workers: %w", err)
 		}
 		log.InfoContext(ctx, "server.workers_started", slog.Int("concurrency", cfg.WorkerConcurrency))
+		workers.serve(ctx, g, client)
+		if onStart != nil && cfg.Role == RoleAll {
+			onStart(apiAddr)
+		}
+		// Role worker: /livez and /readyz on the health listener (HR-397).
+		healthAddr, err := serveHealth(ctx, g, cfg, pool, workers, log)
+		if err != nil {
+			return err
+		}
+		if onStart != nil && healthAddr != "" {
+			onStart(healthAddr)
+		}
 		g.Go(func() error {
 			<-ctx.Done()
 			sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownGrace)
@@ -552,14 +660,11 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	return err
 }
 
-func listen(ctx context.Context, cfg *Config, handler http.Handler, log *slog.Logger) (*http.Server, net.Listener, error) {
+func listen(ctx context.Context, cfg *Config, handler http.Handler, certs *httpx.CertReloader, log *slog.Logger) (*http.Server, net.Listener, error) {
 	var tlsConf *tls.Config
-	if cfg.HTTP.TLSCertFile != "" {
-		cert, err := tls.LoadX509KeyPair(cfg.HTTP.TLSCertFile, cfg.HTTP.TLSKeyFile)
-		if err != nil {
-			return nil, nil, fmt.Errorf("server: TLS key pair: %w", err)
-		}
-		tlsConf = httpx.ServerTLSConfig(cert)
+	if certs != nil {
+		// The pair is re-read from disk when it changes (HR-371).
+		tlsConf = httpx.ReloadingServerTLSConfig(certs)
 	}
 	srv, err := httpx.NewServer(httpx.ServerConfig{
 		Addr: cfg.HTTP.Addr, Handler: handler, TLS: tlsConf,
@@ -586,6 +691,7 @@ func publicProcedures() []string {
 // service accounts and API keys. Gateway procedures are refused here: gateways
 // call the Authority only on the mTLS gateway listener (HR-181).
 type apiDeps struct {
+	data *datarequests.Service
 	pool *db.Pool
 	// cel are the configured CEL limits (cel).
 	cel       celenv.Limits
@@ -639,6 +745,14 @@ type apiDeps struct {
 	// extDeps what it is handed.
 	ext     extension.Set
 	extDeps extension.Deps
+	// workers is the job workers' heartbeat that /readyz requires (role
+	// all); nil when this process runs no workers.
+	workers *workerHeartbeat
+	// hold is the operator's maintenance hold (HR-379).
+	hold bool
+	// support is customer-approved support access (wiring_m13_support.go);
+	// nil or off when not configured.
+	support supportService
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
@@ -650,7 +764,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	rs, err := rpc.NewServer(rpc.Options{
 		Logger:       log,
 		Public:       publicProcedures(),
-		Authenticate: d.auth,
+		Authenticate: holdAuthenticator(d.hold, heldOnAPI, d.auth),
 	})
 	if err != nil {
 		return nil, err
@@ -687,7 +801,11 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		return nil, err
 	}
 	if d.m5 != nil {
-		pantherclawv1connect.RegisterAccountServiceHandler(rs, accountrpc.New(authnapp.NewAccount(pool, d.m5.webauthn, d.m5.notifications)))
+		account := accountrpc.New(authnapp.NewAccount(pool, d.m5.webauthn, d.m5.notifications))
+		if d.ui != nil && d.ui.deletion != nil {
+			account.WithAccountDeleter(d.ui.deletion)
+		}
+		pantherclawv1connect.RegisterAccountServiceHandler(rs, account)
 		pantherclawv1connect.RegisterNotificationServiceHandler(rs, notificationsrpc.New(d.m5.notifications))
 	}
 	d.m6.registerPublic(rs)
@@ -744,6 +862,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerM11Protect(rs, d, autos)
 	authzen := registerAuthZEN(rs, d)
 	registerUITenancy(rs, d)
+	registerUsage(rs, d)
+	registerDataRequests(rs, d)
+	registerSupport(rs, d)
 	mux := http.NewServeMux()
 	edges.mount(mux)
 	automationTriggers.mount(mux)
@@ -757,26 +878,18 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	d.device.Mount(mux, d.oauth)
 	if d.web != nil {
 		d.web.Mount(mux)
+		mountSupport(mux, d)
+	}
+	mountDataRequests(mux, d)
+	if d.web != nil && d.ui != nil && d.ui.deletion != nil {
+		d.web.MountAccountDeletion(mux, d.ui.deletion)
 	}
 	mountM14Data(mux, d)
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, "ok\n")
 	})
-	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-		defer cancel()
-		err := pool.InGlobalTx(ctx, db.GlobalHealth, func(ctx context.Context, tx db.GlobalTx) error {
-			var one int
-			return tx.QueryRow(ctx, "SELECT 1").Scan(&one)
-		}, db.ReadOnly())
-		if err != nil {
-			log.WarnContext(ctx, "server.not_ready", pclog.Err(err))
-			http.Error(w, "not ready", http.StatusServiceUnavailable)
-			return
-		}
-		_, _ = io.WriteString(w, "ready\n")
-	})
+	mux.Handle("GET /readyz", readiness{pool: pool, workers: d.workers, held: d.hold, log: log})
 	mux.HandleFunc("GET /.well-known/pantherclaw/jwks.json", func(w http.ResponseWriter, _ *http.Request) {
 		b, err := reg.JWKS()
 		if err != nil {
@@ -799,7 +912,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	// The client address goes into every request's context for the account
 	// procedures' per-IP limits (G0 UI D85).
-	return httpx.ClientIPMiddleware(workloadrpc.RawBody(mux, d.clientIP), d.clientIP), nil
+	return httpx.ClientIPMiddleware(workloadrpc.RawBody(holdHTTP(d.hold, heldHTTPPath, mux), d.clientIP), d.clientIP), nil
 }
 
 // attestTimeout bounds one call to an issuer or a cluster API server.
@@ -905,6 +1018,8 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	migPW := fs.String("migrator-password-file", "", "password file for pc_migrator")
 	auditPW := fs.String("audit-password-file", "", "password file for pc_audit_ro")
 	retentionPW := fs.String("retention-password-file", "", "password file for pc_retention (the retention job's role)")
+	backupPW := fs.String("backup-password-file", "", "optional: password file for pc_backup, the read-only role of the backup job")
+	deleterPW := fs.String("deleter-password-file", "", "optional: password file for pc_deleter, the role of the org deletion job")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -938,17 +1053,54 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if err := db.BootstrapRoles(ctx, conn, pw); err != nil {
 		return err
 	}
+	if *backupPW != "" {
+		// Before the database grants, which give an existing pc_backup
+		// its read access (G0 M13 D21).
+		bpw, err := config.ReadSecretFile(*backupPW)
+		if err != nil {
+			return err
+		}
+		if err := db.BootstrapBackupRole(ctx, conn, bpw); err != nil {
+			return err
+		}
+	}
+	if *deleterPW != "" {
+		// Before the database grants, which give an existing pc_deleter
+		// its org tables (G0 M13 D34).
+		dpw, err := config.ReadSecretFile(*deleterPW)
+		if err != nil {
+			return err
+		}
+		if err := db.BootstrapDeleterRole(ctx, conn, dpw); err != nil {
+			return err
+		}
+	}
 	if err := db.BootstrapDatabase(ctx, conn); err != nil {
 		return err
 	}
 	_, _ = fmt.Fprintf(stdout, "bootstrapped roles %s, %s, %s, %s, %s and schema %s in database %s\n",
 		db.RoleMigrator, db.RoleApp, db.RoleAuditRO, db.RoleRetention, db.RoleLister, db.Schema, cc.Database)
+	if *backupPW != "" {
+		_, _ = fmt.Fprintf(stdout, "bootstrapped the read-only backup role %s\n", db.RoleBackup)
+	}
+	if *deleterPW != "" {
+		_, _ = fmt.Fprintf(stdout, "bootstrapped the org deletion role %s\n", db.RoleDeleter)
+	}
 	return nil
 }
 
 func cmdKeys(ctx context.Context, args []string, stdout, stderr io.Writer, env Env) error {
-	if len(args) > 0 && args[0] == "rotate-gateway-ca" {
-		return cmdRotateGatewayCA(ctx, args[1:], stdout, stderr, env)
+	if len(args) > 0 {
+		switch args[0] {
+		case "rotate-gateway-ca":
+			return cmdRotateGatewayCA(ctx, args[1:], stdout, stderr, env)
+		case "rotate-receipts":
+			return cmdRotateSigning(ctx, rotateReceipts, args[1:], stdout, stderr, env)
+		case "rotate-evidence":
+			return cmdRotateSigning(ctx, rotateEvidence, args[1:], stdout, stderr, env)
+		case "bump-epochs":
+			return cmdBumpEpochs(ctx, args[1:], stdout, stderr, env)
+		}
 	}
 	if len(args) == 0 || args[0] != "gen-kek" {
 		_, _ = fmt.Fprint(stderr, usage)

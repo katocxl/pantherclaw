@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/domain"
+	"github.com/katocxl/pantherclaw/internal/evidence/securityevent"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -83,6 +84,9 @@ func ChainOrg(ctx context.Context, pool *db.Pool, org ids.OrgID, batch int) (int
 				OrgID: org, Seq: link.Seq, EntryID: link.EntryID, PrevHash: link.PrevHash, EntryHash: link.EntryHash,
 			}); err != nil {
 				return err
+			}
+			if err := securityevent.Store(ctx, tx, e, link.Seq); err != nil {
+				return fmt.Errorf("ledger: security outbox: %w", err)
 			}
 			seq, hash = link.Seq, link.EntryHash
 		}

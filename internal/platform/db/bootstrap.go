@@ -29,7 +29,84 @@ const (
 	// RoleRetention removes expired evidence bodies; only the worker's
 	// retention job uses it (G0 M7 design decision 9, HR-198).
 	RoleRetention = "pc_retention"
+	// RoleBackup reads every table for pg_dump: BYPASSRLS, SELECT only
+	// (G0 M13 D21, HR-378). Created only with --backup-password-file.
+	RoleBackup = "pc_backup"
+	// RoleDeleter removes a DELETED org's rows: SELECT and DELETE on the
+	// org tables, the tombstone of pc.orgs, never BYPASSRLS (G0 M13 D34,
+	// HR-391). Created only with --deleter-password-file; only the
+	// worker's data.delete_org job uses it.
+	RoleDeleter = "pc_deleter"
 )
+
+// BootstrapDeleterRole creates or updates pc_deleter and sets its password
+// (G0 M13 D34, HR-391): LOGIN, NOINHERIT, NOBYPASSRLS. Its grants come from
+// BootstrapDatabase and the migrations. It must run with a superuser
+// connection.
+func BootstrapDeleterRole(ctx context.Context, admin *pgx.Conn, pw pclog.Secret[[]byte]) error {
+	return bootstrapOptionalRole(ctx, admin, RoleDeleter, bootstrapDeleterRoleSQL, pw)
+}
+
+// bootstrapDeleterRoleSQL creates pc_deleter with exactly its attributes.
+const bootstrapDeleterRoleSQL = `
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_deleter') THEN
+        CREATE ROLE pc_deleter;
+    END IF;
+END
+$$;
+ALTER ROLE pc_deleter LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;`
+
+// BootstrapBackupRole creates or updates pc_backup and sets its password
+// (G0 M13 D21, HR-378): LOGIN, NOINHERIT, BYPASSRLS so a dump sees every
+// org, and nothing else. Its read grants come from BootstrapDatabase and
+// the migrations. It must run with a superuser connection (BYPASSRLS).
+func BootstrapBackupRole(ctx context.Context, admin *pgx.Conn, pw pclog.Secret[[]byte]) error {
+	return bootstrapOptionalRole(ctx, admin, RoleBackup, bootstrapBackupRoleSQL, pw)
+}
+
+// bootstrapOptionalRole runs createSQL (which creates role with its
+// attributes) and sets the role's password as a SCRAM verifier.
+func bootstrapOptionalRole(ctx context.Context, admin *pgx.Conn, role, createSQL string, pw pclog.Secret[[]byte]) error {
+	if err := checkPassword(pw.Reveal()); err != nil {
+		return fmt.Errorf("db: bootstrap: %s password: %w", role, err)
+	}
+	verifier, err := scramVerifier(pw.Reveal())
+	if err != nil {
+		return err
+	}
+	return pgx.BeginFunc(ctx, admin, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, "SET LOCAL log_statement = 'none'"); err != nil {
+			return fmt.Errorf("db: bootstrap: %w", err)
+		}
+		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", int64(bootstrapLockKey)); err != nil {
+			return fmt.Errorf("db: bootstrap lock: %w", err)
+		}
+		if _, err := tx.Exec(ctx, createSQL); err != nil {
+			return fmt.Errorf("db: bootstrap role %s: %w", role, err)
+		}
+		var stmt string
+		if err := tx.QueryRow(ctx, "SELECT format('ALTER ROLE %I PASSWORD %L', $1::text, $2::text)", role, verifier).Scan(&stmt); err != nil {
+			return fmt.Errorf("db: bootstrap: %w", err)
+		}
+		if _, err := tx.Exec(ctx, stmt); err != nil {
+			return fmt.Errorf("db: bootstrap: set %s password: %w", role, err)
+		}
+		return nil
+	})
+}
+
+// bootstrapBackupRoleSQL creates pc_backup with exactly its attributes.
+const bootstrapBackupRoleSQL = `
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_backup') THEN
+        CREATE ROLE pc_backup;
+    END IF;
+END
+$$;
+ALTER ROLE pc_backup LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION BYPASSRLS NOINHERIT;`
 
 var (
 	//go:embed bootstrap_roles.sql

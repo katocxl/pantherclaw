@@ -76,6 +76,8 @@ type rangeDriver struct {
 
 	// planEvents counts the plan events reported (G0 UI range steps).
 	planEvents int
+	// flood is the api.flood steps' API layer, shared by a scenario's steps (M13).
+	flood *floodState
 }
 
 type reviewer struct {
@@ -326,6 +328,8 @@ func (d *rangeDriver) Do(ctx context.Context, sc domain.Scenario, st domain.Step
 		return d.killSwitch()
 	case "browser.call":
 		return d.browserCall(st)
+	case "support.probe":
+		return d.supportProbe(st)
 	case "sandbox.probe":
 		return d.extra.probe(d, st, vars)
 	}

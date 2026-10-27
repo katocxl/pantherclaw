@@ -86,9 +86,14 @@ const (
 	// policies show their rows only in this purpose (app.purpose) or in
 	// the account's own context (app.account_id).
 	GlobalAccounts GlobalPurpose = "accounts"
+	// GlobalRateLimit is the shared rate limiter's pc.rate_counters (G0
+	// M13 D9, HR-376): counters only, keyed by opaque ids, no tenant data.
+	GlobalRateLimit GlobalPurpose = "rate_limit"
 )
 
-var globalPurposes = []GlobalPurpose{GlobalLicence, GlobalJobs, GlobalCrossOrgList, GlobalHealth, GlobalAnchors, GlobalAccounts}
+var globalPurposes = []GlobalPurpose{
+	GlobalLicence, GlobalJobs, GlobalCrossOrgList, GlobalHealth, GlobalAnchors, GlobalAccounts, GlobalRateLimit,
+}
 
 // TxOption customizes a transaction.
 type TxOption func(*pgx.TxOptions)
@@ -209,7 +214,10 @@ type ListerPurpose string
 
 // Lister purposes (extended by later migrations).
 const (
-	ListActiveOrgs      ListerPurpose = "orgs"
+	ListActiveOrgs ListerPurpose = "orgs"
+	// ListAllOrgs lists every org whatever its state, for the post-restore
+	// epoch bump (G0 M13 D6, HR-373).
+	ListAllOrgs         ListerPurpose = "orgs_all"
 	ListLedgerUnchained ListerPurpose = "ledger_unchained" // orgs with entries above their chain watermark
 	// ListVerificationsDue lists orgs with verification tasks past their
 	// deadline or with expired leases (G0 M7, HR-190).
@@ -224,9 +232,14 @@ const (
 	// account's active memberships (G0 UI D8, HR-349). It takes the account
 	// as the ListerParams AccountID.
 	ListAccountMemberships ListerPurpose = "account_memberships"
+	// ListAccountUsers includes disabled users and organizations for deletion.
+	ListAccountUsers ListerPurpose = "account_users"
 	// ListBillingLink finds the (org, link) of one billing ref (G0 UI D37).
 	// It takes the ref as the ListerParams Billing*.
 	ListBillingLink ListerPurpose = "billing_link_lookup"
+	// ListLapsedOrgs lists the active orgs whose hosted plan lapsed, for
+	// the daily reminder and day-90 deletion job (G0 M13 D34, HR-393).
+	ListLapsedOrgs ListerPurpose = "orgs_lapsed"
 )
 
 // ListerParams are the inputs of the parameterized lister purposes, set

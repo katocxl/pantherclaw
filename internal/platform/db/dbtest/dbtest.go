@@ -62,15 +62,20 @@ type DB struct {
 	App      db.Config
 	Migrator db.Config
 	AuditRO  db.Config
+	// Deleter is pc_deleter, the role of the org deletion job (HR-391).
+	Deleter db.Config
 	// Retention is pc_retention, the role of the retention job (HR-198).
 	Retention db.Config
 	admin     *pgx.ConnConfig
 }
 
 type cluster struct {
-	admin    *pgx.ConnConfig
-	pw       db.RolePasswords
-	template string
+	admin *pgx.ConnConfig
+	pw    db.RolePasswords
+	// deleterPW is pc_deleter's, bootstrapped like the other roles so
+	// that every test database grants it the org tables (G0 M13 D34).
+	deleterPW pclog.Secret[[]byte]
+	template  string
 }
 
 var (
@@ -117,6 +122,7 @@ func New(t testing.TB) *DB {
 		Migrator:  roleConfig(shared.admin, name, db.RoleMigrator, shared.pw.Migrator, false),
 		AuditRO:   roleConfig(shared.admin, name, db.RoleAuditRO, shared.pw.AuditRO, true),
 		Retention: roleConfig(shared.admin, name, db.RoleRetention, shared.pw.Retention, true),
+		Deleter:   roleConfig(shared.admin, name, db.RoleDeleter, shared.deleterPW, true),
 		admin:     shared.admin,
 	}
 }
@@ -146,6 +152,29 @@ func (d *DB) AdminExec(t testing.TB, sql string, args ...any) {
 	}); err != nil {
 		t.Fatalf("dbtest: admin exec: %v", err)
 	}
+}
+
+// AdminDo runs fn with a superuser connection to this database (for
+// bootstrap code that takes a connection).
+func (d *DB) AdminDo(t testing.TB, fn func(*pgx.Conn) error) {
+	t.Helper()
+	if err := withDB(context.Background(), d.admin, d.Name, fn); err != nil {
+		t.Fatalf("dbtest: admin: %v", err)
+	}
+}
+
+// ConnectAs opens a plain connection to this database as user (a role the
+// test bootstrapped itself), closed when the test ends.
+func (d *DB) ConnectAs(t testing.TB, user string, password []byte) *pgx.Conn {
+	t.Helper()
+	cfg := d.admin.Copy()
+	cfg.Database, cfg.User, cfg.Password = d.Name, user, string(password)
+	conn, err := pgx.ConnectConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("dbtest: connect as %s: %v", user, err)
+	}
+	t.Cleanup(func() { _ = conn.Close(context.Background()) })
+	return conn
 }
 
 // AdminQueryRow runs a single-row query as the superuser in this database.
@@ -187,6 +216,10 @@ func setup(url string) (*cluster, error) {
 	}
 	defer func() { _ = conn.Close(context.Background()) }()
 	if err := db.BootstrapRoles(ctx, conn, c.pw); err != nil {
+		return nil, err
+	}
+	c.deleterPW = derive(admin.Password, db.RoleDeleter)
+	if err := db.BootstrapDeleterRole(ctx, conn, c.deleterPW); err != nil {
 		return nil, err
 	}
 	c.template = "pc_tmpl_" + db.SchemaFingerprint()

@@ -107,6 +107,21 @@ func entitlementsProto(v entitlements.View) *pantherclawv1.Entitlements {
 	if p.CompUntil != nil {
 		out.CompUntil = timestamppb.New(*p.CompUntil)
 	}
+	if p.LapsedAt != nil {
+		out.LapsedAt = timestamppb.New(*p.LapsedAt)
+		out.DeletionDueAt = timestamppb.New(p.LapsedAt.Add(90 * 24 * time.Hour))
+	}
+	if pending := v.PendingDeletion; pending != nil && pending.WindowEnd != nil {
+		out.DeletionDueAt = timestamppb.New(*pending.WindowEnd)
+		out.PendingDeletion = &pantherclawv1.PendingDeletion{RequestedAt: timestamppb.New(pending.CreatedAt), ExecuteAt: timestamppb.New(*pending.WindowEnd), Cancellable: pending.Reason != nil && *pending.Reason == "requested"}
+		if pending.Reason != nil {
+			if *pending.Reason == "lapse_90d" {
+				out.PendingDeletion.Reason = pantherclawv1.DeletionReason_DELETION_REASON_LAPSE_90D
+			} else {
+				out.PendingDeletion.Reason = pantherclawv1.DeletionReason_DELETION_REASON_REQUESTED
+			}
+		}
+	}
 	return out
 }
 

@@ -1,0 +1,13 @@
+{{template "head" .}}
+<h1>Delete your account</h1>
+<p>This permanently removes your profile and access in every organization. Existing evidence retains pseudonymous identifiers. An organization needs another administrator before its last administrator can leave.</p>
+{{if .SteppedUp}}
+<p>You have signed in again to confirm this action.</p>
+<button type="button" id="delete-account">Permanently delete my account</button>
+{{else}}
+<p>Sign in again before confirming deletion.</p>
+<button type="button" id="reauth-account">Sign in to continue</button>
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/account-deletion.js"></script>
+{{template "foot" .}}

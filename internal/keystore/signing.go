@@ -92,7 +92,7 @@ func LoadSigningKeys(ctx context.Context, pool *db.Pool, kp keys.KeyProvider, re
 			if active[p] {
 				continue
 			}
-			if _, err := createSigningKey(ctx, tx, kp, reg, p); err != nil {
+			if _, err := createSigningKey(ctx, tx, kp, reg, p, Actor); err != nil {
 				return err
 			}
 		}
@@ -125,7 +125,7 @@ func loadAltKey(ctx context.Context, kp keys.KeyProvider, reg *keys.Registry, or
 
 // createSigningKey creates, stores and audits a new active key of p, puts
 // it in reg when reg is not nil, and returns its kid.
-func createSigningKey(ctx context.Context, tx db.TenantTx, kp keys.KeyProvider, reg *keys.Registry, p keys.Purpose) (string, error) {
+func createSigningKey(ctx context.Context, tx db.TenantTx, kp keys.KeyProvider, reg *keys.Registry, p keys.Purpose, actor domain.Actor) (string, error) {
 	var kid string
 	var public, private []byte
 	var put func() error
@@ -155,7 +155,7 @@ func createSigningKey(ctx context.Context, tx db.TenantTx, kp keys.KeyProvider, 
 		return "", fmt.Errorf("keystore: insert signing key: %w", err)
 	}
 	if _, err := audit.Record(ctx, tx, audit.Event{
-		Name: "signing_key.created", Actor: Actor, Outcome: audit.Success,
+		Name: "signing_key.created", Actor: actor, Outcome: audit.Success,
 		Object:  &audit.Object{Type: "signing_key", ID: kid},
 		Details: map[string]string{"purpose": string(p), "algorithm": string(p.Algorithm()), "kek_id": kp.CurrentKEK()},
 	}); err != nil {
@@ -176,11 +176,27 @@ var ErrNotFound = errors.New("keystore: key not found")
 // verifying during the overlap) and creates a new active key. Reload the
 // registry afterwards.
 func RotateSigningKey(ctx context.Context, pool *db.Pool, kp keys.KeyProvider, p keys.Purpose, actor domain.Actor) (newKID string, err error) {
-	if !p.Valid() {
-		return "", fmt.Errorf("keystore: unknown purpose %q", p)
+	kids, err := RotateSigningKeys(ctx, pool, kp, []keys.Purpose{p}, actor)
+	if err != nil {
+		return "", err
+	}
+	return kids[0], nil
+}
+
+// RotateSigningKeys rotates every purpose as RotateSigningKey does, all in
+// one transaction: either every purpose has a new active key or none does.
+// It returns the new kids in the order of purposes; actor is recorded on
+// every retirement and creation (G0 M13 D5).
+func RotateSigningKeys(ctx context.Context, pool *db.Pool, kp keys.KeyProvider, purposes []keys.Purpose, actor domain.Actor) ([]string, error) {
+	for _, p := range purposes {
+		if !p.Valid() {
+			return nil, fmt.Errorf("keystore: unknown purpose %q", p)
+		}
 	}
 	org := ids.PlatformOrg
-	err = pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+	var kids []string
+	err := pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		kids = nil
 		q := dbq.New(tx)
 		if err := q.LockKeystore(ctx, org.UUID()); err != nil {
 			return err
@@ -189,29 +205,42 @@ func RotateSigningKey(ctx context.Context, pool *db.Pool, kp keys.KeyProvider, p
 		if err != nil {
 			return err
 		}
-		for _, r := range rows {
-			if r.Purpose == string(p) && r.State == string(keys.StateActive) {
-				if err := db.ExpectOneRow(q.TransitionSigningKey(ctx, dbq.TransitionSigningKeyParams{
-					OrgID: org, Kid: r.Kid, FromState: string(keys.StateActive), ToState: string(keys.StateRetiring),
-				})); err != nil {
-					return err
-				}
-				if _, err := audit.Record(ctx, tx, audit.Event{
-					Name: "signing_key.retiring", Actor: actor, Outcome: audit.Success,
-					Object: &audit.Object{Type: "signing_key", ID: r.Kid}, Details: map[string]string{"purpose": r.Purpose},
-				}); err != nil {
-					return err
-				}
+		for _, p := range purposes {
+			kid, err := rotateIn(ctx, tx, q, kp, rows, p, actor)
+			if err != nil {
+				return err
 			}
+			kids = append(kids, kid)
 		}
-		kid, err := createSigningKey(ctx, tx, kp, nil, p)
-		if err != nil {
-			return err
-		}
-		newKID = kid
 		return nil
 	})
-	return newKID, err
+	if err != nil {
+		return nil, err
+	}
+	return kids, nil
+}
+
+// rotateIn retires p's active key in rows and creates its new one in tx.
+func rotateIn(ctx context.Context, tx db.TenantTx, q *dbq.Queries, kp keys.KeyProvider, rows []dbq.ListSigningKeysRow,
+	p keys.Purpose, actor domain.Actor,
+) (string, error) {
+	org := tx.OrgID()
+	for _, r := range rows {
+		if r.Purpose == string(p) && r.State == string(keys.StateActive) {
+			if err := db.ExpectOneRow(q.TransitionSigningKey(ctx, dbq.TransitionSigningKeyParams{
+				OrgID: org, Kid: r.Kid, FromState: string(keys.StateActive), ToState: string(keys.StateRetiring),
+			})); err != nil {
+				return "", err
+			}
+			if _, err := audit.Record(ctx, tx, audit.Event{
+				Name: "signing_key.retiring", Actor: actor, Outcome: audit.Success,
+				Object: &audit.Object{Type: "signing_key", ID: r.Kid}, Details: map[string]string{"purpose": r.Purpose},
+			}); err != nil {
+				return "", err
+			}
+		}
+	}
+	return createSigningKey(ctx, tx, kp, nil, p, actor)
 }
 
 // ReplaceSigningKey gives purpose a new active key and revokes every
@@ -261,7 +290,7 @@ func ReplaceSigningKey(ctx context.Context, pool *db.Pool, kp keys.KeyProvider, 
 			}
 			revoked = append(revoked, r.Kid)
 		}
-		kid, err := createSigningKey(ctx, tx, kp, nil, p)
+		kid, err := createSigningKey(ctx, tx, kp, nil, p, Actor)
 		if err != nil {
 			return err
 		}

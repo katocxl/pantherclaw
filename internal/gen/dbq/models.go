@@ -62,6 +62,32 @@ type PcAccount struct {
 	DisplayName   string
 	CreatedAt     time.Time
 	LastSignInAt  *time.Time
+	DeletedAt     *time.Time
+}
+
+type PcAccountDeletion struct {
+	AccountID     ids.UUID
+	JournalID     ids.UUID
+	State         string
+	RecordDigest  string
+	EventRecorded bool
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type PcAccountDeletionEvent struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	AccountID    ids.UUID
+	Kind         string
+	RecordDigest []byte
+}
+
+type PcAccountDeletionStep struct {
+	OrgID  ids.OrgID
+	ID     ids.UUID
+	UserID ids.UUID
+	State  string
 }
 
 type PcAccountEvent struct {
@@ -90,25 +116,27 @@ type PcAccountLoginRequest struct {
 	ConsumedAt          *time.Time
 	InvitationOrgID     *ids.UUID
 	InvitationTokenHash []byte
+	DeletionAccountID   *ids.UUID
 }
 
 type PcAccountSession struct {
-	ID             ids.UUID
-	AccountID      ids.UUID
-	SecretHash     []byte
-	PrevSecretHash []byte
-	RotatedAt      *time.Time
-	Generation     int32
-	Provider       string
-	AuthTime       *time.Time
-	UserAgent      string
-	ClientIp       string
-	State          string
-	EndReason      *string
-	CreatedAt      time.Time
-	LastSeenAt     time.Time
-	ExpiresAt      time.Time
-	EndedAt        *time.Time
+	ID                        ids.UUID
+	AccountID                 ids.UUID
+	SecretHash                []byte
+	PrevSecretHash            []byte
+	RotatedAt                 *time.Time
+	Generation                int32
+	Provider                  string
+	AuthTime                  *time.Time
+	UserAgent                 string
+	ClientIp                  string
+	State                     string
+	EndReason                 *string
+	CreatedAt                 time.Time
+	LastSeenAt                time.Time
+	ExpiresAt                 time.Time
+	EndedAt                   *time.Time
+	DeletionReauthenticatedAt *time.Time
 }
 
 type PcActionDefinition struct {
@@ -775,6 +803,29 @@ type PcBillingLink struct {
 	UpdatedAt   time.Time
 }
 
+type PcBreakglassActivation struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	UserID      ids.UUID
+	Role        string
+	Reason      string
+	Credential  ids.UUID
+	StartedAt   time.Time
+	ExpiresAt   time.Time
+	EndedAt     *time.Time
+	EndedByType *string
+	EndedByID   *string
+	EndReason   *string
+}
+
+type PcBreakglassHolder struct {
+	OrgID        ids.OrgID
+	UserID       ids.UUID
+	Role         string
+	DesignatedBy ids.UUID
+	DesignatedAt time.Time
+}
+
 type PcBrokerKey struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID
@@ -1359,6 +1410,38 @@ type PcCustomDetectionRuleTest struct {
 	CreatedAt time.Time
 }
 
+type PcDataRequest struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	Kind             string
+	State            string
+	CreatedBy        *ids.UUID
+	CreatedByAccount *ids.UUID
+	Reason           *string
+	WindowEnd        *time.Time
+	LapsedAt         *time.Time
+	AdminAccounts    []ids.UUID
+	CanceledBy       *ids.UUID
+	CanceledAt       *time.Time
+	ReadyAt          *time.Time
+	ExpiresAt        *time.Time
+	Parts            int32
+	TotalSize        int64
+	Manifest         *string
+	ErrorCode        *string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+type PcDataRequestPart struct {
+	OrgID     ids.OrgID
+	RequestID ids.UUID
+	Number    int32
+	Content   []byte
+	Sha256    []byte
+	CreatedAt time.Time
+}
+
 type PcDecisionConsequence struct {
 	OrgID         ids.OrgID
 	TransactionID ids.UUID
@@ -1403,6 +1486,19 @@ type PcDek struct {
 	KekID      string
 	State      string
 	CreatedAt  time.Time
+}
+
+type PcDeletionRecord struct {
+	OrgID              ids.OrgID
+	ID                 ids.UUID
+	DeletedOrgID       ids.UUID
+	Reason             string
+	RequestedByAccount *ids.UUID
+	Accounts           []ids.UUID
+	ReappliedFrom      []byte
+	Record             []byte
+	SignedRecord       string
+	CreatedAt          time.Time
 }
 
 type PcDelivery struct {
@@ -1975,6 +2071,11 @@ type PcHoldSlot struct {
 	UpdatedAt time.Time
 }
 
+type PcIdentityDeletionGuard struct {
+	IdentityHash []byte
+	State        string
+}
+
 type PcIdentityPlaybook struct {
 	OrgID     ids.OrgID
 	Enabled   bool
@@ -2270,6 +2371,7 @@ type PcOrg struct {
 	UpdatedAt        time.Time
 	Slug             *string
 	CreatedByAccount *ids.UUID
+	DeletedAt        *time.Time
 }
 
 type PcOrgContainment struct {
@@ -2280,6 +2382,16 @@ type PcOrgContainment struct {
 	EngagedBy    *string
 	EngagedAt    *time.Time
 	EngageReason *string
+}
+
+type PcOrgDeletionJournal struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	DeletedOrgID ids.UUID
+	Snapshot     []byte
+	SignedIntent string
+	Complete     bool
+	CreatedAt    time.Time
 }
 
 type PcOrgEntitlement struct {
@@ -2301,6 +2413,7 @@ type PcOrgEntitlement struct {
 	Version     int64
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+	LapsedAt    *time.Time
 }
 
 type PcOrgTermsAcceptance struct {
@@ -2723,6 +2836,13 @@ type PcProtectedChangeSetting struct {
 	UpdatedAt time.Time
 }
 
+type PcRateCounter struct {
+	Scope       string
+	Key         string
+	WindowStart time.Time
+	Count       int32
+}
+
 type PcReconciliationTask struct {
 	OrgID             ids.OrgID
 	ID                ids.UUID
@@ -2999,6 +3119,21 @@ type PcSavedQuery struct {
 	UpdatedAt   time.Time
 }
 
+type PcSchemaInfo struct {
+	ID        int16
+	Version   int64
+	AppliedAt time.Time
+}
+
+type PcSecurityEventOutbox struct {
+	OrgID          ids.OrgID
+	LedgerSeq      int64
+	Payload        []byte
+	Attempts       int32
+	LastEmittedAt  *time.Time
+	AcknowledgedAt *time.Time
+}
+
 type PcServiceAccount struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID
@@ -3186,6 +3321,60 @@ type PcSsfTransmitter struct {
 	LastRefusalCode     *string
 }
 
+type PcSupportAccessGrant struct {
+	OrgID              ids.OrgID
+	ID                 ids.UUID
+	RequestID          ids.UUID
+	AccountID          ids.UUID
+	Scope              string
+	ApprovedBy         ids.UUID
+	ApprovedCredential ids.UUID
+	StartsAt           time.Time
+	ExpiresAt          time.Time
+	RevokedAt          *time.Time
+	RevokedByType      *string
+	RevokedByID        *string
+}
+
+type PcSupportAccessRequest struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	RequesterAccount  ids.UUID
+	RequesterIssuer   string
+	RequesterSubject  string
+	RequesterEmail    string
+	RequesterName     string
+	StaffOrg          ids.UUID
+	StaffUser         ids.UUID
+	StaffCredential   ids.UUID
+	Task              string
+	Scope             string
+	DurationHours     int32
+	State             string
+	CreatedAt         time.Time
+	ExpiresAt         time.Time
+	DecidedBy         *ids.UUID
+	DecidedCredential *ids.UUID
+	DecidedAt         *time.Time
+}
+
+type PcSupportSession struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	GrantID         ids.UUID
+	AccountID       ids.UUID
+	StaffCredential ids.UUID
+	SecretHash      []byte
+	State           string
+	EndReason       *string
+	UserAgent       string
+	ClientIp        string
+	CreatedAt       time.Time
+	LastSeenAt      time.Time
+	ExpiresAt       time.Time
+	EndedAt         *time.Time
+}
+
 type PcSuppression struct {
 	OrgID       ids.OrgID
 	ID          ids.UUID
@@ -3333,6 +3522,18 @@ type PcUnreceiptedEffect struct {
 	AcknowledgedBy  *string
 	AcknowledgedAt  *time.Time
 	FirstSeenAt     time.Time
+}
+
+type PcUsageDaily struct {
+	OrgID         ids.OrgID
+	Day           pgtype.Date
+	Agents        int32
+	InstancesPeak int32
+	Runs          int32
+	BytesWritten  int64
+	BytesRemoved  int64
+	StoredBytes   int64
+	ComputedAt    time.Time
 }
 
 type PcUser struct {

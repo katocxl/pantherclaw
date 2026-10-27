@@ -4,7 +4,7 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 
 | Runbook | Milestone | Purpose |
 |---|---|---|
-| [key-rotation.md](key-rotation.md) | M1 / M6 / M7 | Rotate signing keys, DEKs, KEKs, gateway broker keys and sealed credentials; the internal CA |
+| [key-rotation.md](key-rotation.md) | M1 / M6 / M7 / M13 | Rotate signing keys, DEKs, KEKs, gateway broker keys and sealed credentials; the internal CA; the epoch bump after a restore |
 | [gateway.md](gateway.md) | M6 | Enroll, renew, check and revoke gateways |
 | [kill-switch.md](kill-switch.md) | M6 | Engage and restore the org-wide emergency stop |
 | [sandbox.md](sandbox.md) | M9 | Run an agent in the containment sandbox, read its closures, apply its changes (patch only), clean up |
@@ -12,7 +12,7 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [anchoring.md](anchoring.md) | M7 | Turn on, watch and update the anchored global root (Rekor v2 and RFC 3161) |
 | [retention.md](retention.md) | M7 | Set up the retention role and job; set retention periods, legal holds and payload capture |
 | [coverage-records.md](coverage-records.md) | M9 | Read and explain coverage records, the freshness contract, exclusions and credential-overreach findings |
-| [backup-restore.md](backup-restore.md) | M13 | Backups, point-in-time recovery, restore drill |
+| [backup-restore.md](backup-restore.md) | M13 | Nightly encrypted backups, KEK escrow, the restore drill with measured RPO and RTO, a real restore |
 | [incident-response.md](incident-response.md) | M10 | Alerts → incidents → cases → containment → restoration; a security incident in PantherClaw itself |
 | [siem-export.md](siem-export.md) | M10 | Add, verify, watch and rotate OCSF 1.9 SIEM export destinations (Business) |
 | [shared-signals.md](shared-signals.md) | M10 | Receive CAEP and RISC events from the IdP; the two-person identity playbook (Business) |
@@ -32,3 +32,8 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [comp-plans.md](comp-plans.md) | UI | Grant and revoke complimentary plans from the operator command line (hosted deployments) |
 | [billing-webhooks.md](billing-webhooks.md) | UI | Billing webhook failures: a stale plan, refused or out-of-order events; protection is never affected |
 | [hosted-oidc-outage.md](hosted-oidc-outage.md) | UI | Hosted OIDC provider outage: sign-in is down, enforcement is unaffected |
+| [deploy.md](deploy.md) | M13 | Deploy hosted staging (L3): host layout, sign-in through an SSH tunnel, deploy with a readiness wait and rollback, the G3 record, health and certificates |
+| [observability.md](observability.md) | M13 | Export traces and metrics over OTLP/HTTP, the loopback admin listener, security-event log lines and `restore reapply` |
+| [support-access.md](support-access.md) | M13 | Customer-approved support access (hosted, Enterprise) and break-glass (Business and above) |
+| [data-requests.md](data-requests.md) | M13 | Export an organization, delete it with a 7-day window and a signed deletion record, the lapse lifecycle, account deletion |
+| [installation.md](installation.md) | M13 | Verified releases with `install.sh`, a single node with `pclaw up`, the Helm chart, FIPS builds |

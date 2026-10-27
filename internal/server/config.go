@@ -35,10 +35,16 @@ const (
 type Config struct {
 	Role string `json:"role" env:"PC_ROLE"`
 	// Deployment is development, staging or production (config_ui_web.go).
-	Deployment string     `json:"deployment" env:"PC_DEPLOYMENT"`
-	Log        LogConfig  `json:"log"`
-	HTTP       HTTPConfig `json:"http"`
-	DB         DBConfig   `json:"database"`
+	Deployment string `json:"deployment" env:"PC_DEPLOYMENT"`
+	// Maintenance is the operator's maintenance hold (wiring_m13_platform.go).
+	Maintenance MaintenanceConfig `json:"maintenance"`
+	// Health is the worker role's health listener (wiring_m13_install.go).
+	Health HealthConfig `json:"health"`
+	Log    LogConfig    `json:"log"`
+	HTTP   HTTPConfig   `json:"http"`
+	DB     DBConfig     `json:"database"`
+	// Support is customer-approved support access (config_m13_support.go).
+	Support SupportConfig `json:"support"`
 	// KEKFiles are key-encryption-key files; the first wraps new keys.
 	KEKFiles    []string `json:"kek_files" env:"PC_KEK_FILES"`
 	LicenceFile string   `json:"licence_file" env:"PC_LICENCE_FILE"`
@@ -72,6 +78,14 @@ type Config struct {
 	// (G0 UI D8, D9, D12; config_ui_tenancy.go).
 	Billing BillingConfig `json:"billing"`
 	Signup  SignupConfig  `json:"signup"`
+	// Telemetry and Admin are the OTLP exporter and the private admin
+	// listener (G0 M13 D30; wiring_m13_observability.go).
+	Telemetry TelemetryConfig `json:"telemetry"`
+	Admin     AdminConfig     `json:"admin"`
+	// Limits is the API rate limits and usage meters (G0 M13 D8, D10;
+	// config_m13_limits.go).
+	Limits  LimitsConfig  `json:"limits"`
+	Backups BackupsConfig `json:"backups"`
 }
 
 // IdentityConfig configures workload identity (M3).
@@ -115,6 +129,7 @@ type DBConfig struct {
 	// reports ROLE_UNAVAILABLE (config_retention.go).
 	RetentionUser         string          `json:"retention_user" env:"PC_DB_RETENTION_USER"`
 	RetentionPasswordFile string          `json:"retention_password_file" env:"PC_DB_RETENTION_PASSWORD_FILE"`
+	DeleterPasswordFile   string          `json:"deleter_password_file" env:"PC_DB_DELETER_PASSWORD_FILE"`
 	MaxConns              int             `json:"max_conns" env:"PC_DB_MAX_CONNS"`
 	StatementTimeout      config.Duration `json:"statement_timeout" env:"PC_DB_STATEMENT_TIMEOUT"`
 	LockTimeout           config.Duration `json:"lock_timeout" env:"PC_DB_LOCK_TIMEOUT"`
@@ -137,6 +152,7 @@ func DefaultConfig() Config {
 			IdleInTxTimeout: config.Duration(d.IdleInTxTimeout),
 		},
 		WorkerConcurrency: 10,
+		Backups:           BackupsConfig{RetentionDays: 60},
 		Authority: AuthorityConfig{
 			GrantMaxPerAction: "100", GrantCurrency: "USD", BudgetName: "dev-refunds",
 			PermitTTL: config.Duration(5 * time.Second), StaleDispatch: config.Duration(30 * time.Second),
@@ -148,8 +164,10 @@ func DefaultConfig() Config {
 			Concurrency: 5,
 			SMTP:        SMTPConfig{Port: 587, TLS: "starttls"},
 		},
-		Waitlist: defaultWaitlist(),
-		CEL:      celenv.DefaultLimits,
+		Waitlist:  defaultWaitlist(),
+		CEL:       celenv.DefaultLimits,
+		Telemetry: defaultTelemetry(),
+		Limits:    defaultLimits(),
 	}
 }
 
@@ -181,6 +199,8 @@ func (c *Config) Validate() error {
 		errs = append(errs, errors.New("worker_concurrency must be 1..1000"))
 	}
 	errs = append(errs, c.validateDeployment()...)
+	errs = append(errs, c.validateHealth()...)
+	errs = append(errs, c.validateSupport()...)
 	errs = append(errs, c.validateTenancy()...)
 	errs = append(errs, c.validateAuthority()...)
 	errs = append(errs, c.validateAuth()...)
@@ -191,10 +211,13 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateM8()...)
 	errs = append(errs, c.validateEvidence()...)
 	errs = append(errs, c.validateRetention()...)
+	errs = append(errs, c.validateDataRequests()...)
 	errs = append(errs, c.validateCoverage()...)
 	errs = append(errs, c.validateGateways()...)
 	errs = append(errs, c.validateDev()...)
 	errs = append(errs, c.validateDevSlack()...)
+	errs = append(errs, c.validateObservability()...)
+	errs = append(errs, c.validateLimits()...)
 	if err := c.CEL.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("cel: %w", err))
 	}

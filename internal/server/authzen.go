@@ -23,6 +23,8 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/ratelimit"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -43,7 +45,8 @@ import (
 // about to forward, verified exactly as the gateway's are (HR-318); a
 // subject that only names someone is refused. A denial is 200 with
 // decision false. Bodies are at most 128 KiB, a forwarded body 64 KiB, and
-// each point has its own rate a second on each instance (HR-321).
+// each point has its own rate a second (HR-321), counted in the shared
+// limiter across every instance; a counter error refuses (HR-376).
 const (
 	authzenConfigPath      = "/.well-known/authzen-configuration"
 	authzenEvaluationPath  = "/access/v1/evaluation"
@@ -84,7 +87,7 @@ type authzenEndpoint struct {
 	decider   authzenDecider
 	publicURL string
 	mappers   *mapperCache
-	rates     *pointRates
+	rates     pointLimiter
 	// pointOf finds the caller's ACTIVE point (activePoint; tests replace it).
 	pointOf func(ctx context.Context, c tapp.Caller) (point, error)
 	log     *slog.Logger
@@ -99,6 +102,10 @@ func newAuthZENEndpoint(pool *db.Pool, authn authzenAuthenticator, decider authz
 	e := &authzenEndpoint{
 		pool: pool, authn: authn, decider: decider, publicURL: strings.TrimRight(publicURL, "/"),
 		mappers: newMapperCache(limits), rates: newPointRates(clk), log: log,
+	}
+	if pool != nil {
+		// Each point's rate holds across replicas (G0 M13 D9, HR-376).
+		e.rates = sharedPointRates{ratelimit.NewStore(pool)}
 	}
 	e.pointOf = e.activePoint
 	return e
@@ -235,7 +242,12 @@ func (e *authzenEndpoint) serve(w http.ResponseWriter, r *http.Request, batch bo
 		authzenRefuse(w, http.StatusBadRequest, authzenInvalid)
 		return
 	}
-	if !e.rates.allow(p.ID, p.Rate, len(evals)) {
+	if ok, err := e.rates.allowPoint(ctx, p, len(evals)); err != nil || !ok {
+		telemetry.RateLimited(r.Context(), telemetry.ScopeAuthZEN)
+		if err != nil {
+			// The shared counter is unavailable: refuse (HR-376).
+			e.log.ErrorContext(ctx, "authzen.rate_unavailable", slog.String("point", p.ID.String()), pclog.Err(err))
+		}
 		authzenRefuse(w, http.StatusTooManyRequests, authzenRateLimited)
 		return
 	}
@@ -281,10 +293,29 @@ func (e *authzenEndpoint) serve(w http.ResponseWriter, r *http.Request, batch bo
 
 func isCtl(r rune) bool { return r < 0x20 || r == 0x7f }
 
+// pointLimiter counts a point's evaluations a second (HR-321); an error
+// refuses the request (HR-376).
+type pointLimiter interface {
+	allowPoint(ctx context.Context, p point, n int) (bool, error)
+}
+
+// scopeAuthZENPoint is the shared counter's scope of a point's rate.
+const scopeAuthZENPoint = "authzen.point"
+
+// sharedPointRates counts each point's evaluations a second in the shared
+// limiter, so the rate holds across every replica (G0 M13 D9, HR-376).
+type sharedPointRates struct{ l ratelimit.Limiter }
+
+func (s sharedPointRates) allowPoint(ctx context.Context, p point, n int) (bool, error) {
+	d, err := s.l.Take(ctx, scopeAuthZENPoint, p.Org.String()+"/"+p.ID.String(), time.Second, n, p.Rate)
+	return d.Allowed, err
+}
+
 // pointRates limits each point's evaluations a second on this instance
 // (HR-321): a one-second window per point, its points kept in a bounded
 // least-recently-used list, so one point's window never resets
-// another's (D82).
+// another's (D82). The server uses sharedPointRates; pointRates serves an
+// endpoint without a database (tests).
 type pointRates struct {
 	mu    sync.Mutex
 	clock clock.Clock
@@ -304,6 +335,10 @@ func newPointRates(clk clock.Clock) *pointRates {
 		clk = clock.System{}
 	}
 	return &pointRates{clock: clk, max: 10_000, order: list.New(), by: map[ids.UUID]*list.Element{}}
+}
+
+func (l *pointRates) allowPoint(_ context.Context, p point, n int) (bool, error) {
+	return l.allow(p.ID, p.Rate, n), nil
 }
 
 // allow records n evaluations for a point and reports whether they fit.

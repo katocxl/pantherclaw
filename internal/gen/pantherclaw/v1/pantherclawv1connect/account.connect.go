@@ -47,6 +47,9 @@ const (
 	// AccountServiceRemoveUserKeyProcedure is the procedure name of the AccountService's RemoveUserKey
 	// RPC.
 	AccountServiceRemoveUserKeyProcedure = "/pantherclaw.v1.AccountService/RemoveUserKey"
+	// AccountServiceDeleteAccountProcedure is the procedure name of the AccountService's DeleteAccount
+	// RPC.
+	AccountServiceDeleteAccountProcedure = "/pantherclaw.v1.AccountService/DeleteAccount"
 )
 
 var (
@@ -103,6 +106,13 @@ var (
 			Procedure:  AccountServiceRemoveUserKeyProcedure,
 		}
 	})
+	accountServiceDeleteAccountSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_account_proto.Services().ByName("AccountService").Methods().ByName("DeleteAccount"),
+			Procedure:  AccountServiceDeleteAccountProcedure,
+		}
+	})
 )
 
 // AccountServiceClient is a client for the pantherclaw.v1.AccountService service.
@@ -131,6 +141,15 @@ type AccountServiceClient interface {
 	// can never add one for someone else. The user is told by email.
 	// permission: user.manage
 	RemoveUserKey(context.Context, *v1.RemoveUserKeyRequest) (*v1.RemoveUserKeyResponse, error)
+	// DeleteAccount deletes the signed-in hosted account (G0 M13 D34,
+	// HR-394): only from an account session whose sign-in is recent
+	// (RECENT_SIGN_IN_REQUIRED otherwise), and refused while the account is
+	// the last org admin of any active org (LAST_ADMIN). Its users in every
+	// org are disabled and pseudonymised ("deleted user <short id>"), its
+	// email and name are removed, and its sessions end. Evidence keeps
+	// opaque ids only.
+	// permission: account.delete
+	DeleteAccount(context.Context, *v1.DeleteAccountRequest) (*v1.DeleteAccountResponse, error)
 }
 
 // NewAccountServiceClient constructs a client for the pantherclaw.v1.AccountService service.
@@ -165,6 +184,15 @@ type AccountServiceHandler interface {
 	// can never add one for someone else. The user is told by email.
 	// permission: user.manage
 	RemoveUserKey(context.Context, *v1.RemoveUserKeyRequest) (*v1.RemoveUserKeyResponse, error)
+	// DeleteAccount deletes the signed-in hosted account (G0 M13 D34,
+	// HR-394): only from an account session whose sign-in is recent
+	// (RECENT_SIGN_IN_REQUIRED otherwise), and refused while the account is
+	// the last org admin of any active org (LAST_ADMIN). Its users in every
+	// org are disabled and pseudonymised ("deleted user <short id>"), its
+	// email and name are removed, and its sessions end. Evidence keeps
+	// opaque ids only.
+	// permission: account.delete
+	DeleteAccount(context.Context, *v1.DeleteAccountRequest) (*v1.DeleteAccountResponse, error)
 }
 
 // RegisterAccountServiceHandler registers svc as the pantherclaw.v1.AccountService implementation
@@ -179,6 +207,7 @@ func RegisterAccountServiceHandler(server *connect.Server, svc AccountServiceHan
 		connect.Method{Spec: accountServiceListUserKeysSpec(), Handler: adapter.listUserKeys},
 		connect.Method{Spec: accountServiceRevokeUserSessionsSpec(), Handler: adapter.revokeUserSessions},
 		connect.Method{Spec: accountServiceRemoveUserKeySpec(), Handler: adapter.removeUserKey},
+		connect.Method{Spec: accountServiceDeleteAccountSpec(), Handler: adapter.deleteAccount},
 	)
 }
 
@@ -211,6 +240,10 @@ func (UnimplementedAccountServiceHandler) RevokeUserSessions(context.Context, *v
 
 func (UnimplementedAccountServiceHandler) RemoveUserKey(context.Context, *v1.RemoveUserKeyRequest) (*v1.RemoveUserKeyResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.AccountService.RemoveUserKey is not implemented")
+}
+
+func (UnimplementedAccountServiceHandler) DeleteAccount(context.Context, *v1.DeleteAccountRequest) (*v1.DeleteAccountResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.AccountService.DeleteAccount is not implemented")
 }
 
 type accountServiceClient struct {
@@ -268,6 +301,14 @@ func (c *accountServiceClient) RevokeUserSessions(ctx context.Context, req *v1.R
 func (c *accountServiceClient) RemoveUserKey(ctx context.Context, req *v1.RemoveUserKeyRequest) (*v1.RemoveUserKeyResponse, error) {
 	var res v1.RemoveUserKeyResponse
 	if err := c.client.CallUnary(ctx, accountServiceRemoveUserKeySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accountServiceClient) DeleteAccount(ctx context.Context, req *v1.DeleteAccountRequest) (*v1.DeleteAccountResponse, error) {
+	var res v1.DeleteAccountResponse
+	if err := c.client.CallUnary(ctx, accountServiceDeleteAccountSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -353,6 +394,18 @@ func (h accountServiceHandler) removeUserKey(ctx context.Context, _ connect.Spec
 		return err
 	}
 	res, err := h.svc.RemoveUserKey(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accountServiceHandler) deleteAccount(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteAccountRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteAccount(ctx, &req)
 	if err != nil {
 		return err
 	}
