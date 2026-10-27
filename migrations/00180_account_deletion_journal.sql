@@ -170,7 +170,14 @@ CREATE TRIGGER account_identity_guard BEFORE INSERT OR UPDATE ON pc.cli_sessions
 CREATE TRIGGER account_identity_guard BEFORE INSERT OR UPDATE ON pc.role_bindings FOR EACH ROW EXECUTE FUNCTION pc.account_identity_guard();
 CREATE TRIGGER account_identity_guard BEFORE INSERT OR UPDATE ON pc.account_sessions FOR EACH ROW EXECUTE FUNCTION pc.account_identity_guard();
 
+-- squawk: pc.account_login_requests rows live 10 minutes and are purged a
+-- day after they expire, so the table is small and the new key and index
+-- lock it briefly; the new column is NULL in every existing row, and goose
+-- runs each migration in one transaction (.squawk.toml), so CONCURRENTLY
+-- is not possible.
+-- squawk-ignore adding-foreign-key-constraint
 ALTER TABLE pc.account_login_requests ADD COLUMN deletion_account_id uuid REFERENCES pc.accounts(id);
+-- squawk-ignore require-concurrent-index-creation
 CREATE INDEX account_login_requests_deletion_account ON pc.account_login_requests(deletion_account_id) WHERE deletion_account_id IS NOT NULL;
 GRANT UPDATE(deletion_account_id) ON pc.account_login_requests TO pc_app;
 ALTER TABLE pc.account_sessions ADD COLUMN deletion_reauthenticated_at timestamptz;
