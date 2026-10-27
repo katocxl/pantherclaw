@@ -17,6 +17,31 @@ vars:
   COMPOSE: docker compose -f deploy/compose/compose.yaml
 
 tasks:
+  api:schema:
+    desc: Generate the Connect JSON OpenAPI 3.1 schema from protobuf
+    cmds:
+      - go tool -modfile={{.PINS}}/buf/go.mod buf generate --template buf.openapi.gen.yaml
+
+  api:check:
+    desc: Run authenticated schema property checks on a disposable database
+    dotenv: ["deploy/compose/.env"]
+    cmds:
+      - uv sync --locked --project tools/api
+      - >-
+        PC_TEST_API_SCHEMA=1 PC_TEST_REQUIRE_DB=1
+        PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable"
+        go test -tags integration -count=1 -timeout 20m -run '^TestM13_APIConformance$' ./internal/server
+
+  test:fuzz:
+    desc: Run the bounded nightly security parser fuzz targets
+    cmds:
+      - bash tools/scripts/fuzz-nightly.sh
+
+  docs:build:
+    desc: Build the static searchable docs into a new dist/docs directory
+    cmds:
+      - go -C tools run ./docsite -root .. -out ../dist/docs
+
   default:
     cmds:
       - "{{.TASK_EXE}} --list"

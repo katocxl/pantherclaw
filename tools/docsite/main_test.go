@@ -11,7 +11,7 @@ import (
 )
 
 func TestRenderSafeMarkdownAndLinks(t *testing.T) {
-	source := []byte("# Guide\n\n<script>alert(1)</script>\n\n[unsafe](javascript:alert%281%29)\n\n[local](../quickstart.md#start) [source](../BUILD_GUIDE.md#scope)\n\n| Key | Value |\n| --- | --- |\n| ready | yes |\n")
+	source := []byte("# Guide\n\n<script>alert(1)</script>\n\n[unsafe](javascript:alert%281%29)\n\n[local](../quickstart.md#start) [source](../BUILD_GUIDE.md#scope)\n\n![Diagram](../diagram.svg)\n\n```sh\npclaw-command-only-in-code\n```\n\n| Key | Value |\n| --- | --- |\n| ready | yes |\n")
 	item, body, err := render("docs/runbooks/deploy.md", source, map[string]bool{"docs/quickstart.md": true})
 	if err != nil {
 		t.Fatal(err)
@@ -22,12 +22,12 @@ func TestRenderSafeMarkdownAndLinks(t *testing.T) {
 			t.Fatalf("unsafe output: %s", s)
 		}
 	}
-	for _, want := range []string{`href="../quickstart.html#start"`, sourceBase + "docs/BUILD_GUIDE.md#scope", "<table>", `id="guide"`} {
+	for _, want := range []string{`href="../quickstart.html#start"`, sourceBase + "docs/BUILD_GUIDE.md#scope", imageBase + "docs/diagram.svg", "<table>", `id="guide"`} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in %s", want, s)
 		}
 	}
-	if item.Title != "Guide" || item.URL != "docs/runbooks/deploy.html" || !strings.Contains(item.Text, "ready") {
+	if item.Title != "Guide" || item.URL != "docs/runbooks/deploy.html" || !strings.Contains(item.Text, "ready") || !strings.Contains(item.Text, "pclaw-command-only-in-code") {
 		t.Fatalf("index entry: %+v", item)
 	}
 }
