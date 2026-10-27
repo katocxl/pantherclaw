@@ -14,9 +14,14 @@
 //   - Connect-Protocol-Version is optional: the Connect protocol says
 //     clients should send it, and the server accepts calls without it, so
 //     bare HTTP callers and curl examples keep working;
-//   - a property of a request message also accepts null, which ProtoJSON
-//     reads as the field's default, unless that default breaks the field's
-//     own protovalidate rules (then null is refused like the default).
+//   - in request messages, where a field's default passes its own
+//     protovalidate rules, the property also accepts null (the ProtoJSON
+//     spec reads null as the default) and, for a string without presence,
+//     the empty string;
+//     where the default breaks them, omitting the field is refused like the
+//     default, so the property is required;
+//   - an enum field's `in` and `not_in` rules are given by value name, as
+//     ProtoJSON writes enums (the generator only lists numbers).
 //
 // It runs from `task api:schema` and rewrites the file in place, keeping the
 // generator's key order and formatting so the nightly drift check still works.
@@ -69,11 +74,11 @@ func run(path string) error {
 	if err != nil {
 		return err
 	}
-	invalid, err := zeroInvalid(protoregistry.GlobalFiles)
+	facts, err := Collect(protoregistry.GlobalFiles)
 	if err != nil {
 		return err
 	}
-	out, err := Fix(in, zeroMinimums(protoregistry.GlobalFiles), invalid)
+	out, err := Fix(in, facts)
 	if err != nil {
 		return err
 	}
@@ -82,6 +87,69 @@ func run(path string) error {
 
 // field names one property of a component schema.
 type field struct{ schema, property string }
+
+// Facts are what the descriptors say about the fields of every message.
+type Facts struct {
+	// Minimums are numeric fields with `gte: 0`.
+	Minimums map[field]bool
+	// ZeroInvalid are fields whose default breaks their own rules.
+	ZeroInvalid map[field]bool
+	// Strings are singular string fields without presence, where "" is the
+	// default; for an `optional` one, "" is a set value and validated.
+	Strings map[field]bool
+	// Enums are enum fields (or items) with `in` or `not_in` rules.
+	Enums map[field]EnumRule
+}
+
+// EnumRule restricts an enum field, or each item of a repeated one.
+type EnumRule struct {
+	In, NotIn []string
+}
+
+// Collect reads the Facts from the registered descriptors.
+func Collect(files *protoregistry.Files) (Facts, error) {
+	invalid, err := zeroInvalid(files)
+	if err != nil {
+		return Facts{}, err
+	}
+	f := Facts{Minimums: zeroMinimums(files), ZeroInvalid: invalid, Strings: map[field]bool{}, Enums: map[field]EnumRule{}}
+	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+		walkMessages(fd.Messages(), func(md protoreflect.MessageDescriptor) {
+			for i := range md.Fields().Len() {
+				fd := md.Fields().Get(i)
+				key := field{string(md.FullName()), fd.JSONName()}
+				if fd.Kind() == protoreflect.StringKind && fd.Cardinality() != protoreflect.Repeated && !fd.HasPresence() {
+					f.Strings[key] = true
+				}
+				if fd.Kind() != protoreflect.EnumKind {
+					continue
+				}
+				rules, ok := proto.GetExtension(fd.Options(), validate.E_Field).(*validate.FieldRules)
+				if !ok || rules == nil {
+					continue
+				}
+				if fd.IsList() {
+					rules = rules.GetRepeated().GetItems()
+				}
+				er := rules.GetEnum()
+				names := func(nums []int32) []string {
+					out := make([]string, 0, len(nums))
+					for _, n := range nums {
+						if v := fd.Enum().Values().ByNumber(protoreflect.EnumNumber(n)); v != nil {
+							out = append(out, string(v.Name()))
+						}
+					}
+					return out
+				}
+				if len(er.GetIn()) > 0 || len(er.GetNotIn()) > 0 {
+					f.Enums[key] = EnumRule{In: names(er.GetIn()), NotIn: names(er.GetNotIn())}
+				}
+			}
+		})
+		return true
+	})
+	return f, nil
+}
 
 // zeroMinimums lists every numeric field whose protovalidate rules say
 // `gte: 0`, directly or for each item of a repeated field.
@@ -180,9 +248,9 @@ func zeroInvalid(files *protoregistry.Files) (map[field]bool, error) {
 
 // Fix applies the corrections to a generated schema. Fields it is asked to
 // constrain must exist when their message is in the schema, so a renamed
-// field cannot silently lose its bound. zeroInvalid names the request
-// properties that must not accept null.
-func Fix(doc []byte, minimums, zeroInvalid map[field]bool) ([]byte, error) {
+// field cannot silently lose its bound.
+func Fix(doc []byte, facts Facts) ([]byte, error) {
+	minimums := facts.Minimums
 	root, err := parse(doc)
 	if err != nil {
 		return nil, err
@@ -241,10 +309,25 @@ func Fix(doc []byte, minimums, zeroInvalid map[field]bool) ([]byte, error) {
 		if props == nil {
 			continue // An enum, a well-known type or a message without fields.
 		}
+		s := schemas.get(name)
 		for _, prop := range props.obj {
-			if !zeroInvalid[field{name, prop.key}] {
-				acceptNull(prop.value)
+			f := field{name, prop.key}
+			if r, ok := facts.Enums[f]; ok {
+				target := prop.value
+				if items := target.get("items"); items != nil {
+					target = items
+				}
+				restrictEnum(target, r)
 			}
+			if facts.ZeroInvalid[f] {
+				require(s, prop.key)
+				continue
+			}
+			if facts.Strings[f] {
+				allowEmpty(prop.value)
+			}
+			acceptNull(prop.value)
+			acceptNullEnum(prop.value) // Also on a rerun, after restrictEnum.
 		}
 	}
 	var buf bytes.Buffer
@@ -316,6 +399,55 @@ func requestSchemas(paths, schemas *node) []string {
 	return names
 }
 
+// restrictEnum states the rule by value name: `in` as an enum, `not_in` as
+// a not-enum, replacing the generator's numeric not.
+func restrictEnum(p *node, r EnumRule) {
+	list := func(names []string) *node {
+		n := &node{isArr: true}
+		for _, name := range names {
+			n.arr = append(n.arr, &node{raw: quote(name)})
+		}
+		return n
+	}
+	p.obj = slices.DeleteFunc(p.obj, func(m member) bool { return m.key == "not" || (m.key == "enum" && len(r.In) > 0) })
+	if len(r.In) > 0 {
+		p.obj = append(p.obj, member{"enum", list(r.In)})
+	}
+	if len(r.NotIn) > 0 {
+		p.obj = append(p.obj, member{"not", &node{obj: []member{{"enum", list(r.NotIn)}}}})
+	}
+}
+
+// require adds name to a schema's required list.
+func require(s *node, name string) {
+	req := s.get("required")
+	if req == nil {
+		req = &node{isArr: true}
+		s.obj = append(s.obj, member{"required", req})
+	}
+	if !slices.ContainsFunc(req.arr, func(v *node) bool { return string(v.raw) == string(quote(name)) }) {
+		req.arr = append(req.arr, &node{raw: quote(name)})
+	}
+}
+
+// allowEmpty lets a string property also be "", moving the keywords that
+// refuse it (pattern, format, minLength) into an anyOf branch.
+func allowEmpty(p *node) {
+	var moved []member
+	p.obj = slices.DeleteFunc(p.obj, func(m member) bool {
+		if m.key == "pattern" || m.key == "format" || (m.key == "minLength" && m.value.scalar() != "0") {
+			moved = append(moved, m)
+			return true
+		}
+		return false
+	})
+	if len(moved) == 0 {
+		return
+	}
+	empty := &node{obj: []member{{"maxLength", &node{raw: []byte("0")}}}}
+	p.obj = append(p.obj, member{"anyOf", &node{isArr: true, arr: []*node{{obj: moved}, empty}}})
+}
+
 // acceptNull lets a property schema also take null: a reference becomes
 // anyOf [ref, null], a typed schema gains the null type (and null in its
 // enum). It is idempotent.
@@ -325,6 +457,7 @@ func acceptNull(p *node) {
 		switch m.key {
 		case "$ref":
 			p.obj[i] = member{"anyOf", &node{isArr: true, arr: []*node{{obj: []member{m}}, nullType}}}
+			acceptNullEnum(p)
 			return
 		case "type":
 			if m.value.raw != nil {
@@ -335,11 +468,15 @@ func acceptNull(p *node) {
 			} else if !slices.ContainsFunc(m.value.arr, func(v *node) bool { return string(v.raw) == `"null"` }) {
 				m.value.arr = append(m.value.arr, &node{raw: []byte(`"null"`)})
 			}
-			if enum := p.get("enum"); enum != nil && !slices.ContainsFunc(enum.arr, func(v *node) bool { return string(v.raw) == "null" }) {
-				enum.arr = append(enum.arr, &node{raw: []byte("null")})
-			}
+			acceptNullEnum(p)
 			return
 		}
+	}
+}
+
+func acceptNullEnum(p *node) {
+	if enum := p.get("enum"); enum != nil && !slices.ContainsFunc(enum.arr, func(v *node) bool { return string(v.raw) == "null" }) {
+		enum.arr = append(enum.arr, &node{raw: []byte("null")})
 	}
 }
 

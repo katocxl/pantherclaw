@@ -2,7 +2,8 @@
 # Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 # Replaces the generator's Connect-Protocol-Version component. Header values
 # are strings on the wire, so a numeric schema makes every correct request
-# look schema-violating to a validator that reads the headers as sent.
+# look schema-violating to a validator that reads the headers as sent. The
+# server ignores an empty value, so "" is listed too.
 # (internal/apischema leaves Connect-Timeout-Ms out of the schema.)
 openapi: 3.1.0
 info:
@@ -14,5 +15,7 @@ components:
     connect-protocol-version:
       type: string
       title: Connect-Protocol-Version
-      description: Define the version of the Connect protocol
-      enum: ["1"]
+      description: >-
+        Define the version of the Connect protocol. Optional; when present it
+        must be "1", and an empty value counts as absent.
+      enum: ["1", ""]

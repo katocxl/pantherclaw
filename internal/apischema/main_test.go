@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -67,6 +68,13 @@ const sample = `{
       "connect-timeout-header": {
         "type": "number"
       },
+      "x.v1.State": {
+        "type": "string",
+        "enum": [
+          "STATE_UNSPECIFIED",
+          "STATE_ON"
+        ]
+      },
       "x.v1.Sub": {
         "type": "object",
         "properties": {
@@ -100,6 +108,26 @@ const sample = `{
             "title": "days",
             "minimum": 1
           },
+          "parentId": {
+            "type": "string",
+            "title": "parent_id",
+            "pattern": "^x$",
+            "format": "uuid"
+          },
+          "state": {
+            "not": {
+              "enum": [
+                0
+              ]
+            },
+            "$ref": "#/components/schemas/x.v1.State"
+          },
+          "states": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/x.v1.State"
+            }
+          },
           "parent": {
             "$ref": "#/components/schemas/x.v1.Sub",
             "title": "parent"
@@ -114,8 +142,19 @@ const sample = `{
   }
 }`
 
+// sampleFacts are the descriptor facts for the sample schema.
+func sampleFacts(minimums map[field]bool) Facts {
+	notUnspecified := EnumRule{NotIn: []string{"STATE_UNSPECIFIED"}}
+	return Facts{
+		Minimums:    minimums,
+		ZeroInvalid: map[field]bool{{"x.v1.Req", "days"}: true, {"x.v1.Req", "state"}: true},
+		Strings:     map[field]bool{{"x.v1.Req", "parentId"}: true, {"x.v1.Req", "note"}: true, {"x.v1.Sub", "kind"}: true},
+		Enums:       map[field]EnumRule{{"x.v1.Req", "state"}: notUnspecified, {"x.v1.Req", "states"}: notUnspecified},
+	}
+}
+
 func TestFixAddsZeroMinimumAnd415AndDropsTheTimeout(t *testing.T) {
-	out, err := Fix([]byte(sample), map[field]bool{{"x.v1.Req", "pageSize"}: true, {"x.v1.Absent", "n"}: true}, map[field]bool{{"x.v1.Req", "days"}: true})
+	out, err := Fix([]byte(sample), sampleFacts(map[field]bool{{"x.v1.Req", "pageSize"}: true, {"x.v1.Absent", "n"}: true}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,6 +206,25 @@ func TestFixAddsZeroMinimumAnd415AndDropsTheTimeout(t *testing.T) {
 			t.Errorf("%s.%s = %s, want %s", c.schema, c.prop, got, c.want)
 		}
 	}
+	prop := func(name string) string {
+		b, _ := json.Marshal(raw.Components.Schemas["x.v1.Req"].Properties[name])
+		return string(b)
+	}
+	for name, want := range map[string]string{
+		"parentId": `{"anyOf":[{"format":"uuid","pattern":"^x$"},{"maxLength":0}],"title":"parent_id","type":["string","null"]}`,
+		"state":    `{"$ref":"#/components/schemas/x.v1.State","not":{"enum":["STATE_UNSPECIFIED"]}}`,
+		"states":   `{"items":{"$ref":"#/components/schemas/x.v1.State","not":{"enum":["STATE_UNSPECIFIED"]}},"type":["array","null"]}`,
+	} {
+		if got := prop(name); got != want {
+			t.Errorf("%s = %s, want %s", name, got, want)
+		}
+	}
+	if !strings.Contains(string(out), `"required": [
+          "days",
+          "state"
+        ]`) {
+		t.Errorf("fields whose default is invalid are not required:\n%s", out)
+	}
 	if s := string(out); strings.Contains(s, "Connect-Timeout-Ms") || strings.Contains(s, "connect-timeout-header") ||
 		!strings.Contains(s, "Connect-Protocol-Version") {
 		t.Fatalf("Connect-Timeout-Ms not dropped alone:\n%s", s)
@@ -182,7 +240,7 @@ func TestFixAddsZeroMinimumAnd415AndDropsTheTimeout(t *testing.T) {
             "format": "int32"`) {
 		t.Fatalf("minimum not placed after maximum:\n%s", out)
 	}
-	again, err := Fix(out, map[field]bool{{"x.v1.Req", "pageSize"}: true}, map[field]bool{{"x.v1.Req", "days"}: true})
+	again, err := Fix(out, sampleFacts(map[field]bool{{"x.v1.Req", "pageSize"}: true}))
 	if err != nil || string(again) != string(out) {
 		t.Fatalf("Fix is not idempotent: %v", err)
 	}
@@ -199,7 +257,7 @@ func TestFixKeepsFormatting(t *testing.T) {
     null
   ]
 }`
-	out, err := Fix([]byte(`{"components":{"schemas":{}}}`), nil, nil)
+	out, err := Fix([]byte(`{"components":{"schemas":{}}}`), Facts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,10 +276,10 @@ func TestFixKeepsFormatting(t *testing.T) {
 }
 
 func TestFixRejectsMissingOrContradictingProperty(t *testing.T) {
-	if _, err := Fix([]byte(sample), map[field]bool{{"x.v1.Req", "gone"}: true}, nil); err == nil {
+	if _, err := Fix([]byte(sample), Facts{Minimums: map[field]bool{{"x.v1.Req", "gone"}: true}}); err == nil {
 		t.Fatal("a missing property was accepted")
 	}
-	if _, err := Fix([]byte(sample), map[field]bool{{"x.v1.Req", "days"}: true}, nil); err == nil {
+	if _, err := Fix([]byte(sample), Facts{Minimums: map[field]bool{{"x.v1.Req", "days"}: true}}); err == nil {
 		t.Fatal("a minimum contradicting gte 0 was accepted")
 	}
 }
@@ -267,6 +325,24 @@ func TestZeroInvalidFromProtovalidate(t *testing.T) {
 	}
 }
 
+// The real descriptors: "" is the default of a plain string, but a set
+// value of an optional one.
+func TestCollectStringsWithoutPresence(t *testing.T) {
+	f, err := Collect(protoregistry.GlobalFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !f.Strings[field{"pantherclaw.v1.ListTeamsRequest", "businessUnitId"}] {
+		t.Error("ListTeamsRequest.business_unit_id missing")
+	}
+	if f.Strings[field{"pantherclaw.v1.ListAgentsRequest", "teamId"}] {
+		t.Error("optional ListAgentsRequest.team_id listed")
+	}
+	if r := f.Enums[field{"pantherclaw.v1.ListAgentsRequest", "states"}]; !slices.Equal(r.NotIn, []string{"AGENT_STATE_UNSPECIFIED"}) {
+		t.Errorf("ListAgentsRequest.states rule = %+v", r)
+	}
+}
+
 // The real descriptors: page_size has `gte: 0` and days has `gte: 1`.
 func TestZeroMinimumsFromProtovalidate(t *testing.T) {
 	got := zeroMinimums(protoregistry.GlobalFiles)
@@ -289,11 +365,11 @@ func TestCommittedSchemaIsFixed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	invalid, err := zeroInvalid(protoregistry.GlobalFiles)
+	facts, err := Collect(protoregistry.GlobalFiles)
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := Fix(doc, zeroMinimums(protoregistry.GlobalFiles), invalid)
+	out, err := Fix(doc, facts)
 	if err != nil {
 		t.Fatal(err)
 	}
