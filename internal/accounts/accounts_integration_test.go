@@ -259,7 +259,8 @@ func TestHR349_MembershipsComeOnlyFromTheAuditedListerForThatAccount(t *testing.
 }
 
 // TestHR350_AccountSessionsCallOnlyAllowListedProcedures: the allow list is
-// exactly D8's, and an account caller carries no org caller, so every
+// exactly D8's plus GetDeletionRecord (G0 M13 D34), and an account
+// caller carries no org caller, so every
 // org-scoped use case refuses it.
 func TestHR350_AccountSessionsCallOnlyAllowListedProcedures(t *testing.T) {
 	declared, err := protoperms.Declared(filepath.Join("..", "..", "proto"))
@@ -269,6 +270,8 @@ func TestHR350_AccountSessionsCallOnlyAllowListedProcedures(t *testing.T) {
 	want := map[string]bool{
 		"/pantherclaw.v1.AccessService/WhoAmI": true, "/pantherclaw.v1.AccessService/AcceptInvitation": true,
 		"/pantherclaw.v1.TenancyService/CreateOrg": true, "/pantherclaw.v1.TenancyService/ListMyOrgs": true,
+		// G0 M13 D34: only records of deletions this account requested.
+		"/pantherclaw.v1.DataRequestService/GetDeletionRecord": true,
 	}
 	for proc := range declared {
 		allowed := accounts.AllowedProcedure(proc)
