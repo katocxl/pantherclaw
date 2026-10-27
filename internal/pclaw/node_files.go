@@ -90,8 +90,8 @@ const (
 	nodeSecretsDir     = "secrets"
 	nodeTLSDir         = "tls"
 	nodeGatewayDir     = "gateway"
-	nodeOIDCSecret     = "oidc-client.secret"
-	nodeGitHubSecret   = "github-client.secret"
+	nodeOIDCSecret     = "oidc-client.secret"   //nolint:gosec // G101: a file name, not a credential
+	nodeGitHubSecret   = "github-client.secret" //nolint:gosec // G101: a file name, not a credential
 	nodeDeploymentProd = "production"
 	nodeDeploymentDev  = "development"
 	// nodePostgresImage is the PostgreSQL 17 image deploy/compose pins.
@@ -134,7 +134,7 @@ func saveNodeState(dir string, st nodeState) error {
 // writeNodeFile replaces path with b (written beside it, then renamed).
 func writeNodeFile(path string, b []byte, perm os.FileMode) error {
 	tmp := path + ".new"
-	if err := os.WriteFile(tmp, b, perm); err != nil {
+	if err := os.WriteFile(tmp, b, perm); err != nil { //nolint:gosec // G703: a file in the node directory pclaw manages, chosen by its own user
 		return err
 	}
 	if err := os.Chmod(tmp, perm); err != nil {
@@ -339,7 +339,7 @@ func nodeServerConfigJSON(st nodeState) ([]byte, error) {
 		"deployment": st.Deployment,
 		"log":        map[string]any{"level": "info"},
 		"http":       map[string]any{"addr": "0.0.0.0:8080", "plaintext_behind_proxy": true},
-		"database": map[string]any{
+		"database": map[string]any{ //nolint:gosec // G101: secret file paths, not credentials
 			"host": nodePostgresHost, "port": 5432, "name": "pantherclaw",
 			"sslmode": "verify-full", "sslrootcert": "/node/secrets/ca.crt",
 			"app_user": "pc_app", "app_password_file": "/node/secrets/pc_app.pw",

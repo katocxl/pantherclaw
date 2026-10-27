@@ -32,6 +32,7 @@ const (
 	MaxPartBytes        = 64 << 20
 	MaxExportBytes      = 2 << 30
 	fileChunkBytes      = 4 << 20
+	maxParts            = 64
 	ExportFormat        = "pantherclaw.export/v1"
 	ExportJWSType       = "pap-export+jwt"
 	ExportCosignContext = "pantherclaw.export/v1"
@@ -98,7 +99,11 @@ func (b *archiveBuilder) add(ctx context.Context, name string, content []byte) e
 		return err
 	}
 	h := sha256.Sum256(content)
-	b.manifest.Files = append(b.manifest.Files, ExportFile{Path: name, Part: int32(len(b.manifest.Parts) + 1), Size: int64(len(content)), SHA256: hex.EncodeToString(h[:])})
+	parts, err := partCount(b.manifest.Parts)
+	if err != nil {
+		return err
+	}
+	b.manifest.Files = append(b.manifest.Files, ExportFile{Path: name, Part: parts + 1, Size: int64(len(content)), SHA256: hex.EncodeToString(h[:])})
 	return nil
 }
 
@@ -110,10 +115,14 @@ func (b *archiveBuilder) flush(ctx context.Context) error {
 		return err
 	}
 	n := b.buf.Len()
-	if n > MaxPartBytes || b.total+int64(n) > MaxExportBytes || len(b.manifest.Parts) >= 64 {
+	if n > MaxPartBytes || b.total+int64(n) > MaxExportBytes || len(b.manifest.Parts) >= maxParts {
 		return ErrTooLarge
 	}
-	part := int32(len(b.manifest.Parts) + 1)
+	parts, err := partCount(b.manifest.Parts)
+	if err != nil {
+		return err
+	}
+	part := parts + 1
 	sum := sha256.Sum256(b.buf.Bytes())
 	if err := b.q.InsertDataRequestPart(ctx, dbq.InsertDataRequestPartParams{OrgID: b.org, RequestID: b.id, Number: part, Content: b.buf.Bytes(), Sha256: sum[:]}); err != nil {
 		return err
@@ -273,7 +282,11 @@ func (s *Service) Build(ctx context.Context, org ids.OrgID, id ids.UUID) error {
 		if len(manifest) > 1<<20 {
 			return ErrTooLarge
 		}
-		n, err := q.MarkExportReady(ctx, dbq.MarkExportReadyParams{OrgID: org, ID: id, ReadyAt: &now, Parts: int32(len(m.Parts)), TotalSize: b.total, Manifest: &manifest})
+		parts, err := partCount(m.Parts)
+		if err != nil {
+			return err
+		}
+		n, err := q.MarkExportReady(ctx, dbq.MarkExportReadyParams{OrgID: org, ID: id, ReadyAt: &now, Parts: parts, TotalSize: b.total, Manifest: &manifest})
 		if err != nil {
 			return err
 		}
@@ -362,4 +375,15 @@ func (s *Service) failExport(ctx context.Context, org ids.OrgID, id ids.UUID, co
 		_, err := dbq.New(tx).FailDataRequest(ctx, &code, org, id)
 		return err
 	})
+}
+
+// partCount is the number of parts as the int32 the manifest and the
+// database store. flush refuses a part beyond maxParts, so a larger count
+// means a broken builder and is refused rather than truncated.
+func partCount(parts []ExportPart) (int32, error) {
+	n := len(parts)
+	if n < 0 || n > maxParts {
+		return 0, ErrTooLarge
+	}
+	return int32(n), nil
 }

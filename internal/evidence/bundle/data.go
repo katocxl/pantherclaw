@@ -83,19 +83,21 @@ type deletionDocument struct {
 	ReappliedKind    string    `json:"reapplied_kind,omitzero"`
 }
 
-func dataSignature(raw []byte, typ, purpose string, created time.Time, o Options) (pack.Signed, error) {
+// verifyDataSignature checks raw's signature against the pinned key of
+// purpose that was valid at created.
+func verifyDataSignature(raw []byte, typ, purpose string, created time.Time, o Options) error {
 	if len(raw) > MaxDataDocumentBytes || o.Trust == nil {
-		return pack.Signed{}, errors.New("bounded data document and pinned trust are required")
+		return errors.New("bounded data document and pinned trust are required")
 	}
 	s, err := pack.ParseDataJWS(string(raw), typ)
 	if err != nil {
-		return s, err
+		return err
 	}
 	k := o.Trust.key(purpose, s.Kid)
 	if k == nil || !s.Verify(k.ed) || !k.ValidAt(created) {
-		return s, errors.New("signature or signing-key validity failed")
+		return errors.New("signature or signing-key validity failed")
 	}
-	return s, nil
+	return nil
 }
 
 func validDataID(s string) bool {
@@ -129,7 +131,7 @@ func VerifyExport(raw []byte, parts fs.FS, o Options) *Report {
 		err = errors.New("invalid export manifest shape")
 	}
 	if err == nil {
-		s, err = dataSignature(raw, "pap-export+jwt", PurposeEvidencePacks, m.CreatedAt, o)
+		err = verifyDataSignature(raw, "pap-export+jwt", PurposeEvidencePacks, m.CreatedAt, o)
 	}
 	if err != nil {
 		r.add("export.manifest", "", Failed, "%v", err)
@@ -218,7 +220,7 @@ func verifyDataPart(parts fs.FS, name string, part dataPart, files map[string]da
 	}
 	for _, item := range z.File {
 		declared, ok := files[item.Name]
-		if !ok || seen[item.Name] || declared.Part != part.Number || item.Method != zip.Store || item.Mode()&fs.ModeType != 0 || item.UncompressedSize64 != uint64(declared.Size) {
+		if !ok || seen[item.Name] || declared.Part != part.Number || item.Method != zip.Store || item.Mode()&fs.ModeType != 0 || item.UncompressedSize64 != uint64(declared.Size) { //nolint:gosec // G115: the manifest check bounds every file size to 0..dataPartBytes
 			return errors.New("unlisted, duplicate, unsafe or mismatched ZIP entry")
 		}
 		reader, err := item.Open()
@@ -288,7 +290,7 @@ func VerifyDeletion(raw []byte, o Options) *Report {
 		err = errors.New("invalid or incomplete deletion record")
 	}
 	if err == nil {
-		_, err = dataSignature(raw, "pap-deletion+jwt", PurposeReceipts, m.CompleteTime, o)
+		err = verifyDataSignature(raw, "pap-deletion+jwt", PurposeReceipts, m.CompleteTime, o)
 	}
 	seen := map[string]bool{}
 	for _, table := range m.Tables {
