@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -68,6 +69,27 @@ func TestHR225_AHeldSecretInAPayloadIsRefused(t *testing.T) {
 		if strings.Contains(r.answer.Reason, testSecret) {
 			t.Errorf("%s: the refusal repeats the secret", name)
 		}
+		// The refusal reaches the server, for detections (G0 M12), with
+		// machine metadata only: never the payload or the secret.
+		h.circuitMu.Lock()
+		refusals := slices.Clone(h.refusals)
+		h.circuitMu.Unlock()
+		if len(refusals) != 1 {
+			t.Fatalf("%s: reported %v", name, refusals)
+		}
+		f := strings.Fields(refusals[0])
+		if len(f) != 4 || f[0] != h.conn.GetId() || f[1] != "secret_in_payload" || f[2] != "shell.command.run" || len(f[3]) != 36 {
+			t.Errorf("%s: reported %q", name, refusals[0])
+		}
+		if strings.Contains(refusals[0], testSecret) || strings.Contains(refusals[0], b64(testSecret)) || strings.Contains(refusals[0], "curl") {
+			t.Errorf("%s: the report carries the payload", name)
+		}
+	}
+	// A clean command reports nothing.
+	h := setup(t, withShell, withCredential(t, []string{"127.0.0.1"}))
+	h.hook(t, shellInput("go test ./...", "/home/dev/proj"), nil)
+	if len(h.refusals) != 0 {
+		t.Fatalf("a clean command reported %v", h.refusals)
 	}
 }
 

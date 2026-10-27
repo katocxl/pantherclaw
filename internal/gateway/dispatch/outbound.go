@@ -12,6 +12,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway/outbound"
 	"github.com/katocxl/pantherclaw/internal/gateway/simcheck"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
 
@@ -70,10 +71,32 @@ func (e *Engine) outboundCheck(ctx context.Context, conn *control.Connection, a 
 	res := outbound.Scan(outbound.Input{Args: a.Params, Path: a.Target.ID}, held)
 	if res.HeldSecret {
 		e.log.WarnContext(ctx, "gateway.secret_in_payload", slog.String("connection_id", conn.GetId()), slog.String("run_id", a.RunID), slog.String("operation", a.Operation))
+		e.reportLocalRefusal(ctx, conn, CodeSecretInPayload, a)
 		return true, nil
 	}
 	for _, f := range res.Findings {
 		findings = append(findings, &pb.PayloadFinding{Kind: f.Kind, Location: f.Location})
 	}
 	return false, findings
+}
+
+// reportLocalRefusal tells the server of a local refusal, so M10's
+// detections see it (G0 M12): the connection, the code, the operation and
+// the run, never the payload or the secret. The refusal stands whatever
+// the report does; a report that fails is only logged.
+func (e *Engine) reportLocalRefusal(ctx context.Context, conn *control.Connection, code string, a actionir.ActionIR) {
+	if e.localRefusals == nil {
+		return
+	}
+	operation, run := a.Operation, a.RunID
+	if !actionir.ValidOperation(operation) {
+		operation = ""
+	}
+	if _, err := ids.ParseUUID(run); err != nil {
+		run = ""
+	}
+	if err := e.localRefusals(context.WithoutCancel(ctx), conn.GetId(), code, operation, run); err != nil {
+		e.log.WarnContext(ctx, "gateway.local_refusal_not_reported", slog.String("connection_id", conn.GetId()),
+			slog.String("code", code), pclog.Err(err))
+	}
 }

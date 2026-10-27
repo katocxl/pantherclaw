@@ -86,6 +86,9 @@ const (
 	// GatewayServiceReportRevocationFailureProcedure is the procedure name of the GatewayService's
 	// ReportRevocationFailure RPC.
 	GatewayServiceReportRevocationFailureProcedure = "/pantherclaw.v1.GatewayService/ReportRevocationFailure"
+	// GatewayServiceReportLocalRefusalProcedure is the procedure name of the GatewayService's
+	// ReportLocalRefusal RPC.
+	GatewayServiceReportLocalRefusalProcedure = "/pantherclaw.v1.GatewayService/ReportLocalRefusal"
 )
 
 var (
@@ -503,6 +506,13 @@ var (
 			Procedure:  GatewayServiceReportRevocationFailureProcedure,
 		}
 	})
+	gatewayServiceReportLocalRefusalSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayService").Methods().ByName("ReportLocalRefusal"),
+			Procedure:  GatewayServiceReportLocalRefusalProcedure,
+		}
+	})
 )
 
 // GatewayServiceClient is a client for the pantherclaw.v1.GatewayService service.
@@ -574,6 +584,14 @@ type GatewayServiceClient interface {
 	// R-18). A dispatch's token is reported with its outcome instead.
 	// permission: gateway.observe
 	ReportRevocationFailure(context.Context, *v1.ReportRevocationFailureRequest) (*v1.ReportRevocationFailureResponse, error)
+	// ReportLocalRefusal reports an action the gateway refused on its own
+	// before asking the Authority, as a security signal for detections
+	// (G0 M12, HR-225): only machine metadata (the connection, the refusal
+	// code, the operation and the run), never the payload or the secret. The
+	// server records connection.secret_in_payload_refused for a connection
+	// the gateway serves.
+	// permission: gateway.observe
+	ReportLocalRefusal(context.Context, *v1.ReportLocalRefusalRequest) (*v1.ReportLocalRefusalResponse, error)
 }
 
 // NewGatewayServiceClient constructs a client for the pantherclaw.v1.GatewayService service.
@@ -672,6 +690,14 @@ type GatewayServiceHandler interface {
 	// R-18). A dispatch's token is reported with its outcome instead.
 	// permission: gateway.observe
 	ReportRevocationFailure(context.Context, *v1.ReportRevocationFailureRequest) (*v1.ReportRevocationFailureResponse, error)
+	// ReportLocalRefusal reports an action the gateway refused on its own
+	// before asking the Authority, as a security signal for detections
+	// (G0 M12, HR-225): only machine metadata (the connection, the refusal
+	// code, the operation and the run), never the payload or the secret. The
+	// server records connection.secret_in_payload_refused for a connection
+	// the gateway serves.
+	// permission: gateway.observe
+	ReportLocalRefusal(context.Context, *v1.ReportLocalRefusalRequest) (*v1.ReportLocalRefusalResponse, error)
 }
 
 // RegisterGatewayServiceHandler registers svc as the pantherclaw.v1.GatewayService implementation
@@ -692,6 +718,7 @@ func RegisterGatewayServiceHandler(server *connect.Server, svc GatewayServiceHan
 		connect.Method{Spec: gatewayServiceReportObservationSpec(), Handler: adapter.reportObservation},
 		connect.Method{Spec: gatewayServiceReportFactsSpec(), Handler: adapter.reportFacts},
 		connect.Method{Spec: gatewayServiceReportRevocationFailureSpec(), Handler: adapter.reportRevocationFailure},
+		connect.Method{Spec: gatewayServiceReportLocalRefusalSpec(), Handler: adapter.reportLocalRefusal},
 	)
 }
 
@@ -764,6 +791,10 @@ func (UnimplementedGatewayServiceHandler) ReportFacts(context.Context, *v1.Repor
 
 func (UnimplementedGatewayServiceHandler) ReportRevocationFailure(context.Context, *v1.ReportRevocationFailureRequest) (*v1.ReportRevocationFailureResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ReportRevocationFailure is not implemented")
+}
+
+func (UnimplementedGatewayServiceHandler) ReportLocalRefusal(context.Context, *v1.ReportLocalRefusalRequest) (*v1.ReportLocalRefusalResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ReportLocalRefusal is not implemented")
 }
 
 type gatewayServiceClient struct {
@@ -869,6 +900,14 @@ func (c *gatewayServiceClient) ReportFacts(ctx context.Context, req *v1.ReportFa
 func (c *gatewayServiceClient) ReportRevocationFailure(ctx context.Context, req *v1.ReportRevocationFailureRequest) (*v1.ReportRevocationFailureResponse, error) {
 	var res v1.ReportRevocationFailureResponse
 	if err := c.client.CallUnary(ctx, gatewayServiceReportRevocationFailureSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayServiceClient) ReportLocalRefusal(ctx context.Context, req *v1.ReportLocalRefusalRequest) (*v1.ReportLocalRefusalResponse, error) {
+	var res v1.ReportLocalRefusalResponse
+	if err := c.client.CallUnary(ctx, gatewayServiceReportLocalRefusalSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -1022,6 +1061,18 @@ func (h gatewayServiceHandler) reportRevocationFailure(ctx context.Context, _ co
 		return err
 	}
 	res, err := h.svc.ReportRevocationFailure(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayServiceHandler) reportLocalRefusal(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReportLocalRefusalRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReportLocalRefusal(ctx, &req)
 	if err != nil {
 		return err
 	}

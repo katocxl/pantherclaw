@@ -198,6 +198,10 @@ type Options struct {
 	// item 6, R-18); nil only logs it. A dispatch's is reported with its
 	// outcome.
 	ReportRevocation RevocationReporter
+	// ReportLocalRefusal tells the server an action was refused locally as
+	// secret_in_payload, with machine metadata only, so detections see it
+	// (G0 M12, HR-225); nil only logs it.
+	ReportLocalRefusal LocalRefusalReporter
 	// GitHubAPIURL is GitHub's REST API (gateway configuration
 	// github.api_url), where a GitHub App connection to GitHub's MCP server
 	// mints its tokens and reads its facts; a connection to the REST API
@@ -211,6 +215,11 @@ const DefaultGitHubAPIURL = "https://api.github.com"
 // RevocationReporter reports an installation token that was not revoked,
 // with what it was for: facts, verification, org_scan or drift.
 type RevocationReporter func(ctx context.Context, connection, purpose string, a broker.Access) error
+
+// LocalRefusalReporter reports an action the gateway refused on its own:
+// the connection, the refusal code, the operation and the run, never the
+// payload or a secret.
+type LocalRefusalReporter func(ctx context.Context, connection, code, operation, run string) error
 
 // Engine dispatches mapped actions.
 type Engine struct {
@@ -229,6 +238,7 @@ type Engine struct {
 	reportFacts FactReporter
 	factTimeout time.Duration
 	revocations RevocationReporter
+	localRefusals LocalRefusalReporter
 	sims        *simcheck.Checker
 	githubAPI   string
 
@@ -272,7 +282,7 @@ func New(o Options) (*Engine, error) {
 		containment: o.Containment, broker: o.Broker, allowed: o.AllowedPrefixes, breaker: newBreaker(o.Now, o.ReportCircuit, o.Log).withReason(o.ReportCircuitReason),
 		log: o.Log, onDrift: o.OnDrift, clients: map[string]clientEntry{}, drift: map[string]driftEntry{}, approvers: o.Approvers,
 		connectors:  o.Connectors,
-		reportFacts: o.ReportFacts, factTimeout: o.FactTimeout, revocations: o.ReportRevocation,
+		reportFacts: o.ReportFacts, factTimeout: o.FactTimeout, revocations: o.ReportRevocation, localRefusals: o.ReportLocalRefusal,
 		sims: simcheck.New(), githubAPI: strings.TrimSuffix(o.GitHubAPIURL, "/"), apis: map[string]clientEntry{},
 	}, nil
 }
