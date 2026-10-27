@@ -32,6 +32,11 @@ tasks:
         PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable"
         go test -tags integration -count=1 -timeout 20m -run '^TestM13_APIConformance$' ./internal/server
 
+  perf:m13:
+    desc: The M13 performance measurement with fixed conditions (docs/perf/M13.md) - static Linux builds in a private PostgreSQL container's network namespace, BenchmarkRefund and the stack under pantherclaw-sim load; needs Docker; RATES, DURATION, BENCHTIME, ROUNDS override
+    cmds:
+      - bash tools/scripts/perf-m13.sh
+
   test:fuzz:
     desc: Run the bounded nightly security parser fuzz targets
     cmds:
@@ -255,9 +260,9 @@ tasks:
       - git diff --exit-code -- internal/gen
 
   trace:
-    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default UI)
+    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M13)
     cmds:
-      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "UI"}}
+      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M13"}}
 
   sdk:vectors:
     desc: Regenerate the SDK conformance vectors in sdk/conformance from the Go implementation (review the diff)
