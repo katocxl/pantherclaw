@@ -321,7 +321,8 @@ func tenantTables(ctx context.Context, tx db.TenantTx) ([]string, error) {
 }
 
 // deletionOrder derives dependencies from the live catalog. Unknown cycles
-// fail closed; the one reviewed feedback edge is explicitly deferred.
+// fail closed; the reviewed feedback edges (00181, 00183) are deferrable
+// and removeOrgRows defers them.
 func deletionOrder(ctx context.Context, tx db.TenantTx, tables []string) ([]string, error) {
 	rows, err := tx.Query(ctx, `SELECT child.relname,parent.relname FROM pg_constraint c
         JOIN pg_class child ON child.oid=c.conrelid JOIN pg_class parent ON parent.oid=c.confrelid
@@ -375,7 +376,7 @@ func (s *Service) removeOrgRows(ctx context.Context, org ids.OrgID) error {
 		if state != "DELETED" {
 			return errors.New("datarequests: org is not deleted")
 		}
-		if _, err := tx.Exec(ctx, "SET CONSTRAINTS pc.automations_enabled_version_fk DEFERRED"); err != nil {
+		if _, err := tx.Exec(ctx, "SET CONSTRAINTS pc.automations_enabled_version_fk, pc.agent_instances_sandbox_session_fk, pc.automation_triggers_execution_fk DEFERRED"); err != nil {
 			return err
 		}
 		tables, err := tenantTables(ctx, tx)
