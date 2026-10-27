@@ -31,7 +31,7 @@ var root = filepath.Join("..", "..")
 var (
 	helmOnce sync.Once
 	helmBin  string
-	helmErr  error
+	errHelm  error
 )
 
 // helm builds the pinned helm once per test binary.
@@ -40,12 +40,12 @@ func helm(t *testing.T) string {
 	helmOnce.Do(func() {
 		modfile, err := filepath.Abs(filepath.Join(root, "tools", "pins", "helm", "go.mod"))
 		if err != nil {
-			helmErr = err
+			errHelm = err
 			return
 		}
 		dir, err := os.MkdirTemp("", "pantherclaw-helm")
 		if err != nil {
-			helmErr = err
+			errHelm = err
 			return
 		}
 		helmBin = filepath.Join(dir, "helm")
@@ -54,13 +54,13 @@ func helm(t *testing.T) string {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
-		out, err := exec.CommandContext(ctx, "go", "build", "-modfile="+modfile, "-o", helmBin, "helm.sh/helm/v4/cmd/helm").CombinedOutput() //nolint:gosec // G204: the pinned helm
+		out, err := exec.CommandContext(ctx, "go", "build", "-modfile="+modfile, "-o", helmBin, "helm.sh/helm/v4/cmd/helm").CombinedOutput()
 		if err != nil {
-			helmErr = errors.New(string(out))
+			errHelm = errors.New(string(out))
 		}
 	})
-	if helmErr != nil {
-		t.Fatalf("build the pinned helm: %v", helmErr)
+	if errHelm != nil {
+		t.Fatalf("build the pinned helm: %v", errHelm)
 	}
 	return helmBin
 }
@@ -79,7 +79,7 @@ func render(t *testing.T, set ...string) []map[string]any {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, args...) //nolint:gosec // G204: the pinned helm on the repository's chart
+	cmd := exec.CommandContext(ctx, bin, args...)
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Run(); err != nil {

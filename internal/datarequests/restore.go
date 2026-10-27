@@ -118,13 +118,14 @@ func (s *Service) reapplyOrg(ctx context.Context, _ *db.Pool, e restore.Event, a
 		var existing ids.UUID
 		var done bool
 		err := tx.QueryRow(ctx, "SELECT id,complete FROM pc.org_deletion_journal WHERE org_id=$1 AND deleted_org_id=$2 AND snapshot->'record'->>'reapplied_from'=$3 FOR UPDATE", ids.PlatformOrg, org, snap.Record.ReappliedFrom).Scan(&existing, &done)
-		if db.IsNoRows(err) {
+		switch {
+		case db.IsNoRows(err):
 			if err := s.persistIntent(ctx, tx, snap, id, org); err != nil {
 				return err
 			}
-		} else if err != nil {
+		case err != nil:
 			return err
-		} else {
+		default:
 			id = existing
 		}
 		if !done {

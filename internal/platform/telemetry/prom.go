@@ -73,7 +73,7 @@ func header(b *strings.Builder, name, help, typ string) {
 func labels(set attribute.Set, extra ...string) string {
 	var parts []string
 	for _, kv := range filtered(set.ToSlice()) {
-		parts = append(parts, promName(string(kv.Key))+"="+strconv.Quote(kv.Value.Emit()))
+		parts = append(parts, promName(string(kv.Key))+"="+strconv.Quote(kv.Value.String()))
 	}
 	for i := 0; i+1 < len(extra); i += 2 {
 		parts = append(parts, extra[i]+"="+strconv.Quote(extra[i+1]))

@@ -141,5 +141,5 @@ func unixNano(t time.Time) uint64 {
 	if t.IsZero() {
 		return 0
 	}
-	return uint64(t.UnixNano()) //nolint:gosec // G115: times after 1970
+	return uint64(t.UnixNano())
 }

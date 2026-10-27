@@ -42,7 +42,7 @@ func expireBreakGlass(ctx context.Context, tx db.TenantTx) error {
 // ExpireBreakGlass records ended events for expired activations. Expiry
 // is enforced at authentication even when the worker is delayed.
 func (s *Service) ExpireBreakGlass(ctx context.Context, org ids.OrgID) error {
-	return s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error { return expireBreakGlass(ctx, tx) })
+	return s.pool.InTenantTx(ctx, org, expireBreakGlass)
 }
 
 type breakGlassSweepArgs struct{}

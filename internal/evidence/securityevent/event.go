@@ -121,9 +121,10 @@ func FromEntry(entry domain.Entry, seq int64) (Event, bool, error) {
 	}
 	if r.detail != "" {
 		obj.ID = body.Details[r.detail]
-		if kind == "response.credential_revoked" {
+		switch kind {
+		case "response.credential_revoked":
 			obj.ID = body.Details["connection"] + "/" + obj.ID
-		} else if kind == "connection.sealed_revoked" {
+		case "connection.sealed_revoked":
 			obj.ID = body.Object.ID + "/" + obj.ID
 		}
 	}

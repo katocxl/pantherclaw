@@ -80,13 +80,13 @@ func runInstall(t *testing.T, srv *httptest.Server, ghExit string) (string, stri
 	gh := filepath.Join(tmp, "no-gh")
 	if ghExit != "" {
 		gh = filepath.Join(tmp, "gh")
-		if err := os.WriteFile(gh, []byte("#!/bin/sh\necho \"fake gh $*\" >&2\nexit "+ghExit+"\n"), 0o755); err != nil { //nolint:gosec // G306: an executable test script
+		if err := os.WriteFile(gh, []byte("#!/bin/sh\necho \"fake gh $*\" >&2\nexit "+ghExit+"\n"), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, sh, filepath.Join("..", "..", "install.sh"), "--version", version, "--dir", dir) //nolint:gosec // G204: the repository's install script
+	cmd := exec.CommandContext(ctx, sh, filepath.Join("..", "..", "install.sh"), "--version", version, "--dir", dir)
 	cmd.Env = append(os.Environ(),
 		"PANTHERCLAW_RELEASE_BASE_URL="+srv.URL, "PANTHERCLAW_GH="+filepath.ToSlash(gh),
 		"PANTHERCLAW_OS=linux", "PANTHERCLAW_ARCH=amd64", "HOME="+tmp)

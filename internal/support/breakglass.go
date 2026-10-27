@@ -5,6 +5,7 @@ package support
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 	"unicode"
@@ -432,7 +433,7 @@ func (s *Service) BreakGlassCall(ctx context.Context, c tapp.Caller, procedure s
 		return c, nil
 	}
 	if err := s.breakGlassAvailable(ctx, c.Org); err != nil {
-		if err == ErrBreakGlassEdition {
+		if errors.Is(err, ErrBreakGlassEdition) {
 			return c, nil
 		}
 		return tapp.Caller{}, err

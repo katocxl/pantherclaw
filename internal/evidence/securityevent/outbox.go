@@ -49,8 +49,11 @@ func Attempt(ctx context.Context, pool *db.Pool, org ids.OrgID) ([]Event, error)
 			if err := json.Unmarshal(raw, &e); err != nil {
 				return fmt.Errorf("security outbox: invalid stored event: %w", err)
 			}
-			if err := Validate(e); err != nil || e.Org != org {
-				return fmt.Errorf("security outbox: invalid projection for org %s: %v", org, err)
+			if err := Validate(e); err != nil {
+				return fmt.Errorf("security outbox: invalid projection for org %s: %w", org, err)
+			}
+			if e.Org != org {
+				return fmt.Errorf("security outbox: projection of org %s stored under org %s", e.Org, org)
 			}
 			events = append(events, e)
 		}

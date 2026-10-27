@@ -46,7 +46,8 @@ func (h *Handler) MountAccountDeletion(mux *http.ServeMux, d AccountDeletion) {
 				h.jsonError(w, http.StatusUnauthorized, "ambiguous_credential")
 				return
 			}
-			if ac != nil && h.accounts != nil {
+			switch {
+			case ac != nil && h.accounts != nil:
 				s, ok := h.accountSession(w, r)
 				if !ok {
 					h.jsonError(w, http.StatusUnauthorized, "unauthenticated")
@@ -54,7 +55,7 @@ func (h *Handler) MountAccountDeletion(mux *http.ServeMux, d AccountDeletion) {
 				}
 				account, session, provider = s.Account, s.Session, s.Provider
 				fresh = s.DeletionReauthenticatedAt != nil && !s.DeletionReauthenticatedAt.Before(s.Now.Add(-5*time.Minute))
-			} else if oc != nil {
+			case oc != nil:
 				s, ok := h.session(w, r)
 				if !ok {
 					h.jsonError(w, http.StatusUnauthorized, "unauthenticated")
@@ -75,7 +76,7 @@ func (h *Handler) MountAccountDeletion(mux *http.ServeMux, d AccountDeletion) {
 					return
 				}
 				account, provider = id, s.Provider
-			} else {
+			default:
 				h.jsonError(w, http.StatusUnauthorized, "unauthenticated")
 				return
 			}

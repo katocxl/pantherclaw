@@ -80,8 +80,8 @@ func TestHR381_ExporterNeverBlocksARequest(t *testing.T) {
 		t.Fatalf("ending 10000 spans took %v with a stuck exporter", d)
 	}
 	// The worker holds at most one batch; the queue at most 2048.
-	if min := int64(10000 - SpanQueueSize - SpanBatchSize); q.Dropped() < min {
-		t.Fatalf("dropped %d, want at least %d", q.Dropped(), min)
+	if least := int64(10000 - SpanQueueSize - SpanBatchSize); q.Dropped() < least {
+		t.Fatalf("dropped %d, want at least %d", q.Dropped(), least)
 	}
 	close(sink.release)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -297,7 +297,11 @@ func TestHR382_AdminHandlerServesProfilesAndMetrics(t *testing.T) {
 		"/debug/pprof/goroutine?debug=1": "goroutine profile",
 		"/debug/pprof/heap":              "",
 	} {
-		resp, err := http.Get(srv.URL + path)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+path, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := srv.Client().Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}

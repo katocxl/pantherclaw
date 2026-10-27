@@ -21,7 +21,7 @@ import (
 func TestStageSecrets_CopiesRegularFiles0400(t *testing.T) {
 	from, to := t.TempDir(), t.TempDir()
 	for name, body := range map[string]string{"app-password": "pw\n", "kek": "a2Vr"} {
-		if err := os.WriteFile(filepath.Join(from, name), []byte(body), 0o644); err != nil { //nolint:gosec // G306: a group-readable source, as a Secret volume shows it
+		if err := os.WriteFile(filepath.Join(from, name), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -30,6 +30,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/platform/config"
+	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/server"
 )
 
@@ -46,7 +47,7 @@ func testNode(t *testing.T, docker nodeDocker) (*node, *bytes.Buffer, *bytes.Buf
 			return cfgDir, true
 		}
 		return "", false
-	}, http: http.DefaultClient}
+	}, http: httpx.NewControlClient(httpx.ControlConfig{Timeout: 30 * time.Second})}
 	prev := nodeDockerHook
 	nodeDockerHook = docker
 	t.Cleanup(func() { nodeDockerHook = prev })
