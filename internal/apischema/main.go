@@ -7,7 +7,10 @@
 //   - a protovalidate `gte: 0` on a numeric field becomes `minimum: 0`; the
 //     generator sets it, but its serializer drops a zero minimum;
 //   - every operation that takes a request body documents the bodiless 415
-//     Connect answers for a missing or unsupported Content-Type.
+//     Connect answers for a missing or unsupported Content-Type;
+//   - the optional Connect-Timeout-Ms header is not published: a client may
+//     send it, but a tiny value legitimately ends in deadline_exceeded
+//     (504), which is not a property of the operation.
 //
 // It runs from `task api:schema` and rewrites the file in place, keeping the
 // generator's key order and formatting so the nightly drift check still works.
@@ -22,6 +25,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sort"
 
 	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
@@ -32,8 +36,12 @@ import (
 	_ "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1" // Registers the API descriptors.
 )
 
-// unsupportedMedia is the response Connect sends without a body.
-const unsupportedMedia = "Unsupported media type, no body"
+const (
+	// unsupportedMedia is the response Connect sends without a body.
+	unsupportedMedia = "Unsupported media type, no body"
+	// timeoutHeader and its component are left out of the schema.
+	timeoutHeader, timeoutSchema = "Connect-Timeout-Ms", "connect-timeout-header"
+)
 
 func main() {
 	if len(os.Args) != 2 {
@@ -163,6 +171,7 @@ func Fix(doc []byte, minimums map[field]bool) ([]byte, error) {
 	if paths != nil {
 		for _, item := range paths.obj {
 			for _, op := range item.value.obj {
+				dropTimeoutHeader(op.value)
 				if op.value.get("requestBody") == nil {
 					continue
 				}
@@ -176,9 +185,25 @@ func Fix(doc []byte, minimums map[field]bool) ([]byte, error) {
 			}
 		}
 	}
+	schemas.obj = slices.DeleteFunc(schemas.obj, func(m member) bool { return m.key == timeoutSchema })
 	var buf bytes.Buffer
 	root.write(&buf, "")
 	return buf.Bytes(), nil
+}
+
+// dropTimeoutHeader removes Connect-Timeout-Ms from an operation's
+// parameters, and the parameters list when nothing else is left.
+func dropTimeoutHeader(op *node) {
+	params := op.get("parameters")
+	if params == nil {
+		return
+	}
+	params.arr = slices.DeleteFunc(params.arr, func(p *node) bool {
+		return p.get("in").scalar() == `"header"` && p.get("name").scalar() == string(quote(timeoutHeader))
+	})
+	if len(params.arr) == 0 {
+		op.obj = slices.DeleteFunc(op.obj, func(m member) bool { return m.key == "parameters" })
+	}
 }
 
 // setMinimumZero adds `minimum: 0` after `maximum` (or after `title`, else

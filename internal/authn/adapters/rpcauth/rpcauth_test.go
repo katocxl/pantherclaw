@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
@@ -151,5 +152,36 @@ func TestHR180_GatewayEnrollmentReachesItsHandlerWithoutAPrincipal(t *testing.T)
 	_, err := client("viewer").WhoAmI(context.Background(), &pantherclawv1.WhoAmIRequest{})
 	if called || code(err) != connect.CodeUnauthenticated {
 		t.Fatalf("enroll: gateway authenticator called=%v, err=%v", called, err)
+	}
+}
+
+// TestAFinishedCallIsNotUnauthenticated: a credential lookup that fails
+// because the call's deadline passed or the client cancelled gives
+// deadline_exceeded or canceled, never 401, so a client with a valid
+// session is not sent to sign in again.
+func TestAFinishedCallIsNotUnauthenticated(t *testing.T) {
+	org := ids.New[ids.Org]()
+	perms := map[string]td.Permission{pantherclawv1connect.AccessServiceWhoAmIProcedure: td.PermAuthenticated}
+	auth := rpcauth.New(fakeAuthn{org: org}, perms, nil)
+	spec := connect.Spec{Procedure: pantherclawv1connect.AccessServiceWhoAmIProcedure}
+	call := func(ctx context.Context, token string) error {
+		info := &connect.CallInfo{}
+		info.RequestHeader().Set("Authorization", "Bearer "+token)
+		_, err := auth(ctx, info, spec)
+		return err
+	}
+	expired, cancel := context.WithDeadline(context.Background(), time.Unix(1, 0))
+	defer cancel()
+	if err := call(expired, "forged"); code(err) != connect.CodeDeadlineExceeded {
+		t.Errorf("expired call = %v, want deadline_exceeded", err)
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := call(cancelled, "forged"); code(err) != connect.CodeCanceled {
+		t.Errorf("cancelled call = %v, want canceled", err)
+	}
+	// A live call with a bad credential is still unauthenticated.
+	if err := call(context.Background(), "forged"); pcerr.CodeOf(err) != pcerr.Unauthenticated {
+		t.Errorf("live call = %v, want unauthenticated", err)
 	}
 }

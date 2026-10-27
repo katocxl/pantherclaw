@@ -215,3 +215,47 @@ func TestEveryRPCDeclaresAPermission(t *testing.T) {
 		t.Fatal("no rpc definitions found")
 	}
 }
+
+// TestOnlyPOSTIsServed: Connect GET of a NO_SIDE_EFFECTS method, and any
+// other method, gets 405 with Allow: POST; POST still works.
+func TestOnlyPOSTIsServed(t *testing.T) {
+	svc := &testSystem{}
+	s, err := NewServer(public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pantherclawv1connect.RegisterSystemServiceHandler(s, svc)
+	mux := http.NewServeMux()
+	Mount(mux, s)
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	u := ts.URL + pantherclawv1connect.SystemServiceGetBuildInfoProcedure
+	for _, method := range []string{http.MethodGet, http.MethodOptions, http.MethodPut, http.MethodHead} {
+		target := u
+		if method == http.MethodGet {
+			target += "?connect=v1&encoding=json&message=%7B%7D"
+		}
+		req, _ := http.NewRequestWithContext(context.Background(), method, target, nil)
+		res, err := ts.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = res.Body.Close()
+		if res.StatusCode != http.StatusMethodNotAllowed || res.Header.Get("Allow") != http.MethodPost {
+			t.Errorf("%s = %d Allow %q, want 405 Allow POST", method, res.StatusCode, res.Header.Get("Allow"))
+		}
+	}
+	if svc.calls.Load() != 0 {
+		t.Fatal("a refused method reached the handler")
+	}
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, u, strings.NewReader("{}"))
+	req.Header.Set("Content-Type", "application/json")
+	res, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusOK || svc.calls.Load() != 1 {
+		t.Fatalf("POST = %d, calls %d", res.StatusCode, svc.calls.Load())
+	}
+}

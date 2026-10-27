@@ -19,6 +19,16 @@ const sample = `{
   "paths": {
     "/x.v1.S/List": {
       "post": {
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header"
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header"
+          }
+        ],
         "requestBody": {
           "content": {}
         },
@@ -31,6 +41,12 @@ const sample = `{
     },
     "/x.v1.S/Get": {
       "get": {
+        "parameters": [
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Success"
@@ -41,6 +57,9 @@ const sample = `{
   },
   "components": {
     "schemas": {
+      "connect-timeout-header": {
+        "type": "number"
+      },
       "x.v1.Req": {
         "type": "object",
         "properties": {
@@ -65,7 +84,7 @@ const sample = `{
   }
 }`
 
-func TestFixAddsZeroMinimumAnd415(t *testing.T) {
+func TestFixAddsZeroMinimumAnd415AndDropsTheTimeout(t *testing.T) {
 	out, err := Fix([]byte(sample), map[field]bool{{"x.v1.Req", "pageSize"}: true, {"x.v1.Absent", "n"}: true})
 	if err != nil {
 		t.Fatal(err)
@@ -94,6 +113,13 @@ func TestFixAddsZeroMinimumAnd415(t *testing.T) {
 	}
 	if _, ok := doc.Paths["/x.v1.S/Get"]["get"].Responses["415"]; ok {
 		t.Fatal("an operation without a request body gained a 415")
+	}
+	if s := string(out); strings.Contains(s, "Connect-Timeout-Ms") || strings.Contains(s, "connect-timeout-header") ||
+		!strings.Contains(s, "Connect-Protocol-Version") {
+		t.Fatalf("Connect-Timeout-Ms not dropped alone:\n%s", s)
+	}
+	if strings.Count(string(out), `"parameters"`) != 1 {
+		t.Fatalf("an emptied parameters list was kept:\n%s", out)
 	}
 	if !strings.Contains(string(out), `"maximum": 200,
             "minimum": 0,

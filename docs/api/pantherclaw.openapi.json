@@ -22,13 +22,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -83,13 +76,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -146,13 +132,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -207,13 +186,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -270,13 +242,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -331,13 +296,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -394,13 +352,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -455,13 +406,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -518,13 +462,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -579,13 +516,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -642,13 +572,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -703,13 +626,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -766,13 +682,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -827,13 +736,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -890,13 +792,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -951,13 +846,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -1014,13 +902,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -1075,13 +956,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -1138,13 +1012,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -1199,13 +1066,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -1262,13 +1122,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -1323,13 +1176,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -1386,13 +1232,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -1447,13 +1286,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -1510,13 +1342,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -1571,13 +1396,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -1634,13 +1452,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -1695,13 +1506,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -1758,13 +1562,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -1819,13 +1616,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -1882,13 +1672,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -1943,13 +1726,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -2006,13 +1782,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -2067,13 +1836,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -2130,13 +1892,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -2191,13 +1946,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -2254,13 +2002,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -2315,13 +2056,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -2378,13 +2112,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -2439,13 +2166,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -2502,13 +2222,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -2563,13 +2276,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -2626,13 +2332,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -2687,13 +2386,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -2750,13 +2442,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -2811,13 +2496,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -2874,13 +2552,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -2935,13 +2606,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -2998,13 +2662,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -3059,13 +2716,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -3122,13 +2772,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -3183,13 +2826,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -3246,13 +2882,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -3307,13 +2936,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -3370,13 +2992,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -3431,13 +3046,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -3494,13 +3102,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -3555,13 +3156,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -3618,13 +3212,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -3679,13 +3266,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -3742,13 +3322,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -3803,13 +3376,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -3866,13 +3432,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -3927,13 +3486,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -3990,13 +3542,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -4051,13 +3596,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -4114,13 +3652,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -4175,13 +3706,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -4238,13 +3762,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -4299,13 +3816,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -4362,13 +3872,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -4423,13 +3926,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -4486,13 +3982,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -4547,13 +4036,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -4610,13 +4092,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -4671,13 +4146,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -4734,13 +4202,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -4795,13 +4256,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -4858,13 +4312,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -4919,13 +4366,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -4982,13 +4422,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -5043,13 +4476,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -5106,13 +4532,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -5167,13 +4586,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -5230,13 +4642,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -5291,13 +4696,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -5354,13 +4752,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -5415,13 +4806,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -5478,13 +4862,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -5539,13 +4916,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -5602,13 +4972,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -5663,13 +5026,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -5726,13 +5082,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -5787,13 +5136,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -5850,13 +5192,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -5911,13 +5246,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -5974,13 +5302,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -6035,13 +5356,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -6098,13 +5412,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -6159,13 +5466,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -6222,13 +5522,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -6283,13 +5576,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -6346,13 +5632,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -6407,13 +5686,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -6470,13 +5742,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -6531,13 +5796,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -6594,13 +5852,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -6655,13 +5906,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -6718,13 +5962,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -6779,13 +6016,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -6842,13 +6072,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -6903,13 +6126,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -6966,13 +6182,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -7027,13 +6236,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -7090,13 +6292,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -7151,13 +6346,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -7214,13 +6402,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -7275,13 +6456,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -7338,13 +6512,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -7399,13 +6566,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -7462,13 +6622,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -7523,13 +6676,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -7586,13 +6732,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -7647,13 +6786,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -7710,13 +6842,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -7771,13 +6896,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -7834,13 +6952,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -7895,13 +7006,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -7958,13 +7062,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -8019,13 +7116,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -8082,13 +7172,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -8143,13 +7226,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -8206,13 +7282,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -8267,13 +7336,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -8330,13 +7392,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -8391,13 +7446,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -8454,13 +7502,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -8515,13 +7556,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -8578,13 +7612,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -8639,13 +7666,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -8702,13 +7722,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -8763,13 +7776,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -8826,13 +7832,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -8887,13 +7886,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -8950,13 +7942,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -9011,13 +7996,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -9074,13 +8052,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -9135,13 +8106,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -9198,13 +8162,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -9259,13 +8216,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -9322,13 +8272,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -9383,13 +8326,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -9446,13 +8382,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -9507,13 +8436,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -9570,13 +8492,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -9631,13 +8546,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -9694,13 +8602,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -9755,13 +8656,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -9818,13 +8712,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -9879,13 +8766,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -9942,13 +8822,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -10003,13 +8876,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -10066,13 +8932,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -10127,13 +8986,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -10190,13 +9042,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -10251,13 +9096,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -10314,13 +9152,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -10375,13 +9206,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -10438,13 +9262,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -10500,13 +9317,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -10561,13 +9371,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -10625,13 +9428,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -10686,13 +9482,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -10749,13 +9538,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -10810,13 +9592,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -10873,13 +9648,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -10934,13 +9702,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -10997,13 +9758,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -11058,13 +9812,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -11121,13 +9868,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -11182,13 +9922,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -11245,13 +9978,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -11306,13 +10032,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -11369,13 +10088,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -11430,13 +10142,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -11493,13 +10198,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -11554,13 +10252,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -11617,13 +10308,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -11678,13 +10362,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -11741,13 +10418,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -11802,13 +10472,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -11865,13 +10528,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -11926,13 +10582,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -11989,13 +10638,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -12050,13 +10692,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -12113,13 +10748,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -12175,13 +10803,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -12236,13 +10857,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -12300,13 +10914,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -12361,13 +10968,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -12424,13 +11024,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -12485,13 +11078,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -12548,13 +11134,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -12609,13 +11188,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -12672,13 +11244,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -12733,13 +11298,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -12796,13 +11354,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -12857,13 +11408,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -12920,13 +11464,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -12981,13 +11518,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -13044,13 +11574,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -13105,13 +11628,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -13168,13 +11684,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -13229,13 +11738,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -13292,13 +11794,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -13353,13 +11848,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -13416,13 +11904,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -13477,13 +11958,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -13540,13 +12014,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -13601,13 +12068,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -13664,13 +12124,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -13725,13 +12178,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -13788,13 +12234,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -13849,13 +12288,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -13912,13 +12344,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -13973,13 +12398,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -14036,13 +12454,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -14097,13 +12508,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -14160,13 +12564,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -14221,13 +12618,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -14285,13 +12675,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -14346,13 +12729,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -14409,13 +12785,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -14470,13 +12839,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -14533,13 +12895,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -14594,13 +12949,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -14657,13 +13005,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -14718,13 +13059,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -14781,13 +13115,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -14842,13 +13169,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -14905,13 +13225,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -14966,13 +13279,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -15029,13 +13335,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -15090,13 +13389,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -15153,13 +13445,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -15214,13 +13499,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -15277,13 +13555,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -15338,13 +13609,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -15401,13 +13665,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -15462,13 +13719,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -15525,13 +13775,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -15586,13 +13829,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -15649,13 +13885,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -15710,13 +13939,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -15773,13 +13995,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -15834,13 +14049,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -15897,13 +14105,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -15958,13 +14159,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -16021,13 +14215,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -16082,13 +14269,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -16145,13 +14325,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -16206,13 +14379,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -16269,13 +14435,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -16330,13 +14489,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -16393,13 +14545,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -16454,13 +14599,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -16517,13 +14655,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -16578,13 +14709,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -16641,13 +14765,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -16702,13 +14819,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -16765,13 +14875,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -16826,13 +14929,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -16889,13 +14985,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -16950,13 +15039,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -17013,13 +15095,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -17074,13 +15149,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -17137,13 +15205,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -17198,13 +15259,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -17261,13 +15315,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -17322,13 +15369,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -17385,13 +15425,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -17446,13 +15479,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -17509,13 +15535,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -17570,13 +15589,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -17633,13 +15645,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -17694,13 +15699,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -17757,13 +15755,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -17818,13 +15809,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -17881,13 +15865,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -17942,13 +15919,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -18005,13 +15975,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -18066,13 +16029,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -18129,13 +16085,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -18190,13 +16139,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -18253,13 +16195,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -18314,13 +16249,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -18377,13 +16305,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -18438,13 +16359,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -18501,13 +16415,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -18562,13 +16469,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -18625,13 +16525,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -18686,13 +16579,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -18749,13 +16635,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -18810,13 +16689,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -18873,13 +16745,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -18934,13 +16799,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -18997,13 +16855,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -19058,13 +16909,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -19121,13 +16965,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -19182,13 +17019,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -19245,13 +17075,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -19306,13 +17129,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -19369,13 +17185,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -19430,13 +17239,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -19493,13 +17295,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -19554,13 +17349,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -19617,13 +17405,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -19678,13 +17459,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -19741,13 +17515,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -19802,13 +17569,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -19865,13 +17625,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -19926,13 +17679,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -19989,13 +17735,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -20050,13 +17789,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -20113,13 +17845,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -20174,13 +17899,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -20237,13 +17955,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -20298,13 +18009,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -20361,13 +18065,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -20422,13 +18119,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -20485,13 +18175,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -20546,13 +18229,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -20609,13 +18285,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -20670,13 +18339,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -20733,13 +18395,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -20794,13 +18449,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -20857,13 +18505,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -20918,13 +18559,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -20981,13 +18615,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -21042,13 +18669,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -21105,13 +18725,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -21166,13 +18779,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -21229,13 +18835,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -21290,13 +18889,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -21353,13 +18945,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -21414,13 +18999,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -21477,13 +19055,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -21538,13 +19109,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -21601,13 +19165,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -21662,13 +19219,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -21725,13 +19275,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -21786,13 +19329,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -21849,13 +19385,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -21910,13 +19439,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -21973,13 +19495,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -22034,13 +19549,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -22097,13 +19605,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -22158,13 +19659,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -22221,13 +19715,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -22282,13 +19769,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -22345,13 +19825,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -22406,13 +19879,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -22469,13 +19935,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -22530,13 +19989,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -22593,13 +20045,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -22654,13 +20099,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -22717,13 +20155,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -22778,13 +20209,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -22841,13 +20265,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -22902,13 +20319,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -22965,13 +20375,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -23026,13 +20429,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -23089,13 +20485,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -23150,13 +20539,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -23213,13 +20595,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -23274,13 +20649,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -23337,13 +20705,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -23398,13 +20759,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -23461,13 +20815,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -23522,13 +20869,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -23585,13 +20925,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -23646,13 +20979,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -23709,13 +21035,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -23770,13 +21089,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -23833,13 +21145,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -23894,13 +21199,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -23957,13 +21255,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -24018,13 +21309,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -24081,13 +21365,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -24142,13 +21419,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -24205,13 +21475,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -24266,13 +21529,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -24329,13 +21585,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -24390,13 +21639,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -24453,13 +21695,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -24514,13 +21749,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -24577,13 +21805,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -24638,13 +21859,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -24701,13 +21915,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -24762,13 +21969,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -24825,13 +22025,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -24886,13 +22079,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -24949,13 +22135,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -25010,13 +22189,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -25073,13 +22245,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -25134,13 +22299,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -25197,13 +22355,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -25258,13 +22409,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -25321,13 +22465,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -25382,13 +22519,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -25445,13 +22575,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -25506,13 +22629,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -25569,13 +22685,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -25630,13 +22739,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -25693,13 +22795,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -25754,13 +22849,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -25817,13 +22905,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -25878,13 +22959,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -25941,13 +23015,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -26002,13 +23069,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -26065,13 +23125,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -26126,13 +23179,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -26189,13 +23235,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -26250,13 +23289,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -26313,13 +23345,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -26374,13 +23399,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -26437,13 +23455,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -26498,13 +23509,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -26561,13 +23565,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -26622,13 +23619,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -26685,13 +23675,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -26746,13 +23729,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -26809,13 +23785,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -26870,13 +23839,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -26933,13 +23895,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -26994,13 +23949,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -27057,13 +24005,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -27118,13 +24059,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -27181,13 +24115,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -27242,13 +24169,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -27305,13 +24225,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -27366,13 +24279,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -27429,13 +24335,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -27490,13 +24389,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -27553,13 +24445,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -27614,13 +24499,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -27677,13 +24555,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -27738,13 +24609,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -27801,13 +24665,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -27862,13 +24719,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -27925,13 +24775,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -27986,13 +24829,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -28049,13 +24885,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -28110,13 +24939,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -28173,13 +24995,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -28234,13 +25049,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -28297,13 +25105,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -28358,13 +25159,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -28421,13 +25215,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -28482,13 +25269,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -28545,13 +25325,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -28606,13 +25379,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -28669,13 +25435,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -28730,13 +25489,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -28793,13 +25545,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -28854,13 +25599,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -28917,13 +25655,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -28978,13 +25709,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -29041,13 +25765,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -29102,13 +25819,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -29165,13 +25875,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -29226,13 +25929,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -29289,13 +25985,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -29350,13 +26039,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -29413,13 +26095,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -29474,13 +26149,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -29537,13 +26205,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -29598,13 +26259,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -29661,13 +26315,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -29722,13 +26369,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -29785,13 +26425,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -29846,13 +26479,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -29909,13 +26535,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -29970,13 +26589,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -30033,13 +26645,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -30094,13 +26699,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -30157,13 +26755,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -30218,13 +26809,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -30281,13 +26865,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -30342,13 +26919,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -30405,13 +26975,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -30466,13 +27029,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -30529,13 +27085,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -30590,13 +27139,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -30653,13 +27195,6 @@
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
             }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
           }
         ],
         "requestBody": {
@@ -30714,13 +27249,6 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
             }
           }
         ],
@@ -31575,12 +28103,6 @@
         "enum": [
           "1"
         ]
-      },
-      "connect-timeout-header": {
-        "type": "string",
-        "title": "Connect-Timeout-Ms",
-        "description": "Define the timeout, in ms (at most 10 digits)",
-        "pattern": "^[0-9]{1,10}$"
       },
       "connect.error": {
         "type": "object",

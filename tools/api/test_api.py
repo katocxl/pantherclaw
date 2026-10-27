@@ -64,6 +64,29 @@ schema = schemathesis.openapi.from_dict(raw)
 schema.config.update(base_url=BASE)
 schema.config.generation.max_examples = 25
 SECRETS = {COOKIE}
+# Opaque cursors are server-issued and server-validated; no schema can say
+# which strings are valid, so positive cases send none. Negative cases
+# keep generating them, and test_opaque_page_tokens_are_strict asserts
+# that a made-up token is refused.
+OPAQUE_TOKENS = {"pageToken", "page_token"}
+
+
+def clear_opaque_tokens(value):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key in OPAQUE_TOKENS and isinstance(item, str):
+                value[key] = ""
+            else:
+                clear_opaque_tokens(item)
+    elif isinstance(value, list):
+        for item in value:
+            clear_opaque_tokens(item)
+
+
+@schemathesis.hook
+def before_call(context, case, kwargs):
+    if case.meta is not None and case.meta.generation.mode.is_positive:
+        clear_opaque_tokens(case.body)
 
 
 def safe_failure(error, session):
@@ -111,3 +134,22 @@ def test_read_conformance(case, api_session):
             pytest.fail("authenticated API assurance lost its session", pytrace=False)
     except Exception as error:
         safe_failure(error, api_session)
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/pantherclaw.v1.CoverageService/ListCoverage", "/pantherclaw.v1.AccessService/ListUsers"],
+)
+def test_opaque_page_tokens_are_strict(path, api_session):
+    """A made-up cursor is refused, never treated as a valid page."""
+    response = api_session.post(
+        BASE + path,
+        json={"pageSize": 5, "pageToken": "bm90LWEtdG9rZW4"},
+        headers={**HEADERS, "Connect-Protocol-Version": "1"},
+        timeout=10,
+        allow_redirects=False,
+    )
+    assert response.status_code == 400, response.status_code
+    body = response.json()
+    assert body.get("code") == "invalid_argument", body
+    assert body.get("message", "").startswith("INVALID_PAGE_TOKEN"), body
