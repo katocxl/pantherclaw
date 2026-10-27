@@ -50,6 +50,9 @@ func (d *rangeDriver) uiStep(st domain.Step) (domain.Observation, bool, error) {
 	case "operator.delete_org":
 		obs, err := d.deleteOrg()
 		return obs, true, err
+	case "data.probe":
+		obs, err := d.dataProbe(st)
+		return obs, true, err
 	}
 	return domain.Observation{}, false, nil
 }
