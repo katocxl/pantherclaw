@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+# Replaces the generator's Connect header components. Header values are
+# strings on the wire, so a numeric schema makes every correct request look
+# schema-violating to a validator that reads the headers as sent.
+openapi: 3.1.0
+info:
+  title: PantherClaw Connect JSON API overrides
+  version: v1
+paths: {}
+components:
+  schemas:
+    connect-protocol-version:
+      type: string
+      title: Connect-Protocol-Version
+      description: Define the version of the Connect protocol
+      enum: ["1"]
+    connect-timeout-header:
+      type: string
+      title: Connect-Timeout-Ms
+      description: Define the timeout, in ms (at most 10 digits)
+      pattern: "^[0-9]{1,10}$"

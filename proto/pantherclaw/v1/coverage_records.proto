@@ -311,9 +311,17 @@ message ListCoverageRequest {
     pattern: "^[A-Za-z0-9_-]*$"
   }];
   // Only this agent.
-  optional string agent_id = 3 [(buf.validate.field).string.uuid = true];
+  optional string agent_id = 3 [(buf.validate.field).string = {
+    uuid: true
+    // Server ids are UUIDv7; other versions are refused.
+    pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+  }];
   // Only this connection.
-  optional string connection_id = 4 [(buf.validate.field).string.uuid = true];
+  optional string connection_id = 4 [(buf.validate.field).string = {
+    uuid: true
+    // Server ids are UUIDv7; other versions are refused.
+    pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+  }];
 }
 
 // ListCoverageResponse is one page; records leave out routes,

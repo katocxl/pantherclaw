@@ -30077,18 +30077,18 @@
         "description": "WhoAmIResponse describes the caller."
       },
       "connect-protocol-version": {
-        "type": "number",
+        "type": "string",
         "title": "Connect-Protocol-Version",
-        "enum": [
-          1
-        ],
         "description": "Define the version of the Connect protocol",
-        "const": 1
+        "enum": [
+          "1"
+        ]
       },
       "connect-timeout-header": {
-        "type": "number",
+        "type": "string",
         "title": "Connect-Timeout-Ms",
-        "description": "Define the timeout, in ms"
+        "description": "Define the timeout, in ms (at most 10 digits)",
+        "pattern": "^[0-9]{1,10}$"
       },
       "connect.error": {
         "type": "object",
@@ -32130,6 +32130,7 @@
           "teamId": {
             "type": "string",
             "title": "team_id",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
             "format": "uuid",
             "description": "Only agents of this team.",
             "nullable": true
@@ -44440,6 +44441,7 @@
           "agentId": {
             "type": "string",
             "title": "agent_id",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
             "format": "uuid",
             "description": "Only this agent.",
             "nullable": true
@@ -44447,6 +44449,7 @@
           "connectionId": {
             "type": "string",
             "title": "connection_id",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
             "format": "uuid",
             "description": "Only this connection.",
             "nullable": true
@@ -68450,6 +68453,7 @@
           "businessUnitId": {
             "type": "string",
             "title": "business_unit_id",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
             "format": "uuid",
             "description": "Only teams of this business unit."
           },
