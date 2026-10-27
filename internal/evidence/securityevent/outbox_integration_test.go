@@ -11,6 +11,7 @@ import (
 	"encoding/json/v2"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
@@ -20,15 +21,21 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
-func appendRevocation(t *testing.T, p *db.Pool, org ids.OrgID, object string) {
+// appendRevocation appends one API key revocation per object, all in one
+// transaction, so the chainer sees them together.
+func appendRevocation(t *testing.T, p *db.Pool, org ids.OrgID, objects ...string) {
 	t.Helper()
-	body, err := domain.CanonicalBody(map[string]any{"outcome": "success", "object": securityevent.Object{Type: "api_key", ID: object}, "details": map[string]string{"reason": "must never leave database", "payload": "secret-body"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = p.InTenantTx(context.Background(), org, func(ctx context.Context, tx db.TenantTx) error {
-		_, err := ledger.Append(ctx, tx, "audit.access.api_key_revoked", domain.Actor{Type: "user", ID: ids.NewV7().String()}, body)
-		return err
+	err := p.InTenantTx(context.Background(), org, func(ctx context.Context, tx db.TenantTx) error {
+		for _, object := range objects {
+			body, err := domain.CanonicalBody(map[string]any{"outcome": "success", "object": securityevent.Object{Type: "api_key", ID: object}, "details": map[string]string{"reason": "must never leave database", "payload": "secret-body"}})
+			if err != nil {
+				return err
+			}
+			if _, err := ledger.Append(ctx, tx, "audit.access.api_key_revoked", domain.Actor{Type: "user", ID: ids.NewV7().String()}, body); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -44,8 +51,8 @@ func TestHR383_CommitGapRetriedWithoutRemoteAcknowledgement(t *testing.T) {
 	org, other := ids.New[ids.Org](), ids.New[ids.Org]()
 	d.AdminExec(t, `INSERT INTO pc.orgs(id,name) VALUES($1,'outbox'),($2,'other')`, org, other)
 	appendRevocation(t, p, org, ids.NewV7().String())
-	if n, err := ledger.ChainAll(ctx, p, org, 500); err != nil || n != 1 {
-		t.Fatalf("chain=%d %v", n, err)
+	if n := chainSettled(t, d, p, org); n != 1 {
+		t.Fatalf("chain=%d", n)
 	}
 	var payload string
 	var attempts, acked int
@@ -124,12 +131,10 @@ func TestHR383_CommitGapRetriedWithoutRemoteAcknowledgement(t *testing.T) {
 func TestHR383_InvalidProjectionRollsBackEntireChainBatch(t *testing.T) {
 	d := dbtest.New(t)
 	p := d.AppPool(t)
-	ctx := context.Background()
 	org := ids.New[ids.Org]()
 	d.AdminExec(t, `INSERT INTO pc.orgs(id,name) VALUES($1,'outbox')`, org)
-	appendRevocation(t, p, org, ids.NewV7().String())
-	appendRevocation(t, p, org, "malformed")
-	if _, err := ledger.ChainAll(ctx, p, org, 500); err == nil {
+	appendRevocation(t, p, org, ids.NewV7().String(), "malformed")
+	if err := chainUntilSettled(t, d, p, org, nil); err == nil {
 		t.Fatal("invalid projection chained")
 	}
 	for _, table := range []string{"ledger_chain", "security_event_outbox"} {
@@ -176,7 +181,7 @@ func TestHR383_DeletionIntentWaitsForExactExternalCopyAcknowledgement(t *testing
 				t.Fatal(err)
 			}
 			check(false) // crash/retry before the asynchronous chainer
-			if _, err := ledger.ChainAll(ctx, p, ids.PlatformOrg, 500); err != nil {
+			if err := chainUntilSettled(t, d, p, ids.PlatformOrg, nil); err != nil {
 				t.Fatal(err)
 			}
 			check(false)
@@ -208,5 +213,45 @@ func TestHR383_DeletionIntentWaitsForExactExternalCopyAcknowledgement(t *testing
 				}
 			}
 		})
+	}
+}
+
+// chainSettled chains org until every committed entry is chained and
+// returns how many it chained, failing on a chain error. The chainer takes
+// only entries below the cluster-wide xmin, so a transaction open in a
+// concurrently running test package can hold new entries back briefly.
+func chainSettled(t *testing.T, d *dbtest.DB, p *db.Pool, org ids.OrgID) int {
+	t.Helper()
+	total := 0
+	err := chainUntilSettled(t, d, p, org, &total)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return total
+}
+
+// chainUntilSettled chains org until every committed entry is chained or
+// the chainer fails, and returns the failure.
+func chainUntilSettled(t *testing.T, d *dbtest.DB, p *db.Pool, org ids.OrgID, total *int) error {
+	t.Helper()
+	deadline := time.Now().Add(time.Minute)
+	for {
+		n, err := ledger.ChainAll(context.Background(), p, org, 500)
+		if total != nil {
+			*total += n
+		}
+		if err != nil {
+			return err
+		}
+		var left int
+		d.AdminQueryRow(t, `SELECT count(*) FROM pc.ledger_entries e WHERE org_id = $1
+			AND NOT EXISTS (SELECT 1 FROM pc.ledger_chain c WHERE c.org_id = e.org_id AND c.entry_id = e.id)`, []any{org}, &left)
+		if left == 0 {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("entries not chained within a minute")
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }

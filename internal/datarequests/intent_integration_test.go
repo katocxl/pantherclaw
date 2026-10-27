@@ -17,7 +17,6 @@ import (
 	"time"
 
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
-	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
 	"github.com/katocxl/pantherclaw/internal/evidence/securityevent"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -40,9 +39,7 @@ func TestT176_OrgErasureWaitsForExactExternalIntentACK(t *testing.T) {
 		t.Fatalf("before ACK: rows=%d journal=%d completions=%d", rows, journal, completions)
 	}
 	// Chaining, local emission and exporting alone must not allow erasure.
-	if _, err := ledger.ChainOrg(t.Context(), s.Pool, ids.PlatformOrg, 10000); err != nil {
-		t.Fatal(err)
-	}
+	chainPlatform(t, s)
 	if _, err := securityevent.Attempt(t.Context(), s.Pool, ids.PlatformOrg); err != nil {
 		t.Fatal(err)
 	}

@@ -75,9 +75,7 @@ func deletionRequest(t *testing.T, s *Service, org ids.OrgID, when time.Time) id
 // exported copy; neither a mere emission nor a local export is an ACK.
 func acknowledgeIntents(t *testing.T, s *Service) {
 	t.Helper()
-	if _, err := ledger.ChainOrg(t.Context(), s.Pool, ids.PlatformOrg, 10000); err != nil {
-		t.Fatal(err)
-	}
+	chainPlatform(t, s)
 	if err := s.Pool.InTenantTx(t.Context(), ids.PlatformOrg, func(ctx context.Context, tx db.TenantTx) error {
 		var seq int64
 		if err := tx.QueryRow(ctx, "SELECT coalesce(max(ledger_seq),0) FROM pc.security_event_outbox WHERE org_id=$1", ids.PlatformOrg).Scan(&seq); err != nil {
@@ -295,5 +293,33 @@ func TestT176_RestoreRequeuesDeletionWhenOriginalRequestIsMissing(t *testing.T) 
 	d.AdminQueryRow(t, "SELECT reapplied_from FROM pc.deletion_records WHERE deleted_org_id=$1", []any{org}, &from)
 	if len(from) != 32 {
 		t.Fatal("original deletion digest lost")
+	}
+}
+
+// chainPlatform chains the platform org until every committed entry is
+// chained. The chainer takes only entries below the cluster-wide xmin, so
+// a transaction open in a concurrently running test package can hold new
+// entries back briefly.
+func chainPlatform(t *testing.T, s *Service) {
+	t.Helper()
+	deadline := time.Now().Add(time.Minute)
+	for {
+		if _, err := ledger.ChainOrg(t.Context(), s.Pool, ids.PlatformOrg, 10000); err != nil {
+			t.Fatal(err)
+		}
+		var left int
+		if err := s.Pool.InTenantTx(t.Context(), ids.PlatformOrg, func(ctx context.Context, tx db.TenantTx) error {
+			return tx.QueryRow(ctx, `SELECT count(*) FROM pc.ledger_entries e WHERE org_id = $1
+				AND NOT EXISTS (SELECT 1 FROM pc.ledger_chain c WHERE c.org_id = e.org_id AND c.entry_id = e.id)`, ids.PlatformOrg).Scan(&left)
+		}, db.ReadOnly()); err != nil {
+			t.Fatal(err)
+		}
+		if left == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("platform entries not chained within a minute")
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }

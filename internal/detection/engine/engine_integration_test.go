@@ -101,6 +101,8 @@ func (f *fixture) audit(t *testing.T, name string, n int, details func(i int) ma
 			}
 			if _, err := audit.Record(ctx, tx, audit.Event{
 				Name: name, Actor: evdomain.Actor{Type: "user", ID: "u1"}, Outcome: audit.Success, Details: d,
+				// The org, as the response service records it on the kill switch.
+				Object: &audit.Object{Type: "org", ID: f.org.String()},
 			}); err != nil {
 				return err
 			}

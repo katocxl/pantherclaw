@@ -58,7 +58,7 @@ func TestHR390_ExportBytesExpireForClosedOrgsWithoutHostedBilling(t *testing.T) 
 	d.AdminExec(t, `INSERT INTO pc.data_requests(org_id,id,kind,state,created_by,ready_at,expires_at,parts,total_size,manifest)
         VALUES($1,$2,'EXPORT','READY',$3,now()-interval '8 days',now()-interval '1 day',1,1,'test')`, org, id, ids.NewV7())
 	d.AdminExec(t, "INSERT INTO pc.data_request_parts(org_id,request_id,number,content,sha256) VALUES($1,$2,1,$3,$4)", org, id, []byte{1}, make([]byte, 32))
-	d.AdminExec(t, "UPDATE pc.orgs SET state='CLOSED' WHERE id=$1", org)
+	d.AdminExec(t, "UPDATE pc.orgs SET state='SUSPENDED' WHERE id=$1", org)
 	if err := s.Daily(t.Context(), org); err != nil {
 		t.Fatal(err)
 	}
