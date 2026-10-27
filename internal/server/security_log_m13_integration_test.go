@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
@@ -37,8 +38,22 @@ func TestHR383_SecurityLogCLIExportsExclusivelyAndAuditsExplicitACK(t *testing.T
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if n, err := ledger.ChainAll(ctx, p, org, 500); err != nil || n != 1 {
-		t.Fatalf("chain=%d %v", n, err)
+	// The chainer takes only entries below the cluster-wide xmin, so a
+	// transaction open in a concurrently running test package can hold the
+	// entry back briefly: chain until it is chained.
+	chained := 0
+	for deadline := time.Now().Add(time.Minute); chained < 1; time.Sleep(100 * time.Millisecond) {
+		n, err := ledger.ChainAll(ctx, p, org, 500)
+		if err != nil {
+			t.Fatal(err)
+		}
+		chained += n
+		if chained < 1 && time.Now().After(deadline) {
+			t.Fatal("the entry was not chained within a minute")
+		}
+	}
+	if chained != 1 {
+		t.Fatalf("chain=%d", chained)
 	}
 	run := func(args ...string) (int, string, string) {
 		t.Helper()
