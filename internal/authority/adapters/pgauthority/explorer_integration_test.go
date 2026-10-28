@@ -13,7 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/actionir"
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
+	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
+	"github.com/katocxl/pantherclaw/internal/authority/replay"
 	gapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -237,7 +240,8 @@ func compareIDs(a, b ids.UUID) int {
 // of a denied transaction carries an explanation with every field filled
 // (task_id stays empty: grants carry no structured task id). Constraints
 // are names for evidence.read alone and "name=value" lines with
-// grant.read; budgets need budget.read (F066, F647).
+// grant.read; budgets need budget.read. Material values come from the
+// sealed inputs (F066, F647, rows26 D12b).
 func TestExplorer_ExplainsAHeldAndADeniedDecision(t *testing.T) {
 	w := newWorld(t)
 	w.refundable("ch_1", "ch_2")
@@ -255,14 +259,14 @@ func TestExplorer_ExplainsAHeldAndADeniedDecision(t *testing.T) {
 		},
 		Credential: tapp.CredAccessToken,
 	})
-	e := &txapp.Explorer{Pool: w.pool}
+	e := &txapp.Explorer{Pool: w.pool, Recordings: engineRecordings{w.replayEngine()}}
 	for _, tc := range []struct {
-		name, check string
-		txn         ids.UUID
-		material    string
+		name   string
+		txn    ids.UUID
+		amount string
 	}{
-		{"held", "requirements", held.TransactionID, "amount"},
-		{"denied", "authority", denied.TransactionID, "amount"},
+		{"held", held.TransactionID, "60.00 USD"},
+		{"denied", denied.TransactionID, "30.00 USD"},
 	} {
 		ev, err := e.TransactionEvidence(everything, tc.txn)
 		if err != nil {
@@ -270,7 +274,7 @@ func TestExplorer_ExplainsAHeldAndADeniedDecision(t *testing.T) {
 		}
 		x := ev.Explanation
 		if x == nil || x.Decision != ev.Transaction.Decision || x.Category == "" || x.Decisive == nil || x.Decisive.Code == "" ||
-			x.Operation != "payments.refund.create" || x.Target == "" || x.Material[tc.material] == "" ||
+			x.Operation != "payments.refund.create" || x.Target == "" || x.Material["amount"] != tc.amount || x.Material["charge"] == "" ||
 			x.Principal != "user:"+w.alice.String() || x.Environment != w.env.String() || x.Policy == "" || len(x.Gaps) == 0 ||
 			x.Execution == "" {
 			t.Fatalf("%s: explanation %+v", tc.name, x)
@@ -313,4 +317,12 @@ func (w *world) heldBudgetGrant() gdomain.Grant {
 		w.t.Fatal(err)
 	}
 	return g
+}
+
+// engineRecordings is the explorer's opener: the replay engine's, as the
+// server wires it.
+type engineRecordings struct{ *replay.Engine }
+
+func (r engineRecordings) Definition(ctx context.Context, org ids.OrgID, pin actionir.Definition) (pipeline.Pinned, error) {
+	return r.Source.Definition(ctx, org, pin)
 }

@@ -4,12 +4,18 @@
 package app
 
 import (
+	"context"
 	"encoding/base64"
+	"errors"
+	"maps"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/actionir"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
+	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
+	"github.com/katocxl/pantherclaw/internal/authority/recording"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/money"
@@ -25,7 +31,6 @@ func receipt(claims string) string {
 const grantID = "0192aaaa-bbbb-7ccc-8ddd-0000000000g1"
 
 func sample(decision, check, code string, execution domain.ExecutionState, coverage string) (*Evidence, explainInputs) {
-	amount := money.MustParse("30.00")
 	ev := &Evidence{
 		Transaction: Summary{ID: ids.NewV7(), Decision: decision, Operation: "payments.refund.create", Execution: execution},
 		Decisions: []DecisionRecord{{Evaluation: 1, JWS: receipt(`{"pap": {"decision": "` + decision + `",
@@ -37,9 +42,10 @@ func sample(decision, check, code string, execution domain.ExecutionState, cover
 		Basis: &DecisionBasis{Policy: "0192aaaa-bbbb-7ccc-8ddd-0000000000p1", Levels: []Level{{Kind: "grant", ID: grantID, Revision: 2}}},
 	}
 	in := explainInputs{
-		facts:   dbq.ExplanationFactsRow{TargetType: "stripe.charge", TargetID: "ch_1", Amount: &amount, Currency: "USD", EnvironmentID: ids.NewV7()},
+		facts:   dbq.ExplanationFactsRow{TargetType: "stripe.charge", TargetID: "ch_1", EnvironmentID: ids.NewV7()},
 		grant:   &dbq.ExplanationGrantRevisionRow{ExpiresAt: time.Now().Add(time.Hour), Bounds: []byte(`{"operations": ["payments.refund.create"], "params": {"x": 1}}`)},
 		unknown: map[string]money.Decimal{grantID + "/task": money.MustParse("30.00")}, budgetsShown: true, grantID: grantID, grantRevision: 2,
+		material: map[string]string{"amount": "60.00 USD", "charge": "ch_1"}, materialOK: true,
 	}
 	return ev, in
 }
@@ -49,13 +55,11 @@ func sample(decision, check, code string, execution domain.ExecutionState, cover
 // its presentation, the failing check and decisive item, the action, the
 // principal, environment, grant, policy, budgets, gaps, execution state.
 // No grant revision carries a structured task id, so task_id stays empty
-// (rows26 D12a).
+// (rows26 D12a). Material values come from the sealed inputs (D12b).
 //
 // Covers: F066, F647
 func TestF066_EveryFieldOfAHeldAndADeniedDecisionIsFilled(t *testing.T) {
 	held, heldIn := sample("REQUIRE_APPROVAL", "requirements", "REFUND_OVER_50", domain.Waiting, "PARTIAL")
-	heldIn.display = []byte(`{"fields": [{"name": "operation", "value": "payments.refund.create"}, {"name": "params.amount", "value": "60.00 USD"},
-		{"name": "params.charge", "value": "ch_1"}]}`)
 	denied, deniedIn := sample("DENY", "authority", "BUDGET_EXHAUSTED", domain.Blocked, "OBSERVE_ONLY")
 	for _, tc := range []struct {
 		name     string
@@ -66,7 +70,7 @@ func TestF066_EveryFieldOfAHeldAndADeniedDecisionIsFilled(t *testing.T) {
 		gap      string
 	}{
 		{"held", held, heldIn, adomain.PresentHold, map[string]string{"amount": "60.00 USD", "charge": "ch_1"}, GapCoveragePartial},
-		{"denied", denied, deniedIn, adomain.PresentDeny, map[string]string{"amount": "30", "currency": "USD"}, GapCoverageObserveOnly},
+		{"denied", denied, deniedIn, adomain.PresentDeny, map[string]string{"amount": "60.00 USD", "charge": "ch_1"}, GapCoverageObserveOnly},
 	} {
 		x := explain(tc.ev, tc.in)
 		if x == nil {
@@ -78,13 +82,8 @@ func TestF066_EveryFieldOfAHeldAndADeniedDecisionIsFilled(t *testing.T) {
 			x.Execution != tc.ev.Transaction.Execution {
 			t.Errorf("%s: %+v", tc.name, x)
 		}
-		if len(x.Material) != len(tc.material) {
+		if !maps.Equal(x.Material, tc.material) {
 			t.Errorf("%s: material %v, want %v", tc.name, x.Material, tc.material)
-		}
-		for k, v := range tc.material {
-			if got := x.Material[k]; got != v && (k != "amount" || !money.MustParse(got).Equal(money.MustParse(v))) {
-				t.Errorf("%s: material %s = %q, want %q", tc.name, k, got, v)
-			}
 		}
 		if g := x.Grant; g == nil || g.ID != grantID || g.Revision != 2 || g.Expires.IsZero() ||
 			!slices.Equal(g.Constraints, []string{"operations", "params"}) {
@@ -138,5 +137,34 @@ func TestF647_GapsAndPresentation(t *testing.T) {
 	}
 	if explain(&Evidence{}, in) != nil {
 		t.Fatal("an explanation without a decision receipt")
+	}
+}
+
+type failingRecordings struct{ err error }
+
+func (f failingRecordings) RecordedInputs(context.Context, ids.OrgID, ids.UUID, int) (*recording.Recording, error) {
+	return nil, f.err
+}
+
+func (failingRecordings) Definition(context.Context, ids.OrgID, actionir.Definition) (pipeline.Pinned, error) {
+	return pipeline.Pinned{}, nil
+}
+
+// TestF066_MissingInputsAreAGap: when the sealed inputs are missing or
+// truncated (or no opener is configured) the material values stay empty
+// and the gaps say so (rows26 D12b).
+//
+// Covers: F066, F647
+func TestF066_MissingInputsAreAGap(t *testing.T) {
+	for _, r := range []Recordings{nil, failingRecordings{recording.ErrTruncated}, failingRecordings{errors.New("no row")}} {
+		if m, ok := recordedMaterial(context.Background(), r, ids.OrgID{}, ids.NewV7(), 1); ok || m != nil {
+			t.Fatalf("%T: material %v ok %v", r, m, ok)
+		}
+	}
+	ev, in := sample("DENY", "authority", "GRANT_AMOUNT_EXCEEDED", domain.Blocked, "ENFORCED")
+	in.material, in.materialOK = nil, false
+	x := explain(ev, in)
+	if len(x.Material) != 0 || !slices.Contains(x.Gaps, GapMaterialUnavailable) {
+		t.Fatalf("missing inputs: material %v, gaps %v", x.Material, x.Gaps)
 	}
 }

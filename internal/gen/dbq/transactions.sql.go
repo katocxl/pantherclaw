@@ -269,25 +269,8 @@ func (q *Queries) ExecutionOf(ctx context.Context, orgID ids.OrgID, transactionI
 	return i, err
 }
 
-const explanationDisplay = `-- name: ExplanationDisplay :one
-SELECT display FROM pc.approval_requests
-WHERE org_id = $1 AND transaction_id = $2
-ORDER BY evaluation DESC, created_at DESC
-LIMIT 1
-`
-
-// The display of the transaction's latest approval request, whose fields
-// hold the definition's canonical material values (F066).
-func (q *Queries) ExplanationDisplay(ctx context.Context, orgID ids.OrgID, transactionID *ids.UUID) ([]byte, error) {
-	row := q.db.QueryRow(ctx, explanationDisplay, orgID, transactionID)
-	var display []byte
-	err := row.Scan(&display)
-	return display, err
-}
-
 const explanationFacts = `-- name: ExplanationFacts :one
-SELECT coalesce(t.target_type, '')::text AS target_type, coalesce(t.target_id, '')::text AS target_id, t.amount,
-       coalesce(t.currency, '')::text AS currency, r.environment_id
+SELECT coalesce(t.target_type, '')::text AS target_type, coalesce(t.target_id, '')::text AS target_id, r.environment_id
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 WHERE t.org_id = $1 AND t.id = $2
@@ -296,23 +279,15 @@ WHERE t.org_id = $1 AND t.id = $2
 type ExplanationFactsRow struct {
 	TargetType    string
 	TargetID      string
-	Amount        *money.Decimal
-	Currency      string
 	EnvironmentID ids.UUID
 }
 
 // What a decision explanation reads besides the decision receipt (F066):
-// the action's target, amount and currency, and the run's environment.
+// the action's target and the run's environment.
 func (q *Queries) ExplanationFacts(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ExplanationFactsRow, error) {
 	row := q.db.QueryRow(ctx, explanationFacts, orgID, iD)
 	var i ExplanationFactsRow
-	err := row.Scan(
-		&i.TargetType,
-		&i.TargetID,
-		&i.Amount,
-		&i.Currency,
-		&i.EnvironmentID,
-	)
+	err := row.Scan(&i.TargetType, &i.TargetID, &i.EnvironmentID)
 	return i, err
 }
 

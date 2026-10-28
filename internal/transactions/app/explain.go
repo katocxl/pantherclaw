@@ -9,10 +9,14 @@ import (
 	"encoding/json/v2"
 	"maps"
 	"slices"
-	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/actionir"
+	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
+	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
+	"github.com/katocxl/pantherclaw/internal/authority/recording"
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -31,6 +35,9 @@ const (
 	GapCoveragePartial     = "COVERAGE_PARTIAL"
 	GapCoverageObserveOnly = "COVERAGE_OBSERVE_ONLY"
 	GapCoverageUnknown     = "COVERAGE_UNKNOWN"
+	// GapMaterialUnavailable: the evaluation's sealed inputs are missing or
+	// truncated, so its material values cannot be shown.
+	GapMaterialUnavailable = "MATERIAL_VALUES_UNAVAILABLE"
 )
 
 // ChecklistLine is one checklist item of a decision receipt. Detail is
@@ -72,8 +79,8 @@ type Explanation struct {
 	Operation string
 	// Target is "<type>:<id>".
 	Target string
-	// Material are the definition's canonical material values (never
-	// content): from the approval display, else the budget amount.
+	// Material are the definition's material values, never content (as
+	// an approval display shows them), from the sealed inputs.
 	Material    map[string]string
 	Principal   string
 	Environment string
@@ -118,8 +125,10 @@ type receiptConsequence struct {
 // evidence itself.
 type explainInputs struct {
 	facts dbq.ExplanationFactsRow
-	// display is the latest approval request's display; nil without one.
-	display []byte
+	// material are the decisive evaluation's material values, opened from
+	// its sealed inputs; materialOK is false when they could not be.
+	material   map[string]string
+	materialOK bool
 	// grant is the grant revision's expiry and bounds; nil when unread.
 	grant *dbq.ExplanationGrantRevisionRow
 	// unknown is what the transaction holds per "<owner>/<rule>" with its
@@ -142,13 +151,6 @@ func readExplainInputs(ctx context.Context, c tenancy.Caller, q *dbq.Queries, ev
 		return in, err
 	}
 	in.facts = f
-	switch d, err := q.ExplanationDisplay(ctx, c.Org, &id); {
-	case db.IsNoRows(err):
-	case err != nil:
-		return in, err
-	default:
-		in.display = d
-	}
 	if in.budgetsShown, err = NewAgentScope(c, q, td.PermBudgetRead).Can(ctx, ev.Transaction.Agent); err != nil {
 		return in, err
 	}
@@ -219,7 +221,9 @@ func explain(ev *Evidence, in explainInputs) *Explanation {
 			break
 		}
 	}
-	out.Material = materialValues(in)
+	if in.materialOK {
+		out.Material = in.material
+	}
 	if ev.Basis != nil {
 		out.Policy = ev.Basis.Policy
 	}
@@ -241,34 +245,8 @@ func explain(ev *Evidence, in explainInputs) *Explanation {
 		}
 	}
 	out.Gaps = gaps(ev, claims)
-	return out
-}
-
-// materialValues are the canonical material parameters an approval display
-// recorded ("params.<name>" fields, which are never content), or else the
-// transaction's budget amount and currency.
-func materialValues(in explainInputs) map[string]string {
-	out := map[string]string{}
-	if in.display != nil {
-		var d struct {
-			Fields []struct {
-				Name  string `json:"name"`
-				Value string `json:"value"`
-			} `json:"fields"`
-		}
-		if json.Unmarshal(in.display, &d) == nil {
-			for _, f := range d.Fields {
-				if p, ok := strings.CutPrefix(f.Name, "params."); ok && f.Value != "" {
-					out[p] = f.Value
-				}
-			}
-		}
-	}
-	if len(out) == 0 && in.facts.Amount != nil {
-		out["amount"] = in.facts.Amount.String()
-		if in.facts.Currency != "" {
-			out["currency"] = in.facts.Currency
-		}
+	if !in.materialOK {
+		out.Gaps = append(out.Gaps, GapMaterialUnavailable)
 	}
 	return out
 }
@@ -342,4 +320,47 @@ func gaps(ev *Evidence, claims receiptClaims) []string {
 		out = append(out, GapCoverageObserveOnly)
 	}
 	return out
+}
+
+// Recordings opens an evaluation's sealed inputs and the definition they
+// pin: the replay engine's opener and source (F066). Like a replay, it
+// needs only evidence.read.
+type Recordings interface {
+	RecordedInputs(ctx context.Context, org ids.OrgID, txn ids.UUID, evaluation int) (*recording.Recording, error)
+	Definition(ctx context.Context, org ids.OrgID, pin actionir.Definition) (pipeline.Pinned, error)
+}
+
+// recordedMaterial are an evaluation's material values: each material
+// parameter of the definition that is not content, written as an approval
+// display writes it. ok is false when the inputs are missing, truncated or
+// unreadable, or no recordings are configured.
+func recordedMaterial(ctx context.Context, r Recordings, org ids.OrgID, txn ids.UUID, evaluation int) (map[string]string, bool) {
+	if r == nil {
+		return nil, false
+	}
+	rec, err := r.RecordedInputs(ctx, org, txn, evaluation)
+	if err != nil || rec == nil {
+		return nil, false
+	}
+	p, err := actionir.Parse(rec.Request.Action)
+	if err != nil {
+		return nil, false
+	}
+	pinned, err := r.Definition(ctx, org, p.Action.Definition)
+	if err != nil || pinned.Definition == nil {
+		return nil, false
+	}
+	vals, err := pinned.Definition.DecodeParams(p.Action.Params)
+	if err != nil {
+		return nil, false
+	}
+	out := map[string]string{}
+	for name, spec := range pinned.Definition.Params {
+		v, ok := vals[name]
+		if !ok || !spec.Material || spec.Type == defs.TypeContent {
+			continue
+		}
+		out[name] = apdomain.FormatValue(v, spec)
+	}
+	return out, true
 }

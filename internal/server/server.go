@@ -810,7 +810,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	d.m6.registerPublic(rs)
 	d.m5p2.registerPublic(rs)
-	registerM7(rs, pool, d.verification, consoleBaseURL(d.publicURL, d.ext))
+	registerM7(rs, pool, d.kp, d.verification, consoleBaseURL(d.publicURL, d.ext))
 	var githubNotify githubapp.Notifier
 	if d.m5 != nil {
 		githubNotify = d.m5.notifications

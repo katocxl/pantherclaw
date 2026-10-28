@@ -361,6 +361,9 @@ func fieldValue(d *defs.Definition, name string, in ActionInput) (Field, error) 
 	return f, nil
 }
 
+// FormatValue writes a parameter as an approval display does (F066).
+func FormatValue(v defs.Value, spec defs.ParamSpec) string { return formatValue(v, spec) }
+
 // formatValue writes a parameter canonically: money as its canonical
 // decimal and currency, numbers with their unit, ids verbatim.
 func formatValue(v defs.Value, spec defs.ParamSpec) string {
