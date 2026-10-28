@@ -16,13 +16,14 @@ The hosted control plane holds:
 
 - organization configuration, grants and policies;
 - the ledger, receipts and evidence;
+- normalised facts (replay inputs);
 - payload captures, only under a capture profile and for at most 30 days ([retention.md](retention.md#restricted-payload-capture-records-manager-auditor));
 - account and IdP data;
 - billing data.
 
 **Target credentials.** They are sealed to your gateway's broker key (HPKE X-Wing) and opened only inside your gateway. The control plane stores the sealed ciphertext (`pc.credentials.sealed`) and sends it to that gateway with its configuration (HR-182). It never holds the broker key or sees the plaintext (HR-061).
 
-**Traffic.** The gateway connects outbound only, over mTLS. Target payloads pass through your gateway; the control plane sees them only as a payload capture.
+**Traffic.** The gateway connects outbound only, over mTLS. The gateway sends each action's canonical description (operation, target and arguments) to the control plane for the decision, and the control plane keeps the normalised facts and receipts. Raw request and response bodies reach it only as a payload capture.
 
 **Region.** The hosted region is named in your order form and on the PantherClaw trust page.
 

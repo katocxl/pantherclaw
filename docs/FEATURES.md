@@ -623,7 +623,7 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
-| PN-011.1 | Transactional path latency | `Authorize` (decision plus permit) p99 ≤ 25 ms; gateway overhead p99 ≤ 35 ms at 1k rps, 2 vCPU, co-located; RSS < 150 MB. Local figures are published in docs/perf/M13.md; the staging run is pending. | MVP | Community | M13 | new |
+| PN-011.1 | Transactional path latency | `Authorize` (decision plus permit) p99 ≤ 25 ms; gateway overhead p99 ≤ 35 ms at 1k rps, 2 vCPU, co-located; gateway RSS < 150 MB. Local figures are published in docs/perf/M13.md; the staging run is pending. | MVP | Community | M13 | new |
 | PN-011.2 | Fast/monitor path latency | Monitor mode with a cached signed policy and asynchronous evidence: p50 < 2 ms, p99 < 5 ms. Conflicts with HR-001 and HR-184; needs an ADR (founder 2026-10-28). | Next | Community | post-1.0 | new |
 | PN-011.3 | Revocation propagation | Revocation, suspension and kill-switch events reach gateways at p99 < 1 s. A gateway whose heartbeat is more than 2 s old fails closed. | MVP | Community | M13 | new |
 | PN-011.4 | Zero overspend under concurrency | No overspend with 1,000 concurrent reservations against one budget, proven by a race test in CI. | MVP | Community | M13 | F114 |
