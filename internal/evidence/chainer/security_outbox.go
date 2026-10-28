@@ -5,7 +5,6 @@ package chainer
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 
 	"github.com/riverqueue/river"
@@ -54,27 +53,17 @@ type SecurityDispatchWorker struct {
 }
 
 func (w *SecurityDispatchWorker) Work(ctx context.Context, _ *river.Job[SecurityDispatchArgs]) error {
-	const capOrgs = 10000
-	refs, err := w.Pool.CrossOrgList(ctx, db.ListAllOrgs, capOrgs)
-	if err != nil {
-		return err
-	}
-	client, err := river.ClientFromContextSafely[jobs.TxType](ctx)
-	if err != nil {
-		return err
-	}
-	params := make([]river.InsertManyParams, 0, len(refs))
-	for _, ref := range refs {
-		params = append(params, river.InsertManyParams{Args: SecurityOrgArgs{Org: ref.Org}})
-	}
-	if len(params) > 0 {
-		if _, err := client.InsertMany(ctx, params); err != nil {
+	// Every org, in pages (D45), one InsertMany per page.
+	return w.Pool.CrossOrgPages(ctx, db.ListAllOrgs, db.ListerPageSize, func(page []db.OrgRef) error {
+		client, err := river.ClientFromContextSafely[jobs.TxType](ctx)
+		if err != nil {
 			return err
 		}
-	}
-	if len(refs) == capOrgs {
-		w.Log.ErrorContext(ctx, "security_event.dispatch_capped", slog.Int("org_cap", capOrgs))
-		return errors.New("security-event dispatcher reached 10000-org lister cap; paging required")
-	}
-	return nil
+		params := make([]river.InsertManyParams, 0, len(page))
+		for _, ref := range page {
+			params = append(params, river.InsertManyParams{Args: SecurityOrgArgs{Org: ref.Org}})
+		}
+		_, err = client.InsertMany(ctx, params)
+		return err
+	})
 }
