@@ -424,7 +424,7 @@ func TestF159_ADisplaySaysWhenTheTargetCannotConfirmItsConditions(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if with.V != 3 || with.Consequence.Verifier == "" || with.Consequence.ConditionLimits != nil {
+	if with.V != 2 || with.Consequence.Verifier == "" || with.Consequence.ConditionLimits != nil {
 		t.Fatalf("with a verifier: v %d, verifier %q, limits %q", with.V, with.Consequence.Verifier, with.Consequence.ConditionLimits)
 	}
 	d := *in.Definition

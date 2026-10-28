@@ -293,15 +293,26 @@ func uid(s string) ids.UUID {
 }
 
 // TestHR030_ConditionLimitsChangeTheBinding: the binding covers the
-// display, so a display that differs only in its condition limits (F159)
-// gives another display hash and another binding, and a stored version 2
-// display, read back, still hashes to the display hash it was bound with.
+// display, so a version 3 display of an action without a verifier, with
+// its condition limits (F159), binds differently from the same display
+// without them at version 2; and a stored version 2 display, read back,
+// still hashes to the display hash it was bound with.
 //
 // Covers: F159
 func TestHR030_ConditionLimitsChangeTheBinding(t *testing.T) {
-	disp := domain.Display{V: domain.DisplayVersion, Kind: "action", Title: "Refund ch_1"}
-	limited := disp
-	limited.Consequence.ConditionLimits = []string{domain.NoVerifierLimit}
+	in := refundInput(t, "")
+	d := *in.Definition
+	d.Verifier = nil
+	in.Definition = &d
+	limited, err := domain.RenderAction(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if limited.V != domain.ConditionLimitsVersion || len(limited.Consequence.ConditionLimits) != 1 {
+		t.Fatalf("a no-verifier display: v %d, limits %q", limited.V, limited.Consequence.ConditionLimits)
+	}
+	disp := limited
+	disp.V, disp.Consequence.ConditionLimits = domain.DisplayVersion, nil
 	bindingOf := func(d domain.Display) domain.Binding {
 		t.Helper()
 		c, err := d.Canonical()
@@ -320,7 +331,7 @@ func TestHR030_ConditionLimitsChangeTheBinding(t *testing.T) {
 		t.Fatal("the condition limits do not change the binding")
 	}
 
-	raw, err := os.ReadFile(filepath.Join("testdata", "display_v2_mock_payments.json"))
+	raw, err := os.ReadFile(filepath.Join("testdata", "display_mock_payments.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

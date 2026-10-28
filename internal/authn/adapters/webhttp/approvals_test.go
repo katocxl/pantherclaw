@@ -220,7 +220,7 @@ func (f *fakeApprovals) View(ctx context.Context, id ids.UUID) (apapp.View, erro
 		v.Display.PayloadFindings = []apdomain.PayloadFindingLine{{Kind: "github_token", Location: "arg:content(base64)"}}
 	}
 	if f.noVerifier {
-		v.Display.V, v.Display.Consequence.ConditionLimits = apdomain.DisplayVersion, []string{apdomain.NoVerifierLimit}
+		v.Display.V, v.Display.Consequence.ConditionLimits = apdomain.ConditionLimitsVersion, []string{apdomain.NoVerifierLimit}
 	}
 	if f.review {
 		v.Display.Consequence.Operation = "github.pull.merge"

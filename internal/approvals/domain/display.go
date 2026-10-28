@@ -22,10 +22,13 @@ import (
 // DisplayVersion is the version of the stored display's shape. Version 2
 // (HR-030 option B, founder decision 2026-10-13) shows a fact's value only
 // for the members the approval binds and never when it was observed.
-// Version 3 (F159) adds the consequence's condition limits. A stored
-// display of an earlier version stays valid: the binding covers the
-// display as it was stored, its version included (HR-030).
-const DisplayVersion = 3
+const DisplayVersion = 2
+
+// ConditionLimitsVersion is the version of a display with condition limits
+// (F159, tracker D33a). Only such a display is version 3: every other one
+// renders as version 2, so existing holds, recordings and bindings stay
+// identical, and the binding covers the stored version (HR-030).
+const ConditionLimitsVersion = 3
 
 // NoVerifierLimit is the condition limit of an operation the target has no
 // verifier for (F159): nothing confirms the approved conditions while the
@@ -229,7 +232,7 @@ func RenderAction(in ActionInput) (Display, error) {
 	if d.Verifier != nil {
 		out.Consequence.Verifier = d.Verifier.Operation + " establishes " + d.Verifier.Establishes
 	} else {
-		out.Consequence.ConditionLimits = []string{NoVerifierLimit}
+		out.V, out.Consequence.ConditionLimits = ConditionLimitsVersion, []string{NoVerifierLimit}
 	}
 	out.Facts = factLines(in.Facts, in.Bound)
 	out.Consequences = consequenceLines(in.Consequences)
