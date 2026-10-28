@@ -30518,6 +30518,19 @@
         ],
         "description": "Decision is an authorization decision (PAP-1 §7.1)."
       },
+      "pantherclaw.v1.DecisionPresentation": {
+        "type": "string",
+        "title": "DecisionPresentation",
+        "enum": [
+          "DECISION_PRESENTATION_UNSPECIFIED",
+          "DECISION_PRESENTATION_ALLOW",
+          "DECISION_PRESENTATION_CONSTRAIN",
+          "DECISION_PRESENTATION_HOLD",
+          "DECISION_PRESENTATION_DENY",
+          "DECISION_PRESENTATION_CANNOT_AUTHORIZE"
+        ],
+        "description": "DecisionPresentation is how a decision is shown to people and agents\n (F069): ALLOW_WITH_OBLIGATIONS is Constrain, both REQUIRE_* decisions are\n Hold."
+      },
       "pantherclaw.v1.DispatchMode": {
         "type": "string",
         "title": "DispatchMode",
@@ -30556,6 +30569,42 @@
           "WAIT_STATE_CONSUMED"
         ],
         "description": "WaitState is the state of a held action's approval request as a waiter\n sees it (HR-174): states, codes and times only."
+      },
+      "pantherclaw.v1.AgentExplanation": {
+        "type": "object",
+        "properties": {
+          "presentation": {
+            "title": "presentation",
+            "description": "How the decision is presented.",
+            "$ref": "#/components/schemas/pantherclaw.v1.DecisionPresentation"
+          },
+          "failingCategory": {
+            "type": "string",
+            "title": "failing_category",
+            "description": "The decisive checklist item's check name, for example \"authority\";\n empty for ALLOW and CONSTRAIN."
+          },
+          "decisiveCode": {
+            "type": "string",
+            "title": "decisive_code",
+            "description": "The decisive checklist item's code."
+          },
+          "transactionId": {
+            "type": "string",
+            "title": "transaction_id",
+            "description": "The transaction."
+          },
+          "nextActions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.NextAction"
+            },
+            "title": "next_actions",
+            "description": "What a person can do next."
+          }
+        },
+        "title": "AgentExplanation",
+        "additionalProperties": false,
+        "description": "AgentExplanation is all a decision tells the agent about why (F330,\n HR-400): never the grant, policy, limits, budget values or request."
       },
       "pantherclaw.v1.AuthorizeRequest": {
         "type": "object",
@@ -30714,6 +30763,11 @@
             },
             "title": "consequences",
             "description": "What the action's consequence rules said, in rule order (G0 M8,\n HR-206): each consequence predicted, not ruled out (UNKNOWN) or ruled\n out. A predicted consequence is a prediction, never an authorized or\n confirmed effect. Empty for a stored decision (repeat)."
+          },
+          "agentExplanation": {
+            "title": "agent_explanation",
+            "description": "The agent-safe explanation (F330, HR-400). Without a transaction it\n has no transaction id and no recovery action.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AgentExplanation"
           }
         },
         "title": "AuthorizeResponse",
@@ -31075,6 +31129,218 @@
         "additionalProperties": false,
         "description": "DataScopeApplied is what applying a read's data scope did to its answer\n (G0 M14 D20, D102): never a value, only the record key and counts."
       },
+      "pantherclaw.v1.DecisionExplanation": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "title": "decision",
+            "description": "The decision.",
+            "$ref": "#/components/schemas/pantherclaw.v1.Decision"
+          },
+          "presentation": {
+            "title": "presentation",
+            "description": "How it is presented.",
+            "$ref": "#/components/schemas/pantherclaw.v1.DecisionPresentation"
+          },
+          "failingCategory": {
+            "type": "string",
+            "title": "failing_category",
+            "description": "The decisive item's check; empty for ALLOW and CONSTRAIN."
+          },
+          "decisive": {
+            "title": "decisive",
+            "description": "The decisive checklist item.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ChecklistItem"
+          },
+          "transactionId": {
+            "type": "string",
+            "title": "transaction_id",
+            "description": "The transaction."
+          },
+          "action": {
+            "title": "action",
+            "description": "The action, from the definition's canonical fields.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExplainedAction"
+          },
+          "principal": {
+            "type": "string",
+            "title": "principal",
+            "description": "Who the action was for: \"user:\u003cid\u003e\" or \"service_account:\u003cid\u003e\"."
+          },
+          "taskId": {
+            "type": "string",
+            "title": "task_id",
+            "description": "A structured task id from the grant revision; empty, since grants\n carry only free-text task references."
+          },
+          "environment": {
+            "type": "string",
+            "title": "environment",
+            "description": "The run's environment id."
+          },
+          "grant": {
+            "title": "grant",
+            "description": "The grant revision the decision used.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExplainedGrant"
+          },
+          "policyVersionId": {
+            "type": "string",
+            "title": "policy_version_id",
+            "description": "The policy version the decision used."
+          },
+          "budgets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ExplainedBudget"
+            },
+            "title": "budgets",
+            "description": "The budgets at decision time; left out without budget.read."
+          },
+          "gaps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "gaps",
+            "description": "What is not known: UNKNOWN_CONSEQUENCE, OUTCOME_UNKNOWN,\n NO_EFFECT_CONFIRMED, COVERAGE_PARTIAL, COVERAGE_OBSERVE_ONLY or\n COVERAGE_UNKNOWN."
+          },
+          "executionState": {
+            "type": "string",
+            "title": "execution_state",
+            "description": "The transaction's execution state, for example \"BLOCKED\"."
+          },
+          "nextActions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.NextAction"
+            },
+            "title": "next_actions",
+            "description": "What a person can do next."
+          }
+        },
+        "title": "DecisionExplanation",
+        "additionalProperties": false,
+        "description": "DecisionExplanation is the full explanation of a decision, for people\n with evidence.read (F066, F647): what was asked, under which grant and\n policy, what decided it, what is not known and what to do next. Agent\n text never reaches it outside existing untrusted fields (HR-023, HR-034)."
+      },
+      "pantherclaw.v1.ExplainedAction": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "title": "operation",
+            "description": "The operation."
+          },
+          "target": {
+            "type": "string",
+            "title": "target",
+            "description": "The target, \"\u003ctype\u003e:\u003cid\u003e\"."
+          },
+          "materialValues": {
+            "type": "object",
+            "title": "material_values",
+            "additionalProperties": {
+              "type": "string",
+              "title": "value"
+            },
+            "description": "The definition's material parameters (never content), or the budget\n amount and currency when no approval display recorded them."
+          }
+        },
+        "title": "ExplainedAction",
+        "additionalProperties": false,
+        "description": "ExplainedAction is an action's canonical fields."
+      },
+      "pantherclaw.v1.ExplainedAction.MaterialValuesEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key"
+          },
+          "value": {
+            "type": "string",
+            "title": "value"
+          }
+        },
+        "title": "MaterialValuesEntry",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ExplainedBudget": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "title": "account_id",
+            "description": "The grant or guardrail that owns the rule."
+          },
+          "rule": {
+            "type": "string",
+            "title": "rule",
+            "description": "Rule id."
+          },
+          "currency": {
+            "type": "string",
+            "title": "currency",
+            "description": "Currency (ISO 4217); empty for a count."
+          },
+          "limit": {
+            "type": "string",
+            "title": "limit",
+            "description": "The limit; empty when the rule only counts."
+          },
+          "reserved": {
+            "type": "string",
+            "title": "reserved",
+            "description": "Reserved by unsettled permits."
+          },
+          "spent": {
+            "type": "string",
+            "title": "spent",
+            "description": "Spent by accepted outcomes."
+          },
+          "unknown": {
+            "type": "string",
+            "title": "unknown",
+            "description": "Held by this transaction with its outcome unknown."
+          }
+        },
+        "title": "ExplainedBudget",
+        "additionalProperties": false,
+        "description": "ExplainedBudget is one budget rule at decision time. Amounts are decimal\n strings in its currency."
+      },
+      "pantherclaw.v1.ExplainedGrant": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Grant id."
+          },
+          "revision": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "revision",
+            "format": "int64",
+            "description": "Revision."
+          },
+          "constraints": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "constraints",
+            "description": "The revision's bounds: their names, or \"name=value\" lines (compact\n JSON values) when the caller also holds grant.read."
+          },
+          "expireTime": {
+            "title": "expire_time",
+            "description": "When the revision expires.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "ExplainedGrant",
+        "additionalProperties": false,
+        "description": "ExplainedGrant is the grant revision a decision used."
+      },
       "pantherclaw.v1.GetNonceRequest": {
         "type": "object",
         "title": "GetNonceRequest",
@@ -31098,6 +31364,29 @@
         "title": "GetNonceResponse",
         "additionalProperties": false,
         "description": "GetNonceResponse returns it."
+      },
+      "pantherclaw.v1.NextAction": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "code",
+            "description": "Stable code, for example \"inspect_transaction\"."
+          },
+          "label": {
+            "type": "string",
+            "title": "label",
+            "description": "What to run or open, for example \"pclaw txn show \u003cid\u003e\"."
+          },
+          "url": {
+            "type": "string",
+            "title": "url",
+            "description": "The console page, when the server serves a console; empty otherwise."
+          }
+        },
+        "title": "NextAction",
+        "additionalProperties": false,
+        "description": "NextAction is one recovery action."
       },
       "pantherclaw.v1.Obligation": {
         "type": "object",
@@ -73835,6 +74124,11 @@
             },
             "title": "links",
             "description": "Links from and to it."
+          },
+          "explanation": {
+            "title": "explanation",
+            "description": "The decision explained for people (F066, F647).",
+            "$ref": "#/components/schemas/pantherclaw.v1.DecisionExplanation"
           }
         },
         "title": "GetTransactionEvidenceResponse",

@@ -66,11 +66,11 @@ func mountConsole(mux *http.ServeMux, ext extension.Set) error {
 
 // consoleBaseURL is the base of the console pages a decision links to
 // (F330): the public URL when this build mounts a console, else empty.
-func consoleBaseURL(cfg *Config, ext extension.Set) string {
+func consoleBaseURL(publicURL string, ext extension.Set) string {
 	if ext.Console == nil {
 		return ""
 	}
-	return cfg.Auth.PublicURL
+	return publicURL
 }
 
 // errExtensionRoute reports an extension route the server refuses at

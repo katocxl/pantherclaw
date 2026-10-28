@@ -478,6 +478,8 @@ message GetTransactionEvidenceResponse {
   repeated Reconciliation reconciliations = 7;
   // Links from and to it.
   repeated TransactionLink links = 8;
+  // The decision explained for people (F066, F647).
+  DecisionExplanation explanation = 9;
 }
 
 // ReconciliationService owns unknown outcomes and conflicting effects

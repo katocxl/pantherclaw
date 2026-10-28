@@ -941,8 +941,8 @@ type AuthorizeResponse struct {
 	// out. A predicted consequence is a prediction, never an authorized or
 	// confirmed effect. Empty for a stored decision (repeat).
 	Consequences []*Consequence `protobuf:"bytes,19,rep,name=consequences,proto3" json:"consequences,omitempty"`
-	// The agent-safe explanation (F330, HR-400); absent when the action
-	// could not be bound to a transaction.
+	// The agent-safe explanation (F330, HR-400). Without a transaction it
+	// has no transaction id and no recovery action.
 	AgentExplanation *AgentExplanation `protobuf:"bytes,20,opt,name=agent_explanation,json=agentExplanation,proto3" json:"agent_explanation,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -2773,6 +2773,424 @@ func (x *RecordToolObservationResponse) GetObservationId() string {
 	return ""
 }
 
+// DecisionExplanation is the full explanation of a decision, for people
+// with evidence.read (F066, F647): what was asked, under which grant and
+// policy, what decided it, what is not known and what to do next. Agent
+// text never reaches it outside existing untrusted fields (HR-023, HR-034).
+type DecisionExplanation struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The decision.
+	Decision Decision `protobuf:"varint,1,opt,name=decision,proto3,enum=pantherclaw.v1.Decision" json:"decision,omitempty"`
+	// How it is presented.
+	Presentation DecisionPresentation `protobuf:"varint,2,opt,name=presentation,proto3,enum=pantherclaw.v1.DecisionPresentation" json:"presentation,omitempty"`
+	// The decisive item's check; empty for ALLOW and CONSTRAIN.
+	FailingCategory string `protobuf:"bytes,3,opt,name=failing_category,json=failingCategory,proto3" json:"failing_category,omitempty"`
+	// The decisive checklist item.
+	Decisive *ChecklistItem `protobuf:"bytes,4,opt,name=decisive,proto3" json:"decisive,omitempty"`
+	// The transaction.
+	TransactionId string `protobuf:"bytes,5,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
+	// The action, from the definition's canonical fields.
+	Action *ExplainedAction `protobuf:"bytes,6,opt,name=action,proto3" json:"action,omitempty"`
+	// Who the action was for: "user:<id>" or "service_account:<id>".
+	Principal string `protobuf:"bytes,7,opt,name=principal,proto3" json:"principal,omitempty"`
+	// A structured task id from the grant revision; empty, since grants
+	// carry only free-text task references.
+	TaskId string `protobuf:"bytes,8,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	// The run's environment id.
+	Environment string `protobuf:"bytes,9,opt,name=environment,proto3" json:"environment,omitempty"`
+	// The grant revision the decision used.
+	Grant *ExplainedGrant `protobuf:"bytes,10,opt,name=grant,proto3" json:"grant,omitempty"`
+	// The policy version the decision used.
+	PolicyVersionId string `protobuf:"bytes,11,opt,name=policy_version_id,json=policyVersionId,proto3" json:"policy_version_id,omitempty"`
+	// The budgets at decision time; left out without budget.read.
+	Budgets []*ExplainedBudget `protobuf:"bytes,12,rep,name=budgets,proto3" json:"budgets,omitempty"`
+	// What is not known: UNKNOWN_CONSEQUENCE, OUTCOME_UNKNOWN,
+	// NO_EFFECT_CONFIRMED, COVERAGE_PARTIAL, COVERAGE_OBSERVE_ONLY or
+	// COVERAGE_UNKNOWN.
+	Gaps []string `protobuf:"bytes,13,rep,name=gaps,proto3" json:"gaps,omitempty"`
+	// The transaction's execution state, for example "BLOCKED".
+	ExecutionState string `protobuf:"bytes,14,opt,name=execution_state,json=executionState,proto3" json:"execution_state,omitempty"`
+	// What a person can do next.
+	NextActions   []*NextAction `protobuf:"bytes,15,rep,name=next_actions,json=nextActions,proto3" json:"next_actions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DecisionExplanation) Reset() {
+	*x = DecisionExplanation{}
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DecisionExplanation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DecisionExplanation) ProtoMessage() {}
+
+func (x *DecisionExplanation) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DecisionExplanation.ProtoReflect.Descriptor instead.
+func (*DecisionExplanation) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *DecisionExplanation) GetDecision() Decision {
+	if x != nil {
+		return x.Decision
+	}
+	return Decision_DECISION_UNSPECIFIED
+}
+
+func (x *DecisionExplanation) GetPresentation() DecisionPresentation {
+	if x != nil {
+		return x.Presentation
+	}
+	return DecisionPresentation_DECISION_PRESENTATION_UNSPECIFIED
+}
+
+func (x *DecisionExplanation) GetFailingCategory() string {
+	if x != nil {
+		return x.FailingCategory
+	}
+	return ""
+}
+
+func (x *DecisionExplanation) GetDecisive() *ChecklistItem {
+	if x != nil {
+		return x.Decisive
+	}
+	return nil
+}
+
+func (x *DecisionExplanation) GetTransactionId() string {
+	if x != nil {
+		return x.TransactionId
+	}
+	return ""
+}
+
+func (x *DecisionExplanation) GetAction() *ExplainedAction {
+	if x != nil {
+		return x.Action
+	}
+	return nil
+}
+
+func (x *DecisionExplanation) GetPrincipal() string {
+	if x != nil {
+		return x.Principal
+	}
+	return ""
+}
+
+func (x *DecisionExplanation) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
+func (x *DecisionExplanation) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
+func (x *DecisionExplanation) GetGrant() *ExplainedGrant {
+	if x != nil {
+		return x.Grant
+	}
+	return nil
+}
+
+func (x *DecisionExplanation) GetPolicyVersionId() string {
+	if x != nil {
+		return x.PolicyVersionId
+	}
+	return ""
+}
+
+func (x *DecisionExplanation) GetBudgets() []*ExplainedBudget {
+	if x != nil {
+		return x.Budgets
+	}
+	return nil
+}
+
+func (x *DecisionExplanation) GetGaps() []string {
+	if x != nil {
+		return x.Gaps
+	}
+	return nil
+}
+
+func (x *DecisionExplanation) GetExecutionState() string {
+	if x != nil {
+		return x.ExecutionState
+	}
+	return ""
+}
+
+func (x *DecisionExplanation) GetNextActions() []*NextAction {
+	if x != nil {
+		return x.NextActions
+	}
+	return nil
+}
+
+// ExplainedAction is an action's canonical fields.
+type ExplainedAction struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The operation.
+	Operation string `protobuf:"bytes,1,opt,name=operation,proto3" json:"operation,omitempty"`
+	// The target, "<type>:<id>".
+	Target string `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	// The definition's material parameters (never content), or the budget
+	// amount and currency when no approval display recorded them.
+	MaterialValues map[string]string `protobuf:"bytes,3,rep,name=material_values,json=materialValues,proto3" json:"material_values,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ExplainedAction) Reset() {
+	*x = ExplainedAction{}
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExplainedAction) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExplainedAction) ProtoMessage() {}
+
+func (x *ExplainedAction) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExplainedAction.ProtoReflect.Descriptor instead.
+func (*ExplainedAction) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *ExplainedAction) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
+}
+
+func (x *ExplainedAction) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+func (x *ExplainedAction) GetMaterialValues() map[string]string {
+	if x != nil {
+		return x.MaterialValues
+	}
+	return nil
+}
+
+// ExplainedGrant is the grant revision a decision used.
+type ExplainedGrant struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Grant id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Revision.
+	Revision int64 `protobuf:"varint,2,opt,name=revision,proto3" json:"revision,omitempty"`
+	// The revision's bounds: their names, or "name=value" lines (compact
+	// JSON values) when the caller also holds grant.read.
+	Constraints []string `protobuf:"bytes,3,rep,name=constraints,proto3" json:"constraints,omitempty"`
+	// When the revision expires.
+	ExpireTime    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExplainedGrant) Reset() {
+	*x = ExplainedGrant{}
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExplainedGrant) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExplainedGrant) ProtoMessage() {}
+
+func (x *ExplainedGrant) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExplainedGrant.ProtoReflect.Descriptor instead.
+func (*ExplainedGrant) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *ExplainedGrant) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ExplainedGrant) GetRevision() int64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *ExplainedGrant) GetConstraints() []string {
+	if x != nil {
+		return x.Constraints
+	}
+	return nil
+}
+
+func (x *ExplainedGrant) GetExpireTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpireTime
+	}
+	return nil
+}
+
+// ExplainedBudget is one budget rule at decision time. Amounts are decimal
+// strings in its currency.
+type ExplainedBudget struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The grant or guardrail that owns the rule.
+	AccountId string `protobuf:"bytes,1,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	// Rule id.
+	Rule string `protobuf:"bytes,2,opt,name=rule,proto3" json:"rule,omitempty"`
+	// Currency (ISO 4217); empty for a count.
+	Currency string `protobuf:"bytes,3,opt,name=currency,proto3" json:"currency,omitempty"`
+	// The limit; empty when the rule only counts.
+	Limit string `protobuf:"bytes,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Reserved by unsettled permits.
+	Reserved string `protobuf:"bytes,5,opt,name=reserved,proto3" json:"reserved,omitempty"`
+	// Spent by accepted outcomes.
+	Spent string `protobuf:"bytes,6,opt,name=spent,proto3" json:"spent,omitempty"`
+	// Held by this transaction with its outcome unknown.
+	Unknown       string `protobuf:"bytes,7,opt,name=unknown,proto3" json:"unknown,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExplainedBudget) Reset() {
+	*x = ExplainedBudget{}
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExplainedBudget) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExplainedBudget) ProtoMessage() {}
+
+func (x *ExplainedBudget) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExplainedBudget.ProtoReflect.Descriptor instead.
+func (*ExplainedBudget) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ExplainedBudget) GetAccountId() string {
+	if x != nil {
+		return x.AccountId
+	}
+	return ""
+}
+
+func (x *ExplainedBudget) GetRule() string {
+	if x != nil {
+		return x.Rule
+	}
+	return ""
+}
+
+func (x *ExplainedBudget) GetCurrency() string {
+	if x != nil {
+		return x.Currency
+	}
+	return ""
+}
+
+func (x *ExplainedBudget) GetLimit() string {
+	if x != nil {
+		return x.Limit
+	}
+	return ""
+}
+
+func (x *ExplainedBudget) GetReserved() string {
+	if x != nil {
+		return x.Reserved
+	}
+	return ""
+}
+
+func (x *ExplainedBudget) GetSpent() string {
+	if x != nil {
+		return x.Spent
+	}
+	return ""
+}
+
+func (x *ExplainedBudget) GetUnknown() string {
+	if x != nil {
+		return x.Unknown
+	}
+	return ""
+}
+
 var File_pantherclaw_v1_authority_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_authority_proto_rawDesc = "" +
@@ -2975,7 +3393,46 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\vinstance_id\x18\x03 \x01(\tR\n" +
 	"instanceId\x12\x14\n" +
 	"\x05nonce\x18\x04 \x01(\tR\x05nonce\x12%\n" +
-	"\x0eobservation_id\x18\x05 \x01(\tR\robservationId*\xcc\x01\n" +
+	"\x0eobservation_id\x18\x05 \x01(\tR\robservationId\"\xcd\x05\n" +
+	"\x13DecisionExplanation\x124\n" +
+	"\bdecision\x18\x01 \x01(\x0e2\x18.pantherclaw.v1.DecisionR\bdecision\x12H\n" +
+	"\fpresentation\x18\x02 \x01(\x0e2$.pantherclaw.v1.DecisionPresentationR\fpresentation\x12)\n" +
+	"\x10failing_category\x18\x03 \x01(\tR\x0ffailingCategory\x129\n" +
+	"\bdecisive\x18\x04 \x01(\v2\x1d.pantherclaw.v1.ChecklistItemR\bdecisive\x12%\n" +
+	"\x0etransaction_id\x18\x05 \x01(\tR\rtransactionId\x127\n" +
+	"\x06action\x18\x06 \x01(\v2\x1f.pantherclaw.v1.ExplainedActionR\x06action\x12\x1c\n" +
+	"\tprincipal\x18\a \x01(\tR\tprincipal\x12\x17\n" +
+	"\atask_id\x18\b \x01(\tR\x06taskId\x12 \n" +
+	"\venvironment\x18\t \x01(\tR\venvironment\x124\n" +
+	"\x05grant\x18\n" +
+	" \x01(\v2\x1e.pantherclaw.v1.ExplainedGrantR\x05grant\x12*\n" +
+	"\x11policy_version_id\x18\v \x01(\tR\x0fpolicyVersionId\x129\n" +
+	"\abudgets\x18\f \x03(\v2\x1f.pantherclaw.v1.ExplainedBudgetR\abudgets\x12\x12\n" +
+	"\x04gaps\x18\r \x03(\tR\x04gaps\x12'\n" +
+	"\x0fexecution_state\x18\x0e \x01(\tR\x0eexecutionState\x12=\n" +
+	"\fnext_actions\x18\x0f \x03(\v2\x1a.pantherclaw.v1.NextActionR\vnextActions\"\xe8\x01\n" +
+	"\x0fExplainedAction\x12\x1c\n" +
+	"\toperation\x18\x01 \x01(\tR\toperation\x12\x16\n" +
+	"\x06target\x18\x02 \x01(\tR\x06target\x12\\\n" +
+	"\x0fmaterial_values\x18\x03 \x03(\v23.pantherclaw.v1.ExplainedAction.MaterialValuesEntryR\x0ematerialValues\x1aA\n" +
+	"\x13MaterialValuesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9b\x01\n" +
+	"\x0eExplainedGrant\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
+	"\brevision\x18\x02 \x01(\x03R\brevision\x12 \n" +
+	"\vconstraints\x18\x03 \x03(\tR\vconstraints\x12;\n" +
+	"\vexpire_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"expireTime\"\xc2\x01\n" +
+	"\x0fExplainedBudget\x12\x1d\n" +
+	"\n" +
+	"account_id\x18\x01 \x01(\tR\taccountId\x12\x12\n" +
+	"\x04rule\x18\x02 \x01(\tR\x04rule\x12\x1a\n" +
+	"\bcurrency\x18\x03 \x01(\tR\bcurrency\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\tR\x05limit\x12\x1a\n" +
+	"\breserved\x18\x05 \x01(\tR\breserved\x12\x14\n" +
+	"\x05spent\x18\x06 \x01(\tR\x05spent\x12\x18\n" +
+	"\aunknown\x18\a \x01(\tR\aunknown*\xcc\x01\n" +
 	"\bDecision\x12\x18\n" +
 	"\x14DECISION_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eDECISION_ALLOW\x10\x01\x12#\n" +
@@ -3055,7 +3512,7 @@ func file_pantherclaw_v1_authority_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_authority_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_pantherclaw_v1_authority_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_pantherclaw_v1_authority_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_pantherclaw_v1_authority_proto_goTypes = []any{
 	(Decision)(0),                         // 0: pantherclaw.v1.Decision
 	(DecisionPresentation)(0),             // 1: pantherclaw.v1.DecisionPresentation
@@ -3091,9 +3548,14 @@ var file_pantherclaw_v1_authority_proto_goTypes = []any{
 	(*VerifyWorkloadResponse)(nil),        // 31: pantherclaw.v1.VerifyWorkloadResponse
 	(*RecordToolObservationRequest)(nil),  // 32: pantherclaw.v1.RecordToolObservationRequest
 	(*RecordToolObservationResponse)(nil), // 33: pantherclaw.v1.RecordToolObservationResponse
-	nil,                                   // 34: pantherclaw.v1.CredentialAccess.RequestedEntry
-	nil,                                   // 35: pantherclaw.v1.CredentialAccess.GrantedEntry
-	(*timestamppb.Timestamp)(nil),         // 36: google.protobuf.Timestamp
+	(*DecisionExplanation)(nil),           // 34: pantherclaw.v1.DecisionExplanation
+	(*ExplainedAction)(nil),               // 35: pantherclaw.v1.ExplainedAction
+	(*ExplainedGrant)(nil),                // 36: pantherclaw.v1.ExplainedGrant
+	(*ExplainedBudget)(nil),               // 37: pantherclaw.v1.ExplainedBudget
+	nil,                                   // 38: pantherclaw.v1.CredentialAccess.RequestedEntry
+	nil,                                   // 39: pantherclaw.v1.CredentialAccess.GrantedEntry
+	nil,                                   // 40: pantherclaw.v1.ExplainedAction.MaterialValuesEntry
+	(*timestamppb.Timestamp)(nil),         // 41: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_authority_proto_depIdxs = []int32{
 	1,  // 0: pantherclaw.v1.AgentExplanation.presentation:type_name -> pantherclaw.v1.DecisionPresentation
@@ -3109,43 +3571,52 @@ var file_pantherclaw_v1_authority_proto_depIdxs = []int32{
 	14, // 10: pantherclaw.v1.AuthorizeResponse.consequences:type_name -> pantherclaw.v1.Consequence
 	8,  // 11: pantherclaw.v1.AuthorizeResponse.agent_explanation:type_name -> pantherclaw.v1.AgentExplanation
 	2,  // 12: pantherclaw.v1.Consequence.state:type_name -> pantherclaw.v1.ConsequenceState
-	36, // 13: pantherclaw.v1.WaitInfo.deadline_time:type_name -> google.protobuf.Timestamp
+	41, // 13: pantherclaw.v1.WaitInfo.deadline_time:type_name -> google.protobuf.Timestamp
 	3,  // 14: pantherclaw.v1.WaitInfo.state:type_name -> pantherclaw.v1.WaitState
-	36, // 15: pantherclaw.v1.WaitInfo.consume_by_time:type_name -> google.protobuf.Timestamp
-	36, // 16: pantherclaw.v1.WaitInfo.evidence_deadline_time:type_name -> google.protobuf.Timestamp
+	41, // 15: pantherclaw.v1.WaitInfo.consume_by_time:type_name -> google.protobuf.Timestamp
+	41, // 16: pantherclaw.v1.WaitInfo.evidence_deadline_time:type_name -> google.protobuf.Timestamp
 	5,  // 17: pantherclaw.v1.ChecklistItem.status:type_name -> pantherclaw.v1.ChecklistStatus
 	6,  // 18: pantherclaw.v1.RecordExecutionRequest.outcome:type_name -> pantherclaw.v1.Outcome
 	23, // 19: pantherclaw.v1.RecordExecutionRequest.captures:type_name -> pantherclaw.v1.PayloadCapture
 	22, // 20: pantherclaw.v1.RecordExecutionRequest.credential_access:type_name -> pantherclaw.v1.CredentialAccess
 	21, // 21: pantherclaw.v1.RecordExecutionRequest.data_scope:type_name -> pantherclaw.v1.DataScopeApplied
-	34, // 22: pantherclaw.v1.CredentialAccess.requested:type_name -> pantherclaw.v1.CredentialAccess.RequestedEntry
-	35, // 23: pantherclaw.v1.CredentialAccess.granted:type_name -> pantherclaw.v1.CredentialAccess.GrantedEntry
-	36, // 24: pantherclaw.v1.CredentialAccess.expire_time:type_name -> google.protobuf.Timestamp
+	38, // 22: pantherclaw.v1.CredentialAccess.requested:type_name -> pantherclaw.v1.CredentialAccess.RequestedEntry
+	39, // 23: pantherclaw.v1.CredentialAccess.granted:type_name -> pantherclaw.v1.CredentialAccess.GrantedEntry
+	41, // 24: pantherclaw.v1.CredentialAccess.expire_time:type_name -> google.protobuf.Timestamp
 	7,  // 25: pantherclaw.v1.PayloadCapture.direction:type_name -> pantherclaw.v1.CaptureDirection
-	36, // 26: pantherclaw.v1.GetNonceResponse.expire_time:type_name -> google.protobuf.Timestamp
+	41, // 26: pantherclaw.v1.GetNonceResponse.expire_time:type_name -> google.protobuf.Timestamp
 	25, // 27: pantherclaw.v1.ReportUnknownWorkloadRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
 	25, // 28: pantherclaw.v1.VerifyWorkloadRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
-	36, // 29: pantherclaw.v1.VerifyWorkloadResponse.run_expires_at:type_name -> google.protobuf.Timestamp
+	41, // 29: pantherclaw.v1.VerifyWorkloadResponse.run_expires_at:type_name -> google.protobuf.Timestamp
 	25, // 30: pantherclaw.v1.RecordToolObservationRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
-	11, // 31: pantherclaw.v1.AuthorityService.Authorize:input_type -> pantherclaw.v1.AuthorizeRequest
-	18, // 32: pantherclaw.v1.AuthorityService.BeginDispatch:input_type -> pantherclaw.v1.BeginDispatchRequest
-	20, // 33: pantherclaw.v1.AuthorityService.RecordExecution:input_type -> pantherclaw.v1.RecordExecutionRequest
-	26, // 34: pantherclaw.v1.AuthorityService.GetNonce:input_type -> pantherclaw.v1.GetNonceRequest
-	28, // 35: pantherclaw.v1.AuthorityService.ReportUnknownWorkload:input_type -> pantherclaw.v1.ReportUnknownWorkloadRequest
-	30, // 36: pantherclaw.v1.AuthorityService.VerifyWorkload:input_type -> pantherclaw.v1.VerifyWorkloadRequest
-	32, // 37: pantherclaw.v1.AuthorityService.RecordToolObservation:input_type -> pantherclaw.v1.RecordToolObservationRequest
-	13, // 38: pantherclaw.v1.AuthorityService.Authorize:output_type -> pantherclaw.v1.AuthorizeResponse
-	19, // 39: pantherclaw.v1.AuthorityService.BeginDispatch:output_type -> pantherclaw.v1.BeginDispatchResponse
-	24, // 40: pantherclaw.v1.AuthorityService.RecordExecution:output_type -> pantherclaw.v1.RecordExecutionResponse
-	27, // 41: pantherclaw.v1.AuthorityService.GetNonce:output_type -> pantherclaw.v1.GetNonceResponse
-	29, // 42: pantherclaw.v1.AuthorityService.ReportUnknownWorkload:output_type -> pantherclaw.v1.ReportUnknownWorkloadResponse
-	31, // 43: pantherclaw.v1.AuthorityService.VerifyWorkload:output_type -> pantherclaw.v1.VerifyWorkloadResponse
-	33, // 44: pantherclaw.v1.AuthorityService.RecordToolObservation:output_type -> pantherclaw.v1.RecordToolObservationResponse
-	38, // [38:45] is the sub-list for method output_type
-	31, // [31:38] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	0,  // 31: pantherclaw.v1.DecisionExplanation.decision:type_name -> pantherclaw.v1.Decision
+	1,  // 32: pantherclaw.v1.DecisionExplanation.presentation:type_name -> pantherclaw.v1.DecisionPresentation
+	16, // 33: pantherclaw.v1.DecisionExplanation.decisive:type_name -> pantherclaw.v1.ChecklistItem
+	35, // 34: pantherclaw.v1.DecisionExplanation.action:type_name -> pantherclaw.v1.ExplainedAction
+	36, // 35: pantherclaw.v1.DecisionExplanation.grant:type_name -> pantherclaw.v1.ExplainedGrant
+	37, // 36: pantherclaw.v1.DecisionExplanation.budgets:type_name -> pantherclaw.v1.ExplainedBudget
+	9,  // 37: pantherclaw.v1.DecisionExplanation.next_actions:type_name -> pantherclaw.v1.NextAction
+	40, // 38: pantherclaw.v1.ExplainedAction.material_values:type_name -> pantherclaw.v1.ExplainedAction.MaterialValuesEntry
+	41, // 39: pantherclaw.v1.ExplainedGrant.expire_time:type_name -> google.protobuf.Timestamp
+	11, // 40: pantherclaw.v1.AuthorityService.Authorize:input_type -> pantherclaw.v1.AuthorizeRequest
+	18, // 41: pantherclaw.v1.AuthorityService.BeginDispatch:input_type -> pantherclaw.v1.BeginDispatchRequest
+	20, // 42: pantherclaw.v1.AuthorityService.RecordExecution:input_type -> pantherclaw.v1.RecordExecutionRequest
+	26, // 43: pantherclaw.v1.AuthorityService.GetNonce:input_type -> pantherclaw.v1.GetNonceRequest
+	28, // 44: pantherclaw.v1.AuthorityService.ReportUnknownWorkload:input_type -> pantherclaw.v1.ReportUnknownWorkloadRequest
+	30, // 45: pantherclaw.v1.AuthorityService.VerifyWorkload:input_type -> pantherclaw.v1.VerifyWorkloadRequest
+	32, // 46: pantherclaw.v1.AuthorityService.RecordToolObservation:input_type -> pantherclaw.v1.RecordToolObservationRequest
+	13, // 47: pantherclaw.v1.AuthorityService.Authorize:output_type -> pantherclaw.v1.AuthorizeResponse
+	19, // 48: pantherclaw.v1.AuthorityService.BeginDispatch:output_type -> pantherclaw.v1.BeginDispatchResponse
+	24, // 49: pantherclaw.v1.AuthorityService.RecordExecution:output_type -> pantherclaw.v1.RecordExecutionResponse
+	27, // 50: pantherclaw.v1.AuthorityService.GetNonce:output_type -> pantherclaw.v1.GetNonceResponse
+	29, // 51: pantherclaw.v1.AuthorityService.ReportUnknownWorkload:output_type -> pantherclaw.v1.ReportUnknownWorkloadResponse
+	31, // 52: pantherclaw.v1.AuthorityService.VerifyWorkload:output_type -> pantherclaw.v1.VerifyWorkloadResponse
+	33, // 53: pantherclaw.v1.AuthorityService.RecordToolObservation:output_type -> pantherclaw.v1.RecordToolObservationResponse
+	47, // [47:54] is the sub-list for method output_type
+	40, // [40:47] is the sub-list for method input_type
+	40, // [40:40] is the sub-list for extension type_name
+	40, // [40:40] is the sub-list for extension extendee
+	0,  // [0:40] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_authority_proto_init() }
@@ -3159,7 +3630,7 @@ func file_pantherclaw_v1_authority_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_authority_proto_rawDesc), len(file_pantherclaw_v1_authority_proto_rawDesc)),
 			NumEnums:      8,
-			NumMessages:   28,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

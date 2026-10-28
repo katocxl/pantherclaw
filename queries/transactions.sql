@@ -236,3 +236,34 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 -- name: SimulatedTransactions :many
 SELECT id FROM pc.transactions
 WHERE org_id = sqlc.arg(org_id) AND id = ANY (sqlc.arg(transaction_ids)::uuid[]) AND simulated;
+
+-- What a decision explanation reads besides the decision receipt (F066):
+-- the action's target, amount and currency, and the run's environment.
+-- name: ExplanationFacts :one
+SELECT coalesce(t.target_type, '')::text AS target_type, coalesce(t.target_id, '')::text AS target_id, t.amount,
+       coalesce(t.currency, '')::text AS currency, r.environment_id
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(id);
+
+-- The display of the transaction's latest approval request, whose fields
+-- hold the definition's canonical material values (F066).
+-- name: ExplanationDisplay :one
+SELECT display FROM pc.approval_requests
+WHERE org_id = sqlc.arg(org_id) AND transaction_id = sqlc.arg(transaction_id)
+ORDER BY evaluation DESC, created_at DESC
+LIMIT 1;
+
+-- The grant revision a decision used (F066).
+-- name: ExplanationGrantRevision :one
+SELECT expires_at, bounds FROM pc.grant_revisions
+WHERE org_id = sqlc.arg(org_id) AND grant_id = sqlc.arg(grant_id) AND revision = sqlc.arg(revision);
+
+-- The transaction's budget holds whose outcome is unknown (F066, F115).
+-- name: ExplanationUnknownHolds :many
+SELECT ba.owner_id, ba.rule, res.amount
+FROM pc.reservations res
+JOIN pc.budget_accounts ba ON ba.org_id = res.org_id AND ba.id = res.account_id
+JOIN pc.permits p ON p.org_id = res.org_id AND p.id = res.permit_id
+WHERE res.org_id = sqlc.arg(org_id) AND res.transaction_id = sqlc.arg(transaction_id) AND res.state = 'HELD'
+  AND p.state = 'UNKNOWN';

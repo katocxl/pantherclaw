@@ -199,6 +199,9 @@ type Evidence struct {
 	Effects         []EffectRecord
 	Reconciliations []Reconciliation
 	Links           []Link
+	// Explanation is the latest decision explained (F066, F647); nil
+	// without a readable decision receipt.
+	Explanation *Explanation
 }
 
 // newReaders is the explorer's agent scope: evidence.read where the agent
@@ -373,6 +376,11 @@ func (e *Explorer) TransactionEvidence(ctx context.Context, id ids.UUID) (Eviden
 				From: l.FromTransactionID, To: l.ToTransactionID, Kind: domain.LinkKind(l.Kind), CreatedBy: l.CreatedBy, Created: l.CreatedAt,
 			})
 		}
+		in, err := readExplainInputs(ctx, c, q, &out)
+		if err != nil {
+			return err
+		}
+		out.Explanation = explain(&out, in)
 		return nil
 	}, db.ReadOnly())
 	return out, err

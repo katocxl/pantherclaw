@@ -4,15 +4,10 @@
 package authority
 
 import (
-	"strings"
-
 	"github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 )
-
-// NextActionInspect opens the transaction's evidence (F330).
-const NextActionInspect = "inspect_transaction"
 
 // PresentationToProto maps a presentation (F069).
 var PresentationToProto = map[domain.Presentation]pantherclawv1.DecisionPresentation{
@@ -23,19 +18,13 @@ var PresentationToProto = map[domain.Presentation]pantherclawv1.DecisionPresenta
 	domain.PresentCannotAuthorize: pantherclawv1.DecisionPresentation_DECISION_PRESENTATION_CANNOT_AUTHORIZE,
 }
 
-// NextActions are the recovery actions for a transaction (F330, F066):
-// inspecting it, with its console page when there is a console. A case
-// cannot be opened from the CLI, so none is offered. Nil without a
-// transaction.
+// NextActions are a transaction's recovery actions (domain.NextActions).
 func NextActions(consoleURL, txn string) []*pantherclawv1.NextAction {
-	if txn == "" {
-		return nil
+	var out []*pantherclawv1.NextAction
+	for _, a := range domain.NextActions(consoleURL, txn) {
+		out = append(out, &pantherclawv1.NextAction{Code: a.Code, Label: a.Label, Url: a.URL})
 	}
-	a := &pantherclawv1.NextAction{Code: NextActionInspect, Label: "pclaw txn show " + txn}
-	if consoleURL != "" {
-		a.Url = strings.TrimSuffix(consoleURL, "/") + "/app/evidence/transactions/" + txn
-	}
-	return []*pantherclawv1.NextAction{a}
+	return out
 }
 
 // agentExplanation is all the decision tells the agent (HR-400): the

@@ -46,8 +46,10 @@ func TestHR400_TheAuthorizeResponseExplainsOnlyWhatIsAgentSafe(t *testing.T) {
 	res := Result{
 		Decision: domain.Deny,
 		Checklist: []pipeline.Item{
-			{Step: pipeline.StepAuthority, Check: "authority", Status: pipeline.StatusFailed, Code: "GRANT_AMOUNT_EXCEEDED",
-				Detail: "amount 30.00 exceeds the grant's 10.00", Level: "grant g-secret@3", Decisive: true},
+			{
+				Step: pipeline.StepAuthority, Check: "authority", Status: pipeline.StatusFailed, Code: "GRANT_AMOUNT_EXCEEDED",
+				Detail: "amount 30.00 exceeds the grant's 10.00", Level: "grant g-secret@3", Decisive: true,
+			},
 			{Step: pipeline.StepScope, Check: "scope", Status: pipeline.StatusPassed, Code: "IN_SCOPE"},
 		},
 		Obligations: []pdomain.Obligation{{Rule: "policy-rule-secret", Param: "amount", Max: "10.00"}},
@@ -56,7 +58,7 @@ func TestHR400_TheAuthorizeResponseExplainsOnlyWhatIsAgentSafe(t *testing.T) {
 	if x.GetPresentation() != pantherclawv1.DecisionPresentation_DECISION_PRESENTATION_DENY || x.GetFailingCategory() != "authority" ||
 		x.GetDecisiveCode() != "GRANT_AMOUNT_EXCEEDED" || x.GetTransactionId() != txn || len(x.GetNextActions()) != 1 ||
 		x.GetNextActions()[0].GetUrl() != "https://pc.example/app/evidence/transactions/"+txn ||
-		x.GetNextActions()[0].GetLabel() != "pclaw txn show "+txn || x.GetNextActions()[0].GetCode() != NextActionInspect {
+		x.GetNextActions()[0].GetLabel() != "pclaw txn show "+txn || x.GetNextActions()[0].GetCode() != domain.NextActionInspect {
 		t.Fatalf("explanation = %v", x)
 	}
 	b, _ := protojson.Marshal(x)
