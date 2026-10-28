@@ -114,7 +114,11 @@ func (s *Store) ResolveOccurred(ctx context.Context, c tenancy.Caller, r app.Res
 			}
 			// A person's "occurred" confirms the action: it opens the
 			// consequences its decision predicted, as the verifier's does
-			// (#349 review).
+			// (#349 review). Its UNKNOWN consequences are audited whether
+			// or not the definition has a verifier (G0 M8).
+			if err := auditUnknownConsequences(ctx, tx, q, c.Org, k.TransactionID, actor); err != nil {
+				return err
+			}
 			if te.DefinitionDigest != nil {
 				if d, err := definition(ctx, q, c.Org, *te.DefinitionDigest); err == nil && d.Verifier != nil && len(d.Verifier.Capture) > 0 {
 					fields, err := capturedOf(ctx, q, c.Org, k.TransactionID, d.Verifier)

@@ -40,7 +40,8 @@ const consequenceDelay = 5
 // transaction's newest observation that holds them). A predicted
 // consequence that cannot be verified is audited as such, never left
 // silently (#349 review): nothing captured to find it by, no environment,
-// no verifier that finds it.
+// no verifier that finds it. UNKNOWN consequences are audited apart, by
+// auditUnknownConsequences.
 func openConsequences(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, parent ids.UUID, digest string,
 	v *defs.VerifierSpec, fields map[string]string, actor evdomain.Actor,
 ) error {
@@ -103,6 +104,25 @@ func openConsequences(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org i
 				params, actor); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+// auditUnknownConsequences audits each consequence parent's decision could
+// not rule out (UNKNOWN, such as the deployment of an approved merge whose
+// facts were missing) as not verified (CONSEQUENCE_UNKNOWN) when parent is
+// confirmed, by a verifier or by a person, with or without a verifier
+// (G0 M8). It names no environment to look the consequence up by, so it is
+// never opened, and never left silently either.
+func auditUnknownConsequences(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, parent ids.UUID, actor evdomain.Actor) error {
+	unknown, err := q.UnknownConsequences(ctx, org, parent)
+	if err != nil {
+		return err
+	}
+	for _, c := range unknown {
+		if err := notVerified(ctx, tx, parent, c.Operation, "CONSEQUENCE_UNKNOWN", actor); err != nil {
+			return err
 		}
 	}
 	return nil

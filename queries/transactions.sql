@@ -6,7 +6,9 @@
 
 -- ListTransactions lists transactions newest first. execution_state
 -- mirrors transactions/domain.Execution (a test keeps them equal) so the
--- filter applies before the page is cut.
+-- filter applies before the page is cut. Only transactions the viewer may
+-- read are paged (G0 M10 D60): every one with all_agents, otherwise those
+-- whose run's agent is in visible_agents.
 -- name: ListTransactions :many
 WITH x AS (
     SELECT t.id, t.run_id, r.agent_id, t.operation, t.connection_id, t.decision, t.reason_code, t.effect_state,
@@ -29,6 +31,7 @@ WITH x AS (
     LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
     LEFT JOIN pc.execution_attempts a ON a.org_id = p.org_id AND a.permit_id = p.id
     WHERE t.org_id = sqlc.arg(org_id)
+      AND (sqlc.arg(all_agents)::bool OR r.agent_id = ANY (sqlc.arg(visible_agents)::text[]::uuid[]))
       AND (coalesce(sqlc.arg(before)::uuid, '00000000-0000-0000-0000-000000000000') = '00000000-0000-0000-0000-000000000000'
            OR t.id < sqlc.arg(before)::uuid)
       AND (sqlc.narg(run_id)::uuid IS NULL OR t.run_id = sqlc.narg(run_id)::uuid)
@@ -134,6 +137,9 @@ ORDER BY created_at;
 
 -- Reconciliation (G0 M7 design decisions 3 and 4, HR-192, HR-193).
 
+-- ListReconciliations pages only reconciliations the viewer may read (G0
+-- M10 D60): every one with all_agents, otherwise those whose run's agent
+-- is in visible_agents.
 -- name: ListReconciliations :many
 SELECT k.id, k.transaction_id, k.kind, k.state, k.resolved_via, k.observation_id, k.user_id, k.basis, k.evidence,
        k.waitlist_entry_id, k.opened_at, k.resolved_at, r.agent_id
@@ -141,6 +147,7 @@ FROM pc.reconciliation_tasks k
 JOIN pc.transactions t ON t.org_id = k.org_id AND t.id = k.transaction_id
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 WHERE k.org_id = sqlc.arg(org_id)
+  AND (sqlc.arg(all_agents)::bool OR r.agent_id = ANY (sqlc.arg(visible_agents)::text[]::uuid[]))
   AND (coalesce(sqlc.arg(before)::uuid, '00000000-0000-0000-0000-000000000000') = '00000000-0000-0000-0000-000000000000'
        OR k.id < sqlc.arg(before)::uuid)
   AND (cardinality(sqlc.arg(states)::text[]) = 0 OR k.state = ANY (sqlc.arg(states)::text[]))

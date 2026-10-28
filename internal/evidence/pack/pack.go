@@ -79,6 +79,11 @@ const (
 	GapNotFound          = "not_found"
 )
 
+// ErrCaptureUnavailable reports a payload capture that exists but cannot
+// be opened; a pack records it as a not_captured gap of its transaction
+// rather than failing.
+var ErrCaptureUnavailable = errors.New("pack: a payload capture cannot be opened")
+
 // Item kinds.
 const (
 	KindTransaction = "transaction"
@@ -99,6 +104,10 @@ const (
 	// KindAutomation is an automation execution's record (G0 M11 part 2 D30):
 	// the execution, its grants, runs and gates.
 	KindAutomation = "automation"
+	// KindCapture is an opened payload capture (HR-199):
+	// captures/<transaction>/<direction>.bin, the body as captured, only
+	// in a pack whose creator holds evidence.read_restricted and asked.
+	KindCapture = "capture"
 )
 
 // Scope kinds (design decision 15).

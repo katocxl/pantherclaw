@@ -208,7 +208,9 @@ func newReaders(c tenancy.Caller, q *dbq.Queries) *AgentScope {
 }
 
 // ListTransactions lists the transactions the caller may read, newest
-// first. A page holds fewer than its size when some are not readable.
+// first. Hidden transactions are filtered in SQL before paging, so a page
+// is full whenever more readable ones exist, and neither the page nor its
+// next token reveals a hidden one (G0 M10 D60, T-042).
 func (e *Explorer) ListTransactions(ctx context.Context, pr page.Request, f Filter) (TransactionPage, error) {
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
@@ -229,29 +231,26 @@ func (e *Explorer) ListTransactions(ctx context.Context, pr page.Request, f Filt
 	var out TransactionPage
 	err = e.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		all, visible, err := newReaders(c, q).Visible(ctx)
+		if err != nil {
+			return err
+		}
 		rows, err := q.ListTransactions(ctx, dbq.ListTransactionsParams{
-			OrgID: c.Org, Before: pr.After, RunID: f.Run, AgentID: f.Agent, ConnectionID: f.Connection,
-			Decisions: decisions, ExecutionStates: execs, EffectStates: effects, StartTime: f.Start, EndTime: f.End,
-			PageLimit: pr.Limit(),
+			OrgID: c.Org, AllAgents: all, VisibleAgents: orEmpty(visible), Before: pr.After, RunID: f.Run, AgentID: f.Agent,
+			ConnectionID: f.Connection, Decisions: decisions, ExecutionStates: execs, EffectStates: effects, StartTime: f.Start,
+			EndTime: f.End, PageLimit: pr.Limit(),
 		})
 		if err != nil {
 			return err
 		}
 		rows, out.Next = page.Finish(pr, rows, func(r dbq.ListTransactionsRow) ids.UUID { return r.ID })
-		rd := newReaders(c, q)
 		for _, r := range rows {
-			ok, err := rd.Can(ctx, r.AgentID)
-			if err != nil {
-				return err
-			}
-			if ok {
-				out.Items = append(out.Items, summary(dbq.TransactionSummaryRow{
-					ID: r.ID, RunID: r.RunID, AgentID: r.AgentID, Operation: r.Operation, ConnectionID: r.ConnectionID,
-					Decision: r.Decision, ReasonCode: r.ReasonCode, EffectState: r.EffectState,
-					EffectLevelRequired: r.EffectLevelRequired, EffectLevelAchieved: r.EffectLevelAchieved, Mode: r.Mode,
-					Evaluations: r.Evaluations, CreatedAt: r.CreatedAt, PermitState: r.PermitState, Outcome: r.Outcome,
-				}))
-			}
+			out.Items = append(out.Items, summary(dbq.TransactionSummaryRow{
+				ID: r.ID, RunID: r.RunID, AgentID: r.AgentID, Operation: r.Operation, ConnectionID: r.ConnectionID,
+				Decision: r.Decision, ReasonCode: r.ReasonCode, EffectState: r.EffectState,
+				EffectLevelRequired: r.EffectLevelRequired, EffectLevelAchieved: r.EffectLevelAchieved, Mode: r.Mode,
+				Evaluations: r.Evaluations, CreatedAt: r.CreatedAt, PermitState: r.PermitState, Outcome: r.Outcome,
+			}))
 		}
 		return nil
 	}, db.ReadOnly())
@@ -459,6 +458,14 @@ func boolPtr(b pgtype.Bool) *bool {
 	return &v
 }
 
+// orEmpty is s, or an empty list for nil (a SQL array, never NULL).
+func orEmpty(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
 func deref[T any](p *T) T {
 	var zero T
 	if p == nil {
@@ -571,26 +578,25 @@ func (e *Explorer) ListReconciliations(ctx context.Context, pr page.Request, f R
 	var out ReconciliationPage
 	err = e.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		// Hidden reconciliations are filtered in SQL before paging (D60).
+		all, visible, err := newReaders(c, q).Visible(ctx)
+		if err != nil {
+			return err
+		}
 		rows, err := q.ListReconciliations(ctx, dbq.ListReconciliationsParams{
-			OrgID: c.Org, Before: pr.After, States: states, Kinds: kinds, TransactionID: f.Transaction, PageLimit: pr.Limit(),
+			OrgID: c.Org, AllAgents: all, VisibleAgents: orEmpty(visible), Before: pr.After, States: states, Kinds: kinds,
+			TransactionID: f.Transaction, PageLimit: pr.Limit(),
 		})
 		if err != nil {
 			return err
 		}
 		rows, out.Next = page.Finish(pr, rows, func(r dbq.ListReconciliationsRow) ids.UUID { return r.ID })
-		rd := newReaders(c, q)
 		for _, k := range rows {
-			ok, err := rd.Can(ctx, k.AgentID)
-			if err != nil {
-				return err
-			}
-			if ok {
-				out.Items = append(out.Items, reconciliation(dbq.ReconciliationsOfRow{
-					ID: k.ID, TransactionID: k.TransactionID, Kind: k.Kind, State: k.State, ResolvedVia: k.ResolvedVia,
-					ObservationID: k.ObservationID, UserID: k.UserID, Basis: k.Basis, Evidence: k.Evidence,
-					WaitlistEntryID: k.WaitlistEntryID, OpenedAt: k.OpenedAt, ResolvedAt: k.ResolvedAt,
-				}))
-			}
+			out.Items = append(out.Items, reconciliation(dbq.ReconciliationsOfRow{
+				ID: k.ID, TransactionID: k.TransactionID, Kind: k.Kind, State: k.State, ResolvedVia: k.ResolvedVia,
+				ObservationID: k.ObservationID, UserID: k.UserID, Basis: k.Basis, Evidence: k.Evidence,
+				WaitlistEntryID: k.WaitlistEntryID, OpenedAt: k.OpenedAt, ResolvedAt: k.ResolvedAt,
+			}))
 		}
 		return nil
 	}, db.ReadOnly())
