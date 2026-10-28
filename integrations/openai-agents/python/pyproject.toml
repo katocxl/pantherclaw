@@ -28,10 +28,6 @@ packages = ["src/pantherclaw_openai_agents"]
 [tool.uv]
 # DEPENDENCY_POLICY: nothing uploaded in the last 7 days is locked (the cooldown).
 exclude-newer = "7 days"
-# Exception EX-007 (docs/security/GATES_AND_REVIEW.md §4, founder decision
-# 2026-10-21): certifi 2026.10.19 fixes PYSEC-2026-4320 / GHSA-6q48-6c7w-9gw2
-# inside the cooldown. Remove this line once certifi 2026.10.19 is 7 days old.
-exclude-newer-package = { certifi = "2026-10-21T00:00:00Z" }
 
 [tool.uv.sources]
 # The core client from this repository, until it is published.

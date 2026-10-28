@@ -112,7 +112,13 @@ func TestHR387_SupportSessionsOnlyCallReads(t *testing.T) {
 	// A support cookie never authenticates as a browser session, and a
 	// forged one is refused.
 	forged := consoleCall(ts)
-	forged.cookie = cookie[:len(cookie)-1] + "0"
+	// Change the last character to a different one: a fixed "0" left the
+	// cookie unchanged whenever it already ended in "0".
+	last := byte('0')
+	if cookie[len(cookie)-1] == last {
+		last = '1'
+	}
+	forged.cookie = cookie[:len(cookie)-1] + string(last)
 	if res, _ := forged.do(t, ts, whoAmI); res.StatusCode != http.StatusUnauthorized {
 		t.Errorf("forged support cookie = %d", res.StatusCode)
 	}
