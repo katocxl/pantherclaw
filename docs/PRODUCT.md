@@ -87,7 +87,7 @@ Naming follows one rule: a short brand word the admin remembers, always shown wi
 
 Two features sit in a different component from their pillar, because that is where buyers look for them: the containment sandbox (PN-008.1, pillar 10) belongs to **Checkpoint**, and credential-reach findings (F048, pillar 2) belong to **Stash**.
 
-**Claim boundary for “real time”:** Reflex's tagline is shorthand for a performance target, not a guarantee. The target: every connected gateway refuses new calls within 1 second at p99, timed from when the containment is recorded. Calls already sent complete. A gateway that hasn't heard from the control plane for 2 seconds refuses every call. The p99 figure has not been measured yet; [docs/perf/M13.md](perf/M13.md) records the status. Contracts, security questionnaires and technical documents state the measured figure once it exists, never "real time" or "instant" (F801).
+**Claim boundary for “real time”:** Reflex's tagline is shorthand for a performance target, not a guarantee. The target: every connected gateway refuses new calls within 1 second at p99, timed from when the containment is recorded. Calls already sent complete. A gateway that hasn't heard from the control plane for 2 seconds refuses every call. Measured locally on 2026-10-28: p99 13.3 ms over 400 events with 4 gateways ([docs/perf/M13.md](perf/M13.md)); the staging figure is still to come. Contracts, security questionnaires and technical documents state the measured figure once it exists, never "real time" or "instant" (F801).
 
 ## 4. Components in detail
 

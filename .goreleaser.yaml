@@ -166,3 +166,4 @@ release:
   footer: |
     **Verify this release:** `gh attestation verify <file> --repo katocxl/pantherclaw`
     Licensed under the Business Source License 1.1 (core) and Apache-2.0 (SDKs); see LICENSE and NOTICE.
+    Operating evidence: performance figures and their test conditions are in docs/perf/M13.md (local measurements, updated 2026-10-28). Continuity: one PostgreSQL database and fail-closed gateways, so losing the database stops decisions until it is restored (ARCHITECTURE §16). Operating limits: docs/perf/M13.md.

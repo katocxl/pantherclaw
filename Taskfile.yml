@@ -39,6 +39,30 @@ tasks:
     cmds:
       - bash tools/scripts/perf-m13.sh
 
+  perf:revocation:
+    desc: The PN-011.3 revocation propagation measurement (docs/perf/M13.md) - TestPN0113_RevocationPropagation with 200 cycles, a static Linux test binary run in a private PostgreSQL container's network namespace as perf:m13 does; needs Docker; NAME names the container; JSON in bin/perf/out
+    vars:
+      NAME: '{{.NAME | default "pc-perf-revocation"}}'
+      IMAGE:
+        sh: sed -n 's/^ *image. \(postgres:17-bookworm@sha256:[0-9a-f]*\)$/\1/p' deploy/compose/compose.yaml | head -n1
+      PW:
+        sh: head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n'
+    cmds:
+      - mkdir -p bin/perf/out
+      - CGO_ENABLED=0 GOOS=linux GOARCH="${GOARCH:-amd64}" go test -c -tags integration -trimpath -o bin/perf/e2e.test ./test/e2e/
+      - docker rm -f {{.NAME}} >/dev/null 2>&1 || true
+      - defer: docker rm -f {{.NAME}} >/dev/null 2>&1 || true
+      - >-
+        docker run -d --name {{.NAME}} -e POSTGRES_PASSWORD={{.PW}} -e POSTGRES_DB=pantherclaw --shm-size 256m
+        {{.IMAGE}} -c max_connections=200 -c shared_buffers=256MB >/dev/null
+      - >-
+        for i in $(seq 1 60); do docker exec {{.NAME}} pg_isready -U postgres >/dev/null 2>&1 && break; sleep 1; done
+      - >-
+        set -o pipefail; MSYS_NO_PATHCONV=1 docker run --rm --network container:{{.NAME}} -v "$(cd bin/perf && (pwd -W 2>/dev/null || pwd)):/perf" -w /perf
+        -e PC_TEST_REQUIRE_DB=1 -e PC_TEST_PG_ADMIN_URL="postgres://postgres:{{.PW}}@127.0.0.1:5432/postgres?sslmode=disable"
+        -e PC_PERF_REVOCATION=1 -e PC_PERF_OUT=/perf/out --entrypoint /perf/e2e.test {{.IMAGE}}
+        -test.run '^TestPN0113_RevocationPropagation$' -test.count 1 -test.v -test.timeout 30m 2>&1 | tee bin/perf/out/revocation.log
+
   test:fuzz:
     desc: Run the bounded nightly security parser fuzz targets
     cmds:

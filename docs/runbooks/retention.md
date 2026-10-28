@@ -16,6 +16,8 @@ PantherClaw keeps every evidence record, and removes only the **body** of a reco
 
 Grant, policy, package and connection revisions are kept while any retained receipt references them; M7 never removes them. Operational logs and traces live outside the database (SB-4, 14 days).
 
+Where this data lives in each deployment mode, and how long it lasts after a lapse or deletion: [residency.md](residency.md).
+
 ## The retention role and the job
 
 `pc_retention` is a login role of its own, created by `pantherclaw-server db bootstrap`. It can only null the body columns of the evidence tables and set their tombstone, delete replay inputs (and payload captures), read the columns it needs to choose them, and append its own audit entry. A trigger refuses every other change of an evidence row, a second removal, and a rebuilt body. `pc_app` still has no UPDATE or DELETE on any evidence table (HR-055).
