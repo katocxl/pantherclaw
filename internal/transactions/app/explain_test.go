@@ -82,7 +82,7 @@ func TestF066_EveryFieldOfAHeldAndADeniedDecisionIsFilled(t *testing.T) {
 			t.Errorf("%s: material %v, want %v", tc.name, x.Material, tc.material)
 		}
 		for k, v := range tc.material {
-			if got := x.Material[k]; got != v && !(k == "amount" && money.MustParse(got).Equal(money.MustParse(v))) {
+			if got := x.Material[k]; got != v && (k != "amount" || !money.MustParse(got).Equal(money.MustParse(v))) {
 				t.Errorf("%s: material %s = %q, want %q", tc.name, k, got, v)
 			}
 		}

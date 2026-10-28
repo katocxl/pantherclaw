@@ -96,6 +96,7 @@ func (d Decision) Presentation() Presentation {
 		return PresentHold
 	case Deny:
 		return PresentDeny
+	case CannotAuthorize:
 	}
 	return PresentCannotAuthorize
 }
@@ -111,6 +112,7 @@ func (p Presentation) Label() string {
 		return "Hold"
 	case PresentDeny:
 		return "Deny"
+	case PresentCannotAuthorize:
 	}
 	return "Cannot authorize"
 }
