@@ -6,6 +6,7 @@
 package app_test
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/coverage/app"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -94,5 +96,54 @@ func TestIntAccessDetailListsEachVerifiedRead(t *testing.T) {
 	if err != nil || !slices.Equal(d.Modes, []string{app.ModeTargetEnforced}) || len(d.Verified) != 1 ||
 		d.Verified[0].Operation != "payments.refund.get" || !d.Verified[0].At.Equal(at) {
 		t.Fatalf("verified reads: %+v (%v)", d.Verified, err)
+	}
+}
+
+// TestIntAccessDetailLinksTheAccountGrantsAndTransactions: the detail names
+// the GitHub App installation's account, the affected agents' active grants
+// that allow an operation of the connection and their 20 newest
+// transactions on it, ids only; the account only to a holder of
+// connection.read.
+//
+// Covers: F423
+func TestIntAccessDetailLinksTheAccountGrantsAndTransactions(t *testing.T) {
+	f := newFixture(t)
+	f.grant(t, "payments.refund.create")
+	f.grant(t, "github.pull.merge") // no operation of this connection
+	var txns []ids.UUID
+	for i := range 22 {
+		id := ids.NewV7()
+		txns = append(txns, id)
+		f.exec(t, `INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code,
+			gateway_id, connection_id, channel, mode, created_at) VALUES ($1, $2, $3, $4, $5, 'payments.refund.create', 'ALLOW', 'OK',
+			'gw', $6, 'http', 'enforce', now() - make_interval(mins => 30 - $7::int))`, f.org, id, f.run, ids.NewV7(), make([]byte, 32), f.conn, i)
+	}
+	f.exec(t, `INSERT INTO pc.connection_github (org_id, connection_id, app_client_id, installation_id, account_login, updated_by)
+		VALUES ($1, $2, 'Iv1.ci', 7, 'acme', 'test')`, f.org, f.conn)
+	f.reassessOrg(t)
+	var grant ids.UUID
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, `SELECT g.id FROM pc.grants g JOIN pc.grant_revisions r ON r.grant_id = g.id
+		WHERE g.org_id = $1 AND convert_from(r.bounds, 'UTF8')::jsonb->'operations' ? 'payments.refund.create'`, f.org).Scan(&grant)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	grants := []ids.UUID{grant}
+	slices.Reverse(txns)
+	for _, agent := range []*ids.UUID{nil, &f.agent} {
+		d, err := f.svc.GetAccessDetail(f.as(td.RoleAuditor), f.conn, agent)
+		if err != nil || d.TargetAccount != "acme" || !slices.Equal(d.Grants, grants) || !slices.Equal(d.Transactions, txns[:app.MaxAccessTransactions]) {
+			t.Fatalf("agent %v: account %q, grants %v (want %v), transactions %v (%v)", agent, d.TargetAccount, d.Grants, grants, d.Transactions, err)
+		}
+	}
+	// coverage.read without connection.read does not name the account.
+	d, err := f.svc.GetAccessDetail(f.as(td.RoleAgentOwner), f.conn, &f.agent)
+	if err != nil || d.TargetAccount != "" || len(d.Grants) != 1 || len(d.Transactions) != app.MaxAccessTransactions {
+		t.Fatalf("an agent owner: %+v (%v)", d, err)
+	}
+	// Another credential names no account.
+	f.d.AdminExec(t, "DELETE FROM pc.connection_github WHERE connection_id = $1", f.conn)
+	if d, err := f.svc.GetAccessDetail(f.as(td.RoleAuditor), f.conn, nil); err != nil || d.TargetAccount != "" {
+		t.Fatalf("without an installation: %q (%v)", d.TargetAccount, err)
 	}
 }

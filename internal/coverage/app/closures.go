@@ -63,6 +63,9 @@ type Service struct {
 	// Protect holds exclusions for a distinct publisher when the org
 	// protects COVERAGE_EXCLUSION (G0 M11 D42); nil holds none.
 	Protect *protect.Gate
+	// Ents reports the edition the coverage graph needs (F277); nil offers
+	// none (fail closed).
+	Ents Entitlements
 }
 
 func (s *Service) log() *slog.Logger {

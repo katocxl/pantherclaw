@@ -150,6 +150,7 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.CoverageService/CreateExclusion":                           entitlements.ClassChange,
 	"/pantherclaw.v1.CoverageService/GetAccessDetail":                           entitlements.ClassRead,
 	"/pantherclaw.v1.CoverageService/GetClosure":                                entitlements.ClassRead,
+	"/pantherclaw.v1.CoverageService/GetCoverageGraph":                          entitlements.ClassRead,
 	"/pantherclaw.v1.CoverageService/GetCoverage":                               entitlements.ClassRead,
 	"/pantherclaw.v1.CoverageService/GetFreshnessContract":                      entitlements.ClassRead,
 	"/pantherclaw.v1.CoverageService/GetSnapshot":                               entitlements.ClassRead,

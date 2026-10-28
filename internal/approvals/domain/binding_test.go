@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"flag"
 	"os"
@@ -289,4 +290,56 @@ func uid(s string) ids.UUID {
 		panic(err)
 	}
 	return u
+}
+
+// TestHR030_ConditionLimitsChangeTheBinding: the binding covers the
+// display, so a display that differs only in its condition limits (F159)
+// gives another display hash and another binding, and a stored version 2
+// display, read back, still hashes to the display hash it was bound with.
+//
+// Covers: F159
+func TestHR030_ConditionLimitsChangeTheBinding(t *testing.T) {
+	disp := domain.Display{V: domain.DisplayVersion, Kind: "action", Title: "Refund ch_1"}
+	limited := disp
+	limited.Consequence.ConditionLimits = []string{domain.NoVerifierLimit}
+	bindingOf := func(d domain.Display) domain.Binding {
+		t.Helper()
+		c, err := d.Canonical()
+		if err != nil {
+			t.Fatal(err)
+		}
+		p := parts()
+		p.DisplayHash = c.Hash
+		b, err := p.Binding()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	if bindingOf(disp).Hash == bindingOf(limited).Hash {
+		t.Fatal("the condition limits do not change the binding")
+	}
+
+	raw, err := os.ReadFile(filepath.Join("testdata", "display_v2_mock_payments.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored struct {
+		Display     jsontext.Value `json:"display"`
+		DisplayHash string         `json:"display_hash"`
+	}
+	if err := json.Unmarshal(raw, &stored); err != nil {
+		t.Fatal(err)
+	}
+	var v2 domain.Display
+	if err := json.Unmarshal(stored.Display, &v2); err != nil {
+		t.Fatal(err)
+	}
+	c, err := v2.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v2.V != 2 || c.String() != stored.DisplayHash || !bytes.Equal(c.Input, stored.Display) {
+		t.Fatalf("a stored v2 display reads back as v%d with hash %s, want %s", v2.V, c.String(), stored.DisplayHash)
+	}
 }
