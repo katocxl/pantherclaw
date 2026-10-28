@@ -12,7 +12,7 @@ PantherClaw verifies which AI agent is acting and for whom, gives it only the ac
 |---|---|---|
 | **Badge** | Know who's acting | Finds every agent, gives it an owner, and verifies which workload is acting and for whom, using the identities you already have (your IdP, GitHub Actions, Kubernetes) |
 | **Pass** | Authorize the task | Just enough access for one task, for a limited time, with exact human approvals |
-| **Guardrails** | Keep agents within limits | Org rules, budgets and sequence limits that hold across parallel agents and sub-agents |
+| **Guardrails** | Keep agents within limits | Org rules and limits that hold across parallel agents and sub-agents: one shared budget, count and concurrency limits, sequence rules and required approvals |
 | **Checkpoint** | Enforce the boundary | An agent firewall: a gateway for MCP and API calls plus a containment sandbox, with per-route evidence of which routes are enforced, partial or only observed |
 | **Stash** | Keep secrets out of reach | Credentials PantherClaw holds never reach the agent and are used only for authorized actions; keys an agent still holds are reported as gaps |
 | **Reflex** | Contain threats in real time | Spot misuse, see what an agent could reach, and stop a run, an agent or the whole org; target: every connected gateway refuses new calls within 1 second at p99 |

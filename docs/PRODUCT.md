@@ -29,7 +29,7 @@ Security teams use PantherClaw as a loop. Each stage is one or two components.
 | **Know** | Find every agent, give it an owner, verify it | Badge |
 | **Authorize** | Give each task just enough access; set org rules and limits | Pass · Guardrails |
 | **Enforce** | Route every consequential action through a checkpoint; keep keys away from agents | Checkpoint · Stash |
-| **Contain** | Spot trouble, see the blast radius, stop it, recover | Reflex |
+| **Contain** | Spot trouble, see the breach radius, stop it, recover | Reflex |
 | **Prove** | Show what was authorised, sent and achieved, and that controls held under attack | Trail |
 | **Operate** | Run the platform: deployment, governed automations, administration | Root |
 

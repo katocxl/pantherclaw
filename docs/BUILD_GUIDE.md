@@ -3,7 +3,7 @@
 **The authoritative guide for building PantherClaw from an empty repository to a production-ready v1.0 backend.**
 Version 1.1 · 2026-10-09 · Owner: Joshua Kato · Approved at G0 (M0); delivery order and first market revised by ADR-0017, M3 identity scope by ADR-0018.
 
-> PantherClaw is an AI Agent Identity & Runtime Authorization Firewall — the identity and runtime firewall for AI agents. It gives agents useful authority, makes every consequential action explainable, and stops that authority when it is no longer appropriate.
+> PantherClaw is the identity and runtime firewall for AI agents. It gives agents useful authority, makes every consequential action explainable, and stops that authority when it is no longer appropriate.
 
 ---
 
