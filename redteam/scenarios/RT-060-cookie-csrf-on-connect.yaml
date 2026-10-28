@@ -68,12 +68,15 @@ steps:
     expect:
       outcome: REFUSED
       decisive_control: HR-342
+  # Refused at the transport: every Connect route is mounted POST-only and
+  # answers a bodiless 405 Allow: POST before the session is looked at, so
+  # there is no reason code. REFUSED means a non-200 answer whose body is
+  # never taken as response data, so no session data comes back.
   - id: connect-get
     do: browser.call
     with: {target: api, origin: same_origin, csrf: true, method: GET, body: json}
     expect:
       outcome: REFUSED
-      code: BROWSER_REQUEST_REFUSED
       decisive_control: HR-342
   - id: bearer-and-cookie
     do: browser.call

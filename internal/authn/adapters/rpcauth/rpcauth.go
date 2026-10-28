@@ -19,6 +19,7 @@ package rpcauth
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -65,7 +66,7 @@ func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authentica
 	if o.log == nil {
 		o.log = pclog.Discard()
 	}
-	return func(ctx context.Context, info *connect.CallInfo, spec connect.Spec) (context.Context, error) {
+	authenticate := func(ctx context.Context, info *connect.CallInfo, spec connect.Spec) (context.Context, error) {
 		perm, ok := perms[spec.Procedure]
 		if !ok || perm == td.PermPublic {
 			return nil, connect.NewError(connect.CodePermissionDenied, "permission denied")
@@ -165,6 +166,30 @@ func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authentica
 		}
 		return tapp.WithCaller(ctx, c), nil
 	}
+	return func(ctx context.Context, info *connect.CallInfo, spec connect.Spec) (context.Context, error) {
+		actx, err := authenticate(ctx, info, spec)
+		if err != nil {
+			// A call whose deadline passed or that the client canceled
+			// failed for that reason, not for its credential: answering
+			// 401 would tell a valid session to sign in again.
+			if cerr := contextError(ctx); cerr != nil {
+				return nil, cerr
+			}
+		}
+		return actx, err
+	}
+}
+
+// contextError is the Connect error for a finished call context, nil while
+// it is live.
+func contextError(ctx context.Context) error {
+	switch err := ctx.Err(); {
+	case errors.Is(err, context.DeadlineExceeded):
+		return connect.NewError(connect.CodeDeadlineExceeded, "deadline exceeded")
+	case err != nil:
+		return connect.NewError(connect.CodeCanceled, "canceled")
+	}
+	return nil
 }
 
 // PlanGate refuses a procedure the caller's org's plan does not allow.

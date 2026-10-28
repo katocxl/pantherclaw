@@ -3083,13 +3083,13 @@ const file_pantherclaw_v1_tenancy_proto_rawDesc = "" +
 	"\x0eGetTeamRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\";\n" +
 	"\x0fGetTeamResponse\x12(\n" +
-	"\x04team\x18\x01 \x01(\v2\x14.pantherclaw.v1.TeamR\x04team\"\xd7\x01\n" +
+	"\x04team\x18\x01 \x01(\v2\x14.pantherclaw.v1.TeamR\x04team\"\xb0\x02\n" +
 	"\x10ListTeamsRequest\x12'\n" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x128\n" +
 	"\n" +
-	"page_token\x18\x02 \x01(\tB\x19\xbaH\x16r\x14\x18@2\x10^[A-Za-z0-9_-]*$R\tpageToken\x125\n" +
-	"\x10business_unit_id\x18\x03 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\x0ebusinessUnitId\x12)\n" +
+	"page_token\x18\x02 \x01(\tB\x19\xbaH\x16r\x14\x18@2\x10^[A-Za-z0-9_-]*$R\tpageToken\x12\x8d\x01\n" +
+	"\x10business_unit_id\x18\x03 \x01(\tBc\xbaH`\xd8\x01\x01r[2V^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$\xb0\x01\x01R\x0ebusinessUnitId\x12)\n" +
 	"\x10include_archived\x18\x04 \x01(\bR\x0fincludeArchived\"g\n" +
 	"\x11ListTeamsResponse\x12*\n" +
 	"\x05teams\x18\x01 \x03(\v2\x14.pantherclaw.v1.TeamR\x05teams\x12&\n" +

@@ -2,8 +2,22 @@
 
 `task api:schema` generates `docs/api/pantherclaw.openapi.json` from the
 repository protobuf API, using the local pinned Connect OpenAPI plugin.
-Generated files are reviewed and committed. The nightly workflow regenerates
-them and rejects drift. The schema describes Connect JSON and translated
+`internal/apischema` then makes the schema match the server: `minimum: 0`
+for every protovalidate `gte: 0` numeric field (the generator drops it), the
+bodiless 415 that Connect returns for a missing or unsupported Content-Type
+on every operation with a request body, `null` on request-message
+properties whose default passes their rules (ProtoJSON reads null as the
+default), an optional `Connect-Protocol-Version`, and no `Connect-Timeout-Ms`
+(an optional header whose tiny values legitimately end in a 504).
+`tools/api/openapi.override.yaml` types `Connect-Protocol-Version` as the
+string it is on the wire. Generated files are reviewed and committed.
+
+The API serves POST only (405 `Allow: POST` otherwise). JSON requests with
+unknown fields are rejected; upgrade the server before clients. Binary
+protobuf requests still ignore unknown fields.
+
+The nightly workflow regenerates
+the schema and rejects drift. The schema describes Connect JSON and translated
 Protovalidate rules; the server still owns authorization, tenant isolation,
 plan checks, step-up and cross-field validation. The source includes the full
 RPC surface. Gateway mTLS, streaming and server confirmation pages retain

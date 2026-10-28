@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,6 +19,8 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
@@ -213,5 +216,117 @@ func TestEveryRPCDeclaresAPermission(t *testing.T) {
 	}
 	if found == 0 {
 		t.Fatal("no rpc definitions found")
+	}
+}
+
+// TestOnlyPOSTIsServed: Connect GET of a NO_SIDE_EFFECTS method, and any
+// other method, gets 405 with Allow: POST; POST still works.
+func TestOnlyPOSTIsServed(t *testing.T) {
+	svc := &testSystem{}
+	s, err := NewServer(public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pantherclawv1connect.RegisterSystemServiceHandler(s, svc)
+	mux := http.NewServeMux()
+	Mount(mux, s)
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	u := ts.URL + pantherclawv1connect.SystemServiceGetBuildInfoProcedure
+	for _, method := range []string{http.MethodGet, http.MethodOptions, http.MethodPut, http.MethodHead} {
+		target := u
+		if method == http.MethodGet {
+			target += "?connect=v1&encoding=json&message=%7B%7D"
+		}
+		req, _ := http.NewRequestWithContext(context.Background(), method, target, nil)
+		res, err := ts.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = res.Body.Close()
+		if res.StatusCode != http.StatusMethodNotAllowed || res.Header.Get("Allow") != http.MethodPost {
+			t.Errorf("%s = %d Allow %q, want 405 Allow POST", method, res.StatusCode, res.Header.Get("Allow"))
+		}
+	}
+	if svc.calls.Load() != 0 {
+		t.Fatal("a refused method reached the handler")
+	}
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, u, strings.NewReader("{}"))
+	req.Header.Set("Content-Type", "application/json")
+	res, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusOK || svc.calls.Load() != 1 {
+		t.Fatalf("POST = %d, calls %d", res.StatusCode, svc.calls.Load())
+	}
+}
+
+// TestHR100_JSONUnknownFieldsAreRefused: a JSON request (unary or Connect
+// streaming) with a field the server does not know is invalid_argument with
+// a fixed message that names nothing from the request; the same unknown
+// field in binary protobuf is still ignored.
+func TestHR100_JSONUnknownFieldsAreRefused(t *testing.T) {
+	svc := &testSystem{}
+	s, err := NewServer(Options{Public: []string{
+		pantherclawv1connect.SystemServiceGetBuildInfoProcedure,
+		pantherclawv1connect.DataRequestServiceDownloadExportProcedure,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pantherclawv1connect.RegisterSystemServiceHandler(s, svc)
+	pantherclawv1connect.RegisterDataRequestServiceHandler(s, pantherclawv1connect.UnimplementedDataRequestServiceHandler{})
+	mux := http.NewServeMux()
+	Mount(mux, s)
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	post := func(procedure, contentType string, body []byte) (int, string) {
+		t.Helper()
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, ts.URL+procedure, bytes.NewReader(body))
+		req.Header.Set("Content-Type", contentType)
+		res, err := ts.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(b)
+	}
+	const secret = "bogusFieldValue"
+	unary := pantherclawv1connect.SystemServiceGetBuildInfoProcedure
+
+	status, body := post(unary, "application/json", []byte(`{"clientRequestId":"abc-1","bogusField":"`+secret+`"}`))
+	if status != http.StatusBadRequest || !strings.Contains(body, `"invalid_argument"`) ||
+		!strings.Contains(body, errUnknownField.Error()) || strings.Contains(body, "bogus") {
+		t.Fatalf("unary JSON with an unknown field = %d %s", status, body)
+	}
+	// A malformed body keeps its ordinary error.
+	if status, body := post(unary, "application/json", []byte(`{"clientRequestId":`)); status != http.StatusBadRequest || strings.Contains(body, errUnknownField.Error()) {
+		t.Fatalf("malformed JSON = %d %s", status, body)
+	}
+
+	// Connect streaming JSON: one enveloped request message; the error rides
+	// in the end-of-stream message.
+	msg := []byte(`{"id":"01a17e0b-100b-736a-be40-2282fc898524","part":1,"bogusField":"` + secret + `"}`)
+	env := append([]byte{0, 0, 0, 0, byte(len(msg))}, msg...)
+	status, body = post(pantherclawv1connect.DataRequestServiceDownloadExportProcedure, "application/connect+json", env)
+	if status != http.StatusOK || !strings.Contains(body, `"invalid_argument"`) ||
+		!strings.Contains(body, errUnknownField.Error()) || strings.Contains(body, "bogus") {
+		t.Fatalf("streaming JSON with an unknown field = %d %q", status, body)
+	}
+	if svc.calls.Load() != 0 {
+		t.Fatal("a refused request reached the handler")
+	}
+
+	// Binary protobuf: field 99 is unknown and ignored.
+	b, err := proto.Marshal(&pantherclawv1.GetBuildInfoRequest{ClientRequestId: "abc-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b = protowire.AppendString(protowire.AppendTag(b, 99, protowire.BytesType), secret)
+	if status, body := post(unary, "application/proto", b); status != http.StatusOK || svc.calls.Load() != 1 {
+		t.Fatalf("binary with an unknown field = %d %q", status, body)
 	}
 }

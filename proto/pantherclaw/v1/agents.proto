@@ -295,7 +295,11 @@ message ListAgentsRequest {
     }
   }];
   // Only agents of this team.
-  optional string team_id = 4 [(buf.validate.field).string.uuid = true];
+  optional string team_id = 4 [(buf.validate.field).string = {
+    uuid: true
+    // Server ids are UUIDv7; other versions are refused.
+    pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+  }];
   // Also list automations as execution identities (G0 M11 part 2 D15,
   // F025); needs automation.read, else omitted with a note.
   bool include_automations = 5;

@@ -2383,14 +2383,14 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"\x0fGetAgentRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"J\n" +
 	"\x10GetAgentResponse\x126\n" +
-	"\asummary\x18\x01 \x01(\v2\x1c.pantherclaw.v1.AgentSummaryR\asummary\"\xa4\x02\n" +
+	"\asummary\x18\x01 \x01(\v2\x1c.pantherclaw.v1.AgentSummaryR\asummary\"\xfc\x02\n" +
 	"\x11ListAgentsRequest\x12'\n" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x128\n" +
 	"\n" +
 	"page_token\x18\x02 \x01(\tB\x19\xbaH\x16r\x14\x18@2\x10^[A-Za-z0-9_-]*$R\tpageToken\x12G\n" +
-	"\x06states\x18\x03 \x03(\x0e2\x1a.pantherclaw.v1.AgentStateB\x13\xbaH\x10\x92\x01\r\x10\b\x18\x01\"\a\x82\x01\x04\x10\x01 \x00R\x06states\x12&\n" +
-	"\ateam_id\x18\x04 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x06teamId\x88\x01\x01\x12/\n" +
+	"\x06states\x18\x03 \x03(\x0e2\x1a.pantherclaw.v1.AgentStateB\x13\xbaH\x10\x92\x01\r\x10\b\x18\x01\"\a\x82\x01\x04\x10\x01 \x00R\x06states\x12~\n" +
+	"\ateam_id\x18\x04 \x01(\tB`\xbaH]r[2V^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$\xb0\x01\x01H\x00R\x06teamId\x88\x01\x01\x12/\n" +
 	"\x13include_automations\x18\x05 \x01(\bR\x12includeAutomationsB\n" +
 	"\n" +
 	"\b_team_id\"\x87\x02\n" +

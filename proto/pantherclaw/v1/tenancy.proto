@@ -410,7 +410,11 @@ message ListTeamsRequest {
   }];
   // Only teams of this business unit.
   string business_unit_id = 3 [
-    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).string = {
+      uuid: true
+      // Server ids are UUIDv7; other versions are refused.
+      pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
     (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
   ];
   // Include archived teams.

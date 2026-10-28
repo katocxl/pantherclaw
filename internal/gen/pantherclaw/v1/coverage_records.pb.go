@@ -3755,14 +3755,14 @@ const file_pantherclaw_v1_coverage_records_proto_rawDesc = "" +
 	"\x12GetCoverageRequest\x12;\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1d.pantherclaw.v1.CoverageScopeB\x06\xbaH\x03\xc8\x01\x01R\x05scope\"M\n" +
 	"\x13GetCoverageResponse\x126\n" +
-	"\x06record\x18\x01 \x01(\v2\x1e.pantherclaw.v1.CoverageRecordR\x06record\"\xf6\x01\n" +
+	"\x06record\x18\x01 \x01(\v2\x1e.pantherclaw.v1.CoverageRecordR\x06record\"\xa8\x03\n" +
 	"\x13ListCoverageRequest\x12'\n" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x129\n" +
 	"\n" +
-	"page_token\x18\x02 \x01(\tB\x1a\xbaH\x17r\x15\x18\x80\x022\x10^[A-Za-z0-9_-]*$R\tpageToken\x12(\n" +
-	"\bagent_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\aagentId\x88\x01\x01\x122\n" +
-	"\rconnection_id\x18\x04 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x01R\fconnectionId\x88\x01\x01B\v\n" +
+	"page_token\x18\x02 \x01(\tB\x1a\xbaH\x17r\x15\x18\x80\x022\x10^[A-Za-z0-9_-]*$R\tpageToken\x12\x80\x01\n" +
+	"\bagent_id\x18\x03 \x01(\tB`\xbaH]r[2V^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$\xb0\x01\x01H\x00R\aagentId\x88\x01\x01\x12\x8a\x01\n" +
+	"\rconnection_id\x18\x04 \x01(\tB`\xbaH]r[2V^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$\xb0\x01\x01H\x01R\fconnectionId\x88\x01\x01B\v\n" +
 	"\t_agent_idB\x10\n" +
 	"\x0e_connection_id\"x\n" +
 	"\x14ListCoverageResponse\x128\n" +

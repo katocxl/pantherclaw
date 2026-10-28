@@ -31,6 +31,7 @@ import (
 	"buf.build/go/protovalidate"
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
+	"connectrpc.com/connect/v2/connectproto"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -90,8 +91,29 @@ func NewServer(opts Options) (*connect.Server, error) {
 }
 
 // Mount installs the server's procedures on mux with message size limits.
+// Every route answers POST only, and JSON requests with unknown fields are
+// refused (strictJSON).
 func Mount(mux *http.ServeMux, s *connect.Server) {
-	connecthttp.Mount(mux, s, connecthttp.WithReadMaxBytes(MaxRequestBytes), connecthttp.WithSendMaxBytes(MaxResponseBytes))
+	connecthttp.Mount(postOnly{mux}, s,
+		connecthttp.WithCodecs(connectproto.NewBinaryCodec(), newStrictJSON()),
+		connecthttp.WithReadMaxBytes(MaxRequestBytes), connecthttp.WithSendMaxBytes(MaxResponseBytes))
+}
+
+// postOnly registers each Connect route behind a POST check. Connect would
+// also serve GET for NO_SIDE_EFFECTS methods; no client uses it, browser
+// sessions are POST-only (HR-342), and the published schema lists POST, so
+// any other method gets a bodiless 405 with Allow: POST.
+type postOnly struct{ mux *http.ServeMux }
+
+func (p postOnly) Handle(pattern string, h http.Handler) {
+	p.mux.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		h.ServeHTTP(w, r)
+	}))
 }
 
 func recoverInterceptor(log *slog.Logger) connect.ServerInterceptor {

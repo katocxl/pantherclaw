@@ -11,3 +11,4 @@ plugins:
       - path=pantherclaw.openapi.json
       - content-types=json
       - base=tools/api/openapi.base.yaml
+      - override=tools/api/openapi.override.yaml

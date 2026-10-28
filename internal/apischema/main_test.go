@@ -1,0 +1,517 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"slices"
+	"strings"
+	"testing"
+
+	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoregistry"
+)
+
+const sample = `{
+  "paths": {
+    "/x.v1.S/List": {
+      "post": {
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/x.v1.Req"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/x.v1.S/Get": {
+      "get": {
+        "parameters": [
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "connect-timeout-header": {
+        "type": "number"
+      },
+      "x.v1.State": {
+        "type": "string",
+        "enum": [
+          "STATE_UNSPECIFIED",
+          "STATE_ON"
+        ]
+      },
+      "x.v1.Sub": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "A"
+            ]
+          }
+        }
+      },
+      "x.v1.Resp": {
+        "type": "object",
+        "properties": {
+          "n": {
+            "type": "string"
+          }
+        }
+      },
+      "x.v1.Req": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": "integer",
+            "title": "page_size",
+            "maximum": 200,
+            "format": "int32"
+          },
+          "days": {
+            "type": "integer",
+            "title": "days",
+            "minimum": 1
+          },
+          "parentId": {
+            "type": "string",
+            "title": "parent_id",
+            "pattern": "^x$",
+            "format": "uuid"
+          },
+          "state": {
+            "not": {
+              "enum": [
+                0
+              ]
+            },
+            "$ref": "#/components/schemas/x.v1.State"
+          },
+          "states": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/x.v1.State"
+            }
+          },
+          "parent": {
+            "$ref": "#/components/schemas/x.v1.Sub",
+            "title": "parent"
+          },
+          "note": {
+            "type": "string",
+            "description": "a \u003cb\u003e \u0026 c"
+          }
+        }
+      }
+    }
+  }
+}`
+
+// sampleFacts are the descriptor facts for the sample schema.
+func sampleFacts(minimums map[field]bool) Facts {
+	notUnspecified := EnumRule{NotIn: []string{"STATE_UNSPECIFIED"}}
+	return Facts{
+		Minimums:    minimums,
+		ZeroInvalid: map[field]bool{{"x.v1.Req", "days"}: true, {"x.v1.Req", "state"}: true},
+		Strings:     map[field]bool{{"x.v1.Req", "parentId"}: true, {"x.v1.Req", "note"}: true, {"x.v1.Sub", "kind"}: true},
+		Enums:       map[field]EnumRule{{"x.v1.Req", "state"}: notUnspecified, {"x.v1.Req", "states"}: notUnspecified},
+	}
+}
+
+func TestFixAddsZeroMinimumAnd415AndDropsTheTimeout(t *testing.T) {
+	out, err := Fix([]byte(sample), sampleFacts(map[field]bool{{"x.v1.Req", "pageSize"}: true, {"x.v1.Absent", "n"}: true}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Paths      map[string]map[string]struct{ Responses map[string]map[string]any }
+		Components struct {
+			Schemas map[string]struct{ Properties map[string]map[string]any }
+		}
+	}
+	if err := json.Unmarshal(out, &doc); err != nil {
+		t.Fatal(err)
+	}
+	var raw struct {
+		Components struct {
+			Schemas map[string]struct{ Properties map[string]map[string]any }
+		}
+	}
+	if err := json.Unmarshal(out, &raw); err != nil {
+		t.Fatal(err)
+	}
+	props := doc.Components.Schemas["x.v1.Req"].Properties
+	if got := props["pageSize"]["minimum"]; got != float64(0) {
+		t.Fatalf("pageSize minimum = %v, want 0", got)
+	}
+	if got := props["days"]["minimum"]; got != float64(1) {
+		t.Fatalf("days (gte 1) minimum = %v, want untouched 1", got)
+	}
+	if _, ok := props["note"]["minimum"]; ok {
+		t.Fatal("an unlisted field gained a minimum")
+	}
+	if got := doc.Paths["/x.v1.S/List"]["post"].Responses["415"]["description"]; got != unsupportedMedia {
+		t.Fatalf("415 = %v", got)
+	}
+	if _, ok := doc.Paths["/x.v1.S/Get"]["get"].Responses["415"]; ok {
+		t.Fatal("an operation without a request body gained a 415")
+	}
+	types := func(schema, prop string) string {
+		b, err := json.Marshal(map[string]any{"type": raw.Components.Schemas[schema].Properties[prop]["type"], "enum": raw.Components.Schemas[schema].Properties[prop]["enum"], "anyOf": raw.Components.Schemas[schema].Properties[prop]["anyOf"]})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	for _, c := range []struct{ schema, prop, want string }{
+		{"x.v1.Req", "pageSize", `{"anyOf":null,"enum":null,"type":["integer","null"]}`},
+		{"x.v1.Req", "days", `{"anyOf":null,"enum":null,"type":"integer"}`},
+		{"x.v1.Req", "parent", `{"anyOf":[{"$ref":"#/components/schemas/x.v1.Sub"},{"type":"null"}],"enum":null,"type":null}`},
+		{"x.v1.Sub", "kind", `{"anyOf":null,"enum":["A",null],"type":["string","null"]}`},
+		{"x.v1.Resp", "n", `{"anyOf":null,"enum":null,"type":"string"}`},
+	} {
+		if got := types(c.schema, c.prop); got != c.want {
+			t.Errorf("%s.%s = %s, want %s", c.schema, c.prop, got, c.want)
+		}
+	}
+	prop := func(name string) string {
+		b, err := json.Marshal(raw.Components.Schemas["x.v1.Req"].Properties[name])
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	for name, want := range map[string]string{
+		"parentId": `{"anyOf":[{"format":"uuid","pattern":"^x$"},{"maxLength":0}],"title":"parent_id","type":["string","null"]}`,
+		"state":    `{"$ref":"#/components/schemas/x.v1.State","not":{"enum":["STATE_UNSPECIFIED"]}}`,
+		"states":   `{"items":{"$ref":"#/components/schemas/x.v1.State","not":{"enum":["STATE_UNSPECIFIED"]}},"type":["array","null"]}`,
+	} {
+		if got := prop(name); got != want {
+			t.Errorf("%s = %s, want %s", name, got, want)
+		}
+	}
+	if !strings.Contains(string(out), `"required": [
+          "days",
+          "state"
+        ]`) {
+		t.Errorf("fields whose default is invalid are not required:\n%s", out)
+	}
+	if s := string(out); strings.Contains(s, "Connect-Timeout-Ms") || strings.Contains(s, "connect-timeout-header") ||
+		!strings.Contains(s, "Connect-Protocol-Version") {
+		t.Fatalf("Connect-Timeout-Ms not dropped alone:\n%s", s)
+	}
+	if strings.Contains(string(out), `"required": true`) {
+		t.Fatalf("Connect-Protocol-Version is still required:\n%s", out)
+	}
+	if strings.Count(string(out), `"parameters"`) != 1 {
+		t.Fatalf("an emptied parameters list was kept:\n%s", out)
+	}
+	if !strings.Contains(string(out), `"maximum": 200,
+            "minimum": 0,
+            "format": "int32"`) {
+		t.Fatalf("minimum not placed after maximum:\n%s", out)
+	}
+	again, err := Fix(out, sampleFacts(map[field]bool{{"x.v1.Req", "pageSize"}: true}))
+	if err != nil || string(again) != string(out) {
+		t.Fatalf("Fix is not idempotent: %v", err)
+	}
+}
+
+func TestFixKeepsFormatting(t *testing.T) {
+	doc := `{
+  "a": [],
+  "b": {},
+  "c": "\u003cx\u003e \u0026",
+  "d": [
+    1,
+    true,
+    null
+  ]
+}`
+	out, err := Fix([]byte(`{"components":{"schemas":{}}}`), Facts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != "{\n  \"components\": {\n    \"schemas\": {}\n  }\n}" {
+		t.Fatalf("unexpected:\n%s", out)
+	}
+	n, err := parse([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	n.write(&buf, "")
+	if buf.String() != doc {
+		t.Fatalf("round trip changed the document:\n%s", buf.String())
+	}
+}
+
+func TestFixRejectsMissingOrContradictingProperty(t *testing.T) {
+	if _, err := Fix([]byte(sample), Facts{Minimums: map[field]bool{{"x.v1.Req", "gone"}: true}}); err == nil {
+		t.Fatal("a missing property was accepted")
+	}
+	if _, err := Fix([]byte(sample), Facts{Minimums: map[field]bool{{"x.v1.Req", "days"}: true}}); err == nil {
+		t.Fatal("a minimum contradicting gte 0 was accepted")
+	}
+}
+
+func TestGteZero(t *testing.T) {
+	i32 := func(r *validate.Int32Rules) *validate.FieldRules {
+		return &validate.FieldRules{Type: &validate.FieldRules_Int32{Int32: r}}
+	}
+	for name, tc := range map[string]struct {
+		rules *validate.FieldRules
+		want  bool
+	}{
+		"gte 0":        {i32(&validate.Int32Rules{GreaterThan: &validate.Int32Rules_Gte{Gte: 0}}), true},
+		"gte 1":        {i32(&validate.Int32Rules{GreaterThan: &validate.Int32Rules_Gte{Gte: 1}}), false},
+		"gt 0":         {i32(&validate.Int32Rules{GreaterThan: &validate.Int32Rules_Gt{Gt: 0}}), false},
+		"lte only":     {i32(&validate.Int32Rules{LessThan: &validate.Int32Rules_Lte{Lte: 200}}), false},
+		"double gte 0": {&validate.FieldRules{Type: &validate.FieldRules_Double{Double: &validate.DoubleRules{GreaterThan: &validate.DoubleRules_Gte{Gte: 0}}}}, true},
+		"string":       {&validate.FieldRules{Type: &validate.FieldRules_String_{String_: &validate.StringRules{MaxLen: proto.Uint64(5)}}}, false},
+		"none":         {nil, false},
+	} {
+		if got := gteZero(tc.rules); got != tc.want {
+			t.Errorf("%s: gteZero = %v, want %v", name, got, tc.want)
+		}
+	}
+}
+
+// The real descriptors: a uuid without IGNORE_IF_ZERO_VALUE refuses its
+// default, a plain page token and an optional id do not.
+func TestZeroInvalidFromProtovalidate(t *testing.T) {
+	got, err := zeroInvalid(protoregistry.GlobalFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for f, want := range map[field]bool{
+		{"pantherclaw.v1.ListAgentsRequest", "pageToken"}:     false,
+		{"pantherclaw.v1.ListAgentsRequest", "teamId"}:        false,
+		{"pantherclaw.v1.ListTeamsRequest", "businessUnitId"}: false,
+		{"pantherclaw.v1.ListUsageRequest", "days"}:           true,
+	} {
+		if got[f] != want {
+			t.Errorf("%v zero invalid = %v, want %v", f, got[f], want)
+		}
+	}
+}
+
+// The real descriptors: "" is the default of a plain string, but a set
+// value of an optional one.
+func TestCollectStringsWithoutPresence(t *testing.T) {
+	f, err := Collect(protoregistry.GlobalFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !f.Strings[field{"pantherclaw.v1.ListTeamsRequest", "businessUnitId"}] {
+		t.Error("ListTeamsRequest.business_unit_id missing")
+	}
+	if f.Strings[field{"pantherclaw.v1.ListAgentsRequest", "teamId"}] {
+		t.Error("optional ListAgentsRequest.team_id listed")
+	}
+	if r := f.Enums[field{"pantherclaw.v1.ListAgentsRequest", "states"}]; !slices.Equal(r.NotIn, []string{"AGENT_STATE_UNSPECIFIED"}) {
+		t.Errorf("ListAgentsRequest.states rule = %+v", r)
+	}
+}
+
+// The real descriptors: page_size has `gte: 0` and days has `gte: 1`.
+func TestZeroMinimumsFromProtovalidate(t *testing.T) {
+	got := zeroMinimums(protoregistry.GlobalFiles)
+	if !got[field{"pantherclaw.v1.ListAgentsRequest", "pageSize"}] {
+		t.Fatal("ListAgentsRequest.page_size (gte 0) missing")
+	}
+	if got[field{"pantherclaw.v1.ListUsageRequest", "days"}] {
+		t.Fatal("ListUsageRequest.days (gte 1) listed")
+	}
+	for f := range got {
+		if !strings.HasPrefix(f.schema, "pantherclaw.") && !strings.HasPrefix(f.schema, "opentelemetry.") {
+			t.Fatalf("unexpected message %s", f.schema)
+		}
+	}
+}
+
+// The committed schema is what `task api:schema` produces.
+func TestCommittedSchemaIsFixed(t *testing.T) {
+	doc, err := os.ReadFile("../../docs/api/pantherclaw.openapi.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	facts, err := Collect(protoregistry.GlobalFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := Fix(doc, facts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != string(doc) {
+		t.Fatal("docs/api/pantherclaw.openapi.json is stale; run task api:schema")
+	}
+}
+
+const shared = `{
+  "paths": {
+    "/x.v1.S/Put": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/x.v1.PutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/x.v1.Item"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "x.v1.Kind": {
+        "type": "string",
+        "enum": [
+          "KIND_A"
+        ]
+      },
+      "x.v1.Tag": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          }
+        }
+      },
+      "x.v1.Item": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/x.v1.Kind"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/x.v1.Tag"
+            }
+          }
+        }
+      },
+      "x.v1.PutRequest": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/x.v1.Item"
+          }
+        }
+      }
+    }
+  }
+}`
+
+func TestFixCopiesSharedSchemasForRequests(t *testing.T) {
+	out, err := Fix([]byte(shared), Facts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Paths      map[string]map[string]any
+		Components struct{ Schemas map[string]map[string]any }
+	}
+	if err := json.Unmarshal(out, &doc); err != nil {
+		t.Fatal(err)
+	}
+	schemas := doc.Components.Schemas
+	encode := func(v any) string {
+		b, err := json.Marshal(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	prop := func(schema, name string) string {
+		props, _ := schemas[schema]["properties"].(map[string]any)
+		return encode(props[name])
+	}
+	for _, c := range []struct{ schema, prop, want string }{
+		{"x.v1.Item", "name", `{"type":"string"}`},
+		{"x.v1.Item", "kind", `{"$ref":"#/components/schemas/x.v1.Kind"}`},
+		{"x.v1.Item", "tags", `{"items":{"$ref":"#/components/schemas/x.v1.Tag"},"type":"array"}`},
+		{"x.v1.Tag", "label", `{"type":"string"}`},
+		{"x.v1.ItemInput", "name", `{"type":["string","null"]}`},
+		{"x.v1.ItemInput", "kind", `{"anyOf":[{"$ref":"#/components/schemas/x.v1.Kind"},{"type":"null"}]}`},
+		{"x.v1.ItemInput", "tags", `{"items":{"$ref":"#/components/schemas/x.v1.TagInput"},"type":["array","null"]}`},
+		{"x.v1.TagInput", "label", `{"type":["string","null"]}`},
+		{"x.v1.PutRequest", "item", `{"anyOf":[{"$ref":"#/components/schemas/x.v1.ItemInput"},{"type":"null"}]}`},
+	} {
+		if got := prop(c.schema, c.prop); got != c.want {
+			t.Errorf("%s.%s = %s, want %s", c.schema, c.prop, got, c.want)
+		}
+	}
+	if _, ok := schemas["x.v1.KindInput"]; ok {
+		t.Error("an enum nothing changes was copied")
+	}
+	if _, ok := schemas["x.v1.PutRequestInput"]; ok {
+		t.Error("a request-only schema was copied")
+	}
+	if got := schemas["x.v1.ItemInput"][copyOf]; got != "x.v1.Item" {
+		t.Errorf("ItemInput %s = %v", copyOf, got)
+	}
+	if got := encode(doc.Paths["/x.v1.S/Put"]["post"].(map[string]any)["responses"]); !strings.Contains(got, `"$ref":"#/components/schemas/x.v1.Item"}`) {
+		t.Errorf("the response no longer points at the original: %s", got)
+	}
+	again, err := Fix(out, Facts{})
+	if err != nil || string(again) != string(out) {
+		t.Fatalf("Fix is not idempotent: %v", err)
+	}
+	if _, err := Fix([]byte(strings.Replace(shared, `"x.v1.Kind": {`, `"x.v1.ItemInput": {}, "x.v1.Kind": {`, 1)), Facts{}); err == nil {
+		t.Error("a copy replaced an existing schema")
+	}
+}
