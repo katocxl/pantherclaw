@@ -61,6 +61,44 @@ enum Decision {
   DECISION_CANNOT_AUTHORIZE = 6;
 }
 
+// DecisionPresentation is how a decision is shown to people and agents
+// (F069): ALLOW_WITH_OBLIGATIONS is Constrain, both REQUIRE_* decisions are
+// Hold.
+enum DecisionPresentation {
+  DECISION_PRESENTATION_UNSPECIFIED = 0;
+  DECISION_PRESENTATION_ALLOW = 1;
+  DECISION_PRESENTATION_CONSTRAIN = 2;
+  DECISION_PRESENTATION_HOLD = 3;
+  DECISION_PRESENTATION_DENY = 4;
+  DECISION_PRESENTATION_CANNOT_AUTHORIZE = 5;
+}
+
+// AgentExplanation is all a decision tells the agent about why (F330,
+// HR-400): never the grant, policy, limits, budget values or request.
+message AgentExplanation {
+  // How the decision is presented.
+  DecisionPresentation presentation = 1;
+  // The decisive checklist item's check name, for example "authority";
+  // empty for ALLOW and CONSTRAIN.
+  string failing_category = 2;
+  // The decisive checklist item's code.
+  string decisive_code = 3;
+  // The transaction.
+  string transaction_id = 4;
+  // What a person can do next.
+  repeated NextAction next_actions = 5;
+}
+
+// NextAction is one recovery action.
+message NextAction {
+  // Stable code, for example "inspect_transaction".
+  string code = 1;
+  // What to run or open, for example "pclaw txn show <id>".
+  string label = 2;
+  // The console page, when the server serves a console; empty otherwise.
+  string url = 3;
+}
+
 // Reason explains one checklist outcome.
 message Reason {
   // Stable machine code, for example GRANT_AMOUNT_EXCEEDED. Holds add
@@ -164,6 +202,9 @@ message AuthorizeResponse {
   // out. A predicted consequence is a prediction, never an authorized or
   // confirmed effect. Empty for a stored decision (repeat).
   repeated Consequence consequences = 19;
+  // The agent-safe explanation (F330, HR-400); absent when the action
+  // could not be bound to a transaction.
+  AgentExplanation agent_explanation = 20;
 }
 
 // ConsequenceState is what a consequence rule said about an action

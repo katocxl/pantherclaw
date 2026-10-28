@@ -68,3 +68,51 @@ func (o Outcome) Decisive() string {
 	}
 	return ""
 }
+
+// Presentation is how a decision is shown to people and agents (F069).
+type Presentation string
+
+// The five presentations.
+const (
+	PresentAllow           Presentation = "ALLOW"
+	PresentConstrain       Presentation = "CONSTRAIN"
+	PresentHold            Presentation = "HOLD"
+	PresentDeny            Presentation = "DENY"
+	PresentCannotAuthorize Presentation = "CANNOT_AUTHORIZE"
+)
+
+// Presentation maps the decision: ALLOW_WITH_OBLIGATIONS is Constrain and
+// both REQUIRE_* decisions are Hold. An unknown decision is presented as
+// Cannot authorize, never as an allow.
+func (d Decision) Presentation() Presentation {
+	switch d {
+	case Allow:
+		return PresentAllow
+	case AllowWithObligations:
+		return PresentConstrain
+	case RequireApproval, RequireStepUp:
+		return PresentHold
+	case Deny:
+		return PresentDeny
+	}
+	return PresentCannotAuthorize
+}
+
+// Label is the presentation's display name.
+func (p Presentation) Label() string {
+	switch p {
+	case PresentAllow:
+		return "Allow"
+	case PresentConstrain:
+		return "Constrain"
+	case PresentHold:
+		return "Hold"
+	case PresentDeny:
+		return "Deny"
+	}
+	return "Cannot authorize"
+}
+
+// Explains reports whether the presentation names a failing category:
+// only a decision that did not plainly allow does (F330).
+func (p Presentation) Explains() bool { return p != PresentAllow && p != PresentConstrain }

@@ -304,7 +304,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	}
 
 	authorityStore := &pgauthority.Store{Pool: pool, LockTimeout: cfg.Authority.BudgetLockTimeout.D()}
-	svc, err := newAuthority(cfg, pool, reg, kp, authorityStore, log)
+	svc, err := newAuthority(cfg, pool, reg, kp, authorityStore, consoleBaseURL(cfg, ext), log)
 	if err != nil {
 		return err
 	}
