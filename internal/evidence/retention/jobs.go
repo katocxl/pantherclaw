@@ -77,25 +77,42 @@ func (w *orgWorker) Work(ctx context.Context, job *river.Job[OrgArgs]) error {
 type dispatcher struct {
 	river.WorkerDefaults[DispatchArgs]
 	pool *db.Pool
+	// pageSize is the lister page size and so the bound of one InsertMany;
+	// zero means maxOrgsPerDispatch. insert enqueues one page; nil means the
+	// River client of the job's context. Tests set both.
+	pageSize int
+	insert   func(ctx context.Context, params []river.InsertManyParams) error
 }
 
+// Work lists the due orgs in pages (D45): retention_due is ordered by org
+// id, so one capped call would starve the orgs above the cap while the
+// first ones stay due. Each page is one InsertMany.
 func (w *dispatcher) Work(ctx context.Context, _ *river.Job[DispatchArgs]) error {
-	refs, err := w.pool.CrossOrgList(ctx, ListDue, maxOrgsPerDispatch)
-	if err != nil || len(refs) == 0 {
-		return err
+	size := w.pageSize
+	if size == 0 {
+		size = maxOrgsPerDispatch
 	}
-	client, err := river.ClientFromContextSafely[jobs.TxType](ctx)
-	if err != nil {
-		return fmt.Errorf("retention: %w", err)
-	}
-	params := make([]river.InsertManyParams, 0, len(refs))
-	for _, r := range refs {
-		params = append(params, river.InsertManyParams{Args: OrgArgs{Org: r.Org}})
-	}
-	if _, err := client.InsertMany(ctx, params); err != nil {
-		return fmt.Errorf("retention: enqueue: %w", err)
-	}
-	return nil
+	return w.pool.CrossOrgPages(ctx, ListDue, size, func(page []db.OrgRef) error {
+		insert := w.insert
+		if insert == nil {
+			client, err := river.ClientFromContextSafely[jobs.TxType](ctx)
+			if err != nil {
+				return fmt.Errorf("retention: %w", err)
+			}
+			insert = func(ctx context.Context, params []river.InsertManyParams) error {
+				_, err := client.InsertMany(ctx, params)
+				return err
+			}
+		}
+		params := make([]river.InsertManyParams, 0, len(page))
+		for _, r := range page {
+			params = append(params, river.InsertManyParams{Args: OrgArgs{Org: r.Org}})
+		}
+		if err := insert(ctx, params); err != nil {
+			return fmt.Errorf("retention: enqueue: %w", err)
+		}
+		return nil
+	})
 }
 
 // Register adds the retention workers to reg. r.App lists the due orgs.

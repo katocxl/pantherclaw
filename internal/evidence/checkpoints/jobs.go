@@ -131,22 +131,23 @@ type dispatcher[T river.JobArgs] struct {
 }
 
 func (w *dispatcher[T]) Work(ctx context.Context, _ *river.Job[T]) error {
-	refs, err := w.pool.CrossOrgList(ctx, w.purpose, maxOrgsPerDispatch)
-	if err != nil || len(refs) == 0 {
-		return err
-	}
-	client, err := river.ClientFromContextSafely[jobs.TxType](ctx)
-	if err != nil {
-		return fmt.Errorf("checkpoints: %w", err)
-	}
-	params := make([]river.InsertManyParams, 0, len(refs))
-	for _, r := range refs {
-		params = append(params, river.InsertManyParams{Args: w.job(r.Org)})
-	}
-	if _, err := client.InsertMany(ctx, params); err != nil {
-		return fmt.Errorf("checkpoints: enqueue: %w", err)
-	}
-	return nil
+	// The purpose lists due orgs by org id, so one capped call would starve
+	// the orgs above the cap while the first ones stay due: it pages (D45),
+	// one InsertMany per page.
+	return w.pool.CrossOrgPages(ctx, w.purpose, maxOrgsPerDispatch, func(page []db.OrgRef) error {
+		client, err := river.ClientFromContextSafely[jobs.TxType](ctx)
+		if err != nil {
+			return fmt.Errorf("checkpoints: %w", err)
+		}
+		params := make([]river.InsertManyParams, 0, len(page))
+		for _, r := range page {
+			params = append(params, river.InsertManyParams{Args: w.job(r.Org)})
+		}
+		if _, err := client.InsertMany(ctx, params); err != nil {
+			return fmt.Errorf("checkpoints: enqueue: %w", err)
+		}
+		return nil
+	})
 }
 
 // Register adds the checkpoint and verification workers to reg.

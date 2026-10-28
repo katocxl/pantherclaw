@@ -19,7 +19,7 @@ import (
 const (
 	// SweepInterval is how often orgs with open permits are found.
 	SweepInterval    = time.Second
-	maxOrgsPerSweep  = 1000
+	maxOrgsPerSweep  = 1000 // the lister page size: one InsertMany's bound
 	listPermitsSweep = db.ListerPurpose("permits_sweep")
 	// listBudgetSettle finds orgs with settled reservations not yet applied
 	// to their budget rows (ADR-0015).
@@ -71,35 +71,35 @@ type SweepDispatchWorker struct {
 	Pool *db.Pool
 }
 
-// Work implements river.Worker.
+// Work implements river.Worker. Both purposes list due orgs by org id, so a single capped call would
+// starve the orgs above the cap; it pages instead (D45), one InsertMany per
+// page.
 func (w *SweepDispatchWorker) Work(ctx context.Context, _ *river.Job[SweepDispatchArgs]) error {
-	var refs []db.OrgRef
 	seen := map[ids.OrgID]bool{}
 	for _, purpose := range []db.ListerPurpose{listPermitsSweep, listBudgetSettle} {
-		found, err := w.Pool.CrossOrgList(ctx, purpose, maxOrgsPerSweep)
+		err := w.Pool.CrossOrgPages(ctx, purpose, maxOrgsPerSweep, func(page []db.OrgRef) error {
+			params := make([]river.InsertManyParams, 0, len(page))
+			for _, r := range page {
+				if !seen[r.Org] {
+					seen[r.Org] = true
+					params = append(params, river.InsertManyParams{Args: SweepOrgArgs{Org: r.Org}})
+				}
+			}
+			if len(params) == 0 {
+				return nil
+			}
+			client, err := river.ClientFromContextSafely[jobs.TxType](ctx)
+			if err != nil {
+				return fmt.Errorf("authority: %w", err)
+			}
+			if _, err := client.InsertMany(ctx, params); err != nil {
+				return fmt.Errorf("authority: enqueue sweeps: %w", err)
+			}
+			return nil
+		})
 		if err != nil {
 			return err
 		}
-		for _, r := range found {
-			if !seen[r.Org] {
-				seen[r.Org] = true
-				refs = append(refs, r)
-			}
-		}
-	}
-	if len(refs) == 0 {
-		return nil
-	}
-	client, err := river.ClientFromContextSafely[jobs.TxType](ctx)
-	if err != nil {
-		return fmt.Errorf("authority: %w", err)
-	}
-	params := make([]river.InsertManyParams, 0, len(refs))
-	for _, r := range refs {
-		params = append(params, river.InsertManyParams{Args: SweepOrgArgs{Org: r.Org}})
-	}
-	if _, err := client.InsertMany(ctx, params); err != nil {
-		return fmt.Errorf("authority: enqueue sweeps: %w", err)
 	}
 	return nil
 }

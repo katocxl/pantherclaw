@@ -92,16 +92,16 @@ type expireWorker struct {
 }
 
 func (w *expireWorker) Work(ctx context.Context, _ *river.Job[ExpireArgs]) error {
-	refs, err := w.svc.Pool.CrossOrgList(ctx, db.ListActiveOrgs, maxOrgsPerExpiry)
-	if err != nil {
-		return err
-	}
-	for _, r := range refs {
-		if err := w.svc.Expire(ctx, r.Org); err != nil {
-			return err
+	// Every active org, in pages (D45); each org in its own tenant
+	// transaction, between the lister calls.
+	return w.svc.Pool.CrossOrgPages(ctx, db.ListActiveOrgs, maxOrgsPerExpiry, func(page []db.OrgRef) error {
+		for _, r := range page {
+			if err := w.svc.Expire(ctx, r.Org); err != nil {
+				return err
+			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 // Expire expires org's ready packs past their 7 days: their content goes.

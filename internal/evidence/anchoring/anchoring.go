@@ -61,7 +61,7 @@ const (
 	// MaxAttempts bounds the attempts to log and timestamp one anchor; the
 	// next period's anchor covers the orgs again anyway.
 	MaxAttempts = 8
-	// MaxOrgs bounds the orgs of one anchor (one cross-org listing).
+	// MaxOrgs is the largest page of the cross-org listing of one anchor.
 	MaxOrgs = 10_000
 	// firstBackoff doubles after every failed attempt, up to maxBackoff.
 	firstBackoff = time.Minute
@@ -111,7 +111,7 @@ type Service struct {
 	// Clock defaults to the system clock.
 	Clock clock.Clock
 	Log   *slog.Logger
-	// MaxOrgs caps the orgs listed (0: MaxOrgs).
+	// MaxOrgs is the page size of the cross-org listing (0: MaxOrgs).
 	MaxOrgs int
 }
 
@@ -170,12 +170,10 @@ func (s *Service) Create(ctx context.Context, period time.Time) (Created, error)
 	if limit <= 0 || limit > MaxOrgs {
 		limit = MaxOrgs
 	}
-	refs, err := s.Pool.CrossOrgList(ctx, db.ListActiveOrgs, limit)
+	// Every active org, listed in pages of limit (D45).
+	refs, err := s.Pool.CrossOrgListAll(ctx, db.ListActiveOrgs, limit)
 	if err != nil {
 		return out, err
-	}
-	if len(refs) == limit {
-		s.log().WarnContext(ctx, "evidence.anchor_orgs_capped", slog.Int("orgs", limit))
 	}
 	var parts []orgLeaf
 	for _, r := range refs {

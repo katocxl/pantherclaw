@@ -159,23 +159,21 @@ type janitorDispatchWorker struct {
 	pool *db.Pool
 }
 
-// Work lists orgs through the audited lister (HR-054) and enqueues one job
-// per org.
+// Work lists orgs in pages through the audited lister (HR-054, D45) and
+// enqueues one job per org, one InsertMany per page.
 func (w *janitorDispatchWorker) Work(ctx context.Context, _ *river.Job[JanitorDispatchArgs]) error {
-	refs, err := w.pool.CrossOrgList(ctx, db.ListActiveOrgs, 10000)
-	if err != nil || len(refs) == 0 {
+	return w.pool.CrossOrgPages(ctx, db.ListActiveOrgs, db.ListerPageSize, func(page []db.OrgRef) error {
+		client, err := river.ClientFromContextSafely[jobs.TxType](ctx)
+		if err != nil {
+			return fmt.Errorf("approvals janitor: %w", err)
+		}
+		params := make([]river.InsertManyParams, 0, len(page))
+		for _, r := range page {
+			params = append(params, river.InsertManyParams{Args: JanitorOrgArgs{Org: r.Org}})
+		}
+		_, err = client.InsertMany(ctx, params)
 		return err
-	}
-	client, err := river.ClientFromContextSafely[jobs.TxType](ctx)
-	if err != nil {
-		return fmt.Errorf("approvals janitor: %w", err)
-	}
-	params := make([]river.InsertManyParams, 0, len(refs))
-	for _, r := range refs {
-		params = append(params, river.InsertManyParams{Args: JanitorOrgArgs{Org: r.Org}})
-	}
-	_, err = client.InsertMany(ctx, params)
-	return err
+	})
 }
 
 // RegisterJanitor adds the janitor workers to reg.

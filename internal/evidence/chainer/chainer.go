@@ -83,25 +83,23 @@ type DispatchWorker struct {
 
 // Work implements river.Worker.
 func (w *DispatchWorker) Work(ctx context.Context, _ *river.Job[DispatchArgs]) error {
-	refs, err := w.Pool.CrossOrgList(ctx, db.ListLedgerUnchained, maxOrgsPerDispatch)
-	if err != nil {
-		return err
-	}
-	if len(refs) == 0 {
+	// ledger_unchained lists orgs by org id, so one capped call would starve
+	// the orgs above the cap while busy lower ones stay unchained: it pages
+	// (D45), one InsertMany per page.
+	return w.Pool.CrossOrgPages(ctx, db.ListLedgerUnchained, maxOrgsPerDispatch, func(page []db.OrgRef) error {
+		client, err := river.ClientFromContextSafely[jobs.TxType](ctx)
+		if err != nil {
+			return fmt.Errorf("chainer: %w", err)
+		}
+		params := make([]river.InsertManyParams, 0, len(page))
+		for _, r := range page {
+			params = append(params, river.InsertManyParams{Args: ChainOrgArgs{Org: r.Org}})
+		}
+		if _, err := client.InsertMany(ctx, params); err != nil {
+			return fmt.Errorf("chainer: enqueue: %w", err)
+		}
 		return nil
-	}
-	client, err := river.ClientFromContextSafely[jobs.TxType](ctx)
-	if err != nil {
-		return fmt.Errorf("chainer: %w", err)
-	}
-	params := make([]river.InsertManyParams, 0, len(refs))
-	for _, r := range refs {
-		params = append(params, river.InsertManyParams{Args: ChainOrgArgs{Org: r.Org}})
-	}
-	if _, err := client.InsertMany(ctx, params); err != nil {
-		return fmt.Errorf("chainer: enqueue: %w", err)
-	}
-	return nil
+	})
 }
 
 // Register adds the chainer workers to reg.

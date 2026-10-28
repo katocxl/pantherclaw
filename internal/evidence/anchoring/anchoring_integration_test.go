@@ -535,3 +535,18 @@ func TestHR195_TickAnchorsTheCurrentPeriodAndRetriesOnlyAfterTheBackoff(t *testi
 		t.Fatalf("a tick within the backoff retried: %+v", a)
 	}
 }
+
+// TestHR054_AnAnchorCoversEveryOrgPastOnePage (D45): with a listing page
+// smaller than the number of orgs, the anchor still has a leaf for every
+// org with a checkpoint.
+func TestHR054_AnAnchorCoversEveryOrgPastOnePage(t *testing.T) {
+	f := newFixture(t, 3)
+	f.svc.MaxOrgs = 1
+	c := f.create(t, time.Now().UTC().Truncate(time.Hour).Add(-time.Hour))
+	if c.Leaves != len(f.orgs) {
+		t.Fatalf("anchor of %d leaves, want %d", c.Leaves, len(f.orgs))
+	}
+	for _, org := range f.orgs {
+		f.leaf(t, org, c.ID)
+	}
+}

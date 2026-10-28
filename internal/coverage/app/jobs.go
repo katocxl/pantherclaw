@@ -278,22 +278,23 @@ type dispatcher struct {
 }
 
 func (w *dispatcher) Work(ctx context.Context, _ *river.Job[ReassessDispatchArgs]) error {
-	refs, err := w.pool.CrossOrgList(ctx, ListReassess, maxOrgsPerDispatch)
-	if err != nil || len(refs) == 0 {
-		return err
-	}
-	client, err := river.ClientFromContextSafely[jobs.TxType](ctx)
-	if err != nil {
-		return fmt.Errorf("coverage: %w", err)
-	}
-	params := make([]river.InsertManyParams, 0, len(refs))
-	for _, r := range refs {
-		params = append(params, river.InsertManyParams{Args: ReassessOrgArgs{Org: r.Org}})
-	}
-	if _, err := client.InsertMany(ctx, params); err != nil {
-		return fmt.Errorf("coverage: enqueue: %w", err)
-	}
-	return nil
+	// The purpose lists due orgs by org id, so one capped call would starve
+	// the orgs above the cap while the first ones stay due: it pages (D45),
+	// one InsertMany per page.
+	return w.pool.CrossOrgPages(ctx, ListReassess, maxOrgsPerDispatch, func(page []db.OrgRef) error {
+		client, err := river.ClientFromContextSafely[jobs.TxType](ctx)
+		if err != nil {
+			return fmt.Errorf("coverage: %w", err)
+		}
+		params := make([]river.InsertManyParams, 0, len(page))
+		for _, r := range page {
+			params = append(params, river.InsertManyParams{Args: ReassessOrgArgs{Org: r.Org}})
+		}
+		if _, err := client.InsertMany(ctx, params); err != nil {
+			return fmt.Errorf("coverage: enqueue: %w", err)
+		}
+		return nil
+	})
 }
 
 // Register adds the reassess workers to reg.
