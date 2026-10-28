@@ -783,16 +783,18 @@ func TestF642_OutcomesAreTyped(t *testing.T) {
 	}
 }
 
+// deadURL is an address nothing listens on. It uses the reserved port 1
+// rather than a closed ephemeral port, which another test's server could
+// take before the dial (it then answered 404 instead of refusing).
 func deadURL(t *testing.T) string {
 	t.Helper()
-	var lc net.ListenConfig
-	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+	const addr = "127.0.0.1:1"
+	var d net.Dialer
+	if c, err := d.DialContext(context.Background(), "tcp", addr); err == nil {
+		_ = c.Close()
+		t.Skipf("something listens on %s", addr)
 	}
-	u := "http://" + ln.Addr().String()
-	_ = ln.Close()
-	return u
+	return "http://" + addr
 }
 
 // TestNothingDispatchedWithoutACommit: every decision without a permit,

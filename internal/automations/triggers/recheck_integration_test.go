@@ -90,6 +90,11 @@ func TestT123_ConcurrentTriggersNeverOverrunTheHourlyCap(t *testing.T) {
 // TestThresholds_AFiredBucketAddsNoRows (D87 L5, D97 N5): once a bucket
 // has fired, further events in it add no count rows.
 func TestThresholds_AFiredBucketAddsNoRows(t *testing.T) {
+	// Count rows are per minute, so events after a minute boundary land
+	// in a new row of the same window: keep the whole test in one minute.
+	if left := time.Until(time.Now().Truncate(time.Minute).Add(time.Minute)); left < 20*time.Second {
+		time.Sleep(left + time.Second)
+	}
 	h, _ := newRecordingHarness(t)
 	f := h.f
 	thr := f.Automation(t, "rows", f.Definition(`"threshold":{"on":"grant.revoked","over":"1h","at_least":2}`, ""), autodomain.RolloutFull)
