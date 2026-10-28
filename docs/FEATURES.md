@@ -580,7 +580,7 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | F457 | Route-specific closure | Each closure records the tested identity and effect, blocking control, scope and reopen conditions, with before/after comparison. Revoking a token does not close a browser session or SSH key. | MVP | Community | M9 | F457, F458, F459 |
 | F460 | No configuration-based badges | Setup alone never yields `ENFORCED` or a protection percentage. Fleet confidence comes from verified coverage, not inventory size, and each integration declares its supported actions and exclusions. | MVP | Community | M9 | F460, F605, F768 |
 
-## 17. Adversarial Sandbox
+## 17. Red-team Range (Adversarial Sandbox)
 
 **Component:** Trail.
 
@@ -746,7 +746,7 @@ These boundaries constrain every pillar above. A feature request that conflicts 
 | Performance | Root | 19 | PN-011.1–PN-011.5 | SLOs are targets: M13 optimises with a fixed effort on the staging server and publishes the measured numbers with their test conditions; v1.0 is not blocked on reaching them (G0 M13 F7) |
 | Management | Root | 20 | PN-012.1–PN-012.5, F573, F581 | Licence expiry never disables enforcement; support access needs the customer's approval every time and never reads credentials; deletion is verified and recorded in a signed deletion record (G0 M13 D32, D34) |
 | Bypass-resistant enforcement | Checkpoint | 16 (with 6, 10) | F435, F443, PN-008.2 | Per route, with current, expiring evidence |
-| Adversarial sandbox | Trail | 17 | PN-009.1–PN-009.5 | Simulated targets only; separate from the containment sandbox (PN-008) |
+| Red-team range (adversarial sandbox) | Trail | 17 | PN-009.1–PN-009.5 | Simulated targets only; separate from the containment sandbox (PN-008) |
 
 ## Traceability
 

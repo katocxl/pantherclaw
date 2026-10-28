@@ -1,12 +1,14 @@
 # PantherClaw — Product Components, Positioning and First Market
 
-**Status (2026-10-09):** **Accepted** by the founder: component brand names (§3), first market and delivery order ([ADR-0017](adr/0017-coding-agents-first-and-proven-coverage.md)), identity federation ([ADR-0018](adr/0018-federated-workload-identity-and-represented-principals.md)), standards at the edges ([ADR-0019](adr/0019-standards-at-the-edges.md)), one product sold in editions, and the pricing unit (§7). **Open:** licence wording for the pricing unit and trademark clearance (§9).
+**Status (2026-10-09):** **Accepted** by the founder: component brand names (§3), first market and delivery order ([ADR-0017](adr/0017-coding-agents-first-and-proven-coverage.md)), identity federation ([ADR-0018](adr/0018-federated-workload-identity-and-represented-principals.md)), standards at the edges ([ADR-0019](adr/0019-standards-at-the-edges.md)), one product sold in editions, and the pricing unit (§7). **Open:** licence wording for the pricing unit and trademark clearance (§9). **Updated 2026-10-28** (founder): taglines, the six-stage loop, the category line and named parts per component.
 
 This document says how PantherClaw is explained, demonstrated and sold to security teams. It groups the 20 pillars of [FEATURES.md](FEATURES.md) into seven product components that an IT administrator can recognise. It never changes product behaviour: FEATURES.md, ARCHITECTURE.md and PAP/1 stay authoritative for what is built. Where it conflicts with "Where customers start" in the reference specification (§2), this document wins. Everything here is planned scope, not a claim that it is built.
 
 ## 1. Positioning
 
-**Category:** agent transaction firewall (reference specification §2).
+**Category:** the identity and runtime firewall for AI agents (the reference specification calls it an agent transaction firewall).
+
+**Headline:** Know who's acting. Control what they can do. Prove what happened.
 
 **One line:** PantherClaw verifies which AI agent is acting and for whom, gives it only the access its current task needs, and puts its actions behind a firewall that proves, route by route, where it cannot be bypassed, with evidence your auditors can check.
 
@@ -25,38 +27,75 @@ Security teams use PantherClaw as a loop. Each stage is one or two components.
 | Stage | What the team does | Components |
 |---|---|---|
 | **Know** | Find every agent, give it an owner, verify it | Badge |
-| **Grant** | Give each task just enough access; set org rules and limits | Pass · Guardrails |
+| **Authorize** | Give each task just enough access; set org rules and limits | Pass · Guardrails |
 | **Enforce** | Route every consequential action through a checkpoint; keep keys away from agents | Checkpoint · Stash |
-| **Respond** | Spot trouble, see the blast radius, stop it, recover | Reflex |
+| **Contain** | Spot trouble, see the blast radius, stop it, recover | Reflex |
 | **Prove** | Show what was authorised, sent and achieved, and that controls held under attack | Trail |
+| **Operate** | Run the platform: deployment, governed automations, administration | Root |
 
-Findings from Respond and Prove feed back into Grant: unused access is removed, policies are tightened, bypass routes are closed.
+Findings from Contain and Prove feed back into Authorize: unused access is removed, policies are tightened, bypass routes are closed.
 
 ## 3. The seven components at a glance
 
-Naming follows one rule: a short brand word the admin remembers, always shown with its tagline and, where needed, the plain category it belongs to ("PantherClaw Checkpoint — control every action", an agent firewall). Brand names chosen by the founder on 2026-10-09.
+Naming follows one rule: a short brand word the admin remembers, always shown with its tagline and, where needed, the plain category it belongs to ("PantherClaw Checkpoint — enforce the boundary", an agent firewall). Brand names chosen by the founder on 2026-10-09.
 
 | Component | Tagline | Category | Question it answers | Main owner | Pillars | Main milestones |
 |---|---|---|---|---|---|---|
-| **Badge** | Know every agent | Agent identity | Which agents do we have, who is accountable, and is this request really from that agent, acting for whom? | IAM / platform | 1, 2, 3, 4 | M3 |
-| **Pass** | Grant temporary access | Task-scoped access and approvals | Who allowed this agent to do what, on which resources, for which task, until when? | Agent owners, IAM, business approvers | 5A, 7 | M4, M5 |
-| **Guardrails** | Set the boundaries | Policy and limits | What may agents never do, what limits apply across a task, and what changes if we tighten a rule? | Security engineering | 5B, 5C, 8 | M4, M11 |
-| **Checkpoint** | Control every action | Agent firewall | Does every route from this agent to our systems go through the checkpoint? | Platform / security engineering | 6A, 6C, 6D, 16 | M4, M6, M8, M9 |
-| **Stash** | Keep credentials safe | Credential custody | Which secrets can each agent reach, and could it use them outside the firewall? | IAM / PAM / platform | 6B | M6, M8 |
-| **Reflex** | Stop threats instantly | Detection and response | What happened, under whose authority, what else can this agent reach, and is it stopped? | SOC / incident response | 9, 10, 11, 12, 13, 14 | M6, M7, M10 |
-| **Trail** | Prove what happened | Evidence and assurance | Who authorised what, what was sent, what actually happened, and did controls hold? | GRC, audit, security leadership | 15, 17 | M7, M12 |
+| **Badge** | Know who's acting | Agent identity | Which agents do we have, who is accountable, and is this request really from that agent, acting for whom? | IAM / platform | 1, 2, 3, 4 | M3 |
+| **Pass** | Authorize the task | Task-scoped access and approvals | Who allowed this agent to do what, on which resources, for which task, until when? | Agent owners, IAM, business approvers | 5A, 7 | M4, M5 |
+| **Guardrails** | Keep agents within limits | Policy and limits | What may agents never do, what limits apply across a task, and what changes if we tighten a rule? | Security engineering | 5B, 5C, 8 | M4, M11 |
+| **Checkpoint** | Enforce the boundary | Agent firewall | Does every route from this agent to our systems go through the checkpoint? | Platform / security engineering | 6A, 6C, 6D, 16 | M4, M6, M8, M9 |
+| **Stash** | Keep secrets out of reach | Credential custody | Which secrets can each agent reach, and could it use them outside the firewall? | IAM / PAM / platform | 6B | M6, M8 |
+| **Reflex** | Contain threats in real time | Detection and response | What happened, under whose authority, what else can this agent reach, and is it stopped? | SOC / incident response | 9, 10, 11, 12, 13, 14 | M6, M7, M10 |
+| **Trail** | Make actions verifiable | Evidence and assurance | Who authorised what, what was sent, what actually happened, and did controls hold? | GRC, audit, security leadership | 15, 17 | M7, M12 |
 
-**Root — Manage it all** (the platform, included with every component, not sold separately): Governed Automations (5D), Deployments (18), Performance (19) and Management (20).
+**Root — Run the control plane** (the platform, included with every component, not sold separately): Governed Automations (5D), Deployments (18), Performance (19) and Management (20).
+
+### Named parts
+
+| Component | Part | What it does | Pillar |
+|---|---|---|---|
+| Badge | Identity | Tells apart the verified workload, the agent, its accountable owner and the person or organization it acts for. | 4 |
+| Badge | Inventory | One record per agent, with an owner and a backup owner. | 1 |
+| Badge | Discovery | Finds shadow agents on laptops and in GitHub. Not observed doesn't mean absent. | 2 |
+| Badge | Lifecycle | Claim, transfer, retire and restore agents. Restoring is a governed action, never automatic. | 3 |
+| Pass | Task grants | Just enough access for one task, with a grantor and an expiry. A sub-agent never gets more than its parent. | 5A |
+| Pass | Approvals | People approve the exact action, with a security key for high-consequence ones. Any change to the action voids the approval. | 7 |
+| Pass | Access requests | Agents ask for access instead of anyone switching rules off. A request that expires is a deny. | 7 |
+| Guardrails | Policies | Org rules checked on every covered action. Each decision names the rule and value that decided it. | 5B |
+| Guardrails | Policy changes | Test a change, simulate it on recorded activity, roll it out in shadow or pilot first, and roll it back. | 5C |
+| Guardrails | Limits | One budget shared by parallel agents and sub-agents, count and concurrency limits, and sequence rules. | 8 |
+| Checkpoint | Gateway | Sits in front of MCP servers and APIs and decides each call before it is sent. Works with Claude Code and the Claude Agent SDK. | 6A |
+| Checkpoint | Connections | Each tool and API is registered once, with health checks and a switch that stops every action through it. | 6C |
+| Checkpoint | Reviewed tool packages | Signed definitions of what each tool call means. A changed tool is held for review. | 6D |
+| Checkpoint | Containment sandbox | Runs an agent where the gateway is its only network route. | PN-008.1 |
+| Checkpoint | Coverage | Shows for each route whether it is enforced, partial or only observed, with evidence that expires. | 16 |
+| Stash | Credential custody | Target credentials are sealed into the gateway and used only for authorized actions. The agent never receives them. | 6B |
+| Stash | GitHub App tokens | Per-action GitHub App tokens replace personal access tokens and SSH keys. | 6B |
+| Stash | Credential reach | Finds keys an agent still holds and reports them as gaps, with a preview of who depends on them before you revoke or rotate. | F048 |
+| Reflex | Operations | A live queue of what needs attention in your scope. | 11 |
+| Reflex | Detection | Detection rules raise alerts, labelled as inference and grouped by what they share. | 12 |
+| Reflex | Investigation | Cases, a run's timeline, and search across agents, grants and transactions. | 9, 13 |
+| Reflex | Breach radius | What an agent could reach, kept separate from what it actually touched. | 14 |
+| Reflex | Containment | Suspend a run, an agent, a grant or a connection, or engage the org kill switch. Restoring the kill switch takes two people. | 10 |
+| Trail | Receipts | Signed receipts for the decision, what was sent and what changed, checkable offline with pclaw verify. Effects are marked confirmed, partial, unverifiable or unknown, never assumed. | 15 |
+| Trail | Red-team range | Attacks your own policies with simulated targets, in CI, and reports what held. | 17 |
+| Root | Automations | Governed automations that get a fresh, bounded grant for every execution. | 5D |
+| Root | Deployment | Self-hosted, or hybrid: we host the control plane, you run the gateway, and your credentials stay with you. | 18 |
+| Root | Administration | Teams, roles, sign-in and licences. Support staff get access only when you approve it, every time. | 20 |
+| Root | Performance | Latency targets, published with the conditions they are measured under. | 19 |
 
 Two features sit in a different component from their pillar, because that is where buyers look for them: the containment sandbox (PN-008.1, pillar 10) belongs to **Checkpoint**, and credential-reach findings (F048, pillar 2) belong to **Stash**.
 
-**Claim boundary for "instantly":** Reflex's tagline is marketing shorthand. The real promise is a performance target, not a guarantee: containment reaches every gateway in under 1 second at p99 (PN-011.3), with gateways failing closed after 2 seconds without a heartbeat; requests already dispatched complete (ARCHITECTURE §15–16). Contracts, security questionnaires and technical documents state the measured figure, never "instant" (F801).
+**Claim boundary for “real time”:** Reflex's tagline is shorthand for a performance target, not a guarantee. The target: every connected gateway refuses new calls within 1 second at p99, timed from when the containment is recorded. Calls already sent complete. A gateway that hasn't heard from the control plane for 2 seconds refuses every call. The p99 figure has not been measured yet; [docs/perf/M13.md](perf/M13.md) records the status. Contracts, security questionnaires and technical documents state the measured figure once it exists, never "real time" or "instant" (F801).
 
 ## 4. Components in detail
 
 Each component lists what an administrator does with it, the result they can show their manager or auditor, what it works with, and who else sells something similar. Competitor notes come from an October 2026 market review whose vendor claims were not independently verified.
 
-### 4.1 Badge — "Know every agent" (agent identity)
+### 4.1 Badge — "Know who's acting" (agent identity)
+
+**Parts:** Identity, Inventory, Discovery, Lifecycle.
 
 - **What you do:** find shadow agents on laptops and in GitHub (`pclaw scan`, organisation scan); claim each one and assign an owner and a backup; admit new agent instances, either by confirming a key fingerprint or automatically from a trusted CI or Kubernetes identity; retire agents and review the access they leave behind.
 - **What you can show:** the share of active agents with an owner and a verified identity, the verification level of each, and the shadow agents found and resolved.
@@ -64,7 +103,9 @@ Each component lists what an administrator does with it, the result they can sho
 - **Inside:** Inventory, Discovery, Lifecycle, Identity & Authority Protocol (PAP/1).
 - **Similar offerings:** Microsoft Entra Agent ID, Okta/Auth0, CyberArk, Astrix, Aembit. **Our difference:** we don't run another directory. We bind the identities you already have to each individual run and to the exact actions it takes.
 
-### 4.2 Pass — "Grant temporary access" (task-scoped access and approvals)
+### 4.2 Pass — "Authorize the task" (task-scoped access and approvals)
+
+**Parts:** Task grants, Approvals, Access requests.
 
 - **What you do:** issue task grants from templates ("fix this repository: read, branch, open a pull request; merging needs a reviewer"); handle access requests instead of switching guardrails off; approve exact actions, with a security key for high-consequence ones; inspect the delegation chain when an agent hands work to a sub-agent.
 - **What you can show:** no standing agent privileges; every grant has an accountable grantor and an expiry; approvals cover one exact action and lapse when anything material changes; time to decision.
@@ -72,15 +113,19 @@ Each component lists what an administrator does with it, the result they can sho
 - **Inside:** Task grants & delegation, Agent Waitlist (approvals, access requests, step-up).
 - **Similar offerings:** Keycard, Descope, Auth0 asynchronous authorisation, CyberArk just-in-time access, Permit.io consent flows. **Our difference:** grants belong to a run that only PantherClaw can create; a sub-agent can only receive a narrower grant; approvals are bound to the exact action and die on any material change.
 
-### 4.3 Guardrails — "Set the boundaries" (policy and limits)
+### 4.3 Guardrails — "Keep agents within limits" (policy and limits)
 
-- **What you do:** start from templates (coding to production, support, refunds, diagnostics, release); set budgets, counts, rates and sequences ("no external message after reading customer data in the same task"); test a policy and simulate it against recorded activity before enforcing it; roll it out to a pilot group first; grant exceptions that expire.
+**Parts:** Policies, Policy changes, Limits.
+
+- **What you do:** start from templates (coding to production, support, refunds, diagnostics, release); set budgets, counts, concurrency limits and sequences ("no external message after reading customer data in the same task"); test a policy and simulate it against recorded activity before enforcing it; roll it out to a pilot group first; grant exceptions that expire.
 - **What you can show:** every decision explained by the exact rule and value that decided it; zero overspend under concurrent agents; each policy change simulated before publication.
 - **Works with:** OPA as an extra, restrict-only check ([ADR-0004](adr/0004-cel-policy-engine.md)); gateways you already run, registered as enforcement points, which ask for decisions through OpenID AuthZEN with the agent's own proof (PN-023, M14; those routes count as Partly protected); data scoping of reads by record and data class (M14, Team); trusted external facts and risk signals (F366, Next).
 - **Inside:** Decision pipeline & policy engine, Policy lifecycle, Agent Controls.
 - **Similar offerings:** AWS AgentCore policies, Cerbos, Permit.io, Pomerium, OPA. **Our difference:** limits are reserved atomically across parallel runs and sub-agents; missing evidence gives "Cannot authorise", never a guess; the same rule applies whether the agent uses MCP, a direct API or a hook (F099).
 
-### 4.4 Checkpoint — "Control every action" (agent firewall)
+### 4.4 Checkpoint — "Enforce the boundary" (agent firewall)
+
+**Parts:** Gateway, Connections, Reviewed tool packages, Containment sandbox, Coverage.
 
 - **What you do:** put the gateway in front of MCP servers and APIs; install the Claude Code or Agent SDK integration; run agents in the containment sandbox, whose only network route is the gateway; review what each tool really does (tool packages); switch routes from Watching to Enforced; read the coverage card for each agent.
 - **What you can show:** the protection level of each agent and route (§5), with its expiry date, and the bypass routes closed.
@@ -88,7 +133,9 @@ Each component lists what an administrator does with it, the result they can sho
 - **Inside:** Gateway & dispatch, Connections & connectors, Reviewed tool packages, Coverage & Bypass Resistance, plus the containment sandbox.
 - **Similar offerings:** Pomerium, Permit.io, Aembit and agentgateway MCP/HTTP gateways; AuthZed SpiceBox and Astrix hooks for coding agents; the sandboxes built into coding agents. **Our difference:** the gateway forwards exactly what was authorised (it rebuilds the request), commits each dispatch on the server, labels cooperative routes honestly as Partly protected, and proves route closure with probes that expire.
 
-### 4.5 Stash — "Keep credentials safe" (credential custody)
+### 4.5 Stash — "Keep secrets out of reach" (credential custody)
+
+**Parts:** Credential custody, GitHub App tokens, Credential reach.
 
 - **What you do:** seal target credentials into the gateway (`pclaw seal`); replace personal access tokens and SSH keys with per-action GitHub App tokens; compare what each credential can do with what the task needs; revoke or rotate with a preview of who depends on it.
 - **What you can show:** no reusable secrets in agent processes for covered targets; credential-overreach findings closed.
@@ -96,20 +143,24 @@ Each component lists what an administrator does with it, the result they can sho
 - **Inside:** Credential custody (access modes, sealed credentials, access-source inspection, revocation completeness), credential-reach findings.
 - **Similar offerings:** CyberArk, Aembit, Arcade, Keycard, HashiCorp Vault. **Our difference:** a credential is opened only for an authorised, committed action and never reaches the agent, and we don't need to become your vault.
 
-### 4.6 Reflex — "Stop threats instantly" (detection and response)
+### 4.6 Reflex — "Contain threats in real time" (detection and response)
 
-- **What you do:** work the operations queue; inspect a run end to end; see the breach radius (what happened vs what grants allow vs what raw credentials allow); suspend one run, agent, grant or connection; engage the org kill switch, which needs two people to restore; send events to your SIEM; restore access through a reviewed workflow.
+**Parts:** Operations, Detection, Investigation, Breach radius, Containment.
+
+- **What you do:** work the operations queue; follow a run's timeline; see the breach radius (what happened vs what grants allow vs what raw credentials allow); suspend one run, agent, grant or connection; engage the org kill switch, which needs two people to restore; send events to your SIEM; restore access through a reviewed workflow.
 - **What you can show:** time to contain; containment confirmed per route rather than assumed; incidents closed with evidence.
 - **Works with:** SIEMs via OCSF 1.9, SOAR tools, Slack and signed webhooks; your identity provider's Shared Signals (CAEP/RISC) events, so a disabled user or revoked session reaches that person's agent grants (PN-024, M10).
 - **Inside:** Sessions, Containment, Monitoring, Threat Detection, Investigation, Breach Radius.
 - **Similar offerings:** CrowdStrike (with SGNL), Astrix, Pomerium. **Our difference:** responses act on authority itself (grants, runs, credentials, connections) and confirm each route, instead of only raising alerts.
 
-### 4.7 Trail — "Prove what happened" (evidence and assurance)
+### 4.7 Trail — "Make actions verifiable" (evidence and assurance)
+
+**Parts:** Receipts, Red-team range.
 
 - **What you do:** open the three receipts for any action (decision, execution, effect); verify them offline with `pclaw verify`; replay a decision under a proposed policy; export evidence packs; run the red-team range against your own policies and fail CI when a change lets a blocked attack through.
 - **What you can show:** signed, chain-verified evidence anchored in a public transparency log; red-team assurance reports; unknown outcomes reconciled rather than hidden.
 - **Works with:** auditors' own tooling (open PAP/1 receipt format, Apache-2.0 verifier), Sigstore Rekor, OpenTelemetry for operations data.
-- **Inside:** Proof, Adversarial Sandbox (red-team range).
+- **Inside:** Proof, red-team range (adversarial sandbox).
 - **Similar offerings:** Pomerium's attested audit trails; SIEM and log platforms. **Our difference:** decision, execution and effect are separate records; tested-control reports never claim compliance certification.
 
 ## 5. Protection and verification levels in plain language
@@ -207,9 +258,9 @@ Strategic threats to watch: CrowdStrike/SGNL and Microsoft for enterprise agent 
 
 | # | Decision | Status |
 |---|---|---|
-| 1 | Brand names for the seven components and the platform | Accepted 2026-10-09: Badge, Pass, Guardrails, Checkpoint, Stash, Reflex, Trail; Root for the platform (§3) |
+| 1 | Brand names for the seven components and the platform | Accepted 2026-10-09: Badge, Pass, Guardrails, Checkpoint, Stash, Reflex, Trail; Root for the platform (§3); taglines, stages and category replaced 2026-10-28 |
 | 2 | Sell as one product with editions, not separate component SKUs | Accepted 2026-10-09 (§7 items 1–3) |
 | 3 | Pricing unit for coding agents | Accepted 2026-10-09 (§7 item 4) |
 | 4 | [ADR-0019](adr/0019-standards-at-the-edges.md): AuthZEN endpoint, Shared Signals receiver | Accepted 2026-10-09 |
 | 5 | Amend the licence's Agent definition and set per-edition instance allowances | Open (§7 item 4) |
-| 6 | Trademark clearance for the component names before any marketing spend ([UPGRADES.md](UPGRADES.md) "Trademark") | Open. Highest risk: **Checkpoint** (Check Point Software sells firewalls, the same class of goods) and **Guardrails** (Guardrails AI, and widely used generically by AWS, NVIDIA and others, so weak as a mark) |
+| 6 | Trademark clearance for the component names before any marketing spend ([UPGRADES.md](UPGRADES.md) "Trademark") | Open. Highest risk: **Checkpoint** (Check Point Software sells firewalls, the same class of goods) and **Guardrails** (Guardrails AI, and widely used generically by AWS, NVIDIA and others, so weak as a mark). Checkpoint kept on 2026-10-28 pending the founder's search. |

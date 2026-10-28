@@ -1,6 +1,6 @@
 # PantherClaw
 
-**The agent transaction firewall.**
+**The identity and runtime firewall for AI agents.**
 
 PantherClaw verifies which AI agent is acting and for whom, gives it only the access its current task needs, and puts its actions behind a firewall that proves, route by route, where it cannot be bypassed, with evidence your auditors can check. It answers one question for every consequential action: can this agent run do this, for this task, through this route, right now, and can we prove the boundary held?
 
@@ -10,14 +10,14 @@ PantherClaw verifies which AI agent is acting and for whom, gives it only the ac
 
 | Component | Tagline | What it does |
 |---|---|---|
-| **Badge** | Know every agent | Finds every agent, gives it an owner, and verifies which workload is acting and for whom, using the identities you already have (your IdP, GitHub Actions, Kubernetes) |
-| **Pass** | Grant temporary access | Just enough access for one task, for a limited time, with exact human approvals |
-| **Guardrails** | Set the boundaries | Org rules, budgets and sequence limits that hold across parallel agents and sub-agents |
-| **Checkpoint** | Control every action | An agent firewall: a gateway for MCP and API calls plus a containment sandbox, with per-route evidence of which routes cannot be bypassed |
-| **Stash** | Keep credentials safe | Credentials PantherClaw holds never reach the agent and are used only for authorized actions; keys an agent still holds are reported as gaps |
-| **Reflex** | Stop threats instantly | Spot misuse, see the blast radius, and stop a run, an agent or the whole org; the target is containment reaching every gateway in under 1 second at p99 |
-| **Trail** | Prove what happened | Signed decision, execution and effect receipts you can verify offline, plus a red-team range for your own policies |
-| **Root** | Manage it all | The platform: self-hosted or hybrid deployment, administration, automations and licensing |
+| **Badge** | Know who's acting | Finds every agent, gives it an owner, and verifies which workload is acting and for whom, using the identities you already have (your IdP, GitHub Actions, Kubernetes) |
+| **Pass** | Authorize the task | Just enough access for one task, for a limited time, with exact human approvals |
+| **Guardrails** | Keep agents within limits | Org rules, budgets and sequence limits that hold across parallel agents and sub-agents |
+| **Checkpoint** | Enforce the boundary | An agent firewall: a gateway for MCP and API calls plus a containment sandbox, with per-route evidence of which routes are enforced, partial or only observed |
+| **Stash** | Keep secrets out of reach | Credentials PantherClaw holds never reach the agent and are used only for authorized actions; keys an agent still holds are reported as gaps |
+| **Reflex** | Contain threats in real time | Spot misuse, see what an agent could reach, and stop a run, an agent or the whole org; target: every connected gateway refuses new calls within 1 second at p99 |
+| **Trail** | Make actions verifiable | Signed decision, execution and effect receipts you can verify offline, plus a red-team range for your own policies |
+| **Root** | Run the control plane | The platform under every component: self-hosted or hybrid deployment, governed automations, administration and licensing; included, not sold separately |
 
 Details: [docs/PRODUCT.md](docs/PRODUCT.md).
 

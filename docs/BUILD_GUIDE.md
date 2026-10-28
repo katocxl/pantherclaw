@@ -3,7 +3,7 @@
 **The authoritative guide for building PantherClaw from an empty repository to a production-ready v1.0 backend.**
 Version 1.1 · 2026-10-09 · Owner: Joshua Kato · Approved at G0 (M0); delivery order and first market revised by ADR-0017, M3 identity scope by ADR-0018.
 
-> PantherClaw is an AI Agent Identity & Runtime Authorization Firewall — an *agent transaction firewall*. It gives agents useful authority, makes every consequential action explainable, and stops that authority when it is no longer appropriate.
+> PantherClaw is an AI Agent Identity & Runtime Authorization Firewall — the identity and runtime firewall for AI agents. It gives agents useful authority, makes every consequential action explainable, and stops that authority when it is no longer appropriate.
 
 ---
 
@@ -66,9 +66,9 @@ Rules for the AI implementer:
 
 **Twelve invariants:** see [ARCHITECTURE §1](ARCHITECTURE.md#1-product-invariants-non-negotiable). Tests in `test/invariants/` are named `TestINV01_…` … `TestINV12_…`.
 
-**Twenty commercial pillars** ([FEATURES.md](FEATURES.md)): Inventory · Discovery · Lifecycle · Identity & Authority Protocol · Authorization · Non-bypassable Transaction Boundary · Agent Waitlist · Agent Controls · Sessions · Containment · Monitoring · Threat Detection · Investigation · Breach Radius · Proof · Coverage & Bypass Resistance · Adversarial Sandbox · Deployments · Performance · Management.
+**Twenty commercial pillars** ([FEATURES.md](FEATURES.md)): Inventory · Discovery · Lifecycle · Identity & Authority Protocol · Authorization · Non-bypassable Transaction Boundary · Agent Waitlist · Agent Controls · Sessions · Containment · Monitoring · Threat Detection · Investigation · Breach Radius · Proof · Coverage & Bypass Resistance · Red-team Range (Adversarial Sandbox) · Deployments · Performance · Management.
 
-**Seven product components** ([PRODUCT.md](PRODUCT.md)), the way buyers see the pillars: **Badge** (know every agent) · **Pass** (grant temporary access) · **Guardrails** (set the boundaries) · **Checkpoint** (control every action) · **Stash** (keep credentials safe) · **Reflex** (stop threats) · **Trail** (prove what happened), on **Root**, the platform (manage it all).
+**Seven product components** ([PRODUCT.md](PRODUCT.md)), the way buyers see the pillars: **Badge** (know who's acting) · **Pass** (authorize the task) · **Guardrails** (keep agents within limits) · **Checkpoint** (enforce the boundary) · **Stash** (keep secrets out of reach) · **Reflex** (contain threats in real time) · **Trail** (make actions verifiable), on **Root**, the platform (run the control plane).
 
 **First market** ([ADR-0017](adr/0017-coding-agents-first-and-proven-coverage.md)): coding and DevOps agents. The v0.1.0 preview proves enforced coverage for a coding agent ("three routes, three stops"); refunds stay the engine's test harness and become the second market.
 
