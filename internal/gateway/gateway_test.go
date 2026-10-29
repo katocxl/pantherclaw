@@ -92,6 +92,9 @@ type fakeAuthority struct {
 	noPermit bool
 	repeat   bool
 	beginErr error
+	// onBegin runs once at the next BeginDispatch (G0 M15 D44: another
+	// request spending an elicitation handle meanwhile).
+	onBegin func()
 	// token is the action token BeginDispatch returns.
 	token string
 	// obligations and effective (the effective action's hash, from the
@@ -239,6 +242,13 @@ func (f *fakeAuthority) ReportUnknownWorkload(_ context.Context, req *pb.ReportU
 }
 
 func (f *fakeAuthority) BeginDispatch(_ context.Context, req *pb.BeginDispatchRequest) (*pb.BeginDispatchResponse, error) {
+	f.mu.Lock()
+	hook := f.onBegin
+	f.onBegin = nil
+	f.mu.Unlock()
+	if hook != nil {
+		hook() // once, outside the lock: it may make calls of its own
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.begins = append(f.begins, req)
@@ -423,6 +433,8 @@ type harness struct {
 	// refusals records the local refusals the gateway reported (under
 	// circuitMu): connection, code, operation and run.
 	refusals []string
+	// refusalDetails are the elicitation details of each refusal (G0 M15 D40).
+	refusalDetails []dispatch.RefusalDetail
 	// githubAPI, when set, is the gateway's github.api_url.
 	githubAPI string
 	// log, when set, is the gateway's logger instead of a discarding one.
@@ -545,10 +557,11 @@ func setup(t *testing.T, opts ...func(*harness)) *harness {
 			h.revocations = append(h.revocations, conn+" "+purpose+" "+a.Repository)
 			return nil
 		},
-		ReportLocalRefusal: func(_ context.Context, conn, code, operation, run string) error {
+		ReportLocalRefusal: func(_ context.Context, conn, code, operation, run string, detail dispatch.RefusalDetail) error {
 			h.circuitMu.Lock()
 			defer h.circuitMu.Unlock()
 			h.refusals = append(h.refusals, conn+" "+code+" "+operation+" "+run)
+			h.refusalDetails = append(h.refusalDetails, detail)
 			return nil
 		},
 		Org: testOrg, GatewayID: "gw-test",

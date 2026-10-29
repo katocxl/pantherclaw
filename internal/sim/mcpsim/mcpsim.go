@@ -118,6 +118,8 @@ type Server struct {
 	answers  []string
 	calls    int
 	params   []http.Header
+	// surface is the reviewed-surface state (surface_m15.go).
+	surface surface
 }
 
 type refund struct {
@@ -339,6 +341,9 @@ func (s *Server) modern(w http.ResponseWriter, r *http.Request, m message) {
 			writeJSON(w, http.StatusBadRequest, reply(m.ID, nil, rpcError(-32020, "Header mismatch: "+msg)))
 			return
 		}
+		if s.elicit(w, m) {
+			return
+		}
 		if s.f.InputRequired {
 			writeJSON(w, http.StatusOK, reply(m.ID, map[string]any{"resultType": "input_required", "inputRequests": map[string]any{
 				"confirm": map[string]any{"method": "elicitation/create", "params": map[string]any{"message": "Confirm the refund?"}},
@@ -350,6 +355,8 @@ func (s *Server) modern(w http.ResponseWriter, r *http.Request, m message) {
 			result["resultType"] = "complete"
 		}
 		s.answer(w, m.ID, result, rpcErr, nil)
+	case "resources/read":
+		s.readResource(w, m)
 	default:
 		if res, ok := s.lists(m.Method, m.Params); ok && s.hasResources() {
 			res["resultType"] = "complete"
@@ -415,6 +422,8 @@ func (s *Server) legacy(w http.ResponseWriter, r *http.Request, m message) {
 	case "tools/call":
 		result, rpcErr := s.call(r.Context(), m.Params)
 		s.answer(w, m.ID, result, rpcErr, s.f.Ask)
+	case "resources/read":
+		s.readResource(w, m)
 	default:
 		if res, ok := s.lists(m.Method, m.Params); ok && s.hasResources() {
 			writeJSON(w, http.StatusOK, reply(m.ID, res, nil))

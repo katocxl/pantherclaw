@@ -52,14 +52,18 @@ type Mapper struct {
 	mcp  map[string]*compiled
 	hook map[string]*compiled
 	// a2a maps A2A methods (G0 M14 D9).
-	a2a  map[string]*compiled
-	http []*compiled
+	a2a map[string]*compiled
+	// resources are the mcp_resource mappings, matched by URI (G0 M15 D30).
+	resources []*compiled
+	http      []*compiled
 }
 
 type compiled struct {
-	def      *domain.Definition
-	m        domain.Mapping
-	tmpl     []segment
+	def  *domain.Definition
+	m    domain.Mapping
+	tmpl []segment
+	// resource is an mcp_resource mapping's template.
+	resource domain.URITemplate
 	targetID *celenv.Program
 	account  *celenv.Program
 	params   map[string]*celenv.Program
@@ -103,6 +107,8 @@ func New(pkg *domain.Package, limits celenv.Limits) (*Mapper, error) {
 				m.http = append(m.http, c)
 			case domain.ChannelA2A:
 				m.a2a[mp.Method] = c
+			case domain.ChannelMCPResource:
+				m.resources = append(m.resources, c)
 			case domain.ChannelSDK, domain.ChannelAuthZEN:
 				// Never a mapping's channel: package validation refuses it.
 			}
@@ -148,6 +154,9 @@ func compile(env *celenv.Env, d *domain.Definition, mp domain.Mapping) (*compile
 	c := &compiled{def: d, m: mp, params: map[string]*celenv.Program{}}
 	if mp.Channel == domain.ChannelHTTP {
 		c.tmpl = parseTemplate(mp.Path)
+	}
+	if t, ok := mp.ResourceTemplate(); ok {
+		c.resource = t
 	}
 	var progs []*celenv.Program
 	expr := func(name, src string, want *types.Type, optional bool) (*celenv.Program, error) {
@@ -206,6 +215,9 @@ func compile(env *celenv.Env, d *domain.Definition, mp domain.Mapping) (*compile
 }
 
 func (c *compiled) hasPathVar(v string) bool {
+	if slices.Contains(c.resource.Vars, v) {
+		return true
+	}
 	return slices.ContainsFunc(c.tmpl, func(s segment) bool { return s.param == v })
 }
 
@@ -261,7 +273,7 @@ func (m *Mapper) byName(ctx context.Context, tc Context, by map[string]*compiled
 	if err != nil {
 		return actionir.Parsed{}, err
 	}
-	return m.run(ctx, tc, c, channel, map[string]any{"input": input, "path": map[string]any{}, "query": map[string]any{}})
+	return m.run(ctx, tc, c, channel, map[string]any{"input": input, "path": map[string]any{}, "query": map[string]any{}}, nil)
 }
 
 // HTTP maps a request by method, raw (escaped) path, raw query and body,
@@ -304,7 +316,7 @@ func (m *Mapper) HTTPRequest(ctx context.Context, tc Context, method, rawPath, r
 	if err != nil {
 		return actionir.Parsed{}, err
 	}
-	return m.run(ctx, tc, match, domain.ChannelHTTP, map[string]any{"input": input, "path": vars, "query": query})
+	return m.run(ctx, tc, match, domain.ChannelHTTP, map[string]any{"input": input, "path": vars, "query": query}, nil)
 }
 
 // HTTPRoute returns the route id a request's method and raw path match,
@@ -325,7 +337,9 @@ func (m *Mapper) HTTPRoute(method, rawPath string) (route string, ok bool) {
 	return route, ok
 }
 
-func (m *Mapper) run(ctx context.Context, tc Context, c *compiled, channel domain.Channel, vars map[string]any) (actionir.Parsed, error) {
+// answers, when set, are elicitation answers checked against the mapping's
+// declared fields (G0 M15 D33), added as params elicitation.<field>.
+func (m *Mapper) run(ctx context.Context, tc Context, c *compiled, channel domain.Channel, vars map[string]any, answers domain.Values) (actionir.Parsed, error) {
 	input, _ := vars["input"].(map[string]any)
 	for k := range input {
 		if _, found := slices.BinarySearch(c.inputs, k); !found {
@@ -360,6 +374,9 @@ func (m *Mapper) run(ctx context.Context, tc Context, c *compiled, channel domai
 		if present {
 			vals[name] = v
 		}
+	}
+	for name, v := range answers {
+		vals[domain.ElicitationPrefix+name] = v
 	}
 	params, err := c.def.EncodeParams(vals)
 	if err != nil {

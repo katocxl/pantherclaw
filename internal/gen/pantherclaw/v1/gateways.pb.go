@@ -3293,9 +3293,15 @@ type ReportLocalRefusalRequest struct {
 	// The refused action's operation.
 	Operation string `protobuf:"bytes,3,opt,name=operation,proto3" json:"operation,omitempty"`
 	// The refused action's run id; empty when it named none.
-	RunId         string `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	RunId string `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	// Why an upstream elicitation was refused (G0 M15 D40); set only with
+	// code elicitation_refused, and unset when no reason below fits.
+	ElicitationReason *string `protobuf:"bytes,5,opt,name=elicitation_reason,json=elicitationReason,proto3,oneof" json:"elicitation_reason,omitempty"`
+	// SHA-256 of the refused question's text, never the text itself; set
+	// only with code elicitation_refused.
+	QuestionSha256 []byte `protobuf:"bytes,6,opt,name=question_sha256,json=questionSha256,proto3,oneof" json:"question_sha256,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ReportLocalRefusalRequest) Reset() {
@@ -3354,6 +3360,20 @@ func (x *ReportLocalRefusalRequest) GetRunId() string {
 		return x.RunId
 	}
 	return ""
+}
+
+func (x *ReportLocalRefusalRequest) GetElicitationReason() string {
+	if x != nil && x.ElicitationReason != nil {
+		return *x.ElicitationReason
+	}
+	return ""
+}
+
+func (x *ReportLocalRefusalRequest) GetQuestionSha256() []byte {
+	if x != nil {
+		return x.QuestionSha256
+	}
+	return nil
 }
 
 // ReportLocalRefusalResponse is empty.
@@ -5305,12 +5325,16 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"repository\x12;\n" +
 	"\vexpire_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"expireTime\"!\n" +
-	"\x1fReportRevocationFailureResponse\"\xaa\x02\n" +
+	"\x1fReportRevocationFailureResponse\"\xbd\x04\n" +
 	"\x19ReportLocalRefusalRequest\x12-\n" +
-	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12,\n" +
-	"\x04code\x18\x02 \x01(\tB\x18\xbaH\x15r\x13R\x11secret_in_payloadR\x04code\x12O\n" +
+	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12A\n" +
+	"\x04code\x18\x02 \x01(\tB-\xbaH*r(R\x11secret_in_payloadR\x13elicitation_refusedR\x04code\x12O\n" +
 	"\toperation\x18\x03 \x01(\tB1\xbaH.r,\x18\x80\x012'^([a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7})?$R\toperation\x12_\n" +
-	"\x06run_id\x18\x04 \x01(\tBH\xbaHErC2A^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$R\x05runId\"\x1c\n" +
+	"\x06run_id\x18\x04 \x01(\tBH\xbaHErC2A^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$R\x05runId\x12\x99\x01\n" +
+	"\x12elicitation_reason\x18\x05 \x01(\tBe\xbaHbr`R\burl_modeR\x10undeclared_fieldR\rtype_mismatchR\x0fduplicate_fieldR\x0ftoo_many_fieldsR\x11injection_flaggedH\x00R\x11elicitationReason\x88\x01\x01\x125\n" +
+	"\x0fquestion_sha256\x18\x06 \x01(\fB\a\xbaH\x04z\x02h H\x01R\x0equestionSha256\x88\x01\x01B\x15\n" +
+	"\x13_elicitation_reasonB\x12\n" +
+	"\x10_question_sha256\"\x1c\n" +
 	"\x1aReportLocalRefusalResponse\"C\n" +
 	"\x19ClaimVerificationsRequest\x12&\n" +
 	"\tmax_tasks\x18\x01 \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x10(\x01R\bmaxTasks\"\xf1\x01\n" +
@@ -5728,6 +5752,7 @@ func file_pantherclaw_v1_gateways_proto_init() {
 	file_pantherclaw_v1_gateway_facts_proto_init()
 	file_pantherclaw_v1_github_proto_init()
 	file_pantherclaw_v1_gateways_proto_msgTypes[37].OneofWrappers = []any{}
+	file_pantherclaw_v1_gateways_proto_msgTypes[41].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

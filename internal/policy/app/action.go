@@ -4,6 +4,8 @@
 package app
 
 import (
+	"strings"
+
 	"cel.dev/cel-go/cel"
 	"cel.dev/cel-go/common/types"
 	"cel.dev/cel-go/common/types/ref"
@@ -16,9 +18,12 @@ import (
 
 // Struct type names of the policy environment.
 const (
-	actionType      = "pc.Action"
-	targetType      = "pc.Target"
-	paramsType      = "pc.Params"
+	actionType = "pc.Action"
+	targetType = "pc.Target"
+	paramsType = "pc.Params"
+	// elicitationType holds the answers to an upstream server's questions
+	// (G0 M15 D46): action.params.elicitation.<field>.
+	elicitationType = "pc.Elicitation"
 	destinationType = "pc.Destination"
 )
 
@@ -58,17 +63,28 @@ func celType(t defs.ParamType) *types.Type {
 // required, HR-042). Untrusted text params are not in the schema at all, so
 // agent prose can never influence a rule (HR-023).
 func ActionSchema(d *defs.Definition) celenv.Schema {
-	params := map[string]celenv.Field{}
+	params, elicited := map[string]celenv.Field{}, map[string]celenv.Field{}
 	for name, p := range d.Params {
-		if t := celType(p.Type); t != nil {
-			params[name] = celenv.Field{Type: t, Optional: !p.Required}
+		t := celType(p.Type)
+		if t == nil {
+			continue
 		}
+		if field, ok := strings.CutPrefix(name, defs.ElicitationPrefix); ok {
+			// A derived param elicitation.<field> is action.params.elicitation.<field>
+			// (D46): the dotted name cannot be written in a rule.
+			elicited[field] = celenv.Field{Type: t, Optional: true}
+			continue
+		}
+		params[name] = celenv.Field{Type: t, Optional: !p.Required}
+	}
+	if len(elicited) > 0 {
+		params["elicitation"] = celenv.Field{Type: types.NewObjectType(elicitationType), Optional: true}
 	}
 	target := map[string]celenv.Field{"type": {Type: cel.StringType}, "id": {Type: cel.StringType}}
 	if d.Target.Account != defs.PresenceNone {
 		target["account"] = celenv.Field{Type: cel.StringType, Optional: d.Target.Account == defs.PresenceOptional}
 	}
-	return celenv.Schema{
+	s := celenv.Schema{
 		actionType: {Name: actionType, Fields: map[string]celenv.Field{
 			"operation": {Type: cel.StringType}, "channel": {Type: cel.StringType}, "route": {Type: cel.StringType},
 			"env": {Type: cel.StringType}, "target": {Type: types.NewObjectType(targetType)},
@@ -80,6 +96,10 @@ func ActionSchema(d *defs.Definition) celenv.Schema {
 		paramsType:      {Name: paramsType, Fields: params},
 		destinationType: {Name: destinationType, Fields: map[string]celenv.Field{"kind": {Type: cel.StringType}, "id": {Type: cel.StringType}}},
 	}
+	if len(elicited) > 0 {
+		s[elicitationType] = celenv.Struct{Name: elicitationType, Fields: elicited}
+	}
+	return s
 }
 
 // ActionVariable declares `action` for an environment built on ActionSchema.
@@ -89,11 +109,20 @@ var ActionVariable = celenv.Variable{Name: "action", Type: types.NewObjectType(a
 // its decoded params and the destination class of its connection. Text
 // params are left out (HR-023).
 func ActionRecord(d *defs.Definition, a actionir.ActionIR, vals defs.Values, destinationClass string) *celenv.Record {
-	params := map[string]ref.Val{}
+	params, elicited := map[string]ref.Val{}, map[string]ref.Val{}
 	for name, v := range vals {
-		if val := value(v); val != nil {
-			params[name] = val
+		val := value(v)
+		if val == nil {
+			continue
 		}
+		if field, ok := strings.CutPrefix(name, defs.ElicitationPrefix); ok {
+			elicited[field] = val
+			continue
+		}
+		params[name] = val
+	}
+	if len(elicited) > 0 {
+		params["elicitation"] = &celenv.Record{TypeName: elicitationType, Fields: elicited}
 	}
 	target := map[string]ref.Val{"type": types.String(a.Target.Type), "id": types.String(a.Target.ID)}
 	if a.Target.Account != "" && d.Target.Account != defs.PresenceNone {

@@ -87,6 +87,17 @@ type task struct {
 	// (state_server.go).
 	actionID string
 	version  int64
+	// retry is the elicitation a held retry answers (G0 M15 D44): kept in
+	// the sealed body, so a resubmission can still answer the server.
+	retry *retryState
+}
+
+// retryState is what a held elicitation retry needs to be resubmitted
+// (D44): the handle and, for each answered request key, the agent's action
+// and the fields it filled. The answers themselves are the action's params.
+type retryState struct {
+	Handle    []byte                            `json:"handle"`
+	Responses map[string]dispatch.InputResponse `json:"responses"`
 }
 
 // actionKey identifies a call without its action id: two calls with equal
@@ -110,8 +121,9 @@ type holdStore interface {
 	heldAction(k key, b binding) (string, bool)
 	// settle records what an answer means for the call's hold.
 	settle(k key, b binding, action string, res dispatch.Result)
-	// newTask returns a task for a call's answer, or nil.
-	newTask(b binding, a actionir.Parsed, k key, res dispatch.Result, result toolResult) *task
+	// newTask returns a task for a call's answer, or nil; retry is the
+	// elicitation a held retry answers (D44), or nil.
+	newTask(b binding, a actionir.Parsed, k key, res dispatch.Result, result toolResult, retry *retryState) *task
 	// lookup returns a task of this binding, claiming a working one for
 	// a resubmission when resubmit is set.
 	lookup(id string, b binding, resubmit bool) (snapshot task, claimed, found bool)

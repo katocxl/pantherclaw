@@ -122,7 +122,7 @@ func (s *memoryStore) settle(k key, b binding, action string, res dispatch.Resul
 // call, or a new one. Any other answer (a 2025-11-25 task-augmented call
 // that was not held) makes a completed task with result. It returns nil
 // when the bounds are reached or no random id could be made.
-func (s *memoryStore) newTask(b binding, a actionir.Parsed, k key, res dispatch.Result, result toolResult) *task {
+func (s *memoryStore) newTask(b binding, a actionir.Parsed, k key, res dispatch.Result, result toolResult, retry *retryState) *task {
 	var raw [32]byte
 	if _, err := rand.Read(raw[:]); err != nil {
 		return nil
@@ -146,7 +146,7 @@ func (s *memoryStore) newTask(b binding, a actionir.Parsed, k key, res dispatch.
 	}
 	t := &task{
 		id: base64.RawURLEncoding.EncodeToString(raw[:]), binding: b, action: a, key: k,
-		created: now, updated: now, expires: now.Add(holdTTL), status: statusWorking,
+		created: now, updated: now, expires: now.Add(holdTTL), status: statusWorking, retry: retry,
 	}
 	if !held {
 		t.status, t.result = statusCompleted, &result

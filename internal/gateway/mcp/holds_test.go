@@ -118,11 +118,11 @@ func tasksBelongToTheirBinding(t *testing.T, store func(*clock) holdStore) {
 	b := binding{conn: holdConn, run: holdRun, instance: holdInst}
 	p := heldIR(t, nil)
 	k := actionKey(p.Action)
-	tk := s.newTask(b, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{})
+	tk := s.newTask(b, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{}, nil)
 	if tk == nil || len(tk.id) != 43 || tk.status != statusWorking {
 		t.Fatalf("task %+v", tk)
 	}
-	if again := s.newTask(b, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{}); again == nil || again.id != tk.id {
+	if again := s.newTask(b, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{}, nil); again == nil || again.id != tk.id {
 		t.Fatal("an identical held call made a second task")
 	}
 	for name, other := range map[string]binding{
@@ -162,7 +162,7 @@ func tasksBelongToTheirBinding(t *testing.T, store func(*clock) holdStore) {
 	if _, _, found := s.lookup(tk.id, b, false); found {
 		t.Fatal("an expired task was found")
 	}
-	tk = s.newTask(b, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{})
+	tk = s.newTask(b, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{}, nil)
 	if !s.cancel(tk.id, b) {
 		t.Fatal("the creating binding could not cancel")
 	}
@@ -188,7 +188,7 @@ func TestHR185_HoldsAndTasksAreBounded(t *testing.T) {
 	if _, ok := s.heldAction(key{0xff}, b); ok {
 		t.Fatal("an instance went past its bound")
 	}
-	if s.newTask(b, heldIR(t, nil), key{0xfe}, held, toolResult{}) != nil {
+	if s.newTask(b, heldIR(t, nil), key{0xfe}, held, toolResult{}, nil) != nil {
 		t.Fatal("a task went past the bound")
 	}
 	other := binding{conn: holdConn, run: holdRun, instance: ids.NewV7().String()}

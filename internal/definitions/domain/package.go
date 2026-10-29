@@ -74,7 +74,15 @@ type Mapping struct {
 	// mapping (HR-081); the MCP face lists only tools that have both.
 	Description string  `json:"description,omitzero"`
 	InputSchema *Schema `json:"input_schema,omitzero"`
-	Extract     Extract `json:"extract"`
+	// Resource is an mcp_resource mapping's RFC 6570 level-1 URI template
+	// ({name} variables only), which the extraction reads as path.<name>
+	// (G0 M15 D30). An mcp_resource mapping's description is what MCP
+	// clients receive in resources/list.
+	Resource string `json:"resource,omitzero"`
+	// Elicitation declares what an upstream server may ask the agent while
+	// an mcp mapping's tool runs (G0 M15 D32).
+	Elicitation *ElicitationSpec `json:"elicitation,omitzero"`
+	Extract     Extract          `json:"extract"`
 }
 
 // maxToolDescription bounds a reviewed MCP tool description.
@@ -182,8 +190,14 @@ func expr(name, e string, required bool) error {
 func (d *Definition) validateMapping(i int) error {
 	m := d.Mappings[i]
 	at := fmt.Sprintf("%s: mappings[%d]", d.Operation, i)
-	if m.Channel != ChannelMCP && (m.Description != "" || m.InputSchema != nil) {
+	if m.Channel != ChannelMCP && (m.InputSchema != nil || (m.Description != "" && m.Channel != ChannelMCPResource)) {
 		return invalid("%s: description and input_schema belong to mcp mappings", at)
+	}
+	if m.Channel != ChannelMCP && m.Elicitation != nil {
+		return invalid("%s: elicitation belongs to mcp mappings", at)
+	}
+	if m.Channel != ChannelMCPResource && m.Resource != "" {
+		return invalid("%s: resource belongs to mcp_resource mappings", at)
 	}
 	if m.Channel != ChannelHTTP && m.Encoding != EncodingDefault {
 		return invalid("%s: encoding belongs to http mappings", at)
@@ -205,6 +219,13 @@ func (d *Definition) validateMapping(i int) error {
 			if err := validateSchema(at+".input_schema", m.InputSchema); err != nil {
 				return err
 			}
+		}
+		if err := d.validateElicitation(at, m.Elicitation); err != nil {
+			return err
+		}
+	case ChannelMCPResource:
+		if err := d.validateResourceMapping(at, m); err != nil {
+			return err
 		}
 	case ChannelHTTP:
 		if m.Tool != "" || !slices.Contains(methods, m.Method) || !pathRe.MatchString(m.Path) || len(m.Path) > 512 {
@@ -240,7 +261,7 @@ func (d *Definition) validateMapping(i int) error {
 			return invalid("%s: an a2a mapping names a method %v and no tool or path", at, A2AMethods)
 		}
 	default:
-		return invalid("%s: channel must be mcp, http, hook or a2a", at)
+		return invalid("%s: channel must be mcp, mcp_resource, http, hook or a2a", at)
 	}
 	if !actionir.ValidRoute(m.Route) {
 		return invalid("%s: route %q", at, m.Route)
@@ -310,7 +331,7 @@ func (p *Package) Validate() error {
 		}
 		ops[d.Operation] = d
 		for _, m := range d.Mappings {
-			key := string(m.Channel) + " " + m.Tool + m.Method + " " + varRe.ReplaceAllString(m.Path, "{}")
+			key := string(m.Channel) + " " + m.Tool + m.Method + " " + varRe.ReplaceAllString(m.Path+m.Resource, "{}")
 			if prev, dup := routes[key]; dup {
 				return invalid("%s and %s both map %s", prev, d.Operation, key)
 			}
