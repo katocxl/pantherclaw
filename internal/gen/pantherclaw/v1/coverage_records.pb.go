@@ -2643,8 +2643,19 @@ type AccessDetail struct {
 	// target-verifier test ran. A test vouches only for the read it tested;
 	// writes stay PARTIAL in M9 (founder decision N15).
 	VerifiedOperations []*VerifiedOperation `protobuf:"bytes,19,rep,name=verified_operations,json=verifiedOperations,proto3" json:"verified_operations,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// The GitHub App installation's account login when the credential
+	// issues installation tokens, else empty; shown only to a holder of
+	// connection.read (F423).
+	TargetAccount string `protobuf:"bytes,20,opt,name=target_account,json=targetAccount,proto3" json:"target_account,omitempty"`
+	// The active grants of the affected agents that allow an operation of
+	// the connection, newest first; only agents the caller holds grant.read
+	// over (F423).
+	GrantIds []string `protobuf:"bytes,21,rep,name=grant_ids,json=grantIds,proto3" json:"grant_ids,omitempty"`
+	// The 20 newest transactions on the connection by the affected agents;
+	// only agents the caller holds evidence.read over (F423).
+	RecentTransactionIds []string `protobuf:"bytes,22,rep,name=recent_transaction_ids,json=recentTransactionIds,proto3" json:"recent_transaction_ids,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *AccessDetail) Reset() {
@@ -2806,6 +2817,27 @@ func (x *AccessDetail) GetVerificationBasis() []string {
 func (x *AccessDetail) GetVerifiedOperations() []*VerifiedOperation {
 	if x != nil {
 		return x.VerifiedOperations
+	}
+	return nil
+}
+
+func (x *AccessDetail) GetTargetAccount() string {
+	if x != nil {
+		return x.TargetAccount
+	}
+	return ""
+}
+
+func (x *AccessDetail) GetGrantIds() []string {
+	if x != nil {
+		return x.GrantIds
+	}
+	return nil
+}
+
+func (x *AccessDetail) GetRecentTransactionIds() []string {
+	if x != nil {
+		return x.RecentTransactionIds
 	}
 	return nil
 }
@@ -3688,6 +3720,304 @@ func (x *ListSnapshotsResponse) GetNextPageToken() string {
 	return ""
 }
 
+// GetCoverageGraphRequest names an agent, optionally one connection and
+// operation.
+type GetCoverageGraphRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Agent id.
+	AgentId string `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	// Only this connection.
+	ConnectionId *string `protobuf:"bytes,2,opt,name=connection_id,json=connectionId,proto3,oneof" json:"connection_id,omitempty"`
+	// Only this operation.
+	Operation     *string `protobuf:"bytes,3,opt,name=operation,proto3,oneof" json:"operation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCoverageGraphRequest) Reset() {
+	*x = GetCoverageGraphRequest{}
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCoverageGraphRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCoverageGraphRequest) ProtoMessage() {}
+
+func (x *GetCoverageGraphRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCoverageGraphRequest.ProtoReflect.Descriptor instead.
+func (*GetCoverageGraphRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_coverage_records_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *GetCoverageGraphRequest) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *GetCoverageGraphRequest) GetConnectionId() string {
+	if x != nil && x.ConnectionId != nil {
+		return *x.ConnectionId
+	}
+	return ""
+}
+
+func (x *GetCoverageGraphRequest) GetOperation() string {
+	if x != nil && x.Operation != nil {
+		return *x.Operation
+	}
+	return ""
+}
+
+// CoverageGraphNode is one node of a coverage graph.
+type CoverageGraphNode struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// "agent:<id>", "scope:<connection_id>/<operation>", "route:<route id>"
+	// or "target:<host>".
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// "AGENT", "SCOPE", "ROUTE" or "TARGET".
+	Kind string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	// What to show: the agent id, the operation, the route's channel or
+	// kind, or the host. A route's locator is untrusted text.
+	Label string `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	// For a route: its kind, e.g. "direct_api".
+	RouteKind string `protobuf:"bytes,4,opt,name=route_kind,json=routeKind,proto3" json:"route_kind,omitempty"`
+	// For a route: its status, e.g. "possible".
+	RouteStatus string `protobuf:"bytes,5,opt,name=route_status,json=routeStatus,proto3" json:"route_status,omitempty"`
+	// For a route: "TESTED" (mediated or closed), "POSSIBLE", "EXCLUDED" or
+	// "UNVERIFIED" (every other status, unknown included).
+	Control string `protobuf:"bytes,6,opt,name=control,proto3" json:"control,omitempty"`
+	// For a closed route: the closure that closed it.
+	ClosureId     string `protobuf:"bytes,7,opt,name=closure_id,json=closureId,proto3" json:"closure_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CoverageGraphNode) Reset() {
+	*x = CoverageGraphNode{}
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CoverageGraphNode) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CoverageGraphNode) ProtoMessage() {}
+
+func (x *CoverageGraphNode) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CoverageGraphNode.ProtoReflect.Descriptor instead.
+func (*CoverageGraphNode) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_coverage_records_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *CoverageGraphNode) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *CoverageGraphNode) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *CoverageGraphNode) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *CoverageGraphNode) GetRouteKind() string {
+	if x != nil {
+		return x.RouteKind
+	}
+	return ""
+}
+
+func (x *CoverageGraphNode) GetRouteStatus() string {
+	if x != nil {
+		return x.RouteStatus
+	}
+	return ""
+}
+
+func (x *CoverageGraphNode) GetControl() string {
+	if x != nil {
+		return x.Control
+	}
+	return ""
+}
+
+func (x *CoverageGraphNode) GetClosureId() string {
+	if x != nil {
+		return x.ClosureId
+	}
+	return ""
+}
+
+// CoverageGraphEdge joins two nodes: agent to scope, scope to route, route
+// to target.
+type CoverageGraphEdge struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// From node id.
+	From string `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
+	// To node id.
+	To            string `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CoverageGraphEdge) Reset() {
+	*x = CoverageGraphEdge{}
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CoverageGraphEdge) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CoverageGraphEdge) ProtoMessage() {}
+
+func (x *CoverageGraphEdge) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CoverageGraphEdge.ProtoReflect.Descriptor instead.
+func (*CoverageGraphEdge) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_coverage_records_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *CoverageGraphEdge) GetFrom() string {
+	if x != nil {
+		return x.From
+	}
+	return ""
+}
+
+func (x *CoverageGraphEdge) GetTo() string {
+	if x != nil {
+		return x.To
+	}
+	return ""
+}
+
+// GetCoverageGraphResponse is the graph.
+type GetCoverageGraphResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Nodes.
+	Nodes []*CoverageGraphNode `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty"`
+	// Edges.
+	Edges []*CoverageGraphEdge `protobuf:"bytes,2,rep,name=edges,proto3" json:"edges,omitempty"`
+	// What the scopes shown say about the agent, as the agent lifecycle
+	// derives it: "PROTECTED", "PARTIALLY_PROTECTED" or "OBSERVED".
+	BoundaryState string `protobuf:"bytes,3,opt,name=boundary_state,json=boundaryState,proto3" json:"boundary_state,omitempty"`
+	// Set when the caller may not read every scope of the agent.
+	ScopeLimited  bool `protobuf:"varint,4,opt,name=scope_limited,json=scopeLimited,proto3" json:"scope_limited,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCoverageGraphResponse) Reset() {
+	*x = GetCoverageGraphResponse{}
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCoverageGraphResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCoverageGraphResponse) ProtoMessage() {}
+
+func (x *GetCoverageGraphResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCoverageGraphResponse.ProtoReflect.Descriptor instead.
+func (*GetCoverageGraphResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_coverage_records_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *GetCoverageGraphResponse) GetNodes() []*CoverageGraphNode {
+	if x != nil {
+		return x.Nodes
+	}
+	return nil
+}
+
+func (x *GetCoverageGraphResponse) GetEdges() []*CoverageGraphEdge {
+	if x != nil {
+		return x.Edges
+	}
+	return nil
+}
+
+func (x *GetCoverageGraphResponse) GetBoundaryState() string {
+	if x != nil {
+		return x.BoundaryState
+	}
+	return ""
+}
+
+func (x *GetCoverageGraphResponse) GetScopeLimited() bool {
+	if x != nil {
+		return x.ScopeLimited
+	}
+	return false
+}
+
 var File_pantherclaw_v1_coverage_records_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_coverage_records_proto_rawDesc = "" +
@@ -3904,7 +4234,7 @@ const file_pantherclaw_v1_coverage_records_proto_rawDesc = "" +
 	"\x16GetAccessDetailRequest\x12-\n" +
 	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12(\n" +
 	"\bagent_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\aagentId\x88\x01\x01B\v\n" +
-	"\t_agent_id\"\xb5\x06\n" +
+	"\t_agent_id\"\xaf\a\n" +
 	"\fAccessDetail\x12#\n" +
 	"\rconnection_id\x18\x01 \x01(\tR\fconnectionId\x12\x19\n" +
 	"\bagent_id\x18\x02 \x01(\tR\aagentId\x127\n" +
@@ -3928,7 +4258,10 @@ const file_pantherclaw_v1_coverage_records_proto_rawDesc = "" +
 	"issue_time\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\tissueTime\x12\x1b\n" +
 	"\tagent_ids\x18\x11 \x03(\tR\bagentIds\x12-\n" +
 	"\x12verification_basis\x18\x12 \x03(\tR\x11verificationBasis\x12R\n" +
-	"\x13verified_operations\x18\x13 \x03(\v2!.pantherclaw.v1.VerifiedOperationR\x12verifiedOperations\"n\n" +
+	"\x13verified_operations\x18\x13 \x03(\v2!.pantherclaw.v1.VerifiedOperationR\x12verifiedOperations\x12%\n" +
+	"\x0etarget_account\x18\x14 \x01(\tR\rtargetAccount\x12\x1b\n" +
+	"\tgrant_ids\x18\x15 \x03(\tR\bgrantIds\x124\n" +
+	"\x16recent_transaction_ids\x18\x16 \x03(\tR\x14recentTransactionIds\"n\n" +
 	"\x11VerifiedOperation\x12\x1c\n" +
 	"\toperation\x18\x01 \x01(\tR\toperation\x12;\n" +
 	"\vverify_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -4001,7 +4334,32 @@ const file_pantherclaw_v1_coverage_records_proto_rawDesc = "" +
 	"page_token\x18\x03 \x01(\tB\x19\xbaH\x16r\x14\x18@2\x10^[A-Za-z0-9_-]*$R\tpageToken\"\x7f\n" +
 	"\x15ListSnapshotsResponse\x12>\n" +
 	"\tsnapshots\x18\x01 \x03(\v2 .pantherclaw.v1.CoverageSnapshotR\tsnapshots\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*\xa5\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xe5\x01\n" +
+	"\x17GetCoverageGraphRequest\x12#\n" +
+	"\bagent_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\aagentId\x122\n" +
+	"\rconnection_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\fconnectionId\x88\x01\x01\x12Q\n" +
+	"\toperation\x18\x03 \x01(\tB.\xbaH+r)\x18\x80\x012$^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7}$H\x01R\toperation\x88\x01\x01B\x10\n" +
+	"\x0e_connection_idB\f\n" +
+	"\n" +
+	"_operation\"\xc8\x01\n" +
+	"\x11CoverageGraphNode\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\x12\x1d\n" +
+	"\n" +
+	"route_kind\x18\x04 \x01(\tR\trouteKind\x12!\n" +
+	"\froute_status\x18\x05 \x01(\tR\vrouteStatus\x12\x18\n" +
+	"\acontrol\x18\x06 \x01(\tR\acontrol\x12\x1d\n" +
+	"\n" +
+	"closure_id\x18\a \x01(\tR\tclosureId\"7\n" +
+	"\x11CoverageGraphEdge\x12\x12\n" +
+	"\x04from\x18\x01 \x01(\tR\x04from\x12\x0e\n" +
+	"\x02to\x18\x02 \x01(\tR\x02to\"\xd8\x01\n" +
+	"\x18GetCoverageGraphResponse\x127\n" +
+	"\x05nodes\x18\x01 \x03(\v2!.pantherclaw.v1.CoverageGraphNodeR\x05nodes\x127\n" +
+	"\x05edges\x18\x02 \x03(\v2!.pantherclaw.v1.CoverageGraphEdgeR\x05edges\x12%\n" +
+	"\x0eboundary_state\x18\x03 \x01(\tR\rboundaryState\x12#\n" +
+	"\rscope_limited\x18\x04 \x01(\bR\fscopeLimited*\xa5\x01\n" +
 	"\rCoverageState\x12\x1e\n" +
 	"\x1aCOVERAGE_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16COVERAGE_STATE_UNKNOWN\x10\x01\x12\x1f\n" +
@@ -4036,7 +4394,7 @@ const file_pantherclaw_v1_coverage_records_proto_rawDesc = "" +
 	"$ACCESS_CONTROL_MODE_NARROW_TEMPORARY\x10\x02\x12(\n" +
 	"$ACCESS_CONTROL_MODE_PANTHERCLAW_HELD\x10\x03\x12+\n" +
 	"'ACCESS_CONTROL_MODE_CONSTRAINED_RUNTIME\x10\x04\x12\"\n" +
-	"\x1eACCESS_CONTROL_MODE_AGENT_HELD\x10\x052\xcd\v\n" +
+	"\x1eACCESS_CONTROL_MODE_AGENT_HELD\x10\x052\xb9\f\n" +
 	"\x0fCoverageService\x12[\n" +
 	"\vGetCoverage\x12\".pantherclaw.v1.GetCoverageRequest\x1a#.pantherclaw.v1.GetCoverageResponse\"\x03\x90\x02\x01\x12^\n" +
 	"\fListCoverage\x12#.pantherclaw.v1.ListCoverageRequest\x1a$.pantherclaw.v1.ListCoverageResponse\"\x03\x90\x02\x01\x12X\n" +
@@ -4054,7 +4412,8 @@ const file_pantherclaw_v1_coverage_records_proto_rawDesc = "" +
 	"\x0eListExclusions\x12%.pantherclaw.v1.ListExclusionsRequest\x1a&.pantherclaw.v1.ListExclusionsResponse\"\x03\x90\x02\x01\x12g\n" +
 	"\x0fGetAccessDetail\x12&.pantherclaw.v1.GetAccessDetailRequest\x1a'.pantherclaw.v1.GetAccessDetailResponse\"\x03\x90\x02\x01\x12^\n" +
 	"\fListFindings\x12#.pantherclaw.v1.ListFindingsRequest\x1a$.pantherclaw.v1.ListFindingsResponse\"\x03\x90\x02\x01\x12k\n" +
-	"\x12AcknowledgeFinding\x12).pantherclaw.v1.AcknowledgeFindingRequest\x1a*.pantherclaw.v1.AcknowledgeFindingResponseB\xcd\x01\n" +
+	"\x12AcknowledgeFinding\x12).pantherclaw.v1.AcknowledgeFindingRequest\x1a*.pantherclaw.v1.AcknowledgeFindingResponse\x12j\n" +
+	"\x10GetCoverageGraph\x12'.pantherclaw.v1.GetCoverageGraphRequest\x1a(.pantherclaw.v1.GetCoverageGraphResponse\"\x03\x90\x02\x01B\xcd\x01\n" +
 	"\x12com.pantherclaw.v1B\x14CoverageRecordsProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -4070,7 +4429,7 @@ func file_pantherclaw_v1_coverage_records_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_coverage_records_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_pantherclaw_v1_coverage_records_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
+var file_pantherclaw_v1_coverage_records_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
 var file_pantherclaw_v1_coverage_records_proto_goTypes = []any{
 	(CoverageState)(0),                   // 0: pantherclaw.v1.CoverageState
 	(CoverageRouteKind)(0),               // 1: pantherclaw.v1.CoverageRouteKind
@@ -4119,23 +4478,27 @@ var file_pantherclaw_v1_coverage_records_proto_goTypes = []any{
 	(*GetSnapshotResponse)(nil),          // 44: pantherclaw.v1.GetSnapshotResponse
 	(*ListSnapshotsRequest)(nil),         // 45: pantherclaw.v1.ListSnapshotsRequest
 	(*ListSnapshotsResponse)(nil),        // 46: pantherclaw.v1.ListSnapshotsResponse
-	(*timestamppb.Timestamp)(nil),        // 47: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),          // 48: google.protobuf.Duration
+	(*GetCoverageGraphRequest)(nil),      // 47: pantherclaw.v1.GetCoverageGraphRequest
+	(*CoverageGraphNode)(nil),            // 48: pantherclaw.v1.CoverageGraphNode
+	(*CoverageGraphEdge)(nil),            // 49: pantherclaw.v1.CoverageGraphEdge
+	(*GetCoverageGraphResponse)(nil),     // 50: pantherclaw.v1.GetCoverageGraphResponse
+	(*timestamppb.Timestamp)(nil),        // 51: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),          // 52: google.protobuf.Duration
 }
 var file_pantherclaw_v1_coverage_records_proto_depIdxs = []int32{
 	1,  // 0: pantherclaw.v1.CoverageRoute.kind:type_name -> pantherclaw.v1.CoverageRouteKind
 	2,  // 1: pantherclaw.v1.CoverageRoute.status:type_name -> pantherclaw.v1.CoverageRouteStatus
-	47, // 2: pantherclaw.v1.CoverageRoute.first_seen_time:type_name -> google.protobuf.Timestamp
-	47, // 3: pantherclaw.v1.CoverageRoute.last_seen_time:type_name -> google.protobuf.Timestamp
-	47, // 4: pantherclaw.v1.CoverageInvalidation.occur_time:type_name -> google.protobuf.Timestamp
-	47, // 5: pantherclaw.v1.CoverageInvalidation.reassess_time:type_name -> google.protobuf.Timestamp
-	47, // 6: pantherclaw.v1.CoverageLastValid.compute_time:type_name -> google.protobuf.Timestamp
-	47, // 7: pantherclaw.v1.CoverageLastValid.expire_time:type_name -> google.protobuf.Timestamp
+	51, // 2: pantherclaw.v1.CoverageRoute.first_seen_time:type_name -> google.protobuf.Timestamp
+	51, // 3: pantherclaw.v1.CoverageRoute.last_seen_time:type_name -> google.protobuf.Timestamp
+	51, // 4: pantherclaw.v1.CoverageInvalidation.occur_time:type_name -> google.protobuf.Timestamp
+	51, // 5: pantherclaw.v1.CoverageInvalidation.reassess_time:type_name -> google.protobuf.Timestamp
+	51, // 6: pantherclaw.v1.CoverageLastValid.compute_time:type_name -> google.protobuf.Timestamp
+	51, // 7: pantherclaw.v1.CoverageLastValid.expire_time:type_name -> google.protobuf.Timestamp
 	4,  // 8: pantherclaw.v1.CoverageRecord.scope:type_name -> pantherclaw.v1.CoverageScope
 	0,  // 9: pantherclaw.v1.CoverageRecord.state:type_name -> pantherclaw.v1.CoverageState
 	0,  // 10: pantherclaw.v1.CoverageRecord.computed_state:type_name -> pantherclaw.v1.CoverageState
-	47, // 11: pantherclaw.v1.CoverageRecord.compute_time:type_name -> google.protobuf.Timestamp
-	47, // 12: pantherclaw.v1.CoverageRecord.expire_time:type_name -> google.protobuf.Timestamp
+	51, // 11: pantherclaw.v1.CoverageRecord.compute_time:type_name -> google.protobuf.Timestamp
+	51, // 12: pantherclaw.v1.CoverageRecord.expire_time:type_name -> google.protobuf.Timestamp
 	5,  // 13: pantherclaw.v1.CoverageRecord.routes:type_name -> pantherclaw.v1.CoverageRoute
 	7,  // 14: pantherclaw.v1.CoverageRecord.last_valid:type_name -> pantherclaw.v1.CoverageLastValid
 	6,  // 15: pantherclaw.v1.CoverageRecord.invalidations:type_name -> pantherclaw.v1.CoverageInvalidation
@@ -4146,78 +4509,82 @@ var file_pantherclaw_v1_coverage_records_proto_depIdxs = []int32{
 	5,  // 20: pantherclaw.v1.ListRoutesResponse.routes:type_name -> pantherclaw.v1.CoverageRoute
 	15, // 21: pantherclaw.v1.CoverageClosure.probes:type_name -> pantherclaw.v1.CoverageProbeResult
 	1,  // 22: pantherclaw.v1.CoverageClosure.closed_kinds:type_name -> pantherclaw.v1.CoverageRouteKind
-	47, // 23: pantherclaw.v1.CoverageClosure.observe_time:type_name -> google.protobuf.Timestamp
-	47, // 24: pantherclaw.v1.CoverageClosure.expire_time:type_name -> google.protobuf.Timestamp
-	47, // 25: pantherclaw.v1.CoverageClosure.record_time:type_name -> google.protobuf.Timestamp
+	51, // 23: pantherclaw.v1.CoverageClosure.observe_time:type_name -> google.protobuf.Timestamp
+	51, // 24: pantherclaw.v1.CoverageClosure.expire_time:type_name -> google.protobuf.Timestamp
+	51, // 25: pantherclaw.v1.CoverageClosure.record_time:type_name -> google.protobuf.Timestamp
 	16, // 26: pantherclaw.v1.CoverageClosure.config_checks:type_name -> pantherclaw.v1.CoverageConfigCheck
 	17, // 27: pantherclaw.v1.GetClosureResponse.closure:type_name -> pantherclaw.v1.CoverageClosure
 	17, // 28: pantherclaw.v1.ListClosuresResponse.closures:type_name -> pantherclaw.v1.CoverageClosure
-	48, // 29: pantherclaw.v1.GetFreshnessContractResponse.enforced_ttl:type_name -> google.protobuf.Duration
-	48, // 30: pantherclaw.v1.GetFreshnessContractResponse.reassess_every:type_name -> google.protobuf.Duration
+	52, // 29: pantherclaw.v1.GetFreshnessContractResponse.enforced_ttl:type_name -> google.protobuf.Duration
+	52, // 30: pantherclaw.v1.GetFreshnessContractResponse.reassess_every:type_name -> google.protobuf.Duration
 	0,  // 31: pantherclaw.v1.GetFreshnessContractResponse.stale_state:type_name -> pantherclaw.v1.CoverageState
 	1,  // 32: pantherclaw.v1.CoverageExclusion.route_kind:type_name -> pantherclaw.v1.CoverageRouteKind
-	47, // 33: pantherclaw.v1.CoverageExclusion.create_time:type_name -> google.protobuf.Timestamp
-	47, // 34: pantherclaw.v1.CoverageExclusion.expire_time:type_name -> google.protobuf.Timestamp
-	47, // 35: pantherclaw.v1.CoverageExclusion.revoke_time:type_name -> google.protobuf.Timestamp
+	51, // 33: pantherclaw.v1.CoverageExclusion.create_time:type_name -> google.protobuf.Timestamp
+	51, // 34: pantherclaw.v1.CoverageExclusion.expire_time:type_name -> google.protobuf.Timestamp
+	51, // 35: pantherclaw.v1.CoverageExclusion.revoke_time:type_name -> google.protobuf.Timestamp
 	1,  // 36: pantherclaw.v1.CreateExclusionRequest.route_kind:type_name -> pantherclaw.v1.CoverageRouteKind
 	26, // 37: pantherclaw.v1.CreateExclusionResponse.exclusion:type_name -> pantherclaw.v1.CoverageExclusion
 	26, // 38: pantherclaw.v1.RevokeExclusionResponse.exclusion:type_name -> pantherclaw.v1.CoverageExclusion
 	26, // 39: pantherclaw.v1.ListExclusionsResponse.exclusions:type_name -> pantherclaw.v1.CoverageExclusion
 	3,  // 40: pantherclaw.v1.AccessDetail.modes:type_name -> pantherclaw.v1.AccessControlMode
-	47, // 41: pantherclaw.v1.AccessDetail.closure_expire_time:type_name -> google.protobuf.Timestamp
+	51, // 41: pantherclaw.v1.AccessDetail.closure_expire_time:type_name -> google.protobuf.Timestamp
 	5,  // 42: pantherclaw.v1.AccessDetail.residual_routes:type_name -> pantherclaw.v1.CoverageRoute
-	47, // 43: pantherclaw.v1.AccessDetail.issue_time:type_name -> google.protobuf.Timestamp
+	51, // 43: pantherclaw.v1.AccessDetail.issue_time:type_name -> google.protobuf.Timestamp
 	35, // 44: pantherclaw.v1.AccessDetail.verified_operations:type_name -> pantherclaw.v1.VerifiedOperation
-	47, // 45: pantherclaw.v1.VerifiedOperation.verify_time:type_name -> google.protobuf.Timestamp
+	51, // 45: pantherclaw.v1.VerifiedOperation.verify_time:type_name -> google.protobuf.Timestamp
 	34, // 46: pantherclaw.v1.GetAccessDetailResponse.detail:type_name -> pantherclaw.v1.AccessDetail
-	47, // 47: pantherclaw.v1.CoverageFinding.first_seen_time:type_name -> google.protobuf.Timestamp
-	47, // 48: pantherclaw.v1.CoverageFinding.last_seen_time:type_name -> google.protobuf.Timestamp
-	47, // 49: pantherclaw.v1.CoverageFinding.resolve_time:type_name -> google.protobuf.Timestamp
+	51, // 47: pantherclaw.v1.CoverageFinding.first_seen_time:type_name -> google.protobuf.Timestamp
+	51, // 48: pantherclaw.v1.CoverageFinding.last_seen_time:type_name -> google.protobuf.Timestamp
+	51, // 49: pantherclaw.v1.CoverageFinding.resolve_time:type_name -> google.protobuf.Timestamp
 	37, // 50: pantherclaw.v1.ListFindingsResponse.findings:type_name -> pantherclaw.v1.CoverageFinding
 	37, // 51: pantherclaw.v1.AcknowledgeFindingResponse.finding:type_name -> pantherclaw.v1.CoverageFinding
 	4,  // 52: pantherclaw.v1.CoverageSnapshot.scope:type_name -> pantherclaw.v1.CoverageScope
 	0,  // 53: pantherclaw.v1.CoverageSnapshot.state:type_name -> pantherclaw.v1.CoverageState
 	5,  // 54: pantherclaw.v1.CoverageSnapshot.routes:type_name -> pantherclaw.v1.CoverageRoute
-	47, // 55: pantherclaw.v1.CoverageSnapshot.compute_time:type_name -> google.protobuf.Timestamp
-	47, // 56: pantherclaw.v1.CoverageSnapshot.expire_time:type_name -> google.protobuf.Timestamp
+	51, // 55: pantherclaw.v1.CoverageSnapshot.compute_time:type_name -> google.protobuf.Timestamp
+	51, // 56: pantherclaw.v1.CoverageSnapshot.expire_time:type_name -> google.protobuf.Timestamp
 	42, // 57: pantherclaw.v1.GetSnapshotResponse.snapshot:type_name -> pantherclaw.v1.CoverageSnapshot
 	4,  // 58: pantherclaw.v1.ListSnapshotsRequest.scope:type_name -> pantherclaw.v1.CoverageScope
 	42, // 59: pantherclaw.v1.ListSnapshotsResponse.snapshots:type_name -> pantherclaw.v1.CoverageSnapshot
-	9,  // 60: pantherclaw.v1.CoverageService.GetCoverage:input_type -> pantherclaw.v1.GetCoverageRequest
-	11, // 61: pantherclaw.v1.CoverageService.ListCoverage:input_type -> pantherclaw.v1.ListCoverageRequest
-	13, // 62: pantherclaw.v1.CoverageService.ListRoutes:input_type -> pantherclaw.v1.ListRoutesRequest
-	18, // 63: pantherclaw.v1.CoverageService.GetClosure:input_type -> pantherclaw.v1.GetClosureRequest
-	20, // 64: pantherclaw.v1.CoverageService.ListClosures:input_type -> pantherclaw.v1.ListClosuresRequest
-	22, // 65: pantherclaw.v1.CoverageService.GetFreshnessContract:input_type -> pantherclaw.v1.GetFreshnessContractRequest
-	43, // 66: pantherclaw.v1.CoverageService.GetSnapshot:input_type -> pantherclaw.v1.GetSnapshotRequest
-	45, // 67: pantherclaw.v1.CoverageService.ListSnapshots:input_type -> pantherclaw.v1.ListSnapshotsRequest
-	24, // 68: pantherclaw.v1.CoverageService.Reassess:input_type -> pantherclaw.v1.ReassessRequest
-	27, // 69: pantherclaw.v1.CoverageService.CreateExclusion:input_type -> pantherclaw.v1.CreateExclusionRequest
-	29, // 70: pantherclaw.v1.CoverageService.RevokeExclusion:input_type -> pantherclaw.v1.RevokeExclusionRequest
-	31, // 71: pantherclaw.v1.CoverageService.ListExclusions:input_type -> pantherclaw.v1.ListExclusionsRequest
-	33, // 72: pantherclaw.v1.CoverageService.GetAccessDetail:input_type -> pantherclaw.v1.GetAccessDetailRequest
-	38, // 73: pantherclaw.v1.CoverageService.ListFindings:input_type -> pantherclaw.v1.ListFindingsRequest
-	40, // 74: pantherclaw.v1.CoverageService.AcknowledgeFinding:input_type -> pantherclaw.v1.AcknowledgeFindingRequest
-	10, // 75: pantherclaw.v1.CoverageService.GetCoverage:output_type -> pantherclaw.v1.GetCoverageResponse
-	12, // 76: pantherclaw.v1.CoverageService.ListCoverage:output_type -> pantherclaw.v1.ListCoverageResponse
-	14, // 77: pantherclaw.v1.CoverageService.ListRoutes:output_type -> pantherclaw.v1.ListRoutesResponse
-	19, // 78: pantherclaw.v1.CoverageService.GetClosure:output_type -> pantherclaw.v1.GetClosureResponse
-	21, // 79: pantherclaw.v1.CoverageService.ListClosures:output_type -> pantherclaw.v1.ListClosuresResponse
-	23, // 80: pantherclaw.v1.CoverageService.GetFreshnessContract:output_type -> pantherclaw.v1.GetFreshnessContractResponse
-	44, // 81: pantherclaw.v1.CoverageService.GetSnapshot:output_type -> pantherclaw.v1.GetSnapshotResponse
-	46, // 82: pantherclaw.v1.CoverageService.ListSnapshots:output_type -> pantherclaw.v1.ListSnapshotsResponse
-	25, // 83: pantherclaw.v1.CoverageService.Reassess:output_type -> pantherclaw.v1.ReassessResponse
-	28, // 84: pantherclaw.v1.CoverageService.CreateExclusion:output_type -> pantherclaw.v1.CreateExclusionResponse
-	30, // 85: pantherclaw.v1.CoverageService.RevokeExclusion:output_type -> pantherclaw.v1.RevokeExclusionResponse
-	32, // 86: pantherclaw.v1.CoverageService.ListExclusions:output_type -> pantherclaw.v1.ListExclusionsResponse
-	36, // 87: pantherclaw.v1.CoverageService.GetAccessDetail:output_type -> pantherclaw.v1.GetAccessDetailResponse
-	39, // 88: pantherclaw.v1.CoverageService.ListFindings:output_type -> pantherclaw.v1.ListFindingsResponse
-	41, // 89: pantherclaw.v1.CoverageService.AcknowledgeFinding:output_type -> pantherclaw.v1.AcknowledgeFindingResponse
-	75, // [75:90] is the sub-list for method output_type
-	60, // [60:75] is the sub-list for method input_type
-	60, // [60:60] is the sub-list for extension type_name
-	60, // [60:60] is the sub-list for extension extendee
-	0,  // [0:60] is the sub-list for field type_name
+	48, // 60: pantherclaw.v1.GetCoverageGraphResponse.nodes:type_name -> pantherclaw.v1.CoverageGraphNode
+	49, // 61: pantherclaw.v1.GetCoverageGraphResponse.edges:type_name -> pantherclaw.v1.CoverageGraphEdge
+	9,  // 62: pantherclaw.v1.CoverageService.GetCoverage:input_type -> pantherclaw.v1.GetCoverageRequest
+	11, // 63: pantherclaw.v1.CoverageService.ListCoverage:input_type -> pantherclaw.v1.ListCoverageRequest
+	13, // 64: pantherclaw.v1.CoverageService.ListRoutes:input_type -> pantherclaw.v1.ListRoutesRequest
+	18, // 65: pantherclaw.v1.CoverageService.GetClosure:input_type -> pantherclaw.v1.GetClosureRequest
+	20, // 66: pantherclaw.v1.CoverageService.ListClosures:input_type -> pantherclaw.v1.ListClosuresRequest
+	22, // 67: pantherclaw.v1.CoverageService.GetFreshnessContract:input_type -> pantherclaw.v1.GetFreshnessContractRequest
+	43, // 68: pantherclaw.v1.CoverageService.GetSnapshot:input_type -> pantherclaw.v1.GetSnapshotRequest
+	45, // 69: pantherclaw.v1.CoverageService.ListSnapshots:input_type -> pantherclaw.v1.ListSnapshotsRequest
+	24, // 70: pantherclaw.v1.CoverageService.Reassess:input_type -> pantherclaw.v1.ReassessRequest
+	27, // 71: pantherclaw.v1.CoverageService.CreateExclusion:input_type -> pantherclaw.v1.CreateExclusionRequest
+	29, // 72: pantherclaw.v1.CoverageService.RevokeExclusion:input_type -> pantherclaw.v1.RevokeExclusionRequest
+	31, // 73: pantherclaw.v1.CoverageService.ListExclusions:input_type -> pantherclaw.v1.ListExclusionsRequest
+	33, // 74: pantherclaw.v1.CoverageService.GetAccessDetail:input_type -> pantherclaw.v1.GetAccessDetailRequest
+	38, // 75: pantherclaw.v1.CoverageService.ListFindings:input_type -> pantherclaw.v1.ListFindingsRequest
+	40, // 76: pantherclaw.v1.CoverageService.AcknowledgeFinding:input_type -> pantherclaw.v1.AcknowledgeFindingRequest
+	47, // 77: pantherclaw.v1.CoverageService.GetCoverageGraph:input_type -> pantherclaw.v1.GetCoverageGraphRequest
+	10, // 78: pantherclaw.v1.CoverageService.GetCoverage:output_type -> pantherclaw.v1.GetCoverageResponse
+	12, // 79: pantherclaw.v1.CoverageService.ListCoverage:output_type -> pantherclaw.v1.ListCoverageResponse
+	14, // 80: pantherclaw.v1.CoverageService.ListRoutes:output_type -> pantherclaw.v1.ListRoutesResponse
+	19, // 81: pantherclaw.v1.CoverageService.GetClosure:output_type -> pantherclaw.v1.GetClosureResponse
+	21, // 82: pantherclaw.v1.CoverageService.ListClosures:output_type -> pantherclaw.v1.ListClosuresResponse
+	23, // 83: pantherclaw.v1.CoverageService.GetFreshnessContract:output_type -> pantherclaw.v1.GetFreshnessContractResponse
+	44, // 84: pantherclaw.v1.CoverageService.GetSnapshot:output_type -> pantherclaw.v1.GetSnapshotResponse
+	46, // 85: pantherclaw.v1.CoverageService.ListSnapshots:output_type -> pantherclaw.v1.ListSnapshotsResponse
+	25, // 86: pantherclaw.v1.CoverageService.Reassess:output_type -> pantherclaw.v1.ReassessResponse
+	28, // 87: pantherclaw.v1.CoverageService.CreateExclusion:output_type -> pantherclaw.v1.CreateExclusionResponse
+	30, // 88: pantherclaw.v1.CoverageService.RevokeExclusion:output_type -> pantherclaw.v1.RevokeExclusionResponse
+	32, // 89: pantherclaw.v1.CoverageService.ListExclusions:output_type -> pantherclaw.v1.ListExclusionsResponse
+	36, // 90: pantherclaw.v1.CoverageService.GetAccessDetail:output_type -> pantherclaw.v1.GetAccessDetailResponse
+	39, // 91: pantherclaw.v1.CoverageService.ListFindings:output_type -> pantherclaw.v1.ListFindingsResponse
+	41, // 92: pantherclaw.v1.CoverageService.AcknowledgeFinding:output_type -> pantherclaw.v1.AcknowledgeFindingResponse
+	50, // 93: pantherclaw.v1.CoverageService.GetCoverageGraph:output_type -> pantherclaw.v1.GetCoverageGraphResponse
+	78, // [78:94] is the sub-list for method output_type
+	62, // [62:78] is the sub-list for method input_type
+	62, // [62:62] is the sub-list for extension type_name
+	62, // [62:62] is the sub-list for extension extendee
+	0,  // [0:62] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_coverage_records_proto_init() }
@@ -4234,13 +4601,14 @@ func file_pantherclaw_v1_coverage_records_proto_init() {
 	file_pantherclaw_v1_coverage_records_proto_msgTypes[27].OneofWrappers = []any{}
 	file_pantherclaw_v1_coverage_records_proto_msgTypes[29].OneofWrappers = []any{}
 	file_pantherclaw_v1_coverage_records_proto_msgTypes[34].OneofWrappers = []any{}
+	file_pantherclaw_v1_coverage_records_proto_msgTypes[43].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_coverage_records_proto_rawDesc), len(file_pantherclaw_v1_coverage_records_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   43,
+			NumMessages:   47,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

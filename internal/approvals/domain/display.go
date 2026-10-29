@@ -24,6 +24,17 @@ import (
 // for the members the approval binds and never when it was observed.
 const DisplayVersion = 2
 
+// ConditionLimitsVersion is the version of a display with condition limits
+// (F159, tracker D33a). Only such a display is version 3: every other one
+// renders as version 2, so existing holds, recordings and bindings stay
+// identical, and the binding covers the stored version (HR-030).
+const ConditionLimitsVersion = 3
+
+// NoVerifierLimit is the condition limit of an operation the target has no
+// verifier for (F159): nothing confirms the approved conditions while the
+// action runs.
+const NoVerifierLimit = "The target can't confirm these conditions while the action runs; they are checked only when it is sent."
+
 // MaxContext caps the earlier approved requests shown as context (decision 9).
 const MaxContext = 5
 
@@ -69,6 +80,10 @@ type Consequence struct {
 	// Clamped is set when an obligation lowered a parameter: the fields
 	// show the action that will run (F108).
 	Clamped bool `json:"clamped,omitzero"`
+	// ConditionLimits say what the target cannot confirm while the action
+	// runs (F159): NoVerifierLimit when it has no verifier for the
+	// operation.
+	ConditionLimits []string `json:"condition_limits,omitzero"`
 }
 
 // Field is one canonical field of the template. Stable ids are verbatim;
@@ -216,6 +231,8 @@ func RenderAction(in ActionInput) (Display, error) {
 	}
 	if d.Verifier != nil {
 		out.Consequence.Verifier = d.Verifier.Operation + " establishes " + d.Verifier.Establishes
+	} else {
+		out.V, out.Consequence.ConditionLimits = ConditionLimitsVersion, []string{NoVerifierLimit}
 	}
 	out.Facts = factLines(in.Facts, in.Bound)
 	out.Consequences = consequenceLines(in.Consequences)

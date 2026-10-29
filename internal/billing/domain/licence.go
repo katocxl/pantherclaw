@@ -256,6 +256,10 @@ func (e Entitlements) Cases() bool { return e.Edition.Paid() }
 // (F253–F260, F272, F274, F289, F293, F430): Team and above.
 func (e Entitlements) BreachRadius() bool { return e.Edition.Paid() }
 
+// CoverageGraph reports whether the edition offers the per-agent coverage
+// graph (F277): Team and above.
+func (e Entitlements) CoverageGraph() bool { return e.Edition.Paid() }
+
 // AdvancedDetections reports whether the edition runs the sequence,
 // probing, delegation and behavior-drift detections and typical-run
 // comparison (PN-006.4, PN-006.5, F399, F234): Business and above.

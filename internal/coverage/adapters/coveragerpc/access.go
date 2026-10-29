@@ -37,7 +37,13 @@ func (h *Handler) GetAccessDetail(ctx context.Context, req *pantherclawv1.GetAcc
 		ConnectionId: d.Connection.String(), AgentId: idText(d.Agent), Custodian: d.Custodian,
 		CredentialVersion: d.CredentialVersion, CredentialHosts: d.Audience, Disclosures: d.Disclosures,
 		Scope: d.Scope, Audience: d.Audience, Expiry: d.Expiry, IssuedBy: d.IssuedBy, IssueTime: tsp(d.IssuedAt),
-		VerificationBasis: d.Basis,
+		VerificationBasis: d.Basis, TargetAccount: d.TargetAccount,
+	}
+	for _, g := range d.Grants {
+		out.GrantIds = append(out.GrantIds, g.String())
+	}
+	for _, t := range d.Transactions {
+		out.RecentTransactionIds = append(out.RecentTransactionIds, t.String())
 	}
 	for _, v := range d.Verified {
 		out.VerifiedOperations = append(out.VerifiedOperations, &pantherclawv1.VerifiedOperation{Operation: v.Operation, VerifyTime: ts(v.At)})

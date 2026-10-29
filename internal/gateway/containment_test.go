@@ -90,3 +90,24 @@ func TestServingWaitsForTheFirstConfiguration(t *testing.T) {
 		t.Fatalf("not ready after the configuration: %v", err)
 	}
 }
+
+// TestPN0113_EpochReadsTheContainmentView: Epoch reports the epoch the
+// containment check holds and follows it when it moves; reading it asks
+// the Authority nothing and refuses nothing.
+//
+// Covers: PN-011.3
+func TestPN0113_EpochReadsTheContainmentView(t *testing.T) {
+	h := setup(t)
+	if e := h.gw.Epoch(); e != 1 {
+		t.Fatalf("Epoch() = %d, want 1", e)
+	}
+	h.containment.mu.Lock()
+	h.containment.epoch = 7
+	h.containment.mu.Unlock()
+	if e := h.gw.Epoch(); e != 7 {
+		t.Fatalf("Epoch() = %d after the move, want 7", e)
+	}
+	if err := h.gw.Contained(); err != nil || h.auth.snap().authorize != 0 {
+		t.Fatalf("Contained() = %v, authorize %d", err, h.auth.snap().authorize)
+	}
+}
