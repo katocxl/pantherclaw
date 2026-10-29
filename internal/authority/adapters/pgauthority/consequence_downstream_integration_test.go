@@ -14,6 +14,8 @@ import (
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline/pipelinetest"
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 	"github.com/katocxl/pantherclaw/internal/transactions/adapters/pgtransactions"
@@ -112,6 +114,31 @@ func (d *downstream) state(txn ids.UUID) string {
 func (d *downstream) receipts(txn ids.UUID) []string {
 	return strings.Split(d.str(`SELECT string_agg(seq || ' ' || state || ' ' || basis || ' ' || coalesce(level_achieved, '') || ' ' || receipt_jws,
 		E'\n' ORDER BY seq) FROM pc.effect_receipts WHERE transaction_id = $1`, txn), "\n")
+}
+
+// counts are the run's downstream counts, for operation (all when ""),
+// and the run's confirmed actions of operation, as wait_effect and policy
+// read them (G0 M17 D103).
+func (d *downstream) counts(operation string) (dbq.RunDownstreamCountsRow, []ids.UUID) {
+	d.t.Helper()
+	var c dbq.RunDownstreamCountsRow
+	var confirmed []ids.UUID
+	if err := d.pool.InTenantTx(context.Background(), d.org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		var op *string
+		if operation != "" {
+			op = &operation
+		}
+		var err error
+		if c, err = q.RunDownstreamCounts(ctx, d.org, d.runID, op); err != nil || operation == "" {
+			return err
+		}
+		confirmed, err = q.RunDownstreamConfirmed(ctx, d.org, d.runID, operation)
+		return err
+	}); err != nil {
+		d.t.Fatal(err)
+	}
+	return c, confirmed
 }
 
 // predictAlso adds a predicted consequence to the latest evaluation of
@@ -273,9 +300,24 @@ func TestHR451_ADownstreamStateComesFromTheConsequencesOwnEvidence(t *testing.T)
 		txn.String()+" ") {
 		t.Fatalf("depth 2 origin %q", got)
 	}
+	// Only the run's own action counts, not the consequences opened for
+	// it in the same run (D141 L1).
+	const refund, payout = "payments.refund.create", "payments.payout.trigger"
+	if all, _ := c.counts(""); all != (dbq.RunDownstreamCountsRow{Pending: 1}) {
+		t.Fatalf("the run's counts with the chain pending: %+v", all)
+	}
 	c.report(kids[0], "paid", "/refund", "re_1")
 	if c.state(cons[0]) != "CONFIRMED" || c.state(txn) != "CONFIRMED" || chainReceipts(txn) != 1 {
 		t.Fatalf("the chain paid: the payout %q, the refund %q, %d receipts", c.state(cons[0]), c.state(txn), chainReceipts(txn))
+	}
+	if all, _ := c.counts(""); all != (dbq.RunDownstreamCountsRow{Confirmed: 1}) {
+		t.Fatalf("the run's counts with the chain paid: %+v", all)
+	}
+	if got, confirmed := c.counts(refund); got.Confirmed != 1 || !slices.Equal(confirmed, []ids.UUID{txn}) {
+		t.Fatalf("the refunds confirmed downstream: %+v %v", got, confirmed)
+	}
+	if got, confirmed := c.counts(payout); got != (dbq.RunDownstreamCountsRow{}) || len(confirmed) != 0 {
+		t.Fatalf("the payouts counted as the run's actions: %+v %v", got, confirmed)
 	}
 }
 

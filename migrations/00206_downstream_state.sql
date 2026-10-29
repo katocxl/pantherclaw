@@ -23,22 +23,38 @@
 -- for in that action's latest evaluation, so that once it is confirmed it
 -- opens the consequences that follow from that position (depth + 1).
 
+-- Every CHECK is added NOT VALID and validated apart: VALIDATE CONSTRAINT
+-- takes only SHARE UPDATE EXCLUSIVE, so decisions and reports keep writing
+-- while pc.transactions and pc.effect_receipts are scanned (as 00163).
+
 -- +goose Up
 ALTER TABLE pc.transactions
-    ADD COLUMN downstream_state text
-        CHECK (downstream_state IN ('PENDING', 'CONFIRMED', 'UNCONFIRMED', 'NOT_VERIFIABLE')),
+    ADD COLUMN downstream_state text,
     ADD COLUMN downstream_not_verifiable boolean NOT NULL DEFAULT false,
     ADD COLUMN consequence_root uuid,
-    ADD COLUMN consequence_position integer CHECK (consequence_position BETWEEN 0 AND 255),
-    ADD CONSTRAINT transactions_downstream CHECK (NOT downstream_not_verifiable OR downstream_state IS NOT NULL),
-    ADD CONSTRAINT transactions_consequence_origin CHECK ((consequence_root IS NULL) = (consequence_position IS NULL));
+    ADD COLUMN consequence_position integer,
+    ADD CONSTRAINT transactions_downstream_state
+        CHECK (downstream_state IN ('PENDING', 'CONFIRMED', 'UNCONFIRMED', 'NOT_VERIFIABLE')) NOT VALID,
+    ADD CONSTRAINT transactions_consequence_position CHECK (consequence_position BETWEEN 0 AND 255) NOT VALID,
+    ADD CONSTRAINT transactions_downstream CHECK (NOT downstream_not_verifiable OR downstream_state IS NOT NULL) NOT VALID,
+    ADD CONSTRAINT transactions_consequence_origin CHECK ((consequence_root IS NULL) = (consequence_position IS NULL)) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.transactions VALIDATE CONSTRAINT transactions_downstream_state;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.transactions VALIDATE CONSTRAINT transactions_consequence_position;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.transactions VALIDATE CONSTRAINT transactions_downstream;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.transactions VALIDATE CONSTRAINT transactions_consequence_origin;
 
 GRANT UPDATE (downstream_state, downstream_not_verifiable) ON pc.transactions TO pc_app;
 
 ALTER TABLE pc.effect_receipts
     DROP CONSTRAINT effect_receipts_basis_check,
     ADD CONSTRAINT effect_receipts_basis_check CHECK (basis IN ('verifier', 'late_report', 'target_log', 'person',
-        'compensation', 'definition', 'deadline', 'consequence'));
+        'compensation', 'definition', 'deadline', 'consequence')) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.effect_receipts VALIDATE CONSTRAINT effect_receipts_basis_check;
 
 -- +goose Down
 -- Effect receipts are evidence: a down migration never deletes one, so it
@@ -46,10 +62,13 @@ ALTER TABLE pc.effect_receipts
 ALTER TABLE pc.effect_receipts
     DROP CONSTRAINT effect_receipts_basis_check,
     ADD CONSTRAINT effect_receipts_basis_check CHECK (basis IN ('verifier', 'late_report', 'target_log', 'person',
-        'compensation', 'definition', 'deadline'));
+        'compensation', 'definition', 'deadline')) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.effect_receipts VALIDATE CONSTRAINT effect_receipts_basis_check;
 
 REVOKE UPDATE (downstream_state, downstream_not_verifiable) ON pc.transactions FROM pc_app;
 
-ALTER TABLE pc.transactions DROP CONSTRAINT transactions_consequence_origin, DROP COLUMN consequence_position,
-    DROP COLUMN consequence_root, DROP CONSTRAINT transactions_downstream, DROP COLUMN downstream_not_verifiable,
+ALTER TABLE pc.transactions DROP CONSTRAINT transactions_consequence_origin, DROP CONSTRAINT transactions_downstream,
+    DROP CONSTRAINT transactions_consequence_position, DROP CONSTRAINT transactions_downstream_state,
+    DROP COLUMN consequence_position, DROP COLUMN consequence_root, DROP COLUMN downstream_not_verifiable,
     DROP COLUMN downstream_state;

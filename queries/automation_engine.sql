@@ -192,7 +192,9 @@ LIMIT 16;
 -- pending, which is a downstream state still PENDING or an allowed action
 -- whose effect is not yet final while its latest evaluation predicted
 -- consequences; and unconfirmed, which is UNCONFIRMED or NOT_VERIFIABLE.
--- An action that predicted no consequence is in none of them.
+-- An action that predicted no consequence is in none of them, and a
+-- consequence transaction is not one of the run's actions: its state rolls
+-- up into the action at its root.
 SELECT count(*) FILTER (WHERE t.downstream_state = 'CONFIRMED')::int AS confirmed,
        count(*) FILTER (WHERE t.downstream_state = 'PENDING'
            OR (t.downstream_state IS NULL AND t.decision IN ('ALLOW', 'ALLOW_WITH_OBLIGATIONS')
@@ -203,13 +205,13 @@ SELECT count(*) FILTER (WHERE t.downstream_state = 'CONFIRMED')::int AS confirme
                                                  WHERE d.org_id = t.org_id AND d.transaction_id = t.id))))::int AS pending,
        count(*) FILTER (WHERE t.downstream_state IN ('UNCONFIRMED', 'NOT_VERIFIABLE'))::int AS unconfirmed
 FROM pc.transactions t
-WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id)
+WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id) AND t.consequence_root IS NULL
     AND (sqlc.narg(operation)::text IS NULL OR t.operation = sqlc.narg(operation));
 
 -- name: RunDownstreamConfirmed :many
 SELECT t.id FROM pc.transactions t
 WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id) AND t.operation = sqlc.arg(operation)
-    AND t.downstream_state = 'CONFIRMED'
+    AND t.downstream_state = 'CONFIRMED' AND t.consequence_root IS NULL
 ORDER BY t.created_at
 LIMIT 16;
 
@@ -234,7 +236,7 @@ SELECT (NOT EXISTS (
 -- (UNKNOWN, CONFLICTING, UNVERIFIABLE, PROPAGATION_PENDING or not yet
 -- recorded) on an operation that counts as irreversible (D84 E1, E6).
 SELECT count(*)::int FROM pc.transactions t
-WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id)
+WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id) AND t.consequence_root IS NULL
     AND t.decision IN ('ALLOW', 'ALLOW_WITH_OBLIGATIONS')
     AND (t.effect_state IS NULL OR t.effect_state IN ('UNKNOWN', 'CONFLICTING', 'UNVERIFIABLE', 'PROPAGATION_PENDING'))
     AND NOT EXISTS (

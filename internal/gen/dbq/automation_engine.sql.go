@@ -1426,7 +1426,7 @@ func (q *Queries) RequestAutomationExecutionCancel(ctx context.Context, arg Requ
 const runDownstreamConfirmed = `-- name: RunDownstreamConfirmed :many
 SELECT t.id FROM pc.transactions t
 WHERE t.org_id = $1 AND t.run_id = $2 AND t.operation = $3
-    AND t.downstream_state = 'CONFIRMED'
+    AND t.downstream_state = 'CONFIRMED' AND t.consequence_root IS NULL
 ORDER BY t.created_at
 LIMIT 16
 `
@@ -1462,7 +1462,7 @@ SELECT count(*) FILTER (WHERE t.downstream_state = 'CONFIRMED')::int AS confirme
                                                  WHERE d.org_id = t.org_id AND d.transaction_id = t.id))))::int AS pending,
        count(*) FILTER (WHERE t.downstream_state IN ('UNCONFIRMED', 'NOT_VERIFIABLE'))::int AS unconfirmed
 FROM pc.transactions t
-WHERE t.org_id = $1 AND t.run_id = $2
+WHERE t.org_id = $1 AND t.run_id = $2 AND t.consequence_root IS NULL
     AND ($3::text IS NULL OR t.operation = $3)
 `
 
@@ -1477,7 +1477,9 @@ type RunDownstreamCountsRow struct {
 // pending, which is a downstream state still PENDING or an allowed action
 // whose effect is not yet final while its latest evaluation predicted
 // consequences; and unconfirmed, which is UNCONFIRMED or NOT_VERIFIABLE.
-// An action that predicted no consequence is in none of them.
+// An action that predicted no consequence is in none of them, and a
+// consequence transaction is not one of the run's actions: its state rolls
+// up into the action at its root.
 func (q *Queries) RunDownstreamCounts(ctx context.Context, orgID ids.OrgID, runID ids.UUID, operation *string) (RunDownstreamCountsRow, error) {
 	row := q.db.QueryRow(ctx, runDownstreamCounts, orgID, runID, operation)
 	var i RunDownstreamCountsRow
@@ -1592,7 +1594,7 @@ func (q *Queries) RunTransactionCounts(ctx context.Context, orgID ids.OrgID, run
 
 const runUnknownIrreversible = `-- name: RunUnknownIrreversible :one
 SELECT count(*)::int FROM pc.transactions t
-WHERE t.org_id = $1 AND t.run_id = $2
+WHERE t.org_id = $1 AND t.run_id = $2 AND t.consequence_root IS NULL
     AND t.decision IN ('ALLOW', 'ALLOW_WITH_OBLIGATIONS')
     AND (t.effect_state IS NULL OR t.effect_state IN ('UNKNOWN', 'CONFLICTING', 'UNVERIFIABLE', 'PROPAGATION_PENDING'))
     AND NOT EXISTS (

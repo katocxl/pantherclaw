@@ -60,15 +60,23 @@ func RunRecord(r *Run) *celenv.Record {
 
 // ReadsRunConsequences reports whether a rule of b may read the run's
 // consequence counts, so the Authority reads them only then (D103). It
-// errs toward reading: any mention of either field counts.
+// scans every CEL expression the compiler compiles (celExpressions, D141)
+// and errs toward reading: any mention of either field counts.
 func ReadsRunConsequences(b *domain.Bundle) bool {
 	if b == nil {
 		return false
 	}
-	for _, r := range b.Rules {
-		if strings.Contains(r.When, "consequences_pending") || strings.Contains(r.When, "consequences_unconfirmed") {
-			return true
+	for i := range b.Rules {
+		for _, x := range celExpressions(&b.Rules[i]) {
+			if strings.Contains(x, "consequences_pending") || strings.Contains(x, "consequences_unconfirmed") {
+				return true
+			}
 		}
 	}
 	return false
 }
+
+// celExpressions are every CEL expression of r the compiler compiles; the
+// first is the rule's condition. A new CEL site belongs here, so that
+// ReadsRunConsequences sees it as soon as it is compiled.
+func celExpressions(r *domain.Rule) []string { return []string{r.When} }
