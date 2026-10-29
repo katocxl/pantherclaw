@@ -96,7 +96,7 @@ func TestHR415_UpstreamDescriptionsStayInComments(t *testing.T) {
 // (D43).
 // Covers: F352
 func TestHR415_DraftValuesEscapeControlCharacters(t *testing.T) {
-	uri := "docs://a" + string(rune(0x1b)) + "[2J" + string(rune(0x9b)) + "b" + string(rune(0x202e)) + "c\"\\"
+	uri := "docs://a" + string(rune(0x1b)) + "[2J" + string(rune(0x9b)) + "b" + string(rune(0x202e)) + "c\"\\" + string(rune(0xE0001))
 	d := draft(dbq.PcConnection{ID: ids.NewV7(), Name: "x"}, []dbq.PcConnectionInventory{
 		{Kind: InventoryResource, Name: uri, Digest: "sha256:" + strings.Repeat("a", 64)},
 	})
@@ -104,6 +104,9 @@ func TestHR415_DraftValuesEscapeControlCharacters(t *testing.T) {
 		if r != '\n' && (unicode.IsControl(r) || unicode.Is(unicode.Cf, r)) {
 			t.Fatalf("a raw control character %U in the draft", r)
 		}
+	}
+	if !strings.Contains(string(d.Manifest), `\U000e0001`) {
+		t.Error(`a supplementary format character is not a \U escape`)
 	}
 	for _, td := range d.Todo {
 		if strings.ContainsRune(td, 0x1b) {

@@ -148,6 +148,8 @@ func escapeControls(s string) string {
 	var b strings.Builder
 	for _, r := range strings.ToValidUTF8(s, string(unicode.ReplacementChar)) {
 		switch {
+		case r > 0xFFFF && unicode.Is(unicode.Cf, r):
+			fmt.Fprintf(&b, `\U%08x`, r)
 		case unicode.IsControl(r), unicode.Is(unicode.Cf, r), r == 0x2028, r == 0x2029:
 			fmt.Fprintf(&b, `\u%04x`, r)
 		default:

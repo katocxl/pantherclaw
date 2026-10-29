@@ -57,6 +57,8 @@ func quote(s string) string {
 		case r == '"' || r == '\\':
 			b.WriteByte('\\')
 			b.WriteRune(r)
+		case r > 0xFFFF && unicode.Is(unicode.Cf, r):
+			fmt.Fprintf(&b, `\U%08x`, r)
 		case unicode.IsControl(r), unicode.Is(unicode.Cf, r), r == 0x2028, r == 0x2029:
 			fmt.Fprintf(&b, `\u%04x`, r)
 		default:
