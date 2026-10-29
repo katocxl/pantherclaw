@@ -684,7 +684,7 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - Migrations `00160`–`00164`, the last one `pc.billing_links` (server-recorded checkouts and subscriptions, one current subscription per organization) (`00165`–`00168` spare; `00169` became M13's platform migration, G0 M13 D40).
 
 ### M17 — Consequence chains, continuous discovery, identity presets and custom scenarios
-**HR:** HR-450..468 · **PN:** PN-001.3, PN-002.3 (GitLab CI, SPIFFE, GCP, AWS), PN-009.6 · **F:** F405–F414 · **ADR:** 0038 · **G0:** [g0/M17.md](g0/M17.md).
+**HR:** HR-450..469 · **PN:** PN-001.3, PN-002.3 (presets), PN-009.6 · **F:** F405–F414 · **ADR:** 0038 · **G0:** [g0/M17.md](g0/M17.md).
 - M17 is post-1.0 and lands after M16, in migration order (founder, 2026-10-29).
 - **Downstream verification** (F414): predicted consequences are verified as their own transactions, or audited as not verifiable. A parent's downstream state is confirmed only from its consequences' evidence and gets an appended `downstream` receipt. Automations wait on it (`wait_effect` with `consequences: true`), and policy reads `run.consequences_pending` and `run.consequences_unconfirmed`.
 - **Customer consequence rules and chains** (F405–F413, founder decision G1, [ADR-0038](adr/0038-consequence-chains-customer-rules-and-verifier-kinds.md)):
@@ -693,9 +693,9 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
   - expired rules yield UNKNOWN;
   - consequences carry derived labels and explanations (`pclaw consequence-rules`).
 - **Continuous discovery** (PN-001.3, G3): complete org scans and CI scans (`pclaw scan --submit --scope … --complete`) count misses. After 3 missed scans a vanished discovery notifies its owner once; nothing else changes. Material changes are recorded, queued and notified.
-- **Identity presets** (PN-002.3, G2): one verifier per kind (an unknown kind is refused), then GitLab CI, SPIFFE JWT-SVID, GCP workload identity and AWS IAM (Enterprise). Azure managed identity and Entra Agent ID wait for a founder decision (G0 M17 D122). L3 waits for a PAP-1 revision.
+- **Identity presets** (PN-002.3, G2): one verifier per kind (an unknown kind is refused), then GitLab CI, SPIFFE JWT-SVID, GCP workload identity, AWS IAM, Azure managed identity and Entra Agent ID (Enterprise). For the last two only, HR-140 and HR-143 are relaxed under an operator-pinned tenant and app id, with assurance at most 1 hour from the attestation (G18, HR-469). L3 waits for a PAP-1 revision.
 - **Custom range scenarios** (PN-009.6, G4): `CX-` scenarios (Business) run on the simulator harness with a data-only tool file. The server labels them customer-authored and never puts them in an assurance pack. RT scenarios need a matching library digest.
-- Migrations: `00206`–`00210` and `00213` are used. `00211` is held for Azure and Entra; `00212`, `00214` and `00215` are spare. One new permission, `consequence_rule.manage`.
+- Migrations: `00206`–`00211` and `00213` are used; `00212`, `00214` and `00215` are spare. One new permission, `consequence_rule.manage`.
 
 ---
 
