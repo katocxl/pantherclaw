@@ -241,6 +241,10 @@ func (m *MCPDispatch) DispatchTemplate() (URITemplate, bool) {
 // template and nothing of the other channels, on a read without side
 // effects that a resource dispatch sends.
 func (d *Definition) validateResourceMapping(at string, m Mapping) error {
+	if slices.ContainsFunc(d.Mappings, func(o Mapping) bool { return o.Channel != ChannelMCPResource }) {
+		// One operation is a tool or a resource, never both (G0 M15 D36).
+		return invalid("%s: an operation's mappings are all mcp_resource or none of them", at)
+	}
 	if m.Tool != "" || m.Method != "" || m.Path != "" || m.InputSchema != nil || m.Elicitation != nil {
 		return invalid("%s: an mcp_resource mapping names a resource template and no tool, method, path, input_schema or elicitation", at)
 	}
@@ -310,7 +314,7 @@ func (d *Definition) validateResourceDispatch(at string, m *MCPDispatch) error {
 			return err
 		}
 	}
-	if d.Access != AccessRead || slices.ContainsFunc(d.Mappings, func(mp Mapping) bool { return mp.Channel == ChannelMCP }) {
+	if d.Access != AccessRead || slices.ContainsFunc(d.Mappings, func(mp Mapping) bool { return mp.Channel != ChannelMCPResource }) {
 		return invalid("%s: a resource dispatch belongs to a read mapped only as a resource", at)
 	}
 	return nil

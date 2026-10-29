@@ -85,34 +85,63 @@ type formField struct {
 // question is what the gateway keeps of one relayed or refused question.
 type question struct {
 	key, sha256, scan string
+	sum               []byte
+}
+
+// Refusal reasons reported with elicitation_refused (D40); a refusal no
+// reason fits is reported without one.
+const (
+	reasonURLMode         = "url_mode"
+	reasonUndeclaredField = "undeclared_field"
+	reasonTypeMismatch    = "type_mismatch"
+	reasonDuplicateField  = "duplicate_field"
+	reasonTooManyFields   = "too_many_fields"
+	reasonInjection       = "injection_flagged"
+)
+
+// refusal says why the gate refuses: the reported reason ("" when none
+// fits) and what the gateway logs.
+type refusal struct {
+	reason, why string
 }
 
 // screen checks an input_required result against the tool's declared
-// elicitation fields (D33). It returns the requests and the request state
-// to relay, the questions seen, and why it refuses ("" when it relays).
-func screen(spec *domain.ElicitationSpec, body []byte) (requests, state jsontext.Value, qs []question, refusal string) {
+// elicitation fields (D33, D37, D39). It returns the requests and the
+// request state to relay, the questions seen and, when it refuses, why;
+// the refused question, if any, is the last one seen.
+func screen(spec *domain.ElicitationSpec, body []byte) (requests, state jsontext.Value, qs []question, no *refusal) {
 	var res struct {
 		InputRequests map[string]jsontext.Value `json:"inputRequests"`
 		RequestState  jsontext.Value            `json:"requestState"`
 	}
 	if err := json.Unmarshal(body, &res); err != nil || len(res.InputRequests) == 0 {
-		return nil, nil, nil, "no input requests"
+		return nil, nil, nil, &refusal{why: "no input requests"}
 	}
 	if len(res.InputRequests) > maxInputRequests {
-		return nil, nil, nil, "too many input requests"
+		return nil, nil, nil, &refusal{reasonTooManyFields, "too many input requests"}
 	}
 	if s := res.RequestState; len(s) > 0 && (s.Kind() != '"' || len(s) > maxRequestState) {
-		return nil, nil, nil, "a request state that is not a short string"
+		return nil, nil, nil, &refusal{why: "a request state that is not a short string"}
 	}
+	asked := map[string]bool{}
 	for _, key := range slices.Sorted(maps.Keys(res.InputRequests)) {
 		var ir inputRequest
 		if !inputKeyRe.MatchString(key) || json.Unmarshal(res.InputRequests[key], &ir) != nil {
-			return nil, nil, qs, "an input request that does not decode"
+			return nil, nil, qs, &refusal{why: "an input request that does not decode"}
 		}
 		sum := sha256.Sum256([]byte(ir.Params.Message))
-		q := question{key: key, sha256: hex.EncodeToString(sum[:]), scan: injection.ScanClean}
-		why := checkRequest(spec, ir)
-		if why == "" {
+		q := question{key: key, sha256: hex.EncodeToString(sum[:]), scan: injection.ScanClean, sum: sum[:]}
+		no := checkRequest(spec, ir)
+		if no == nil {
+			// Field names are unique across the requests (D39).
+			for name := range ir.Params.RequestedSchema.Properties {
+				if asked[name] {
+					no = &refusal{reasonDuplicateField, "a field asked for twice: " + name}
+				}
+				asked[name] = true
+			}
+		}
+		if no == nil {
 			texts := []string{ir.Params.Message}
 			for _, raw := range ir.Params.RequestedSchema.Properties {
 				var f formField
@@ -121,59 +150,61 @@ func screen(spec *domain.ElicitationSpec, body []byte) (requests, state jsontext
 			}
 			for _, t := range texts {
 				if injection.Scan(t).Flagged {
-					q.scan, why = injection.ScanFlagged, "the question reads like instructions"
+					q.scan, no = injection.ScanFlagged, &refusal{reasonInjection, "the question reads like instructions"}
 					break
 				}
 			}
 		}
 		qs = append(qs, q)
-		if why != "" {
-			return nil, nil, qs, why
+		if no != nil {
+			return nil, nil, qs, no
 		}
 	}
 	raw, err := json.Marshal(res.InputRequests, json.Deterministic(true))
 	if err != nil {
-		return nil, nil, qs, "the input requests do not encode"
+		return nil, nil, qs, &refusal{why: "the input requests do not encode"}
 	}
-	return raw, res.RequestState, qs, ""
+	return raw, res.RequestState, qs, nil
 }
 
 // checkRequest checks one input request: a form-mode elicitation for
-// declared fields of compatible types (D33, HR-420); URL mode, sampling
-// and roots stay declined (HR-421).
-func checkRequest(spec *domain.ElicitationSpec, ir inputRequest) string {
+// declared fields of compatible types (D33, D37, HR-420); URL mode,
+// sampling and roots stay declined (HR-421).
+func checkRequest(spec *domain.ElicitationSpec, ir inputRequest) *refusal {
 	switch {
 	case ir.Method != "elicitation/create":
-		return ir.Method + " is not relayed"
+		return &refusal{why: ir.Method + " is not relayed"}
 	case ir.Params.Mode != "" && ir.Params.Mode != "form":
-		return "a " + ir.Params.Mode + "-mode elicitation is not relayed"
+		return &refusal{reasonURLMode, "a " + ir.Params.Mode + "-mode elicitation is not relayed"}
 	case len(ir.Params.URL) > 0:
-		return "an elicitation with a URL is not relayed"
+		return &refusal{reasonURLMode, "an elicitation with a URL is not relayed"}
 	case ir.Params.Message == "" || len(ir.Params.Message) > maxRequestState:
-		return "an elicitation without a short message"
+		return &refusal{why: "an elicitation without a short message"}
 	case ir.Params.RequestedSchema == nil || ir.Params.RequestedSchema.Type != "object" || len(ir.Params.RequestedSchema.Properties) == 0:
-		return "an elicitation without a requested form"
+		return &refusal{reasonTypeMismatch, "an elicitation without a requested form"}
+	case len(ir.Params.RequestedSchema.Properties) > domain.MaxElicitationFields:
+		return &refusal{reasonTooManyFields, "a form with too many fields"}
 	}
 	s := ir.Params.RequestedSchema
 	for _, name := range s.Required {
 		if _, ok := s.Properties[name]; !ok {
-			return "a required field the form does not ask for"
+			return &refusal{reasonTypeMismatch, "a required field the form does not ask for"}
 		}
 	}
 	for _, name := range slices.Sorted(maps.Keys(s.Properties)) {
 		declared, ok := spec.Field(name)
 		if !ok {
-			return "a field the reviewed mapping does not declare: " + name
+			return &refusal{reasonUndeclaredField, "a field the reviewed mapping does not declare: " + name}
 		}
 		var f formField
 		if err := json.Unmarshal(s.Properties[name], &f, json.RejectUnknownMembers(true)); err != nil {
-			return "a form field of an unsupported shape: " + name
+			return &refusal{reasonTypeMismatch, "a form field of an unsupported shape: " + name}
 		}
 		if !compatible(declared, f) {
-			return "a form field of another type than declared: " + name
+			return &refusal{reasonTypeMismatch, "a form field of another type than declared: " + name}
 		}
 	}
-	return ""
+	return nil
 }
 
 // compatible reports whether a form field asks for what a declared field
@@ -204,14 +235,18 @@ func (h *Handler) relay(ctx context.Context, conn *control.Connection, tool stri
 	if spec == nil || c.res.Response == nil || c.res.Code != dispatch.CodeInputRequired {
 		return nil, false
 	}
-	requests, state, qs, refusal := screen(spec, c.res.Response.Body)
+	requests, state, qs, no := screen(spec, c.res.Response.Body)
 	attrs := []any{slog.String("connection_id", conn.GetId()), slog.String("transaction_id", c.res.TransactionID)}
 	for _, q := range qs {
 		attrs = append(attrs, slog.Group("question_"+q.key, slog.String("sha256", q.sha256), slog.String("scan", q.scan)))
 	}
-	if refusal != "" {
-		h.log.WarnContext(ctx, "security.elicitation_refused", append(attrs, slog.String("reason", refusal))...)
-		h.engine.ReportElicitationRefused(ctx, conn, c.action.Action)
+	if no != nil {
+		h.log.WarnContext(ctx, "security.elicitation_refused", append(attrs, slog.String("reason", no.why))...)
+		detail := dispatch.RefusalDetail{ElicitationReason: no.reason}
+		if len(qs) > 0 {
+			detail.QuestionSHA256 = qs[len(qs)-1].sum
+		}
+		h.engine.ReportElicitationRefused(ctx, conn, c.action.Action, detail)
 		return nil, false
 	}
 	h.log.InfoContext(ctx, "gateway.elicitation_relayed", attrs...)

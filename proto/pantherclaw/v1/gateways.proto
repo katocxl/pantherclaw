@@ -720,6 +720,14 @@ message ReportLocalRefusalRequest {
   }];
   // The refused action's run id; empty when it named none.
   string run_id = 4 [(buf.validate.field).string.pattern = "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$"];
+  // Why an upstream elicitation was refused (G0 M15 D40); set only with
+  // code elicitation_refused, and unset when no reason below fits.
+  optional string elicitation_reason = 5 [(buf.validate.field).string = {
+    in: ["url_mode", "undeclared_field", "type_mismatch", "duplicate_field", "too_many_fields", "injection_flagged"]
+  }];
+  // SHA-256 of the refused question's text, never the text itself; set
+  // only with code elicitation_refused.
+  optional bytes question_sha256 = 6 [(buf.validate.field).bytes.len = 32];
 }
 
 // ReportLocalRefusalResponse is empty.

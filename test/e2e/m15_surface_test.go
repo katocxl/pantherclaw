@@ -178,6 +178,9 @@ func (s *stack) activateSurface(t *testing.T, endpoint string) {
 			"      - channel: mcp_resource\n        resource: 'payments://refunds/{refund}'\n        route: payments-refund-get\n" +
 				"        description: One refund on the simulated payments API.\n        extract:\n          target_id: path.refund\n",
 		},
+		// One operation is a tool or a resource, never both (D36).
+		{"      - channel: http\n        method: GET\n        path: /v1/refunds/{refund}\n        route: payments-refund-get\n" +
+			"        extract:\n          target_id: path.refund\n          params: {}\n", ""},
 		{
 			"    dispatch:\n      http:\n        method: GET\n        path: /v1/refunds/{target.id}\n",
 			"    dispatch:\n      mcp:\n        resource: 'payments://refunds/{target.id}'\n        upstream_digest: sha256:" + strings.Repeat("0f", 32) + "\n",

@@ -137,6 +137,14 @@ func TestHR421_ElicitationsOutsideTheReviewStayDeclined(t *testing.T) {
 		if len(refusals) != 1 || !strings.HasPrefix(refusals[0], h.conn.GetId()+" elicitation_refused payments.refund.create ") {
 			t.Errorf("%s: reported %q", name, refusals)
 		}
+		h.circuitMu.Lock()
+		details := slices.Clone(h.refusalDetails)
+		h.circuitMu.Unlock()
+		want := map[string]string{"url mode": "url_mode", "flagged": "injection_flagged", "undeclared field": "undeclared_field", "another type": "type_mismatch"}[name]
+		sum := sha256.Sum256([]byte(e.Message))
+		if len(details) != 1 || details[0].ElicitationReason != want || !bytes.Equal(details[0].QuestionSHA256, sum[:]) {
+			t.Errorf("%s: details %+v, want %s and the question's digest", name, details, want)
+		}
 		if h.auth.snap().outcome() != pb.Outcome_OUTCOME_FAILED {
 			t.Errorf("%s: recorded %s", name, h.auth.snap().outcome())
 		}

@@ -728,9 +728,10 @@ func ResourceURI(def *defs.Definition, a actionir.ActionIR) (string, error) {
 const CodeElicitationRefused = "elicitation_refused"
 
 // ReportElicitationRefused tells the server an upstream elicitation was
-// refused (G0 M15 D33): machine metadata only, never the question.
-func (e *Engine) ReportElicitationRefused(ctx context.Context, conn *control.Connection, a actionir.ActionIR) {
-	e.reportLocalRefusal(ctx, conn, CodeElicitationRefused, a)
+// refused (G0 M15 D33, D40): machine metadata, the reason and the
+// question's SHA-256 only, never the question.
+func (e *Engine) ReportElicitationRefused(ctx context.Context, conn *control.Connection, a actionir.ActionIR, detail RefusalDetail) {
+	e.reportLocalRefusal(ctx, conn, CodeElicitationRefused, a, detail)
 }
 
 // InputResponses is how a retry answers an upstream server's input

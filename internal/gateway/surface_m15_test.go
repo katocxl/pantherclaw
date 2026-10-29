@@ -34,6 +34,10 @@ const (
 		"              pattern: '^re_[A-Za-z0-9-]{1,64}$'\n        extract:\n          target_id: input.refund\n"
 	getRefundResource = "      - channel: mcp_resource\n        resource: 'payments://refunds/{refund}'\n        route: payments-refund-get\n" +
 		"        description: One refund on the simulated payments API.\n        extract:\n          target_id: path.refund\n"
+	// getRefundHTTP goes: one operation is a tool or a resource, never both
+	// (D36).
+	getRefundHTTP = "      - channel: http\n        method: GET\n        path: /v1/refunds/{refund}\n        route: payments-refund-get\n" +
+		"        extract:\n          target_id: path.refund\n          params: {}\n"
 	getRefundHTTPDispatch = "    dispatch:\n      http:\n        method: GET\n        path: /v1/refunds/{target.id}\n"
 	createRefundMCP       = "      - channel: mcp\n        tool: create_refund\n        route: payments-refund\n"
 )
@@ -61,6 +65,7 @@ func withSurface(t *testing.T, f mcpsim.Faults, fields string) (*mcpsim.Server, 
 				},
 				{"        idempotency_header: Idempotency-Key\n", ""},
 				{getRefundMCP, getRefundResource},
+				{getRefundHTTP, ""},
 				{getRefundHTTPDispatch, "    dispatch:\n      mcp:\n        resource: 'payments://refunds/{target.id}'\n        upstream_digest: " + resDigest + "\n"},
 			}
 			if fields != "" {

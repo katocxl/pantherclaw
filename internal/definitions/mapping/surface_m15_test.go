@@ -36,6 +36,9 @@ func resourceRaw(t *testing.T) []byte {
 			"          properties:\n            refund:\n              type: string\n              description: The refund id\n"+
 			"              pattern: '^re_[A-Za-z0-9-]{1,64}$'\n        extract:\n          target_id: input.refund\n",
 		"        extract:\n          target_id: path.refund\n")
+	// One operation is a tool or a resource, never both (D36).
+	raw = replaceOnce(t, raw, "      - channel: http\n        method: GET\n        path: /v1/refunds/{refund}\n        route: payments-refund-get\n"+
+		"        extract:\n          target_id: path.refund\n          params: {}\n", "")
 	return replaceOnce(t, raw, "    dispatch:\n      http:\n        method: GET\n        path: /v1/refunds/{target.id}\n",
 		"    dispatch:\n      mcp:\n        resource: 'payments://refunds/{target.id}'\n        upstream_digest: sha256:"+strings.Repeat("0f", 32)+"\n")
 }

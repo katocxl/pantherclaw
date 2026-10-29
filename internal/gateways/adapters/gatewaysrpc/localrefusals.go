@@ -8,13 +8,14 @@ import (
 
 	"connectrpc.com/connect/v2"
 
+	connapp "github.com/katocxl/pantherclaw/internal/connections/app"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
 // LocalRefusals records actions a gateway refused on its own.
 type LocalRefusals interface {
-	ReportLocalRefusal(ctx context.Context, org ids.OrgID, gateway, connection ids.UUID, code, operation string, run ids.UUID) error
+	ReportLocalRefusal(ctx context.Context, org ids.OrgID, gateway, connection ids.UUID, code, operation string, run ids.UUID, detail connapp.RefusalDetail) error
 }
 
 // WithLocalRefusals serves ReportLocalRefusal from r.
@@ -24,7 +25,8 @@ func (h *GatewayHandler) WithLocalRefusals(r LocalRefusals) *GatewayHandler {
 }
 
 // ReportLocalRefusal implements GatewayServiceHandler, on the mTLS
-// listener only (G0 M12, HR-225): a secret_in_payload refusal is audited,
+// listener only (G0 M12, HR-225; G0 M15 D40): a secret_in_payload or
+// elicitation_refused refusal is audited,
 // with machine metadata only, for a connection the gateway serves, so
 // detections see it.
 func (h *GatewayHandler) ReportLocalRefusal(ctx context.Context, req *pb.ReportLocalRefusalRequest) (*pb.ReportLocalRefusalResponse, error) {
@@ -45,7 +47,9 @@ func (h *GatewayHandler) ReportLocalRefusal(ctx context.Context, req *pb.ReportL
 			return nil, errInvalidID
 		}
 	}
-	if err := h.localRefusals.ReportLocalRefusal(ctx, id.Org, id.Gateway, conn, req.GetCode(), req.GetOperation(), run); err != nil {
+	if err := h.localRefusals.ReportLocalRefusal(ctx, id.Org, id.Gateway, conn, req.GetCode(), req.GetOperation(), run, connapp.RefusalDetail{
+		ElicitationReason: req.GetElicitationReason(), QuestionSHA256: req.GetQuestionSha256(),
+	}); err != nil {
 		return nil, err
 	}
 	return &pb.ReportLocalRefusalResponse{}, nil

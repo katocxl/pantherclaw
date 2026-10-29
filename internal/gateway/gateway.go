@@ -205,10 +205,12 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 			_, err := ctl.Gateway.ReportRevocationFailure(ctx, req)
 			return err
 		},
-		ReportLocalRefusal: func(ctx context.Context, conn, code, operation, run string) error {
-			_, err := ctl.Gateway.ReportLocalRefusal(ctx, &pb.ReportLocalRefusalRequest{
-				ConnectionId: conn, Code: code, Operation: operation, RunId: run,
-			})
+		ReportLocalRefusal: func(ctx context.Context, conn, code, operation, run string, detail dispatch.RefusalDetail) error {
+			req := &pb.ReportLocalRefusalRequest{ConnectionId: conn, Code: code, Operation: operation, RunId: run, QuestionSha256: detail.QuestionSHA256}
+			if detail.ElicitationReason != "" {
+				req.ElicitationReason = &detail.ElicitationReason
+			}
+			_, err := ctl.Gateway.ReportLocalRefusal(ctx, req)
 			return err
 		},
 	}

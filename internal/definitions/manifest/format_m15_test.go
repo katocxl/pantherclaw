@@ -18,6 +18,8 @@ import (
 const (
 	getMCPMapping = "      - channel: mcp\n        tool: get_refund\n        route: payments-refund-get\n" +
 		"        description: Read one refund on the simulated payments API by its id.\n"
+	httpGetMapping = "      - channel: http\n        method: GET\n        path: /v1/refunds/{refund}\n        route: payments-refund-get\n" +
+		"        extract:\n          target_id: path.refund\n          params: {}\n"
 	getDispatch = "    dispatch:\n      http:\n        method: GET\n        path: /v1/refunds/{target.id}\n"
 	// ResourceMapping replaces the mapping up to its input schema, which
 	// the test removes separately.
@@ -37,6 +39,8 @@ func withResource(t *testing.T) []byte {
 	t.Helper()
 	raw := mutate(t, readMock(t), getMCPMapping, resourceMapping)
 	raw = mutate(t, raw, getSchema, resourceExtract)
+	// One operation is a tool or a resource, never both (D36).
+	raw = mutate(t, raw, httpGetMapping, "")
 	return mutate(t, raw, getDispatch, resourceDispatch)
 }
 
@@ -53,7 +57,7 @@ func TestHR419_ResourcesAreReviewedReadTemplates(t *testing.T) {
 		t.Fatal(err)
 	}
 	d, _ := p.Definition("payments.refund.get")
-	m := d.Mappings[1]
+	m := d.Mappings[0]
 	tmpl, ok := m.ResourceTemplate()
 	if m.Channel != domain.ChannelMCPResource || !ok || tmpl.Static() || tmpl.Vars[0] != "refund" ||
 		d.Dispatch.MCP.Resource != "payments://refunds/{target.id}" || d.Dispatch.MCP.Tool != "" {
@@ -82,6 +86,10 @@ func TestHR419_ResourcesAreReviewedReadTemplates(t *testing.T) {
 		"an agent-chosen host":          {"'payments://refunds/{target.id}'", "'payments://{target.id}/refunds'"},
 		"side effects on a resource":    {"    params: {}\n    effects:\n      - kind: none\n        description: Reads only\n", "    params: {}\n    effects:\n      - kind: none\n        description: Reads only\n    side_effects:\n      - kind: payments.note\n        description: Leaves a note\n"},
 		"a resource route mapped twice": {resourceMapping + resourceExtract, resourceMapping + resourceExtract + "          params: {}\n" + strings.Replace(resourceMapping, "route: payments-refund-get", "route: payments-refund-get2", 1) + resourceExtract},
+		// One operation is a tool or a resource, never both (D36).
+		"an http mapping beside it": {resourceMapping, httpGetMapping + resourceMapping},
+		"an mcp tool beside it": {resourceMapping, "      - channel: mcp\n        tool: get_refund\n        route: payments-refund-get2\n" +
+			"        extract:\n          target_id: input.refund\n          params: {}\n" + resourceMapping},
 	} {
 		changed := strings.Replace(string(raw), change[0], change[1], 1)
 		if changed == string(raw) {
