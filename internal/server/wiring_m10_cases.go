@@ -44,7 +44,7 @@ func caseOpener(d apiDeps) reflexports.CaseOpener { //nolint:unused // wired by 
 // API (G0 M10 D19, D20).
 func registerCases(rs *connect.Server, d apiDeps, grants *grantsapp.Service) {
 	pantherclawv1connect.RegisterCaseServiceHandler(rs, casesrpc.New(caseService(d)))
-	inv := &investigations.Service{Pool: d.pool, Budgets: inspectBudgets{grants: grants}}
+	inv := &investigations.Service{Pool: d.pool, Budgets: inspectBudgets{state: grants.BudgetState}}
 	if e := m10CaseEditions(d); e != nil {
 		inv.Editions = e
 	}

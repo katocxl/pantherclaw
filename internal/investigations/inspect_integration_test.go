@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/investigations"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -163,4 +164,61 @@ func TestHR401_RunInspectionReadsEachSectionWithItsOwnPermission(t *testing.T) {
 	if _, err := svc.InspectRun(f.as(td.RoleApprover), run, investigations.InspectOptions{}); !errors.Is(err, investigations.ErrRunNotFound) {
 		t.Errorf("approver (no evidence.read): %v, want not found", err)
 	}
+}
+
+// sections is a scope that may read every section of what it sees.
+type sections struct{ scope }
+
+func (s sections) Readable(ctx context.Context, _ investigations.Section, agent ids.UUID) (bool, error) {
+	return s.Visible(ctx, agent)
+}
+
+// children gives run n child runs of agent, launched by an instance of
+// the fixture's agent, created at start plus one millisecond each.
+func (f *fixture) children(t *testing.T, run, agent ids.UUID, n int, start time.Time) {
+	t.Helper()
+	inst := ids.NewV7()
+	f.exec(t, `INSERT INTO pc.agent_instances (org_id, id, agent_id, jkt, public_jwk, state, enrolled_via)
+		VALUES ($1, $2, $3, $4, '{}', 'ADMITTED', 'discovery')`, f.org, inst, f.agent, inst.String()[:36]+"0000000")
+	f.exec(t, `INSERT INTO pc.runs (org_id, id, agent_id, environment_id, launcher_instance_id, principal_user_id, principal_source,
+		parent_run_id, depth, created_at, expires_at)
+		SELECT $1, gen_random_uuid(), $2, $3, $4, $5, 'parent_run', $6, 1,
+		       $7::timestamptz + i * interval '1 millisecond', $7::timestamptz + i * interval '1 millisecond' + interval '1 hour'
+		FROM generate_series(1, $8::int) AS i`, f.org, agent, f.env, inst, f.alice, run, start, n)
+}
+
+// TestRunInspectionNeverCountsHiddenChildren: children the caller cannot
+// see are neither listed nor counted toward children_truncated, and a
+// visible child after more than a page of hidden ones is still found;
+// more than 200 visible children are truncated (HR-401, rows26 D25).
+// Covers: F224
+func TestRunInspectionNeverCountsHiddenChildren(t *testing.T) {
+	f := newFixture(t)
+	s := sections{scope{f.agent: true}}
+	lineage := investigations.InspectOptions{Sections: []investigations.Section{investigations.SectionLineage}}
+	start := time.Now().Add(-time.Hour).UTC().Truncate(time.Microsecond)
+
+	run := f.run(t, f.agent)
+	f.children(t, run, f.other, investigations.MaxChildren+50, start)
+	f.children(t, run, f.agent, 1, start.Add(time.Minute))
+	many := f.run(t, f.agent)
+	f.children(t, many, f.agent, investigations.MaxChildren+1, start)
+
+	f.read(t, func(ctx context.Context, tx db.TenantTx) error {
+		in, err := investigations.InspectRun(ctx, tx, s, run, lineage)
+		if err != nil {
+			return err
+		}
+		if in.Lineage == nil || len(in.Lineage.Children) != 1 || in.Lineage.ChildrenTruncated {
+			t.Errorf("hidden children counted: %+v", in.Lineage)
+		}
+		in, err = investigations.InspectRun(ctx, tx, s, many, lineage)
+		if err != nil {
+			return err
+		}
+		if in.Lineage == nil || len(in.Lineage.Children) != investigations.MaxChildren || !in.Lineage.ChildrenTruncated {
+			t.Errorf("%d visible children, truncated %v", len(in.Lineage.Children), in.Lineage.ChildrenTruncated)
+		}
+		return nil
+	})
 }

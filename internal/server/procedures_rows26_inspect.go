@@ -5,13 +5,13 @@ package server
 
 import (
 	"context"
-	"errors"
 	"maps"
 
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/investigations"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -27,7 +27,9 @@ func init() { maps.Copy(procedurePermissions, inspectProcedures) }
 
 // inspectBudgets reads the remaining limits of an inspection's budget
 // lines from the grants' budget state (F227).
-type inspectBudgets struct{ grants *grantsapp.Service }
+type inspectBudgets struct {
+	state func(context.Context, domain.GrantID) ([]grantsapp.AccountState, error) // grantsapp.Service.BudgetState
+}
 
 var _ investigations.BudgetLimits = inspectBudgets{}
 
@@ -38,8 +40,11 @@ func (b inspectBudgets) Remaining(ctx context.Context, grants []ids.UUID) (map[i
 		if err != nil {
 			continue
 		}
-		accounts, err := b.grants.BudgetState(ctx, id)
-		if errors.Is(err, grantsapp.ErrGrantNotFound) {
+		// A grant the caller may not read the budget of, or one that is gone,
+		// leaves its lines without remaining; the inspection does not fail
+		// (HR-401, rows26 D25).
+		accounts, err := b.state(ctx, id)
+		if c := pcerr.CodeOf(err); c == pcerr.PermissionDenied || c == pcerr.NotFound {
 			continue
 		} else if err != nil {
 			return nil, err

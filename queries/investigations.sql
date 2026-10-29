@@ -89,6 +89,16 @@ WHERE org_id = sqlc.arg(org_id) AND parent_run_id = sqlc.arg(run_id)
 ORDER BY created_at, id
 LIMIT sqlc.arg(max_rows);
 
+-- Child runs of a run after a (created_at, id) position, for reading
+-- page by page until enough visible children are found (rows26 D25).
+-- name: InvRunChildrenAfter :many
+SELECT id, agent_id, state, created_at, ended_at
+FROM pc.runs
+WHERE org_id = sqlc.arg(org_id) AND parent_run_id = sqlc.arg(run_id)
+  AND (created_at, id) > (sqlc.arg(after_time)::timestamptz, sqlc.arg(after_id)::uuid)
+ORDER BY created_at, id
+LIMIT sqlc.arg(max_rows);
+
 -- Authority changes of an agent in a window: grants issued or revoked and
 -- grant revisions made (F241, F284).
 -- name: InvGrantChanges :many
