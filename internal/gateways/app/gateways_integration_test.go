@@ -463,15 +463,15 @@ func TestIntGatewaysListInPages(t *testing.T) {
 	if _, err := e.svc.RevokeGateway(e.admin, made[2], "test"); err != nil {
 		t.Fatal(err)
 	}
-	first, next, err := e.svc.ListGateways(e.admin, 1, "", false)
+	first, _, next, err := e.svc.ListGateways(e.admin, 1, "", false)
 	if err != nil || len(first) != 1 || first[0].ID != made[0] || next == "" {
 		t.Fatalf("first page: %d %q %v", len(first), next, err)
 	}
-	second, next, err := e.svc.ListGateways(e.admin, 1, next, false)
+	second, _, next, err := e.svc.ListGateways(e.admin, 1, next, false)
 	if err != nil || len(second) != 1 || second[0].ID != made[1] || next != "" {
 		t.Fatalf("second page: %d %q %v", len(second), next, err)
 	}
-	all, _, err := e.svc.ListGateways(e.admin, 0, "", true)
+	all, _, _, err := e.svc.ListGateways(e.admin, 0, "", true)
 	if err != nil || len(all) != 3 {
 		t.Fatalf("with revoked: %d %v", len(all), err)
 	}

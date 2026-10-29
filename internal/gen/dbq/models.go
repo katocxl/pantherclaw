@@ -1994,6 +1994,37 @@ type PcGatewayEpochDelivery struct {
 	DeliveredAt time.Time
 }
 
+type PcGatewayMcpState struct {
+	OrgID        ids.OrgID
+	GatewayID    ids.UUID
+	Kind         string
+	Key          []byte
+	ConnectionID ids.UUID
+	RunID        *ids.UUID
+	InstanceID   *ids.UUID
+	Jkt          *string
+	ActionID     *string
+	Status       *string
+	Busy         bool
+	SealedBody   []byte
+	Version      int64
+	ExpireTime   time.Time
+	UpdateTime   time.Time
+	CreatedAt    time.Time
+}
+
+type PcGatewayReplica struct {
+	OrgID         ids.OrgID
+	GatewayID     ids.UUID
+	ReplicaID     string
+	Version       string
+	Build         string
+	StartTime     *time.Time
+	ConfigVersion int64
+	Connections   []byte
+	LastSeen      time.Time
+}
+
 type PcGithubExemption struct {
 	OrgID        ids.OrgID
 	GithubUserID int64
