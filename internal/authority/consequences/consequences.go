@@ -159,7 +159,7 @@ type Input struct {
 	// consequences are UNKNOWN.
 	More func(ctx context.Context, on *defs.Definition, targetID string, names []string) (map[string]fdomain.Fact, map[string]time.Duration, error)
 	// Direct decides as pipeline version 4 did, for its replay (G0 M17
-	// D133): the rules for the action's operation only, no chain and no
+	// D133, D134): the rules for the action's operation only, no chain and no
 	// expiry.
 	Direct bool
 }

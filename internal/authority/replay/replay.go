@@ -312,9 +312,9 @@ func (e *Engine) served(ctx context.Context, org ids.OrgID, rec *recording.Recor
 		case err != nil:
 			return s, nil, fmt.Errorf("replay: definition %s: %w", d.Digest, err)
 		}
-		if rec.Pipeline == 4 {
-			// Version 4 had no chains: the rules for the operation only
-			// (D133), which its recording pins.
+		if rec.Pipeline < 6 {
+			// Versions before 6 had no chains: the rules for the operation only
+			// (D133, D134), which their recordings pin.
 			pinned.Consequences = consequences.Direct(pinned.Consequences, pinned.Definition.Operation)
 		}
 		s.Definitions[d.Digest], s.Consequences[d.Digest] = pinned.Definition, pinned.Consequences

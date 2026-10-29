@@ -32,10 +32,10 @@ func TestHR234_RecordingFromBeforeRolloutsReplaysIdentically(t *testing.T) {
 }
 
 // TestHR234_RecordingOfThisVersionReplaysIdentically: a recording made by
-// pipeline version 5 (testdata, the same hold recorded by this code)
+// pipeline version 6 (testdata, the same hold recorded by this code)
 // replays the same way.
 func TestHR234_RecordingOfThisVersionReplaysIdentically(t *testing.T) {
-	replaysIdentically(t, "recording_v5_hold", pipeline.Version)
+	replaysIdentically(t, "recording_v6_hold", pipeline.Version)
 }
 
 // replaysIdentically checks the golden recording name, made by pipeline
