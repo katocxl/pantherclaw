@@ -19,4 +19,8 @@ package pipeline
 // 4: step 6 also checks the definition's fact bindings (Prerequisite.Binds,
 // HR-205): from the same recorded reads, a merge whose sha differs from its
 // fact's is CANNOT_AUTHORIZE HEAD_MOVED, which version 3 did not decide.
-const Version = 4
+//
+// 5: step 6 reads the identity-risk facts a policy using `principal` needs,
+// and step 7 asks the org's active external policy checks (G0 M16 D81,
+// D82), whose answers a recording does not hold.
+const Version = 5

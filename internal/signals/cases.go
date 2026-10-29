@@ -168,6 +168,7 @@ func (s *Service) accepted(ctx context.Context, tx db.TenantTx, r Received, entr
 			return err
 		}
 	}
+	s.identityRisk(ctx, tx, r) // G0 M16 D82 (risk.go)
 	return s.playbookActs(ctx, tx, r, caseID)
 }
 

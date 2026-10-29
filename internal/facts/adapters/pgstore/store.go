@@ -78,7 +78,7 @@ func (s *Store) CreateProvider(ctx context.Context, org ids.OrgID, p domain.Prov
 			if err := q.InsertFactDeclaration(ctx, dbq.InsertFactDeclarationParams{
 				OrgID: org, ProviderID: p.ID, Name: d.Name, ValueType: string(d.Type), SubjectType: d.SubjectType,
 				MaxLagS:      int32(d.MaxLag / time.Second), //nolint:gosec // at most a day
-				ConnectionID: opt(p.ConnectionID),
+				ConnectionID: opt(p.ConnectionID), Kind: string(d.Kind.Of()),
 			}); err != nil {
 				return err
 			}
@@ -130,7 +130,7 @@ func (s *Store) ProviderFor(ctx context.Context, org ids.OrgID, serviceAccount i
 		for _, d := range decls {
 			p.Facts = append(p.Facts, domain.Declaration{
 				Name: d.Name, Type: domain.Type(d.ValueType), SubjectType: d.SubjectType,
-				MaxLag: time.Duration(d.MaxLagS) * time.Second,
+				MaxLag: time.Duration(d.MaxLagS) * time.Second, Kind: domain.Kind(d.Kind),
 			})
 		}
 		return nil
@@ -204,12 +204,13 @@ func (s *Store) Put(ctx context.Context, org ids.OrgID, f domain.Fact) (bool, er
 		if conn == nil {
 			tag, err = q.PutFact(ctx, dbq.PutFactParams{
 				OrgID: org, ID: ids.NewV7(), Name: f.Name, SubjectType: f.SubjectType, SubjectID: f.SubjectID,
-				ProviderID: f.ProviderID, Value: raw, ObservedAt: f.ObservedAt,
+				ProviderID: f.ProviderID, Value: raw, ObservedAt: f.ObservedAt, Source: optString(f.Source), Method: optString(f.Method),
 			})
 		} else {
 			tag, err = q.PutConnectionFact(ctx, dbq.PutConnectionFactParams{
 				OrgID: org, ID: ids.NewV7(), Name: f.Name, SubjectType: f.SubjectType, SubjectID: f.SubjectID,
 				ProviderID: f.ProviderID, Value: raw, ObservedAt: f.ObservedAt, ConnectionID: conn,
+				Source: optString(f.Source), Method: optString(f.Method),
 			})
 		}
 		if err != nil {
@@ -351,7 +352,7 @@ func (s *Store) ListProviders(ctx context.Context, org ids.OrgID, includeDisable
 			at[r.ID] = i
 			out = append(out, domain.Provider{
 				ID: r.ID, Org: org, Name: r.Name, ServiceAccountID: val(r.ServiceAccountID), GatewayID: val(r.GatewayID),
-				ConnectionID: val(r.ConnectionID), State: domain.ProviderState(r.State),
+				ConnectionID: val(r.ConnectionID), State: domain.ProviderState(r.State), Builtin: r.Builtin,
 			})
 		}
 		decls, err := q.ListProviderDeclarations(ctx, org, provIDs)
@@ -362,6 +363,7 @@ func (s *Store) ListProviders(ctx context.Context, org ids.OrgID, includeDisable
 			p := &out[at[d.ProviderID]]
 			p.Facts = append(p.Facts, domain.Declaration{
 				Name: d.Name, Type: domain.Type(d.ValueType), SubjectType: d.SubjectType, MaxLag: time.Duration(d.MaxLagS) * time.Second,
+				Kind: domain.Kind(d.Kind),
 			})
 		}
 		return nil
@@ -384,6 +386,7 @@ func (s *Store) About(ctx context.Context, org ids.OrgID, subjectType, subjectID
 			out = append(out, app.Recorded{
 				Name: r.Name, SubjectType: subjectType, SubjectID: subjectID, Value: r.Value,
 				ObservedAt: r.ObservedAt, RecordedAt: r.RecordedAt, ProviderID: r.ProviderID,
+				Source: deref(r.Source), Method: deref(r.Method),
 			})
 		}
 		return err
@@ -431,9 +434,26 @@ func (s *Store) ProviderForConnection(ctx context.Context, org ids.OrgID, connec
 		for _, d := range decls {
 			p.Facts = append(p.Facts, domain.Declaration{
 				Name: d.Name, Type: domain.Type(d.ValueType), SubjectType: d.SubjectType, MaxLag: time.Duration(d.MaxLagS) * time.Second,
+				Kind: domain.Kind(d.Kind),
 			})
 		}
 		return nil
 	}, db.ReadOnly())
 	return p, err
+}
+
+// optString is a nullable text: nil for "".
+func optString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// deref is a nullable text's value: "" for nil.
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
