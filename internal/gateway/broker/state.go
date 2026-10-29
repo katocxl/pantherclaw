@@ -15,8 +15,8 @@ import (
 // MCP task bodies (G0 M15 D13, HR-411): a task the gateway keeps on the
 // server is sealed to its own broker key, which every replica of the
 // gateway shares, so any replica opens it and the server never does.
-// The associated data binds the org, the gateway, the kind and the
-// entry's key, so a body opens only as the entry it was sealed for.
+// The associated data binds the org, the gateway, the kind, the entry's
+// key and its binding, so a body opens only as the entry it was sealed for.
 
 // stateInfo is the HPKE info of a sealed MCP state body.
 var stateInfo = []byte("pc.mcp_state.v1")
@@ -25,9 +25,12 @@ var stateInfo = []byte("pc.mcp_state.v1")
 // another entry's body).
 var ErrStateOpen = errors.New("broker: the MCP state body does not open")
 
-// StateAAD is the associated data of an MCP state body (D13).
-func StateAAD(org, gateway, kind string, key []byte) []byte {
-	return []byte("pc.mcp_state.v1|" + org + "|" + gateway + "|" + kind + "|" + hex.EncodeToString(key))
+// StateAAD is the associated data of an MCP state body (D13, D41): it also
+// binds the entry's connection, run and instance, so a row whose binding
+// is rewritten on the server no longer opens.
+func StateAAD(org, gateway, kind string, key []byte, connection, run, instance string) []byte {
+	return []byte("pc.mcp_state.v1|" + org + "|" + gateway + "|" + kind + "|" + hex.EncodeToString(key) + "|" + connection + "|" + run +
+		"|" + instance)
 }
 
 // SealState seals an MCP state body to the key's public half.

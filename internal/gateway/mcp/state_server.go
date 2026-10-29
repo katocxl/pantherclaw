@@ -167,8 +167,9 @@ type taskBody struct {
 
 func taskKey(id string) []byte { k := sha256.Sum256([]byte(id)); return k[:] }
 
-func (s *serverState) aad(k []byte) []byte {
-	return broker.StateAAD(s.org, s.gateway, "TASK", k)
+// aad is a sealed body's associated data (D13, D41).
+func (s *serverState) aad(kind string, k []byte, b binding) []byte {
+	return broker.StateAAD(s.org, s.gateway, kind, k, b.conn, b.run, b.instance)
 }
 
 // sealTask builds a task's entry with its sealed body.
@@ -181,7 +182,7 @@ func (s *serverState) sealTask(t *task) (*pb.MCPStateEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	sealed, err := s.seal.SealState(s.aad(k), pt)
+	sealed, err := s.seal.SealState(s.aad("TASK", k, t.binding), pt)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +199,7 @@ func (s *serverState) openTask(id string, e *pb.MCPStateEntry) (task, bool) {
 	if s.seal == nil {
 		return task{}, false
 	}
-	pt, err := s.seal.OpenState(s.aad(e.GetKey()), e.GetSealedBody())
+	pt, err := s.seal.OpenState(s.aad("TASK", e.GetKey(), entryBinding(e)), e.GetSealedBody())
 	if err != nil {
 		return task{}, false
 	}
@@ -351,7 +352,12 @@ func (s *serverState) cancel(id string, b binding) bool {
 	if err != nil || entryBinding(e) != b {
 		return false
 	}
-	if t, ok := s.openTask(id, e); ok && t.action.Canonical != nil {
+	// A body that does not open is not this binding's task (D41).
+	t, ok := s.openTask(id, e)
+	if !ok {
+		return false
+	}
+	if t.action.Canonical != nil {
 		_, _ = s.del(pb.MCPStateKind_MCP_STATE_KIND_HOLD, t.key[:], 0)
 	}
 	deleted, err := s.del(pb.MCPStateKind_MCP_STATE_KIND_TASK, k, e.GetVersion())
@@ -499,7 +505,7 @@ func (s *serverState) putElicitation(k key, b binding, body []byte, expires time
 	if s.local != nil {
 		return s.local.putElicitation(k, b, body, expires, ifVersion)
 	}
-	sealed, err := s.seal.SealState(broker.StateAAD(s.org, s.gateway, "ELICITATION", k[:]), body)
+	sealed, err := s.seal.SealState(s.aad("ELICITATION", k[:], b), body)
 	if err != nil {
 		return 0, err
 	}
@@ -531,7 +537,7 @@ func (s *serverState) getElicitation(k key) (elicitation, bool, error) {
 	if !s.now().Before(e.GetExpireTime().AsTime()) {
 		return elicitation{}, false, nil
 	}
-	body, oerr := s.seal.OpenState(broker.StateAAD(s.org, s.gateway, "ELICITATION", k[:]), e.GetSealedBody())
+	body, oerr := s.seal.OpenState(s.aad("ELICITATION", k[:], entryBinding(e)), e.GetSealedBody())
 	if oerr == nil {
 		return elicitation{binding: entryBinding(e), body: body, version: e.GetVersion(), expires: e.GetExpireTime().AsTime()}, true, nil
 	}

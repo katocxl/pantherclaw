@@ -415,3 +415,42 @@ func TestHR412_ElicitationsAreSharedAndBounded(t *testing.T) {
 		t.Fatalf("without a broker key: %v, sent %d", err, len(f.seen)-sent)
 	}
 }
+
+// TestHR411_ARowRewrittenOnTheServerDoesNotOpen: a task's or an
+// elicitation's sealed body binds its connection, run and instance (G0 M15
+// D41). A row whose binding columns are rewritten on the server, under the
+// same key, does not open on the gateway and is not found, even by the
+// binding it was rewritten to.
+func TestHR411_ARowRewrittenOnTheServerDoesNotOpen(t *testing.T) {
+	c := &clock{t: time.Unix(1_800_000_000, 0)}
+	f := newFakeState(c.now)
+	a, b := replicas(t, f, c)
+	bind := binding{conn: holdConn, run: holdRun, instance: holdInst}
+	p := heldIR(t, nil)
+	tk := a.newTask(bind, p, actionKey(p.Action), dispatch.Result{Class: dispatch.Held}, toolResult{})
+	if tk == nil {
+		t.Fatal("no task")
+	}
+	ek := key{0xe2}
+	if _, err := a.putElicitation(ek, bind, []byte(`{}`), c.t.Add(10*time.Minute), 0); err != nil {
+		t.Fatal(err)
+	}
+	other := binding{conn: holdConn, run: ids.NewV7().String(), instance: holdInst}
+	f.mu.Lock()
+	for _, e := range f.m {
+		e.RunId = other.run
+	}
+	f.mu.Unlock()
+	if _, _, found := b.lookup(tk.id, other, true); found {
+		t.Fatal("a task whose run was rewritten on the server was found")
+	}
+	if _, _, found := b.lookup(tk.id, bind, false); found {
+		t.Fatal("a rewritten task was found by its first binding")
+	}
+	if b.cancel(tk.id, other) {
+		t.Fatal("a rewritten task was canceled")
+	}
+	if _, found, err := b.getElicitation(ek); found || err != nil {
+		t.Fatalf("an elicitation whose run was rewritten on the server: %v %v", found, err)
+	}
+}
