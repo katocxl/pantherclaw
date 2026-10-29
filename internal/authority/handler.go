@@ -123,14 +123,15 @@ func (h *Handler) Authorize(ctx context.Context, req *pantherclawv1.AuthorizeReq
 		})
 	}
 	out.Obligations = gatewayObligations(res.Obligations)
-	out.Consequences = consequencesToProto(res.Consequences)
+	out.Consequences = consequencesToProto(res.Consequences, res.Decision.Permits() && res.Mode != pipeline.ModeMonitor)
 	out.AgentExplanation = agentExplanation(h.svc.consoleURL, res, out.GetTransactionId())
 	return out, nil
 }
 
-// consequencesToProto is what the consequence rules said; a rule that
-// could not be evaluated is in the checklist, not here.
-func consequencesToProto(cs []consequences.Consequence) []*pantherclawv1.Consequence {
+// consequencesToProto is what the consequence rules said, labelled for a
+// decision that permits the action (an enforced permit) or not (D111); a
+// rule that could not be evaluated is in the checklist, not here.
+func consequencesToProto(cs []consequences.Consequence, permits bool) []*pantherclawv1.Consequence {
 	var out []*pantherclawv1.Consequence
 	index := map[int]int32{} // position in cs -> index in out
 	for i, c := range cs {
@@ -142,6 +143,7 @@ func consequencesToProto(cs []consequences.Consequence) []*pantherclawv1.Consequ
 			RuleId: c.Rule, Operation: c.Operation, TargetType: c.Target.Type, TargetId: c.Target.ID, Environments: c.Environments,
 			State: consequenceState[c.State], Unknown: c.Unknown, FactsDigest: c.FactsDigest,
 			Depth: int32(depth), Source: consequenceSource[source], //nolint:gosec // ≤ MaxDepth
+			Label: ConsequenceLabel(consequences.LabelOf(c.State, permits, false, false)),
 		}
 		if p, ok := index[parent]; chained && ok {
 			pc.ParentIndex = &p
@@ -339,4 +341,18 @@ func accessOf(a *pantherclawv1.CredentialAccess) *Access {
 		out.Expires = a.GetExpireTime().AsTime()
 	}
 	return out
+}
+
+var consequenceLabels = map[consequences.Label]pantherclawv1.ConsequenceLabel{
+	consequences.LabelMayCause:     pantherclawv1.ConsequenceLabel_CONSEQUENCE_LABEL_MAY_CAUSE,
+	consequences.LabelAuthorized:   pantherclawv1.ConsequenceLabel_CONSEQUENCE_LABEL_AUTHORIZED,
+	consequences.LabelUnknown:      pantherclawv1.ConsequenceLabel_CONSEQUENCE_LABEL_UNKNOWN,
+	consequences.LabelNotTriggered: pantherclawv1.ConsequenceLabel_CONSEQUENCE_LABEL_NOT_TRIGGERED,
+	consequences.LabelAccepted:     pantherclawv1.ConsequenceLabel_CONSEQUENCE_LABEL_ACCEPTED,
+	consequences.LabelConfirmed:    pantherclawv1.ConsequenceLabel_CONSEQUENCE_LABEL_CONFIRMED,
+}
+
+// ConsequenceLabel is a label's protobuf value.
+func ConsequenceLabel(l consequences.Label) pantherclawv1.ConsequenceLabel {
+	return consequenceLabels[l]
 }

@@ -267,3 +267,23 @@ FROM pc.reservations res
 JOIN pc.budget_accounts ba ON ba.org_id = res.org_id AND ba.id = res.account_id
 WHERE res.org_id = sqlc.arg(org_id) AND res.transaction_id = sqlc.arg(transaction_id)
 ORDER BY ba.owner_id, ba.rule, ba.id;
+
+-- Why each consequence of the transaction's latest evaluation could not be
+-- ruled out, in rule order (G0 M17 D111, F409, F412).
+-- name: ExplanationConsequences :many
+SELECT c.position, c.rule_id, c.unknown
+FROM pc.decision_consequences c
+WHERE c.org_id = sqlc.arg(org_id) AND c.transaction_id = sqlc.arg(transaction_id)
+  AND c.evaluation = (SELECT max(d.evaluation) FROM pc.decision_consequences d
+                      WHERE d.org_id = c.org_id AND d.transaction_id = c.transaction_id)
+ORDER BY c.position;
+
+-- The consequence transactions opened for a transaction once its effect
+-- was confirmed, with their own effect (D111, F410: ACCEPTED, CONFIRMED).
+-- name: ExplanationConsequenceTransactions :many
+SELECT t.operation, coalesce(t.target_type, '')::text AS target_type, coalesce(t.target_id, '')::text AS target_id,
+       coalesce(t.effect_state, '')::text AS effect_state
+FROM pc.transaction_links l
+JOIN pc.transactions t ON t.org_id = l.org_id AND t.id = l.to_transaction_id
+WHERE l.org_id = sqlc.arg(org_id) AND l.from_transaction_id = sqlc.arg(transaction_id) AND l.kind = 'consequence'
+ORDER BY t.created_at;

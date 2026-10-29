@@ -245,6 +245,11 @@ message Consequence {
   optional int32 parent_index = 10;
   // Where the rule comes from (D106).
   ConsequenceSource source = 11;
+  // What the consequence is for this decision (D111, F410): MAY_CAUSE,
+  // AUTHORIZED (predicted under an enforced permit), UNKNOWN or
+  // NOT_TRIGGERED. ACCEPTED and CONFIRMED come only later, in a
+  // transaction's explanation.
+  ConsequenceLabel label = 12;
 }
 
 // ConsequenceSource is where a consequence rule comes from (G0 M17 D106).
@@ -736,6 +741,8 @@ message DecisionExplanation {
   string execution_state = 14;
   // What a person can do next.
   repeated NextAction next_actions = 15;
+  // The consequences of the decision (G0 M17 D111), in rule order.
+  repeated ExplainedConsequence consequences = 16;
 }
 
 // ExplainedAction is an action's canonical fields.
@@ -786,4 +793,51 @@ message ExplainedBudget {
   string unknown = 7;
   // The grant or guardrail that owns the rule.
   string owner_id = 8;
+}
+
+// ConsequenceLabel is what a consequence is, apart from what was
+// authorized and what was confirmed (G0 M17 D111, F410). It is derived
+// where it is shown, never stored.
+enum ConsequenceLabel {
+  CONSEQUENCE_LABEL_UNSPECIFIED = 0;
+  // The rule predicts it; nothing permitted the action (or the decision
+  // was observe-only).
+  CONSEQUENCE_LABEL_MAY_CAUSE = 1;
+  // Predicted, and the decision permitted the action, the consequence with
+  // it.
+  CONSEQUENCE_LABEL_AUTHORIZED = 2;
+  // It could not be ruled out.
+  CONSEQUENCE_LABEL_UNKNOWN = 3;
+  // The rule's facts rule it out.
+  CONSEQUENCE_LABEL_NOT_TRIGGERED = 4;
+  // Its own transaction was opened once the action's effect was confirmed.
+  CONSEQUENCE_LABEL_ACCEPTED = 5;
+  // That transaction's effect is CONFIRMED.
+  CONSEQUENCE_LABEL_CONFIRMED = 6;
+}
+
+// ExplainedConsequence is one consequence of a decision, explained (G0
+// M17 D111; F407, F409, F410).
+message ExplainedConsequence {
+  // The rule, and where it comes from ("package" or "customer").
+  string rule_id = 1;
+  string source = 2;
+  // The rule ids from the action to this consequence (F411).
+  repeated string chain = 3;
+  // The consequence operation and its target ("<type>:<id>"), and the
+  // environments a predicted one reaches.
+  string operation = 4;
+  string target = 5;
+  repeated string environments = 6;
+  // What the rule says.
+  string description = 7;
+  // The names of the facts the rule needs (never their values; F407).
+  repeated string evidence = 8;
+  // The last day of the rule's review (YYYY-MM-DD; F409).
+  string valid_until = 9;
+  // Why an UNKNOWN consequence could not be ruled out, and where its chain
+  // stopped.
+  repeated string unknown_links = 10;
+  // What it is now.
+  ConsequenceLabel label = 11;
 }

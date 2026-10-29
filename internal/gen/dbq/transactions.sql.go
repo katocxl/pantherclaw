@@ -302,6 +302,86 @@ func (q *Queries) ExplanationBudgetAccounts(ctx context.Context, orgID ids.OrgID
 	return items, nil
 }
 
+const explanationConsequenceTransactions = `-- name: ExplanationConsequenceTransactions :many
+SELECT t.operation, coalesce(t.target_type, '')::text AS target_type, coalesce(t.target_id, '')::text AS target_id,
+       coalesce(t.effect_state, '')::text AS effect_state
+FROM pc.transaction_links l
+JOIN pc.transactions t ON t.org_id = l.org_id AND t.id = l.to_transaction_id
+WHERE l.org_id = $1 AND l.from_transaction_id = $2 AND l.kind = 'consequence'
+ORDER BY t.created_at
+`
+
+type ExplanationConsequenceTransactionsRow struct {
+	Operation   string
+	TargetType  string
+	TargetID    string
+	EffectState string
+}
+
+// The consequence transactions opened for a transaction once its effect
+// was confirmed, with their own effect (D111, F410: ACCEPTED, CONFIRMED).
+func (q *Queries) ExplanationConsequenceTransactions(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID) ([]ExplanationConsequenceTransactionsRow, error) {
+	rows, err := q.db.Query(ctx, explanationConsequenceTransactions, orgID, transactionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExplanationConsequenceTransactionsRow{}
+	for rows.Next() {
+		var i ExplanationConsequenceTransactionsRow
+		if err := rows.Scan(
+			&i.Operation,
+			&i.TargetType,
+			&i.TargetID,
+			&i.EffectState,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const explanationConsequences = `-- name: ExplanationConsequences :many
+SELECT c.position, c.rule_id, c.unknown
+FROM pc.decision_consequences c
+WHERE c.org_id = $1 AND c.transaction_id = $2
+  AND c.evaluation = (SELECT max(d.evaluation) FROM pc.decision_consequences d
+                      WHERE d.org_id = c.org_id AND d.transaction_id = c.transaction_id)
+ORDER BY c.position
+`
+
+type ExplanationConsequencesRow struct {
+	Position int32
+	RuleID   string
+	Unknown  []byte
+}
+
+// Why each consequence of the transaction's latest evaluation could not be
+// ruled out, in rule order (G0 M17 D111, F409, F412).
+func (q *Queries) ExplanationConsequences(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID) ([]ExplanationConsequencesRow, error) {
+	rows, err := q.db.Query(ctx, explanationConsequences, orgID, transactionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExplanationConsequencesRow{}
+	for rows.Next() {
+		var i ExplanationConsequencesRow
+		if err := rows.Scan(&i.Position, &i.RuleID, &i.Unknown); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const explanationFacts = `-- name: ExplanationFacts :one
 SELECT coalesce(t.target_type, '')::text AS target_type, coalesce(t.target_id, '')::text AS target_id, r.environment_id
 FROM pc.transactions t

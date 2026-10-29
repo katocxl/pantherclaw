@@ -30817,6 +30817,20 @@
         ],
         "description": "ChecklistStatus is the outcome of one checklist item."
       },
+      "pantherclaw.v1.ConsequenceLabel": {
+        "type": "string",
+        "title": "ConsequenceLabel",
+        "enum": [
+          "CONSEQUENCE_LABEL_UNSPECIFIED",
+          "CONSEQUENCE_LABEL_MAY_CAUSE",
+          "CONSEQUENCE_LABEL_AUTHORIZED",
+          "CONSEQUENCE_LABEL_UNKNOWN",
+          "CONSEQUENCE_LABEL_NOT_TRIGGERED",
+          "CONSEQUENCE_LABEL_ACCEPTED",
+          "CONSEQUENCE_LABEL_CONFIRMED"
+        ],
+        "description": "ConsequenceLabel is what a consequence is, apart from what was\n authorized and what was confirmed (G0 M17 D111, F410). It is derived\n where it is shown, never stored."
+      },
       "pantherclaw.v1.ConsequenceSource": {
         "type": "string",
         "title": "ConsequenceSource",
@@ -31293,6 +31307,11 @@
             "title": "source",
             "description": "Where the rule comes from (D106).",
             "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceSource"
+          },
+          "label": {
+            "title": "label",
+            "description": "What the consequence is for this decision (D111, F410): MAY_CAUSE,\n AUTHORIZED (predicted under an enforced permit), UNKNOWN or\n NOT_TRIGGERED. ACCEPTED and CONFIRMED come only later, in a\n transaction's explanation.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceLabel"
           }
         },
         "title": "Consequence",
@@ -31567,6 +31586,14 @@
             },
             "title": "next_actions",
             "description": "What a person can do next."
+          },
+          "consequences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ExplainedConsequence"
+            },
+            "title": "consequences",
+            "description": "The consequences of the decision (G0 M17 D111), in rule order."
           }
         },
         "title": "DecisionExplanation",
@@ -31662,6 +31689,78 @@
         "title": "ExplainedBudget",
         "additionalProperties": false,
         "description": "ExplainedBudget is one budget rule at decision time. Amounts are decimal\n strings in its currency."
+      },
+      "pantherclaw.v1.ExplainedConsequence": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "title": "rule_id",
+            "description": "The rule, and where it comes from (\"package\" or \"customer\")."
+          },
+          "source": {
+            "type": "string",
+            "title": "source"
+          },
+          "chain": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "chain",
+            "description": "The rule ids from the action to this consequence (F411)."
+          },
+          "operation": {
+            "type": "string",
+            "title": "operation",
+            "description": "The consequence operation and its target (\"\u003ctype\u003e:\u003cid\u003e\"), and the\n environments a predicted one reaches."
+          },
+          "target": {
+            "type": "string",
+            "title": "target"
+          },
+          "environments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "environments"
+          },
+          "description": {
+            "type": "string",
+            "title": "description",
+            "description": "What the rule says."
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "evidence",
+            "description": "The names of the facts the rule needs (never their values; F407)."
+          },
+          "validUntil": {
+            "type": "string",
+            "title": "valid_until",
+            "description": "The last day of the rule's review (YYYY-MM-DD; F409)."
+          },
+          "unknownLinks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "unknown_links",
+            "description": "Why an UNKNOWN consequence could not be ruled out, and where its chain\n stopped."
+          },
+          "label": {
+            "title": "label",
+            "description": "What it is now.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceLabel"
+          }
+        },
+        "title": "ExplainedConsequence",
+        "additionalProperties": false,
+        "description": "ExplainedConsequence is one consequence of a decision, explained (G0\n M17 D111; F407, F409, F410)."
       },
       "pantherclaw.v1.ExplainedGrant": {
         "type": "object",

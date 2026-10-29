@@ -208,6 +208,10 @@ type Consequence struct {
 	// Unknown says, for an UNKNOWN consequence, why each fact could not
 	// be used, or why the rule could not be, and where derivation stopped.
 	Unknown []string
+	// Requires are the names of the facts the rule needs, and ValidUntil
+	// the last day of its review (G0 M17 D111, F407, F409).
+	Requires   []string
+	ValidUntil string
 	// Reason is an UNKNOWN consequence's reason code: ReasonUnknown, or
 	// ReasonExpired or ReasonFanout.
 	Reason string
@@ -358,7 +362,7 @@ func base(r Rule, h hop) Consequence {
 	}
 	return Consequence{
 		Rule: r.ID, Operation: r.Consequence.Operation, Effect: r.Consequence.Effect, Description: r.Consequence.Description,
-		Source: source, Depth: h.depth, Parent: h.parent, Definition: r.Definition,
+		Source: source, Depth: h.depth, Parent: h.parent, Definition: r.Definition, Requires: r.RequiresFacts, ValidUntil: r.ValidUntil,
 	}
 }
 
