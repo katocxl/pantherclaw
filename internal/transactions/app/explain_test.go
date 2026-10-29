@@ -150,13 +150,20 @@ func (failingRecordings) Definition(context.Context, ids.OrgID, actionir.Definit
 	return pipeline.Pinned{}, nil
 }
 
+// panickingRecordings is an opener with no sealing key behind it.
+type panickingRecordings struct{ failingRecordings }
+
+func (panickingRecordings) RecordedInputs(context.Context, ids.OrgID, ids.UUID, int) (*recording.Recording, error) {
+	panic("interface conversion: interface is nil, not replay.Opener")
+}
+
 // TestF066_MissingInputsAreAGap: when the sealed inputs are missing or
 // truncated (or no opener is configured) the material values stay empty
-// and the gaps say so (rows26 D12b).
+// and the gaps say so, and an opener that panics is the same gap (rows26 D12b).
 //
 // Covers: F066, F647
 func TestF066_MissingInputsAreAGap(t *testing.T) {
-	for _, r := range []Recordings{nil, failingRecordings{recording.ErrTruncated}, failingRecordings{errors.New("no row")}} {
+	for _, r := range []Recordings{nil, failingRecordings{recording.ErrTruncated}, failingRecordings{errors.New("no row")}, panickingRecordings{}} {
 		if m, ok := recordedMaterial(context.Background(), r, ids.OrgID{}, ids.NewV7(), 1); ok || m != nil {
 			t.Fatalf("%T: material %v ok %v", r, m, ok)
 		}

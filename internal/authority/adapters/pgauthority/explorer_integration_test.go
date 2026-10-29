@@ -244,6 +244,7 @@ func compareIDs(a, b ids.UUID) int {
 // sealed inputs (F066, F647, rows26 D12b).
 func TestExplorer_ExplainsAHeldAndADeniedDecision(t *testing.T) {
 	w := newWorld(t)
+	w.keepInputs()
 	w.refundable("ch_1", "ch_2")
 	held := w.authorize(w.request(w.run(w.heldBudgetGrant().ID, ids.UUID{}), ids.NewV7(), "ch_1", "60.00"))
 	denied := w.authorize(w.request(w.run(w.grant("20").ID, ids.UUID{}), ids.NewV7(), "ch_2", "30.00"))
@@ -296,6 +297,30 @@ func TestExplorer_ExplainsAHeldAndADeniedDecision(t *testing.T) {
 			t.Fatalf("%s: with evidence.read alone %+v", tc.name, x)
 		}
 	}
+
+	// Inputs that were not kept: with no opener, and with a keyed opener
+	// but no stored row, material_values stays empty and the gaps say so;
+	// the explanation never panics (rows26 D12b).
+	t.Run("inputs not kept", func(t *testing.T) {
+		w := newWorld(t)
+		w.refundable("ch_3")
+		r := w.authorize(w.request(w.run(w.grant("20").ID, ids.UUID{}), ids.NewV7(), "ch_3", "30.00"))
+		w.keepInputs()
+		keyed := w.replayEngine()
+		reader := w.reader(tdomain.RoleReconciler, tdomain.Scope{Type: tdomain.ScopeOrg, ID: w.org.UUID()})
+		for name, rec := range map[string]txapp.Recordings{
+			"nil opener": engineRecordings{&replay.Engine{Source: keyed.Source}},
+			"no row":     engineRecordings{keyed},
+		} {
+			ev, err := (&txapp.Explorer{Pool: w.pool, Recordings: rec}).TransactionEvidence(reader, r.TransactionID)
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			if x := ev.Explanation; x == nil || len(x.Material) != 0 || !slices.Contains(x.Gaps, txapp.GapMaterialUnavailable) {
+				t.Fatalf("%s: explanation %+v", name, x)
+			}
+		}
+	})
 }
 
 // heldBudgetGrant is heldGrant with a 500 USD task budget.

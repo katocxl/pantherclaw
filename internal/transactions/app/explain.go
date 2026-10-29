@@ -333,8 +333,15 @@ type Recordings interface {
 // recordedMaterial are an evaluation's material values: each material
 // parameter of the definition that is not content, written as an approval
 // display writes it. ok is false when the inputs are missing, truncated or
-// unreadable, or no recordings are configured.
-func recordedMaterial(ctx context.Context, r Recordings, org ids.OrgID, txn ids.UUID, evaluation int) (map[string]string, bool) {
+// unreadable, or no recordings are configured; an opener that panics (no
+// sealing key, a nil opener) is the same gap, never a failed read
+// (rows26 D12b).
+func recordedMaterial(ctx context.Context, r Recordings, org ids.OrgID, txn ids.UUID, evaluation int) (out map[string]string, ok bool) {
+	defer func() {
+		if recover() != nil {
+			out, ok = nil, false
+		}
+	}()
 	if r == nil {
 		return nil, false
 	}
@@ -354,10 +361,10 @@ func recordedMaterial(ctx context.Context, r Recordings, org ids.OrgID, txn ids.
 	if err != nil {
 		return nil, false
 	}
-	out := map[string]string{}
+	out = map[string]string{}
 	for name, spec := range pinned.Definition.Params {
-		v, ok := vals[name]
-		if !ok || !spec.Material || spec.Type == defs.TypeContent {
+		v, has := vals[name]
+		if !has || !spec.Material || spec.Type == defs.TypeContent {
 			continue
 		}
 		out[name] = apdomain.FormatValue(v, spec)
