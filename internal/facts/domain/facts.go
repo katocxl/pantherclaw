@@ -306,6 +306,8 @@ type Fact struct {
 	ObservedAt  time.Time
 	RecordedAt  time.Time
 	ProviderID  ids.UUID
+	// Kind is its declaration's kind (G0 M16 D80) as the pipeline reads it.
+	Kind Kind
 	// Source and Method are its provenance (G0 M16 D80), when sent.
 	Source, Method string
 }
@@ -366,7 +368,7 @@ func Accept(p Provider, o Observation, now time.Time, prev *Fact) (Fact, error) 
 	}
 	return Fact{
 		Name: o.Name, SubjectType: o.SubjectType, SubjectID: o.SubjectID, Value: v, ObservedAt: observed, RecordedAt: now.UTC(), ProviderID: p.ID,
-		Source: o.Source, Method: o.Method,
+		Source: cleanSource(o.Source), Method: o.Method,
 	}, nil
 }
 

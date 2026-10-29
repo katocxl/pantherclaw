@@ -327,19 +327,42 @@ type Snapshotter interface {
 // holds no transaction.
 type PeerCheck func(ctx context.Context, org ids.OrgID, conn Connection, grant gdomain.Grant) (reason string)
 
-// ExternalCheck asks the org's ACTIVE external policy checks whose
-// operations match the action (G0 M16 D81, HR-436..440): one verdict per
-// check, none when no check matches. It reads through its own store and
-// calls each endpoint through the egress guards; an error means the checks
-// could not be read, which is CANNOT_AUTHORIZE. Unset (replay and
-// simulation), no check is asked: replay reports "external check not
-// evaluated".
+// ExternalCheck is the org's ACTIVE external policy checks (G0 M16 D81,
+// D96; HR-436..440). An evaluation never calls one inside its snapshot:
+//
+//   - Preload, before the snapshot opens, puts the org's active checks on
+//     the context, from a short in-process cache (a read only on a miss);
+//   - pass 1 (inside the snapshot) finds the checks whose operations match
+//     the action and returns them with their input (Evaluation.ExternalCalls);
+//   - the caller ends the snapshot, Calls them with no database connection
+//     held (AskExternal), and runs pass 2 in a new snapshot with the answers;
+//   - pass 2 uses the answers only for the same checks and the same input;
+//     anything else is CANNOT_AUTHORIZE. There is one round per decision.
+//
+// Unset (replay and simulation), no check is asked: replay reports
+// "external check not evaluated".
 type ExternalCheck interface {
-	// Preload reads the org's active checks before the evaluation's snapshot
-	// opens and returns a context that carries them, so Ask takes no second
-	// database connection while the snapshot holds one.
 	Preload(ctx context.Context, org ids.OrgID) context.Context
-	Ask(ctx context.Context, org ids.OrgID, in ExternalInput) ([]ExternalVerdict, error)
+	// Matching returns the preloaded active checks whose operations cover the
+	// operation; an error (checks not readable, or not preloaded) is
+	// CANNOT_AUTHORIZE.
+	Matching(ctx context.Context, org ids.OrgID, operation string) ([]ExternalTarget, error)
+	// Call asks each check about its input, one verdict per call in order.
+	Call(ctx context.Context, org ids.OrgID, calls []ExternalCall) []ExternalVerdict
+}
+
+// ExternalTarget names one check.
+type ExternalTarget struct {
+	ID   ids.UUID
+	Name string
+}
+
+// ExternalCall is one check to ask and what to ask it; Digest is the
+// SHA-256 of the input, which pass 2 compares.
+type ExternalCall struct {
+	Check  ExternalTarget
+	Input  ExternalInput
+	Digest string
 }
 
 // ExternalInput is what an external check is asked: the action's meaning
@@ -365,6 +388,7 @@ type ExternalInput struct {
 // "hold", or "" when the check did not answer (Unavailable says why);
 // Reasons are UNTRUSTED text for people only (HR-440).
 type ExternalVerdict struct {
+	CheckID     ids.UUID
 	Check       string
 	Decision    string
 	Reasons     []string

@@ -60,12 +60,19 @@ func newExternalChecks(pool *db.Pool, cfg *Config, bill *billing.Service, log *s
 }
 
 // wireM16External gives the decision pipeline the org's external policy
-// checks (D81).
-func wireM16External(svc *authority.Service, ec *externalchecks.Service) {
+// checks (D81), and the grant narrower's simulation the same checks to
+// report as not evaluated (D96).
+func wireM16External(svc *authority.Service, m5p2 *m5p2Services, ec *externalchecks.Service, pool *db.Pool) {
 	if svc == nil || ec == nil {
 		return
 	}
+	ec.WithRaiser(edgesRaiser(pool))
 	svc.WithExternalCheck(ec)
+	if m5p2 != nil && m5p2.approvals != nil {
+		if n, ok := m5p2.approvals.Simulator.(*authority.Narrower); ok && n.Pipeline != nil {
+			n.Pipeline.External, n.Pipeline.SimulateExternal = ec, true
+		}
+	}
 }
 
 // registerM16External serves ExternalCheckService.

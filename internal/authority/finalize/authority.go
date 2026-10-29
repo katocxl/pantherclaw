@@ -252,25 +252,35 @@ func (a *Authority) evaluate(ctx context.Context, req pipeline.Request, run, act
 	var prev *Stored
 	var ev *pipeline.Evaluation
 	var rec *recording.Recorder
-	err := a.Pipeline.Snapshot(ctx, req.Org, func(ctx context.Context, r pipeline.Reader) error {
-		l, ok := r.(Lookuper)
-		if !ok {
-			l = a.Store
-		}
-		var err error
-		if prev, err = l.Lookup(ctx, req.Org, run, action); err != nil {
-			return fmt.Errorf("finalize: lookup: %w", err)
-		}
-		if prev != nil && (prev.ActionHash != req.Action.HashHex() || prev.Final || prev.Evaluations >= MaxEvaluations) {
-			return nil
-		}
-		var reader pipeline.Reader
-		reader, rec = a.recorder(r, req)
-		ev, err = a.Pipeline.EvaluateWith(ctx, reader, req)
-		return err
-	})
-	if err != nil {
+	snapshot := func(ctx context.Context) error {
+		prev, ev, rec = nil, nil, nil
+		return a.Pipeline.Snapshot(ctx, req.Org, func(ctx context.Context, r pipeline.Reader) error {
+			l, ok := r.(Lookuper)
+			if !ok {
+				l = a.Store
+			}
+			var err error
+			if prev, err = l.Lookup(ctx, req.Org, run, action); err != nil {
+				return fmt.Errorf("finalize: lookup: %w", err)
+			}
+			if prev != nil && (prev.ActionHash != req.Action.HashHex() || prev.Final || prev.Evaluations >= MaxEvaluations) {
+				return nil
+			}
+			var reader pipeline.Reader
+			reader, rec = a.recorder(r, req)
+			ev, err = a.Pipeline.EvaluateWith(ctx, reader, req)
+			return err
+		})
+	}
+	if err := snapshot(ctx); err != nil {
 		return nil, nil, nil, err
+	}
+	// The external checks pass 1 found are asked with no snapshot open, and
+	// pass 2 decides with their answers (G0 M16 D96).
+	if answered, again := a.Pipeline.AskExternal(ctx, req.Org, ev); again {
+		if err := snapshot(answered); err != nil {
+			return nil, nil, nil, err
+		}
 	}
 	return prev, ev, rec, nil
 }

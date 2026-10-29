@@ -100,7 +100,7 @@ WHERE f.observed_at <= EXCLUDED.observed_at;
 -- A gateway provider's facts count only while its gateway still serves
 -- its connection and the connection is active (#299 review follow-up).
 -- name: ListSubjectFacts :many
-SELECT f.name, f.value, f.observed_at, f.recorded_at, f.provider_id, d.value_type
+SELECT f.name, f.value, f.observed_at, f.recorded_at, f.provider_id, d.value_type, d.kind, f.source, f.method
 FROM pc.facts f
 JOIN pc.fact_providers p ON p.org_id = f.org_id AND p.id = f.provider_id AND p.state = 'ACTIVE'
 JOIN pc.fact_declarations d ON d.org_id = f.org_id AND d.provider_id = f.provider_id AND d.name = f.name AND d.active

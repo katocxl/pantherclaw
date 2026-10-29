@@ -369,7 +369,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	wireM14Process(autos, bill)
 	wireM14A2APeer(svc, authorityStore, autos, pool)
 	external := newExternalChecks(pool, cfg, bill, log)
-	wireM16External(svc, external)
+	wireM16External(svc, m5p2, external, pool)
 	if cfg.Role == RoleAPI || cfg.Role == RoleAll {
 		tokens, err := token.New(reg, cfg.Auth.PublicURL, token.Audience)
 		if err != nil {

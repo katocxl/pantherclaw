@@ -355,7 +355,7 @@ func fromFacts(subjectType, subjectID string, names []string, found map[string]f
 		}
 		out.Facts = append(out.Facts, Fact{
 			Name: name, Type: string(f.Value.Type), Value: v, ObservedAt: f.ObservedAt, RecordedAt: f.RecordedAt,
-			Provider: uid(f.ProviderID),
+			Provider: uid(f.ProviderID), Kind: kindOf(f.Kind), Source: f.Source, Method: f.Method,
 		})
 	}
 	return out, nil
@@ -380,7 +380,7 @@ func (f Facts) value() (map[string]fdomain.Fact, error) {
 		}
 		out[x.Name] = fdomain.Fact{
 			Name: x.Name, SubjectType: f.SubjectType, SubjectID: f.SubjectID, Value: v, ObservedAt: x.ObservedAt,
-			RecordedAt: x.RecordedAt, ProviderID: p,
+			RecordedAt: x.RecordedAt, ProviderID: p, Kind: fdomain.Kind(x.Kind), Source: x.Source, Method: x.Method,
 		}
 	}
 	return out, nil
@@ -700,4 +700,13 @@ func (s Sensitive) value() ([]pipeline.SensitiveRead, error) {
 		out = append(out, pipeline.SensitiveRead{TransactionID: txn, RunID: run, Operation: x.Operation, Class: x.Class, At: x.At})
 	}
 	return out, errOf(s.Err)
+}
+
+// kindOf records a fact's kind only when it is not a value, so a value
+// fact's recording is the bytes it always was.
+func kindOf(k fdomain.Kind) string {
+	if k.Of() == fdomain.KindValue {
+		return ""
+	}
+	return string(k)
 }

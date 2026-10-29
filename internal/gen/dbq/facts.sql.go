@@ -621,7 +621,7 @@ func (q *Queries) ListProviderDeclarations(ctx context.Context, orgID ids.OrgID,
 }
 
 const listSubjectFacts = `-- name: ListSubjectFacts :many
-SELECT f.name, f.value, f.observed_at, f.recorded_at, f.provider_id, d.value_type
+SELECT f.name, f.value, f.observed_at, f.recorded_at, f.provider_id, d.value_type, d.kind, f.source, f.method
 FROM pc.facts f
 JOIN pc.fact_providers p ON p.org_id = f.org_id AND p.id = f.provider_id AND p.state = 'ACTIVE'
 JOIN pc.fact_declarations d ON d.org_id = f.org_id AND d.provider_id = f.provider_id AND d.name = f.name AND d.active
@@ -648,6 +648,9 @@ type ListSubjectFactsRow struct {
 	RecordedAt time.Time
 	ProviderID ids.UUID
 	ValueType  string
+	Kind       string
+	Source     *string
+	Method     *string
 }
 
 // ListSubjectFacts returns the facts of active providers about one subject.
@@ -679,6 +682,9 @@ func (q *Queries) ListSubjectFacts(ctx context.Context, arg ListSubjectFactsPara
 			&i.RecordedAt,
 			&i.ProviderID,
 			&i.ValueType,
+			&i.Kind,
+			&i.Source,
+			&i.Method,
 		); err != nil {
 			return nil, err
 		}

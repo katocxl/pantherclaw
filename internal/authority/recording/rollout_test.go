@@ -25,7 +25,7 @@ import (
 // bytes, and replays to the same decision, checklist and decision basis.
 // The rollout fields are new and omitted when empty, so neither the format
 // nor the pipeline version changed (G0 M11.1, D12). M16 raised the pipeline
-// to version 5 (D95): the fixture stays labelled 4, the version it was
+// to version 5 (D95): the fixture stays labeled 4, the version it was
 // recorded under, and replays in version 4 mode (Pipeline.ReplayOf).
 func TestHR234_RecordingFromBeforeRolloutsReplaysIdentically(t *testing.T) {
 	raw := readFixture(t, "recording_v1_hold.json")

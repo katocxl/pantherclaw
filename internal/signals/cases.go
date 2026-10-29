@@ -106,6 +106,14 @@ func (s *Service) accepted(ctx context.Context, tx db.TenantTx, r Received, entr
 	}
 	evidence := []reflexdomain.EvidenceRef{{Kind: reflexdomain.EvidenceLedger, ID: entry}}
 	short := ShortName(r.EventType)
+	// The identity-risk fact first, so its case can say when it failed (G0
+	// M16 D82, risk.go).
+	riskRecorded := s.identityRisk(ctx, tx, r)
+	if !riskRecorded {
+		if err := s.riskNotRecorded(ctx, tx, r, evidence, person); err != nil {
+			return err
+		}
+	}
 	var alert *ids.UUID
 	if s.raiser != nil {
 		id, err := s.raiser.Raise(ctx, tx.Pgx(), reflexdomain.Signal{
@@ -136,6 +144,9 @@ func (s *Service) accepted(ctx context.Context, tx db.TenantTx, r Received, entr
 			questions = append(questions, "The person has "+strconv.Itoa(int(counts.Grants))+" active grants; the case lists "+
 				strconv.Itoa(listed)+". Which of the others matter?")
 		}
+		if !riskRecorded {
+			questions = append(questions, RiskNotRecordedNote)
+		}
 		if counts.Approvals > 0 {
 			questions = append(questions, "Should the person's "+strconv.Itoa(int(counts.Approvals))+" waiting approvals stand?")
 		}
@@ -150,7 +161,7 @@ func (s *Service) accepted(ctx context.Context, tx db.TenantTx, r Received, entr
 		if _, err := q.SetSSFEventCase(ctx, &caseID, r.Org, r.Event); err != nil {
 			return err
 		}
-	} else if _, err := q.SetSSFEventCaseNote(ctx, noCaseNote(), r.Org, r.Event); err != nil {
+	} else if _, err := q.SetSSFEventCaseNote(ctx, noCaseNote(riskRecorded), r.Org, r.Event); err != nil {
 		return err
 	}
 	if s.notify != nil {
@@ -168,7 +179,6 @@ func (s *Service) accepted(ctx context.Context, tx db.TenantTx, r Received, entr
 			return err
 		}
 	}
-	s.identityRisk(ctx, tx, r) // G0 M16 D82 (risk.go)
 	return s.playbookActs(ctx, tx, r, caseID)
 }
 
@@ -350,7 +360,10 @@ func (s *Service) playbookFailed(ctx context.Context, tx db.TenantTx, r Received
 	return err
 }
 
-func noCaseNote() *string {
+func noCaseNote(riskRecorded bool) *string {
 	n := NoCaseNote
+	if !riskRecorded {
+		n += "; " + RiskNotRecordedNote
+	}
 	return &n
 }

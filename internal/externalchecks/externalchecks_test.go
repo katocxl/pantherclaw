@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
+	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -67,15 +68,25 @@ func TestHR437_TimeoutStatusAndInFlightCapAreUnavailable(t *testing.T) {
 	if got := f.ask(context.Background(), org, Check{ID: ids.NewV7(), Endpoint: failing.URL, TimeoutMs: MaxTimeoutMs}, []byte(`{}`)); got.Unavailable != UnavailableStatus {
 		t.Errorf("500: %+v, want HTTP_STATUS", got)
 	}
-	slot := a.slot(org)
+	var releases []func()
 	for range MaxInFlight {
-		slot <- struct{}{}
+		release, ok := a.acquire(org)
+		if !ok {
+			t.Fatal("a slot below the cap was refused")
+		}
+		releases = append(releases, release)
 	}
 	if got := a.ask(context.Background(), org, check, []byte(`{}`)); got.Unavailable != UnavailableInFlight {
 		t.Errorf("over the cap: %+v, want TOO_MANY_IN_FLIGHT", got)
 	}
 	if got := a.ask(context.Background(), ids.New[ids.Org](), Check{ID: ids.NewV7(), Endpoint: failing.URL, TimeoutMs: 50}, []byte(`{}`)); got.Unavailable == UnavailableInFlight {
 		t.Error("another org's calls count against this org's cap")
+	}
+	for _, r := range releases {
+		r()
+	}
+	if len(a.flights) != 0 {
+		t.Fatalf("idle orgs kept: %d", len(a.flights))
 	}
 }
 
@@ -175,4 +186,110 @@ func poolOf(srv *httptest.Server) *x509.CertPool {
 	p := x509.NewCertPool()
 	p.AddCert(srv.Certificate())
 	return p
+}
+
+// TestHR438_APathPrefixCannotBeEscaped: dot segments (raw, encoded in any
+// case or twice), encoded slashes and a longer last segment never pass a
+// path-scoped prefix (R-481).
+// Covers: F366
+func TestHR438_APathPrefixCannotBeEscaped(t *testing.T) {
+	allowed := []string{"https://opa.example.com/v1/data/pantherclaw/", "https://opa.example.com/v1/data/pc"}
+	for _, u := range []string{
+		"https://opa.example.com/v1/data/pantherclaw/../other/allow",
+		"https://opa.example.com/v1/data/pantherclaw/./x",
+		"https://opa.example.com/v1/data/pantherclaw/%2e%2e/other",
+		"https://opa.example.com/v1/data/pantherclaw/%2E%2E/other",
+		"https://opa.example.com/v1/data/pantherclaw/.%2e/other",
+		"https://opa.example.com/v1/data/pantherclaw/%252e%252e/other",
+		"https://opa.example.com/v1/data/pantherclaw/a%2f..%2fother",
+		"https://opa.example.com/v1/data/pantherclaw/a%2F..%2Fother",
+		"https://opa.example.com/v1/data/pantherclaw/a%5c..%5cother",
+		"https://opa.example.com/v1/data/pc-othertenant",
+		"https://opa.example.com/v1/data/pc/../other",
+	} {
+		if err := CheckEndpoint(u, allowed); err == nil {
+			t.Errorf("%s allowed", u)
+		}
+	}
+	for _, u := range []string{
+		"https://opa.example.com/v1/data/pantherclaw/decision", "https://opa.example.com/v1/data/pc",
+		"https://opa.example.com/v1/data/pc/decision", "https://opa.example.com/v1/data/pc?pretty=false",
+	} {
+		if err := CheckEndpoint(u, allowed); err != nil {
+			t.Errorf("%s refused: %v", u, err)
+		}
+	}
+}
+
+type business struct{}
+
+func (business) Current(context.Context) (billing.Entitlements, error) {
+	return billing.Entitlements{Edition: billing.Business}, nil
+}
+
+// TestHR438_CallTimeAllowList: an ACTIVE check whose endpoint left the
+// allowed prefixes is not called (ENDPOINT_NOT_ALLOWED); without the
+// preload, Matching refuses rather than read inside a snapshot; without the
+// entitlement no check is read.
+// Covers: F366
+func TestHR438_CallTimeAllowList(t *testing.T) {
+	org := ids.New[ids.Org]()
+	called := false
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		_, _ = w.Write([]byte(`{"result": {"decision": "allow"}}`))
+	}))
+	defer srv.Close()
+	s := New(nil, Config{AllowedPrefixes: []string{"https://opa.example.com/"}, RootCAs: poolOf(srv)}, business{}, nil)
+	check := Check{ID: ids.NewV7(), Name: "opa", Endpoint: srv.URL + "/v1", TimeoutMs: MaxTimeoutMs, Operations: []string{"*"}}
+	s.cache.put(org, []Check{check}, time.Now())
+	ctx := s.Preload(context.Background(), org)
+	targets, err := s.Matching(ctx, org, "stripe.refund.create")
+	if err != nil || len(targets) != 1 {
+		t.Fatalf("matching: %v %v", targets, err)
+	}
+	s.cache.first(s.cache.reported, check.ID) // reported already: this test has no database
+	got := s.Call(ctx, org, []pipeline.ExternalCall{{Check: targets[0]}})
+	if called || got[0].Unavailable != UnavailableNotAllowed || got[0].CheckID != check.ID {
+		t.Fatalf("called %v, verdict %+v", called, got[0])
+	}
+	if _, err := s.Matching(context.Background(), org, "stripe.refund.create"); err == nil {
+		t.Fatal("Matching without a preload read nothing and passed")
+	}
+	community := New(nil, Config{}, nil, nil)
+	community.cache.put(org, []Check{check}, time.Now())
+	if targets, err := community.Matching(community.Preload(context.Background(), org), org, "stripe.refund.create"); err != nil || len(targets) != 0 {
+		t.Fatalf("without the entitlement: %v %v", targets, err)
+	}
+}
+
+// TestM16_ActiveChecksAreCachedBriefly: an org's entry serves for CacheTTL
+// and an activation or a disabling drops it.
+func TestM16_ActiveChecksAreCachedBriefly(t *testing.T) {
+	c, org, now := newActiveCache(), ids.New[ids.Org](), time.Now()
+	c.put(org, []Check{{ID: ids.NewV7()}}, now)
+	if got, ok := c.get(org, now.Add(CacheTTL-time.Millisecond)); !ok || len(got) != 1 {
+		t.Fatal("a fresh entry missed")
+	}
+	if _, ok := c.get(org, now.Add(CacheTTL+time.Millisecond)); ok {
+		t.Fatal("an expired entry served")
+	}
+	c.put(org, nil, now)
+	c.drop(org)
+	if _, ok := c.get(org, now); ok {
+		t.Fatal("a dropped entry served")
+	}
+}
+
+// TestHR440_ReasonsAreOneCleanLineEach: a reason with a line break is a
+// bad answer; control, format and bidi characters are stripped.
+// Covers: F366
+func TestHR440_ReasonsAreOneCleanLineEach(t *testing.T) {
+	if a := Parse([]byte(`{"result": {"decision": "deny", "reasons": ["ok\nreason: allowed"]}}`)); a.Unavailable != UnavailableBadAnswer {
+		t.Fatalf("a two-line reason: %+v", a)
+	}
+	a := Parse([]byte(`{"result": {"decision": "deny", "reasons": ["over‮ limit​"]}}`))
+	if a.Decision != "deny" || len(a.Reasons) != 1 || a.Reasons[0] != "over limit" {
+		t.Fatalf("%+v", a)
+	}
 }

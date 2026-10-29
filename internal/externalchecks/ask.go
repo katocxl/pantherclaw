@@ -11,10 +11,12 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
 
+	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -40,20 +42,88 @@ const maxAnswerBytes = 64 << 10
 
 var _ pipeline.ExternalCheck = (*Service)(nil)
 
+// UnavailableNotAllowed: the check's endpoint is no longer under the
+// server's external_checks.allowed_prefixes, so it is not called (HR-438).
+const UnavailableNotAllowed = "ENDPOINT_NOT_ALLOWED"
+
+// CacheTTL is how long an org's active checks are served from memory; an
+// activation or a disabling in this process drops the org's entry at once.
+const CacheTTL = 5 * time.Second
+
 // asker calls the checks: one egress client per check (its CA and
-// timeout never change), and at most MaxInFlight calls per org.
+// timeout never change), and at most MaxInFlight calls per org in this
+// process.
 type asker struct {
 	cfg     Config
 	mu      sync.Mutex
-	clients map[ids.UUID]*http.Client
-	flights map[ids.OrgID]chan struct{}
+	clients map[ids.UUID]*cachedClient
+	flights map[ids.OrgID]*flight
 }
 
 func newAsker(cfg Config) *asker {
-	return &asker{cfg: cfg, clients: map[ids.UUID]*http.Client{}, flights: map[ids.OrgID]chan struct{}{}}
+	return &asker{cfg: cfg, clients: map[ids.UUID]*cachedClient{}, flights: map[ids.OrgID]*flight{}}
 }
 
-// preloaded is the org's active checks, read before the snapshot opened.
+// activeCache is each org's ACTIVE checks, read at most every CacheTTL.
+type activeCache struct {
+	mu   sync.Mutex
+	orgs map[ids.OrgID]cachedChecks
+	// warned and reported are the checks whose endpoint was found outside
+	// the allowed prefixes in this process: each is logged once when read
+	// and audited and alerted once when called.
+	warned, reported map[ids.UUID]bool
+}
+
+type cachedChecks struct {
+	checks []Check
+	at     time.Time
+}
+
+func newActiveCache() *activeCache {
+	return &activeCache{orgs: map[ids.OrgID]cachedChecks{}, warned: map[ids.UUID]bool{}, reported: map[ids.UUID]bool{}}
+}
+
+func (c *activeCache) get(org ids.OrgID, now time.Time) ([]Check, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.orgs[org]
+	if !ok || now.Sub(e.at) > CacheTTL {
+		delete(c.orgs, org)
+		return nil, false
+	}
+	return e.checks, true
+}
+
+func (c *activeCache) put(org ids.OrgID, checks []Check, now time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for o, e := range c.orgs { // drop expired orgs while here
+		if now.Sub(e.at) > CacheTTL {
+			delete(c.orgs, o)
+		}
+	}
+	c.orgs[org] = cachedChecks{checks: checks, at: now}
+}
+
+func (c *activeCache) drop(org ids.OrgID) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.orgs, org)
+}
+
+// first reports whether id is in seen for the first time, and marks it.
+func (c *activeCache) first(seen map[ids.UUID]bool, id ids.UUID) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if seen[id] {
+		return false
+	}
+	seen[id] = true
+	return true
+}
+
+// preloaded is the org's active checks, put on the context before the
+// snapshot opened.
 type preloaded struct {
 	org    ids.OrgID
 	checks []Check
@@ -62,14 +132,35 @@ type preloaded struct {
 
 type preloadKey struct{}
 
-// Preload implements pipeline.ExternalCheck: it reads the org's ACTIVE
-// checks in its own short transaction, before the decision's snapshot
-// holds a connection, so a burst of decisions never waits on the pool
-// for a second one. A read error is kept and Ask returns it
-// (CANNOT_AUTHORIZE).
+// Preload implements pipeline.ExternalCheck: the org's ACTIVE checks from
+// the cache, read in a short transaction of its own before the decision's
+// snapshot holds a connection, and only on a miss. Without the external
+// checks entitlement nothing is read. A read error is kept and Matching
+// returns it (CANNOT_AUTHORIZE).
 func (s *Service) Preload(ctx context.Context, org ids.OrgID) context.Context {
-	checks, err := s.active(ctx, org)
+	checks, err := s.preload(ctx, org)
 	return context.WithValue(ctx, preloadKey{}, preloaded{org: org, checks: checks, err: err})
+}
+
+func (s *Service) preload(ctx context.Context, org ids.OrgID) ([]Check, error) {
+	if s.business(ctx) != nil {
+		return nil, nil
+	}
+	now := time.Now()
+	if checks, ok := s.cache.get(org, now); ok {
+		return checks, nil
+	}
+	checks, err := s.active(ctx, org)
+	if err != nil {
+		return nil, err
+	}
+	s.cache.put(org, checks, now)
+	for _, c := range checks {
+		if CheckEndpoint(c.Endpoint, s.cfg.AllowedPrefixes) != nil && s.cache.first(s.cache.warned, c.ID) {
+			s.log.WarnContext(ctx, "external_checks.endpoint_not_allowed", "org", org.String(), "check", c.ID.String(), "name", c.Name)
+		}
+	}
+	return checks, nil
 }
 
 func (s *Service) active(ctx context.Context, org ids.OrgID) ([]Check, error) {
@@ -87,40 +178,69 @@ func (s *Service) active(ctx context.Context, org ids.OrgID) ([]Check, error) {
 	return checks, err
 }
 
-// Ask implements pipeline.ExternalCheck: it asks each of the org's ACTIVE
-// checks whose operations cover the action, in name order, from the
-// preloaded list (read here when there is none).
-func (s *Service) Ask(ctx context.Context, org ids.OrgID, in pipeline.ExternalInput) ([]pipeline.ExternalVerdict, error) {
+// errNotPreloaded: an evaluation reached the checks without Preload, which
+// would read inside its snapshot; it is CANNOT_AUTHORIZE instead.
+var errNotPreloaded = errors.New("externalchecks: the checks were not preloaded")
+
+// Matching implements pipeline.ExternalCheck: the preloaded checks whose
+// operations cover the operation, in name order. It never reads.
+func (s *Service) Matching(ctx context.Context, org ids.OrgID, operation string) ([]pipeline.ExternalTarget, error) {
 	pre, ok := ctx.Value(preloadKey{}).(preloaded)
-	if !ok || pre.org != org {
-		pre.checks, pre.err = s.active(ctx, org)
-	}
-	if pre.err != nil {
+	switch {
+	case !ok || pre.org != org:
+		return nil, errNotPreloaded
+	case pre.err != nil:
 		return nil, pre.err
 	}
-	var checks []Check
+	var out []pipeline.ExternalTarget
 	for _, c := range pre.checks {
-		if c.Covers(in.Operation) {
-			checks = append(checks, c)
+		if c.Covers(operation) {
+			out = append(out, pipeline.ExternalTarget{ID: c.ID, Name: c.Name})
 		}
 	}
-	if len(checks) == 0 {
-		return nil, nil
+	return out, nil
+}
+
+// Call implements pipeline.ExternalCheck: it asks each check, at once, with
+// no database connection held. A check whose endpoint is no longer under
+// the allowed prefixes is not called (ENDPOINT_NOT_ALLOWED, HR-438), and is
+// audited and alerted once per process.
+func (s *Service) Call(ctx context.Context, org ids.OrgID, calls []pipeline.ExternalCall) []pipeline.ExternalVerdict {
+	checks, err := s.preload(ctx, org)
+	out := make([]pipeline.ExternalVerdict, len(calls))
+	byID := map[ids.UUID]Check{}
+	for _, c := range checks {
+		byID[c.ID] = c
 	}
-	body, err := Body(org, in)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]pipeline.ExternalVerdict, len(checks))
+	var refused []Check
 	var wg sync.WaitGroup
-	for i, c := range checks {
+	for i, call := range calls {
+		out[i] = pipeline.ExternalVerdict{CheckID: call.Check.ID, Check: call.Check.Name}
+		c, ok := byID[call.Check.ID]
+		switch {
+		case err != nil || !ok:
+			out[i].Unavailable = UnavailableUnreachable // disabled meanwhile, or unreadable
+			continue
+		case CheckEndpoint(c.Endpoint, s.cfg.AllowedPrefixes) != nil:
+			out[i].Unavailable = UnavailableNotAllowed
+			refused = append(refused, c)
+			continue
+		}
+		body, err := Body(org, call.Input)
+		if err != nil {
+			out[i].Unavailable = UnavailableBadAnswer
+			continue
+		}
 		wg.Go(func() {
 			a := s.asker.ask(ctx, org, c, body)
-			out[i] = pipeline.ExternalVerdict{Check: c.Name, Decision: a.Decision, Reasons: a.Reasons, Unavailable: a.Unavailable}
+			out[i].Decision, out[i].Reasons, out[i].Unavailable = a.Decision, a.Reasons, a.Unavailable
 		})
 	}
 	wg.Wait()
-	return out, nil
+	for _, c := range refused {
+		s.notAllowed(ctx, org, c)
+	}
+	return out
 }
 
 // Answer is one check's answer: a decision with its UNTRUSTED reasons, or
@@ -182,13 +302,11 @@ func Body(org ids.OrgID, in pipeline.ExternalInput) ([]byte, error) {
 // ask posts body to one check. Beyond MaxInFlight calls in flight for the
 // org it does not call at all.
 func (a *asker) ask(ctx context.Context, org ids.OrgID, c Check, body []byte) Answer {
-	slot := a.slot(org)
-	select {
-	case slot <- struct{}{}:
-		defer func() { <-slot }()
-	default:
+	release, ok := a.acquire(org)
+	if !ok {
 		return Answer{Unavailable: UnavailableInFlight}
 	}
+	defer release()
 	client, err := a.client(c)
 	if err != nil {
 		return Answer{Unavailable: UnavailableUnreachable}
@@ -248,34 +366,84 @@ func Parse(raw []byte) Answer {
 	if d != "allow" && d != "deny" && d != "hold" || len(w.Result.Reasons) > MaxReasons {
 		return Answer{Unavailable: UnavailableBadAnswer}
 	}
+	reasons := make([]string, 0, len(w.Result.Reasons))
 	for _, r := range w.Result.Reasons {
-		if !utf8.ValidString(r) || utf8.RuneCountInString(r) > MaxReasonLen {
+		if !utf8.ValidString(r) || utf8.RuneCountInString(r) > MaxReasonLen || strings.ContainsFunc(r, lineBreak) {
 			return Answer{Unavailable: UnavailableBadAnswer}
 		}
+		// UNTRUSTED text for people: controls, format and bidi characters
+		// are stripped as for any other untrusted text (HR-034, HR-102).
+		reasons = append(reasons, apdomain.Clean("reason", r, MaxReasonLen).Text)
 	}
-	return Answer{Decision: d, Reasons: w.Result.Reasons}
+	return Answer{Decision: d, Reasons: reasons}
 }
 
-// slot is the org's in-flight semaphore.
-func (a *asker) slot(org ids.OrgID) chan struct{} {
+// lineBreak reports a carriage return, line feed, line or paragraph
+// separator: a reason is one line.
+func lineBreak(r rune) bool { return r == 0x0a || r == 0x0d || r == 0x2028 || r == 0x2029 }
+
+// flight is an org's in-flight calls in this process.
+type flight struct {
+	slots chan struct{}
+	users int
+}
+
+// acquire takes one of the org's MaxInFlight slots in this process, or
+// reports that none is free. The cap is per process: with several
+// Authority replicas an org may have MaxInFlight calls in flight on each
+// (the M19 shared limits will bound it across replicas). An org's entry is
+// dropped once nothing uses it.
+func (a *asker) acquire(org ids.OrgID) (release func(), ok bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	s, ok := a.flights[org]
-	if !ok {
-		s = make(chan struct{}, MaxInFlight)
-		a.flights[org] = s
+	f, found := a.flights[org]
+	if !found {
+		f = &flight{slots: make(chan struct{}, MaxInFlight)}
+		a.flights[org] = f
 	}
-	return s
+	select {
+	case f.slots <- struct{}{}:
+	default:
+		if f.users == 0 {
+			delete(a.flights, org)
+		}
+		return nil, false
+	}
+	f.users++
+	return func() {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		<-f.slots
+		if f.users--; f.users == 0 {
+			delete(a.flights, org)
+		}
+	}, true
+}
+
+// clientIdle is how long an unused check's client is kept.
+const clientIdle = 10 * time.Minute
+
+type cachedClient struct {
+	client *http.Client
+	used   time.Time
 }
 
 // client is the check's egress client: no redirects, the dial-time address
 // guard, no proxy, no client certificate (HR-070..074), with the check's CA
-// bundle (or the system roots) and its timeout.
+// bundle (or the system roots) and its timeout. A client unused for
+// clientIdle, or of a disabled check (evict), is dropped.
 func (a *asker) client(c Check) (*http.Client, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if cl, ok := a.clients[c.ID]; ok {
-		return cl, nil
+	now := time.Now()
+	for id, cc := range a.clients {
+		if now.Sub(cc.used) > clientIdle {
+			delete(a.clients, id)
+		}
+	}
+	if cc, ok := a.clients[c.ID]; ok {
+		cc.used = now
+		return cc.client, nil
 	}
 	ec := httpx.EgressConfig{Timeout: time.Duration(c.TimeoutMs) * time.Millisecond, AllowedPrefixes: a.cfg.AllowedAddrs, RootCAs: a.cfg.RootCAs}
 	if c.CAPEM != "" {
@@ -286,6 +454,13 @@ func (a *asker) client(c Check) (*http.Client, error) {
 		ec.RootCAs = pool
 	}
 	cl := httpx.NewEgressClient(ec)
-	a.clients[c.ID] = cl
+	a.clients[c.ID] = &cachedClient{client: cl, used: now}
 	return cl, nil
+}
+
+// evict drops a check's client (a disabled check).
+func (a *asker) evict(id ids.UUID) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	delete(a.clients, id)
 }

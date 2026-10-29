@@ -13,11 +13,16 @@
 //     ACTIVE per org. Disabling is final.
 //   - Its endpoint is https, without credentials or fragment, never a
 //     metadata service, and starts with one of the server configuration's
-//     external_checks.allowed_prefixes, checked at creation and again at
-//     activation. Each call goes through the egress client (HR-070..074)
-//     with the check's own CA bundle and timeout (50 to 1000 ms).
+//     external_checks.allowed_prefixes, checked at creation, at activation
+//     and before every call: an ACTIVE check whose endpoint left the
+//     prefixes is CANNOT_AUTHORIZE, audited and alerted. Its path holds no
+//     dot segment or encoded slash. Each call goes through the egress client
+//     (HR-070..074) with the check's own CA bundle and timeout (50 to 1000
+//     ms), and never while a database connection is held (D96).
 //   - It can only restrict (HR-436, ask.go); a failed, slow or malformed
-//     answer, or too many calls in flight, is CANNOT_AUTHORIZE (HR-437).
+//     answer, or more than MaxInFlight calls in flight for the org in this
+//     process, is CANNOT_AUTHORIZE (HR-437). The cap is per process; the
+//     M19 shared limits bound it across replicas.
 //   - It is asked about the action's meaning, never the content of a
 //     disclosure-capable parameter (HR-439), and its reasons are UNTRUSTED
 //     text for people only (HR-440).
@@ -40,12 +45,15 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
+	reflexports "github.com/katocxl/pantherclaw/internal/reflex/ports"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -163,6 +171,10 @@ type Service struct {
 	editions Editions
 	log      *slog.Logger
 	asker    *asker
+	cache    *activeCache
+	// raiser alerts on a check whose endpoint left the allowed prefixes
+	// (nil: audited only).
+	raiser reflexports.Raiser
 }
 
 // New returns the service.
@@ -170,7 +182,7 @@ func New(pool *db.Pool, cfg Config, editions Editions, log *slog.Logger) *Servic
 	if log == nil {
 		log = pclog.Discard()
 	}
-	return &Service{pool: pool, cfg: cfg, editions: editions, log: log, asker: newAsker(cfg)}
+	return &Service{pool: pool, cfg: cfg, editions: editions, log: log, asker: newAsker(cfg), cache: newActiveCache()}
 }
 
 // CheckEndpoint applies the endpoint rules (HR-438).
@@ -186,6 +198,9 @@ func CheckEndpoint(raw string, allowed []string) error {
 	if a, ok := httpx.HostAddr(u.Hostname()); ok && httpx.MetadataAddr(a) {
 		return ErrEndpoint
 	}
+	if escapingPath(u) {
+		return ErrEndpoint
+	}
 	for _, p := range allowed {
 		if p != "" && strings.HasPrefix(raw, p) && prefixBoundary(raw, p) {
 			return nil
@@ -194,21 +209,33 @@ func CheckEndpoint(raw string, allowed []string) error {
 	return ErrEndpoint
 }
 
-// prefixBoundary keeps a prefix from matching another host that starts
-// with the same letters: https://opa.example.com never allows
-// https://opa.example.com.evil.test.
+// escapingPath reports a path that could leave a path-scoped prefix once a
+// server or a proxy resolves it: a "." or ".." segment, raw or
+// percent-encoded in any case (also twice encoded), or an encoded slash or
+// backslash. Go sends the path as written; the far side may clean it.
+func escapingPath(u *url.URL) bool {
+	esc := strings.ToLower(u.EscapedPath())
+	if strings.Contains(esc, "%2f") || strings.Contains(esc, "%5c") || strings.Contains(esc, "%25") {
+		return true
+	}
+	for _, seg := range strings.Split(u.Path, "/") {
+		if seg == "." || seg == ".." {
+			return true
+		}
+	}
+	return false
+}
+
+// prefixBoundary keeps a prefix from matching a longer host or path that
+// starts with the same letters: https://opa.example.com never allows
+// https://opa.example.com.evil.test, and https://opa.example.com/v1/data/pc
+// never allows .../v1/data/pc-other. A prefix that ends in "/" is its own
+// boundary; otherwise the endpoint ends there or goes on with "/" or "?".
 func prefixBoundary(raw, prefix string) bool {
 	if len(raw) == len(prefix) || strings.HasSuffix(prefix, "/") {
 		return true
 	}
-	pu, err := url.Parse(prefix)
-	if err != nil {
-		return false
-	}
-	if pu.Path == "" {
-		return raw[len(prefix)] == '/' || raw[len(prefix)] == '?'
-	}
-	return true
+	return raw[len(prefix)] == '/' || raw[len(prefix)] == '?'
 }
 
 func (in NewCheck) validate() (NewCheck, error) {
@@ -366,6 +393,9 @@ func (s *Service) Activate(ctx context.Context, id ids.UUID, su *stepup.StepUp) 
 		out, err = get(ctx, q, c.Org, id)
 		return err
 	})
+	if err == nil {
+		s.cache.drop(c.Org)
+	}
 	return out, err
 }
 
@@ -396,6 +426,10 @@ func (s *Service) Disable(ctx context.Context, id ids.UUID) (Check, error) {
 		out, err = get(ctx, q, c.Org, id)
 		return err
 	})
+	if err == nil {
+		s.cache.drop(c.Org)
+		s.asker.evict(id)
+	}
 	return out, err
 }
 
@@ -541,4 +575,45 @@ func (s *Service) Test(ctx context.Context, id ids.UUID, operation string) (Answ
 		return Answer{}, nil, err
 	}
 	return ans, body, nil
+}
+
+// WithRaiser sets the alert raiser (reflex core).
+func (s *Service) WithRaiser(r reflexports.Raiser) *Service {
+	s.raiser = r
+	return s
+}
+
+// notAllowed records, once per process and check, that an ACTIVE check's
+// endpoint is no longer under the allowed prefixes, so decisions it covers
+// are CANNOT_AUTHORIZE until a person disables it (HR-438): an audit event
+// and an alert.
+func (s *Service) notAllowed(ctx context.Context, org ids.OrgID, c Check) {
+	if !s.cache.first(s.cache.reported, c.ID) {
+		return
+	}
+	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		if _, err := audit.Record(ctx, tx, audit.Event{
+			Name: "policy.external_check_endpoint_not_allowed", Actor: evdomain.Actor{Type: "system", ID: "external_checks"}, Outcome: audit.Failure,
+			Object: &audit.Object{Type: "external_policy_check", ID: c.ID.String()}, Details: map[string]string{"name": c.Name, "host": hostOf(c.Endpoint)},
+		}); err != nil {
+			return err
+		}
+		if s.raiser == nil {
+			return nil
+		}
+		_, err := s.raiser.Raise(ctx, tx.Pgx(), reflexdomain.Signal{
+			Org: org, Source: reflexdomain.SourceSystem, Title: "External policy check endpoint not allowed",
+			Summary: "The active external policy check " + c.Name + " points outside the server's external_checks.allowed_prefixes; " +
+				"the actions it covers cannot be authorized until it is disabled.",
+			Severity: reflexdomain.SeverityHigh, Attention: reflexdomain.AttentionAlert, Basis: reflexdomain.BasisObserved,
+			Subjects:  []reflexdomain.Subject{{Type: reflexdomain.SubjectResource, ID: "external_policy_check:" + c.ID.String()}},
+			GroupKey:  "external_check:" + c.ID.String(),
+			DedupeKey: "external_check.endpoint_not_allowed:" + c.ID.String(), OccurredAt: time.Now(),
+			Facts: map[string]string{"check": c.ID.String(), "name": c.Name},
+		})
+		return err
+	})
+	if err != nil {
+		s.log.WarnContext(ctx, "external_checks.endpoint_not_allowed_report_failed", "check", c.ID.String(), pclog.Err(err))
+	}
 }

@@ -88,3 +88,19 @@ func TestHR441_OnlyTheBuiltinProviderDeclaresIdentityRisk(t *testing.T) {
 		t.Error("a built-in provider with a service account was accepted")
 	}
 }
+
+// TestHR435_SourceIsOneCleanLine: a source with a line break is refused;
+// control, format and bidi characters are stripped from what is kept.
+// Covers: F366
+func TestHR435_SourceIsOneCleanLine(t *testing.T) {
+	p := classifier()
+	for _, src := range []string{"catalog\nreason: approved", "a\rb", "x" + string(rune(0x2028)) + "y"} {
+		if _, err := Accept(p, classification("pii", src, "rule"), now, nil); err == nil {
+			t.Errorf("%q accepted", src)
+		}
+	}
+	f, err := Accept(p, classification("pii", "cat"+string(rune(0x202E))+"alog"+string(rune(0x200B)), "rule"), now, nil)
+	if err != nil || f.Source != "catalog" {
+		t.Fatalf("Accept = %q, %v", f.Source, err)
+	}
+}

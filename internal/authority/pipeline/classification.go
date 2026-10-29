@@ -14,6 +14,10 @@ import (
 // ClassificationMaxAge, which is ignored.
 const ReasonClassificationStale = "CLASSIFICATION_STALE"
 
+// ReasonClassificationIgnored notes a pc.classification fact that is not
+// of the classification kind or lacks its provenance, which is ignored.
+const ReasonClassificationIgnored = "CLASSIFICATION_IGNORED"
+
 // ClassificationMaxAge is how old a classification may be and still raise
 // a read's class: the longest lag any fact may declare.
 const ClassificationMaxAge = fdomain.MaxLagCeiling
@@ -36,6 +40,12 @@ func (p *Pipeline) classify(ctx context.Context, s *state) bool {
 	f, ok := got[fdomain.NameClassification]
 	switch {
 	case !ok || f.Class() == "":
+		return true
+	case f.Kind.Of() != fdomain.KindClassification || f.Source == "" || f.Method == "":
+		// A value-kind declaration of the name (from before M16), or a fact
+		// without provenance, never raises a class (HR-435).
+		s.cl.note(StepFacts, StatusNotApplicable, ReasonClassificationIgnored,
+			fdomain.NameClassification+" is not a classification with provenance and is ignored")
 		return true
 	case s.cont.Now.Sub(f.ObservedAt) > ClassificationMaxAge:
 		s.cl.note(StepFacts, StatusNotApplicable, ReasonClassificationStale,
