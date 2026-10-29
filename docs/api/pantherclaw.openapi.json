@@ -9078,6 +9078,60 @@
         }
       }
     },
+    "/pantherclaw.v1.CoverageService/GetCoverageGraph": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.CoverageService"
+        ],
+        "summary": "GetCoverageGraph",
+        "description": "GetCoverageGraph returns an agent's coverage as a graph (F277; Team\n edition and above): the agent, its scopes, each scope's routes and\n where they go, with each route marked TESTED, POSSIBLE, EXCLUDED or\n UNVERIFIED. It is built only from the records the caller may read,\n filtered before any node is built (HR-402); unknown is UNVERIFIED,\n never controlled.\n permission: coverage.read",
+        "operationId": "pantherclaw.v1.CoverageService.GetCoverageGraph",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetCoverageGraphRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetCoverageGraphResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.DataRequestService/CreateExport": {
       "post": {
         "tags": [
@@ -43771,6 +43825,27 @@
             },
             "title": "verified_operations",
             "description": "For each read of the scopes shown, when its latest passing\n target-verifier test ran. A test vouches only for the read it tested;\n writes stay PARTIAL in M9 (founder decision N15)."
+          },
+          "targetAccount": {
+            "type": "string",
+            "title": "target_account",
+            "description": "The GitHub App installation's account login when the credential\n issues installation tokens, else empty; shown only to a holder of\n connection.read (F423)."
+          },
+          "grantIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "grant_ids",
+            "description": "The active grants of the affected agents that allow an operation of\n the connection, newest first; only agents the caller holds grant.read\n over (F423)."
+          },
+          "recentTransactionIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "recent_transaction_ids",
+            "description": "The 20 newest transactions on the connection by the affected agents;\n only agents the caller holds evidence.read over (F423)."
           }
         },
         "title": "AccessDetail",
@@ -44133,6 +44208,67 @@
         "title": "CoverageFinding",
         "additionalProperties": false,
         "description": "CoverageFinding is an exposure finding (F048; M10 adds kinds)."
+      },
+      "pantherclaw.v1.CoverageGraphEdge": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "title": "from",
+            "description": "From node id."
+          },
+          "to": {
+            "type": "string",
+            "title": "to",
+            "description": "To node id."
+          }
+        },
+        "title": "CoverageGraphEdge",
+        "additionalProperties": false,
+        "description": "CoverageGraphEdge joins two nodes: agent to scope, scope to route, route\n to target."
+      },
+      "pantherclaw.v1.CoverageGraphNode": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "\"agent:\u003cid\u003e\", \"scope:\u003cconnection_id\u003e/\u003coperation\u003e\", \"route:\u003croute id\u003e\"\n or \"target:\u003chost\u003e\"."
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "\"AGENT\", \"SCOPE\", \"ROUTE\" or \"TARGET\"."
+          },
+          "label": {
+            "type": "string",
+            "title": "label",
+            "description": "What to show: the agent id, the operation, the route's channel or\n kind, or the host. A route's locator is untrusted text."
+          },
+          "routeKind": {
+            "type": "string",
+            "title": "route_kind",
+            "description": "For a route: its kind, e.g. \"direct_api\"."
+          },
+          "routeStatus": {
+            "type": "string",
+            "title": "route_status",
+            "description": "For a route: its status, e.g. \"possible\"."
+          },
+          "control": {
+            "type": "string",
+            "title": "control",
+            "description": "For a route: \"TESTED\" (mediated or closed), \"POSSIBLE\", \"EXCLUDED\" or\n \"UNVERIFIED\" (every other status, unknown included)."
+          },
+          "closureId": {
+            "type": "string",
+            "title": "closure_id",
+            "description": "For a closed route: the closure that closed it."
+          }
+        },
+        "title": "CoverageGraphNode",
+        "additionalProperties": false,
+        "description": "CoverageGraphNode is one node of a coverage graph."
       },
       "pantherclaw.v1.CoverageInvalidation": {
         "type": "object",
@@ -44697,6 +44833,78 @@
         "title": "GetClosureResponse",
         "additionalProperties": false,
         "description": "GetClosureResponse returns it."
+      },
+      "pantherclaw.v1.GetCoverageGraphRequest": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "title": "agent_id",
+            "format": "uuid",
+            "description": "Agent id."
+          },
+          "connectionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "Only this connection.",
+            "nullable": true
+          },
+          "operation": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "operation",
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7}$",
+            "description": "Only this operation.",
+            "nullable": true
+          }
+        },
+        "title": "GetCoverageGraphRequest",
+        "additionalProperties": false,
+        "description": "GetCoverageGraphRequest names an agent, optionally one connection and\n operation.",
+        "required": [
+          "agentId"
+        ]
+      },
+      "pantherclaw.v1.GetCoverageGraphResponse": {
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.CoverageGraphNode"
+            },
+            "title": "nodes",
+            "description": "Nodes."
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.CoverageGraphEdge"
+            },
+            "title": "edges",
+            "description": "Edges."
+          },
+          "boundaryState": {
+            "type": "string",
+            "title": "boundary_state",
+            "description": "What the scopes shown say about the agent, as the agent lifecycle\n derives it: \"PROTECTED\", \"PARTIALLY_PROTECTED\" or \"OBSERVED\"."
+          },
+          "scopeLimited": {
+            "type": "boolean",
+            "title": "scope_limited",
+            "description": "Set when the caller may not read every scope of the agent."
+          }
+        },
+        "title": "GetCoverageGraphResponse",
+        "additionalProperties": false,
+        "description": "GetCoverageGraphResponse is the graph."
       },
       "pantherclaw.v1.GetCoverageRequest": {
         "type": "object",

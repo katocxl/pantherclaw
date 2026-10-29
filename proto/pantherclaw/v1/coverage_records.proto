@@ -114,6 +114,16 @@ service CoverageService {
   // when seen again with the same excess.
   // permission: coverage.manage
   rpc AcknowledgeFinding(AcknowledgeFindingRequest) returns (AcknowledgeFindingResponse);
+  // GetCoverageGraph returns an agent's coverage as a graph (F277; Team
+  // edition and above): the agent, its scopes, each scope's routes and
+  // where they go, with each route marked TESTED, POSSIBLE, EXCLUDED or
+  // UNVERIFIED. It is built only from the records the caller may read,
+  // filtered before any node is built (HR-402); unknown is UNVERIFIED,
+  // never controlled.
+  // permission: coverage.read
+  rpc GetCoverageGraph(GetCoverageGraphRequest) returns (GetCoverageGraphResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // CoverageState is the protection claim of one scope (F435–F438).
@@ -682,6 +692,17 @@ message AccessDetail {
   // target-verifier test ran. A test vouches only for the read it tested;
   // writes stay PARTIAL in M9 (founder decision N15).
   repeated VerifiedOperation verified_operations = 19;
+  // The GitHub App installation's account login when the credential
+  // issues installation tokens, else empty; shown only to a holder of
+  // connection.read (F423).
+  string target_account = 20;
+  // The active grants of the affected agents that allow an operation of
+  // the connection, newest first; only agents the caller holds grant.read
+  // over (F423).
+  repeated string grant_ids = 21;
+  // The 20 newest transactions on the connection by the affected agents;
+  // only agents the caller holds evidence.read over (F423).
+  repeated string recent_transaction_ids = 22;
 }
 
 // VerifiedOperation is when the latest passing target-verifier test of one
@@ -845,4 +866,61 @@ message ListSnapshotsResponse {
   repeated CoverageSnapshot snapshots = 1;
   // Token for the next page; empty at the end.
   string next_page_token = 2;
+}
+
+// GetCoverageGraphRequest names an agent, optionally one connection and
+// operation.
+message GetCoverageGraphRequest {
+  // Agent id.
+  string agent_id = 1 [(buf.validate.field).string.uuid = true];
+  // Only this connection.
+  optional string connection_id = 2 [(buf.validate.field).string.uuid = true];
+  // Only this operation.
+  optional string operation = 3 [(buf.validate.field).string = {
+    max_len: 128
+    pattern: "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7}$"
+  }];
+}
+
+// CoverageGraphNode is one node of a coverage graph.
+message CoverageGraphNode {
+  // "agent:<id>", "scope:<connection_id>/<operation>", "route:<route id>"
+  // or "target:<host>".
+  string id = 1;
+  // "AGENT", "SCOPE", "ROUTE" or "TARGET".
+  string kind = 2;
+  // What to show: the agent id, the operation, the route's channel or
+  // kind, or the host. A route's locator is untrusted text.
+  string label = 3;
+  // For a route: its kind, e.g. "direct_api".
+  string route_kind = 4;
+  // For a route: its status, e.g. "possible".
+  string route_status = 5;
+  // For a route: "TESTED" (mediated or closed), "POSSIBLE", "EXCLUDED" or
+  // "UNVERIFIED" (every other status, unknown included).
+  string control = 6;
+  // For a closed route: the closure that closed it.
+  string closure_id = 7;
+}
+
+// CoverageGraphEdge joins two nodes: agent to scope, scope to route, route
+// to target.
+message CoverageGraphEdge {
+  // From node id.
+  string from = 1;
+  // To node id.
+  string to = 2;
+}
+
+// GetCoverageGraphResponse is the graph.
+message GetCoverageGraphResponse {
+  // Nodes.
+  repeated CoverageGraphNode nodes = 1;
+  // Edges.
+  repeated CoverageGraphEdge edges = 2;
+  // What the scopes shown say about the agent, as the agent lifecycle
+  // derives it: "PROTECTED", "PARTIALLY_PROTECTED" or "OBSERVED".
+  string boundary_state = 3;
+  // Set when the caller may not read every scope of the agent.
+  bool scope_limited = 4;
 }

@@ -323,6 +323,14 @@ func (g *Gateway) Contained() error {
 	return err
 }
 
+// Epoch is the containment epoch the gateway's check holds now, 0 while
+// its view is stale. It reads only: a permit from an older epoch is
+// refused as stale either way (PN-011.3 measures when this catches up).
+func (g *Gateway) Epoch() int64 {
+	e, _ := g.containment.Check()
+	return e
+}
+
 // WaitReady returns once the first containment snapshot and the first
 // configuration arrived: the gateway serves nothing before (HR-010,
 // decision 19).

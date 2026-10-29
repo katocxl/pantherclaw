@@ -31,18 +31,43 @@ func (r *readers) can(ctx context.Context, agent *ids.UUID) (bool, error) {
 	if agent == nil {
 		return r.c.Can(td.PermCoverageRead, td.OrgPath(r.c.Org)), nil
 	}
-	path, ok := r.paths[*agent]
-	if !ok {
-		a, err := r.q.GetAgent(ctx, r.c.Org, *agent)
-		if err != nil {
-			return false, err
-		}
-		if path, err = agents.PathOf(ctx, r.q, a); err != nil {
-			return false, err
-		}
-		r.paths[*agent] = path
+	path, err := r.path(ctx, *agent)
+	if err != nil {
+		return false, err
 	}
 	return r.c.Can(td.PermCoverageRead, path), nil
+}
+
+// path is where an agent lives.
+func (r *readers) path(ctx context.Context, agent ids.UUID) (td.Path, error) {
+	if path, ok := r.paths[agent]; ok {
+		return path, nil
+	}
+	a, err := r.q.GetAgent(ctx, r.c.Org, agent)
+	if err != nil {
+		return nil, err
+	}
+	path, err := agents.PathOf(ctx, r.q, a)
+	if err != nil {
+		return nil, err
+	}
+	r.paths[agent] = path
+	return path, nil
+}
+
+// holding keeps the agents the caller holds perm over, in order.
+func (r *readers) holding(ctx context.Context, perm td.Permission, of []ids.UUID) ([]ids.UUID, error) {
+	var out []ids.UUID
+	for _, a := range of {
+		path, err := r.path(ctx, a)
+		if err != nil {
+			return nil, err
+		}
+		if r.c.Can(perm, path) {
+			out = append(out, a)
+		}
+	}
+	return out, nil
 }
 
 // read runs fn read-only in the caller's org, for a caller holding

@@ -403,6 +403,26 @@ WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
 ORDER BY agent_id
 LIMIT 200;
 
+-- The active grants in effect now of some agents, with their bounds: the
+-- access detail links those that allow an operation of the connection
+-- (F423).
+-- name: CoverageActiveGrantsOfAgents :many
+SELECT g.id, g.agent_id, r.bounds FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+WHERE g.org_id = sqlc.arg(org_id) AND g.agent_id = ANY(sqlc.arg(agent_ids)::uuid[]) AND g.state = 'ACTIVE'
+  AND r.not_before <= now() AND r.expires_at > now()
+ORDER BY g.id DESC
+LIMIT 500;
+
+-- The newest transactions on a connection by some agents' runs (F423).
+-- name: CoverageRecentTransactionsOfConnection :many
+SELECT t.id FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = sqlc.arg(org_id) AND t.connection_id = sqlc.arg(connection_id)
+  AND r.agent_id = ANY(sqlc.arg(agent_ids)::uuid[])
+ORDER BY t.created_at DESC, t.id DESC
+LIMIT sqlc.arg(max_rows);
+
 -- The bounds of the org's active grants in effect now: the operations
 -- they allow are what a connection's credential is declared to need
 -- (F048).

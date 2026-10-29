@@ -15,6 +15,44 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const coverageActiveGrantsOfAgents = `-- name: CoverageActiveGrantsOfAgents :many
+SELECT g.id, g.agent_id, r.bounds FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+WHERE g.org_id = $1 AND g.agent_id = ANY($2::uuid[]) AND g.state = 'ACTIVE'
+  AND r.not_before <= now() AND r.expires_at > now()
+ORDER BY g.id DESC
+LIMIT 500
+`
+
+type CoverageActiveGrantsOfAgentsRow struct {
+	ID      ids.UUID
+	AgentID ids.UUID
+	Bounds  []byte
+}
+
+// The active grants in effect now of some agents, with their bounds: the
+// access detail links those that allow an operation of the connection
+// (F423).
+func (q *Queries) CoverageActiveGrantsOfAgents(ctx context.Context, orgID ids.OrgID, agentIds []ids.UUID) ([]CoverageActiveGrantsOfAgentsRow, error) {
+	rows, err := q.db.Query(ctx, coverageActiveGrantsOfAgents, orgID, agentIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CoverageActiveGrantsOfAgentsRow{}
+	for rows.Next() {
+		var i CoverageActiveGrantsOfAgentsRow
+		if err := rows.Scan(&i.ID, &i.AgentID, &i.Bounds); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const coverageAgentsOfConnection = `-- name: CoverageAgentsOfConnection :many
 SELECT DISTINCT agent_id FROM pc.coverage_snapshots
 WHERE org_id = $1 AND connection_id = $2
@@ -499,6 +537,48 @@ LIMIT $2
 // (F021).
 func (q *Queries) CoverageProtectedAgents(ctx context.Context, orgID ids.OrgID, maxRows int32) ([]ids.UUID, error) {
 	rows, err := q.db.Query(ctx, coverageProtectedAgents, orgID, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const coverageRecentTransactionsOfConnection = `-- name: CoverageRecentTransactionsOfConnection :many
+SELECT t.id FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = $1 AND t.connection_id = $2
+  AND r.agent_id = ANY($3::uuid[])
+ORDER BY t.created_at DESC, t.id DESC
+LIMIT $4
+`
+
+type CoverageRecentTransactionsOfConnectionParams struct {
+	OrgID        ids.OrgID
+	ConnectionID *ids.UUID
+	AgentIds     []ids.UUID
+	MaxRows      int32
+}
+
+// The newest transactions on a connection by some agents' runs (F423).
+func (q *Queries) CoverageRecentTransactionsOfConnection(ctx context.Context, arg CoverageRecentTransactionsOfConnectionParams) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, coverageRecentTransactionsOfConnection,
+		arg.OrgID,
+		arg.ConnectionID,
+		arg.AgentIds,
+		arg.MaxRows,
+	)
 	if err != nil {
 		return nil, err
 	}
