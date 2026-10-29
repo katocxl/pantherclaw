@@ -86,6 +86,8 @@ func factNames(reqs []fdomain.Requirement, rules []consequences.Rule) []string {
 	for _, r := range fdomain.Merge(reqs) {
 		names = append(names, r.Name)
 	}
+	// Rules further down a chain read about their consequence's target
+	// (consequences.Input.More), never the action's.
 	for _, r := range rules {
 		for _, n := range r.RequiresFacts {
 			if !slices.Contains(names, n) {
@@ -96,17 +98,23 @@ func factNames(reqs []fdomain.Requirement, rules []consequences.Rule) []string {
 	return names
 }
 
-// consequences evaluates the rules from the facts step 6 read.
-func (s *state) consequences(ctx context.Context, ev *consequences.Evaluator, recorded map[string]fdomain.Fact, reqs []fdomain.Requirement) {
+// consequences evaluates the rules from the facts step 6 read, and down a
+// chain from the facts about each predicted consequence's target (G0 M17
+// D109).
+func (p *Pipeline) consequences(ctx context.Context, s *state, ev *consequences.Evaluator, recorded map[string]fdomain.Fact, reqs []fdomain.Requirement) {
 	if s.pinned == nil || len(s.pinned.Consequences) == 0 {
 		return
 	}
-	ages := map[string]time.Duration{}
-	for _, r := range fdomain.Merge(reqs) {
-		ages[r.Name] = r.MaxAge
-	}
 	s.ev.Consequences = ev.Evaluate(ctx, s.pinned.Consequences, consequences.Input{
-		On: s.def, TargetID: s.a.Target.ID, Facts: recorded, Ages: ages, Now: s.cont.Now,
+		On: s.def, TargetID: s.a.Target.ID, Facts: recorded, Ages: maxAges(reqs), Now: s.cont.Now, Direct: p.direct(),
+		More: func(ctx context.Context, on *defs.Definition, targetID string, names []string) (map[string]fdomain.Fact, map[string]time.Duration, error) {
+			var reqs []fdomain.Requirement
+			if s.policy != nil {
+				reqs = s.policy.Compiled.FactRequirements(on.Operation, s.a.Env)
+			}
+			facts, err := p.Reader.Facts(ctx, s.req.Org, s.connID(), on.Target.Type, targetID, names)
+			return facts, maxAges(reqs), err
+		},
 	})
 	for i := range s.ev.Consequences {
 		c := &s.ev.Consequences[i]
@@ -123,7 +131,11 @@ func (s *state) consequences(ctx context.Context, ev *consequences.Evaluator, re
 			continue
 		case c.State == consequences.Unknown:
 			k.unknown = len(s.cl.items)
-			s.cl.add(StepRequirements, adomain.RequireApproval, consequences.ReasonUnknown,
+			reason := c.Reason
+			if reason == "" {
+				reason = consequences.ReasonUnknown
+			}
+			s.cl.add(StepRequirements, adomain.RequireApproval, reason,
 				"Consequence unknown: "+c.Operation+" on "+c.Target.ID+" ("+c.Rule+"): "+strings.Join(c.Unknown, "; "), "")
 		case c.State == consequences.Predicted:
 			s.cl.note(StepFacts, StatusAnnotated, consequences.ReasonPredicted, predicted(c))
@@ -133,6 +145,15 @@ func (s *state) consequences(ctx context.Context, ev *consequences.Evaluator, re
 		k.action, k.ir = s.consequenceAction(c)
 		s.pending = append(s.pending, k)
 	}
+}
+
+// maxAges are the maximum ages requirements ask for their facts.
+func maxAges(reqs []fdomain.Requirement) map[string]time.Duration {
+	ages := map[string]time.Duration{}
+	for _, r := range fdomain.Merge(reqs) {
+		ages[r.Name] = r.MaxAge
+	}
+	return ages
 }
 
 // consequenceFacts reads, for each pending consequence, the facts its

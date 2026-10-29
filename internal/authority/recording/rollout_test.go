@@ -23,17 +23,33 @@ import (
 // before per-agent policy selection (testdata, recorded by the code on main
 // at 8fc4434a: format 1, pipeline 4) still decodes and encodes to the same
 // bytes, and replays to the same decision, checklist and decision basis.
-// The rollout fields are new and omitted when empty, so neither the format
-// nor the pipeline version changed (G0 M11.1, D12).
+// The rollout fields are new and omitted when empty, so the format did not
+// change (G0 M11.1, D12). The pipeline version did, for consequence chains
+// (G0 M17 D133): this server still replays version 4, deciding as version
+// 4 did, so the recording must replay exactly as it was decided.
 func TestHR234_RecordingFromBeforeRolloutsReplaysIdentically(t *testing.T) {
-	raw := readFixture(t, "recording_v1_hold.json")
+	replaysIdentically(t, "recording_v1_hold", 4)
+}
+
+// TestHR234_RecordingOfThisVersionReplaysIdentically: a recording made by
+// pipeline version 5 (testdata, the same hold recorded by this code)
+// replays the same way.
+func TestHR234_RecordingOfThisVersionReplaysIdentically(t *testing.T) {
+	replaysIdentically(t, "recording_v5_hold", pipeline.Version)
+}
+
+// replaysIdentically checks the golden recording name, made by pipeline
+// version v, under the policy bundle of recording_v1_hold.
+func replaysIdentically(t *testing.T, name string, v int) {
+	t.Helper()
+	raw := readFixture(t, name+".json")
 	rec, err := recording.Decode(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rec.Format != recording.FormatVersion || rec.Pipeline != pipeline.Version {
-		t.Fatalf("the fixture is format %d pipeline %d; this code is format %d pipeline %d: a version changed",
-			rec.Format, rec.Pipeline, recording.FormatVersion, pipeline.Version)
+	if rec.Format != recording.FormatVersion || rec.Pipeline != v || !pipeline.Replays(rec.Pipeline) {
+		t.Fatalf("the fixture is format %d pipeline %d; want format %d pipeline %d, which pipeline %d replays: a version changed",
+			rec.Format, rec.Pipeline, recording.FormatVersion, v, pipeline.Version)
 	}
 	if again, err := recording.Encode(rec); err != nil || !bytes.Equal(again, bytes.TrimSpace(raw)) {
 		t.Fatalf("the fixture does not encode to the same bytes (%v)", err)
@@ -62,11 +78,11 @@ func TestHR234_RecordingFromBeforeRolloutsReplaysIdentically(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ev, err := (&pipeline.Pipeline{}).EvaluateWith(t.Context(), rd, req)
+	ev, err := (&pipeline.Pipeline{Replaying: rec.Pipeline}).EvaluateWith(t.Context(), rd, req)
 	if err != nil || len(rd.Gaps()) > 0 {
 		t.Fatalf("replay: %v, gaps %v", err, rd.Gaps())
 	}
-	if got, want := view(ev), string(readFixture(t, "recording_v1_hold.view.txt")); got != want {
+	if got, want := view(ev), string(readFixture(t, name+".view.txt")); got != want {
 		t.Fatalf("the replay differs from the original:\noriginal %s\nreplayed %s", want, got)
 	}
 }

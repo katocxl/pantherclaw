@@ -6,6 +6,7 @@ package domain
 import (
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 )
@@ -20,6 +21,23 @@ type ConsequenceRule struct {
 	RequiresFacts []string    `json:"requires_facts"`
 	Consequence   Consequence `json:"consequence"`
 	ValidUntil    string      `json:"valid_until"`
+	// MaxDepth is how far down a chain the rule applies (G0 M17 D109,
+	// F411): 1, the default, only to an action itself; up to
+	// MaxConsequenceDepth to a consequence of a consequence.
+	MaxDepth int `json:"max_depth,omitzero"`
+}
+
+// MaxConsequenceDepth is the deepest a consequence chain goes (D109).
+const MaxConsequenceDepth = 4
+
+// Depth is the deepest the rule applies: MaxDepth, or 1 without one.
+func (c ConsequenceRule) Depth() int { return max(c.MaxDepth, 1) }
+
+// Expired reports whether the rule's review has expired at now (G0 M17
+// D110): its valid_until day is over, or cannot be read.
+func (c ConsequenceRule) Expired(now time.Time) bool {
+	exp, err := parseDay("valid_until", c.ValidUntil)
+	return err != nil || !now.Before(exp)
 }
 
 // Consequence is the predicted downstream effect.
@@ -81,6 +99,8 @@ func (c ConsequenceRule) validate(ops map[string]*Definition) error {
 		return invalid("consequence %s: consequence operation %s is not defined in this package", c.ID, c.Consequence.Operation)
 	case len(c.RequiresFacts) == 0 || len(c.RequiresFacts) > maxItems:
 		return invalid("consequence %s: a consequence needs 1..%d verified facts (no invented causality)", c.ID, maxItems)
+	case c.MaxDepth < 0 || c.MaxDepth > MaxConsequenceDepth:
+		return invalid("consequence %s: max_depth is 1..%d", c.ID, MaxConsequenceDepth)
 	}
 	for _, f := range c.RequiresFacts {
 		if !kindRe.MatchString(f) {

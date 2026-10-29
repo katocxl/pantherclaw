@@ -19,4 +19,19 @@ package pipeline
 // 4: step 6 also checks the definition's fact bindings (Prerequisite.Binds,
 // HR-205): from the same recorded reads, a merge whose sha differs from its
 // fact's is CANNOT_AUTHORIZE HEAD_MOVED, which version 3 did not decide.
-const Version = 4
+//
+// 5: step 6 follows consequence chains down rules that apply deeper than
+// the action itself, reading the facts about each consequence's target
+// (G0 M17 D109), an expired rule's consequence is UNKNOWN (D110), and the
+// org's customer rules join the package's (D106, D108).
+const Version = 5
+
+// Replays reports whether this server replays inputs recorded by pipeline
+// version v (G0 M17 D133): this version, and version 4, which it decides
+// as version 4 did (Pipeline.Replaying). Others are incomplete (F507).
+func Replays(v int) bool { return v == 4 || v == Version }
+
+// direct reports whether the evaluation decides consequences as version 4
+// did: the rules for the action's operation only, without chains, expiry
+// or customer rules.
+func (p *Pipeline) direct() bool { return p.Replaying == 4 }

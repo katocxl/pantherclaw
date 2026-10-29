@@ -87,6 +87,9 @@ type Pipeline struct {
 	// is DENY DELEGATION_NOT_ALLOWED. Unset, other kinds are unaffected
 	// and an a2a call is CANNOT_AUTHORIZE (fail closed).
 	Peer PeerCheck
+	// Replaying is, for a replay, the pipeline version that recorded the
+	// inputs (one that Replays); zero, or Version, decides as this version.
+	Replaying int
 }
 
 // IdentitySummary is the identity part of a decision receipt (ids only).
@@ -698,7 +701,7 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 	s.facts = map[string]fdomain.Value{}
 	var rules []consequences.Rule
 	if s.pinned != nil {
-		rules = s.pinned.Consequences
+		rules = consequences.Direct(s.pinned.Consequences, s.a.Operation)
 	}
 	names := factNames(reqs, rules)
 	if len(names) == 0 {
@@ -711,7 +714,7 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 		return
 	}
 	defer func() {
-		s.consequences(ctx, evaluatorFor(p.consequenceLimits(s)), recorded, reqs)
+		p.consequences(ctx, s, evaluatorFor(p.consequenceLimits(s)), recorded, reqs)
 		p.consequenceFacts(ctx, s)
 	}()
 	if len(reqs) == 0 {

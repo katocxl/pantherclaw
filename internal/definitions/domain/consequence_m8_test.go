@@ -108,3 +108,35 @@ func TestHR206_AConsequenceOperationIsDefinedInItsPackage(t *testing.T) {
 		}
 	}
 }
+
+// TestHR455_ARuleDeclaresHowDeepItApplies: max_depth is 1..4, and a rule
+// without one applies only to an action itself (G0 M17 D109).
+//
+// Covers: F411
+func TestHR455_ARuleDeclaresHowDeepItApplies(t *testing.T) {
+	merge := minimal(map[string]domain.ParamSpec{})
+	merge.Operation, merge.Access = "x.pull.merge", domain.AccessWrite
+	merge.Approval = &domain.ApprovalTemplate{Title: "Merge {target.id}", Fields: []string{"target.id"}}
+	pkg := func(depth int) *domain.Package {
+		return &domain.Package{
+			Format: 1, Name: "pc.test", Version: "1.0.0", Publisher: "pantherclaw", Summary: "s", Definitions: []domain.Definition{*merge},
+			Consequences: []domain.ConsequenceRule{{
+				ID: "merge-merges", Operation: "x.pull.merge", When: "true", RequiresFacts: []string{"x.next"}, ValidUntil: "2027-01-01",
+				Consequence: domain.Consequence{Operation: "x.pull.merge", Effect: "merge", Description: "Merges"}, MaxDepth: depth,
+			}},
+		}
+	}
+	for _, depth := range []int{0, 1, 4} {
+		if err := pkg(depth).Validate(); err != nil {
+			t.Errorf("max_depth %d: %v", depth, err)
+		}
+	}
+	for _, depth := range []int{-1, 5} {
+		if err := pkg(depth).Validate(); !errors.Is(err, domain.ErrInvalid) || !strings.Contains(err.Error(), "max_depth is 1..4") {
+			t.Errorf("max_depth %d: %v", depth, err)
+		}
+	}
+	if d := (domain.ConsequenceRule{}).Depth(); d != 1 {
+		t.Errorf("default depth %d", d)
+	}
+}
