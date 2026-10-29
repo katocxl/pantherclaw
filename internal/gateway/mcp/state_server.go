@@ -66,11 +66,19 @@ type serverState struct {
 	c            StateClient
 	seal         Sealer
 	org, gateway string
-	clock        func() time.Time
+	// local keeps the tasks of a gateway without a broker key in this
+	// process's memory, as before M15: their bodies cannot be sealed, so
+	// they are not shared. Holds and sessions are shared all the same.
+	local *memoryStore
+	clock func() time.Time
 }
 
 func newServerState(c StateClient, sealer Sealer, org, gateway string, now func() time.Time) *serverState {
-	return &serverState{c: c, seal: sealer, org: org, gateway: gateway, clock: now}
+	s := &serverState{c: c, seal: sealer, org: org, gateway: gateway, clock: now}
+	if sealer == nil {
+		s.local = newStore(now)
+	}
+	return s
 }
 
 func (s *serverState) now() time.Time { return s.clock() }
@@ -209,6 +217,9 @@ func (s *serverState) openTask(id string, e *pb.MCPStateEntry) (task, bool) {
 // one; nil when it cannot be stored (no broker key, the bounds, or the
 // server out of reach), which only costs the agent the task.
 func (s *serverState) newTask(b binding, a actionir.Parsed, k key, res dispatch.Result, result toolResult) *task {
+	if s.local != nil {
+		return s.local.newTask(b, a, k, res, result)
+	}
 	held := res.Class == dispatch.Held
 	actionID := a.Action.ActionID
 	if !held {
@@ -251,6 +262,9 @@ func (s *serverState) newTask(b binding, a actionir.Parsed, k key, res dispatch.
 // claim is a compare-and-set of busy: a poll that loses the race only
 // reads.
 func (s *serverState) lookup(id string, b binding, resubmit bool) (snapshot task, claimed, found bool) {
+	if s.local != nil {
+		return s.local.lookup(id, b, resubmit)
+	}
 	e, err := s.get(pb.MCPStateKind_MCP_STATE_KIND_TASK, taskKey(id))
 	if err != nil || entryBinding(e) != b || !s.now().Before(e.GetExpireTime().AsTime()) {
 		return task{}, false, false
@@ -272,6 +286,9 @@ func (s *serverState) lookup(id string, b binding, resubmit bool) (snapshot task
 // finish records a resubmission's answer; a task canceled meanwhile is
 // answered from the poll's copy.
 func (s *serverState) finish(snap task, res dispatch.Result, result toolResult) task {
+	if s.local != nil {
+		return s.local.finish(snap, res, result)
+	}
 	e, err := s.get(pb.MCPStateKind_MCP_STATE_KIND_TASK, taskKey(snap.id))
 	t, ok := task{}, false
 	if err == nil && entryBinding(e) == snap.binding {
@@ -298,6 +315,10 @@ func (s *serverState) finish(snap task, res dispatch.Result, result toolResult) 
 
 // release ends a claim that produced no answer.
 func (s *serverState) release(id string) {
+	if s.local != nil {
+		s.local.release(id)
+		return
+	}
 	e, err := s.get(pb.MCPStateKind_MCP_STATE_KIND_TASK, taskKey(id))
 	if err != nil || !e.GetBusy() {
 		return
@@ -309,6 +330,14 @@ func (s *serverState) release(id string) {
 
 // cancel forgets a task of this binding and the hold of its call.
 func (s *serverState) cancel(id string, b binding) bool {
+	if s.local != nil {
+		t, _, found := s.local.lookup(id, b, false)
+		if !found || !s.local.cancel(id, b) {
+			return false
+		}
+		_, _ = s.del(pb.MCPStateKind_MCP_STATE_KIND_HOLD, t.key[:], 0)
+		return true
+	}
 	k := taskKey(id)
 	e, err := s.get(pb.MCPStateKind_MCP_STATE_KIND_TASK, k)
 	if err != nil || entryBinding(e) != b {

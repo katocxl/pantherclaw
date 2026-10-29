@@ -150,6 +150,9 @@ type options struct {
 	// pc.stripe and the connection "stripe" to it, held by the gateway with
 	// stripeKey sealed (the e2e test key when empty; dev seed --stripe-url,
 	// G0 M14).
+	// brokerKey gives the gateway a broker key even when no connection
+	// needs one: it seals the MCP tasks it keeps on the server (G0 M15 D13).
+	brokerKey    bool
 	stripe       bool
 	stripeFaults stripe.Faults
 	stripeKey    string
@@ -403,7 +406,7 @@ func start(t *testing.T, o options) *stack {
 		// GitHub the stack calls (github.api_url).
 		gc.GitHub.APIURL = s.gh.url
 	}
-	if o.access == "pantherclaw_held" || o.github || o.stripe || o.slack || o.postgres != nil {
+	if o.access == "pantherclaw_held" || o.github || o.stripe || o.slack || o.postgres != nil || o.brokerKey {
 		// The gateway's broker key, which only it can open credentials with
 		// (HR-061); it registers the public half when it starts.
 		gc.Broker.KEKFiles = []string{filepath.Join(dir, "gateway-kek")}

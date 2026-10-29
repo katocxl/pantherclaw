@@ -227,8 +227,18 @@ func TestHR412_AStateMissOnlyCostsANewAction(t *testing.T) {
 	if _, _, found := rotated.lookup(tk.id, bind, true); found {
 		t.Fatal("a body sealed to another key was found")
 	}
-	if newServerState(f, nil, holdOrg, "gw-1", c.now).newTask(bind, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{}) != nil {
-		t.Fatal("a task was kept without a broker key")
+	// Without a broker key a task stays in its process, as before M15.
+	sent := len(f.seen)
+	local := newServerState(f, nil, holdOrg, "gw-1", c.now)
+	lt := local.newTask(bind, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{})
+	if lt == nil || len(f.seen) != sent {
+		t.Fatal("a task without a broker key was not kept locally, or was sent")
+	}
+	if _, _, found := local.lookup(lt.id, bind, false); !found {
+		t.Fatal("a local task was not found")
+	}
+	if _, _, found := newServerState(f, nil, holdOrg, "gw-1", c.now).lookup(lt.id, bind, false); found {
+		t.Fatal("another process found a local task")
 	}
 	f.down = true
 	a.settle(k, bind, p.Action.ActionID, dispatch.Result{Class: dispatch.Held})
