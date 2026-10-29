@@ -1,0 +1,509 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+package mcp
+
+import (
+	"cmp"
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
+	"errors"
+	"fmt"
+	"log/slog"
+	"maps"
+	"regexp"
+	"slices"
+	"time"
+
+	"github.com/katocxl/pantherclaw/internal/actionir"
+	"github.com/katocxl/pantherclaw/internal/definitions/domain"
+	"github.com/katocxl/pantherclaw/internal/detection/injection"
+	"github.com/katocxl/pantherclaw/internal/gateway/control"
+	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
+	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/money"
+)
+
+// The elicitation gate (G0 M15 D33, D34; HR-420, HR-421). When a
+// 2026-07-28 upstream server answers a tools/call with input_required, the
+// 2026-07-28 face relays the requests to the agent, rebuilt from their
+// scanned parts only (D44 M3), and only for
+// a tool whose reviewed mapping declares elicitation fields, and only when
+// every request is a form-mode elicitation whose requested schema asks for
+// declared fields of compatible types, and whose text the injection scan
+// finds clean. Anything else stays today's tool error, and a declared
+// tool's refusal is reported as elicitation_refused. The first call stays
+// recorded as it is today (FAILED, upstream_input_required).
+//
+// The server's requestState and request keys never reach the agent (D39,
+// HR-075): the gateway keeps them as an ELICITATION state entry, bound to
+// the call's connection, run and instance, and gives the agent a
+// single-use random handle as its requestState. The agent's retry carrying
+// inputResponses must present that handle for the same binding and tool;
+// it is a new action: each accepted answer is checked against the asked
+// and declared fields before anything is decided, becomes the material
+// param elicitation.<field>, and goes upstream only when the Authority
+// permits the action (dispatch builds the inputResponses from the permitted
+// action). The handle is spent only after ALLOW and BeginDispatch, right
+// before the send (D44): a refused, held or unauthenticated retry keeps it,
+// a held retry's task keeps it for the resubmission, and a lost race is
+// recorded FAILED elicitation_handle_spent with nothing sent. A handle
+// lives 10 minutes: an approval that comes later finds it expired, and the
+// agent calls the tool again. URL-mode elicitation,
+// sampling and roots stay declined, and so does an elicitation/create on a
+// 2025-11-25 stream (upstream.answer). The question's text is never kept:
+// the gateway logs only its SHA-256 and the scan's result.
+
+// Bounds on what the gate relays and accepts.
+const (
+	maxInputRequests = 16
+	maxRequestState  = 4 << 10
+)
+
+var inputKeyRe = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
+
+// inputRequest is one request of an input_required result.
+type inputRequest struct {
+	Method string `json:"method"`
+	Params struct {
+		Mode            string         `json:"mode"`
+		Message         string         `json:"message"`
+		RequestedSchema *formSchema    `json:"requestedSchema"`
+		URL             jsontext.Value `json:"url"`
+	} `json:"params"`
+}
+
+// formSchema is an elicitation form's requested schema: a flat object.
+type formSchema struct {
+	Type       string                    `json:"type"`
+	Properties map[string]jsontext.Value `json:"properties"`
+	Required   []string                  `json:"required"`
+}
+
+// formField is one property of a form: a primitive.
+type formField struct {
+	Type        string         `json:"type"`
+	Title       string         `json:"title,omitzero"`
+	Description string         `json:"description,omitzero"`
+	Enum        []string       `json:"enum,omitzero"`
+	Default     jsontext.Value `json:"default,omitzero"`
+	Minimum     jsontext.Value `json:"minimum,omitzero"`
+	Maximum     jsontext.Value `json:"maximum,omitzero"`
+	MinLength   int            `json:"minLength,omitzero"`
+	MaxLength   int            `json:"maxLength,omitzero"`
+}
+
+// question is what the gateway keeps of one relayed or refused question.
+type question struct {
+	key, sha256, scan string
+	sum               []byte
+}
+
+// Refusal reasons reported with elicitation_refused (D40); a refusal no
+// reason fits is reported without one.
+const (
+	reasonURLMode         = "url_mode"
+	reasonUndeclaredField = "undeclared_field"
+	reasonTypeMismatch    = "type_mismatch"
+	reasonDuplicateField  = "duplicate_field"
+	reasonTooManyFields   = "too_many_fields"
+	reasonInjection       = "injection_flagged"
+)
+
+// refusal says why the gate refuses: the reported reason ("" when none
+// fits), a fixed description that holds nothing the server wrote, and the
+// SHA-256 of the refused question (nil when it did not decode; D44 L1).
+type refusal struct {
+	reason, why string
+	sum         []byte
+}
+
+// screen checks an input_required result against the tool's declared
+// elicitation fields (D33, D37, D39). It returns the requests to relay,
+// rebuilt from their screened parts only (D44 M3), what the gateway keeps
+// of them, the questions seen and, when it refuses, why.
+func screen(spec *domain.ElicitationSpec, body []byte) (requests jsontext.Value, stored storedElicitation, qs []question, no *refusal) {
+	var res struct {
+		InputRequests map[string]jsontext.Value `json:"inputRequests"`
+		RequestState  jsontext.Value            `json:"requestState"`
+	}
+	if err := json.Unmarshal(body, &res); err != nil || len(res.InputRequests) == 0 {
+		return nil, stored, nil, &refusal{why: "no input requests"}
+	}
+	if len(res.InputRequests) > maxInputRequests {
+		return nil, stored, nil, &refusal{reason: reasonTooManyFields, why: "too many input requests"}
+	}
+	if s := res.RequestState; len(s) > 0 && (s.Kind() != '"' || len(s) > maxRequestState || json.Unmarshal(s, &stored.RequestState) != nil) {
+		return nil, stored, nil, &refusal{why: "a request state that is not a short string"}
+	}
+	asked := map[string]bool{}
+	rebuilt := map[string]any{}
+	for _, key := range slices.Sorted(maps.Keys(res.InputRequests)) {
+		var ir inputRequest
+		if !inputKeyRe.MatchString(key) || json.Unmarshal(res.InputRequests[key], &ir) != nil {
+			return nil, stored, qs, &refusal{why: "an input request that does not decode"}
+		}
+		sum := sha256.Sum256([]byte(ir.Params.Message))
+		q := question{key: key, sha256: hex.EncodeToString(sum[:]), scan: injection.ScanClean, sum: sum[:]}
+		no := checkRequest(spec, ir)
+		var props map[string]any
+		if no == nil {
+			// Field names are unique across the requests (D39).
+			for name := range ir.Params.RequestedSchema.Properties {
+				if asked[name] {
+					no = &refusal{reason: reasonDuplicateField, why: "a field asked for twice"}
+				}
+				asked[name] = true
+			}
+		}
+		if no == nil {
+			// Only what is scanned is relayed: the message and, of each
+			// declared field, its type, title, description and enum values.
+			texts := []string{ir.Params.Message}
+			props = map[string]any{}
+			for name, raw := range ir.Params.RequestedSchema.Properties {
+				var f formField
+				_ = json.Unmarshal(raw, &f) // checkRequest decoded it
+				texts = append(append(texts, f.Title, f.Description), f.Enum...)
+				props[name] = formField{Type: f.Type, Title: f.Title, Description: f.Description, Enum: f.Enum}
+			}
+			for _, t := range texts {
+				if injection.Scan(t).Flagged {
+					q.scan, no = injection.ScanFlagged, &refusal{reason: reasonInjection, why: "the question reads like instructions"}
+					break
+				}
+			}
+		}
+		qs = append(qs, q)
+		if no != nil {
+			no.sum = q.sum
+			return nil, stored, qs, no
+		}
+		schema := map[string]any{"type": "object", "properties": props}
+		if len(ir.Params.RequestedSchema.Required) > 0 {
+			schema["required"] = ir.Params.RequestedSchema.Required
+		}
+		rebuilt[key] = map[string]any{"method": "elicitation/create", "params": map[string]any{"message": ir.Params.Message, "requestedSchema": schema}}
+		digest, _ := json.Marshal(schema, json.Deterministic(true))
+		sumSchema := sha256.Sum256(digest)
+		stored.Requests = append(stored.Requests, storedRequest{
+			Key: key, Fields: slices.Sorted(maps.Keys(props)), SchemaDigest: hex.EncodeToString(sumSchema[:]),
+		})
+	}
+	raw, err := json.Marshal(rebuilt, json.Deterministic(true))
+	if err != nil {
+		return nil, stored, qs, &refusal{why: "the input requests do not encode"}
+	}
+	return raw, stored, qs, nil
+}
+
+// checkRequest checks one input request: a form-mode elicitation for
+// declared fields of compatible types (D33, D37, HR-420); URL mode,
+// sampling and roots stay declined (HR-421).
+func checkRequest(spec *domain.ElicitationSpec, ir inputRequest) *refusal {
+	switch {
+	case ir.Method != "elicitation/create":
+		return &refusal{why: "only elicitation/create is relayed"}
+	case ir.Params.Mode != "" && ir.Params.Mode != "form":
+		return &refusal{reason: reasonURLMode, why: "only form-mode elicitation is relayed"}
+	case len(ir.Params.URL) > 0:
+		return &refusal{reason: reasonURLMode, why: "an elicitation with a URL is not relayed"}
+	case ir.Params.Message == "" || len(ir.Params.Message) > maxRequestState:
+		return &refusal{why: "an elicitation without a short message"}
+	case ir.Params.RequestedSchema == nil || ir.Params.RequestedSchema.Type != "object" || len(ir.Params.RequestedSchema.Properties) == 0:
+		return &refusal{reason: reasonTypeMismatch, why: "an elicitation without a requested form"}
+	case len(ir.Params.RequestedSchema.Properties) > domain.MaxElicitationFields:
+		return &refusal{reason: reasonTooManyFields, why: "a form with too many fields"}
+	}
+	s := ir.Params.RequestedSchema
+	for _, name := range s.Required {
+		if _, ok := s.Properties[name]; !ok {
+			return &refusal{reason: reasonTypeMismatch, why: "a required field the form does not ask for"}
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(s.Properties)) {
+		declared, ok := spec.Field(name)
+		if !ok {
+			return &refusal{reason: reasonUndeclaredField, why: "a field the reviewed mapping does not declare"}
+		}
+		var f formField
+		if err := json.Unmarshal(s.Properties[name], &f, json.RejectUnknownMembers(true)); err != nil {
+			return &refusal{reason: reasonTypeMismatch, why: "a form field of an unsupported shape"}
+		}
+		if !compatible(declared, f) {
+			return &refusal{reason: reasonTypeMismatch, why: "a form field of another type than declared"}
+		}
+	}
+	return nil
+}
+
+// compatible reports whether a form field asks for what a declared field
+// holds: a string for an identifier or content, a string of declared enum
+// values for an enum, a number for a decimal, an integer, a boolean.
+func compatible(declared domain.ParamSpec, f formField) bool {
+	switch declared.Type {
+	case domain.TypeIdentifier, domain.TypeContent:
+		return f.Type == "string" && len(f.Enum) == 0
+	case domain.TypeEnum:
+		return f.Type == "string" && len(f.Enum) > 0 && !slices.ContainsFunc(f.Enum, func(v string) bool { return !slices.Contains(declared.Values, v) })
+	case domain.TypeDecimal:
+		return f.Type == "number" && len(f.Enum) == 0
+	case domain.TypeInteger:
+		return f.Type == "integer" && len(f.Enum) == 0
+	case domain.TypeBoolean:
+		return f.Type == "boolean" && len(f.Enum) == 0
+	case domain.TypeMoney, domain.TypeIdentifierList, domain.TypeText, domain.TypeCommand, domain.TypePath, domain.TypeQueryFilter:
+		// Never an elicitation field (domain.ElicitationTypes).
+	}
+	return false
+}
+
+// relay answers a 2026-07-28 tools/call whose upstream server asked for
+// input: the requests unchanged when the gate passes them, or false when
+// the caller answers today's tool error. A declared tool's refusal is
+// reported as elicitation_refused.
+func (h *Handler) relay(ctx context.Context, conn *control.Connection, tool string, c called) (map[string]any, bool) {
+	spec := conn.Mapper.Elicitation(tool)
+	if spec == nil || c.res.Response == nil || c.res.Code != dispatch.CodeInputRequired {
+		return nil, false
+	}
+	requests, stored, qs, no := screen(spec, c.res.Response.Body)
+	attrs := []any{slog.String("connection_id", conn.GetId()), slog.String("transaction_id", c.res.TransactionID)}
+	for _, q := range qs {
+		attrs = append(attrs, slog.Group("question_"+q.key, slog.String("sha256", q.sha256), slog.String("scan", q.scan)))
+	}
+	if no != nil {
+		// Only the digest, the scan result and the reason code are logged (D44
+		// L2): nothing the server wrote.
+		h.log.WarnContext(ctx, "security.elicitation_refused", append(attrs, slog.String("reason", cmp.Or(no.reason, "unspecified")))...)
+		detail := dispatch.RefusalDetail{ElicitationReason: no.reason, QuestionSHA256: no.sum}
+		h.engine.ReportElicitationRefused(ctx, conn, c.action.Action, detail)
+		return nil, false
+	}
+	// The server's request state and request keys stay with the gateway
+	// (D39, HR-075): the agent gets a single-use handle in their place.
+	stored.Tool = tool
+	handle, err := h.keepElicitation(c.b, stored)
+	if err != nil {
+		h.log.WarnContext(ctx, "gateway.elicitation_not_kept", append(attrs, pclog.Err(err))...)
+		return nil, false
+	}
+	h.log.InfoContext(ctx, "gateway.elicitation_relayed", attrs...)
+	return map[string]any{
+		"resultType": "input_required", "inputRequests": requests, "requestState": handle,
+		"_meta": map[string]any{metaResult: map[string]any{
+			"transaction_id": c.res.TransactionID, "outcome": outcome(c.res), "decision": decision(c.res), "mode": mode(c.res),
+			"receipt": c.res.Receipt,
+		}},
+	}, true
+}
+
+// elicitationTTL is how long a relayed elicitation can be answered (D39).
+const elicitationTTL = 10 * time.Minute
+
+// storedElicitation is what the gateway keeps of a relayed elicitation
+// (D39): the tool, the server's request state and, of each request, its
+// key, the fields it asked for and its schema's digest. Never the question.
+type storedElicitation struct {
+	Tool         string          `json:"tool"`
+	RequestState string          `json:"request_state,omitzero"`
+	Requests     []storedRequest `json:"requests"`
+}
+
+type storedRequest struct {
+	Key          string   `json:"key"`
+	Fields       []string `json:"fields"`
+	SchemaDigest string   `json:"schema_digest"`
+}
+
+// keepElicitation stores a relayed elicitation under the SHA-256 of a
+// fresh random handle, for b, and returns the handle (base64url).
+func (h *Handler) keepElicitation(b binding, s storedElicitation) (string, error) {
+	var handle [32]byte
+	if _, err := rand.Read(handle[:]); err != nil {
+		return "", err
+	}
+	body, err := json.Marshal(s, json.Deterministic(true))
+	if err != nil {
+		return "", err
+	}
+	if _, err := h.holds.putElicitation(sha256.Sum256(handle[:]), b, body, h.holds.now().Add(elicitationTTL), 0); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(handle[:]), nil
+}
+
+// errExpired reports a handle that resolves to no live elicitation of the
+// call: expired (10 minutes), already answered, another binding's or
+// forged. The agent calls the tool again (D44).
+var errExpired = errors.New("elicitation expired; call the tool again")
+
+// parseHandle reads a retry's requestState as a handle the gateway gave.
+func parseHandle(raw jsontext.Value) ([]byte, error) {
+	var text string
+	if raw.Kind() != '"' || json.Unmarshal(raw, &text) != nil {
+		return nil, fmt.Errorf("%w: no requestState handle", errAnswer)
+	}
+	handle, err := base64.RawURLEncoding.DecodeString(text)
+	if err != nil || len(handle) != 32 {
+		return nil, fmt.Errorf("%w: requestState is not a handle", errAnswer)
+	}
+	return handle, nil
+}
+
+// resolveElicitation finds the live elicitation a handle names for this
+// binding and tool ("" for a task's, whose action already names it; D39),
+// without spending it, and returns the claim that
+// spends it: a Delete with the version read, which dispatch runs after
+// ALLOW and BeginDispatch, right before the send (D44). Anything else is
+// errExpired.
+func (h *Handler) resolveElicitation(b binding, tool string, handle []byte) (storedElicitation, func(context.Context) error, error) {
+	var s storedElicitation
+	k := key(sha256.Sum256(handle))
+	e, found, err := h.holds.getElicitation(k)
+	if err != nil || !found || e.binding != b || json.Unmarshal(e.body, &s) != nil || (tool != "" && s.Tool != tool) {
+		return storedElicitation{}, nil, errExpired
+	}
+	claim := func(context.Context) error {
+		deleted, err := h.holds.deleteElicitation(k, e.version)
+		if err == nil && !deleted {
+			err = errExpired
+		}
+		return err
+	}
+	return s, claim, nil
+}
+
+// errAnswer reports inputResponses the reviewed mapping does not allow.
+var errAnswer = errors.New("the input responses do not answer the reviewed elicitation fields")
+
+// answers reads a retry's inputResponses (D33, D39): each key one the stored
+// elicitation asked, its action and, for an accepted one, its content,
+// every field one that request asked for and the mapping declares, of its
+// declared type and answered once. It returns the answers as typed values
+// and what the dispatch needs to answer the server, with the stored
+// request state.
+func answers(spec *domain.ElicitationSpec, raw jsontext.Value, stored storedElicitation) (domain.Values, dispatch.InputResponses, error) {
+	ir := dispatch.InputResponses{Keys: map[string]dispatch.InputResponse{}}
+	if spec == nil {
+		return nil, ir, fmt.Errorf("%w: the tool declares no elicitation", errAnswer)
+	}
+	var responses map[string]jsontext.Value
+	if raw.Kind() != '{' || json.Unmarshal(raw, &responses) != nil || len(responses) == 0 || len(responses) > maxInputRequests {
+		return nil, ir, errAnswer
+	}
+	ir.RequestState = stored.RequestState
+	vals := domain.Values{}
+	for _, key := range slices.Sorted(maps.Keys(responses)) {
+		var r struct {
+			Action  string                    `json:"action"`
+			Content map[string]jsontext.Value `json:"content"`
+		}
+		if !inputKeyRe.MatchString(key) || json.Unmarshal(responses[key], &r, json.RejectUnknownMembers(true)) != nil {
+			return nil, ir, errAnswer
+		}
+		i := slices.IndexFunc(stored.Requests, func(q storedRequest) bool { return q.Key == key })
+		if i < 0 {
+			return nil, ir, fmt.Errorf("%w: %s was not asked", errAnswer, key)
+		}
+		resp := dispatch.InputResponse{Action: r.Action}
+		switch {
+		case r.Action == "accept" && len(r.Content) > 0:
+		case (r.Action == "decline" || r.Action == "cancel") && r.Content == nil:
+		default:
+			return nil, ir, fmt.Errorf("%w: %s", errAnswer, key)
+		}
+		for _, name := range slices.Sorted(maps.Keys(r.Content)) {
+			f, ok := spec.Field(name)
+			if _, twice := vals[name]; !ok || twice || !slices.Contains(stored.Requests[i].Fields, name) {
+				return nil, ir, fmt.Errorf("%w: field %s", errAnswer, name)
+			}
+			v, err := answerValue(f.Type, r.Content[name])
+			if err != nil {
+				return nil, ir, fmt.Errorf("%w: field %s", errAnswer, name)
+			}
+			vals[name] = v
+			resp.Fields = append(resp.Fields, name)
+		}
+		ir.Keys[key] = resp
+	}
+	return vals, ir, nil
+}
+
+// answerValue reads one answer as its declared type; the declared spec's
+// limits are checked when the action is mapped.
+func answerValue(t domain.ParamType, raw jsontext.Value) (domain.Value, error) {
+	v := domain.Value{Type: t}
+	var err error
+	switch t {
+	case domain.TypeIdentifier, domain.TypeContent, domain.TypeEnum:
+		if raw.Kind() != '"' {
+			return v, errAnswer
+		}
+		err = json.Unmarshal(raw, &v.Str)
+	case domain.TypeBoolean:
+		if raw.Kind() != 't' && raw.Kind() != 'f' {
+			return v, errAnswer // null is no answer (HR-103)
+		}
+		err = json.Unmarshal(raw, &v.Bool)
+	case domain.TypeInteger:
+		if raw.Kind() != '0' {
+			return v, errAnswer
+		}
+		err = json.Unmarshal(raw, &v.Int)
+	case domain.TypeDecimal:
+		if raw.Kind() != '0' {
+			return v, errAnswer
+		}
+		v.Decimal, err = money.Parse(string(raw))
+	case domain.TypeMoney, domain.TypeIdentifierList, domain.TypeText, domain.TypeCommand, domain.TypePath, domain.TypeQueryFilter:
+		return v, errAnswer
+	}
+	if err != nil {
+		return v, fmt.Errorf("%w: %w", actionir.ErrAmbiguous, err)
+	}
+	return v, nil
+}
+
+// codeElicitationExpired is a retry whose handle resolves to nothing.
+const codeElicitationExpired = "elicitation_expired"
+
+// answered reads a 2026-07-28 retry (D39, D44): its handle resolves, for
+// this binding and tool, to a live elicitation, and its inputResponses
+// answer that elicitation's asked and declared fields. It returns what
+// dispatch needs (with the claim that spends the handle), the answers, and
+// what a held retry's task keeps. errExpired: the handle resolves to
+// nothing; any other error: the answers do not fit.
+func (h *Handler) answered(spec *domain.ElicitationSpec, b binding, p params) (dispatch.InputResponses, domain.Values, *retryState, error) {
+	handle, err := parseHandle(p.RequestState)
+	if err != nil {
+		return dispatch.InputResponses{}, nil, nil, err
+	}
+	stored, claim, err := h.resolveElicitation(b, p.Name, handle)
+	if err != nil {
+		return dispatch.InputResponses{}, nil, nil, err
+	}
+	vals, ir, err := answers(spec, p.InputResponses, stored)
+	if err != nil {
+		return dispatch.InputResponses{}, nil, nil, err
+	}
+	ir.Claim = claim
+	return ir, vals, &retryState{Handle: handle, Responses: ir.Keys}, nil
+}
+
+// resubmitting returns the dispatch state of a held retry's task (D44):
+// its handle resolved again, so the resubmission answers the server with
+// the decided params and the stored request state, and spends the handle
+// only right before the send. errExpired: the handle expired first.
+func (h *Handler) resubmitting(t task) (dispatch.InputResponses, error) {
+	stored, claim, err := h.resolveElicitation(t.binding, "", t.retry.Handle)
+	if err != nil {
+		return dispatch.InputResponses{}, err
+	}
+	return dispatch.InputResponses{Keys: t.retry.Responses, RequestState: stored.RequestState, Claim: claim}, nil
+}

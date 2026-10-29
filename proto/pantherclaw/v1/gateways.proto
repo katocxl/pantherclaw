@@ -161,6 +161,14 @@ service GatewayService {
   // gateway; a missing entry is not an error.
   // permission: gateway.sync
   rpc DeleteMCPState(DeleteMCPStateRequest) returns (DeleteMCPStateResponse);
+  // ReportInventory reports what an upstream MCP server lists behind one
+  // of the calling gateway's kind-mcp connections (F352, G0 M15 D20): its
+  // tools, resources and resource templates. A new item no active reviewed
+  // package version covers opens a TOOL_REVIEW entry and stays inert
+  // (HR-414); descriptions are UNTRUSTED (HR-415). Reports are capped and
+  // accepted only for connections the gateway serves (HR-418).
+  // permission: gateway.observe
+  rpc ReportInventory(ReportInventoryRequest) returns (ReportInventoryResponse);
 }
 
 // GatewayState is whether a gateway may act.
@@ -754,7 +762,7 @@ message ReportLocalRefusalRequest {
   string connection_id = 1 [(buf.validate.field).string.uuid = true];
   // The refusal code.
   string code = 2 [(buf.validate.field).string = {
-    in: ["secret_in_payload"]
+    in: ["secret_in_payload", "elicitation_refused"]
   }];
   // The refused action's operation.
   string operation = 3 [(buf.validate.field).string = {
@@ -763,6 +771,14 @@ message ReportLocalRefusalRequest {
   }];
   // The refused action's run id; empty when it named none.
   string run_id = 4 [(buf.validate.field).string.pattern = "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$"];
+  // Why an upstream elicitation was refused (G0 M15 D40); set only with
+  // code elicitation_refused, and unset when no reason below fits.
+  optional string elicitation_reason = 5 [(buf.validate.field).string = {
+    in: ["url_mode", "undeclared_field", "type_mismatch", "duplicate_field", "too_many_fields", "injection_flagged"]
+  }];
+  // SHA-256 of the refused question's text, never the text itself; set
+  // only with code elicitation_refused.
+  optional bytes question_sha256 = 6 [(buf.validate.field).bytes.len = 32];
 }
 
 // ReportLocalRefusalResponse is empty.
@@ -1055,4 +1071,86 @@ message DeleteMCPStateRequest {
 message DeleteMCPStateResponse {
   // Whether there was one.
   bool deleted = 1;
+}
+
+// ReportInventoryRequest is one connection's upstream listing (G0 M15 D20).
+message ReportInventoryRequest {
+  // Connection id; the calling gateway must serve it.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  // Every page of every list was read, so an item missing here vanished.
+  bool complete = 2;
+  // Tools.
+  repeated InventoryTool tools = 3 [(buf.validate.field).repeated.max_items = 1000];
+  // Resources.
+  repeated InventoryResource resources = 4 [(buf.validate.field).repeated.max_items = 1000];
+  // Resource templates.
+  repeated InventoryResourceTemplate resource_templates = 5 [(buf.validate.field).repeated.max_items = 1000];
+}
+
+// InventoryTool is one listed tool.
+message InventoryTool {
+  // Tool name.
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_.-]+$"
+  }];
+  // upstream.ToolDigest of its definition.
+  string digest = 2 [(buf.validate.field).string.pattern = "^sha256:[0-9a-f]{64}$"];
+  // UNTRUSTED: its description, at most 8 KiB.
+  string description = 3 [(buf.validate.field).string.max_bytes = 8192];
+  // Whether the gateway cut the description to 8 KiB.
+  bool description_truncated = 4;
+}
+
+// InventoryResource is one listed resource.
+message InventoryResource {
+  // Its URI.
+  string uri = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 2048
+  }];
+  // UNTRUSTED: its name.
+  string name = 2 [(buf.validate.field).string.max_bytes = 128];
+  // UNTRUSTED: its MIME type.
+  string mime_type = 3 [(buf.validate.field).string.max_bytes = 128];
+  // UNTRUSTED: its description, at most 8 KiB.
+  string description = 4 [(buf.validate.field).string.max_bytes = 8192];
+  // Whether the gateway cut the description to 8 KiB.
+  bool description_truncated = 5;
+  // SHA-256 of the canonical listing entry.
+  string digest = 6 [(buf.validate.field).string.pattern = "^sha256:[0-9a-f]{64}$"];
+  // Whether the gateway cut name to 128 bytes.
+  bool name_truncated = 7;
+  // Whether the gateway cut mime_type to 128 bytes.
+  bool mime_type_truncated = 8;
+}
+
+// InventoryResourceTemplate is one listed resource template.
+message InventoryResourceTemplate {
+  // Its URI template.
+  string uri_template = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 2048
+  }];
+  // UNTRUSTED: its name.
+  string name = 2 [(buf.validate.field).string.max_bytes = 128];
+  // UNTRUSTED: its MIME type.
+  string mime_type = 3 [(buf.validate.field).string.max_bytes = 128];
+  // UNTRUSTED: its description, at most 8 KiB.
+  string description = 4 [(buf.validate.field).string.max_bytes = 8192];
+  // Whether the gateway cut the description to 8 KiB.
+  bool description_truncated = 5;
+  // SHA-256 of the canonical listing entry.
+  string digest = 6 [(buf.validate.field).string.pattern = "^sha256:[0-9a-f]{64}$"];
+  // Whether the gateway cut name to 128 bytes.
+  bool name_truncated = 7;
+  // Whether the gateway cut mime_type to 128 bytes.
+  bool mime_type_truncated = 8;
+}
+
+// ReportInventoryResponse says how many items became NEW.
+message ReportInventoryResponse {
+  // Items that became NEW with this report.
+  int32 new_items = 1;
 }

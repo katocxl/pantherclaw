@@ -231,6 +231,8 @@ type GatewayHandler struct {
 	// verifications leases and takes verification reports (G0 M7).
 	verifications Verifications
 	facts         Facts
+	// inventories records discovery inventory reports (G0 M15 D20).
+	inventories Inventories
 }
 
 // NewGateway returns the GatewayService handler.

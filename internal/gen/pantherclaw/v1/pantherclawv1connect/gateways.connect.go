@@ -99,6 +99,9 @@ const (
 	// GatewayServiceDeleteMCPStateProcedure is the procedure name of the GatewayService's
 	// DeleteMCPState RPC.
 	GatewayServiceDeleteMCPStateProcedure = "/pantherclaw.v1.GatewayService/DeleteMCPState"
+	// GatewayServiceReportInventoryProcedure is the procedure name of the GatewayService's
+	// ReportInventory RPC.
+	GatewayServiceReportInventoryProcedure = "/pantherclaw.v1.GatewayService/ReportInventory"
 )
 
 var (
@@ -552,6 +555,13 @@ var (
 			Procedure:  GatewayServiceDeleteMCPStateProcedure,
 		}
 	})
+	gatewayServiceReportInventorySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayService").Methods().ByName("ReportInventory"),
+			Procedure:  GatewayServiceReportInventoryProcedure,
+		}
+	})
 )
 
 // GatewayServiceClient is a client for the pantherclaw.v1.GatewayService service.
@@ -652,6 +662,14 @@ type GatewayServiceClient interface {
 	// gateway; a missing entry is not an error.
 	// permission: gateway.sync
 	DeleteMCPState(context.Context, *v1.DeleteMCPStateRequest) (*v1.DeleteMCPStateResponse, error)
+	// ReportInventory reports what an upstream MCP server lists behind one
+	// of the calling gateway's kind-mcp connections (F352, G0 M15 D20): its
+	// tools, resources and resource templates. A new item no active reviewed
+	// package version covers opens a TOOL_REVIEW entry and stays inert
+	// (HR-414); descriptions are UNTRUSTED (HR-415). Reports are capped and
+	// accepted only for connections the gateway serves (HR-418).
+	// permission: gateway.observe
+	ReportInventory(context.Context, *v1.ReportInventoryRequest) (*v1.ReportInventoryResponse, error)
 }
 
 // NewGatewayServiceClient constructs a client for the pantherclaw.v1.GatewayService service.
@@ -779,6 +797,14 @@ type GatewayServiceHandler interface {
 	// gateway; a missing entry is not an error.
 	// permission: gateway.sync
 	DeleteMCPState(context.Context, *v1.DeleteMCPStateRequest) (*v1.DeleteMCPStateResponse, error)
+	// ReportInventory reports what an upstream MCP server lists behind one
+	// of the calling gateway's kind-mcp connections (F352, G0 M15 D20): its
+	// tools, resources and resource templates. A new item no active reviewed
+	// package version covers opens a TOOL_REVIEW entry and stays inert
+	// (HR-414); descriptions are UNTRUSTED (HR-415). Reports are capped and
+	// accepted only for connections the gateway serves (HR-418).
+	// permission: gateway.observe
+	ReportInventory(context.Context, *v1.ReportInventoryRequest) (*v1.ReportInventoryResponse, error)
 }
 
 // RegisterGatewayServiceHandler registers svc as the pantherclaw.v1.GatewayService implementation
@@ -804,6 +830,7 @@ func RegisterGatewayServiceHandler(server *connect.Server, svc GatewayServiceHan
 		connect.Method{Spec: gatewayServicePutMCPStateSpec(), Handler: adapter.putMCPState},
 		connect.Method{Spec: gatewayServiceGetMCPStateSpec(), Handler: adapter.getMCPState},
 		connect.Method{Spec: gatewayServiceDeleteMCPStateSpec(), Handler: adapter.deleteMCPState},
+		connect.Method{Spec: gatewayServiceReportInventorySpec(), Handler: adapter.reportInventory},
 	)
 }
 
@@ -896,6 +923,10 @@ func (UnimplementedGatewayServiceHandler) GetMCPState(context.Context, *v1.GetMC
 
 func (UnimplementedGatewayServiceHandler) DeleteMCPState(context.Context, *v1.DeleteMCPStateRequest) (*v1.DeleteMCPStateResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.DeleteMCPState is not implemented")
+}
+
+func (UnimplementedGatewayServiceHandler) ReportInventory(context.Context, *v1.ReportInventoryRequest) (*v1.ReportInventoryResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ReportInventory is not implemented")
 }
 
 type gatewayServiceClient struct {
@@ -1041,6 +1072,14 @@ func (c *gatewayServiceClient) GetMCPState(ctx context.Context, req *v1.GetMCPSt
 func (c *gatewayServiceClient) DeleteMCPState(ctx context.Context, req *v1.DeleteMCPStateRequest) (*v1.DeleteMCPStateResponse, error) {
 	var res v1.DeleteMCPStateResponse
 	if err := c.client.CallUnary(ctx, gatewayServiceDeleteMCPStateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayServiceClient) ReportInventory(ctx context.Context, req *v1.ReportInventoryRequest) (*v1.ReportInventoryResponse, error) {
+	var res v1.ReportInventoryResponse
+	if err := c.client.CallUnary(ctx, gatewayServiceReportInventorySpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -1254,6 +1293,18 @@ func (h gatewayServiceHandler) deleteMCPState(ctx context.Context, _ connect.Spe
 		return err
 	}
 	res, err := h.svc.DeleteMCPState(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayServiceHandler) reportInventory(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReportInventoryRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReportInventory(ctx, &req)
 	if err != nil {
 		return err
 	}

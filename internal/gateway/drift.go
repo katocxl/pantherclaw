@@ -30,6 +30,10 @@ const (
 // DriftReporter tells the server an upstream tool drifted.
 type DriftReporter func(ctx context.Context, connection string, d dispatch.Drift) error
 
+// InventoryReporter tells the server what a connection's upstream server
+// lists (F352, G0 M15 D20).
+type InventoryReporter func(ctx context.Context, connection string, inv dispatch.Inventory) error
+
 // watchDrift checks for drift on every configuration load and every
 // DriftEvery until ctx ends.
 func (g *Gateway) watchDrift(ctx context.Context) error {
@@ -50,7 +54,8 @@ func (g *Gateway) watchDrift(ctx context.Context) error {
 }
 
 // checkDrift checks every kind-mcp connection of cfg and reports each
-// drifted tool. A server that cannot be listed is logged and checked
+// drifted tool. It also reports each connection's inventory
+// (inventory.go). A server that cannot be listed is logged and checked
 // again next time.
 func (g *Gateway) checkDrift(ctx context.Context, cfg *control.Config) {
 	for _, id := range slices.Sorted(maps.Keys(cfg.ByID)) {
@@ -67,6 +72,7 @@ func (g *Gateway) checkDrift(ctx context.Context, cfg *control.Config) {
 		for _, d := range drifts {
 			g.drifted(ctx, id, d)
 		}
+		g.inventory(ctx, id, conn)
 	}
 }
 

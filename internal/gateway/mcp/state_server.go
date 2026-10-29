@@ -164,6 +164,8 @@ func (s *serverState) settle(k key, b binding, action string, res dispatch.Resul
 type taskBody struct {
 	Action []byte      `json:"action"`
 	Result *toolResult `json:"result"`
+	// Retry is a held elicitation retry's state (G0 M15 D44).
+	Retry *retryState `json:"retry,omitzero"`
 }
 
 func taskKey(id string) []byte { k := sha256.Sum256([]byte(id)); return k[:] }
@@ -179,7 +181,7 @@ func (s *serverState) sealTask(t *task) (*pb.MCPStateEntry, error) {
 		return nil, broker.ErrNoBroker
 	}
 	k := taskKey(t.id)
-	pt, err := json.Marshal(taskBody{Action: t.action.Canonical, Result: t.result})
+	pt, err := json.Marshal(taskBody{Action: t.action.Canonical, Result: t.result, Retry: t.retry})
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +212,7 @@ func (s *serverState) openTask(id string, e *pb.MCPStateEntry) (task, bool) {
 	}
 	t := task{
 		id: id, binding: entryBinding(e), actionID: e.GetActionId(), status: e.GetStatus(), busy: e.GetBusy(), result: body.Result,
-		expires: e.GetExpireTime().AsTime(), updated: e.GetUpdateTime().AsTime(), version: e.GetVersion(),
+		expires: e.GetExpireTime().AsTime(), updated: e.GetUpdateTime().AsTime(), version: e.GetVersion(), retry: body.Retry,
 	}
 	t.created = t.expires.Add(-holdTTL)
 	if len(body.Action) > 0 {
@@ -226,9 +228,9 @@ func (s *serverState) openTask(id string, e *pb.MCPStateEntry) (task, bool) {
 // newTask stores a task for a call's answer, as the memory store makes
 // one; nil when it cannot be stored (no broker key, the bounds, or the
 // server out of reach), which only costs the agent the task.
-func (s *serverState) newTask(b binding, a actionir.Parsed, k key, res dispatch.Result, result toolResult) *task {
+func (s *serverState) newTask(b binding, a actionir.Parsed, k key, res dispatch.Result, result toolResult, retry *retryState) *task {
 	if s.local != nil {
-		return s.local.newTask(b, a, k, res, result)
+		return s.local.newTask(b, a, k, res, result, retry)
 	}
 	held := res.Class == dispatch.Held
 	actionID := a.Action.ActionID
@@ -242,7 +244,7 @@ func (s *serverState) newTask(b binding, a actionir.Parsed, k key, res dispatch.
 	now := s.now()
 	t := &task{
 		id: id, binding: b, action: a, key: k, actionID: actionID, created: now, updated: now, expires: now.Add(holdTTL),
-		status: statusWorking,
+		status: statusWorking, retry: retry,
 	}
 	if !held {
 		t.status, t.result = statusCompleted, &result

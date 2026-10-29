@@ -28,13 +28,13 @@ func TestHR225_ALocalSecretRefusalReachesDetections(t *testing.T) {
 	e.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'other', 'test')", e.org, other)
 	ctx := context.Background()
 	run := ids.NewV7()
-	if err := e.svc.ReportLocalRefusal(ctx, e.org, other, c.ID, app.RefusalSecretInPayload, "payments.refund.create", run); !is(err, app.ErrNotFound) {
+	if err := e.svc.ReportLocalRefusal(ctx, e.org, other, c.ID, app.RefusalSecretInPayload, "payments.refund.create", run, app.RefusalDetail{}); !is(err, app.ErrNotFound) {
 		t.Fatalf("another gateway's connection: %v", err)
 	}
-	if err := e.svc.ReportLocalRefusal(ctx, e.org, e.gateway, c.ID, "simulator_unverified", "payments.refund.create", run); !is(err, app.ErrRefusalCode) {
+	if err := e.svc.ReportLocalRefusal(ctx, e.org, e.gateway, c.ID, "simulator_unverified", "payments.refund.create", run, app.RefusalDetail{}); !is(err, app.ErrRefusalCode) {
 		t.Fatalf("another code: %v", err)
 	}
-	if err := e.svc.ReportLocalRefusal(ctx, e.org, e.gateway, c.ID, app.RefusalSecretInPayload, "payments.refund.create", run); err != nil {
+	if err := e.svc.ReportLocalRefusal(ctx, e.org, e.gateway, c.ID, app.RefusalSecretInPayload, "payments.refund.create", run, app.RefusalDetail{}); err != nil {
 		t.Fatal(err)
 	}
 	n := e.int64(t, `SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.connection.secret_in_payload_refused'

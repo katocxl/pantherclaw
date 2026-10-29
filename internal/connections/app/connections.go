@@ -121,6 +121,9 @@ type Service struct {
 	// kinds store the M14 kinds' configurations (WithKindConfigs, G0 M14
 	// D64); nil has none, so those kinds cannot be created.
 	kinds *ports.KindConfigs
+	// ents gates the inventory draft by edition (WithEntitlements, G0 M15
+	// D23); nil refuses it.
+	ents Entitlements
 }
 
 // New returns the connection use cases. publicURL and gatewayAPIURL are

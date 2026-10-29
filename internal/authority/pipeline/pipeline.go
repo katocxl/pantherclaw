@@ -347,7 +347,13 @@ func (p *Pipeline) scope(ctx context.Context, s *state) {
 		return
 	}
 	known := slices.ContainsFunc(d.Mappings, func(m defs.Mapping) bool {
-		return m.Route == s.a.Route && (string(m.Channel) == s.a.Channel || (s.a.Channel != "mcp" && s.a.Channel != "http"))
+		// A resource read comes through the MCP face too: an mcp action
+		// matches an mcp or mcp_resource mapping (G0 M15 D36).
+		ch := string(m.Channel)
+		if m.Channel == defs.ChannelMCPResource {
+			ch = string(defs.ChannelMCP)
+		}
+		return m.Route == s.a.Route && (ch == s.a.Channel || (s.a.Channel != "mcp" && s.a.Channel != "http"))
 	})
 	if !known {
 		s.cl.add(StepScope, adomain.CannotAuthorize, ReasonRouteUnknown, "route "+s.a.Route+" is not a reviewed route of "+d.Operation, "")

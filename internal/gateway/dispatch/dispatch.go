@@ -199,8 +199,8 @@ type Options struct {
 	// outcome.
 	ReportRevocation RevocationReporter
 	// ReportLocalRefusal tells the server an action was refused locally as
-	// secret_in_payload, with machine metadata only, so detections see it
-	// (G0 M12, HR-225); nil only logs it.
+	// secret_in_payload or elicitation_refused, with machine metadata only,
+	// so detections see it (G0 M12, HR-225; G0 M15 D40); nil only logs it.
 	ReportLocalRefusal LocalRefusalReporter
 	// GitHubAPIURL is GitHub's REST API (gateway configuration
 	// github.api_url), where a GitHub App connection to GitHub's MCP server
@@ -218,8 +218,17 @@ type RevocationReporter func(ctx context.Context, connection, purpose string, a 
 
 // LocalRefusalReporter reports an action the gateway refused on its own:
 // the connection, the refusal code, the operation and the run, never the
-// payload or a secret.
-type LocalRefusalReporter func(ctx context.Context, connection, code, operation, run string) error
+// payload or a secret; for an elicitation refusal also its reason and the
+// question's SHA-256 (G0 M15 D40).
+type LocalRefusalReporter func(ctx context.Context, connection, code, operation, run string, detail RefusalDetail) error
+
+// RefusalDetail is what an elicitation refusal adds (G0 M15 D40): its
+// reason (empty when none fits) and the question's SHA-256 (nil when
+// none), never the question.
+type RefusalDetail struct {
+	ElicitationReason string
+	QuestionSHA256    []byte
+}
 
 // Engine dispatches mapped actions.
 type Engine struct {
