@@ -531,11 +531,12 @@ func (s *serverState) getElicitation(k key) (elicitation, bool, error) {
 	if !s.now().Before(e.GetExpireTime().AsTime()) {
 		return elicitation{}, false, nil
 	}
-	body, err := s.seal.OpenState(broker.StateAAD(s.org, s.gateway, "ELICITATION", k[:]), e.GetSealedBody())
-	if err != nil {
-		return elicitation{}, false, nil
+	body, oerr := s.seal.OpenState(broker.StateAAD(s.org, s.gateway, "ELICITATION", k[:]), e.GetSealedBody())
+	if oerr == nil {
+		return elicitation{binding: entryBinding(e), body: body, version: e.GetVersion(), expires: e.GetExpireTime().AsTime()}, true, nil
 	}
-	return elicitation{binding: entryBinding(e), body: body, version: e.GetVersion(), expires: e.GetExpireTime().AsTime()}, true, nil
+	// A body that does not open (the broker key rotated) is not found.
+	return elicitation{}, false, nil
 }
 
 // deleteElicitation deletes a relayed elicitation.

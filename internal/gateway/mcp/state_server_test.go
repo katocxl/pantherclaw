@@ -188,7 +188,7 @@ func TestHR411_HoldsAndTasksAreSharedByEveryReplica(t *testing.T) {
 	if done := b.finish(snap, dispatch.Result{Class: dispatch.Held}, toolResult{}); done.status != statusWorking || done.busy {
 		t.Fatalf("still held: %+v", done)
 	}
-	snap, claimed, _ = a.lookup(tk.id, bind, true)
+	_, claimed, _ = a.lookup(tk.id, bind, true)
 	if !claimed {
 		t.Fatal("a finished claim was not released")
 	}
