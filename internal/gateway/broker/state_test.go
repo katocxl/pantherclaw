@@ -33,12 +33,12 @@ func stateKey(t *testing.T) *broker.Key {
 
 // TestHR411_ATaskBodyOpensOnlyAsItsOwnEntryWithTheGatewaysKey: a task body
 // sealed to the broker key opens with that key for the same org, gateway,
-// kind and entry key, and for nothing else; the sealed bytes do not carry
-// the plaintext (G0 M15 D13).
+// kind, entry key, connection, run and instance, and for nothing else;
+// the sealed bytes do not carry the plaintext (G0 M15 D13, D41).
 func TestHR411_ATaskBodyOpensOnlyAsItsOwnEntryWithTheGatewaysKey(t *testing.T) {
 	k, other := stateKey(t), stateKey(t)
 	entry := bytes.Repeat([]byte{7}, 32)
-	aad := broker.StateAAD("org-1", "gw-1", "TASK", entry)
+	aad := broker.StateAAD("org-1", "gw-1", "TASK", entry, "conn-1", "run-1", "inst-1")
 	plain := []byte(`{"action":"secret-action","result":null}`)
 	sealed, err := k.SealState(aad, plain)
 	if err != nil || bytes.Contains(sealed, []byte("secret-action")) {
@@ -48,10 +48,13 @@ func TestHR411_ATaskBodyOpensOnlyAsItsOwnEntryWithTheGatewaysKey(t *testing.T) {
 		t.Fatalf("open: %q %v", got, err)
 	}
 	for name, a := range map[string][]byte{
-		"org":     broker.StateAAD("org-2", "gw-1", "TASK", entry),
-		"gateway": broker.StateAAD("org-1", "gw-2", "TASK", entry),
-		"kind":    broker.StateAAD("org-1", "gw-1", "HOLD", entry),
-		"key":     broker.StateAAD("org-1", "gw-1", "TASK", bytes.Repeat([]byte{8}, 32)),
+		"org":        broker.StateAAD("org-2", "gw-1", "TASK", entry, "conn-1", "run-1", "inst-1"),
+		"gateway":    broker.StateAAD("org-1", "gw-2", "TASK", entry, "conn-1", "run-1", "inst-1"),
+		"kind":       broker.StateAAD("org-1", "gw-1", "HOLD", entry, "conn-1", "run-1", "inst-1"),
+		"key":        broker.StateAAD("org-1", "gw-1", "TASK", bytes.Repeat([]byte{8}, 32), "conn-1", "run-1", "inst-1"),
+		"connection": broker.StateAAD("org-1", "gw-1", "TASK", entry, "conn-2", "run-1", "inst-1"),
+		"run":        broker.StateAAD("org-1", "gw-1", "TASK", entry, "conn-1", "run-2", "inst-1"),
+		"instance":   broker.StateAAD("org-1", "gw-1", "TASK", entry, "conn-1", "run-1", "inst-2"),
 	} {
 		if _, err := k.OpenState(a, sealed); !errors.Is(err, broker.ErrStateOpen) {
 			t.Errorf("another %s opened the body: %v", name, err)

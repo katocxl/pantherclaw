@@ -16,6 +16,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/gateways/app"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -146,8 +147,10 @@ func TestHR412_MCPStateConflictsAndBoundsOnlyCostANewAction(t *testing.T) {
 	ctx := context.Background()
 	run, inst := ids.NewV7(), ids.NewV7()
 	hold := func(name string, ttl time.Duration) app.MCPEntry {
-		return app.MCPEntry{Kind: app.MCPHold, Key: stateKey(name), Connection: conn, Run: &run, Instance: &inst,
-			ActionID: ids.NewV7().String(), ExpireTime: clk.Now().Add(ttl)}
+		return app.MCPEntry{
+			Kind: app.MCPHold, Key: stateKey(name), Connection: conn, Run: &run, Instance: &inst,
+			ActionID: ids.NewV7().String(), ExpireTime: clk.Now().Add(ttl),
+		}
 	}
 	h := hold("h0", time.Hour)
 	if _, err := svc.PutMCPState(ctx, a, h, 0); err != nil {
@@ -195,14 +198,18 @@ func TestHR412_MCPStateConflictsAndBoundsOnlyCostANewAction(t *testing.T) {
 		t.Fatalf("an expired key written again: %d %v", v, err)
 	}
 	// A task's body counts toward the gateway's bytes.
-	big := app.MCPEntry{Kind: app.MCPTask, Key: stateKey("big"), Connection: conn, Instance: &inst, ActionID: "a", Status: "working",
-		SealedBody: make([]byte, 1), ExpireTime: clk.Now().Add(time.Hour)}
+	big := app.MCPEntry{
+		Kind: app.MCPTask, Key: stateKey("big"), Connection: conn, Instance: &inst, ActionID: "a", Status: "working",
+		SealedBody: make([]byte, 1), ExpireTime: clk.Now().Add(time.Hour),
+	}
 	if _, err := svc.PutMCPState(ctx, a, big, 0); !errors.Is(err, app.ErrMCPStateFull) {
 		t.Fatalf("a task past the instance bound: %v", err)
 	}
 	// So does a relayed elicitation (D39), which may carry a sealed body.
-	el := app.MCPEntry{Kind: app.MCPElicitation, Key: stateKey("el"), Connection: conn, Instance: &inst, SealedBody: []byte{1},
-		ExpireTime: clk.Now().Add(10 * time.Minute)}
+	el := app.MCPEntry{
+		Kind: app.MCPElicitation, Key: stateKey("el"), Connection: conn, Instance: &inst, SealedBody: []byte{1},
+		ExpireTime: clk.Now().Add(10 * time.Minute),
+	}
 	if _, err := svc.PutMCPState(ctx, a, el, 0); !errors.Is(err, app.ErrMCPStateFull) {
 		t.Fatalf("an elicitation past the instance bound: %v", err)
 	}
@@ -228,8 +235,10 @@ func TestHR413_SessionsStayBoundAndAnInstanceKeepsSixteen(t *testing.T) {
 	ctx := context.Background()
 	run, inst := ids.NewV7(), ids.NewV7()
 	sess := func(i int) app.MCPEntry {
-		return app.MCPEntry{Kind: app.MCPSession, Key: stateKey(fmt.Sprint("session", i)), Connection: conn, Run: &run, Instance: &inst,
-			JKT: "thumbprint", ExpireTime: clk.Now().Add(8 * time.Hour)}
+		return app.MCPEntry{
+			Kind: app.MCPSession, Key: stateKey(fmt.Sprint("session", i)), Connection: conn, Run: &run, Instance: &inst,
+			JKT: "thumbprint", ExpireTime: clk.Now().Add(8 * time.Hour),
+		}
 	}
 	for i := range app.MaxMCPSessionsPerInstance {
 		if _, err := svc.PutMCPState(ctx, a, sess(i), 0); err != nil {
@@ -253,5 +262,117 @@ func TestHR413_SessionsStayBoundAndAnInstanceKeepsSixteen(t *testing.T) {
 	}
 	if n := e.count(t, "SELECT count(*) FROM pc.gateway_mcp_state WHERE org_id = $1 AND kind = 'SESSION'", e.org); n != app.MaxMCPSessionsPerInstance {
 		t.Fatalf("%d sessions", n)
+	}
+}
+
+// TestT182_TheServerKeepsEntriesBoundAndToServedConnections: a replica
+// cannot rebind an entry (its connection, run, instance and key thumbprint
+// never change), cannot write state for a connection its gateway does not
+// serve, and cannot delete by version an entry that already expired; each
+// kind keeps its own shape and lifetime (G0 M15 T-182, D42).
+func TestT182_TheServerKeepsEntriesBoundAndToServedConnections(t *testing.T) {
+	e := newEnv(t)
+	e.pinMockPayments(t)
+	_, a := e.enroll(t, "a")
+	_, b := e.enroll(t, "b")
+	conn, theirs := e.httpConnection(t, a.Gateway), e.httpConnection(t, b.Gateway)
+	svc, clk := e.at(time.Now())
+	ctx := context.Background()
+	run, inst := ids.NewV7(), ids.NewV7()
+	sess := app.MCPEntry{
+		Kind: app.MCPSession, Key: stateKey("s"), Connection: conn, Run: &run, Instance: &inst, JKT: "jkt-1",
+		ExpireTime: clk.Now().Add(8 * time.Hour),
+	}
+	if _, err := svc.PutMCPState(ctx, a, sess, 0); err != nil {
+		t.Fatal(err)
+	}
+	other := ids.NewV7()
+	for name, edit := range map[string]func(*app.MCPEntry){
+		"run":        func(x *app.MCPEntry) { x.Run = &other },
+		"instance":   func(x *app.MCPEntry) { x.Instance = &other },
+		"thumbprint": func(x *app.MCPEntry) { x.JKT = "jkt-2" },
+		"connection": func(x *app.MCPEntry) { x.Connection = e.httpConnection(t, a.Gateway) },
+	} {
+		rebound := sess
+		edit(&rebound)
+		if _, err := svc.PutMCPState(ctx, a, rebound, 1); !errors.Is(err, app.ErrMCPStateConflict) {
+			t.Errorf("a session rebound to another %s: %v", name, err)
+		}
+	}
+	if got, err := svc.GetMCPState(ctx, a, app.MCPSession, sess.Key); err != nil || *got.RunID != run || *got.Jkt != "jkt-1" || got.Version != 1 {
+		t.Fatalf("after the refused rebinding: %+v %v", got, err)
+	}
+	unserved := sess
+	unserved.Key, unserved.Connection = stateKey("unserved"), theirs
+	if _, err := svc.PutMCPState(ctx, a, unserved, 0); !errors.Is(err, app.ErrMCPStateConnection) {
+		t.Fatalf("state for another gateway's connection: %v", err)
+	}
+	unserved.Connection = ids.NewV7()
+	if _, err := svc.PutMCPState(ctx, a, unserved, 0); !errors.Is(err, app.ErrMCPStateConnection) {
+		t.Fatalf("state for an unknown connection: %v", err)
+	}
+	hold := app.MCPEntry{
+		Kind: app.MCPHold, Key: stateKey("h"), Connection: conn, Run: &run, Instance: &inst, ActionID: "act",
+		ExpireTime: clk.Now().Add(time.Minute),
+	}
+	if _, err := svc.PutMCPState(ctx, a, hold, 0); err != nil {
+		t.Fatal(err)
+	}
+	clk.Advance(time.Minute)
+	if ok, err := svc.DeleteMCPState(ctx, a, app.MCPHold, hold.Key, 1); ok || err != nil {
+		t.Fatalf("a versioned delete of an expired entry: %v %v", ok, err)
+	}
+	// Shapes and lifetimes per kind.
+	for name, en := range map[string]app.MCPEntry{
+		"a hold past an hour": {
+			Kind: app.MCPHold, Key: stateKey("h2"), Connection: conn, ActionID: "a",
+			ExpireTime: clk.Now().Add(2 * time.Hour),
+		},
+		"a session past eight hours": {
+			Kind: app.MCPSession, Key: stateKey("s2"), Connection: conn,
+			ExpireTime: clk.Now().Add(9 * time.Hour),
+		},
+		"an elicitation past ten minutes": {
+			Kind: app.MCPElicitation, Key: stateKey("e1"), Connection: conn, SealedBody: []byte{1},
+			ExpireTime: clk.Now().Add(20 * time.Minute),
+		},
+		"an elicitation without a body": {
+			Kind: app.MCPElicitation, Key: stateKey("e2"), Connection: conn,
+			ExpireTime: clk.Now().Add(5 * time.Minute),
+		},
+		"an elicitation with a status": {
+			Kind: app.MCPElicitation, Key: stateKey("e3"), Connection: conn, SealedBody: []byte{1},
+			Status: "working", ExpireTime: clk.Now().Add(5 * time.Minute),
+		},
+		"an elicitation with an action": {
+			Kind: app.MCPElicitation, Key: stateKey("e4"), Connection: conn, SealedBody: []byte{1},
+			ActionID: "a", ExpireTime: clk.Now().Add(5 * time.Minute),
+		},
+	} {
+		if _, err := svc.PutMCPState(ctx, a, en, 0); !errors.Is(err, app.ErrMCPStateInvalid) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	// The database refuses the same shapes from pc_app directly.
+	for name, sql := range map[string]string{
+		"an elicitation without a body": `INSERT INTO pc.gateway_mcp_state (org_id, gateway_id, kind, key, connection_id, version, expire_time,
+			update_time) VALUES ($1, $2, 'ELICITATION', $3, $4, 1, now() + interval '5 minutes', now())`,
+		"a hold past an hour": `INSERT INTO pc.gateway_mcp_state (org_id, gateway_id, kind, key, connection_id, action_id, version,
+			expire_time, update_time) VALUES ($1, $2, 'HOLD', $3, $4, 'a', 1, now() + interval '2 hours', now())`,
+	} {
+		err := e.pool.InTenantTx(ctx, e.org, func(ctx context.Context, tx db.TenantTx) error {
+			_, err := tx.Exec(ctx, sql, e.org, a.Gateway, stateKey(name), conn)
+			return err
+		})
+		if !db.IsCheckViolation(err) {
+			t.Errorf("%s inserted directly: %v", name, err)
+		}
+	}
+	err := e.pool.InTenantTx(ctx, e.org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := tx.Exec(ctx, "UPDATE pc.gateway_mcp_state SET run_id = $1", other)
+		return err
+	})
+	if err == nil {
+		t.Fatal("pc_app rebound an entry directly")
 	}
 }

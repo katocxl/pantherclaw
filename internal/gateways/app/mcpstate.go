@@ -30,9 +30,11 @@ const (
 	MaxMCPSessions            = 10_000
 	MaxMCPSessionsPerInstance = 16
 	MaxMCPBodyBytes           = 64 << 20
-	// MaxMCPStateTTL bounds expire_time: a session lasts at most 8 hours
-	// and a hold or task one hour.
-	MaxMCPStateTTL = 8*time.Hour + time.Minute
+	// Lifetimes (D42): how far ahead an entry may expire, a minute for
+	// clock skew included. 00187's CHECK matches.
+	MaxMCPHoldTTL        = time.Hour + time.Minute
+	MaxMCPSessionTTL     = 8*time.Hour + time.Minute
+	MaxMCPElicitationTTL = 10*time.Minute + time.Minute
 )
 
 // MCP state kinds, as stored.
@@ -51,6 +53,9 @@ var (
 	ErrMCPStateFull     = pcerr.New(pcerr.ResourceExhausted, "MCP_STATE_FULL", "the gateway keeps as much MCP state as it may")
 	ErrMCPStateNotFound = pcerr.New(pcerr.NotFound, "MCP_STATE_NOT_FOUND", "no such MCP state entry")
 	ErrMCPStateInvalid  = pcerr.New(pcerr.InvalidArgument, "MCP_STATE_INVALID", "the MCP state entry does not fit its kind")
+	// ErrMCPStateConnection: the connection is not one the calling gateway
+	// serves (D42, as ReportStatus and HR-418).
+	ErrMCPStateConnection = pcerr.New(pcerr.PermissionDenied, "MCP_STATE_CONNECTION", "the gateway does not serve this connection")
 )
 
 // MCPEntry is one entry to write.
@@ -73,22 +78,46 @@ func optString(s string) *string {
 	return &s
 }
 
-// valid reports whether the entry carries only what its kind may.
+// valid reports whether the entry carries only what its kind may, and
+// expires within its kind's lifetime (D42).
 func (e MCPEntry) valid(now time.Time) bool {
-	if len(e.Key) != 32 || !e.ExpireTime.After(now) || e.ExpireTime.After(now.Add(MaxMCPStateTTL)) {
+	if len(e.Key) != 32 || !e.ExpireTime.After(now) {
 		return false
 	}
+	ttl, ok := false, false
 	switch e.Kind {
 	case MCPHold:
-		return e.ActionID != "" && e.JKT == "" && e.Status == "" && !e.Busy && len(e.SealedBody) == 0
+		ttl = !e.ExpireTime.After(now.Add(MaxMCPHoldTTL))
+		ok = e.ActionID != "" && e.JKT == "" && e.Status == "" && !e.Busy && len(e.SealedBody) == 0
 	case MCPTask:
-		return e.ActionID != "" && e.JKT == "" && e.Status != ""
+		ttl = !e.ExpireTime.After(now.Add(MaxMCPHoldTTL))
+		ok = e.ActionID != "" && e.JKT == "" && e.Status != ""
 	case MCPSession:
-		return e.ActionID == "" && e.Status == "" && !e.Busy && len(e.SealedBody) == 0
+		ttl = !e.ExpireTime.After(now.Add(MaxMCPSessionTTL))
+		ok = e.ActionID == "" && e.Status == "" && !e.Busy && len(e.SealedBody) == 0
 	case MCPElicitation:
-		return e.JKT == ""
+		ttl = !e.ExpireTime.After(now.Add(MaxMCPElicitationTTL))
+		ok = e.ActionID == "" && e.JKT == "" && e.Status == "" && !e.Busy && len(e.SealedBody) > 0
 	}
-	return false
+	return ttl && ok
+}
+
+// sameBinding reports whether an update keeps the stored entry's binding,
+// which never changes once written (D42).
+func (e MCPEntry) sameBinding(cur dbq.PcGatewayMcpState) bool {
+	return e.Connection == cur.ConnectionID && sameUUID(e.Run, cur.RunID) && sameUUID(e.Instance, cur.InstanceID) &&
+		e.JKT == derefString(cur.Jkt)
+}
+
+func sameUUID(a, b *ids.UUID) bool {
+	return (a == nil && b == nil) || (a != nil && b != nil && *a == *b)
+}
+
+func derefString(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 // PutMCPState writes an entry of the calling gateway and returns its new
@@ -104,6 +133,12 @@ func (s *Service) PutMCPState(ctx context.Context, id Identity, e MCPEntry, ifVe
 	var version int64
 	err := s.pool.InTenantTx(ctx, id.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		conn, err := q.GetConnection(ctx, id.Org, e.Connection)
+		if db.IsNoRows(err) || (err == nil && (conn.GatewayID != id.Gateway || conn.State == "RETIRED")) {
+			return ErrMCPStateConnection
+		} else if err != nil {
+			return err
+		}
 		// One writer per gateway at a time, so the bounds hold.
 		if err := q.LockGatewayMCPState(ctx, id.Gateway); err != nil {
 			return err
@@ -114,7 +149,7 @@ func (s *Service) PutMCPState(ctx context.Context, id Identity, e MCPEntry, ifVe
 		}
 		exists := err == nil
 		live := exists && cur.ExpireTime.After(now)
-		if (ifVersion == 0 && live) || (ifVersion != 0 && (!live || cur.Version != ifVersion)) {
+		if (ifVersion == 0 && live) || (ifVersion != 0 && (!live || cur.Version != ifVersion || !e.sameBinding(cur))) {
 			return ErrMCPStateConflict
 		}
 		oldBytes := 0
@@ -126,8 +161,7 @@ func (s *Service) PutMCPState(ctx context.Context, id Identity, e MCPEntry, ifVe
 		}
 		if ifVersion != 0 {
 			n, err := q.UpdateGatewayMCPState(ctx, dbq.UpdateGatewayMCPStateParams{
-				OrgID: id.Org, GatewayID: id.Gateway, Kind: e.Kind, Key: e.Key, ConnectionID: e.Connection, RunID: e.Run,
-				InstanceID: e.Instance, Jkt: optString(e.JKT), ActionID: optString(e.ActionID), Status: optString(e.Status),
+				OrgID: id.Org, GatewayID: id.Gateway, Kind: e.Kind, Key: e.Key, ActionID: optString(e.ActionID), Status: optString(e.Status),
 				Busy: e.Busy, SealedBody: e.SealedBody, ExpireTime: e.ExpireTime, UpdateTime: now, IfVersion: ifVersion,
 			})
 			if err != nil {
@@ -141,7 +175,7 @@ func (s *Service) PutMCPState(ctx context.Context, id Identity, e MCPEntry, ifVe
 		if exists {
 			// An expired row under the same key no longer counts.
 			if _, err := q.DeleteGatewayMCPState(ctx, dbq.DeleteGatewayMCPStateParams{
-				OrgID: id.Org, GatewayID: id.Gateway, Kind: e.Kind, Key: e.Key, IfVersion: cur.Version,
+				OrgID: id.Org, GatewayID: id.Gateway, Kind: e.Kind, Key: e.Key,
 			}); err != nil {
 				return err
 			}
@@ -216,7 +250,7 @@ func (s *Service) DeleteMCPState(ctx context.Context, id Identity, kind string, 
 	err := s.pool.InTenantTx(ctx, id.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		n, err := q.DeleteGatewayMCPState(ctx, dbq.DeleteGatewayMCPStateParams{
-			OrgID: id.Org, GatewayID: id.Gateway, Kind: kind, Key: key, IfVersion: ifVersion,
+			OrgID: id.Org, GatewayID: id.Gateway, Kind: kind, Key: key, IfVersion: ifVersion, Now: s.clk.Now(),
 		})
 		if err != nil {
 			return err

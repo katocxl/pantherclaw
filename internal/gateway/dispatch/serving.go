@@ -22,7 +22,7 @@ func (e *Engine) ServingState(conn *control.Connection) string {
 	}
 	e.breaker.mu.Lock()
 	c := e.breaker.circuits[conn.GetId()]
-	open := c != nil && c.open && !(conn.GetRevision() > c.revision && conn.GetState() == "ACTIVE")
+	open := c != nil && c.open && (conn.GetRevision() <= c.revision || conn.GetState() != "ACTIVE")
 	e.breaker.mu.Unlock()
 	if open {
 		return ServingCircuitOpen
