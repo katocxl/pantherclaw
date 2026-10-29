@@ -158,13 +158,13 @@ func (h *AdminHandler) CreateGatewayEnrollmentToken(ctx context.Context, req *pa
 
 // ListGateways implements GatewayAdminServiceHandler.
 func (h *AdminHandler) ListGateways(ctx context.Context, req *pantherclawv1.ListGatewaysRequest) (*pantherclawv1.ListGatewaysResponse, error) {
-	rows, next, err := h.s.ListGateways(ctx, req.GetPageSize(), req.GetPageToken(), req.GetIncludeRevoked())
+	rows, statuses, next, err := h.s.ListGateways(ctx, req.GetPageSize(), req.GetPageToken(), req.GetIncludeRevoked())
 	if err != nil {
 		return nil, err
 	}
 	out := &pantherclawv1.ListGatewaysResponse{NextPageToken: next}
 	for _, g := range rows {
-		out.Gateways = append(out.Gateways, gatewayOf(g, h.s.PantherClawHosted(g.ID)))
+		out.Gateways = append(out.Gateways, withStatus(gatewayOf(g, h.s.PantherClawHosted(g.ID)), statuses[g.ID]))
 	}
 	return out, nil
 }
@@ -179,7 +179,7 @@ func (h *AdminHandler) GetGateway(ctx context.Context, req *pantherclawv1.GetGat
 	if err != nil {
 		return nil, err
 	}
-	out := &pantherclawv1.GetGatewayResponse{Gateway: gatewayOf(d.Gateway, h.s.PantherClawHosted(d.Gateway.ID))}
+	out := &pantherclawv1.GetGatewayResponse{Gateway: withStatus(gatewayOf(d.Gateway, h.s.PantherClawHosted(d.Gateway.ID)), d.Status)}
 	for _, c := range d.Certificates {
 		out.Certificates = append(out.Certificates, certOf(c))
 	}
