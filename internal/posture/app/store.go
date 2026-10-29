@@ -71,7 +71,7 @@ type Summary map[domain.ActionKind]int
 // finding a reconciliation opened, saw, moved or remediated (G0 M16 D91:
 // suggestions follow unused-authority findings).
 type FindingHook interface {
-	FindingChanged(ctx context.Context, tx db.TenantTx, finding ids.UUID, kind domain.Kind) error
+	FindingChanged(ctx context.Context, tx db.TenantTx, finding ids.UUID, kind domain.Kind, act domain.ActionKind) error
 }
 
 // Reconcile brings the org's findings in line with a recomputation, in the
@@ -149,7 +149,7 @@ func ReconcileWith(ctx context.Context, tx db.TenantTx, rec exapp.Recomputed, ho
 			}
 		}
 		if hook != nil {
-			if err := hook.FindingChanged(ctx, tx, id, kind); err != nil {
+			if err := hook.FindingChanged(ctx, tx, id, kind, a.Kind); err != nil {
 				return nil, err
 			}
 		}

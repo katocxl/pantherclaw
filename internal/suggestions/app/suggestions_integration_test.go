@@ -11,18 +11,22 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/automations/securitysteps"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	exapp "github.com/katocxl/pantherclaw/internal/exposure/app"
 	"github.com/katocxl/pantherclaw/internal/exposure/exposuretest"
+	"github.com/katocxl/pantherclaw/internal/exposure/recompute"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 	poapp "github.com/katocxl/pantherclaw/internal/posture/app"
 	podomain "github.com/katocxl/pantherclaw/internal/posture/domain"
@@ -451,9 +455,10 @@ func TestHR445_ExpectedEffectOnlyFromRecordedTransactions(t *testing.T) {
 
 // TestT196_SuggestionsNeverLoosenPolicy (T-196): a suggestion is inserted
 // only OPEN, its identity never changes, it is dismissed only with a
-// reason and then left alone by generation; a resolved finding makes its
-// suggestion STALE and the next one starts OPEN; a suggestion never writes
-// a policy version by itself.
+// reason and then left alone by generation while its finding stays open
+// (until the finding is next remediated: TestT196_ADismissalLasts…); a
+// resolved finding makes its open or drafted suggestion STALE, and a STALE
+// one never reopens; a suggestion never writes a policy version by itself.
 //
 // Covers: F185
 func TestT196_SuggestionsNeverLoosenPolicy(t *testing.T) {
@@ -527,6 +532,238 @@ func TestT196_SuggestionsNeverLoosenPolicy(t *testing.T) {
 		t.Fatalf("stale: %s", oc)
 	}
 	refused(t, o, `UPDATE pc.policy_suggestions SET state = 'OPEN' WHERE id = $1`, other.ID)
+}
+
+// TestT196_ADismissalLastsUntilTheFindingIsNextRemediated (T-196, D91): a
+// dismissed suggestion is left alone while its finding stays open; the
+// finding's remediation is recorded on it once, by the reconciliation that
+// remediates it; when the finding reopens, the next generation starts a
+// new OPEN suggestion and the dismissed one stays as it was.
+//
+// Covers: F185
+func TestT196_ADismissalLastsUntilTheFindingIsNextRemediated(t *testing.T) {
+	ctx := context.Background()
+	o := world(t)
+	got, _ := generate(t, o)
+	s := got[o.Agent]
+	if _, err := service(o, billing.Business).Dismiss(as(o, orgScope(o), td.RoleSecurityAdmin), s.ID,
+		"the agent runs refunds at month end"); err != nil {
+		t.Fatal(err)
+	}
+	if _, oc := generate(t, o); oc[o.Agent] != app.Skipped {
+		t.Fatalf("regenerated a dismissed suggestion: %s", oc[o.Agent])
+	}
+	// Only a dismissed suggestion records a remediation.
+	refused(t, o, `UPDATE pc.policy_suggestions SET finding_remediated_at = now() WHERE id = $1`, got[o.Other].ID)
+
+	o.Revoke(t, s.GrantID)
+	if err := recomputeWith(ctx, o, &app.Queue{Jobs: insertClient(t, o)}, func() {}); err != nil {
+		t.Fatal(err)
+	}
+	f := unusedAny(t, o, s.PostureFindingID)
+	if f.State != string(podomain.Remediated) {
+		t.Fatalf("finding %s", f.State)
+	}
+	if c := count(t, o, `SELECT count(*) FROM pc.policy_suggestions WHERE id = $1 AND state = 'DISMISSED'
+		AND finding_remediated_at IS NOT NULL`, s.ID); c != 1 {
+		t.Fatal("the remediation was not recorded on the dismissed suggestion")
+	}
+	refused(t, o, `UPDATE pc.policy_suggestions SET finding_remediated_at = now() + interval '1 day' WHERE id = $1`, s.ID)
+
+	o.Exec(t, `UPDATE pc.posture_findings SET state = 'OPEN' WHERE id = $1`, f.ID) // reopened
+	var oc app.Outcome
+	o.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		oc, err = app.Generate(ctx, tx, f.ID)
+		return err
+	})
+	if oc != app.Created {
+		t.Fatalf("reopened: %s", oc)
+	}
+	if c := count(t, o, `SELECT count(*) FROM pc.policy_suggestions WHERE posture_finding_id = $1 AND state = 'OPEN'`, f.ID); c != 1 {
+		t.Fatalf("open suggestions after reopening: %d", c)
+	}
+	if c := count(t, o, `SELECT count(*) FROM pc.policy_suggestions WHERE id = $1 AND state = 'DISMISSED'`, s.ID); c != 1 {
+		t.Fatal("the dismissed suggestion changed")
+	}
+}
+
+// TestD91_ARemediationDuringAGenerationLeavesTheSuggestionStale (D91): a
+// generation and a reconciliation that remediates its finding run at the
+// same time, in either order; the later one waits for the earlier one, and
+// the suggestion ends STALE with no OPEN one left, the remediation made
+// STALE in the reconciliation's own transaction.
+//
+// Covers: F185
+func TestD91_ARemediationDuringAGenerationLeavesTheSuggestionStale(t *testing.T) {
+	for _, generationFirst := range []bool{true, false} {
+		t.Run(map[bool]string{true: "generation first", false: "reconciliation first"}[generationFirst], func(t *testing.T) {
+			ctx := context.Background()
+			o := world(t)
+			got, _ := generate(t, o)
+			s := got[o.Agent]
+			o.Revoke(t, s.GrantID)
+			hook := &app.Queue{Jobs: insertClient(t, o)}
+
+			held, release := make(chan struct{}), make(chan struct{})
+			stop := sync.OnceFunc(func() { close(release) })
+			defer stop()
+			pause := func() { close(held); <-release }
+			first, second := make(chan error, 1), make(chan error, 1)
+			var outcome app.Outcome
+			generation := func(pause func()) error {
+				var err error
+				outcome, err = generateWith(ctx, o, s.PostureFindingID, pause)
+				return err
+			}
+			if generationFirst {
+				go func() { first <- generation(pause) }()
+			} else {
+				go func() { first <- recomputeWith(ctx, o, hook, pause) }()
+			}
+			select {
+			case <-held:
+			case err := <-first:
+				t.Fatalf("first transaction: %v", err)
+			}
+			if generationFirst {
+				go func() { second <- recomputeWith(ctx, o, hook, func() {}) }()
+			} else {
+				go func() { second <- generation(func() {}) }()
+			}
+			select {
+			case err := <-second:
+				t.Fatalf("did not wait for the held transaction: %v", err)
+			case <-time.After(300 * time.Millisecond):
+			}
+			stop()
+			if err := <-first; err != nil {
+				t.Fatal(err)
+			}
+			if err := <-second; err != nil {
+				t.Fatal(err)
+			}
+
+			want := app.Skipped // the finding was already remediated and its suggestion STALE
+			if generationFirst {
+				want = app.Refreshed
+			}
+			if outcome != want {
+				t.Fatalf("generation: %s, want %s", outcome, want)
+			}
+			if f := unusedAny(t, o, s.PostureFindingID); f.State != string(podomain.Remediated) {
+				t.Fatalf("finding %s", f.State)
+			}
+			if c := count(t, o, `SELECT count(*) FROM pc.policy_suggestions WHERE id = $1 AND state = 'STALE'`, s.ID); c != 1 {
+				t.Fatal("the suggestion is not STALE")
+			}
+			if c := count(t, o, `SELECT count(*) FROM pc.policy_suggestions WHERE posture_finding_id = $1 AND state = 'OPEN'`,
+				s.PostureFindingID); c != 0 {
+				t.Fatalf("%d open suggestions for a remediated finding", c)
+			}
+			if n := jobsFor(t, o, s.PostureFindingID); n != 1 {
+				t.Fatalf("generation jobs: %d", n)
+			}
+		})
+	}
+}
+
+// TestD91_TheGenerationJobCommitsAndRollsBackWithTheReconciliation (D91):
+// the recomputation service, with the suggestions' queue as its finding
+// hook, enqueues one suggestions.generate job per unused-authority finding
+// in the reconciliation's transaction; when that transaction rolls back,
+// no job is left.
+//
+// Covers: F185
+func TestD91_TheGenerationJobCommitsAndRollsBackWithTheReconciliation(t *testing.T) {
+	ctx := context.Background()
+	o := world(t)
+	svc := &recompute.Service{Pool: o.P, Ents: edition(billing.Business), Findings: &app.Queue{Jobs: insertClient(t, o)}}
+	res, err := svc.Run(ctx, o.Org)
+	if err != nil || !res.Recomputed || res.Posture == nil {
+		t.Fatalf("run: %+v %v", res, err)
+	}
+	for agent, f := range unused(t, o) {
+		if n := jobsFor(t, o, f.ID); n != 1 {
+			t.Fatalf("agent %s: %d generation jobs", agent, n)
+		}
+	}
+
+	rolled := world(t)
+	svc = &recompute.Service{
+		Pool: rolled.P, Ents: edition(billing.Business), Findings: failAfter{&app.Queue{Jobs: insertClient(t, rolled)}},
+	}
+	if _, err := svc.Run(ctx, rolled.Org); !errors.Is(err, errHook) {
+		t.Fatalf("run: %v", err)
+	}
+	for agent, f := range unused(t, rolled) {
+		if n := jobsFor(t, rolled, f.ID); n != 0 {
+			t.Fatalf("agent %s: %d generation jobs after a rollback", agent, n)
+		}
+	}
+}
+
+var errHook = errors.New("hook failed after enqueueing")
+
+// failAfter enqueues, then fails the reconciliation.
+type failAfter struct{ q *app.Queue }
+
+func (f failAfter) FindingChanged(ctx context.Context, tx db.TenantTx, finding ids.UUID, kind podomain.Kind,
+	act podomain.ActionKind,
+) error {
+	if err := f.q.FindingChanged(ctx, tx, finding, kind, act); err != nil {
+		return err
+	}
+	return errHook
+}
+
+func insertClient(t *testing.T, o *exposuretest.Org) *jobs.Client {
+	t.Helper()
+	c, err := jobs.NewClient(o.P, nil, jobs.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+// recomputeWith recomputes and reconciles with hook in one transaction,
+// calling pause before it commits.
+func recomputeWith(ctx context.Context, o *exposuretest.Org, hook poapp.FindingHook, pause func()) error {
+	return o.P.InTenantTx(ctx, o.Org, func(ctx context.Context, tx db.TenantTx) error {
+		rec, err := exapp.Recompute(ctx, tx, "manual", 0)
+		if err != nil {
+			return err
+		}
+		if _, err := poapp.ReconcileWith(ctx, tx, rec, hook); err != nil {
+			return err
+		}
+		pause()
+		return nil
+	})
+}
+
+// generateWith runs a finding's generation, calling pause before it
+// commits.
+func generateWith(ctx context.Context, o *exposuretest.Org, finding ids.UUID, pause func()) (app.Outcome, error) {
+	var out app.Outcome
+	err := o.P.InTenantTx(ctx, o.Org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		if out, err = app.Generate(ctx, tx, finding); err != nil {
+			return err
+		}
+		pause()
+		return nil
+	})
+	return out, err
+}
+
+// jobsFor counts the committed generation jobs of a finding.
+func jobsFor(t *testing.T, o *exposuretest.Org, finding ids.UUID) int {
+	t.Helper()
+	var n int
+	o.D.AdminQueryRow(t, `SELECT count(*) FROM pc.river_job WHERE kind = 'suggestions.generate' AND args->>'finding' = $1`,
+		[]any{finding.String()}, &n)
+	return n
 }
 
 func unusedAny(t *testing.T, o *exposuretest.Org, id ids.UUID) dbq.PcPostureFinding {

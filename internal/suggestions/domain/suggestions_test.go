@@ -160,12 +160,21 @@ func TestHR445_UncollectedDataReportedAsNotCollected(t *testing.T) {
 }
 
 // TestT196_SuggestionInputsAreBounded (T-196): a dismissal needs a reason
-// of 10 to 1000 characters; the observed operations are capped and say
-// so; affected paths that are not operation paths propose nothing.
+// of 10 to 1000 characters with no control, format or bidi character
+// (HR-102); the observed operations are capped and say so; affected paths
+// that are not operation paths propose nothing.
 //
 // Covers: F185
 func TestT196_SuggestionInputsAreBounded(t *testing.T) {
-	for _, r := range []string{"", "   short  ", strings.Repeat("x", MaxDismissReason+1)} {
+	for _, r := range []string{
+		"", "   short  ", strings.Repeat("x", MaxDismissReason+1),
+		"the owner " + string(rune(0x202e)) + "still needs it", // right-to-left override
+		"the owner " + string(rune(0x2066)) + "still needs it", // left-to-right isolate
+		"the owner " + string(rune(0x200b)) + "still needs it", // zero-width space
+		"the owner\x1b[2Jstill needs it",                       // terminal escape
+		"the owner\nstill needs it",
+		"the owner \xffstill needs it", // invalid UTF-8
+	} {
 		if CheckDismissReason(r) == nil {
 			t.Errorf("reason %q accepted", r)
 		}

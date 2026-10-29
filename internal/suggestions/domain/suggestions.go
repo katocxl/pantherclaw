@@ -19,6 +19,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -99,12 +100,18 @@ const (
 )
 
 // ErrDismissReason is a dismissal without a usable reason.
-var ErrDismissReason = errors.New("suggestions: a dismissal needs a reason of 10-1000 characters")
+var ErrDismissReason = errors.New(
+	"suggestions: a dismissal needs a reason of 10-1000 characters without control, format or bidi characters")
 
-// CheckDismissReason validates a dismissal's reason.
+// CheckDismissReason validates a dismissal's reason: person-written text
+// shown to others, so it holds nothing the shared untrusted-text cleaner
+// would remove or change (HR-102).
 func CheckDismissReason(reason string) error {
 	n := utf8.RuneCountInString(strings.TrimSpace(reason))
 	if n < MinDismissReason || n > MaxDismissReason {
+		return ErrDismissReason
+	}
+	if apdomain.Clean("dismiss_reason", reason, MaxDismissReason).Text != reason {
 		return ErrDismissReason
 	}
 	return nil

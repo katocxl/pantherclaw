@@ -2703,6 +2703,7 @@ type PcPolicySuggestion struct {
 	DraftPolicyVersionID *ids.UUID
 	DismissedBy          *string
 	DismissReason        *string
+	FindingRemediatedAt  *time.Time
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 }

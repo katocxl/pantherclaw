@@ -20,6 +20,12 @@ UPDATE pc.policy_suggestions SET owners = sqlc.arg(owners), window_from = sqlc.a
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'OPEN'
 RETURNING *;
 
+-- SuggestionFinding reads the posture finding a generation follows,
+-- share-locked: a reconciliation that moves it waits for the generation,
+-- or the generation waits for it and reads the new state (D91).
+-- name: SuggestionFinding :one
+SELECT * FROM pc.posture_findings WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) FOR SHARE;
+
 -- LatestPolicySuggestionForFinding is a finding's newest suggestion,
 -- locked.
 -- name: LatestPolicySuggestionForFinding :one
@@ -34,6 +40,13 @@ FOR UPDATE;
 -- name: StalePolicySuggestions :execrows
 UPDATE pc.policy_suggestions SET state = 'STALE'
 WHERE org_id = sqlc.arg(org_id) AND posture_finding_id = sqlc.arg(posture_finding_id) AND state IN ('OPEN', 'DRAFTED');
+
+-- EndPolicySuggestionDismissals records a finding's remediation on its
+-- dismissed suggestions that have none yet: their dismissal ends with it.
+-- name: EndPolicySuggestionDismissals :execrows
+UPDATE pc.policy_suggestions SET finding_remediated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND posture_finding_id = sqlc.arg(posture_finding_id) AND state = 'DISMISSED'
+  AND finding_remediated_at IS NULL;
 
 -- name: GetPolicySuggestion :one
 SELECT * FROM pc.policy_suggestions WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);

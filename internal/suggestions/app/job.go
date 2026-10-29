@@ -50,10 +50,20 @@ type Queue struct {
 	Jobs *jobs.Client
 }
 
-// FindingChanged implements poapp.FindingHook.
-func (q *Queue) FindingChanged(ctx context.Context, tx db.TenantTx, finding ids.UUID, kind podomain.Kind) error {
+// FindingChanged implements poapp.FindingHook. A remediation resolves the
+// finding's suggestions in the reconciliation's own transaction, so a
+// generation already running (which deduplicates a new job) cannot leave
+// one OPEN; the job still follows.
+func (q *Queue) FindingChanged(ctx context.Context, tx db.TenantTx, finding ids.UUID, kind podomain.Kind,
+	act podomain.ActionKind,
+) error {
 	if kind != podomain.UnusedAuthority {
 		return nil
+	}
+	if act == podomain.ActRemediate {
+		if _, err := Resolve(ctx, tx, finding); err != nil {
+			return err
+		}
 	}
 	c := q.Jobs
 	if c == nil {

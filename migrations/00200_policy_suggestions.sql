@@ -18,6 +18,9 @@
 -- * OPEN refreshes its evidence; DRAFTED, DISMISSED and STALE are frozen.
 --   OPEN -> DRAFTED (with the draft's id), OPEN -> DISMISSED (with who and
 --   why), OPEN or DRAFTED -> STALE (the finding was resolved).
+-- * A dismissal lasts until the finding is next remediated: the
+--   remediation is recorded once on the DISMISSED row
+--   (finding_remediated_at), and a later reopening gets a new OPEN one.
 -- +goose Up
 CREATE TABLE pc.policy_suggestions (
     org_id                  uuid        NOT NULL REFERENCES pc.orgs (id),
@@ -33,6 +36,7 @@ CREATE TABLE pc.policy_suggestions (
     -- operation -> recorded transactions of the grant in the window (at
     -- most 100 operations).
     observed                jsonb       NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(observed) = 'object'
+                                                                     AND jsonb_array_length(jsonb_path_query_array(observed, '$.keyvalue()')) <= 100
                                                                      AND octet_length(observed::text) <= 16384),
     -- The routes that were not ENFORCED for the whole window, worst first:
     -- [{agent, connection, operation, state}] (at most 100).
@@ -52,6 +56,8 @@ CREATE TABLE pc.policy_suggestions (
     draft_policy_version_id uuid,
     dismissed_by            text        CHECK (char_length(dismissed_by) BETWEEN 1 AND 128),
     dismiss_reason          text        CHECK (char_length(btrim(dismiss_reason)) BETWEEN 10 AND 1000),
+    -- When the finding was remediated after the dismissal (set once).
+    finding_remediated_at   timestamptz,
     created_at              timestamptz NOT NULL DEFAULT now(),
     updated_at              timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (org_id, id),
@@ -72,7 +78,8 @@ CREATE TABLE pc.policy_suggestions (
     CHECK ((expected_effect -> 'collected') = 'true'::jsonb
         OR jsonb_array_length(COALESCE(expected_effect -> 'not_collected', '[]'::jsonb)) >= 1),
     CHECK ((state = 'DRAFTED') = (draft_policy_version_id IS NOT NULL) OR state = 'STALE'),
-    CHECK ((state = 'DISMISSED') = (dismissed_by IS NOT NULL AND dismiss_reason IS NOT NULL))
+    CHECK ((state = 'DISMISSED') = (dismissed_by IS NOT NULL AND dismiss_reason IS NOT NULL)),
+    CHECK (finding_remediated_at IS NULL OR state = 'DISMISSED')
 );
 CREATE UNIQUE INDEX policy_suggestions_open ON pc.policy_suggestions (org_id, posture_finding_id) WHERE state = 'OPEN';
 CREATE INDEX policy_suggestions_finding ON pc.policy_suggestions (org_id, posture_finding_id, id DESC);
@@ -92,7 +99,7 @@ CREATE FUNCTION pc.policy_suggestion_insert() RETURNS trigger
     LANGUAGE plpgsql SET search_path = pc, pg_temp AS $$
 BEGIN
     IF NEW.state <> 'OPEN' OR NEW.draft_policy_version_id IS NOT NULL OR NEW.dismissed_by IS NOT NULL
-        OR NEW.dismiss_reason IS NOT NULL THEN
+        OR NEW.dismiss_reason IS NOT NULL OR NEW.finding_remediated_at IS NOT NULL THEN
         RAISE EXCEPTION 'a policy suggestion starts open' USING ERRCODE = 'check_violation';
     END IF;
     NEW.created_at := now();
@@ -131,6 +138,13 @@ BEGIN
         RAISE EXCEPTION 'policy suggestion % records its draft or dismissal only with that move', OLD.id
             USING ERRCODE = 'check_violation';
     END IF;
+    IF NEW.finding_remediated_at IS DISTINCT FROM OLD.finding_remediated_at THEN
+        IF OLD.finding_remediated_at IS NOT NULL OR OLD.state <> 'DISMISSED' OR NEW.state <> 'DISMISSED' THEN
+            RAISE EXCEPTION 'policy suggestion % records the remediation once, while dismissed', OLD.id
+                USING ERRCODE = 'check_violation';
+        END IF;
+        NEW.finding_remediated_at := now();
+    END IF;
     NEW.updated_at := now();
     RETURN NEW;
 END
@@ -141,7 +155,7 @@ CREATE TRIGGER policy_suggestions_update BEFORE UPDATE ON pc.policy_suggestions
 
 GRANT SELECT, INSERT ON pc.policy_suggestions TO pc_app;
 GRANT UPDATE (owners, window_from, window_to, observed, coverage_limits, proposed, expected_effect, uncertainty,
-    uncertainty_reasons, state, draft_policy_version_id, dismissed_by, dismiss_reason, updated_at)
+    uncertainty_reasons, state, draft_policy_version_id, dismissed_by, dismiss_reason, finding_remediated_at, updated_at)
     ON pc.policy_suggestions TO pc_app;
 GRANT SELECT ON pc.policy_suggestions TO pc_audit_ro;
 

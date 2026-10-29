@@ -436,12 +436,15 @@ type Suggestion struct {
 	UncertaintyReasons   []string                   `protobuf:"bytes,14,rep,name=uncertainty_reasons,json=uncertaintyReasons,proto3" json:"uncertainty_reasons,omitempty"`
 	State                SuggestionState            `protobuf:"varint,15,opt,name=state,proto3,enum=pantherclaw.v1.SuggestionState" json:"state,omitempty"`
 	DraftPolicyVersionId string                     `protobuf:"bytes,16,opt,name=draft_policy_version_id,json=draftPolicyVersionId,proto3" json:"draft_policy_version_id,omitempty"`
-	DismissedBy          string                     `protobuf:"bytes,17,opt,name=dismissed_by,json=dismissedBy,proto3" json:"dismissed_by,omitempty"`
-	DismissReason        string                     `protobuf:"bytes,18,opt,name=dismiss_reason,json=dismissReason,proto3" json:"dismiss_reason,omitempty"`
-	CreateTime           *timestamppb.Timestamp     `protobuf:"bytes,19,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	UpdateTime           *timestamppb.Timestamp     `protobuf:"bytes,20,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// dismissed_by: UNTRUSTED, the dismissing person's actor reference.
+	DismissedBy string `protobuf:"bytes,17,opt,name=dismissed_by,json=dismissedBy,proto3" json:"dismissed_by,omitempty"`
+	// dismiss_reason: UNTRUSTED person-written text (10-1000 characters,
+	// without control, format or bidi characters); show it as text only.
+	DismissReason string                 `protobuf:"bytes,18,opt,name=dismiss_reason,json=dismissReason,proto3" json:"dismiss_reason,omitempty"`
+	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Suggestion) Reset() {

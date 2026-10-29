@@ -44,7 +44,7 @@ const (
 // suggestion a person drafted or dismissed is left as it is.
 func Generate(ctx context.Context, tx db.TenantTx, finding ids.UUID) (Outcome, error) {
 	q, org := dbq.New(tx), tx.OrgID()
-	f, err := q.GetPostureFinding(ctx, org, finding)
+	f, err := q.SuggestionFinding(ctx, org, finding)
 	if db.IsNoRows(err) {
 		return Skipped, nil
 	} else if err != nil {
@@ -53,15 +53,15 @@ func Generate(ctx context.Context, tx db.TenantTx, finding ids.UUID) (Outcome, e
 	if podomain.Kind(f.Kind) != podomain.UnusedAuthority || f.GrantID == nil {
 		return Skipped, nil
 	}
-	if _, ops := domain.RoutesOf(f.AffectedPaths); len(ops) == 0 {
-		return Skipped, nil // nothing to restrict by operation
-	}
 	if podomain.State(f.State) == podomain.Remediated {
-		n, err := q.StalePolicySuggestions(ctx, org, finding)
+		n, err := Resolve(ctx, tx, finding)
 		if err != nil || n == 0 {
 			return Skipped, err
 		}
 		return MadeStale, nil
+	}
+	if _, ops := domain.RoutesOf(f.AffectedPaths); len(ops) == 0 {
+		return Skipped, nil // nothing to restrict by operation
 	}
 	if !podomain.State(f.State).Active() {
 		return Skipped, nil // accepted for a while: the suggestion stays as it was
@@ -71,8 +71,10 @@ func Generate(ctx context.Context, tx db.TenantTx, finding ids.UUID) (Outcome, e
 	case db.IsNoRows(err):
 	case err != nil:
 		return "", err
-	case domain.State(latest.State) == domain.Drafted || domain.State(latest.State) == domain.Dismissed:
+	case domain.State(latest.State) == domain.Drafted:
 		return Skipped, nil
+	case domain.State(latest.State) == domain.Dismissed && latest.FindingRemediatedAt == nil:
+		return Skipped, nil // dismissed until the finding is next remediated
 	}
 	ev, err := gather(ctx, q, org, f)
 	if err != nil {
@@ -93,6 +95,22 @@ func Generate(ctx context.Context, tx db.TenantTx, finding ids.UUID) (Outcome, e
 		Uncertainty: string(ev.assessment.Uncertainty), UncertaintyReasons: ev.assessment.Reasons,
 	})
 	return Created, err
+}
+
+// Resolve applies a finding's remediation to its suggestions, in tx (D91):
+// open and drafted ones become STALE, and dismissed ones record that their
+// dismissal ended, so a reopened finding gets a new OPEN suggestion. It
+// returns how many were made STALE.
+func Resolve(ctx context.Context, tx db.TenantTx, finding ids.UUID) (int64, error) {
+	q, org := dbq.New(tx), tx.OrgID()
+	n, err := q.StalePolicySuggestions(ctx, org, finding)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := q.EndPolicySuggestionDismissals(ctx, org, finding); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 // evidence is what a suggestion stores.

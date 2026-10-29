@@ -32,7 +32,7 @@ var (
 	ErrState    = pcerr.New(pcerr.FailedPrecondition, "SUGGESTION_NOT_OPEN",
 		"only an open suggestion can be dismissed or drafted")
 	ErrReason = pcerr.New(pcerr.InvalidArgument, "SUGGESTION_REASON_INVALID",
-		"a dismissal needs a reason of 10-1000 characters")
+		"a dismissal needs a reason of 10-1000 characters without control, format or bidi characters")
 	ErrUnwired = pcerr.New(pcerr.FailedPrecondition, "SUGGESTION_DRAFTS_UNAVAILABLE",
 		"this server cannot store policy drafts")
 )
@@ -246,9 +246,9 @@ func (s *Service) Dismiss(ctx context.Context, id ids.UUID, reason string) (dbq.
 }
 
 // Draft turns an open suggestion into a policy DRAFT (D92, HR-442): the
-// published bundle (or a new one) with the suggestion's FORBID rule for its
-// agent, keeping every operation an earlier rule of that agent already
-// forbade, so a draft never forbids less than what is published. It is
+// published bundle (or a new one) with the suggestion's operations added
+// to the FORBID rule for its agent (DraftBundle), so a draft never forbids
+// less than what is published. It is
 // stored with the caller as its author and never published: publishing
 // goes through the M11.1 gate. Needs policy.author at the org.
 func (s *Service) Draft(ctx context.Context, id ids.UUID) (dbq.PcPolicySuggestion, int, error) {
@@ -276,8 +276,7 @@ func (s *Service) Draft(ctx context.Context, id ids.UUID) (dbq.PcPolicySuggestio
 		if err != nil {
 			return err
 		}
-		draft := securitysteps.RestrictionDraft(base, map[ids.UUID][]string{r.AgentID: DraftOperations(base, r.AgentID, proposed)},
-			domain.WindowDays)
+		draft := DraftBundle(base, r.AgentID, proposed)
 		v, n, err := s.Drafts.CreateDraft(ctx, x.tx.Pgx(), x.c.Org, draft, x.c.Actor())
 		if err != nil {
 			return err
@@ -301,9 +300,28 @@ func (s *Service) Draft(ctx context.Context, id ids.UUID) (dbq.PcPolicySuggestio
 	return out, version, err
 }
 
+// DraftBundle is the draft of a suggestion over the published bundle base
+// (nil: none). The published FORBID rule for the agent is kept as it is,
+// its When, Reason and Summary included (a person may have widened it),
+// and only gains the proposed operations; without one, RestrictionDraft
+// adds its rule for the agent.
+func DraftBundle(base *pdomain.Bundle, agent ids.UUID, proposed []pdomain.Rule) *pdomain.Bundle {
+	ops := DraftOperations(base, agent, proposed)
+	if base != nil {
+		want := securitysteps.RestrictionRuleID(agent)
+		if i := slices.IndexFunc(base.Rules, func(r pdomain.Rule) bool { return r.ID == want && r.Kind == pdomain.Forbid }); i >= 0 {
+			b := *base
+			b.Rules, b.Tests = slices.Clone(base.Rules), slices.Clone(base.Tests)
+			b.Rules[i].Operations = ops
+			return &b
+		}
+	}
+	return securitysteps.RestrictionDraft(base, map[ids.UUID][]string{agent: ops}, domain.WindowDays)
+}
+
 // DraftOperations are the operations a suggestion's draft forbids its
 // agent: the proposed ones, plus any the published bundle's rule for that
-// agent already forbids (RestrictionDraft replaces that rule).
+// agent already forbids.
 func DraftOperations(base *pdomain.Bundle, agent ids.UUID, proposed []pdomain.Rule) []string {
 	var ops []string
 	for _, r := range proposed {

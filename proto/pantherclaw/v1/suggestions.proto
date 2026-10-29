@@ -116,7 +116,10 @@ message Suggestion {
   repeated string uncertainty_reasons = 14;
   SuggestionState state = 15;
   string draft_policy_version_id = 16;
+  // dismissed_by: UNTRUSTED, the dismissing person's actor reference.
   string dismissed_by = 17;
+  // dismiss_reason: UNTRUSTED person-written text (10-1000 characters,
+  // without control, format or bidi characters); show it as text only.
   string dismiss_reason = 18;
   google.protobuf.Timestamp create_time = 19;
   google.protobuf.Timestamp update_time = 20;

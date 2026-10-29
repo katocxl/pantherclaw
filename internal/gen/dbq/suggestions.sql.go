@@ -18,7 +18,7 @@ import (
 const dismissPolicySuggestion = `-- name: DismissPolicySuggestion :one
 UPDATE pc.policy_suggestions SET state = 'DISMISSED', dismissed_by = $1, dismiss_reason = $2
 WHERE org_id = $3 AND id = $4 AND state = 'OPEN'
-RETURNING org_id, id, kind, posture_finding_id, grant_id, agent_id, owners, window_from, window_to, observed, coverage_limits, proposed, expected_effect, uncertainty, uncertainty_reasons, state, draft_policy_version_id, dismissed_by, dismiss_reason, created_at, updated_at
+RETURNING org_id, id, kind, posture_finding_id, grant_id, agent_id, owners, window_from, window_to, observed, coverage_limits, proposed, expected_effect, uncertainty, uncertainty_reasons, state, draft_policy_version_id, dismissed_by, dismiss_reason, finding_remediated_at, created_at, updated_at
 `
 
 type DismissPolicySuggestionParams struct {
@@ -56,6 +56,7 @@ func (q *Queries) DismissPolicySuggestion(ctx context.Context, arg DismissPolicy
 		&i.DraftPolicyVersionID,
 		&i.DismissedBy,
 		&i.DismissReason,
+		&i.FindingRemediatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -65,7 +66,7 @@ func (q *Queries) DismissPolicySuggestion(ctx context.Context, arg DismissPolicy
 const draftPolicySuggestion = `-- name: DraftPolicySuggestion :one
 UPDATE pc.policy_suggestions SET state = 'DRAFTED', draft_policy_version_id = $1
 WHERE org_id = $2 AND id = $3 AND state = 'OPEN'
-RETURNING org_id, id, kind, posture_finding_id, grant_id, agent_id, owners, window_from, window_to, observed, coverage_limits, proposed, expected_effect, uncertainty, uncertainty_reasons, state, draft_policy_version_id, dismissed_by, dismiss_reason, created_at, updated_at
+RETURNING org_id, id, kind, posture_finding_id, grant_id, agent_id, owners, window_from, window_to, observed, coverage_limits, proposed, expected_effect, uncertainty, uncertainty_reasons, state, draft_policy_version_id, dismissed_by, dismiss_reason, finding_remediated_at, created_at, updated_at
 `
 
 func (q *Queries) DraftPolicySuggestion(ctx context.Context, draftPolicyVersionID *ids.UUID, orgID ids.OrgID, iD ids.UUID) (PcPolicySuggestion, error) {
@@ -91,14 +92,31 @@ func (q *Queries) DraftPolicySuggestion(ctx context.Context, draftPolicyVersionI
 		&i.DraftPolicyVersionID,
 		&i.DismissedBy,
 		&i.DismissReason,
+		&i.FindingRemediatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
+const endPolicySuggestionDismissals = `-- name: EndPolicySuggestionDismissals :execrows
+UPDATE pc.policy_suggestions SET finding_remediated_at = now()
+WHERE org_id = $1 AND posture_finding_id = $2 AND state = 'DISMISSED'
+  AND finding_remediated_at IS NULL
+`
+
+// EndPolicySuggestionDismissals records a finding's remediation on its
+// dismissed suggestions that have none yet: their dismissal ends with it.
+func (q *Queries) EndPolicySuggestionDismissals(ctx context.Context, orgID ids.OrgID, postureFindingID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, endPolicySuggestionDismissals, orgID, postureFindingID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getPolicySuggestion = `-- name: GetPolicySuggestion :one
-SELECT org_id, id, kind, posture_finding_id, grant_id, agent_id, owners, window_from, window_to, observed, coverage_limits, proposed, expected_effect, uncertainty, uncertainty_reasons, state, draft_policy_version_id, dismissed_by, dismiss_reason, created_at, updated_at FROM pc.policy_suggestions WHERE org_id = $1 AND id = $2
+SELECT org_id, id, kind, posture_finding_id, grant_id, agent_id, owners, window_from, window_to, observed, coverage_limits, proposed, expected_effect, uncertainty, uncertainty_reasons, state, draft_policy_version_id, dismissed_by, dismiss_reason, finding_remediated_at, created_at, updated_at FROM pc.policy_suggestions WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetPolicySuggestion(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcPolicySuggestion, error) {
@@ -124,6 +142,7 @@ func (q *Queries) GetPolicySuggestion(ctx context.Context, orgID ids.OrgID, iD i
 		&i.DraftPolicyVersionID,
 		&i.DismissedBy,
 		&i.DismissReason,
+		&i.FindingRemediatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -137,7 +156,7 @@ INSERT INTO pc.policy_suggestions (org_id, id, kind, posture_finding_id, grant_i
 VALUES ($1, $2, $3, $4, $5, $6,
     $7, $8, $9, $10, $11, $12,
     $13, $14, $15)
-RETURNING org_id, id, kind, posture_finding_id, grant_id, agent_id, owners, window_from, window_to, observed, coverage_limits, proposed, expected_effect, uncertainty, uncertainty_reasons, state, draft_policy_version_id, dismissed_by, dismiss_reason, created_at, updated_at
+RETURNING org_id, id, kind, posture_finding_id, grant_id, agent_id, owners, window_from, window_to, observed, coverage_limits, proposed, expected_effect, uncertainty, uncertainty_reasons, state, draft_policy_version_id, dismissed_by, dismiss_reason, finding_remediated_at, created_at, updated_at
 `
 
 type InsertPolicySuggestionParams struct {
@@ -202,6 +221,7 @@ func (q *Queries) InsertPolicySuggestion(ctx context.Context, arg InsertPolicySu
 		&i.DraftPolicyVersionID,
 		&i.DismissedBy,
 		&i.DismissReason,
+		&i.FindingRemediatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -209,7 +229,7 @@ func (q *Queries) InsertPolicySuggestion(ctx context.Context, arg InsertPolicySu
 }
 
 const latestPolicySuggestionForFinding = `-- name: LatestPolicySuggestionForFinding :one
-SELECT org_id, id, kind, posture_finding_id, grant_id, agent_id, owners, window_from, window_to, observed, coverage_limits, proposed, expected_effect, uncertainty, uncertainty_reasons, state, draft_policy_version_id, dismissed_by, dismiss_reason, created_at, updated_at FROM pc.policy_suggestions
+SELECT org_id, id, kind, posture_finding_id, grant_id, agent_id, owners, window_from, window_to, observed, coverage_limits, proposed, expected_effect, uncertainty, uncertainty_reasons, state, draft_policy_version_id, dismissed_by, dismiss_reason, finding_remediated_at, created_at, updated_at FROM pc.policy_suggestions
 WHERE org_id = $1 AND posture_finding_id = $2
 ORDER BY id DESC
 LIMIT 1
@@ -241,6 +261,7 @@ func (q *Queries) LatestPolicySuggestionForFinding(ctx context.Context, orgID id
 		&i.DraftPolicyVersionID,
 		&i.DismissedBy,
 		&i.DismissReason,
+		&i.FindingRemediatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -248,7 +269,7 @@ func (q *Queries) LatestPolicySuggestionForFinding(ctx context.Context, orgID id
 }
 
 const listPolicySuggestions = `-- name: ListPolicySuggestions :many
-SELECT org_id, id, kind, posture_finding_id, grant_id, agent_id, owners, window_from, window_to, observed, coverage_limits, proposed, expected_effect, uncertainty, uncertainty_reasons, state, draft_policy_version_id, dismissed_by, dismiss_reason, created_at, updated_at FROM pc.policy_suggestions
+SELECT org_id, id, kind, posture_finding_id, grant_id, agent_id, owners, window_from, window_to, observed, coverage_limits, proposed, expected_effect, uncertainty, uncertainty_reasons, state, draft_policy_version_id, dismissed_by, dismiss_reason, finding_remediated_at, created_at, updated_at FROM pc.policy_suggestions
 WHERE org_id = $1
   AND (cardinality($2::text[]) = 0 OR state = ANY ($2::text[]))
   AND ($3::text IS NULL OR kind = $3::text)
@@ -307,6 +328,7 @@ func (q *Queries) ListPolicySuggestions(ctx context.Context, arg ListPolicySugge
 			&i.DraftPolicyVersionID,
 			&i.DismissedBy,
 			&i.DismissReason,
+			&i.FindingRemediatedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -321,7 +343,7 @@ func (q *Queries) ListPolicySuggestions(ctx context.Context, arg ListPolicySugge
 }
 
 const lockPolicySuggestion = `-- name: LockPolicySuggestion :one
-SELECT org_id, id, kind, posture_finding_id, grant_id, agent_id, owners, window_from, window_to, observed, coverage_limits, proposed, expected_effect, uncertainty, uncertainty_reasons, state, draft_policy_version_id, dismissed_by, dismiss_reason, created_at, updated_at FROM pc.policy_suggestions WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, kind, posture_finding_id, grant_id, agent_id, owners, window_from, window_to, observed, coverage_limits, proposed, expected_effect, uncertainty, uncertainty_reasons, state, draft_policy_version_id, dismissed_by, dismiss_reason, finding_remediated_at, created_at, updated_at FROM pc.policy_suggestions WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockPolicySuggestion(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcPolicySuggestion, error) {
@@ -347,6 +369,7 @@ func (q *Queries) LockPolicySuggestion(ctx context.Context, orgID ids.OrgID, iD 
 		&i.DraftPolicyVersionID,
 		&i.DismissedBy,
 		&i.DismissReason,
+		&i.FindingRemediatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -358,7 +381,7 @@ UPDATE pc.policy_suggestions SET owners = $1, window_from = $2, window_to = $3,
     observed = $4, coverage_limits = $5, proposed = $6,
     expected_effect = $7, uncertainty = $8, uncertainty_reasons = $9
 WHERE org_id = $10 AND id = $11 AND state = 'OPEN'
-RETURNING org_id, id, kind, posture_finding_id, grant_id, agent_id, owners, window_from, window_to, observed, coverage_limits, proposed, expected_effect, uncertainty, uncertainty_reasons, state, draft_policy_version_id, dismissed_by, dismiss_reason, created_at, updated_at
+RETURNING org_id, id, kind, posture_finding_id, grant_id, agent_id, owners, window_from, window_to, observed, coverage_limits, proposed, expected_effect, uncertainty, uncertainty_reasons, state, draft_policy_version_id, dismissed_by, dismiss_reason, finding_remediated_at, created_at, updated_at
 `
 
 type RefreshPolicySuggestionParams struct {
@@ -411,6 +434,7 @@ func (q *Queries) RefreshPolicySuggestion(ctx context.Context, arg RefreshPolicy
 		&i.DraftPolicyVersionID,
 		&i.DismissedBy,
 		&i.DismissReason,
+		&i.FindingRemediatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -534,6 +558,45 @@ func (q *Queries) SuggestionEffect(ctx context.Context, arg SuggestionEffectPara
 	)
 	var i SuggestionEffectRow
 	err := row.Scan(&i.Matching, &i.NotDenied)
+	return i, err
+}
+
+const suggestionFinding = `-- name: SuggestionFinding :one
+SELECT org_id, id, kind, root_cause, agent_id, connection_id, grant_id, coverage_finding_id, title, detail, affected_paths, paths_truncated, severity, state, owner_user_id, accepted_until, accepted_reason, fingerprint, last_snapshot_id, remediated_snapshot_id, first_seen_at, last_seen_at, state_changed_at, remediated_at FROM pc.posture_findings WHERE org_id = $1 AND id = $2 FOR SHARE
+`
+
+// SuggestionFinding reads the posture finding a generation follows,
+// share-locked: a reconciliation that moves it waits for the generation,
+// or the generation waits for it and reads the new state (D91).
+func (q *Queries) SuggestionFinding(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcPostureFinding, error) {
+	row := q.db.QueryRow(ctx, suggestionFinding, orgID, iD)
+	var i PcPostureFinding
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.Kind,
+		&i.RootCause,
+		&i.AgentID,
+		&i.ConnectionID,
+		&i.GrantID,
+		&i.CoverageFindingID,
+		&i.Title,
+		&i.Detail,
+		&i.AffectedPaths,
+		&i.PathsTruncated,
+		&i.Severity,
+		&i.State,
+		&i.OwnerUserID,
+		&i.AcceptedUntil,
+		&i.AcceptedReason,
+		&i.Fingerprint,
+		&i.LastSnapshotID,
+		&i.RemediatedSnapshotID,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.StateChangedAt,
+		&i.RemediatedAt,
+	)
 	return i, err
 }
 
