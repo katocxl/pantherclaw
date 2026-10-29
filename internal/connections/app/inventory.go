@@ -5,7 +5,6 @@ package app
 
 import (
 	"context"
-	"encoding/json/v2"
 	"maps"
 	"regexp"
 	"slices"
@@ -289,18 +288,26 @@ func cover(ctx context.Context, tx db.TenantTx, c actor, conn ids.UUID, row dbq.
 }
 
 // coverage is what the connection's pinned package version reviewed, when
-// that version is active: upstream tools by name and digest, resources
-// and templates by their mcp_resource mapping.
+// that version is active: upstream tools by name and digest; a resource
+// whose URI matches a reviewed mcp_resource template, through the matcher
+// the resources face uses; and a resource template equal to a reviewed
+// one (G0 M15 D43 L5).
 type coverage struct {
 	defs      []domain.Definition
-	resources map[string]bool
+	templates []string
 }
 
 func (c coverage) covers(kind, name, digest string) bool {
-	if kind == InventoryTool {
+	switch kind {
+	case InventoryTool:
 		return reviewed(c.defs, name, digest)
+	case InventoryTemplate:
+		return slices.Contains(c.templates, name)
 	}
-	return c.resources[name]
+	return slices.ContainsFunc(c.templates, func(t string) bool {
+		_, ok := domain.MatchResource(t, name)
+		return ok
+	})
 }
 
 // pinnedCoverage reads the coverage of the org's pinned version of pkg;
@@ -319,32 +326,17 @@ func pinnedCoverage(ctx context.Context, q *dbq.Queries, org ids.OrgID, pkg stri
 	if err != nil {
 		return coverage{}, nil //nolint:nilerr // an undecodable version covers nothing (fail closed)
 	}
-	return coverage{defs: p.Definitions, resources: reviewedResources(pin.Raw)}, nil
+	return coverage{defs: p.Definitions, templates: reviewedTemplates(p.Definitions)}, nil
 }
 
-// reviewedResources are the URIs and URI templates of a package's
-// mcp_resource mappings (G0 M15 D30), read from the manifest's JSON form.
-func reviewedResources(raw []byte) map[string]bool {
-	doc, err := manifest.ToJSON(raw)
-	if err != nil {
-		return nil
-	}
-	var p struct {
-		Definitions []struct {
-			Mappings []struct {
-				Channel  string `json:"channel"`
-				Resource string `json:"resource"`
-			} `json:"mappings"`
-		} `json:"definitions"`
-	}
-	if json.Unmarshal(doc, &p) != nil {
-		return nil
-	}
-	out := map[string]bool{}
-	for _, d := range p.Definitions {
+// reviewedTemplates are the URI templates of a package's mcp_resource
+// mappings (G0 M15 D30).
+func reviewedTemplates(defs []domain.Definition) []string {
+	var out []string
+	for _, d := range defs {
 		for _, m := range d.Mappings {
-			if m.Channel == "mcp_resource" && m.Resource != "" {
-				out[m.Resource] = true
+			if m.Channel == domain.ChannelMCPResource && m.Resource != "" {
+				out = append(out, m.Resource)
 			}
 		}
 	}
