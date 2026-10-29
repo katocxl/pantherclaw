@@ -311,7 +311,7 @@ Agent identities get Entra access tokens like managed identities, so the same `e
    pclaw issuer propose-entra-agent --agent <agent> --tenant-id <tenant id> --app-id <app id> \
      --object-id <agent identity object id> --auto-admit --reason "Entra agent"
    ```
-   Only an agent acting autonomously as itself attests: the token must be app-only (`idtyp` `app`), and both `xms_sub_fct` and `xms_act_fct` must name an agent identity (`11`). Agents acting on behalf of a user, or through their agent user account, never attest.
+   Only an agent acting autonomously as itself attests: the token must be app-only (`idtyp` `app`), and both `xms_sub_fct` and `xms_act_fct` must name an agent identity (`11`). Agents acting on behalf of a user, or through their agent user account, never attest. These claims follow Microsoft's [Token claims reference for agent IDs](https://learn.microsoft.com/en-us/entra/agent-id/agent-token-claims) (retrieved 2026-10-29); if Microsoft changes them, attestation fails closed.
 3. The agent acquires an access token for the app with its agent identity (for example with the Microsoft Entra SDK) and passes it in an environment variable:
    ```bash
    pclaw workload renew --key-file workload.json --out token.json --entra-token-env PANTHERCLAW_ENTRA_TOKEN

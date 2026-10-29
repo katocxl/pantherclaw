@@ -173,7 +173,11 @@ func MatchAzureMI(b AzureMIBinding, c AzureClaims) (Match, error) {
 }
 
 // agentIdentityFacet is the facet value Entra uses for an agent identity
-// in xms_sub_fct and xms_act_fct (space-separated, any order).
+// (AgentIdentity) in xms_sub_fct and xms_act_fct, per Microsoft's "Token
+// claims reference for agent IDs",
+// https://learn.microsoft.com/en-us/entra/agent-id/agent-token-claims
+// (retrieved 2026-10-29; page updated 2026-08-27; Agent ID is generally
+// available). Values are space-separated, in any order.
 const agentIdentityFacet = "11"
 
 // EntraAgentBinding pins Entra Agent ID tokens to one agent identity

@@ -24,9 +24,25 @@ ALTER TABLE pc.trusted_issuers ADD CONSTRAINT trusted_issuers_audience CHECK (
 ALTER TABLE pc.trusted_issuers VALIDATE CONSTRAINT trusted_issuers_audience;
 
 -- +goose Down
+-- The narrower CHECKs would refuse Azure entries; remove them first. A
+-- Down never deletes issuer rows.
+-- +goose StatementBegin
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pc.trusted_issuers
+               WHERE kind IN ('azure_mi', 'entra_agent_id') OR audience <> 'pantherclaw:' || org_id::text) THEN
+        RAISE EXCEPTION 'remove the M17 issuer entries first';
+    END IF;
+END
+$$;
+-- +goose StatementEnd
 ALTER TABLE pc.trusted_issuers DROP CONSTRAINT trusted_issuers_audience;
 ALTER TABLE pc.trusted_issuers ADD CONSTRAINT trusted_issuers_audience
     CHECK (audience = 'pantherclaw:' || org_id::text) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.trusted_issuers VALIDATE CONSTRAINT trusted_issuers_audience;
 ALTER TABLE pc.trusted_issuers DROP CONSTRAINT trusted_issuers_kind_check;
 ALTER TABLE pc.trusted_issuers ADD CONSTRAINT trusted_issuers_kind_check
     CHECK (kind IN ('github_actions', 'kubernetes', 'gitlab_ci', 'spiffe_jwt', 'gcp_workload', 'aws_iam')) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.trusted_issuers VALIDATE CONSTRAINT trusted_issuers_kind_check;

@@ -18,9 +18,25 @@ ALTER TABLE pc.trusted_issuers ADD CONSTRAINT trusted_issuers_algorithms_check
 ALTER TABLE pc.trusted_issuers VALIDATE CONSTRAINT trusted_issuers_algorithms_check;
 
 -- +goose Down
+-- The narrower CHECKs would refuse M17 entries; remove them first. A Down
+-- never deletes issuer rows.
+-- +goose StatementBegin
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pc.trusted_issuers
+               WHERE kind NOT IN ('github_actions', 'kubernetes') OR cardinality(algorithms) > 4) THEN
+        RAISE EXCEPTION 'remove the M17 issuer entries first';
+    END IF;
+END
+$$;
+-- +goose StatementEnd
 ALTER TABLE pc.trusted_issuers DROP CONSTRAINT trusted_issuers_kind_check;
 ALTER TABLE pc.trusted_issuers ADD CONSTRAINT trusted_issuers_kind_check
     CHECK (kind IN ('github_actions', 'kubernetes')) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.trusted_issuers VALIDATE CONSTRAINT trusted_issuers_kind_check;
 ALTER TABLE pc.trusted_issuers DROP CONSTRAINT trusted_issuers_algorithms_check;
 ALTER TABLE pc.trusted_issuers ADD CONSTRAINT trusted_issuers_algorithms_check
     CHECK (cardinality(algorithms) BETWEEN 1 AND 4) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.trusted_issuers VALIDATE CONSTRAINT trusted_issuers_algorithms_check;
