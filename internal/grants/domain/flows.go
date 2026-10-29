@@ -48,9 +48,9 @@ func validateFlows(flows []FlowAllowance) error {
 			}
 		}
 		for j, d := range f.Destinations {
-			if d.Kind == "" || d.ID == "" || len(d.Kind) > maxFlowField || len(d.ID) > maxFlowField ||
+			if (d.Kind != "internal" && d.Kind != "external") || d.ID == "" || len(d.ID) > maxFlowField ||
 				slices.Contains(f.Destinations[:j], d) {
-				return invalid("grant: %s destinations are distinct, each with a kind and an id", at)
+				return invalid("grant: %s destinations are distinct, each with a kind (internal or external) and an id", at)
 			}
 		}
 	}
