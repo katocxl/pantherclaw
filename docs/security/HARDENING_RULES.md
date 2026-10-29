@@ -479,3 +479,24 @@
 | HR-419 | A resource read is a read operation decided by the full pipeline; a URI that matches no reviewed template never reaches the upstream server; template values are percent-encoded and cannot change the connection's scheme or host. | T-185 | M15 |
 | HR-420 | An elicitation reaches the agent only in form mode, only for fields the reviewed mapping declares and only after a clean injection scan of its message; the answer travels only as material parameters (`elicitation.<field>`) of a new action decided by the full pipeline, and the question text is never stored. | T-186, T-028 | M15 |
 | HR-421 | URL-mode elicitation, sampling, roots and `elicitation/create` arriving mid-stream from a 2025-11-25 upstream are declined. | T-186, T-028 | M15 |
+
+## Data-flow holds, external policy checks and evidence-backed suggestions (G0 M16)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
+| HR-430 | An allowed read records its data class (`read_class`), taken from the package's declared response classes, capped by a `data_classes` obligation, and raised by a classification fact; a fact or obligation never lowers it below what the package declares. | T-190, T-191 | M16 |
+| HR-431 | An external disclosure (a write to a `public` destination or with a predicted `external_disclosure` effect) after a `pii` or `secret` read anywhere in the same run tree is held for approval (`DATA_FLOW_HOLD`) unless one flow allowance of the grant covers every sensitive class read and every destination of the action. | T-190 | M16 |
+| HR-432 | Flow allowances only narrow under delegation: each child allowance must be covered by one parent allowance (classes and destinations), and a grant without flows allows no flow. | T-197 | M16 |
+| HR-433 | In monitor mode a data-flow hold is recorded as a would-HOLD with the code `DATA_FLOW_HOLD`. | T-190 | M16 |
+| HR-434 | Read history and the data-flow hold keep only classes, operations, run and transaction ids and times, never read content. | T-190 | M16 |
+| HR-435 | A classification fact is accepted only with its provenance (source and method) and can only raise a read's sensitivity; it never lowers a class and never allows anything. | T-191 | M16 |
+| HR-436 | An external policy check can only restrict: `deny` is DENY and `hold` is REQUIRE_APPROVAL, while its `allow` only passes a checklist item and never widens a decision. | T-192 | M16 |
+| HR-437 | A failed or slow external policy check (timeout, non-2xx answer, bad JSON, missing result, or more than 16 calls in flight for the organization) gives CANNOT_AUTHORIZE (`EXTERNAL_CHECK_UNAVAILABLE`). | T-193 | M16 |
+| HR-438 | An external-check endpoint must be HTTPS and match a prefix the server configuration allows; it is called only through the egress guards and becomes ACTIVE only after a person's security-key step-up. | T-192 | M16 |
+| HR-439 | The content of disclosure-capable parameters is never sent to an external policy check, only its length. | T-194 | M16 |
+| HR-440 | External-check reasons are UNTRUSTED: shown to people only, never to agents (HR-400). | T-192 | M16 |
+| HR-441 | Identity-risk facts (`pc.identity.risk`) come only from the Shared Signals receiver's built-in provider, which no RPC can create, and only restrict: they never allow anything. | T-195 | M16 |
+| HR-442 | A suggestion never changes policy; drafting from it creates a policy draft that is enforced only after passing the M11.1 publication gate. | T-196 | M16 |
+| HR-443 | Every suggestion states its evidence window, coverage limits and uncertainty, and the uncertainty is never LOW when any route of the grant's operations lacked ENFORCED or OBSERVE_ONLY coverage for the whole window. | T-196 | M16 |
+| HR-444 | A suggestion is visible only to people who can see both its grant and its agent. | T-196 | M16 |
+| HR-445 | A suggestion's expected effect comes from recorded transactions only; data that was not collected is reported as "not collected", never as zero. | T-196 | M16 |
