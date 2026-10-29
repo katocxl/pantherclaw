@@ -500,8 +500,10 @@ Each milestone starts with a G0 brief in [GATES_AND_REVIEW.md](security/GATES_AN
 
 ```
 M0 → M1 → M1.5 → M2 → M3 → M4 → M5 → M6 → M7 → M8 → M9 → M12 → v0.1.0 preview
-   → M11.1 → M10 → M11 → M14 → UI → M13 → v1.0
+   → M11.1 → M10 → M11 → M14 → UI → M13 → v1.0 → M15 → M16
 ```
+
+M15 and M16 are post-1.0 milestones (founder, 2026-10-29: coding continues while the v1.0 testing steps are postponed); M15 lands before M16 ([G0 M15](g0/M15.md), founder decision F9).
 
 M11 is split in two (founder, 2026-10-15: "finish up with policies!"): **M11.1**, the policy lifecycle, comes after the preview and before M10; **M11**, governed automations, keeps its place after M10.
 
@@ -682,6 +684,15 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Website and interactive demo** (PN-025), in the commercial distribution: a static website and an interactive demo of the real console on simulated data in the browser, on its own origin with no sign-up, no cookies and no API.
 - **Pulled from M13:** PN-012.2 (per-organization entitlements and plan limits), PN-012.3 (invitations accepted in the browser), F322, F325, F335 (UI part), F336, F341. **Stays in M13:** hosted staging and production infrastructure, backups and the DR drill, rate limits and quotas, support access, data export and deletion, the Helm chart, the FIPS build, post-quantum TLS, SLOs under load, Schemathesis, the threat-model refresh (G4), the docs site and the OpenTelemetry exporter.
 - Migrations `00160`–`00164`, the last one `pc.billing_links` (server-recorded checkouts and subscriptions, one current subscription per organization) (`00165`–`00168` spare; `00169` became M13's platform migration, G0 M13 D40).
+
+### M15 — Gateway state, discovery and the reviewed MCP surface
+**HR:** HR-410..421 · **PN:** PN-010.6 (status part), PN-015.2 · **F:** F352 · **ADR:** 0036 · **G0:** [g0/M15.md](g0/M15.md).
+- **Gateway status** (PN-010.6, status part): gateways report replicas, version, build, configuration version and per-connection serving state; `Gateway` shows its replicas and whether it is connected. Reporting never blocks serving. Fleet views and silent-gateway alerts stay in M18.
+- **Shared MCP state** (founder decision F1, [ADR-0036](adr/0036-server-backed-mcp-state-discovery-and-reviewed-surface.md)): MCP holds, tasks and sessions live on the server through gateway control RPCs, bound to connection, run and instance, with task bodies sealed to the gateway's broker key; an approval given through one replica binds on another and survives a restart.
+- **Tool and resource discovery** (F352, F2): the gateway lists every tool, resource and resource template of its MCP connections; the server keeps an untrusted, scanned inventory, opens connection-scoped TOOL_REVIEW entries, and drafts an unsigned package (Team) that a person completes, signs and activates. Discovered items stay unusable until a reviewed version covers them (`pclaw connection inventory`, `pclaw package draft`).
+- **Reviewed resources** (F3): a new `mcp_resource` mapping channel; the MCP face serves `resources/list`, `resources/templates/list` and `resources/read` for reviewed resources only, each read decided by the full pipeline on the connection's own host.
+- **The elicitation gate** (PN-015.2, F4): on 2026-07-28 upstreams, `input_required` reaches the agent only in form mode, for fields the reviewed mapping declares, after an injection scan; the answer is decided as a new action. URL mode, sampling, roots and mid-stream 2025-11-25 elicitation stay declined.
+- Migrations `00186`–`00188` (`00189` only if needed, `00190`–`00195` spare); no new permissions.
 
 ---
 
