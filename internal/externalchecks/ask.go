@@ -143,7 +143,7 @@ func (s *Service) Preload(ctx context.Context, org ids.OrgID) context.Context {
 }
 
 func (s *Service) preload(ctx context.Context, org ids.OrgID) ([]Check, error) {
-	if s.business(ctx) != nil {
+	if !s.entitled(ctx) {
 		return nil, nil
 	}
 	now := time.Now()
@@ -464,3 +464,7 @@ func (a *asker) evict(id ids.UUID) {
 	defer a.mu.Unlock()
 	delete(a.clients, id)
 }
+
+// entitled reports whether the licence includes external checks; without
+// it, no check is read for a decision.
+func (s *Service) entitled(ctx context.Context) bool { return s.business(ctx) == nil }

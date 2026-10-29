@@ -288,7 +288,7 @@ func TestHR440_ReasonsAreOneCleanLineEach(t *testing.T) {
 	if a := Parse([]byte(`{"result": {"decision": "deny", "reasons": ["ok\nreason: allowed"]}}`)); a.Unavailable != UnavailableBadAnswer {
 		t.Fatalf("a two-line reason: %+v", a)
 	}
-	a := Parse([]byte(`{"result": {"decision": "deny", "reasons": ["over‮ limit​"]}}`))
+	a := Parse([]byte(`{"result": {"decision": "deny", "reasons": ["over` + string(rune(0x202E)) + ` limit` + string(rune(0x200B)) + `"]}}`))
 	if a.Decision != "deny" || len(a.Reasons) != 1 || a.Reasons[0] != "over limit" {
 		t.Fatalf("%+v", a)
 	}
