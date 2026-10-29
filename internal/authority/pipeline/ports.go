@@ -326,3 +326,43 @@ type Snapshotter interface {
 // other reason refuses it. It reads through its own store; the pipeline
 // holds no transaction.
 type PeerCheck func(ctx context.Context, org ids.OrgID, conn Connection, grant gdomain.Grant) (reason string)
+
+// ExternalCheck asks the org's ACTIVE external policy checks whose
+// operations match the action (G0 M16 D81, HR-436..440): one verdict per
+// check, none when no check matches. It reads through its own store and
+// calls each endpoint through the egress guards; an error means the checks
+// could not be read, which is CANNOT_AUTHORIZE. Unset (replay and
+// simulation), no check is asked: replay reports "external check not
+// evaluated".
+type ExternalCheck interface {
+	Ask(ctx context.Context, org ids.OrgID, in ExternalInput) ([]ExternalVerdict, error)
+}
+
+// ExternalInput is what an external check is asked: the action's meaning
+// and who stands behind it, never the content of a disclosure-capable
+// parameter (HR-439).
+type ExternalInput struct {
+	Operation        string
+	Access           string
+	Target           actionir.Target
+	Destinations     []actionir.Destination
+	DestinationClass string
+	Agent, Instance  string
+	Run              string
+	// RepresentedUser is the run's principal ("user:<id>"), when a person.
+	RepresentedUser string
+	Mode            string
+	// Params are the material params, by name, as ActionIR JSON; each
+	// disclosure-capable one is {"bytes": n} instead.
+	Params map[string]any
+}
+
+// ExternalVerdict is one check's answer. Decision is "allow", "deny" or
+// "hold", or "" when the check did not answer (Unavailable says why);
+// Reasons are UNTRUSTED text for people only (HR-440).
+type ExternalVerdict struct {
+	Check       string
+	Decision    string
+	Reasons     []string
+	Unavailable string
+}

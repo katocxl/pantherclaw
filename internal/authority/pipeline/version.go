@@ -19,4 +19,18 @@ package pipeline
 // 4: step 6 also checks the definition's fact bindings (Prerequisite.Binds,
 // HR-205): from the same recorded reads, a merge whose sha differs from its
 // fact's is CANNOT_AUTHORIZE HEAD_MOVED, which version 3 did not decide.
-const Version = 4
+//
+// 5: step 6 reads the identity-risk facts a policy using `principal` needs,
+// and step 7 asks the org's active external policy checks (G0 M16 D81,
+// D82), whose answers a recording does not hold.
+const Version = 5
+
+// Replays reports whether this code replays inputs recorded by pipeline
+// version v (G0 M16 D95): the current version, and version 4 in its own
+// mode, which makes none of version 5's reads (Pipeline.ReplayOf), so a
+// version 4 recording decides as it did.
+func Replays(v int) bool { return v == 4 || v == Version }
+
+// at reports whether the evaluation runs at least version v: always, except
+// when it replays a recording made under an earlier one.
+func (p *Pipeline) at(v int) bool { return p.ReplayOf == 0 || p.ReplayOf >= v }

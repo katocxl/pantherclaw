@@ -1,0 +1,178 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// ExternalCheckService manages an org's external policy checks (G0 M16
+// D81, founder decision F7; HR-436..440; Business edition). A check is an
+// Open Policy Agent endpoint the Authority asks, after the policy rules,
+// about the actions whose operation matches one of its patterns. It can
+// only restrict: "deny" is DENY EXTERNAL_POLICY_DENY, "hold" is
+// REQUIRE_APPROVAL EXTERNAL_POLICY_HOLD, "allow" only passes a checklist
+// item, and a timeout, an error or a bad answer is CANNOT_AUTHORIZE
+// EXTERNAL_CHECK_UNAVAILABLE. A check is created PENDING and asks nothing
+// until a person activates it on its page (confirm_url) with a security
+// key; its endpoint must be https and start with a prefix the server's
+// external_checks.allowed_prefixes allows. At most three are active per
+// org. The input never carries the content of disclosure-capable
+// parameters, only their length, and the check's reasons are shown to
+// people only, never to agents.
+service ExternalCheckService {
+  // CreateExternalCheck adds a PENDING check (a person only).
+  // permission: policy.external_check.manage
+  rpc CreateExternalCheck(CreateExternalCheckRequest) returns (CreateExternalCheckResponse);
+  // ActivateExternalCheck is refused over the API (STEP_UP_REQUIRED): a
+  // person activates a check on its page with a security key.
+  // permission: policy.external_check.manage
+  rpc ActivateExternalCheck(ActivateExternalCheckRequest) returns (ActivateExternalCheckResponse);
+  // DisableExternalCheck disables a check (a person only). Disabling is
+  // final and takes effect at the next decision.
+  // permission: policy.external_check.manage
+  rpc DisableExternalCheck(DisableExternalCheckRequest) returns (DisableExternalCheckResponse);
+  // ListExternalChecks lists the org's checks.
+  // permission: policy.read
+  rpc ListExternalChecks(ListExternalChecksRequest) returns (ListExternalChecksResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // TestExternalCheck asks a check about a synthetic action and returns its
+  // answer; no decision uses it (a person only).
+  // permission: policy.external_check.manage
+  rpc TestExternalCheck(TestExternalCheckRequest) returns (TestExternalCheckResponse);
+}
+
+// ExternalCheck is one external policy check.
+message ExternalCheck {
+  // Check id.
+  string id = 1;
+  // Name.
+  string name = 2;
+  // The https endpoint the input is posted to.
+  string endpoint = 3;
+  // Whether the check trusts its own CA bundle instead of the system roots.
+  bool custom_ca = 4;
+  // How long a decision waits for its answer, in milliseconds (50-1000).
+  int32 timeout_ms = 5;
+  // The operations it is asked about: exact names or a prefix ending in *.
+  repeated string operations = 6;
+  // "PENDING", "ACTIVE" or "DISABLED".
+  string state = 7;
+  // Who created it.
+  string created_by = 8;
+  // Who activated it with a security key; empty while PENDING.
+  string activated_by = 9;
+  // When it was created.
+  google.protobuf.Timestamp create_time = 10;
+  // When it was activated.
+  google.protobuf.Timestamp activate_time = 11;
+  // When its state last changed.
+  google.protobuf.Timestamp update_time = 12;
+  // The page where a person activates it.
+  string confirm_url = 13;
+}
+
+// CreateExternalCheckRequest describes a check.
+message CreateExternalCheckRequest {
+  // Name: lowercase letters, digits and dashes.
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 63
+    pattern: "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+  }];
+  // The https endpoint, for example https://opa.example.com/v1/data/pc/decision.
+  string endpoint = 2 [(buf.validate.field).string = {
+    min_len: 9
+    max_len: 2048
+    prefix: "https://"
+  }];
+  // A PEM CA bundle the endpoint's certificate chains to; empty for the
+  // system roots.
+  string ca_pem = 3 [(buf.validate.field).string.max_len = 16384];
+  // Milliseconds a decision waits (50-1000); 0 for 250.
+  int32 timeout_ms = 4 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 1000
+  }];
+  // Operations: exact names or a prefix ending in * (1-32).
+  repeated string operations = 5 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 32
+    items: {
+      string: {
+        min_len: 1
+        max_len: 128
+      }
+    }
+  }];
+}
+
+// CreateExternalCheckResponse returns the check.
+message CreateExternalCheckResponse {
+  // The PENDING check.
+  ExternalCheck check = 1;
+}
+
+// ActivateExternalCheckRequest names a check.
+message ActivateExternalCheckRequest {
+  // Check id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ActivateExternalCheckResponse is never returned over the API.
+message ActivateExternalCheckResponse {
+  // The check.
+  ExternalCheck check = 1;
+}
+
+// DisableExternalCheckRequest names a check.
+message DisableExternalCheckRequest {
+  // Check id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// DisableExternalCheckResponse returns the check.
+message DisableExternalCheckResponse {
+  // The DISABLED check.
+  ExternalCheck check = 1;
+}
+
+// ListExternalChecksRequest lists checks.
+message ListExternalChecksRequest {
+  // Also disabled checks.
+  bool include_disabled = 1;
+}
+
+// ListExternalChecksResponse returns them.
+message ListExternalChecksResponse {
+  // Checks, by name.
+  repeated ExternalCheck checks = 1;
+}
+
+// TestExternalCheckRequest asks a check about a synthetic action.
+message TestExternalCheckRequest {
+  // Check id (PENDING or ACTIVE).
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // The operation of the synthetic action; empty for the check's first
+  // exact operation, or "test.operation".
+  string operation = 2 [(buf.validate.field).string.max_len = 128];
+}
+
+// TestExternalCheckResponse is the check's answer.
+message TestExternalCheckResponse {
+  // "allow", "deny" or "hold"; empty when the check did not answer.
+  string decision = 1;
+  // Its reasons, UNTRUSTED text from the endpoint (at most 5 of 200
+  // characters).
+  repeated string reasons = 2;
+  // Why there is no answer: TIMEOUT, HTTP_STATUS, BAD_ANSWER or
+  // UNREACHABLE; empty with an answer.
+  string error_code = 3;
+  // How long the call took, in milliseconds.
+  int32 latency_ms = 4;
+  // The input that was sent.
+  bytes input = 5;
+}

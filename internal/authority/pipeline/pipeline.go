@@ -87,6 +87,12 @@ type Pipeline struct {
 	// is DENY DELEGATION_NOT_ALLOWED. Unset, other kinds are unaffected
 	// and an a2a call is CANNOT_AUTHORIZE (fail closed).
 	Peer PeerCheck
+	// External asks the org's active external policy checks (G0 M16 D81;
+	// external.go). Unset, none is asked (replay and simulation).
+	External ExternalCheck
+	// ReplayOf is the version of the recording a replay decides (Replays);
+	// 0 is Version. A replay of version 4 makes none of version 5's reads.
+	ReplayOf int
 }
 
 // IdentitySummary is the identity part of a decision receipt (ids only).
@@ -252,6 +258,8 @@ type state struct {
 	vals    defs.Values
 	gAction *gdomain.Action
 	facts   map[string]fdomain.Value
+	// risk is the open identity-risk signal policy sees (G0 M16 D82).
+	risk    *papp.Risk
 	used    []fdomain.Fact
 	covered bool
 	// held are the HOLD_WRITES controls covering a write (step 3); step 8
@@ -696,6 +704,9 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 		return
 	}
 	s.policy = pol
+	if !p.identityRisk(ctx, s) || !p.classify(ctx, s) { // G0 M16 D82 (risk.go), D80 (classification.go)
+		return
+	}
 	var reqs []fdomain.Requirement
 	for _, pr := range s.def.Prerequisites {
 		reqs = append(reqs, fdomain.Requirement{Name: pr.Fact, MaxAge: time.Duration(pr.MaxAgeSeconds) * time.Second, Source: "definition"})
@@ -828,6 +839,7 @@ func (p *Pipeline) boundaries(ctx context.Context, s *state) {
 		s.cl.add(StepBoundaries, effectOf(f), f.Reason(), f.Finding.Detail, f.Level.String())
 	}
 	p.policyRules(ctx, s)
+	p.external(ctx, s) // G0 M16 D81 (external.go)
 	s.disclosure()
 	p.dataFlow(ctx, s)      // G0 M16 D76 (dataflow.go)
 	p.boundariesM14(ctx, s) // G0 M14 D11, D78, D89 (scope.go)
@@ -858,7 +870,7 @@ func (p *Pipeline) policyRules(ctx context.Context, s *state) {
 
 // policyInput is what the policy is evaluated with.
 func (s *state) policyInput() papp.Input {
-	in := papp.Input{Budget: s.policy.Budget, Facts: s.facts, Now: s.cont.Now, Waivers: s.waivers(s.a.Operation)}
+	in := papp.Input{Budget: s.policy.Budget, Facts: s.facts, Now: s.cont.Now, Waivers: s.waivers(s.a.Operation), Risk: s.risk}
 	if s.run != nil && s.run.AgentID == s.req.Identity.AgentID {
 		// The server's run record, found by the request's run id and checked
 		// against the agent's verified identity, never the request itself.

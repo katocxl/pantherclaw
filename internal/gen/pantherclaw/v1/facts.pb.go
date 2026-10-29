@@ -100,6 +100,61 @@ func (FactType) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_facts_proto_rawDescGZIP(), []int{0}
 }
 
+// FactKind is what a declared fact says (G0 M16 D80).
+type FactKind int32
+
+const (
+	// A value (the default).
+	FactKind_FACT_KIND_UNSPECIFIED FactKind = 0
+	// A value about the target.
+	FactKind_FACT_KIND_VALUE FactKind = 1
+	// The data class of the target: public, internal, pii or secret, as an
+	// identifier value ({"id": "pii"}). It can only raise the class of a read
+	// and needs provenance (HR-435).
+	FactKind_FACT_KIND_CLASSIFICATION FactKind = 2
+)
+
+// Enum value maps for FactKind.
+var (
+	FactKind_name = map[int32]string{
+		0: "FACT_KIND_UNSPECIFIED",
+		1: "FACT_KIND_VALUE",
+		2: "FACT_KIND_CLASSIFICATION",
+	}
+	FactKind_value = map[string]int32{
+		"FACT_KIND_UNSPECIFIED":    0,
+		"FACT_KIND_VALUE":          1,
+		"FACT_KIND_CLASSIFICATION": 2,
+	}
+)
+
+func (x FactKind) Enum() *FactKind {
+	p := new(FactKind)
+	*p = x
+	return p
+}
+
+func (x FactKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FactKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_facts_proto_enumTypes[1].Descriptor()
+}
+
+func (FactKind) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_facts_proto_enumTypes[1]
+}
+
+func (x FactKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FactKind.Descriptor instead.
+func (FactKind) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_facts_proto_rawDescGZIP(), []int{1}
+}
+
 // ProviderState is a provider's state.
 type ProviderState int32
 
@@ -134,11 +189,11 @@ func (x ProviderState) String() string {
 }
 
 func (ProviderState) Descriptor() protoreflect.EnumDescriptor {
-	return file_pantherclaw_v1_facts_proto_enumTypes[1].Descriptor()
+	return file_pantherclaw_v1_facts_proto_enumTypes[2].Descriptor()
 }
 
 func (ProviderState) Type() protoreflect.EnumType {
-	return &file_pantherclaw_v1_facts_proto_enumTypes[1]
+	return &file_pantherclaw_v1_facts_proto_enumTypes[2]
 }
 
 func (x ProviderState) Number() protoreflect.EnumNumber {
@@ -147,7 +202,7 @@ func (x ProviderState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ProviderState.Descriptor instead.
 func (ProviderState) EnumDescriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_facts_proto_rawDescGZIP(), []int{1}
+	return file_pantherclaw_v1_facts_proto_rawDescGZIP(), []int{2}
 }
 
 // FactDeclaration is one fact a provider may write.
@@ -160,7 +215,10 @@ type FactDeclaration struct {
 	// Target type the fact is about, for example payments.charge.
 	SubjectType string `protobuf:"bytes,3,opt,name=subject_type,json=subjectType,proto3" json:"subject_type,omitempty"`
 	// How old an observation may be when it is recorded.
-	MaxLag        *durationpb.Duration `protobuf:"bytes,4,opt,name=max_lag,json=maxLag,proto3" json:"max_lag,omitempty"`
+	MaxLag *durationpb.Duration `protobuf:"bytes,4,opt,name=max_lag,json=maxLag,proto3" json:"max_lag,omitempty"`
+	// What the fact says; unspecified is a value. A classification is an
+	// identifier fact.
+	Kind          FactKind `protobuf:"varint,5,opt,name=kind,proto3,enum=pantherclaw.v1.FactKind" json:"kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -223,6 +281,13 @@ func (x *FactDeclaration) GetMaxLag() *durationpb.Duration {
 	return nil
 }
 
+func (x *FactDeclaration) GetKind() FactKind {
+	if x != nil {
+		return x.Kind
+	}
+	return FactKind_FACT_KIND_UNSPECIFIED
+}
+
 // FactProvider is a registered provider.
 type FactProvider struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -240,7 +305,10 @@ type FactProvider struct {
 	// system of record, and that connection; service_account_id is then empty.
 	GatewayId string `protobuf:"bytes,6,opt,name=gateway_id,json=gatewayId,proto3" json:"gateway_id,omitempty"`
 	// The connection.
-	ConnectionId  string `protobuf:"bytes,7,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	ConnectionId string `protobuf:"bytes,7,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// A built-in provider (G0 M16 D82): PantherClaw itself writes its facts,
+	// such as pc.signals's pc.identity.risk; no RPC creates one.
+	Builtin       bool `protobuf:"varint,8,opt,name=builtin,proto3" json:"builtin,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -322,6 +390,13 @@ func (x *FactProvider) GetConnectionId() string {
 		return x.ConnectionId
 	}
 	return ""
+}
+
+func (x *FactProvider) GetBuiltin() bool {
+	if x != nil {
+		return x.Builtin
+	}
+	return false
 }
 
 // RegisterProviderRequest registers a provider.
@@ -642,7 +717,14 @@ type FactObservation struct {
 	Value []byte `protobuf:"bytes,4,opt,name=value,proto3" json:"value,omitempty"`
 	// When the provider observed it; neither later than the server's clock
 	// nor older than the declaration's maximum lag.
-	ObserveTime   *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=observe_time,json=observeTime,proto3" json:"observe_time,omitempty"`
+	ObserveTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=observe_time,json=observeTime,proto3" json:"observe_time,omitempty"`
+	// Provenance (G0 M16 D80): the source that classified or observed it, for
+	// example a data catalog's name. Required, with method, for a
+	// classification fact (HR-435).
+	Source string `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
+	// How it was established: "manual", "rule" or "model"; empty with no
+	// source.
+	Method        string `protobuf:"bytes,7,opt,name=method,proto3" json:"method,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -710,6 +792,20 @@ func (x *FactObservation) GetObserveTime() *timestamppb.Timestamp {
 		return x.ObserveTime
 	}
 	return nil
+}
+
+func (x *FactObservation) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *FactObservation) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
 }
 
 // PutFactsRequest carries observations.
@@ -894,7 +990,11 @@ type Fact struct {
 	// When it was recorded.
 	RecordTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=record_time,json=recordTime,proto3" json:"record_time,omitempty"`
 	// Provider.
-	ProviderId    string `protobuf:"bytes,7,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	ProviderId string `protobuf:"bytes,7,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	// Provenance: source and method, when the provider sent them.
+	Source string `protobuf:"bytes,8,opt,name=source,proto3" json:"source,omitempty"`
+	// "manual", "rule" or "model".
+	Method        string `protobuf:"bytes,9,opt,name=method,proto3" json:"method,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -974,6 +1074,20 @@ func (x *Fact) GetRecordTime() *timestamppb.Timestamp {
 func (x *Fact) GetProviderId() string {
 	if x != nil {
 		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *Fact) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *Fact) GetMethod() string {
+	if x != nil {
+		return x.Method
 	}
 	return ""
 }
@@ -1092,13 +1206,14 @@ var File_pantherclaw_v1_facts_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_facts_proto_rawDesc = "" +
 	"\n" +
-	"\x1apantherclaw/v1/facts.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xae\x02\n" +
+	"\x1apantherclaw/v1/facts.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe6\x02\n" +
 	"\x0fFactDeclaration\x12G\n" +
 	"\x04name\x18\x01 \x01(\tB3\xbaH0r.\x18\x80\x012)^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*){1,7}$R\x04name\x128\n" +
 	"\x04type\x18\x02 \x01(\x0e2\x18.pantherclaw.v1.FactTypeB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04type\x12Q\n" +
 	"\fsubject_type\x18\x03 \x01(\tB.\xbaH+r)\x18\x80\x012$^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){0,7}$R\vsubjectType\x12E\n" +
-	"\amax_lag\x18\x04 \x01(\v2\x19.google.protobuf.DurationB\x11\xbaH\x0e\xc8\x01\x01\xaa\x01\b\"\x04\b\x80\xa3\x05*\x00R\x06maxLag\"\x90\x02\n" +
+	"\amax_lag\x18\x04 \x01(\v2\x19.google.protobuf.DurationB\x11\xbaH\x0e\xc8\x01\x01\xaa\x01\b\"\x04\b\x80\xa3\x05*\x00R\x06maxLag\x126\n" +
+	"\x04kind\x18\x05 \x01(\x0e2\x18.pantherclaw.v1.FactKindB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04kind\"\xaa\x02\n" +
 	"\fFactProvider\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12,\n" +
@@ -1107,7 +1222,8 @@ const file_pantherclaw_v1_facts_proto_rawDesc = "" +
 	"\x05facts\x18\x05 \x03(\v2\x1f.pantherclaw.v1.FactDeclarationR\x05facts\x12\x1d\n" +
 	"\n" +
 	"gateway_id\x18\x06 \x01(\tR\tgatewayId\x12#\n" +
-	"\rconnection_id\x18\a \x01(\tR\fconnectionId\"\xaa\x04\n" +
+	"\rconnection_id\x18\a \x01(\tR\fconnectionId\x12\x18\n" +
+	"\abuiltin\x18\b \x01(\bR\abuiltin\"\xaa\x04\n" +
 	"\x17RegisterProviderRequest\x125\n" +
 	"\x04name\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18@2\x18^[a-z][a-z0-9_.-]{0,63}$R\x04name\x129\n" +
 	"\x12service_account_id\x18\x02 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\x10serviceAccountId\x12A\n" +
@@ -1126,7 +1242,7 @@ const file_pantherclaw_v1_facts_proto_rawDesc = "" +
 	"\x14ListProvidersRequest\x12)\n" +
 	"\x10include_disabled\x18\x01 \x01(\bR\x0fincludeDisabled\"S\n" +
 	"\x15ListProvidersResponse\x12:\n" +
-	"\tproviders\x18\x01 \x03(\v2\x1c.pantherclaw.v1.FactProviderR\tproviders\"\xf5\x01\n" +
+	"\tproviders\x18\x01 \x03(\v2\x1c.pantherclaw.v1.FactProviderR\tproviders\"\xcd\x02\n" +
 	"\x0fFactObservation\x12\x1e\n" +
 	"\x04name\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\x80\x01R\x04name\x12-\n" +
@@ -1136,7 +1252,9 @@ const file_pantherclaw_v1_facts_proto_rawDesc = "" +
 	"subject_id\x18\x03 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\x80\x02R\tsubjectId\x12!\n" +
 	"\x05value\x18\x04 \x01(\fB\v\xbaH\bz\x06\x10\x02\x18\x80\x82\x01R\x05value\x12E\n" +
-	"\fobserve_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\vobserveTime\"b\n" +
+	"\fobserve_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\vobserveTime\x12 \n" +
+	"\x06source\x18\x06 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x01R\x06source\x124\n" +
+	"\x06method\x18\a \x01(\tB\x1c\xbaH\x19r\x17R\x00R\x06manualR\x04ruleR\x05modelR\x06method\"b\n" +
 	"\x0fPutFactsRequest\x12O\n" +
 	"\fobservations\x18\x01 \x03(\v2\x1f.pantherclaw.v1.FactObservationB\n" +
 	"\xbaH\a\x92\x01\x04\b\x01\x10dR\fobservations\"j\n" +
@@ -1147,7 +1265,7 @@ const file_pantherclaw_v1_facts_proto_rawDesc = "" +
 	"\x04code\x18\x03 \x01(\tR\x04code\x12\x16\n" +
 	"\x06detail\x18\x04 \x01(\tR\x06detail\"H\n" +
 	"\x10PutFactsResponse\x124\n" +
-	"\aresults\x18\x01 \x03(\v2\x1a.pantherclaw.v1.FactResultR\aresults\"\x8f\x02\n" +
+	"\aresults\x18\x01 \x03(\v2\x1a.pantherclaw.v1.FactResultR\aresults\"\xbf\x02\n" +
 	"\x04Fact\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
 	"\fsubject_type\x18\x02 \x01(\tR\vsubjectType\x12\x1d\n" +
@@ -1158,7 +1276,9 @@ const file_pantherclaw_v1_facts_proto_rawDesc = "" +
 	"\vrecord_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"recordTime\x12\x1f\n" +
 	"\vprovider_id\x18\a \x01(\tR\n" +
-	"providerId\"\x93\x01\n" +
+	"providerId\x12\x16\n" +
+	"\x06source\x18\b \x01(\tR\x06source\x12\x16\n" +
+	"\x06method\x18\t \x01(\tR\x06method\"\x93\x01\n" +
 	"\x10ListFactsRequest\x12-\n" +
 	"\fsubject_type\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\x80\x01R\vsubjectType\x12)\n" +
@@ -1176,7 +1296,11 @@ const file_pantherclaw_v1_facts_proto_rawDesc = "" +
 	"\x0fFACT_TYPE_MONEY\x10\x04\x12\x18\n" +
 	"\x14FACT_TYPE_IDENTIFIER\x10\x05\x12\x17\n" +
 	"\x13FACT_TYPE_TIMESTAMP\x10\x06\x12\x14\n" +
-	"\x10FACT_TYPE_OBJECT\x10\a*g\n" +
+	"\x10FACT_TYPE_OBJECT\x10\a*X\n" +
+	"\bFactKind\x12\x19\n" +
+	"\x15FACT_KIND_UNSPECIFIED\x10\x00\x12\x13\n" +
+	"\x0fFACT_KIND_VALUE\x10\x01\x12\x1c\n" +
+	"\x18FACT_KIND_CLASSIFICATION\x10\x02*g\n" +
 	"\rProviderState\x12\x1e\n" +
 	"\x1aPROVIDER_STATE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15PROVIDER_STATE_ACTIVE\x10\x01\x12\x1b\n" +
@@ -1202,58 +1326,60 @@ func file_pantherclaw_v1_facts_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_facts_proto_rawDescData
 }
 
-var file_pantherclaw_v1_facts_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_pantherclaw_v1_facts_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_pantherclaw_v1_facts_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_pantherclaw_v1_facts_proto_goTypes = []any{
 	(FactType)(0),                    // 0: pantherclaw.v1.FactType
-	(ProviderState)(0),               // 1: pantherclaw.v1.ProviderState
-	(*FactDeclaration)(nil),          // 2: pantherclaw.v1.FactDeclaration
-	(*FactProvider)(nil),             // 3: pantherclaw.v1.FactProvider
-	(*RegisterProviderRequest)(nil),  // 4: pantherclaw.v1.RegisterProviderRequest
-	(*RegisterProviderResponse)(nil), // 5: pantherclaw.v1.RegisterProviderResponse
-	(*DisableProviderRequest)(nil),   // 6: pantherclaw.v1.DisableProviderRequest
-	(*DisableProviderResponse)(nil),  // 7: pantherclaw.v1.DisableProviderResponse
-	(*ListProvidersRequest)(nil),     // 8: pantherclaw.v1.ListProvidersRequest
-	(*ListProvidersResponse)(nil),    // 9: pantherclaw.v1.ListProvidersResponse
-	(*FactObservation)(nil),          // 10: pantherclaw.v1.FactObservation
-	(*PutFactsRequest)(nil),          // 11: pantherclaw.v1.PutFactsRequest
-	(*FactResult)(nil),               // 12: pantherclaw.v1.FactResult
-	(*PutFactsResponse)(nil),         // 13: pantherclaw.v1.PutFactsResponse
-	(*Fact)(nil),                     // 14: pantherclaw.v1.Fact
-	(*ListFactsRequest)(nil),         // 15: pantherclaw.v1.ListFactsRequest
-	(*ListFactsResponse)(nil),        // 16: pantherclaw.v1.ListFactsResponse
-	(*durationpb.Duration)(nil),      // 17: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil),    // 18: google.protobuf.Timestamp
+	(FactKind)(0),                    // 1: pantherclaw.v1.FactKind
+	(ProviderState)(0),               // 2: pantherclaw.v1.ProviderState
+	(*FactDeclaration)(nil),          // 3: pantherclaw.v1.FactDeclaration
+	(*FactProvider)(nil),             // 4: pantherclaw.v1.FactProvider
+	(*RegisterProviderRequest)(nil),  // 5: pantherclaw.v1.RegisterProviderRequest
+	(*RegisterProviderResponse)(nil), // 6: pantherclaw.v1.RegisterProviderResponse
+	(*DisableProviderRequest)(nil),   // 7: pantherclaw.v1.DisableProviderRequest
+	(*DisableProviderResponse)(nil),  // 8: pantherclaw.v1.DisableProviderResponse
+	(*ListProvidersRequest)(nil),     // 9: pantherclaw.v1.ListProvidersRequest
+	(*ListProvidersResponse)(nil),    // 10: pantherclaw.v1.ListProvidersResponse
+	(*FactObservation)(nil),          // 11: pantherclaw.v1.FactObservation
+	(*PutFactsRequest)(nil),          // 12: pantherclaw.v1.PutFactsRequest
+	(*FactResult)(nil),               // 13: pantherclaw.v1.FactResult
+	(*PutFactsResponse)(nil),         // 14: pantherclaw.v1.PutFactsResponse
+	(*Fact)(nil),                     // 15: pantherclaw.v1.Fact
+	(*ListFactsRequest)(nil),         // 16: pantherclaw.v1.ListFactsRequest
+	(*ListFactsResponse)(nil),        // 17: pantherclaw.v1.ListFactsResponse
+	(*durationpb.Duration)(nil),      // 18: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil),    // 19: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_facts_proto_depIdxs = []int32{
 	0,  // 0: pantherclaw.v1.FactDeclaration.type:type_name -> pantherclaw.v1.FactType
-	17, // 1: pantherclaw.v1.FactDeclaration.max_lag:type_name -> google.protobuf.Duration
-	1,  // 2: pantherclaw.v1.FactProvider.state:type_name -> pantherclaw.v1.ProviderState
-	2,  // 3: pantherclaw.v1.FactProvider.facts:type_name -> pantherclaw.v1.FactDeclaration
-	2,  // 4: pantherclaw.v1.RegisterProviderRequest.facts:type_name -> pantherclaw.v1.FactDeclaration
-	3,  // 5: pantherclaw.v1.RegisterProviderResponse.provider:type_name -> pantherclaw.v1.FactProvider
-	3,  // 6: pantherclaw.v1.ListProvidersResponse.providers:type_name -> pantherclaw.v1.FactProvider
-	18, // 7: pantherclaw.v1.FactObservation.observe_time:type_name -> google.protobuf.Timestamp
-	10, // 8: pantherclaw.v1.PutFactsRequest.observations:type_name -> pantherclaw.v1.FactObservation
-	12, // 9: pantherclaw.v1.PutFactsResponse.results:type_name -> pantherclaw.v1.FactResult
-	18, // 10: pantherclaw.v1.Fact.observe_time:type_name -> google.protobuf.Timestamp
-	18, // 11: pantherclaw.v1.Fact.record_time:type_name -> google.protobuf.Timestamp
-	14, // 12: pantherclaw.v1.ListFactsResponse.facts:type_name -> pantherclaw.v1.Fact
-	4,  // 13: pantherclaw.v1.FactService.RegisterProvider:input_type -> pantherclaw.v1.RegisterProviderRequest
-	6,  // 14: pantherclaw.v1.FactService.DisableProvider:input_type -> pantherclaw.v1.DisableProviderRequest
-	8,  // 15: pantherclaw.v1.FactService.ListProviders:input_type -> pantherclaw.v1.ListProvidersRequest
-	11, // 16: pantherclaw.v1.FactService.PutFacts:input_type -> pantherclaw.v1.PutFactsRequest
-	15, // 17: pantherclaw.v1.FactService.ListFacts:input_type -> pantherclaw.v1.ListFactsRequest
-	5,  // 18: pantherclaw.v1.FactService.RegisterProvider:output_type -> pantherclaw.v1.RegisterProviderResponse
-	7,  // 19: pantherclaw.v1.FactService.DisableProvider:output_type -> pantherclaw.v1.DisableProviderResponse
-	9,  // 20: pantherclaw.v1.FactService.ListProviders:output_type -> pantherclaw.v1.ListProvidersResponse
-	13, // 21: pantherclaw.v1.FactService.PutFacts:output_type -> pantherclaw.v1.PutFactsResponse
-	16, // 22: pantherclaw.v1.FactService.ListFacts:output_type -> pantherclaw.v1.ListFactsResponse
-	18, // [18:23] is the sub-list for method output_type
-	13, // [13:18] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	18, // 1: pantherclaw.v1.FactDeclaration.max_lag:type_name -> google.protobuf.Duration
+	1,  // 2: pantherclaw.v1.FactDeclaration.kind:type_name -> pantherclaw.v1.FactKind
+	2,  // 3: pantherclaw.v1.FactProvider.state:type_name -> pantherclaw.v1.ProviderState
+	3,  // 4: pantherclaw.v1.FactProvider.facts:type_name -> pantherclaw.v1.FactDeclaration
+	3,  // 5: pantherclaw.v1.RegisterProviderRequest.facts:type_name -> pantherclaw.v1.FactDeclaration
+	4,  // 6: pantherclaw.v1.RegisterProviderResponse.provider:type_name -> pantherclaw.v1.FactProvider
+	4,  // 7: pantherclaw.v1.ListProvidersResponse.providers:type_name -> pantherclaw.v1.FactProvider
+	19, // 8: pantherclaw.v1.FactObservation.observe_time:type_name -> google.protobuf.Timestamp
+	11, // 9: pantherclaw.v1.PutFactsRequest.observations:type_name -> pantherclaw.v1.FactObservation
+	13, // 10: pantherclaw.v1.PutFactsResponse.results:type_name -> pantherclaw.v1.FactResult
+	19, // 11: pantherclaw.v1.Fact.observe_time:type_name -> google.protobuf.Timestamp
+	19, // 12: pantherclaw.v1.Fact.record_time:type_name -> google.protobuf.Timestamp
+	15, // 13: pantherclaw.v1.ListFactsResponse.facts:type_name -> pantherclaw.v1.Fact
+	5,  // 14: pantherclaw.v1.FactService.RegisterProvider:input_type -> pantherclaw.v1.RegisterProviderRequest
+	7,  // 15: pantherclaw.v1.FactService.DisableProvider:input_type -> pantherclaw.v1.DisableProviderRequest
+	9,  // 16: pantherclaw.v1.FactService.ListProviders:input_type -> pantherclaw.v1.ListProvidersRequest
+	12, // 17: pantherclaw.v1.FactService.PutFacts:input_type -> pantherclaw.v1.PutFactsRequest
+	16, // 18: pantherclaw.v1.FactService.ListFacts:input_type -> pantherclaw.v1.ListFactsRequest
+	6,  // 19: pantherclaw.v1.FactService.RegisterProvider:output_type -> pantherclaw.v1.RegisterProviderResponse
+	8,  // 20: pantherclaw.v1.FactService.DisableProvider:output_type -> pantherclaw.v1.DisableProviderResponse
+	10, // 21: pantherclaw.v1.FactService.ListProviders:output_type -> pantherclaw.v1.ListProvidersResponse
+	14, // 22: pantherclaw.v1.FactService.PutFacts:output_type -> pantherclaw.v1.PutFactsResponse
+	17, // 23: pantherclaw.v1.FactService.ListFacts:output_type -> pantherclaw.v1.ListFactsResponse
+	19, // [19:24] is the sub-list for method output_type
+	14, // [14:19] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_facts_proto_init() }
@@ -1266,7 +1392,7 @@ func file_pantherclaw_v1_facts_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_facts_proto_rawDesc), len(file_pantherclaw_v1_facts_proto_rawDesc)),
-			NumEnums:      2,
+			NumEnums:      3,
 			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,

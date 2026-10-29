@@ -49,6 +49,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/evidence/chainer"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/extension"
+	"github.com/katocxl/pantherclaw/internal/externalchecks"
 	"github.com/katocxl/pantherclaw/internal/facts/adapters/factsrpc"
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	factsapp "github.com/katocxl/pantherclaw/internal/facts/app"
@@ -367,6 +368,8 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	wireM11Process(autos, m11protect, pool)
 	wireM14Process(autos, bill)
 	wireM14A2APeer(svc, authorityStore, autos, pool)
+	external := newExternalChecks(pool, cfg, bill, log)
+	wireM16External(svc, external)
 	if cfg.Role == RoleAPI || cfg.Role == RoleAll {
 		tokens, err := token.New(reg, cfg.Auth.PublicURL, token.Audience)
 		if err != nil {
@@ -463,6 +466,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			workers:      workers,
 			hold:         cfg.Maintenance.Hold,
 			data:         dataRequests,
+			external:     external,
 		})
 		if err != nil {
 			return err
@@ -691,8 +695,10 @@ func publicProcedures() []string {
 // service accounts and API keys. Gateway procedures are refused here: gateways
 // call the Authority only on the mTLS gateway listener (HR-181).
 type apiDeps struct {
-	data *datarequests.Service
-	pool *db.Pool
+	// external is the external policy check service (G0 M16 D81).
+	external *externalchecks.Service
+	data     *datarequests.Service
+	pool     *db.Pool
 	// cel are the configured CEL limits (cel).
 	cel       celenv.Limits
 	reg       *keys.Registry
@@ -867,6 +873,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerUsage(rs, d)
 	registerDataRequests(rs, d)
 	registerSupport(rs, d)
+	registerM16External(rs, d)
 	mux := http.NewServeMux()
 	edges.mount(mux)
 	automationTriggers.mount(mux)
@@ -887,6 +894,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		d.web.MountAccountDeletion(mux, d.ui.deletion)
 	}
 	mountM14Data(mux, d)
+	mountM16External(mux, d)
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, "ok\n")

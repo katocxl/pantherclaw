@@ -115,7 +115,7 @@ var roles = []Role{
 	},
 	{
 		Name: RoleSecurityAdmin, Title: "Security Admin", Scopes: orgScope,
-		Description: "Watches and contains: reads users, roles, audit and approval requests, disables compromised users and service accounts, revokes grants, responds to incidents, sets the Agent Waitlist's escalation chains and settings, restores suspended agents with a security key, resolves unknown outcomes, exports evidence packs, sets the change windows (human only), excludes routes from coverage and acknowledges its findings (human only), reassesses coverage, and manages detections, incidents, cases, posture findings, SIEM export and Shared Signals, protected-change settings and compromised publishers (human only) and AuthZEN enforcement points (human only); reads automations and the runs peer agents made for requesters.",
+		Description: "Watches and contains: reads users, roles, audit and approval requests, disables compromised users and service accounts, revokes grants, responds to incidents, sets the Agent Waitlist's escalation chains and settings, restores suspended agents with a security key, resolves unknown outcomes, exports evidence packs, sets the change windows (human only), excludes routes from coverage and acknowledges its findings (human only), reassesses coverage, and manages detections, incidents, cases, posture findings, SIEM export and Shared Signals, protected-change settings and compromised publishers (human only) and AuthZEN enforcement points (human only), and external policy checks (human only); reads automations and the runs peer agents made for requesters.",
 		Permissions: with(basicReads, []Permission{
 			PermUserRead, PermUserManage, PermRoleRead, PermInvitationRead, PermServiceAccountRead,
 			PermServiceAccountManage, PermAuditRead, PermAgentRead, PermIncidentRespond, PermRunRead, PermRunManage,
@@ -124,6 +124,7 @@ var roles = []Role{
 			PermEvidenceExport, PermReleaseWindowManage, PermGitHubScanRun, PermCoverageRead, PermCoverageManage, PermCoverageReassess, PermRedteamRead,
 		}, authorityReads, boundaryReads, reflexReads, reflexManage, []Permission{
 			PermAutomationRead, PermProtectedChangeManage, PermPublisherCompromise, PermEnforcementPointManage, PermA2APeerRunRead,
+			PermExternalCheckManage,
 		}),
 	},
 	{

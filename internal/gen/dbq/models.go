@@ -1868,6 +1868,23 @@ type PcExposureSnapshot struct {
 	ComputedAt   time.Time
 }
 
+type PcExternalPolicyCheck struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Name                string
+	Endpoint            string
+	CaPem               *string
+	TimeoutMs           int32
+	Operations          []string
+	State               string
+	CreatedBy           string
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}
+
 type PcFact struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID
@@ -1879,6 +1896,8 @@ type PcFact struct {
 	ObservedAt   time.Time
 	RecordedAt   time.Time
 	ConnectionID *ids.UUID
+	Source       *string
+	Method       *string
 }
 
 type PcFactDeclaration struct {
@@ -1890,6 +1909,7 @@ type PcFactDeclaration struct {
 	MaxLagS      int32
 	Active       bool
 	ConnectionID *ids.UUID
+	Kind         string
 }
 
 type PcFactProvider struct {
@@ -1902,6 +1922,7 @@ type PcFactProvider struct {
 	CreatedAt        time.Time
 	GatewayID        *ids.UUID
 	ConnectionID     *ids.UUID
+	Builtin          bool
 }
 
 type PcFleetCohort struct {
