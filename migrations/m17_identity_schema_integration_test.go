@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	"github.com/katocxl/pantherclaw/migrations"
 )
@@ -108,10 +109,15 @@ func TestM17_IdentityDownsRefuseM17EntriesAndApplyAgain(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), "remove the M17 issuer entries first") {
 				t.Fatalf("Down with an M17 entry: %v", err)
 			}
+			// Nothing was deleted, and the wider CHECKs still hold: the
+			// app can add another such entry.
 			var n int
-			if err := m.Pgx().QueryRow(ctx, "SELECT count(*) FROM pc.trusted_issuers").Scan(&n); err != nil || n != 1 {
+			if err := fx.p.InTenantTx(ctx, fx.org, func(ctx context.Context, tx db.TenantTx) error {
+				return tx.QueryRow(ctx, "SELECT count(*) FROM pc.trusted_issuers").Scan(&n)
+			}); err != nil || n != 1 {
 				t.Fatalf("%d entries after the refused Down, %v", n, err)
 			}
+			fx.mustExec(t, insert, fx.org, newID(), newID(), fx.agent, row.kind, aud, row.algs)
 		})
 	}
 
