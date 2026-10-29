@@ -96,7 +96,8 @@ func m15ResourceAndElicitation(t *testing.T) {
 		`{"id": "hidden-refund", "kind": "FORBID", "summary": "a refund kept from agents", "operations": ["payments.refund.get"], `+
 		`"when": "action.target.id == \"`+ids[1]+`\"", "reason": "REFUND_HIDDEN"}, `+
 		`{"id": "no-sms", "kind": "FORBID", "summary": "receipts never go by sms", "operations": ["payments.refund.create"], `+
-		`"when": "\"elicitation.channel\" in action.params && action.params[\"elicitation.channel\"] == \"sms\"", "reason": "NO_SMS"}]}`)
+		`"when": "has(action.params.elicitation) && has(action.params.elicitation.channel) && action.params.elicitation.channel == \"sms\"", `+
+		`"reason": "NO_SMS"}]}`)
 
 	// Resources: the allowed read, the denied one, an unreviewed URI.
 	if status, body := read(20, mcpsim.ResourcePrefix+ids[0]); status != http.StatusOK || !strings.Contains(body, `\"id\":\"`+ids[0]+`\"`) {
@@ -227,6 +228,12 @@ func (s *stack) activateSurface(t *testing.T, endpoint string) {
 	}
 	if err := im.Transition(ctx, s.org, mockpayments.Name, surfaceVersion, defs.StateActive, nil); err != nil {
 		t.Fatalf("activate the MCP surface variant: %v", err)
+	}
+	// The variant replaces the reviewed version: a rule naming
+	// action.params.elicitation compiles only when every active version of
+	// the operation declares the field (D46).
+	if err := im.Transition(ctx, s.org, mockpayments.Name, mockpayments.Version, defs.StateRetired, nil); err != nil {
+		t.Fatalf("retire %s: %v", mockpayments.Version, err)
 	}
 	s.db.AdminExec(t, "UPDATE pc.connections SET kind = 'mcp', base_url = $2 WHERE id = $1", s.conn, endpoint)
 	gw := s.gatewayID(t)

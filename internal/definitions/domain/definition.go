@@ -292,6 +292,10 @@ func (d *Definition) Validate() error {
 		return err
 	}
 	for _, name := range slices.Sorted(maps.Keys(d.Params)) {
+		if name == "elicitation" {
+			// Policy reads elicitation answers as action.params.elicitation (D46).
+			return invalid("%s: param name elicitation is reserved", op)
+		}
 		if strings.HasPrefix(name, ElicitationPrefix) {
 			if err := d.checkElicitationParam(name); err != nil {
 				return err

@@ -217,6 +217,9 @@ func TestHR420_ElicitationFieldsBecomeMaterialParams(t *testing.T) {
 		"on an http mapping": mutate(t, readMock(t), httpMapping, httpMapping+"        elicitation:\n          fields:\n            approve:\n              type: boolean\n"),
 		"declared by hand": mutate(t, readMock(t), "    params:\n      amount:\n",
 			"    params:\n      elicitation.approve:\n        type: boolean\n        material: true\n      amount:\n"),
+		// Policy reads answers as action.params.elicitation (D46).
+		"a param named elicitation": mutate(t, readMock(t), "    params:\n      amount:\n",
+			"    params:\n      elicitation:\n        type: boolean\n      amount:\n"),
 	} {
 		if _, err := Decode(raw); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("%s: %v", name, err)
