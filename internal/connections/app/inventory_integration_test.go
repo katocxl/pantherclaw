@@ -94,8 +94,10 @@ func TestHR414_DiscoveredItemsStayNewUntilAnActiveVersionCoversThem(t *testing.T
 		t.Errorf("reviewed tool: %s with %d open entries", s, o)
 	}
 	for _, it := range [][3]string{
-		{app.InventoryTool, "get_refund", digest("aa")}, {app.InventoryTool, "delete_everything", digest("bb")},
-		{app.InventoryResource, "file:///a.txt", digest("cc")}, {app.InventoryTemplate, "file:///docs/{name}", digest("dd")},
+		{app.InventoryTool, "get_refund", digest("aa")},
+		{app.InventoryTool, "delete_everything", digest("bb")},
+		{app.InventoryResource, "file:///a.txt", digest("cc")},
+		{app.InventoryTemplate, "file:///docs/{name}", digest("dd")},
 	} {
 		if s, o := e.item(t, c.ID, it[0], it[1], it[2]); s != app.InventoryNew || o != 1 {
 			t.Errorf("%v: %s with %d open entries, want NEW with 1", it, s, o)
@@ -272,8 +274,10 @@ func TestHR418_InventoryReportsAreBoundedAndOnlyForServedConnections(t *testing.
 	}
 	for name, err := range map[string]error{
 		"1,001 tools": report(tools...),
-		"a long description": report(app.InventoryEntry{Kind: app.InventoryTool, Name: "t", Digest: digest("ab"),
-			Description: strings.Repeat("d", app.MaxInventoryDescription+1)}),
+		"a long description": report(app.InventoryEntry{
+			Kind: app.InventoryTool, Name: "t", Digest: digest("ab"),
+			Description: strings.Repeat("d", app.MaxInventoryDescription+1),
+		}),
 		"a bad digest": report(app.InventoryEntry{Kind: app.InventoryTool, Name: "t", Digest: "md5:x"}),
 		"a bad kind":   report(app.InventoryEntry{Kind: "PROMPT", Name: "t", Digest: digest("ab")}),
 	} {
