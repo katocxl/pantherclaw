@@ -92,17 +92,9 @@ func (h *Handler) WhatHappened(ctx context.Context, req *pantherclawv1.WhatHappe
 			Depth: int32(g.Depth), State: g.State, CreateTime: timestamppb.New(g.Created), RevokeTime: ts(g.Revoked), //nolint:gosec // G115: depth ≤ 4
 		})
 	}
-	for _, d := range x.Delegation {
-		out.Delegation = append(out.Delegation, &pantherclawv1.InvestigationDelegation{
-			RunId: d.Run.String(), AgentId: d.Agent.String(), Launcher: party(d.Launcher), Principal: party(d.Principal),
-			GrantId: str(d.Grant), Depth: int32(d.Depth), //nolint:gosec // G115: depth ≤ 8
-		})
-	}
+	out.Delegation = delegations(x.Delegation)
 	for _, a := range x.Approvals {
-		out.Approvals = append(out.Approvals, &pantherclawv1.InvestigationApproval{
-			Id: a.ID.String(), TransactionId: str(a.Transaction), Operation: a.Operation, State: a.State, EndReason: a.EndReason,
-			CreateTime: timestamppb.New(a.Created), ApproveTime: ts(a.Approved), EndTime: ts(a.Ended),
-		})
+		out.Approvals = append(out.Approvals, approval(a))
 	}
 	return out, nil
 }
@@ -122,24 +114,16 @@ func (h *Handler) GetRunTimeline(ctx context.Context, req *pantherclawv1.GetRunT
 		EndTime: ts(t.End), Truncated: t.Truncated, ScopeLimited: t.ScopeLimited,
 	}
 	for _, e := range t.Events {
-		out.Events = append(out.Events, &pantherclawv1.TimelineEvent{
-			Time: timestamppb.New(e.At), Kind: e.Kind, TransactionId: str(e.Transaction), ApprovalId: str(e.Approval),
-			GrantId: str(e.Grant), RunId: str(e.Run), Operation: e.Operation, ConnectionId: str(e.Connection), Detail: e.Detail,
-		})
+		out.Events = append(out.Events, event(e))
 	}
 	for _, g := range t.Gaps {
 		out.Gaps = append(out.Gaps, &pantherclawv1.TimelineGap{Kind: g.Kind, TransactionId: g.Transaction.String(), Time: timestamppb.New(g.At)})
 	}
 	for _, l := range t.Lanes {
-		out.Lanes = append(out.Lanes, &pantherclawv1.TimelineLane{
-			RunId: l.Run.String(), AgentId: l.Agent.String(), State: l.State, CreateTime: timestamppb.New(l.Created), EndTime: ts(l.Ended),
-		})
+		out.Lanes = append(out.Lanes, lane(l))
 	}
 	for _, p := range t.Phases {
-		out.Phases = append(out.Phases, &pantherclawv1.TimelinePhase{
-			StartTime: timestamppb.New(p.Start), EndTime: timestamppb.New(p.End), ConnectionId: str(p.Connection),
-			Actions: int32(p.Actions), Operations: p.Operations, Basis: string(p.Basis), //nolint:gosec // G115: ≤ 2000 actions
-		})
+		out.Phases = append(out.Phases, phase(p))
 	}
 	return out, nil
 }
@@ -224,4 +208,128 @@ func (h *Handler) CompareRun(ctx context.Context, req *pantherclawv1.CompareRunR
 		})
 	}
 	return out, nil
+}
+
+// InspectRun implements InvestigationServiceHandler (rows26 D20; HR-401).
+func (h *Handler) InspectRun(ctx context.Context, req *pantherclawv1.InspectRunRequest) (*pantherclawv1.InspectRunResponse, error) {
+	id, err := idOf(req.GetRunId())
+	if err != nil {
+		return nil, err
+	}
+	o := investigations.InspectOptions{PageSize: int(req.GetTimelinePageSize()), PageToken: req.GetTimelinePageToken()}
+	for _, s := range req.GetInclude() {
+		o.Sections = append(o.Sections, investigations.Section(s))
+	}
+	x, err := h.svc.InspectRun(ctx, id, o)
+	if err != nil {
+		return nil, err
+	}
+	r := x.Run
+	out := &pantherclawv1.InspectRunResponse{
+		Run: &pantherclawv1.RunSummary{
+			RunId: r.Run.String(), AgentId: r.Agent.String(), TaskRef: r.TaskRef, Launcher: party(r.Launcher),
+			Principal: party(r.Principal), GrantId: str(r.Grant), State: r.State, StartTime: timestamppb.New(r.Start),
+			EndTime: ts(r.End), EndReason: r.EndReason, ParentRunId: str(r.Parent), Depth: int32(r.Depth), //nolint:gosec // G115: depth ≤ 8
+		},
+		NextPageToken: x.NextPageToken, TimelineTruncated: x.TimelineTruncated, ScopeLimited: x.ScopeLimited,
+	}
+	for _, s := range x.Omitted {
+		out.OmittedSections = append(out.OmittedSections, pantherclawv1.InspectSection(s)) //nolint:gosec // G115: a section number
+	}
+	if l := x.Lineage; l != nil {
+		lin := &pantherclawv1.RunLineage{
+			ChildrenTruncated: l.ChildrenTruncated, UpstreamExecution: execution(l.Upstream), DownstreamTruncated: l.DownstreamTruncated,
+		}
+		lin.Parents = delegations(l.Parents)
+		for _, c := range l.Children {
+			lin.Children = append(lin.Children, lane(c))
+		}
+		for i := range l.Downstream {
+			lin.DownstreamExecutions = append(lin.DownstreamExecutions, execution(&l.Downstream[i]))
+		}
+		out.Lineage = lin
+	}
+	if x.HasTimeline {
+		tl := &pantherclawv1.RunTimeline{}
+		for _, e := range x.Events {
+			tl.Events = append(tl.Events, event(e))
+		}
+		for _, p := range x.Phases {
+			tl.Phases = append(tl.Phases, phase(p))
+		}
+		out.Timeline = tl
+	}
+	for _, b := range x.Budget {
+		out.Budget = append(out.Budget, &pantherclawv1.RunBudgetLine{
+			AccountId: b.Account.String(), Rule: b.Rule, Currency: b.Currency, Held: b.Held, Committed: b.Committed,
+			Released: b.Released, Count: b.Count, Remaining: b.Remaining,
+		})
+	}
+	for _, a := range x.Approvals {
+		out.Approvals = append(out.Approvals, approval(a))
+	}
+	for _, c := range x.Coverage {
+		out.Coverage = append(out.Coverage, &pantherclawv1.RunRouteCoverage{
+			ConnectionId: c.Connection.String(), Operation: c.Operation, SnapshotId: c.Snapshot.String(), State: c.State,
+			Reasons: c.Reasons, ComputedAt: timestamppb.New(c.Computed), StaleAtDecision: c.StaleAtDecision,
+		})
+	}
+	for _, g := range x.Gaps {
+		rg := &pantherclawv1.RunGap{
+			Kind: g.Kind, Time: timestamppb.New(g.At), GatewayId: str(g.Gateway), ConnectionId: str(g.Connection), Operation: g.Operation,
+		}
+		if !g.Transaction.IsZero() {
+			rg.TransactionId = g.Transaction.String()
+		}
+		out.Gaps = append(out.Gaps, rg)
+	}
+	return out, nil
+}
+
+func execution(e *investigations.ExecutionLink) *pantherclawv1.RunExecutionLink {
+	if e == nil {
+		return nil
+	}
+	return &pantherclawv1.RunExecutionLink{
+		ExecutionId: e.Execution.String(), AutomationId: e.Automation.String(), Mode: e.Mode, State: e.State,
+		TriggerKind: e.TriggerKind, CreateTime: timestamppb.New(e.Created), EndTime: ts(e.Ended),
+	}
+}
+
+func delegations(ds []investigations.Delegation) []*pantherclawv1.InvestigationDelegation {
+	var out []*pantherclawv1.InvestigationDelegation
+	for _, d := range ds {
+		out = append(out, &pantherclawv1.InvestigationDelegation{
+			RunId: d.Run.String(), AgentId: d.Agent.String(), Launcher: party(d.Launcher), Principal: party(d.Principal),
+			GrantId: str(d.Grant), Depth: int32(d.Depth), //nolint:gosec // G115: depth ≤ 8
+		})
+	}
+	return out
+}
+
+func lane(l investigations.Lane) *pantherclawv1.TimelineLane {
+	return &pantherclawv1.TimelineLane{
+		RunId: l.Run.String(), AgentId: l.Agent.String(), State: l.State, CreateTime: timestamppb.New(l.Created), EndTime: ts(l.Ended),
+	}
+}
+
+func event(e investigations.Event) *pantherclawv1.TimelineEvent {
+	return &pantherclawv1.TimelineEvent{
+		Time: timestamppb.New(e.At), Kind: e.Kind, TransactionId: str(e.Transaction), ApprovalId: str(e.Approval),
+		GrantId: str(e.Grant), RunId: str(e.Run), Operation: e.Operation, ConnectionId: str(e.Connection), Detail: e.Detail,
+	}
+}
+
+func phase(p investigations.Phase) *pantherclawv1.TimelinePhase {
+	return &pantherclawv1.TimelinePhase{
+		StartTime: timestamppb.New(p.Start), EndTime: timestamppb.New(p.End), ConnectionId: str(p.Connection),
+		Actions: int32(p.Actions), Operations: p.Operations, Basis: string(p.Basis), //nolint:gosec // G115: ≤ 2000 actions
+	}
+}
+
+func approval(a investigations.Approval) *pantherclawv1.InvestigationApproval {
+	return &pantherclawv1.InvestigationApproval{
+		Id: a.ID.String(), TransactionId: str(a.Transaction), Operation: a.Operation, State: a.State, EndReason: a.EndReason,
+		CreateTime: timestamppb.New(a.Created), ApproveTime: ts(a.Approved), EndTime: ts(a.Ended),
+	}
 }

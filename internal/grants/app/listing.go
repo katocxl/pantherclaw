@@ -32,6 +32,7 @@ type GrantFilter struct {
 // BudgetAccount is the stored state of one budget account (one rule,
 // grouping key and period of a grant or guardrail).
 type BudgetAccount struct {
+	ID            ids.UUID
 	OwnerKind     string // "grant" or "envelope"
 	OwnerID       ids.UUID
 	Rule          string

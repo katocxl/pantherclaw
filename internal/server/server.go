@@ -837,7 +837,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		return nil, err
 	}
 	registerM11Search(rs, d)
-	registerCases(rs, d)
+	registerCases(rs, d, grants)
 	registerResponse(rs, d)
 	registerExposure(rs, d)
 	edges, err := registerM10Edges(rs, d)

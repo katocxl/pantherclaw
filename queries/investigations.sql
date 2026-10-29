@@ -89,6 +89,16 @@ WHERE org_id = sqlc.arg(org_id) AND parent_run_id = sqlc.arg(run_id)
 ORDER BY created_at, id
 LIMIT sqlc.arg(max_rows);
 
+-- Child runs of a run after a (created_at, id) position, for reading
+-- page by page until enough visible children are found (rows26 D25).
+-- name: InvRunChildrenAfter :many
+SELECT id, agent_id, state, created_at, ended_at
+FROM pc.runs
+WHERE org_id = sqlc.arg(org_id) AND parent_run_id = sqlc.arg(run_id)
+  AND (created_at, id) > (sqlc.arg(after_time)::timestamptz, sqlc.arg(after_id)::uuid)
+ORDER BY created_at, id
+LIMIT sqlc.arg(max_rows);
+
 -- Authority changes of an agent in a window: grants issued or revoked and
 -- grant revisions made (F241, F284).
 -- name: InvGrantChanges :many
@@ -176,3 +186,92 @@ LIMIT 5000;
 -- at most 10 000 (one more tells the caller there are too many).
 -- name: InvOrgAgents :many
 SELECT id FROM pc.agents WHERE org_id = sqlc.arg(org_id) ORDER BY id LIMIT 10001;
+
+-- The automation execution that launched a run (F065).
+-- name: InvRunUpstreamExecution :one
+SELECT e.id, e.automation_id, e.mode, e.state, e.trigger_kind, e.created_at, e.ended_at
+FROM pc.automation_launches l
+JOIN pc.automation_executions e ON e.org_id = l.org_id AND e.id = l.execution_id
+WHERE l.org_id = sqlc.arg(org_id) AND l.run_id = sqlc.arg(run_id);
+
+-- Automation executions whose subjects name a run, created since it
+-- started (F065), oldest first.
+-- name: InvRunDownstreamExecutions :many
+SELECT e.id, e.automation_id, e.mode, e.state, e.trigger_kind, e.created_at, e.ended_at
+FROM pc.automation_executions e
+WHERE e.org_id = sqlc.arg(org_id) AND e.created_at >= sqlc.arg(since)
+  AND e.subjects @> jsonb_build_array(jsonb_build_object('type', 'run', 'id', sqlc.arg(run_id)::uuid::text))
+ORDER BY e.created_at, e.id
+LIMIT sqlc.arg(max_rows);
+
+-- What a run's actions reserved on each budget account and counter (F227):
+-- the current permit's reservations of every transaction of the run.
+-- name: InvRunBudget :many
+SELECT coalesce(r.account_id, r.counter_id)::uuid AS line_id, (r.account_id IS NOT NULL)::boolean AS account,
+       coalesce(a.rule, c.rule)::text AS rule, coalesce(a.currency, '')::text AS currency,
+       coalesce(sum(r.amount) FILTER (WHERE r.state = 'HELD'), 0)::numeric(26,8) AS held,
+       coalesce(sum(r.amount) FILTER (WHERE r.state = 'COMMITTED'), 0)::numeric(26,8) AS committed,
+       coalesce(sum(r.amount) FILTER (WHERE r.state = 'RELEASED'), 0)::numeric(26,8) AS released,
+       count(*) FILTER (WHERE r.state = 'HELD')::bigint AS held_count,
+       count(*) FILTER (WHERE r.state = 'COMMITTED')::bigint AS committed_count,
+       count(*) FILTER (WHERE r.state = 'RELEASED')::bigint AS released_count,
+       count(*)::bigint AS reservations
+FROM pc.transactions t
+JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
+JOIN pc.reservations r ON r.org_id = p.org_id AND r.permit_id = p.id
+LEFT JOIN pc.budget_accounts a ON a.org_id = r.org_id AND a.id = r.account_id
+LEFT JOIN pc.counters c ON c.org_id = r.org_id AND c.id = r.counter_id
+WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id)
+GROUP BY 1, 2, 3, 4
+ORDER BY 3, 1
+LIMIT 500;
+
+-- The grants a run's transactions decided under.
+-- name: InvRunGrants :many
+SELECT DISTINCT t.grant_id::uuid AS grant_id
+FROM pc.transactions t
+WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id) AND t.grant_id IS NOT NULL
+LIMIT 20;
+
+-- The coverage snapshots a run's decision receipts claimed (F229, HR-217).
+-- name: InvRunCoverage :many
+SELECT s.id AS snapshot_id, s.connection_id, s.operation, s.state, s.reasons, s.computed_at,
+       bool_or(s.expires_at IS NOT NULL AND s.expires_at <= d.created_at)::boolean AS stale_at_decision
+FROM pc.transactions t
+JOIN pc.decision_receipts d ON d.org_id = t.org_id AND d.transaction_id = t.id
+JOIN pc.coverage_snapshots s ON s.org_id = d.org_id AND s.id = d.coverage_snapshot_id
+WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id)
+GROUP BY s.org_id, s.id
+ORDER BY s.connection_id, s.operation, s.id
+LIMIT 1000;
+
+-- A run's decisions on a connection that claimed no coverage, or coverage
+-- below ENFORCED or expired when decided (F229), oldest first.
+-- name: InvRunCoverageGaps :many
+SELECT t.id, t.created_at, t.connection_id, t.operation,
+       (d.coverage_snapshot_id IS NULL)::boolean AS no_claim
+FROM pc.transactions t
+JOIN pc.decision_receipts d ON d.org_id = t.org_id AND d.transaction_id = t.id
+LEFT JOIN pc.coverage_snapshots s ON s.org_id = d.org_id AND s.id = d.coverage_snapshot_id
+WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id) AND t.connection_id IS NOT NULL
+  AND (d.coverage_snapshot_id IS NULL OR s.state <> 'ENFORCED' OR s.expires_at <= d.created_at)
+ORDER BY t.created_at, t.id
+LIMIT sqlc.arg(max_rows);
+
+-- When a run's transactions reached each gateway, oldest first (F229).
+-- name: InvRunGatewayDecisions :many
+SELECT g.id AS gateway_id, g.created_at AS gateway_created_at, t.created_at
+FROM pc.transactions t
+JOIN pc.gateways g ON g.org_id = t.org_id AND g.id::text = t.gateway_id
+WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id)
+ORDER BY g.id, t.created_at
+LIMIT sqlc.arg(max_rows);
+
+-- Certificate renewals of gateways in a window: a gateway's heartbeat.
+-- name: InvGatewayRenewals :many
+SELECT c.gateway_id, c.issued_at
+FROM pc.gateway_certs c
+WHERE c.org_id = sqlc.arg(org_id) AND c.gateway_id = ANY (sqlc.arg(gateway_ids)::uuid[])
+  AND c.issued_at >= sqlc.arg(start_time) AND c.issued_at < sqlc.arg(end_time)
+ORDER BY c.gateway_id, c.issued_at
+LIMIT 10000;
