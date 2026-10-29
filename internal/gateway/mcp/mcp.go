@@ -110,8 +110,8 @@ type Handler struct {
 	publicURL string
 	origin    string
 	log       *slog.Logger
-	holds     *store
-	sessions  *sessions
+	holds     holdStore
+	sessions  sessionStore
 }
 
 // New returns the MCP face. publicURL is the gateway's base URL: proofs
@@ -630,7 +630,7 @@ func (h *Handler) callTool(w http.ResponseWriter, r *http.Request, conn *control
 	}, p.Name, args)
 	k := actionKey(parsed.Action)
 	if err == nil && fresh {
-		if held, ok := h.holds.heldAction(k); ok {
+		if held, ok := h.holds.heldAction(k, c.b); ok {
 			parsed.Action.ActionID, action = held, held
 			parsed, err = actionir.Encode(parsed.Action)
 		}
@@ -717,7 +717,7 @@ func (h *Handler) task(w http.ResponseWriter, r *http.Request, conn *control.Con
 func (h *Handler) resubmit(w http.ResponseWriter, r *http.Request, conn *control.Connection, req request, t task,
 	in dispatch.Inbound,
 ) (task, dispatch.Result, bool) {
-	defer h.holds.release(t.id)
+	defer h.holds.release(t.id, t.binding)
 	res := h.engine.Dispatch(r.Context(), dispatch.Call{Connection: conn, Action: t.action, Workload: in.Creds})
 	if res.Class == dispatch.AuthenticationFailed {
 		h.refusePAP(w, r, req.ID, res.PAPError, res.Nonce)

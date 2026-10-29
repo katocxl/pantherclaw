@@ -45,6 +45,9 @@ type loadConfig struct {
 	// names this run's charges.
 	Unique bool
 	Tag    string
+	// MCP sends each refund as a 2026-07-28 MCP tools/call (create_refund)
+	// to /mcp/{connection} instead of the HTTP route (G0 M15 D15).
+	MCP bool
 }
 
 // requests is how many requests the run sends, warm-up included.
@@ -61,6 +64,8 @@ type sample struct {
 	gwTotal   float64
 	ok        bool
 	afterWarm bool
+	// toolError: an MCP answer with isError true.
+	toolError bool
 }
 
 // Summary is the machine-readable result.
@@ -92,6 +97,7 @@ func runLoad(ctx context.Context, args []string, stdout, stderr io.Writer) error
 	fs.StringVar(&c.Amount, "amount", "1.00", "refund amount per request (USD)")
 	fs.IntVar(&c.MaxInFlight, "max-in-flight", 2048, "requests in flight before new ones are dropped (and counted)")
 	fs.BoolVar(&c.Unique, "unique", false, "refund a distinct charge and amount per request (identical refunds are parked since M4); ignores --amount")
+	fs.BoolVar(&c.MCP, "mcp", false, "send MCP tools/call (create_refund, 2026-07-28) to /mcp/{connection} instead of the HTTP route")
 	factsKey := fs.String("facts-key-file", "", "report the charges as refundable first, with this fact provider API key (from `dev seed --facts-key-out`)")
 	out := fs.String("out", "", "also write the JSON summary to this file")
 	if err := fs.Parse(args); err != nil {
@@ -195,6 +201,9 @@ func drive(ctx context.Context, c loadConfig) (Summary, error) {
 }
 
 func one(ctx context.Context, client *http.Client, c loadConfig, run, body string) sample {
+	if c.MCP {
+		return oneMCP(ctx, client, c, run, body)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSuffix(c.Gateway, "/")+"/"+c.Connection+"/v1/refunds", strings.NewReader(body))
 	if err != nil {
 		return sample{}
@@ -249,7 +258,11 @@ func summarize(c loadConfig, all []sample, dropped int64, elapsed time.Duration)
 			s.Errors++
 			continue
 		}
-		s.Statuses[strconv.Itoa(x.status)]++
+		key := strconv.Itoa(x.status)
+		if x.toolError {
+			key += "/tool_error"
+		}
+		s.Statuses[key]++
 		total = append(total, x.total)
 		if x.status == http.StatusOK {
 			authz = append(authz, x.authz)
@@ -283,4 +296,31 @@ func printSummary(w io.Writer, s Summary) {
 		p := s.Percentile[name]
 		_, _ = fmt.Fprintf(w, "%-18s %9.2f %9.2f %9.2f %9.2f\n", name, p["p50"], p["p95"], p["p99"], p["max"])
 	}
+}
+
+// oneMCP sends one refund as an MCP tools/call, as pclaw mcp proxy does
+// for a 2026-07-28 client, without an action id, so the gateway looks up
+// a hold first (G0 M15 D14). Only the client's time is measured: the MCP
+// face sends no Server-Timing.
+func oneMCP(ctx context.Context, client *http.Client, c loadConfig, run, args string) sample {
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"create_refund","arguments":` + args +
+		`,"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}`
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSuffix(c.Gateway, "/")+"/mcp/"+c.Connection, strings.NewReader(body))
+	if err != nil {
+		return sample{}
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("PAP-Run-Id", run)
+	req.Header.Set("MCP-Protocol-Version", "2026-07-28")
+	req.Header.Set("Mcp-Method", "tools/call")
+	req.Header.Set("Mcp-Name", "create_refund")
+	t0 := time.Now()
+	resp, err := client.Do(req)
+	if err != nil {
+		return sample{}
+	}
+	b, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	return sample{status: resp.StatusCode, total: ms(time.Since(t0)), ok: true, toolError: strings.Contains(string(b), `"isError":true`)}
 }

@@ -79,20 +79,20 @@ func TestHR185_HoldsEndWithTheirDecision(t *testing.T) {
 	b := binding{conn: holdConn, run: holdRun, instance: holdInst}
 	k := actionKey(heldIR(t, nil).Action)
 	s.settle(k, b, "act-1", dispatch.Result{Class: dispatch.Held, TransactionID: "txn-1"})
-	if a, ok := s.heldAction(k); !ok || a != "act-1" {
+	if a, ok := s.heldAction(k, b); !ok || a != "act-1" {
 		t.Fatalf("held = %q %v", a, ok)
 	}
 	s.settle(k, b, "act-1", dispatch.Result{Class: dispatch.CannotAuthorize, Code: dispatch.CodeAuthorityUnavailable})
-	if _, ok := s.heldAction(k); !ok {
+	if _, ok := s.heldAction(k, b); !ok {
 		t.Fatal("an answer without a decision ended the hold")
 	}
 	s.settle(k, b, "act-1", dispatch.Result{Class: dispatch.PolicyDenied, TransactionID: "txn-1"})
-	if _, ok := s.heldAction(k); ok {
+	if _, ok := s.heldAction(k, b); ok {
 		t.Fatal("a denial kept the hold")
 	}
 	s.settle(k, b, "act-2", dispatch.Result{Class: dispatch.Held, TransactionID: "txn-2"})
 	c.t = c.t.Add(holdTTL)
-	if _, ok := s.heldAction(k); ok {
+	if _, ok := s.heldAction(k, b); ok {
 		t.Fatal("an expired hold was reused")
 	}
 }
@@ -101,8 +101,20 @@ func TestHR185_HoldsEndWithTheirDecision(t *testing.T) {
 // connection, run and instance that created it, until it expires; one poll
 // at a time resubmits it; a cancel from another binding does nothing.
 func TestHR185_TasksBelongToTheirBinding(t *testing.T) {
+	for name, store := range map[string]func(c *clock) holdStore{
+		"memory": func(c *clock) holdStore { return newStore(c.now) },
+		// G0 M15 D16: the server store keeps the same contract.
+		"server": func(c *clock) holdStore {
+			return newServerState(newFakeState(c.now), newTestSealer(t), holdOrg, "gw-1", c.now)
+		},
+	} {
+		t.Run(name, func(t *testing.T) { tasksBelongToTheirBinding(t, store) })
+	}
+}
+
+func tasksBelongToTheirBinding(t *testing.T, store func(*clock) holdStore) {
 	c := &clock{t: time.Unix(1_800_000_000, 0)}
-	s := newStore(c.now)
+	s := store(c)
 	b := binding{conn: holdConn, run: holdRun, instance: holdInst}
 	p := heldIR(t, nil)
 	k := actionKey(p.Action)
@@ -131,7 +143,7 @@ func TestHR185_TasksBelongToTheirBinding(t *testing.T) {
 	if _, claimed, found := s.lookup(tk.id, b, true); !found || claimed {
 		t.Fatal("two polls resubmitted at once")
 	}
-	s.release(tk.id)
+	s.release(tk.id, b)
 	snap, claimed, _ := s.lookup(tk.id, b, true)
 	if !claimed {
 		t.Fatal("a released task could not be resubmitted")
@@ -157,8 +169,8 @@ func TestHR185_TasksBelongToTheirBinding(t *testing.T) {
 	if _, _, found := s.lookup(tk.id, b, false); found {
 		t.Fatal("a canceled task was found")
 	}
-	if len(s.tasks) != 0 || s.bytes != 0 {
-		t.Fatalf("store not empty: %d tasks, %d bytes", len(s.tasks), s.bytes)
+	if m, ok := s.(*memoryStore); ok && (len(m.tasks) != 0 || m.bytes != 0) {
+		t.Fatalf("store not empty: %d tasks, %d bytes", len(m.tasks), m.bytes)
 	}
 }
 
@@ -173,7 +185,7 @@ func TestHR185_HoldsAndTasksAreBounded(t *testing.T) {
 		s.settle(key{byte(i), 1}, b, "act", held)
 	}
 	s.settle(key{0xff}, b, "act", held)
-	if _, ok := s.heldAction(key{0xff}); ok {
+	if _, ok := s.heldAction(key{0xff}, b); ok {
 		t.Fatal("an instance went past its bound")
 	}
 	if s.newTask(b, heldIR(t, nil), key{0xfe}, held, toolResult{}) != nil {
@@ -181,7 +193,7 @@ func TestHR185_HoldsAndTasksAreBounded(t *testing.T) {
 	}
 	other := binding{conn: holdConn, run: holdRun, instance: ids.NewV7().String()}
 	s.settle(key{0xfd}, other, "act", held)
-	if _, ok := s.heldAction(key{0xfd}); !ok {
+	if _, ok := s.heldAction(key{0xfd}, other); !ok {
 		t.Fatal("another instance was refused")
 	}
 }

@@ -253,6 +253,8 @@ const (
 	MCPStateKind_MCP_STATE_KIND_HOLD        MCPStateKind = 1
 	MCPStateKind_MCP_STATE_KIND_TASK        MCPStateKind = 2
 	MCPStateKind_MCP_STATE_KIND_SESSION     MCPStateKind = 3
+	// An elicitation the gateway relayed to the agent (G0 M15 D39).
+	MCPStateKind_MCP_STATE_KIND_ELICITATION MCPStateKind = 4
 )
 
 // Enum value maps for MCPStateKind.
@@ -262,12 +264,14 @@ var (
 		1: "MCP_STATE_KIND_HOLD",
 		2: "MCP_STATE_KIND_TASK",
 		3: "MCP_STATE_KIND_SESSION",
+		4: "MCP_STATE_KIND_ELICITATION",
 	}
 	MCPStateKind_value = map[string]int32{
 		"MCP_STATE_KIND_UNSPECIFIED": 0,
 		"MCP_STATE_KIND_HOLD":        1,
 		"MCP_STATE_KIND_TASK":        2,
 		"MCP_STATE_KIND_SESSION":     3,
+		"MCP_STATE_KIND_ELICITATION": 4,
 	}
 )
 
@@ -4190,8 +4194,8 @@ type MCPStateEntry struct {
 	Status string `protobuf:"bytes,8,opt,name=status,proto3" json:"status,omitempty"`
 	// TASK: a poll claimed it and is resubmitting the action.
 	Busy bool `protobuf:"varint,9,opt,name=busy,proto3" json:"busy,omitempty"`
-	// TASK only: the action and its result, sealed to the gateway's active
-	// broker key (D13).
+	// TASK and ELICITATION only: sealed to the gateway's active broker key
+	// (D13).
 	SealedBody []byte `protobuf:"bytes,10,opt,name=sealed_body,json=sealedBody,proto3" json:"sealed_body,omitempty"`
 	// Server-assigned, +1 per write.
 	Version int64 `protobuf:"varint,11,opt,name=version,proto3" json:"version,omitempty"`
@@ -5424,12 +5428,13 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	" CONNECTION_SERVING_STATE_SERVING\x10\x01\x12)\n" +
 	"%CONNECTION_SERVING_STATE_CIRCUIT_OPEN\x10\x02\x12.\n" +
 	"*CONNECTION_SERVING_STATE_DRIFT_QUARANTINED\x10\x03\x12'\n" +
-	"#CONNECTION_SERVING_STATE_NOT_LOADED\x10\x04*|\n" +
+	"#CONNECTION_SERVING_STATE_NOT_LOADED\x10\x04*\x9c\x01\n" +
 	"\fMCPStateKind\x12\x1e\n" +
 	"\x1aMCP_STATE_KIND_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13MCP_STATE_KIND_HOLD\x10\x01\x12\x17\n" +
 	"\x13MCP_STATE_KIND_TASK\x10\x02\x12\x1a\n" +
-	"\x16MCP_STATE_KIND_SESSION\x10\x032\x82\x06\n" +
+	"\x16MCP_STATE_KIND_SESSION\x10\x03\x12\x1e\n" +
+	"\x1aMCP_STATE_KIND_ELICITATION\x10\x042\x82\x06\n" +
 	"\x13GatewayAdminService\x12\\\n" +
 	"\rCreateGateway\x12$.pantherclaw.v1.CreateGatewayRequest\x1a%.pantherclaw.v1.CreateGatewayResponse\x12\x89\x01\n" +
 	"\x1cCreateGatewayEnrollmentToken\x123.pantherclaw.v1.CreateGatewayEnrollmentTokenRequest\x1a4.pantherclaw.v1.CreateGatewayEnrollmentTokenResponse\x12^\n" +

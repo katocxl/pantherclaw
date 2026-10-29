@@ -68,6 +68,7 @@ func (g *Gateway) checkDrift(ctx context.Context, cfg *control.Config) {
 			g.log.WarnContext(ctx, "gateway.drift_check_failed", slog.String("connection_id", id), pclog.Err(err))
 			continue
 		}
+		g.status.driftChecked(id, time.Now())
 		for _, d := range drifts {
 			g.drifted(ctx, id, d)
 		}

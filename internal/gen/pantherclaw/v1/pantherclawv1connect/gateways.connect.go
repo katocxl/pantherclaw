@@ -649,7 +649,9 @@ type GatewayServiceClient interface {
 	// permission: gateway.observe
 	ReportStatus(context.Context, *v1.ReportStatusRequest) (*v1.ReportStatusResponse, error)
 	// PutMCPState writes one MCP hold, task or session of the calling
-	// gateway (G0 M15 D12, HR-411..413), compare-and-set on if_version.
+	// gateway (G0 M15 D12, HR-411..413), compare-and-set on if_version. An
+	// update keeps the entry's binding, and a connection the gateway does
+	// not serve is refused (D42).
 	// permission: gateway.sync
 	PutMCPState(context.Context, *v1.PutMCPStateRequest) (*v1.PutMCPStateResponse, error)
 	// GetMCPState reads one live MCP hold, task or session of the calling
@@ -782,7 +784,9 @@ type GatewayServiceHandler interface {
 	// permission: gateway.observe
 	ReportStatus(context.Context, *v1.ReportStatusRequest) (*v1.ReportStatusResponse, error)
 	// PutMCPState writes one MCP hold, task or session of the calling
-	// gateway (G0 M15 D12, HR-411..413), compare-and-set on if_version.
+	// gateway (G0 M15 D12, HR-411..413), compare-and-set on if_version. An
+	// update keeps the entry's binding, and a connection the gateway does
+	// not serve is refused (D42).
 	// permission: gateway.sync
 	PutMCPState(context.Context, *v1.PutMCPStateRequest) (*v1.PutMCPStateResponse, error)
 	// GetMCPState reads one live MCP hold, task or session of the calling

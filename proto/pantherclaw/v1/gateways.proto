@@ -146,7 +146,9 @@ service GatewayService {
   // permission: gateway.observe
   rpc ReportStatus(ReportStatusRequest) returns (ReportStatusResponse);
   // PutMCPState writes one MCP hold, task or session of the calling
-  // gateway (G0 M15 D12, HR-411..413), compare-and-set on if_version.
+  // gateway (G0 M15 D12, HR-411..413), compare-and-set on if_version. An
+  // update keeps the entry's binding, and a connection the gateway does
+  // not serve is refused (D42).
   // permission: gateway.sync
   rpc PutMCPState(PutMCPStateRequest) returns (PutMCPStateResponse);
   // GetMCPState reads one live MCP hold, task or session of the calling
@@ -963,6 +965,8 @@ enum MCPStateKind {
   MCP_STATE_KIND_HOLD = 1;
   MCP_STATE_KIND_TASK = 2;
   MCP_STATE_KIND_SESSION = 3;
+  // An elicitation the gateway relayed to the agent (G0 M15 D39).
+  MCP_STATE_KIND_ELICITATION = 4;
 }
 
 // MCPStateEntry is one MCP hold, task or session of a gateway, bound to
@@ -1000,8 +1004,8 @@ message MCPStateEntry {
   }];
   // TASK: a poll claimed it and is resubmitting the action.
   bool busy = 9;
-  // TASK only: the action and its result, sealed to the gateway's active
-  // broker key (D13).
+  // TASK and ELICITATION only: sealed to the gateway's active broker key
+  // (D13).
   bytes sealed_body = 10 [(buf.validate.field).bytes.max_len = 4194304];
   // Server-assigned, +1 per write.
   int64 version = 11;

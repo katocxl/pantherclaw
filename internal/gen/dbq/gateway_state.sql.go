@@ -16,8 +16,8 @@ import (
 )
 
 const countGatewayMCPState = `-- name: CountGatewayMCPState :one
-SELECT count(*) FILTER (WHERE kind IN ('HOLD', 'TASK'))::bigint AS entries,
-       count(*) FILTER (WHERE kind IN ('HOLD', 'TASK') AND instance_id IS NOT DISTINCT FROM $1::uuid)::bigint AS instance_entries,
+SELECT count(*) FILTER (WHERE kind IN ('HOLD', 'TASK', 'ELICITATION'))::bigint AS entries,
+       count(*) FILTER (WHERE kind IN ('HOLD', 'TASK', 'ELICITATION') AND instance_id IS NOT DISTINCT FROM $1::uuid)::bigint AS instance_entries,
        count(*) FILTER (WHERE kind = 'SESSION')::bigint AS sessions,
        coalesce(sum(octet_length(sealed_body)), 0)::bigint AS body_bytes
 FROM pc.gateway_mcp_state
@@ -38,7 +38,7 @@ type CountGatewayMCPStateRow struct {
 	BodyBytes       int64
 }
 
-// The live entries of a gateway: holds and tasks in all and of one
+// The live entries of a gateway: holds, tasks and elicitations in all and of one
 // instance, sessions in all, and the bytes of sealed task bodies.
 func (q *Queries) CountGatewayMCPState(ctx context.Context, arg CountGatewayMCPStateParams) (CountGatewayMCPStateRow, error) {
 	row := q.db.QueryRow(ctx, countGatewayMCPState,
@@ -60,7 +60,7 @@ func (q *Queries) CountGatewayMCPState(ctx context.Context, arg CountGatewayMCPS
 const deleteGatewayMCPState = `-- name: DeleteGatewayMCPState :execrows
 DELETE FROM pc.gateway_mcp_state
 WHERE org_id = $1 AND gateway_id = $2 AND kind = $3 AND key = $4
-  AND ($5::bigint = 0 OR version = $5::bigint)
+  AND ($5::bigint = 0 OR (version = $5::bigint AND expire_time > $6))
 `
 
 type DeleteGatewayMCPStateParams struct {
@@ -69,8 +69,10 @@ type DeleteGatewayMCPStateParams struct {
 	Kind      string
 	Key       []byte
 	IfVersion int64
+	Now       time.Time
 }
 
+// A versioned delete matches only an unexpired row (D42).
 func (q *Queries) DeleteGatewayMCPState(ctx context.Context, arg DeleteGatewayMCPStateParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteGatewayMCPState,
 		arg.OrgID,
@@ -78,6 +80,7 @@ func (q *Queries) DeleteGatewayMCPState(ctx context.Context, arg DeleteGatewayMC
 		arg.Kind,
 		arg.Key,
 		arg.IfVersion,
+		arg.Now,
 	)
 	if err != nil {
 		return 0, err
@@ -313,37 +316,28 @@ func (q *Queries) PurgeGatewayMCPState(ctx context.Context, orgID ids.OrgID, now
 
 const updateGatewayMCPState = `-- name: UpdateGatewayMCPState :execrows
 UPDATE pc.gateway_mcp_state
-SET connection_id = $1, run_id = $2, instance_id = $3, jkt = $4,
-    action_id = $5, status = $6, busy = $7, sealed_body = $8,
-    version = version + 1, expire_time = $9, update_time = $10
-WHERE org_id = $11 AND gateway_id = $12 AND kind = $13 AND key = $14
-  AND version = $15
+SET action_id = $1, status = $2, busy = $3, sealed_body = $4,
+    version = version + 1, expire_time = $5, update_time = $6
+WHERE org_id = $7 AND gateway_id = $8 AND kind = $9 AND key = $10
+  AND version = $11
 `
 
 type UpdateGatewayMCPStateParams struct {
-	ConnectionID ids.UUID
-	RunID        *ids.UUID
-	InstanceID   *ids.UUID
-	Jkt          *string
-	ActionID     *string
-	Status       *string
-	Busy         bool
-	SealedBody   []byte
-	ExpireTime   time.Time
-	UpdateTime   time.Time
-	OrgID        ids.OrgID
-	GatewayID    ids.UUID
-	Kind         string
-	Key          []byte
-	IfVersion    int64
+	ActionID   *string
+	Status     *string
+	Busy       bool
+	SealedBody []byte
+	ExpireTime time.Time
+	UpdateTime time.Time
+	OrgID      ids.OrgID
+	GatewayID  ids.UUID
+	Kind       string
+	Key        []byte
+	IfVersion  int64
 }
 
 func (q *Queries) UpdateGatewayMCPState(ctx context.Context, arg UpdateGatewayMCPStateParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updateGatewayMCPState,
-		arg.ConnectionID,
-		arg.RunID,
-		arg.InstanceID,
-		arg.Jkt,
 		arg.ActionID,
 		arg.Status,
 		arg.Busy,

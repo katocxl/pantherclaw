@@ -40,22 +40,22 @@ VALUES (sqlc.arg(org_id), sqlc.arg(gateway_id), sqlc.arg(kind), sqlc.arg(key), s
 
 -- name: UpdateGatewayMCPState :execrows
 UPDATE pc.gateway_mcp_state
-SET connection_id = sqlc.arg(connection_id), run_id = sqlc.narg(run_id), instance_id = sqlc.narg(instance_id), jkt = sqlc.narg(jkt),
-    action_id = sqlc.narg(action_id), status = sqlc.narg(status), busy = sqlc.arg(busy), sealed_body = sqlc.narg(sealed_body),
+SET action_id = sqlc.narg(action_id), status = sqlc.narg(status), busy = sqlc.arg(busy), sealed_body = sqlc.narg(sealed_body),
     version = version + 1, expire_time = sqlc.arg(expire_time), update_time = sqlc.arg(update_time)
 WHERE org_id = sqlc.arg(org_id) AND gateway_id = sqlc.arg(gateway_id) AND kind = sqlc.arg(kind) AND key = sqlc.arg(key)
   AND version = sqlc.arg(if_version);
 
 -- name: DeleteGatewayMCPState :execrows
+-- A versioned delete matches only an unexpired row (D42).
 DELETE FROM pc.gateway_mcp_state
 WHERE org_id = sqlc.arg(org_id) AND gateway_id = sqlc.arg(gateway_id) AND kind = sqlc.arg(kind) AND key = sqlc.arg(key)
-  AND (sqlc.arg(if_version)::bigint = 0 OR version = sqlc.arg(if_version)::bigint);
+  AND (sqlc.arg(if_version)::bigint = 0 OR (version = sqlc.arg(if_version)::bigint AND expire_time > sqlc.arg(now)));
 
 -- name: CountGatewayMCPState :one
--- The live entries of a gateway: holds and tasks in all and of one
+-- The live entries of a gateway: holds, tasks and elicitations in all and of one
 -- instance, sessions in all, and the bytes of sealed task bodies.
-SELECT count(*) FILTER (WHERE kind IN ('HOLD', 'TASK'))::bigint AS entries,
-       count(*) FILTER (WHERE kind IN ('HOLD', 'TASK') AND instance_id IS NOT DISTINCT FROM sqlc.narg(instance_id)::uuid)::bigint AS instance_entries,
+SELECT count(*) FILTER (WHERE kind IN ('HOLD', 'TASK', 'ELICITATION'))::bigint AS entries,
+       count(*) FILTER (WHERE kind IN ('HOLD', 'TASK', 'ELICITATION') AND instance_id IS NOT DISTINCT FROM sqlc.narg(instance_id)::uuid)::bigint AS instance_entries,
        count(*) FILTER (WHERE kind = 'SESSION')::bigint AS sessions,
        coalesce(sum(octet_length(sealed_body)), 0)::bigint AS body_bytes
 FROM pc.gateway_mcp_state

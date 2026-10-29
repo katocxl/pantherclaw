@@ -58,11 +58,11 @@ func TestHR083_SessionsEnd(t *testing.T) {
 	}
 	idle := open(time.Time{})
 	c.t = c.t.Add(sessionIdle - time.Second)
-	if _, ok := s.get(idle); !ok {
+	if _, ok, _ := s.get(idle); !ok {
 		t.Fatal("ended before its idle time")
 	}
 	c.t = c.t.Add(time.Second)
-	if _, ok := s.get(idle); ok {
+	if _, ok, _ := s.get(idle); ok {
 		t.Fatal("an idle session lived on")
 	}
 	busy := open(time.Time{})
@@ -70,20 +70,20 @@ func TestHR083_SessionsEnd(t *testing.T) {
 		c.t = c.t.Add(29 * time.Minute)
 		s.touch(busy)
 	}
-	if _, ok := s.get(busy); ok {
+	if _, ok, _ := s.get(busy); ok {
 		t.Fatal("a session lived beyond 8 hours")
 	}
 	short := open(c.t.Add(10 * time.Minute))
 	c.t = c.t.Add(10 * time.Minute)
-	if _, ok := s.get(short); ok {
+	if _, ok, _ := s.get(short); ok {
 		t.Fatal("a session outlived its run")
 	}
 	ended := open(time.Time{})
 	s.end(ended)
-	if _, ok := s.get(ended); ok {
+	if _, ok, _ := s.get(ended); ok {
 		t.Fatal("an ended session was found")
 	}
-	if _, ok := s.get("not-a-session"); ok {
+	if _, ok, _ := s.get("not-a-session"); ok {
 		t.Fatal("an unknown id was found")
 	}
 }
@@ -111,11 +111,11 @@ func TestHR083_AnInstanceKeepsAtMost16Sessions(t *testing.T) {
 	if _, err := s.open(holdConn, holdInst, "key-1", holdRun, time.Time{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := s.get(mine[1]); ok {
+	if _, ok, _ := s.get(mine[1]); ok {
 		t.Fatal("the least recently used session was kept")
 	}
 	for _, id := range append([]string{theirs, mine[0]}, mine[2:]...) {
-		if _, ok := s.get(id); !ok {
+		if _, ok, _ := s.get(id); !ok {
 			t.Fatal("another session was ended")
 		}
 	}
