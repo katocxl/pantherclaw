@@ -54895,7 +54895,8 @@
           "ISSUER_KIND_GITLAB_CI",
           "ISSUER_KIND_SPIFFE_JWT",
           "ISSUER_KIND_GCP_WORKLOAD",
-          "ISSUER_KIND_AWS_IAM"
+          "ISSUER_KIND_AWS_IAM",
+          "ISSUER_KIND_AZURE_MI"
         ],
         "description": "IssuerKind is a preset; only presets can be configured (HR-140)."
       },
@@ -55025,6 +55026,88 @@
         "required": [
           "accountId",
           "roleName"
+        ]
+      },
+      "pantherclaw.v1.AzureMiBinding": {
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "title": "tenant_id",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "Entra tenant id."
+          },
+          "appId": {
+            "type": "string",
+            "title": "app_id",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "Entra app (client) id the tokens are issued for."
+          },
+          "objectId": {
+            "type": "string",
+            "title": "object_id",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "The managed identity's object (principal) id."
+          },
+          "resourceId": {
+            "type": "string",
+            "title": "resource_id",
+            "maxLength": 512,
+            "pattern": "^$|^/subscriptions/",
+            "description": "Optional exact Azure resource id of the identity (xms_mirid)."
+          }
+        },
+        "title": "AzureMiBinding",
+        "additionalProperties": false,
+        "description": "AzureMiBinding binds Azure managed identity tokens to one identity\n (HR-469). The tenant and app must be a pair the operator pinned to this\n org (identity.entra_apps); the tokens' audience is that app."
+      },
+      "pantherclaw.v1.AzureMiBindingInput": {
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "title": "tenant_id",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "Entra tenant id."
+          },
+          "appId": {
+            "type": "string",
+            "title": "app_id",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "Entra app (client) id the tokens are issued for."
+          },
+          "objectId": {
+            "type": "string",
+            "title": "object_id",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "The managed identity's object (principal) id."
+          },
+          "resourceId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "resource_id",
+            "maxLength": 512,
+            "description": "Optional exact Azure resource id of the identity (xms_mirid).",
+            "anyOf": [
+              {
+                "pattern": "^$|^/subscriptions/"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "AzureMiBinding",
+        "additionalProperties": false,
+        "description": "AzureMiBinding binds Azure managed identity tokens to one identity\n (HR-469). The tenant and app must be a pair the operator pinned to this\n org (identity.entra_apps); the tokens' audience is that app.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.AzureMiBinding",
+        "required": [
+          "tenantId",
+          "appId",
+          "objectId"
         ]
       },
       "pantherclaw.v1.CreateEnrollmentTokenRequest": {
@@ -55678,6 +55761,18 @@
           },
           {
             "properties": {
+              "azureMi": {
+                "title": "azure_mi",
+                "$ref": "#/components/schemas/pantherclaw.v1.AzureMiBinding"
+              }
+            },
+            "title": "azure_mi",
+            "required": [
+              "azureMi"
+            ]
+          },
+          {
+            "properties": {
               "gcp": {
                 "title": "gcp",
                 "$ref": "#/components/schemas/pantherclaw.v1.GcpBinding"
@@ -56131,6 +56226,19 @@
             "title": "aws",
             "required": [
               "aws"
+            ]
+          },
+          {
+            "properties": {
+              "azureMi": {
+                "title": "azure_mi",
+                "description": "Azure managed identity.",
+                "$ref": "#/components/schemas/pantherclaw.v1.AzureMiBindingInput"
+              }
+            },
+            "title": "azure_mi",
+            "required": [
+              "azureMi"
             ]
           },
           {
@@ -77377,7 +77485,8 @@
           "ATTESTATION_KIND_GITLAB_CI",
           "ATTESTATION_KIND_SPIFFE_JWT",
           "ATTESTATION_KIND_GCP_WORKLOAD",
-          "ATTESTATION_KIND_AWS_IAM"
+          "ATTESTATION_KIND_AWS_IAM",
+          "ATTESTATION_KIND_AZURE_MI"
         ],
         "description": "AttestationKind names the preset an attestation token is for."
       },

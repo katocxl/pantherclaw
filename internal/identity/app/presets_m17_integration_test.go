@@ -277,3 +277,89 @@ func TestHR464_AWSEntriesAndAttestation(t *testing.T) {
 	_, err = w.attestEnroll(t, w.svc, newWorkload(), "", w.awsAtt(t, session, "3"))
 	wantPAP(t, "signed over 15 minutes ago", err, pap.CodeAttestationLow)
 }
+
+const (
+	azTenant = "aaaabbbb-0000-cccc-1111-dddd2222eeee"
+	azApp    = "00001111-aaaa-2222-bbbb-3333cccc4444"
+	azObject = "11112222-bbbb-3333-cccc-4444dddd5555"
+)
+
+// entraApps stands in for issuerkeys.Entra: the app is pinned to org in
+// azTenant, and verifies like fakeGitHub.
+type entraApps struct{ org ids.OrgID }
+
+func (e entraApps) OrgOf(app string) ids.OrgID {
+	if app == azApp {
+		return e.org
+	}
+	return ids.OrgID{}
+}
+
+func (e entraApps) Allowed(tenant, app string, org ids.OrgID) bool {
+	return tenant == azTenant && app == azApp && org == e.org
+}
+
+func (e entraApps) Verify(ctx context.Context, app string, org ids.OrgID, tok string) ([]byte, error) {
+	if e.OrgOf(app) != org {
+		return nil, errors.New("app not pinned to this org")
+	}
+	return fakeGitHub{}.Verify(ctx, tok)
+}
+
+// azAtt is a managed identity token for azApp, issued at iat and living
+// a day.
+func azAtt(iat time.Time, mutate func(map[string]any)) *app.Attestation {
+	c := map[string]any{
+		"iss": "https://sts.windows.net/" + azTenant + "/", "aud": azApp, "tid": azTenant, "oid": azObject, "sub": azObject,
+		"idtyp": "app", "uti": ids.NewV7().String(), "iat": iat.Unix(), "nbf": iat.Unix(), "exp": iat.Add(24 * time.Hour).Unix(),
+	}
+	if mutate != nil {
+		mutate(c)
+	}
+	return &app.Attestation{Kind: issuers.KindAzureMI, Token: jwt(c)}
+}
+
+// TestHR469_AzureMIEntriesAndAttestation: an entry pins only a tenant and
+// app pair the operator pinned to the org, and its audience is that app;
+// a day-long managed identity token enrolls at L2 once, for at most an
+// hour, and another org's app or another identity enrolls nothing.
+// Covers: PN-002.3
+func TestHR469_AzureMIEntriesAndAttestation(t *testing.T) {
+	w := newWorld(t)
+	w.svc.WithAttestors(app.Attestors{Entra: entraApps{org: w.org}})
+	agent := w.agent(t, adomain.ContextService)
+	b := app.Binding{AzureMI: &issuers.AzureMIBinding{TenantID: azTenant, AppID: azApp, ObjectID: azObject}}
+	other := app.Binding{AzureMI: &issuers.AzureMIBinding{TenantID: azTenant, AppID: "00001111-aaaa-2222-bbbb-3333cccc4445", ObjectID: azObject}}
+	if _, err := w.svc.ProposeIssuer(w.orgAdmin(), app.ProposeInput{AgentID: agent, Binding: other, Reason: "x"}, nil); !errors.Is(err, app.ErrUnknownIssuer) {
+		t.Errorf("app not pinned to the org: %v", err)
+	}
+	e := w.activeEntry(t, agent, b, true)
+	if e.Kind != issuers.KindAzureMI || e.Audience != azApp || e.Issuer != "https://login.microsoftonline.com/"+azTenant+"/v2.0" {
+		t.Fatalf("revision: %+v", e)
+	}
+
+	att := azAtt(time.Now().Add(-3*time.Hour), nil)
+	in, err := w.attestEnroll(t, w.svc, newWorkload(), "", att)
+	if err != nil || in.State != "ADMITTED" || in.Level != 2 || in.Instance.Agent != agent {
+		t.Fatalf("managed identity: %+v, %v", in, err)
+	}
+	if n := w.count(t, `SELECT count(*) FROM pc.agent_instances WHERE org_id = $1 AND att_level = 2
+		AND attested_until <= now() + interval '61 minutes'`, w.org); n != 1 {
+		t.Errorf("%d instances attested for at most an hour, want 1", n)
+	}
+	_, err = w.attestEnroll(t, w.svc, newWorkload(), "", att)
+	wantPAP(t, "reused managed identity token", err, pap.CodeInvalidToken)
+
+	for name, mutate := range map[string]func(map[string]any){
+		"other identity":   func(c map[string]any) { c["oid"] = "11112222-bbbb-3333-cccc-4444dddd5556" },
+		"user token":       func(c map[string]any) { c["idtyp"] = "user" },
+		"other tenant":     func(c map[string]any) { c["tid"] = "bbbbcccc-0000-cccc-1111-dddd2222eeee" },
+		"lives over a day": func(c map[string]any) { c["exp"] = time.Now().Add(23 * time.Hour).Unix() },
+	} {
+		_, err := w.attestEnroll(t, w.svc, newWorkload(), "", azAtt(time.Now().Add(-2*time.Hour), mutate))
+		wantPAP(t, name, err, pap.CodeAttestationLow)
+	}
+	// An app id the operator did not pin names no org at all.
+	_, err = w.attestEnroll(t, w.svc, newWorkload(), "", azAtt(time.Now(), func(c map[string]any) { c["aud"] = "00001111-aaaa-2222-bbbb-3333cccc4445" }))
+	wantPAP(t, "unpinned app", err, pap.CodeAttestationLow)
+}

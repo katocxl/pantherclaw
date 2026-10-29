@@ -159,7 +159,7 @@ func (s *Workload) Enroll(ctx context.Context, req *pantherclawv1.EnrollRequest)
 	if tok, err := credential.Parse(credential.EnrollmentToken, req.GetEnrollmentToken()); err == nil {
 		org = tok.Org()
 	} else if req.GetEnrollmentToken() == "" && att != nil {
-		org = app.AttestationOrg(att.Token)
+		org = s.svc.AttestationOrg(*att)
 	}
 	c, rb, err := s.verify(ctx, info)
 	if err != nil {
@@ -300,6 +300,8 @@ func attestation(a *pantherclawv1.Attestation) *app.Attestation {
 		kind = issuers.KindGCP
 	case pantherclawv1.AttestationKind_ATTESTATION_KIND_AWS_IAM:
 		kind = issuers.KindAWS
+	case pantherclawv1.AttestationKind_ATTESTATION_KIND_AZURE_MI:
+		kind = issuers.KindAzureMI
 	}
 	return &app.Attestation{Kind: kind, Token: a.GetToken()}
 }

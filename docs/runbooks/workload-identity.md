@@ -279,7 +279,29 @@ A label (`pull_request` with `types: [labeled]` cannot be used: it runs the PR's
    ```
    A signed request attests once, within 15 minutes of signing; pclaw signs a new one at each renewal.
 
-## 8. When something goes wrong
+## 8. Azure managed identities (L2, M17)
+
+Azure managed identity tokens are Microsoft Entra access tokens for an app; they cannot carry `pantherclaw:<org id>`, and they live up to a day. So for this preset only, the operator pins each Entra app to one org, the token's audience is that app, and an attestation grants at most one hour of L2 whatever the token's lifetime (HR-469).
+
+1. In the customer's tenant, register an app to stand for PantherClaw (no secrets or permissions needed). The operator pins it to the org; each app id may be listed once:
+   ```json
+   "identity": {"entra_apps": [
+     {"tenant_id": "<tenant id>", "app_id": "<app id>", "org_id": "<org id>"}
+   ]}
+   ```
+   Tokens are verified only with the tenant's keys at `https://login.microsoftonline.com/<tenant id>/discovery/v2.0/keys`.
+2. An admin proposes an entry for a `service` agent that pins the tenant, the app and the managed identity's **object (principal) id**, optionally its resource id, and an **Identity Publisher** activates it:
+   ```bash
+   pclaw issuer propose-azure-mi --agent <agent> --tenant-id <tenant id> --app-id <app id> \
+     --object-id <principal id> --auto-admit --reason "service agent"
+   ```
+3. Attest with `--azure-app <app id>` (and `--azure-client-id` for a user-assigned identity). pclaw asks the instance metadata service, or the `IDENTITY_ENDPOINT` of App Service, Functions and Container Apps, for a token for that app.
+   ```bash
+   pclaw workload renew --key-file workload.json --out token.json --azure-app <app id>
+   ```
+   Each token attests once. Azure caches a managed identity's token for about a day, so L2 lasts an hour from the attestation and renewals continue at L1 until Azure hands out a new token.
+
+## 9. When something goes wrong
 
 - **Disable an entry** at once: `pclaw issuer disable ENTRY --reason …`. It stops auto-admission, and its instances drop to L1 at their next token.
 - **Revoke an instance**: `pclaw instance revoke INSTANCE --reason …`. Outstanding permits fail at `BeginDispatch`.

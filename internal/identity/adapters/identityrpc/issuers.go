@@ -47,6 +47,11 @@ func bindingFromProto(req *pantherclawv1.ProposeIssuerEntryRequest) app.Binding 
 	if aw := req.GetAws(); aw != nil {
 		b.AWS = &issuers.AWSBinding{AccountID: aw.GetAccountId(), RoleName: aw.GetRoleName()}
 	}
+	if az := req.GetAzureMi(); az != nil {
+		b.AzureMI = &issuers.AzureMIBinding{
+			TenantID: az.GetTenantId(), AppID: az.GetAppId(), ObjectID: az.GetObjectId(), ResourceID: az.GetResourceId(),
+		}
+	}
 	if gh != nil {
 		g := issuers.GitHubBinding{
 			RepositoryID: gh.GetRepositoryId(), RepositoryOwnerID: gh.GetRepositoryOwnerId(),
@@ -103,6 +108,12 @@ func revisionProto(r app.Revision) *pantherclawv1.IssuerRevision {
 	if aw := r.Binding.AWS; aw != nil {
 		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_AWS_IAM
 		out.Binding = &pantherclawv1.IssuerRevision_Aws{Aws: &pantherclawv1.AwsBinding{AccountId: aw.AccountID, RoleName: aw.RoleName}}
+	}
+	if az := r.Binding.AzureMI; az != nil {
+		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_AZURE_MI
+		out.Binding = &pantherclawv1.IssuerRevision_AzureMi{AzureMi: &pantherclawv1.AzureMiBinding{
+			TenantId: az.TenantID, AppId: az.AppID, ObjectId: az.ObjectID, ResourceId: az.ResourceID,
+		}}
 	}
 	if k := r.Binding.Kubernetes; k != nil {
 		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_KUBERNETES

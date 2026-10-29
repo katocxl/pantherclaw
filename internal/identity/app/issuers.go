@@ -35,7 +35,7 @@ var (
 	ErrUnknownCluster = pcerr.New(pcerr.InvalidArgument, "ISSUER_CLUSTER",
 		"the cluster is not configured for this organization (identity.kubernetes_clusters)")
 	ErrUnknownIssuer = pcerr.New(pcerr.InvalidArgument, "ISSUER_NOT_CONFIGURED",
-		"the issuer is not configured for this organization (identity.gitlab_issuers, identity.spiffe_trust_domains)")
+		"the issuer is not configured for this organization (identity.gitlab_issuers, identity.spiffe_trust_domains, identity.entra_apps)")
 	ErrConfirmReusable = pcerr.New(pcerr.FailedPrecondition, "CONFIRM_REUSABLE_REFS",
 		"confirm that every reusable workflow ref is a protected branch or tag of its repository")
 )
@@ -54,14 +54,16 @@ type Binding struct {
 	SPIFFE     *issuers.SPIFFEBinding     `json:"spiffe,omitzero"`
 	GCP        *issuers.GCPBinding        `json:"gcp,omitzero"`
 	AWS        *issuers.AWSBinding        `json:"aws,omitzero"`
+	AzureMI    *issuers.AzureMIBinding    `json:"azure_mi,omitzero"`
 }
 
 // presetContext is the execution context each preset attests (D119-D121).
 var presetContext = map[issuers.Kind]adomain.ExecutionContext{
 	issuers.KindGitHub: adomain.ContextCI, issuers.KindKubernetes: adomain.ContextKubernetes, issuers.KindGitLab: adomain.ContextCI,
-	issuers.KindSPIFFE: adomain.ContextService,
-	issuers.KindGCP:    adomain.ContextService,
-	issuers.KindAWS:    adomain.ContextService,
+	issuers.KindSPIFFE:  adomain.ContextService,
+	issuers.KindGCP:     adomain.ContextService,
+	issuers.KindAWS:     adomain.ContextService,
+	issuers.KindAzureMI: adomain.ContextService,
 }
 
 // kinds lists the kind of every field that is set.
@@ -69,9 +71,10 @@ func (b Binding) kinds() []issuers.Kind {
 	var out []issuers.Kind
 	for k, set := range map[issuers.Kind]bool{
 		issuers.KindGitHub: b.GitHub != nil, issuers.KindKubernetes: b.Kubernetes != nil, issuers.KindGitLab: b.GitLab != nil,
-		issuers.KindSPIFFE: b.SPIFFE != nil,
-		issuers.KindGCP:    b.GCP != nil,
-		issuers.KindAWS:    b.AWS != nil,
+		issuers.KindSPIFFE:  b.SPIFFE != nil,
+		issuers.KindGCP:     b.GCP != nil,
+		issuers.KindAWS:     b.AWS != nil,
+		issuers.KindAzureMI: b.AzureMI != nil,
 	} {
 		if set {
 			out = append(out, k)
@@ -102,6 +105,8 @@ func (b Binding) validate() error {
 		err = b.GCP.Validate()
 	case issuers.KindAWS:
 		err = b.AWS.Validate()
+	case issuers.KindAzureMI:
+		err = b.AzureMI.Validate()
 	default:
 		return pcerr.New(pcerr.InvalidArgument, "ISSUER_BINDING", "exactly one preset binding is required")
 	}
@@ -123,9 +128,21 @@ func (b Binding) issuer() string {
 		return issuers.GCPIssuer
 	case issuers.KindAWS:
 		return issuers.AWSIssuer
+	case issuers.KindAzureMI:
+		return issuers.AzureIssuer(b.AzureMI.TenantID)
 	default:
 		return b.Kubernetes.Issuer()
 	}
+}
+
+// audience is the audience the entry's tokens must name: pantherclaw:<org>
+// (HR-140), or for the Azure presets the operator-pinned Entra app id
+// (HR-469).
+func (b Binding) audience(org ids.OrgID) string {
+	if b.AzureMI != nil {
+		return b.AzureMI.AppID
+	}
+	return issuers.Audience(org)
 }
 
 func (b Binding) algorithms() []string {
@@ -140,6 +157,8 @@ func (b Binding) algorithms() []string {
 		return issuers.GCPAlgorithms
 	case issuers.KindAWS:
 		return issuers.AWSAlgorithms
+	case issuers.KindAzureMI:
+		return issuers.AzureAlgorithms
 	default:
 		return []string{"TokenReview"}
 	}
@@ -163,6 +182,8 @@ func (b Binding) widening(prev *Binding) []string {
 		return b.GCP.Widening(prev.GCP)
 	case b.AWS != nil:
 		return b.AWS.Widening(prev.AWS)
+	case b.AzureMI != nil:
+		return b.AzureMI.Widening(prev.AzureMI)
 	default:
 		return b.Kubernetes.Widening(prev.Kubernetes)
 	}
@@ -288,6 +309,9 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 	if sp := in.Binding.SPIFFE; sp != nil && (s.att.SPIFFE == nil || !s.att.SPIFFE.Allowed(sp.TrustDomain, c.Org)) {
 		return Revision{}, ErrUnknownIssuer
 	}
+	if az := in.Binding.AzureMI; az != nil && (s.att.Entra == nil || !s.att.Entra.Allowed(az.TenantID, az.AppID, c.Org)) {
+		return Revision{}, ErrUnknownIssuer
+	}
 	var out Revision
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
@@ -350,7 +374,7 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 		}
 		r, err := q.InsertIssuerRevision(ctx, dbq.InsertIssuerRevisionParams{
 			OrgID: c.Org, ID: ids.NewV7(), EntryID: entryID, Revision: number, AgentID: a.ID, Kind: string(in.Binding.kind()),
-			Issuer: in.Binding.issuer(), Audience: issuers.Audience(c.Org), Algorithms: in.Binding.algorithms(), Binding: binding,
+			Issuer: in.Binding.issuer(), Audience: in.Binding.audience(c.Org), Algorithms: in.Binding.algorithms(), Binding: binding,
 			AutoAdmit: in.AutoAdmit, Widening: wjson, State: state, ProposedBy: c.Principal.String(), ActivatedBy: activatedBy,
 		})
 		if err != nil {

@@ -13,6 +13,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/identity/issuers"
@@ -56,6 +57,8 @@ type Attestors struct {
 	GCP Verifier
 	// AWS sends checked GetCallerIdentity requests to STS (D121).
 	AWS CallerVerifier
+	// Entra is the operator-pinned Entra apps of the Azure presets (D129).
+	Entra EntraDirectory
 }
 
 // IssuerDirectory is a preset's operator-configured issuers, each with its
@@ -70,6 +73,14 @@ type IssuerDirectory interface {
 // and sends it to STS (awssts.Verifier).
 type CallerVerifier interface {
 	Verify(ctx context.Context, org ids.OrgID, token string) (issuers.AWSCaller, issuers.AWSSigned, error)
+}
+
+// EntraDirectory is the operator-pinned Entra apps (issuerkeys.Entra):
+// each app id attests for exactly one org (HR-469).
+type EntraDirectory interface {
+	OrgOf(app string) ids.OrgID
+	Allowed(tenant, app string, org ids.OrgID) bool
+	Verify(ctx context.Context, app string, org ids.OrgID, token string) ([]byte, error)
 }
 
 // WithAttestors sets the attestation verifiers and returns s.
@@ -122,6 +133,35 @@ func AttestationOrg(token string) ids.OrgID {
 		found = org
 	}
 	return found
+}
+
+// AttestationOrg reads the org an attestation names, without verifying
+// anything, like the package function. For the Azure presets the org is
+// the one the operator pinned to the token's audience app
+// (identity.entra_apps), never a pantherclaw:<org> audience (HR-469).
+func (s *Service) AttestationOrg(a Attestation) ids.OrgID {
+	if a.Kind != issuers.KindAzureMI {
+		return AttestationOrg(a.Token)
+	}
+	if s.att.Entra == nil {
+		return ids.OrgID{}
+	}
+	return s.att.Entra.OrgOf(azureApp(a.Token))
+}
+
+// azureApp is the app id an Entra token's unverified audience names, or "".
+func azureApp(token string) string {
+	payload, err := unverifiedPayload(token)
+	if err != nil {
+		return ""
+	}
+	var c struct {
+		Aud string `json:"aud"`
+	}
+	if json.Unmarshal(payload, &c) != nil {
+		return ""
+	}
+	return issuers.AzureAppAudience(c.Aud)
 }
 
 // awsOrg reads the org of a signed AWS request without checking it.
@@ -217,6 +257,8 @@ func (s *Service) attest(ctx context.Context, org ids.OrgID, a Attestation) ([]a
 		return s.attestGCP(ctx, org, a.Token, revs)
 	case issuers.KindAWS:
 		return s.attestAWS(ctx, org, a.Token, revs)
+	case issuers.KindAzureMI:
+		return s.attestAzure(ctx, org, a, revs)
 	default:
 		return nil, attErr(fmt.Errorf("unknown preset %q", a.Kind))
 	}
@@ -420,6 +462,60 @@ func (s *Service) attestAWS(ctx context.Context, org ids.OrgID, token string, re
 		out = append(out, attested{
 			rev: r, match: m, issuer: issuers.AWSIssuer, key: issuers.ReplayKey("sigv4:"+signed.Signature, token), window: w,
 			claims: withClaims(m.Binding, map[string]string{"arn": c.Arn, "sts_host": signed.URL.Hostname()}),
+		})
+	}
+	if len(out) == 0 {
+		return nil, attErr(last)
+	}
+	return out, nil
+}
+
+// attestAzure verifies an Entra access token with the pinned keys of the
+// tenant of the app its audience names, which the operator pinned to org.
+// The token may live up to a day, but the attestation grants at most
+// AzureAssurance from now, and its uti (or the token) stays single use
+// (HR-469).
+func (s *Service) attestAzure(ctx context.Context, org ids.OrgID, a Attestation, revs []dbq.PcTrustedIssuer) ([]attested, error) {
+	if s.att.Entra == nil {
+		return nil, attErr(errors.New("no Entra app is configured"))
+	}
+	app := azureApp(a.Token)
+	if app == "" {
+		return nil, attErr(errors.New("the audience is not an Entra app id"))
+	}
+	payload, err := s.att.Entra.Verify(ctx, app, org, a.Token)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	c, err := issuers.ParseAzureClaims(payload)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	tw, err := issuers.ParseWindow(payload)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	w, err := issuers.AzureWindow(tw, c.UTI, s.clk.Now())
+	if err != nil {
+		return nil, attErr(err)
+	}
+	var out []attested
+	var last error
+	for _, r := range revs {
+		b, err := bindingOf(r)
+		if err != nil || b.AzureMI == nil {
+			continue
+		}
+		m, err := issuers.MatchAzureMI(*b.AzureMI, c)
+		if err != nil {
+			last = err
+			continue
+		}
+		out = append(out, attested{
+			rev: r, match: m, issuer: issuers.AzureIssuer(c.TenantID), key: issuers.ReplayKey(c.UTI, a.Token), window: w,
+			claims: withClaims(m.Binding, map[string]string{
+				"app_id": app, "xms_mirid": c.MIRID, "token_expires_at": tw.ExpiresAt.UTC().Format(time.RFC3339),
+			}),
 		})
 	}
 	if len(out) == 0 {

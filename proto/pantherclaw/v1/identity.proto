@@ -107,6 +107,8 @@ enum IssuerKind {
   ISSUER_KIND_GCP_WORKLOAD = 5;
   // AWS IAM role session (sts:GetCallerIdentity).
   ISSUER_KIND_AWS_IAM = 6;
+  // Azure managed identity (Entra access token for a pinned app).
+  ISSUER_KIND_AZURE_MI = 7;
 }
 
 // IssuerEntryState is the state of one revision.
@@ -308,6 +310,23 @@ message AwsBinding {
   string role_name = 2 [(buf.validate.field).string.pattern = "^[A-Za-z0-9+=,.@_-]{1,64}$"];
 }
 
+// AzureMiBinding binds Azure managed identity tokens to one identity
+// (HR-469). The tenant and app must be a pair the operator pinned to this
+// org (identity.entra_apps); the tokens' audience is that app.
+message AzureMiBinding {
+  // Entra tenant id.
+  string tenant_id = 1 [(buf.validate.field).string.pattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"];
+  // Entra app (client) id the tokens are issued for.
+  string app_id = 2 [(buf.validate.field).string.pattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"];
+  // The managed identity's object (principal) id.
+  string object_id = 3 [(buf.validate.field).string.pattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"];
+  // Optional exact Azure resource id of the identity (xms_mirid).
+  string resource_id = 4 [(buf.validate.field).string = {
+    max_len: 512
+    pattern: "^$|^/subscriptions/"
+  }];
+}
+
 // KubernetesBinding binds Kubernetes service-account tokens to one agent
 // (HR-144).
 message KubernetesBinding {
@@ -367,6 +386,7 @@ message IssuerRevision {
     SpiffeBinding spiffe = 21;
     GcpBinding gcp = 22;
     AwsBinding aws = 23;
+    AzureMiBinding azure_mi = 24;
   }
   // Admits matching instances without an owner.
   bool auto_admit = 11;
@@ -528,6 +548,8 @@ message ProposeIssuerEntryRequest {
     GcpBinding gcp = 9;
     // AWS IAM role.
     AwsBinding aws = 10;
+    // Azure managed identity.
+    AzureMiBinding azure_mi = 11;
   }
   // Admit matching instances without an owner (a widening when turned on).
   bool auto_admit = 5;

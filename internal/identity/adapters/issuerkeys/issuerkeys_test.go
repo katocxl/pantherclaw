@@ -370,3 +370,34 @@ func TestHR462_SPIFFETrustDomainsComeFromOperatorConfiguration(t *testing.T) {
 		}
 	}
 }
+
+// TestHR469_EntraAppsMapToOneOrg: each configured app id names exactly
+// one org, an org may pin only its own tenant and app pair, and a token is
+// verified only for the org its app is pinned to.
+// Covers: PN-002.3
+func TestHR469_EntraAppsMapToOneOrg(t *testing.T) {
+	org, other := ids.New[ids.Org](), ids.New[ids.Org]()
+	const tenant, app = "aaaabbbb-0000-cccc-1111-dddd2222eeee", "00001111-aaaa-2222-bbbb-3333cccc4444"
+	e, err := issuerkeys.NewEntra([]issuerkeys.EntraApp{{TenantID: tenant, AppID: app, OrgID: org.String()}}, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.OrgOf(app) != org || !e.OrgOf("00001111-aaaa-2222-bbbb-3333cccc4445").IsZero() {
+		t.Error("app to org mapping")
+	}
+	if !e.Allowed(tenant, app, org) || e.Allowed(tenant, app, other) || e.Allowed("bbbbcccc-0000-cccc-1111-dddd2222eeee", app, org) {
+		t.Error("tenant and app pairs not honoured")
+	}
+	if _, err := e.Verify(context.Background(), app, other, "a.b.c"); !errors.Is(err, issuerkeys.ErrUnverified) {
+		t.Errorf("app verified for another org: %v", err)
+	}
+	for name, apps := range map[string][]issuerkeys.EntraApp{
+		"app in two orgs": {{TenantID: tenant, AppID: app, OrgID: org.String()}, {TenantID: tenant, AppID: app, OrgID: other.String()}},
+		"bad tenant":      {{TenantID: "contoso.onmicrosoft.com", AppID: app, OrgID: org.String()}},
+		"bad org":         {{TenantID: tenant, AppID: app, OrgID: "acme"}},
+	} {
+		if err := issuerkeys.ValidateEntra(apps); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

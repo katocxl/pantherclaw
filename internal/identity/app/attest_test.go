@@ -97,3 +97,44 @@ func TestAttestationOrgReadsTheAWSAudienceHeader(t *testing.T) {
 		t.Error("an AWS request without pantherclaw:<org> named an org")
 	}
 }
+
+type fakeEntra map[string]ids.OrgID
+
+func (f fakeEntra) OrgOf(app string) ids.OrgID                { return f[app] }
+func (f fakeEntra) Allowed(_, app string, org ids.OrgID) bool { return f[app] == org }
+func (f fakeEntra) Verify(context.Context, string, ids.OrgID, string) ([]byte, error) {
+	return nil, errors.New("unused")
+}
+
+// TestHR469_AzureOrgComesOnlyFromThePinnedApp: an Azure token's org is the
+// one the operator pinned to its audience app, never a pantherclaw:<org>
+// audience; every other kind still reads pantherclaw:<org> and never an
+// app id (HR-140).
+// Covers: PN-002.3
+func TestHR469_AzureOrgComesOnlyFromThePinnedApp(t *testing.T) {
+	org, other := ids.New[ids.Org](), ids.New[ids.Org]()
+	const app = "00001111-aaaa-2222-bbbb-3333cccc4444"
+	s := (&Service{}).WithAttestors(Attestors{Entra: fakeEntra{app: org}})
+	for aud, want := range map[string]ids.OrgID{
+		app: org, "api://" + app: org, "pantherclaw:" + other.String(): {}, "00001111-aaaa-2222-bbbb-3333cccc4445": {},
+	} {
+		if got := s.AttestationOrg(Attestation{Kind: issuers.KindAzureMI, Token: unsigned(`{"aud":"` + aud + `"}`)}); got != want {
+			t.Errorf("azure_mi aud %q: org %v, want %v", aud, got, want)
+		}
+	}
+	for _, k := range []issuers.Kind{issuers.KindGitHub, issuers.KindGitLab, issuers.KindSPIFFE, issuers.KindGCP} {
+		if got := s.AttestationOrg(Attestation{Kind: k, Token: unsigned(`{"aud":"` + app + `"}`)}); !got.IsZero() {
+			t.Errorf("%s with an app id audience named org %v", k, got)
+		}
+		if got := s.AttestationOrg(Attestation{Kind: k, Token: unsigned(`{"aud":"pantherclaw:` + other.String() + `"}`)}); got != other {
+			t.Errorf("%s: org %v", k, got)
+		}
+	}
+	if !(&Service{}).AttestationOrg(Attestation{Kind: issuers.KindAzureMI, Token: unsigned(`{"aud":"` + app + `"}`)}).IsZero() {
+		t.Error("an org without entra_apps")
+	}
+	b := Binding{GitHub: &issuers.GitHubBinding{}}
+	if b.audience(org) != "pantherclaw:"+org.String() || (Binding{AzureMI: &issuers.AzureMIBinding{AppID: app}}).audience(org) != app {
+		t.Error("entry audiences")
+	}
+}

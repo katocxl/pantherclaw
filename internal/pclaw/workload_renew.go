@@ -34,7 +34,7 @@ const exitRefused = 3
 
 func init() {
 	commands["workload renew"] = command{
-		usage: "workload renew --key-file FILE --out FILE [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp | --aws] [--declared-release sha256:…]",
+		usage: "workload renew --key-file FILE --out FILE [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp | --aws | --azure-app APP_ID [--azure-client-id ID]] [--declared-release sha256:…]",
 		run:   workloadRenew,
 	}
 }

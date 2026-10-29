@@ -91,3 +91,30 @@ func TestSPIFFEAndGCPAttestationSources(t *testing.T) {
 		t.Errorf("two sources: %v", err)
 	}
 }
+
+// TestAzureManagedIdentitySource: --azure-app asks the managed identity
+// endpoint for a token whose resource is the pinned Entra app.
+// Covers: PN-002.3
+func TestAzureManagedIdentitySource(t *testing.T) {
+	var got *http.Request
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r
+		_, _ = w.Write([]byte(`{"access_token":"a.z.t","expires_on":"1791457200","resource":"x","token_type":"Bearer"}`))
+	}))
+	defer srv.Close()
+	fs := flag.NewFlagSet("x", flag.ContinueOnError)
+	f := declareAttestation(fs)
+	if err := fs.Parse([]string{"--azure-app", "00001111-aaaa-2222-bbbb-3333cccc4444", "--azure-client-id", "cid"}); err != nil {
+		t.Fatal(err)
+	}
+	a := &app{env: envOf(map[string]string{"IDENTITY_ENDPOINT": srv.URL + "/msi/token", "IDENTITY_HEADER": "h"}), http: srv.Client()}
+	att, err := f.attestation(context.Background(), a, ids.OrgID{})
+	if err != nil || att.GetKind() != pantherclawv1.AttestationKind_ATTESTATION_KIND_AZURE_MI || att.GetToken() != "a.z.t" {
+		t.Fatalf("attestation = %v, %v", att, err)
+	}
+	q := got.URL.Query()
+	if got.Header.Get("X-IDENTITY-HEADER") != "h" || q.Get("resource") != "00001111-aaaa-2222-bbbb-3333cccc4444" ||
+		q.Get("client_id") != "cid" || q.Get("api-version") != "2019-08-01" {
+		t.Errorf("request = %v %v", got.URL, got.Header)
+	}
+}

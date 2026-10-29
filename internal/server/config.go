@@ -105,6 +105,10 @@ type IdentityConfig struct {
 	// requests to (D121); none means the global and regional
 	// sts.*.amazonaws.com endpoints.
 	AWSSTSHosts []string `json:"aws_sts_hosts"`
+	// EntraApps pin each Entra app the Azure presets accept to one tenant
+	// and one org (D129); none means those presets refuse every
+	// attestation.
+	EntraApps []issuerkeys.EntraApp `json:"entra_apps"`
 }
 
 // LogConfig configures logging.
@@ -203,6 +207,9 @@ func (c *Config) Validate() error {
 	}
 	if err := awssts.ValidateHosts(c.Identity.AWSSTSHosts); err != nil {
 		errs = append(errs, fmt.Errorf("identity.aws_sts_hosts: %w", err))
+	}
+	if err := issuerkeys.ValidateEntra(c.Identity.EntraApps); err != nil {
+		errs = append(errs, fmt.Errorf("identity.entra_apps: %w", err))
 	}
 	if (c.HTTP.TLSCertFile == "") != (c.HTTP.TLSKeyFile == "") {
 		errs = append(errs, errors.New("http.tls_cert_file and http.tls_key_file must be set together"))

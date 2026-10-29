@@ -33,6 +33,10 @@ func presetAttestors(att *iapp.Attestors, cfg IdentityConfig) error {
 	if err != nil {
 		return err
 	}
-	att.GitLab, att.SPIFFE, att.GCP, att.AWS = gitlab, spiffe, gcp, aws
+	entra, err := issuerkeys.NewEntra(cfg.EntraApps, attestTimeout)
+	if err != nil {
+		return err
+	}
+	att.GitLab, att.SPIFFE, att.GCP, att.AWS, att.Entra = gitlab, spiffe, gcp, aws, entra
 	return nil
 }
