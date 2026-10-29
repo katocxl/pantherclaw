@@ -44527,7 +44527,7 @@
           "id": {
             "type": "string",
             "title": "id",
-            "description": "\"agent:\u003cid\u003e\", \"scope:\u003cconnection_id\u003e/\u003coperation\u003e\", \"route:\u003croute id\u003e\"\n or \"target:\u003chost\u003e\"."
+            "description": "\"agent:\u003cid\u003e\", \"scope:\u003cconnection_id\u003e/\u003coperation\u003e\",\n \"route:\u003cconnection_id\u003e/\u003coperation\u003e/\u003croute id or kind\u003e\" (one per scope),\n or \"target:\u003chost\u003e\" (the connection's base URL host) or\n \"target:\u003cconnection_id\u003e\" for a connection without one."
           },
           "kind": {
             "type": "string",
@@ -45188,12 +45188,12 @@
           "boundaryState": {
             "type": "string",
             "title": "boundary_state",
-            "description": "What the scopes shown say about the agent, as the agent lifecycle\n derives it: \"PROTECTED\", \"PARTIALLY_PROTECTED\" or \"OBSERVED\"."
+            "description": "What the scopes shown say about the agent, as the agent lifecycle\n derives it: \"PROTECTED\", \"PARTIALLY_PROTECTED\" or \"OBSERVED\"; \"UNKNOWN\"\n when scope_limited is set, since a scope not shown could be weaker."
           },
           "scopeLimited": {
             "type": "boolean",
             "title": "scope_limited",
-            "description": "Set when the caller may not read every scope of the agent."
+            "description": "Set when the caller may not read every scope of the agent, or when the\n agent has more scopes than one graph shows (200)."
           }
         },
         "title": "GetCoverageGraphResponse",
