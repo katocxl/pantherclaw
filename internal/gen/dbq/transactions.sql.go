@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
 
 const compensated = `-- name: Compensated :many
@@ -266,6 +267,82 @@ func (q *Queries) ExecutionOf(ctx context.Context, orgID ids.OrgID, transactionI
 		&i.ChainSeq,
 	)
 	return i, err
+}
+
+const explanationFacts = `-- name: ExplanationFacts :one
+SELECT coalesce(t.target_type, '')::text AS target_type, coalesce(t.target_id, '')::text AS target_id, r.environment_id
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = $1 AND t.id = $2
+`
+
+type ExplanationFactsRow struct {
+	TargetType    string
+	TargetID      string
+	EnvironmentID ids.UUID
+}
+
+// What a decision explanation reads besides the decision receipt (F066):
+// the action's target and the run's environment.
+func (q *Queries) ExplanationFacts(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ExplanationFactsRow, error) {
+	row := q.db.QueryRow(ctx, explanationFacts, orgID, iD)
+	var i ExplanationFactsRow
+	err := row.Scan(&i.TargetType, &i.TargetID, &i.EnvironmentID)
+	return i, err
+}
+
+const explanationGrantRevision = `-- name: ExplanationGrantRevision :one
+SELECT expires_at, bounds FROM pc.grant_revisions
+WHERE org_id = $1 AND grant_id = $2 AND revision = $3
+`
+
+type ExplanationGrantRevisionRow struct {
+	ExpiresAt time.Time
+	Bounds    []byte
+}
+
+// The grant revision a decision used (F066).
+func (q *Queries) ExplanationGrantRevision(ctx context.Context, orgID ids.OrgID, grantID ids.UUID, revision int32) (ExplanationGrantRevisionRow, error) {
+	row := q.db.QueryRow(ctx, explanationGrantRevision, orgID, grantID, revision)
+	var i ExplanationGrantRevisionRow
+	err := row.Scan(&i.ExpiresAt, &i.Bounds)
+	return i, err
+}
+
+const explanationUnknownHolds = `-- name: ExplanationUnknownHolds :many
+SELECT ba.owner_id, ba.rule, res.amount
+FROM pc.reservations res
+JOIN pc.budget_accounts ba ON ba.org_id = res.org_id AND ba.id = res.account_id
+JOIN pc.permits p ON p.org_id = res.org_id AND p.id = res.permit_id
+WHERE res.org_id = $1 AND res.transaction_id = $2 AND res.state = 'HELD'
+  AND p.state = 'UNKNOWN'
+`
+
+type ExplanationUnknownHoldsRow struct {
+	OwnerID ids.UUID
+	Rule    string
+	Amount  money.Decimal
+}
+
+// The transaction's budget holds whose outcome is unknown (F066, F115).
+func (q *Queries) ExplanationUnknownHolds(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID) ([]ExplanationUnknownHoldsRow, error) {
+	rows, err := q.db.Query(ctx, explanationUnknownHolds, orgID, transactionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExplanationUnknownHoldsRow{}
+	for rows.Next() {
+		var i ExplanationUnknownHoldsRow
+		if err := rows.Scan(&i.OwnerID, &i.Rule, &i.Amount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const insertTransactionLink = `-- name: InsertTransactionLink :execrows

@@ -304,7 +304,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	}
 
 	authorityStore := &pgauthority.Store{Pool: pool, LockTimeout: cfg.Authority.BudgetLockTimeout.D()}
-	svc, err := newAuthority(cfg, pool, reg, kp, authorityStore, log)
+	svc, err := newAuthority(cfg, pool, reg, kp, authorityStore, consoleBaseURL(cfg.Auth.PublicURL, ext), log)
 	if err != nil {
 		return err
 	}
@@ -810,7 +810,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	d.m6.registerPublic(rs)
 	d.m5p2.registerPublic(rs)
-	registerM7(rs, pool, d.verification)
+	registerM7(rs, pool, d.kp, d.verification, consoleBaseURL(d.publicURL, d.ext))
 	var githubNotify githubapp.Notifier
 	if d.m5 != nil {
 		githubNotify = d.m5.notifications

@@ -332,6 +332,9 @@ type Result struct {
 	PAPError pap.Code
 	// Timings are the steps' durations (the Server-Timing header).
 	Timings []Lap
+	// Explanation is the Authority's agent-safe explanation (F330,
+	// HR-400); nil when no decision was asked for.
+	Explanation *pb.AgentExplanation
 }
 
 // Lap is one step's duration.
@@ -431,6 +434,7 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	r := Result{
 		Decision: ar.GetDecision(), TransactionID: ar.GetTransactionId(), Nonce: ar.GetNonce(),
 		Monitor: ar.GetMode() == pb.DispatchMode_DISPATCH_MODE_MONITOR, Wait: ar.GetWait(),
+		Explanation: ar.GetAgentExplanation(),
 	}
 	for _, rs := range ar.GetReasons() {
 		r.Reasons = append(r.Reasons, rs.GetCode())

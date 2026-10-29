@@ -16,6 +16,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
@@ -62,6 +63,8 @@ type Service struct {
 	observations ToolObservations
 	// held is the operator's maintenance hold (hold.go): no decision.
 	held bool
+	// consoleURL is the console base URL for recovery links (explain.go).
+	consoleURL string
 }
 
 // Config configures the Service.
@@ -69,6 +72,9 @@ type Config struct {
 	// Decider runs the decision pipeline and binds its decisions.
 	Decider *finalize.Authority
 	Logger  *slog.Logger
+	// ConsoleBaseURL is the server's public URL when it serves a console,
+	// for the recovery links of a decision (F330); empty when it serves none.
+	ConsoleBaseURL string
 }
 
 // New returns a Service.
@@ -77,7 +83,7 @@ func New(cfg Config) *Service {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	return &Service{decider: cfg.Decider, log: log}
+	return &Service{decider: cfg.Decider, log: log, consoleURL: strings.TrimSuffix(cfg.ConsoleBaseURL, "/")}
 }
 
 // Result is the answer to Authorize.

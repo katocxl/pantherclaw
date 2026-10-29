@@ -88,6 +88,8 @@ type Answer struct {
 	// Mode is "enforce", or "monitor" when the decision prevented nothing.
 	Mode    string `json:"mode"`
 	Receipt string `json:"receipt,omitzero"`
+	// Explanation is the agent-safe explanation (F330, HR-400).
+	Explanation *dispatch.Explanation `json:"explanation,omitzero"`
 }
 
 func answer(w http.ResponseWriter, status int, a Answer) {
@@ -183,6 +185,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func decide(res dispatch.Result) Answer {
 	a := Answer{
 		TransactionID: res.TransactionID, Reasons: res.Reasons, Receipt: res.Receipt, ErrorClass: string(res.Class), Code: res.Code,
+		Explanation: dispatch.ExplanationOf(res.Explanation),
 	}
 	if res.Monitor {
 		a.Mode = "monitor"

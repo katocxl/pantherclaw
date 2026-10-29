@@ -13,7 +13,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/actionir"
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
+	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
+	"github.com/katocxl/pantherclaw/internal/authority/replay"
+	gapp "github.com/katocxl/pantherclaw/internal/grants/app"
+	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
@@ -229,4 +234,120 @@ func TestExplorer_ReportsEachItemsIntegrity(t *testing.T) {
 
 func compareIDs(a, b ids.UUID) int {
 	return slices.Compare(a[:], b[:])
+}
+
+// TestExplorer_ExplainsAHeldAndADeniedDecision: the evidence of a held and
+// of a denied transaction carries an explanation with every field filled
+// (task_id stays empty: grants carry no structured task id). Constraints
+// are names for evidence.read alone and "name=value" lines with
+// grant.read; budgets need budget.read. Material values come from the
+// sealed inputs (F066, F647, rows26 D12b).
+func TestExplorer_ExplainsAHeldAndADeniedDecision(t *testing.T) {
+	w := newWorld(t)
+	w.keepInputs()
+	w.refundable("ch_1", "ch_2")
+	held := w.authorize(w.request(w.run(w.heldBudgetGrant().ID, ids.UUID{}), ids.NewV7(), "ch_1", "60.00"))
+	denied := w.authorize(w.request(w.run(w.grant("20").ID, ids.UUID{}), ids.NewV7(), "ch_2", "30.00"))
+	if held.Decision != "REQUIRE_APPROVAL" || denied.Decision != "DENY" {
+		t.Fatalf("held %s, denied %s", held.Decision, denied.Decision)
+	}
+	org := tdomain.Scope{Type: tdomain.ScopeOrg, ID: w.org.UUID()}
+	evidenceOnly := w.reader(tdomain.RoleReconciler, org)
+	everything := tapp.WithCaller(context.Background(), tapp.Caller{
+		Subject: tdomain.Subject{
+			Org: w.org, Principal: tdomain.PrincipalRef{Kind: tdomain.KindUser, ID: ids.NewV7()},
+			Bindings: []tdomain.Binding{{Role: tdomain.RoleReconciler, Scope: org}, {Role: tdomain.RolePolicyAuthor, Scope: org}},
+		},
+		Credential: tapp.CredAccessToken,
+	})
+	e := &txapp.Explorer{Pool: w.pool, Recordings: engineRecordings{w.replayEngine()}}
+	for _, tc := range []struct {
+		name   string
+		txn    ids.UUID
+		amount string
+	}{
+		{"held", held.TransactionID, "60.00 USD"},
+		{"denied", denied.TransactionID, "30.00 USD"},
+	} {
+		ev, err := e.TransactionEvidence(everything, tc.txn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		x := ev.Explanation
+		if x == nil || x.Decision != ev.Transaction.Decision || x.Category == "" || x.Decisive == nil || x.Decisive.Code == "" ||
+			x.Operation != "payments.refund.create" || x.Target == "" || x.Material["amount"] != tc.amount || x.Material["reason"] != "duplicate" ||
+			x.Principal != "user:"+w.alice.String() || x.Environment != w.env.String() || x.Policy == "" || len(x.Gaps) == 0 ||
+			x.Execution == "" {
+			t.Fatalf("%s: explanation %+v", tc.name, x)
+		}
+		if g := x.Grant; g == nil || g.ID == "" || g.Revision == 0 || g.Expires.IsZero() || len(g.Constraints) == 0 ||
+			!strings.Contains(g.Constraints[0], "=") {
+			t.Fatalf("%s: grant with grant.read %+v", tc.name, x.Grant)
+		}
+		if len(x.Budgets) == 0 || x.Budgets[0].Rule == "" {
+			t.Fatalf("%s: budgets with budget.read %+v", tc.name, x.Budgets)
+		}
+
+		ev, err = e.TransactionEvidence(evidenceOnly, tc.txn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if x := ev.Explanation; x == nil || x.Grant == nil || len(x.Grant.Constraints) == 0 ||
+			slices.ContainsFunc(x.Grant.Constraints, func(c string) bool { return strings.Contains(c, "=") }) || x.Budgets != nil {
+			t.Fatalf("%s: with evidence.read alone %+v", tc.name, x)
+		}
+	}
+
+	// Inputs that were not kept: with no opener, and with a keyed opener
+	// but no stored row, material_values stays empty and the gaps say so;
+	// the explanation never panics (rows26 D12b).
+	t.Run("inputs not kept", func(t *testing.T) {
+		w := newWorld(t)
+		w.refundable("ch_3")
+		r := w.authorize(w.request(w.run(w.grant("20").ID, ids.UUID{}), ids.NewV7(), "ch_3", "30.00"))
+		w.keepInputs()
+		keyed := w.replayEngine()
+		reader := w.reader(tdomain.RoleReconciler, tdomain.Scope{Type: tdomain.ScopeOrg, ID: w.org.UUID()})
+		for name, rec := range map[string]txapp.Recordings{
+			"nil opener": engineRecordings{&replay.Engine{Source: keyed.Source}},
+			"no row":     engineRecordings{keyed},
+		} {
+			ev, err := (&txapp.Explorer{Pool: w.pool, Recordings: rec}).TransactionEvidence(reader, r.TransactionID)
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			if x := ev.Explanation; x == nil || len(x.Material) != 0 || !slices.Contains(x.Gaps, txapp.GapMaterialUnavailable) {
+				t.Fatalf("%s: explanation %+v", name, x)
+			}
+		}
+	})
+}
+
+// heldBudgetGrant is heldGrant with a 500 USD task budget.
+func (w *world) heldBudgetGrant() gdomain.Grant {
+	w.t.Helper()
+	b, _ := gdomain.DecodeBounds([]byte(`{"operations": ["payments.refund.create", "payments.refund.get"],
+	  "params": {"payments.refund.create": {"amount": {"max": {"USD": "100.00"}}}}}`))
+	reqs, err := gdomain.DecodeRequirements([]byte(`[{"operations": ["payments.refund.create"], "param": "amount",
+	  "unless": {"max": {"USD": "50.00"}}, "approval": {"role": "approver", "count": 1}, "reason": "REFUND_OVER_50"}]`))
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	lim, _ := gdomain.DecodeLimits([]byte(`{"budgets": [{"id": "task", "grouping": "task", "operations": ["payments.refund.create"], "currency": "USD", "limit": "500", "period": "none"}]}`))
+	g, err := w.grants.Issue(w.human, gapp.IssueRequest{
+		AgentID: w.agent, Principal: gdomain.Principal{Kind: gdomain.PrincipalUser, ID: w.alice}, TaskRef: "refunds",
+		ExpiresAt: time.Now().Add(48 * time.Hour), Bounds: b, Requirements: reqs, Limits: lim, Delegation: gdomain.Delegation{Depth: 1, MaxChildren: 5},
+	})
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	return g
+}
+
+// engineRecordings is the explorer's opener: the replay engine's, as the
+// server wires it.
+type engineRecordings struct{ *replay.Engine }
+
+func (r engineRecordings) Definition(ctx context.Context, org ids.OrgID, pin actionir.Definition) (pipeline.Pinned, error) {
+	return r.Source.Definition(ctx, org, pin)
 }

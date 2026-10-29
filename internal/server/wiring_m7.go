@@ -17,10 +17,12 @@ import (
 
 // registerM7 mounts the M7 track A services people use: the transaction
 // list, the evidence explorer and reconciliation. verification signs the
-// effect receipts a person's resolution or a compensation appends.
-func registerM7(rs *connect.Server, pool *db.Pool, verification *txapp.Service) {
-	explorer := &txapp.Explorer{Pool: pool}
-	pantherclawv1connect.RegisterTransactionServiceHandler(rs, transactionsrpc.New(explorer))
+// effect receipts a person's resolution or a compensation appends; consoleURL is
+// the console base for an explanation's links (empty: no console); kp opens
+// the sealed inputs an explanation reads its material values from.
+func registerM7(rs *connect.Server, pool *db.Pool, kp keys.KeyProvider, verification *txapp.Service, consoleURL string) {
+	explorer := &txapp.Explorer{Pool: pool, Recordings: replayRecordings{replayEngine(pool, kp)}}
+	pantherclawv1connect.RegisterTransactionServiceHandler(rs, transactionsrpc.New(explorer).WithConsoleURL(consoleURL))
 	reconciler := &txapp.Reconciler{Store: &pgtransactions.Store{Pool: pool}, Effects: verification}
 	pantherclawv1connect.RegisterReconciliationServiceHandler(rs, transactionsrpc.NewReconciliations(explorer, reconciler))
 }

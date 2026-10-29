@@ -83,6 +83,9 @@ func (h *Handler) Authorize(ctx context.Context, req *pantherclawv1.AuthorizeReq
 		return nil, err
 	}
 	if out := refusedChannel(req.GetActionIr()); out != nil {
+		out.AgentExplanation = agentExplanation(h.svc.consoleURL, Result{Decision: domain.CannotAuthorize, Reasons: []domain.Reason{{
+			Code: out.GetReasons()[0].GetCode(), Check: out.GetReasons()[0].GetCheck(), Decisive: true,
+		}}}, "")
 		return out, nil
 	}
 	creds := credentials(req.GetWorkload())
@@ -121,6 +124,7 @@ func (h *Handler) Authorize(ctx context.Context, req *pantherclawv1.AuthorizeReq
 	}
 	out.Obligations = gatewayObligations(res.Obligations)
 	out.Consequences = consequencesToProto(res.Consequences)
+	out.AgentExplanation = agentExplanation(h.svc.consoleURL, res, out.GetTransactionId())
 	return out, nil
 }
 

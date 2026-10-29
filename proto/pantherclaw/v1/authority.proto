@@ -61,6 +61,44 @@ enum Decision {
   DECISION_CANNOT_AUTHORIZE = 6;
 }
 
+// DecisionPresentation is how a decision is shown to people and agents
+// (F069): ALLOW_WITH_OBLIGATIONS is Constrain, both REQUIRE_* decisions are
+// Hold.
+enum DecisionPresentation {
+  DECISION_PRESENTATION_UNSPECIFIED = 0;
+  DECISION_PRESENTATION_ALLOW = 1;
+  DECISION_PRESENTATION_CONSTRAIN = 2;
+  DECISION_PRESENTATION_HOLD = 3;
+  DECISION_PRESENTATION_DENY = 4;
+  DECISION_PRESENTATION_CANNOT_AUTHORIZE = 5;
+}
+
+// AgentExplanation is all a decision tells the agent about why (F330,
+// HR-400): never the grant, policy, limits, budget values or request.
+message AgentExplanation {
+  // How the decision is presented.
+  DecisionPresentation presentation = 1;
+  // The decisive checklist item's check name, for example "authority";
+  // empty for ALLOW and CONSTRAIN.
+  string failing_category = 2;
+  // The decisive checklist item's code.
+  string decisive_code = 3;
+  // The transaction.
+  string transaction_id = 4;
+  // What a person can do next.
+  repeated NextAction next_actions = 5;
+}
+
+// NextAction is one recovery action.
+message NextAction {
+  // Stable code, for example "inspect_transaction".
+  string code = 1;
+  // What to run or open, for example "pclaw txn show <id>".
+  string label = 2;
+  // The console page, when the server serves a console; empty otherwise.
+  string url = 3;
+}
+
 // Reason explains one checklist outcome.
 message Reason {
   // Stable machine code, for example GRANT_AMOUNT_EXCEEDED. Holds add
@@ -164,6 +202,9 @@ message AuthorizeResponse {
   // out. A predicted consequence is a prediction, never an authorized or
   // confirmed effect. Empty for a stored decision (repeat).
   repeated Consequence consequences = 19;
+  // The agent-safe explanation (F330, HR-400). Without a transaction it
+  // has no transaction id and no recovery action.
+  AgentExplanation agent_explanation = 20;
 }
 
 // ConsequenceState is what a consequence rule said about an action
@@ -638,4 +679,87 @@ message RecordToolObservationResponse {
   string nonce = 4;
   // The observation's id.
   string observation_id = 5;
+}
+
+// DecisionExplanation is the full explanation of a decision, for people
+// with evidence.read (F066, F647): what was asked, under which grant and
+// policy, what decided it, what is not known and what to do next. Agent
+// text never reaches it outside existing untrusted fields (HR-023, HR-034).
+message DecisionExplanation {
+  // The decision.
+  Decision decision = 1;
+  // How it is presented.
+  DecisionPresentation presentation = 2;
+  // The decisive item's check; empty for ALLOW and CONSTRAIN.
+  string failing_category = 3;
+  // The decisive checklist item.
+  ChecklistItem decisive = 4;
+  // The transaction.
+  string transaction_id = 5;
+  // The action, from the definition's canonical fields.
+  ExplainedAction action = 6;
+  // Who the action was for: "user:<id>" or "service_account:<id>".
+  string principal = 7;
+  // A structured task id from the grant revision; empty, since grants
+  // carry only free-text task references.
+  string task_id = 8;
+  // The run's environment id.
+  string environment = 9;
+  // The grant revision the decision used.
+  ExplainedGrant grant = 10;
+  // The policy version the decision used.
+  string policy_version_id = 11;
+  // The budgets at decision time; left out without budget.read.
+  repeated ExplainedBudget budgets = 12;
+  // What is not known: UNKNOWN_CONSEQUENCE, OUTCOME_UNKNOWN,
+  // NO_EFFECT_CONFIRMED, COVERAGE_PARTIAL, COVERAGE_OBSERVE_ONLY or
+  // COVERAGE_UNKNOWN.
+  repeated string gaps = 13;
+  // The transaction's execution state, for example "BLOCKED".
+  string execution_state = 14;
+  // What a person can do next.
+  repeated NextAction next_actions = 15;
+}
+
+// ExplainedAction is an action's canonical fields.
+message ExplainedAction {
+  // The operation.
+  string operation = 1;
+  // The target, "<type>:<id>".
+  string target = 2;
+  // The definition's material parameters (never content), or the budget
+  // amount and currency when no approval display recorded them.
+  map<string, string> material_values = 3;
+}
+
+// ExplainedGrant is the grant revision a decision used.
+message ExplainedGrant {
+  // Grant id.
+  string id = 1;
+  // Revision.
+  int64 revision = 2;
+  // The revision's bounds: their names, or "name=value" lines (compact
+  // JSON values) when the caller also holds grant.read.
+  repeated string constraints = 3;
+  // When the revision expires.
+  google.protobuf.Timestamp expire_time = 4;
+}
+
+// ExplainedBudget is one budget rule at decision time. Amounts are decimal
+// strings in its currency.
+message ExplainedBudget {
+  // The grant or guardrail that owns the rule.
+  string account_id = 1;
+  // Rule id.
+  string rule = 2;
+  // Currency (ISO 4217); empty for a count.
+  string currency = 3;
+  // The limit; empty when the rule only counts.
+  string limit = 4;
+  // Reserved by unsettled permits.
+  string reserved = 5;
+  // Spent by accepted outcomes.
+  string spent = 6;
+  // Held by this transaction with its outcome unknown.
+  string unknown = 7;
 }

@@ -30,6 +30,9 @@ var ErrTransactionNotFound = pcerr.New(pcerr.NotFound, "TRANSACTION_NOT_FOUND", 
 // read is scoped like run.read: evidence.read where the run's agent lives.
 type Explorer struct {
 	Pool *db.Pool
+	// Recordings opens a decision's sealed inputs for its explanation's
+	// material values (F066); nil leaves them unavailable.
+	Recordings Recordings
 }
 
 // Filter narrows ListTransactions; empty fields match everything.
@@ -199,6 +202,9 @@ type Evidence struct {
 	Effects         []EffectRecord
 	Reconciliations []Reconciliation
 	Links           []Link
+	// Explanation is the latest decision explained (F066, F647); nil
+	// without a readable decision receipt.
+	Explanation *Explanation
 }
 
 // newReaders is the explorer's agent scope: evidence.read where the agent
@@ -266,6 +272,7 @@ func (e *Explorer) TransactionEvidence(ctx context.Context, id ids.UUID) (Eviden
 		return Evidence{}, err
 	}
 	var out Evidence
+	var in explainInputs
 	err = e.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		t, err := q.TransactionSummary(ctx, c.Org, id)
@@ -373,9 +380,19 @@ func (e *Explorer) TransactionEvidence(ctx context.Context, id ids.UUID) (Eviden
 				From: l.FromTransactionID, To: l.ToTransactionID, Kind: domain.LinkKind(l.Kind), CreatedBy: l.CreatedBy, Created: l.CreatedAt,
 			})
 		}
-		return nil
+		in, err = readExplainInputs(ctx, c, q, &out)
+		return err
 	}, db.ReadOnly())
-	return out, err
+	if err != nil {
+		return out, err
+	}
+	// The sealed inputs are opened outside the read transaction, as a
+	// replay opens them.
+	if n := len(out.Decisions); n > 0 {
+		in.material, in.materialOK = recordedMaterial(ctx, e.Recordings, c.Org, id, out.Decisions[n-1].Evaluation)
+	}
+	out.Explanation = explain(&out, in)
+	return out, nil
 }
 
 // summary converts a transaction row, deriving its execution state.
