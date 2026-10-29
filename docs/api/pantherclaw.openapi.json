@@ -30388,6 +30388,23 @@
             "maxLength": 64,
             "format": "byte",
             "description": "The secret of the scan's org_scan lease the gateway holds, with\n scan_id: the server compares its hash, so only the holder of the lease\n submits, not any holder of the gateway's certificate."
+          },
+          "scope": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "scope",
+            "maxLength": 256,
+            "description": "UNTRUSTED scope of a CI-mode scan (G0 M17 D115): the repository or\n host it scanned. Its findings are discoveries of source ci_scan, kept\n apart per scope."
+          },
+          "complete": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "complete",
+            "description": "The scan read the whole scope, and this request carries every finding\n of it (at most 200, D130): a ci_scan discovery of the scope it lacks\n counts a miss (HR-459). Needs scope."
           }
         },
         "title": "SubmitScanFindingsRequest",
@@ -30417,6 +30434,12 @@
             "title": "dropped",
             "format": "int32",
             "description": "Findings dropped because the org already has 200 open discoveries."
+          },
+          "missed": {
+            "type": "integer",
+            "title": "missed",
+            "format": "int32",
+            "description": "Discoveries of the scope a complete scan did not see, each counted a\n miss. A discovery missed by 3 complete scans in a row is announced as\n vanished; nothing changes the agent (HR-458)."
           }
         },
         "title": "SubmitScanFindingsResponse",
@@ -62035,7 +62058,7 @@
           "kind": {
             "type": "string",
             "title": "kind",
-            "description": "\"INCIDENT\", \"UNCONFIRMED_CONTAINMENT\", \"ALERT\", \"PROTECTION_FAILURE\",\n \"AUTOMATION_EXCEPTION\", \"WAITING_DECISION\", \"POSTURE_FINDING\" or\n \"AUTHORITY_EXPANSION\"."
+            "description": "\"INCIDENT\", \"UNCONFIRMED_CONTAINMENT\", \"ALERT\", \"PROTECTION_FAILURE\",\n \"AUTOMATION_EXCEPTION\", \"WAITING_DECISION\", \"POSTURE_FINDING\",\n \"AUTHORITY_EXPANSION\" or \"DISCOVERY_CHANGE\"."
           },
           "id": {
             "type": "string",

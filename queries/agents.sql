@@ -239,3 +239,12 @@ SELECT DISTINCT u.id FROM pc.users u
 JOIN pc.role_bindings r ON r.org_id = u.org_id AND r.user_id = u.id
 WHERE u.org_id = sqlc.arg(org_id) AND u.state = 'ACTIVE' AND r.role = 'org_admin' AND r.scope_type = 'ORG'
 ORDER BY u.id LIMIT 50;
+
+-- MissScopeDiscoveries counts a miss for each ci_scan discovery of the
+-- scope that a complete CI-mode scan did not see (D115), and returns them.
+-- name: MissScopeDiscoveries :many
+UPDATE pc.discoveries
+SET missed_scans = missed_scans + 1
+WHERE org_id = sqlc.arg(org_id) AND source = 'ci_scan' AND scan_scope = sqlc.arg(scope)::text
+  AND last_scan_run IS DISTINCT FROM sqlc.arg(run)::uuid
+RETURNING id, agent_id, state, observed, missed_scans, vanish_notified_at;

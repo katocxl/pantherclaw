@@ -807,6 +807,52 @@ func (q *Queries) MissOrgScanDiscoveries(ctx context.Context, arg MissOrgScanDis
 	return items, nil
 }
 
+const missScopeDiscoveries = `-- name: MissScopeDiscoveries :many
+UPDATE pc.discoveries
+SET missed_scans = missed_scans + 1
+WHERE org_id = $1 AND source = 'ci_scan' AND scan_scope = $2::text
+  AND last_scan_run IS DISTINCT FROM $3::uuid
+RETURNING id, agent_id, state, observed, missed_scans, vanish_notified_at
+`
+
+type MissScopeDiscoveriesRow struct {
+	ID               ids.UUID
+	AgentID          ids.UUID
+	State            string
+	Observed         []byte
+	MissedScans      int32
+	VanishNotifiedAt *time.Time
+}
+
+// MissScopeDiscoveries counts a miss for each ci_scan discovery of the
+// scope that a complete CI-mode scan did not see (D115), and returns them.
+func (q *Queries) MissScopeDiscoveries(ctx context.Context, orgID ids.OrgID, scope string, run ids.UUID) ([]MissScopeDiscoveriesRow, error) {
+	rows, err := q.db.Query(ctx, missScopeDiscoveries, orgID, scope, run)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MissScopeDiscoveriesRow{}
+	for rows.Next() {
+		var i MissScopeDiscoveriesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.State,
+			&i.Observed,
+			&i.MissedScans,
+			&i.VanishNotifiedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const moveDiscovery = `-- name: MoveDiscovery :exec
 UPDATE pc.discoveries SET agent_id = $1, state = 'CLAIMED'
 WHERE org_id = $2 AND agent_id = $3 AND state = 'OPEN'

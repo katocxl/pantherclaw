@@ -17,6 +17,16 @@ var discoveryTemplates = []Template{
 			"the agent if it is gone.",
 		Link: "/agents",
 	},
+	// A material change of an open or claimed discovery (HR-460): only the
+	// names of the changed keys; their values are in the agent's history.
+	{
+		Type: "agent.discovery_changed", Severity: Warning, Params: []string{"agent", "kind", "discovery", "keys"},
+		Title: "A discovered agent changed what it may do",
+		Body: "A scan saw the {kind} discovery {discovery} of agent {agent} change: {keys}. PantherClaw changed nothing; " +
+			"the before and after values are in the agent's history. Review whether the agent still needs what it now " +
+			"declares.",
+		Link: "/agents",
+	},
 }
 
 func init() { templates = append(templates, discoveryTemplates...) }

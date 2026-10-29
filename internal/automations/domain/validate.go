@@ -26,7 +26,7 @@ import (
 var Events = []string{
 	"action.decided", "action.held", "action.denied", "effect.recorded", "run.ended", "grant.issued", "grant.revoked",
 	"coverage.lost", "alert.raised", "incident.opened", "case.closed", "agent.discovered", "approval.expired",
-	"automation.finished",
+	"automation.finished", "agent.discovery_changed", "agent.discovery_vanished",
 }
 
 // Probes is the closed condition-probe vocabulary (D19).

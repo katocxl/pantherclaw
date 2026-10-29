@@ -9,6 +9,8 @@ import (
 	"maps"
 	"slices"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/katocxl/pantherclaw/internal/agents/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -168,4 +170,108 @@ func observedKind(observed []byte) string {
 		return "unknown"
 	}
 	return o["kind"]
+}
+
+// scopeMissed counts the misses of a complete CI-mode scan (D115): each
+// ci_scan discovery of the scope that the scan's submission did not carry
+// misses once, and one that reaches domain.VanishAfterMisses is announced
+// as OrgScanFinished does. It returns how many missed.
+func scopeMissed(ctx context.Context, tx db.TenantTx, q *dbq.Queries, notify Notifier, ledger evdomain.Actor, scope string,
+	run ids.UUID,
+) (int, error) {
+	missed, err := q.MissScopeDiscoveries(ctx, tx.OrgID(), scope, run)
+	if err != nil {
+		return 0, err
+	}
+	for _, d := range missed {
+		if d.MissedScans < domain.VanishAfterMisses || d.VanishNotifiedAt != nil {
+			continue
+		}
+		v := vanished{id: d.ID, agent: d.AgentID, kind: observedKind(d.Observed), misses: d.MissedScans, source: "ci_scan"}
+		if err := v.notice(ctx, tx, q, notify, ledger, map[string]string{"scan": run.String()}); err != nil {
+			return 0, err
+		}
+	}
+	return len(missed), nil
+}
+
+// maxChangeValue bounds each before and after value of a discovery change:
+// they are untrusted observations, kept short (D116).
+const maxChangeValue = 256
+
+// changed records and announces a material change of an open or claimed
+// discovery (D116, HR-460): the agent change carries the before and after
+// values of the material keys that changed, and nothing else; the owners
+// (or, unclaimed, the org admins) are told. Neither the discovery's state
+// nor the agent's authority changes; a dismissed one reopens instead
+// (HR-209).
+func (w discoverer) changed(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, kind string,
+	prior dbq.GetScanDiscoveryRow, now map[string]string,
+) error {
+	var before map[string]string
+	_ = json.Unmarshal(prior.Observed, &before) // unreadable reads as nothing before
+	details := map[string]string{"discovery_id": prior.ID.String(), "source": w.source, "kind": kind}
+	if w.run != nil {
+		details["scan"] = w.run.String()
+	}
+	var keys []string
+	for _, k := range materialKeys[kind] {
+		if before[k] == now[k] {
+			continue
+		}
+		keys = append(keys, k)
+		details["before."+k], details["after."+k] = changeValue(before[k]), changeValue(now[k])
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+	if err := RecordChange(ctx, q, org, prior.AgentID, domain.Change{Kind: domain.ChangeDiscoveryChanged, Actor: w.actor, Details: details}); err != nil {
+		return err
+	}
+	// The ledger gets the ids and the names of the keys only.
+	led := map[string]string{
+		"discovery_id": prior.ID.String(), "source": w.source, "kind": kind, "changed": strings.Join(keys, ","),
+	}
+	if _, err := audit.Record(ctx, tx, audit.Event{
+		Name: string(domain.ChangeDiscoveryChanged), Actor: w.ledger, Outcome: audit.Success,
+		Object: &audit.Object{Type: "agent", ID: prior.AgentID.String()}, Details: led,
+	}); err != nil {
+		return err
+	}
+	if w.notify == nil {
+		return nil
+	}
+	people, err := noticeRecipients(ctx, q, org, prior.AgentID)
+	if err != nil {
+		return err
+	}
+	dedupe := "discovery_changed:" + prior.ID.String()
+	if w.run != nil {
+		dedupe += ":" + w.run.String()
+	} else {
+		dedupe += ":" + ids.NewV7().String()
+	}
+	_, err = w.notify.Enqueue(ctx, tx, napp.Message{
+		Org: org, Type: "agent.discovery_changed", Personal: people, DedupeKey: dedupe,
+		Params: map[string]string{
+			"agent": prior.AgentID.String(), "kind": kind, "discovery": prior.ID.String(), "keys": strings.Join(keys, ", "),
+		},
+	})
+	return err
+}
+
+// changeValue is an untrusted observed value as a change detail: at most
+// maxChangeValue characters, and "(not shown)" for text a change detail
+// cannot hold.
+func changeValue(v string) string {
+	if utf8.RuneCountInString(v) > maxChangeValue {
+		v = string([]rune(v)[:maxChangeValue])
+	}
+	if !plainScope(v) {
+		if v == "" {
+			return "(none)"
+		}
+		return "(not shown)"
+	}
+	return v
 }
