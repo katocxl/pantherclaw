@@ -146,8 +146,10 @@ func TestHR412_MCPStateConflictsAndBoundsOnlyCostANewAction(t *testing.T) {
 	ctx := context.Background()
 	run, inst := ids.NewV7(), ids.NewV7()
 	hold := func(name string, ttl time.Duration) app.MCPEntry {
-		return app.MCPEntry{Kind: app.MCPHold, Key: stateKey(name), Connection: conn, Run: &run, Instance: &inst,
-			ActionID: ids.NewV7().String(), ExpireTime: clk.Now().Add(ttl)}
+		return app.MCPEntry{
+			Kind: app.MCPHold, Key: stateKey(name), Connection: conn, Run: &run, Instance: &inst,
+			ActionID: ids.NewV7().String(), ExpireTime: clk.Now().Add(ttl),
+		}
 	}
 	h := hold("h0", time.Hour)
 	if _, err := svc.PutMCPState(ctx, a, h, 0); err != nil {
@@ -195,14 +197,18 @@ func TestHR412_MCPStateConflictsAndBoundsOnlyCostANewAction(t *testing.T) {
 		t.Fatalf("an expired key written again: %d %v", v, err)
 	}
 	// A task's body counts toward the gateway's bytes.
-	big := app.MCPEntry{Kind: app.MCPTask, Key: stateKey("big"), Connection: conn, Instance: &inst, ActionID: "a", Status: "working",
-		SealedBody: make([]byte, 1), ExpireTime: clk.Now().Add(time.Hour)}
+	big := app.MCPEntry{
+		Kind: app.MCPTask, Key: stateKey("big"), Connection: conn, Instance: &inst, ActionID: "a", Status: "working",
+		SealedBody: make([]byte, 1), ExpireTime: clk.Now().Add(time.Hour),
+	}
 	if _, err := svc.PutMCPState(ctx, a, big, 0); !errors.Is(err, app.ErrMCPStateFull) {
 		t.Fatalf("a task past the instance bound: %v", err)
 	}
 	// So does a relayed elicitation (D39), which may carry a sealed body.
-	el := app.MCPEntry{Kind: app.MCPElicitation, Key: stateKey("el"), Connection: conn, Instance: &inst, SealedBody: []byte{1},
-		ExpireTime: clk.Now().Add(10 * time.Minute)}
+	el := app.MCPEntry{
+		Kind: app.MCPElicitation, Key: stateKey("el"), Connection: conn, Instance: &inst, SealedBody: []byte{1},
+		ExpireTime: clk.Now().Add(10 * time.Minute),
+	}
 	if _, err := svc.PutMCPState(ctx, a, el, 0); !errors.Is(err, app.ErrMCPStateFull) {
 		t.Fatalf("an elicitation past the instance bound: %v", err)
 	}
@@ -228,8 +234,10 @@ func TestHR413_SessionsStayBoundAndAnInstanceKeepsSixteen(t *testing.T) {
 	ctx := context.Background()
 	run, inst := ids.NewV7(), ids.NewV7()
 	sess := func(i int) app.MCPEntry {
-		return app.MCPEntry{Kind: app.MCPSession, Key: stateKey(fmt.Sprint("session", i)), Connection: conn, Run: &run, Instance: &inst,
-			JKT: "thumbprint", ExpireTime: clk.Now().Add(8 * time.Hour)}
+		return app.MCPEntry{
+			Kind: app.MCPSession, Key: stateKey(fmt.Sprint("session", i)), Connection: conn, Run: &run, Instance: &inst,
+			JKT: "thumbprint", ExpireTime: clk.Now().Add(8 * time.Hour),
+		}
 	}
 	for i := range app.MaxMCPSessionsPerInstance {
 		if _, err := svc.PutMCPState(ctx, a, sess(i), 0); err != nil {
