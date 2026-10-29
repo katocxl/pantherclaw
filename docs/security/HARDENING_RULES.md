@@ -462,3 +462,27 @@
 | HR-400 | A decision returned to an agent (AuthorizeResponse, gateway refusals, hook and A2A refusals) adds only the agent-safe explanation: presentation, failing category, decisive code, transaction id and recovery actions. It never adds the effective grant, policy, limits, budget values or request content (F330; founder 2026-10-28). | T-150, T-080 | M13 |
 | HR-401 | Run inspection reads each section only with that section's own permission and scope. A section the caller can't read is left out and listed in omitted_sections, never returned partially counted. | — (rows26 D22, F224) | M13 |
 | HR-402 | The coverage graph is assembled only from coverage records the caller may read, filtered before any node or count is built. Unknown stays UNVERIFIED and is never shown as controlled. | T-042, T-085 | M13 |
+
+## Consequence chains, continuous discovery, identity presets and custom scenarios (G0 M17)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
+| HR-450 | A predicted consequence that cannot be opened for verification is audited as not verifiable, never skipped silently. | T-198 | M17 |
+| HR-451 | A parent's downstream state is CONFIRMED only from its consequences' own evidence, never from the parent's acceptance. Downstream receipts are appended, never rewritten. | T-198 | M17 |
+| HR-452 | A wait on consequences passes only on CONFIRMED. Unconfirmed or not verifiable never passes. | T-198 | M17 |
+| HR-453 | A customer consequence rule change is a two-person protected change in every protect mode. | T-199 | M17 |
+| HR-454 | Customer rules only add requirements. They never suppress, waive or turn an UNKNOWN into NOT_TRIGGERED. | T-199 | M17 |
+| HR-455 | Consequence chains have bounded depth and fan-out, have no cycles, and stop at an UNKNOWN link, which stays at least a HOLD. | T-200 | M17 |
+| HR-456 | An expired consequence rule yields UNKNOWN. | T-199 | M17 |
+| HR-457 | Every link of a chain is a named rule over verified facts. | T-200 | M17 |
+| HR-458 | A vanished discovery only notifies, after 3 complete scans missed it, and never changes an agent's state or authority. | T-201 | M17 |
+| HR-459 | A failed, partial or non-complete scan never counts as a miss. | T-201 | M17 |
+| HR-460 | A material change on an open or claimed discovery is recorded with the before and after keys, and the owner is told. | T-201 | M17 |
+| HR-461 | The GitLab CI preset accepts only protected refs, never merge-request pipelines, pins numeric ids and trusts only operator-configured issuers. | T-202 | M17 |
+| HR-462 | The SPIFFE JWT-SVID preset pins the exact SPIFFE ID, requires the token's trust domain to equal the bundle's, and trusts only operator-configured bundles. | T-203 | M17 |
+| HR-463 | The GCP workload identity preset takes keys only from the pinned key URL and binds on the numeric service-account id. | T-202 | M17 |
+| HR-464 | The AWS IAM preset accepts only a GetCallerIdentity request to an allow-listed STS host, with a signed audience header, at most 15 minutes old, single use. | T-203 | M17 |
+| HR-465 | An attestation of an unknown kind is refused, never defaulted. | T-202, T-203 | M17 |
+| HR-466 | Customer scenarios are labelled customer-authored by the server and never appear in an assurance pack. | T-204 | M17 |
+| HR-467 | An RT scenario id is accepted only with a matching library digest. | T-204 | M17 |
+| HR-468 | The customer tool simulator is data only, and every response is marked simulated. | T-204, T-092 | M17 |
