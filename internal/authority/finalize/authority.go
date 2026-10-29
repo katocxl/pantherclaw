@@ -343,7 +343,7 @@ func (a *Authority) bind(ctx context.Context, gw Gateway, ev *pipeline.Evaluatio
 		Obligations: ev.Obligations, Reasons: reasons(ev.Checklist), Mode: ev.Mode, Wait: waitOf(ev, w.TransactionID),
 		Consequences: ev.Consequences,
 	}
-	res.Would, _, _ = ev.WouldUnknown()
+	res.Would, _ = ev.Would()
 	if res.Wait != nil && !w.HoldRequest.IsZero() {
 		res.Wait.RequestID = w.HoldRequest
 	}

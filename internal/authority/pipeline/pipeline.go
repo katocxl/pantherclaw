@@ -829,6 +829,7 @@ func (p *Pipeline) boundaries(ctx context.Context, s *state) {
 	}
 	p.policyRules(ctx, s)
 	s.disclosure()
+	p.dataFlow(ctx, s)      // G0 M16 D76 (dataflow.go)
 	p.boundariesM14(ctx, s) // G0 M14 D11, D78, D89 (scope.go)
 	p.consequenceBoundaries(ctx, s)
 	p.budgets(ctx, s)

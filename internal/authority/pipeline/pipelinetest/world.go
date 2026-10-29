@@ -55,6 +55,7 @@ type World struct {
 	Fail  map[string]bool
 	hold  *holdState
 	final *finalState
+	flow  *flowState
 }
 
 // New returns a world for org with p pinned and every definition ACTIVE.

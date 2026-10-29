@@ -54181,6 +54181,132 @@
         "additionalProperties": false,
         "description": "BudgetAccount is the state of one budget account. Amounts are decimal\n strings in the account's currency."
       },
+      "pantherclaw.v1.FlowAllowance": {
+        "type": "object",
+        "properties": {
+          "classes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 2,
+              "minItems": 1,
+              "uniqueItems": true,
+              "enum": [
+                "pii",
+                "secret"
+              ]
+            },
+            "title": "classes",
+            "maxItems": 2,
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "A subset of \"pii\" and \"secret\"."
+          },
+          "destinations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FlowDestination"
+            },
+            "title": "destinations",
+            "maxItems": 64,
+            "minItems": 1,
+            "description": "Exact ActionIR destinations, at least one."
+          }
+        },
+        "title": "FlowAllowance",
+        "additionalProperties": false,
+        "description": "FlowAllowance lets data of its classes, read anywhere in the run tree, go\n to its destinations without a DATA_FLOW_HOLD (G0 M16 D75, HR-431). Under\n delegation each child allowance must be covered by one of the parent's\n (HR-432)."
+      },
+      "pantherclaw.v1.FlowAllowanceInput": {
+        "type": "object",
+        "properties": {
+          "classes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 2,
+              "minItems": 1,
+              "uniqueItems": true,
+              "enum": [
+                "pii",
+                "secret"
+              ]
+            },
+            "title": "classes",
+            "maxItems": 2,
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "A subset of \"pii\" and \"secret\"."
+          },
+          "destinations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FlowDestinationInput"
+            },
+            "title": "destinations",
+            "maxItems": 64,
+            "minItems": 1,
+            "description": "Exact ActionIR destinations, at least one."
+          }
+        },
+        "title": "FlowAllowance",
+        "additionalProperties": false,
+        "description": "FlowAllowance lets data of its classes, read anywhere in the run tree, go\n to its destinations without a DATA_FLOW_HOLD (G0 M16 D75, HR-431). Under\n delegation each child allowance must be covered by one of the parent's\n (HR-432).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.FlowAllowance",
+        "required": [
+          "classes",
+          "destinations"
+        ]
+      },
+      "pantherclaw.v1.FlowDestination": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "maxLength": 512,
+            "minLength": 1,
+            "description": "Destination kind."
+          },
+          "id": {
+            "type": "string",
+            "title": "id",
+            "maxLength": 512,
+            "minLength": 1,
+            "description": "Destination id."
+          }
+        },
+        "title": "FlowDestination",
+        "additionalProperties": false,
+        "description": "FlowDestination is one ActionIR destination: its kind and id."
+      },
+      "pantherclaw.v1.FlowDestinationInput": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "maxLength": 512,
+            "minLength": 1,
+            "description": "Destination kind."
+          },
+          "id": {
+            "type": "string",
+            "title": "id",
+            "maxLength": 512,
+            "minLength": 1,
+            "description": "Destination id."
+          }
+        },
+        "title": "FlowDestination",
+        "additionalProperties": false,
+        "description": "FlowDestination is one ActionIR destination: its kind and id.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.FlowDestination",
+        "required": [
+          "kind",
+          "id"
+        ]
+      },
       "pantherclaw.v1.GetBudgetStateRequest": {
         "type": "object",
         "properties": {
@@ -54374,6 +54500,14 @@
             "title": "create_time",
             "description": "When this revision was created.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "flows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FlowAllowance"
+            },
+            "title": "flows",
+            "description": "Data flows allowed after a pii or secret read in the run tree (G0 M16\n D75); none allows no flow."
           }
         },
         "title": "Grant",
@@ -54559,6 +54693,18 @@
             "minimum": 0,
             "format": "int32",
             "description": "Lowest attestation level (0-2)."
+          },
+          "flows": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FlowAllowanceInput"
+            },
+            "title": "flows",
+            "maxItems": 16,
+            "description": "Data flows allowed after a sensitive read (G0 M16 D75); none allows no\n flow."
           }
         },
         "title": "IssueGrantRequest",
@@ -54770,6 +54916,18 @@
             "format": "uuid",
             "description": "The ACCESS_REQUEST waitlist entry this revision answers (F051); the\n revision closes it as approved. The entry must be open and about this\n grant.",
             "nullable": true
+          },
+          "flows": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FlowAllowanceInput"
+            },
+            "title": "flows",
+            "maxItems": 16,
+            "description": "Data flows allowed after a sensitive read (G0 M16 D75, D94); none allows\n no flow. Adding or widening one widens the grant."
           }
         },
         "title": "ReviseGrantRequest",
@@ -77059,6 +77217,18 @@
             "minimum": 0,
             "format": "int32",
             "description": "Lowest attestation level (0-2); at least the parent's."
+          },
+          "flows": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FlowAllowanceInput"
+            },
+            "title": "flows",
+            "maxItems": 16,
+            "description": "Data flows allowed after a sensitive read (G0 M16 D75, D94); each must\n be covered by one of the parent grant's, and none allows no flow."
           }
         },
         "title": "DelegateGrantRequest",

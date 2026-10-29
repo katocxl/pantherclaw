@@ -337,7 +337,7 @@ func (s *Workload) DelegateGrant(ctx context.Context, req *pantherclawv1.Delegat
 	}
 	in := grantsapp.DelegateRequest{
 		TaskRef: req.GetTaskRef(), Delegation: grantsapp.Delegation(req.GetDelegation().GetDepth(), req.GetDelegation().GetMaxChildren()),
-		MinAttestation: int(req.GetMinAttestationLevel()),
+		MinAttestation: int(req.GetMinAttestationLevel()), Flows: grantsrpc.Flows(req.GetFlows()),
 	}
 	if in.ChildRunID, err = runsrpc.ParseID(req.GetChildRunId()); err != nil {
 		return nil, err

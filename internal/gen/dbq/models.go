@@ -2062,6 +2062,7 @@ type PcGrantRevision struct {
 	Widens          bool
 	CreatedBy       string
 	CreatedAt       time.Time
+	Flows           []byte
 }
 
 type PcHoldSlot struct {

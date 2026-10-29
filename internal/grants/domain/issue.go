@@ -4,6 +4,7 @@
 package domain
 
 import (
+	"fmt"
 	"time"
 
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
@@ -122,6 +123,11 @@ func (g Grant) validateChild(ic IssueContext, caps Caps) error {
 	if v := g.Bounds.Within(p.Bounds); v != nil {
 		return outside("wider than the parent grant: %s", v)
 	}
+	// Flows only narrow under delegation, and none means none (G0 M16 D75,
+	// HR-432).
+	if i := FlowsWithin(g.Flows, p.Flows); i >= 0 {
+		return outside("wider than the parent grant: flows[%d] is not covered by one of the parent's flows", i)
+	}
 	return nil
 }
 
@@ -156,6 +162,11 @@ func CompareRevision(cur, next Grant) (Revision, error) {
 	}
 	if !limitsKept(cur.Limits, next.Limits) {
 		return Revision{Widens: true, Detail: "a budget or counter is removed or changed"}, nil
+	}
+	// A flow added or widened (more classes or destinations) widens; a
+	// removed or narrowed one narrows (G0 M16 D94).
+	if i := FlowsWithin(next.Flows, cur.Flows); i >= 0 {
+		return Revision{Widens: true, Detail: fmt.Sprintf("flows[%d] is added or widened", i)}, nil
 	}
 	switch {
 	case next.ExpiresAt.After(cur.ExpiresAt) || next.NotBefore.Before(cur.NotBefore):
