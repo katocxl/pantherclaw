@@ -3477,6 +3477,7 @@ type PcTransaction struct {
 	Simulated           bool
 	DecidedVia          *string
 	EnforcementPointID  *ids.UUID
+	ReadClass           *string
 }
 
 type PcTransactionLink struct {

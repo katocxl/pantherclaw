@@ -158,6 +158,10 @@ type Evaluation struct {
 	// Consequences are what step 6 found the action's consequence rules
 	// say, in rule order (G0 M8, HR-206).
 	Consequences []consequences.Consequence
+	// ReadClass is the class of the data a read returns (G0 M16 D72); the
+	// transaction records it only when the read is allowed
+	// (RecordedReadClass).
+	ReadClass string
 }
 
 // VerifyPlan is fixed when a permit is issued: the digest of the
@@ -256,6 +260,9 @@ type state struct {
 	// pending are the predicted and unknown consequences steps 4, 7 and 8
 	// decide with the action.
 	pending []pendingConsequence
+	// classification is the class a pc.classification fact gives the
+	// action's target (G0 M16 D80), or "": it raises the read class.
+	classification string
 }
 
 // Snapshot calls fn with a Reader whose reads all come from one snapshot
@@ -310,6 +317,7 @@ func (p *Pipeline) evaluate(ctx context.Context, req Request) (*Evaluation, erro
 	p.boundaries(ctx, s)
 	p.requirements(ctx, s)
 	s.ev.Decision, s.ev.Checklist = s.cl.compose(s.covered)
+	s.readClass()
 	s.ev.Basis = s.basis()
 	return s.ev, nil
 }
