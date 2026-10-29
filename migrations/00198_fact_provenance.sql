@@ -59,7 +59,7 @@ ALTER TABLE pc.facts
     -- squawk-ignore constraint-missing-not-valid
     ADD CONSTRAINT facts_provenance CHECK (
         (source IS NULL AND method IS NULL)
-        OR (char_length(source) BETWEEN 1 AND 128 AND method IN ('manual', 'rule', 'model')));
+        OR (source IS NOT NULL AND method IS NOT NULL AND char_length(source) BETWEEN 1 AND 128 AND method IN ('manual', 'rule', 'model')));
 
 -- pc.identity.risk comes only from the built-in provider (HR-441).
 -- +goose StatementBegin

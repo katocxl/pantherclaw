@@ -53,22 +53,56 @@ func newAsker(cfg Config) *asker {
 	return &asker{cfg: cfg, clients: map[ids.UUID]*http.Client{}, flights: map[ids.OrgID]chan struct{}{}}
 }
 
-// Ask implements pipeline.ExternalCheck: it reads the org's ACTIVE checks
-// and asks each one whose operations cover the action, in name order.
-func (s *Service) Ask(ctx context.Context, org ids.OrgID, in pipeline.ExternalInput) ([]pipeline.ExternalVerdict, error) {
+// preloaded is the org's active checks, read before the snapshot opened.
+type preloaded struct {
+	org    ids.OrgID
+	checks []Check
+	err    error
+}
+
+type preloadKey struct{}
+
+// Preload implements pipeline.ExternalCheck: it reads the org's ACTIVE
+// checks in its own short transaction, before the decision's snapshot
+// holds a connection, so a burst of decisions never waits on the pool
+// for a second one. A read error is kept and Ask returns it
+// (CANNOT_AUTHORIZE).
+func (s *Service) Preload(ctx context.Context, org ids.OrgID) context.Context {
+	checks, err := s.active(ctx, org)
+	return context.WithValue(ctx, preloadKey{}, preloaded{org: org, checks: checks, err: err})
+}
+
+func (s *Service) active(ctx context.Context, org ids.OrgID) ([]Check, error) {
 	var checks []Check
 	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		rows, err := dbq.New(tx).ListActiveExternalChecks(ctx, org)
 		for _, r := range rows {
-			if c := (Check{ID: r.ID, Name: r.Name, Endpoint: r.Endpoint, CAPEM: deref(r.CaPem), TimeoutMs: int(r.TimeoutMs),
-				Operations: r.Operations, State: StateActive}); c.Covers(in.Operation) {
-				checks = append(checks, c)
-			}
+			checks = append(checks, Check{
+				ID: r.ID, Name: r.Name, Endpoint: r.Endpoint, CAPEM: deref(r.CaPem), TimeoutMs: int(r.TimeoutMs),
+				Operations: r.Operations, State: StateActive,
+			})
 		}
 		return err
 	}, db.ReadOnly())
-	if err != nil {
-		return nil, err
+	return checks, err
+}
+
+// Ask implements pipeline.ExternalCheck: it asks each of the org's ACTIVE
+// checks whose operations cover the action, in name order, from the
+// preloaded list (read here when there is none).
+func (s *Service) Ask(ctx context.Context, org ids.OrgID, in pipeline.ExternalInput) ([]pipeline.ExternalVerdict, error) {
+	pre, ok := ctx.Value(preloadKey{}).(preloaded)
+	if !ok || pre.org != org {
+		pre.checks, pre.err = s.active(ctx, org)
+	}
+	if pre.err != nil {
+		return nil, pre.err
+	}
+	var checks []Check
+	for _, c := range pre.checks {
+		if c.Covers(in.Operation) {
+			checks = append(checks, c)
+		}
 	}
 	if len(checks) == 0 {
 		return nil, nil

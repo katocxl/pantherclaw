@@ -246,7 +246,7 @@ func (q *Queries) GetFactProviderByConnection(ctx context.Context, orgID ids.Org
 const insertFactDeclaration = `-- name: InsertFactDeclaration :exec
 INSERT INTO pc.fact_declarations (org_id, provider_id, name, value_type, subject_type, max_lag_s, connection_id, kind)
 VALUES ($1, $2, $3, $4, $5, $6,
-        $7, $8)
+        $7, coalesce(nullif($8::text, ''), 'value'))
 `
 
 type InsertFactDeclarationParams struct {

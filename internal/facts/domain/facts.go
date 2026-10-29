@@ -364,7 +364,8 @@ func Accept(p Provider, o Observation, now time.Time, prev *Fact) (Fact, error) 
 	if prev != nil && observed.Before(prev.ObservedAt) {
 		return Fact{}, fmt.Errorf("%w: a newer observation of %s is already recorded", ErrStale, o.Name)
 	}
-	return Fact{Name: o.Name, SubjectType: o.SubjectType, SubjectID: o.SubjectID, Value: v, ObservedAt: observed, RecordedAt: now.UTC(), ProviderID: p.ID,
+	return Fact{
+		Name: o.Name, SubjectType: o.SubjectType, SubjectID: o.SubjectID, Value: v, ObservedAt: observed, RecordedAt: now.UTC(), ProviderID: p.ID,
 		Source: o.Source, Method: o.Method,
 	}, nil
 }

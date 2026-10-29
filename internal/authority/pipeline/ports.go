@@ -335,6 +335,10 @@ type PeerCheck func(ctx context.Context, org ids.OrgID, conn Connection, grant g
 // simulation), no check is asked: replay reports "external check not
 // evaluated".
 type ExternalCheck interface {
+	// Preload reads the org's active checks before the evaluation's snapshot
+	// opens and returns a context that carries them, so Ask takes no second
+	// database connection while the snapshot holds one.
+	Preload(ctx context.Context, org ids.OrgID) context.Context
 	Ask(ctx context.Context, org ids.OrgID, in ExternalInput) ([]ExternalVerdict, error)
 }
 
