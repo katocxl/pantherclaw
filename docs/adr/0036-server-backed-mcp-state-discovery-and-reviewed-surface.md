@@ -20,6 +20,7 @@
 **Consequences.**
 - An approval binds across replicas and restarts, which M19's high availability builds on; every `tools/call` adds one state read before `Authorize` (measured in `docs/perf/M15.md`).
 - The server stores task bodies it cannot read; a broker key rotation loses open tasks, which then cost the agent a new action.
+- Tasks and elicitations are shared only when the replicas share a broker key: a gateway without one keeps them in its own memory, as before, while holds and sessions are shared either way; it warns at start-up when it serves an MCP connection without a broker key (D42).
 - New upstream tools reach review instead of being ignored, but stay unusable until a person completes and signs a package; reviewers get a draft, never a ready-to-sign package.
 - Resource reads are governed and receipted like other reads, and M14's data-scoping obligations apply to them.
 - HR-082 becomes concrete: elicitation is enabled only where a reviewed package declares it, and its answers are decided by policy. Sampling and roots each need their own decision later.

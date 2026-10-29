@@ -66,6 +66,8 @@ Give the operator the token, the `ca_sha256` pin and the URLs, through a channel
 
    It waits up to 30 seconds for these. It refuses every dispatch while its containment stream is more than 2 seconds old (`containment_stale`).
 
+   **Replicas** (G0 M15). Several processes (replicas) may serve one gateway record, each with its own certificate (§6). MCP holds and sessions are shared through the server either way. MCP tasks and elicitations are shared only when every replica uses the same broker key (the same `broker.key_file` and KEK files): a gateway without a broker key keeps them in its own memory, so a task started on one replica cannot be polled on another, and it logs a warning at start-up when it serves an `mcp` connection without one.
+
 ## 4. Renewal
 
 - Certificates last 24 hours. The gateway renews at 16 hours, over mTLS, with a new key. A failed renewal is retried every minute until expiry.
