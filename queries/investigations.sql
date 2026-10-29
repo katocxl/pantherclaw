@@ -81,14 +81,6 @@ WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id)
 ORDER BY t.created_at, t.id
 LIMIT sqlc.arg(max_rows);
 
--- Child runs (lanes) of a run.
--- name: InvRunChildren :many
-SELECT id, agent_id, state, created_at, ended_at
-FROM pc.runs
-WHERE org_id = sqlc.arg(org_id) AND parent_run_id = sqlc.arg(run_id)
-ORDER BY created_at, id
-LIMIT sqlc.arg(max_rows);
-
 -- Child runs of a run after a (created_at, id) position, for reading
 -- page by page until enough visible children are found (rows26 D25).
 -- name: InvRunChildrenAfter :many
