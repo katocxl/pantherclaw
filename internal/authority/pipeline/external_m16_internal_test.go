@@ -160,8 +160,10 @@ func TestHR441_RiskIsOpenForADayAndOnlyRestricts(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	principal, launcher := gdomain.Principal{Kind: gdomain.PrincipalUser, ID: ids.NewV7()}, gdomain.Principal{Kind: gdomain.PrincipalUser, ID: ids.NewV7()}
 	fact := func(age time.Duration) fdomain.Fact {
-		return fdomain.Fact{Name: fdomain.NameIdentityRisk, ObservedAt: now.Add(-age),
-			Value: fdomain.Value{Type: fdomain.TypeObject, Object: map[string]any{"event": "credential-change", "level": "high", "at": now.Add(-age).Unix()}}}
+		return fdomain.Fact{
+			Name: fdomain.NameIdentityRisk, ObservedAt: now.Add(-age),
+			Value: fdomain.Value{Type: fdomain.TypeObject, Object: map[string]any{"event": "credential-change", "level": "high", "at": now.Add(-age).Unix()}},
+		}
 	}
 	run := func(facts map[string]fdomain.Fact) *state {
 		s := &state{
@@ -259,10 +261,14 @@ func TestT195_AForgedRiskCannotLiftARestriction(t *testing.T) {
 		policy: policyWith(t, `!principal.risk.open`),
 	}
 	s.cl.add(StepBoundaries, adomain.Deny, "PRIOR", "another step", "")
-	fresh := fdomain.Fact{Name: fdomain.NameIdentityRisk, ObservedAt: now,
-		Value: fdomain.Value{Type: fdomain.TypeObject, Object: map[string]any{"event": "x", "at": now.Unix()}}}
+	fresh := fdomain.Fact{
+		Name: fdomain.NameIdentityRisk, ObservedAt: now,
+		Value: fdomain.Value{Type: fdomain.TypeObject, Object: map[string]any{"event": "x", "at": now.Unix()}},
+	}
 	(&Pipeline{Reader: riskReader{facts: map[string]fdomain.Fact{launcher.ID.String(): fresh}}}).identityRisk(context.Background(), s)
 	if d, _ := s.cl.compose(true); d != adomain.Deny || s.risk == nil {
 		t.Fatalf("%s %+v", d, s.risk)
 	}
 }
+
+func (f askFunc) Preload(ctx context.Context, _ ids.OrgID) context.Context { return ctx }

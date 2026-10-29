@@ -106,6 +106,17 @@ GRANT UPDATE (state, activated_by, activated_credential, activated_at, updated_a
 GRANT SELECT (org_id, id, name, endpoint, timeout_ms, operations, state, created_by, activated_by, activated_at, created_at,
     updated_at) ON pc.external_policy_checks TO pc_audit_ro;
 
+-- 00181's tenant write freeze, and the org deleter's grants.
+CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.external_policy_checks
+    FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
+-- +goose StatementBegin
+DO $$ BEGIN
+    IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_deleter') THEN
+        GRANT SELECT, DELETE ON pc.external_policy_checks TO pc_deleter;
+    END IF;
+END $$;
+-- +goose StatementEnd
+
 -- +goose Down
 DROP TABLE pc.external_policy_checks;
 DROP FUNCTION pc.external_policy_check_guard();

@@ -277,6 +277,10 @@ type state struct {
 // when the Pipeline's Reader is a Snapshotter, and with that Reader itself
 // otherwise.
 func (p *Pipeline) Snapshot(ctx context.Context, org ids.OrgID, fn func(ctx context.Context, r Reader) error) error {
+	if p.External != nil {
+		// Before the snapshot holds a connection (G0 M16 D81).
+		ctx = p.External.Preload(ctx, org)
+	}
 	if s, ok := p.Reader.(Snapshotter); ok {
 		return s.Snapshot(ctx, org, fn)
 	}

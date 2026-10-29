@@ -11,7 +11,7 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(name), sqlc.narg(service_accoun
 -- name: InsertFactDeclaration :exec
 INSERT INTO pc.fact_declarations (org_id, provider_id, name, value_type, subject_type, max_lag_s, connection_id, kind)
 VALUES (sqlc.arg(org_id), sqlc.arg(provider_id), sqlc.arg(name), sqlc.arg(value_type), sqlc.arg(subject_type), sqlc.arg(max_lag_s),
-        sqlc.narg(connection_id), sqlc.arg(kind));
+        sqlc.narg(connection_id), coalesce(nullif(sqlc.arg(kind)::text, ''), 'value'));
 
 -- ListActiveDeclarations are the active declarations of active providers
 -- with their scope: connection_id is NULL for an org-scoped (service
