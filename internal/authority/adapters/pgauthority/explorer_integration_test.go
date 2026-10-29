@@ -242,6 +242,8 @@ func compareIDs(a, b ids.UUID) int {
 // are names for evidence.read alone and "name=value" lines with
 // grant.read; budgets need budget.read. Material values come from the
 // sealed inputs (F066, F647, rows26 D12b).
+//
+// Covers: F066, F647
 func TestExplorer_ExplainsAHeldAndADeniedDecision(t *testing.T) {
 	w := newWorld(t)
 	w.keepInputs()
@@ -284,7 +286,7 @@ func TestExplorer_ExplainsAHeldAndADeniedDecision(t *testing.T) {
 			!strings.Contains(g.Constraints[0], "=") {
 			t.Fatalf("%s: grant with grant.read %+v", tc.name, x.Grant)
 		}
-		if len(x.Budgets) == 0 || x.Budgets[0].Rule == "" {
+		if len(x.Budgets) == 0 || x.Budgets[0].Rule == "" || x.Budgets[0].Owner == "" {
 			t.Fatalf("%s: budgets with budget.read %+v", tc.name, x.Budgets)
 		}
 
@@ -296,6 +298,24 @@ func TestExplorer_ExplainsAHeldAndADeniedDecision(t *testing.T) {
 			slices.ContainsFunc(x.Grant.Constraints, func(c string) bool { return strings.Contains(c, "=") }) || x.Budgets != nil {
 			t.Fatalf("%s: with evidence.read alone %+v", tc.name, x)
 		}
+	}
+
+	// An allowed refund reserves on its grant's budget: the explanation
+	// names that budget account and, apart, the grant that owns the rule
+	// (rows26 D13).
+	w.refundable("ch_4")
+	allowed := w.authorize(w.request(w.run(w.grant("100").ID, ids.UUID{}), ids.NewV7(), "ch_4", "30.00"))
+	ev, err := e.TransactionEvidence(everything, allowed.TransactionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var account, owner string
+	w.db.AdminQueryRow(t, `SELECT ba.id::text, ba.owner_id::text FROM pc.reservations res
+		JOIN pc.budget_accounts ba ON ba.org_id = res.org_id AND ba.id = res.account_id
+		WHERE res.transaction_id = $1 ORDER BY ba.id LIMIT 1`, []any{allowed.TransactionID}, &account, &owner)
+	if x := ev.Explanation; allowed.Decision != "ALLOW" || x == nil || len(x.Budgets) == 0 ||
+		x.Budgets[0].Account != account || x.Budgets[0].Owner != owner || account == owner {
+		t.Fatalf("allowed %s: budgets %+v, want account %s owned by %s", allowed.Decision, ev.Explanation, account, owner)
 	}
 
 	// Inputs that were not kept: with no opener, and with a keyed opener

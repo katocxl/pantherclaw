@@ -712,8 +712,8 @@ message DecisionExplanation {
   // The budgets at decision time; left out without budget.read.
   repeated ExplainedBudget budgets = 12;
   // What is not known: UNKNOWN_CONSEQUENCE, OUTCOME_UNKNOWN,
-  // NO_EFFECT_CONFIRMED, COVERAGE_PARTIAL, COVERAGE_OBSERVE_ONLY or
-  // COVERAGE_UNKNOWN.
+  // NO_EFFECT_CONFIRMED, COVERAGE_PARTIAL, COVERAGE_OBSERVE_ONLY,
+  // COVERAGE_UNKNOWN or MATERIAL_VALUES_UNAVAILABLE.
   repeated string gaps = 13;
   // The transaction's execution state, for example "BLOCKED".
   string execution_state = 14;
@@ -727,8 +727,12 @@ message ExplainedAction {
   string operation = 1;
   // The target, "<type>:<id>".
   string target = 2;
-  // The definition's material parameters (never content), or the budget
-  // amount and currency when no approval display recorded them.
+  // UNTRUSTED. The definition's material parameters (never content), read
+  // from the decision's sealed evaluation inputs and written as an approval
+  // display writes them. String values may be agent-supplied (cleaned):
+  // show them as plain text only. Empty when the inputs are missing,
+  // truncated or cannot be opened; gaps then add
+  // MATERIAL_VALUES_UNAVAILABLE.
   map<string, string> material_values = 3;
 }
 
@@ -748,7 +752,8 @@ message ExplainedGrant {
 // ExplainedBudget is one budget rule at decision time. Amounts are decimal
 // strings in its currency.
 message ExplainedBudget {
-  // The grant or guardrail that owns the rule.
+  // The budget account (budget_accounts.id) this transaction reserved on;
+  // empty when it reserved nothing on the rule.
   string account_id = 1;
   // Rule id.
   string rule = 2;
@@ -762,4 +767,6 @@ message ExplainedBudget {
   string spent = 6;
   // Held by this transaction with its outcome unknown.
   string unknown = 7;
+  // The grant or guardrail that owns the rule.
+  string owner_id = 8;
 }

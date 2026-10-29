@@ -269,6 +269,42 @@ func (q *Queries) ExecutionOf(ctx context.Context, orgID ids.OrgID, transactionI
 	return i, err
 }
 
+const explanationBudgetAccounts = `-- name: ExplanationBudgetAccounts :many
+SELECT DISTINCT ba.id, ba.owner_id, ba.rule
+FROM pc.reservations res
+JOIN pc.budget_accounts ba ON ba.org_id = res.org_id AND ba.id = res.account_id
+WHERE res.org_id = $1 AND res.transaction_id = $2
+ORDER BY ba.owner_id, ba.rule, ba.id
+`
+
+type ExplanationBudgetAccountsRow struct {
+	ID      ids.UUID
+	OwnerID ids.UUID
+	Rule    string
+}
+
+// The budget accounts the transaction reserved on, by the owner and rule
+// of each (F066; the same join as ExplanationUnknownHolds).
+func (q *Queries) ExplanationBudgetAccounts(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID) ([]ExplanationBudgetAccountsRow, error) {
+	rows, err := q.db.Query(ctx, explanationBudgetAccounts, orgID, transactionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExplanationBudgetAccountsRow{}
+	for rows.Next() {
+		var i ExplanationBudgetAccountsRow
+		if err := rows.Scan(&i.ID, &i.OwnerID, &i.Rule); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const explanationFacts = `-- name: ExplanationFacts :one
 SELECT coalesce(t.target_type, '')::text AS target_type, coalesce(t.target_id, '')::text AS target_id, r.environment_id
 FROM pc.transactions t

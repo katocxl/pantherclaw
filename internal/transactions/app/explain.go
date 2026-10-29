@@ -61,11 +61,12 @@ type ExplainedGrant struct {
 	Expires     time.Time
 }
 
-// ExplainedBudget is one budget rule at decision time: Owner is the grant
-// or guardrail that owns it, Unknown what this transaction holds on it
-// with its outcome unknown.
+// ExplainedBudget is one budget rule at decision time: Account is the
+// budget account the transaction reserved on (empty when it reserved
+// nothing on the rule), Owner the grant or guardrail that owns the rule,
+// Unknown what this transaction holds on it with its outcome unknown.
 type ExplainedBudget struct {
-	Owner, Rule, Currency           string
+	Account, Owner, Rule, Currency  string
 	Limit, Reserved, Spent, Unknown string
 }
 
@@ -133,7 +134,10 @@ type explainInputs struct {
 	grant *dbq.ExplanationGrantRevisionRow
 	// unknown is what the transaction holds per "<owner>/<rule>" with its
 	// outcome unknown.
-	unknown       map[string]money.Decimal
+	unknown map[string]money.Decimal
+	// accounts is the budget account the transaction reserved on per
+	// "<owner>/<rule>"; a rule it reserved nothing on has none.
+	accounts      map[string]string
 	grantValues   bool
 	budgetsShown  bool
 	grantID       string
@@ -177,6 +181,16 @@ func readExplainInputs(ctx context.Context, c tenancy.Caller, q *dbq.Queries, ev
 		holds, err := q.ExplanationUnknownHolds(ctx, c.Org, id)
 		if err != nil {
 			return in, err
+		}
+		accounts, err := q.ExplanationBudgetAccounts(ctx, c.Org, id)
+		if err != nil {
+			return in, err
+		}
+		in.accounts = map[string]string{}
+		for _, a := range accounts {
+			if k := a.OwnerID.String() + "/" + a.Rule; in.accounts[k] == "" {
+				in.accounts[k] = a.ID.String()
+			}
 		}
 		in.unknown = map[string]money.Decimal{}
 		for _, h := range holds {
@@ -236,7 +250,7 @@ func explain(ev *Evidence, in explainInputs) *Explanation {
 	}
 	if in.budgetsShown {
 		for _, b := range claims.Pap.Budgets {
-			eb := ExplainedBudget{Owner: b.Level, Rule: b.Rule, Currency: b.Currency, Reserved: b.Reserved, Spent: b.Spent}
+			eb := ExplainedBudget{Account: in.accounts[b.Level+"/"+b.Rule], Owner: b.Level, Rule: b.Rule, Currency: b.Currency, Reserved: b.Reserved, Spent: b.Spent}
 			eb.Limit = limitOf(b.Available, b.Reserved, b.Spent)
 			if u, ok := in.unknown[b.Level+"/"+b.Rule]; ok {
 				eb.Unknown = u.String()
@@ -333,15 +347,9 @@ type Recordings interface {
 // recordedMaterial are an evaluation's material values: each material
 // parameter of the definition that is not content, written as an approval
 // display writes it. ok is false when the inputs are missing, truncated or
-// unreadable, or no recordings are configured; an opener that panics (no
-// sealing key, a nil opener) is the same gap, never a failed read
-// (rows26 D12b).
-func recordedMaterial(ctx context.Context, r Recordings, org ids.OrgID, txn ids.UUID, evaluation int) (out map[string]string, ok bool) {
-	defer func() {
-		if recover() != nil {
-			out, ok = nil, false
-		}
-	}()
+// unreadable, when no opener or sealing key is configured (the opener's
+// error), or when no recordings are configured (rows26 D12b).
+func recordedMaterial(ctx context.Context, r Recordings, org ids.OrgID, txn ids.UUID, evaluation int) (map[string]string, bool) {
 	if r == nil {
 		return nil, false
 	}
@@ -361,10 +369,10 @@ func recordedMaterial(ctx context.Context, r Recordings, org ids.OrgID, txn ids.
 	if err != nil {
 		return nil, false
 	}
-	out = map[string]string{}
+	out := map[string]string{}
 	for name, spec := range pinned.Definition.Params {
-		v, has := vals[name]
-		if !has || !spec.Material || spec.Type == defs.TypeContent {
+		v, ok := vals[name]
+		if !ok || !spec.Material || spec.Type == defs.TypeContent {
 			continue
 		}
 		out[name] = apdomain.FormatValue(v, spec)

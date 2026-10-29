@@ -16,6 +16,7 @@ import (
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/authority/recording"
+	"github.com/katocxl/pantherclaw/internal/authority/replay"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/money"
@@ -45,6 +46,7 @@ func sample(decision, check, code string, execution domain.ExecutionState, cover
 		facts:   dbq.ExplanationFactsRow{TargetType: "stripe.charge", TargetID: "ch_1", EnvironmentID: ids.NewV7()},
 		grant:   &dbq.ExplanationGrantRevisionRow{ExpiresAt: time.Now().Add(time.Hour), Bounds: []byte(`{"operations": ["payments.refund.create"], "params": {"x": 1}}`)},
 		unknown: map[string]money.Decimal{grantID + "/task": money.MustParse("30.00")}, budgetsShown: true, grantID: grantID, grantRevision: 2,
+		accounts: map[string]string{grantID + "/task": "acct-1"},
 		material: map[string]string{"amount": "60.00 USD", "charge": "ch_1"}, materialOK: true,
 	}
 	return ev, in
@@ -90,7 +92,7 @@ func TestF066_EveryFieldOfAHeldAndADeniedDecisionIsFilled(t *testing.T) {
 			t.Errorf("%s: grant %+v", tc.name, x.Grant)
 		}
 		if len(x.Budgets) != 1 || x.Budgets[0] != (ExplainedBudget{
-			Owner: grantID, Rule: "task", Currency: "USD", Limit: "100", Reserved: "30.00", Spent: "50.00", Unknown: "30",
+			Account: "acct-1", Owner: grantID, Rule: "task", Currency: "USD", Limit: "100", Reserved: "30.00", Spent: "50.00", Unknown: "30",
 		}) {
 			t.Errorf("%s: budgets %+v", tc.name, x.Budgets)
 		}
@@ -150,20 +152,15 @@ func (failingRecordings) Definition(context.Context, ids.OrgID, actionir.Definit
 	return pipeline.Pinned{}, nil
 }
 
-// panickingRecordings is an opener with no sealing key behind it.
-type panickingRecordings struct{ failingRecordings }
-
-func (panickingRecordings) RecordedInputs(context.Context, ids.OrgID, ids.UUID, int) (*recording.Recording, error) {
-	panic("interface conversion: interface is nil, not replay.Opener")
-}
-
 // TestF066_MissingInputsAreAGap: when the sealed inputs are missing or
 // truncated (or no opener is configured) the material values stay empty
-// and the gaps say so, and an opener that panics is the same gap (rows26 D12b).
+// and the gaps say so; so does an engine with no opener or sealing key
+// (rows26 D12b).
 //
 // Covers: F066, F647
 func TestF066_MissingInputsAreAGap(t *testing.T) {
-	for _, r := range []Recordings{nil, failingRecordings{recording.ErrTruncated}, failingRecordings{errors.New("no row")}, panickingRecordings{}} {
+	for _, r := range []Recordings{nil, failingRecordings{recording.ErrTruncated}, failingRecordings{errors.New("no row")},
+		failingRecordings{replay.ErrNoOpener}, failingRecordings{recording.ErrUnreadable}} {
 		if m, ok := recordedMaterial(context.Background(), r, ids.OrgID{}, ids.NewV7(), 1); ok || m != nil {
 			t.Fatalf("%T: material %v ok %v", r, m, ok)
 		}

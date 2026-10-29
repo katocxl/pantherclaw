@@ -40,6 +40,10 @@ import (
 // org's ids look the same).
 var ErrNotFound = errors.New("replay: not found")
 
+// ErrNoOpener reports an engine with no source or opener for sealed
+// inputs: they were not kept, or no sealing key is configured.
+var ErrNoOpener = errors.New("replay: no opener for the inputs")
+
 // Source is everything a replay reads. Every method reads, none writes
 // (HR-197).
 type Source interface {
@@ -248,8 +252,11 @@ func (e *Engine) replay(ctx context.Context, org ids.OrgID, txn ids.UUID, evalua
 // values it read. Callers return them only to holders of
 // evidence.read_restricted (design decision 11). Missing inputs are
 // ErrNotFound; truncated or unreadable ones are the recording package's
-// errors.
+// errors; an engine without a source or an opener is ErrNoOpener.
 func (e *Engine) RecordedInputs(ctx context.Context, org ids.OrgID, txn ids.UUID, evaluation int) (*recording.Recording, error) {
+	if e == nil || e.Source == nil || e.Inputs == nil {
+		return nil, ErrNoOpener
+	}
 	row, err := e.Source.Inputs(ctx, org, txn, evaluation)
 	if err != nil {
 		return nil, fmt.Errorf("replay: the inputs: %w", err)

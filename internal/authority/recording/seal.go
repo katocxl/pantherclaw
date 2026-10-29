@@ -90,9 +90,11 @@ func (s *Sealer) Seal(ctx context.Context, org ids.OrgID, txn ids.UUID, evaluati
 }
 
 // Open opens the row of (txn, evaluation): ErrFormat for a format this code
-// does not read, ErrTruncated, or ErrUnreadable.
+// does not read, ErrTruncated, or ErrUnreadable (also with no sealing key).
 func (s *Sealer) Open(ctx context.Context, org ids.OrgID, txn ids.UUID, evaluation int, row Sealed) (*Recording, error) {
 	switch {
+	case s == nil || s.env == nil:
+		return nil, ErrUnreadable
 	case row.Format != FormatVersion:
 		return nil, fmt.Errorf("%w: %d", ErrFormat, row.Format)
 	case row.Truncated || row.Inputs == nil:
