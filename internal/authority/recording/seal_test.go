@@ -151,3 +151,15 @@ func TestTamperedRecordingHoldsNoReads(t *testing.T) {
 		t.Fatalf("tampered = %+v", back)
 	}
 }
+
+// TestASealerWithoutAKeyOpensNothing: with no sealing key the inputs are
+// unreadable, never a panic (rows26 D13).
+//
+// Covers: F066
+func TestASealerWithoutAKeyOpensNothing(t *testing.T) {
+	for _, s := range []*recording.Sealer{nil, recording.NewSealer(nil)} {
+		if _, err := s.Open(t.Context(), ids.OrgID{}, ids.NewV7(), 1, recording.Sealed{Format: recording.FormatVersion, Inputs: []byte{1}}); !errors.Is(err, recording.ErrUnreadable) {
+			t.Fatalf("open: %v, want ErrUnreadable", err)
+		}
+	}
+}

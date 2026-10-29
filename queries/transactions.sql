@@ -258,3 +258,12 @@ JOIN pc.budget_accounts ba ON ba.org_id = res.org_id AND ba.id = res.account_id
 JOIN pc.permits p ON p.org_id = res.org_id AND p.id = res.permit_id
 WHERE res.org_id = sqlc.arg(org_id) AND res.transaction_id = sqlc.arg(transaction_id) AND res.state = 'HELD'
   AND p.state = 'UNKNOWN';
+
+-- The budget accounts the transaction reserved on, by the owner and rule
+-- of each (F066; the same join as ExplanationUnknownHolds).
+-- name: ExplanationBudgetAccounts :many
+SELECT DISTINCT ba.id, ba.owner_id, ba.rule
+FROM pc.reservations res
+JOIN pc.budget_accounts ba ON ba.org_id = res.org_id AND ba.id = res.account_id
+WHERE res.org_id = sqlc.arg(org_id) AND res.transaction_id = sqlc.arg(transaction_id)
+ORDER BY ba.owner_id, ba.rule, ba.id;

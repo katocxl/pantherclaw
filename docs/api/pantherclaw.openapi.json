@@ -31309,7 +31309,7 @@
               "type": "string"
             },
             "title": "gaps",
-            "description": "What is not known: UNKNOWN_CONSEQUENCE, OUTCOME_UNKNOWN,\n NO_EFFECT_CONFIRMED, COVERAGE_PARTIAL, COVERAGE_OBSERVE_ONLY or\n COVERAGE_UNKNOWN."
+            "description": "What is not known: UNKNOWN_CONSEQUENCE, OUTCOME_UNKNOWN,\n NO_EFFECT_CONFIRMED, COVERAGE_PARTIAL, COVERAGE_OBSERVE_ONLY,\n COVERAGE_UNKNOWN or MATERIAL_VALUES_UNAVAILABLE."
           },
           "executionState": {
             "type": "string",
@@ -31349,7 +31349,7 @@
               "type": "string",
               "title": "value"
             },
-            "description": "The definition's material parameters (never content), or the budget\n amount and currency when no approval display recorded them."
+            "description": "UNTRUSTED. The definition's material parameters (never content), read\n from the decision's sealed evaluation inputs and written as an approval\n display writes them. String values may be agent-supplied (cleaned):\n show them as plain text only. Empty when the inputs are missing,\n truncated or cannot be opened; gaps then add\n MATERIAL_VALUES_UNAVAILABLE."
           }
         },
         "title": "ExplainedAction",
@@ -31377,7 +31377,7 @@
           "accountId": {
             "type": "string",
             "title": "account_id",
-            "description": "The grant or guardrail that owns the rule."
+            "description": "The budget account (budget_accounts.id) this transaction reserved on;\n empty when it reserved nothing on the rule."
           },
           "rule": {
             "type": "string",
@@ -31408,6 +31408,11 @@
             "type": "string",
             "title": "unknown",
             "description": "Held by this transaction with its outcome unknown."
+          },
+          "ownerId": {
+            "type": "string",
+            "title": "owner_id",
+            "description": "The grant or guardrail that owns the rule."
           }
         },
         "title": "ExplainedBudget",

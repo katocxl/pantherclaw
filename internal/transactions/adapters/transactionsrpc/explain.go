@@ -48,7 +48,7 @@ func explanationProto(x *app.Explanation, txn, consoleURL string) *pantherclawv1
 	}
 	for _, b := range x.Budgets {
 		out.Budgets = append(out.Budgets, &pantherclawv1.ExplainedBudget{
-			AccountId: b.Owner, Rule: b.Rule, Currency: b.Currency, Limit: b.Limit, Reserved: b.Reserved, Spent: b.Spent, Unknown: b.Unknown,
+			AccountId: b.Account, OwnerId: b.Owner, Rule: b.Rule, Currency: b.Currency, Limit: b.Limit, Reserved: b.Reserved, Spent: b.Spent, Unknown: b.Unknown,
 		})
 	}
 	for _, a := range adomain.NextActions(consoleURL, txn) {

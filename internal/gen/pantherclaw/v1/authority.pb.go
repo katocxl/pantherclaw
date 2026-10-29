@@ -2805,8 +2805,8 @@ type DecisionExplanation struct {
 	// The budgets at decision time; left out without budget.read.
 	Budgets []*ExplainedBudget `protobuf:"bytes,12,rep,name=budgets,proto3" json:"budgets,omitempty"`
 	// What is not known: UNKNOWN_CONSEQUENCE, OUTCOME_UNKNOWN,
-	// NO_EFFECT_CONFIRMED, COVERAGE_PARTIAL, COVERAGE_OBSERVE_ONLY or
-	// COVERAGE_UNKNOWN.
+	// NO_EFFECT_CONFIRMED, COVERAGE_PARTIAL, COVERAGE_OBSERVE_ONLY,
+	// COVERAGE_UNKNOWN or MATERIAL_VALUES_UNAVAILABLE.
 	Gaps []string `protobuf:"bytes,13,rep,name=gaps,proto3" json:"gaps,omitempty"`
 	// The transaction's execution state, for example "BLOCKED".
 	ExecutionState string `protobuf:"bytes,14,opt,name=execution_state,json=executionState,proto3" json:"execution_state,omitempty"`
@@ -2958,8 +2958,12 @@ type ExplainedAction struct {
 	Operation string `protobuf:"bytes,1,opt,name=operation,proto3" json:"operation,omitempty"`
 	// The target, "<type>:<id>".
 	Target string `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
-	// The definition's material parameters (never content), or the budget
-	// amount and currency when no approval display recorded them.
+	// UNTRUSTED. The definition's material parameters (never content), read
+	// from the decision's sealed evaluation inputs and written as an approval
+	// display writes them. String values may be agent-supplied (cleaned):
+	// show them as plain text only. Empty when the inputs are missing,
+	// truncated or cannot be opened; gaps then add
+	// MATERIAL_VALUES_UNAVAILABLE.
 	MaterialValues map[string]string `protobuf:"bytes,3,rep,name=material_values,json=materialValues,proto3" json:"material_values,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
@@ -3094,7 +3098,8 @@ func (x *ExplainedGrant) GetExpireTime() *timestamppb.Timestamp {
 // strings in its currency.
 type ExplainedBudget struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The grant or guardrail that owns the rule.
+	// The budget account (budget_accounts.id) this transaction reserved on;
+	// empty when it reserved nothing on the rule.
 	AccountId string `protobuf:"bytes,1,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
 	// Rule id.
 	Rule string `protobuf:"bytes,2,opt,name=rule,proto3" json:"rule,omitempty"`
@@ -3107,7 +3112,9 @@ type ExplainedBudget struct {
 	// Spent by accepted outcomes.
 	Spent string `protobuf:"bytes,6,opt,name=spent,proto3" json:"spent,omitempty"`
 	// Held by this transaction with its outcome unknown.
-	Unknown       string `protobuf:"bytes,7,opt,name=unknown,proto3" json:"unknown,omitempty"`
+	Unknown string `protobuf:"bytes,7,opt,name=unknown,proto3" json:"unknown,omitempty"`
+	// The grant or guardrail that owns the rule.
+	OwnerId       string `protobuf:"bytes,8,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3187,6 +3194,13 @@ func (x *ExplainedBudget) GetSpent() string {
 func (x *ExplainedBudget) GetUnknown() string {
 	if x != nil {
 		return x.Unknown
+	}
+	return ""
+}
+
+func (x *ExplainedBudget) GetOwnerId() string {
+	if x != nil {
+		return x.OwnerId
 	}
 	return ""
 }
@@ -3423,7 +3437,7 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\brevision\x18\x02 \x01(\x03R\brevision\x12 \n" +
 	"\vconstraints\x18\x03 \x03(\tR\vconstraints\x12;\n" +
 	"\vexpire_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expireTime\"\xc2\x01\n" +
+	"expireTime\"\xdd\x01\n" +
 	"\x0fExplainedBudget\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x12\x12\n" +
@@ -3432,7 +3446,8 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\x05limit\x18\x04 \x01(\tR\x05limit\x12\x1a\n" +
 	"\breserved\x18\x05 \x01(\tR\breserved\x12\x14\n" +
 	"\x05spent\x18\x06 \x01(\tR\x05spent\x12\x18\n" +
-	"\aunknown\x18\a \x01(\tR\aunknown*\xcc\x01\n" +
+	"\aunknown\x18\a \x01(\tR\aunknown\x12\x19\n" +
+	"\bowner_id\x18\b \x01(\tR\aownerId*\xcc\x01\n" +
 	"\bDecision\x12\x18\n" +
 	"\x14DECISION_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eDECISION_ALLOW\x10\x01\x12#\n" +
