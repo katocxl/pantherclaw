@@ -128,7 +128,7 @@ func (h *Handler) Authorize(ctx context.Context, req *pantherclawv1.AuthorizeReq
 	return out, nil
 }
 
-// consequencesToProto is what the consequence rules said, labelled for a
+// consequencesToProto is what the consequence rules said, labeled for a
 // decision that permits the action (an enforced permit) or not (D111); a
 // rule that could not be evaluated is in the checklist, not here.
 func consequencesToProto(cs []consequences.Consequence, permits bool) []*pantherclawv1.Consequence {

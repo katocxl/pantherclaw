@@ -229,3 +229,41 @@ func TestHR234_DirectDecidesAsVersion4(t *testing.T) {
 		t.Fatalf("direct: %s, %d reads", got, len(r.calls))
 	}
 }
+
+// TestHR457_EveryLinkIsANamedRuleOverVerifiedFacts: a hop is derived only
+// by a named rule for the consequence's own operation, from facts read
+// about the consequence's own target: the action's facts are never reused
+// down the chain, so a fact the hop's target lacks leaves it UNKNOWN, and
+// a rule without a verified fact is refused before it is ever stored.
+//
+// Covers: F411, F413
+func TestHR457_EveryLinkIsANamedRuleOverVerifiedFacts(t *testing.T) {
+	p := chainPackage(t)
+	// The deeper rule reads a fact the action's target has.
+	p.Consequences[len(p.Consequences)-2].RequiresFacts = []string{"github.repo.deploy_triggers"}
+	p.Consequences[len(p.Consequences)-2].When = "facts.github_repo_deploy_triggers.state != 'none'"
+	r := &reads{facts: map[string]fdomain.Fact{}}
+	cs := derive(t, p, r)
+	if got := shape(cs); got != "merge-triggers-deployment:PREDICTED@1<-1 deploy-updates-settings:UNKNOWN@2<0" {
+		t.Fatalf("the action's facts reused: %s", got)
+	}
+	if len(r.calls) != 1 || r.calls[0] != "github.deployment.trigger acme/payments github.repo.deploy_triggers" {
+		t.Fatalf("reads %q", r.calls)
+	}
+	noFacts := link("cx.no-facts", "github.pull.merge", "github.deployment.trigger", "x.y", 1)
+	noFacts.RequiresFacts = nil
+	ops := map[string]*defs.Definition{}
+	for _, op := range []string{"github.pull.merge", "github.deployment.trigger"} {
+		ops[op], _ = p.Definition(op)
+	}
+	if err := noFacts.ValidateCustomer(ops); !errors.Is(err, defs.ErrInvalid) || !strings.Contains(err.Error(), "no invented causality") {
+		t.Fatalf("a rule without facts: %v", err)
+	}
+	unnamed := link("deploys", "github.pull.merge", "github.deployment.trigger", "x.y", 1)
+	if err := unnamed.ValidateCustomer(ops); !errors.Is(err, defs.ErrInvalid) {
+		t.Fatalf("a customer rule without a cx. name: %v", err)
+	}
+	if err := link("cx.deploys", "github.pull.merge", "github.deployment.trigger", "x.y", 1).ValidateCustomer(ops); err != nil {
+		t.Fatalf("a valid customer rule: %v", err)
+	}
+}
