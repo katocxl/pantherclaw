@@ -42,6 +42,15 @@ service InvestigationService {
   rpc CompareRun(CompareRunRequest) returns (CompareRunResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // InspectRun is one run end to end: its summary, lineage, timeline,
+  // budget, approvals, coverage and gaps (F224, F065, F227, F229; HR-401).
+  // Each section is read only with its own permission where the run's
+  // agent lives; a section the caller cannot read is left out whole and
+  // listed in omitted_sections.
+  // permission: evidence.read
+  rpc InspectRun(InspectRunRequest) returns (InspectRunResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // InvestigationParty is a launcher, principal or grantor.
@@ -374,4 +383,200 @@ message CompareRunResponse {
   string basis = 13;
   // The caller's scope is narrower than the organization.
   bool scope_limited = 14;
+}
+
+// InspectSection is one section of a run inspection.
+enum InspectSection {
+  INSPECT_SECTION_UNSPECIFIED = 0;
+  // The run's events and inferred phases (evidence.read).
+  INSPECT_SECTION_TIMELINE = 1;
+  // Parent and child runs and the automation executions before and after
+  // the run (evidence.read and automation.read).
+  INSPECT_SECTION_LINEAGE = 2;
+  // What the run's actions reserved, spent and released (budget.read).
+  INSPECT_SECTION_BUDGET = 3;
+  // Holds on the run's actions (approval.read).
+  INSPECT_SECTION_APPROVALS = 4;
+  // The coverage its decisions claimed (coverage.read).
+  INSPECT_SECTION_COVERAGE = 5;
+  // Missing evidence (evidence.read and coverage.read).
+  INSPECT_SECTION_GAPS = 6;
+}
+
+// InspectRunRequest names a run and the sections to read.
+message InspectRunRequest {
+  // Run id.
+  string run_id = 1 [(buf.validate.field).string.uuid = true];
+  // Timeline events per page: at most 500, 0 for 200.
+  int32 timeline_page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 500
+  }];
+  // The next_page_token of the previous page; empty for the first.
+  string timeline_page_token = 3 [(buf.validate.field).string.max_len = 200];
+  // The sections to read; empty for all.
+  repeated InspectSection include = 4 [(buf.validate.field).repeated = {
+    max_items: 6
+    unique: true
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+}
+
+// RunSummary is who ran what under which authority.
+message RunSummary {
+  // Run id.
+  string run_id = 1;
+  // Its agent.
+  string agent_id = 2;
+  // UNTRUSTED task label from the launcher; it never changes scope.
+  string task_ref = 3;
+  // Who started the run.
+  InvestigationParty launcher = 4;
+  // Whose authority the run uses.
+  InvestigationParty principal = 5;
+  // The grant; empty for a run without one.
+  string grant_id = 6;
+  // Its state.
+  string state = 7;
+  // When it started.
+  google.protobuf.Timestamp start_time = 8;
+  // When it ended; unset while active.
+  google.protobuf.Timestamp end_time = 9;
+  // Why it ended; empty while active.
+  string end_reason = 10;
+  // The parent run; empty for a top-level run.
+  string parent_run_id = 11;
+  // Nesting depth; 0 for a top-level run.
+  int32 depth = 12;
+}
+
+// RunExecutionLink is an automation execution linked to a run.
+message RunExecutionLink {
+  // Execution id.
+  string execution_id = 1;
+  // Its automation.
+  string automation_id = 2;
+  // LIVE, SHADOW or TEST.
+  string mode = 3;
+  // Its state.
+  string state = 4;
+  // The trigger kind.
+  string trigger_kind = 5;
+  // When it was created.
+  google.protobuf.Timestamp create_time = 6;
+  // When it ended; unset while active.
+  google.protobuf.Timestamp end_time = 7;
+}
+
+// RunLineage is where the run sits among runs and automations (F065).
+message RunLineage {
+  // The parent runs, nearest first, up to the caller's scope.
+  repeated InvestigationDelegation parents = 1;
+  // Child runs the caller may read (at most 200).
+  repeated TimelineLane children = 2;
+  // The run has more children than one inspection holds.
+  bool children_truncated = 3;
+  // The execution that launched the run; unset when none did.
+  RunExecutionLink upstream_execution = 4;
+  // Executions whose subjects name the run, oldest first (at most 200).
+  repeated RunExecutionLink downstream_executions = 5;
+  // More executions name the run than one inspection holds.
+  bool downstream_truncated = 6;
+}
+
+// RunTimeline is one page of the run's timeline.
+message RunTimeline {
+  // Events, oldest first.
+  repeated TimelineEvent events = 1;
+  // Inferred phases (Team edition; empty otherwise).
+  repeated TimelinePhase phases = 2;
+}
+
+// RunBudgetLine is what the run's actions did to one budget account or
+// counter (F227).
+message RunBudgetLine {
+  // The budget account or counter.
+  string account_id = 1;
+  // Its rule.
+  string rule = 2;
+  // The account's currency; empty for a counter or a count-only rule.
+  string currency = 3;
+  // Held by the run's open reservations: an amount, or a count for a
+  // counter.
+  string held = 4;
+  // Committed by the run's actions.
+  string committed = 5;
+  // Released.
+  string released = 6;
+  // How many reservations the run made on it.
+  int64 count = 7;
+  // What is left of the rule's amount limit in its current period; empty
+  // for a counter, a rule without an amount limit or an earlier period.
+  string remaining = 8;
+}
+
+// RunRouteCoverage is a coverage snapshot the run's decisions claimed.
+message RunRouteCoverage {
+  // The connection.
+  string connection_id = 1;
+  // The operation.
+  string operation = 2;
+  // The snapshot.
+  string snapshot_id = 3;
+  // UNKNOWN, OBSERVE_ONLY, PARTIAL or ENFORCED.
+  string state = 4;
+  // Why.
+  repeated string reasons = 5;
+  // When it was computed.
+  google.protobuf.Timestamp computed_at = 6;
+  // A decision claimed it after it had expired.
+  bool stale_at_decision = 7;
+}
+
+// RunGap is evidence the inspection expected and did not find (F229).
+message RunGap {
+  // NO_DECISION_RECEIPT, OUTCOME_UNKNOWN, NO_OUTCOME_RECORDED,
+  // NO_COVERAGE_CLAIM, COVERAGE_BELOW_ENFORCED or TELEMETRY_GAP.
+  string kind = 1;
+  // The transaction; empty for a telemetry gap.
+  string transaction_id = 2;
+  // When.
+  google.protobuf.Timestamp time = 3;
+  // The gateway of a telemetry gap; empty otherwise.
+  string gateway_id = 4;
+  // The connection; empty when none.
+  string connection_id = 5;
+  // The operation; empty when none.
+  string operation = 6;
+}
+
+// InspectRunResponse is one run end to end (F224).
+message InspectRunResponse {
+  // The run.
+  RunSummary run = 1;
+  // Its lineage; unset when omitted or not asked for.
+  RunLineage lineage = 2;
+  // One page of its timeline; unset when omitted or not asked for.
+  RunTimeline timeline = 3;
+  // The next timeline page; empty on the last.
+  string next_page_token = 4;
+  // The run has more actions than one timeline holds.
+  bool timeline_truncated = 5;
+  // Its budget lines.
+  repeated RunBudgetLine budget = 6;
+  // Holds on its actions (at most 1000).
+  repeated InvestigationApproval approvals = 7;
+  // The coverage its decisions claimed (at most 1000 snapshots).
+  repeated RunRouteCoverage coverage = 8;
+  // Missing evidence.
+  repeated RunGap gaps = 9;
+  // Asked-for sections the caller may not read, left out whole.
+  repeated InspectSection omitted_sections = 10;
+  // The caller's scope is narrower than the organization.
+  bool scope_limited = 11;
 }

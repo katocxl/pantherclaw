@@ -269,6 +269,7 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.InvestigationService/CompareRun":                      entitlements.ClassRead,
 	"/pantherclaw.v1.InvestigationService/GetPrecedingContext":             entitlements.ClassRead,
 	"/pantherclaw.v1.InvestigationService/GetRunTimeline":                  entitlements.ClassRead,
+	"/pantherclaw.v1.InvestigationService/InspectRun":                      entitlements.ClassRead,
 	"/pantherclaw.v1.InvestigationService/WhatHappened":                    entitlements.ClassRead,
 	"/pantherclaw.v1.NotificationService/CreateChannel":                    entitlements.ClassChange,
 	"/pantherclaw.v1.NotificationService/DeleteChannel":                    entitlements.ClassChange,
