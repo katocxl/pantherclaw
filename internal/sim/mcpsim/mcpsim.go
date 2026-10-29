@@ -100,6 +100,11 @@ type Faults struct {
 	// Misbehave makes create_refund with an upstream misbehave by its
 	// charge (ChargeInflate and the others): test-only.
 	Misbehave bool
+	// Extra, Resources and Templates are listed beyond the built-in tools
+	// (G0 M15 D24, inventory.go).
+	Extra     []ExtraTool
+	Resources []Resource
+	Templates []ResourceTemplate
 }
 
 // Server is the simulated MCP server.
@@ -221,7 +226,7 @@ func (s *Server) tools() []jsontext.Value {
 	if s.f.GitHub != nil {
 		out = append(out, github.MCPTools...)
 	}
-	return out
+	return append(out, s.extraTools()...)
 }
 
 // declared are the x-mcp-header parameters of a tool as the server lists
@@ -346,6 +351,11 @@ func (s *Server) modern(w http.ResponseWriter, r *http.Request, m message) {
 		}
 		s.answer(w, m.ID, result, rpcErr, nil)
 	default:
+		if res, ok := s.lists(m.Method, m.Params); ok && s.hasResources() {
+			res["resultType"] = "complete"
+			writeJSON(w, http.StatusOK, reply(m.ID, res, nil))
+			return
+		}
 		writeJSON(w, http.StatusNotFound, reply(m.ID, nil, rpcError(-32601, "Method not found")))
 	}
 }
@@ -406,6 +416,10 @@ func (s *Server) legacy(w http.ResponseWriter, r *http.Request, m message) {
 		result, rpcErr := s.call(r.Context(), m.Params)
 		s.answer(w, m.ID, result, rpcErr, s.f.Ask)
 	default:
+		if res, ok := s.lists(m.Method, m.Params); ok && s.hasResources() {
+			writeJSON(w, http.StatusOK, reply(m.ID, res, nil))
+			return
+		}
 		writeJSON(w, http.StatusOK, reply(m.ID, nil, rpcError(-32601, "Method not found")))
 	}
 }
@@ -500,6 +514,9 @@ func (s *Server) call(ctx context.Context, params jsontext.Value) (map[string]an
 	}
 	if p.Name == "create_refund" && s.f.Upstream != "" {
 		return s.forward(ctx, p.Arguments), nil
+	}
+	if res, ok := s.callExtra(p.Name, p.Arguments); ok {
+		return res, nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -341,6 +341,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	ghScans := &githubapp.Scans{Pool: pool, Ents: bill}
 	m6.credentials.OnGitHubInstallation(ghScans.InstallationRecorded)
 	svc.WithToolObservations(m6.connections)
+	m6.connections.WithEntitlements(bill) // the inventory draft is Team and above (G0 M15 D23)
 	m5p2, err := newM5p2(cfg, pool, bill, m5.notifications, log)
 	if err != nil {
 		return err
@@ -608,6 +609,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		if err := txapp.Register(jreg, pool, verification); err != nil {
+			return err
+		}
+		if err := registerM15DiscoveryJobs(jreg, m6.connections); err != nil {
 			return err
 		}
 		coverageJobs, err := registerCoverageWorkers(jreg, cfg, pool)

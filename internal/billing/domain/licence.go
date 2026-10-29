@@ -228,6 +228,10 @@ func (e Entitlements) PolicyRollout() bool { return e.Edition.Paid() }
 // (G0 M8, PN-001.2: Team and above).
 func (e Entitlements) GitHubOrgScan() bool { return e.Edition.Paid() }
 
+// PackageDraft reports whether the edition drafts packages from a
+// connection's discovery inventory (G0 M15 D23, F352: Team and above).
+func (e Entitlements) PackageDraft() bool { return e.Edition.Paid() }
+
 // PolicySimulation reports whether the edition simulates policy versions
 // over recorded decisions (G0 M11.1 D15, F187: Team and above).
 func (e Entitlements) PolicySimulation() bool { return e.Edition.Paid() }

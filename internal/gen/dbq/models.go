@@ -1128,6 +1128,26 @@ type PcConnectionGithub struct {
 	UpdatedAt           time.Time
 }
 
+type PcConnectionInventory struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	ConnectionID    ids.UUID
+	Kind            string
+	Name            string
+	DisplayName     string
+	MimeType        string
+	Digest          string
+	Description     string
+	DescriptionScan string
+	State           string
+	ReviewEntryID   *ids.UUID
+	DismissedBy     *string
+	DismissReason   *string
+	FirstSeen       time.Time
+	LastSeen        time.Time
+	UpdatedAt       time.Time
+}
+
 type PcConnectionRoute struct {
 	OrgID        ids.OrgID
 	ConnectionID ids.UUID

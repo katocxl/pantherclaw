@@ -478,6 +478,120 @@ func (ConnectionTestResult) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{7}
 }
 
+// InventoryItemKind is what an upstream MCP server listed.
+type InventoryItemKind int32
+
+const (
+	InventoryItemKind_INVENTORY_ITEM_KIND_UNSPECIFIED       InventoryItemKind = 0
+	InventoryItemKind_INVENTORY_ITEM_KIND_TOOL              InventoryItemKind = 1
+	InventoryItemKind_INVENTORY_ITEM_KIND_RESOURCE          InventoryItemKind = 2
+	InventoryItemKind_INVENTORY_ITEM_KIND_RESOURCE_TEMPLATE InventoryItemKind = 3
+)
+
+// Enum value maps for InventoryItemKind.
+var (
+	InventoryItemKind_name = map[int32]string{
+		0: "INVENTORY_ITEM_KIND_UNSPECIFIED",
+		1: "INVENTORY_ITEM_KIND_TOOL",
+		2: "INVENTORY_ITEM_KIND_RESOURCE",
+		3: "INVENTORY_ITEM_KIND_RESOURCE_TEMPLATE",
+	}
+	InventoryItemKind_value = map[string]int32{
+		"INVENTORY_ITEM_KIND_UNSPECIFIED":       0,
+		"INVENTORY_ITEM_KIND_TOOL":              1,
+		"INVENTORY_ITEM_KIND_RESOURCE":          2,
+		"INVENTORY_ITEM_KIND_RESOURCE_TEMPLATE": 3,
+	}
+)
+
+func (x InventoryItemKind) Enum() *InventoryItemKind {
+	p := new(InventoryItemKind)
+	*p = x
+	return p
+}
+
+func (x InventoryItemKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (InventoryItemKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_connections_proto_enumTypes[8].Descriptor()
+}
+
+func (InventoryItemKind) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_connections_proto_enumTypes[8]
+}
+
+func (x InventoryItemKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use InventoryItemKind.Descriptor instead.
+func (InventoryItemKind) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{8}
+}
+
+// InventoryItemState is where an inventory item's review stands.
+type InventoryItemState int32
+
+const (
+	InventoryItemState_INVENTORY_ITEM_STATE_UNSPECIFIED InventoryItemState = 0
+	// Not covered by an active reviewed package version; inert, with an open
+	// review entry.
+	InventoryItemState_INVENTORY_ITEM_STATE_NEW InventoryItemState = 1
+	// An active package version pinned for the connection covers it.
+	InventoryItemState_INVENTORY_ITEM_STATE_COVERED InventoryItemState = 2
+	// A person dismissed it with a reason.
+	InventoryItemState_INVENTORY_ITEM_STATE_DISMISSED InventoryItemState = 3
+	// A complete listing no longer had it.
+	InventoryItemState_INVENTORY_ITEM_STATE_VANISHED InventoryItemState = 4
+)
+
+// Enum value maps for InventoryItemState.
+var (
+	InventoryItemState_name = map[int32]string{
+		0: "INVENTORY_ITEM_STATE_UNSPECIFIED",
+		1: "INVENTORY_ITEM_STATE_NEW",
+		2: "INVENTORY_ITEM_STATE_COVERED",
+		3: "INVENTORY_ITEM_STATE_DISMISSED",
+		4: "INVENTORY_ITEM_STATE_VANISHED",
+	}
+	InventoryItemState_value = map[string]int32{
+		"INVENTORY_ITEM_STATE_UNSPECIFIED": 0,
+		"INVENTORY_ITEM_STATE_NEW":         1,
+		"INVENTORY_ITEM_STATE_COVERED":     2,
+		"INVENTORY_ITEM_STATE_DISMISSED":   3,
+		"INVENTORY_ITEM_STATE_VANISHED":    4,
+	}
+)
+
+func (x InventoryItemState) Enum() *InventoryItemState {
+	p := new(InventoryItemState)
+	*p = x
+	return p
+}
+
+func (x InventoryItemState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (InventoryItemState) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_connections_proto_enumTypes[9].Descriptor()
+}
+
+func (InventoryItemState) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_connections_proto_enumTypes[9]
+}
+
+func (x InventoryItemState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use InventoryItemState.Descriptor instead.
+func (InventoryItemState) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{9}
+}
+
 // Connection is one connection.
 type Connection struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -4442,6 +4556,538 @@ func (x *GetConnectionHealthResponse) GetHealth() *ConnectionHealth {
 	return nil
 }
 
+// InventoryItem is one (kind, name, digest) an upstream server listed.
+type InventoryItem struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Item id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Connection id.
+	ConnectionId string `protobuf:"bytes,2,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// Kind.
+	Kind InventoryItemKind `protobuf:"varint,3,opt,name=kind,proto3,enum=pantherclaw.v1.InventoryItemKind" json:"kind,omitempty"`
+	// The tool name, resource URI or URI template.
+	Name string `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	// UNTRUSTED: the listed name of a resource or template.
+	DisplayName string `protobuf:"bytes,5,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	// UNTRUSTED: the listed MIME type.
+	MimeType string `protobuf:"bytes,6,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
+	// sha256:<hex> of the canonical listing entry.
+	Digest string `protobuf:"bytes,7,opt,name=digest,proto3" json:"digest,omitempty"`
+	// UNTRUSTED: the upstream description, at most 8 KiB. Show it flagged;
+	// it is never a served description (HR-415).
+	Description string `protobuf:"bytes,8,opt,name=description,proto3" json:"description,omitempty"`
+	// The injection scan of the description: clean, flagged, partial or
+	// not_scanned.
+	DescriptionScan string `protobuf:"bytes,9,opt,name=description_scan,json=descriptionScan,proto3" json:"description_scan,omitempty"`
+	// State.
+	State InventoryItemState `protobuf:"varint,10,opt,name=state,proto3,enum=pantherclaw.v1.InventoryItemState" json:"state,omitempty"`
+	// The item's TOOL_REVIEW waitlist entry, if one was opened.
+	ReviewEntryId string `protobuf:"bytes,11,opt,name=review_entry_id,json=reviewEntryId,proto3" json:"review_entry_id,omitempty"`
+	// Who dismissed it.
+	DismissedBy string `protobuf:"bytes,12,opt,name=dismissed_by,json=dismissedBy,proto3" json:"dismissed_by,omitempty"`
+	// UNTRUSTED: the dismissal reason.
+	DismissReason string `protobuf:"bytes,13,opt,name=dismiss_reason,json=dismissReason,proto3" json:"dismiss_reason,omitempty"`
+	// First listed.
+	FirstSeenTime *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=first_seen_time,json=firstSeenTime,proto3" json:"first_seen_time,omitempty"`
+	// Last listed.
+	LastSeenTime *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=last_seen_time,json=lastSeenTime,proto3" json:"last_seen_time,omitempty"`
+	// Last state change.
+	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InventoryItem) Reset() {
+	*x = InventoryItem{}
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InventoryItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InventoryItem) ProtoMessage() {}
+
+func (x *InventoryItem) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InventoryItem.ProtoReflect.Descriptor instead.
+func (*InventoryItem) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *InventoryItem) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *InventoryItem) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *InventoryItem) GetKind() InventoryItemKind {
+	if x != nil {
+		return x.Kind
+	}
+	return InventoryItemKind_INVENTORY_ITEM_KIND_UNSPECIFIED
+}
+
+func (x *InventoryItem) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *InventoryItem) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *InventoryItem) GetMimeType() string {
+	if x != nil {
+		return x.MimeType
+	}
+	return ""
+}
+
+func (x *InventoryItem) GetDigest() string {
+	if x != nil {
+		return x.Digest
+	}
+	return ""
+}
+
+func (x *InventoryItem) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *InventoryItem) GetDescriptionScan() string {
+	if x != nil {
+		return x.DescriptionScan
+	}
+	return ""
+}
+
+func (x *InventoryItem) GetState() InventoryItemState {
+	if x != nil {
+		return x.State
+	}
+	return InventoryItemState_INVENTORY_ITEM_STATE_UNSPECIFIED
+}
+
+func (x *InventoryItem) GetReviewEntryId() string {
+	if x != nil {
+		return x.ReviewEntryId
+	}
+	return ""
+}
+
+func (x *InventoryItem) GetDismissedBy() string {
+	if x != nil {
+		return x.DismissedBy
+	}
+	return ""
+}
+
+func (x *InventoryItem) GetDismissReason() string {
+	if x != nil {
+		return x.DismissReason
+	}
+	return ""
+}
+
+func (x *InventoryItem) GetFirstSeenTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FirstSeenTime
+	}
+	return nil
+}
+
+func (x *InventoryItem) GetLastSeenTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastSeenTime
+	}
+	return nil
+}
+
+func (x *InventoryItem) GetUpdateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdateTime
+	}
+	return nil
+}
+
+// ListConnectionInventoryRequest selects one page.
+type ListConnectionInventoryRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Connection id.
+	ConnectionId string `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// Only these states (default all).
+	States []InventoryItemState `protobuf:"varint,2,rep,packed,name=states,proto3,enum=pantherclaw.v1.InventoryItemState" json:"states,omitempty"`
+	// Only these kinds (default all).
+	Kinds []InventoryItemKind `protobuf:"varint,3,rep,packed,name=kinds,proto3,enum=pantherclaw.v1.InventoryItemKind" json:"kinds,omitempty"`
+	// Maximum results (default 50, at most 200).
+	PageSize int32 `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// Token from a previous response.
+	PageToken     string `protobuf:"bytes,5,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListConnectionInventoryRequest) Reset() {
+	*x = ListConnectionInventoryRequest{}
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListConnectionInventoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListConnectionInventoryRequest) ProtoMessage() {}
+
+func (x *ListConnectionInventoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListConnectionInventoryRequest.ProtoReflect.Descriptor instead.
+func (*ListConnectionInventoryRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *ListConnectionInventoryRequest) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *ListConnectionInventoryRequest) GetStates() []InventoryItemState {
+	if x != nil {
+		return x.States
+	}
+	return nil
+}
+
+func (x *ListConnectionInventoryRequest) GetKinds() []InventoryItemKind {
+	if x != nil {
+		return x.Kinds
+	}
+	return nil
+}
+
+func (x *ListConnectionInventoryRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListConnectionInventoryRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+// ListConnectionInventoryResponse is one page.
+type ListConnectionInventoryResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Items.
+	Items []*InventoryItem `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	// Token for the next page; empty at the end.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListConnectionInventoryResponse) Reset() {
+	*x = ListConnectionInventoryResponse{}
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListConnectionInventoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListConnectionInventoryResponse) ProtoMessage() {}
+
+func (x *ListConnectionInventoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListConnectionInventoryResponse.ProtoReflect.Descriptor instead.
+func (*ListConnectionInventoryResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *ListConnectionInventoryResponse) GetItems() []*InventoryItem {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *ListConnectionInventoryResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+// DismissInventoryItemRequest dismisses one NEW item.
+type DismissInventoryItemRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Item id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// UNTRUSTED: why, 1 to 500 characters.
+	Reason        string `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DismissInventoryItemRequest) Reset() {
+	*x = DismissInventoryItemRequest{}
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DismissInventoryItemRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DismissInventoryItemRequest) ProtoMessage() {}
+
+func (x *DismissInventoryItemRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DismissInventoryItemRequest.ProtoReflect.Descriptor instead.
+func (*DismissInventoryItemRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *DismissInventoryItemRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *DismissInventoryItemRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+// DismissInventoryItemResponse returns the dismissed item.
+type DismissInventoryItemResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The item.
+	Item          *InventoryItem `protobuf:"bytes,1,opt,name=item,proto3" json:"item,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DismissInventoryItemResponse) Reset() {
+	*x = DismissInventoryItemResponse{}
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DismissInventoryItemResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DismissInventoryItemResponse) ProtoMessage() {}
+
+func (x *DismissInventoryItemResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DismissInventoryItemResponse.ProtoReflect.Descriptor instead.
+func (*DismissInventoryItemResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *DismissInventoryItemResponse) GetItem() *InventoryItem {
+	if x != nil {
+		return x.Item
+	}
+	return nil
+}
+
+// DraftPackageFromInventoryRequest names the NEW items to draft.
+type DraftPackageFromInventoryRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Connection id.
+	ConnectionId string `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// NEW items of that connection, 1 to 100.
+	ItemIds       []string `protobuf:"bytes,2,rep,name=item_ids,json=itemIds,proto3" json:"item_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DraftPackageFromInventoryRequest) Reset() {
+	*x = DraftPackageFromInventoryRequest{}
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DraftPackageFromInventoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DraftPackageFromInventoryRequest) ProtoMessage() {}
+
+func (x *DraftPackageFromInventoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DraftPackageFromInventoryRequest.ProtoReflect.Descriptor instead.
+func (*DraftPackageFromInventoryRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *DraftPackageFromInventoryRequest) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *DraftPackageFromInventoryRequest) GetItemIds() []string {
+	if x != nil {
+		return x.ItemIds
+	}
+	return nil
+}
+
+// DraftPackageFromInventoryResponse is the unsigned draft.
+type DraftPackageFromInventoryResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The draft package manifest (YAML), unsigned. Upstream descriptions are
+	// in comments marked UNTRUSTED, never in a description field.
+	ManifestYaml []byte `protobuf:"bytes,1,opt,name=manifest_yaml,json=manifestYaml,proto3" json:"manifest_yaml,omitempty"`
+	// What a person must fill in before the draft validates.
+	Todo          []string `protobuf:"bytes,2,rep,name=todo,proto3" json:"todo,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DraftPackageFromInventoryResponse) Reset() {
+	*x = DraftPackageFromInventoryResponse{}
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DraftPackageFromInventoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DraftPackageFromInventoryResponse) ProtoMessage() {}
+
+func (x *DraftPackageFromInventoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DraftPackageFromInventoryResponse.ProtoReflect.Descriptor instead.
+func (*DraftPackageFromInventoryResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *DraftPackageFromInventoryResponse) GetManifestYaml() []byte {
+	if x != nil {
+		return x.ManifestYaml
+	}
+	return nil
+}
+
+func (x *DraftPackageFromInventoryResponse) GetTodo() []string {
+	if x != nil {
+		return x.Todo
+	}
+	return nil
+}
+
 var File_pantherclaw_v1_connections_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_connections_proto_rawDesc = "" +
@@ -4814,7 +5460,49 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\x1aGetConnectionHealthRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"W\n" +
 	"\x1bGetConnectionHealthResponse\x128\n" +
-	"\x06health\x18\x01 \x01(\v2 .pantherclaw.v1.ConnectionHealthR\x06health*\xd9\x01\n" +
+	"\x06health\x18\x01 \x01(\v2 .pantherclaw.v1.ConnectionHealthR\x06health\"\xa3\x05\n" +
+	"\rInventoryItem\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
+	"\rconnection_id\x18\x02 \x01(\tR\fconnectionId\x125\n" +
+	"\x04kind\x18\x03 \x01(\x0e2!.pantherclaw.v1.InventoryItemKindR\x04kind\x12\x12\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\x12!\n" +
+	"\fdisplay_name\x18\x05 \x01(\tR\vdisplayName\x12\x1b\n" +
+	"\tmime_type\x18\x06 \x01(\tR\bmimeType\x12\x16\n" +
+	"\x06digest\x18\a \x01(\tR\x06digest\x12 \n" +
+	"\vdescription\x18\b \x01(\tR\vdescription\x12)\n" +
+	"\x10description_scan\x18\t \x01(\tR\x0fdescriptionScan\x128\n" +
+	"\x05state\x18\n" +
+	" \x01(\x0e2\".pantherclaw.v1.InventoryItemStateR\x05state\x12&\n" +
+	"\x0freview_entry_id\x18\v \x01(\tR\rreviewEntryId\x12!\n" +
+	"\fdismissed_by\x18\f \x01(\tR\vdismissedBy\x12%\n" +
+	"\x0edismiss_reason\x18\r \x01(\tR\rdismissReason\x12B\n" +
+	"\x0ffirst_seen_time\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\rfirstSeenTime\x12@\n" +
+	"\x0elast_seen_time\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\flastSeenTime\x12;\n" +
+	"\vupdate_time\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"updateTime\"\xcd\x02\n" +
+	"\x1eListConnectionInventoryRequest\x12-\n" +
+	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12M\n" +
+	"\x06states\x18\x02 \x03(\x0e2\".pantherclaw.v1.InventoryItemStateB\x11\xbaH\x0e\x92\x01\v\x10\x04\"\a\x82\x01\x04\x10\x01 \x00R\x06states\x12J\n" +
+	"\x05kinds\x18\x03 \x03(\x0e2!.pantherclaw.v1.InventoryItemKindB\x11\xbaH\x0e\x92\x01\v\x10\x03\"\a\x82\x01\x04\x10\x01 \x00R\x05kinds\x12'\n" +
+	"\tpage_size\x18\x04 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x128\n" +
+	"\n" +
+	"page_token\x18\x05 \x01(\tB\x19\xbaH\x16r\x14\x18@2\x10^[A-Za-z0-9_-]*$R\tpageToken\"~\n" +
+	"\x1fListConnectionInventoryResponse\x123\n" +
+	"\x05items\x18\x01 \x03(\v2\x1d.pantherclaw.v1.InventoryItemR\x05items\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"[\n" +
+	"\x1bDismissInventoryItemRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12\"\n" +
+	"\x06reason\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xf4\x03R\x06reason\"Q\n" +
+	"\x1cDismissInventoryItemResponse\x121\n" +
+	"\x04item\x18\x01 \x01(\v2\x1d.pantherclaw.v1.InventoryItemR\x04item\"\x81\x01\n" +
+	" DraftPackageFromInventoryRequest\x12-\n" +
+	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12.\n" +
+	"\bitem_ids\x18\x02 \x03(\tB\x13\xbaH\x10\x92\x01\r\b\x01\x10d\x18\x01\"\x05r\x03\xb0\x01\x01R\aitemIds\"\\\n" +
+	"!DraftPackageFromInventoryResponse\x12#\n" +
+	"\rmanifest_yaml\x18\x01 \x01(\fR\fmanifestYaml\x12\x12\n" +
+	"\x04todo\x18\x02 \x03(\tR\x04todo*\xd9\x01\n" +
 	"\x0eConnectionKind\x12\x1f\n" +
 	"\x1bCONNECTION_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14CONNECTION_KIND_HTTP\x10\x01\x12\x17\n" +
@@ -4857,7 +5545,18 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\x14ConnectionTestResult\x12&\n" +
 	"\"CONNECTION_TEST_RESULT_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dCONNECTION_TEST_RESULT_PASSED\x10\x01\x12!\n" +
-	"\x1dCONNECTION_TEST_RESULT_FAILED\x10\x022\xbb\f\n" +
+	"\x1dCONNECTION_TEST_RESULT_FAILED\x10\x02*\xa3\x01\n" +
+	"\x11InventoryItemKind\x12#\n" +
+	"\x1fINVENTORY_ITEM_KIND_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18INVENTORY_ITEM_KIND_TOOL\x10\x01\x12 \n" +
+	"\x1cINVENTORY_ITEM_KIND_RESOURCE\x10\x02\x12)\n" +
+	"%INVENTORY_ITEM_KIND_RESOURCE_TEMPLATE\x10\x03*\xc1\x01\n" +
+	"\x12InventoryItemState\x12$\n" +
+	" INVENTORY_ITEM_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18INVENTORY_ITEM_STATE_NEW\x10\x01\x12 \n" +
+	"\x1cINVENTORY_ITEM_STATE_COVERED\x10\x02\x12\"\n" +
+	"\x1eINVENTORY_ITEM_STATE_DISMISSED\x10\x03\x12!\n" +
+	"\x1dINVENTORY_ITEM_STATE_VANISHED\x10\x042\xb2\x0f\n" +
 	"\x11ConnectionService\x12e\n" +
 	"\x10CreateConnection\x12'.pantherclaw.v1.CreateConnectionRequest\x1a(.pantherclaw.v1.CreateConnectionResponse\x12a\n" +
 	"\rGetConnection\x12$.pantherclaw.v1.GetConnectionRequest\x1a%.pantherclaw.v1.GetConnectionResponse\"\x03\x90\x02\x01\x12g\n" +
@@ -4873,7 +5572,10 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\x10RevokeCredential\x12'.pantherclaw.v1.RevokeCredentialRequest\x1a(.pantherclaw.v1.RevokeCredentialResponse\x12\x85\x01\n" +
 	"\x19GetConnectionCapabilities\x120.pantherclaw.v1.GetConnectionCapabilitiesRequest\x1a1.pantherclaw.v1.GetConnectionCapabilitiesResponse\"\x03\x90\x02\x01\x12_\n" +
 	"\x0eTestConnection\x12%.pantherclaw.v1.TestConnectionRequest\x1a&.pantherclaw.v1.TestConnectionResponse\x12s\n" +
-	"\x13GetConnectionHealth\x12*.pantherclaw.v1.GetConnectionHealthRequest\x1a+.pantherclaw.v1.GetConnectionHealthResponse\"\x03\x90\x02\x01B\xc9\x01\n" +
+	"\x13GetConnectionHealth\x12*.pantherclaw.v1.GetConnectionHealthRequest\x1a+.pantherclaw.v1.GetConnectionHealthResponse\"\x03\x90\x02\x01\x12\x7f\n" +
+	"\x17ListConnectionInventory\x12..pantherclaw.v1.ListConnectionInventoryRequest\x1a/.pantherclaw.v1.ListConnectionInventoryResponse\"\x03\x90\x02\x01\x12q\n" +
+	"\x14DismissInventoryItem\x12+.pantherclaw.v1.DismissInventoryItemRequest\x1a,.pantherclaw.v1.DismissInventoryItemResponse\x12\x80\x01\n" +
+	"\x19DraftPackageFromInventory\x120.pantherclaw.v1.DraftPackageFromInventoryRequest\x1a1.pantherclaw.v1.DraftPackageFromInventoryResponseB\xc9\x01\n" +
 	"\x12com.pantherclaw.v1B\x10ConnectionsProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -4888,8 +5590,8 @@ func file_pantherclaw_v1_connections_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_connections_proto_rawDescData
 }
 
-var file_pantherclaw_v1_connections_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_pantherclaw_v1_connections_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
+var file_pantherclaw_v1_connections_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
+var file_pantherclaw_v1_connections_proto_msgTypes = make([]protoimpl.MessageInfo, 57)
 var file_pantherclaw_v1_connections_proto_goTypes = []any{
 	(ConnectionKind)(0),                       // 0: pantherclaw.v1.ConnectionKind
 	(ConnectionState)(0),                      // 1: pantherclaw.v1.ConnectionState
@@ -4899,174 +5601,198 @@ var file_pantherclaw_v1_connections_proto_goTypes = []any{
 	(SealedCredentialState)(0),                // 5: pantherclaw.v1.SealedCredentialState
 	(CapabilityLevel)(0),                      // 6: pantherclaw.v1.CapabilityLevel
 	(ConnectionTestResult)(0),                 // 7: pantherclaw.v1.ConnectionTestResult
-	(*Connection)(nil),                        // 8: pantherclaw.v1.Connection
-	(*PostgresConfig)(nil),                    // 9: pantherclaw.v1.PostgresConfig
-	(*PostgresTable)(nil),                     // 10: pantherclaw.v1.PostgresTable
-	(*PostgresColumn)(nil),                    // 11: pantherclaw.v1.PostgresColumn
-	(*A2AConfig)(nil),                         // 12: pantherclaw.v1.A2AConfig
-	(*A2AInterface)(nil),                      // 13: pantherclaw.v1.A2AInterface
-	(*A2APeerScope)(nil),                      // 14: pantherclaw.v1.A2APeerScope
-	(*ConnectionRoute)(nil),                   // 15: pantherclaw.v1.ConnectionRoute
-	(*ConnectionCredential)(nil),              // 16: pantherclaw.v1.ConnectionCredential
-	(*CreateConnectionRequest)(nil),           // 17: pantherclaw.v1.CreateConnectionRequest
-	(*CreateConnectionResponse)(nil),          // 18: pantherclaw.v1.CreateConnectionResponse
-	(*GetConnectionRequest)(nil),              // 19: pantherclaw.v1.GetConnectionRequest
-	(*GetConnectionResponse)(nil),             // 20: pantherclaw.v1.GetConnectionResponse
-	(*ListConnectionsRequest)(nil),            // 21: pantherclaw.v1.ListConnectionsRequest
-	(*ListConnectionsResponse)(nil),           // 22: pantherclaw.v1.ListConnectionsResponse
-	(*UpdateConnectionRequest)(nil),           // 23: pantherclaw.v1.UpdateConnectionRequest
-	(*UpdateConnectionResponse)(nil),          // 24: pantherclaw.v1.UpdateConnectionResponse
-	(*SetRouteModeRequest)(nil),               // 25: pantherclaw.v1.SetRouteModeRequest
-	(*SetRouteModeResponse)(nil),              // 26: pantherclaw.v1.SetRouteModeResponse
-	(*QuarantineConnectionRequest)(nil),       // 27: pantherclaw.v1.QuarantineConnectionRequest
-	(*QuarantineConnectionResponse)(nil),      // 28: pantherclaw.v1.QuarantineConnectionResponse
-	(*RestoreConnectionRequest)(nil),          // 29: pantherclaw.v1.RestoreConnectionRequest
-	(*RestoreConnectionResponse)(nil),         // 30: pantherclaw.v1.RestoreConnectionResponse
-	(*RetireConnectionRequest)(nil),           // 31: pantherclaw.v1.RetireConnectionRequest
-	(*RetireConnectionResponse)(nil),          // 32: pantherclaw.v1.RetireConnectionResponse
-	(*GetSealingKeyRequest)(nil),              // 33: pantherclaw.v1.GetSealingKeyRequest
-	(*GetSealingKeyResponse)(nil),             // 34: pantherclaw.v1.GetSealingKeyResponse
-	(*PutCredentialRequest)(nil),              // 35: pantherclaw.v1.PutCredentialRequest
-	(*PutCredentialResponse)(nil),             // 36: pantherclaw.v1.PutCredentialResponse
-	(*ListCredentialsRequest)(nil),            // 37: pantherclaw.v1.ListCredentialsRequest
-	(*ListCredentialsResponse)(nil),           // 38: pantherclaw.v1.ListCredentialsResponse
-	(*RevokeCredentialRequest)(nil),           // 39: pantherclaw.v1.RevokeCredentialRequest
-	(*RevokeCredentialResponse)(nil),          // 40: pantherclaw.v1.RevokeCredentialResponse
-	(*CapabilitySupport)(nil),                 // 41: pantherclaw.v1.CapabilitySupport
-	(*ConnectionOperation)(nil),               // 42: pantherclaw.v1.ConnectionOperation
-	(*ConnectionPermission)(nil),              // 43: pantherclaw.v1.ConnectionPermission
-	(*ConnectionLimit)(nil),                   // 44: pantherclaw.v1.ConnectionLimit
-	(*ConnectionCapabilities)(nil),            // 45: pantherclaw.v1.ConnectionCapabilities
-	(*GetConnectionCapabilitiesRequest)(nil),  // 46: pantherclaw.v1.GetConnectionCapabilitiesRequest
-	(*GetConnectionCapabilitiesResponse)(nil), // 47: pantherclaw.v1.GetConnectionCapabilitiesResponse
-	(*ConnectionTestCheck)(nil),               // 48: pantherclaw.v1.ConnectionTestCheck
-	(*ConnectionTest)(nil),                    // 49: pantherclaw.v1.ConnectionTest
-	(*TestConnectionRequest)(nil),             // 50: pantherclaw.v1.TestConnectionRequest
-	(*TestConnectionResponse)(nil),            // 51: pantherclaw.v1.TestConnectionResponse
-	(*ConnectionCircuit)(nil),                 // 52: pantherclaw.v1.ConnectionCircuit
-	(*ConnectionDeliveries)(nil),              // 53: pantherclaw.v1.ConnectionDeliveries
-	(*ConnectionDependentAgent)(nil),          // 54: pantherclaw.v1.ConnectionDependentAgent
-	(*ConnectionHealth)(nil),                  // 55: pantherclaw.v1.ConnectionHealth
-	(*GetConnectionHealthRequest)(nil),        // 56: pantherclaw.v1.GetConnectionHealthRequest
-	(*GetConnectionHealthResponse)(nil),       // 57: pantherclaw.v1.GetConnectionHealthResponse
-	(*timestamppb.Timestamp)(nil),             // 58: google.protobuf.Timestamp
-	(*ConnectorSpec)(nil),                     // 59: pantherclaw.v1.ConnectorSpec
-	(*GitHubInstallation)(nil),                // 60: pantherclaw.v1.GitHubInstallation
+	(InventoryItemKind)(0),                    // 8: pantherclaw.v1.InventoryItemKind
+	(InventoryItemState)(0),                   // 9: pantherclaw.v1.InventoryItemState
+	(*Connection)(nil),                        // 10: pantherclaw.v1.Connection
+	(*PostgresConfig)(nil),                    // 11: pantherclaw.v1.PostgresConfig
+	(*PostgresTable)(nil),                     // 12: pantherclaw.v1.PostgresTable
+	(*PostgresColumn)(nil),                    // 13: pantherclaw.v1.PostgresColumn
+	(*A2AConfig)(nil),                         // 14: pantherclaw.v1.A2AConfig
+	(*A2AInterface)(nil),                      // 15: pantherclaw.v1.A2AInterface
+	(*A2APeerScope)(nil),                      // 16: pantherclaw.v1.A2APeerScope
+	(*ConnectionRoute)(nil),                   // 17: pantherclaw.v1.ConnectionRoute
+	(*ConnectionCredential)(nil),              // 18: pantherclaw.v1.ConnectionCredential
+	(*CreateConnectionRequest)(nil),           // 19: pantherclaw.v1.CreateConnectionRequest
+	(*CreateConnectionResponse)(nil),          // 20: pantherclaw.v1.CreateConnectionResponse
+	(*GetConnectionRequest)(nil),              // 21: pantherclaw.v1.GetConnectionRequest
+	(*GetConnectionResponse)(nil),             // 22: pantherclaw.v1.GetConnectionResponse
+	(*ListConnectionsRequest)(nil),            // 23: pantherclaw.v1.ListConnectionsRequest
+	(*ListConnectionsResponse)(nil),           // 24: pantherclaw.v1.ListConnectionsResponse
+	(*UpdateConnectionRequest)(nil),           // 25: pantherclaw.v1.UpdateConnectionRequest
+	(*UpdateConnectionResponse)(nil),          // 26: pantherclaw.v1.UpdateConnectionResponse
+	(*SetRouteModeRequest)(nil),               // 27: pantherclaw.v1.SetRouteModeRequest
+	(*SetRouteModeResponse)(nil),              // 28: pantherclaw.v1.SetRouteModeResponse
+	(*QuarantineConnectionRequest)(nil),       // 29: pantherclaw.v1.QuarantineConnectionRequest
+	(*QuarantineConnectionResponse)(nil),      // 30: pantherclaw.v1.QuarantineConnectionResponse
+	(*RestoreConnectionRequest)(nil),          // 31: pantherclaw.v1.RestoreConnectionRequest
+	(*RestoreConnectionResponse)(nil),         // 32: pantherclaw.v1.RestoreConnectionResponse
+	(*RetireConnectionRequest)(nil),           // 33: pantherclaw.v1.RetireConnectionRequest
+	(*RetireConnectionResponse)(nil),          // 34: pantherclaw.v1.RetireConnectionResponse
+	(*GetSealingKeyRequest)(nil),              // 35: pantherclaw.v1.GetSealingKeyRequest
+	(*GetSealingKeyResponse)(nil),             // 36: pantherclaw.v1.GetSealingKeyResponse
+	(*PutCredentialRequest)(nil),              // 37: pantherclaw.v1.PutCredentialRequest
+	(*PutCredentialResponse)(nil),             // 38: pantherclaw.v1.PutCredentialResponse
+	(*ListCredentialsRequest)(nil),            // 39: pantherclaw.v1.ListCredentialsRequest
+	(*ListCredentialsResponse)(nil),           // 40: pantherclaw.v1.ListCredentialsResponse
+	(*RevokeCredentialRequest)(nil),           // 41: pantherclaw.v1.RevokeCredentialRequest
+	(*RevokeCredentialResponse)(nil),          // 42: pantherclaw.v1.RevokeCredentialResponse
+	(*CapabilitySupport)(nil),                 // 43: pantherclaw.v1.CapabilitySupport
+	(*ConnectionOperation)(nil),               // 44: pantherclaw.v1.ConnectionOperation
+	(*ConnectionPermission)(nil),              // 45: pantherclaw.v1.ConnectionPermission
+	(*ConnectionLimit)(nil),                   // 46: pantherclaw.v1.ConnectionLimit
+	(*ConnectionCapabilities)(nil),            // 47: pantherclaw.v1.ConnectionCapabilities
+	(*GetConnectionCapabilitiesRequest)(nil),  // 48: pantherclaw.v1.GetConnectionCapabilitiesRequest
+	(*GetConnectionCapabilitiesResponse)(nil), // 49: pantherclaw.v1.GetConnectionCapabilitiesResponse
+	(*ConnectionTestCheck)(nil),               // 50: pantherclaw.v1.ConnectionTestCheck
+	(*ConnectionTest)(nil),                    // 51: pantherclaw.v1.ConnectionTest
+	(*TestConnectionRequest)(nil),             // 52: pantherclaw.v1.TestConnectionRequest
+	(*TestConnectionResponse)(nil),            // 53: pantherclaw.v1.TestConnectionResponse
+	(*ConnectionCircuit)(nil),                 // 54: pantherclaw.v1.ConnectionCircuit
+	(*ConnectionDeliveries)(nil),              // 55: pantherclaw.v1.ConnectionDeliveries
+	(*ConnectionDependentAgent)(nil),          // 56: pantherclaw.v1.ConnectionDependentAgent
+	(*ConnectionHealth)(nil),                  // 57: pantherclaw.v1.ConnectionHealth
+	(*GetConnectionHealthRequest)(nil),        // 58: pantherclaw.v1.GetConnectionHealthRequest
+	(*GetConnectionHealthResponse)(nil),       // 59: pantherclaw.v1.GetConnectionHealthResponse
+	(*InventoryItem)(nil),                     // 60: pantherclaw.v1.InventoryItem
+	(*ListConnectionInventoryRequest)(nil),    // 61: pantherclaw.v1.ListConnectionInventoryRequest
+	(*ListConnectionInventoryResponse)(nil),   // 62: pantherclaw.v1.ListConnectionInventoryResponse
+	(*DismissInventoryItemRequest)(nil),       // 63: pantherclaw.v1.DismissInventoryItemRequest
+	(*DismissInventoryItemResponse)(nil),      // 64: pantherclaw.v1.DismissInventoryItemResponse
+	(*DraftPackageFromInventoryRequest)(nil),  // 65: pantherclaw.v1.DraftPackageFromInventoryRequest
+	(*DraftPackageFromInventoryResponse)(nil), // 66: pantherclaw.v1.DraftPackageFromInventoryResponse
+	(*timestamppb.Timestamp)(nil),             // 67: google.protobuf.Timestamp
+	(*ConnectorSpec)(nil),                     // 68: pantherclaw.v1.ConnectorSpec
+	(*GitHubInstallation)(nil),                // 69: pantherclaw.v1.GitHubInstallation
 }
 var file_pantherclaw_v1_connections_proto_depIdxs = []int32{
-	0,  // 0: pantherclaw.v1.Connection.kind:type_name -> pantherclaw.v1.ConnectionKind
-	4,  // 1: pantherclaw.v1.Connection.destination_class:type_name -> pantherclaw.v1.DestinationClass
-	3,  // 2: pantherclaw.v1.Connection.access_mode:type_name -> pantherclaw.v1.AccessMode
-	2,  // 3: pantherclaw.v1.Connection.default_mode:type_name -> pantherclaw.v1.RouteMode
-	15, // 4: pantherclaw.v1.Connection.routes:type_name -> pantherclaw.v1.ConnectionRoute
-	1,  // 5: pantherclaw.v1.Connection.state:type_name -> pantherclaw.v1.ConnectionState
-	58, // 6: pantherclaw.v1.Connection.create_time:type_name -> google.protobuf.Timestamp
-	58, // 7: pantherclaw.v1.Connection.update_time:type_name -> google.protobuf.Timestamp
-	59, // 8: pantherclaw.v1.Connection.connector:type_name -> pantherclaw.v1.ConnectorSpec
-	60, // 9: pantherclaw.v1.Connection.github:type_name -> pantherclaw.v1.GitHubInstallation
-	9,  // 10: pantherclaw.v1.Connection.postgres:type_name -> pantherclaw.v1.PostgresConfig
-	12, // 11: pantherclaw.v1.Connection.a2a:type_name -> pantherclaw.v1.A2AConfig
-	10, // 12: pantherclaw.v1.PostgresConfig.tables:type_name -> pantherclaw.v1.PostgresTable
-	11, // 13: pantherclaw.v1.PostgresTable.columns:type_name -> pantherclaw.v1.PostgresColumn
-	13, // 14: pantherclaw.v1.A2AConfig.interface:type_name -> pantherclaw.v1.A2AInterface
-	14, // 15: pantherclaw.v1.A2AConfig.peer_scope:type_name -> pantherclaw.v1.A2APeerScope
-	2,  // 16: pantherclaw.v1.ConnectionRoute.mode:type_name -> pantherclaw.v1.RouteMode
-	58, // 17: pantherclaw.v1.ConnectionRoute.change_time:type_name -> google.protobuf.Timestamp
-	5,  // 18: pantherclaw.v1.ConnectionCredential.state:type_name -> pantherclaw.v1.SealedCredentialState
-	58, // 19: pantherclaw.v1.ConnectionCredential.create_time:type_name -> google.protobuf.Timestamp
-	0,  // 20: pantherclaw.v1.CreateConnectionRequest.kind:type_name -> pantherclaw.v1.ConnectionKind
-	4,  // 21: pantherclaw.v1.CreateConnectionRequest.destination_class:type_name -> pantherclaw.v1.DestinationClass
-	3,  // 22: pantherclaw.v1.CreateConnectionRequest.access_mode:type_name -> pantherclaw.v1.AccessMode
-	2,  // 23: pantherclaw.v1.CreateConnectionRequest.default_mode:type_name -> pantherclaw.v1.RouteMode
-	59, // 24: pantherclaw.v1.CreateConnectionRequest.connector:type_name -> pantherclaw.v1.ConnectorSpec
-	9,  // 25: pantherclaw.v1.CreateConnectionRequest.postgres:type_name -> pantherclaw.v1.PostgresConfig
-	12, // 26: pantherclaw.v1.CreateConnectionRequest.a2a:type_name -> pantherclaw.v1.A2AConfig
-	8,  // 27: pantherclaw.v1.CreateConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
-	8,  // 28: pantherclaw.v1.GetConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
-	16, // 29: pantherclaw.v1.GetConnectionResponse.active_credential:type_name -> pantherclaw.v1.ConnectionCredential
-	8,  // 30: pantherclaw.v1.ListConnectionsResponse.connections:type_name -> pantherclaw.v1.Connection
-	4,  // 31: pantherclaw.v1.UpdateConnectionRequest.destination_class:type_name -> pantherclaw.v1.DestinationClass
-	3,  // 32: pantherclaw.v1.UpdateConnectionRequest.access_mode:type_name -> pantherclaw.v1.AccessMode
-	2,  // 33: pantherclaw.v1.UpdateConnectionRequest.default_mode:type_name -> pantherclaw.v1.RouteMode
-	59, // 34: pantherclaw.v1.UpdateConnectionRequest.connector:type_name -> pantherclaw.v1.ConnectorSpec
-	9,  // 35: pantherclaw.v1.UpdateConnectionRequest.postgres:type_name -> pantherclaw.v1.PostgresConfig
-	12, // 36: pantherclaw.v1.UpdateConnectionRequest.a2a:type_name -> pantherclaw.v1.A2AConfig
-	8,  // 37: pantherclaw.v1.UpdateConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
-	2,  // 38: pantherclaw.v1.SetRouteModeRequest.mode:type_name -> pantherclaw.v1.RouteMode
-	8,  // 39: pantherclaw.v1.SetRouteModeResponse.connection:type_name -> pantherclaw.v1.Connection
-	8,  // 40: pantherclaw.v1.QuarantineConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
-	8,  // 41: pantherclaw.v1.RestoreConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
-	60, // 42: pantherclaw.v1.PutCredentialRequest.github:type_name -> pantherclaw.v1.GitHubInstallation
-	16, // 43: pantherclaw.v1.PutCredentialResponse.credential:type_name -> pantherclaw.v1.ConnectionCredential
-	16, // 44: pantherclaw.v1.ListCredentialsResponse.credentials:type_name -> pantherclaw.v1.ConnectionCredential
-	6,  // 45: pantherclaw.v1.CapabilitySupport.level:type_name -> pantherclaw.v1.CapabilityLevel
-	2,  // 46: pantherclaw.v1.ConnectionOperation.mode:type_name -> pantherclaw.v1.RouteMode
-	41, // 47: pantherclaw.v1.ConnectionCapabilities.discovery:type_name -> pantherclaw.v1.CapabilitySupport
-	41, // 48: pantherclaw.v1.ConnectionCapabilities.observation:type_name -> pantherclaw.v1.CapabilitySupport
-	41, // 49: pantherclaw.v1.ConnectionCapabilities.enforcement:type_name -> pantherclaw.v1.CapabilitySupport
-	41, // 50: pantherclaw.v1.ConnectionCapabilities.response:type_name -> pantherclaw.v1.CapabilitySupport
-	42, // 51: pantherclaw.v1.ConnectionCapabilities.operations:type_name -> pantherclaw.v1.ConnectionOperation
-	43, // 52: pantherclaw.v1.ConnectionCapabilities.permissions:type_name -> pantherclaw.v1.ConnectionPermission
-	44, // 53: pantherclaw.v1.ConnectionCapabilities.limits:type_name -> pantherclaw.v1.ConnectionLimit
-	49, // 54: pantherclaw.v1.ConnectionCapabilities.last_passed_test:type_name -> pantherclaw.v1.ConnectionTest
-	45, // 55: pantherclaw.v1.GetConnectionCapabilitiesResponse.capabilities:type_name -> pantherclaw.v1.ConnectionCapabilities
-	7,  // 56: pantherclaw.v1.ConnectionTest.result:type_name -> pantherclaw.v1.ConnectionTestResult
-	48, // 57: pantherclaw.v1.ConnectionTest.checks:type_name -> pantherclaw.v1.ConnectionTestCheck
-	58, // 58: pantherclaw.v1.ConnectionTest.finish_time:type_name -> google.protobuf.Timestamp
-	58, // 59: pantherclaw.v1.ConnectionTest.create_time:type_name -> google.protobuf.Timestamp
-	49, // 60: pantherclaw.v1.TestConnectionResponse.test:type_name -> pantherclaw.v1.ConnectionTest
-	58, // 61: pantherclaw.v1.ConnectionCircuit.open_time:type_name -> google.protobuf.Timestamp
-	58, // 62: pantherclaw.v1.ConnectionCircuit.report_time:type_name -> google.protobuf.Timestamp
-	58, // 63: pantherclaw.v1.ConnectionDeliveries.since_time:type_name -> google.protobuf.Timestamp
-	58, // 64: pantherclaw.v1.ConnectionDeliveries.last_failure_time:type_name -> google.protobuf.Timestamp
-	58, // 65: pantherclaw.v1.ConnectionDeliveries.last_success_time:type_name -> google.protobuf.Timestamp
-	58, // 66: pantherclaw.v1.ConnectionDeliveries.last_delegated_time:type_name -> google.protobuf.Timestamp
-	58, // 67: pantherclaw.v1.ConnectionDependentAgent.last_use_time:type_name -> google.protobuf.Timestamp
-	8,  // 68: pantherclaw.v1.ConnectionHealth.connection:type_name -> pantherclaw.v1.Connection
-	16, // 69: pantherclaw.v1.ConnectionHealth.active_credential:type_name -> pantherclaw.v1.ConnectionCredential
-	52, // 70: pantherclaw.v1.ConnectionHealth.circuits:type_name -> pantherclaw.v1.ConnectionCircuit
-	43, // 71: pantherclaw.v1.ConnectionHealth.permissions:type_name -> pantherclaw.v1.ConnectionPermission
-	49, // 72: pantherclaw.v1.ConnectionHealth.last_test:type_name -> pantherclaw.v1.ConnectionTest
-	49, // 73: pantherclaw.v1.ConnectionHealth.last_passed_test:type_name -> pantherclaw.v1.ConnectionTest
-	53, // 74: pantherclaw.v1.ConnectionHealth.deliveries:type_name -> pantherclaw.v1.ConnectionDeliveries
-	54, // 75: pantherclaw.v1.ConnectionHealth.dependent_agents:type_name -> pantherclaw.v1.ConnectionDependentAgent
-	54, // 76: pantherclaw.v1.ConnectionHealth.granted_agents:type_name -> pantherclaw.v1.ConnectionDependentAgent
-	55, // 77: pantherclaw.v1.GetConnectionHealthResponse.health:type_name -> pantherclaw.v1.ConnectionHealth
-	17, // 78: pantherclaw.v1.ConnectionService.CreateConnection:input_type -> pantherclaw.v1.CreateConnectionRequest
-	19, // 79: pantherclaw.v1.ConnectionService.GetConnection:input_type -> pantherclaw.v1.GetConnectionRequest
-	21, // 80: pantherclaw.v1.ConnectionService.ListConnections:input_type -> pantherclaw.v1.ListConnectionsRequest
-	23, // 81: pantherclaw.v1.ConnectionService.UpdateConnection:input_type -> pantherclaw.v1.UpdateConnectionRequest
-	25, // 82: pantherclaw.v1.ConnectionService.SetRouteMode:input_type -> pantherclaw.v1.SetRouteModeRequest
-	27, // 83: pantherclaw.v1.ConnectionService.QuarantineConnection:input_type -> pantherclaw.v1.QuarantineConnectionRequest
-	29, // 84: pantherclaw.v1.ConnectionService.RestoreConnection:input_type -> pantherclaw.v1.RestoreConnectionRequest
-	31, // 85: pantherclaw.v1.ConnectionService.RetireConnection:input_type -> pantherclaw.v1.RetireConnectionRequest
-	33, // 86: pantherclaw.v1.ConnectionService.GetSealingKey:input_type -> pantherclaw.v1.GetSealingKeyRequest
-	35, // 87: pantherclaw.v1.ConnectionService.PutCredential:input_type -> pantherclaw.v1.PutCredentialRequest
-	37, // 88: pantherclaw.v1.ConnectionService.ListCredentials:input_type -> pantherclaw.v1.ListCredentialsRequest
-	39, // 89: pantherclaw.v1.ConnectionService.RevokeCredential:input_type -> pantherclaw.v1.RevokeCredentialRequest
-	46, // 90: pantherclaw.v1.ConnectionService.GetConnectionCapabilities:input_type -> pantherclaw.v1.GetConnectionCapabilitiesRequest
-	50, // 91: pantherclaw.v1.ConnectionService.TestConnection:input_type -> pantherclaw.v1.TestConnectionRequest
-	56, // 92: pantherclaw.v1.ConnectionService.GetConnectionHealth:input_type -> pantherclaw.v1.GetConnectionHealthRequest
-	18, // 93: pantherclaw.v1.ConnectionService.CreateConnection:output_type -> pantherclaw.v1.CreateConnectionResponse
-	20, // 94: pantherclaw.v1.ConnectionService.GetConnection:output_type -> pantherclaw.v1.GetConnectionResponse
-	22, // 95: pantherclaw.v1.ConnectionService.ListConnections:output_type -> pantherclaw.v1.ListConnectionsResponse
-	24, // 96: pantherclaw.v1.ConnectionService.UpdateConnection:output_type -> pantherclaw.v1.UpdateConnectionResponse
-	26, // 97: pantherclaw.v1.ConnectionService.SetRouteMode:output_type -> pantherclaw.v1.SetRouteModeResponse
-	28, // 98: pantherclaw.v1.ConnectionService.QuarantineConnection:output_type -> pantherclaw.v1.QuarantineConnectionResponse
-	30, // 99: pantherclaw.v1.ConnectionService.RestoreConnection:output_type -> pantherclaw.v1.RestoreConnectionResponse
-	32, // 100: pantherclaw.v1.ConnectionService.RetireConnection:output_type -> pantherclaw.v1.RetireConnectionResponse
-	34, // 101: pantherclaw.v1.ConnectionService.GetSealingKey:output_type -> pantherclaw.v1.GetSealingKeyResponse
-	36, // 102: pantherclaw.v1.ConnectionService.PutCredential:output_type -> pantherclaw.v1.PutCredentialResponse
-	38, // 103: pantherclaw.v1.ConnectionService.ListCredentials:output_type -> pantherclaw.v1.ListCredentialsResponse
-	40, // 104: pantherclaw.v1.ConnectionService.RevokeCredential:output_type -> pantherclaw.v1.RevokeCredentialResponse
-	47, // 105: pantherclaw.v1.ConnectionService.GetConnectionCapabilities:output_type -> pantherclaw.v1.GetConnectionCapabilitiesResponse
-	51, // 106: pantherclaw.v1.ConnectionService.TestConnection:output_type -> pantherclaw.v1.TestConnectionResponse
-	57, // 107: pantherclaw.v1.ConnectionService.GetConnectionHealth:output_type -> pantherclaw.v1.GetConnectionHealthResponse
-	93, // [93:108] is the sub-list for method output_type
-	78, // [78:93] is the sub-list for method input_type
-	78, // [78:78] is the sub-list for extension type_name
-	78, // [78:78] is the sub-list for extension extendee
-	0,  // [0:78] is the sub-list for field type_name
+	0,   // 0: pantherclaw.v1.Connection.kind:type_name -> pantherclaw.v1.ConnectionKind
+	4,   // 1: pantherclaw.v1.Connection.destination_class:type_name -> pantherclaw.v1.DestinationClass
+	3,   // 2: pantherclaw.v1.Connection.access_mode:type_name -> pantherclaw.v1.AccessMode
+	2,   // 3: pantherclaw.v1.Connection.default_mode:type_name -> pantherclaw.v1.RouteMode
+	17,  // 4: pantherclaw.v1.Connection.routes:type_name -> pantherclaw.v1.ConnectionRoute
+	1,   // 5: pantherclaw.v1.Connection.state:type_name -> pantherclaw.v1.ConnectionState
+	67,  // 6: pantherclaw.v1.Connection.create_time:type_name -> google.protobuf.Timestamp
+	67,  // 7: pantherclaw.v1.Connection.update_time:type_name -> google.protobuf.Timestamp
+	68,  // 8: pantherclaw.v1.Connection.connector:type_name -> pantherclaw.v1.ConnectorSpec
+	69,  // 9: pantherclaw.v1.Connection.github:type_name -> pantherclaw.v1.GitHubInstallation
+	11,  // 10: pantherclaw.v1.Connection.postgres:type_name -> pantherclaw.v1.PostgresConfig
+	14,  // 11: pantherclaw.v1.Connection.a2a:type_name -> pantherclaw.v1.A2AConfig
+	12,  // 12: pantherclaw.v1.PostgresConfig.tables:type_name -> pantherclaw.v1.PostgresTable
+	13,  // 13: pantherclaw.v1.PostgresTable.columns:type_name -> pantherclaw.v1.PostgresColumn
+	15,  // 14: pantherclaw.v1.A2AConfig.interface:type_name -> pantherclaw.v1.A2AInterface
+	16,  // 15: pantherclaw.v1.A2AConfig.peer_scope:type_name -> pantherclaw.v1.A2APeerScope
+	2,   // 16: pantherclaw.v1.ConnectionRoute.mode:type_name -> pantherclaw.v1.RouteMode
+	67,  // 17: pantherclaw.v1.ConnectionRoute.change_time:type_name -> google.protobuf.Timestamp
+	5,   // 18: pantherclaw.v1.ConnectionCredential.state:type_name -> pantherclaw.v1.SealedCredentialState
+	67,  // 19: pantherclaw.v1.ConnectionCredential.create_time:type_name -> google.protobuf.Timestamp
+	0,   // 20: pantherclaw.v1.CreateConnectionRequest.kind:type_name -> pantherclaw.v1.ConnectionKind
+	4,   // 21: pantherclaw.v1.CreateConnectionRequest.destination_class:type_name -> pantherclaw.v1.DestinationClass
+	3,   // 22: pantherclaw.v1.CreateConnectionRequest.access_mode:type_name -> pantherclaw.v1.AccessMode
+	2,   // 23: pantherclaw.v1.CreateConnectionRequest.default_mode:type_name -> pantherclaw.v1.RouteMode
+	68,  // 24: pantherclaw.v1.CreateConnectionRequest.connector:type_name -> pantherclaw.v1.ConnectorSpec
+	11,  // 25: pantherclaw.v1.CreateConnectionRequest.postgres:type_name -> pantherclaw.v1.PostgresConfig
+	14,  // 26: pantherclaw.v1.CreateConnectionRequest.a2a:type_name -> pantherclaw.v1.A2AConfig
+	10,  // 27: pantherclaw.v1.CreateConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
+	10,  // 28: pantherclaw.v1.GetConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
+	18,  // 29: pantherclaw.v1.GetConnectionResponse.active_credential:type_name -> pantherclaw.v1.ConnectionCredential
+	10,  // 30: pantherclaw.v1.ListConnectionsResponse.connections:type_name -> pantherclaw.v1.Connection
+	4,   // 31: pantherclaw.v1.UpdateConnectionRequest.destination_class:type_name -> pantherclaw.v1.DestinationClass
+	3,   // 32: pantherclaw.v1.UpdateConnectionRequest.access_mode:type_name -> pantherclaw.v1.AccessMode
+	2,   // 33: pantherclaw.v1.UpdateConnectionRequest.default_mode:type_name -> pantherclaw.v1.RouteMode
+	68,  // 34: pantherclaw.v1.UpdateConnectionRequest.connector:type_name -> pantherclaw.v1.ConnectorSpec
+	11,  // 35: pantherclaw.v1.UpdateConnectionRequest.postgres:type_name -> pantherclaw.v1.PostgresConfig
+	14,  // 36: pantherclaw.v1.UpdateConnectionRequest.a2a:type_name -> pantherclaw.v1.A2AConfig
+	10,  // 37: pantherclaw.v1.UpdateConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
+	2,   // 38: pantherclaw.v1.SetRouteModeRequest.mode:type_name -> pantherclaw.v1.RouteMode
+	10,  // 39: pantherclaw.v1.SetRouteModeResponse.connection:type_name -> pantherclaw.v1.Connection
+	10,  // 40: pantherclaw.v1.QuarantineConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
+	10,  // 41: pantherclaw.v1.RestoreConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
+	69,  // 42: pantherclaw.v1.PutCredentialRequest.github:type_name -> pantherclaw.v1.GitHubInstallation
+	18,  // 43: pantherclaw.v1.PutCredentialResponse.credential:type_name -> pantherclaw.v1.ConnectionCredential
+	18,  // 44: pantherclaw.v1.ListCredentialsResponse.credentials:type_name -> pantherclaw.v1.ConnectionCredential
+	6,   // 45: pantherclaw.v1.CapabilitySupport.level:type_name -> pantherclaw.v1.CapabilityLevel
+	2,   // 46: pantherclaw.v1.ConnectionOperation.mode:type_name -> pantherclaw.v1.RouteMode
+	43,  // 47: pantherclaw.v1.ConnectionCapabilities.discovery:type_name -> pantherclaw.v1.CapabilitySupport
+	43,  // 48: pantherclaw.v1.ConnectionCapabilities.observation:type_name -> pantherclaw.v1.CapabilitySupport
+	43,  // 49: pantherclaw.v1.ConnectionCapabilities.enforcement:type_name -> pantherclaw.v1.CapabilitySupport
+	43,  // 50: pantherclaw.v1.ConnectionCapabilities.response:type_name -> pantherclaw.v1.CapabilitySupport
+	44,  // 51: pantherclaw.v1.ConnectionCapabilities.operations:type_name -> pantherclaw.v1.ConnectionOperation
+	45,  // 52: pantherclaw.v1.ConnectionCapabilities.permissions:type_name -> pantherclaw.v1.ConnectionPermission
+	46,  // 53: pantherclaw.v1.ConnectionCapabilities.limits:type_name -> pantherclaw.v1.ConnectionLimit
+	51,  // 54: pantherclaw.v1.ConnectionCapabilities.last_passed_test:type_name -> pantherclaw.v1.ConnectionTest
+	47,  // 55: pantherclaw.v1.GetConnectionCapabilitiesResponse.capabilities:type_name -> pantherclaw.v1.ConnectionCapabilities
+	7,   // 56: pantherclaw.v1.ConnectionTest.result:type_name -> pantherclaw.v1.ConnectionTestResult
+	50,  // 57: pantherclaw.v1.ConnectionTest.checks:type_name -> pantherclaw.v1.ConnectionTestCheck
+	67,  // 58: pantherclaw.v1.ConnectionTest.finish_time:type_name -> google.protobuf.Timestamp
+	67,  // 59: pantherclaw.v1.ConnectionTest.create_time:type_name -> google.protobuf.Timestamp
+	51,  // 60: pantherclaw.v1.TestConnectionResponse.test:type_name -> pantherclaw.v1.ConnectionTest
+	67,  // 61: pantherclaw.v1.ConnectionCircuit.open_time:type_name -> google.protobuf.Timestamp
+	67,  // 62: pantherclaw.v1.ConnectionCircuit.report_time:type_name -> google.protobuf.Timestamp
+	67,  // 63: pantherclaw.v1.ConnectionDeliveries.since_time:type_name -> google.protobuf.Timestamp
+	67,  // 64: pantherclaw.v1.ConnectionDeliveries.last_failure_time:type_name -> google.protobuf.Timestamp
+	67,  // 65: pantherclaw.v1.ConnectionDeliveries.last_success_time:type_name -> google.protobuf.Timestamp
+	67,  // 66: pantherclaw.v1.ConnectionDeliveries.last_delegated_time:type_name -> google.protobuf.Timestamp
+	67,  // 67: pantherclaw.v1.ConnectionDependentAgent.last_use_time:type_name -> google.protobuf.Timestamp
+	10,  // 68: pantherclaw.v1.ConnectionHealth.connection:type_name -> pantherclaw.v1.Connection
+	18,  // 69: pantherclaw.v1.ConnectionHealth.active_credential:type_name -> pantherclaw.v1.ConnectionCredential
+	54,  // 70: pantherclaw.v1.ConnectionHealth.circuits:type_name -> pantherclaw.v1.ConnectionCircuit
+	45,  // 71: pantherclaw.v1.ConnectionHealth.permissions:type_name -> pantherclaw.v1.ConnectionPermission
+	51,  // 72: pantherclaw.v1.ConnectionHealth.last_test:type_name -> pantherclaw.v1.ConnectionTest
+	51,  // 73: pantherclaw.v1.ConnectionHealth.last_passed_test:type_name -> pantherclaw.v1.ConnectionTest
+	55,  // 74: pantherclaw.v1.ConnectionHealth.deliveries:type_name -> pantherclaw.v1.ConnectionDeliveries
+	56,  // 75: pantherclaw.v1.ConnectionHealth.dependent_agents:type_name -> pantherclaw.v1.ConnectionDependentAgent
+	56,  // 76: pantherclaw.v1.ConnectionHealth.granted_agents:type_name -> pantherclaw.v1.ConnectionDependentAgent
+	57,  // 77: pantherclaw.v1.GetConnectionHealthResponse.health:type_name -> pantherclaw.v1.ConnectionHealth
+	8,   // 78: pantherclaw.v1.InventoryItem.kind:type_name -> pantherclaw.v1.InventoryItemKind
+	9,   // 79: pantherclaw.v1.InventoryItem.state:type_name -> pantherclaw.v1.InventoryItemState
+	67,  // 80: pantherclaw.v1.InventoryItem.first_seen_time:type_name -> google.protobuf.Timestamp
+	67,  // 81: pantherclaw.v1.InventoryItem.last_seen_time:type_name -> google.protobuf.Timestamp
+	67,  // 82: pantherclaw.v1.InventoryItem.update_time:type_name -> google.protobuf.Timestamp
+	9,   // 83: pantherclaw.v1.ListConnectionInventoryRequest.states:type_name -> pantherclaw.v1.InventoryItemState
+	8,   // 84: pantherclaw.v1.ListConnectionInventoryRequest.kinds:type_name -> pantherclaw.v1.InventoryItemKind
+	60,  // 85: pantherclaw.v1.ListConnectionInventoryResponse.items:type_name -> pantherclaw.v1.InventoryItem
+	60,  // 86: pantherclaw.v1.DismissInventoryItemResponse.item:type_name -> pantherclaw.v1.InventoryItem
+	19,  // 87: pantherclaw.v1.ConnectionService.CreateConnection:input_type -> pantherclaw.v1.CreateConnectionRequest
+	21,  // 88: pantherclaw.v1.ConnectionService.GetConnection:input_type -> pantherclaw.v1.GetConnectionRequest
+	23,  // 89: pantherclaw.v1.ConnectionService.ListConnections:input_type -> pantherclaw.v1.ListConnectionsRequest
+	25,  // 90: pantherclaw.v1.ConnectionService.UpdateConnection:input_type -> pantherclaw.v1.UpdateConnectionRequest
+	27,  // 91: pantherclaw.v1.ConnectionService.SetRouteMode:input_type -> pantherclaw.v1.SetRouteModeRequest
+	29,  // 92: pantherclaw.v1.ConnectionService.QuarantineConnection:input_type -> pantherclaw.v1.QuarantineConnectionRequest
+	31,  // 93: pantherclaw.v1.ConnectionService.RestoreConnection:input_type -> pantherclaw.v1.RestoreConnectionRequest
+	33,  // 94: pantherclaw.v1.ConnectionService.RetireConnection:input_type -> pantherclaw.v1.RetireConnectionRequest
+	35,  // 95: pantherclaw.v1.ConnectionService.GetSealingKey:input_type -> pantherclaw.v1.GetSealingKeyRequest
+	37,  // 96: pantherclaw.v1.ConnectionService.PutCredential:input_type -> pantherclaw.v1.PutCredentialRequest
+	39,  // 97: pantherclaw.v1.ConnectionService.ListCredentials:input_type -> pantherclaw.v1.ListCredentialsRequest
+	41,  // 98: pantherclaw.v1.ConnectionService.RevokeCredential:input_type -> pantherclaw.v1.RevokeCredentialRequest
+	48,  // 99: pantherclaw.v1.ConnectionService.GetConnectionCapabilities:input_type -> pantherclaw.v1.GetConnectionCapabilitiesRequest
+	52,  // 100: pantherclaw.v1.ConnectionService.TestConnection:input_type -> pantherclaw.v1.TestConnectionRequest
+	58,  // 101: pantherclaw.v1.ConnectionService.GetConnectionHealth:input_type -> pantherclaw.v1.GetConnectionHealthRequest
+	61,  // 102: pantherclaw.v1.ConnectionService.ListConnectionInventory:input_type -> pantherclaw.v1.ListConnectionInventoryRequest
+	63,  // 103: pantherclaw.v1.ConnectionService.DismissInventoryItem:input_type -> pantherclaw.v1.DismissInventoryItemRequest
+	65,  // 104: pantherclaw.v1.ConnectionService.DraftPackageFromInventory:input_type -> pantherclaw.v1.DraftPackageFromInventoryRequest
+	20,  // 105: pantherclaw.v1.ConnectionService.CreateConnection:output_type -> pantherclaw.v1.CreateConnectionResponse
+	22,  // 106: pantherclaw.v1.ConnectionService.GetConnection:output_type -> pantherclaw.v1.GetConnectionResponse
+	24,  // 107: pantherclaw.v1.ConnectionService.ListConnections:output_type -> pantherclaw.v1.ListConnectionsResponse
+	26,  // 108: pantherclaw.v1.ConnectionService.UpdateConnection:output_type -> pantherclaw.v1.UpdateConnectionResponse
+	28,  // 109: pantherclaw.v1.ConnectionService.SetRouteMode:output_type -> pantherclaw.v1.SetRouteModeResponse
+	30,  // 110: pantherclaw.v1.ConnectionService.QuarantineConnection:output_type -> pantherclaw.v1.QuarantineConnectionResponse
+	32,  // 111: pantherclaw.v1.ConnectionService.RestoreConnection:output_type -> pantherclaw.v1.RestoreConnectionResponse
+	34,  // 112: pantherclaw.v1.ConnectionService.RetireConnection:output_type -> pantherclaw.v1.RetireConnectionResponse
+	36,  // 113: pantherclaw.v1.ConnectionService.GetSealingKey:output_type -> pantherclaw.v1.GetSealingKeyResponse
+	38,  // 114: pantherclaw.v1.ConnectionService.PutCredential:output_type -> pantherclaw.v1.PutCredentialResponse
+	40,  // 115: pantherclaw.v1.ConnectionService.ListCredentials:output_type -> pantherclaw.v1.ListCredentialsResponse
+	42,  // 116: pantherclaw.v1.ConnectionService.RevokeCredential:output_type -> pantherclaw.v1.RevokeCredentialResponse
+	49,  // 117: pantherclaw.v1.ConnectionService.GetConnectionCapabilities:output_type -> pantherclaw.v1.GetConnectionCapabilitiesResponse
+	53,  // 118: pantherclaw.v1.ConnectionService.TestConnection:output_type -> pantherclaw.v1.TestConnectionResponse
+	59,  // 119: pantherclaw.v1.ConnectionService.GetConnectionHealth:output_type -> pantherclaw.v1.GetConnectionHealthResponse
+	62,  // 120: pantherclaw.v1.ConnectionService.ListConnectionInventory:output_type -> pantherclaw.v1.ListConnectionInventoryResponse
+	64,  // 121: pantherclaw.v1.ConnectionService.DismissInventoryItem:output_type -> pantherclaw.v1.DismissInventoryItemResponse
+	66,  // 122: pantherclaw.v1.ConnectionService.DraftPackageFromInventory:output_type -> pantherclaw.v1.DraftPackageFromInventoryResponse
+	105, // [105:123] is the sub-list for method output_type
+	87,  // [87:105] is the sub-list for method input_type
+	87,  // [87:87] is the sub-list for extension type_name
+	87,  // [87:87] is the sub-list for extension extendee
+	0,   // [0:87] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_connections_proto_init() }
@@ -5082,8 +5808,8 @@ func file_pantherclaw_v1_connections_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_connections_proto_rawDesc), len(file_pantherclaw_v1_connections_proto_rawDesc)),
-			NumEnums:      8,
-			NumMessages:   50,
+			NumEnums:      10,
+			NumMessages:   57,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

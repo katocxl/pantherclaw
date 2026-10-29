@@ -312,6 +312,9 @@ const expireWaitlistEntries = `-- name: ExpireWaitlistEntries :many
 UPDATE pc.waitlist_entries
 SET state = 'EXPIRED', decided_by = 'system', decided_at = now(), decision_reason = 'EXPIRED'
 WHERE org_id = $1 AND state = 'OPEN' AND kind = ANY ($2::text[]) AND deadline_at <= now()
+  -- An inventory item's review ends only by coverage, dismissal or
+  -- disappearance (HR-417), never at its deadline.
+  AND subject_type <> 'connection_inventory'
 RETURNING id, kind
 `
 
