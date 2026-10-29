@@ -145,6 +145,18 @@ GRANT UPDATE (owners, window_from, window_to, observed, coverage_limits, propose
     ON pc.policy_suggestions TO pc_app;
 GRANT SELECT ON pc.policy_suggestions TO pc_audit_ro;
 
+-- The tenant write freeze of an org being deleted (00181, HR-391).
+CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.policy_suggestions
+    FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
+-- The login role is optional until db bootstrap --deleter-password-file.
+-- +goose StatementBegin
+DO $$ BEGIN
+    IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_deleter') THEN
+        GRANT SELECT, DELETE ON pc.policy_suggestions TO pc_deleter;
+    END IF;
+END $$;
+-- +goose StatementEnd
+
 -- +goose Down
 DROP TABLE pc.policy_suggestions;
 DROP FUNCTION pc.policy_suggestion_update();

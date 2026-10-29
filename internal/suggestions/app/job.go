@@ -19,10 +19,11 @@ import (
 )
 
 // GenerateArgs asks for one finding's suggestion to be created, refreshed
-// or made stale (D91). Job args carry ids only (HR-056).
+// or made stale (D91). Job args carry ids only (HR-056): the finding as
+// its canonical UUID string.
 type GenerateArgs struct {
 	Org     ids.OrgID `json:"org"`
-	Finding ids.UUID  `json:"finding"`
+	Finding string    `json:"finding"`
 }
 
 // Kind implements river.JobArgs.
@@ -61,7 +62,7 @@ func (q *Queue) FindingChanged(ctx context.Context, tx db.TenantTx, finding ids.
 			return fmt.Errorf("suggestions: %w", err)
 		}
 	}
-	return jobs.InsertTx(ctx, c, tx, GenerateArgs{Org: tx.OrgID(), Finding: finding}, nil)
+	return jobs.InsertTx(ctx, c, tx, GenerateArgs{Org: tx.OrgID(), Finding: finding.String()}, nil)
 }
 
 type generateWorker struct {
@@ -72,15 +73,19 @@ type generateWorker struct {
 
 // Work generates in the finding's org.
 func (w *generateWorker) Work(ctx context.Context, job *river.Job[GenerateArgs]) error {
+	finding, err := ids.ParseUUID(job.Args.Finding)
+	if err != nil {
+		return river.JobCancel(fmt.Errorf("suggestions: finding %q: %w", job.Args.Finding, err))
+	}
 	var out Outcome
-	err := w.pool.InTenantTx(ctx, job.Args.Org, func(ctx context.Context, tx db.TenantTx) error {
+	err = w.pool.InTenantTx(ctx, job.Args.Org, func(ctx context.Context, tx db.TenantTx) error {
 		var err error
-		out, err = Generate(ctx, tx, job.Args.Finding)
+		out, err = Generate(ctx, tx, finding)
 		return err
 	})
 	if err == nil && out != Skipped {
 		w.log.InfoContext(ctx, "suggestions.generated", slog.String("org", job.Args.Org.String()),
-			slog.String("finding", job.Args.Finding.String()), slog.String("outcome", string(out)))
+			slog.String("finding", job.Args.Finding), slog.String("outcome", string(out)))
 	}
 	return err
 }
