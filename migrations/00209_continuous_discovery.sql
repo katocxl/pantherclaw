@@ -24,9 +24,15 @@ ALTER TABLE pc.discoveries
         OR (source IN ('scan', 'github_scan', 'ci_scan') AND scan_key IS NOT NULL AND key_jkt IS NULL AND public_jwk IS NULL))
         NOT VALID,
     ADD CONSTRAINT discoveries_ci_scope CHECK ((source = 'ci_scan') = (scan_scope IS NOT NULL)) NOT VALID;
+-- Discoveries are few (open ones are capped per source and org, HR-148), so
+-- validating and indexing them holds the lock briefly.
+-- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.discoveries VALIDATE CONSTRAINT discoveries_source;
+-- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.discoveries VALIDATE CONSTRAINT discoveries_source_key;
+-- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.discoveries VALIDATE CONSTRAINT discoveries_ci_scope;
+-- squawk-ignore require-concurrent-index-creation
 CREATE INDEX discoveries_ci_scope_idx ON pc.discoveries (org_id, scan_scope) WHERE source = 'ci_scan';
 
 GRANT UPDATE (missed_scans, last_scan_run, vanish_notified_at) ON pc.discoveries TO pc_app;
