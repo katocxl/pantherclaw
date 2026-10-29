@@ -48,8 +48,10 @@ func (n *notices) of(typ string) []napp.Message {
 }
 
 func server(name, transport string) app.ScanFinding {
-	return app.ScanFinding{Kind: "mcp_server", Key: sha256.Sum256([]byte("mcp_server" + name)),
-		Attributes: map[string]string{"name": name, "client": "cursor", "transport": transport}}
+	return app.ScanFinding{
+		Kind: "mcp_server", Key: sha256.Sum256([]byte("mcp_server" + name)),
+		Attributes: map[string]string{"name": name, "client": "cursor", "transport": transport},
+	}
 }
 
 // TestHR458_VanishedCIDiscoveryOnlyNotifies: a ci_scan discovery missed by

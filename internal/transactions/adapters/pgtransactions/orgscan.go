@@ -6,11 +6,11 @@ package pgtransactions
 import (
 	"context"
 	"encoding/json/v2"
-	agentsapp "github.com/katocxl/pantherclaw/internal/agents/app"
 	"slices"
 	"strconv"
 	"strings"
 
+	agentsapp "github.com/katocxl/pantherclaw/internal/agents/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"

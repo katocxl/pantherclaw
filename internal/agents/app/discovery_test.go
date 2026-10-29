@@ -21,13 +21,21 @@ func TestMissedKinds(t *testing.T) {
 		want       []string
 	}{
 		{"complete", all, map[string]string{}, []string{"github_app", "github_mcp_config", "github_workflow"}},
-		{"no repositories", []string{"mcp_configs", "org_installations", "workflows"}, map[string]string{"repositories": "denied"},
-			[]string{"github_app"}},
+		{
+			"no repositories",
+			[]string{"mcp_configs", "org_installations", "workflows"},
+			map[string]string{"repositories": "denied"},
+			[]string{"github_app"},
+		},
 		{"unreadable contents", all, map[string]string{"contents": "2 repositories"}, []string{"github_app"}},
 		{"findings not submitted", all, map[string]string{"findings": "some findings could not be submitted"}, nil},
 		{"app unusable", nil, map[string]string{"organization": "x"}, nil},
-		{"workflows only", []string{"repositories", "workflows"}, map[string]string{"mcp_configs": "not reported", "org_installations": "not reported"},
-			[]string{"github_workflow"}},
+		{
+			"workflows only",
+			[]string{"repositories", "workflows"},
+			map[string]string{"mcp_configs": "not reported", "org_installations": "not reported"},
+			[]string{"github_workflow"},
+		},
 	} {
 		if got := missedKinds(tc.scanned, tc.notScanned); !slices.Equal(got, tc.want) {
 			t.Errorf("%s: missedKinds = %v, want %v", tc.name, got, tc.want)
