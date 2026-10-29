@@ -1,0 +1,26 @@
+# ADR-0036 — Server-backed MCP state, discovery and the reviewed MCP surface
+
+**Status:** Accepted (2026-10-29; G0 M15 founder decisions F1–F4, answered with the recommended option each time; the [G0 M15 brief](../g0/M15.md) records them with the coordinator's design decisions). Builds on the MCP face of M6 ([ADR-0002](0002-control-plane-and-gateway-split.md): the gateway has no database of its own).
+
+**Context.** The gateway's MCP face keeps holds, tasks and sessions in memory, so a restart forgets them and a second replica of the same gateway does not know them: an approval given through one replica does not bind on another. The gateway also tells the server nothing about itself beyond enrollment. It governs only the tools a reviewed package names: tools and resources that the upstream MCP server adds later are ignored, with no way to bring them under review, and resources are not served at all. Finally, an upstream server's request for input (`input_required` on the 2026-07-28 protocol, `elicitation/create` on 2025-11-25) is declined, so tools that need one answer from the agent cannot be used. HR-081 (agents see only reviewed descriptions) and HR-082 (elicitation and sampling blocked by default, policy-gated when enabled) must keep holding.
+
+**Decision.**
+1. **MCP state lives on the server** (F1; HR-410..413).
+   - Gateways report their status and replicas through a gateway RPC; reporting never blocks serving.
+   - Holds, tasks and sessions are stored in Postgres through gateway control RPCs (`PutMCPState`, `GetMCPState`, `DeleteMCPState`) with optimistic versions, per gateway and bound to (connection, run, instance); sessions are also bound to the agent key and stored only as a SHA-256.
+   - **Sealing (D13).** A task body is sealed with the platform sealing to the gateway's active broker public key, with the organization, gateway, kind and key in the additional data. Replicas share the broker key, so any replica opens it; the server never does. A body that does not open is treated as not found.
+   - When the server cannot be reached, a hold or task lookup is a new action, and a session lookup answers 503: nothing stale is served.
+2. **Discovered tools are drafted for review** (F2; HR-414..418). The gateway lists every tool, resource and resource template of each MCP connection, with caps, and reports them. The server keeps an inventory, scans descriptions as untrusted text, and opens a connection-scoped TOOL_REVIEW entry for every item an active reviewed package does not cover. A person can dismiss an item with a reason or draft an unsigned package from chosen items; the draft fails validation until a person completes it, and it enters only through the normal signature check and review. Nothing discovered is served or dispatched until a reviewed version covers it.
+3. **Discovered resources become read operations** (F3; HR-419). A new `mcp_resource` mapping channel maps a reviewed URI template to an `access: read` operation. The MCP face serves reviewed resources only; each `resources/read` is decided by the full pipeline, and the upstream URI is built from the reviewed template with percent-encoded values on the connection's own scheme and host. An unmatched URI never reaches the upstream server.
+4. **Elicitation is policy-gated** (F4; HR-420, HR-421).
+   - **Relay only on 2026-07-28 (D33).** A reviewed `mcp` mapping may declare elicitation fields, which become material parameters of the operation. On a 2026-07-28 upstream, `input_required` is relayed to the agent only in form mode, for declared fields, after a clean injection scan. The agent's answer is a new action decided by the full pipeline and forwarded only on ALLOW; the question text is kept only as a hash. The 2025-11-25 face keeps today's tool error.
+   - **Still declined (D34).** URL-mode elicitation, `sampling/createMessage`, `roots/list`, and `elicitation/create` arriving mid-stream from a 2025-11-25 upstream.
+
+**Consequences.**
+- An approval binds across replicas and restarts, which M19's high availability builds on; every `tools/call` adds one state read before `Authorize` (measured in `docs/perf/M15.md`).
+- The server stores task bodies it cannot read; a broker key rotation loses open tasks, which then cost the agent a new action.
+- New upstream tools reach review instead of being ignored, but stay unusable until a person completes and signs a package; reviewers get a draft, never a ready-to-sign package.
+- Resource reads are governed and receipted like other reads, and M14's data-scoping obligations apply to them.
+- HR-082 becomes concrete: elicitation is enabled only where a reviewed package declares it, and its answers are decided by policy. Sampling and roots each need their own decision later.
+
+**Alternatives.** Sticky routing documented only, with state in memory (an approval still lost on restart or failover); a database in the gateway (contradicts ADR-0002); listing discovered tools without a draft (review without a path to coverage); serving discovered descriptions after a scan (HR-081 forbids it); routing elicitation to a human approver (slower, and it still discloses the question to a person outside the run); relaying elicitation on the 2025-11-25 stream, where it arrives mid-stream outside a decided action.

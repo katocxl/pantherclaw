@@ -462,3 +462,20 @@
 | HR-400 | A decision returned to an agent (AuthorizeResponse, gateway refusals, hook and A2A refusals) adds only the agent-safe explanation: presentation, failing category, decisive code, transaction id and recovery actions. It never adds the effective grant, policy, limits, budget values or request content (F330; founder 2026-10-28). | T-150, T-080 | M13 |
 | HR-401 | Run inspection reads each section only with that section's own permission and scope. A section the caller can't read is left out and listed in omitted_sections, never returned partially counted. | — (rows26 D22, F224) | M13 |
 | HR-402 | The coverage graph is assembled only from coverage records the caller may read, filtered before any node or count is built. Unknown stays UNVERIFIED and is never shown as controlled. | T-042, T-085 | M13 |
+
+## Gateway state, discovery and the reviewed MCP surface (G0 M15)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
+| HR-410 | A gateway's status report is accepted only for its own gateway (organization and gateway from the certificate, HR-181), and connection ids that gateway does not serve are dropped; reporting never blocks serving: a failed report is logged and the gateway keeps serving. | T-182 | M15 |
+| HR-411 | Shared MCP state (holds, tasks, sessions) is kept per gateway, with organization and gateway from the certificate, and every entry is bound to (connection, run, instance). A task body is sealed to the gateway's broker key with that binding in the additional data, and the server never opens it; a body that does not open counts as not found. | T-182, T-183 | M15 |
+| HR-412 | A state miss, a version conflict (`MCP_STATE_CONFLICT`), an unreachable server or a full store (`MCP_STATE_FULL`) only costs the agent a new action (a session lookup answers 503); an entry is never served to another binding, and a stale entry is never served. | T-183 | M15 |
+| HR-413 | An MCP session stays bound to its connection, instance, agent key (jkt) and run on every replica; only the SHA-256 of the session id is stored or sent, never the id itself. | T-183 | M15 |
+| HR-414 | A discovered tool, resource or resource template is inert: it is never served, listed to agents or dispatched until an ACTIVE reviewed package version pinned by the connection covers it. | T-184 | M15 |
+| HR-415 | Discovered text (tool, resource and template descriptions from the upstream server) is UNTRUSTED: it is scanned for injection, shown flagged, and never used as a served description or as a draft package's `description`. | T-184 | M15 |
+| HR-416 | A draft package from the inventory is generated unsigned and fails manifest validation as generated; it enters only through the normal signature check and TOOL_REVIEW, and the server never signs it. | T-184 | M15 |
+| HR-417 | An inventory review entry closes only by coverage (APPROVED), dismissal by a person with a reason (REJECTED), or the item's disappearance in a complete listing (EXPIRED). | T-184, T-187 | M15 |
+| HR-418 | Inventory reports are capped (1,000 items per kind, 8 KiB per description) and accepted only for connections the calling gateway serves. | T-187 | M15 |
+| HR-419 | A resource read is a read operation decided by the full pipeline; a URI that matches no reviewed template never reaches the upstream server; template values are percent-encoded and cannot change the connection's scheme or host. | T-185 | M15 |
+| HR-420 | An elicitation reaches the agent only in form mode, only for fields the reviewed mapping declares and only after a clean injection scan of its message; the answer travels only as material parameters (`elicitation.<field>`) of a new action decided by the full pipeline, and the question text is stored only as its SHA-256. | T-186, T-028 | M15 |
+| HR-421 | URL-mode elicitation, sampling, roots and `elicitation/create` arriving mid-stream from a 2025-11-25 upstream are declined. | T-186, T-028 | M15 |
