@@ -17,7 +17,7 @@ import (
 // Customer-authored scenarios (G0 M17 D124–D126, PN-009.6): CX-### files a
 // customer writes for its own tools. A range runs library scenarios or
 // customer ones, never both; a customer range has no assurance report, only
-// the unsigned summary labelled customer-authored, and its baseline is an
+// the unsigned summary marked customer-authored, and its baseline is an
 // earlier customer range named by its id.
 
 // customerStatement is the summary's statement for a customer range.
@@ -93,6 +93,8 @@ func verdictOf(v pantherclawv1.RangeVerdict) rtdomain.Verdict {
 		return rtdomain.VerdictSkipped
 	case pantherclawv1.RangeVerdict_RANGE_VERDICT_MISSING:
 		return rtdomain.VerdictMissing
+	case pantherclawv1.RangeVerdict_RANGE_VERDICT_ERROR, pantherclawv1.RangeVerdict_RANGE_VERDICT_UNSPECIFIED:
+		return rtdomain.VerdictError
 	}
 	return rtdomain.VerdictError
 }

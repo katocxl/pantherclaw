@@ -12,6 +12,8 @@ import (
 	"os"
 	"regexp"
 	"slices"
+
+	"github.com/katocxl/pantherclaw/internal/sim/github"
 )
 
 // A tools file declares a customer's own tools for the simulator as data
@@ -62,8 +64,20 @@ const (
 
 var (
 	fileToolName = regexp.MustCompile(`^[A-Za-z0-9_.:/-]{1,120}$`)
-	// builtinTools are the simulator's own tools: a file cannot redefine them.
-	builtinTools = []string{"create_refund", "get_refund"}
+	// builtinTools are the simulator's own tools and the GitHub MCP server's
+	// it serves: a file cannot redefine or shadow them.
+	builtinTools = func() []string {
+		out := []string{"create_refund", "get_refund"}
+		for _, v := range github.MCPTools {
+			var t struct {
+				Name string `json:"name"`
+			}
+			if json.Unmarshal(v, &t) == nil && t.Name != "" {
+				out = append(out, t.Name)
+			}
+		}
+		return out
+	}()
 )
 
 // DeclaredTool is a validated tool of a tools file, its results keyed by

@@ -432,7 +432,7 @@ type summary struct {
 	RangeID       string `json:"range_id"`
 	RunnerVersion string `json:"runner_version"`
 	SetDigest     string `json:"scenario_set_digest"`
-	// Origin is library or customer; a customer summary is labelled
+	// Origin is library or customer; a customer summary is marked
 	// customer-authored (G0 M17 D126, HR-466).
 	Origin      string          `json:"origin"`
 	Counts      map[string]int  `json:"counts"`

@@ -99,6 +99,7 @@ func TestHR468_ToolsFileIsDataAndEveryAnswerIsSimulated(t *testing.T) {
 		"too many tools":     `{"tools":[` + strings.Join(many, ",") + `]}`,
 		"too large":          `{"tools":[{"name":"a","description":"` + strings.Repeat("x", MaxToolsFileBytes) + `","inputSchema":{}}]}`,
 		"a built-in":         `{"tools":[{"name":"create_refund","description":"","inputSchema":{}}]}`,
+		"a GitHub tool":      `{"tools":[{"name":"get_file_contents","description":"","inputSchema":{}}]}`,
 		"twice":              `{"tools":[{"name":"a","description":"","inputSchema":{}},{"name":"a","description":"","inputSchema":{}}]}`,
 		"bad name":           `{"tools":[{"name":"a b","description":"","inputSchema":{}}]}`,
 		"schema not object":  `{"tools":[{"name":"a","description":"","inputSchema":"x"}]}`,

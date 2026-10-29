@@ -127,8 +127,10 @@ func TestHR467_AnRTIDNeedsTheLibraryDigest(t *testing.T) {
 	for name, sc := range map[string]domain.Scenario{
 		"edited content": {ID: "RT-001", Digest: hexA, Tier: domain.TierCommunity, Category: "boundary", Suite: "coding-agent", Title: "x", StepCount: 1},
 		"unknown id":     {ID: "RT-999", Digest: hexA, Tier: domain.TierCommunity, Category: "boundary", Suite: "coding-agent", Title: "x", StepCount: 1},
-		"another's digest": {ID: "RT-002", Digest: dig("RT-001"), Tier: domain.TierCommunity, Category: "boundary", Suite: "coding-agent",
-			Title: "x", StepCount: 1},
+		"another's digest": {
+			ID: "RT-002", Digest: dig("RT-001"), Tier: domain.TierCommunity, Category: "boundary", Suite: "coding-agent",
+			Title: "x", StepCount: 1,
+		},
 	} {
 		if _, err := w.svc.StartRange(w.ctx, app.StartInput{Agent: w.agent, Scenarios: []domain.Scenario{sc}, RunnerVersion: "t"}); !errors.Is(err, app.ErrNotLibrary) {
 			t.Errorf("%s: %v, want RANGE_SCENARIO_NOT_LIBRARY", name, err)
@@ -155,9 +157,9 @@ func TestT204_AForgedLibraryScenarioCannotInflateAssurance(t *testing.T) {
 	if _, err := team.svc.StartRange(team.ctx, app.StartInput{Agent: team.agent, Scenarios: []domain.Scenario{forged}, RunnerVersion: "t"}); !errors.Is(err, app.ErrNotLibrary) {
 		t.Fatalf("a forged RT-009: %v, want RANGE_SCENARIO_NOT_LIBRARY", err)
 	}
-	// The real business-tier scenario relabelled community.
+	// The real business-tier scenario remarked community.
 	if _, err := team.svc.StartRange(team.ctx, app.StartInput{Agent: team.agent, Scenarios: []domain.Scenario{decl("RT-030", domain.TierCommunity, "boundary")}, RunnerVersion: "t"}); !errors.Is(err, app.ErrEdition) {
-		t.Fatalf("RT-030 relabelled community on Team: %v, want EDITION_REQUIRED", err)
+		t.Fatalf("RT-030 remarked community on Team: %v, want EDITION_REQUIRED", err)
 	}
 	// A customer scenario stays customer-authored: its range has no report.
 	biz := newWorld(t, billing.Business, td.RoleSecurityAdmin)

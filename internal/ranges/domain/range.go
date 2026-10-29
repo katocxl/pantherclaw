@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	rtdomain "github.com/katocxl/pantherclaw/internal/redteam/domain"
 )
 
 // State is where a range is in its life.
@@ -73,20 +74,15 @@ const (
 )
 
 // Origins (G0 M17 D124): the server derives a scenario's origin from its
-// id, never from the runner. RT-### is the PantherClaw library, CX-### is
-// customer-authored.
+// id, never from the runner. They are the scenario format's own, so the
+// range and the runner can never disagree.
 const (
-	OriginLibrary  = "library"
-	OriginCustomer = "customer"
+	OriginLibrary  = rtdomain.OriginLibrary
+	OriginCustomer = rtdomain.OriginCustomer
 )
 
 // OriginOf returns the origin of a scenario id.
-func OriginOf(id string) string {
-	if strings.HasPrefix(id, "CX-") {
-		return OriginCustomer
-	}
-	return OriginLibrary
-}
+func OriginOf(id string) string { return rtdomain.OriginOf(id) }
 
 // Categories lists the report's categories in report order.
 var Categories = []string{"functional", "boundary", "recovery", "explanation"}

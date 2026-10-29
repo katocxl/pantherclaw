@@ -163,13 +163,16 @@ var CustomerStepKinds = []string{
 	"agent.call", "agent.child", "agent.steal", "target.replay", "wait", "check.receipt", "person.approve", "person.decline",
 }
 
-// customerCapabilities are the requires a customer scenario may name: what
+// CustomerCapabilities are the requires a customer scenario may name: what
 // a live range can set up. Sandbox probes, a second org, a browser session
 // and the simulator swaps belong to the harness.
-var customerCapabilities = []string{
+var CustomerCapabilities = []string{
 	"github", "payments", "mcp", "person", "stripe.refund", "stripe.transfer", "pg.query", "slack.post",
 	"authzen.evaluate", "a2a.send",
 }
+
+// KnownCapabilities returns every capability a scenario may require.
+func KnownCapabilities() []string { return slices.Clone(capabilities) }
 
 // validateCustomer applies the limits of a customer scenario (D126): it is
 // business-tier, never harness-only, uses only live-driver step kinds and
@@ -182,8 +185,8 @@ func (s *Scenario) validateCustomer() error {
 		return invalid("a customer scenario (CX-###) cannot be harness_only")
 	}
 	for _, r := range s.Requires {
-		if !slices.Contains(customerCapabilities, r) {
-			return invalid("a customer scenario (CX-###) requires only %v, not %q", customerCapabilities, r)
+		if !slices.Contains(CustomerCapabilities, r) {
+			return invalid("a customer scenario (CX-###) requires only %v, not %q", CustomerCapabilities, r)
 		}
 	}
 	for i, st := range s.Steps {
