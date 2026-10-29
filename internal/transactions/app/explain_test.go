@@ -159,8 +159,13 @@ func (failingRecordings) Definition(context.Context, ids.OrgID, actionir.Definit
 //
 // Covers: F066, F647
 func TestF066_MissingInputsAreAGap(t *testing.T) {
-	for _, r := range []Recordings{nil, failingRecordings{recording.ErrTruncated}, failingRecordings{errors.New("no row")},
-		failingRecordings{replay.ErrNoOpener}, failingRecordings{recording.ErrUnreadable}} {
+	for _, r := range []Recordings{
+		nil,
+		failingRecordings{recording.ErrTruncated},
+		failingRecordings{errors.New("no row")},
+		failingRecordings{replay.ErrNoOpener},
+		failingRecordings{recording.ErrUnreadable},
+	} {
 		if m, ok := recordedMaterial(context.Background(), r, ids.OrgID{}, ids.NewV7(), 1); ok || m != nil {
 			t.Fatalf("%T: material %v ok %v", r, m, ok)
 		}
