@@ -73,7 +73,7 @@ func (s *Server) callExtra(name string, args map[string]string) (map[string]any,
 // whether method is one of them. Both page by Faults.PageSize.
 func (s *Server) lists(method string, params jsontext.Value) (map[string]any, bool) {
 	var items []any
-	field := ""
+	var field string
 	switch method {
 	case "resources/list":
 		field = "resources"
