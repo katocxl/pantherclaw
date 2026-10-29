@@ -14,6 +14,7 @@ import (
 	"time"
 
 	adomain "github.com/katocxl/pantherclaw/internal/agents/domain"
+	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/identity/app"
 	"github.com/katocxl/pantherclaw/internal/identity/issuers"
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
@@ -67,6 +68,7 @@ func glAtt(claims map[string]any) *app.Attestation {
 func TestHR461_GitLabEntriesAndAttestation(t *testing.T) {
 	w := newWorld(t)
 	w.svc.WithAttestors(app.Attestors{GitLab: fakeIssuers{issuers.GitLabDefaultIssuer: w.org}})
+	w.svc.WithEntitlements(edition(billing.Enterprise))
 	agent := w.agent(t, adomain.ContextCI)
 
 	rogue := gl(glRef)
@@ -132,6 +134,7 @@ func (w *world) spAtt(mutate func(map[string]any)) *app.Attestation {
 func TestHR462_SPIFFEEntriesAndAttestation(t *testing.T) {
 	w := newWorld(t)
 	w.svc.WithAttestors(app.Attestors{SPIFFE: fakeIssuers{"prod.acme.test": w.org}})
+	w.svc.WithEntitlements(edition(billing.Enterprise))
 	agent := w.agent(t, adomain.ContextService)
 
 	rogue := app.Binding{SPIFFE: &issuers.SPIFFEBinding{TrustDomain: "evil.test", SPIFFEID: "spiffe://evil.test/w"}}
@@ -187,6 +190,7 @@ func (w *world) gcpAtt(mutate func(map[string]any)) *app.Attestation {
 func TestHR463_GCPEntriesAndAttestation(t *testing.T) {
 	w := newWorld(t)
 	w.svc.WithAttestors(app.Attestors{GCP: fakeGitHub{}})
+	w.svc.WithEntitlements(edition(billing.Enterprise))
 	agent := w.agent(t, adomain.ContextService)
 	b := app.Binding{GCP: &issuers.GCPBinding{ServiceAccountID: "113524806285125460987", ProjectID: "acme-prod"}}
 	ciAgent := w.agent(t, adomain.ContextCI)
@@ -251,6 +255,7 @@ func (w *world) awsAtt(t *testing.T, arn, sig string) *app.Attestation {
 func TestHR464_AWSEntriesAndAttestation(t *testing.T) {
 	w := newWorld(t)
 	w.svc.WithAttestors(app.Attestors{AWS: fakeSTS{now: time.Now()}})
+	w.svc.WithEntitlements(edition(billing.Enterprise))
 	agent := w.agent(t, adomain.ContextService)
 	b := app.Binding{AWS: &issuers.AWSBinding{AccountID: "123456789012", RoleName: "agent-runner"}}
 	e := w.activeEntry(t, agent, b, true)
@@ -327,6 +332,7 @@ func azAtt(iat time.Time, mutate func(map[string]any)) *app.Attestation {
 func TestHR469_AzureMIEntriesAndAttestation(t *testing.T) {
 	w := newWorld(t)
 	w.svc.WithAttestors(app.Attestors{Entra: entraApps{org: w.org}})
+	w.svc.WithEntitlements(edition(billing.Enterprise))
 	agent := w.agent(t, adomain.ContextService)
 	b := app.Binding{AzureMI: &issuers.AzureMIBinding{TenantID: azTenant, AppID: azApp, ObjectID: azObject}}
 	other := app.Binding{AzureMI: &issuers.AzureMIBinding{TenantID: azTenant, AppID: "00001111-aaaa-2222-bbbb-3333cccc4445", ObjectID: azObject}}
@@ -372,6 +378,7 @@ func TestHR469_AzureMIEntriesAndAttestation(t *testing.T) {
 func TestHR469_EntraAgentEntriesAndAttestation(t *testing.T) {
 	w := newWorld(t)
 	w.svc.WithAttestors(app.Attestors{Entra: entraApps{org: w.org}})
+	w.svc.WithEntitlements(edition(billing.Enterprise))
 	agent := w.agent(t, adomain.ContextService)
 	b := app.Binding{EntraAgent: &issuers.EntraAgentBinding{TenantID: azTenant, AppID: azApp, ObjectID: azObject}}
 	e := w.activeEntry(t, agent, b, true)
@@ -408,4 +415,151 @@ func TestHR469_EntraAgentEntriesAndAttestation(t *testing.T) {
 	mi.Kind = issuers.KindAzureMI
 	_, err = w.attestEnroll(t, w.svc, newWorkload(), "", mi)
 	wantPAP(t, "agent entry through azure_mi", err, pap.CodeAttestationLow)
+}
+
+// edition is a fixed edition (billing.Service).
+type edition billing.Edition
+
+func (e edition) Current(context.Context) (billing.Entitlements, error) {
+	return billing.Entitlements{Edition: billing.Edition(e)}, nil
+}
+
+// TestM17PresetsNeedEnterprise: below the Enterprise edition, or
+// without an edition source, no M17 preset entry can be proposed; the M3
+// presets are not gated.
+// Covers: PN-002.3
+func TestM17PresetsNeedEnterprise(t *testing.T) {
+	w := newWorld(t)
+	w.svc.WithAttestors(app.Attestors{
+		GitLab: fakeIssuers{issuers.GitLabDefaultIssuer: w.org}, SPIFFE: fakeIssuers{"prod.acme.test": w.org},
+		Entra: entraApps{org: w.org},
+	})
+	svc := w.agent(t, adomain.ContextService)
+	ci := w.agent(t, adomain.ContextCI)
+	for name, in := range map[string]app.ProposeInput{
+		"gitlab_ci":    {AgentID: ci, Binding: gl(glRef)},
+		"spiffe_jwt":   {AgentID: svc, Binding: sp()},
+		"gcp_workload": {AgentID: svc, Binding: app.Binding{GCP: &issuers.GCPBinding{ServiceAccountID: "1"}}},
+		"aws_iam":      {AgentID: svc, Binding: app.Binding{AWS: &issuers.AWSBinding{AccountID: "123456789012", RoleName: "r"}}},
+		"azure_mi":     {AgentID: svc, Binding: app.Binding{AzureMI: &issuers.AzureMIBinding{TenantID: azTenant, AppID: azApp, ObjectID: azObject}}},
+		"entra_agent_id": {AgentID: svc, Binding: app.Binding{EntraAgent: &issuers.EntraAgentBinding{
+			TenantID: azTenant, AppID: azApp, ObjectID: azObject,
+		}}},
+	} {
+		in.Reason = "x"
+		for _, e := range []app.Entitlements{nil, edition(billing.Community), edition(billing.Team), edition(billing.Business)} {
+			w.svc.WithEntitlements(e)
+			if _, err := w.svc.ProposeIssuer(w.orgAdmin(), in, nil); !errors.Is(err, app.ErrEdition) {
+				t.Errorf("%s with %v: %v", name, e, err)
+			}
+		}
+		w.svc.WithEntitlements(edition(billing.Enterprise))
+		if _, err := w.svc.ProposeIssuer(w.orgAdmin(), in, nil); err != nil {
+			t.Errorf("%s on Enterprise: %v", name, err)
+		}
+	}
+	w.svc.WithEntitlements(nil)
+	gh := w.agent(t, adomain.ContextCI)
+	if _, err := w.svc.ProposeIssuer(w.orgAdmin(), app.ProposeInput{AgentID: gh, Binding: app.Binding{GitHub: &issuers.GitHubBinding{
+		RepositoryID: "1", RepositoryOwnerID: "2", WorkflowRefs: []string{"acme/agents/.github/workflows/ci.yml@refs/heads/main"},
+	}}, Reason: "x"}, nil); errors.Is(err, app.ErrEdition) {
+		t.Error("the GitHub preset is gated")
+	}
+}
+
+// TestT202_MergeRequestTokensAndRogueGitLabIssuers: a merge-request
+// pipeline's ID token never attests, and neither does a token from a
+// self-managed instance the operator did not configure, nor an entry
+// naming one (T-202).
+// Covers: PN-002.3
+func TestT202_MergeRequestTokensAndRogueGitLabIssuers(t *testing.T) {
+	w := newWorld(t)
+	w.svc.WithAttestors(app.Attestors{GitLab: fakeIssuers{issuers.GitLabDefaultIssuer: w.org}})
+	w.svc.WithEntitlements(edition(billing.Enterprise))
+	agent := w.agent(t, adomain.ContextCI)
+	w.activeEntry(t, agent, gl(glRef), true)
+	rogue := gl("gitlab.evil.test/acme/agents/runner//.gitlab-ci.yml@refs/heads/main")
+	rogue.GitLab.Issuer = "https://gitlab.evil.test"
+	if _, err := w.svc.ProposeIssuer(w.orgAdmin(), app.ProposeInput{AgentID: agent, Binding: rogue, Reason: "x"}, nil); !errors.Is(err, app.ErrUnknownIssuer) {
+		t.Errorf("entry naming a rogue instance: %v", err)
+	}
+	for name, mutate := range map[string]func(map[string]any){
+		"merge request":          func(c map[string]any) { c["pipeline_source"] = "merge_request_event" },
+		"external pull request":  func(c map[string]any) { c["pipeline_source"] = "external_pull_request_event" },
+		"fork's unprotected ref": func(c map[string]any) { c["ref_protected"] = "false"; c["ref"] = "patch-1" },
+		"rogue instance":         func(c map[string]any) { c["iss"] = "https://gitlab.evil.test" },
+	} {
+		c := w.glClaims(glRef)
+		mutate(c)
+		_, err := w.attestEnroll(t, w.svc, newWorkload(), "", glAtt(c))
+		wantPAP(t, name, err, pap.CodeAttestationLow)
+	}
+	if n := w.count(t, "SELECT count(*) FROM pc.agent_instances WHERE org_id = $1", w.org); n != 0 {
+		t.Errorf("%d instances enrolled", n)
+	}
+}
+
+// TestT203_SPIFFETrustDomainConfusion: a JWT-SVID verified by one trust
+// domain's bundle never attests for a workload of another, even one an
+// entry pins (T-203; the AWS half is in awssts).
+// Covers: PN-002.3
+func TestT203_SPIFFETrustDomainConfusion(t *testing.T) {
+	w := newWorld(t)
+	// Both trust domains are configured; the token names prod but the
+	// entry pins a workload of edge.
+	w.svc.WithAttestors(app.Attestors{SPIFFE: fakeIssuers{"prod.acme.test": w.org, "edge.acme.test": w.org}})
+	w.svc.WithEntitlements(edition(billing.Enterprise))
+	agent := w.agent(t, adomain.ContextService)
+	w.activeEntry(t, agent, app.Binding{SPIFFE: &issuers.SPIFFEBinding{TrustDomain: "edge.acme.test", SPIFFEID: "spiffe://edge.acme.test/w"}}, true)
+	for name, sub := range map[string]string{
+		"other trust domain's workload": spID,
+		"pinned path, other domain":     "spiffe://prod.acme.test/w",
+		"look-alike domain":             "spiffe://edge.acme.test.evil/w",
+	} {
+		_, err := w.attestEnroll(t, w.svc, newWorkload(), "", w.spAtt(func(c map[string]any) { c["sub"] = sub }))
+		wantPAP(t, name, err, pap.CodeAttestationLow)
+	}
+}
+
+// TestT205_LongLivedEntraTokens: a stolen day-long Entra token attests
+// once, for at most an hour, and only for the one org its app is pinned
+// to; the same app can never be used to attest for another org (T-205).
+// Covers: PN-002.3
+func TestT205_LongLivedEntraTokens(t *testing.T) {
+	w := newWorld(t)
+	w.svc.WithAttestors(app.Attestors{Entra: entraApps{org: w.org}})
+	w.svc.WithEntitlements(edition(billing.Enterprise))
+	agent := w.agent(t, adomain.ContextService)
+	w.activeEntry(t, agent, app.Binding{AzureMI: &issuers.AzureMIBinding{TenantID: azTenant, AppID: azApp, ObjectID: azObject}}, true)
+	stolen := azAtt(time.Now().Add(-time.Hour), nil)
+	if _, err := w.attestEnroll(t, w.svc, newWorkload(), "", stolen); err != nil {
+		t.Fatal(err)
+	}
+	// Replayed by the thief from another key: refused for the rest of
+	// the token's day.
+	_, err := w.attestEnroll(t, w.svc, newWorkload(), "", stolen)
+	wantPAP(t, "replayed token", err, pap.CodeInvalidToken)
+	if n := w.count(t, `SELECT count(*) FROM pc.attestations WHERE org_id = $1
+		AND expires_at <= accepted_at + interval '1 hour' AND expires_at <= issued_at + interval '1 hour'`, w.org); n != 1 {
+		t.Errorf("%d attestations bounded by an hour, want 1", n)
+	}
+
+	// Another org, even with the same tenant and app pinned in its own
+	// entry, cannot use the app: the operator pinned it to w's org.
+	o := newWorld(t)
+	o.svc.WithAttestors(app.Attestors{Entra: entraApps{org: w.org}})
+	o.svc.WithEntitlements(edition(billing.Enterprise))
+	other := o.agent(t, adomain.ContextService)
+	b := app.Binding{AzureMI: &issuers.AzureMIBinding{TenantID: azTenant, AppID: azApp, ObjectID: azObject}}
+	if _, err := o.svc.ProposeIssuer(o.orgAdmin(), app.ProposeInput{AgentID: other, Binding: b, Reason: "x"}, nil); !errors.Is(err, app.ErrUnknownIssuer) {
+		t.Errorf("another org pinned the app: %v", err)
+	}
+	if got := o.svc.AttestationOrg(*azAtt(time.Now(), nil)); got != w.org {
+		t.Errorf("the app's tokens name org %v, want only %v", got, w.org)
+	}
+	// A pantherclaw:<other org> audience never redirects an Entra token.
+	tok := azAtt(time.Now(), func(c map[string]any) { c["aud"] = "pantherclaw:" + o.org.String() })
+	if got := o.svc.AttestationOrg(*tok); !got.IsZero() {
+		t.Errorf("an Entra token named org %v through a pantherclaw audience", got)
+	}
 }

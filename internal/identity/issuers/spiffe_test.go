@@ -82,6 +82,9 @@ func TestHR462_SPIFFEPresetRules(t *testing.T) {
 	}
 }
 
+// TestHR141_SPIFFEChangesAreWidenings: a new or changed SPIFFE ID needs
+// activation.
+// Covers: PN-002.3
 func TestHR141_SPIFFEChangesAreWidenings(t *testing.T) {
 	b := spBinding()
 	if w := b.Widening(&b); len(w) != 0 {

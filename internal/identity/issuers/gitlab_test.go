@@ -124,6 +124,7 @@ func TestHR461_GitLabPresetRules(t *testing.T) {
 
 // TestHR141_GitLabWideningIsDetected: added definitions, removed pins and
 // a moved project widen; dropping a definition narrows.
+// Covers: PN-002.3
 func TestHR141_GitLabWideningIsDetected(t *testing.T) {
 	base := glBinding()
 	base.Environment = "production"

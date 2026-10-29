@@ -142,3 +142,47 @@ func TestHR464_STSAnswersForCheckedRequestsOnly(t *testing.T) {
 		}
 	}
 }
+
+// TestT203_STSRequestSmuggling: a request that tries to reach another
+// host, carry another action or smuggle headers or a second request is
+// refused before anything is sent to STS (T-203).
+// Covers: PN-002.3
+func TestT203_STSRequestSmuggling(t *testing.T) {
+	ctx := context.Background()
+	org := ids.New[ids.Org]()
+	now := time.Now()
+	s := newSTS(t)
+	v, err := awssts.New(s.client(), nil, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := func() issuers.AWSRequest {
+		r, err := issuers.ParseAWSRequest(token(t, org, "sts.amazonaws.com", now))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	for name, mutate := range map[string]func(*issuers.AWSRequest){
+		"host header elsewhere":  func(r *issuers.AWSRequest) { r.Headers["host"] = "evil.test" },
+		"forwarded host":         func(r *issuers.AWSRequest) { r.Headers["X-Forwarded-Host"] = "evil.test" },
+		"transfer encoding":      func(r *issuers.AWSRequest) { r.Headers["Transfer-Encoding"] = "chunked" },
+		"content length":         func(r *issuers.AWSRequest) { r.Headers["Content-Length"] = "0" },
+		"second request in body": func(r *issuers.AWSRequest) { r.Body += "\r\n\r\nPOST / HTTP/1.1\r\nHost: evil.test\r\n\r\n" },
+		"other action":           func(r *issuers.AWSRequest) { r.Body = "Action=AssumeRole&Version=2011-06-15" },
+		"action in the query":    func(r *issuers.AWSRequest) { r.URL = "https://sts.amazonaws.com/?Action=AssumeRole" },
+		"userinfo host":          func(r *issuers.AWSRequest) { r.URL = "https://sts.amazonaws.com@evil.test/" },
+		"encoded path":           func(r *issuers.AWSRequest) { r.URL = "https://sts.amazonaws.com/%2e%2e/" },
+	} {
+		r := base()
+		mutate(&r)
+		tok, err := r.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		s.got = nil
+		if _, _, err := v.Verify(ctx, org, tok); err == nil || s.got != nil {
+			t.Errorf("%s: err %v, sent %v", name, err, s.got != nil)
+		}
+	}
+}

@@ -191,3 +191,8 @@ func widenedPin(name, prev, next string) []string {
 		return []string{name + " changed: " + prev + " to " + next}
 	}
 }
+
+// Extended reports whether k is one of the M17 presets, which need the
+// Enterprise edition (PN-002.3); GitHub Actions and Kubernetes are in
+// every edition.
+func Extended(k Kind) bool { return Known(k) && k != KindGitHub && k != KindKubernetes }

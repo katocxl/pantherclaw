@@ -13,6 +13,7 @@ import (
 
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
 	adomain "github.com/katocxl/pantherclaw/internal/agents/domain"
+	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/identity/issuers"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -36,6 +37,8 @@ var (
 		"the cluster is not configured for this organization (identity.kubernetes_clusters)")
 	ErrUnknownIssuer = pcerr.New(pcerr.InvalidArgument, "ISSUER_NOT_CONFIGURED",
 		"the issuer is not configured for this organization (identity.gitlab_issuers, identity.spiffe_trust_domains, identity.entra_apps)")
+	ErrEdition = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED",
+		"the GitLab CI, SPIFFE, GCP, AWS, Azure managed identity and Entra Agent ID presets need the Enterprise edition")
 	ErrConfirmReusable = pcerr.New(pcerr.FailedPrecondition, "CONFIRM_REUSABLE_REFS",
 		"confirm that every reusable workflow ref is a protected branch or tag of its repository")
 )
@@ -44,6 +47,37 @@ var (
 // (founder decision 3: clusters are operator configuration).
 type Clusters interface {
 	Allowed(cluster string, org ids.OrgID) bool
+}
+
+// Entitlements reports the current edition (billing.Service).
+type Entitlements interface {
+	Current(ctx context.Context) (billing.Entitlements, error)
+}
+
+// WithEntitlements sets the edition source the M17 presets are gated on
+// and returns s. Without one those presets are refused (fail closed).
+func (s *Service) WithEntitlements(e Entitlements) *Service {
+	s.ents = e
+	return s
+}
+
+// requireEdition refuses a preset the edition does not include
+// (PN-002.3).
+func (s *Service) requireEdition(ctx context.Context, k issuers.Kind) error {
+	if !issuers.Extended(k) {
+		return nil
+	}
+	if s.ents == nil {
+		return ErrEdition
+	}
+	ent, err := s.ents.Current(ctx)
+	if err != nil {
+		return err
+	}
+	if !ent.IdentityPresetsExtended() {
+		return ErrEdition
+	}
+	return nil
 }
 
 // Binding is the binding of one preset: exactly one field is set.
@@ -310,6 +344,9 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 	}
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
+		return Revision{}, err
+	}
+	if err := s.requireEdition(ctx, in.Binding.kind()); err != nil {
 		return Revision{}, err
 	}
 	if k := in.Binding.Kubernetes; k != nil && (clusters == nil || !clusters.Allowed(k.Cluster, c.Org)) {

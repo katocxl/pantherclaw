@@ -788,7 +788,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	identity := iapp.New(pool, reg, d.publicURL, clock.System{}).WithAttestors(attestors)
+	identity := iapp.New(pool, reg, d.publicURL, clock.System{}).WithAttestors(attestors).WithEntitlements(d.billing)
 	pantherclawv1connect.RegisterIdentityServiceHandler(rs, identityrpc.NewIdentity(identity, d.clusters))
 	grants, runs := m11Issuance(d)
 	wireM14Grants(grants, d)

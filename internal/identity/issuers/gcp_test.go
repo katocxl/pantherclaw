@@ -78,6 +78,9 @@ func TestHR463_GCPPresetRules(t *testing.T) {
 	}
 }
 
+// TestHR141_GCPRemovingAPinIsAWidening: dropping a project or instance pin
+// needs activation; adding one narrows.
+// Covers: PN-002.3
 func TestHR141_GCPRemovingAPinIsAWidening(t *testing.T) {
 	prev := issuers.GCPBinding{ServiceAccountID: gcpSA, ProjectID: "acme-prod"}
 	if w := (issuers.GCPBinding{ServiceAccountID: gcpSA}).Widening(&prev); len(w) == 0 {
