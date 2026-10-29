@@ -39,7 +39,7 @@ func (q *Queries) DismissInventoryItem(ctx context.Context, arg DismissInventory
 
 const getInventoryItemByKey = `-- name: GetInventoryItemByKey :one
 
-SELECT org_id, id, connection_id, kind, name, display_name, mime_type, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at FROM pc.connection_inventory
+SELECT org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at FROM pc.connection_inventory
 WHERE org_id = $1 AND connection_id = $2 AND kind = $3
   AND name = $4 AND digest = $5
 `
@@ -76,6 +76,7 @@ func (q *Queries) GetInventoryItemByKey(ctx context.Context, arg GetInventoryIte
 		&i.Name,
 		&i.DisplayName,
 		&i.MimeType,
+		&i.DisplayTruncated,
 		&i.Digest,
 		&i.Description,
 		&i.DescriptionScan,
@@ -91,7 +92,7 @@ func (q *Queries) GetInventoryItemByKey(ctx context.Context, arg GetInventoryIte
 }
 
 const getInventoryItems = `-- name: GetInventoryItems :many
-SELECT org_id, id, connection_id, kind, name, display_name, mime_type, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at FROM pc.connection_inventory
+SELECT org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at FROM pc.connection_inventory
 WHERE org_id = $1 AND connection_id = $2 AND id = ANY ($3::uuid[])
 ORDER BY kind, name, id
 `
@@ -113,6 +114,7 @@ func (q *Queries) GetInventoryItems(ctx context.Context, orgID ids.OrgID, connec
 			&i.Name,
 			&i.DisplayName,
 			&i.MimeType,
+			&i.DisplayTruncated,
 			&i.Digest,
 			&i.Description,
 			&i.DescriptionScan,
@@ -135,24 +137,26 @@ func (q *Queries) GetInventoryItems(ctx context.Context, orgID ids.OrgID, connec
 }
 
 const insertInventoryItem = `-- name: InsertInventoryItem :exec
-INSERT INTO pc.connection_inventory (org_id, id, connection_id, kind, name, display_name, mime_type, digest, description,
-                                     description_scan, state)
+INSERT INTO pc.connection_inventory (org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest,
+                                     description, description_scan, state)
 VALUES ($1, $2, $3, $4, $5, $6,
-        $7, $8, $9, $10, $11)
+        $7, $8, $9, $10, $11,
+        $12)
 `
 
 type InsertInventoryItemParams struct {
-	OrgID           ids.OrgID
-	ID              ids.UUID
-	ConnectionID    ids.UUID
-	Kind            string
-	Name            string
-	DisplayName     string
-	MimeType        string
-	Digest          string
-	Description     string
-	DescriptionScan string
-	State           string
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	ConnectionID     ids.UUID
+	Kind             string
+	Name             string
+	DisplayName      string
+	MimeType         string
+	DisplayTruncated bool
+	Digest           string
+	Description      string
+	DescriptionScan  string
+	State            string
 }
 
 func (q *Queries) InsertInventoryItem(ctx context.Context, arg InsertInventoryItemParams) error {
@@ -164,6 +168,7 @@ func (q *Queries) InsertInventoryItem(ctx context.Context, arg InsertInventoryIt
 		arg.Name,
 		arg.DisplayName,
 		arg.MimeType,
+		arg.DisplayTruncated,
 		arg.Digest,
 		arg.Description,
 		arg.DescriptionScan,
@@ -173,7 +178,7 @@ func (q *Queries) InsertInventoryItem(ctx context.Context, arg InsertInventoryIt
 }
 
 const listConnectionInventory = `-- name: ListConnectionInventory :many
-SELECT org_id, id, connection_id, kind, name, display_name, mime_type, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at FROM pc.connection_inventory
+SELECT org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at FROM pc.connection_inventory
 WHERE org_id = $1 AND connection_id = $2
   AND (cardinality($3::text[]) = 0 OR state = ANY ($3::text[]))
   AND (cardinality($4::text[]) = 0 OR kind = ANY ($4::text[]))
@@ -215,6 +220,7 @@ func (q *Queries) ListConnectionInventory(ctx context.Context, arg ListConnectio
 			&i.Name,
 			&i.DisplayName,
 			&i.MimeType,
+			&i.DisplayTruncated,
 			&i.Digest,
 			&i.Description,
 			&i.DescriptionScan,
@@ -237,7 +243,7 @@ func (q *Queries) ListConnectionInventory(ctx context.Context, arg ListConnectio
 }
 
 const listNewInventory = `-- name: ListNewInventory :many
-SELECT org_id, id, connection_id, kind, name, display_name, mime_type, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at FROM pc.connection_inventory
+SELECT org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at FROM pc.connection_inventory
 WHERE org_id = $1 AND connection_id = $2 AND state = 'NEW'
 ORDER BY id
 `
@@ -259,6 +265,7 @@ func (q *Queries) ListNewInventory(ctx context.Context, orgID ids.OrgID, connect
 			&i.Name,
 			&i.DisplayName,
 			&i.MimeType,
+			&i.DisplayTruncated,
 			&i.Digest,
 			&i.Description,
 			&i.DescriptionScan,
@@ -281,7 +288,7 @@ func (q *Queries) ListNewInventory(ctx context.Context, orgID ids.OrgID, connect
 }
 
 const lockInventoryItem = `-- name: LockInventoryItem :one
-SELECT org_id, id, connection_id, kind, name, display_name, mime_type, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at FROM pc.connection_inventory WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at FROM pc.connection_inventory WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockInventoryItem(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcConnectionInventory, error) {
@@ -295,6 +302,7 @@ func (q *Queries) LockInventoryItem(ctx context.Context, orgID ids.OrgID, iD ids
 		&i.Name,
 		&i.DisplayName,
 		&i.MimeType,
+		&i.DisplayTruncated,
 		&i.Digest,
 		&i.Description,
 		&i.DescriptionScan,

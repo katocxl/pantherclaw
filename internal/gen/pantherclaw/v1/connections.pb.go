@@ -4592,9 +4592,11 @@ type InventoryItem struct {
 	// Last listed.
 	LastSeenTime *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=last_seen_time,json=lastSeenTime,proto3" json:"last_seen_time,omitempty"`
 	// Last state change.
-	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	UpdateTime *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	// Whether the gateway cut the display name or MIME type to 128 bytes.
+	DisplayTruncated bool `protobuf:"varint,17,opt,name=display_truncated,json=displayTruncated,proto3" json:"display_truncated,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *InventoryItem) Reset() {
@@ -4737,6 +4739,13 @@ func (x *InventoryItem) GetUpdateTime() *timestamppb.Timestamp {
 		return x.UpdateTime
 	}
 	return nil
+}
+
+func (x *InventoryItem) GetDisplayTruncated() bool {
+	if x != nil {
+		return x.DisplayTruncated
+	}
+	return false
 }
 
 // ListConnectionInventoryRequest selects one page.
@@ -5460,7 +5469,7 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\x1aGetConnectionHealthRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"W\n" +
 	"\x1bGetConnectionHealthResponse\x128\n" +
-	"\x06health\x18\x01 \x01(\v2 .pantherclaw.v1.ConnectionHealthR\x06health\"\xa3\x05\n" +
+	"\x06health\x18\x01 \x01(\v2 .pantherclaw.v1.ConnectionHealthR\x06health\"\xd0\x05\n" +
 	"\rInventoryItem\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rconnection_id\x18\x02 \x01(\tR\fconnectionId\x125\n" +
@@ -5479,7 +5488,8 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\x0ffirst_seen_time\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\rfirstSeenTime\x12@\n" +
 	"\x0elast_seen_time\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\flastSeenTime\x12;\n" +
 	"\vupdate_time\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"updateTime\"\xcd\x02\n" +
+	"updateTime\x12+\n" +
+	"\x11display_truncated\x18\x11 \x01(\bR\x10displayTruncated\"\xcd\x02\n" +
 	"\x1eListConnectionInventoryRequest\x12-\n" +
 	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12M\n" +
 	"\x06states\x18\x02 \x03(\x0e2\".pantherclaw.v1.InventoryItemStateB\x11\xbaH\x0e\x92\x01\v\x10\x04\"\a\x82\x01\x04\x10\x01 \x00R\x06states\x12J\n" +

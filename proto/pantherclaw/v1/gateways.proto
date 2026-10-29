@@ -1112,6 +1112,10 @@ message InventoryResource {
   bool description_truncated = 5;
   // SHA-256 of the canonical listing entry.
   string digest = 6 [(buf.validate.field).string.pattern = "^sha256:[0-9a-f]{64}$"];
+  // Whether the gateway cut name to 128 bytes.
+  bool name_truncated = 7;
+  // Whether the gateway cut mime_type to 128 bytes.
+  bool mime_type_truncated = 8;
 }
 
 // InventoryResourceTemplate is one listed resource template.
@@ -1131,6 +1135,10 @@ message InventoryResourceTemplate {
   bool description_truncated = 5;
   // SHA-256 of the canonical listing entry.
   string digest = 6 [(buf.validate.field).string.pattern = "^sha256:[0-9a-f]{64}$"];
+  // Whether the gateway cut name to 128 bytes.
+  bool name_truncated = 7;
+  // Whether the gateway cut mime_type to 128 bytes.
+  bool mime_type_truncated = 8;
 }
 
 // ReportInventoryResponse says how many items became NEW.

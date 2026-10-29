@@ -67,6 +67,9 @@ var (
 	errNoEntitlement     = pcerr.New(pcerr.Unavailable, "EDITION_UNKNOWN", "the edition could not be read")
 
 	inventoryDigest = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+	// inventoryTool is a tool name as ReportDrift takes it: the only upstream
+	// name a review entry shows as trusted (D43).
+	inventoryTool = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,128}$`)
 )
 
 // Entitlements reports the current edition (billing.Service).
@@ -87,6 +90,8 @@ type InventoryEntry struct {
 	Kind, Name, DisplayName, MimeType, Digest string
 	Description                               string
 	DescriptionTruncated                      bool
+	// DisplayTruncated: the gateway cut DisplayName or MimeType to 128 bytes.
+	DisplayTruncated bool
 }
 
 // InventoryReport is a gateway's listing of one connection. Complete: every
@@ -105,6 +110,7 @@ func (r InventoryReport) check() error {
 		case e.Kind != InventoryTool && e.Kind != InventoryResource && e.Kind != InventoryTemplate,
 			count[e.Kind] > MaxInventoryItems,
 			e.Name == "" || len(e.Name) > maxInventoryName || !utf8.ValidString(e.Name),
+			e.Kind == InventoryTool && !inventoryTool.MatchString(e.Name),
 			len(e.DisplayName) > maxInventoryDisplay || len(e.MimeType) > maxInventoryDisplay,
 			len(e.Description) > MaxInventoryDescription || !utf8.ValidString(e.Description),
 			!inventoryDigest.MatchString(e.Digest):
@@ -205,7 +211,7 @@ func (s *Service) see(ctx context.Context, tx db.TenantTx, c actor, conn dbq.PcC
 			return ids.UUID{}, false, err
 		}
 		if to == InventoryNew {
-			if err := s.openReview(ctx, tx, c, conn.ID, row.ID, e); err != nil {
+			if err := s.openReview(ctx, tx, c, row.ID, e); err != nil {
 				return ids.UUID{}, false, err
 			}
 		}
@@ -234,7 +240,8 @@ func (s *Service) discover(ctx context.Context, tx db.TenantTx, c actor, conn db
 	id := ids.NewV7()
 	if err := dbq.New(tx).InsertInventoryItem(ctx, dbq.InsertInventoryItemParams{
 		OrgID: c.Org, ID: id, ConnectionID: conn.ID, Kind: e.Kind, Name: e.Name, DisplayName: e.DisplayName,
-		MimeType: e.MimeType, Digest: e.Digest, Description: e.Description, DescriptionScan: scan, State: state,
+		MimeType: e.MimeType, DisplayTruncated: e.DisplayTruncated, Digest: e.Digest, Description: e.Description,
+		DescriptionScan: scan, State: state,
 	}); err != nil {
 		return ids.UUID{}, false, err
 	}
@@ -246,7 +253,7 @@ func (s *Service) discover(ctx context.Context, tx db.TenantTx, c actor, conn db
 		}
 	}
 	if state == InventoryNew {
-		if err := s.openReview(ctx, tx, c, conn.ID, id, e); err != nil {
+		if err := s.openReview(ctx, tx, c, id, e); err != nil {
 			return ids.UUID{}, false, err
 		}
 	}
@@ -256,8 +263,8 @@ func (s *Service) discover(ctx context.Context, tx db.TenantTx, c actor, conn db
 }
 
 // openReview opens a NEW item's TOOL_REVIEW entry and links it.
-func (s *Service) openReview(ctx context.Context, tx db.TenantTx, c actor, conn, item ids.UUID, e InventoryEntry) error {
-	entry, err := pgwaitlist.OpenInventoryReview(ctx, tx, c.Org, item, conn, e.Kind, e.Name, c.Audit)
+func (s *Service) openReview(ctx context.Context, tx db.TenantTx, c actor, item ids.UUID, e InventoryEntry) error {
+	entry, err := pgwaitlist.OpenInventoryReview(ctx, tx, c.Org, item, e.Kind, e.Name, e.Kind == InventoryTool, c.Audit)
 	if err != nil {
 		return err
 	}

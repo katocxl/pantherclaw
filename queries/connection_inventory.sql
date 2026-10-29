@@ -12,10 +12,11 @@ WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND 
   AND name = sqlc.arg(name) AND digest = sqlc.arg(digest);
 
 -- name: InsertInventoryItem :exec
-INSERT INTO pc.connection_inventory (org_id, id, connection_id, kind, name, display_name, mime_type, digest, description,
-                                     description_scan, state)
+INSERT INTO pc.connection_inventory (org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest,
+                                     description, description_scan, state)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), sqlc.arg(kind), sqlc.arg(name), sqlc.arg(display_name),
-        sqlc.arg(mime_type), sqlc.arg(digest), sqlc.arg(description), sqlc.arg(description_scan), sqlc.arg(state));
+        sqlc.arg(mime_type), sqlc.arg(display_truncated), sqlc.arg(digest), sqlc.arg(description), sqlc.arg(description_scan),
+        sqlc.arg(state));
 
 -- name: SeeInventoryItem :exec
 UPDATE pc.connection_inventory SET last_seen = now()

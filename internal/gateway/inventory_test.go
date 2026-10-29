@@ -7,6 +7,7 @@ import (
 	"encoding/json/jsontext"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
 	"github.com/katocxl/pantherclaw/internal/gateway/upstream"
@@ -46,6 +47,15 @@ func TestHR418_GatewayInventoryReportsStayWithinBounds(t *testing.T) {
 	want, _ := upstream.ToolDigest(inv.Resources.Items[0])
 	if r := req.GetResources()[0]; r.GetUri() != "file:///a" || r.GetDigest() != want || r.GetDescription() != "A file." || r.GetDescriptionTruncated() {
 		t.Errorf("resource = %v", r)
+	}
+	// An over-long name or MIME type is cut on a rune boundary and flagged;
+	// the report stays complete (D43).
+	longName := inventoryRequest("c", dispatch.Inventory{Complete: true, Resources: upstream.Listing{Items: []jsontext.Value{
+		jsontext.Value(`{"uri":"file:///b","name":"` + strings.Repeat("é", 100) + `","mimeType":"` + strings.Repeat("m", 129) + `"}`),
+	}}})
+	if r := longName.GetResources(); !longName.GetComplete() || len(r) != 1 || !r[0].GetNameTruncated() || !r[0].GetMimeTypeTruncated() ||
+		len(r[0].GetName()) != 128 || !utf8.ValidString(r[0].GetName()) || len(r[0].GetMimeType()) != 128 {
+		t.Errorf("an over-long name: complete %v, %v", longName.GetComplete(), r)
 	}
 	if !inventoryRequest("c", dispatch.Inventory{Complete: true}).GetComplete() {
 		t.Error("an empty complete listing is not complete")

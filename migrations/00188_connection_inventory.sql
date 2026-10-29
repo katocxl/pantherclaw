@@ -19,6 +19,8 @@ CREATE TABLE pc.connection_inventory (
     -- UNTRUSTED: a resource's or template's listed name.
     display_name     text        NOT NULL DEFAULT '' CHECK (octet_length(display_name) <= 128),
     mime_type        text        NOT NULL DEFAULT '' CHECK (octet_length(mime_type) <= 128),
+    -- Whether the gateway cut display_name or mime_type to 128 bytes.
+    display_truncated boolean    NOT NULL DEFAULT false,
     digest           text        NOT NULL CHECK (digest ~ '^sha256:[0-9a-f]{64}$'),
     -- UNTRUSTED: the upstream description, at most 8 KiB as the gateway cut it.
     description      text        NOT NULL DEFAULT '' CHECK (octet_length(description) <= 8192),
@@ -46,11 +48,20 @@ ALTER TABLE pc.connection_inventory FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON pc.connection_inventory
     USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
     WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
+CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.connection_inventory
+    FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
 
 GRANT SELECT, INSERT ON pc.connection_inventory TO pc_app;
 GRANT UPDATE (display_name, mime_type, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason,
     last_seen, updated_at) ON pc.connection_inventory TO pc_app;
 GRANT SELECT ON pc.connection_inventory TO pc_audit_ro;
+-- +goose StatementBegin
+DO $$ BEGIN
+    IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_deleter') THEN
+        GRANT SELECT, DELETE ON pc.connection_inventory TO pc_deleter;
+    END IF;
+END $$;
+-- +goose StatementEnd
 
 -- An inventory item's TOOL_REVIEW entry has the item as its subject.
 ALTER TABLE pc.waitlist_entries

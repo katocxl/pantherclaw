@@ -9,6 +9,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
+	"unicode"
 
 	"google.golang.org/protobuf/proto"
 
@@ -59,13 +61,19 @@ func inventoryCommands() map[string]command {
 				if err := errors.Join(errs...); err != nil {
 					return nil, err
 				}
-				return c.connections.ListConnectionInventory(ctx, req)
+				res, err := c.connections.ListConnectionInventory(ctx, req)
+				for _, it := range res.GetItems() {
+					escapeItem(it)
+				}
+				return res, err
 			}
 		}),
 		"connection inventory dismiss": rpc("connection inventory dismiss ITEM_ID --reason TEXT", 1, func(fs *flag.FlagSet) call {
 			reason := fs.String("reason", "", "why the item is dismissed (1 to 500 characters)")
 			return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
-				return c.connections.DismissInventoryItem(ctx, &pb.DismissInventoryItemRequest{Id: a[0], Reason: *reason})
+				res, err := c.connections.DismissInventoryItem(ctx, &pb.DismissInventoryItemRequest{Id: a[0], Reason: *reason})
+				escapeItem(res.GetItem())
+				return res, err
 			}
 		}),
 		"package draft": {"package draft --connection CONNECTION_ID [--item ITEM_ID...] [-o FILE]", packageDraft},
@@ -126,8 +134,34 @@ func packageDraft(ctx context.Context, a *app, args []string) error {
 	_, err = fmt.Fprintln(a.stderr, "The draft is UNSIGNED and does not validate until you fill in:")
 	for _, t := range res.GetTodo() {
 		if err == nil {
-			_, err = fmt.Fprintln(a.stderr, "  - "+t)
+			_, err = fmt.Fprintln(a.stderr, "  - "+escapeControls(t))
 		}
 	}
 	return err
+}
+
+// escapeControls writes every control, format (bidirectional, zero-width)
+// and line or paragraph separator character of upstream text as \uXXXX,
+// so what a server listed cannot drive the terminal it is printed to
+// (HR-415, D43).
+func escapeControls(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToValidUTF8(s, string(unicode.ReplacementChar)) {
+		switch {
+		case unicode.IsControl(r), unicode.Is(unicode.Cf, r), r == 0x2028, r == 0x2029:
+			fmt.Fprintf(&b, `\u%04x`, r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// escapeItem escapes the upstream and person-written text of an item.
+func escapeItem(it *pb.InventoryItem) {
+	if it == nil {
+		return
+	}
+	it.Name, it.DisplayName, it.MimeType = escapeControls(it.Name), escapeControls(it.DisplayName), escapeControls(it.MimeType)
+	it.Description, it.DismissReason = escapeControls(it.Description), escapeControls(it.DismissReason)
 }

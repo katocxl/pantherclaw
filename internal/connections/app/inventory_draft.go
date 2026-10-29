@@ -4,7 +4,6 @@
 package app
 
 import (
-	"encoding/json/v2"
 	"fmt"
 	"strings"
 	"unicode"
@@ -46,10 +45,26 @@ func slug(s string, sep rune) string {
 	return strings.TrimRight(out[:min(len(out), 48)], string(sep))
 }
 
-// quote is s as a YAML double-quoted scalar (a JSON string is one).
+// quote is s as a YAML double-quoted scalar. Every control, format
+// (bidirectional, zero-width) and separator character is a \uXXXX escape,
+// so upstream text in the draft cannot drive a terminal it is printed to
+// (D43).
 func quote(s string) string {
-	b, _ := json.Marshal(s)
-	return string(b)
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range strings.ToValidUTF8(s, string(unicode.ReplacementChar)) {
+		switch {
+		case r == '"' || r == '\\':
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		case unicode.IsControl(r), unicode.Is(unicode.Cf, r), r == 0x2028, r == 0x2029:
+			fmt.Fprintf(&b, `\u%04x`, r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
 }
 
 // untrusted writes the upstream description as comment lines, each marked
@@ -60,7 +75,7 @@ func untrusted(b *strings.Builder, indent, desc string) {
 		switch {
 		case r == '\n':
 			return r
-		case unicode.IsControl(r), unicode.Is(unicode.Cf, r), r == ' ', r == ' ':
+		case unicode.IsControl(r), unicode.Is(unicode.Cf, r), r == 0x2028, r == 0x2029:
 			return ' '
 		}
 		return r
@@ -109,12 +124,12 @@ func draft(conn dbq.PcConnection, rows []dbq.PcConnectionInventory) Draft {
 				"        input_schema: {} # TODO\n        extract: # TODO\n          target_id: \"\"\n          params: {}\n", quote(r.Name), quote(route))
 			fmt.Fprintf(&b, "    dispatch:\n      mcp:\n        tool: %s\n        upstream_digest: %s\n        arguments: {} # TODO\n",
 				quote(r.Name), quote(r.Digest))
-			todo = append(todo, fmt.Sprintf("%s (tool %s): summary, target, params, effects, mapping description, input schema, extract and arguments", op, r.Name))
+			todo = append(todo, fmt.Sprintf("%s (tool %s): summary, target, params, effects, mapping description, input schema, extract and arguments", op, quote(r.Name)))
 		default:
 			fmt.Fprintf(&b, "      - channel: mcp_resource\n        resource: %s\n        route: %s\n        extract: # TODO\n"+
 				"          target_id: \"\"\n          params: {}\n", quote(r.Name), quote(route))
 			fmt.Fprintf(&b, "    dispatch:\n      mcp:\n        resource: %s\n", quote(r.Name))
-			todo = append(todo, fmt.Sprintf("%s (resource %s): summary, target, params, effects and extract", op, r.Name))
+			todo = append(todo, fmt.Sprintf("%s (resource %s): summary, target, params, effects and extract", op, quote(r.Name)))
 		}
 	}
 	todo = append(todo, "assurance of every operation", "sign with an org package key, import, and review the version")

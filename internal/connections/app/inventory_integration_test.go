@@ -85,7 +85,7 @@ func TestHR414_DiscoveredItemsStayNewUntilAnActiveVersionCoversThem(t *testing.T
 		{Kind: app.InventoryTool, Name: "get_refund", Digest: upstreamDigest, Description: "Read a refund."},
 		{Kind: app.InventoryTool, Name: "get_refund", Digest: digest("aa")},
 		{Kind: app.InventoryTool, Name: "delete_everything", Digest: digest("bb")},
-		{Kind: app.InventoryResource, Name: "file:///a.txt", DisplayName: "a", Digest: digest("cc")},
+		{Kind: app.InventoryResource, Name: "file:///a.txt", DisplayName: "a", Digest: digest("cc"), DisplayTruncated: true},
 		{Kind: app.InventoryTemplate, Name: "file:///docs/{name}", Digest: digest("dd")},
 	}})
 	if err != nil || n != 4 {
@@ -103,6 +103,21 @@ func TestHR414_DiscoveredItemsStayNewUntilAnActiveVersionCoversThem(t *testing.T
 		if s, o := e.item(t, c.ID, it[0], it[1], it[2]); s != app.InventoryNew || o != 1 {
 			t.Errorf("%v: %s with %d open entries, want NEW with 1", it, s, o)
 		}
+	}
+	// Only PantherClaw's checks are trusted in an entry: the kind, the item
+	// and a pattern-checked tool name; a resource URI is untrusted (D43).
+	if n := e.int64(t, `SELECT count(*) FROM pc.waitlist_entries w JOIN pc.connection_inventory i ON i.id = w.subject_id
+		WHERE i.name = 'delete_everything' AND w.evidence -> 'trusted' ->> 'tool' = 'delete_everything'
+		AND w.evidence -> 'trusted' ->> 'inventory_item' = i.id::text AND w.evidence -> 'trusted' ->> 'kind' = 'TOOL'`); n != 1 {
+		t.Errorf("a tool's entry: %d with its trusted name", n)
+	}
+	if n := e.int64(t, `SELECT count(*) FROM pc.waitlist_entries w JOIN pc.connection_inventory i ON i.id = w.subject_id
+		WHERE i.kind = 'RESOURCE' AND w.evidence -> 'untrusted' ->> 'name' = 'file:///a.txt'
+		AND NOT (w.evidence -> 'trusted')::jsonb ? 'tool' AND w.evidence::text NOT LIKE '%"trusted":{%file:///%'`); n != 1 {
+		t.Errorf("a resource's entry: %d with its URI untrusted only", n)
+	}
+	if n := e.int64(t, "SELECT count(*) FROM pc.connection_inventory WHERE display_truncated"); n != 1 {
+		t.Errorf("%d items with a cut display name, want 1", n)
 	}
 	// A repeat changes nothing and opens nothing.
 	if n, err := e.svc.ReportInventory(ctx, e.org, e.gateway, app.InventoryReport{Connection: c.ID, Entries: []app.InventoryEntry{
@@ -279,8 +294,9 @@ func TestHR418_InventoryReportsAreBoundedAndOnlyForServedConnections(t *testing.
 			Kind: app.InventoryTool, Name: "t", Digest: digest("ab"),
 			Description: strings.Repeat("d", app.MaxInventoryDescription+1),
 		}),
-		"a bad digest": report(app.InventoryEntry{Kind: app.InventoryTool, Name: "t", Digest: "md5:x"}),
-		"a bad kind":   report(app.InventoryEntry{Kind: "PROMPT", Name: "t", Digest: digest("ab")}),
+		"a bad digest":                    report(app.InventoryEntry{Kind: app.InventoryTool, Name: "t", Digest: "md5:x"}),
+		"a bad kind":                      report(app.InventoryEntry{Kind: "PROMPT", Name: "t", Digest: digest("ab")}),
+		"a tool name outside the pattern": report(app.InventoryEntry{Kind: app.InventoryTool, Name: "t\x1b[2J", Digest: digest("ab")}),
 	} {
 		if !errors.Is(err, app.ErrInventory) {
 			t.Errorf("%s: %v", name, err)

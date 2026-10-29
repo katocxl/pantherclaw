@@ -19,16 +19,24 @@ const SubjectInventory = "connection_inventory"
 
 // OpenInventoryReview opens the TOOL_REVIEW entry of a NEW inventory item
 // (F352, G0 M15 D22): what a connection's upstream server lists that no
-// active reviewed package version covers. Only what PantherClaw
-// established goes in the trusted block; the upstream description never
-// does (HR-415). It returns the item's open entry when there is one.
-func OpenInventoryReview(ctx context.Context, tx db.TenantTx, org ids.OrgID, item, connection ids.UUID, kind, name string,
+// active reviewed package version covers. Only what PantherClaw checked is
+// trusted: the kind, the item and, for a tool, its pattern-checked name. A
+// resource URI or template is upstream text and goes in the untrusted
+// block; the description never goes in the entry (HR-415, D43). It returns
+// the item's open entry when there is one.
+func OpenInventoryReview(ctx context.Context, tx db.TenantTx, org ids.OrgID, item ids.UUID, kind, name string, toolName bool,
 	actor evdomain.Actor,
 ) (ids.UUID, error) {
-	return open(ctx, tx, org, entry{
+	e := entry{
 		kind: wdomain.KindToolReview, subjectType: SubjectInventory, subject: item,
-		trusted: map[string]string{"connection": connection.String(), "kind": kind, "name": name},
-	}, actor)
+		trusted: map[string]string{"kind": kind, "inventory_item": item.String()},
+	}
+	if toolName {
+		e.trusted["tool"] = name
+	} else {
+		e.untrusted = map[string]string{"name": name}
+	}
+	return open(ctx, tx, org, e, actor)
 }
 
 // CloseInventoryReview settles an inventory item's open TOOL_REVIEW entry

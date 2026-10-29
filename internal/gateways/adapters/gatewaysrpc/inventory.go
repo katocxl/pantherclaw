@@ -52,12 +52,14 @@ func (h *GatewayHandler) ReportInventory(ctx context.Context, req *pb.ReportInve
 		r.Entries = append(r.Entries, connapp.InventoryEntry{
 			Kind: connapp.InventoryResource, Name: x.GetUri(), DisplayName: x.GetName(), MimeType: x.GetMimeType(), Digest: x.GetDigest(),
 			Description: x.GetDescription(), DescriptionTruncated: x.GetDescriptionTruncated(),
+			DisplayTruncated: x.GetNameTruncated() || x.GetMimeTypeTruncated(),
 		})
 	}
 	for _, x := range req.GetResourceTemplates() {
 		r.Entries = append(r.Entries, connapp.InventoryEntry{
 			Kind: connapp.InventoryTemplate, Name: x.GetUriTemplate(), DisplayName: x.GetName(), MimeType: x.GetMimeType(),
 			Digest: x.GetDigest(), Description: x.GetDescription(), DescriptionTruncated: x.GetDescriptionTruncated(),
+			DisplayTruncated: x.GetNameTruncated() || x.GetMimeTypeTruncated(),
 		})
 	}
 	n, err := h.inventories.ReportInventory(ctx, id.Org, id.Gateway, r)

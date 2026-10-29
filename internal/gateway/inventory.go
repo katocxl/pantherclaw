@@ -9,6 +9,8 @@ import (
 	"encoding/json/v2"
 	"log/slog"
 	"regexp"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
@@ -72,6 +74,7 @@ func inventoryRequest(conn string, inv dispatch.Inventory) *pb.ReportInventoryRe
 		}
 		req.Resources = append(req.Resources, &pb.InventoryResource{
 			Uri: e.ref, Name: e.name, MimeType: e.mime, Description: e.desc, DescriptionTruncated: e.cut, Digest: e.digest,
+			NameTruncated: e.nameCut, MimeTypeTruncated: e.mimeCut,
 		})
 	}
 	for _, r := range inv.Templates.Items {
@@ -82,6 +85,7 @@ func inventoryRequest(conn string, inv dispatch.Inventory) *pb.ReportInventoryRe
 		}
 		req.ResourceTemplates = append(req.ResourceTemplates, &pb.InventoryResourceTemplate{
 			UriTemplate: e.ref, Name: e.name, MimeType: e.mime, Description: e.desc, DescriptionTruncated: e.cut, Digest: e.digest,
+			NameTruncated: e.nameCut, MimeTypeTruncated: e.mimeCut,
 		})
 	}
 	return req
@@ -90,7 +94,7 @@ func inventoryRequest(conn string, inv dispatch.Inventory) *pb.ReportInventoryRe
 // listed is one resource or template as reported.
 type listed struct {
 	ref, name, mime, desc, digest string
-	cut                           bool
+	cut, nameCut, mimeCut         bool
 }
 
 // resourceEntry reads a resource (field "uri") or template ("uriTemplate")
@@ -113,12 +117,15 @@ func resourceEntry(v jsontext.Value, field string) (listed, bool) {
 	name, ok2 := str("name")
 	mime, ok3 := str("mimeType")
 	d, err := upstream.ToolDigest(v)
-	if !ok1 || !ok2 || !ok3 || err != nil || ref == "" || len(ref) > maxInventoryURI || len(name) > maxInventoryName ||
-		len(mime) > maxInventoryName {
+	if !ok1 || !ok2 || !ok3 || err != nil || ref == "" || len(ref) > maxInventoryURI {
 		return listed{}, false
 	}
 	desc, cut := description(m["description"])
-	return listed{ref: ref, name: name, mime: mime, desc: desc, cut: cut, digest: d}, true
+	// An over-long name or MIME type is display text only: cut and flagged,
+	// so the report stays complete (D43).
+	name, nameCut := cutUTF8(name, maxInventoryName)
+	mime, mimeCut := cutUTF8(mime, maxInventoryName)
+	return listed{ref: ref, name: name, mime: mime, desc: desc, cut: cut, nameCut: nameCut, mimeCut: mimeCut, digest: d}, true
 }
 
 // description is a listed description as reported: valid UTF-8 cut to
@@ -140,4 +147,18 @@ func descriptionText(v jsontext.Value) *string {
 		return nil
 	}
 	return &s
+}
+
+// cutUTF8 is s as valid UTF-8 cut to at most n bytes on a rune boundary,
+// and whether it was cut.
+func cutUTF8(s string, n int) (string, bool) {
+	s = strings.ToValidUTF8(s, "")
+	if len(s) <= n {
+		return s, false
+	}
+	s = s[:n]
+	for len(s) > 0 && !utf8.ValidString(s) {
+		s = s[:len(s)-1]
+	}
+	return s, true
 }

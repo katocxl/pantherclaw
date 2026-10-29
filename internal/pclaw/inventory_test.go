@@ -62,6 +62,13 @@ func TestInventoryCommands(t *testing.T) {
 		!slices.Equal(r.list.GetKinds(), []pb.InventoryItemKind{pb.InventoryItemKind_INVENTORY_ITEM_KIND_RESOURCE_TEMPLATE}) {
 		t.Fatalf("list = %d %q, sent %v", code, errs, r.list)
 	}
+	// Upstream text is printed with its control characters escaped (D43).
+	r.items[0].Name = "docs://a" + string(rune(0x1b)) + "[2J" + string(rune(0x9b)) + "b"
+	if code, stdout, _ := run(t, env, "connection", "inventory", "list", "c1"); code != 0 ||
+		strings.ContainsAny(stdout, string([]rune{0x1b, 0x9b})) || !strings.Contains(stdout, `\\u001b[2J\\u009bb`) {
+		t.Fatalf("list printed %q", stdout)
+	}
+	r.items[0].Name = ""
 	if code, _, errs := run(t, env, "connection", "inventory", "list", "c1", "--state", "gone"); code == 0 || !strings.Contains(errs, "--state") {
 		t.Fatalf("unknown state = %d %q", code, errs)
 	}

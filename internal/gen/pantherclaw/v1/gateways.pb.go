@@ -4809,9 +4809,13 @@ type InventoryResource struct {
 	// Whether the gateway cut the description to 8 KiB.
 	DescriptionTruncated bool `protobuf:"varint,5,opt,name=description_truncated,json=descriptionTruncated,proto3" json:"description_truncated,omitempty"`
 	// SHA-256 of the canonical listing entry.
-	Digest        string `protobuf:"bytes,6,opt,name=digest,proto3" json:"digest,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Digest string `protobuf:"bytes,6,opt,name=digest,proto3" json:"digest,omitempty"`
+	// Whether the gateway cut name to 128 bytes.
+	NameTruncated bool `protobuf:"varint,7,opt,name=name_truncated,json=nameTruncated,proto3" json:"name_truncated,omitempty"`
+	// Whether the gateway cut mime_type to 128 bytes.
+	MimeTypeTruncated bool `protobuf:"varint,8,opt,name=mime_type_truncated,json=mimeTypeTruncated,proto3" json:"mime_type_truncated,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *InventoryResource) Reset() {
@@ -4886,6 +4890,20 @@ func (x *InventoryResource) GetDigest() string {
 	return ""
 }
 
+func (x *InventoryResource) GetNameTruncated() bool {
+	if x != nil {
+		return x.NameTruncated
+	}
+	return false
+}
+
+func (x *InventoryResource) GetMimeTypeTruncated() bool {
+	if x != nil {
+		return x.MimeTypeTruncated
+	}
+	return false
+}
+
 // InventoryResourceTemplate is one listed resource template.
 type InventoryResourceTemplate struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -4900,9 +4918,13 @@ type InventoryResourceTemplate struct {
 	// Whether the gateway cut the description to 8 KiB.
 	DescriptionTruncated bool `protobuf:"varint,5,opt,name=description_truncated,json=descriptionTruncated,proto3" json:"description_truncated,omitempty"`
 	// SHA-256 of the canonical listing entry.
-	Digest        string `protobuf:"bytes,6,opt,name=digest,proto3" json:"digest,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Digest string `protobuf:"bytes,6,opt,name=digest,proto3" json:"digest,omitempty"`
+	// Whether the gateway cut name to 128 bytes.
+	NameTruncated bool `protobuf:"varint,7,opt,name=name_truncated,json=nameTruncated,proto3" json:"name_truncated,omitempty"`
+	// Whether the gateway cut mime_type to 128 bytes.
+	MimeTypeTruncated bool `protobuf:"varint,8,opt,name=mime_type_truncated,json=mimeTypeTruncated,proto3" json:"mime_type_truncated,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *InventoryResourceTemplate) Reset() {
@@ -4975,6 +4997,20 @@ func (x *InventoryResourceTemplate) GetDigest() string {
 		return x.Digest
 	}
 	return ""
+}
+
+func (x *InventoryResourceTemplate) GetNameTruncated() bool {
+	if x != nil {
+		return x.NameTruncated
+	}
+	return false
+}
+
+func (x *InventoryResourceTemplate) GetMimeTypeTruncated() bool {
+	if x != nil {
+		return x.MimeTypeTruncated
+	}
+	return false
 }
 
 // ReportInventoryResponse says how many items became NEW.
@@ -5390,7 +5426,7 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x01\x18\x80\x012\x11^[A-Za-z0-9_.-]+$R\x04name\x124\n" +
 	"\x06digest\x18\x02 \x01(\tB\x1c\xbaH\x19r\x172\x15^sha256:[0-9a-f]{64}$R\x06digest\x12*\n" +
 	"\vdescription\x18\x03 \x01(\tB\b\xbaH\x05r\x03(\x80@R\vdescription\x123\n" +
-	"\x15description_truncated\x18\x04 \x01(\bR\x14descriptionTruncated\"\x8d\x02\n" +
+	"\x15description_truncated\x18\x04 \x01(\bR\x14descriptionTruncated\"\xe4\x02\n" +
 	"\x11InventoryResource\x12\x1c\n" +
 	"\x03uri\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01(\x80\x10R\x03uri\x12\x1c\n" +
@@ -5398,7 +5434,9 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\tmime_type\x18\x03 \x01(\tB\b\xbaH\x05r\x03(\x80\x01R\bmimeType\x12*\n" +
 	"\vdescription\x18\x04 \x01(\tB\b\xbaH\x05r\x03(\x80@R\vdescription\x123\n" +
 	"\x15description_truncated\x18\x05 \x01(\bR\x14descriptionTruncated\x124\n" +
-	"\x06digest\x18\x06 \x01(\tB\x1c\xbaH\x19r\x172\x15^sha256:[0-9a-f]{64}$R\x06digest\"\xa6\x02\n" +
+	"\x06digest\x18\x06 \x01(\tB\x1c\xbaH\x19r\x172\x15^sha256:[0-9a-f]{64}$R\x06digest\x12%\n" +
+	"\x0ename_truncated\x18\a \x01(\bR\rnameTruncated\x12.\n" +
+	"\x13mime_type_truncated\x18\b \x01(\bR\x11mimeTypeTruncated\"\xfd\x02\n" +
 	"\x19InventoryResourceTemplate\x12-\n" +
 	"\furi_template\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01(\x80\x10R\vuriTemplate\x12\x1c\n" +
@@ -5406,7 +5444,9 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\tmime_type\x18\x03 \x01(\tB\b\xbaH\x05r\x03(\x80\x01R\bmimeType\x12*\n" +
 	"\vdescription\x18\x04 \x01(\tB\b\xbaH\x05r\x03(\x80@R\vdescription\x123\n" +
 	"\x15description_truncated\x18\x05 \x01(\bR\x14descriptionTruncated\x124\n" +
-	"\x06digest\x18\x06 \x01(\tB\x1c\xbaH\x19r\x172\x15^sha256:[0-9a-f]{64}$R\x06digest\"6\n" +
+	"\x06digest\x18\x06 \x01(\tB\x1c\xbaH\x19r\x172\x15^sha256:[0-9a-f]{64}$R\x06digest\x12%\n" +
+	"\x0ename_truncated\x18\a \x01(\bR\rnameTruncated\x12.\n" +
+	"\x13mime_type_truncated\x18\b \x01(\bR\x11mimeTypeTruncated\"6\n" +
 	"\x17ReportInventoryResponse\x12\x1b\n" +
 	"\tnew_items\x18\x01 \x01(\x05R\bnewItems*b\n" +
 	"\fGatewayState\x12\x1d\n" +

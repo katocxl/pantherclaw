@@ -1175,6 +1175,8 @@ message InventoryItem {
   google.protobuf.Timestamp last_seen_time = 15;
   // Last state change.
   google.protobuf.Timestamp update_time = 16;
+  // Whether the gateway cut the display name or MIME type to 128 bytes.
+  bool display_truncated = 17;
 }
 
 // ListConnectionInventoryRequest selects one page.
