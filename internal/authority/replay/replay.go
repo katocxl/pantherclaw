@@ -482,8 +482,11 @@ func (e *Engine) customerRules(ctx context.Context, org ids.OrgID, rec *recordin
 	}
 	for _, x := range c.Rules {
 		raw, err := hex.DecodeString(x.Digest)
-		if err != nil || len(raw) != 32 {
-			return nil
+		if err != nil {
+			return fmt.Errorf("replay: customer rule %s digest: %w", x.ID, err)
+		}
+		if len(raw) != 32 {
+			return fmt.Errorf("replay: customer rule %s digest is %d bytes", x.ID, len(raw))
 		}
 		digest := [32]byte(raw)
 		r, err := e.Source.CustomerRule(ctx, org, x.ID, x.Version, digest)

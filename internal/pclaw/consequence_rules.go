@@ -34,7 +34,7 @@ type rulesVerb struct {
 var rulesVerbs = map[string]rulesVerb{
 	"propose": {"propose FILE", 1, func(*flag.FlagSet) rulesCall {
 		return func(ctx context.Context, a *app, c pantherclawv1connect.ConsequenceRuleServiceClient, args []string) (proto.Message, error) {
-			raw, err := os.ReadFile(args[0]) //nolint:gosec // a file the person names
+			raw, err := os.ReadFile(args[0])
 			if err != nil {
 				return nil, err
 			}
