@@ -55,7 +55,7 @@ func TestChangeValueTrimsAfterCutting(t *testing.T) {
 	if got := changeValue(""); got != "(none)" {
 		t.Errorf("empty = %q", got)
 	}
-	if got := changeValue("a‮b"); got != "(not shown)" {
+	if got := changeValue("a" + string(rune(0x202e)) + "b"); got != "(not shown)" {
 		t.Errorf("bidi = %q", got)
 	}
 }
