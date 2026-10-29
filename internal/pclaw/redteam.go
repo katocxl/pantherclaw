@@ -293,7 +293,10 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 		c := rtdomain.Compare(base.entries, rtapp.Entries(results))
 		cmp = &c
 	}
-	sum := newSummary(rangeID, fin.GetRange(), set, results, cmp)
+	sum, err := newSummary(rangeID, fin.GetRange(), set, results, cmp)
+	if err != nil {
+		return failExit("%v", err)
+	}
 	sum.Notes = append(append([]string(nil), grantNotes...), driver.Notes()...)
 	if base != nil {
 		sum.Baseline = fmt.Sprintf("range %s, finished %s, %d scenarios", base.rangeID, base.finished, len(base.entries))
@@ -457,15 +460,25 @@ type summaryResult struct {
 
 const summaryStatement = "Tested-control evidence against simulated targets, recorded by this runner. Unsigned. Not a compliance certification."
 
-func newSummary(rangeID string, r *pantherclawv1.Range, set []rtapp.Loaded, results []rtdomain.Result, cmp *rtdomain.Comparison) summary {
+// newSummary pairs each scenario of set with its result. The runner returns
+// one result per scenario, in order; anything else is an error, so no
+// scenario is dropped from the summary and its origin is the set's.
+func newSummary(rangeID string, r *pantherclawv1.Range, set []rtapp.Loaded, results []rtdomain.Result, cmp *rtdomain.Comparison) (summary, error) {
+	if len(results) != len(set) {
+		return summary{}, fmt.Errorf("the runner returned %d results for %d scenarios", len(results), len(set))
+	}
+	origin, err := setOrigin(set)
+	if err != nil {
+		return summary{}, err
+	}
 	digests := map[string]string{}
 	s := summary{Statement: summaryStatement, Unsigned: true, RangeID: rangeID, RunnerVersion: r.GetRunnerVersion(), Counts: map[string]int{}}
 	for i, l := range set {
 		digests[l.Scenario.ID] = l.Digest
-		if i >= len(results) {
-			break // the runner returns one result per scenario
+		res := results[i] //nolint:gosec // G602: len(results) == len(set), checked above
+		if res.ScenarioID != l.Scenario.ID {
+			return summary{}, fmt.Errorf("result %d is for %s, not scenario %s", i, res.ScenarioID, l.Scenario.ID)
 		}
-		res := results[i] //nolint:gosec // G602: i < len(results), checked above
 		s.Counts[string(res.Verdict)]++
 		s.Results = append(s.Results, summaryResult{
 			ID: l.Scenario.ID, Digest: l.Digest, Title: l.Scenario.Title, Category: l.Scenario.Category,
@@ -473,11 +486,12 @@ func newSummary(rangeID string, r *pantherclawv1.Range, set []rtapp.Loaded, resu
 		})
 	}
 	s.SetDigest = rtdomain.SetDigest(digests)
-	s.Origin = rtdomain.OriginLibrary
-	for _, res := range s.Results {
-		if res.Origin == rtdomain.OriginCustomer { // a set is one origin (setOrigin)
-			s.Origin, s.Statement = rtdomain.OriginCustomer, customerStatement
-		}
+	s.Origin = origin
+	if origin == "" {
+		s.Origin = rtdomain.OriginLibrary // an empty set
+	}
+	if origin == rtdomain.OriginCustomer {
+		s.Statement = customerStatement
 	}
 	if cmp != nil {
 		for _, rg := range cmp.Regressions {
@@ -485,7 +499,7 @@ func newSummary(rangeID string, r *pantherclawv1.Range, set []rtapp.Loaded, resu
 		}
 		s.Changed = cmp.Changed
 	}
-	return s
+	return s, nil
 }
 
 func writeSummary(dir string, s summary) error {

@@ -130,15 +130,51 @@ func TestRedteamCustomerBaselineIsAFinishedCustomerRange(t *testing.T) {
 func TestRedteamCustomerSummaryIsMarkedCustomerAuthored(t *testing.T) {
 	set := loaded("CX-001")
 	res := []rtdomain.Result{{ScenarioID: "CX-001", Verdict: rtdomain.VerdictPass}}
-	s := newSummary(rtRange, &pantherclawv1.Range{Id: rtRange, Origin: "customer"}, set, res, nil)
+	s, err := newSummary(rtRange, &pantherclawv1.Range{Id: rtRange, Origin: "customer"}, set, res, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if s.Origin != rtdomain.OriginCustomer || s.Statement != customerStatement || s.Results[0].Origin != rtdomain.OriginCustomer || !s.Unsigned {
 		t.Fatalf("summary %+v", s)
 	}
 	if !strings.Contains(s.Statement, "Customer-authored") || !strings.Contains(s.Statement, "Not a PantherClaw-attested assurance report") {
 		t.Fatalf("statement %q", s.Statement)
 	}
-	lib := newSummary(rtRange, &pantherclawv1.Range{Id: rtRange}, loaded("RT-001"), res, nil)
-	if lib.Origin != rtdomain.OriginLibrary || lib.Statement != summaryStatement {
+	lib, err := newSummary(rtRange, &pantherclawv1.Range{Id: rtRange}, loaded("RT-001"), []rtdomain.Result{{ScenarioID: "RT-001", Verdict: rtdomain.VerdictPass}}, nil)
+	if err != nil || lib.Origin != rtdomain.OriginLibrary || lib.Statement != summaryStatement {
 		t.Fatalf("library summary %+v", lib)
+	}
+}
+
+// TestRedteamSummaryNeedsOneResultPerScenario: the summary pairs scenarios
+// and results one to one, in order; a missing, extra or mismatched result is
+// an error, never a scenario dropped or a customer set marked library.
+// Covers: PN-009.6
+func TestRedteamSummaryNeedsOneResultPerScenario(t *testing.T) {
+	r := &pantherclawv1.Range{Id: rtRange, Origin: "customer"}
+	pass := func(ids ...string) []rtdomain.Result {
+		out := make([]rtdomain.Result, 0, len(ids))
+		for _, id := range ids {
+			out = append(out, rtdomain.Result{ScenarioID: id, Verdict: rtdomain.VerdictPass})
+		}
+		return out
+	}
+	s, err := newSummary(rtRange, r, loaded("CX-001", "CX-002"), pass("CX-001", "CX-002"), nil)
+	if err != nil || len(s.Results) != 2 || s.Origin != rtdomain.OriginCustomer || s.Counts[string(rtdomain.VerdictPass)] != 2 {
+		t.Fatalf("summary %+v, %v", s, err)
+	}
+	for name, res := range map[string][]rtdomain.Result{
+		"none":      nil,
+		"one short": pass("CX-001"),
+		"one extra": pass("CX-001", "CX-002", "CX-003"),
+		"reordered": pass("CX-002", "CX-001"),
+		"other id":  pass("CX-001", "RT-002"),
+	} {
+		if _, err := newSummary(rtRange, r, loaded("CX-001", "CX-002"), res, nil); err == nil {
+			t.Errorf("%s: a summary was made", name)
+		}
+	}
+	if _, err := newSummary(rtRange, r, loaded("CX-001", "RT-001"), pass("CX-001", "RT-001"), nil); err == nil {
+		t.Error("a mixed set was summarized")
 	}
 }
