@@ -147,7 +147,7 @@ Each component lists what an administrator does with it, the result they can sho
 
 **Parts:** Operations, Detection, Investigation, Breach radius, Containment.
 
-- **What you do:** work the operations queue; follow a run's timeline; see the breach radius (what happened vs what grants allow vs what raw credentials allow); suspend one run, agent, grant or connection; engage the org kill switch, which needs two people to restore; send events to your SIEM; restore access through a reviewed workflow.
+- **What you do:** work the operations queue; inspect a run end to end; see the breach radius (what happened vs what grants allow vs what raw credentials allow); suspend one run, agent, grant or connection; engage the org kill switch, which needs two people to restore; send events to your SIEM; restore access through a reviewed workflow.
 - **What you can show:** time to contain; containment confirmed per route rather than assumed; incidents closed with evidence.
 - **Works with:** SIEMs via OCSF 1.9, SOAR tools, Slack and signed webhooks; your identity provider's Shared Signals (CAEP/RISC) events, so a disabled user or revoked session reaches that person's agent grants (PN-024, M10).
 - **Inside:** Sessions, Containment, Monitoring, Threat Detection, Investigation, Breach Radius.

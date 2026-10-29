@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
 
 const invApprovals = `-- name: InvApprovals :many
@@ -75,6 +76,53 @@ func (q *Queries) InvApprovals(ctx context.Context, arg InvApprovalsParams) ([]I
 			&i.ConsumedAt,
 			&i.EndedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const invGatewayRenewals = `-- name: InvGatewayRenewals :many
+SELECT c.gateway_id, c.issued_at
+FROM pc.gateway_certs c
+WHERE c.org_id = $1 AND c.gateway_id = ANY ($2::uuid[])
+  AND c.issued_at >= $3 AND c.issued_at < $4
+ORDER BY c.gateway_id, c.issued_at
+LIMIT 10000
+`
+
+type InvGatewayRenewalsParams struct {
+	OrgID      ids.OrgID
+	GatewayIds []ids.UUID
+	StartTime  time.Time
+	EndTime    time.Time
+}
+
+type InvGatewayRenewalsRow struct {
+	GatewayID ids.UUID
+	IssuedAt  time.Time
+}
+
+// Certificate renewals of gateways in a window: a gateway's heartbeat.
+func (q *Queries) InvGatewayRenewals(ctx context.Context, arg InvGatewayRenewalsParams) ([]InvGatewayRenewalsRow, error) {
+	rows, err := q.db.Query(ctx, invGatewayRenewals,
+		arg.OrgID,
+		arg.GatewayIds,
+		arg.StartTime,
+		arg.EndTime,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []InvGatewayRenewalsRow{}
+	for rows.Next() {
+		var i InvGatewayRenewalsRow
+		if err := rows.Scan(&i.GatewayID, &i.IssuedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -412,6 +460,75 @@ func (q *Queries) InvRunAncestors(ctx context.Context, orgID ids.OrgID, runID id
 	return items, nil
 }
 
+const invRunBudget = `-- name: InvRunBudget :many
+SELECT coalesce(r.account_id, r.counter_id)::uuid AS line_id, (r.account_id IS NOT NULL)::boolean AS account,
+       coalesce(a.rule, c.rule)::text AS rule, coalesce(a.currency, '')::text AS currency,
+       coalesce(sum(r.amount) FILTER (WHERE r.state = 'HELD'), 0)::numeric(26,8) AS held,
+       coalesce(sum(r.amount) FILTER (WHERE r.state = 'COMMITTED'), 0)::numeric(26,8) AS committed,
+       coalesce(sum(r.amount) FILTER (WHERE r.state = 'RELEASED'), 0)::numeric(26,8) AS released,
+       count(*) FILTER (WHERE r.state = 'HELD')::bigint AS held_count,
+       count(*) FILTER (WHERE r.state = 'COMMITTED')::bigint AS committed_count,
+       count(*) FILTER (WHERE r.state = 'RELEASED')::bigint AS released_count,
+       count(*)::bigint AS reservations
+FROM pc.transactions t
+JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
+JOIN pc.reservations r ON r.org_id = p.org_id AND r.permit_id = p.id
+LEFT JOIN pc.budget_accounts a ON a.org_id = r.org_id AND a.id = r.account_id
+LEFT JOIN pc.counters c ON c.org_id = r.org_id AND c.id = r.counter_id
+WHERE t.org_id = $1 AND t.run_id = $2
+GROUP BY 1, 2, 3, 4
+ORDER BY 3, 1
+LIMIT 500
+`
+
+type InvRunBudgetRow struct {
+	LineID         ids.UUID
+	Account        bool
+	Rule           string
+	Currency       string
+	Held           money.Decimal
+	Committed      money.Decimal
+	Released       money.Decimal
+	HeldCount      int64
+	CommittedCount int64
+	ReleasedCount  int64
+	Reservations   int64
+}
+
+// What a run's actions reserved on each budget account and counter (F227):
+// the current permit's reservations of every transaction of the run.
+func (q *Queries) InvRunBudget(ctx context.Context, orgID ids.OrgID, runID ids.UUID) ([]InvRunBudgetRow, error) {
+	rows, err := q.db.Query(ctx, invRunBudget, orgID, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []InvRunBudgetRow{}
+	for rows.Next() {
+		var i InvRunBudgetRow
+		if err := rows.Scan(
+			&i.LineID,
+			&i.Account,
+			&i.Rule,
+			&i.Currency,
+			&i.Held,
+			&i.Committed,
+			&i.Released,
+			&i.HeldCount,
+			&i.CommittedCount,
+			&i.ReleasedCount,
+			&i.Reservations,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const invRunChildren = `-- name: InvRunChildren :many
 SELECT id, agent_id, state, created_at, ended_at
 FROM pc.runs
@@ -448,6 +565,230 @@ func (q *Queries) InvRunChildren(ctx context.Context, orgID ids.OrgID, runID *id
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const invRunCoverage = `-- name: InvRunCoverage :many
+SELECT s.id AS snapshot_id, s.connection_id, s.operation, s.state, s.reasons, s.computed_at,
+       bool_or(s.expires_at IS NOT NULL AND s.expires_at <= d.created_at)::boolean AS stale_at_decision
+FROM pc.transactions t
+JOIN pc.decision_receipts d ON d.org_id = t.org_id AND d.transaction_id = t.id
+JOIN pc.coverage_snapshots s ON s.org_id = d.org_id AND s.id = d.coverage_snapshot_id
+WHERE t.org_id = $1 AND t.run_id = $2
+GROUP BY s.org_id, s.id
+ORDER BY s.connection_id, s.operation, s.id
+LIMIT 1000
+`
+
+type InvRunCoverageRow struct {
+	SnapshotID      ids.UUID
+	ConnectionID    ids.UUID
+	Operation       string
+	State           string
+	Reasons         []string
+	ComputedAt      time.Time
+	StaleAtDecision bool
+}
+
+// The coverage snapshots a run's decision receipts claimed (F229, HR-217).
+func (q *Queries) InvRunCoverage(ctx context.Context, orgID ids.OrgID, runID ids.UUID) ([]InvRunCoverageRow, error) {
+	rows, err := q.db.Query(ctx, invRunCoverage, orgID, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []InvRunCoverageRow{}
+	for rows.Next() {
+		var i InvRunCoverageRow
+		if err := rows.Scan(
+			&i.SnapshotID,
+			&i.ConnectionID,
+			&i.Operation,
+			&i.State,
+			&i.Reasons,
+			&i.ComputedAt,
+			&i.StaleAtDecision,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const invRunCoverageGaps = `-- name: InvRunCoverageGaps :many
+SELECT t.id, t.created_at, t.connection_id, t.operation,
+       (d.coverage_snapshot_id IS NULL)::boolean AS no_claim
+FROM pc.transactions t
+JOIN pc.decision_receipts d ON d.org_id = t.org_id AND d.transaction_id = t.id
+LEFT JOIN pc.coverage_snapshots s ON s.org_id = d.org_id AND s.id = d.coverage_snapshot_id
+WHERE t.org_id = $1 AND t.run_id = $2 AND t.connection_id IS NOT NULL
+  AND (d.coverage_snapshot_id IS NULL OR s.state <> 'ENFORCED' OR s.expires_at <= d.created_at)
+ORDER BY t.created_at, t.id
+LIMIT $3
+`
+
+type InvRunCoverageGapsRow struct {
+	ID           ids.UUID
+	CreatedAt    time.Time
+	ConnectionID *ids.UUID
+	Operation    string
+	NoClaim      bool
+}
+
+// A run's decisions on a connection that claimed no coverage, or coverage
+// below ENFORCED or expired when decided (F229), oldest first.
+func (q *Queries) InvRunCoverageGaps(ctx context.Context, orgID ids.OrgID, runID ids.UUID, maxRows int32) ([]InvRunCoverageGapsRow, error) {
+	rows, err := q.db.Query(ctx, invRunCoverageGaps, orgID, runID, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []InvRunCoverageGapsRow{}
+	for rows.Next() {
+		var i InvRunCoverageGapsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.ConnectionID,
+			&i.Operation,
+			&i.NoClaim,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const invRunDownstreamExecutions = `-- name: InvRunDownstreamExecutions :many
+SELECT e.id, e.automation_id, e.mode, e.state, e.trigger_kind, e.created_at, e.ended_at
+FROM pc.automation_executions e
+WHERE e.org_id = $1 AND e.created_at >= $2
+  AND e.subjects @> jsonb_build_array(jsonb_build_object('type', 'run', 'id', $3::uuid::text))
+ORDER BY e.created_at, e.id
+LIMIT $4
+`
+
+type InvRunDownstreamExecutionsParams struct {
+	OrgID   ids.OrgID
+	Since   time.Time
+	RunID   ids.UUID
+	MaxRows int32
+}
+
+type InvRunDownstreamExecutionsRow struct {
+	ID           ids.UUID
+	AutomationID ids.UUID
+	Mode         string
+	State        string
+	TriggerKind  string
+	CreatedAt    time.Time
+	EndedAt      *time.Time
+}
+
+// Automation executions whose subjects name a run, created since it
+// started (F065), oldest first.
+func (q *Queries) InvRunDownstreamExecutions(ctx context.Context, arg InvRunDownstreamExecutionsParams) ([]InvRunDownstreamExecutionsRow, error) {
+	rows, err := q.db.Query(ctx, invRunDownstreamExecutions,
+		arg.OrgID,
+		arg.Since,
+		arg.RunID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []InvRunDownstreamExecutionsRow{}
+	for rows.Next() {
+		var i InvRunDownstreamExecutionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AutomationID,
+			&i.Mode,
+			&i.State,
+			&i.TriggerKind,
+			&i.CreatedAt,
+			&i.EndedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const invRunGatewayDecisions = `-- name: InvRunGatewayDecisions :many
+SELECT g.id AS gateway_id, g.created_at AS gateway_created_at, t.created_at
+FROM pc.transactions t
+JOIN pc.gateways g ON g.org_id = t.org_id AND g.id::text = t.gateway_id
+WHERE t.org_id = $1 AND t.run_id = $2
+ORDER BY g.id, t.created_at
+LIMIT $3
+`
+
+type InvRunGatewayDecisionsRow struct {
+	GatewayID        ids.UUID
+	GatewayCreatedAt time.Time
+	CreatedAt        time.Time
+}
+
+// When a run's transactions reached each gateway, oldest first (F229).
+func (q *Queries) InvRunGatewayDecisions(ctx context.Context, orgID ids.OrgID, runID ids.UUID, maxRows int32) ([]InvRunGatewayDecisionsRow, error) {
+	rows, err := q.db.Query(ctx, invRunGatewayDecisions, orgID, runID, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []InvRunGatewayDecisionsRow{}
+	for rows.Next() {
+		var i InvRunGatewayDecisionsRow
+		if err := rows.Scan(&i.GatewayID, &i.GatewayCreatedAt, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const invRunGrants = `-- name: InvRunGrants :many
+SELECT DISTINCT t.grant_id::uuid AS grant_id
+FROM pc.transactions t
+WHERE t.org_id = $1 AND t.run_id = $2 AND t.grant_id IS NOT NULL
+LIMIT 20
+`
+
+// The grants a run's transactions decided under.
+func (q *Queries) InvRunGrants(ctx context.Context, orgID ids.OrgID, runID ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, invRunGrants, orgID, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var grant_id ids.UUID
+		if err := rows.Scan(&grant_id); err != nil {
+			return nil, err
+		}
+		items = append(items, grant_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -601,6 +942,39 @@ func (q *Queries) InvRunTransactions(ctx context.Context, arg InvRunTransactions
 		return nil, err
 	}
 	return items, nil
+}
+
+const invRunUpstreamExecution = `-- name: InvRunUpstreamExecution :one
+SELECT e.id, e.automation_id, e.mode, e.state, e.trigger_kind, e.created_at, e.ended_at
+FROM pc.automation_launches l
+JOIN pc.automation_executions e ON e.org_id = l.org_id AND e.id = l.execution_id
+WHERE l.org_id = $1 AND l.run_id = $2
+`
+
+type InvRunUpstreamExecutionRow struct {
+	ID           ids.UUID
+	AutomationID ids.UUID
+	Mode         string
+	State        string
+	TriggerKind  string
+	CreatedAt    time.Time
+	EndedAt      *time.Time
+}
+
+// The automation execution that launched a run (F065).
+func (q *Queries) InvRunUpstreamExecution(ctx context.Context, orgID ids.OrgID, runID ids.UUID) (InvRunUpstreamExecutionRow, error) {
+	row := q.db.QueryRow(ctx, invRunUpstreamExecution, orgID, runID)
+	var i InvRunUpstreamExecutionRow
+	err := row.Scan(
+		&i.ID,
+		&i.AutomationID,
+		&i.Mode,
+		&i.State,
+		&i.TriggerKind,
+		&i.CreatedAt,
+		&i.EndedAt,
+	)
+	return i, err
 }
 
 const invSharedTargets = `-- name: InvSharedTargets :many

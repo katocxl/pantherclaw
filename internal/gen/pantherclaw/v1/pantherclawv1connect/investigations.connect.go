@@ -39,6 +39,9 @@ const (
 	// InvestigationServiceCompareRunProcedure is the procedure name of the InvestigationService's
 	// CompareRun RPC.
 	InvestigationServiceCompareRunProcedure = "/pantherclaw.v1.InvestigationService/CompareRun"
+	// InvestigationServiceInspectRunProcedure is the procedure name of the InvestigationService's
+	// InspectRun RPC.
+	InvestigationServiceInspectRunProcedure = "/pantherclaw.v1.InvestigationService/InspectRun"
 )
 
 var (
@@ -74,6 +77,14 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	investigationServiceInspectRunSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_investigations_proto.Services().ByName("InvestigationService").Methods().ByName("InspectRun"),
+			Procedure:        InvestigationServiceInspectRunProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // InvestigationServiceClient is a client for the pantherclaw.v1.InvestigationService service.
@@ -97,6 +108,13 @@ type InvestigationServiceClient interface {
 	// (Business edition).
 	// permission: evidence.read
 	CompareRun(context.Context, *v1.CompareRunRequest) (*v1.CompareRunResponse, error)
+	// InspectRun is one run end to end: its summary, lineage, timeline,
+	// budget, approvals, coverage and gaps (F224, F065, F227, F229; HR-401).
+	// Each section is read only with its own permission where the run's
+	// agent lives; a section the caller cannot read is left out whole and
+	// listed in omitted_sections.
+	// permission: evidence.read
+	InspectRun(context.Context, *v1.InspectRunRequest) (*v1.InspectRunResponse, error)
 }
 
 // NewInvestigationServiceClient constructs a client for the pantherclaw.v1.InvestigationService
@@ -127,6 +145,13 @@ type InvestigationServiceHandler interface {
 	// (Business edition).
 	// permission: evidence.read
 	CompareRun(context.Context, *v1.CompareRunRequest) (*v1.CompareRunResponse, error)
+	// InspectRun is one run end to end: its summary, lineage, timeline,
+	// budget, approvals, coverage and gaps (F224, F065, F227, F229; HR-401).
+	// Each section is read only with its own permission where the run's
+	// agent lives; a section the caller cannot read is left out whole and
+	// listed in omitted_sections.
+	// permission: evidence.read
+	InspectRun(context.Context, *v1.InspectRunRequest) (*v1.InspectRunResponse, error)
 }
 
 // RegisterInvestigationServiceHandler registers svc as the pantherclaw.v1.InvestigationService
@@ -138,6 +163,7 @@ func RegisterInvestigationServiceHandler(server *connect.Server, svc Investigati
 		connect.Method{Spec: investigationServiceGetRunTimelineSpec(), Handler: adapter.getRunTimeline},
 		connect.Method{Spec: investigationServiceGetPrecedingContextSpec(), Handler: adapter.getPrecedingContext},
 		connect.Method{Spec: investigationServiceCompareRunSpec(), Handler: adapter.compareRun},
+		connect.Method{Spec: investigationServiceInspectRunSpec(), Handler: adapter.inspectRun},
 	)
 }
 
@@ -158,6 +184,10 @@ func (UnimplementedInvestigationServiceHandler) GetPrecedingContext(context.Cont
 
 func (UnimplementedInvestigationServiceHandler) CompareRun(context.Context, *v1.CompareRunRequest) (*v1.CompareRunResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.InvestigationService.CompareRun is not implemented")
+}
+
+func (UnimplementedInvestigationServiceHandler) InspectRun(context.Context, *v1.InspectRunRequest) (*v1.InspectRunResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.InvestigationService.InspectRun is not implemented")
 }
 
 type investigationServiceClient struct {
@@ -191,6 +221,14 @@ func (c *investigationServiceClient) GetPrecedingContext(ctx context.Context, re
 func (c *investigationServiceClient) CompareRun(ctx context.Context, req *v1.CompareRunRequest) (*v1.CompareRunResponse, error) {
 	var res v1.CompareRunResponse
 	if err := c.client.CallUnary(ctx, investigationServiceCompareRunSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *investigationServiceClient) InspectRun(ctx context.Context, req *v1.InspectRunRequest) (*v1.InspectRunResponse, error) {
+	var res v1.InspectRunResponse
+	if err := c.client.CallUnary(ctx, investigationServiceInspectRunSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -240,6 +278,18 @@ func (h investigationServiceHandler) compareRun(ctx context.Context, _ connect.S
 		return err
 	}
 	res, err := h.svc.CompareRun(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h investigationServiceHandler) inspectRun(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.InspectRunRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.InspectRun(ctx, &req)
 	if err != nil {
 		return err
 	}

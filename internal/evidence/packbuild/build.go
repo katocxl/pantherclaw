@@ -318,6 +318,11 @@ func (b *builder) build() ([]byte, string, int, error) {
 	if err := b.transactions(); err != nil {
 		return nil, "", 0, err
 	}
+	if r.scope.Kind == pack.ScopeRun {
+		if err := b.runGaps(); err != nil {
+			return nil, "", 0, err
+		}
+	}
 	if b.rangeData != nil {
 		if err := b.assurance(); err != nil {
 			return nil, "", 0, err
