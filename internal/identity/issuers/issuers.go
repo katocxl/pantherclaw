@@ -32,10 +32,11 @@ const (
 	KindKubernetes Kind = "kubernetes"
 	KindGitLab     Kind = "gitlab_ci"
 	KindSPIFFE     Kind = "spiffe_jwt"
+	KindGCP        Kind = "gcp_workload"
 )
 
 // kinds are the presets this build implements.
-var kinds = []Kind{KindGitHub, KindKubernetes, KindGitLab, KindSPIFFE}
+var kinds = []Kind{KindGitHub, KindKubernetes, KindGitLab, KindSPIFFE, KindGCP}
 
 // Known reports whether k is a preset this build implements. Anything else
 // is refused, never mapped to a default preset (HR-465).

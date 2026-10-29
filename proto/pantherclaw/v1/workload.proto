@@ -75,6 +75,9 @@ enum AttestationKind {
   ATTESTATION_KIND_GITLAB_CI = 3;
   // A SPIFFE JWT-SVID (aud pantherclaw:<org>).
   ATTESTATION_KIND_SPIFFE_JWT = 4;
+  // A Google-signed ID token from the GCP metadata server (audience
+  // pantherclaw:<org>, format=full).
+  ATTESTATION_KIND_GCP_WORKLOAD = 5;
 }
 
 // Attestation is a platform token offered as L2 evidence. It is verified,

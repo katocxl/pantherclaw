@@ -163,3 +163,54 @@ func TestHR462_SPIFFEEntriesAndAttestation(t *testing.T) {
 		wantPAP(t, name, err, pap.CodeAttestationLow)
 	}
 }
+
+// gcpAtt is a Google-signed ID token (format=full) for w's org.
+func (w *world) gcpAtt(mutate func(map[string]any)) *app.Attestation {
+	now := time.Now()
+	c := map[string]any{
+		"iss": issuers.GCPIssuer, "aud": "pantherclaw:" + w.org.String(), "sub": "113524806285125460987",
+		"iat": now.Unix(), "exp": now.Add(time.Hour).Unix(),
+		"google": map[string]any{"compute_engine": map[string]any{"project_id": "acme-prod", "instance_id": "5117906829363456"}},
+	}
+	if mutate != nil {
+		mutate(c)
+	}
+	return &app.Attestation{Kind: issuers.KindGCP, Token: jwt(c)}
+}
+
+// TestHR463_GCPEntriesAndAttestation: a service agent's entry pins the
+// numeric service account; its ID token enrolls at L2 once, and other
+// accounts, projects and issuers enroll nothing.
+// Covers: PN-002.3
+func TestHR463_GCPEntriesAndAttestation(t *testing.T) {
+	w := newWorld(t)
+	w.svc.WithAttestors(app.Attestors{GCP: fakeGitHub{}})
+	agent := w.agent(t, adomain.ContextService)
+	b := app.Binding{GCP: &issuers.GCPBinding{ServiceAccountID: "113524806285125460987", ProjectID: "acme-prod"}}
+	ciAgent := w.agent(t, adomain.ContextCI)
+	if _, err := w.svc.ProposeIssuer(w.orgAdmin(), app.ProposeInput{AgentID: ciAgent, Binding: b, Reason: "x"}, nil); !errors.Is(err, app.ErrContextMismatch) {
+		t.Errorf("ci agent: %v", err)
+	}
+	e := w.activeEntry(t, agent, b, true)
+	if e.Kind != issuers.KindGCP || e.Issuer != issuers.GCPIssuer || len(e.Algorithms) != 1 || e.Algorithms[0] != "RS256" {
+		t.Fatalf("revision: %+v", e)
+	}
+	att := w.gcpAtt(nil)
+	in, err := w.attestEnroll(t, w.svc, newWorkload(), "", att)
+	if err != nil || in.State != "ADMITTED" || in.Level != 2 || in.Instance.Agent != agent {
+		t.Fatalf("pinned service account: %+v, %v", in, err)
+	}
+	_, err = w.attestEnroll(t, w.svc, newWorkload(), "", att)
+	wantPAP(t, "reused GCP token", err, pap.CodeInvalidToken)
+	for name, mutate := range map[string]func(map[string]any){
+		"other service account": func(c map[string]any) { c["sub"] = "113524806285125460988" },
+		"other project": func(c map[string]any) {
+			c["google"] = map[string]any{"compute_engine": map[string]any{"project_id": "acme-dev"}}
+		},
+		"other issuer":       func(c map[string]any) { c["iss"] = "https://evil.test" },
+		"lives over an hour": func(c map[string]any) { c["exp"] = time.Now().Add(61 * time.Minute).Unix() },
+	} {
+		_, err := w.attestEnroll(t, w.svc, newWorkload(), "", w.gcpAtt(mutate))
+		wantPAP(t, name, err, pap.CodeAttestationLow)
+	}
+}

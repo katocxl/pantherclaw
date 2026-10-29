@@ -103,6 +103,8 @@ enum IssuerKind {
   ISSUER_KIND_GITLAB_CI = 3;
   // SPIFFE JWT-SVID.
   ISSUER_KIND_SPIFFE_JWT = 4;
+  // Google-signed GCP ID token.
+  ISSUER_KIND_GCP_WORKLOAD = 5;
 }
 
 // IssuerEntryState is the state of one revision.
@@ -284,6 +286,17 @@ message SpiffeBinding {
   }];
 }
 
+// GcpBinding binds Google-signed ID tokens to one service account (HR-463).
+message GcpBinding {
+  // The service account's numeric unique id (the token's sub), never its
+  // email.
+  string service_account_id = 1 [(buf.validate.field).string.pattern = "^[1-9][0-9]{0,29}$"];
+  // Optional Compute Engine project id (google.compute_engine.project_id).
+  string project_id = 2 [(buf.validate.field).string.pattern = "^$|^[a-z][a-z0-9-]{4,28}[a-z0-9]$"];
+  // Optional numeric Compute Engine instance id.
+  string instance_id = 3 [(buf.validate.field).string.pattern = "^$|^[1-9][0-9]{0,29}$"];
+}
+
 // KubernetesBinding binds Kubernetes service-account tokens to one agent
 // (HR-144).
 message KubernetesBinding {
@@ -341,6 +354,7 @@ message IssuerRevision {
     KubernetesBinding kubernetes = 10;
     GitlabBinding gitlab = 20;
     SpiffeBinding spiffe = 21;
+    GcpBinding gcp = 22;
   }
   // Admits matching instances without an owner.
   bool auto_admit = 11;
@@ -498,6 +512,8 @@ message ProposeIssuerEntryRequest {
     GitlabBinding gitlab = 7;
     // SPIFFE JWT-SVID.
     SpiffeBinding spiffe = 8;
+    // GCP service account.
+    GcpBinding gcp = 9;
   }
   // Admit matching instances without an owner (a widening when turned on).
   bool auto_admit = 5;

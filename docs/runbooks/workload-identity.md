@@ -248,7 +248,21 @@ A label (`pull_request` with `types: [labeled]` cannot be used: it runs the PR's
    ```
    The file is read again at each renewal. Each JWT-SVID attests once; keep its lifetime at one hour or less (HR-143).
 
-## 6. When something goes wrong
+## 6. Google Cloud (L2, M17)
+
+1. Nothing to configure on the server: Google ID tokens are verified only with Google's keys at `https://www.googleapis.com/oauth2/v3/certs`, and their issuer must be `https://accounts.google.com`.
+2. An admin proposes an entry for a `service` agent that pins the service account's **numeric unique id** (never its email, which can be deleted and recreated), optionally with the Compute Engine project and instance, and an **Identity Publisher** activates it:
+   ```bash
+   pclaw issuer propose-gcp --agent <agent> --service-account-id 113524806285125460987 \
+     --project-id acme-prod --auto-admit --reason "service agent"
+   ```
+   The unique id is shown as **Unique ID** on the service account's details page, or by `gcloud iam service-accounts describe EMAIL --format 'value(uniqueId)'`.
+3. On the instance, attest with `--gcp`: pclaw asks the metadata server for an ID token with audience `pantherclaw:<org id>` and the Compute Engine claims (`format=full`), in the same way as `--github` (section 2).
+   ```bash
+   pclaw workload renew --key-file workload.json --out token.json --gcp
+   ```
+
+## 7. When something goes wrong
 
 - **Disable an entry** at once: `pclaw issuer disable ENTRY --reason …`. It stops auto-admission, and its instances drop to L1 at their next token.
 - **Revoke an instance**: `pclaw instance revoke INSTANCE --reason …`. Outstanding permits fail at `BeginDispatch`.

@@ -31,7 +31,7 @@ var (
 	ErrProposalOpen = pcerr.New(pcerr.FailedPrecondition, "ISSUER_PROPOSAL_OPEN",
 		"the entry already has a proposed revision; withdraw or activate it first")
 	ErrContextMismatch = pcerr.New(pcerr.InvalidArgument, "ISSUER_CONTEXT",
-		"the GitHub and GitLab presets are for ci agents, the Kubernetes preset for kubernetes agents and the SPIFFE preset for service agents; desktop agents stay at L1")
+		"the GitHub and GitLab presets are for ci agents, the Kubernetes preset for kubernetes agents and the SPIFFE and cloud presets for service agents; desktop agents stay at L1")
 	ErrUnknownCluster = pcerr.New(pcerr.InvalidArgument, "ISSUER_CLUSTER",
 		"the cluster is not configured for this organization (identity.kubernetes_clusters)")
 	ErrUnknownIssuer = pcerr.New(pcerr.InvalidArgument, "ISSUER_NOT_CONFIGURED",
@@ -52,12 +52,14 @@ type Binding struct {
 	Kubernetes *issuers.KubernetesBinding `json:"kubernetes,omitzero"`
 	GitLab     *issuers.GitLabBinding     `json:"gitlab,omitzero"`
 	SPIFFE     *issuers.SPIFFEBinding     `json:"spiffe,omitzero"`
+	GCP        *issuers.GCPBinding        `json:"gcp,omitzero"`
 }
 
 // presetContext is the execution context each preset attests (D119-D121).
 var presetContext = map[issuers.Kind]adomain.ExecutionContext{
 	issuers.KindGitHub: adomain.ContextCI, issuers.KindKubernetes: adomain.ContextKubernetes, issuers.KindGitLab: adomain.ContextCI,
 	issuers.KindSPIFFE: adomain.ContextService,
+	issuers.KindGCP:    adomain.ContextService,
 }
 
 // kinds lists the kind of every field that is set.
@@ -66,6 +68,7 @@ func (b Binding) kinds() []issuers.Kind {
 	for k, set := range map[issuers.Kind]bool{
 		issuers.KindGitHub: b.GitHub != nil, issuers.KindKubernetes: b.Kubernetes != nil, issuers.KindGitLab: b.GitLab != nil,
 		issuers.KindSPIFFE: b.SPIFFE != nil,
+		issuers.KindGCP:    b.GCP != nil,
 	} {
 		if set {
 			out = append(out, k)
@@ -92,6 +95,8 @@ func (b Binding) validate() error {
 		err = b.GitLab.Validate()
 	case issuers.KindSPIFFE:
 		err = b.SPIFFE.Validate()
+	case issuers.KindGCP:
+		err = b.GCP.Validate()
 	default:
 		return pcerr.New(pcerr.InvalidArgument, "ISSUER_BINDING", "exactly one preset binding is required")
 	}
@@ -109,6 +114,8 @@ func (b Binding) issuer() string {
 		return strings.TrimSuffix(b.GitLab.Issuer, "/")
 	case issuers.KindSPIFFE:
 		return b.SPIFFE.Issuer()
+	case issuers.KindGCP:
+		return issuers.GCPIssuer
 	default:
 		return b.Kubernetes.Issuer()
 	}
@@ -122,6 +129,8 @@ func (b Binding) algorithms() []string {
 		return issuers.GitLabAlgorithms
 	case issuers.KindSPIFFE:
 		return issuers.SPIFFEAlgorithms
+	case issuers.KindGCP:
+		return issuers.GCPAlgorithms
 	default:
 		return []string{"TokenReview"}
 	}
@@ -141,6 +150,8 @@ func (b Binding) widening(prev *Binding) []string {
 		return b.GitLab.Widening(prev.GitLab)
 	case b.SPIFFE != nil:
 		return b.SPIFFE.Widening(prev.SPIFFE)
+	case b.GCP != nil:
+		return b.GCP.Widening(prev.GCP)
 	default:
 		return b.Kubernetes.Widening(prev.Kubernetes)
 	}

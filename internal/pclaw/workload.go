@@ -34,10 +34,10 @@ func workloadCommands() map[string]command {
 	return map[string]command{
 		"workload init": {"workload init --key-file FILE", workloadInit},
 		"workload enroll": {
-			"workload enroll --key-file FILE --server URL [--enrollment-token-file FILE] [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE] [--org ID] [--declared-release sha256:…]",
+			"workload enroll --key-file FILE --server URL [--enrollment-token-file FILE] [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp] [--org ID] [--declared-release sha256:…]",
 			workloadEnroll,
 		},
-		"workload token": {"workload token --key-file FILE [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE] [--declared-release sha256:…] [--out FILE]", workloadToken},
+		"workload token": {"workload token --key-file FILE [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp] [--declared-release sha256:…] [--out FILE]", workloadToken},
 	}
 }
 
@@ -78,6 +78,7 @@ type attestationFlags struct {
 	kubernetes *string
 	gitlabEnv  *string
 	spiffe     *string
+	gcp        *bool
 }
 
 func declareAttestation(fs *flag.FlagSet) attestationFlags {
@@ -88,16 +89,17 @@ func declareAttestation(fs *flag.FlagSet) attestationFlags {
 			"(id_tokens with aud pantherclaw:<org>)"),
 		spiffe: fs.String("spiffe-token", "", "attest with the JWT-SVID in this file (audience pantherclaw:<org>); "+
 			"it is read again at each renewal"),
+		gcp: fs.Bool("gcp", false, "attest with a Google-signed ID token from the GCP metadata server (audience pantherclaw:<org>)"),
 	}
 }
 
 // errAttestationSources is returned when more than one source is given.
-var errAttestationSources = errors.New("use one of --github, --kubernetes-token, --gitlab-token-env and --spiffe-token, not both")
+var errAttestationSources = errors.New("use one of --github, --kubernetes-token, --gitlab-token-env, --spiffe-token and --gcp, not both")
 
 // check refuses more than one attestation source.
 func (f attestationFlags) check() error {
 	n := 0
-	for _, set := range []bool{*f.github, *f.kubernetes != "", *f.gitlabEnv != "", *f.spiffe != ""} {
+	for _, set := range []bool{*f.github, *f.kubernetes != "", *f.gitlabEnv != "", *f.spiffe != "", *f.gcp} {
 		if set {
 			n++
 		}
@@ -126,6 +128,15 @@ func (f attestationFlags) attestation(ctx context.Context, a *app, org ids.OrgID
 			return nil, err
 		}
 		return &pantherclawv1.Attestation{Kind: pantherclawv1.AttestationKind_ATTESTATION_KIND_SPIFFE_JWT, Token: tok}, nil
+	case *f.gcp:
+		if org.IsZero() {
+			return nil, errors.New("the org is unknown: pass --org")
+		}
+		tok, err := gcpIdentity(ctx, a, "pantherclaw:"+org.String())
+		if err != nil {
+			return nil, err
+		}
+		return &pantherclawv1.Attestation{Kind: pantherclawv1.AttestationKind_ATTESTATION_KIND_GCP_WORKLOAD, Token: tok}, nil
 	case *f.github:
 		if org.IsZero() {
 			return nil, errors.New("the org is unknown: pass --org")
@@ -182,6 +193,39 @@ func githubOIDC(ctx context.Context, a *app, audience string) (string, error) {
 		return "", errors.New("github oidc: no token in the response")
 	}
 	return v.Value, nil
+}
+
+// gcpIdentity asks the GCP metadata server (GCE_METADATA_HOST, default
+// metadata.google.internal) for an ID token of the instance's service
+// account with audience, including the Compute Engine claims.
+func gcpIdentity(ctx context.Context, a *app, audience string) (string, error) {
+	host, ok := a.env("GCE_METADATA_HOST")
+	if !ok || host == "" {
+		host = "metadata.google.internal"
+	}
+	u := url.URL{
+		Scheme: "http", Host: host, Path: "/computeMetadata/v1/instance/service-accounts/default/identity",
+		RawQuery: url.Values{"audience": {audience}, "format": {"full"}}.Encode(),
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Metadata-Flavor", "Google")
+	resp, err := a.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("gcp metadata: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 16<<10))
+	if err != nil || resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("gcp metadata: status %d", resp.StatusCode)
+	}
+	tok := strings.TrimSpace(string(b))
+	if strings.Count(tok, ".") != 2 {
+		return "", errors.New("gcp metadata: no ID token in the response")
+	}
+	return tok, nil
 }
 
 func (a *app) workloadClient(server string, kf workloadclient.KeyFile) (pantherclawv1connect.WorkloadServiceClient, error) {

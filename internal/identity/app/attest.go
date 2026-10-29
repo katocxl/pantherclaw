@@ -52,6 +52,8 @@ type Attestors struct {
 	GitLab IssuerDirectory
 	// SPIFFE is the operator-configured trust domains, keyed by name (D120).
 	SPIFFE IssuerDirectory
+	// GCP verifies Google-signed ID tokens with the pinned key URL (D121).
+	GCP Verifier
 }
 
 // IssuerDirectory is a preset's operator-configured issuers, each with its
@@ -182,6 +184,8 @@ func (s *Service) attest(ctx context.Context, org ids.OrgID, a Attestation) ([]a
 		return s.attestGitLab(ctx, org, a.Token, revs)
 	case issuers.KindSPIFFE:
 		return s.attestSPIFFE(ctx, org, a.Token, revs)
+	case issuers.KindGCP:
+		return s.attestGCP(ctx, org, a.Token, revs)
 	default:
 		return nil, attErr(fmt.Errorf("unknown preset %q", a.Kind))
 	}
@@ -301,6 +305,52 @@ func (s *Service) attestSPIFFE(ctx context.Context, org ids.OrgID, token string,
 		out = append(out, attested{
 			rev: r, match: m, issuer: b.SPIFFE.Issuer(), key: issuers.ReplayKey("", token), window: w,
 			claims: withClaims(m.Binding, nil),
+		})
+	}
+	if len(out) == 0 {
+		return nil, attErr(last)
+	}
+	return out, nil
+}
+
+// attestGCP verifies a Google-signed ID token with the keys at the pinned
+// URL only (HR-463).
+func (s *Service) attestGCP(ctx context.Context, org ids.OrgID, token string, revs []dbq.PcTrustedIssuer) ([]attested, error) {
+	if s.att.GCP == nil {
+		return nil, attErr(errors.New("the GCP preset is not configured"))
+	}
+	payload, err := s.att.GCP.Verify(ctx, token)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	c, err := issuers.ParseGCPClaims(payload)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	w, err := issuers.ParseWindow(payload)
+	if err == nil {
+		err = w.Check(s.clk.Now())
+	}
+	if err != nil {
+		return nil, attErr(err)
+	}
+	var out []attested
+	var last error
+	for _, r := range revs {
+		b, err := bindingOf(r)
+		if err != nil || b.GCP == nil {
+			continue
+		}
+		m, err := issuers.MatchGCP(*b.GCP, org, c)
+		if err != nil {
+			last = err
+			continue
+		}
+		ce := c.Google.ComputeEngine
+		// Google ID tokens carry no jti: the token is the single-use key.
+		out = append(out, attested{
+			rev: r, match: m, issuer: c.Issuer, key: issuers.ReplayKey(w.JTI, token), window: w,
+			claims: withClaims(m.Binding, map[string]string{"project_id": ce.ProjectID, "instance_id": ce.InstanceID, "zone": ce.Zone}),
 		})
 	}
 	if len(out) == 0 {

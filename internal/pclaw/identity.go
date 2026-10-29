@@ -111,6 +111,20 @@ func identityCommands() map[string]command {
 				})
 			}
 		}),
+		"issuer propose-gcp": rpc("issuer propose-gcp --agent ID --service-account-id N [--project-id P] [--instance-id N] [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
+			agent, entry, reason := fs.String("agent", "", "agent the entry binds to"), fs.String("entry", "", "revise this entry"), fs.String("reason", "", "why")
+			sa := fs.String("service-account-id", "", "the service account's numeric unique id (not its email)")
+			project, instance := fs.String("project-id", "", "pin a Compute Engine project"), fs.String("instance-id", "", "pin a numeric Compute Engine instance id")
+			auto := fs.Bool("auto-admit", false, "admit matching workloads without an owner (needs activation by an Identity Publisher)")
+			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
+				return c.identity.ProposeIssuerEntry(ctx, &pantherclawv1.ProposeIssuerEntryRequest{
+					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason,
+					Binding: &pantherclawv1.ProposeIssuerEntryRequest_Gcp{Gcp: &pantherclawv1.GcpBinding{
+						ServiceAccountId: *sa, ProjectId: *project, InstanceId: *instance,
+					}},
+				})
+			}
+		}),
 		"issuer propose-kubernetes": rpc("issuer propose-kubernetes --agent ID --cluster NAME --namespace NS --service-account NAME --service-account-uid UID [--image-repository R...] [--image-digest D...] [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
 			agent, entry, reason := fs.String("agent", "", "agent the entry binds to"), fs.String("entry", "", "revise this entry"), fs.String("reason", "", "why")
 			cluster, ns := fs.String("cluster", "", "cluster name from the server configuration"), fs.String("namespace", "", "namespace")

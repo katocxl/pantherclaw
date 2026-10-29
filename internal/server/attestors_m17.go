@@ -6,10 +6,13 @@ package server
 import (
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/issuerkeys"
 	iapp "github.com/katocxl/pantherclaw/internal/identity/app"
+	"github.com/katocxl/pantherclaw/internal/identity/issuers"
+	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 )
 
 // presetAttestors adds the M17 presets (PN-002.3) to att: each one's
-// issuers come from operator configuration only (HR-142).
+// issuers come from operator configuration or a pinned vendor URL only
+// (HR-142).
 func presetAttestors(att *iapp.Attestors, cfg IdentityConfig) error {
 	gitlab, err := issuerkeys.NewGitLabDirectory(cfg.GitLabIssuers, attestTimeout)
 	if err != nil {
@@ -19,6 +22,12 @@ func presetAttestors(att *iapp.Attestors, cfg IdentityConfig) error {
 	if err != nil {
 		return err
 	}
-	att.GitLab, att.SPIFFE = gitlab, spiffe
+	gcp, err := issuerkeys.NewFetcher(httpx.NewEgressClient(httpx.EgressConfig{Timeout: attestTimeout}), issuerkeys.Config{
+		JWKSURL: issuers.GCPKeysURL, Algorithms: issuers.GCPAlgorithms,
+	}, nil)
+	if err != nil {
+		return err
+	}
+	att.GitLab, att.SPIFFE, att.GCP = gitlab, spiffe, gcp
 	return nil
 }
