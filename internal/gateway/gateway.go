@@ -322,6 +322,7 @@ func (g *Gateway) Run(ctx context.Context) error {
 	eg.Go(func() error { return g.watchA2ACards(ctx) })
 	eg.Go(func() error { return g.watchVerifications(ctx) })
 	eg.Go(func() error { return g.watchStatus(ctx) })
+	eg.Go(func() error { return g.warnUnsharedTasks(ctx) })
 	eg.Go(func() error { <-ctx.Done(); return nil })
 	return eg.Wait()
 }

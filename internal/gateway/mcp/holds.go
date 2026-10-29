@@ -105,8 +105,9 @@ func actionKey(a actionir.ActionIR) key {
 // replica sees them and a restart loses nothing. A miss, a conflict or a
 // full store only costs the agent a new action (HR-412).
 type holdStore interface {
-	// heldAction returns the action id of an open hold on the same call.
-	heldAction(k key) (string, bool)
+	// heldAction returns the action id of an open hold on the same call
+	// by the same binding.
+	heldAction(k key, b binding) (string, bool)
 	// settle records what an answer means for the call's hold.
 	settle(k key, b binding, action string, res dispatch.Result)
 	// newTask returns a task for a call's answer, or nil.
@@ -116,8 +117,8 @@ type holdStore interface {
 	lookup(id string, b binding, resubmit bool) (snapshot task, claimed, found bool)
 	// finish records a resubmission's answer.
 	finish(snap task, res dispatch.Result, result toolResult) task
-	// release ends a claim that produced no answer.
-	release(id string)
+	// release ends a claim of this binding that produced no answer.
+	release(id string, b binding)
 	// cancel forgets a task of this binding and the hold of its call.
 	cancel(id string, b binding) bool
 	// now is the store's clock.

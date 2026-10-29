@@ -12,6 +12,7 @@ import (
 	"slices"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -94,7 +95,7 @@ func (g *Gateway) servingStates() map[string]string {
 func (g *Gateway) statusRequest(states map[string]string) *pb.ReportStatusRequest {
 	v := version.Get()
 	req := &pb.ReportStatusRequest{
-		ReplicaId: g.status.replica, Version: truncate(v.Version, 64), Build: truncate(v.Commit, 64),
+		ReplicaId: g.status.replica, Version: truncate(v.Version), Build: truncate(v.Commit),
 		StartTime: timestamppb.New(g.status.started), ConfigVersion: g.ConfigVersion(),
 	}
 	g.status.mu.Lock()
@@ -112,11 +113,20 @@ func (g *Gateway) statusRequest(states map[string]string) *pb.ReportStatusReques
 	return req
 }
 
-func truncate(s string, n int) string {
-	if len(s) > n {
-		return s[:n]
+// statusFieldMax is the most bytes of a version or build (D10).
+const statusFieldMax = 64
+
+// truncate cuts s to at most statusFieldMax bytes on a rune boundary
+// (D42).
+func truncate(s string) string {
+	n := statusFieldMax
+	if len(s) <= n {
+		return s
 	}
-	return s
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 // watchStatus reports the replica's status until ctx ends.
@@ -165,4 +175,32 @@ func (g *Gateway) reportStatus(ctx context.Context, states map[string]string) in
 	}
 	g.log.DebugContext(ctx, "gateway.status_reported", slog.String("replica_id", g.status.replica))
 	return next
+}
+
+// warnUnsharedTasks logs, once the first configuration loaded, when the
+// gateway serves a kind-mcp connection without a broker key: its MCP tasks
+// and relayed elicitations then stay in this process, as before M15, and
+// are not shared with its other replicas or kept across a restart. Holds
+// and sessions are shared either way (G0 M15 D42).
+func (g *Gateway) warnUnsharedTasks(ctx context.Context) error {
+	if g.broker != nil {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-g.config.Ready():
+	}
+	cfg := g.config.Current()
+	if cfg == nil {
+		return nil
+	}
+	for _, conn := range cfg.ByID {
+		if conn.GetKind() == "mcp" {
+			g.log.WarnContext(ctx, "gateway.mcp_tasks_not_shared",
+				slog.String("reason", "no broker key: MCP tasks and elicitations stay in this process and are not shared by replicas"))
+			return nil
+		}
+	}
+	return nil
 }

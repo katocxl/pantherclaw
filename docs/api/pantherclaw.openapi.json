@@ -13029,7 +13029,7 @@
           "pantherclaw.v1.GatewayService"
         ],
         "summary": "PutMCPState",
-        "description": "PutMCPState writes one MCP hold, task or session of the calling\n gateway (G0 M15 D12, HR-411..413), compare-and-set on if_version.\n permission: gateway.sync",
+        "description": "PutMCPState writes one MCP hold, task or session of the calling\n gateway (G0 M15 D12, HR-411..413), compare-and-set on if_version. An\n update keeps the entry's binding, and a connection the gateway does\n not serve is refused (D42).\n permission: gateway.sync",
         "operationId": "pantherclaw.v1.GatewayService.PutMCPState",
         "parameters": [
           {

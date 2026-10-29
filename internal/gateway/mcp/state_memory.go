@@ -86,12 +86,13 @@ func (s *memoryStore) fullLocked(instance string, extra int) bool {
 	return n >= maxPerInstance
 }
 
-// heldAction returns the action id of an open hold on the same call.
-func (s *memoryStore) heldAction(k key) (string, bool) {
+// heldAction returns the action id of an open hold on the same call by
+// the same binding.
+func (s *memoryStore) heldAction(k key, b binding) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	h, ok := s.holds[k]
-	if !ok || !s.now().Before(h.expires) {
+	if !ok || h.binding != b || !s.now().Before(h.expires) {
 		return "", false
 	}
 	return h.action, true
@@ -190,11 +191,11 @@ func (s *memoryStore) finish(snap task, res dispatch.Result, result toolResult) 
 	return *t
 }
 
-// release ends a claim that produced no answer.
-func (s *memoryStore) release(id string) {
+// release ends a claim of this binding that produced no answer.
+func (s *memoryStore) release(id string, b binding) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if t, ok := s.tasks[id]; ok {
+	if t, ok := s.tasks[id]; ok && t.binding == b {
 		t.busy = false
 	}
 }

@@ -149,11 +149,11 @@ func TestHR411_HoldsAndTasksAreSharedByEveryReplica(t *testing.T) {
 	k := actionKey(p.Action)
 
 	a.settle(k, bind, p.Action.ActionID, dispatch.Result{Class: dispatch.Held, TransactionID: "txn-1"})
-	if got, ok := b.heldAction(k); !ok || got != p.Action.ActionID {
+	if got, ok := b.heldAction(k, bind); !ok || got != p.Action.ActionID {
 		t.Fatalf("held on the other replica = %q %v", got, ok)
 	}
 	a.settle(k, bind, p.Action.ActionID, dispatch.Result{Class: dispatch.Held, TransactionID: "txn-1"})
-	if _, ok := b.heldAction(k); !ok {
+	if _, ok := b.heldAction(k, bind); !ok {
 		t.Fatal("holding the same call again lost the hold")
 	}
 
@@ -192,7 +192,7 @@ func TestHR411_HoldsAndTasksAreSharedByEveryReplica(t *testing.T) {
 	if !claimed {
 		t.Fatal("a finished claim was not released")
 	}
-	a.release(tk.id)
+	a.release(tk.id, bind)
 	snap, claimed, _ = b.lookup(tk.id, bind, true)
 	if !claimed {
 		t.Fatal("a released task could not be resubmitted")
@@ -216,7 +216,7 @@ func TestHR411_HoldsAndTasksAreSharedByEveryReplica(t *testing.T) {
 	if _, _, found := b.lookup(tk.id, bind, false); found {
 		t.Fatal("a canceled task was found")
 	}
-	if _, ok := b.heldAction(k); ok {
+	if _, ok := b.heldAction(k, bind); ok {
 		t.Fatal("canceling a task kept the hold of its call")
 	}
 }
@@ -254,7 +254,7 @@ func TestHR412_AStateMissOnlyCostsANewAction(t *testing.T) {
 	}
 	f.down = true
 	a.settle(k, bind, p.Action.ActionID, dispatch.Result{Class: dispatch.Held})
-	if _, ok := a.heldAction(k); ok {
+	if _, ok := a.heldAction(k, bind); ok {
 		t.Fatal("a hold was found with the server out of reach")
 	}
 	if a.newTask(bind, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{}) != nil {

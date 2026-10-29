@@ -129,10 +129,11 @@ func entryBinding(e *pb.MCPStateEntry) binding {
 }
 
 // heldAction returns the action id of an open hold on the same call: one
-// GetMCPState per tools/call, before the Authority is asked (D14).
-func (s *serverState) heldAction(k key) (string, bool) {
+// GetMCPState per tools/call, before the Authority is asked (D14). A hold
+// of another binding is not this call's (HR-411, D42).
+func (s *serverState) heldAction(k key, b binding) (string, bool) {
 	e, err := s.get(pb.MCPStateKind_MCP_STATE_KIND_HOLD, k[:])
-	if err != nil || !s.now().Before(e.GetExpireTime().AsTime()) || e.GetActionId() == "" {
+	if err != nil || entryBinding(e) != b || !s.now().Before(e.GetExpireTime().AsTime()) || e.GetActionId() == "" {
 		return "", false
 	}
 	return e.GetActionId(), true
@@ -322,14 +323,14 @@ func (s *serverState) finish(snap task, res dispatch.Result, result toolResult) 
 	return t
 }
 
-// release ends a claim that produced no answer.
-func (s *serverState) release(id string) {
+// release ends a claim of this binding that produced no answer.
+func (s *serverState) release(id string, b binding) {
 	if s.local != nil {
-		s.local.release(id)
+		s.local.release(id, b)
 		return
 	}
 	e, err := s.get(pb.MCPStateKind_MCP_STATE_KIND_TASK, taskKey(id))
-	if err != nil || !e.GetBusy() {
+	if err != nil || entryBinding(e) != b || !e.GetBusy() {
 		return
 	}
 	v := e.GetVersion()
