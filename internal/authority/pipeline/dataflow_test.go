@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
@@ -68,9 +69,10 @@ func itemOf(ev *pipeline.Evaluation, code string) (pipeline.Item, bool) {
 
 // TestHR430_ReadClassFromDeclarationsObligationsAndFacts: an allowed read
 // records the strictest class its definition declares, capped by the
-// decision's data_classes obligation (or, for a scoped read, the strictest
-// class the obligation allows), raised and never lowered by a
-// classification fact; only ALLOW and ALLOW_WITH_OBLIGATIONS record it.
+// decision's data_classes obligation (for a scoped read, the stricter of
+// that and the strictest class the obligation allows), raised and never
+// lowered by a classification fact; ALLOW, ALLOW_WITH_OBLIGATIONS and a
+// monitor-mode permit record it (D97).
 func TestHR430_ReadClassFromDeclarationsObligationsAndFacts(t *testing.T) {
 	read := &defs.Definition{Access: defs.AccessRead, Response: &defs.ResponseSpec{Format: "json", Fields: []defs.ResponseField{
 		{Path: "email", Class: "pii"}, {Path: "token", Class: "secret"}, {Path: "note", Class: "internal"},
@@ -79,6 +81,11 @@ func TestHR430_ReadClassFromDeclarationsObligationsAndFacts(t *testing.T) {
 		return []pdomain.Obligation{{Kind: pdomain.DataClasses, Values: v}}
 	}
 	scoped := &defs.Definition{Access: defs.AccessRead, Scoping: []string{"classes"}}
+	scopedDeclared := &defs.Definition{
+		Access: defs.AccessRead, Scoping: []string{"classes"},
+		Response: &defs.ResponseSpec{Format: "json", Fields: []defs.ResponseField{{Path: "note", Class: "internal"}}},
+	}
+	scopedSecret := &defs.Definition{Access: defs.AccessRead, Scoping: []string{"classes"}, Response: read.Response}
 	for name, c := range map[string]struct {
 		d          *defs.Definition
 		obligs     []pdomain.Obligation
@@ -90,6 +97,9 @@ func TestHR430_ReadClassFromDeclarationsObligationsAndFacts(t *testing.T) {
 		"an obligation never raises":     {&defs.Definition{Access: defs.AccessRead, Response: &defs.ResponseSpec{Fields: []defs.ResponseField{{Path: "a", Class: "internal"}}}}, classes("secret"), "", "internal"},
 		"scoped: the strictest allowed":  {scoped, classes("internal", "pii"), "", "pii"},
 		"scoped without an obligation":   {scoped, nil, "", ""},
+		"scoped: stricter than declared": {scopedDeclared, classes("internal", "pii"), "", "pii"},
+		"scoped: declared, capped":       {scopedSecret, classes("internal", "pii"), "", "pii"},
+		"scoped: declared stricter":      {scopedDeclared, classes("public"), "", "public"},
 		"raised by a fact":               {read, classes("internal"), "pii", "pii"},
 		"a fact never lowers":            {read, nil, "public", "secret"},
 		"a fact classifies the unknown":  {&defs.Definition{Access: defs.AccessRead}, nil, "pii", "pii"},
@@ -104,6 +114,13 @@ func TestHR430_ReadClassFromDeclarationsObligationsAndFacts(t *testing.T) {
 	for _, d := range []adomain.Decision{adomain.Allow, adomain.AllowWithObligations} {
 		if got := (&pipeline.Evaluation{Decision: d, ReadClass: "pii"}).RecordedReadClass(); got != "pii" {
 			t.Errorf("%s records %q", d, got)
+		}
+	}
+	// A monitor-mode permit dispatches the read whatever its would-decision
+	// (D97).
+	for _, d := range []adomain.Decision{adomain.Deny, adomain.RequireApproval, adomain.CannotAuthorize} {
+		if got := (&pipeline.Evaluation{Decision: d, Mode: pipeline.ModeMonitor, ReadClass: "pii"}).RecordedReadClass(); got != "pii" {
+			t.Errorf("a monitor permit (%s) records %q", d, got)
 		}
 	}
 	for _, d := range []adomain.Decision{adomain.Deny, adomain.RequireApproval, adomain.CannotAuthorize, adomain.RequireStepUp} {
@@ -235,5 +252,51 @@ func TestHR431_AVersion4ReplayNeitherReadsNorHolds(t *testing.T) {
 	expect(t, ev, adomain.Allow, pipeline.ReasonGrantCovers)
 	if _, ok := ev.Would(); ok {
 		t.Fatal("a version 4 replay reports a would-hold")
+	}
+}
+
+// TestHR431_APredictedDisclosureOnANonPublicConnection (D74): through an
+// internal connection, a write whose predicted consequence has the
+// external_disclosure effect is an external disclosure and is held after a
+// pii read; when the consequence is not predicted, nothing applies.
+func TestHR431_APredictedDisclosureOnANonPublicConnection(t *testing.T) {
+	f := newFxWith(t, func(raw []byte) []byte {
+		return []byte(strings.Replace(string(payoutPackage(raw)), "effect: funds.transfer\n      environments",
+			"effect: "+pipeline.EffectExternalDisclosure+"\n      environments", 1))
+	}, "")
+	f.payoutRun(false)
+	gw := ids.NewV7()
+	c := connection(gw)
+	c.DestinationClass = "internal"
+	f.w.PutConnection(c)
+	f.w.AddSensitiveRead(sensitiveRead(f.run, "pii"))
+
+	f.payouts("ch_1", map[string]any{"state": "none", "environments": []any{}}, time.Second)
+	expect(t, f.disclose(f.run, gw, c, slackChannel), adomain.Allow, pipeline.ReasonGrantCovers)
+
+	f.payouts("ch_1", scheduled, time.Second)
+	ev := f.disclose(f.run, gw, c, slackChannel)
+	if len(ev.Consequences) != 1 || ev.Consequences[0].Effect != pipeline.EffectExternalDisclosure {
+		t.Fatalf("consequences: %+v", ev.Consequences)
+	}
+	expect(t, ev, adomain.RequireApproval, pipeline.ReasonDataFlowHold)
+}
+
+// TestHR431_EveryClassReadCountsPastTheNewest (D97): a secret read older
+// than the MaxSensitiveReads newest pii reads still counts, so a flow that
+// allows only pii does not cover the disclosure; the detail names at most
+// MaxSensitiveReads transactions.
+func TestHR431_EveryClassReadCountsPastTheNewest(t *testing.T) {
+	f, gw, c := dataFlowFx(t, pipeline.ModeEnforce)
+	withFlows(f, gdomain.FlowAllowance{Classes: []string{"pii"}, Destinations: []actionir.Destination{slackChannel}})
+	f.w.AddSensitiveRead(sensitiveRead(f.run, "secret"))
+	for range pipeline.MaxSensitiveReads + 3 {
+		f.w.AddSensitiveRead(sensitiveRead(f.run, "pii"))
+	}
+	ev := f.disclose(f.run, gw, c, slackChannel)
+	expect(t, ev, adomain.RequireApproval, pipeline.ReasonDataFlowHold)
+	it, _ := itemOf(ev, pipeline.ReasonDataFlowHold)
+	if !strings.Contains(it.Detail, "pii and secret") || strings.Count(it.Detail, ", ")+1 > pipeline.MaxSensitiveReads {
+		t.Fatalf("hold detail: %s", it.Detail)
 	}
 }

@@ -44,7 +44,7 @@ func (w *world) readRefund(conn, run ids.UUID) finalize.Result {
 }
 
 // childRun starts a child run of parent under the same grant.
-func (w *world) childRun(parent ids.UUID, grant ids.UUID) ids.UUID {
+func (w *world) childRun(parent, grant ids.UUID) ids.UUID {
 	w.t.Helper()
 	child := w.run(gdomain.GrantID{}, parent)
 	exec(w.t, w.pool, w.org, "UPDATE pc.runs SET grant_id = $1 WHERE id = $2", grant, child)

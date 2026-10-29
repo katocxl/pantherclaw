@@ -449,12 +449,17 @@ WITH RECURSIVE up (id, parent_run_id, hop) AS (
     UNION ALL
     SELECT c.id, tree.hop + 1 FROM tree JOIN pc.runs c ON c.org_id = $1 AND c.parent_run_id = tree.id
     WHERE tree.hop < 8
+), reads AS (
+    SELECT t.id, t.run_id, t.operation, coalesce(t.read_class, '')::text AS read_class, t.created_at
+    FROM pc.transactions t
+    WHERE t.org_id = $1 AND t.run_id IN (SELECT tree.id FROM tree) AND t.read_class IN ('pii', 'secret')
 )
-SELECT t.id, t.run_id, t.operation, coalesce(t.read_class, '')::text AS read_class, t.created_at
-FROM pc.transactions t
-WHERE t.org_id = $1 AND t.run_id IN (SELECT tree.id FROM tree) AND t.read_class IN ('pii', 'secret')
-ORDER BY t.created_at DESC, t.id DESC
-LIMIT 20
+SELECT n.id, n.run_id, n.operation, n.read_class, n.created_at FROM (
+    (SELECT id, run_id, operation, read_class, created_at FROM reads ORDER BY reads.created_at DESC, reads.id DESC LIMIT 20)
+    UNION
+    (SELECT DISTINCT ON (reads.read_class) id, run_id, operation, read_class, created_at FROM reads ORDER BY reads.read_class, reads.created_at DESC, reads.id DESC)
+) n
+ORDER BY n.created_at DESC, n.id DESC
 `
 
 type SensitiveReadsRow struct {
@@ -465,9 +470,10 @@ type SensitiveReadsRow struct {
 	CreatedAt time.Time
 }
 
-// The sensitive reads of a run tree (G0 M16 D73, HR-431): the pii and
+// The sensitive reads of a run tree (G0 M16 D73, D97, HR-431): the pii and
 // secret reads of every run sharing the run's root (runs nest at most 8
-// deep), the 20 most recent. Classes and ids only, never content (HR-434).
+// deep), the 20 most recent plus the most recent of each class, so every
+// class read is there. Classes and ids only, never content (HR-434).
 func (q *Queries) SensitiveReads(ctx context.Context, orgID ids.OrgID, runID ids.UUID) ([]SensitiveReadsRow, error) {
 	rows, err := q.db.Query(ctx, sensitiveReads, orgID, runID)
 	if err != nil {

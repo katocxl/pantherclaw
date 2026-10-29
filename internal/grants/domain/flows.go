@@ -116,3 +116,12 @@ func DecodeFlows(raw []byte) ([]FlowAllowance, error) {
 	}
 	return out, nil
 }
+
+// FlowCovers reports whether every grant of the chain, from the root down
+// to the run's own, has a flow that covers every class and every
+// destination (D75, HR-432): a parent's narrowing revision stops a flow its
+// child still names, as bounds are checked at every level. A chain without
+// grants covers nothing.
+func (c Chain) FlowCovers(classes []string, dests []actionir.Destination) bool {
+	return len(c.Grants) > 0 && !slices.ContainsFunc(c.Grants, func(g Grant) bool { return !FlowCovers(g.Flows, classes, dests) })
+}

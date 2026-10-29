@@ -55,6 +55,34 @@ func TestHR432_FlowsOnlyNarrowUnderDelegation(t *testing.T) {
 	}
 }
 
+// TestHR432_ANarrowedParentStopsTheChildsFlow: a flow is checked at every
+// grant of the chain, so a parent's narrowing revision (no review, no
+// cascade) stops the flow its delegated child still names.
+func TestHR432_ANarrowedParentStopsTheChildsFlow(t *testing.T) {
+	p := rootGrant(t, refundBounds)
+	p.Flows = []FlowAllowance{flow([]string{"pii"}, chanA)}
+	c := childOf(t, p, refundBounds)
+	c.Flows = p.Flows
+	if err := issue(c, &p); err != nil {
+		t.Fatal(err)
+	}
+	pii, dests := []string{"pii"}, []actionir.Destination{chanA}
+	if !(Chain{Grants: []Grant{p, c}}).FlowCovers(pii, dests) {
+		t.Fatal("the chain does not cover a flow every grant names")
+	}
+	next := p
+	next.Revision, next.Flows = 2, nil
+	if r, err := CompareRevision(p, next); err != nil || r.Widens {
+		t.Fatalf("removing the flow: widens %v %v", r.Widens, err)
+	}
+	if (Chain{Grants: []Grant{next, c}}).FlowCovers(pii, dests) {
+		t.Fatal("the child's flow survives the parent's narrowing revision")
+	}
+	if (Chain{}).FlowCovers(pii, dests) {
+		t.Fatal("a chain without grants covers a flow")
+	}
+}
+
 // TestHR432_NilFlowsAllowNothing: a grant without flows covers no flow,
 // and a flow never covers an action without destinations.
 func TestHR432_NilFlowsAllowNothing(t *testing.T) {
