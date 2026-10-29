@@ -197,3 +197,17 @@ func TestE2E_M15_SharedMCPState(t *testing.T) {
 		t.Fatalf("%d replicas reported status, want A, B and A after its restart at least", replicas)
 	}
 }
+
+// TestE2E_M15_DiscoveryToReviewedTool: a tool the upstream MCP server lists
+// beyond the reviewed package is drafted, reviewed, signed and activated
+// before any agent can see or call it (G0 M15 D15, D24; helper in
+// m15_discovery_test.go).
+// Covers: F352
+func TestE2E_M15_DiscoveryToReviewedTool(t *testing.T) { discoveryToReviewedTool(t) }
+
+// TestE2E_M15_ResourceAndElicitation: reviewed resources are reads decided
+// by the full pipeline, and elicitation reaches the agent only through the
+// declared, scanned, policy-decided path (G0 M15 D15, D35; helper in
+// m15_surface_test.go).
+// Covers: F352, PN-015.2
+func TestE2E_M15_ResourceAndElicitation(t *testing.T) { m15ResourceAndElicitation(t) }

@@ -35,9 +35,6 @@ import (
 // TestE2E_M15_ResourceAndElicitation (m15_e2e_test.go) runs
 // m15ResourceAndElicitation.
 
-// The exit test calls the helper; until it lands (S15a) nothing else does.
-var _ = m15ResourceAndElicitation
-
 // surfaceVersion is the reviewed MCP variant of the payments package.
 const surfaceVersion = "1.0.2"
 

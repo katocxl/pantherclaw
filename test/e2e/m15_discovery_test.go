@@ -56,7 +56,7 @@ const discoveryPackage = "acme.discovery"
 // package key, imported and activated, it covers lookup_customer: the item
 // is COVERED, its entry APPROVED, and the tool is listed and callable,
 // while the dismissed one stays unlisted.
-func discoveryToReviewedTool(t *testing.T) { //nolint:unused // TestE2E_M15_DiscoveryToReviewedTool (m15_e2e_test.go) calls it
+func discoveryToReviewedTool(t *testing.T) {
 	t.Helper()
 	s := start(t, options{budget: "1000.00"})
 	ctx := context.Background()
