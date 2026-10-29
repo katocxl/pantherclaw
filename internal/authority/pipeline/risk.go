@@ -24,7 +24,7 @@ const RiskWindow = 24 * time.Hour
 // or older fact is no risk, and the newest open one is what policy sees.
 // Risk only makes rules match, so it never allows anything.
 func (p *Pipeline) identityRisk(ctx context.Context, s *state) bool {
-	if s.policy == nil || s.run == nil || !s.policy.Compiled.UsesPrincipal(s.a.Operation) {
+	if !p.at(5) || s.policy == nil || s.run == nil || !s.policy.Compiled.UsesPrincipal(s.a.Operation) {
 		return true
 	}
 	var people []string

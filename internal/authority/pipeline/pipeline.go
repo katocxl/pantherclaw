@@ -90,6 +90,9 @@ type Pipeline struct {
 	// External asks the org's active external policy checks (G0 M16 D81;
 	// external.go). Unset, none is asked (replay and simulation).
 	External ExternalCheck
+	// ReplayOf is the version of the recording a replay decides (Replays);
+	// 0 is Version. A replay of version 4 makes none of version 5's reads.
+	ReplayOf int
 }
 
 // IdentitySummary is the identity part of a decision receipt (ids only).

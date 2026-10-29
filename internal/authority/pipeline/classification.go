@@ -25,7 +25,7 @@ const ClassificationMaxAge = fdomain.MaxLagCeiling
 // policy that names the fact sees it as facts.pc_classification through
 // the ordinary fact requirements.
 func (p *Pipeline) classify(ctx context.Context, s *state) bool {
-	if s.def == nil || s.def.Access != defs.AccessRead {
+	if !p.at(5) || s.def == nil || s.def.Access != defs.AccessRead {
 		return true
 	}
 	got, err := p.Reader.Facts(ctx, s.req.Org, s.connID(), s.a.Target.Type, s.a.Target.ID, []string{fdomain.NameClassification})

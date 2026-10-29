@@ -238,7 +238,7 @@ func (e *Engine) replay(ctx context.Context, org ids.OrgID, txn ids.UUID, evalua
 	if err != nil {
 		return out.incomplete(Limitation{Code: IncompleteInputsUnreadable, Detail: "the recorded request does not parse"}), nil //nolint:nilerr // incomplete, not a failure
 	}
-	ev, err := (&pipeline.Pipeline{}).EvaluateWith(ctx, reader, req)
+	ev, err := (&pipeline.Pipeline{ReplayOf: rec.Pipeline}).EvaluateWith(ctx, reader, req)
 	if err != nil {
 		return out.incomplete(gaps(rd.Gaps())...), nil //nolint:nilerr // incomplete, not a failure
 	}
@@ -282,10 +282,10 @@ func (e *Engine) open(ctx context.Context, org ids.OrgID, txn ids.UUID, evaluati
 		return nil, &Limitation{Code: IncompleteInputsTruncated, Detail: "the inputs were larger than 32 KiB compressed and only their digest was kept"}
 	case row.Format != recording.FormatVersion:
 		return nil, &Limitation{Code: IncompleteFormatUnsupported, Detail: fmt.Sprintf("the inputs use format %d; this server reads format %d", row.Format, recording.FormatVersion)}
-	case row.Pipeline != pipeline.Version:
+	case !pipeline.Replays(row.Pipeline):
 		return nil, &Limitation{
 			Code:   IncompletePipelineVersion,
-			Detail: fmt.Sprintf("the evaluation ran pipeline version %d; this server replays version %d", row.Pipeline, pipeline.Version),
+			Detail: fmt.Sprintf("the evaluation ran pipeline version %d; this server replays versions 4 and %d", row.Pipeline, pipeline.Version),
 		}
 	}
 	rec, err := e.Inputs.Open(ctx, org, txn, evaluation, row)
