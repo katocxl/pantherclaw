@@ -524,7 +524,7 @@ func (s *Service) attestAzure(ctx context.Context, org ids.OrgID, a Attestation,
 		out = append(out, attested{
 			rev: r, match: m, issuer: issuers.AzureIssuer(c.TenantID), key: issuers.ReplayKey(c.UTI, a.Token), window: w,
 			claims: withClaims(m.Binding, map[string]string{
-				"app_id": app, "xms_mirid": c.MIRID, "token_expires_at": tw.ExpiresAt.UTC().Format(time.RFC3339),
+				"app_id": app, "token_expires_at": tw.ExpiresAt.UTC().Format(time.RFC3339),
 			}),
 		})
 	}

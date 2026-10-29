@@ -49,7 +49,7 @@ func bindingFromProto(req *pantherclawv1.ProposeIssuerEntryRequest) app.Binding 
 	}
 	if az := req.GetAzureMi(); az != nil {
 		b.AzureMI = &issuers.AzureMIBinding{
-			TenantID: az.GetTenantId(), AppID: az.GetAppId(), ObjectID: az.GetObjectId(), ResourceID: az.GetResourceId(),
+			TenantID: az.GetTenantId(), AppID: az.GetAppId(), ObjectID: az.GetObjectId(),
 		}
 	}
 	if ea := req.GetEntraAgent(); ea != nil {
@@ -115,7 +115,7 @@ func revisionProto(r app.Revision) *pantherclawv1.IssuerRevision {
 	if az := r.Binding.AzureMI; az != nil {
 		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_AZURE_MI
 		out.Binding = &pantherclawv1.IssuerRevision_AzureMi{AzureMi: &pantherclawv1.AzureMiBinding{
-			TenantId: az.TenantID, AppId: az.AppID, ObjectId: az.ObjectID, ResourceId: az.ResourceID,
+			TenantId: az.TenantID, AppId: az.AppID, ObjectId: az.ObjectID,
 		}}
 	}
 	if ea := r.Binding.EntraAgent; ea != nil {

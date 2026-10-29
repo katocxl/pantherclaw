@@ -55049,13 +55049,6 @@
             "title": "object_id",
             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
             "description": "The managed identity's object (principal) id."
-          },
-          "resourceId": {
-            "type": "string",
-            "title": "resource_id",
-            "maxLength": 512,
-            "pattern": "^$|^/subscriptions/",
-            "description": "Optional exact Azure resource id of the identity (xms_mirid)."
           }
         },
         "title": "AzureMiBinding",
@@ -55082,23 +55075,6 @@
             "title": "object_id",
             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
             "description": "The managed identity's object (principal) id."
-          },
-          "resourceId": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "title": "resource_id",
-            "maxLength": 512,
-            "description": "Optional exact Azure resource id of the identity (xms_mirid).",
-            "anyOf": [
-              {
-                "pattern": "^$|^/subscriptions/"
-              },
-              {
-                "maxLength": 0
-              }
-            ]
           }
         },
         "title": "AzureMiBinding",

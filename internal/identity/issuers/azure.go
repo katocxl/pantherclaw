@@ -67,8 +67,6 @@ type AzureMIBinding struct {
 	AppID    string `json:"app_id"`
 	// ObjectID is the managed identity's service principal object id.
 	ObjectID string `json:"object_id"`
-	// ResourceID optionally pins xms_mirid exactly.
-	ResourceID string `json:"resource_id,omitzero"`
 }
 
 // Validate checks the binding (HR-469).
@@ -79,9 +77,6 @@ func (b AzureMIBinding) Validate() error {
 			errs = append(errs, name+" must be a lower-case GUID")
 		}
 	}
-	if b.ResourceID != "" && (len(b.ResourceID) > 512 || !strings.HasPrefix(b.ResourceID, "/subscriptions/")) {
-		errs = append(errs, "resource_id must be an Azure resource id")
-	}
 	if len(errs) > 0 {
 		slices.Sort(errs)
 		return fmt.Errorf("%w: %s", ErrInvalidEntry, strings.Join(errs, "; "))
@@ -91,14 +86,13 @@ func (b AzureMIBinding) Validate() error {
 
 // Widening lists what b accepts that prev did not (HR-141).
 func (b AzureMIBinding) Widening(prev *AzureMIBinding) []string {
-	if prev == nil {
+	switch {
+	case prev == nil:
 		return []string{"new trusted issuer entry"}
+	case *prev != b:
+		return []string{"tenant, app or managed identity changed"}
 	}
-	var out []string
-	if prev.TenantID != b.TenantID || prev.AppID != b.AppID || prev.ObjectID != b.ObjectID {
-		out = append(out, "tenant, app or managed identity changed")
-	}
-	return append(out, widenedPin("resource_id", prev.ResourceID, b.ResourceID)...)
+	return nil
 }
 
 // AzureClaims are the claims of an Entra access token whose signature was
@@ -109,7 +103,6 @@ type AzureClaims struct {
 	TenantID string  `json:"tid"`
 	ObjectID string  `json:"oid"`
 	IDType   *string `json:"idtyp"`
-	MIRID    string  `json:"xms_mirid"`
 	UTI      string  `json:"uti"`
 }
 
@@ -165,8 +158,7 @@ func matchEntra(tenant, app, object string, c AzureClaims) error {
 }
 
 // MatchAzureMI applies the Azure managed identity preset (HR-469): the
-// shared Entra rules, an app-only token (idtyp app when present) and the
-// pinned xms_mirid when the entry pins one.
+// shared Entra rules and an app-only token (idtyp app when present).
 func MatchAzureMI(b AzureMIBinding, c AzureClaims) (Match, error) {
 	if err := b.Validate(); err != nil {
 		return Match{}, err
@@ -174,11 +166,8 @@ func MatchAzureMI(b AzureMIBinding, c AzureClaims) (Match, error) {
 	if err := matchEntra(b.TenantID, b.AppID, b.ObjectID, c); err != nil {
 		return Match{}, err
 	}
-	switch {
-	case c.IDType != nil && *c.IDType != "app":
+	if c.IDType != nil && *c.IDType != "app" {
 		return Match{}, rejected("not an app-only token")
-	case b.ResourceID != "" && c.MIRID != b.ResourceID:
-		return Match{}, rejected("managed identity resource")
 	}
 	return Match{Binding: Binding{"tenant_id": c.TenantID, "object_id": c.ObjectID}}, nil
 }

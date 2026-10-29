@@ -290,7 +290,7 @@ Azure managed identity tokens are Microsoft Entra access tokens for an app; they
    ]}
    ```
    Tokens are verified only with the tenant's keys at `https://login.microsoftonline.com/<tenant id>/discovery/v2.0/keys`.
-2. An admin proposes an entry for a `service` agent that pins the tenant, the app and the managed identity's **object (principal) id**, optionally its resource id, and an **Identity Publisher** activates it:
+2. An admin proposes an entry for a `service` agent that pins the tenant, the app and the managed identity's **object (principal) id**, and an **Identity Publisher** activates it:
    ```bash
    pclaw issuer propose-azure-mi --agent <agent> --tenant-id <tenant id> --app-id <app id> \
      --object-id <principal id> --auto-admit --reason "service agent"
@@ -299,7 +299,7 @@ Azure managed identity tokens are Microsoft Entra access tokens for an app; they
    ```bash
    pclaw workload renew --key-file workload.json --out token.json --azure-app <app id>
    ```
-   Each token attests once. Azure caches a managed identity's token for about a day, so L2 lasts an hour from the attestation and renewals continue at L1 until Azure hands out a new token.
+   Each token attests once. Azure caches a managed identity's token for about 24 hours (IMDS returns the same token until it expires), so a managed identity gets **about one hour of L2 per day**: L2 lasts at most an hour from the attestation, and renewals continue at L1 until Azure hands out a new token.
 
 ## 9. Microsoft Entra Agent ID (L2, M17)
 

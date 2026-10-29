@@ -1006,9 +1006,7 @@ type AzureMiBinding struct {
 	// Entra app (client) id the tokens are issued for.
 	AppId string `protobuf:"bytes,2,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
 	// The managed identity's object (principal) id.
-	ObjectId string `protobuf:"bytes,3,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	// Optional exact Azure resource id of the identity (xms_mirid).
-	ResourceId    string `protobuf:"bytes,4,opt,name=resource_id,json=resourceId,proto3" json:"resource_id,omitempty"`
+	ObjectId      string `protobuf:"bytes,3,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1060,13 +1058,6 @@ func (x *AzureMiBinding) GetAppId() string {
 func (x *AzureMiBinding) GetObjectId() string {
 	if x != nil {
 		return x.ObjectId
-	}
-	return ""
-}
-
-func (x *AzureMiBinding) GetResourceId() string {
-	if x != nil {
-		return x.ResourceId
 	}
 	return ""
 }
@@ -3078,13 +3069,11 @@ const file_pantherclaw_v1_identity_proto_rawDesc = "" +
 	"AwsBinding\x121\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tB\x12\xbaH\x0fr\r2\v^[0-9]{12}$R\taccountId\x12>\n" +
-	"\trole_name\x18\x02 \x01(\tB!\xbaH\x1er\x1c2\x1a^[A-Za-z0-9+=,.@_-]{1,64}$R\broleName\"\xf6\x02\n" +
+	"\trole_name\x18\x02 \x01(\tB!\xbaH\x1er\x1c2\x1a^[A-Za-z0-9+=,.@_-]{1,64}$R\broleName\"\xb6\x02\n" +
 	"\x0eAzureMiBinding\x12b\n" +
 	"\ttenant_id\x18\x01 \x01(\tBE\xbaHBr@2>^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$R\btenantId\x12\\\n" +
 	"\x06app_id\x18\x02 \x01(\tBE\xbaHBr@2>^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$R\x05appId\x12b\n" +
-	"\tobject_id\x18\x03 \x01(\tBE\xbaHBr@2>^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$R\bobjectId\x12>\n" +
-	"\vresource_id\x18\x04 \x01(\tB\x1d\xbaH\x1ar\x18\x18\x80\x042\x13^$|^/subscriptions/R\n" +
-	"resourceId\"\xb9\x02\n" +
+	"\tobject_id\x18\x03 \x01(\tBE\xbaHBr@2>^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$R\bobjectId\"\xb9\x02\n" +
 	"\x11EntraAgentBinding\x12b\n" +
 	"\ttenant_id\x18\x01 \x01(\tBE\xbaHBr@2>^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$R\btenantId\x12\\\n" +
 	"\x06app_id\x18\x02 \x01(\tBE\xbaHBr@2>^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$R\x05appId\x12b\n" +

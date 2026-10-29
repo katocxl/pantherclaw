@@ -322,11 +322,6 @@ message AzureMiBinding {
   string app_id = 2 [(buf.validate.field).string.pattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"];
   // The managed identity's object (principal) id.
   string object_id = 3 [(buf.validate.field).string.pattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"];
-  // Optional exact Azure resource id of the identity (xms_mirid).
-  string resource_id = 4 [(buf.validate.field).string = {
-    max_len: 512
-    pattern: "^$|^/subscriptions/"
-  }];
 }
 
 // EntraAgentBinding binds Entra Agent ID tokens to one agent identity
