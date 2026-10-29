@@ -253,6 +253,11 @@ func TestHR196_APackHoldsEveryEffectStateOfItsScope(t *testing.T) {
 	}})
 	raw := p.download(auditor, pk.ID)
 	m := manifestOf(t, raw)
+	// An auditor holds coverage.read where the run's agent lives: the run's
+	// coverage and telemetry gaps are listed, not left out (rows26 D25).
+	if hasGap(m, packbuild.GapCoverageGapsOmitted) {
+		t.Errorf("an auditor's run pack left out its coverage gaps: %+v", m.Gaps)
+	}
 	states := map[string]string{}
 	for _, tx := range m.Transactions {
 		states[tx.ID] = tx.Effect

@@ -26,6 +26,75 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// InspectSection is one section of a run inspection.
+type InspectSection int32
+
+const (
+	InspectSection_INSPECT_SECTION_UNSPECIFIED InspectSection = 0
+	// The run's events and inferred phases (evidence.read).
+	InspectSection_INSPECT_SECTION_TIMELINE InspectSection = 1
+	// Parent and child runs and the automation executions before and after
+	// the run (evidence.read and automation.read).
+	InspectSection_INSPECT_SECTION_LINEAGE InspectSection = 2
+	// What the run's actions reserved, spent and released (budget.read).
+	InspectSection_INSPECT_SECTION_BUDGET InspectSection = 3
+	// Holds on the run's actions (approval.read).
+	InspectSection_INSPECT_SECTION_APPROVALS InspectSection = 4
+	// The coverage its decisions claimed (coverage.read).
+	InspectSection_INSPECT_SECTION_COVERAGE InspectSection = 5
+	// Missing evidence (evidence.read and coverage.read).
+	InspectSection_INSPECT_SECTION_GAPS InspectSection = 6
+)
+
+// Enum value maps for InspectSection.
+var (
+	InspectSection_name = map[int32]string{
+		0: "INSPECT_SECTION_UNSPECIFIED",
+		1: "INSPECT_SECTION_TIMELINE",
+		2: "INSPECT_SECTION_LINEAGE",
+		3: "INSPECT_SECTION_BUDGET",
+		4: "INSPECT_SECTION_APPROVALS",
+		5: "INSPECT_SECTION_COVERAGE",
+		6: "INSPECT_SECTION_GAPS",
+	}
+	InspectSection_value = map[string]int32{
+		"INSPECT_SECTION_UNSPECIFIED": 0,
+		"INSPECT_SECTION_TIMELINE":    1,
+		"INSPECT_SECTION_LINEAGE":     2,
+		"INSPECT_SECTION_BUDGET":      3,
+		"INSPECT_SECTION_APPROVALS":   4,
+		"INSPECT_SECTION_COVERAGE":    5,
+		"INSPECT_SECTION_GAPS":        6,
+	}
+)
+
+func (x InspectSection) Enum() *InspectSection {
+	p := new(InspectSection)
+	*p = x
+	return p
+}
+
+func (x InspectSection) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (InspectSection) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_investigations_proto_enumTypes[0].Descriptor()
+}
+
+func (InspectSection) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_investigations_proto_enumTypes[0]
+}
+
+func (x InspectSection) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use InspectSection.Descriptor instead.
+func (InspectSection) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_investigations_proto_rawDescGZIP(), []int{0}
+}
+
 // InvestigationParty is a launcher, principal or grantor.
 type InvestigationParty struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1848,6 +1917,910 @@ func (x *CompareRunResponse) GetScopeLimited() bool {
 	return false
 }
 
+// InspectRunRequest names a run and the sections to read.
+type InspectRunRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Run id.
+	RunId string `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	// Timeline events per page: at most 500, 0 for 200.
+	TimelinePageSize int32 `protobuf:"varint,2,opt,name=timeline_page_size,json=timelinePageSize,proto3" json:"timeline_page_size,omitempty"`
+	// The next_page_token of the previous page; empty for the first.
+	TimelinePageToken string `protobuf:"bytes,3,opt,name=timeline_page_token,json=timelinePageToken,proto3" json:"timeline_page_token,omitempty"`
+	// The sections to read; empty for all.
+	Include       []InspectSection `protobuf:"varint,4,rep,packed,name=include,proto3,enum=pantherclaw.v1.InspectSection" json:"include,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InspectRunRequest) Reset() {
+	*x = InspectRunRequest{}
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InspectRunRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InspectRunRequest) ProtoMessage() {}
+
+func (x *InspectRunRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InspectRunRequest.ProtoReflect.Descriptor instead.
+func (*InspectRunRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_investigations_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *InspectRunRequest) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *InspectRunRequest) GetTimelinePageSize() int32 {
+	if x != nil {
+		return x.TimelinePageSize
+	}
+	return 0
+}
+
+func (x *InspectRunRequest) GetTimelinePageToken() string {
+	if x != nil {
+		return x.TimelinePageToken
+	}
+	return ""
+}
+
+func (x *InspectRunRequest) GetInclude() []InspectSection {
+	if x != nil {
+		return x.Include
+	}
+	return nil
+}
+
+// RunSummary is who ran what under which authority.
+type RunSummary struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Run id.
+	RunId string `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	// Its agent.
+	AgentId string `protobuf:"bytes,2,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	// UNTRUSTED task label from the launcher; it never changes scope.
+	TaskRef string `protobuf:"bytes,3,opt,name=task_ref,json=taskRef,proto3" json:"task_ref,omitempty"`
+	// Who started the run.
+	Launcher *InvestigationParty `protobuf:"bytes,4,opt,name=launcher,proto3" json:"launcher,omitempty"`
+	// Whose authority the run uses.
+	Principal *InvestigationParty `protobuf:"bytes,5,opt,name=principal,proto3" json:"principal,omitempty"`
+	// The grant; empty for a run without one.
+	GrantId string `protobuf:"bytes,6,opt,name=grant_id,json=grantId,proto3" json:"grant_id,omitempty"`
+	// Its state.
+	State string `protobuf:"bytes,7,opt,name=state,proto3" json:"state,omitempty"`
+	// When it started.
+	StartTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	// When it ended; unset while active.
+	EndTime *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	// Why it ended; empty while active.
+	EndReason string `protobuf:"bytes,10,opt,name=end_reason,json=endReason,proto3" json:"end_reason,omitempty"`
+	// The parent run; empty for a top-level run.
+	ParentRunId string `protobuf:"bytes,11,opt,name=parent_run_id,json=parentRunId,proto3" json:"parent_run_id,omitempty"`
+	// Nesting depth; 0 for a top-level run.
+	Depth         int32 `protobuf:"varint,12,opt,name=depth,proto3" json:"depth,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunSummary) Reset() {
+	*x = RunSummary{}
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunSummary) ProtoMessage() {}
+
+func (x *RunSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunSummary.ProtoReflect.Descriptor instead.
+func (*RunSummary) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_investigations_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *RunSummary) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *RunSummary) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *RunSummary) GetTaskRef() string {
+	if x != nil {
+		return x.TaskRef
+	}
+	return ""
+}
+
+func (x *RunSummary) GetLauncher() *InvestigationParty {
+	if x != nil {
+		return x.Launcher
+	}
+	return nil
+}
+
+func (x *RunSummary) GetPrincipal() *InvestigationParty {
+	if x != nil {
+		return x.Principal
+	}
+	return nil
+}
+
+func (x *RunSummary) GetGrantId() string {
+	if x != nil {
+		return x.GrantId
+	}
+	return ""
+}
+
+func (x *RunSummary) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *RunSummary) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
+	}
+	return nil
+}
+
+func (x *RunSummary) GetEndTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EndTime
+	}
+	return nil
+}
+
+func (x *RunSummary) GetEndReason() string {
+	if x != nil {
+		return x.EndReason
+	}
+	return ""
+}
+
+func (x *RunSummary) GetParentRunId() string {
+	if x != nil {
+		return x.ParentRunId
+	}
+	return ""
+}
+
+func (x *RunSummary) GetDepth() int32 {
+	if x != nil {
+		return x.Depth
+	}
+	return 0
+}
+
+// RunExecutionLink is an automation execution linked to a run.
+type RunExecutionLink struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Execution id.
+	ExecutionId string `protobuf:"bytes,1,opt,name=execution_id,json=executionId,proto3" json:"execution_id,omitempty"`
+	// Its automation.
+	AutomationId string `protobuf:"bytes,2,opt,name=automation_id,json=automationId,proto3" json:"automation_id,omitempty"`
+	// LIVE, SHADOW or TEST.
+	Mode string `protobuf:"bytes,3,opt,name=mode,proto3" json:"mode,omitempty"`
+	// Its state.
+	State string `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
+	// The trigger kind.
+	TriggerKind string `protobuf:"bytes,5,opt,name=trigger_kind,json=triggerKind,proto3" json:"trigger_kind,omitempty"`
+	// When it was created.
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// When it ended; unset while active.
+	EndTime       *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunExecutionLink) Reset() {
+	*x = RunExecutionLink{}
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunExecutionLink) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunExecutionLink) ProtoMessage() {}
+
+func (x *RunExecutionLink) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunExecutionLink.ProtoReflect.Descriptor instead.
+func (*RunExecutionLink) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_investigations_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *RunExecutionLink) GetExecutionId() string {
+	if x != nil {
+		return x.ExecutionId
+	}
+	return ""
+}
+
+func (x *RunExecutionLink) GetAutomationId() string {
+	if x != nil {
+		return x.AutomationId
+	}
+	return ""
+}
+
+func (x *RunExecutionLink) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *RunExecutionLink) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *RunExecutionLink) GetTriggerKind() string {
+	if x != nil {
+		return x.TriggerKind
+	}
+	return ""
+}
+
+func (x *RunExecutionLink) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *RunExecutionLink) GetEndTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EndTime
+	}
+	return nil
+}
+
+// RunLineage is where the run sits among runs and automations (F065).
+type RunLineage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The parent runs, nearest first, up to the caller's scope.
+	Parents []*InvestigationDelegation `protobuf:"bytes,1,rep,name=parents,proto3" json:"parents,omitempty"`
+	// Child runs the caller may read (at most 200).
+	Children []*TimelineLane `protobuf:"bytes,2,rep,name=children,proto3" json:"children,omitempty"`
+	// The run has more children than one inspection holds.
+	ChildrenTruncated bool `protobuf:"varint,3,opt,name=children_truncated,json=childrenTruncated,proto3" json:"children_truncated,omitempty"`
+	// The execution that launched the run; unset when none did.
+	UpstreamExecution *RunExecutionLink `protobuf:"bytes,4,opt,name=upstream_execution,json=upstreamExecution,proto3" json:"upstream_execution,omitempty"`
+	// Executions whose subjects name the run, oldest first (at most 200).
+	DownstreamExecutions []*RunExecutionLink `protobuf:"bytes,5,rep,name=downstream_executions,json=downstreamExecutions,proto3" json:"downstream_executions,omitempty"`
+	// More executions name the run than one inspection holds.
+	DownstreamTruncated bool `protobuf:"varint,6,opt,name=downstream_truncated,json=downstreamTruncated,proto3" json:"downstream_truncated,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *RunLineage) Reset() {
+	*x = RunLineage{}
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunLineage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunLineage) ProtoMessage() {}
+
+func (x *RunLineage) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunLineage.ProtoReflect.Descriptor instead.
+func (*RunLineage) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_investigations_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *RunLineage) GetParents() []*InvestigationDelegation {
+	if x != nil {
+		return x.Parents
+	}
+	return nil
+}
+
+func (x *RunLineage) GetChildren() []*TimelineLane {
+	if x != nil {
+		return x.Children
+	}
+	return nil
+}
+
+func (x *RunLineage) GetChildrenTruncated() bool {
+	if x != nil {
+		return x.ChildrenTruncated
+	}
+	return false
+}
+
+func (x *RunLineage) GetUpstreamExecution() *RunExecutionLink {
+	if x != nil {
+		return x.UpstreamExecution
+	}
+	return nil
+}
+
+func (x *RunLineage) GetDownstreamExecutions() []*RunExecutionLink {
+	if x != nil {
+		return x.DownstreamExecutions
+	}
+	return nil
+}
+
+func (x *RunLineage) GetDownstreamTruncated() bool {
+	if x != nil {
+		return x.DownstreamTruncated
+	}
+	return false
+}
+
+// RunTimeline is one page of the run's timeline.
+type RunTimeline struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Events, oldest first.
+	Events []*TimelineEvent `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	// Inferred phases (Team edition; empty otherwise).
+	Phases        []*TimelinePhase `protobuf:"bytes,2,rep,name=phases,proto3" json:"phases,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunTimeline) Reset() {
+	*x = RunTimeline{}
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunTimeline) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunTimeline) ProtoMessage() {}
+
+func (x *RunTimeline) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunTimeline.ProtoReflect.Descriptor instead.
+func (*RunTimeline) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_investigations_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *RunTimeline) GetEvents() []*TimelineEvent {
+	if x != nil {
+		return x.Events
+	}
+	return nil
+}
+
+func (x *RunTimeline) GetPhases() []*TimelinePhase {
+	if x != nil {
+		return x.Phases
+	}
+	return nil
+}
+
+// RunBudgetLine is what the run's actions did to one budget account or
+// counter (F227).
+type RunBudgetLine struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The budget account or counter.
+	AccountId string `protobuf:"bytes,1,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	// Its rule.
+	Rule string `protobuf:"bytes,2,opt,name=rule,proto3" json:"rule,omitempty"`
+	// The account's currency; empty for a counter or a count-only rule.
+	Currency string `protobuf:"bytes,3,opt,name=currency,proto3" json:"currency,omitempty"`
+	// Held by the run's open reservations: an amount, or a count for a
+	// counter.
+	Held string `protobuf:"bytes,4,opt,name=held,proto3" json:"held,omitempty"`
+	// Committed by the run's actions.
+	Committed string `protobuf:"bytes,5,opt,name=committed,proto3" json:"committed,omitempty"`
+	// Released.
+	Released string `protobuf:"bytes,6,opt,name=released,proto3" json:"released,omitempty"`
+	// How many reservations the run made on it.
+	Count int64 `protobuf:"varint,7,opt,name=count,proto3" json:"count,omitempty"`
+	// What is left of the rule's amount limit in its current period; empty
+	// for a counter, a rule without an amount limit or an earlier period.
+	Remaining     string `protobuf:"bytes,8,opt,name=remaining,proto3" json:"remaining,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunBudgetLine) Reset() {
+	*x = RunBudgetLine{}
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunBudgetLine) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunBudgetLine) ProtoMessage() {}
+
+func (x *RunBudgetLine) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunBudgetLine.ProtoReflect.Descriptor instead.
+func (*RunBudgetLine) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_investigations_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *RunBudgetLine) GetAccountId() string {
+	if x != nil {
+		return x.AccountId
+	}
+	return ""
+}
+
+func (x *RunBudgetLine) GetRule() string {
+	if x != nil {
+		return x.Rule
+	}
+	return ""
+}
+
+func (x *RunBudgetLine) GetCurrency() string {
+	if x != nil {
+		return x.Currency
+	}
+	return ""
+}
+
+func (x *RunBudgetLine) GetHeld() string {
+	if x != nil {
+		return x.Held
+	}
+	return ""
+}
+
+func (x *RunBudgetLine) GetCommitted() string {
+	if x != nil {
+		return x.Committed
+	}
+	return ""
+}
+
+func (x *RunBudgetLine) GetReleased() string {
+	if x != nil {
+		return x.Released
+	}
+	return ""
+}
+
+func (x *RunBudgetLine) GetCount() int64 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+func (x *RunBudgetLine) GetRemaining() string {
+	if x != nil {
+		return x.Remaining
+	}
+	return ""
+}
+
+// RunRouteCoverage is a coverage snapshot the run's decisions claimed.
+type RunRouteCoverage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The connection.
+	ConnectionId string `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// The operation.
+	Operation string `protobuf:"bytes,2,opt,name=operation,proto3" json:"operation,omitempty"`
+	// The snapshot.
+	SnapshotId string `protobuf:"bytes,3,opt,name=snapshot_id,json=snapshotId,proto3" json:"snapshot_id,omitempty"`
+	// UNKNOWN, OBSERVE_ONLY, PARTIAL or ENFORCED.
+	State string `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
+	// Why.
+	Reasons []string `protobuf:"bytes,5,rep,name=reasons,proto3" json:"reasons,omitempty"`
+	// When it was computed.
+	ComputedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=computed_at,json=computedAt,proto3" json:"computed_at,omitempty"`
+	// A decision claimed it after it had expired.
+	StaleAtDecision bool `protobuf:"varint,7,opt,name=stale_at_decision,json=staleAtDecision,proto3" json:"stale_at_decision,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *RunRouteCoverage) Reset() {
+	*x = RunRouteCoverage{}
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunRouteCoverage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunRouteCoverage) ProtoMessage() {}
+
+func (x *RunRouteCoverage) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunRouteCoverage.ProtoReflect.Descriptor instead.
+func (*RunRouteCoverage) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_investigations_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *RunRouteCoverage) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *RunRouteCoverage) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
+}
+
+func (x *RunRouteCoverage) GetSnapshotId() string {
+	if x != nil {
+		return x.SnapshotId
+	}
+	return ""
+}
+
+func (x *RunRouteCoverage) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *RunRouteCoverage) GetReasons() []string {
+	if x != nil {
+		return x.Reasons
+	}
+	return nil
+}
+
+func (x *RunRouteCoverage) GetComputedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ComputedAt
+	}
+	return nil
+}
+
+func (x *RunRouteCoverage) GetStaleAtDecision() bool {
+	if x != nil {
+		return x.StaleAtDecision
+	}
+	return false
+}
+
+// RunGap is evidence the inspection expected and did not find (F229).
+type RunGap struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// NO_DECISION_RECEIPT, OUTCOME_UNKNOWN, NO_OUTCOME_RECORDED,
+	// NO_COVERAGE_CLAIM, COVERAGE_BELOW_ENFORCED or TELEMETRY_GAP.
+	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	// The transaction; empty for a telemetry gap.
+	TransactionId string `protobuf:"bytes,2,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
+	// When.
+	Time *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=time,proto3" json:"time,omitempty"`
+	// The gateway of a telemetry gap; empty otherwise.
+	GatewayId string `protobuf:"bytes,4,opt,name=gateway_id,json=gatewayId,proto3" json:"gateway_id,omitempty"`
+	// The connection; empty when none.
+	ConnectionId string `protobuf:"bytes,5,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// The operation; empty when none.
+	Operation     string `protobuf:"bytes,6,opt,name=operation,proto3" json:"operation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunGap) Reset() {
+	*x = RunGap{}
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunGap) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunGap) ProtoMessage() {}
+
+func (x *RunGap) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunGap.ProtoReflect.Descriptor instead.
+func (*RunGap) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_investigations_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *RunGap) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *RunGap) GetTransactionId() string {
+	if x != nil {
+		return x.TransactionId
+	}
+	return ""
+}
+
+func (x *RunGap) GetTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Time
+	}
+	return nil
+}
+
+func (x *RunGap) GetGatewayId() string {
+	if x != nil {
+		return x.GatewayId
+	}
+	return ""
+}
+
+func (x *RunGap) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *RunGap) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
+}
+
+// InspectRunResponse is one run end to end (F224).
+type InspectRunResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The run.
+	Run *RunSummary `protobuf:"bytes,1,opt,name=run,proto3" json:"run,omitempty"`
+	// Its lineage; unset when omitted or not asked for.
+	Lineage *RunLineage `protobuf:"bytes,2,opt,name=lineage,proto3" json:"lineage,omitempty"`
+	// One page of its timeline; unset when omitted or not asked for.
+	Timeline *RunTimeline `protobuf:"bytes,3,opt,name=timeline,proto3" json:"timeline,omitempty"`
+	// The next timeline page; empty on the last.
+	NextPageToken string `protobuf:"bytes,4,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	// The run has more actions than one timeline holds.
+	TimelineTruncated bool `protobuf:"varint,5,opt,name=timeline_truncated,json=timelineTruncated,proto3" json:"timeline_truncated,omitempty"`
+	// Its budget lines.
+	Budget []*RunBudgetLine `protobuf:"bytes,6,rep,name=budget,proto3" json:"budget,omitempty"`
+	// Holds on its actions (at most 1000).
+	Approvals []*InvestigationApproval `protobuf:"bytes,7,rep,name=approvals,proto3" json:"approvals,omitempty"`
+	// The coverage its decisions claimed (at most 1000 snapshots).
+	Coverage []*RunRouteCoverage `protobuf:"bytes,8,rep,name=coverage,proto3" json:"coverage,omitempty"`
+	// Missing evidence.
+	Gaps []*RunGap `protobuf:"bytes,9,rep,name=gaps,proto3" json:"gaps,omitempty"`
+	// Asked-for sections the caller may not read, left out whole.
+	OmittedSections []InspectSection `protobuf:"varint,10,rep,packed,name=omitted_sections,json=omittedSections,proto3,enum=pantherclaw.v1.InspectSection" json:"omitted_sections,omitempty"`
+	// The caller's scope is narrower than the organization.
+	ScopeLimited  bool `protobuf:"varint,11,opt,name=scope_limited,json=scopeLimited,proto3" json:"scope_limited,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InspectRunResponse) Reset() {
+	*x = InspectRunResponse{}
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InspectRunResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InspectRunResponse) ProtoMessage() {}
+
+func (x *InspectRunResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InspectRunResponse.ProtoReflect.Descriptor instead.
+func (*InspectRunResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_investigations_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *InspectRunResponse) GetRun() *RunSummary {
+	if x != nil {
+		return x.Run
+	}
+	return nil
+}
+
+func (x *InspectRunResponse) GetLineage() *RunLineage {
+	if x != nil {
+		return x.Lineage
+	}
+	return nil
+}
+
+func (x *InspectRunResponse) GetTimeline() *RunTimeline {
+	if x != nil {
+		return x.Timeline
+	}
+	return nil
+}
+
+func (x *InspectRunResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+func (x *InspectRunResponse) GetTimelineTruncated() bool {
+	if x != nil {
+		return x.TimelineTruncated
+	}
+	return false
+}
+
+func (x *InspectRunResponse) GetBudget() []*RunBudgetLine {
+	if x != nil {
+		return x.Budget
+	}
+	return nil
+}
+
+func (x *InspectRunResponse) GetApprovals() []*InvestigationApproval {
+	if x != nil {
+		return x.Approvals
+	}
+	return nil
+}
+
+func (x *InspectRunResponse) GetCoverage() []*RunRouteCoverage {
+	if x != nil {
+		return x.Coverage
+	}
+	return nil
+}
+
+func (x *InspectRunResponse) GetGaps() []*RunGap {
+	if x != nil {
+		return x.Gaps
+	}
+	return nil
+}
+
+func (x *InspectRunResponse) GetOmittedSections() []InspectSection {
+	if x != nil {
+		return x.OmittedSections
+	}
+	return nil
+}
+
+func (x *InspectRunResponse) GetScopeLimited() bool {
+	if x != nil {
+		return x.ScopeLimited
+	}
+	return false
+}
+
 var File_pantherclaw_v1_investigations_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_investigations_proto_rawDesc = "" +
@@ -2024,13 +2997,107 @@ const file_pantherclaw_v1_investigations_proto_rawDesc = "" +
 	"\x19reference_median_accepted\x18\v \x01(\x03R\x17referenceMedianAccepted\x12*\n" +
 	"\x11post_task_actions\x18\f \x01(\x03R\x0fpostTaskActions\x12\x14\n" +
 	"\x05basis\x18\r \x01(\tR\x05basis\x12#\n" +
-	"\rscope_limited\x18\x0e \x01(\bR\fscopeLimited2\xab\x03\n" +
+	"\rscope_limited\x18\x0e \x01(\bR\fscopeLimited\"\xf7\x01\n" +
+	"\x11InspectRunRequest\x12\x1f\n" +
+	"\x06run_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x05runId\x128\n" +
+	"\x12timeline_page_size\x18\x02 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xf4\x03(\x00R\x10timelinePageSize\x128\n" +
+	"\x13timeline_page_token\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\xc8\x01R\x11timelinePageToken\x12M\n" +
+	"\ainclude\x18\x04 \x03(\x0e2\x1e.pantherclaw.v1.InspectSectionB\x13\xbaH\x10\x92\x01\r\x10\x06\x18\x01\"\a\x82\x01\x04\x10\x01 \x00R\ainclude\"\xd7\x03\n" +
+	"\n" +
+	"RunSummary\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x19\n" +
+	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12\x19\n" +
+	"\btask_ref\x18\x03 \x01(\tR\ataskRef\x12>\n" +
+	"\blauncher\x18\x04 \x01(\v2\".pantherclaw.v1.InvestigationPartyR\blauncher\x12@\n" +
+	"\tprincipal\x18\x05 \x01(\v2\".pantherclaw.v1.InvestigationPartyR\tprincipal\x12\x19\n" +
+	"\bgrant_id\x18\x06 \x01(\tR\agrantId\x12\x14\n" +
+	"\x05state\x18\a \x01(\tR\x05state\x129\n" +
+	"\n" +
+	"start_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +
+	"\bend_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12\x1d\n" +
+	"\n" +
+	"end_reason\x18\n" +
+	" \x01(\tR\tendReason\x12\"\n" +
+	"\rparent_run_id\x18\v \x01(\tR\vparentRunId\x12\x14\n" +
+	"\x05depth\x18\f \x01(\x05R\x05depth\"\x9b\x02\n" +
+	"\x10RunExecutionLink\x12!\n" +
+	"\fexecution_id\x18\x01 \x01(\tR\vexecutionId\x12#\n" +
+	"\rautomation_id\x18\x02 \x01(\tR\fautomationId\x12\x12\n" +
+	"\x04mode\x18\x03 \x01(\tR\x04mode\x12\x14\n" +
+	"\x05state\x18\x04 \x01(\tR\x05state\x12!\n" +
+	"\ftrigger_kind\x18\x05 \x01(\tR\vtriggerKind\x12;\n" +
+	"\vcreate_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x125\n" +
+	"\bend_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\"\x93\x03\n" +
+	"\n" +
+	"RunLineage\x12A\n" +
+	"\aparents\x18\x01 \x03(\v2'.pantherclaw.v1.InvestigationDelegationR\aparents\x128\n" +
+	"\bchildren\x18\x02 \x03(\v2\x1c.pantherclaw.v1.TimelineLaneR\bchildren\x12-\n" +
+	"\x12children_truncated\x18\x03 \x01(\bR\x11childrenTruncated\x12O\n" +
+	"\x12upstream_execution\x18\x04 \x01(\v2 .pantherclaw.v1.RunExecutionLinkR\x11upstreamExecution\x12U\n" +
+	"\x15downstream_executions\x18\x05 \x03(\v2 .pantherclaw.v1.RunExecutionLinkR\x14downstreamExecutions\x121\n" +
+	"\x14downstream_truncated\x18\x06 \x01(\bR\x13downstreamTruncated\"{\n" +
+	"\vRunTimeline\x125\n" +
+	"\x06events\x18\x01 \x03(\v2\x1d.pantherclaw.v1.TimelineEventR\x06events\x125\n" +
+	"\x06phases\x18\x02 \x03(\v2\x1d.pantherclaw.v1.TimelinePhaseR\x06phases\"\xe0\x01\n" +
+	"\rRunBudgetLine\x12\x1d\n" +
+	"\n" +
+	"account_id\x18\x01 \x01(\tR\taccountId\x12\x12\n" +
+	"\x04rule\x18\x02 \x01(\tR\x04rule\x12\x1a\n" +
+	"\bcurrency\x18\x03 \x01(\tR\bcurrency\x12\x12\n" +
+	"\x04held\x18\x04 \x01(\tR\x04held\x12\x1c\n" +
+	"\tcommitted\x18\x05 \x01(\tR\tcommitted\x12\x1a\n" +
+	"\breleased\x18\x06 \x01(\tR\breleased\x12\x14\n" +
+	"\x05count\x18\a \x01(\x03R\x05count\x12\x1c\n" +
+	"\tremaining\x18\b \x01(\tR\tremaining\"\x8f\x02\n" +
+	"\x10RunRouteCoverage\x12#\n" +
+	"\rconnection_id\x18\x01 \x01(\tR\fconnectionId\x12\x1c\n" +
+	"\toperation\x18\x02 \x01(\tR\toperation\x12\x1f\n" +
+	"\vsnapshot_id\x18\x03 \x01(\tR\n" +
+	"snapshotId\x12\x14\n" +
+	"\x05state\x18\x04 \x01(\tR\x05state\x12\x18\n" +
+	"\areasons\x18\x05 \x03(\tR\areasons\x12;\n" +
+	"\vcomputed_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"computedAt\x12*\n" +
+	"\x11stale_at_decision\x18\a \x01(\bR\x0fstaleAtDecision\"\xd5\x01\n" +
+	"\x06RunGap\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12%\n" +
+	"\x0etransaction_id\x18\x02 \x01(\tR\rtransactionId\x12.\n" +
+	"\x04time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x1d\n" +
+	"\n" +
+	"gateway_id\x18\x04 \x01(\tR\tgatewayId\x12#\n" +
+	"\rconnection_id\x18\x05 \x01(\tR\fconnectionId\x12\x1c\n" +
+	"\toperation\x18\x06 \x01(\tR\toperation\"\xde\x04\n" +
+	"\x12InspectRunResponse\x12,\n" +
+	"\x03run\x18\x01 \x01(\v2\x1a.pantherclaw.v1.RunSummaryR\x03run\x124\n" +
+	"\alineage\x18\x02 \x01(\v2\x1a.pantherclaw.v1.RunLineageR\alineage\x127\n" +
+	"\btimeline\x18\x03 \x01(\v2\x1b.pantherclaw.v1.RunTimelineR\btimeline\x12&\n" +
+	"\x0fnext_page_token\x18\x04 \x01(\tR\rnextPageToken\x12-\n" +
+	"\x12timeline_truncated\x18\x05 \x01(\bR\x11timelineTruncated\x125\n" +
+	"\x06budget\x18\x06 \x03(\v2\x1d.pantherclaw.v1.RunBudgetLineR\x06budget\x12C\n" +
+	"\tapprovals\x18\a \x03(\v2%.pantherclaw.v1.InvestigationApprovalR\tapprovals\x12<\n" +
+	"\bcoverage\x18\b \x03(\v2 .pantherclaw.v1.RunRouteCoverageR\bcoverage\x12*\n" +
+	"\x04gaps\x18\t \x03(\v2\x16.pantherclaw.v1.RunGapR\x04gaps\x12I\n" +
+	"\x10omitted_sections\x18\n" +
+	" \x03(\x0e2\x1e.pantherclaw.v1.InspectSectionR\x0fomittedSections\x12#\n" +
+	"\rscope_limited\x18\v \x01(\bR\fscopeLimited*\xdf\x01\n" +
+	"\x0eInspectSection\x12\x1f\n" +
+	"\x1bINSPECT_SECTION_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18INSPECT_SECTION_TIMELINE\x10\x01\x12\x1b\n" +
+	"\x17INSPECT_SECTION_LINEAGE\x10\x02\x12\x1a\n" +
+	"\x16INSPECT_SECTION_BUDGET\x10\x03\x12\x1d\n" +
+	"\x19INSPECT_SECTION_APPROVALS\x10\x04\x12\x1c\n" +
+	"\x18INSPECT_SECTION_COVERAGE\x10\x05\x12\x18\n" +
+	"\x14INSPECT_SECTION_GAPS\x10\x062\x85\x04\n" +
 	"\x14InvestigationService\x12^\n" +
 	"\fWhatHappened\x12#.pantherclaw.v1.WhatHappenedRequest\x1a$.pantherclaw.v1.WhatHappenedResponse\"\x03\x90\x02\x01\x12d\n" +
 	"\x0eGetRunTimeline\x12%.pantherclaw.v1.GetRunTimelineRequest\x1a&.pantherclaw.v1.GetRunTimelineResponse\"\x03\x90\x02\x01\x12s\n" +
 	"\x13GetPrecedingContext\x12*.pantherclaw.v1.GetPrecedingContextRequest\x1a+.pantherclaw.v1.GetPrecedingContextResponse\"\x03\x90\x02\x01\x12X\n" +
 	"\n" +
-	"CompareRun\x12!.pantherclaw.v1.CompareRunRequest\x1a\".pantherclaw.v1.CompareRunResponse\"\x03\x90\x02\x01B\xcc\x01\n" +
+	"CompareRun\x12!.pantherclaw.v1.CompareRunRequest\x1a\".pantherclaw.v1.CompareRunResponse\"\x03\x90\x02\x01\x12X\n" +
+	"\n" +
+	"InspectRun\x12!.pantherclaw.v1.InspectRunRequest\x1a\".pantherclaw.v1.InspectRunResponse\"\x03\x90\x02\x01B\xcc\x01\n" +
 	"\x12com.pantherclaw.v1B\x13InvestigationsProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -2045,80 +3112,116 @@ func file_pantherclaw_v1_investigations_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_investigations_proto_rawDescData
 }
 
-var file_pantherclaw_v1_investigations_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_pantherclaw_v1_investigations_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_pantherclaw_v1_investigations_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_pantherclaw_v1_investigations_proto_goTypes = []any{
-	(*InvestigationParty)(nil),          // 0: pantherclaw.v1.InvestigationParty
-	(*InvestigationApproval)(nil),       // 1: pantherclaw.v1.InvestigationApproval
-	(*WhatHappenedRequest)(nil),         // 2: pantherclaw.v1.WhatHappenedRequest
-	(*WhatHappenedResponse)(nil),        // 3: pantherclaw.v1.WhatHappenedResponse
-	(*InvestigationGrantor)(nil),        // 4: pantherclaw.v1.InvestigationGrantor
-	(*InvestigationDelegation)(nil),     // 5: pantherclaw.v1.InvestigationDelegation
-	(*GetRunTimelineRequest)(nil),       // 6: pantherclaw.v1.GetRunTimelineRequest
-	(*TimelineEvent)(nil),               // 7: pantherclaw.v1.TimelineEvent
-	(*TimelineGap)(nil),                 // 8: pantherclaw.v1.TimelineGap
-	(*TimelineLane)(nil),                // 9: pantherclaw.v1.TimelineLane
-	(*TimelinePhase)(nil),               // 10: pantherclaw.v1.TimelinePhase
-	(*GetRunTimelineResponse)(nil),      // 11: pantherclaw.v1.GetRunTimelineResponse
-	(*GetPrecedingContextRequest)(nil),  // 12: pantherclaw.v1.GetPrecedingContextRequest
-	(*ContextItem)(nil),                 // 13: pantherclaw.v1.ContextItem
-	(*GetPrecedingContextResponse)(nil), // 14: pantherclaw.v1.GetPrecedingContextResponse
-	(*CompareRunRequest)(nil),           // 15: pantherclaw.v1.CompareRunRequest
-	(*CompareDestination)(nil),          // 16: pantherclaw.v1.CompareDestination
-	(*CompareRunResponse)(nil),          // 17: pantherclaw.v1.CompareRunResponse
-	(*timestamppb.Timestamp)(nil),       // 18: google.protobuf.Timestamp
+	(InspectSection)(0),                 // 0: pantherclaw.v1.InspectSection
+	(*InvestigationParty)(nil),          // 1: pantherclaw.v1.InvestigationParty
+	(*InvestigationApproval)(nil),       // 2: pantherclaw.v1.InvestigationApproval
+	(*WhatHappenedRequest)(nil),         // 3: pantherclaw.v1.WhatHappenedRequest
+	(*WhatHappenedResponse)(nil),        // 4: pantherclaw.v1.WhatHappenedResponse
+	(*InvestigationGrantor)(nil),        // 5: pantherclaw.v1.InvestigationGrantor
+	(*InvestigationDelegation)(nil),     // 6: pantherclaw.v1.InvestigationDelegation
+	(*GetRunTimelineRequest)(nil),       // 7: pantherclaw.v1.GetRunTimelineRequest
+	(*TimelineEvent)(nil),               // 8: pantherclaw.v1.TimelineEvent
+	(*TimelineGap)(nil),                 // 9: pantherclaw.v1.TimelineGap
+	(*TimelineLane)(nil),                // 10: pantherclaw.v1.TimelineLane
+	(*TimelinePhase)(nil),               // 11: pantherclaw.v1.TimelinePhase
+	(*GetRunTimelineResponse)(nil),      // 12: pantherclaw.v1.GetRunTimelineResponse
+	(*GetPrecedingContextRequest)(nil),  // 13: pantherclaw.v1.GetPrecedingContextRequest
+	(*ContextItem)(nil),                 // 14: pantherclaw.v1.ContextItem
+	(*GetPrecedingContextResponse)(nil), // 15: pantherclaw.v1.GetPrecedingContextResponse
+	(*CompareRunRequest)(nil),           // 16: pantherclaw.v1.CompareRunRequest
+	(*CompareDestination)(nil),          // 17: pantherclaw.v1.CompareDestination
+	(*CompareRunResponse)(nil),          // 18: pantherclaw.v1.CompareRunResponse
+	(*InspectRunRequest)(nil),           // 19: pantherclaw.v1.InspectRunRequest
+	(*RunSummary)(nil),                  // 20: pantherclaw.v1.RunSummary
+	(*RunExecutionLink)(nil),            // 21: pantherclaw.v1.RunExecutionLink
+	(*RunLineage)(nil),                  // 22: pantherclaw.v1.RunLineage
+	(*RunTimeline)(nil),                 // 23: pantherclaw.v1.RunTimeline
+	(*RunBudgetLine)(nil),               // 24: pantherclaw.v1.RunBudgetLine
+	(*RunRouteCoverage)(nil),            // 25: pantherclaw.v1.RunRouteCoverage
+	(*RunGap)(nil),                      // 26: pantherclaw.v1.RunGap
+	(*InspectRunResponse)(nil),          // 27: pantherclaw.v1.InspectRunResponse
+	(*timestamppb.Timestamp)(nil),       // 28: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_investigations_proto_depIdxs = []int32{
-	18, // 0: pantherclaw.v1.InvestigationApproval.create_time:type_name -> google.protobuf.Timestamp
-	18, // 1: pantherclaw.v1.InvestigationApproval.approve_time:type_name -> google.protobuf.Timestamp
-	18, // 2: pantherclaw.v1.InvestigationApproval.end_time:type_name -> google.protobuf.Timestamp
-	0,  // 3: pantherclaw.v1.WhatHappenedResponse.launcher:type_name -> pantherclaw.v1.InvestigationParty
-	0,  // 4: pantherclaw.v1.WhatHappenedResponse.principal:type_name -> pantherclaw.v1.InvestigationParty
-	4,  // 5: pantherclaw.v1.WhatHappenedResponse.grantors:type_name -> pantherclaw.v1.InvestigationGrantor
-	5,  // 6: pantherclaw.v1.WhatHappenedResponse.delegation:type_name -> pantherclaw.v1.InvestigationDelegation
-	1,  // 7: pantherclaw.v1.WhatHappenedResponse.approvals:type_name -> pantherclaw.v1.InvestigationApproval
-	18, // 8: pantherclaw.v1.WhatHappenedResponse.create_time:type_name -> google.protobuf.Timestamp
-	0,  // 9: pantherclaw.v1.InvestigationGrantor.grantor:type_name -> pantherclaw.v1.InvestigationParty
-	0,  // 10: pantherclaw.v1.InvestigationGrantor.principal:type_name -> pantherclaw.v1.InvestigationParty
-	18, // 11: pantherclaw.v1.InvestigationGrantor.create_time:type_name -> google.protobuf.Timestamp
-	18, // 12: pantherclaw.v1.InvestigationGrantor.revoke_time:type_name -> google.protobuf.Timestamp
-	0,  // 13: pantherclaw.v1.InvestigationDelegation.launcher:type_name -> pantherclaw.v1.InvestigationParty
-	0,  // 14: pantherclaw.v1.InvestigationDelegation.principal:type_name -> pantherclaw.v1.InvestigationParty
-	18, // 15: pantherclaw.v1.TimelineEvent.time:type_name -> google.protobuf.Timestamp
-	18, // 16: pantherclaw.v1.TimelineGap.time:type_name -> google.protobuf.Timestamp
-	18, // 17: pantherclaw.v1.TimelineLane.create_time:type_name -> google.protobuf.Timestamp
-	18, // 18: pantherclaw.v1.TimelineLane.end_time:type_name -> google.protobuf.Timestamp
-	18, // 19: pantherclaw.v1.TimelinePhase.start_time:type_name -> google.protobuf.Timestamp
-	18, // 20: pantherclaw.v1.TimelinePhase.end_time:type_name -> google.protobuf.Timestamp
-	18, // 21: pantherclaw.v1.GetRunTimelineResponse.start_time:type_name -> google.protobuf.Timestamp
-	18, // 22: pantherclaw.v1.GetRunTimelineResponse.end_time:type_name -> google.protobuf.Timestamp
-	7,  // 23: pantherclaw.v1.GetRunTimelineResponse.events:type_name -> pantherclaw.v1.TimelineEvent
-	8,  // 24: pantherclaw.v1.GetRunTimelineResponse.gaps:type_name -> pantherclaw.v1.TimelineGap
-	9,  // 25: pantherclaw.v1.GetRunTimelineResponse.lanes:type_name -> pantherclaw.v1.TimelineLane
-	10, // 26: pantherclaw.v1.GetRunTimelineResponse.phases:type_name -> pantherclaw.v1.TimelinePhase
-	18, // 27: pantherclaw.v1.GetPrecedingContextRequest.start_time:type_name -> google.protobuf.Timestamp
-	18, // 28: pantherclaw.v1.GetPrecedingContextRequest.end_time:type_name -> google.protobuf.Timestamp
-	18, // 29: pantherclaw.v1.ContextItem.time:type_name -> google.protobuf.Timestamp
-	18, // 30: pantherclaw.v1.GetPrecedingContextResponse.start_time:type_name -> google.protobuf.Timestamp
-	18, // 31: pantherclaw.v1.GetPrecedingContextResponse.end_time:type_name -> google.protobuf.Timestamp
-	13, // 32: pantherclaw.v1.GetPrecedingContextResponse.items:type_name -> pantherclaw.v1.ContextItem
-	18, // 33: pantherclaw.v1.CompareRunRequest.start_time:type_name -> google.protobuf.Timestamp
-	18, // 34: pantherclaw.v1.CompareRunRequest.end_time:type_name -> google.protobuf.Timestamp
-	18, // 35: pantherclaw.v1.CompareRunResponse.start_time:type_name -> google.protobuf.Timestamp
-	18, // 36: pantherclaw.v1.CompareRunResponse.end_time:type_name -> google.protobuf.Timestamp
-	16, // 37: pantherclaw.v1.CompareRunResponse.new_destinations:type_name -> pantherclaw.v1.CompareDestination
-	2,  // 38: pantherclaw.v1.InvestigationService.WhatHappened:input_type -> pantherclaw.v1.WhatHappenedRequest
-	6,  // 39: pantherclaw.v1.InvestigationService.GetRunTimeline:input_type -> pantherclaw.v1.GetRunTimelineRequest
-	12, // 40: pantherclaw.v1.InvestigationService.GetPrecedingContext:input_type -> pantherclaw.v1.GetPrecedingContextRequest
-	15, // 41: pantherclaw.v1.InvestigationService.CompareRun:input_type -> pantherclaw.v1.CompareRunRequest
-	3,  // 42: pantherclaw.v1.InvestigationService.WhatHappened:output_type -> pantherclaw.v1.WhatHappenedResponse
-	11, // 43: pantherclaw.v1.InvestigationService.GetRunTimeline:output_type -> pantherclaw.v1.GetRunTimelineResponse
-	14, // 44: pantherclaw.v1.InvestigationService.GetPrecedingContext:output_type -> pantherclaw.v1.GetPrecedingContextResponse
-	17, // 45: pantherclaw.v1.InvestigationService.CompareRun:output_type -> pantherclaw.v1.CompareRunResponse
-	42, // [42:46] is the sub-list for method output_type
-	38, // [38:42] is the sub-list for method input_type
-	38, // [38:38] is the sub-list for extension type_name
-	38, // [38:38] is the sub-list for extension extendee
-	0,  // [0:38] is the sub-list for field type_name
+	28, // 0: pantherclaw.v1.InvestigationApproval.create_time:type_name -> google.protobuf.Timestamp
+	28, // 1: pantherclaw.v1.InvestigationApproval.approve_time:type_name -> google.protobuf.Timestamp
+	28, // 2: pantherclaw.v1.InvestigationApproval.end_time:type_name -> google.protobuf.Timestamp
+	1,  // 3: pantherclaw.v1.WhatHappenedResponse.launcher:type_name -> pantherclaw.v1.InvestigationParty
+	1,  // 4: pantherclaw.v1.WhatHappenedResponse.principal:type_name -> pantherclaw.v1.InvestigationParty
+	5,  // 5: pantherclaw.v1.WhatHappenedResponse.grantors:type_name -> pantherclaw.v1.InvestigationGrantor
+	6,  // 6: pantherclaw.v1.WhatHappenedResponse.delegation:type_name -> pantherclaw.v1.InvestigationDelegation
+	2,  // 7: pantherclaw.v1.WhatHappenedResponse.approvals:type_name -> pantherclaw.v1.InvestigationApproval
+	28, // 8: pantherclaw.v1.WhatHappenedResponse.create_time:type_name -> google.protobuf.Timestamp
+	1,  // 9: pantherclaw.v1.InvestigationGrantor.grantor:type_name -> pantherclaw.v1.InvestigationParty
+	1,  // 10: pantherclaw.v1.InvestigationGrantor.principal:type_name -> pantherclaw.v1.InvestigationParty
+	28, // 11: pantherclaw.v1.InvestigationGrantor.create_time:type_name -> google.protobuf.Timestamp
+	28, // 12: pantherclaw.v1.InvestigationGrantor.revoke_time:type_name -> google.protobuf.Timestamp
+	1,  // 13: pantherclaw.v1.InvestigationDelegation.launcher:type_name -> pantherclaw.v1.InvestigationParty
+	1,  // 14: pantherclaw.v1.InvestigationDelegation.principal:type_name -> pantherclaw.v1.InvestigationParty
+	28, // 15: pantherclaw.v1.TimelineEvent.time:type_name -> google.protobuf.Timestamp
+	28, // 16: pantherclaw.v1.TimelineGap.time:type_name -> google.protobuf.Timestamp
+	28, // 17: pantherclaw.v1.TimelineLane.create_time:type_name -> google.protobuf.Timestamp
+	28, // 18: pantherclaw.v1.TimelineLane.end_time:type_name -> google.protobuf.Timestamp
+	28, // 19: pantherclaw.v1.TimelinePhase.start_time:type_name -> google.protobuf.Timestamp
+	28, // 20: pantherclaw.v1.TimelinePhase.end_time:type_name -> google.protobuf.Timestamp
+	28, // 21: pantherclaw.v1.GetRunTimelineResponse.start_time:type_name -> google.protobuf.Timestamp
+	28, // 22: pantherclaw.v1.GetRunTimelineResponse.end_time:type_name -> google.protobuf.Timestamp
+	8,  // 23: pantherclaw.v1.GetRunTimelineResponse.events:type_name -> pantherclaw.v1.TimelineEvent
+	9,  // 24: pantherclaw.v1.GetRunTimelineResponse.gaps:type_name -> pantherclaw.v1.TimelineGap
+	10, // 25: pantherclaw.v1.GetRunTimelineResponse.lanes:type_name -> pantherclaw.v1.TimelineLane
+	11, // 26: pantherclaw.v1.GetRunTimelineResponse.phases:type_name -> pantherclaw.v1.TimelinePhase
+	28, // 27: pantherclaw.v1.GetPrecedingContextRequest.start_time:type_name -> google.protobuf.Timestamp
+	28, // 28: pantherclaw.v1.GetPrecedingContextRequest.end_time:type_name -> google.protobuf.Timestamp
+	28, // 29: pantherclaw.v1.ContextItem.time:type_name -> google.protobuf.Timestamp
+	28, // 30: pantherclaw.v1.GetPrecedingContextResponse.start_time:type_name -> google.protobuf.Timestamp
+	28, // 31: pantherclaw.v1.GetPrecedingContextResponse.end_time:type_name -> google.protobuf.Timestamp
+	14, // 32: pantherclaw.v1.GetPrecedingContextResponse.items:type_name -> pantherclaw.v1.ContextItem
+	28, // 33: pantherclaw.v1.CompareRunRequest.start_time:type_name -> google.protobuf.Timestamp
+	28, // 34: pantherclaw.v1.CompareRunRequest.end_time:type_name -> google.protobuf.Timestamp
+	28, // 35: pantherclaw.v1.CompareRunResponse.start_time:type_name -> google.protobuf.Timestamp
+	28, // 36: pantherclaw.v1.CompareRunResponse.end_time:type_name -> google.protobuf.Timestamp
+	17, // 37: pantherclaw.v1.CompareRunResponse.new_destinations:type_name -> pantherclaw.v1.CompareDestination
+	0,  // 38: pantherclaw.v1.InspectRunRequest.include:type_name -> pantherclaw.v1.InspectSection
+	1,  // 39: pantherclaw.v1.RunSummary.launcher:type_name -> pantherclaw.v1.InvestigationParty
+	1,  // 40: pantherclaw.v1.RunSummary.principal:type_name -> pantherclaw.v1.InvestigationParty
+	28, // 41: pantherclaw.v1.RunSummary.start_time:type_name -> google.protobuf.Timestamp
+	28, // 42: pantherclaw.v1.RunSummary.end_time:type_name -> google.protobuf.Timestamp
+	28, // 43: pantherclaw.v1.RunExecutionLink.create_time:type_name -> google.protobuf.Timestamp
+	28, // 44: pantherclaw.v1.RunExecutionLink.end_time:type_name -> google.protobuf.Timestamp
+	6,  // 45: pantherclaw.v1.RunLineage.parents:type_name -> pantherclaw.v1.InvestigationDelegation
+	10, // 46: pantherclaw.v1.RunLineage.children:type_name -> pantherclaw.v1.TimelineLane
+	21, // 47: pantherclaw.v1.RunLineage.upstream_execution:type_name -> pantherclaw.v1.RunExecutionLink
+	21, // 48: pantherclaw.v1.RunLineage.downstream_executions:type_name -> pantherclaw.v1.RunExecutionLink
+	8,  // 49: pantherclaw.v1.RunTimeline.events:type_name -> pantherclaw.v1.TimelineEvent
+	11, // 50: pantherclaw.v1.RunTimeline.phases:type_name -> pantherclaw.v1.TimelinePhase
+	28, // 51: pantherclaw.v1.RunRouteCoverage.computed_at:type_name -> google.protobuf.Timestamp
+	28, // 52: pantherclaw.v1.RunGap.time:type_name -> google.protobuf.Timestamp
+	20, // 53: pantherclaw.v1.InspectRunResponse.run:type_name -> pantherclaw.v1.RunSummary
+	22, // 54: pantherclaw.v1.InspectRunResponse.lineage:type_name -> pantherclaw.v1.RunLineage
+	23, // 55: pantherclaw.v1.InspectRunResponse.timeline:type_name -> pantherclaw.v1.RunTimeline
+	24, // 56: pantherclaw.v1.InspectRunResponse.budget:type_name -> pantherclaw.v1.RunBudgetLine
+	2,  // 57: pantherclaw.v1.InspectRunResponse.approvals:type_name -> pantherclaw.v1.InvestigationApproval
+	25, // 58: pantherclaw.v1.InspectRunResponse.coverage:type_name -> pantherclaw.v1.RunRouteCoverage
+	26, // 59: pantherclaw.v1.InspectRunResponse.gaps:type_name -> pantherclaw.v1.RunGap
+	0,  // 60: pantherclaw.v1.InspectRunResponse.omitted_sections:type_name -> pantherclaw.v1.InspectSection
+	3,  // 61: pantherclaw.v1.InvestigationService.WhatHappened:input_type -> pantherclaw.v1.WhatHappenedRequest
+	7,  // 62: pantherclaw.v1.InvestigationService.GetRunTimeline:input_type -> pantherclaw.v1.GetRunTimelineRequest
+	13, // 63: pantherclaw.v1.InvestigationService.GetPrecedingContext:input_type -> pantherclaw.v1.GetPrecedingContextRequest
+	16, // 64: pantherclaw.v1.InvestigationService.CompareRun:input_type -> pantherclaw.v1.CompareRunRequest
+	19, // 65: pantherclaw.v1.InvestigationService.InspectRun:input_type -> pantherclaw.v1.InspectRunRequest
+	4,  // 66: pantherclaw.v1.InvestigationService.WhatHappened:output_type -> pantherclaw.v1.WhatHappenedResponse
+	12, // 67: pantherclaw.v1.InvestigationService.GetRunTimeline:output_type -> pantherclaw.v1.GetRunTimelineResponse
+	15, // 68: pantherclaw.v1.InvestigationService.GetPrecedingContext:output_type -> pantherclaw.v1.GetPrecedingContextResponse
+	18, // 69: pantherclaw.v1.InvestigationService.CompareRun:output_type -> pantherclaw.v1.CompareRunResponse
+	27, // 70: pantherclaw.v1.InvestigationService.InspectRun:output_type -> pantherclaw.v1.InspectRunResponse
+	66, // [66:71] is the sub-list for method output_type
+	61, // [61:66] is the sub-list for method input_type
+	61, // [61:61] is the sub-list for extension type_name
+	61, // [61:61] is the sub-list for extension extendee
+	0,  // [0:61] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_investigations_proto_init() }
@@ -2132,13 +3235,14 @@ func file_pantherclaw_v1_investigations_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_investigations_proto_rawDesc), len(file_pantherclaw_v1_investigations_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   18,
+			NumEnums:      1,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_pantherclaw_v1_investigations_proto_goTypes,
 		DependencyIndexes: file_pantherclaw_v1_investigations_proto_depIdxs,
+		EnumInfos:         file_pantherclaw_v1_investigations_proto_enumTypes,
 		MessageInfos:      file_pantherclaw_v1_investigations_proto_msgTypes,
 	}.Build()
 	File_pantherclaw_v1_investigations_proto = out.File

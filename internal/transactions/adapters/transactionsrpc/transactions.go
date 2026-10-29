@@ -26,10 +26,19 @@ import (
 type Transactions struct {
 	pantherclawv1connect.UnimplementedTransactionServiceHandler
 	svc *app.Explorer
+	// consoleURL is the console base for recovery links; empty for none.
+	consoleURL string
 }
 
 // New returns the TransactionService handler.
 func New(svc *app.Explorer) *Transactions { return &Transactions{svc: svc} }
+
+// WithConsoleURL sets the console base URL (the server's public URL when
+// it serves a console) for the recovery links of an explanation (F066).
+func (s *Transactions) WithConsoleURL(base string) *Transactions {
+	s.consoleURL = base
+	return s
+}
 
 // ListTransactions implements TransactionServiceHandler.
 func (s *Transactions) ListTransactions(ctx context.Context, req *pantherclawv1.ListTransactionsRequest) (*pantherclawv1.ListTransactionsResponse, error) {
@@ -146,6 +155,7 @@ func (s *Transactions) GetTransactionEvidence(ctx context.Context, req *pantherc
 			CreatedBy: l.CreatedBy, CreateTime: timestamppb.New(l.Created),
 		})
 	}
+	out.Explanation = explanationProto(e.Explanation, out.GetTransaction().GetId(), s.consoleURL)
 	return out, nil
 }
 

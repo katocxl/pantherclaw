@@ -15399,6 +15399,60 @@
         }
       }
     },
+    "/pantherclaw.v1.InvestigationService/InspectRun": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.InvestigationService"
+        ],
+        "summary": "InspectRun",
+        "description": "InspectRun is one run end to end: its summary, lineage, timeline,\n budget, approvals, coverage and gaps (F224, F065, F227, F229; HR-401).\n Each section is read only with its own permission where the run's\n agent lives; a section the caller cannot read is left out whole and\n listed in omitted_sections.\n permission: evidence.read",
+        "operationId": "pantherclaw.v1.InvestigationService.InspectRun",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.InspectRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.InspectRunResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.NotificationService/CreateChannel": {
       "post": {
         "tags": [
@@ -30572,6 +30626,19 @@
         ],
         "description": "Decision is an authorization decision (PAP-1 §7.1)."
       },
+      "pantherclaw.v1.DecisionPresentation": {
+        "type": "string",
+        "title": "DecisionPresentation",
+        "enum": [
+          "DECISION_PRESENTATION_UNSPECIFIED",
+          "DECISION_PRESENTATION_ALLOW",
+          "DECISION_PRESENTATION_CONSTRAIN",
+          "DECISION_PRESENTATION_HOLD",
+          "DECISION_PRESENTATION_DENY",
+          "DECISION_PRESENTATION_CANNOT_AUTHORIZE"
+        ],
+        "description": "DecisionPresentation is how a decision is shown to people and agents\n (F069): ALLOW_WITH_OBLIGATIONS is Constrain, both REQUIRE_* decisions are\n Hold."
+      },
       "pantherclaw.v1.DispatchMode": {
         "type": "string",
         "title": "DispatchMode",
@@ -30610,6 +30677,42 @@
           "WAIT_STATE_CONSUMED"
         ],
         "description": "WaitState is the state of a held action's approval request as a waiter\n sees it (HR-174): states, codes and times only."
+      },
+      "pantherclaw.v1.AgentExplanation": {
+        "type": "object",
+        "properties": {
+          "presentation": {
+            "title": "presentation",
+            "description": "How the decision is presented.",
+            "$ref": "#/components/schemas/pantherclaw.v1.DecisionPresentation"
+          },
+          "failingCategory": {
+            "type": "string",
+            "title": "failing_category",
+            "description": "The decisive checklist item's check name, for example \"authority\";\n empty for ALLOW and CONSTRAIN."
+          },
+          "decisiveCode": {
+            "type": "string",
+            "title": "decisive_code",
+            "description": "The decisive checklist item's code."
+          },
+          "transactionId": {
+            "type": "string",
+            "title": "transaction_id",
+            "description": "The transaction."
+          },
+          "nextActions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.NextAction"
+            },
+            "title": "next_actions",
+            "description": "What a person can do next."
+          }
+        },
+        "title": "AgentExplanation",
+        "additionalProperties": false,
+        "description": "AgentExplanation is all a decision tells the agent about why (F330,\n HR-400): never the grant, policy, limits, budget values or request."
       },
       "pantherclaw.v1.AuthorizeRequest": {
         "type": "object",
@@ -30768,6 +30871,11 @@
             },
             "title": "consequences",
             "description": "What the action's consequence rules said, in rule order (G0 M8,\n HR-206): each consequence predicted, not ruled out (UNKNOWN) or ruled\n out. A predicted consequence is a prediction, never an authorized or\n confirmed effect. Empty for a stored decision (repeat)."
+          },
+          "agentExplanation": {
+            "title": "agent_explanation",
+            "description": "The agent-safe explanation (F330, HR-400). Without a transaction it\n has no transaction id and no recovery action.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AgentExplanation"
           }
         },
         "title": "AuthorizeResponse",
@@ -31129,6 +31237,218 @@
         "additionalProperties": false,
         "description": "DataScopeApplied is what applying a read's data scope did to its answer\n (G0 M14 D20, D102): never a value, only the record key and counts."
       },
+      "pantherclaw.v1.DecisionExplanation": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "title": "decision",
+            "description": "The decision.",
+            "$ref": "#/components/schemas/pantherclaw.v1.Decision"
+          },
+          "presentation": {
+            "title": "presentation",
+            "description": "How it is presented.",
+            "$ref": "#/components/schemas/pantherclaw.v1.DecisionPresentation"
+          },
+          "failingCategory": {
+            "type": "string",
+            "title": "failing_category",
+            "description": "The decisive item's check; empty for ALLOW and CONSTRAIN."
+          },
+          "decisive": {
+            "title": "decisive",
+            "description": "The decisive checklist item.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ChecklistItem"
+          },
+          "transactionId": {
+            "type": "string",
+            "title": "transaction_id",
+            "description": "The transaction."
+          },
+          "action": {
+            "title": "action",
+            "description": "The action, from the definition's canonical fields.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExplainedAction"
+          },
+          "principal": {
+            "type": "string",
+            "title": "principal",
+            "description": "Who the action was for: \"user:\u003cid\u003e\" or \"service_account:\u003cid\u003e\"."
+          },
+          "taskId": {
+            "type": "string",
+            "title": "task_id",
+            "description": "A structured task id from the grant revision; empty, since grants\n carry only free-text task references."
+          },
+          "environment": {
+            "type": "string",
+            "title": "environment",
+            "description": "The run's environment id."
+          },
+          "grant": {
+            "title": "grant",
+            "description": "The grant revision the decision used.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExplainedGrant"
+          },
+          "policyVersionId": {
+            "type": "string",
+            "title": "policy_version_id",
+            "description": "The policy version the decision used."
+          },
+          "budgets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ExplainedBudget"
+            },
+            "title": "budgets",
+            "description": "The budgets at decision time; left out without budget.read."
+          },
+          "gaps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "gaps",
+            "description": "What is not known: UNKNOWN_CONSEQUENCE, OUTCOME_UNKNOWN,\n NO_EFFECT_CONFIRMED, COVERAGE_PARTIAL, COVERAGE_OBSERVE_ONLY or\n COVERAGE_UNKNOWN."
+          },
+          "executionState": {
+            "type": "string",
+            "title": "execution_state",
+            "description": "The transaction's execution state, for example \"BLOCKED\"."
+          },
+          "nextActions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.NextAction"
+            },
+            "title": "next_actions",
+            "description": "What a person can do next."
+          }
+        },
+        "title": "DecisionExplanation",
+        "additionalProperties": false,
+        "description": "DecisionExplanation is the full explanation of a decision, for people\n with evidence.read (F066, F647): what was asked, under which grant and\n policy, what decided it, what is not known and what to do next. Agent\n text never reaches it outside existing untrusted fields (HR-023, HR-034)."
+      },
+      "pantherclaw.v1.ExplainedAction": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "title": "operation",
+            "description": "The operation."
+          },
+          "target": {
+            "type": "string",
+            "title": "target",
+            "description": "The target, \"\u003ctype\u003e:\u003cid\u003e\"."
+          },
+          "materialValues": {
+            "type": "object",
+            "title": "material_values",
+            "additionalProperties": {
+              "type": "string",
+              "title": "value"
+            },
+            "description": "The definition's material parameters (never content), or the budget\n amount and currency when no approval display recorded them."
+          }
+        },
+        "title": "ExplainedAction",
+        "additionalProperties": false,
+        "description": "ExplainedAction is an action's canonical fields."
+      },
+      "pantherclaw.v1.ExplainedAction.MaterialValuesEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key"
+          },
+          "value": {
+            "type": "string",
+            "title": "value"
+          }
+        },
+        "title": "MaterialValuesEntry",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ExplainedBudget": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "title": "account_id",
+            "description": "The grant or guardrail that owns the rule."
+          },
+          "rule": {
+            "type": "string",
+            "title": "rule",
+            "description": "Rule id."
+          },
+          "currency": {
+            "type": "string",
+            "title": "currency",
+            "description": "Currency (ISO 4217); empty for a count."
+          },
+          "limit": {
+            "type": "string",
+            "title": "limit",
+            "description": "The limit; empty when the rule only counts."
+          },
+          "reserved": {
+            "type": "string",
+            "title": "reserved",
+            "description": "Reserved by unsettled permits."
+          },
+          "spent": {
+            "type": "string",
+            "title": "spent",
+            "description": "Spent by accepted outcomes."
+          },
+          "unknown": {
+            "type": "string",
+            "title": "unknown",
+            "description": "Held by this transaction with its outcome unknown."
+          }
+        },
+        "title": "ExplainedBudget",
+        "additionalProperties": false,
+        "description": "ExplainedBudget is one budget rule at decision time. Amounts are decimal\n strings in its currency."
+      },
+      "pantherclaw.v1.ExplainedGrant": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Grant id."
+          },
+          "revision": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "revision",
+            "format": "int64",
+            "description": "Revision."
+          },
+          "constraints": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "constraints",
+            "description": "The revision's bounds: their names, or \"name=value\" lines (compact\n JSON values) when the caller also holds grant.read."
+          },
+          "expireTime": {
+            "title": "expire_time",
+            "description": "When the revision expires.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "ExplainedGrant",
+        "additionalProperties": false,
+        "description": "ExplainedGrant is the grant revision a decision used."
+      },
       "pantherclaw.v1.GetNonceRequest": {
         "type": "object",
         "title": "GetNonceRequest",
@@ -31152,6 +31472,29 @@
         "title": "GetNonceResponse",
         "additionalProperties": false,
         "description": "GetNonceResponse returns it."
+      },
+      "pantherclaw.v1.NextAction": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "code",
+            "description": "Stable code, for example \"inspect_transaction\"."
+          },
+          "label": {
+            "type": "string",
+            "title": "label",
+            "description": "What to run or open, for example \"pclaw txn show \u003cid\u003e\"."
+          },
+          "url": {
+            "type": "string",
+            "title": "url",
+            "description": "The console page, when the server serves a console; empty otherwise."
+          }
+        },
+        "title": "NextAction",
+        "additionalProperties": false,
+        "description": "NextAction is one recovery action."
       },
       "pantherclaw.v1.Obligation": {
         "type": "object",
@@ -56984,6 +57327,20 @@
         "additionalProperties": false,
         "description": "Suppression is one suppression (D16)."
       },
+      "pantherclaw.v1.InspectSection": {
+        "type": "string",
+        "title": "InspectSection",
+        "enum": [
+          "INSPECT_SECTION_UNSPECIFIED",
+          "INSPECT_SECTION_TIMELINE",
+          "INSPECT_SECTION_LINEAGE",
+          "INSPECT_SECTION_BUDGET",
+          "INSPECT_SECTION_APPROVALS",
+          "INSPECT_SECTION_COVERAGE",
+          "INSPECT_SECTION_GAPS"
+        ],
+        "description": "InspectSection is one section of a run inspection."
+      },
       "pantherclaw.v1.CompareDestination": {
         "type": "object",
         "properties": {
@@ -57429,6 +57786,139 @@
         "additionalProperties": false,
         "description": "GetRunTimelineResponse is a run's timeline (F284, F232)."
       },
+      "pantherclaw.v1.InspectRunRequest": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "title": "run_id",
+            "format": "uuid",
+            "description": "Run id."
+          },
+          "timelinePageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "timeline_page_size",
+            "maximum": 500,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Timeline events per page: at most 500, 0 for 200."
+          },
+          "timelinePageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "timeline_page_token",
+            "maxLength": 200,
+            "description": "The next_page_token of the previous page; empty for the first."
+          },
+          "include": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.InspectSection",
+              "not": {
+                "enum": [
+                  "INSPECT_SECTION_UNSPECIFIED"
+                ]
+              }
+            },
+            "title": "include",
+            "maxItems": 6,
+            "uniqueItems": true,
+            "description": "The sections to read; empty for all."
+          }
+        },
+        "title": "InspectRunRequest",
+        "additionalProperties": false,
+        "description": "InspectRunRequest names a run and the sections to read.",
+        "required": [
+          "runId"
+        ]
+      },
+      "pantherclaw.v1.InspectRunResponse": {
+        "type": "object",
+        "properties": {
+          "run": {
+            "title": "run",
+            "description": "The run.",
+            "$ref": "#/components/schemas/pantherclaw.v1.RunSummary"
+          },
+          "lineage": {
+            "title": "lineage",
+            "description": "Its lineage; unset when omitted or not asked for.",
+            "$ref": "#/components/schemas/pantherclaw.v1.RunLineage"
+          },
+          "timeline": {
+            "title": "timeline",
+            "description": "One page of its timeline; unset when omitted or not asked for.",
+            "$ref": "#/components/schemas/pantherclaw.v1.RunTimeline"
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "The next timeline page; empty on the last."
+          },
+          "timelineTruncated": {
+            "type": "boolean",
+            "title": "timeline_truncated",
+            "description": "The run has more actions than one timeline holds."
+          },
+          "budget": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.RunBudgetLine"
+            },
+            "title": "budget",
+            "description": "Its budget lines."
+          },
+          "approvals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.InvestigationApproval"
+            },
+            "title": "approvals",
+            "description": "Holds on its actions (at most 1000)."
+          },
+          "coverage": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.RunRouteCoverage"
+            },
+            "title": "coverage",
+            "description": "The coverage its decisions claimed (at most 1000 snapshots)."
+          },
+          "gaps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.RunGap"
+            },
+            "title": "gaps",
+            "description": "Missing evidence."
+          },
+          "omittedSections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.InspectSection"
+            },
+            "title": "omitted_sections",
+            "description": "Asked-for sections the caller may not read, left out whole."
+          },
+          "scopeLimited": {
+            "type": "boolean",
+            "title": "scope_limited",
+            "description": "The caller's scope is narrower than the organization."
+          }
+        },
+        "title": "InspectRunResponse",
+        "additionalProperties": false,
+        "description": "InspectRunResponse is one run end to end (F224)."
+      },
       "pantherclaw.v1.InvestigationApproval": {
         "type": "object",
         "properties": {
@@ -57582,6 +58072,325 @@
         "title": "InvestigationParty",
         "additionalProperties": false,
         "description": "InvestigationParty is a launcher, principal or grantor."
+      },
+      "pantherclaw.v1.RunBudgetLine": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "title": "account_id",
+            "description": "The budget account or counter."
+          },
+          "rule": {
+            "type": "string",
+            "title": "rule",
+            "description": "Its rule."
+          },
+          "currency": {
+            "type": "string",
+            "title": "currency",
+            "description": "The account's currency; empty for a counter or a count-only rule."
+          },
+          "held": {
+            "type": "string",
+            "title": "held",
+            "description": "Held by the run's open reservations: an amount, or a count for a\n counter."
+          },
+          "committed": {
+            "type": "string",
+            "title": "committed",
+            "description": "Committed by the run's actions."
+          },
+          "released": {
+            "type": "string",
+            "title": "released",
+            "description": "Released."
+          },
+          "count": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "count",
+            "format": "int64",
+            "description": "How many reservations the run made on it."
+          },
+          "remaining": {
+            "type": "string",
+            "title": "remaining",
+            "description": "What is left of the rule's amount limit in its current period; empty\n for a counter, a rule without an amount limit or an earlier period."
+          }
+        },
+        "title": "RunBudgetLine",
+        "additionalProperties": false,
+        "description": "RunBudgetLine is what the run's actions did to one budget account or\n counter (F227)."
+      },
+      "pantherclaw.v1.RunExecutionLink": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "title": "execution_id",
+            "description": "Execution id."
+          },
+          "automationId": {
+            "type": "string",
+            "title": "automation_id",
+            "description": "Its automation."
+          },
+          "mode": {
+            "type": "string",
+            "title": "mode",
+            "description": "LIVE, SHADOW or TEST."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "Its state."
+          },
+          "triggerKind": {
+            "type": "string",
+            "title": "trigger_kind",
+            "description": "The trigger kind."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was created.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "endTime": {
+            "title": "end_time",
+            "description": "When it ended; unset while active.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "RunExecutionLink",
+        "additionalProperties": false,
+        "description": "RunExecutionLink is an automation execution linked to a run."
+      },
+      "pantherclaw.v1.RunGap": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "NO_DECISION_RECEIPT, OUTCOME_UNKNOWN, NO_OUTCOME_RECORDED,\n NO_COVERAGE_CLAIM, COVERAGE_BELOW_ENFORCED or TELEMETRY_GAP."
+          },
+          "transactionId": {
+            "type": "string",
+            "title": "transaction_id",
+            "description": "The transaction; empty for a telemetry gap."
+          },
+          "time": {
+            "title": "time",
+            "description": "When.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "gatewayId": {
+            "type": "string",
+            "title": "gateway_id",
+            "description": "The gateway of a telemetry gap; empty otherwise."
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "description": "The connection; empty when none."
+          },
+          "operation": {
+            "type": "string",
+            "title": "operation",
+            "description": "The operation; empty when none."
+          }
+        },
+        "title": "RunGap",
+        "additionalProperties": false,
+        "description": "RunGap is evidence the inspection expected and did not find (F229)."
+      },
+      "pantherclaw.v1.RunLineage": {
+        "type": "object",
+        "properties": {
+          "parents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.InvestigationDelegation"
+            },
+            "title": "parents",
+            "description": "The parent runs, nearest first, up to the caller's scope."
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.TimelineLane"
+            },
+            "title": "children",
+            "description": "Child runs the caller may read (at most 200)."
+          },
+          "childrenTruncated": {
+            "type": "boolean",
+            "title": "children_truncated",
+            "description": "The run has more children than one inspection holds."
+          },
+          "upstreamExecution": {
+            "title": "upstream_execution",
+            "description": "The execution that launched the run; unset when none did.",
+            "$ref": "#/components/schemas/pantherclaw.v1.RunExecutionLink"
+          },
+          "downstreamExecutions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.RunExecutionLink"
+            },
+            "title": "downstream_executions",
+            "description": "Executions whose subjects name the run, oldest first (at most 200)."
+          },
+          "downstreamTruncated": {
+            "type": "boolean",
+            "title": "downstream_truncated",
+            "description": "More executions name the run than one inspection holds."
+          }
+        },
+        "title": "RunLineage",
+        "additionalProperties": false,
+        "description": "RunLineage is where the run sits among runs and automations (F065)."
+      },
+      "pantherclaw.v1.RunRouteCoverage": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "description": "The connection."
+          },
+          "operation": {
+            "type": "string",
+            "title": "operation",
+            "description": "The operation."
+          },
+          "snapshotId": {
+            "type": "string",
+            "title": "snapshot_id",
+            "description": "The snapshot."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "UNKNOWN, OBSERVE_ONLY, PARTIAL or ENFORCED."
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "reasons",
+            "description": "Why."
+          },
+          "computedAt": {
+            "title": "computed_at",
+            "description": "When it was computed.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "staleAtDecision": {
+            "type": "boolean",
+            "title": "stale_at_decision",
+            "description": "A decision claimed it after it had expired."
+          }
+        },
+        "title": "RunRouteCoverage",
+        "additionalProperties": false,
+        "description": "RunRouteCoverage is a coverage snapshot the run's decisions claimed."
+      },
+      "pantherclaw.v1.RunSummary": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "title": "run_id",
+            "description": "Run id."
+          },
+          "agentId": {
+            "type": "string",
+            "title": "agent_id",
+            "description": "Its agent."
+          },
+          "taskRef": {
+            "type": "string",
+            "title": "task_ref",
+            "description": "UNTRUSTED task label from the launcher; it never changes scope."
+          },
+          "launcher": {
+            "title": "launcher",
+            "description": "Who started the run.",
+            "$ref": "#/components/schemas/pantherclaw.v1.InvestigationParty"
+          },
+          "principal": {
+            "title": "principal",
+            "description": "Whose authority the run uses.",
+            "$ref": "#/components/schemas/pantherclaw.v1.InvestigationParty"
+          },
+          "grantId": {
+            "type": "string",
+            "title": "grant_id",
+            "description": "The grant; empty for a run without one."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "Its state."
+          },
+          "startTime": {
+            "title": "start_time",
+            "description": "When it started.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "endTime": {
+            "title": "end_time",
+            "description": "When it ended; unset while active.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "endReason": {
+            "type": "string",
+            "title": "end_reason",
+            "description": "Why it ended; empty while active."
+          },
+          "parentRunId": {
+            "type": "string",
+            "title": "parent_run_id",
+            "description": "The parent run; empty for a top-level run."
+          },
+          "depth": {
+            "type": "integer",
+            "title": "depth",
+            "format": "int32",
+            "description": "Nesting depth; 0 for a top-level run."
+          }
+        },
+        "title": "RunSummary",
+        "additionalProperties": false,
+        "description": "RunSummary is who ran what under which authority."
+      },
+      "pantherclaw.v1.RunTimeline": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.TimelineEvent"
+            },
+            "title": "events",
+            "description": "Events, oldest first."
+          },
+          "phases": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.TimelinePhase"
+            },
+            "title": "phases",
+            "description": "Inferred phases (Team edition; empty otherwise)."
+          }
+        },
+        "title": "RunTimeline",
+        "additionalProperties": false,
+        "description": "RunTimeline is one page of the run's timeline."
       },
       "pantherclaw.v1.TimelineEvent": {
         "type": "object",
@@ -74043,6 +74852,11 @@
             },
             "title": "links",
             "description": "Links from and to it."
+          },
+          "explanation": {
+            "title": "explanation",
+            "description": "The decision explained for people (F066, F647).",
+            "$ref": "#/components/schemas/pantherclaw.v1.DecisionExplanation"
           }
         },
         "title": "GetTransactionEvidenceResponse",

@@ -28,9 +28,9 @@ import (
 // published policy, grants and guardrails, facts, budget usage), and the
 // Postgres store binds each decision in one transaction. Permits and
 // receipts, and action tokens (HR-188), are signed with the server's keys.
-func newAuthority(cfg *Config, pool *db.Pool, reg *keys.Registry, kp keys.KeyProvider, store *pgauthority.Store, log *slog.Logger) (
-	*authority.Service, error,
-) {
+func newAuthority(cfg *Config, pool *db.Pool, reg *keys.Registry, kp keys.KeyProvider, store *pgauthority.Store, consoleURL string,
+	log *slog.Logger,
+) (*authority.Service, error) {
 	receipts, err := reg.Signer(keys.PurposeReceipts)
 	if err != nil {
 		return nil, err
@@ -50,7 +50,7 @@ func newAuthority(cfg *Config, pool *db.Pool, reg *keys.Registry, kp keys.KeyPro
 			Inputs: replayInputs(pool, kp), Coverage: coverageClaims{svc: &covapp.Service{Pool: pool, Verifier: covapp.ConnectionTests{}}},
 			ClaimTimeout: claimTimeoutOf(cfg),
 		},
-		Logger: log,
+		Logger: log, ConsoleBaseURL: consoleURL,
 	}), nil
 }
 

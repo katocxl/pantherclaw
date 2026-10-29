@@ -94,6 +94,8 @@ type Refusal struct {
 	TargetStatus int            `json:"target_status,omitzero"`
 	Response     jsontext.Value `json:"response,omitempty"`
 	Receipt      string         `json:"receipt,omitempty"`
+	// Explanation is the agent-safe explanation (F330, HR-400).
+	Explanation *dispatch.Explanation `json:"explanation,omitempty"`
 }
 
 func refuse(w http.ResponseWriter, status int, r Refusal) {
@@ -252,6 +254,7 @@ func (h *Handler) write(w http.ResponseWriter, r *http.Request, res dispatch.Res
 	out := Refusal{
 		ErrorClass: string(res.Class), Error: res.Code, Decision: decision(res.Decision), Reasons: res.Reasons,
 		TransactionID: res.TransactionID, Monitor: res.Monitor, Outcome: outcome(res.Outcome), Receipt: res.Receipt,
+		Explanation: dispatch.ExplanationOf(res.Explanation),
 	}
 	if res.Response != nil {
 		out.TargetStatus = res.Response.Status

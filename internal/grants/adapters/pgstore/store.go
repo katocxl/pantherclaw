@@ -358,7 +358,7 @@ func (s *Store) BudgetAccounts(ctx context.Context, org ids.OrgID, owners []ids.
 		}
 		for _, r := range rows {
 			a := app.BudgetAccount{
-				OwnerKind: r.OwnerKind, OwnerID: r.OwnerID, Rule: r.Rule, PeriodStart: r.PeriodStart, Rank: int(r.Rank),
+				ID: r.ID, OwnerKind: r.OwnerKind, OwnerID: r.OwnerID, Rule: r.Rule, PeriodStart: r.PeriodStart, Rank: int(r.Rank),
 				Reserved: r.Reserved, Spent: r.Spent, ReservedCount: int64(r.ReservedCount), SpentCount: int64(r.SpentCount),
 			}
 			if r.Currency != nil {

@@ -43,7 +43,11 @@ func rpc(usage string, nargs int, setup func(fs *flag.FlagSet) call) command {
 		if err != nil {
 			return err
 		}
-		return a.print(res)
+		if err := a.print(res); err != nil {
+			return err
+		}
+		a.decisionNotes(res)
+		return nil
 	}}
 }
 

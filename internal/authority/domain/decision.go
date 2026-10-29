@@ -7,6 +7,8 @@
 // grant is gone.
 package domain
 
+import "strings"
+
 // Decision is an authorization decision (PAP-1 §7.1).
 type Decision string
 
@@ -67,4 +69,77 @@ func (o Outcome) Decisive() string {
 		return o.Reasons[0].Code
 	}
 	return ""
+}
+
+// Presentation is how a decision is shown to people and agents (F069).
+type Presentation string
+
+// The five presentations.
+const (
+	PresentAllow           Presentation = "ALLOW"
+	PresentConstrain       Presentation = "CONSTRAIN"
+	PresentHold            Presentation = "HOLD"
+	PresentDeny            Presentation = "DENY"
+	PresentCannotAuthorize Presentation = "CANNOT_AUTHORIZE"
+)
+
+// Presentation maps the decision: ALLOW_WITH_OBLIGATIONS is Constrain and
+// both REQUIRE_* decisions are Hold. An unknown decision is presented as
+// Cannot authorize, never as an allow.
+func (d Decision) Presentation() Presentation {
+	switch d {
+	case Allow:
+		return PresentAllow
+	case AllowWithObligations:
+		return PresentConstrain
+	case RequireApproval, RequireStepUp:
+		return PresentHold
+	case Deny:
+		return PresentDeny
+	case CannotAuthorize:
+	}
+	return PresentCannotAuthorize
+}
+
+// Label is the presentation's display name.
+func (p Presentation) Label() string {
+	switch p {
+	case PresentAllow:
+		return "Allow"
+	case PresentConstrain:
+		return "Constrain"
+	case PresentHold:
+		return "Hold"
+	case PresentDeny:
+		return "Deny"
+	case PresentCannotAuthorize:
+	}
+	return "Cannot authorize"
+}
+
+// Explains reports whether the presentation names a failing category:
+// only a decision that did not plainly allow does (F330).
+func (p Presentation) Explains() bool { return p != PresentAllow && p != PresentConstrain }
+
+// NextAction is a recovery action a decision links to (F330, F066).
+type NextAction struct {
+	Code, Label, URL string
+}
+
+// NextActionInspect opens the transaction's evidence.
+const NextActionInspect = "inspect_transaction"
+
+// NextActions are the recovery actions for a transaction: inspecting it,
+// with its console page when consoleURL (the server's public URL when it
+// serves a console) is set. A case cannot be opened from the CLI, so none
+// is offered. Nil without a transaction.
+func NextActions(consoleURL, txn string) []NextAction {
+	if txn == "" {
+		return nil
+	}
+	a := NextAction{Code: NextActionInspect, Label: "pclaw txn show " + txn}
+	if consoleURL != "" {
+		a.URL = strings.TrimSuffix(consoleURL, "/") + "/app/evidence/transactions/" + txn
+	}
+	return []NextAction{a}
 }

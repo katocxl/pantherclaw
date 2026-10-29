@@ -4,9 +4,12 @@
 package server
 
 import (
+	"context"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/actionir"
 	"github.com/katocxl/pantherclaw/internal/authority/adapters/pgauthority"
+	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/authority/recording"
 	"github.com/katocxl/pantherclaw/internal/authority/replay"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
@@ -15,6 +18,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	pccrypto "github.com/katocxl/pantherclaw/internal/platform/crypto"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
 )
 
@@ -38,4 +42,12 @@ func replayEngine(pool *db.Pool, kp keys.KeyProvider) *replay.Engine {
 		Source: &pgauthority.ReplaySource{Pool: pool, Definitions: &defspg.Store{Pool: pool}, FactStore: &factspg.Store{Pool: pool}},
 		Inputs: recording.NewSealer(pccrypto.NewEnvelope(keystore.NewDEKStore(pool, kp))),
 	}
+}
+
+// replayRecordings opens a decision's sealed inputs and pinned definition
+// for its explanation (F066): the replay engine's opener and source.
+type replayRecordings struct{ *replay.Engine }
+
+func (r replayRecordings) Definition(ctx context.Context, org ids.OrgID, pin actionir.Definition) (pipeline.Pinned, error) {
+	return r.Source.Definition(ctx, org, pin)
 }

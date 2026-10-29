@@ -48,11 +48,15 @@ type Event struct {
 	Detail string
 }
 
-// Gap is missing evidence on the timeline.
+// Gap is missing evidence on the timeline. Transaction is zero for a
+// telemetry gap, which names its Gateway instead.
 type Gap struct {
 	Kind        string
 	Transaction ids.UUID
 	At          time.Time
+	Gateway     *ids.UUID
+	Connection  *ids.UUID
+	Operation   string
 }
 
 // Lane is a child run.

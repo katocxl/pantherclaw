@@ -38,6 +38,8 @@ type hookReply struct {
 	code   int
 	hdr    http.Header
 	answer hook.Answer
+	// raw is the answer as sent.
+	raw []byte
 }
 
 func (h *harness) hook(t *testing.T, body string, hdr map[string]string) hookReply {
@@ -59,7 +61,7 @@ func (h *harness) hook(t *testing.T, body string, hdr map[string]string) hookRep
 	}
 	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(resp.Body)
-	r := hookReply{code: resp.StatusCode, hdr: resp.Header}
+	r := hookReply{code: resp.StatusCode, hdr: resp.Header, raw: b}
 	if err := json.Unmarshal(b, &r.answer); err != nil {
 		t.Fatalf("answer %d %q: %v", resp.StatusCode, b, err)
 	}

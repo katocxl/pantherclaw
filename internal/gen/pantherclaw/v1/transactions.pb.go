@@ -1966,7 +1966,9 @@ type GetTransactionEvidenceResponse struct {
 	// Its reconciliations.
 	Reconciliations []*Reconciliation `protobuf:"bytes,7,rep,name=reconciliations,proto3" json:"reconciliations,omitempty"`
 	// Links from and to it.
-	Links         []*TransactionLink `protobuf:"bytes,8,rep,name=links,proto3" json:"links,omitempty"`
+	Links []*TransactionLink `protobuf:"bytes,8,rep,name=links,proto3" json:"links,omitempty"`
+	// The decision explained for people (F066, F647).
+	Explanation   *DecisionExplanation `protobuf:"bytes,9,opt,name=explanation,proto3" json:"explanation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2053,6 +2055,13 @@ func (x *GetTransactionEvidenceResponse) GetReconciliations() []*Reconciliation 
 func (x *GetTransactionEvidenceResponse) GetLinks() []*TransactionLink {
 	if x != nil {
 		return x.Links
+	}
+	return nil
+}
+
+func (x *GetTransactionEvidenceResponse) GetExplanation() *DecisionExplanation {
+	if x != nil {
+		return x.Explanation
 	}
 	return nil
 }
@@ -2779,7 +2788,7 @@ const file_pantherclaw_v1_transactions_proto_rawDesc = "" +
 	"\ffacts_digest\x18\x04 \x01(\tR\vfactsDigest\x12!\n" +
 	"\fbasis_digest\x18\x05 \x01(\tR\vbasisDigest\x12.\n" +
 	"\x13approval_request_id\x18\x06 \x01(\tR\x11approvalRequestId\x12#\n" +
-	"\rconnection_id\x18\a \x01(\tR\fconnectionId\"\xa5\x04\n" +
+	"\rconnection_id\x18\a \x01(\tR\fconnectionId\"\xec\x04\n" +
 	"\x1eGetTransactionEvidenceResponse\x12=\n" +
 	"\vtransaction\x18\x01 \x01(\v2\x1b.pantherclaw.v1.TransactionR\vtransaction\x12L\n" +
 	"\x11decision_receipts\x18\x02 \x03(\v2\x1f.pantherclaw.v1.DecisionReceiptR\x10decisionReceipts\x123\n" +
@@ -2788,7 +2797,8 @@ const file_pantherclaw_v1_transactions_proto_rawDesc = "" +
 	"\fobservations\x18\x05 \x03(\v2\x1b.pantherclaw.v1.ObservationR\fobservations\x12F\n" +
 	"\x0feffect_receipts\x18\x06 \x03(\v2\x1d.pantherclaw.v1.EffectReceiptR\x0eeffectReceipts\x12H\n" +
 	"\x0freconciliations\x18\a \x03(\v2\x1e.pantherclaw.v1.ReconciliationR\x0freconciliations\x125\n" +
-	"\x05links\x18\b \x03(\v2\x1f.pantherclaw.v1.TransactionLinkR\x05links\"\xe9\x02\n" +
+	"\x05links\x18\b \x03(\v2\x1f.pantherclaw.v1.TransactionLinkR\x05links\x12E\n" +
+	"\vexplanation\x18\t \x01(\v2#.pantherclaw.v1.DecisionExplanationR\vexplanation\"\xe9\x02\n" +
 	"\x1aListReconciliationsRequest\x12'\n" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x128\n" +
@@ -2935,6 +2945,7 @@ var file_pantherclaw_v1_transactions_proto_goTypes = []any{
 	(Decision)(0),                          // 34: pantherclaw.v1.Decision
 	(CoverageState)(0),                     // 35: pantherclaw.v1.CoverageState
 	(Outcome)(0),                           // 36: pantherclaw.v1.Outcome
+	(*DecisionExplanation)(nil),            // 37: pantherclaw.v1.DecisionExplanation
 }
 var file_pantherclaw_v1_transactions_proto_depIdxs = []int32{
 	3,  // 0: pantherclaw.v1.Integrity.status:type_name -> pantherclaw.v1.IntegrityStatus
@@ -2983,33 +2994,34 @@ var file_pantherclaw_v1_transactions_proto_depIdxs = []int32{
 	16, // 43: pantherclaw.v1.GetTransactionEvidenceResponse.effect_receipts:type_name -> pantherclaw.v1.EffectReceipt
 	17, // 44: pantherclaw.v1.GetTransactionEvidenceResponse.reconciliations:type_name -> pantherclaw.v1.Reconciliation
 	18, // 45: pantherclaw.v1.GetTransactionEvidenceResponse.links:type_name -> pantherclaw.v1.TransactionLink
-	5,  // 46: pantherclaw.v1.ListReconciliationsRequest.states:type_name -> pantherclaw.v1.ReconciliationState
-	4,  // 47: pantherclaw.v1.ListReconciliationsRequest.kinds:type_name -> pantherclaw.v1.ReconciliationKind
-	17, // 48: pantherclaw.v1.ListReconciliationsResponse.reconciliations:type_name -> pantherclaw.v1.Reconciliation
-	17, // 49: pantherclaw.v1.GetReconciliationResponse.reconciliation:type_name -> pantherclaw.v1.Reconciliation
-	8,  // 50: pantherclaw.v1.GetReconciliationResponse.transaction:type_name -> pantherclaw.v1.Transaction
-	17, // 51: pantherclaw.v1.ResolveOccurredResponse.reconciliation:type_name -> pantherclaw.v1.Reconciliation
-	6,  // 52: pantherclaw.v1.LinkTransactionRequest.kind:type_name -> pantherclaw.v1.LinkKind
-	18, // 53: pantherclaw.v1.LinkTransactionResponse.link:type_name -> pantherclaw.v1.TransactionLink
-	9,  // 54: pantherclaw.v1.TransactionService.ListTransactions:input_type -> pantherclaw.v1.ListTransactionsRequest
-	11, // 55: pantherclaw.v1.TransactionService.GetTransactionEvidence:input_type -> pantherclaw.v1.GetTransactionEvidenceRequest
-	22, // 56: pantherclaw.v1.ReconciliationService.ListReconciliations:input_type -> pantherclaw.v1.ListReconciliationsRequest
-	24, // 57: pantherclaw.v1.ReconciliationService.GetReconciliation:input_type -> pantherclaw.v1.GetReconciliationRequest
-	26, // 58: pantherclaw.v1.ReconciliationService.ResolveOccurred:input_type -> pantherclaw.v1.ResolveOccurredRequest
-	28, // 59: pantherclaw.v1.ReconciliationService.RequestVerification:input_type -> pantherclaw.v1.RequestVerificationRequest
-	30, // 60: pantherclaw.v1.ReconciliationService.LinkTransaction:input_type -> pantherclaw.v1.LinkTransactionRequest
-	10, // 61: pantherclaw.v1.TransactionService.ListTransactions:output_type -> pantherclaw.v1.ListTransactionsResponse
-	21, // 62: pantherclaw.v1.TransactionService.GetTransactionEvidence:output_type -> pantherclaw.v1.GetTransactionEvidenceResponse
-	23, // 63: pantherclaw.v1.ReconciliationService.ListReconciliations:output_type -> pantherclaw.v1.ListReconciliationsResponse
-	25, // 64: pantherclaw.v1.ReconciliationService.GetReconciliation:output_type -> pantherclaw.v1.GetReconciliationResponse
-	27, // 65: pantherclaw.v1.ReconciliationService.ResolveOccurred:output_type -> pantherclaw.v1.ResolveOccurredResponse
-	29, // 66: pantherclaw.v1.ReconciliationService.RequestVerification:output_type -> pantherclaw.v1.RequestVerificationResponse
-	31, // 67: pantherclaw.v1.ReconciliationService.LinkTransaction:output_type -> pantherclaw.v1.LinkTransactionResponse
-	61, // [61:68] is the sub-list for method output_type
-	54, // [54:61] is the sub-list for method input_type
-	54, // [54:54] is the sub-list for extension type_name
-	54, // [54:54] is the sub-list for extension extendee
-	0,  // [0:54] is the sub-list for field type_name
+	37, // 46: pantherclaw.v1.GetTransactionEvidenceResponse.explanation:type_name -> pantherclaw.v1.DecisionExplanation
+	5,  // 47: pantherclaw.v1.ListReconciliationsRequest.states:type_name -> pantherclaw.v1.ReconciliationState
+	4,  // 48: pantherclaw.v1.ListReconciliationsRequest.kinds:type_name -> pantherclaw.v1.ReconciliationKind
+	17, // 49: pantherclaw.v1.ListReconciliationsResponse.reconciliations:type_name -> pantherclaw.v1.Reconciliation
+	17, // 50: pantherclaw.v1.GetReconciliationResponse.reconciliation:type_name -> pantherclaw.v1.Reconciliation
+	8,  // 51: pantherclaw.v1.GetReconciliationResponse.transaction:type_name -> pantherclaw.v1.Transaction
+	17, // 52: pantherclaw.v1.ResolveOccurredResponse.reconciliation:type_name -> pantherclaw.v1.Reconciliation
+	6,  // 53: pantherclaw.v1.LinkTransactionRequest.kind:type_name -> pantherclaw.v1.LinkKind
+	18, // 54: pantherclaw.v1.LinkTransactionResponse.link:type_name -> pantherclaw.v1.TransactionLink
+	9,  // 55: pantherclaw.v1.TransactionService.ListTransactions:input_type -> pantherclaw.v1.ListTransactionsRequest
+	11, // 56: pantherclaw.v1.TransactionService.GetTransactionEvidence:input_type -> pantherclaw.v1.GetTransactionEvidenceRequest
+	22, // 57: pantherclaw.v1.ReconciliationService.ListReconciliations:input_type -> pantherclaw.v1.ListReconciliationsRequest
+	24, // 58: pantherclaw.v1.ReconciliationService.GetReconciliation:input_type -> pantherclaw.v1.GetReconciliationRequest
+	26, // 59: pantherclaw.v1.ReconciliationService.ResolveOccurred:input_type -> pantherclaw.v1.ResolveOccurredRequest
+	28, // 60: pantherclaw.v1.ReconciliationService.RequestVerification:input_type -> pantherclaw.v1.RequestVerificationRequest
+	30, // 61: pantherclaw.v1.ReconciliationService.LinkTransaction:input_type -> pantherclaw.v1.LinkTransactionRequest
+	10, // 62: pantherclaw.v1.TransactionService.ListTransactions:output_type -> pantherclaw.v1.ListTransactionsResponse
+	21, // 63: pantherclaw.v1.TransactionService.GetTransactionEvidence:output_type -> pantherclaw.v1.GetTransactionEvidenceResponse
+	23, // 64: pantherclaw.v1.ReconciliationService.ListReconciliations:output_type -> pantherclaw.v1.ListReconciliationsResponse
+	25, // 65: pantherclaw.v1.ReconciliationService.GetReconciliation:output_type -> pantherclaw.v1.GetReconciliationResponse
+	27, // 66: pantherclaw.v1.ReconciliationService.ResolveOccurred:output_type -> pantherclaw.v1.ResolveOccurredResponse
+	29, // 67: pantherclaw.v1.ReconciliationService.RequestVerification:output_type -> pantherclaw.v1.RequestVerificationResponse
+	31, // 68: pantherclaw.v1.ReconciliationService.LinkTransaction:output_type -> pantherclaw.v1.LinkTransactionResponse
+	62, // [62:69] is the sub-list for method output_type
+	55, // [55:62] is the sub-list for method input_type
+	55, // [55:55] is the sub-list for extension type_name
+	55, // [55:55] is the sub-list for extension extendee
+	0,  // [0:55] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_transactions_proto_init() }

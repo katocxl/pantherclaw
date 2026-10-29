@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 )
@@ -178,4 +179,44 @@ func m7Commands() map[string]command {
 			}
 		}),
 	}
+}
+
+// decisionNotes writes, for a person, one line per transaction to stderr
+// (stdout stays the API's JSON): "<id>  <Label> (<DECISION>)  <code>"
+// (F069); `txn show` adds the explanation's category, code and next
+// actions (F066).
+func (a *app) decisionNotes(res proto.Message) {
+	switch r := res.(type) {
+	case *pantherclawv1.ListTransactionsResponse:
+		for _, t := range r.GetTransactions() {
+			_, _ = fmt.Fprintln(a.stderr, decisionLine(t.GetId(), t.GetDecision(), t.GetReasonCode()))
+		}
+	case *pantherclawv1.GetTransactionEvidenceResponse:
+		t, x := r.GetTransaction(), r.GetExplanation()
+		code := t.GetReasonCode()
+		if c := x.GetDecisive().GetCode(); c != "" {
+			code = c
+		}
+		_, _ = fmt.Fprintln(a.stderr, decisionLine(t.GetId(), t.GetDecision(), code))
+		if x == nil {
+			return
+		}
+		if c := x.GetFailingCategory(); c != "" {
+			_, _ = fmt.Fprintf(a.stderr, "  category: %s\n", c)
+		}
+		_, _ = fmt.Fprintf(a.stderr, "  code: %s\n", code)
+		for _, n := range x.GetNextActions() {
+			line := "  next: " + n.GetLabel()
+			if n.GetUrl() != "" {
+				line += "  " + n.GetUrl()
+			}
+			_, _ = fmt.Fprintln(a.stderr, line)
+		}
+	}
+}
+
+// decisionLine is "<id>  <Label> (<DECISION>)  <code>".
+func decisionLine(id string, d pantherclawv1.Decision, code string) string {
+	name := strings.TrimPrefix(d.String(), "DECISION_")
+	return id + "  " + adomain.Decision(name).Presentation().Label() + " (" + name + ")  " + code
 }

@@ -192,7 +192,12 @@ func (f *fakeAuthority) Authorize(ctx context.Context, req *pb.AuthorizeRequest)
 	}
 	monitor := f.mode == pb.DispatchMode_DISPATCH_MODE_MONITOR
 	if f.decision != pb.Decision_DECISION_ALLOW {
-		res.Reasons = []*pb.Reason{{Code: "GRANT_AMOUNT_EXCEEDED", Decisive: true}}
+		res.Reasons = []*pb.Reason{{Code: "GRANT_AMOUNT_EXCEEDED", Check: "authority", Detail: "amount 30.00 exceeds the grant's 10.00", Decisive: true}}
+		res.AgentExplanation = &pb.AgentExplanation{
+			Presentation: pb.DecisionPresentation_DECISION_PRESENTATION_DENY, FailingCategory: "authority",
+			DecisiveCode: "GRANT_AMOUNT_EXCEEDED", TransactionId: f.txn,
+			NextActions: []*pb.NextAction{{Code: "inspect_transaction", Label: "pclaw txn show " + f.txn, Url: "https://pc.example/app/evidence/transactions/" + f.txn}},
+		}
 	}
 	if f.noPermit || (f.decision != pb.Decision_DECISION_ALLOW && !monitor) {
 		return res, nil

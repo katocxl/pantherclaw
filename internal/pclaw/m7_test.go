@@ -26,14 +26,20 @@ type recordTransactions struct {
 
 func (r *recordTransactions) ListTransactions(_ context.Context, req *pantherclawv1.ListTransactionsRequest) (*pantherclawv1.ListTransactionsResponse, error) {
 	r.list = req
-	return &pantherclawv1.ListTransactionsResponse{}, nil
+	return &pantherclawv1.ListTransactionsResponse{Transactions: []*pantherclawv1.Transaction{{
+		Id: "0192aaaa-bbbb-7ccc-8ddd-0000000000f1", Decision: pantherclawv1.Decision_DECISION_REQUIRE_APPROVAL, ReasonCode: "REFUND_OVER_50",
+	}}}, nil
 }
 
 func (r *recordTransactions) GetTransactionEvidence(_ context.Context, req *pantherclawv1.GetTransactionEvidenceRequest) (*pantherclawv1.GetTransactionEvidenceResponse, error) {
 	r.show = req
 	return &pantherclawv1.GetTransactionEvidenceResponse{Transaction: &pantherclawv1.Transaction{
 		Id: req.GetId(), ExecutionState: pantherclawv1.ExecutionState_EXECUTION_STATE_ACCEPTED,
-		EffectState: pantherclawv1.EffectState_EFFECT_STATE_CONFIRMED,
+		EffectState: pantherclawv1.EffectState_EFFECT_STATE_CONFIRMED, Decision: pantherclawv1.Decision_DECISION_DENY, ReasonCode: "GRANT_AMOUNT_EXCEEDED",
+	}, Explanation: &pantherclawv1.DecisionExplanation{
+		Decision: pantherclawv1.Decision_DECISION_DENY, Presentation: pantherclawv1.DecisionPresentation_DECISION_PRESENTATION_DENY,
+		FailingCategory: "authority", Decisive: &pantherclawv1.ChecklistItem{Check: "authority", Code: "GRANT_AMOUNT_EXCEEDED", Decisive: true},
+		NextActions: []*pantherclawv1.NextAction{{Code: "inspect_transaction", Label: "pclaw txn show " + req.GetId(), Url: "https://pc.example/app/evidence/transactions/" + req.GetId()}},
 	}}, nil
 }
 
@@ -99,6 +105,16 @@ func TestM7TransactionAndReconcileCommands(t *testing.T) {
 	code, out, errs := run(t, env, "txn", "show", txn)
 	if code != 0 || rt.show.GetId() != txn || !strings.Contains(out, "EXECUTION_STATE_ACCEPTED") || !strings.Contains(out, "EFFECT_STATE_CONFIRMED") {
 		t.Fatalf("txn show = %d %q %q", code, out, errs)
+	}
+	// Covers: F069, F066. stdout stays the API's JSON; a person reads the
+	// decision's presentation and its next actions on stderr.
+	if !strings.Contains(out, `"explanation"`) || strings.Contains(out, "Deny (DENY)") ||
+		!strings.Contains(errs, txn+"  Deny (DENY)  GRANT_AMOUNT_EXCEEDED\n") || !strings.Contains(errs, "  category: authority\n") ||
+		!strings.Contains(errs, "  next: pclaw txn show "+txn+"  https://pc.example/app/evidence/transactions/"+txn+"\n") {
+		t.Fatalf("txn show notes: stdout %q, stderr %q", out, errs)
+	}
+	if _, _, errs := run(t, env, "txn", "list"); !strings.Contains(errs, "0192aaaa-bbbb-7ccc-8ddd-0000000000f1  Hold (REQUIRE_APPROVAL)  REFUND_OVER_50\n") {
+		t.Fatalf("txn list notes: %q", errs)
 	}
 
 	if code, _, errs := run(t, env, "reconcile", "list", "--state", "open", "--kind", "unknown_outcome", "--transaction", txn); code != 0 ||

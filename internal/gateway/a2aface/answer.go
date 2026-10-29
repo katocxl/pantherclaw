@@ -107,6 +107,9 @@ func refusal(res dispatch.Result) *faceError {
 	if res.Wait != nil {
 		facts["wait"] = map[string]any{"handle": res.Wait.GetHandle()}
 	}
+	if x := dispatch.ExplanationOf(res.Explanation); x != nil {
+		facts["explanation"] = x
+	}
 	msg := "PantherClaw did not send this call: " + string(res.Class)
 	if res.Code != "" {
 		msg += " (" + res.Code + ")"
