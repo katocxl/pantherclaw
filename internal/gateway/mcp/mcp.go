@@ -110,8 +110,8 @@ type Handler struct {
 	publicURL string
 	origin    string
 	log       *slog.Logger
-	holds     *store
-	sessions  *sessions
+	holds     holdStore
+	sessions  sessionStore
 }
 
 // New returns the MCP face. publicURL is the gateway's base URL: proofs

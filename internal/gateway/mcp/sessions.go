@@ -4,11 +4,8 @@
 package mcp
 
 import (
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"errors"
-	"sync"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
@@ -53,88 +50,25 @@ func (s session) binds(conn string, in dispatch.Inbound) bool {
 	return s.conn == conn && s.instance == in.Instance && s.jkt == in.JKT && (in.Run == "" || in.Run == s.run)
 }
 
-type sessions struct {
-	now func() time.Time
-	mu  sync.Mutex
-	// m is keyed by the SHA-256 of the session id.
-	m map[[sha256.Size]byte]*session
-}
-
-func newSessions(now func() time.Time) *sessions {
-	return &sessions{now: now, m: map[[sha256.Size]byte]*session{}}
-}
-
 func sessionKey(id string) [sha256.Size]byte { return sha256.Sum256([]byte(id)) }
-
-// open starts a session ending at most 8 hours from now and never after
-// runExpires, and returns its id.
-func (s *sessions) open(conn, instance, jkt, run string, runExpires time.Time) (string, error) {
-	var raw [32]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return "", err
-	}
-	id := base64.RawURLEncoding.EncodeToString(raw[:])
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := s.now()
-	for k, v := range s.m {
-		if !v.live(now) {
-			delete(s.m, k)
-		}
-	}
-	var mine [][sha256.Size]byte
-	for k, v := range s.m {
-		if v.instance == instance {
-			mine = append(mine, k)
-		}
-	}
-	if len(mine) >= maxSessionsPerInstance {
-		oldest := mine[0]
-		for _, k := range mine[1:] {
-			if s.m[k].seen.Before(s.m[oldest].seen) {
-				oldest = k
-			}
-		}
-		delete(s.m, oldest)
-	}
-	if len(s.m) >= maxSessions {
-		return "", errSessionsFull
-	}
-	expires := now.Add(sessionMax)
-	if !runExpires.IsZero() && runExpires.Before(expires) {
-		expires = runExpires
-	}
-	s.m[sessionKey(id)] = &session{conn: conn, instance: instance, jkt: jkt, run: run, seen: now, expires: expires}
-	return id, nil
-}
 
 func (v *session) live(now time.Time) bool {
 	return now.Before(v.expires) && now.Sub(v.seen) < sessionIdle
 }
 
-// get returns a live session.
-func (s *sessions) get(id string) (session, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	v, ok := s.m[sessionKey(id)]
-	if !ok || !v.live(s.now()) {
-		return session{}, false
-	}
-	return *v, true
-}
-
-// touch records a verified request in the session.
-func (s *sessions) touch(id string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if v, ok := s.m[sessionKey(id)]; ok {
-		v.seen = s.now()
-	}
-}
-
-// end ends a session.
-func (s *sessions) end(id string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.m, sessionKey(id))
+// sessionStore keeps a gateway's sessions (G0 M15 D14): in memory
+// (state_memory.go) or on the server (state_server.go), where every
+// replica sees them and only the SHA-256 of a session id is stored
+// (HR-413).
+type sessionStore interface {
+	// open starts a session ending at most 8 hours from now and never
+	// after runExpires, and returns its id; errSessionsFull when the
+	// gateway holds as many as it may.
+	open(conn, instance, jkt, run string, runExpires time.Time) (string, error)
+	// get returns a live session; err when the store cannot be asked.
+	get(id string) (sess session, ok bool, err error)
+	// touch records a verified request in the session.
+	touch(id string)
+	// end ends a session.
+	end(id string)
 }

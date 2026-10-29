@@ -138,6 +138,27 @@ service GatewayService {
   // the gateway serves.
   // permission: gateway.observe
   rpc ReportLocalRefusal(ReportLocalRefusalRequest) returns (ReportLocalRefusalResponse);
+  // ReportStatus reports one gateway replica's status (G0 M15 D10,
+  // HR-410): its version, build, start time, the config version it serves
+  // and each connection's serving state. The org and gateway come from the
+  // certificate alone; connections the gateway does not serve are dropped.
+  // A failed report never stops the gateway serving.
+  // permission: gateway.observe
+  rpc ReportStatus(ReportStatusRequest) returns (ReportStatusResponse);
+  // PutMCPState writes one MCP hold, task or session of the calling
+  // gateway (G0 M15 D12, HR-411..413), compare-and-set on if_version.
+  // permission: gateway.sync
+  rpc PutMCPState(PutMCPStateRequest) returns (PutMCPStateResponse);
+  // GetMCPState reads one live MCP hold, task or session of the calling
+  // gateway; an expired entry is not found.
+  // permission: gateway.sync
+  rpc GetMCPState(GetMCPStateRequest) returns (GetMCPStateResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // DeleteMCPState deletes one MCP hold, task or session of the calling
+  // gateway; a missing entry is not an error.
+  // permission: gateway.sync
+  rpc DeleteMCPState(DeleteMCPStateRequest) returns (DeleteMCPStateResponse);
 }
 
 // GatewayState is whether a gateway may act.
@@ -181,6 +202,26 @@ message Gateway {
   // hosting says who runs the gateway; PantherClaw-hosted ones come only
   // from the server's configuration and run no connector (HR-084).
   GatewayHosting hosting = 15;
+  // The replicas that reported status in the last 24 hours (G0 M15 D10).
+  repeated GatewayReplica replicas = 16;
+  // Whether some replica reported in the last 90 seconds.
+  bool connected = 17;
+}
+
+// GatewayReplica is one gateway process that reports status (G0 M15 D10).
+message GatewayReplica {
+  // Random per process start.
+  string replica_id = 1;
+  // Its version.
+  string version = 2;
+  // Its build.
+  string build = 3;
+  // When the process started.
+  google.protobuf.Timestamp start_time = 4;
+  // The config version it serves.
+  int64 config_version = 5;
+  // When it last reported.
+  google.protobuf.Timestamp last_seen_time = 6;
 }
 
 // GatewayCertificate is one certificate the internal CA issued.
@@ -870,4 +911,154 @@ message ReportObservationResponse {
   string effect_state = 2;
   // Whether the task ended.
   bool done = 3;
+}
+
+// ReportStatusRequest is one replica's status (G0 M15 D10).
+message ReportStatusRequest {
+  // Random per process start.
+  string replica_id = 1 [(buf.validate.field).string.pattern = "^[A-Za-z0-9_-]{22}$"];
+  // The gateway's version.
+  string version = 2 [(buf.validate.field).string.max_len = 64];
+  // The gateway's build.
+  string build = 3 [(buf.validate.field).string.max_len = 64];
+  // When the process started.
+  google.protobuf.Timestamp start_time = 4;
+  // The config version it serves.
+  int64 config_version = 5 [(buf.validate.field).int64.gte = 0];
+  // Each connection's serving state.
+  repeated ConnectionStatus connections = 6 [(buf.validate.field).repeated.max_items = 1000];
+}
+
+// ConnectionStatus is one connection's serving state on a replica.
+message ConnectionStatus {
+  // Connection id.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  // Its serving state.
+  ConnectionServingState state = 2 [(buf.validate.field).enum.defined_only = true];
+  // When the replica last checked its upstream tools for drift.
+  google.protobuf.Timestamp last_drift_check_time = 3;
+}
+
+// ConnectionServingState is whether a replica serves a connection.
+enum ConnectionServingState {
+  CONNECTION_SERVING_STATE_UNSPECIFIED = 0;
+  CONNECTION_SERVING_STATE_SERVING = 1;
+  // Its circuit breaker is open (HR-078).
+  CONNECTION_SERVING_STATE_CIRCUIT_OPEN = 2;
+  // Its upstream tools drifted from the reviewed package (HR-081).
+  CONNECTION_SERVING_STATE_DRIFT_QUARANTINED = 3;
+  // It could not be loaded.
+  CONNECTION_SERVING_STATE_NOT_LOADED = 4;
+}
+
+// ReportStatusResponse says when to report next.
+message ReportStatusResponse {
+  // Seconds until the next report.
+  int32 next_report_seconds = 1;
+}
+
+// MCPStateKind is what an MCP state entry holds (G0 M15 D12).
+enum MCPStateKind {
+  MCP_STATE_KIND_UNSPECIFIED = 0;
+  MCP_STATE_KIND_HOLD = 1;
+  MCP_STATE_KIND_TASK = 2;
+  MCP_STATE_KIND_SESSION = 3;
+  // An elicitation the gateway relayed to the agent (G0 M15 D39).
+  MCP_STATE_KIND_ELICITATION = 4;
+}
+
+// MCPStateEntry is one MCP hold, task or session of a gateway, bound to
+// (connection, run, instance) (HR-411..413). The server never opens a
+// task's sealed body.
+message MCPStateEntry {
+  // Kind.
+  MCPStateKind kind = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // The SHA-256 of the canonical action (HOLD, TASK) or of the session id
+  // (SESSION); never the session id itself.
+  bytes key = 2 [(buf.validate.field).bytes.len = 32];
+  // Connection id.
+  string connection_id = 3 [(buf.validate.field).string.uuid = true];
+  // Run id; empty when none.
+  string run_id = 4 [(buf.validate.field).string.pattern = "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$"];
+  // Agent instance id; empty when none.
+  string instance_id = 5 [(buf.validate.field).string.pattern = "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$"];
+  // The RFC 7638 thumbprint of the key that opened the session (SESSION
+  // only).
+  string jkt = 6 [(buf.validate.field).string.max_len = 64];
+  // The held action's id (HOLD and TASK).
+  string action_id = 7 [(buf.validate.field).string.max_len = 64];
+  // TASK: working, completed, failed or cancelled.
+  string status = 8 [(buf.validate.field).string = {
+    in: [
+      "",
+      "working",
+      "completed",
+      "failed",
+      "cancelled"
+    ]
+  }];
+  // TASK: a poll claimed it and is resubmitting the action.
+  bool busy = 9;
+  // TASK and ELICITATION only: sealed to the gateway's active broker key
+  // (D13).
+  bytes sealed_body = 10 [(buf.validate.field).bytes.max_len = 4194304];
+  // Server-assigned, +1 per write.
+  int64 version = 11;
+  // When the entry expires.
+  google.protobuf.Timestamp expire_time = 12 [(buf.validate.field).required = true];
+  // Server-set: when it was last written.
+  google.protobuf.Timestamp update_time = 13;
+}
+
+// PutMCPStateRequest writes an entry.
+message PutMCPStateRequest {
+  // The entry.
+  MCPStateEntry entry = 1 [(buf.validate.field).required = true];
+  // 0: the entry must not exist; otherwise its stored version.
+  int64 if_version = 2 [(buf.validate.field).int64.gte = 0];
+}
+
+// PutMCPStateResponse returns the new version.
+message PutMCPStateResponse {
+  // The entry's version.
+  int64 version = 1;
+}
+
+// GetMCPStateRequest reads an entry.
+message GetMCPStateRequest {
+  // Kind.
+  MCPStateKind kind = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Key.
+  bytes key = 2 [(buf.validate.field).bytes.len = 32];
+}
+
+// GetMCPStateResponse returns the entry.
+message GetMCPStateResponse {
+  // The entry.
+  MCPStateEntry entry = 1;
+}
+
+// DeleteMCPStateRequest deletes an entry.
+message DeleteMCPStateRequest {
+  // Kind.
+  MCPStateKind kind = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Key.
+  bytes key = 2 [(buf.validate.field).bytes.len = 32];
+  // 0: whatever version; otherwise its stored version.
+  int64 if_version = 3 [(buf.validate.field).int64.gte = 0];
+}
+
+// DeleteMCPStateResponse says whether an entry was deleted.
+message DeleteMCPStateResponse {
+  // Whether there was one.
+  bool deleted = 1;
 }

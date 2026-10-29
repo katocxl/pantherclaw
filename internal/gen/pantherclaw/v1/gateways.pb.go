@@ -186,6 +186,122 @@ func (ContainmentStateKind) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{2}
 }
 
+// ConnectionServingState is whether a replica serves a connection.
+type ConnectionServingState int32
+
+const (
+	ConnectionServingState_CONNECTION_SERVING_STATE_UNSPECIFIED ConnectionServingState = 0
+	ConnectionServingState_CONNECTION_SERVING_STATE_SERVING     ConnectionServingState = 1
+	// Its circuit breaker is open (HR-078).
+	ConnectionServingState_CONNECTION_SERVING_STATE_CIRCUIT_OPEN ConnectionServingState = 2
+	// Its upstream tools drifted from the reviewed package (HR-081).
+	ConnectionServingState_CONNECTION_SERVING_STATE_DRIFT_QUARANTINED ConnectionServingState = 3
+	// It could not be loaded.
+	ConnectionServingState_CONNECTION_SERVING_STATE_NOT_LOADED ConnectionServingState = 4
+)
+
+// Enum value maps for ConnectionServingState.
+var (
+	ConnectionServingState_name = map[int32]string{
+		0: "CONNECTION_SERVING_STATE_UNSPECIFIED",
+		1: "CONNECTION_SERVING_STATE_SERVING",
+		2: "CONNECTION_SERVING_STATE_CIRCUIT_OPEN",
+		3: "CONNECTION_SERVING_STATE_DRIFT_QUARANTINED",
+		4: "CONNECTION_SERVING_STATE_NOT_LOADED",
+	}
+	ConnectionServingState_value = map[string]int32{
+		"CONNECTION_SERVING_STATE_UNSPECIFIED":       0,
+		"CONNECTION_SERVING_STATE_SERVING":           1,
+		"CONNECTION_SERVING_STATE_CIRCUIT_OPEN":      2,
+		"CONNECTION_SERVING_STATE_DRIFT_QUARANTINED": 3,
+		"CONNECTION_SERVING_STATE_NOT_LOADED":        4,
+	}
+)
+
+func (x ConnectionServingState) Enum() *ConnectionServingState {
+	p := new(ConnectionServingState)
+	*p = x
+	return p
+}
+
+func (x ConnectionServingState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ConnectionServingState) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_gateways_proto_enumTypes[3].Descriptor()
+}
+
+func (ConnectionServingState) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_gateways_proto_enumTypes[3]
+}
+
+func (x ConnectionServingState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ConnectionServingState.Descriptor instead.
+func (ConnectionServingState) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{3}
+}
+
+// MCPStateKind is what an MCP state entry holds (G0 M15 D12).
+type MCPStateKind int32
+
+const (
+	MCPStateKind_MCP_STATE_KIND_UNSPECIFIED MCPStateKind = 0
+	MCPStateKind_MCP_STATE_KIND_HOLD        MCPStateKind = 1
+	MCPStateKind_MCP_STATE_KIND_TASK        MCPStateKind = 2
+	MCPStateKind_MCP_STATE_KIND_SESSION     MCPStateKind = 3
+	// An elicitation the gateway relayed to the agent (G0 M15 D39).
+	MCPStateKind_MCP_STATE_KIND_ELICITATION MCPStateKind = 4
+)
+
+// Enum value maps for MCPStateKind.
+var (
+	MCPStateKind_name = map[int32]string{
+		0: "MCP_STATE_KIND_UNSPECIFIED",
+		1: "MCP_STATE_KIND_HOLD",
+		2: "MCP_STATE_KIND_TASK",
+		3: "MCP_STATE_KIND_SESSION",
+		4: "MCP_STATE_KIND_ELICITATION",
+	}
+	MCPStateKind_value = map[string]int32{
+		"MCP_STATE_KIND_UNSPECIFIED": 0,
+		"MCP_STATE_KIND_HOLD":        1,
+		"MCP_STATE_KIND_TASK":        2,
+		"MCP_STATE_KIND_SESSION":     3,
+		"MCP_STATE_KIND_ELICITATION": 4,
+	}
+)
+
+func (x MCPStateKind) Enum() *MCPStateKind {
+	p := new(MCPStateKind)
+	*p = x
+	return p
+}
+
+func (x MCPStateKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (MCPStateKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_gateways_proto_enumTypes[4].Descriptor()
+}
+
+func (MCPStateKind) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_gateways_proto_enumTypes[4]
+}
+
+func (x MCPStateKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use MCPStateKind.Descriptor instead.
+func (MCPStateKind) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{4}
+}
+
 // Gateway is one gateway record (one deployment; its replicas enroll
 // separately and share the record).
 type Gateway struct {
@@ -211,7 +327,11 @@ type Gateway struct {
 	RevokeReason string `protobuf:"bytes,9,opt,name=revoke_reason,json=revokeReason,proto3" json:"revoke_reason,omitempty"`
 	// hosting says who runs the gateway; PantherClaw-hosted ones come only
 	// from the server's configuration and run no connector (HR-084).
-	Hosting       GatewayHosting `protobuf:"varint,15,opt,name=hosting,proto3,enum=pantherclaw.v1.GatewayHosting" json:"hosting,omitempty"`
+	Hosting GatewayHosting `protobuf:"varint,15,opt,name=hosting,proto3,enum=pantherclaw.v1.GatewayHosting" json:"hosting,omitempty"`
+	// The replicas that reported status in the last 24 hours (G0 M15 D10).
+	Replicas []*GatewayReplica `protobuf:"bytes,16,rep,name=replicas,proto3" json:"replicas,omitempty"`
+	// Whether some replica reported in the last 90 seconds.
+	Connected     bool `protobuf:"varint,17,opt,name=connected,proto3" json:"connected,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -316,6 +436,111 @@ func (x *Gateway) GetHosting() GatewayHosting {
 	return GatewayHosting_GATEWAY_HOSTING_UNSPECIFIED
 }
 
+func (x *Gateway) GetReplicas() []*GatewayReplica {
+	if x != nil {
+		return x.Replicas
+	}
+	return nil
+}
+
+func (x *Gateway) GetConnected() bool {
+	if x != nil {
+		return x.Connected
+	}
+	return false
+}
+
+// GatewayReplica is one gateway process that reports status (G0 M15 D10).
+type GatewayReplica struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Random per process start.
+	ReplicaId string `protobuf:"bytes,1,opt,name=replica_id,json=replicaId,proto3" json:"replica_id,omitempty"`
+	// Its version.
+	Version string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	// Its build.
+	Build string `protobuf:"bytes,3,opt,name=build,proto3" json:"build,omitempty"`
+	// When the process started.
+	StartTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	// The config version it serves.
+	ConfigVersion int64 `protobuf:"varint,5,opt,name=config_version,json=configVersion,proto3" json:"config_version,omitempty"`
+	// When it last reported.
+	LastSeenTime  *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_seen_time,json=lastSeenTime,proto3" json:"last_seen_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GatewayReplica) Reset() {
+	*x = GatewayReplica{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GatewayReplica) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GatewayReplica) ProtoMessage() {}
+
+func (x *GatewayReplica) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GatewayReplica.ProtoReflect.Descriptor instead.
+func (*GatewayReplica) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *GatewayReplica) GetReplicaId() string {
+	if x != nil {
+		return x.ReplicaId
+	}
+	return ""
+}
+
+func (x *GatewayReplica) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *GatewayReplica) GetBuild() string {
+	if x != nil {
+		return x.Build
+	}
+	return ""
+}
+
+func (x *GatewayReplica) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
+	}
+	return nil
+}
+
+func (x *GatewayReplica) GetConfigVersion() int64 {
+	if x != nil {
+		return x.ConfigVersion
+	}
+	return 0
+}
+
+func (x *GatewayReplica) GetLastSeenTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastSeenTime
+	}
+	return nil
+}
+
 // GatewayCertificate is one certificate the internal CA issued.
 type GatewayCertificate struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -341,7 +566,7 @@ type GatewayCertificate struct {
 
 func (x *GatewayCertificate) Reset() {
 	*x = GatewayCertificate{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[1]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -353,7 +578,7 @@ func (x *GatewayCertificate) String() string {
 func (*GatewayCertificate) ProtoMessage() {}
 
 func (x *GatewayCertificate) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[1]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -366,7 +591,7 @@ func (x *GatewayCertificate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GatewayCertificate.ProtoReflect.Descriptor instead.
 func (*GatewayCertificate) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{1}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *GatewayCertificate) GetId() string {
@@ -446,7 +671,7 @@ type BrokerKey struct {
 
 func (x *BrokerKey) Reset() {
 	*x = BrokerKey{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[2]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -458,7 +683,7 @@ func (x *BrokerKey) String() string {
 func (*BrokerKey) ProtoMessage() {}
 
 func (x *BrokerKey) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[2]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -471,7 +696,7 @@ func (x *BrokerKey) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BrokerKey.ProtoReflect.Descriptor instead.
 func (*BrokerKey) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{2}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *BrokerKey) GetId() string {
@@ -527,7 +752,7 @@ type CreateGatewayRequest struct {
 
 func (x *CreateGatewayRequest) Reset() {
 	*x = CreateGatewayRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[3]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -539,7 +764,7 @@ func (x *CreateGatewayRequest) String() string {
 func (*CreateGatewayRequest) ProtoMessage() {}
 
 func (x *CreateGatewayRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[3]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -552,7 +777,7 @@ func (x *CreateGatewayRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateGatewayRequest.ProtoReflect.Descriptor instead.
 func (*CreateGatewayRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{3}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *CreateGatewayRequest) GetName() string {
@@ -573,7 +798,7 @@ type CreateGatewayResponse struct {
 
 func (x *CreateGatewayResponse) Reset() {
 	*x = CreateGatewayResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -585,7 +810,7 @@ func (x *CreateGatewayResponse) String() string {
 func (*CreateGatewayResponse) ProtoMessage() {}
 
 func (x *CreateGatewayResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -598,7 +823,7 @@ func (x *CreateGatewayResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateGatewayResponse.ProtoReflect.Descriptor instead.
 func (*CreateGatewayResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{4}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *CreateGatewayResponse) GetGateway() *Gateway {
@@ -619,7 +844,7 @@ type CreateGatewayEnrollmentTokenRequest struct {
 
 func (x *CreateGatewayEnrollmentTokenRequest) Reset() {
 	*x = CreateGatewayEnrollmentTokenRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[5]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -631,7 +856,7 @@ func (x *CreateGatewayEnrollmentTokenRequest) String() string {
 func (*CreateGatewayEnrollmentTokenRequest) ProtoMessage() {}
 
 func (x *CreateGatewayEnrollmentTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[5]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -644,7 +869,7 @@ func (x *CreateGatewayEnrollmentTokenRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use CreateGatewayEnrollmentTokenRequest.ProtoReflect.Descriptor instead.
 func (*CreateGatewayEnrollmentTokenRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{5}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CreateGatewayEnrollmentTokenRequest) GetGatewayId() string {
@@ -671,7 +896,7 @@ type CreateGatewayEnrollmentTokenResponse struct {
 
 func (x *CreateGatewayEnrollmentTokenResponse) Reset() {
 	*x = CreateGatewayEnrollmentTokenResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -683,7 +908,7 @@ func (x *CreateGatewayEnrollmentTokenResponse) String() string {
 func (*CreateGatewayEnrollmentTokenResponse) ProtoMessage() {}
 
 func (x *CreateGatewayEnrollmentTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -696,7 +921,7 @@ func (x *CreateGatewayEnrollmentTokenResponse) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use CreateGatewayEnrollmentTokenResponse.ProtoReflect.Descriptor instead.
 func (*CreateGatewayEnrollmentTokenResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{6}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CreateGatewayEnrollmentTokenResponse) GetToken() string {
@@ -742,7 +967,7 @@ type ListGatewaysRequest struct {
 
 func (x *ListGatewaysRequest) Reset() {
 	*x = ListGatewaysRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[7]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -754,7 +979,7 @@ func (x *ListGatewaysRequest) String() string {
 func (*ListGatewaysRequest) ProtoMessage() {}
 
 func (x *ListGatewaysRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[7]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -767,7 +992,7 @@ func (x *ListGatewaysRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGatewaysRequest.ProtoReflect.Descriptor instead.
 func (*ListGatewaysRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{7}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListGatewaysRequest) GetPageSize() int32 {
@@ -804,7 +1029,7 @@ type ListGatewaysResponse struct {
 
 func (x *ListGatewaysResponse) Reset() {
 	*x = ListGatewaysResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[8]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -816,7 +1041,7 @@ func (x *ListGatewaysResponse) String() string {
 func (*ListGatewaysResponse) ProtoMessage() {}
 
 func (x *ListGatewaysResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[8]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -829,7 +1054,7 @@ func (x *ListGatewaysResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGatewaysResponse.ProtoReflect.Descriptor instead.
 func (*ListGatewaysResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{8}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListGatewaysResponse) GetGateways() []*Gateway {
@@ -859,7 +1084,7 @@ type ListApproverKeysRequest struct {
 
 func (x *ListApproverKeysRequest) Reset() {
 	*x = ListApproverKeysRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -871,7 +1096,7 @@ func (x *ListApproverKeysRequest) String() string {
 func (*ListApproverKeysRequest) ProtoMessage() {}
 
 func (x *ListApproverKeysRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -884,7 +1109,7 @@ func (x *ListApproverKeysRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListApproverKeysRequest.ProtoReflect.Descriptor instead.
 func (*ListApproverKeysRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{9}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListApproverKeysRequest) GetPageSize() int32 {
@@ -919,7 +1144,7 @@ type ListApproverKeysResponse struct {
 
 func (x *ListApproverKeysResponse) Reset() {
 	*x = ListApproverKeysResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -931,7 +1156,7 @@ func (x *ListApproverKeysResponse) String() string {
 func (*ListApproverKeysResponse) ProtoMessage() {}
 
 func (x *ListApproverKeysResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -944,7 +1169,7 @@ func (x *ListApproverKeysResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListApproverKeysResponse.ProtoReflect.Descriptor instead.
 func (*ListApproverKeysResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{10}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ListApproverKeysResponse) GetOrgId() string {
@@ -1005,7 +1230,7 @@ type ApproverKey struct {
 
 func (x *ApproverKey) Reset() {
 	*x = ApproverKey{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1017,7 +1242,7 @@ func (x *ApproverKey) String() string {
 func (*ApproverKey) ProtoMessage() {}
 
 func (x *ApproverKey) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1030,7 +1255,7 @@ func (x *ApproverKey) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproverKey.ProtoReflect.Descriptor instead.
 func (*ApproverKey) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{11}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ApproverKey) GetId() string {
@@ -1114,7 +1339,7 @@ type GetGatewayRequest struct {
 
 func (x *GetGatewayRequest) Reset() {
 	*x = GetGatewayRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1126,7 +1351,7 @@ func (x *GetGatewayRequest) String() string {
 func (*GetGatewayRequest) ProtoMessage() {}
 
 func (x *GetGatewayRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1139,7 +1364,7 @@ func (x *GetGatewayRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGatewayRequest.ProtoReflect.Descriptor instead.
 func (*GetGatewayRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{12}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetGatewayRequest) GetId() string {
@@ -1164,7 +1389,7 @@ type GetGatewayResponse struct {
 
 func (x *GetGatewayResponse) Reset() {
 	*x = GetGatewayResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1176,7 +1401,7 @@ func (x *GetGatewayResponse) String() string {
 func (*GetGatewayResponse) ProtoMessage() {}
 
 func (x *GetGatewayResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1189,7 +1414,7 @@ func (x *GetGatewayResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGatewayResponse.ProtoReflect.Descriptor instead.
 func (*GetGatewayResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{13}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetGatewayResponse) GetGateway() *Gateway {
@@ -1226,7 +1451,7 @@ type RevokeGatewayRequest struct {
 
 func (x *RevokeGatewayRequest) Reset() {
 	*x = RevokeGatewayRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1238,7 +1463,7 @@ func (x *RevokeGatewayRequest) String() string {
 func (*RevokeGatewayRequest) ProtoMessage() {}
 
 func (x *RevokeGatewayRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1251,7 +1476,7 @@ func (x *RevokeGatewayRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeGatewayRequest.ProtoReflect.Descriptor instead.
 func (*RevokeGatewayRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{14}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *RevokeGatewayRequest) GetId() string {
@@ -1279,7 +1504,7 @@ type RevokeGatewayResponse struct {
 
 func (x *RevokeGatewayResponse) Reset() {
 	*x = RevokeGatewayResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1291,7 +1516,7 @@ func (x *RevokeGatewayResponse) String() string {
 func (*RevokeGatewayResponse) ProtoMessage() {}
 
 func (x *RevokeGatewayResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1304,7 +1529,7 @@ func (x *RevokeGatewayResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeGatewayResponse.ProtoReflect.Descriptor instead.
 func (*RevokeGatewayResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{15}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *RevokeGatewayResponse) GetGateway() *Gateway {
@@ -1327,7 +1552,7 @@ type RevokeGatewayCertificateRequest struct {
 
 func (x *RevokeGatewayCertificateRequest) Reset() {
 	*x = RevokeGatewayCertificateRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[16]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1339,7 +1564,7 @@ func (x *RevokeGatewayCertificateRequest) String() string {
 func (*RevokeGatewayCertificateRequest) ProtoMessage() {}
 
 func (x *RevokeGatewayCertificateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[16]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1352,7 +1577,7 @@ func (x *RevokeGatewayCertificateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeGatewayCertificateRequest.ProtoReflect.Descriptor instead.
 func (*RevokeGatewayCertificateRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{16}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *RevokeGatewayCertificateRequest) GetGatewayId() string {
@@ -1378,7 +1603,7 @@ type RevokeGatewayCertificateResponse struct {
 
 func (x *RevokeGatewayCertificateResponse) Reset() {
 	*x = RevokeGatewayCertificateResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[17]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1390,7 +1615,7 @@ func (x *RevokeGatewayCertificateResponse) String() string {
 func (*RevokeGatewayCertificateResponse) ProtoMessage() {}
 
 func (x *RevokeGatewayCertificateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[17]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1403,7 +1628,7 @@ func (x *RevokeGatewayCertificateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeGatewayCertificateResponse.ProtoReflect.Descriptor instead.
 func (*RevokeGatewayCertificateResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{17}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{18}
 }
 
 // GatewayServiceEnrollRequest exchanges a token for a certificate.
@@ -1419,7 +1644,7 @@ type GatewayServiceEnrollRequest struct {
 
 func (x *GatewayServiceEnrollRequest) Reset() {
 	*x = GatewayServiceEnrollRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[18]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1431,7 +1656,7 @@ func (x *GatewayServiceEnrollRequest) String() string {
 func (*GatewayServiceEnrollRequest) ProtoMessage() {}
 
 func (x *GatewayServiceEnrollRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[18]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1444,7 +1669,7 @@ func (x *GatewayServiceEnrollRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GatewayServiceEnrollRequest.ProtoReflect.Descriptor instead.
 func (*GatewayServiceEnrollRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{18}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GatewayServiceEnrollRequest) GetToken() string {
@@ -1480,7 +1705,7 @@ type GatewayServiceEnrollResponse struct {
 
 func (x *GatewayServiceEnrollResponse) Reset() {
 	*x = GatewayServiceEnrollResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[19]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1492,7 +1717,7 @@ func (x *GatewayServiceEnrollResponse) String() string {
 func (*GatewayServiceEnrollResponse) ProtoMessage() {}
 
 func (x *GatewayServiceEnrollResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[19]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1505,7 +1730,7 @@ func (x *GatewayServiceEnrollResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GatewayServiceEnrollResponse.ProtoReflect.Descriptor instead.
 func (*GatewayServiceEnrollResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{19}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GatewayServiceEnrollResponse) GetCertificate() []byte {
@@ -1554,7 +1779,7 @@ type RenewCertificateRequest struct {
 
 func (x *RenewCertificateRequest) Reset() {
 	*x = RenewCertificateRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1566,7 +1791,7 @@ func (x *RenewCertificateRequest) String() string {
 func (*RenewCertificateRequest) ProtoMessage() {}
 
 func (x *RenewCertificateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1579,7 +1804,7 @@ func (x *RenewCertificateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenewCertificateRequest.ProtoReflect.Descriptor instead.
 func (*RenewCertificateRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{20}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *RenewCertificateRequest) GetCsr() []byte {
@@ -1602,7 +1827,7 @@ type RenewCertificateResponse struct {
 
 func (x *RenewCertificateResponse) Reset() {
 	*x = RenewCertificateResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1614,7 +1839,7 @@ func (x *RenewCertificateResponse) String() string {
 func (*RenewCertificateResponse) ProtoMessage() {}
 
 func (x *RenewCertificateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1627,7 +1852,7 @@ func (x *RenewCertificateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenewCertificateResponse.ProtoReflect.Descriptor instead.
 func (*RenewCertificateResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{21}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *RenewCertificateResponse) GetCertificate() []byte {
@@ -1656,7 +1881,7 @@ type RegisterBrokerKeyRequest struct {
 
 func (x *RegisterBrokerKeyRequest) Reset() {
 	*x = RegisterBrokerKeyRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[22]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1668,7 +1893,7 @@ func (x *RegisterBrokerKeyRequest) String() string {
 func (*RegisterBrokerKeyRequest) ProtoMessage() {}
 
 func (x *RegisterBrokerKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[22]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1681,7 +1906,7 @@ func (x *RegisterBrokerKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterBrokerKeyRequest.ProtoReflect.Descriptor instead.
 func (*RegisterBrokerKeyRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{22}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *RegisterBrokerKeyRequest) GetPublicKey() []byte {
@@ -1702,7 +1927,7 @@ type RegisterBrokerKeyResponse struct {
 
 func (x *RegisterBrokerKeyResponse) Reset() {
 	*x = RegisterBrokerKeyResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[23]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1714,7 +1939,7 @@ func (x *RegisterBrokerKeyResponse) String() string {
 func (*RegisterBrokerKeyResponse) ProtoMessage() {}
 
 func (x *RegisterBrokerKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[23]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1727,7 +1952,7 @@ func (x *RegisterBrokerKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterBrokerKeyResponse.ProtoReflect.Descriptor instead.
 func (*RegisterBrokerKeyResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{23}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *RegisterBrokerKeyResponse) GetBrokerKey() *BrokerKey {
@@ -1749,7 +1974,7 @@ type GetConfigurationRequest struct {
 
 func (x *GetConfigurationRequest) Reset() {
 	*x = GetConfigurationRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1761,7 +1986,7 @@ func (x *GetConfigurationRequest) String() string {
 func (*GetConfigurationRequest) ProtoMessage() {}
 
 func (x *GetConfigurationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1774,7 +1999,7 @@ func (x *GetConfigurationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConfigurationRequest.ProtoReflect.Descriptor instead.
 func (*GetConfigurationRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{24}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *GetConfigurationRequest) GetKnownVersion() int64 {
@@ -1810,7 +2035,7 @@ type GetConfigurationResponse struct {
 
 func (x *GetConfigurationResponse) Reset() {
 	*x = GetConfigurationResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1822,7 +2047,7 @@ func (x *GetConfigurationResponse) String() string {
 func (*GetConfigurationResponse) ProtoMessage() {}
 
 func (x *GetConfigurationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1835,7 +2060,7 @@ func (x *GetConfigurationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConfigurationResponse.ProtoReflect.Descriptor instead.
 func (*GetConfigurationResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{25}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetConfigurationResponse) GetVersion() int64 {
@@ -1917,7 +2142,7 @@ type GatewayCaptureProfile struct {
 
 func (x *GatewayCaptureProfile) Reset() {
 	*x = GatewayCaptureProfile{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1929,7 +2154,7 @@ func (x *GatewayCaptureProfile) String() string {
 func (*GatewayCaptureProfile) ProtoMessage() {}
 
 func (x *GatewayCaptureProfile) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1942,7 +2167,7 @@ func (x *GatewayCaptureProfile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GatewayCaptureProfile.ProtoReflect.Descriptor instead.
 func (*GatewayCaptureProfile) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{26}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GatewayCaptureProfile) GetId() string {
@@ -2050,7 +2275,7 @@ type GatewayConnection struct {
 
 func (x *GatewayConnection) Reset() {
 	*x = GatewayConnection{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[27]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2062,7 +2287,7 @@ func (x *GatewayConnection) String() string {
 func (*GatewayConnection) ProtoMessage() {}
 
 func (x *GatewayConnection) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[27]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2075,7 +2300,7 @@ func (x *GatewayConnection) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GatewayConnection.ProtoReflect.Descriptor instead.
 func (*GatewayConnection) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{27}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *GatewayConnection) GetId() string {
@@ -2238,7 +2463,7 @@ type RouteModeSetting struct {
 
 func (x *RouteModeSetting) Reset() {
 	*x = RouteModeSetting{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[28]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2250,7 +2475,7 @@ func (x *RouteModeSetting) String() string {
 func (*RouteModeSetting) ProtoMessage() {}
 
 func (x *RouteModeSetting) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[28]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2263,7 +2488,7 @@ func (x *RouteModeSetting) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RouteModeSetting.ProtoReflect.Descriptor instead.
 func (*RouteModeSetting) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{28}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *RouteModeSetting) GetRoute() string {
@@ -2296,7 +2521,7 @@ type GatewayPackage struct {
 
 func (x *GatewayPackage) Reset() {
 	*x = GatewayPackage{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[29]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2308,7 +2533,7 @@ func (x *GatewayPackage) String() string {
 func (*GatewayPackage) ProtoMessage() {}
 
 func (x *GatewayPackage) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[29]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2321,7 +2546,7 @@ func (x *GatewayPackage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GatewayPackage.ProtoReflect.Descriptor instead.
 func (*GatewayPackage) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{29}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *GatewayPackage) GetName() string {
@@ -2373,7 +2598,7 @@ type SealedCredential struct {
 
 func (x *SealedCredential) Reset() {
 	*x = SealedCredential{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[30]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2385,7 +2610,7 @@ func (x *SealedCredential) String() string {
 func (*SealedCredential) ProtoMessage() {}
 
 func (x *SealedCredential) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[30]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2398,7 +2623,7 @@ func (x *SealedCredential) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SealedCredential.ProtoReflect.Descriptor instead.
 func (*SealedCredential) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{30}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *SealedCredential) GetId() string {
@@ -2473,7 +2698,7 @@ type WatchContainmentRequest struct {
 
 func (x *WatchContainmentRequest) Reset() {
 	*x = WatchContainmentRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[31]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2485,7 +2710,7 @@ func (x *WatchContainmentRequest) String() string {
 func (*WatchContainmentRequest) ProtoMessage() {}
 
 func (x *WatchContainmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[31]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2498,7 +2723,7 @@ func (x *WatchContainmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchContainmentRequest.ProtoReflect.Descriptor instead.
 func (*WatchContainmentRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{31}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{32}
 }
 
 // WatchContainmentResponse is the org's containment as the server last confirmed
@@ -2530,7 +2755,7 @@ type WatchContainmentResponse struct {
 
 func (x *WatchContainmentResponse) Reset() {
 	*x = WatchContainmentResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[32]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2542,7 +2767,7 @@ func (x *WatchContainmentResponse) String() string {
 func (*WatchContainmentResponse) ProtoMessage() {}
 
 func (x *WatchContainmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[32]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2555,7 +2780,7 @@ func (x *WatchContainmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchContainmentResponse.ProtoReflect.Descriptor instead.
 func (*WatchContainmentResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{32}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *WatchContainmentResponse) GetKind() ContainmentStateKind {
@@ -2627,7 +2852,7 @@ type ConnectionStateEntry struct {
 
 func (x *ConnectionStateEntry) Reset() {
 	*x = ConnectionStateEntry{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[33]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2639,7 +2864,7 @@ func (x *ConnectionStateEntry) String() string {
 func (*ConnectionStateEntry) ProtoMessage() {}
 
 func (x *ConnectionStateEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[33]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2652,7 +2877,7 @@ func (x *ConnectionStateEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectionStateEntry.ProtoReflect.Descriptor instead.
 func (*ConnectionStateEntry) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{33}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ConnectionStateEntry) GetConnectionId() string {
@@ -2687,7 +2912,7 @@ type ReportCircuitRequest struct {
 
 func (x *ReportCircuitRequest) Reset() {
 	*x = ReportCircuitRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[34]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2699,7 +2924,7 @@ func (x *ReportCircuitRequest) String() string {
 func (*ReportCircuitRequest) ProtoMessage() {}
 
 func (x *ReportCircuitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[34]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2712,7 +2937,7 @@ func (x *ReportCircuitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportCircuitRequest.ProtoReflect.Descriptor instead.
 func (*ReportCircuitRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{34}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ReportCircuitRequest) GetConnectionId() string {
@@ -2754,7 +2979,7 @@ type ReportCircuitResponse struct {
 
 func (x *ReportCircuitResponse) Reset() {
 	*x = ReportCircuitResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[35]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2766,7 +2991,7 @@ func (x *ReportCircuitResponse) String() string {
 func (*ReportCircuitResponse) ProtoMessage() {}
 
 func (x *ReportCircuitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[35]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2779,7 +3004,7 @@ func (x *ReportCircuitResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportCircuitResponse.ProtoReflect.Descriptor instead.
 func (*ReportCircuitResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{35}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ReportCircuitResponse) GetQuarantined() bool {
@@ -2815,7 +3040,7 @@ type ReportDriftRequest struct {
 
 func (x *ReportDriftRequest) Reset() {
 	*x = ReportDriftRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[36]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2827,7 +3052,7 @@ func (x *ReportDriftRequest) String() string {
 func (*ReportDriftRequest) ProtoMessage() {}
 
 func (x *ReportDriftRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[36]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2840,7 +3065,7 @@ func (x *ReportDriftRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportDriftRequest.ProtoReflect.Descriptor instead.
 func (*ReportDriftRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{36}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ReportDriftRequest) GetConnectionId() string {
@@ -2903,7 +3128,7 @@ type ReportDriftResponse struct {
 
 func (x *ReportDriftResponse) Reset() {
 	*x = ReportDriftResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[37]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2915,7 +3140,7 @@ func (x *ReportDriftResponse) String() string {
 func (*ReportDriftResponse) ProtoMessage() {}
 
 func (x *ReportDriftResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[37]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2928,7 +3153,7 @@ func (x *ReportDriftResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportDriftResponse.ProtoReflect.Descriptor instead.
 func (*ReportDriftResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{37}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *ReportDriftResponse) GetQuarantined() bool {
@@ -2958,7 +3183,7 @@ type ReportRevocationFailureRequest struct {
 
 func (x *ReportRevocationFailureRequest) Reset() {
 	*x = ReportRevocationFailureRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[38]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2970,7 +3195,7 @@ func (x *ReportRevocationFailureRequest) String() string {
 func (*ReportRevocationFailureRequest) ProtoMessage() {}
 
 func (x *ReportRevocationFailureRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[38]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2983,7 +3208,7 @@ func (x *ReportRevocationFailureRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportRevocationFailureRequest.ProtoReflect.Descriptor instead.
 func (*ReportRevocationFailureRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{38}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ReportRevocationFailureRequest) GetConnectionId() string {
@@ -3030,7 +3255,7 @@ type ReportRevocationFailureResponse struct {
 
 func (x *ReportRevocationFailureResponse) Reset() {
 	*x = ReportRevocationFailureResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[39]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3042,7 +3267,7 @@ func (x *ReportRevocationFailureResponse) String() string {
 func (*ReportRevocationFailureResponse) ProtoMessage() {}
 
 func (x *ReportRevocationFailureResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[39]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3055,7 +3280,7 @@ func (x *ReportRevocationFailureResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportRevocationFailureResponse.ProtoReflect.Descriptor instead.
 func (*ReportRevocationFailureResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{39}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{40}
 }
 
 // ReportLocalRefusalRequest reports an action the gateway refused locally.
@@ -3081,7 +3306,7 @@ type ReportLocalRefusalRequest struct {
 
 func (x *ReportLocalRefusalRequest) Reset() {
 	*x = ReportLocalRefusalRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[40]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3093,7 +3318,7 @@ func (x *ReportLocalRefusalRequest) String() string {
 func (*ReportLocalRefusalRequest) ProtoMessage() {}
 
 func (x *ReportLocalRefusalRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[40]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3106,7 +3331,7 @@ func (x *ReportLocalRefusalRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportLocalRefusalRequest.ProtoReflect.Descriptor instead.
 func (*ReportLocalRefusalRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{40}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *ReportLocalRefusalRequest) GetConnectionId() string {
@@ -3160,7 +3385,7 @@ type ReportLocalRefusalResponse struct {
 
 func (x *ReportLocalRefusalResponse) Reset() {
 	*x = ReportLocalRefusalResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[41]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3172,7 +3397,7 @@ func (x *ReportLocalRefusalResponse) String() string {
 func (*ReportLocalRefusalResponse) ProtoMessage() {}
 
 func (x *ReportLocalRefusalResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[41]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3185,7 +3410,7 @@ func (x *ReportLocalRefusalResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportLocalRefusalResponse.ProtoReflect.Descriptor instead.
 func (*ReportLocalRefusalResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{41}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{42}
 }
 
 // ClaimVerificationsRequest asks for due verification tasks.
@@ -3199,7 +3424,7 @@ type ClaimVerificationsRequest struct {
 
 func (x *ClaimVerificationsRequest) Reset() {
 	*x = ClaimVerificationsRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[42]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3211,7 +3436,7 @@ func (x *ClaimVerificationsRequest) String() string {
 func (*ClaimVerificationsRequest) ProtoMessage() {}
 
 func (x *ClaimVerificationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[42]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3224,7 +3449,7 @@ func (x *ClaimVerificationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimVerificationsRequest.ProtoReflect.Descriptor instead.
 func (*ClaimVerificationsRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{42}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ClaimVerificationsRequest) GetMaxTasks() int32 {
@@ -3261,7 +3486,7 @@ type VerificationLease struct {
 
 func (x *VerificationLease) Reset() {
 	*x = VerificationLease{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[43]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3273,7 +3498,7 @@ func (x *VerificationLease) String() string {
 func (*VerificationLease) ProtoMessage() {}
 
 func (x *VerificationLease) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[43]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3286,7 +3511,7 @@ func (x *VerificationLease) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerificationLease.ProtoReflect.Descriptor instead.
 func (*VerificationLease) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{43}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *VerificationLease) GetTaskId() string {
@@ -3356,7 +3581,7 @@ type ClaimVerificationsResponse struct {
 
 func (x *ClaimVerificationsResponse) Reset() {
 	*x = ClaimVerificationsResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[44]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3368,7 +3593,7 @@ func (x *ClaimVerificationsResponse) String() string {
 func (*ClaimVerificationsResponse) ProtoMessage() {}
 
 func (x *ClaimVerificationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[44]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3381,7 +3606,7 @@ func (x *ClaimVerificationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimVerificationsResponse.ProtoReflect.Descriptor instead.
 func (*ClaimVerificationsResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{44}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *ClaimVerificationsResponse) GetLeases() []*VerificationLease {
@@ -3404,7 +3629,7 @@ type MintTestActionTokensRequest struct {
 
 func (x *MintTestActionTokensRequest) Reset() {
 	*x = MintTestActionTokensRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[45]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3416,7 +3641,7 @@ func (x *MintTestActionTokensRequest) String() string {
 func (*MintTestActionTokensRequest) ProtoMessage() {}
 
 func (x *MintTestActionTokensRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[45]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3429,7 +3654,7 @@ func (x *MintTestActionTokensRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MintTestActionTokensRequest.ProtoReflect.Descriptor instead.
 func (*MintTestActionTokensRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{45}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *MintTestActionTokensRequest) GetTaskId() string {
@@ -3459,7 +3684,7 @@ type MintTestActionTokensResponse struct {
 
 func (x *MintTestActionTokensResponse) Reset() {
 	*x = MintTestActionTokensResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[46]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3471,7 +3696,7 @@ func (x *MintTestActionTokensResponse) String() string {
 func (*MintTestActionTokensResponse) ProtoMessage() {}
 
 func (x *MintTestActionTokensResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[46]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3484,7 +3709,7 @@ func (x *MintTestActionTokensResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MintTestActionTokensResponse.ProtoReflect.Descriptor instead.
 func (*MintTestActionTokensResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{46}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *MintTestActionTokensResponse) GetToken() string {
@@ -3536,7 +3761,7 @@ type ReportObservationRequest struct {
 
 func (x *ReportObservationRequest) Reset() {
 	*x = ReportObservationRequest{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[47]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3548,7 +3773,7 @@ func (x *ReportObservationRequest) String() string {
 func (*ReportObservationRequest) ProtoMessage() {}
 
 func (x *ReportObservationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[47]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3561,7 +3786,7 @@ func (x *ReportObservationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportObservationRequest.ProtoReflect.Descriptor instead.
 func (*ReportObservationRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{47}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ReportObservationRequest) GetTaskId() string {
@@ -3650,7 +3875,7 @@ type TargetLogItem struct {
 
 func (x *TargetLogItem) Reset() {
 	*x = TargetLogItem{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[48]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3662,7 +3887,7 @@ func (x *TargetLogItem) String() string {
 func (*TargetLogItem) ProtoMessage() {}
 
 func (x *TargetLogItem) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[48]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3675,7 +3900,7 @@ func (x *TargetLogItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TargetLogItem.ProtoReflect.Descriptor instead.
 func (*TargetLogItem) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{48}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *TargetLogItem) GetObjectRef() string {
@@ -3714,7 +3939,7 @@ type ReportObservationResponse struct {
 
 func (x *ReportObservationResponse) Reset() {
 	*x = ReportObservationResponse{}
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[49]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3726,7 +3951,7 @@ func (x *ReportObservationResponse) String() string {
 func (*ReportObservationResponse) ProtoMessage() {}
 
 func (x *ReportObservationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[49]
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3739,7 +3964,7 @@ func (x *ReportObservationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportObservationResponse.ProtoReflect.Descriptor instead.
 func (*ReportObservationResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{49}
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *ReportObservationResponse) GetObservationId() string {
@@ -3763,11 +3988,683 @@ func (x *ReportObservationResponse) GetDone() bool {
 	return false
 }
 
+// ReportStatusRequest is one replica's status (G0 M15 D10).
+type ReportStatusRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Random per process start.
+	ReplicaId string `protobuf:"bytes,1,opt,name=replica_id,json=replicaId,proto3" json:"replica_id,omitempty"`
+	// The gateway's version.
+	Version string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	// The gateway's build.
+	Build string `protobuf:"bytes,3,opt,name=build,proto3" json:"build,omitempty"`
+	// When the process started.
+	StartTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	// The config version it serves.
+	ConfigVersion int64 `protobuf:"varint,5,opt,name=config_version,json=configVersion,proto3" json:"config_version,omitempty"`
+	// Each connection's serving state.
+	Connections   []*ConnectionStatus `protobuf:"bytes,6,rep,name=connections,proto3" json:"connections,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReportStatusRequest) Reset() {
+	*x = ReportStatusRequest{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReportStatusRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReportStatusRequest) ProtoMessage() {}
+
+func (x *ReportStatusRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReportStatusRequest.ProtoReflect.Descriptor instead.
+func (*ReportStatusRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *ReportStatusRequest) GetReplicaId() string {
+	if x != nil {
+		return x.ReplicaId
+	}
+	return ""
+}
+
+func (x *ReportStatusRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *ReportStatusRequest) GetBuild() string {
+	if x != nil {
+		return x.Build
+	}
+	return ""
+}
+
+func (x *ReportStatusRequest) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
+	}
+	return nil
+}
+
+func (x *ReportStatusRequest) GetConfigVersion() int64 {
+	if x != nil {
+		return x.ConfigVersion
+	}
+	return 0
+}
+
+func (x *ReportStatusRequest) GetConnections() []*ConnectionStatus {
+	if x != nil {
+		return x.Connections
+	}
+	return nil
+}
+
+// ConnectionStatus is one connection's serving state on a replica.
+type ConnectionStatus struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Connection id.
+	ConnectionId string `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// Its serving state.
+	State ConnectionServingState `protobuf:"varint,2,opt,name=state,proto3,enum=pantherclaw.v1.ConnectionServingState" json:"state,omitempty"`
+	// When the replica last checked its upstream tools for drift.
+	LastDriftCheckTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_drift_check_time,json=lastDriftCheckTime,proto3" json:"last_drift_check_time,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *ConnectionStatus) Reset() {
+	*x = ConnectionStatus{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConnectionStatus) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConnectionStatus) ProtoMessage() {}
+
+func (x *ConnectionStatus) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConnectionStatus.ProtoReflect.Descriptor instead.
+func (*ConnectionStatus) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *ConnectionStatus) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *ConnectionStatus) GetState() ConnectionServingState {
+	if x != nil {
+		return x.State
+	}
+	return ConnectionServingState_CONNECTION_SERVING_STATE_UNSPECIFIED
+}
+
+func (x *ConnectionStatus) GetLastDriftCheckTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastDriftCheckTime
+	}
+	return nil
+}
+
+// ReportStatusResponse says when to report next.
+type ReportStatusResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Seconds until the next report.
+	NextReportSeconds int32 `protobuf:"varint,1,opt,name=next_report_seconds,json=nextReportSeconds,proto3" json:"next_report_seconds,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *ReportStatusResponse) Reset() {
+	*x = ReportStatusResponse{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReportStatusResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReportStatusResponse) ProtoMessage() {}
+
+func (x *ReportStatusResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReportStatusResponse.ProtoReflect.Descriptor instead.
+func (*ReportStatusResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *ReportStatusResponse) GetNextReportSeconds() int32 {
+	if x != nil {
+		return x.NextReportSeconds
+	}
+	return 0
+}
+
+// MCPStateEntry is one MCP hold, task or session of a gateway, bound to
+// (connection, run, instance) (HR-411..413). The server never opens a
+// task's sealed body.
+type MCPStateEntry struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Kind.
+	Kind MCPStateKind `protobuf:"varint,1,opt,name=kind,proto3,enum=pantherclaw.v1.MCPStateKind" json:"kind,omitempty"`
+	// The SHA-256 of the canonical action (HOLD, TASK) or of the session id
+	// (SESSION); never the session id itself.
+	Key []byte `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	// Connection id.
+	ConnectionId string `protobuf:"bytes,3,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// Run id; empty when none.
+	RunId string `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	// Agent instance id; empty when none.
+	InstanceId string `protobuf:"bytes,5,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	// The RFC 7638 thumbprint of the key that opened the session (SESSION
+	// only).
+	Jkt string `protobuf:"bytes,6,opt,name=jkt,proto3" json:"jkt,omitempty"`
+	// The held action's id (HOLD and TASK).
+	ActionId string `protobuf:"bytes,7,opt,name=action_id,json=actionId,proto3" json:"action_id,omitempty"`
+	// TASK: working, completed, failed or cancelled.
+	Status string `protobuf:"bytes,8,opt,name=status,proto3" json:"status,omitempty"`
+	// TASK: a poll claimed it and is resubmitting the action.
+	Busy bool `protobuf:"varint,9,opt,name=busy,proto3" json:"busy,omitempty"`
+	// TASK and ELICITATION only: sealed to the gateway's active broker key
+	// (D13).
+	SealedBody []byte `protobuf:"bytes,10,opt,name=sealed_body,json=sealedBody,proto3" json:"sealed_body,omitempty"`
+	// Server-assigned, +1 per write.
+	Version int64 `protobuf:"varint,11,opt,name=version,proto3" json:"version,omitempty"`
+	// When the entry expires.
+	ExpireTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
+	// Server-set: when it was last written.
+	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MCPStateEntry) Reset() {
+	*x = MCPStateEntry{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MCPStateEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MCPStateEntry) ProtoMessage() {}
+
+func (x *MCPStateEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MCPStateEntry.ProtoReflect.Descriptor instead.
+func (*MCPStateEntry) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *MCPStateEntry) GetKind() MCPStateKind {
+	if x != nil {
+		return x.Kind
+	}
+	return MCPStateKind_MCP_STATE_KIND_UNSPECIFIED
+}
+
+func (x *MCPStateEntry) GetKey() []byte {
+	if x != nil {
+		return x.Key
+	}
+	return nil
+}
+
+func (x *MCPStateEntry) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *MCPStateEntry) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *MCPStateEntry) GetInstanceId() string {
+	if x != nil {
+		return x.InstanceId
+	}
+	return ""
+}
+
+func (x *MCPStateEntry) GetJkt() string {
+	if x != nil {
+		return x.Jkt
+	}
+	return ""
+}
+
+func (x *MCPStateEntry) GetActionId() string {
+	if x != nil {
+		return x.ActionId
+	}
+	return ""
+}
+
+func (x *MCPStateEntry) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *MCPStateEntry) GetBusy() bool {
+	if x != nil {
+		return x.Busy
+	}
+	return false
+}
+
+func (x *MCPStateEntry) GetSealedBody() []byte {
+	if x != nil {
+		return x.SealedBody
+	}
+	return nil
+}
+
+func (x *MCPStateEntry) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *MCPStateEntry) GetExpireTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpireTime
+	}
+	return nil
+}
+
+func (x *MCPStateEntry) GetUpdateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdateTime
+	}
+	return nil
+}
+
+// PutMCPStateRequest writes an entry.
+type PutMCPStateRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The entry.
+	Entry *MCPStateEntry `protobuf:"bytes,1,opt,name=entry,proto3" json:"entry,omitempty"`
+	// 0: the entry must not exist; otherwise its stored version.
+	IfVersion     int64 `protobuf:"varint,2,opt,name=if_version,json=ifVersion,proto3" json:"if_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PutMCPStateRequest) Reset() {
+	*x = PutMCPStateRequest{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PutMCPStateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PutMCPStateRequest) ProtoMessage() {}
+
+func (x *PutMCPStateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PutMCPStateRequest.ProtoReflect.Descriptor instead.
+func (*PutMCPStateRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *PutMCPStateRequest) GetEntry() *MCPStateEntry {
+	if x != nil {
+		return x.Entry
+	}
+	return nil
+}
+
+func (x *PutMCPStateRequest) GetIfVersion() int64 {
+	if x != nil {
+		return x.IfVersion
+	}
+	return 0
+}
+
+// PutMCPStateResponse returns the new version.
+type PutMCPStateResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The entry's version.
+	Version       int64 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PutMCPStateResponse) Reset() {
+	*x = PutMCPStateResponse{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PutMCPStateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PutMCPStateResponse) ProtoMessage() {}
+
+func (x *PutMCPStateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PutMCPStateResponse.ProtoReflect.Descriptor instead.
+func (*PutMCPStateResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *PutMCPStateResponse) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+// GetMCPStateRequest reads an entry.
+type GetMCPStateRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Kind.
+	Kind MCPStateKind `protobuf:"varint,1,opt,name=kind,proto3,enum=pantherclaw.v1.MCPStateKind" json:"kind,omitempty"`
+	// Key.
+	Key           []byte `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMCPStateRequest) Reset() {
+	*x = GetMCPStateRequest{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMCPStateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMCPStateRequest) ProtoMessage() {}
+
+func (x *GetMCPStateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMCPStateRequest.ProtoReflect.Descriptor instead.
+func (*GetMCPStateRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *GetMCPStateRequest) GetKind() MCPStateKind {
+	if x != nil {
+		return x.Kind
+	}
+	return MCPStateKind_MCP_STATE_KIND_UNSPECIFIED
+}
+
+func (x *GetMCPStateRequest) GetKey() []byte {
+	if x != nil {
+		return x.Key
+	}
+	return nil
+}
+
+// GetMCPStateResponse returns the entry.
+type GetMCPStateResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The entry.
+	Entry         *MCPStateEntry `protobuf:"bytes,1,opt,name=entry,proto3" json:"entry,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMCPStateResponse) Reset() {
+	*x = GetMCPStateResponse{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMCPStateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMCPStateResponse) ProtoMessage() {}
+
+func (x *GetMCPStateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMCPStateResponse.ProtoReflect.Descriptor instead.
+func (*GetMCPStateResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *GetMCPStateResponse) GetEntry() *MCPStateEntry {
+	if x != nil {
+		return x.Entry
+	}
+	return nil
+}
+
+// DeleteMCPStateRequest deletes an entry.
+type DeleteMCPStateRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Kind.
+	Kind MCPStateKind `protobuf:"varint,1,opt,name=kind,proto3,enum=pantherclaw.v1.MCPStateKind" json:"kind,omitempty"`
+	// Key.
+	Key []byte `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	// 0: whatever version; otherwise its stored version.
+	IfVersion     int64 `protobuf:"varint,3,opt,name=if_version,json=ifVersion,proto3" json:"if_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteMCPStateRequest) Reset() {
+	*x = DeleteMCPStateRequest{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteMCPStateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteMCPStateRequest) ProtoMessage() {}
+
+func (x *DeleteMCPStateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteMCPStateRequest.ProtoReflect.Descriptor instead.
+func (*DeleteMCPStateRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *DeleteMCPStateRequest) GetKind() MCPStateKind {
+	if x != nil {
+		return x.Kind
+	}
+	return MCPStateKind_MCP_STATE_KIND_UNSPECIFIED
+}
+
+func (x *DeleteMCPStateRequest) GetKey() []byte {
+	if x != nil {
+		return x.Key
+	}
+	return nil
+}
+
+func (x *DeleteMCPStateRequest) GetIfVersion() int64 {
+	if x != nil {
+		return x.IfVersion
+	}
+	return 0
+}
+
+// DeleteMCPStateResponse says whether an entry was deleted.
+type DeleteMCPStateResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Whether there was one.
+	Deleted       bool `protobuf:"varint,1,opt,name=deleted,proto3" json:"deleted,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteMCPStateResponse) Reset() {
+	*x = DeleteMCPStateResponse{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteMCPStateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteMCPStateResponse) ProtoMessage() {}
+
+func (x *DeleteMCPStateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[60]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteMCPStateResponse.ProtoReflect.Descriptor instead.
+func (*DeleteMCPStateResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{60}
+}
+
+func (x *DeleteMCPStateResponse) GetDeleted() bool {
+	if x != nil {
+		return x.Deleted
+	}
+	return false
+}
+
 var File_pantherclaw_v1_gateways_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\n" +
-	"\x1dpantherclaw/v1/gateways.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a pantherclaw/v1/connections.proto\x1a\x1fpantherclaw/v1/connectors.proto\x1a\"pantherclaw/v1/gateway_facts.proto\x1a\x1bpantherclaw/v1/github.proto\"\x9f\x03\n" +
+	"\x1dpantherclaw/v1/gateways.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a pantherclaw/v1/connections.proto\x1a\x1fpantherclaw/v1/connectors.proto\x1a\"pantherclaw/v1/gateway_facts.proto\x1a\x1bpantherclaw/v1/github.proto\"\xf9\x03\n" +
 	"\aGateway\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x122\n" +
@@ -3782,7 +4679,18 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\vrevoke_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"revokeTime\x12#\n" +
 	"\rrevoke_reason\x18\t \x01(\tR\frevokeReason\x128\n" +
-	"\ahosting\x18\x0f \x01(\x0e2\x1e.pantherclaw.v1.GatewayHostingR\ahosting\"\xda\x02\n" +
+	"\ahosting\x18\x0f \x01(\x0e2\x1e.pantherclaw.v1.GatewayHostingR\ahosting\x12:\n" +
+	"\breplicas\x18\x10 \x03(\v2\x1e.pantherclaw.v1.GatewayReplicaR\breplicas\x12\x1c\n" +
+	"\tconnected\x18\x11 \x01(\bR\tconnected\"\x83\x02\n" +
+	"\x0eGatewayReplica\x12\x1d\n" +
+	"\n" +
+	"replica_id\x18\x01 \x01(\tR\treplicaId\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12\x14\n" +
+	"\x05build\x18\x03 \x01(\tR\x05build\x129\n" +
+	"\n" +
+	"start_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12%\n" +
+	"\x0econfig_version\x18\x05 \x01(\x03R\rconfigVersion\x12@\n" +
+	"\x0elast_seen_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\flastSeenTime\"\xda\x02\n" +
 	"\x12GatewayCertificate\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06serial\x18\x02 \x01(\tR\x06serial\x12%\n" +
@@ -4056,7 +4964,63 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\x19ReportObservationResponse\x12%\n" +
 	"\x0eobservation_id\x18\x01 \x01(\tR\robservationId\x12!\n" +
 	"\feffect_state\x18\x02 \x01(\tR\veffectState\x12\x12\n" +
-	"\x04done\x18\x03 \x01(\bR\x04done*b\n" +
+	"\x04done\x18\x03 \x01(\bR\x04done\"\xcc\x02\n" +
+	"\x13ReportStatusRequest\x129\n" +
+	"\n" +
+	"replica_id\x18\x01 \x01(\tB\x1a\xbaH\x17r\x152\x13^[A-Za-z0-9_-]{22}$R\treplicaId\x12!\n" +
+	"\aversion\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x18@R\aversion\x12\x1d\n" +
+	"\x05build\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x18@R\x05build\x129\n" +
+	"\n" +
+	"start_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12.\n" +
+	"\x0econfig_version\x18\x05 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\rconfigVersion\x12M\n" +
+	"\vconnections\x18\x06 \x03(\v2 .pantherclaw.v1.ConnectionStatusB\t\xbaH\x06\x92\x01\x03\x10\xe8\aR\vconnections\"\xd8\x01\n" +
+	"\x10ConnectionStatus\x12-\n" +
+	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12F\n" +
+	"\x05state\x18\x02 \x01(\x0e2&.pantherclaw.v1.ConnectionServingStateB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05state\x12M\n" +
+	"\x15last_drift_check_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x12lastDriftCheckTime\"F\n" +
+	"\x14ReportStatusResponse\x12.\n" +
+	"\x13next_report_seconds\x18\x01 \x01(\x05R\x11nextReportSeconds\"\xc9\x05\n" +
+	"\rMCPStateEntry\x12<\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x1c.pantherclaw.v1.MCPStateKindB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04kind\x12\x19\n" +
+	"\x03key\x18\x02 \x01(\fB\a\xbaH\x04z\x02h R\x03key\x12-\n" +
+	"\rconnection_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12_\n" +
+	"\x06run_id\x18\x04 \x01(\tBH\xbaHErC2A^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$R\x05runId\x12i\n" +
+	"\vinstance_id\x18\x05 \x01(\tBH\xbaHErC2A^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$R\n" +
+	"instanceId\x12\x19\n" +
+	"\x03jkt\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x18@R\x03jkt\x12$\n" +
+	"\taction_id\x18\a \x01(\tB\a\xbaH\x04r\x02\x18@R\bactionId\x12F\n" +
+	"\x06status\x18\b \x01(\tB.\xbaH+r)R\x00R\aworkingR\tcompletedR\x06failedR\tcancelledR\x06status\x12\x12\n" +
+	"\x04busy\x18\t \x01(\bR\x04busy\x12+\n" +
+	"\vsealed_body\x18\n" +
+	" \x01(\fB\n" +
+	"\xbaH\az\x05\x18\x80\x80\x80\x02R\n" +
+	"sealedBody\x12\x18\n" +
+	"\aversion\x18\v \x01(\x03R\aversion\x12C\n" +
+	"\vexpire_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\n" +
+	"expireTime\x12;\n" +
+	"\vupdate_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"updateTime\"y\n" +
+	"\x12PutMCPStateRequest\x12;\n" +
+	"\x05entry\x18\x01 \x01(\v2\x1d.pantherclaw.v1.MCPStateEntryB\x06\xbaH\x03\xc8\x01\x01R\x05entry\x12&\n" +
+	"\n" +
+	"if_version\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\tifVersion\"/\n" +
+	"\x13PutMCPStateResponse\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\x03R\aversion\"m\n" +
+	"\x12GetMCPStateRequest\x12<\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x1c.pantherclaw.v1.MCPStateKindB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04kind\x12\x19\n" +
+	"\x03key\x18\x02 \x01(\fB\a\xbaH\x04z\x02h R\x03key\"J\n" +
+	"\x13GetMCPStateResponse\x123\n" +
+	"\x05entry\x18\x01 \x01(\v2\x1d.pantherclaw.v1.MCPStateEntryR\x05entry\"\x98\x01\n" +
+	"\x15DeleteMCPStateRequest\x12<\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x1c.pantherclaw.v1.MCPStateKindB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04kind\x12\x19\n" +
+	"\x03key\x18\x02 \x01(\fB\a\xbaH\x04z\x02h R\x03key\x12&\n" +
+	"\n" +
+	"if_version\x18\x03 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\tifVersion\"2\n" +
+	"\x16DeleteMCPStateResponse\x12\x18\n" +
+	"\adeleted\x18\x01 \x01(\bR\adeleted*b\n" +
 	"\fGatewayState\x12\x1d\n" +
 	"\x19GATEWAY_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14GATEWAY_STATE_ACTIVE\x10\x01\x12\x19\n" +
@@ -4070,7 +5034,19 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\"CONTAINMENT_STATE_KIND_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fCONTAINMENT_STATE_KIND_SNAPSHOT\x10\x01\x12!\n" +
 	"\x1dCONTAINMENT_STATE_KIND_CHANGE\x10\x02\x12$\n" +
-	" CONTAINMENT_STATE_KIND_HEARTBEAT\x10\x032\x82\x06\n" +
+	" CONTAINMENT_STATE_KIND_HEARTBEAT\x10\x03*\xec\x01\n" +
+	"\x16ConnectionServingState\x12(\n" +
+	"$CONNECTION_SERVING_STATE_UNSPECIFIED\x10\x00\x12$\n" +
+	" CONNECTION_SERVING_STATE_SERVING\x10\x01\x12)\n" +
+	"%CONNECTION_SERVING_STATE_CIRCUIT_OPEN\x10\x02\x12.\n" +
+	"*CONNECTION_SERVING_STATE_DRIFT_QUARANTINED\x10\x03\x12'\n" +
+	"#CONNECTION_SERVING_STATE_NOT_LOADED\x10\x04*\x9c\x01\n" +
+	"\fMCPStateKind\x12\x1e\n" +
+	"\x1aMCP_STATE_KIND_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13MCP_STATE_KIND_HOLD\x10\x01\x12\x17\n" +
+	"\x13MCP_STATE_KIND_TASK\x10\x02\x12\x1a\n" +
+	"\x16MCP_STATE_KIND_SESSION\x10\x03\x12\x1e\n" +
+	"\x1aMCP_STATE_KIND_ELICITATION\x10\x042\x82\x06\n" +
 	"\x13GatewayAdminService\x12\\\n" +
 	"\rCreateGateway\x12$.pantherclaw.v1.CreateGatewayRequest\x1a%.pantherclaw.v1.CreateGatewayResponse\x12\x89\x01\n" +
 	"\x1cCreateGatewayEnrollmentToken\x123.pantherclaw.v1.CreateGatewayEnrollmentTokenRequest\x1a4.pantherclaw.v1.CreateGatewayEnrollmentTokenResponse\x12^\n" +
@@ -4079,7 +5055,7 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"GetGateway\x12!.pantherclaw.v1.GetGatewayRequest\x1a\".pantherclaw.v1.GetGatewayResponse\"\x03\x90\x02\x01\x12\\\n" +
 	"\rRevokeGateway\x12$.pantherclaw.v1.RevokeGatewayRequest\x1a%.pantherclaw.v1.RevokeGatewayResponse\x12}\n" +
 	"\x18RevokeGatewayCertificate\x12/.pantherclaw.v1.RevokeGatewayCertificateRequest\x1a0.pantherclaw.v1.RevokeGatewayCertificateResponse\x12j\n" +
-	"\x10ListApproverKeys\x12'.pantherclaw.v1.ListApproverKeysRequest\x1a(.pantherclaw.v1.ListApproverKeysResponse\"\x03\x90\x02\x012\xcf\v\n" +
+	"\x10ListApproverKeys\x12'.pantherclaw.v1.ListApproverKeysRequest\x1a(.pantherclaw.v1.ListApproverKeysResponse\"\x03\x90\x02\x012\xc0\x0e\n" +
 	"\x0eGatewayService\x12c\n" +
 	"\x06Enroll\x12+.pantherclaw.v1.GatewayServiceEnrollRequest\x1a,.pantherclaw.v1.GatewayServiceEnrollResponse\x12e\n" +
 	"\x10RenewCertificate\x12'.pantherclaw.v1.RenewCertificateRequest\x1a(.pantherclaw.v1.RenewCertificateResponse\x12h\n" +
@@ -4094,7 +5070,11 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\x11ReportObservation\x12(.pantherclaw.v1.ReportObservationRequest\x1a).pantherclaw.v1.ReportObservationResponse\x12V\n" +
 	"\vReportFacts\x12\".pantherclaw.v1.ReportFactsRequest\x1a#.pantherclaw.v1.ReportFactsResponse\x12z\n" +
 	"\x17ReportRevocationFailure\x12..pantherclaw.v1.ReportRevocationFailureRequest\x1a/.pantherclaw.v1.ReportRevocationFailureResponse\x12k\n" +
-	"\x12ReportLocalRefusal\x12).pantherclaw.v1.ReportLocalRefusalRequest\x1a*.pantherclaw.v1.ReportLocalRefusalResponseB\xc6\x01\n" +
+	"\x12ReportLocalRefusal\x12).pantherclaw.v1.ReportLocalRefusalRequest\x1a*.pantherclaw.v1.ReportLocalRefusalResponse\x12Y\n" +
+	"\fReportStatus\x12#.pantherclaw.v1.ReportStatusRequest\x1a$.pantherclaw.v1.ReportStatusResponse\x12V\n" +
+	"\vPutMCPState\x12\".pantherclaw.v1.PutMCPStateRequest\x1a#.pantherclaw.v1.PutMCPStateResponse\x12[\n" +
+	"\vGetMCPState\x12\".pantherclaw.v1.GetMCPStateRequest\x1a#.pantherclaw.v1.GetMCPStateResponse\"\x03\x90\x02\x01\x12_\n" +
+	"\x0eDeleteMCPState\x12%.pantherclaw.v1.DeleteMCPStateRequest\x1a&.pantherclaw.v1.DeleteMCPStateResponseB\xc6\x01\n" +
 	"\x12com.pantherclaw.v1B\rGatewaysProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -4109,159 +5089,194 @@ func file_pantherclaw_v1_gateways_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_gateways_proto_rawDescData
 }
 
-var file_pantherclaw_v1_gateways_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_pantherclaw_v1_gateways_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
+var file_pantherclaw_v1_gateways_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_pantherclaw_v1_gateways_proto_msgTypes = make([]protoimpl.MessageInfo, 63)
 var file_pantherclaw_v1_gateways_proto_goTypes = []any{
 	(GatewayState)(0),                            // 0: pantherclaw.v1.GatewayState
 	(GatewayCertificateState)(0),                 // 1: pantherclaw.v1.GatewayCertificateState
 	(ContainmentStateKind)(0),                    // 2: pantherclaw.v1.ContainmentStateKind
-	(*Gateway)(nil),                              // 3: pantherclaw.v1.Gateway
-	(*GatewayCertificate)(nil),                   // 4: pantherclaw.v1.GatewayCertificate
-	(*BrokerKey)(nil),                            // 5: pantherclaw.v1.BrokerKey
-	(*CreateGatewayRequest)(nil),                 // 6: pantherclaw.v1.CreateGatewayRequest
-	(*CreateGatewayResponse)(nil),                // 7: pantherclaw.v1.CreateGatewayResponse
-	(*CreateGatewayEnrollmentTokenRequest)(nil),  // 8: pantherclaw.v1.CreateGatewayEnrollmentTokenRequest
-	(*CreateGatewayEnrollmentTokenResponse)(nil), // 9: pantherclaw.v1.CreateGatewayEnrollmentTokenResponse
-	(*ListGatewaysRequest)(nil),                  // 10: pantherclaw.v1.ListGatewaysRequest
-	(*ListGatewaysResponse)(nil),                 // 11: pantherclaw.v1.ListGatewaysResponse
-	(*ListApproverKeysRequest)(nil),              // 12: pantherclaw.v1.ListApproverKeysRequest
-	(*ListApproverKeysResponse)(nil),             // 13: pantherclaw.v1.ListApproverKeysResponse
-	(*ApproverKey)(nil),                          // 14: pantherclaw.v1.ApproverKey
-	(*GetGatewayRequest)(nil),                    // 15: pantherclaw.v1.GetGatewayRequest
-	(*GetGatewayResponse)(nil),                   // 16: pantherclaw.v1.GetGatewayResponse
-	(*RevokeGatewayRequest)(nil),                 // 17: pantherclaw.v1.RevokeGatewayRequest
-	(*RevokeGatewayResponse)(nil),                // 18: pantherclaw.v1.RevokeGatewayResponse
-	(*RevokeGatewayCertificateRequest)(nil),      // 19: pantherclaw.v1.RevokeGatewayCertificateRequest
-	(*RevokeGatewayCertificateResponse)(nil),     // 20: pantherclaw.v1.RevokeGatewayCertificateResponse
-	(*GatewayServiceEnrollRequest)(nil),          // 21: pantherclaw.v1.GatewayServiceEnrollRequest
-	(*GatewayServiceEnrollResponse)(nil),         // 22: pantherclaw.v1.GatewayServiceEnrollResponse
-	(*RenewCertificateRequest)(nil),              // 23: pantherclaw.v1.RenewCertificateRequest
-	(*RenewCertificateResponse)(nil),             // 24: pantherclaw.v1.RenewCertificateResponse
-	(*RegisterBrokerKeyRequest)(nil),             // 25: pantherclaw.v1.RegisterBrokerKeyRequest
-	(*RegisterBrokerKeyResponse)(nil),            // 26: pantherclaw.v1.RegisterBrokerKeyResponse
-	(*GetConfigurationRequest)(nil),              // 27: pantherclaw.v1.GetConfigurationRequest
-	(*GetConfigurationResponse)(nil),             // 28: pantherclaw.v1.GetConfigurationResponse
-	(*GatewayCaptureProfile)(nil),                // 29: pantherclaw.v1.GatewayCaptureProfile
-	(*GatewayConnection)(nil),                    // 30: pantherclaw.v1.GatewayConnection
-	(*RouteModeSetting)(nil),                     // 31: pantherclaw.v1.RouteModeSetting
-	(*GatewayPackage)(nil),                       // 32: pantherclaw.v1.GatewayPackage
-	(*SealedCredential)(nil),                     // 33: pantherclaw.v1.SealedCredential
-	(*WatchContainmentRequest)(nil),              // 34: pantherclaw.v1.WatchContainmentRequest
-	(*WatchContainmentResponse)(nil),             // 35: pantherclaw.v1.WatchContainmentResponse
-	(*ConnectionStateEntry)(nil),                 // 36: pantherclaw.v1.ConnectionStateEntry
-	(*ReportCircuitRequest)(nil),                 // 37: pantherclaw.v1.ReportCircuitRequest
-	(*ReportCircuitResponse)(nil),                // 38: pantherclaw.v1.ReportCircuitResponse
-	(*ReportDriftRequest)(nil),                   // 39: pantherclaw.v1.ReportDriftRequest
-	(*ReportDriftResponse)(nil),                  // 40: pantherclaw.v1.ReportDriftResponse
-	(*ReportRevocationFailureRequest)(nil),       // 41: pantherclaw.v1.ReportRevocationFailureRequest
-	(*ReportRevocationFailureResponse)(nil),      // 42: pantherclaw.v1.ReportRevocationFailureResponse
-	(*ReportLocalRefusalRequest)(nil),            // 43: pantherclaw.v1.ReportLocalRefusalRequest
-	(*ReportLocalRefusalResponse)(nil),           // 44: pantherclaw.v1.ReportLocalRefusalResponse
-	(*ClaimVerificationsRequest)(nil),            // 45: pantherclaw.v1.ClaimVerificationsRequest
-	(*VerificationLease)(nil),                    // 46: pantherclaw.v1.VerificationLease
-	(*ClaimVerificationsResponse)(nil),           // 47: pantherclaw.v1.ClaimVerificationsResponse
-	(*MintTestActionTokensRequest)(nil),          // 48: pantherclaw.v1.MintTestActionTokensRequest
-	(*MintTestActionTokensResponse)(nil),         // 49: pantherclaw.v1.MintTestActionTokensResponse
-	(*ReportObservationRequest)(nil),             // 50: pantherclaw.v1.ReportObservationRequest
-	(*TargetLogItem)(nil),                        // 51: pantherclaw.v1.TargetLogItem
-	(*ReportObservationResponse)(nil),            // 52: pantherclaw.v1.ReportObservationResponse
-	nil,                                          // 53: pantherclaw.v1.ReportObservationRequest.FieldsEntry
-	nil,                                          // 54: pantherclaw.v1.ReportObservationRequest.InstallationPermissionsEntry
-	(*timestamppb.Timestamp)(nil),                // 55: google.protobuf.Timestamp
-	(GatewayHosting)(0),                          // 56: pantherclaw.v1.GatewayHosting
-	(*ConnectorSpec)(nil),                        // 57: pantherclaw.v1.ConnectorSpec
-	(*GitHubInstallation)(nil),                   // 58: pantherclaw.v1.GitHubInstallation
-	(*PostgresConfig)(nil),                       // 59: pantherclaw.v1.PostgresConfig
-	(*A2AConfig)(nil),                            // 60: pantherclaw.v1.A2AConfig
-	(*ReportConnectorStateRequest)(nil),          // 61: pantherclaw.v1.ReportConnectorStateRequest
-	(*ReportFactsRequest)(nil),                   // 62: pantherclaw.v1.ReportFactsRequest
-	(*ReportConnectorStateResponse)(nil),         // 63: pantherclaw.v1.ReportConnectorStateResponse
-	(*ReportFactsResponse)(nil),                  // 64: pantherclaw.v1.ReportFactsResponse
+	(ConnectionServingState)(0),                  // 3: pantherclaw.v1.ConnectionServingState
+	(MCPStateKind)(0),                            // 4: pantherclaw.v1.MCPStateKind
+	(*Gateway)(nil),                              // 5: pantherclaw.v1.Gateway
+	(*GatewayReplica)(nil),                       // 6: pantherclaw.v1.GatewayReplica
+	(*GatewayCertificate)(nil),                   // 7: pantherclaw.v1.GatewayCertificate
+	(*BrokerKey)(nil),                            // 8: pantherclaw.v1.BrokerKey
+	(*CreateGatewayRequest)(nil),                 // 9: pantherclaw.v1.CreateGatewayRequest
+	(*CreateGatewayResponse)(nil),                // 10: pantherclaw.v1.CreateGatewayResponse
+	(*CreateGatewayEnrollmentTokenRequest)(nil),  // 11: pantherclaw.v1.CreateGatewayEnrollmentTokenRequest
+	(*CreateGatewayEnrollmentTokenResponse)(nil), // 12: pantherclaw.v1.CreateGatewayEnrollmentTokenResponse
+	(*ListGatewaysRequest)(nil),                  // 13: pantherclaw.v1.ListGatewaysRequest
+	(*ListGatewaysResponse)(nil),                 // 14: pantherclaw.v1.ListGatewaysResponse
+	(*ListApproverKeysRequest)(nil),              // 15: pantherclaw.v1.ListApproverKeysRequest
+	(*ListApproverKeysResponse)(nil),             // 16: pantherclaw.v1.ListApproverKeysResponse
+	(*ApproverKey)(nil),                          // 17: pantherclaw.v1.ApproverKey
+	(*GetGatewayRequest)(nil),                    // 18: pantherclaw.v1.GetGatewayRequest
+	(*GetGatewayResponse)(nil),                   // 19: pantherclaw.v1.GetGatewayResponse
+	(*RevokeGatewayRequest)(nil),                 // 20: pantherclaw.v1.RevokeGatewayRequest
+	(*RevokeGatewayResponse)(nil),                // 21: pantherclaw.v1.RevokeGatewayResponse
+	(*RevokeGatewayCertificateRequest)(nil),      // 22: pantherclaw.v1.RevokeGatewayCertificateRequest
+	(*RevokeGatewayCertificateResponse)(nil),     // 23: pantherclaw.v1.RevokeGatewayCertificateResponse
+	(*GatewayServiceEnrollRequest)(nil),          // 24: pantherclaw.v1.GatewayServiceEnrollRequest
+	(*GatewayServiceEnrollResponse)(nil),         // 25: pantherclaw.v1.GatewayServiceEnrollResponse
+	(*RenewCertificateRequest)(nil),              // 26: pantherclaw.v1.RenewCertificateRequest
+	(*RenewCertificateResponse)(nil),             // 27: pantherclaw.v1.RenewCertificateResponse
+	(*RegisterBrokerKeyRequest)(nil),             // 28: pantherclaw.v1.RegisterBrokerKeyRequest
+	(*RegisterBrokerKeyResponse)(nil),            // 29: pantherclaw.v1.RegisterBrokerKeyResponse
+	(*GetConfigurationRequest)(nil),              // 30: pantherclaw.v1.GetConfigurationRequest
+	(*GetConfigurationResponse)(nil),             // 31: pantherclaw.v1.GetConfigurationResponse
+	(*GatewayCaptureProfile)(nil),                // 32: pantherclaw.v1.GatewayCaptureProfile
+	(*GatewayConnection)(nil),                    // 33: pantherclaw.v1.GatewayConnection
+	(*RouteModeSetting)(nil),                     // 34: pantherclaw.v1.RouteModeSetting
+	(*GatewayPackage)(nil),                       // 35: pantherclaw.v1.GatewayPackage
+	(*SealedCredential)(nil),                     // 36: pantherclaw.v1.SealedCredential
+	(*WatchContainmentRequest)(nil),              // 37: pantherclaw.v1.WatchContainmentRequest
+	(*WatchContainmentResponse)(nil),             // 38: pantherclaw.v1.WatchContainmentResponse
+	(*ConnectionStateEntry)(nil),                 // 39: pantherclaw.v1.ConnectionStateEntry
+	(*ReportCircuitRequest)(nil),                 // 40: pantherclaw.v1.ReportCircuitRequest
+	(*ReportCircuitResponse)(nil),                // 41: pantherclaw.v1.ReportCircuitResponse
+	(*ReportDriftRequest)(nil),                   // 42: pantherclaw.v1.ReportDriftRequest
+	(*ReportDriftResponse)(nil),                  // 43: pantherclaw.v1.ReportDriftResponse
+	(*ReportRevocationFailureRequest)(nil),       // 44: pantherclaw.v1.ReportRevocationFailureRequest
+	(*ReportRevocationFailureResponse)(nil),      // 45: pantherclaw.v1.ReportRevocationFailureResponse
+	(*ReportLocalRefusalRequest)(nil),            // 46: pantherclaw.v1.ReportLocalRefusalRequest
+	(*ReportLocalRefusalResponse)(nil),           // 47: pantherclaw.v1.ReportLocalRefusalResponse
+	(*ClaimVerificationsRequest)(nil),            // 48: pantherclaw.v1.ClaimVerificationsRequest
+	(*VerificationLease)(nil),                    // 49: pantherclaw.v1.VerificationLease
+	(*ClaimVerificationsResponse)(nil),           // 50: pantherclaw.v1.ClaimVerificationsResponse
+	(*MintTestActionTokensRequest)(nil),          // 51: pantherclaw.v1.MintTestActionTokensRequest
+	(*MintTestActionTokensResponse)(nil),         // 52: pantherclaw.v1.MintTestActionTokensResponse
+	(*ReportObservationRequest)(nil),             // 53: pantherclaw.v1.ReportObservationRequest
+	(*TargetLogItem)(nil),                        // 54: pantherclaw.v1.TargetLogItem
+	(*ReportObservationResponse)(nil),            // 55: pantherclaw.v1.ReportObservationResponse
+	(*ReportStatusRequest)(nil),                  // 56: pantherclaw.v1.ReportStatusRequest
+	(*ConnectionStatus)(nil),                     // 57: pantherclaw.v1.ConnectionStatus
+	(*ReportStatusResponse)(nil),                 // 58: pantherclaw.v1.ReportStatusResponse
+	(*MCPStateEntry)(nil),                        // 59: pantherclaw.v1.MCPStateEntry
+	(*PutMCPStateRequest)(nil),                   // 60: pantherclaw.v1.PutMCPStateRequest
+	(*PutMCPStateResponse)(nil),                  // 61: pantherclaw.v1.PutMCPStateResponse
+	(*GetMCPStateRequest)(nil),                   // 62: pantherclaw.v1.GetMCPStateRequest
+	(*GetMCPStateResponse)(nil),                  // 63: pantherclaw.v1.GetMCPStateResponse
+	(*DeleteMCPStateRequest)(nil),                // 64: pantherclaw.v1.DeleteMCPStateRequest
+	(*DeleteMCPStateResponse)(nil),               // 65: pantherclaw.v1.DeleteMCPStateResponse
+	nil,                                          // 66: pantherclaw.v1.ReportObservationRequest.FieldsEntry
+	nil,                                          // 67: pantherclaw.v1.ReportObservationRequest.InstallationPermissionsEntry
+	(*timestamppb.Timestamp)(nil),                // 68: google.protobuf.Timestamp
+	(GatewayHosting)(0),                          // 69: pantherclaw.v1.GatewayHosting
+	(*ConnectorSpec)(nil),                        // 70: pantherclaw.v1.ConnectorSpec
+	(*GitHubInstallation)(nil),                   // 71: pantherclaw.v1.GitHubInstallation
+	(*PostgresConfig)(nil),                       // 72: pantherclaw.v1.PostgresConfig
+	(*A2AConfig)(nil),                            // 73: pantherclaw.v1.A2AConfig
+	(*ReportConnectorStateRequest)(nil),          // 74: pantherclaw.v1.ReportConnectorStateRequest
+	(*ReportFactsRequest)(nil),                   // 75: pantherclaw.v1.ReportFactsRequest
+	(*ReportConnectorStateResponse)(nil),         // 76: pantherclaw.v1.ReportConnectorStateResponse
+	(*ReportFactsResponse)(nil),                  // 77: pantherclaw.v1.ReportFactsResponse
 }
 var file_pantherclaw_v1_gateways_proto_depIdxs = []int32{
 	0,  // 0: pantherclaw.v1.Gateway.state:type_name -> pantherclaw.v1.GatewayState
-	55, // 1: pantherclaw.v1.Gateway.create_time:type_name -> google.protobuf.Timestamp
-	55, // 2: pantherclaw.v1.Gateway.revoke_time:type_name -> google.protobuf.Timestamp
-	56, // 3: pantherclaw.v1.Gateway.hosting:type_name -> pantherclaw.v1.GatewayHosting
-	1,  // 4: pantherclaw.v1.GatewayCertificate.state:type_name -> pantherclaw.v1.GatewayCertificateState
-	55, // 5: pantherclaw.v1.GatewayCertificate.not_before:type_name -> google.protobuf.Timestamp
-	55, // 6: pantherclaw.v1.GatewayCertificate.not_after:type_name -> google.protobuf.Timestamp
-	55, // 7: pantherclaw.v1.BrokerKey.register_time:type_name -> google.protobuf.Timestamp
-	3,  // 8: pantherclaw.v1.CreateGatewayResponse.gateway:type_name -> pantherclaw.v1.Gateway
-	55, // 9: pantherclaw.v1.CreateGatewayEnrollmentTokenResponse.expire_time:type_name -> google.protobuf.Timestamp
-	3,  // 10: pantherclaw.v1.ListGatewaysResponse.gateways:type_name -> pantherclaw.v1.Gateway
-	14, // 11: pantherclaw.v1.ListApproverKeysResponse.keys:type_name -> pantherclaw.v1.ApproverKey
-	55, // 12: pantherclaw.v1.ApproverKey.create_time:type_name -> google.protobuf.Timestamp
-	3,  // 13: pantherclaw.v1.GetGatewayResponse.gateway:type_name -> pantherclaw.v1.Gateway
-	4,  // 14: pantherclaw.v1.GetGatewayResponse.certificates:type_name -> pantherclaw.v1.GatewayCertificate
-	5,  // 15: pantherclaw.v1.GetGatewayResponse.broker_keys:type_name -> pantherclaw.v1.BrokerKey
-	3,  // 16: pantherclaw.v1.RevokeGatewayResponse.gateway:type_name -> pantherclaw.v1.Gateway
-	5,  // 17: pantherclaw.v1.RegisterBrokerKeyResponse.broker_key:type_name -> pantherclaw.v1.BrokerKey
-	30, // 18: pantherclaw.v1.GetConfigurationResponse.connections:type_name -> pantherclaw.v1.GatewayConnection
-	32, // 19: pantherclaw.v1.GetConfigurationResponse.packages:type_name -> pantherclaw.v1.GatewayPackage
-	33, // 20: pantherclaw.v1.GetConfigurationResponse.credentials:type_name -> pantherclaw.v1.SealedCredential
-	29, // 21: pantherclaw.v1.GetConfigurationResponse.capture_profiles:type_name -> pantherclaw.v1.GatewayCaptureProfile
-	55, // 22: pantherclaw.v1.GatewayCaptureProfile.expire_time:type_name -> google.protobuf.Timestamp
-	31, // 23: pantherclaw.v1.GatewayConnection.routes:type_name -> pantherclaw.v1.RouteModeSetting
-	57, // 24: pantherclaw.v1.GatewayConnection.connector:type_name -> pantherclaw.v1.ConnectorSpec
-	58, // 25: pantherclaw.v1.GatewayConnection.github:type_name -> pantherclaw.v1.GitHubInstallation
-	59, // 26: pantherclaw.v1.GatewayConnection.postgres:type_name -> pantherclaw.v1.PostgresConfig
-	60, // 27: pantherclaw.v1.GatewayConnection.a2a:type_name -> pantherclaw.v1.A2AConfig
-	2,  // 28: pantherclaw.v1.WatchContainmentResponse.kind:type_name -> pantherclaw.v1.ContainmentStateKind
-	36, // 29: pantherclaw.v1.WatchContainmentResponse.connections:type_name -> pantherclaw.v1.ConnectionStateEntry
-	55, // 30: pantherclaw.v1.WatchContainmentResponse.as_of:type_name -> google.protobuf.Timestamp
-	55, // 31: pantherclaw.v1.ReportRevocationFailureRequest.expire_time:type_name -> google.protobuf.Timestamp
-	46, // 32: pantherclaw.v1.ClaimVerificationsResponse.leases:type_name -> pantherclaw.v1.VerificationLease
-	53, // 33: pantherclaw.v1.ReportObservationRequest.fields:type_name -> pantherclaw.v1.ReportObservationRequest.FieldsEntry
-	51, // 34: pantherclaw.v1.ReportObservationRequest.items:type_name -> pantherclaw.v1.TargetLogItem
-	54, // 35: pantherclaw.v1.ReportObservationRequest.installation_permissions:type_name -> pantherclaw.v1.ReportObservationRequest.InstallationPermissionsEntry
-	6,  // 36: pantherclaw.v1.GatewayAdminService.CreateGateway:input_type -> pantherclaw.v1.CreateGatewayRequest
-	8,  // 37: pantherclaw.v1.GatewayAdminService.CreateGatewayEnrollmentToken:input_type -> pantherclaw.v1.CreateGatewayEnrollmentTokenRequest
-	10, // 38: pantherclaw.v1.GatewayAdminService.ListGateways:input_type -> pantherclaw.v1.ListGatewaysRequest
-	15, // 39: pantherclaw.v1.GatewayAdminService.GetGateway:input_type -> pantherclaw.v1.GetGatewayRequest
-	17, // 40: pantherclaw.v1.GatewayAdminService.RevokeGateway:input_type -> pantherclaw.v1.RevokeGatewayRequest
-	19, // 41: pantherclaw.v1.GatewayAdminService.RevokeGatewayCertificate:input_type -> pantherclaw.v1.RevokeGatewayCertificateRequest
-	12, // 42: pantherclaw.v1.GatewayAdminService.ListApproverKeys:input_type -> pantherclaw.v1.ListApproverKeysRequest
-	21, // 43: pantherclaw.v1.GatewayService.Enroll:input_type -> pantherclaw.v1.GatewayServiceEnrollRequest
-	23, // 44: pantherclaw.v1.GatewayService.RenewCertificate:input_type -> pantherclaw.v1.RenewCertificateRequest
-	25, // 45: pantherclaw.v1.GatewayService.RegisterBrokerKey:input_type -> pantherclaw.v1.RegisterBrokerKeyRequest
-	27, // 46: pantherclaw.v1.GatewayService.GetConfiguration:input_type -> pantherclaw.v1.GetConfigurationRequest
-	34, // 47: pantherclaw.v1.GatewayService.WatchContainment:input_type -> pantherclaw.v1.WatchContainmentRequest
-	61, // 48: pantherclaw.v1.GatewayService.ReportConnectorState:input_type -> pantherclaw.v1.ReportConnectorStateRequest
-	37, // 49: pantherclaw.v1.GatewayService.ReportCircuit:input_type -> pantherclaw.v1.ReportCircuitRequest
-	39, // 50: pantherclaw.v1.GatewayService.ReportDrift:input_type -> pantherclaw.v1.ReportDriftRequest
-	45, // 51: pantherclaw.v1.GatewayService.ClaimVerifications:input_type -> pantherclaw.v1.ClaimVerificationsRequest
-	48, // 52: pantherclaw.v1.GatewayService.MintTestActionTokens:input_type -> pantherclaw.v1.MintTestActionTokensRequest
-	50, // 53: pantherclaw.v1.GatewayService.ReportObservation:input_type -> pantherclaw.v1.ReportObservationRequest
-	62, // 54: pantherclaw.v1.GatewayService.ReportFacts:input_type -> pantherclaw.v1.ReportFactsRequest
-	41, // 55: pantherclaw.v1.GatewayService.ReportRevocationFailure:input_type -> pantherclaw.v1.ReportRevocationFailureRequest
-	43, // 56: pantherclaw.v1.GatewayService.ReportLocalRefusal:input_type -> pantherclaw.v1.ReportLocalRefusalRequest
-	7,  // 57: pantherclaw.v1.GatewayAdminService.CreateGateway:output_type -> pantherclaw.v1.CreateGatewayResponse
-	9,  // 58: pantherclaw.v1.GatewayAdminService.CreateGatewayEnrollmentToken:output_type -> pantherclaw.v1.CreateGatewayEnrollmentTokenResponse
-	11, // 59: pantherclaw.v1.GatewayAdminService.ListGateways:output_type -> pantherclaw.v1.ListGatewaysResponse
-	16, // 60: pantherclaw.v1.GatewayAdminService.GetGateway:output_type -> pantherclaw.v1.GetGatewayResponse
-	18, // 61: pantherclaw.v1.GatewayAdminService.RevokeGateway:output_type -> pantherclaw.v1.RevokeGatewayResponse
-	20, // 62: pantherclaw.v1.GatewayAdminService.RevokeGatewayCertificate:output_type -> pantherclaw.v1.RevokeGatewayCertificateResponse
-	13, // 63: pantherclaw.v1.GatewayAdminService.ListApproverKeys:output_type -> pantherclaw.v1.ListApproverKeysResponse
-	22, // 64: pantherclaw.v1.GatewayService.Enroll:output_type -> pantherclaw.v1.GatewayServiceEnrollResponse
-	24, // 65: pantherclaw.v1.GatewayService.RenewCertificate:output_type -> pantherclaw.v1.RenewCertificateResponse
-	26, // 66: pantherclaw.v1.GatewayService.RegisterBrokerKey:output_type -> pantherclaw.v1.RegisterBrokerKeyResponse
-	28, // 67: pantherclaw.v1.GatewayService.GetConfiguration:output_type -> pantherclaw.v1.GetConfigurationResponse
-	35, // 68: pantherclaw.v1.GatewayService.WatchContainment:output_type -> pantherclaw.v1.WatchContainmentResponse
-	63, // 69: pantherclaw.v1.GatewayService.ReportConnectorState:output_type -> pantherclaw.v1.ReportConnectorStateResponse
-	38, // 70: pantherclaw.v1.GatewayService.ReportCircuit:output_type -> pantherclaw.v1.ReportCircuitResponse
-	40, // 71: pantherclaw.v1.GatewayService.ReportDrift:output_type -> pantherclaw.v1.ReportDriftResponse
-	47, // 72: pantherclaw.v1.GatewayService.ClaimVerifications:output_type -> pantherclaw.v1.ClaimVerificationsResponse
-	49, // 73: pantherclaw.v1.GatewayService.MintTestActionTokens:output_type -> pantherclaw.v1.MintTestActionTokensResponse
-	52, // 74: pantherclaw.v1.GatewayService.ReportObservation:output_type -> pantherclaw.v1.ReportObservationResponse
-	64, // 75: pantherclaw.v1.GatewayService.ReportFacts:output_type -> pantherclaw.v1.ReportFactsResponse
-	42, // 76: pantherclaw.v1.GatewayService.ReportRevocationFailure:output_type -> pantherclaw.v1.ReportRevocationFailureResponse
-	44, // 77: pantherclaw.v1.GatewayService.ReportLocalRefusal:output_type -> pantherclaw.v1.ReportLocalRefusalResponse
-	57, // [57:78] is the sub-list for method output_type
-	36, // [36:57] is the sub-list for method input_type
-	36, // [36:36] is the sub-list for extension type_name
-	36, // [36:36] is the sub-list for extension extendee
-	0,  // [0:36] is the sub-list for field type_name
+	68, // 1: pantherclaw.v1.Gateway.create_time:type_name -> google.protobuf.Timestamp
+	68, // 2: pantherclaw.v1.Gateway.revoke_time:type_name -> google.protobuf.Timestamp
+	69, // 3: pantherclaw.v1.Gateway.hosting:type_name -> pantherclaw.v1.GatewayHosting
+	6,  // 4: pantherclaw.v1.Gateway.replicas:type_name -> pantherclaw.v1.GatewayReplica
+	68, // 5: pantherclaw.v1.GatewayReplica.start_time:type_name -> google.protobuf.Timestamp
+	68, // 6: pantherclaw.v1.GatewayReplica.last_seen_time:type_name -> google.protobuf.Timestamp
+	1,  // 7: pantherclaw.v1.GatewayCertificate.state:type_name -> pantherclaw.v1.GatewayCertificateState
+	68, // 8: pantherclaw.v1.GatewayCertificate.not_before:type_name -> google.protobuf.Timestamp
+	68, // 9: pantherclaw.v1.GatewayCertificate.not_after:type_name -> google.protobuf.Timestamp
+	68, // 10: pantherclaw.v1.BrokerKey.register_time:type_name -> google.protobuf.Timestamp
+	5,  // 11: pantherclaw.v1.CreateGatewayResponse.gateway:type_name -> pantherclaw.v1.Gateway
+	68, // 12: pantherclaw.v1.CreateGatewayEnrollmentTokenResponse.expire_time:type_name -> google.protobuf.Timestamp
+	5,  // 13: pantherclaw.v1.ListGatewaysResponse.gateways:type_name -> pantherclaw.v1.Gateway
+	17, // 14: pantherclaw.v1.ListApproverKeysResponse.keys:type_name -> pantherclaw.v1.ApproverKey
+	68, // 15: pantherclaw.v1.ApproverKey.create_time:type_name -> google.protobuf.Timestamp
+	5,  // 16: pantherclaw.v1.GetGatewayResponse.gateway:type_name -> pantherclaw.v1.Gateway
+	7,  // 17: pantherclaw.v1.GetGatewayResponse.certificates:type_name -> pantherclaw.v1.GatewayCertificate
+	8,  // 18: pantherclaw.v1.GetGatewayResponse.broker_keys:type_name -> pantherclaw.v1.BrokerKey
+	5,  // 19: pantherclaw.v1.RevokeGatewayResponse.gateway:type_name -> pantherclaw.v1.Gateway
+	8,  // 20: pantherclaw.v1.RegisterBrokerKeyResponse.broker_key:type_name -> pantherclaw.v1.BrokerKey
+	33, // 21: pantherclaw.v1.GetConfigurationResponse.connections:type_name -> pantherclaw.v1.GatewayConnection
+	35, // 22: pantherclaw.v1.GetConfigurationResponse.packages:type_name -> pantherclaw.v1.GatewayPackage
+	36, // 23: pantherclaw.v1.GetConfigurationResponse.credentials:type_name -> pantherclaw.v1.SealedCredential
+	32, // 24: pantherclaw.v1.GetConfigurationResponse.capture_profiles:type_name -> pantherclaw.v1.GatewayCaptureProfile
+	68, // 25: pantherclaw.v1.GatewayCaptureProfile.expire_time:type_name -> google.protobuf.Timestamp
+	34, // 26: pantherclaw.v1.GatewayConnection.routes:type_name -> pantherclaw.v1.RouteModeSetting
+	70, // 27: pantherclaw.v1.GatewayConnection.connector:type_name -> pantherclaw.v1.ConnectorSpec
+	71, // 28: pantherclaw.v1.GatewayConnection.github:type_name -> pantherclaw.v1.GitHubInstallation
+	72, // 29: pantherclaw.v1.GatewayConnection.postgres:type_name -> pantherclaw.v1.PostgresConfig
+	73, // 30: pantherclaw.v1.GatewayConnection.a2a:type_name -> pantherclaw.v1.A2AConfig
+	2,  // 31: pantherclaw.v1.WatchContainmentResponse.kind:type_name -> pantherclaw.v1.ContainmentStateKind
+	39, // 32: pantherclaw.v1.WatchContainmentResponse.connections:type_name -> pantherclaw.v1.ConnectionStateEntry
+	68, // 33: pantherclaw.v1.WatchContainmentResponse.as_of:type_name -> google.protobuf.Timestamp
+	68, // 34: pantherclaw.v1.ReportRevocationFailureRequest.expire_time:type_name -> google.protobuf.Timestamp
+	49, // 35: pantherclaw.v1.ClaimVerificationsResponse.leases:type_name -> pantherclaw.v1.VerificationLease
+	66, // 36: pantherclaw.v1.ReportObservationRequest.fields:type_name -> pantherclaw.v1.ReportObservationRequest.FieldsEntry
+	54, // 37: pantherclaw.v1.ReportObservationRequest.items:type_name -> pantherclaw.v1.TargetLogItem
+	67, // 38: pantherclaw.v1.ReportObservationRequest.installation_permissions:type_name -> pantherclaw.v1.ReportObservationRequest.InstallationPermissionsEntry
+	68, // 39: pantherclaw.v1.ReportStatusRequest.start_time:type_name -> google.protobuf.Timestamp
+	57, // 40: pantherclaw.v1.ReportStatusRequest.connections:type_name -> pantherclaw.v1.ConnectionStatus
+	3,  // 41: pantherclaw.v1.ConnectionStatus.state:type_name -> pantherclaw.v1.ConnectionServingState
+	68, // 42: pantherclaw.v1.ConnectionStatus.last_drift_check_time:type_name -> google.protobuf.Timestamp
+	4,  // 43: pantherclaw.v1.MCPStateEntry.kind:type_name -> pantherclaw.v1.MCPStateKind
+	68, // 44: pantherclaw.v1.MCPStateEntry.expire_time:type_name -> google.protobuf.Timestamp
+	68, // 45: pantherclaw.v1.MCPStateEntry.update_time:type_name -> google.protobuf.Timestamp
+	59, // 46: pantherclaw.v1.PutMCPStateRequest.entry:type_name -> pantherclaw.v1.MCPStateEntry
+	4,  // 47: pantherclaw.v1.GetMCPStateRequest.kind:type_name -> pantherclaw.v1.MCPStateKind
+	59, // 48: pantherclaw.v1.GetMCPStateResponse.entry:type_name -> pantherclaw.v1.MCPStateEntry
+	4,  // 49: pantherclaw.v1.DeleteMCPStateRequest.kind:type_name -> pantherclaw.v1.MCPStateKind
+	9,  // 50: pantherclaw.v1.GatewayAdminService.CreateGateway:input_type -> pantherclaw.v1.CreateGatewayRequest
+	11, // 51: pantherclaw.v1.GatewayAdminService.CreateGatewayEnrollmentToken:input_type -> pantherclaw.v1.CreateGatewayEnrollmentTokenRequest
+	13, // 52: pantherclaw.v1.GatewayAdminService.ListGateways:input_type -> pantherclaw.v1.ListGatewaysRequest
+	18, // 53: pantherclaw.v1.GatewayAdminService.GetGateway:input_type -> pantherclaw.v1.GetGatewayRequest
+	20, // 54: pantherclaw.v1.GatewayAdminService.RevokeGateway:input_type -> pantherclaw.v1.RevokeGatewayRequest
+	22, // 55: pantherclaw.v1.GatewayAdminService.RevokeGatewayCertificate:input_type -> pantherclaw.v1.RevokeGatewayCertificateRequest
+	15, // 56: pantherclaw.v1.GatewayAdminService.ListApproverKeys:input_type -> pantherclaw.v1.ListApproverKeysRequest
+	24, // 57: pantherclaw.v1.GatewayService.Enroll:input_type -> pantherclaw.v1.GatewayServiceEnrollRequest
+	26, // 58: pantherclaw.v1.GatewayService.RenewCertificate:input_type -> pantherclaw.v1.RenewCertificateRequest
+	28, // 59: pantherclaw.v1.GatewayService.RegisterBrokerKey:input_type -> pantherclaw.v1.RegisterBrokerKeyRequest
+	30, // 60: pantherclaw.v1.GatewayService.GetConfiguration:input_type -> pantherclaw.v1.GetConfigurationRequest
+	37, // 61: pantherclaw.v1.GatewayService.WatchContainment:input_type -> pantherclaw.v1.WatchContainmentRequest
+	74, // 62: pantherclaw.v1.GatewayService.ReportConnectorState:input_type -> pantherclaw.v1.ReportConnectorStateRequest
+	40, // 63: pantherclaw.v1.GatewayService.ReportCircuit:input_type -> pantherclaw.v1.ReportCircuitRequest
+	42, // 64: pantherclaw.v1.GatewayService.ReportDrift:input_type -> pantherclaw.v1.ReportDriftRequest
+	48, // 65: pantherclaw.v1.GatewayService.ClaimVerifications:input_type -> pantherclaw.v1.ClaimVerificationsRequest
+	51, // 66: pantherclaw.v1.GatewayService.MintTestActionTokens:input_type -> pantherclaw.v1.MintTestActionTokensRequest
+	53, // 67: pantherclaw.v1.GatewayService.ReportObservation:input_type -> pantherclaw.v1.ReportObservationRequest
+	75, // 68: pantherclaw.v1.GatewayService.ReportFacts:input_type -> pantherclaw.v1.ReportFactsRequest
+	44, // 69: pantherclaw.v1.GatewayService.ReportRevocationFailure:input_type -> pantherclaw.v1.ReportRevocationFailureRequest
+	46, // 70: pantherclaw.v1.GatewayService.ReportLocalRefusal:input_type -> pantherclaw.v1.ReportLocalRefusalRequest
+	56, // 71: pantherclaw.v1.GatewayService.ReportStatus:input_type -> pantherclaw.v1.ReportStatusRequest
+	60, // 72: pantherclaw.v1.GatewayService.PutMCPState:input_type -> pantherclaw.v1.PutMCPStateRequest
+	62, // 73: pantherclaw.v1.GatewayService.GetMCPState:input_type -> pantherclaw.v1.GetMCPStateRequest
+	64, // 74: pantherclaw.v1.GatewayService.DeleteMCPState:input_type -> pantherclaw.v1.DeleteMCPStateRequest
+	10, // 75: pantherclaw.v1.GatewayAdminService.CreateGateway:output_type -> pantherclaw.v1.CreateGatewayResponse
+	12, // 76: pantherclaw.v1.GatewayAdminService.CreateGatewayEnrollmentToken:output_type -> pantherclaw.v1.CreateGatewayEnrollmentTokenResponse
+	14, // 77: pantherclaw.v1.GatewayAdminService.ListGateways:output_type -> pantherclaw.v1.ListGatewaysResponse
+	19, // 78: pantherclaw.v1.GatewayAdminService.GetGateway:output_type -> pantherclaw.v1.GetGatewayResponse
+	21, // 79: pantherclaw.v1.GatewayAdminService.RevokeGateway:output_type -> pantherclaw.v1.RevokeGatewayResponse
+	23, // 80: pantherclaw.v1.GatewayAdminService.RevokeGatewayCertificate:output_type -> pantherclaw.v1.RevokeGatewayCertificateResponse
+	16, // 81: pantherclaw.v1.GatewayAdminService.ListApproverKeys:output_type -> pantherclaw.v1.ListApproverKeysResponse
+	25, // 82: pantherclaw.v1.GatewayService.Enroll:output_type -> pantherclaw.v1.GatewayServiceEnrollResponse
+	27, // 83: pantherclaw.v1.GatewayService.RenewCertificate:output_type -> pantherclaw.v1.RenewCertificateResponse
+	29, // 84: pantherclaw.v1.GatewayService.RegisterBrokerKey:output_type -> pantherclaw.v1.RegisterBrokerKeyResponse
+	31, // 85: pantherclaw.v1.GatewayService.GetConfiguration:output_type -> pantherclaw.v1.GetConfigurationResponse
+	38, // 86: pantherclaw.v1.GatewayService.WatchContainment:output_type -> pantherclaw.v1.WatchContainmentResponse
+	76, // 87: pantherclaw.v1.GatewayService.ReportConnectorState:output_type -> pantherclaw.v1.ReportConnectorStateResponse
+	41, // 88: pantherclaw.v1.GatewayService.ReportCircuit:output_type -> pantherclaw.v1.ReportCircuitResponse
+	43, // 89: pantherclaw.v1.GatewayService.ReportDrift:output_type -> pantherclaw.v1.ReportDriftResponse
+	50, // 90: pantherclaw.v1.GatewayService.ClaimVerifications:output_type -> pantherclaw.v1.ClaimVerificationsResponse
+	52, // 91: pantherclaw.v1.GatewayService.MintTestActionTokens:output_type -> pantherclaw.v1.MintTestActionTokensResponse
+	55, // 92: pantherclaw.v1.GatewayService.ReportObservation:output_type -> pantherclaw.v1.ReportObservationResponse
+	77, // 93: pantherclaw.v1.GatewayService.ReportFacts:output_type -> pantherclaw.v1.ReportFactsResponse
+	45, // 94: pantherclaw.v1.GatewayService.ReportRevocationFailure:output_type -> pantherclaw.v1.ReportRevocationFailureResponse
+	47, // 95: pantherclaw.v1.GatewayService.ReportLocalRefusal:output_type -> pantherclaw.v1.ReportLocalRefusalResponse
+	58, // 96: pantherclaw.v1.GatewayService.ReportStatus:output_type -> pantherclaw.v1.ReportStatusResponse
+	61, // 97: pantherclaw.v1.GatewayService.PutMCPState:output_type -> pantherclaw.v1.PutMCPStateResponse
+	63, // 98: pantherclaw.v1.GatewayService.GetMCPState:output_type -> pantherclaw.v1.GetMCPStateResponse
+	65, // 99: pantherclaw.v1.GatewayService.DeleteMCPState:output_type -> pantherclaw.v1.DeleteMCPStateResponse
+	75, // [75:100] is the sub-list for method output_type
+	50, // [50:75] is the sub-list for method input_type
+	50, // [50:50] is the sub-list for extension type_name
+	50, // [50:50] is the sub-list for extension extendee
+	0,  // [0:50] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_gateways_proto_init() }
@@ -4273,15 +5288,15 @@ func file_pantherclaw_v1_gateways_proto_init() {
 	file_pantherclaw_v1_connectors_proto_init()
 	file_pantherclaw_v1_gateway_facts_proto_init()
 	file_pantherclaw_v1_github_proto_init()
-	file_pantherclaw_v1_gateways_proto_msgTypes[36].OneofWrappers = []any{}
-	file_pantherclaw_v1_gateways_proto_msgTypes[40].OneofWrappers = []any{}
+	file_pantherclaw_v1_gateways_proto_msgTypes[37].OneofWrappers = []any{}
+	file_pantherclaw_v1_gateways_proto_msgTypes[41].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_gateways_proto_rawDesc), len(file_pantherclaw_v1_gateways_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   52,
+			NumEnums:      5,
+			NumMessages:   63,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

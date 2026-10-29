@@ -168,26 +168,40 @@ func (s *Service) CreateEnrollmentToken(ctx context.Context, gateway ids.UUID) (
 	return out, err
 }
 
-// ListGateways pages through the org's gateways (gateway.read).
-func (s *Service) ListGateways(ctx context.Context, size int32, token string, includeRevoked bool) ([]dbq.PcGateway, string, error) {
+// ListGateways pages through the org's gateways (gateway.read), with what
+// their replicas reported (G0 M15 D10), keyed by gateway.
+func (s *Service) ListGateways(ctx context.Context, size int32, token string, includeRevoked bool,
+) ([]dbq.PcGateway, map[ids.UUID]GatewayStatus, string, error) {
 	c, err := s.manager(ctx, td.PermGatewayRead)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, "", err
 	}
 	pr, err := page.Parse(size, token)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, "", err
 	}
-	var rows []dbq.PcGateway
+	var (
+		rows     []dbq.PcGateway
+		statuses map[ids.UUID]GatewayStatus
+		next     string
+	)
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		rows, err = dbq.New(tx).ListGateways(ctx, dbq.ListGatewaysParams{OrgID: c.Org, IncludeRevoked: includeRevoked, AfterID: pr.After, MaxRows: pr.Limit()})
+		q := dbq.New(tx)
+		if rows, err = q.ListGateways(ctx, dbq.ListGatewaysParams{OrgID: c.Org, IncludeRevoked: includeRevoked, AfterID: pr.After, MaxRows: pr.Limit()}); err != nil {
+			return err
+		}
+		rows, next = page.Finish(pr, rows, func(g dbq.PcGateway) ids.UUID { return g.ID })
+		gws := make([]ids.UUID, 0, len(rows))
+		for _, g := range rows {
+			gws = append(gws, g.ID)
+		}
+		statuses, err = s.statuses(ctx, q, c.Org, gws)
 		return err
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, nil, "", err
 	}
-	rows, next := page.Finish(pr, rows, func(g dbq.PcGateway) ids.UUID { return g.ID })
-	return rows, next, nil
+	return rows, statuses, next, nil
 }
 
 // GatewayDetail is a gateway with its certificates and broker keys.
@@ -195,6 +209,8 @@ type GatewayDetail struct {
 	Gateway      dbq.PcGateway
 	Certificates []dbq.PcGatewayCert
 	BrokerKeys   []dbq.PcBrokerKey
+	// Status is what its replicas reported (G0 M15 D10).
+	Status GatewayStatus
 }
 
 // GetGateway returns one gateway (gateway.read); another org's is NotFound.
@@ -216,7 +232,11 @@ func (s *Service) GetGateway(ctx context.Context, id ids.UUID) (GatewayDetail, e
 		if out.Certificates, err = q.ListGatewayCerts(ctx, c.Org, id); err != nil {
 			return err
 		}
-		out.BrokerKeys, err = q.ListBrokerKeys(ctx, c.Org, id)
+		if out.BrokerKeys, err = q.ListBrokerKeys(ctx, c.Org, id); err != nil {
+			return err
+		}
+		st, err := s.statuses(ctx, q, c.Org, []ids.UUID{id})
+		out.Status = st[id]
 		return err
 	})
 	return out, err

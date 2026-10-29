@@ -5,6 +5,7 @@ package mcp
 
 import (
 	"encoding/json/jsontext"
+	"errors"
 	"maps"
 	"net/http"
 	"slices"
@@ -45,7 +46,11 @@ func (h *Handler) legacy(w http.ResponseWriter, r *http.Request, conn *control.C
 		return
 	}
 	sid := sids[0]
-	sess, ok := h.sessions.get(sid)
+	sess, ok, err := h.sessions.get(sid)
+	if err != nil {
+		sessionsUnavailable(w, req.ID)
+		return
+	}
 	if !ok || sess.conn != conn.GetId() {
 		noSession(w, req.ID)
 		return
@@ -105,6 +110,12 @@ func noSession(w http.ResponseWriter, id jsontext.Value) {
 	fail(w, http.StatusNotFound, id, codeInvalidRequest, "Session not found: initialize a new session", nil)
 }
 
+// sessionsUnavailable answers when the session store cannot be asked (G0
+// M15 D14).
+func sessionsUnavailable(w http.ResponseWriter, id jsontext.Value) {
+	fail(w, http.StatusServiceUnavailable, id, codeUnavailable, "session store unavailable", nil)
+}
+
 // initialize opens a session for the verified workload in its run.
 func (h *Handler) initialize(w http.ResponseWriter, r *http.Request, conn *control.Connection, body []byte, req request) {
 	switch {
@@ -131,8 +142,11 @@ func (h *Handler) initialize(w http.ResponseWriter, r *http.Request, conn *contr
 		return
 	}
 	sid, err := h.sessions.open(conn.GetId(), v.Instance, v.JKT, in.Run, v.RunExpires)
-	if err != nil {
+	if errors.Is(err, errSessionsFull) {
 		fail(w, http.StatusServiceUnavailable, req.ID, codeUnavailable, "the gateway holds too many MCP sessions", nil)
+		return
+	} else if err != nil {
+		sessionsUnavailable(w, req.ID)
 		return
 	}
 	w.Header().Set(HeaderSessionID, sid)
@@ -174,7 +188,11 @@ func (h *Handler) verifySession(w http.ResponseWriter, r *http.Request, id jsont
 // endSession ends a session on DELETE, for its own workload only.
 func (h *Handler) endSession(w http.ResponseWriter, r *http.Request, conn *control.Connection, body []byte) {
 	sid := r.Header.Get(HeaderSessionID)
-	sess, ok := h.sessions.get(sid)
+	sess, ok, err := h.sessions.get(sid)
+	if err != nil {
+		sessionsUnavailable(w, nil)
+		return
+	}
 	if !ok || sess.conn != conn.GetId() {
 		noSession(w, nil)
 		return
