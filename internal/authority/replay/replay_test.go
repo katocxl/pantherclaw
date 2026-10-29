@@ -21,6 +21,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline/pipelinetest"
 	"github.com/katocxl/pantherclaw/internal/authority/recording"
 	"github.com/katocxl/pantherclaw/internal/authority/replay"
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
@@ -100,6 +101,21 @@ func (x *source) HoldSettings(context.Context, ids.OrgID) (pipeline.HoldSettings
 func (x *source) RunConsequences(context.Context, ids.OrgID, ids.UUID) (pipeline.RunConsequenceCounts, error) {
 	x.reads++
 	return pipeline.RunConsequenceCounts{}, nil
+}
+
+// CustomerRule implements replay.Source from the world's customer rules.
+func (x *source) CustomerRule(ctx context.Context, org ids.OrgID, id string, version int, digest [32]byte) (defs.ConsequenceRule, error) {
+	x.reads++
+	rules, err := x.s.W.CustomerRules(ctx, org)
+	if err != nil {
+		return defs.ConsequenceRule{}, err
+	}
+	for _, r := range rules {
+		if r.ID == id && r.Customer.Version == version && r.Customer.Digest == digest {
+			return r.ConsequenceRule, nil
+		}
+	}
+	return defs.ConsequenceRule{}, replay.ErrNotFound
 }
 
 var catalog = map[string]fdomain.Type{"payments.charge.refundable": fdomain.TypeBoolean}
@@ -326,6 +342,7 @@ func TestHR197_ReplayHoldsNoStoreAndWritesNothing(t *testing.T) {
 		"Receipt": true, "Inputs": true, "Definition": true, "Bundle": true, "PolicyVersion": true, "Catalog": true, "Open": true,
 		"HoldSettings":    true, // a read in a READ ONLY transaction (D36)
 		"RunConsequences": true, // a read in a READ ONLY transaction (G0 M17 D103)
+		"CustomerRule":    true, // a read in a READ ONLY transaction (G0 M17 D106)
 	}
 	e := reflect.TypeFor[replay.Engine]()
 	store := reflect.TypeFor[finalize.Store]()

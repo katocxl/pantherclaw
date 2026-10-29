@@ -65,6 +65,9 @@ type Served struct {
 	// them: a replay under a proposed policy that reads them (G0 M17 D103).
 	// Reproduction replays never set it.
 	RunConsequences map[string]pipeline.RunConsequenceCounts
+	// CustomerRules are the recorded customer rule versions, loaded again by
+	// id and version (their digests checked) with their definitions by pin.
+	CustomerRules []consequences.Rule
 }
 
 // Reader serves a recording to the pipeline. It reads nothing else and
@@ -482,4 +485,25 @@ func (r *Reader) RunConsequences(_ context.Context, org ids.OrgID, run ids.UUID)
 		return pipeline.RunConsequenceCounts{}, err
 	}
 	return pipeline.RunConsequenceCounts{Pending: c.Pending, Unconfirmed: c.Unconfirmed}, nil
+}
+
+// CustomerRules implements pipeline.Reader: the recorded versions, served
+// again, or a gap when one could not be loaded as it was.
+func (r *Reader) CustomerRules(_ context.Context, org ids.OrgID) ([]consequences.Rule, error) {
+	c := r.rec.Reads.CustomerRules
+	if err := r.otherOrg(org, "customer_rules", pipeline.StepFacts); err != nil || c == nil {
+		return nil, r.gap("customer_rules", pipeline.StepFacts, "the org's customer consequence rules were not recorded")
+	}
+	if err := errOf(c.Err); err != nil {
+		return nil, err
+	}
+	same := len(c.Rules) == len(r.served.CustomerRules)
+	for i := 0; same && i < len(c.Rules); i++ {
+		s, w := r.served.CustomerRules[i], c.Rules[i]
+		same = s.Customer != nil && s.ID == w.ID && s.Customer.Version == w.Version && hex.EncodeToString(s.Customer.Digest[:]) == w.Digest
+	}
+	if !same {
+		return nil, r.gap("customer_rules", pipeline.StepFacts, "the customer consequence rules are not the ones recorded")
+	}
+	return slices.Clone(r.served.CustomerRules), nil
 }

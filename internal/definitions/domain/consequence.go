@@ -6,6 +6,7 @@ package domain
 import (
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 )
@@ -20,6 +21,23 @@ type ConsequenceRule struct {
 	RequiresFacts []string    `json:"requires_facts"`
 	Consequence   Consequence `json:"consequence"`
 	ValidUntil    string      `json:"valid_until"`
+	// MaxDepth is how far down a chain the rule applies (G0 M17 D109,
+	// F411): 1, the default, only to an action itself; up to
+	// MaxConsequenceDepth to a consequence of a consequence.
+	MaxDepth int `json:"max_depth,omitzero"`
+}
+
+// MaxConsequenceDepth is the deepest a consequence chain goes (D109).
+const MaxConsequenceDepth = 4
+
+// Depth is the deepest the rule applies: MaxDepth, or 1 without one.
+func (c ConsequenceRule) Depth() int { return max(c.MaxDepth, 1) }
+
+// Expired reports whether the rule's review has expired at now (G0 M17
+// D110): its valid_until day is over, or cannot be read.
+func (c ConsequenceRule) Expired(now time.Time) bool {
+	exp, err := parseDay("valid_until", c.ValidUntil)
+	return err != nil || !now.Before(exp)
 }
 
 // Consequence is the predicted downstream effect.
@@ -42,6 +60,9 @@ type Consequence struct {
 
 var (
 	idRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
+	// CustomerRuleIDRe is a customer consequence rule's id (G0 M17 D106):
+	// cx. first, so it never collides with a package rule's.
+	CustomerRuleIDRe = regexp.MustCompile(`^cx.[a-z0-9][a-z0-9_.-]{0,63}$`)
 	// targetTextRe is the literal text of a consequence target template.
 	targetTextRe = regexp.MustCompile(`^[A-Za-z0-9._/@#:-]*$`)
 )
@@ -54,7 +75,7 @@ const maxTargetTemplate = 256
 func (p *Package) validateConsequences(ops map[string]*Definition) error {
 	ids := map[string]bool{}
 	for _, c := range p.Consequences {
-		if err := c.validate(ops); err != nil {
+		if err := c.validate(ops, idRe, "this package"); err != nil {
 			return err
 		}
 		if ids[c.ID] {
@@ -65,12 +86,12 @@ func (p *Package) validateConsequences(ops map[string]*Definition) error {
 	return nil
 }
 
-func (c ConsequenceRule) validate(ops map[string]*Definition) error {
+func (c ConsequenceRule) validate(ops map[string]*Definition, id *regexp.Regexp, where string) error {
 	switch {
-	case !idRe.MatchString(c.ID):
+	case !id.MatchString(c.ID):
 		return invalid("consequence id %q", c.ID)
 	case ops[c.Operation] == nil:
-		return invalid("consequence %s: operation %s is not defined in this package", c.ID, c.Operation)
+		return invalid("consequence %s: operation %s is not defined in %s", c.ID, c.Operation, where)
 	case !actionir.ValidOperation(c.Consequence.Operation) || !kindRe.MatchString(c.Consequence.Effect):
 		return invalid("consequence %s: needs a consequence operation and effect", c.ID)
 	case ops[c.Consequence.Operation] == nil:
@@ -78,9 +99,11 @@ func (c ConsequenceRule) validate(ops map[string]*Definition) error {
 		// package version (a virtual write such as github.deployment.trigger,
 		// or another of its operations); without one the rule could only
 		// fail when an action needs it.
-		return invalid("consequence %s: consequence operation %s is not defined in this package", c.ID, c.Consequence.Operation)
+		return invalid("consequence %s: consequence operation %s is not defined in %s", c.ID, c.Consequence.Operation, where)
 	case len(c.RequiresFacts) == 0 || len(c.RequiresFacts) > maxItems:
 		return invalid("consequence %s: a consequence needs 1..%d verified facts (no invented causality)", c.ID, maxItems)
+	case c.MaxDepth < 0 || c.MaxDepth > MaxConsequenceDepth:
+		return invalid("consequence %s: max_depth is 1..%d", c.ID, MaxConsequenceDepth)
 	}
 	for _, f := range c.RequiresFacts {
 		if !kindRe.MatchString(f) {
@@ -147,4 +170,12 @@ func (c ConsequenceRule) TargetID(on TargetSpec, id string) (string, bool) {
 		return part
 	})
 	return out, ok
+}
+
+// ValidateCustomer checks a customer consequence rule (G0 M17 D106)
+// against ops, the org's ACTIVE definitions by operation: as a package's
+// rule, except that its id starts with cx. and its operation and its
+// consequence operation may come from different packages.
+func (c ConsequenceRule) ValidateCustomer(ops map[string]*Definition) error {
+	return c.validate(ops, CustomerRuleIDRe, "the org's active definitions")
 }

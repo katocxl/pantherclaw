@@ -1,0 +1,178 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// ConsequenceRuleService manages the org's customer consequence rules (G0
+// M17 D106–D108, D112; F405–F413, HR-453, HR-454; Team edition). A
+// customer rule is evaluated in the decision pipeline after the rules of
+// the action's package, and only adds to them: it predicts a further
+// consequence whose authority, limits and requirements the action must
+// also meet, and never suppresses, waives or rules out a package
+// consequence. Proposing and retiring a rule are always protected changes:
+// a second person holding consequence_rule.manage confirms each with a
+// security key on its change request's page, in every protect mode and
+// never as an emergency.
+service ConsequenceRuleService {
+  // ProposeConsequenceRule stores the next version of a rule, PROPOSED,
+  // and returns the protected change that makes it ACTIVE (retiring the
+  // version it replaces) once a second person confirms it. The rule's
+  // operation and its consequence operation must each be defined by an
+  // ACTIVE package version of the org.
+  // permission: consequence_rule.manage
+  rpc ProposeConsequenceRule(ProposeConsequenceRuleRequest) returns (ProposeConsequenceRuleResponse);
+  // RetireConsequenceRule returns the protected change that retires the
+  // rule's ACTIVE version once a second person confirms it.
+  // permission: consequence_rule.manage
+  rpc RetireConsequenceRule(RetireConsequenceRuleRequest) returns (RetireConsequenceRuleResponse);
+  // ListConsequenceRules lists every version of the org's rules, by rule
+  // id, newest version first.
+  // permission: package.read
+  rpc ListConsequenceRules(ListConsequenceRulesRequest) returns (ListConsequenceRulesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetConsequenceRule returns every version of one rule, newest first.
+  // permission: package.read
+  rpc GetConsequenceRule(GetConsequenceRuleRequest) returns (GetConsequenceRuleResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// ConsequenceRuleSpec is a consequence rule as its author writes it: the
+// format of a package's consequence rules, plus how deep down a chain it
+// applies (F405, F411).
+message ConsequenceRuleSpec {
+  // The rule id: cx. first, then lower-case letters, digits, '_', '.' and
+  // '-' (for example cx.deploy-notifies-pager).
+  string id = 1 [(buf.validate.field).string = {
+    pattern: "^cx\\.[a-z0-9][a-z0-9_.-]{0,63}$"
+  }];
+  // The operation whose action the rule applies to.
+  string operation = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+  // A CEL condition over the facts the rule requires: when it holds, the
+  // consequence is predicted.
+  string when = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 4096
+  }];
+  // The verified facts the condition reads (1..32): a fact that is
+  // missing, stale or unknown makes the consequence UNKNOWN, at least a
+  // hold. A consequence is never derived without one (F413).
+  repeated string requires_facts = 4 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 32
+  }];
+  // The predicted consequence.
+  ConsequenceSpec consequence = 5 [(buf.validate.field).required = true];
+  // The last day the rule's review holds (YYYY-MM-DD); after it, the
+  // consequence is UNKNOWN, CONSEQUENCE_RULE_EXPIRED.
+  string valid_until = 6 [(buf.validate.field).string.pattern = "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"];
+  // How far down a chain the rule applies: 1 (the default) only to an
+  // action itself, up to 4.
+  int32 max_depth = 7 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 4
+  }];
+}
+
+// ConsequenceSpec is a rule's predicted consequence.
+message ConsequenceSpec {
+  // The consequence operation, decided with the action.
+  string operation = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+  // The effect kind, for example deployment.trigger.
+  string effect = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 100
+  }];
+  // What an approver reads.
+  string description = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+  // The consequence's target id, a template over the action's target id
+  // ({target.id} or {target.id.<group>}); empty: the action's own target.
+  string target = 4 [(buf.validate.field).string.max_len = 256];
+  // A CEL expression over the rule's facts giving the environments the
+  // consequence reaches, a list of strings; empty: none.
+  string environments = 5 [(buf.validate.field).string.max_len = 4096];
+}
+
+// ConsequenceRuleVersion is one stored version of a rule.
+message ConsequenceRuleVersion {
+  // The version's id.
+  string id = 1;
+  // The rule as written.
+  ConsequenceRuleSpec rule = 2;
+  // Its version, from 1.
+  int32 version = 3;
+  // SHA-256 of the rule's canonical JSON, hex: what a recorded evaluation
+  // names.
+  string digest = 4;
+  // "PROPOSED", "ACTIVE" or "RETIRED".
+  string state = 5;
+  // Who proposed it, and who confirmed it (a different person).
+  string proposed_by = 6;
+  string approved_by = 7;
+  google.protobuf.Timestamp create_time = 8;
+  google.protobuf.Timestamp update_time = 9;
+}
+
+// PendingRuleChange is the protected change a proposal or a retirement
+// opened: confirmed by a second person on its change request's page.
+message PendingRuleChange {
+  // The protected change.
+  string protected_change_id = 1;
+  // Its change request.
+  string change_request_id = 2;
+}
+
+message ProposeConsequenceRuleRequest {
+  ConsequenceRuleSpec rule = 1 [(buf.validate.field).required = true];
+}
+
+message ProposeConsequenceRuleResponse {
+  // The PROPOSED version.
+  ConsequenceRuleVersion version = 1;
+  // The change that activates it.
+  PendingRuleChange pending = 2;
+}
+
+message RetireConsequenceRuleRequest {
+  string rule_id = 1 [(buf.validate.field).string = {
+    pattern: "^cx\\.[a-z0-9][a-z0-9_.-]{0,63}$"
+  }];
+}
+
+message RetireConsequenceRuleResponse {
+  // The change that retires the rule's ACTIVE version.
+  PendingRuleChange pending = 1;
+}
+
+message ListConsequenceRulesRequest {}
+
+message ListConsequenceRulesResponse {
+  // At most 500 versions.
+  repeated ConsequenceRuleVersion versions = 1;
+}
+
+message GetConsequenceRuleRequest {
+  string rule_id = 1 [(buf.validate.field).string = {
+    pattern: "^cx\\.[a-z0-9][a-z0-9_.-]{0,63}$"
+  }];
+}
+
+message GetConsequenceRuleResponse {
+  // Newest first.
+  repeated ConsequenceRuleVersion versions = 1;
+}

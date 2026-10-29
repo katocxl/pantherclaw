@@ -85,21 +85,24 @@ type Tampered struct {
 
 // Reads are the reads of one evaluation, by kind.
 type Reads struct {
-	Containment     *Containment      `json:"containment,omitzero"`
-	Controls        *Controls         `json:"controls,omitzero"`
-	Definitions     []Definition      `json:"definitions,omitzero"`
-	Policy          *Policy           `json:"policy,omitzero"`
-	Runs            []Run             `json:"runs,omitzero"`
-	Agents          []Agent           `json:"agents,omitzero"`
-	Chains          []Chain           `json:"chains,omitzero"`
-	Envelopes       []Envelopes       `json:"envelopes,omitzero"`
-	Facts           []Facts           `json:"facts,omitzero"`
-	Usage           []Usage           `json:"usage,omitzero"`
-	Claims          []Claim           `json:"claims,omitzero"`
-	Connections     []Connection      `json:"connections,omitzero"`
-	Holds           []Hold            `json:"holds,omitzero"`
-	Variants        []Variants        `json:"variants,omitzero"`
-	HoldSettings    *HoldSettings     `json:"hold_settings,omitzero"`
+	Containment  *Containment  `json:"containment,omitzero"`
+	Controls     *Controls     `json:"controls,omitzero"`
+	Definitions  []Definition  `json:"definitions,omitzero"`
+	Policy       *Policy       `json:"policy,omitzero"`
+	Runs         []Run         `json:"runs,omitzero"`
+	Agents       []Agent       `json:"agents,omitzero"`
+	Chains       []Chain       `json:"chains,omitzero"`
+	Envelopes    []Envelopes   `json:"envelopes,omitzero"`
+	Facts        []Facts       `json:"facts,omitzero"`
+	Usage        []Usage       `json:"usage,omitzero"`
+	Claims       []Claim       `json:"claims,omitzero"`
+	Connections  []Connection  `json:"connections,omitzero"`
+	Holds        []Hold        `json:"holds,omitzero"`
+	Variants     []Variants    `json:"variants,omitzero"`
+	HoldSettings *HoldSettings `json:"hold_settings,omitzero"`
+	// CustomerRules is the read of the org's customer consequence rules
+	// (pipeline 6, G0 M17 D106); earlier recordings have none.
+	CustomerRules   *CustomerRules    `json:"customer_rules,omitzero"`
 	RunConsequences []RunConsequences `json:"run_consequences,omitzero"`
 }
 
@@ -475,4 +478,24 @@ func (r *Recording) check() error {
 		return err
 	}
 	return r.Reads.check()
+}
+
+// CustomerRules is the read of the org's ACTIVE customer consequence
+// rules: each by id, version and digest, with the pin of its consequence
+// operation's definition, so that a replay evaluates exactly those
+// versions.
+type CustomerRules struct {
+	Rules []CustomerRule `json:"rules,omitzero"`
+	Err   string         `json:"err,omitzero"`
+}
+
+// CustomerRule is one recorded customer rule version.
+type CustomerRule struct {
+	ID      string `json:"id"`
+	Version int    `json:"version"`
+	// Digest is the SHA-256 of the rule's canonical JSON, hex.
+	Digest string `json:"digest"`
+	// Pin is the definition of its consequence operation, when the org had
+	// an ACTIVE one.
+	Pin *actionir.Definition `json:"pin,omitzero"`
 }

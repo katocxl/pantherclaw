@@ -87,6 +87,9 @@ type Pipeline struct {
 	// is DENY DELEGATION_NOT_ALLOWED. Unset, other kinds are unaffected
 	// and an a2a call is CANNOT_AUTHORIZE (fail closed).
 	Peer PeerCheck
+	// Replaying is, for a replay, the pipeline version that recorded the
+	// inputs (one that Replays); zero, or Version, decides as this version.
+	Replaying int
 }
 
 // IdentitySummary is the identity part of a decision receipt (ids only).
@@ -259,6 +262,9 @@ type state struct {
 	// pending are the predicted and unknown consequences steps 4, 7 and 8
 	// decide with the action.
 	pending []pendingConsequence
+	// rules are the consequence rules step 6 evaluates: the package
+	// version's, then the org's customer rules (G0 M17 D108).
+	rules []consequences.Rule
 }
 
 // Snapshot calls fn with a Reader whose reads all come from one snapshot
@@ -699,10 +705,8 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 		reqs = append(reqs, pol.Compiled.FactRequirements(s.a.Operation, s.a.Env)...)
 	}
 	s.facts = map[string]fdomain.Value{}
-	var rules []consequences.Rule
-	if s.pinned != nil {
-		rules = s.pinned.Consequences
-	}
+	s.rules = p.consequenceRules(ctx, s)
+	rules := consequences.Direct(s.rules, s.a.Operation)
 	names := factNames(reqs, rules)
 	if len(names) == 0 {
 		s.cl.note(StepFacts, StatusNotApplicable, ReasonFactsFresh, "no facts are required")
@@ -714,7 +718,7 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 		return
 	}
 	defer func() {
-		s.consequences(ctx, evaluatorFor(p.consequenceLimits(s)), recorded, reqs)
+		p.consequences(ctx, s, evaluatorFor(p.consequenceLimits(s)), recorded, reqs)
 		p.consequenceFacts(ctx, s)
 	}()
 	if len(reqs) == 0 {

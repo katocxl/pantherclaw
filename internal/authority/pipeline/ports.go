@@ -305,6 +305,11 @@ type Reader interface {
 	// M17 D103). It is read only for a policy that uses
 	// run.consequences_pending or run.consequences_unconfirmed.
 	RunConsequences(ctx context.Context, org ids.OrgID, run ids.UUID) (RunConsequenceCounts, error)
+	// CustomerRules returns the org's ACTIVE customer consequence rules,
+	// in rule id order, each with the ACTIVE definition of its consequence
+	// operation (G0 M17 D106, D108; nil when the org has none). Step 6
+	// evaluates them after the package's rules and only adds them.
+	CustomerRules(ctx context.Context, org ids.OrgID) ([]consequences.Rule, error)
 }
 
 // Snapshotter is a Reader that can serve every read of one evaluation from

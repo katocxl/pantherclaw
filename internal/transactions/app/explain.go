@@ -13,6 +13,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
+	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/authority/recording"
@@ -91,6 +92,8 @@ type Explanation struct {
 	Budgets   []ExplainedBudget
 	Gaps      []string
 	Execution domain.ExecutionState
+	// Consequences are the decision's consequences (G0 M17 D111).
+	Consequences []ExplainedConsequence
 }
 
 // receiptClaims are what an explanation reads from a decision receipt.
@@ -110,6 +113,7 @@ type receiptClaims struct {
 			Spent     string `json:"spent"`
 		} `json:"budgets"`
 		Consequences []receiptConsequence `json:"consequences"`
+		Monitor      bool                 `json:"monitor"`
 		Coverage     *struct {
 			Unavailable string `json:"unavailable"`
 			State       string `json:"state"`
@@ -117,9 +121,75 @@ type receiptClaims struct {
 	} `json:"pap"`
 }
 
-// receiptConsequence is a consequence rule's state in a decision receipt.
+// receiptConsequence is what a decision receipt says of a consequence (G0
+// M8; from pipeline 6 also its source, chain, words, facts and validity,
+// G0 M17 D111).
 type receiptConsequence struct {
-	State string `json:"state"`
+	Rule         string   `json:"rule"`
+	State        string   `json:"state"`
+	Operation    string   `json:"op"`
+	Target       string   `json:"target"`
+	Environments []string `json:"envs"`
+	Source       string   `json:"src"`
+	Chain        []string `json:"chain"`
+	Description  string   `json:"desc"`
+	Evidence     []string `json:"evidence"`
+	ValidUntil   string   `json:"until"`
+}
+
+// ExplainedConsequence is one consequence of a decision, explained (G0 M17
+// D111; F407, F409, F410): the rule and where it comes from, the chain to
+// it, what it is about, the names of the facts the rule needs (never
+// their values), its validity, why an UNKNOWN one could not be ruled out,
+// and what it is now.
+type ExplainedConsequence struct {
+	Rule, Source      string
+	Chain             []string
+	Operation, Target string
+	Environments      []string
+	Description       string
+	Evidence          []string
+	ValidUntil        string
+	UnknownLinks      []string
+	Label             consequences.Label
+}
+
+// explainedConsequences labels the receipt's consequences (D111): a
+// predicted one is AUTHORIZED under an enforced permit, ACCEPTED once its
+// consequence transaction was opened, CONFIRMED once every such
+// transaction's effect is CONFIRMED. rows say, in the same order, why an
+// UNKNOWN one could not be ruled out.
+func explainedConsequences(cs []receiptConsequence, permits bool, rows []dbq.ExplanationConsequencesRow,
+	children []dbq.ExplanationConsequenceTransactionsRow,
+) []ExplainedConsequence {
+	out := make([]ExplainedConsequence, 0, len(cs))
+	for i, c := range cs {
+		source := c.Source
+		if source == "" {
+			source = string(consequences.SourcePackage)
+		}
+		chain := c.Chain
+		if len(chain) == 0 {
+			chain = []string{c.Rule}
+		}
+		e := ExplainedConsequence{
+			Rule: c.Rule, Source: source, Chain: chain, Operation: c.Operation, Target: c.Target, Environments: c.Environments,
+			Description: c.Description, Evidence: c.Evidence, ValidUntil: c.ValidUntil,
+		}
+		if i < len(rows) && rows[i].RuleID == c.Rule {
+			_ = json.Unmarshal(rows[i].Unknown, &e.UnknownLinks)
+		}
+		accepted, confirmed := false, true
+		for _, t := range children {
+			if t.Operation == c.Operation && t.TargetType+":"+t.TargetID == c.Target {
+				accepted = true
+				confirmed = confirmed && t.EffectState == string(domain.Confirmed)
+			}
+		}
+		e.Label = consequences.LabelOf(consequences.State(c.State), permits, accepted, accepted && confirmed)
+		out = append(out, e)
+	}
+	return out
 }
 
 // explainInputs are the records an explanation is built from besides the
@@ -142,6 +212,11 @@ type explainInputs struct {
 	budgetsShown  bool
 	grantID       string
 	grantRevision int
+	// consequences are why each consequence of the latest evaluation could
+	// not be ruled out, and children the consequence transactions opened
+	// (D111).
+	consequences []dbq.ExplanationConsequencesRow
+	children     []dbq.ExplanationConsequenceTransactionsRow
 }
 
 // readExplainInputs reads the records an explanation needs, in the
@@ -155,6 +230,12 @@ func readExplainInputs(ctx context.Context, c tenancy.Caller, q *dbq.Queries, ev
 		return in, err
 	}
 	in.facts = f
+	if in.consequences, err = q.ExplanationConsequences(ctx, c.Org, id); err != nil {
+		return in, err
+	}
+	if in.children, err = q.ExplanationConsequenceTransactions(ctx, c.Org, id); err != nil {
+		return in, err
+	}
 	if in.budgetsShown, err = NewAgentScope(c, q, td.PermBudgetRead).Can(ctx, ev.Transaction.Agent); err != nil {
 		return in, err
 	}
@@ -258,6 +339,8 @@ func explain(ev *Evidence, in explainInputs) *Explanation {
 			out.Budgets = append(out.Budgets, eb)
 		}
 	}
+	out.Consequences = explainedConsequences(claims.Pap.Consequences, adomain.Decision(t.Decision).Permits() && !claims.Pap.Monitor,
+		in.consequences, in.children)
 	out.Gaps = gaps(ev, claims)
 	if !in.materialOK {
 		out.Gaps = append(out.Gaps, GapMaterialUnavailable)

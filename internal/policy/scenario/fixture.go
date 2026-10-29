@@ -446,6 +446,13 @@ func (f *fixture) HoldSettings(context.Context, ids.OrgID) (pipeline.HoldSetting
 	return pipeline.HoldSettings{}, nil
 }
 
+// CustomerRules implements pipeline.Reader: a scenario test decides a
+// policy version over the package's own rules; the org's customer
+// consequence rules only add to what it decides (G0 M17 D108).
+func (f *fixture) CustomerRules(context.Context, ids.OrgID) ([]consequences.Rule, error) {
+	return nil, nil
+}
+
 // evaluate decides the case's action under policy, answering its approval
 // state: "expired" is a request past its deadline; "approved_other_action"
 // an approval bound to another action; "approved" (and step_up "done") an
