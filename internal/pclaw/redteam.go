@@ -462,7 +462,10 @@ func newSummary(rangeID string, r *pantherclawv1.Range, set []rtapp.Loaded, resu
 	s := summary{Statement: summaryStatement, Unsigned: true, RangeID: rangeID, RunnerVersion: r.GetRunnerVersion(), Counts: map[string]int{}}
 	for i, l := range set {
 		digests[l.Scenario.ID] = l.Digest
-		res := results[i]
+		if i >= len(results) {
+			break // the runner returns one result per scenario
+		}
+		res := results[i] //nolint:gosec // G602: i < len(results), checked above
 		s.Counts[string(res.Verdict)]++
 		s.Results = append(s.Results, summaryResult{
 			ID: l.Scenario.ID, Digest: l.Digest, Title: l.Scenario.Title, Category: l.Scenario.Category,
@@ -471,8 +474,10 @@ func newSummary(rangeID string, r *pantherclawv1.Range, set []rtapp.Loaded, resu
 	}
 	s.SetDigest = rtdomain.SetDigest(digests)
 	s.Origin = rtdomain.OriginLibrary
-	if len(set) > 0 && rtdomain.OriginOf(set[0].Scenario.ID) == rtdomain.OriginCustomer {
-		s.Origin, s.Statement = rtdomain.OriginCustomer, customerStatement
+	for _, res := range s.Results {
+		if res.Origin == rtdomain.OriginCustomer { // a set is one origin (setOrigin)
+			s.Origin, s.Statement = rtdomain.OriginCustomer, customerStatement
+		}
 	}
 	if cmp != nil {
 		for _, rg := range cmp.Regressions {
