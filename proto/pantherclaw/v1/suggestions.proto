@@ -1,0 +1,180 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// SuggestionService serves evidence-backed policy suggestions (G0 M16
+// D90–D92; F185; HR-442..445; Business edition).
+//
+// Each unused-authority posture finding gets a suggestion: a FORBID rule
+// for the grant's agent over the operations it has not used, with the
+// evidence behind it. A suggestion states its 30-day window, the
+// operations the grant was used for, the routes that were not ENFORCED for
+// the whole window (coverage limits) and how uncertain it is: LOW only when
+// every route was ENFORCED or OBSERVE_ONLY throughout, MEDIUM when any was
+// PARTIAL, HIGH when any was UNKNOWN or the window has gaps (HR-443). Its
+// expected effect counts recorded transactions only; what was not collected
+// is listed, never counted as zero (HR-445). A suggestion never changes
+// policy: a person dismisses it, or drafts it into a policy DRAFT that only
+// the publication gate can publish (HR-442). A suggestion is visible only to
+// a caller who holds posture.read and grant.read where its agent lives
+// (HR-444); one the caller cannot see is not found.
+service SuggestionService {
+  // ListSuggestions lists suggestions, newest first.
+  // permission: posture.read
+  rpc ListSuggestions(ListSuggestionsRequest) returns (ListSuggestionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetSuggestion returns a suggestion.
+  // permission: posture.read
+  rpc GetSuggestion(GetSuggestionRequest) returns (GetSuggestionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // DismissSuggestion dismisses an open suggestion with a reason.
+  // permission: posture.manage
+  rpc DismissSuggestion(DismissSuggestionRequest) returns (DismissSuggestionResponse);
+  // DraftFromSuggestion creates a policy DRAFT from an open suggestion and
+  // never publishes it.
+  // permission: policy.author
+  rpc DraftFromSuggestion(DraftFromSuggestionRequest) returns (DraftFromSuggestionResponse);
+}
+
+enum SuggestionState {
+  SUGGESTION_STATE_UNSPECIFIED = 0;
+  SUGGESTION_STATE_OPEN = 1;
+  SUGGESTION_STATE_DRAFTED = 2;
+  SUGGESTION_STATE_DISMISSED = 3;
+  SUGGESTION_STATE_STALE = 4;
+}
+
+enum SuggestionKind {
+  SUGGESTION_KIND_UNSPECIFIED = 0;
+  SUGGESTION_KIND_UNUSED_AUTHORITY = 1;
+}
+
+enum SuggestionUncertainty {
+  SUGGESTION_UNCERTAINTY_UNSPECIFIED = 0;
+  SUGGESTION_UNCERTAINTY_LOW = 1;
+  SUGGESTION_UNCERTAINTY_MEDIUM = 2;
+  SUGGESTION_UNCERTAINTY_HIGH = 3;
+}
+
+// SuggestionCoverageLimit is a route that was not ENFORCED for the whole
+// window, and its worst coverage state in it.
+message SuggestionCoverageLimit {
+  string agent_id = 1;
+  string connection_id = 2;
+  string operation = 3;
+  // state: OBSERVE_ONLY, PARTIAL or UNKNOWN.
+  string state = 4;
+}
+
+// SuggestionRule is a proposed policy rule.
+message SuggestionRule {
+  string id = 1;
+  // kind: FORBID.
+  string kind = 2;
+  string summary = 3;
+  repeated string operations = 4;
+  string when = 5;
+  string reason = 6;
+}
+
+// SuggestionEffect is the expected effect over the window's recorded
+// transactions. The counts are set only when recorded data was collected;
+// not_collected lists what was not (RETENTION_SHORTER_THAN_WINDOW,
+// NO_ROUTES, ROUTE_NOT_ENFORCED:<agent>|<connection>|<operation>, MORE),
+// and that is never a zero.
+message SuggestionEffect {
+  bool collected = 1;
+  optional int64 matching_actions = 2;
+  optional int64 newly_denied = 3;
+  optional int64 newly_held = 4;
+  repeated string not_collected = 5;
+}
+
+message Suggestion {
+  string id = 1;
+  SuggestionKind kind = 2;
+  string posture_finding_id = 3;
+  string grant_id = 4;
+  string agent_id = 5;
+  repeated string owner_user_ids = 6;
+  google.protobuf.Timestamp window_start_time = 7;
+  google.protobuf.Timestamp window_end_time = 8;
+  // observed: operation -> recorded actions of the grant in the window.
+  map<string, int64> observed = 9;
+  repeated SuggestionCoverageLimit coverage_limits = 10;
+  repeated SuggestionRule proposed = 11;
+  SuggestionEffect expected_effect = 12;
+  SuggestionUncertainty uncertainty = 13;
+  repeated string uncertainty_reasons = 14;
+  SuggestionState state = 15;
+  string draft_policy_version_id = 16;
+  string dismissed_by = 17;
+  string dismiss_reason = 18;
+  google.protobuf.Timestamp create_time = 19;
+  google.protobuf.Timestamp update_time = 20;
+}
+
+message ListSuggestionsRequest {
+  repeated SuggestionState states = 1 [(buf.validate.field).repeated = {
+    max_items: 4
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+  SuggestionKind kind = 2 [(buf.validate.field).enum.defined_only = true];
+  int32 page_size = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 4 [(buf.validate.field).string = {
+    max_len: 256
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+message ListSuggestionsResponse {
+  repeated Suggestion suggestions = 1;
+  string next_page_token = 2;
+}
+
+message GetSuggestionRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetSuggestionResponse {
+  Suggestion suggestion = 1;
+}
+
+message DismissSuggestionRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 10
+    max_len: 1000
+  }];
+}
+
+message DismissSuggestionResponse {
+  Suggestion suggestion = 1;
+}
+
+message DraftFromSuggestionRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message DraftFromSuggestionResponse {
+  Suggestion suggestion = 1;
+  // policy_version_id is the DRAFT version created; it is not published.
+  string policy_version_id = 2;
+  int32 policy_version = 3;
+}

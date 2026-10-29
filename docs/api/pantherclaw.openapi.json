@@ -23553,6 +23553,222 @@
         }
       }
     },
+    "/pantherclaw.v1.SuggestionService/ListSuggestions": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.SuggestionService"
+        ],
+        "summary": "ListSuggestions",
+        "description": "ListSuggestions lists suggestions, newest first.\n permission: posture.read",
+        "operationId": "pantherclaw.v1.SuggestionService.ListSuggestions",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListSuggestionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListSuggestionsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.SuggestionService/GetSuggestion": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.SuggestionService"
+        ],
+        "summary": "GetSuggestion",
+        "description": "GetSuggestion returns a suggestion.\n permission: posture.read",
+        "operationId": "pantherclaw.v1.SuggestionService.GetSuggestion",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetSuggestionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetSuggestionResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.SuggestionService/DismissSuggestion": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.SuggestionService"
+        ],
+        "summary": "DismissSuggestion",
+        "description": "DismissSuggestion dismisses an open suggestion with a reason.\n permission: posture.manage",
+        "operationId": "pantherclaw.v1.SuggestionService.DismissSuggestion",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DismissSuggestionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DismissSuggestionResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.SuggestionService/DraftFromSuggestion": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.SuggestionService"
+        ],
+        "summary": "DraftFromSuggestion",
+        "description": "DraftFromSuggestion creates a policy DRAFT from an open suggestion and\n never publishes it.\n permission: policy.author",
+        "operationId": "pantherclaw.v1.SuggestionService.DraftFromSuggestion",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DraftFromSuggestionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DraftFromSuggestionResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.SupportAccessService/RequestSupportAccess": {
       "post": {
         "tags": [
@@ -72239,6 +72455,442 @@
         "additionalProperties": false,
         "description": "SetSIEMDestinationStateResponse returns the destination."
       },
+      "pantherclaw.v1.SuggestionKind": {
+        "type": "string",
+        "title": "SuggestionKind",
+        "enum": [
+          "SUGGESTION_KIND_UNSPECIFIED",
+          "SUGGESTION_KIND_UNUSED_AUTHORITY"
+        ]
+      },
+      "pantherclaw.v1.SuggestionState": {
+        "type": "string",
+        "title": "SuggestionState",
+        "enum": [
+          "SUGGESTION_STATE_UNSPECIFIED",
+          "SUGGESTION_STATE_OPEN",
+          "SUGGESTION_STATE_DRAFTED",
+          "SUGGESTION_STATE_DISMISSED",
+          "SUGGESTION_STATE_STALE"
+        ]
+      },
+      "pantherclaw.v1.SuggestionUncertainty": {
+        "type": "string",
+        "title": "SuggestionUncertainty",
+        "enum": [
+          "SUGGESTION_UNCERTAINTY_UNSPECIFIED",
+          "SUGGESTION_UNCERTAINTY_LOW",
+          "SUGGESTION_UNCERTAINTY_MEDIUM",
+          "SUGGESTION_UNCERTAINTY_HIGH"
+        ]
+      },
+      "pantherclaw.v1.DismissSuggestionRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 1000,
+            "minLength": 10
+          }
+        },
+        "title": "DismissSuggestionRequest",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.DismissSuggestionResponse": {
+        "type": "object",
+        "properties": {
+          "suggestion": {
+            "title": "suggestion",
+            "$ref": "#/components/schemas/pantherclaw.v1.Suggestion"
+          }
+        },
+        "title": "DismissSuggestionResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.DraftFromSuggestionRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          }
+        },
+        "title": "DraftFromSuggestionRequest",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.DraftFromSuggestionResponse": {
+        "type": "object",
+        "properties": {
+          "suggestion": {
+            "title": "suggestion",
+            "$ref": "#/components/schemas/pantherclaw.v1.Suggestion"
+          },
+          "policyVersionId": {
+            "type": "string",
+            "title": "policy_version_id",
+            "description": "policy_version_id is the DRAFT version created; it is not published."
+          },
+          "policyVersion": {
+            "type": "integer",
+            "title": "policy_version",
+            "format": "int32"
+          }
+        },
+        "title": "DraftFromSuggestionResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.GetSuggestionRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          }
+        },
+        "title": "GetSuggestionRequest",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetSuggestionResponse": {
+        "type": "object",
+        "properties": {
+          "suggestion": {
+            "title": "suggestion",
+            "$ref": "#/components/schemas/pantherclaw.v1.Suggestion"
+          }
+        },
+        "title": "GetSuggestionResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListSuggestionsRequest": {
+        "type": "object",
+        "properties": {
+          "states": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.SuggestionState",
+              "not": {
+                "enum": [
+                  "SUGGESTION_STATE_UNSPECIFIED"
+                ]
+              }
+            },
+            "title": "states",
+            "maxItems": 4
+          },
+          "kind": {
+            "title": "kind",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.SuggestionKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32"
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 256,
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ListSuggestionsRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListSuggestionsResponse": {
+        "type": "object",
+        "properties": {
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.Suggestion"
+            },
+            "title": "suggestions"
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token"
+          }
+        },
+        "title": "ListSuggestionsResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.Suggestion": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "kind": {
+            "title": "kind",
+            "$ref": "#/components/schemas/pantherclaw.v1.SuggestionKind"
+          },
+          "postureFindingId": {
+            "type": "string",
+            "title": "posture_finding_id"
+          },
+          "grantId": {
+            "type": "string",
+            "title": "grant_id"
+          },
+          "agentId": {
+            "type": "string",
+            "title": "agent_id"
+          },
+          "ownerUserIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "owner_user_ids"
+          },
+          "windowStartTime": {
+            "title": "window_start_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "windowEndTime": {
+            "title": "window_end_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "observed": {
+            "type": "object",
+            "title": "observed",
+            "additionalProperties": {
+              "type": [
+                "integer",
+                "string"
+              ],
+              "title": "value",
+              "format": "int64"
+            },
+            "description": "observed: operation -\u003e recorded actions of the grant in the window."
+          },
+          "coverageLimits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.SuggestionCoverageLimit"
+            },
+            "title": "coverage_limits"
+          },
+          "proposed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.SuggestionRule"
+            },
+            "title": "proposed"
+          },
+          "expectedEffect": {
+            "title": "expected_effect",
+            "$ref": "#/components/schemas/pantherclaw.v1.SuggestionEffect"
+          },
+          "uncertainty": {
+            "title": "uncertainty",
+            "$ref": "#/components/schemas/pantherclaw.v1.SuggestionUncertainty"
+          },
+          "uncertaintyReasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "uncertainty_reasons"
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/pantherclaw.v1.SuggestionState"
+          },
+          "draftPolicyVersionId": {
+            "type": "string",
+            "title": "draft_policy_version_id"
+          },
+          "dismissedBy": {
+            "type": "string",
+            "title": "dismissed_by"
+          },
+          "dismissReason": {
+            "type": "string",
+            "title": "dismiss_reason"
+          },
+          "createTime": {
+            "title": "create_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "updateTime": {
+            "title": "update_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "Suggestion",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.Suggestion.ObservedEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key"
+          },
+          "value": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "value",
+            "format": "int64"
+          }
+        },
+        "title": "ObservedEntry",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.SuggestionCoverageLimit": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "title": "agent_id"
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id"
+          },
+          "operation": {
+            "type": "string",
+            "title": "operation"
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "state: OBSERVE_ONLY, PARTIAL or UNKNOWN."
+          }
+        },
+        "title": "SuggestionCoverageLimit",
+        "additionalProperties": false,
+        "description": "SuggestionCoverageLimit is a route that was not ENFORCED for the whole\n window, and its worst coverage state in it."
+      },
+      "pantherclaw.v1.SuggestionEffect": {
+        "type": "object",
+        "properties": {
+          "collected": {
+            "type": "boolean",
+            "title": "collected"
+          },
+          "matchingActions": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "matching_actions",
+            "format": "int64",
+            "nullable": true
+          },
+          "newlyDenied": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "newly_denied",
+            "format": "int64",
+            "nullable": true
+          },
+          "newlyHeld": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "newly_held",
+            "format": "int64",
+            "nullable": true
+          },
+          "notCollected": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "not_collected"
+          }
+        },
+        "title": "SuggestionEffect",
+        "additionalProperties": false,
+        "description": "SuggestionEffect is the expected effect over the window's recorded\n transactions. The counts are set only when recorded data was collected;\n not_collected lists what was not (RETENTION_SHORTER_THAN_WINDOW,\n NO_ROUTES, ROUTE_NOT_ENFORCED:\u003cagent\u003e|\u003cconnection\u003e|\u003coperation\u003e, MORE),\n and that is never a zero."
+      },
+      "pantherclaw.v1.SuggestionRule": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "kind: FORBID."
+          },
+          "summary": {
+            "type": "string",
+            "title": "summary"
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "operations"
+          },
+          "when": {
+            "type": "string",
+            "title": "when"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason"
+          }
+        },
+        "title": "SuggestionRule",
+        "additionalProperties": false,
+        "description": "SuggestionRule is a proposed policy rule."
+      },
       "pantherclaw.v1.SupportGrantState": {
         "type": "string",
         "title": "SupportGrantState",
@@ -77703,6 +78355,10 @@
     {
       "name": "pantherclaw.v1.SIEMService",
       "description": "SIEMService manages SIEM export destinations (G0 M10 D35, D36; PN-018,\n F537, HR-259, HR-260; Business edition). A destination is an https URL\n that receives OCSF 1.9 events in batches signed with Standard Webhooks.\n It is created PENDING and sends nothing until a person activates it on\n its page (confirm_url) with a security key; its URL, internal flag and\n data classes never change. Export follows a cursor over the evidence\n feed and never skips an event: a failing destination holds its cursor\n and is retried."
+    },
+    {
+      "name": "pantherclaw.v1.SuggestionService",
+      "description": "SuggestionService serves evidence-backed policy suggestions (G0 M16\n D90–D92; F185; HR-442..445; Business edition).\n\n Each unused-authority posture finding gets a suggestion: a FORBID rule\n for the grant's agent over the operations it has not used, with the\n evidence behind it. A suggestion states its 30-day window, the\n operations the grant was used for, the routes that were not ENFORCED for\n the whole window (coverage limits) and how uncertain it is: LOW only when\n every route was ENFORCED or OBSERVE_ONLY throughout, MEDIUM when any was\n PARTIAL, HIGH when any was UNKNOWN or the window has gaps (HR-443). Its\n expected effect counts recorded transactions only; what was not collected\n is listed, never counted as zero (HR-445). A suggestion never changes\n policy: a person dismisses it, or drafts it into a policy DRAFT that only\n the publication gate can publish (HR-442). A suggestion is visible only to\n a caller who holds posture.read and grant.read where its agent lives\n (HR-444); one the caller cannot see is not found."
     },
     {
       "name": "pantherclaw.v1.SupportAccessService",
