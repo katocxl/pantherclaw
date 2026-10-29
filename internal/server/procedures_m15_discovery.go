@@ -12,11 +12,13 @@ import (
 
 // m15DiscoveryProcedures are the F352 discovery inventory procedures (G0
 // M15 D23, D6): reading a connection's inventory, dismissing an item and
-// drafting an unsigned package from items.
+// drafting an unsigned package from items; and the gateway's inventory report
+// (D20).
 var m15DiscoveryProcedures = map[string]td.Permission{
 	pantherclawv1connect.ConnectionServiceListConnectionInventoryProcedure:   td.PermConnectionRead,
 	pantherclawv1connect.ConnectionServiceDismissInventoryItemProcedure:      td.PermConnectionManage,
 	pantherclawv1connect.ConnectionServiceDraftPackageFromInventoryProcedure: td.PermPackageImport,
+	pantherclawv1connect.GatewayServiceReportInventoryProcedure:              td.PermGatewayObserve,
 }
 
 func init() { maps.Copy(procedurePermissions, m15DiscoveryProcedures) }

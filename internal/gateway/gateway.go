@@ -68,7 +68,10 @@ type Gateway struct {
 	log         *slog.Logger
 	// reportDrift, driftEvery and driftPoll drive the drift checks
 	// (drift.go).
-	reportDrift           DriftReporter
+	reportDrift DriftReporter
+	// reportInventory sends each kind-mcp connection's discovery inventory
+	// from the drift loop (G0 M15 D20); nil sends none.
+	reportInventory       InventoryReporter
 	driftEvery, driftPoll time.Duration
 	// verifications, verifyEvery and verifyHintGap drive the verification
 	// reads (verify.go, G0 M7).
@@ -128,6 +131,9 @@ type Deps struct {
 	// ReportDrift tells the server an upstream MCP tool drifted (HR-081);
 	// nil reports nothing.
 	ReportDrift DriftReporter
+	// ReportInventory tells the server what each kind-mcp connection's upstream
+	// server lists (F352, G0 M15 D20); nil reports nothing.
+	ReportInventory InventoryReporter
 	// Verifications claims and reports verification tasks (G0 M7); nil
 	// makes no verification reads.
 	Verifications Verifications
@@ -187,6 +193,10 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 			req := &pb.ReportDriftRequest{ConnectionId: conn, Tool: d.Tool, ExpectedDigest: d.Expected, ObservedDigest: d.Observed}
 			req.ObservedDescription, req.ObservedDescriptionTruncated, req.ObservedDescriptionSha256 = driftDescription(d.Description)
 			_, err := ctl.Gateway.ReportDrift(ctx, req)
+			return err
+		},
+		ReportInventory: func(ctx context.Context, conn string, inv dispatch.Inventory) error {
+			_, err := ctl.Gateway.ReportInventory(ctx, inventoryRequest(conn, inv))
 			return err
 		},
 		Verifications: controlVerifications{ctl},
@@ -282,7 +292,7 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		hook: hook.New(engine, d.Configuration, cfg.PublicURL, log),
 		sdk:  sdk.New(engine, d.Configuration, cfg.PublicURL, log),
 		a2a:  a2aface.New(engine, d.Configuration, a2aPeer, cfg.PublicURL, log),
-		log:  log, reportDrift: d.ReportDrift, driftEvery: DriftEvery, driftPoll: driftPoll,
+		log:  log, reportDrift: d.ReportDrift, reportInventory: d.ReportInventory, driftEvery: DriftEvery, driftPoll: driftPoll,
 		verifications: d.Verifications, verifyEvery: VerifyEvery, verifyHintGap: verifyHintGap,
 		submitScan: d.SubmitScan,
 	}
