@@ -78,6 +78,9 @@ enum AttestationKind {
   // A Google-signed ID token from the GCP metadata server (audience
   // pantherclaw:<org>, format=full).
   ATTESTATION_KIND_GCP_WORKLOAD = 5;
+  // A SigV4-signed sts:GetCallerIdentity request that PantherClaw sends to
+  // STS (signed X-Pantherclaw-Audience: pantherclaw:<org>).
+  ATTESTATION_KIND_AWS_IAM = 6;
 }
 
 // Attestation is a platform token offered as L2 evidence. It is verified,

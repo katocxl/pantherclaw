@@ -262,7 +262,24 @@ A label (`pull_request` with `types: [labeled]` cannot be used: it runs the PR's
    pclaw workload renew --key-file workload.json --out token.json --gcp
    ```
 
-## 7. When something goes wrong
+## 7. AWS (L2, M17)
+
+1. The workload never sends AWS credentials. It signs an `sts:GetCallerIdentity` request with SigV4, including the signed header `X-Pantherclaw-Audience: pantherclaw:<org id>`, and PantherClaw sends that request to STS itself. STS's answer says which role session signed it. By default the request may go only to the global and regional `sts.*.amazonaws.com` endpoints; to list the endpoints explicitly (for example only your regions):
+   ```json
+   "identity": {"aws_sts_hosts": ["sts.eu-west-1.amazonaws.com", "sts.us-east-1.amazonaws.com"]}
+   ```
+2. An admin proposes an entry for a `service` agent that pins the account and the IAM role name, and an **Identity Publisher** activates it. Only sessions of that role attest; IAM users never do.
+   ```bash
+   pclaw issuer propose-aws --agent <agent> --account-id 123456789012 --role-name agent-runner \
+     --auto-admit --reason "service agent"
+   ```
+3. Attest with `--aws`. pclaw signs with the role session credentials in `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` (for example from `eval "$(aws configure export-credentials --format env)"`), on the regional endpoint of `AWS_REGION` when it is set:
+   ```bash
+   pclaw workload renew --key-file workload.json --out token.json --aws
+   ```
+   A signed request attests once, within 15 minutes of signing; pclaw signs a new one at each renewal.
+
+## 8. When something goes wrong
 
 - **Disable an entry** at once: `pclaw issuer disable ENTRY --reason …`. It stops auto-admission, and its instances drop to L1 at their next token.
 - **Revoke an instance**: `pclaw instance revoke INSTANCE --reason …`. Outstanding permits fail at `BeginDispatch`.

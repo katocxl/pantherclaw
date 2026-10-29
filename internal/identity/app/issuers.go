@@ -53,6 +53,7 @@ type Binding struct {
 	GitLab     *issuers.GitLabBinding     `json:"gitlab,omitzero"`
 	SPIFFE     *issuers.SPIFFEBinding     `json:"spiffe,omitzero"`
 	GCP        *issuers.GCPBinding        `json:"gcp,omitzero"`
+	AWS        *issuers.AWSBinding        `json:"aws,omitzero"`
 }
 
 // presetContext is the execution context each preset attests (D119-D121).
@@ -60,6 +61,7 @@ var presetContext = map[issuers.Kind]adomain.ExecutionContext{
 	issuers.KindGitHub: adomain.ContextCI, issuers.KindKubernetes: adomain.ContextKubernetes, issuers.KindGitLab: adomain.ContextCI,
 	issuers.KindSPIFFE: adomain.ContextService,
 	issuers.KindGCP:    adomain.ContextService,
+	issuers.KindAWS:    adomain.ContextService,
 }
 
 // kinds lists the kind of every field that is set.
@@ -69,6 +71,7 @@ func (b Binding) kinds() []issuers.Kind {
 		issuers.KindGitHub: b.GitHub != nil, issuers.KindKubernetes: b.Kubernetes != nil, issuers.KindGitLab: b.GitLab != nil,
 		issuers.KindSPIFFE: b.SPIFFE != nil,
 		issuers.KindGCP:    b.GCP != nil,
+		issuers.KindAWS:    b.AWS != nil,
 	} {
 		if set {
 			out = append(out, k)
@@ -97,6 +100,8 @@ func (b Binding) validate() error {
 		err = b.SPIFFE.Validate()
 	case issuers.KindGCP:
 		err = b.GCP.Validate()
+	case issuers.KindAWS:
+		err = b.AWS.Validate()
 	default:
 		return pcerr.New(pcerr.InvalidArgument, "ISSUER_BINDING", "exactly one preset binding is required")
 	}
@@ -116,6 +121,8 @@ func (b Binding) issuer() string {
 		return b.SPIFFE.Issuer()
 	case issuers.KindGCP:
 		return issuers.GCPIssuer
+	case issuers.KindAWS:
+		return issuers.AWSIssuer
 	default:
 		return b.Kubernetes.Issuer()
 	}
@@ -131,6 +138,8 @@ func (b Binding) algorithms() []string {
 		return issuers.SPIFFEAlgorithms
 	case issuers.KindGCP:
 		return issuers.GCPAlgorithms
+	case issuers.KindAWS:
+		return issuers.AWSAlgorithms
 	default:
 		return []string{"TokenReview"}
 	}
@@ -152,6 +161,8 @@ func (b Binding) widening(prev *Binding) []string {
 		return b.SPIFFE.Widening(prev.SPIFFE)
 	case b.GCP != nil:
 		return b.GCP.Widening(prev.GCP)
+	case b.AWS != nil:
+		return b.AWS.Widening(prev.AWS)
 	default:
 		return b.Kubernetes.Widening(prev.Kubernetes)
 	}

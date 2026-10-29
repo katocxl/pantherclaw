@@ -105,6 +105,8 @@ enum IssuerKind {
   ISSUER_KIND_SPIFFE_JWT = 4;
   // Google-signed GCP ID token.
   ISSUER_KIND_GCP_WORKLOAD = 5;
+  // AWS IAM role session (sts:GetCallerIdentity).
+  ISSUER_KIND_AWS_IAM = 6;
 }
 
 // IssuerEntryState is the state of one revision.
@@ -297,6 +299,15 @@ message GcpBinding {
   string instance_id = 3 [(buf.validate.field).string.pattern = "^$|^[1-9][0-9]{0,29}$"];
 }
 
+// AwsBinding binds AWS STS caller identities to one IAM role (HR-464):
+// sessions of that role in that account attest.
+message AwsBinding {
+  // 12-digit account id.
+  string account_id = 1 [(buf.validate.field).string.pattern = "^[0-9]{12}$"];
+  // IAM role name (not its ARN or path).
+  string role_name = 2 [(buf.validate.field).string.pattern = "^[A-Za-z0-9+=,.@_-]{1,64}$"];
+}
+
 // KubernetesBinding binds Kubernetes service-account tokens to one agent
 // (HR-144).
 message KubernetesBinding {
@@ -355,6 +366,7 @@ message IssuerRevision {
     GitlabBinding gitlab = 20;
     SpiffeBinding spiffe = 21;
     GcpBinding gcp = 22;
+    AwsBinding aws = 23;
   }
   // Admits matching instances without an owner.
   bool auto_admit = 11;
@@ -514,6 +526,8 @@ message ProposeIssuerEntryRequest {
     SpiffeBinding spiffe = 8;
     // GCP service account.
     GcpBinding gcp = 9;
+    // AWS IAM role.
+    AwsBinding aws = 10;
   }
   // Admit matching instances without an owner (a widening when turned on).
   bool auto_admit = 5;

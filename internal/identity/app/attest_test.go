@@ -80,3 +80,20 @@ func TestHR465_UnknownAttestationKindsAreRefused(t *testing.T) {
 		}
 	}
 }
+
+// TestAttestationOrgReadsTheAWSAudienceHeader: a signed AWS request names
+// its org in the X-Pantherclaw-Audience header (D121).
+func TestAttestationOrgReadsTheAWSAudienceHeader(t *testing.T) {
+	org := ids.New[ids.Org]()
+	tok, err := issuers.AWSRequest{Headers: map[string]string{"x-pantherclaw-audience": "pantherclaw:" + org.String()}}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := AttestationOrg(tok); got != org {
+		t.Errorf("org = %v, want %v", got, org)
+	}
+	bad, _ := issuers.AWSRequest{Headers: map[string]string{"x-pantherclaw-audience": org.String()}}.Encode()
+	if !AttestationOrg(bad).IsZero() || !AttestationOrg("not-base64!").IsZero() {
+		t.Error("an AWS request without pantherclaw:<org> named an org")
+	}
+}

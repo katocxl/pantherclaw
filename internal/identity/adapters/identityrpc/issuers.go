@@ -44,6 +44,9 @@ func bindingFromProto(req *pantherclawv1.ProposeIssuerEntryRequest) app.Binding 
 	if g := req.GetGcp(); g != nil {
 		b.GCP = &issuers.GCPBinding{ServiceAccountID: g.GetServiceAccountId(), ProjectID: g.GetProjectId(), InstanceID: g.GetInstanceId()}
 	}
+	if aw := req.GetAws(); aw != nil {
+		b.AWS = &issuers.AWSBinding{AccountID: aw.GetAccountId(), RoleName: aw.GetRoleName()}
+	}
 	if gh != nil {
 		g := issuers.GitHubBinding{
 			RepositoryID: gh.GetRepositoryId(), RepositoryOwnerID: gh.GetRepositoryOwnerId(),
@@ -96,6 +99,10 @@ func revisionProto(r app.Revision) *pantherclawv1.IssuerRevision {
 		out.Binding = &pantherclawv1.IssuerRevision_Gcp{Gcp: &pantherclawv1.GcpBinding{
 			ServiceAccountId: g.ServiceAccountID, ProjectId: g.ProjectID, InstanceId: g.InstanceID,
 		}}
+	}
+	if aw := r.Binding.AWS; aw != nil {
+		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_AWS_IAM
+		out.Binding = &pantherclawv1.IssuerRevision_Aws{Aws: &pantherclawv1.AwsBinding{AccountId: aw.AccountID, RoleName: aw.RoleName}}
 	}
 	if k := r.Binding.Kubernetes; k != nil {
 		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_KUBERNETES

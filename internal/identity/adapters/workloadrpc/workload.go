@@ -298,6 +298,8 @@ func attestation(a *pantherclawv1.Attestation) *app.Attestation {
 		kind = issuers.KindSPIFFE
 	case pantherclawv1.AttestationKind_ATTESTATION_KIND_GCP_WORKLOAD:
 		kind = issuers.KindGCP
+	case pantherclawv1.AttestationKind_ATTESTATION_KIND_AWS_IAM:
+		kind = issuers.KindAWS
 	}
 	return &app.Attestation{Kind: kind, Token: a.GetToken()}
 }

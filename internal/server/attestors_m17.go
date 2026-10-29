@@ -4,6 +4,7 @@
 package server
 
 import (
+	"github.com/katocxl/pantherclaw/internal/identity/adapters/awssts"
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/issuerkeys"
 	iapp "github.com/katocxl/pantherclaw/internal/identity/app"
 	"github.com/katocxl/pantherclaw/internal/identity/issuers"
@@ -28,6 +29,10 @@ func presetAttestors(att *iapp.Attestors, cfg IdentityConfig) error {
 	if err != nil {
 		return err
 	}
-	att.GitLab, att.SPIFFE, att.GCP = gitlab, spiffe, gcp
+	aws, err := awssts.New(httpx.NewEgressClient(httpx.EgressConfig{Timeout: attestTimeout}), cfg.AWSSTSHosts, nil)
+	if err != nil {
+		return err
+	}
+	att.GitLab, att.SPIFFE, att.GCP, att.AWS = gitlab, spiffe, gcp, aws
 	return nil
 }

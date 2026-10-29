@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
@@ -34,10 +35,10 @@ func workloadCommands() map[string]command {
 	return map[string]command{
 		"workload init": {"workload init --key-file FILE", workloadInit},
 		"workload enroll": {
-			"workload enroll --key-file FILE --server URL [--enrollment-token-file FILE] [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp] [--org ID] [--declared-release sha256:…]",
+			"workload enroll --key-file FILE --server URL [--enrollment-token-file FILE] [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp | --aws] [--org ID] [--declared-release sha256:…]",
 			workloadEnroll,
 		},
-		"workload token": {"workload token --key-file FILE [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp] [--declared-release sha256:…] [--out FILE]", workloadToken},
+		"workload token": {"workload token --key-file FILE [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp | --aws] [--declared-release sha256:…] [--out FILE]", workloadToken},
 	}
 }
 
@@ -79,6 +80,7 @@ type attestationFlags struct {
 	gitlabEnv  *string
 	spiffe     *string
 	gcp        *bool
+	aws        *bool
 }
 
 func declareAttestation(fs *flag.FlagSet) attestationFlags {
@@ -90,16 +92,18 @@ func declareAttestation(fs *flag.FlagSet) attestationFlags {
 		spiffe: fs.String("spiffe-token", "", "attest with the JWT-SVID in this file (audience pantherclaw:<org>); "+
 			"it is read again at each renewal"),
 		gcp: fs.Bool("gcp", false, "attest with a Google-signed ID token from the GCP metadata server (audience pantherclaw:<org>)"),
+		aws: fs.Bool("aws", false, "attest with a signed sts:GetCallerIdentity request (role session credentials from AWS_ACCESS_KEY_ID, "+
+			"AWS_SECRET_ACCESS_KEY and AWS_SESSION_TOKEN; AWS_REGION picks the regional endpoint)"),
 	}
 }
 
 // errAttestationSources is returned when more than one source is given.
-var errAttestationSources = errors.New("use one of --github, --kubernetes-token, --gitlab-token-env, --spiffe-token and --gcp, not both")
+var errAttestationSources = errors.New("use one of --github, --kubernetes-token, --gitlab-token-env, --spiffe-token, --gcp and --aws, not both")
 
 // check refuses more than one attestation source.
 func (f attestationFlags) check() error {
 	n := 0
-	for _, set := range []bool{*f.github, *f.kubernetes != "", *f.gitlabEnv != "", *f.spiffe != "", *f.gcp} {
+	for _, set := range []bool{*f.github, *f.kubernetes != "", *f.gitlabEnv != "", *f.spiffe != "", *f.gcp, *f.aws} {
 		if set {
 			n++
 		}
@@ -137,6 +141,19 @@ func (f attestationFlags) attestation(ctx context.Context, a *app, org ids.OrgID
 			return nil, err
 		}
 		return &pantherclawv1.Attestation{Kind: pantherclawv1.AttestationKind_ATTESTATION_KIND_GCP_WORKLOAD, Token: tok}, nil
+	case *f.aws:
+		if org.IsZero() {
+			return nil, errors.New("the org is unknown: pass --org")
+		}
+		creds, err := awsFromEnv(a)
+		if err != nil {
+			return nil, err
+		}
+		tok, err := awsAttestation(creds, "pantherclaw:"+org.String(), time.Now())
+		if err != nil {
+			return nil, err
+		}
+		return &pantherclawv1.Attestation{Kind: pantherclawv1.AttestationKind_ATTESTATION_KIND_AWS_IAM, Token: tok}, nil
 	case *f.github:
 		if org.IsZero() {
 			return nil, errors.New("the org is unknown: pass --org")

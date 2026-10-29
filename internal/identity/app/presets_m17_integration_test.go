@@ -8,6 +8,8 @@ package app_test
 import (
 	"context"
 	"errors"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -213,4 +215,65 @@ func TestHR463_GCPEntriesAndAttestation(t *testing.T) {
 		_, err := w.attestEnroll(t, w.svc, newWorkload(), "", w.gcpAtt(mutate))
 		wantPAP(t, name, err, pap.CodeAttestationLow)
 	}
+}
+
+// fakeSTS stands in for awssts.Verifier: the request's X-Test-Arn header
+// is the caller, signed at now.
+type fakeSTS struct{ now time.Time }
+
+func (f fakeSTS) Verify(_ context.Context, _ ids.OrgID, tok string) (issuers.AWSCaller, issuers.AWSSigned, error) {
+	r, err := issuers.ParseAWSRequest(tok)
+	if err != nil {
+		return issuers.AWSCaller{}, issuers.AWSSigned{}, err
+	}
+	arn := r.Header("X-Test-Arn")
+	acct, _, _ := strings.Cut(strings.TrimPrefix(strings.TrimPrefix(arn, "arn:aws:sts::"), "arn:aws:iam::"), ":")
+	return issuers.AWSCaller{Account: acct, Arn: arn},
+		issuers.AWSSigned{URL: &url.URL{Host: "sts.amazonaws.com"}, SignedAt: f.now, Signature: r.Header("X-Test-Sig") + arn}, nil
+}
+
+// awsAtt is a signed request for w's org from a session with arn.
+func (w *world) awsAtt(t *testing.T, arn, sig string) *app.Attestation {
+	t.Helper()
+	tok, err := issuers.AWSRequest{Headers: map[string]string{
+		issuers.AWSAudienceHeader: "pantherclaw:" + w.org.String(), "X-Test-Arn": arn, "X-Test-Sig": sig,
+	}}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &app.Attestation{Kind: issuers.KindAWS, Token: tok}
+}
+
+// TestHR464_AWSEntriesAndAttestation: a service agent's entry pins an
+// account and role; a session of that role enrolls at L2 once, and other
+// roles, accounts and IAM users enroll nothing.
+// Covers: PN-002.3
+func TestHR464_AWSEntriesAndAttestation(t *testing.T) {
+	w := newWorld(t)
+	w.svc.WithAttestors(app.Attestors{AWS: fakeSTS{now: time.Now()}})
+	agent := w.agent(t, adomain.ContextService)
+	b := app.Binding{AWS: &issuers.AWSBinding{AccountID: "123456789012", RoleName: "agent-runner"}}
+	e := w.activeEntry(t, agent, b, true)
+	if e.Kind != issuers.KindAWS || e.Issuer != issuers.AWSIssuer {
+		t.Fatalf("revision: %+v", e)
+	}
+	session := "arn:aws:sts::123456789012:assumed-role/agent-runner/i-0abc"
+	in, err := w.attestEnroll(t, w.svc, newWorkload(), "", w.awsAtt(t, session, "1"))
+	if err != nil || in.State != "ADMITTED" || in.Level != 2 || in.Instance.Agent != agent {
+		t.Fatalf("role session: %+v, %v", in, err)
+	}
+	_, err = w.attestEnroll(t, w.svc, newWorkload(), "", w.awsAtt(t, session, "1"))
+	wantPAP(t, "reused signed request", err, pap.CodeInvalidToken)
+	for name, arn := range map[string]string{
+		"other role":    "arn:aws:sts::123456789012:assumed-role/admin/i-0abc",
+		"other account": "arn:aws:sts::210987654321:assumed-role/agent-runner/i-0abc",
+		"IAM user":      "arn:aws:iam::123456789012:user/agent-runner",
+	} {
+		_, err := w.attestEnroll(t, w.svc, newWorkload(), "", w.awsAtt(t, arn, "2"))
+		wantPAP(t, name, err, pap.CodeAttestationLow)
+	}
+	// A signed request attests for 15 minutes from its signing time.
+	w.svc.WithAttestors(app.Attestors{AWS: fakeSTS{now: time.Now().Add(-16 * time.Minute)}})
+	_, err = w.attestEnroll(t, w.svc, newWorkload(), "", w.awsAtt(t, session, "3"))
+	wantPAP(t, "signed over 15 minutes ago", err, pap.CodeAttestationLow)
 }

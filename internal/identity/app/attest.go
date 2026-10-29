@@ -54,6 +54,8 @@ type Attestors struct {
 	SPIFFE IssuerDirectory
 	// GCP verifies Google-signed ID tokens with the pinned key URL (D121).
 	GCP Verifier
+	// AWS sends checked GetCallerIdentity requests to STS (D121).
+	AWS CallerVerifier
 }
 
 // IssuerDirectory is a preset's operator-configured issuers, each with its
@@ -62,6 +64,12 @@ type Attestors struct {
 type IssuerDirectory interface {
 	Allowed(issuer string, org ids.OrgID) bool
 	Verify(ctx context.Context, issuer string, org ids.OrgID, token string) ([]byte, error)
+}
+
+// CallerVerifier checks a signed sts:GetCallerIdentity request for an org
+// and sends it to STS (awssts.Verifier).
+type CallerVerifier interface {
+	Verify(ctx context.Context, org ids.OrgID, token string) (issuers.AWSCaller, issuers.AWSSigned, error)
 }
 
 // WithAttestors sets the attestation verifiers and returns s.
@@ -88,11 +96,12 @@ var errAttestationReused = fmt.Errorf("%w: attestation token reused", pap.Err(pa
 // without verifying anything. It only picks the org whose nonces and proof
 // store the request uses; the verified audience must then name the same
 // org (HR-143). It returns the zero id unless exactly one audience is
-// pantherclaw:<org>.
+// pantherclaw:<org>. A token that is not a JWS may be a signed AWS
+// request, whose audience is its X-Pantherclaw-Audience header.
 func AttestationOrg(token string) ids.OrgID {
 	payload, err := unverifiedPayload(token)
 	if err != nil {
-		return ids.OrgID{}
+		return awsOrg(token)
 	}
 	var c struct {
 		Aud jsontext.Value `json:"aud"`
@@ -113,6 +122,26 @@ func AttestationOrg(token string) ids.OrgID {
 		found = org
 	}
 	return found
+}
+
+// awsOrg reads the org of a signed AWS request without checking it.
+func awsOrg(token string) ids.OrgID {
+	if len(token) > maxAttestation {
+		return ids.OrgID{}
+	}
+	r, err := issuers.ParseAWSRequest(token)
+	if err != nil {
+		return ids.OrgID{}
+	}
+	s, ok := strings.CutPrefix(r.Header(issuers.AWSAudienceHeader), "pantherclaw:")
+	if !ok {
+		return ids.OrgID{}
+	}
+	org, err := ids.Parse[ids.Org](s)
+	if err != nil {
+		return ids.OrgID{}
+	}
+	return org
 }
 
 func audiences(v jsontext.Value) []string {
@@ -186,6 +215,8 @@ func (s *Service) attest(ctx context.Context, org ids.OrgID, a Attestation) ([]a
 		return s.attestSPIFFE(ctx, org, a.Token, revs)
 	case issuers.KindGCP:
 		return s.attestGCP(ctx, org, a.Token, revs)
+	case issuers.KindAWS:
+		return s.attestAWS(ctx, org, a.Token, revs)
 	default:
 		return nil, attErr(fmt.Errorf("unknown preset %q", a.Kind))
 	}
@@ -351,6 +382,44 @@ func (s *Service) attestGCP(ctx context.Context, org ids.OrgID, token string, re
 		out = append(out, attested{
 			rev: r, match: m, issuer: c.Issuer, key: issuers.ReplayKey(w.JTI, token), window: w,
 			claims: withClaims(m.Binding, map[string]string{"project_id": ce.ProjectID, "instance_id": ce.InstanceID, "zone": ce.Zone}),
+		})
+	}
+	if len(out) == 0 {
+		return nil, attErr(last)
+	}
+	return out, nil
+}
+
+// attestAWS checks a signed GetCallerIdentity request and has STS say who
+// signed it (HR-464). The request attests for AWSMaxAge from its signing
+// time, and its signature is its single-use key.
+func (s *Service) attestAWS(ctx context.Context, org ids.OrgID, token string, revs []dbq.PcTrustedIssuer) ([]attested, error) {
+	if s.att.AWS == nil {
+		return nil, attErr(errors.New("the AWS preset is not configured"))
+	}
+	c, signed, err := s.att.AWS.Verify(ctx, org, token)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	w := issuers.Window{IssuedAt: signed.SignedAt, ExpiresAt: signed.SignedAt.Add(issuers.AWSMaxAge)}
+	if err := w.Check(s.clk.Now()); err != nil {
+		return nil, attErr(err)
+	}
+	var out []attested
+	var last error
+	for _, r := range revs {
+		b, err := bindingOf(r)
+		if err != nil || b.AWS == nil {
+			continue
+		}
+		m, err := issuers.MatchAWS(*b.AWS, c)
+		if err != nil {
+			last = err
+			continue
+		}
+		out = append(out, attested{
+			rev: r, match: m, issuer: issuers.AWSIssuer, key: issuers.ReplayKey("sigv4:"+signed.Signature, token), window: w,
+			claims: withClaims(m.Binding, map[string]string{"arn": c.Arn, "sts_host": signed.URL.Hostname()}),
 		})
 	}
 	if len(out) == 0 {

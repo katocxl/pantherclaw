@@ -42,6 +42,9 @@ const (
 	// A Google-signed ID token from the GCP metadata server (audience
 	// pantherclaw:<org>, format=full).
 	AttestationKind_ATTESTATION_KIND_GCP_WORKLOAD AttestationKind = 5
+	// A SigV4-signed sts:GetCallerIdentity request that PantherClaw sends to
+	// STS (signed X-Pantherclaw-Audience: pantherclaw:<org>).
+	AttestationKind_ATTESTATION_KIND_AWS_IAM AttestationKind = 6
 )
 
 // Enum value maps for AttestationKind.
@@ -53,6 +56,7 @@ var (
 		3: "ATTESTATION_KIND_GITLAB_CI",
 		4: "ATTESTATION_KIND_SPIFFE_JWT",
 		5: "ATTESTATION_KIND_GCP_WORKLOAD",
+		6: "ATTESTATION_KIND_AWS_IAM",
 	}
 	AttestationKind_value = map[string]int32{
 		"ATTESTATION_KIND_UNSPECIFIED":    0,
@@ -61,6 +65,7 @@ var (
 		"ATTESTATION_KIND_GITLAB_CI":      3,
 		"ATTESTATION_KIND_SPIFFE_JWT":     4,
 		"ATTESTATION_KIND_GCP_WORKLOAD":   5,
+		"ATTESTATION_KIND_AWS_IAM":        6,
 	}
 )
 
@@ -1187,14 +1192,15 @@ const file_pantherclaw_v1_workload_proto_rawDesc = "" +
 	"\xbaH\ar\x05\x10\x01(\x80 R\x04note\"\x82\x01\n" +
 	"$WorkloadServiceRequestAccessResponse\x12\x19\n" +
 	"\bentry_id\x18\x01 \x01(\tR\aentryId\x12?\n" +
-	"\rdeadline_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\fdeadlineTime*\xdd\x01\n" +
+	"\rdeadline_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\fdeadlineTime*\xfb\x01\n" +
 	"\x0fAttestationKind\x12 \n" +
 	"\x1cATTESTATION_KIND_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fATTESTATION_KIND_GITHUB_ACTIONS\x10\x01\x12\x1f\n" +
 	"\x1bATTESTATION_KIND_KUBERNETES\x10\x02\x12\x1e\n" +
 	"\x1aATTESTATION_KIND_GITLAB_CI\x10\x03\x12\x1f\n" +
 	"\x1bATTESTATION_KIND_SPIFFE_JWT\x10\x04\x12!\n" +
-	"\x1dATTESTATION_KIND_GCP_WORKLOAD\x10\x052\x8b\x05\n" +
+	"\x1dATTESTATION_KIND_GCP_WORKLOAD\x10\x05\x12\x1c\n" +
+	"\x18ATTESTATION_KIND_AWS_IAM\x10\x062\x8b\x05\n" +
 	"\x0fWorkloadService\x12G\n" +
 	"\x06Enroll\x12\x1d.pantherclaw.v1.EnrollRequest\x1a\x1e.pantherclaw.v1.EnrollResponse\x12S\n" +
 	"\n" +
