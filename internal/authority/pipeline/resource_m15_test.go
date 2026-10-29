@@ -21,16 +21,20 @@ func asResource(t *testing.T) func([]byte) []byte {
 		for _, r := range [][2]string{
 			{"      - channel: http\n        method: GET\n        path: /v1/refunds/{refund}\n        route: payments-refund-get\n" +
 				"        extract:\n          target_id: path.refund\n          params: {}\n", ""},
-			{"      - channel: mcp\n        tool: get_refund\n        route: payments-refund-get\n" +
-				"        description: Read one refund on the simulated payments API by its id.\n" +
-				"        input_schema:\n          type: object\n          additionalProperties: false\n          required: [refund]\n" +
-				"          properties:\n            refund:\n              type: string\n              description: The refund id\n" +
-				"              pattern: '^re_[A-Za-z0-9-]{1,64}$'\n        extract:\n          target_id: input.refund\n",
+			{
+				"      - channel: mcp\n        tool: get_refund\n        route: payments-refund-get\n" +
+					"        description: Read one refund on the simulated payments API by its id.\n" +
+					"        input_schema:\n          type: object\n          additionalProperties: false\n          required: [refund]\n" +
+					"          properties:\n            refund:\n              type: string\n              description: The refund id\n" +
+					"              pattern: '^re_[A-Za-z0-9-]{1,64}$'\n        extract:\n          target_id: input.refund\n",
 				"      - channel: mcp_resource\n        resource: 'payments://refunds/{refund}'\n        route: payments-refund-get\n" +
-					"        extract:\n          target_id: path.refund\n"},
-			{"    dispatch:\n      http:\n        method: GET\n        path: /v1/refunds/{target.id}\n",
+					"        extract:\n          target_id: path.refund\n",
+			},
+			{
+				"    dispatch:\n      http:\n        method: GET\n        path: /v1/refunds/{target.id}\n",
 				"    dispatch:\n      mcp:\n        resource: 'payments://refunds/{target.id}'\n        upstream_digest: sha256:" +
-					strings.Repeat("0f", 32) + "\n"},
+					strings.Repeat("0f", 32) + "\n",
+			},
 		} {
 			if bytes.Count(raw, []byte(r[0])) != 1 {
 				t.Fatalf("mock payments package: %q not found once", r[0])

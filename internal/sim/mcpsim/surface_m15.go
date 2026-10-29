@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// The simulator's reviewed-surface behaviour (G0 M15 D31, D33): it serves
+// The simulator's reviewed-surface behavior (G0 M15 D31, D33): it serves
 // resources/read for its refunds, payments://refunds/<id>, and, when an
 // elicitation is set, answers a 2026-07-28 create_refund without
 // inputResponses with an input_required result asking for it; a retry that

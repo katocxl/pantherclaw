@@ -805,6 +805,8 @@ func elicitValue(v defs.Value) any {
 		return jsontext.Value(v.Decimal.String())
 	case defs.TypeBoolean:
 		return v.Bool
+	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeContent, defs.TypeMoney, defs.TypeIdentifierList, defs.TypeText, defs.TypeCommand,
+		defs.TypePath, defs.TypeQueryFilter:
 	}
 	return v.Str
 }

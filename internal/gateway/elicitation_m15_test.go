@@ -150,7 +150,7 @@ func TestHR421_ElicitationsOutsideTheReviewStayDeclined(t *testing.T) {
 		}
 	}
 
-	// No elicitation declared: today's behaviour, nothing reported.
+	// No elicitation declared: today's behavior, nothing reported.
 	sim, opt := withSurface(t, mcpsim.Faults{}, "")
 	h := setup(t, opt)
 	sim.SetElicit(&mcpsim.Elicit{Message: "Which channel?", Schema: jsontext.Value(channelSchema)})

@@ -4,6 +4,7 @@
 package domain
 
 import (
+	"encoding/hex"
 	"maps"
 	"regexp"
 	"slices"
@@ -195,26 +196,14 @@ func unescape(s string) (string, bool) {
 		if i+2 >= len(s) {
 			return "", false
 		}
-		hi, lo := unhex(s[i+1]), unhex(s[i+2])
-		if hi < 0 || lo < 0 {
+		c, err := hex.DecodeString(s[i+1 : i+3])
+		if err != nil {
 			return "", false
 		}
-		b.WriteByte(byte(hi<<4 | lo))
+		b.Write(c)
 		i += 2
 	}
 	return b.String(), true
-}
-
-func unhex(c byte) int {
-	switch {
-	case '0' <= c && c <= '9':
-		return int(c - '0')
-	case 'a' <= c && c <= 'f':
-		return int(c-'a') + 10
-	case 'A' <= c && c <= 'F':
-		return int(c-'A') + 10
-	}
-	return -1
 }
 
 // ResourceTemplate returns the parsed template of an mcp_resource

@@ -95,9 +95,7 @@ func TestHR419_ResourcesAreReviewedReadTemplates(t *testing.T) {
 		if changed == string(raw) {
 			t.Fatalf("%s: %q not found", name, change[0])
 		}
-		_, err := Decode([]byte(changed))
-		switch {
-		case !errors.Is(err, domain.ErrInvalid) && !errors.Is(err, ErrInvalid):
+		if _, err := Decode([]byte(changed)); !errors.Is(err, domain.ErrInvalid) && !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
