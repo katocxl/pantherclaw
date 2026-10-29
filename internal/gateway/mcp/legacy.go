@@ -232,7 +232,7 @@ func (h *Handler) legacyCall(w http.ResponseWriter, r *http.Request, conn *contr
 		write(w, http.StatusOK, response{ID: req.ID, Result: c.result})
 		return
 	}
-	t := h.holds.newTask(c.b, c.action, c.key, c.res, c.result)
+	t := h.holds.newTask(c.b, c.action, c.key, c.res, c.result, c.retry)
 	if t == nil {
 		// No room for a task: the answer itself, rather than losing it.
 		write(w, http.StatusOK, response{ID: req.ID, Result: c.result})

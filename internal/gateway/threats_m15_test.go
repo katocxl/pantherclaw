@@ -35,7 +35,7 @@ func TestT185_ResourceTemplateInjectionNeverReachesTheServer(t *testing.T) {
 		"https://evil.example/" + id, "PAYMENTS://refunds/" + id, mcpsim.ResourcePrefix + "re_%00",
 	} {
 		r := h.rawCall(t, "resources/read", `"uri":`+strings.TrimSpace(mustJSON(t, uri)), uri, run, nil)
-		if r.Error == nil || (r.Error.Code != -32002 && r.Error.Code != -32004) {
+		if r.Error == nil || !slices.Contains([]int{-32002, -32004, -32602}, r.Error.Code) {
 			t.Errorf("%s: %+v", uri, r.Error)
 		}
 	}
@@ -49,6 +49,30 @@ func TestT185_ResourceTemplateInjectionNeverReachesTheServer(t *testing.T) {
 	if got := sim.ResourceReads(); !slices.Equal(got, []string{uri}) {
 		t.Fatalf("the server read %q", got)
 	}
+	// A pattern-less identifier is held to the path builder's rule too
+	// (D44): a dot segment, a slash, a backslash or a control character,
+	// raw or percent-decoded, is invalid params and never sent.
+	sim, opt = withSurface(t, mcpsim.Faults{}, "")
+	h = setup(t, opt, withFileParam(t))
+	id = refundOn(t, h)
+	decided = h.auth.snap().authorize
+	for _, file := range []string{"..", ".", "%2E%2E", "%2e", "a%2Fb", "a%5Cb", "a%0Ab", "a%7Fb", "a%00"} {
+		uri := mcpsim.ResourcePrefix + id + "/files/" + file
+		if r := h.rawCall(t, "resources/read", `"uri":"`+uri+`"`, uri, run, nil); r.Error == nil || r.Error.Code != -32602 {
+			t.Errorf("file %q: %+v", file, r.Error)
+		}
+	}
+	if n := h.auth.snap().authorize; n != decided || len(sim.ResourceReads()) != 0 {
+		t.Fatalf("unsafe values: %d decisions, the server read %q", n-decided, sim.ResourceReads())
+	}
+	ok := mcpsim.ResourcePrefix + id + "/files/receipt.pdf"
+	if r := h.rawCall(t, "resources/read", `"uri":"`+ok+`"`, ok, run, nil); r.Error != nil && r.Error.Code != -32004 {
+		t.Fatalf("a safe value: %+v", r.Error)
+	}
+	if got := sim.ResourceReads(); !slices.Equal(got, []string{ok}) {
+		t.Fatalf("the server read %q", got)
+	}
+
 	// Whatever a value holds, expansion keeps the template's scheme, host
 	// and path shape.
 	up, err := domain.ParseResourceTemplate("payments://refunds/{refund}")
@@ -110,7 +134,7 @@ func TestT186_ElicitationPhishingAndExfiltrationAreRefused(t *testing.T) {
 	}
 	decided := s.authorize
 	if r := h.rawCall(t, "tools/call", answer, "create_refund", run, nil); string(r.Result["isError"]) != "true" ||
-		!strings.Contains(string(r.Result["_meta"]), "invalid_input_responses") {
+		!strings.Contains(string(r.Result["_meta"]), "elicitation_expired") {
 		t.Fatalf("a replayed handle: %v", r.Result)
 	}
 	got, states := sim.InputResponses()
@@ -126,4 +150,32 @@ func mustJSON(t *testing.T, v any) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+// withFileParam gives the get_refund resource a second variable, file, a
+// pattern-less identifier (D44 M1): payments://refunds/{refund}/files/{file}.
+func withFileParam(t *testing.T) func(*harness) {
+	return func(h *harness) {
+		inner := h.mutatePkg
+		h.mutatePkg = func(raw []byte) []byte {
+			raw = inner(raw)
+			for _, r := range [][2]string{
+				{"\n    params: {}\n    effects:", "\n    params:\n      file:\n        type: identifier\n    effects:"},
+				{
+					"resource: 'payments://refunds/{refund}'\n        route: payments-refund-get\n" +
+						"        description: One refund on the simulated payments API.\n        extract:\n          target_id: path.refund\n          params: {}\n",
+					"resource: 'payments://refunds/{refund}/files/{file}'\n        route: payments-refund-get\n" +
+						"        description: One refund on the simulated payments API.\n        extract:\n          target_id: path.refund\n" +
+						"          params:\n            file: path.file\n",
+				},
+				{"resource: 'payments://refunds/{target.id}'\n", "resource: 'payments://refunds/{target.id}/files/{params.file}'\n"},
+			} {
+				if strings.Count(string(raw), r[0]) != 1 {
+					t.Fatalf("surface package: %q not found once", r[0])
+				}
+				raw = []byte(strings.Replace(string(raw), r[0], r[1], 1))
+			}
+			return raw
+		}
+	}
 }

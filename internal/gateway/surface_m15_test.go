@@ -97,7 +97,13 @@ type rawReply struct {
 // name, in run, as the test workload.
 func (h *harness) rawCall(t *testing.T, method, params, name, run string, hdr map[string]string) rawReply {
 	t.Helper()
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, h.url+mcpPath, strings.NewReader(jsonRPC(method, params)))
+	return h.rawPost(t, method, jsonRPC(method, params), name, run, hdr)
+}
+
+// rawPost posts a 2026-07-28 body for method, Mcp-Name name, in run.
+func (h *harness) rawPost(t *testing.T, method, body, name, run string, hdr map[string]string) rawReply {
+	t.Helper()
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, h.url+mcpPath, strings.NewReader(body))
 	req.Header.Set("Authorization", "PAP "+testWorkloadToken())
 	req.Header.Set(HeaderProof, "proof-not-checked-by-the-gateway")
 	req.Header.Set(HeaderRunID, run)
@@ -209,8 +215,13 @@ func TestHR419_AnUnreviewedURINeverReachesTheServer(t *testing.T) {
 	if n := h.auth.snap().authorize; n != decided {
 		t.Fatalf("%d decisions for unreviewed URIs", n-decided)
 	}
+	// A value that would change the upstream path is invalid params (D44).
+	climb := "payments://refunds/re_1%2F..%2Fadmin"
+	if r := h.rawCall(t, "resources/read", `"uri":"`+climb+`"`, climb, run, nil); r.Error == nil || r.Error.Code != -32602 {
+		t.Fatalf("a value with a slash: %+v", r.Error)
+	}
 	// Matches the template, but the value is no refund id.
-	bad := "payments://refunds/re_1%2F..%2Fadmin"
+	bad := "payments://refunds/ch_1"
 	if r := h.rawCall(t, "resources/read", `"uri":"`+bad+`"`, bad, run, nil); r.Error == nil || r.Error.Code != -32004 ||
 		!strings.Contains(string(r.Error.Data["io.pantherclaw/error"]), "cannot_authorize") {
 		t.Fatalf("a value outside the identity: %+v", r.Error)
@@ -262,5 +273,34 @@ func TestHR419_ResourcesInASession(t *testing.T) {
 	miss := h.inSession(t, http.MethodPost, sid, run, legacyRPC("resources/read", `"uri":"payments://nothing"`), nil)
 	if miss.errCode() != -32002 || len(sim.ResourceReads()) != 1 {
 		t.Fatalf("an unreviewed URI in a session: %+v", miss.body.Error)
+	}
+}
+
+// TestHR419_AnIdenticalHeldReadReusesItsAction (D44 L6, HR-185 parity):
+// while a resource read is held, the same read by the same run and
+// instance carries the held action id, so an approval binds to it; a
+// read in another run gets an action of its own. Tasks are for tools/call
+// only.
+// Covers: F352
+func TestHR419_AnIdenticalHeldReadReusesItsAction(t *testing.T) {
+	_, opt := withSurface(t, mcpsim.Faults{}, "")
+	h := setup(t, opt)
+	id := refundOn(t, h)
+	uri := mcpsim.ResourcePrefix + id
+	run := ids.NewV7().String()
+	h.auth.decide(pb.Decision_DECISION_REQUIRE_APPROVAL)
+	last := func() string {
+		s := h.auth.snap()
+		return s.actions[len(s.actions)-1].Action.ActionID
+	}
+	h.rawCall(t, "resources/read", `"uri":"`+uri+`"`, uri, run, nil)
+	first := last()
+	h.rawCall(t, "resources/read", `"uri":"`+uri+`"`, uri, run, nil)
+	if again := last(); again != first {
+		t.Fatalf("the identical held read got action %s, want %s", again, first)
+	}
+	h.rawCall(t, "resources/read", `"uri":"`+uri+`"`, uri, ids.NewV7().String(), nil)
+	if other := last(); other == first {
+		t.Fatal("a read in another run reused the held action")
 	}
 }

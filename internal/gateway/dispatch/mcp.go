@@ -135,6 +135,15 @@ func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection
 		e.log.WarnContext(ctx, "gateway.request_not_built", slog.String("transaction_id", want.Txn), pclog.Err(err))
 		return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeRequest, t)
 	}
+	if ir, ok := ctx.Value(inputResponsesKey{}).(InputResponses); ok && ir.Claim != nil {
+		// The elicitation handle is spent only now, after ALLOW and
+		// BeginDispatch, right before the send (G0 M15 D44): a lost race
+		// sends nothing.
+		if err := ir.Claim(ctx); err != nil {
+			e.log.WarnContext(ctx, "gateway.elicitation_handle_spent", slog.String("transaction_id", want.Txn), pclog.Err(err))
+			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeElicitationHandleSpent, t)
+		}
+	}
 	start := time.Now()
 	land, access, err := e.fly(callCtx, conn, a, want)
 	if err != nil {
@@ -711,8 +720,10 @@ func ResourceURI(def *defs.Definition, a actionir.ActionIR) (string, error) {
 				v = p.Str
 			}
 		}
-		if v == "" {
-			return "", fmt.Errorf("%w: %s has no value for the resource template", egress.ErrBuild, ref)
+		if !defs.SafeValue(v) {
+			// Empty, a dot segment, or a slash, backslash or control character
+			// would change the upstream path (D44, HR-419).
+			return "", fmt.Errorf("%w: %s has no safe value for the resource template", egress.ErrBuild, ref)
 		}
 		out[ref] = v
 	}
@@ -727,6 +738,10 @@ func ResourceURI(def *defs.Definition, a actionir.ActionIR) (string, error) {
 // elicitation that the reviewed mapping does not allow (G0 M15 D33).
 const CodeElicitationRefused = "elicitation_refused"
 
+// CodeElicitationHandleSpent is a permitted retry whose elicitation handle
+// another request spent first: nothing was sent (G0 M15 D44).
+const CodeElicitationHandleSpent = "elicitation_handle_spent"
+
 // ReportElicitationRefused tells the server an upstream elicitation was
 // refused (G0 M15 D33, D40): machine metadata, the reason and the
 // question's SHA-256 only, never the question.
@@ -739,10 +754,13 @@ func (e *Engine) ReportElicitationRefused(ctx context.Context, conn *control.Con
 // and, when it accepted, the fields its answer filled. The answers
 // themselves travel only as the action's elicitation.<field> params, so
 // what reaches the server is what the Authority permitted. RequestState is
-// the server's opaque state, passed back as it sent it.
+// the server's opaque state, passed back as it sent it. Claim spends the
+// elicitation's single-use handle; dispatch calls it after ALLOW and
+// BeginDispatch, right before the send (D44).
 type InputResponses struct {
 	Keys         map[string]InputResponse
 	RequestState string
+	Claim        func(context.Context) error
 }
 
 // InputResponse is the answer to one input request.

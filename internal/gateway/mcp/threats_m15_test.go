@@ -30,9 +30,9 @@ func TestT182_TamperedOrForgedMCPStateIsNotServed(t *testing.T) {
 	p := heldIR(t, nil)
 	k := actionKey(p.Action)
 	held := dispatch.Result{Class: dispatch.Held}
-	tk := a.newTask(bind, p, k, held, toolResult{})
+	tk := a.newTask(bind, p, k, held, toolResult{}, nil)
 	other := heldIR(t, nil)
-	tk2 := a.newTask(bind, other, actionKey(other.Action), held, toolResult{})
+	tk2 := a.newTask(bind, other, actionKey(other.Action), held, toolResult{}, nil)
 	if tk == nil || tk2 == nil {
 		t.Fatal("no task")
 	}
@@ -92,7 +92,7 @@ func TestT183_StateIsNeverReusedAcrossBindingsOrReplicas(t *testing.T) {
 	p := heldIR(t, nil)
 	k := actionKey(p.Action)
 	a.settle(k, bind, p.Action.ActionID, dispatch.Result{Class: dispatch.Held, TransactionID: "txn"})
-	tk := a.newTask(bind, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{})
+	tk := a.newTask(bind, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{}, nil)
 	ek := key{0xe4}
 	if _, err := a.putElicitation(ek, bind, []byte(`{}`), c.t.Add(10*time.Minute), 0); err != nil || tk == nil {
 		t.Fatalf("setup: %v %v", err, tk)

@@ -24,7 +24,8 @@ import (
 // action, and the action goes down the one dispatch path (Authorize,
 // BeginDispatch, the upstream read, RecordExecution). A URI that matches
 // no reviewed template is "Resource not found" and never reaches the
-// server. There are no subscriptions.
+// server. There are no subscriptions. An identical held read reuses its
+// held action (HR-185 parity, D44); tasks are for tools/call only.
 
 // codeResourceNotFound is MCP's "Resource not found".
 const codeResourceNotFound = -32002
@@ -116,15 +117,25 @@ func (h *Handler) readResource(w http.ResponseWriter, r *http.Request, conn *con
 		fail(w, http.StatusOK, req.ID, codeInvalidParams, "the "+dispatch.HeaderRunID+" header is required", nil)
 		return dispatch.Result{}, false
 	}
+	// The action id is the client's, or the held one for an identical read
+	// (HR-185 parity, D44 L6), or new. Tasks are for tools/call only.
 	action := in.Action
-	if action == "" {
+	fresh := action == ""
+	if fresh {
 		action = ids.NewV7().String()
 	}
+	b := binding{conn: conn.GetId(), run: in.Run, instance: in.Instance}
 	parsed, err := conn.Mapper.ReadResource(ctx, mapping.Context{
 		Org: h.config.Current().Org, Env: in.Env, RunID: in.Run, ActionID: action, AgentInstance: in.Instance, Connection: conn.GetId(),
 	}, p.URI)
 	if err != nil {
 		code := "invalid_arguments"
+		if errors.Is(err, mapping.ErrUnsafeValue) {
+			// A value that would change the upstream path (D44, HR-419).
+			fail(w, http.StatusOK, req.ID, codeInvalidParams, "Invalid params: a resource URI value is empty, a dot segment, or holds a "+
+				"slash, a backslash or a control character", nil)
+			return dispatch.Result{}, false
+		}
 		if errors.Is(err, mapping.ErrUnmapped) {
 			fail(w, http.StatusOK, req.ID, codeResourceNotFound, "Resource not found", map[string]string{"uri": p.URI})
 			return dispatch.Result{}, false
@@ -136,11 +147,23 @@ func (h *Handler) readResource(w http.ResponseWriter, r *http.Request, conn *con
 		h.readRefused(w, req, res, "The URI does not match the resource's reviewed identity.")
 		return res, false
 	}
+	k := actionKey(parsed.Action)
+	if fresh {
+		if held, ok := h.holds.heldAction(k, b); ok {
+			parsed.Action.ActionID, action = held, held
+			if parsed, err = actionir.Encode(parsed.Action); err != nil {
+				res := dispatch.Result{Class: dispatch.CannotAuthorize, Code: "invalid_arguments"}
+				h.readRefused(w, req, res, "")
+				return res, false
+			}
+		}
+	}
 	res := h.engine.Dispatch(ctx, dispatch.Call{Connection: conn, Action: parsed, Workload: in.Creds})
 	if res.Class == dispatch.AuthenticationFailed {
 		h.refusePAP(w, r, req.ID, res.PAPError, res.Nonce)
 		return res, false
 	}
+	h.holds.settle(k, b, action, res)
 	if res.Nonce != "" {
 		w.Header().Set(dispatch.HeaderNonce, res.Nonce)
 	}

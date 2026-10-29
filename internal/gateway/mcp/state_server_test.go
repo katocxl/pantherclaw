@@ -157,7 +157,7 @@ func TestHR411_HoldsAndTasksAreSharedByEveryReplica(t *testing.T) {
 		t.Fatal("holding the same call again lost the hold")
 	}
 
-	tk := a.newTask(bind, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{})
+	tk := a.newTask(bind, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{}, nil)
 	if tk == nil || len(tk.id) != 43 || tk.status != statusWorking {
 		t.Fatalf("task %+v", tk)
 	}
@@ -208,7 +208,7 @@ func TestHR411_HoldsAndTasksAreSharedByEveryReplica(t *testing.T) {
 	if _, _, found := a.lookup(tk.id, bind, false); found {
 		t.Fatal("an expired task was found")
 	}
-	tk = b.newTask(bind, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{})
+	tk = b.newTask(bind, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{}, nil)
 	b.settle(k, bind, p.Action.ActionID, dispatch.Result{Class: dispatch.Held})
 	if !a.cancel(tk.id, bind) {
 		t.Fatal("the creating binding could not cancel on the other replica")
@@ -231,7 +231,7 @@ func TestHR412_AStateMissOnlyCostsANewAction(t *testing.T) {
 	bind := binding{conn: holdConn, run: holdRun, instance: holdInst}
 	p := heldIR(t, nil)
 	k := actionKey(p.Action)
-	tk := a.newTask(bind, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{})
+	tk := a.newTask(bind, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{}, nil)
 	if tk == nil {
 		t.Fatal("no task")
 	}
@@ -242,7 +242,7 @@ func TestHR412_AStateMissOnlyCostsANewAction(t *testing.T) {
 	// Without a broker key a task stays in its process, as before M15.
 	sent := len(f.seen)
 	local := newServerState(f, nil, holdOrg, "gw-1", c.now)
-	lt := local.newTask(bind, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{})
+	lt := local.newTask(bind, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{}, nil)
 	if lt == nil || len(f.seen) != sent {
 		t.Fatal("a task without a broker key was not kept locally, or was sent")
 	}
@@ -257,7 +257,7 @@ func TestHR412_AStateMissOnlyCostsANewAction(t *testing.T) {
 	if _, ok := a.heldAction(k, bind); ok {
 		t.Fatal("a hold was found with the server out of reach")
 	}
-	if a.newTask(bind, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{}) != nil {
+	if a.newTask(bind, p, k, dispatch.Result{Class: dispatch.Held}, toolResult{}, nil) != nil {
 		t.Fatal("a task was made with the server out of reach")
 	}
 	if _, _, found := a.lookup(tk.id, bind, true); found {
@@ -334,20 +334,20 @@ func TestHR411_AnIdenticalHeldCallNamesTheSameTaskOnEveryReplica(t *testing.T) {
 	p := heldIR(t, nil)
 	k := actionKey(p.Action)
 	held := dispatch.Result{Class: dispatch.Held}
-	first := a.newTask(bind, p, k, held, toolResult{})
-	again := b.newTask(bind, p, k, held, toolResult{})
+	first := a.newTask(bind, p, k, held, toolResult{}, nil)
+	again := b.newTask(bind, p, k, held, toolResult{}, nil)
 	if first == nil || again == nil || again.id != first.id {
 		t.Fatalf("the identical held call on another replica: %+v %+v", first, again)
 	}
 	other := heldIR(t, nil)
-	if tk := b.newTask(bind, other, actionKey(other.Action), held, toolResult{}); tk == nil || tk.id == first.id {
+	if tk := b.newTask(bind, other, actionKey(other.Action), held, toolResult{}, nil); tk == nil || tk.id == first.id {
 		t.Fatal("another action id named the same task")
 	}
 	rotated := newServerState(f, newTestSealer(t), holdOrg, "gw-1", c.now)
-	if tk := rotated.newTask(bind, p, k, held, toolResult{}); tk == nil || tk.id == first.id {
+	if tk := rotated.newTask(bind, p, k, held, toolResult{}, nil); tk == nil || tk.id == first.id {
 		t.Fatal("a rotated broker key named the same task")
 	}
-	done := a.newTask(bind, p, k, dispatch.Result{}, toolResult{})
+	done := a.newTask(bind, p, k, dispatch.Result{}, toolResult{}, nil)
 	if done == nil || done.id == first.id || done.status != statusCompleted {
 		t.Fatalf("a completed task: %+v", done)
 	}
@@ -427,7 +427,7 @@ func TestHR411_ARowRewrittenOnTheServerDoesNotOpen(t *testing.T) {
 	a, b := replicas(t, f, c)
 	bind := binding{conn: holdConn, run: holdRun, instance: holdInst}
 	p := heldIR(t, nil)
-	tk := a.newTask(bind, p, actionKey(p.Action), dispatch.Result{Class: dispatch.Held}, toolResult{})
+	tk := a.newTask(bind, p, actionKey(p.Action), dispatch.Result{Class: dispatch.Held}, toolResult{}, nil)
 	if tk == nil {
 		t.Fatal("no task")
 	}

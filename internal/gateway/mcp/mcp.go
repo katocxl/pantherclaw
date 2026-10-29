@@ -601,7 +601,7 @@ func (h *Handler) call(w http.ResponseWriter, r *http.Request, conn *control.Con
 		return
 	}
 	if c.res.Class == dispatch.Held && supportsTasks(p.Meta) {
-		if t := h.holds.newTask(c.b, c.action, c.key, c.res, c.result); t != nil {
+		if t := h.holds.newTask(c.b, c.action, c.key, c.res, c.result, c.retry); t != nil {
 			write(w, http.StatusOK, response{ID: req.ID, Result: t.view("task", c.res.TransactionID)})
 			return
 		}
@@ -617,6 +617,9 @@ type called struct {
 	action actionir.Parsed
 	key    key
 	b      binding
+	// retry is the elicitation an answered retry answers (D44); a held
+	// retry's task keeps it.
+	retry *retryState
 }
 
 // callTool maps a tools/call through the connection's package and sends it
@@ -655,14 +658,16 @@ func (h *Handler) callTool(w http.ResponseWriter, r *http.Request, conn *control
 		// A retry answering the server's input requests: a new action whose
 		// answers are declared params, checked before anything is decided
 		// (G0 M15 D33, HR-420). Its requestState is the handle the gateway
-		// gave out, which resolves, once, to what the server sent (D39).
-		stored, aerr := h.claimElicitation(c.b, p.Name, p.RequestState)
-		var vals domain.Values
+		// gave out (D39); it is spent only right before the send (D44).
 		var ir dispatch.InputResponses
-		if aerr == nil {
-			vals, ir, aerr = answers(conn.Mapper.Elicitation(p.Name), p.InputResponses, stored)
-		}
-		if aerr != nil {
+		var vals domain.Values
+		ir, vals, c.retry, err = h.answered(conn.Mapper.Elicitation(p.Name), c.b, p)
+		switch {
+		case errors.Is(err, errExpired):
+			c.res = dispatch.Result{Class: dispatch.CannotAuthorize, Code: codeElicitationExpired}
+			c.result = errorResult(c.res, errExpired.Error()+".")
+			return c, true
+		case err != nil:
 			c.res = dispatch.Result{Class: dispatch.CannotAuthorize, Code: "invalid_input_responses"}
 			c.result = errorResult(c.res, "The input responses do not answer the tool's reviewed elicitation fields.")
 			return c, true
@@ -762,7 +767,18 @@ func (h *Handler) resubmit(w http.ResponseWriter, r *http.Request, conn *control
 	in dispatch.Inbound,
 ) (task, dispatch.Result, bool) {
 	defer h.holds.release(t.id, t.binding)
-	res := h.engine.Dispatch(r.Context(), dispatch.Call{Connection: conn, Action: t.action, Workload: in.Creds})
+	ctx := r.Context()
+	if t.retry != nil {
+		// A held elicitation retry answers the server only if its handle is
+		// still live (D44).
+		ir, err := h.resubmitting(t)
+		if err != nil {
+			res := dispatch.Result{Class: dispatch.CannotAuthorize, Code: codeElicitationExpired}
+			return h.holds.finish(t, res, errorResult(res, errExpired.Error()+".")), res, true
+		}
+		ctx = dispatch.WithInputResponses(ctx, ir)
+	}
+	res := h.engine.Dispatch(ctx, dispatch.Call{Connection: conn, Action: t.action, Workload: in.Creds})
 	if res.Class == dispatch.AuthenticationFailed {
 		h.refusePAP(w, r, req.ID, res.PAPError, res.Nonce)
 		return task{}, res, false

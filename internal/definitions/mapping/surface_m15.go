@@ -5,6 +5,7 @@ package mapping
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -13,6 +14,12 @@ import (
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 )
+
+// ErrUnsafeValue reports a resource URI that matches a reviewed template
+// with a value that would change the upstream path (G0 M15 D44): it is
+// refused before anything is decided.
+var ErrUnsafeValue = fmt.Errorf("%w: a resource template value is empty, a dot segment, or holds a slash, a backslash or a control character",
+	actionir.ErrAmbiguous)
 
 // ResourceChannel is the channel of a resource read's action: it comes
 // through the MCP face like a tool call (G0 M15 D30).
@@ -46,7 +53,8 @@ func (m *Mapper) Resources() []Resource {
 
 // resource returns the one reviewed template uri matches, with the
 // variables' values. ErrUnmapped: none matches (HR-419: the URI never
-// reaches the server); ambiguous: more than one does.
+// reaches the server); ambiguous: more than one does; ErrUnsafeValue (with
+// the template): a value domain.SafeValue refuses (D44).
 func (m *Mapper) resource(uri string) (*compiled, map[string]any, error) {
 	var match *compiled
 	var vars map[string]any
@@ -66,6 +74,11 @@ func (m *Mapper) resource(uri string) (*compiled, map[string]any, error) {
 	if match == nil {
 		return nil, nil, fmt.Errorf("%w: resource %q", ErrUnmapped, uri)
 	}
+	for _, v := range vars {
+		if s, _ := v.(string); !domain.SafeValue(s) {
+			return match, nil, ErrUnsafeValue
+		}
+	}
 	return match, vars, nil
 }
 
@@ -73,7 +86,7 @@ func (m *Mapper) resource(uri string) (*compiled, map[string]any, error) {
 // matches, without mapping it; ok is false for none or more than one.
 func (m *Mapper) ResourceRoute(uri string) (route, operation string, ok bool) {
 	c, _, err := m.resource(uri)
-	if err != nil {
+	if c == nil || (err != nil && !errors.Is(err, ErrUnsafeValue)) {
 		return "", "", false
 	}
 	return c.m.Route, c.def.Operation, true

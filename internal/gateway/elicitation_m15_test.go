@@ -72,6 +72,13 @@ func TestHR420_AnElicitationIsRelayedAndAnsweredAsANewAction(t *testing.T) {
 	accept := func(channel string) string {
 		return `{"confirm":{"action":"accept","content":{"channel":"` + channel + `"}}}`
 	}
+	expired := func(name string, r rawReply) {
+		t.Helper()
+		if r.Error != nil || string(r.Result["isError"]) != "true" || !strings.Contains(string(r.Result["_meta"]), "elicitation_expired") ||
+			!strings.Contains(string(r.Result["content"]), "elicitation expired; call the tool again") {
+			t.Errorf("%s: %+v %v", name, r.Error, r.Result)
+		}
+	}
 	refused := func(name string, r rawReply) {
 		t.Helper()
 		if r.Error != nil || string(r.Result["isError"]) != "true" || !strings.Contains(string(r.Result["_meta"]), "invalid_input_responses") {
@@ -94,9 +101,9 @@ func TestHR420_AnElicitationIsRelayedAndAnsweredAsANewAction(t *testing.T) {
 	if r := retry(run, ask(run), accept("fax")); string(r.Result["isError"]) != "true" || !strings.Contains(string(r.Result["_meta"]), "cannot_authorize") {
 		t.Errorf("a value not declared: %v", r.Result)
 	}
-	refused("a forged handle", retry(run, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", accept("sms")))
+	expired("a forged handle", retry(run, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", accept("sms")))
 	refused("the server's own state", retry(run, "st-1", accept("sms")))
-	refused("another run's handle", retry(ids.NewV7().String(), ask(run), accept("sms")))
+	expired("another run's handle", retry(ids.NewV7().String(), ask(run), accept("sms")))
 	if n := h.auth.snap().authorize - decided; n != 8 {
 		t.Fatalf("%d decisions, want only the 8 first calls", n)
 	}
@@ -113,10 +120,11 @@ func TestHR420_AnElicitationIsRelayedAndAnsweredAsANewAction(t *testing.T) {
 	if a := s.actions[len(s.actions)-1].Action; !strings.Contains(string(a.Params), `"elicitation.channel":"sms"`) {
 		t.Fatalf("the denied action's params %s", a.Params)
 	}
-	refused("a used handle", retry(run, handle, accept("email")))
 
+	// A denied retry leaves the handle as it was (D44): the agent can
+	// answer again, and the handle is spent only by the send.
 	h.auth.decide(pb.Decision_DECISION_ALLOW)
-	ok := retry(run, ask(run), accept("email"))
+	ok := retry(run, handle, accept("email"))
 	if ok.Error != nil || string(ok.Result["isError"]) != "false" || sim.Calls() != 1 {
 		t.Fatalf("an allowed answer: %+v %v, %d runs", ok.Error, ok.Result, sim.Calls())
 	}
@@ -124,6 +132,7 @@ func TestHR420_AnElicitationIsRelayedAndAnsweredAsANewAction(t *testing.T) {
 	if len(got) != 1 || string(got[0]) != `{"confirm":{"action":"accept","content":{"channel":"email"}}}` || !slices.Equal(states, []string{"st-1"}) {
 		t.Fatalf("the server got %s %q", got, states)
 	}
+	expired("a spent handle", retry(run, handle, accept("email")))
 	s = h.auth.snap()
 	args := jsontext.Value(`{"amount":"30.00","charge":"ch_1","currency":"USD","reason":"duplicate"}`)
 	params, _ := upstream.ParamsWith("create_refund", args, map[string]any{

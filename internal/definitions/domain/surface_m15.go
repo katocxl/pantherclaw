@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 )
 
 // ChannelMCPResource maps an MCP resources/read onto a read operation
@@ -386,4 +387,54 @@ func (e *ElicitationSpec) Field(name string) (ParamSpec, bool) {
 	}
 	f, ok := e.Fields[name]
 	return f, ok
+}
+
+// SafeValue reports whether a decoded template value may fill one segment
+// (G0 M15 D44, HR-419), by the HTTP path builder's rule: never empty, "."
+// or "..", and without "/", "\" or a control character, so no value adds
+// a segment, climbs a path or splits a request.
+func SafeValue(v string) bool {
+	if v == "" || v == "." || v == ".." || strings.ContainsAny(v, `/\`) {
+		return false
+	}
+	for _, r := range v {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// MatchResource matches uri against a reviewed mcp_resource template and
+// returns each variable's decoded value: the one matcher the gateway's
+// resources face and inventory coverage share (D31, D43 L5). ok is false
+// for a template that does not parse, a URI it does not match, or a value
+// SafeValue refuses.
+func MatchResource(template, uri string) (vals map[string]string, ok bool) {
+	t, err := ParseResourceTemplate(template)
+	if err != nil {
+		return nil, false
+	}
+	if vals, ok = t.Match(uri); !ok {
+		return nil, false
+	}
+	for _, v := range vals {
+		if !SafeValue(v) {
+			return nil, false
+		}
+	}
+	return vals, true
+}
+
+// authoredParams counts the params a package declares, without those
+// derived from elicitation fields: only derived ones take the 16 extra
+// slots (D44 L4).
+func (d *Definition) authoredParams() int {
+	n := 0
+	for name := range d.Params {
+		if !strings.HasPrefix(name, ElicitationPrefix) {
+			n++
+		}
+	}
+	return n
 }

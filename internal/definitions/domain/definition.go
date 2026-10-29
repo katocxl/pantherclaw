@@ -273,7 +273,7 @@ func (d *Definition) Validate() error {
 		return invalid("%s: reversibility must be reversible, compensatable or irreversible", op)
 	case len(d.Effects) == 0 || len(d.Effects) > maxItems || len(d.SideEffects) > maxItems:
 		return invalid("%s: 1..%d effects and at most %d side effects", op, maxItems, maxItems)
-	case len(d.Params) > maxItems+MaxElicitationFields || len(d.Mappings) > maxItems:
+	case d.authoredParams() > maxItems || len(d.Params)-d.authoredParams() > MaxElicitationFields || len(d.Mappings) > maxItems:
 		return invalid("%s: at most %d params and %d mappings", op, maxItems, maxItems)
 	case len(d.Mappings) == 0 && d.Access != AccessRead && d.Dispatch != nil:
 		// A read without mappings is internal: only a verifier, a target

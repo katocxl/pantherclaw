@@ -86,6 +86,10 @@ func TestHR419_ResourcesAreReviewedReadTemplates(t *testing.T) {
 		"an agent-chosen host":          {"'payments://refunds/{target.id}'", "'payments://{target.id}/refunds'"},
 		"side effects on a resource":    {"    params: {}\n    effects:\n      - kind: none\n        description: Reads only\n", "    params: {}\n    effects:\n      - kind: none\n        description: Reads only\n    side_effects:\n      - kind: payments.note\n        description: Leaves a note\n"},
 		"a resource route mapped twice": {resourceMapping + resourceExtract, resourceMapping + resourceExtract + "          params: {}\n" + strings.Replace(resourceMapping, "route: payments-refund-get", "route: payments-refund-get2", 1) + resourceExtract},
+		// Two templates with the same skeleton (D44 L5).
+		"the same skeleton twice": {resourceMapping + resourceExtract, resourceMapping + resourceExtract + "          params: {}\n" +
+			strings.NewReplacer("{refund}", "{other}", "route: payments-refund-get", "route: payments-refund-get2").Replace(resourceMapping) +
+			"        extract:\n          target_id: path.other\n"},
 		// One operation is a tool or a resource, never both (D36).
 		"an http mapping beside it": {resourceMapping, httpGetMapping + resourceMapping},
 		"an mcp tool beside it": {resourceMapping, "      - channel: mcp\n        tool: get_refund\n        route: payments-refund-get2\n" +
@@ -217,5 +221,43 @@ func TestHR420_ElicitationFieldsBecomeMaterialParams(t *testing.T) {
 		if _, err := Decode(raw); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+}
+
+// TestHR420_OnlyDerivedParamsTakeTheExtraSlots (D44 L4): a definition
+// declares at most 64 params of its own; the 16 extra slots are for the
+// params derived from elicitation fields.
+// Covers: PN-015.2
+func TestHR420_OnlyDerivedParamsTakeTheExtraSlots(t *testing.T) {
+	var fields strings.Builder
+	for i := range domain.MaxElicitationFields {
+		fmt.Fprintf(&fields, "            f%d:\n              type: boolean\n", i)
+	}
+	p, err := Decode(withElicitation(t, fields.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, _ := p.Definition("payments.refund.create")
+	for i := 0; len(d.Params) < 64+domain.MaxElicitationFields; i++ {
+		d.Params[fmt.Sprintf("extra_%d", i)] = domain.ParamSpec{Type: domain.TypeBoolean}
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("64 authored and 16 derived params: %v", err)
+	}
+	d.Params["one_more"] = domain.ParamSpec{Type: domain.TypeBoolean}
+	if err := p.Validate(); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("65 authored params: %v", err)
+	}
+	// Without elicitation fields, the extra slots are not there to take.
+	plain, err := Decode(readMock(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pd, _ := plain.Definition("payments.refund.create")
+	for i := 0; len(pd.Params) < 65; i++ {
+		pd.Params[fmt.Sprintf("extra_%d", i)] = domain.ParamSpec{Type: domain.TypeBoolean}
+	}
+	if err := plain.Validate(); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("65 authored params without elicitation: %v", err)
 	}
 }
