@@ -462,3 +462,24 @@
 | HR-400 | A decision returned to an agent (AuthorizeResponse, gateway refusals, hook and A2A refusals) adds only the agent-safe explanation: presentation, failing category, decisive code, transaction id and recovery actions. It never adds the effective grant, policy, limits, budget values or request content (F330; founder 2026-10-28). | T-150, T-080 | M13 |
 | HR-401 | Run inspection reads each section only with that section's own permission and scope. A section the caller can't read is left out and listed in omitted_sections, never returned partially counted. | — (rows26 D22, F224) | M13 |
 | HR-402 | The coverage graph is assembled only from coverage records the caller may read, filtered before any node or count is built. Unknown stays UNVERIFIED and is never shown as controlled. | T-042, T-085 | M13 |
+
+## Branching automations, recommendations, outcome metrics and model drafting (G0 M21)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
+| HR-530 | v1 definitions and running v1 executions are unchanged. | T-231 | M21 |
+| HR-531 | No cycles, and every node is reachable. | T-230 | M21 |
+| HR-532 | Authority and irreversible-wait checks hold per path. | T-230 | M21 |
+| HR-533 | A running execution's pinned version and state are never re-pointed. | T-231 | M21 |
+| HR-534 | Only the taken path's nodes are compensated. | T-231 | M21 |
+| HR-535 | A recommendation never acts and always states what stays unsupported. | T-232 | M21 |
+| HR-536 | Recommendations show only what the viewer may see. | T-232 | M21 |
+| HR-537 | Not collected is never zero. | T-233 | M21 |
+| HR-538 | Requested containment is never counted as confirmed. | T-233 | M21 |
+| HR-539 | No metric claims raw volume as value. | T-233 | M21 |
+| HR-540 | Every metric states its scope and as-of. | T-233 | M21 |
+| HR-541 | Model drafting is off by default, Business, opt-in per org. | T-234 | M21 |
+| HR-542 | No records or untrusted text are sent to the model. | T-234 | M21 |
+| HR-543 | Only strictly parsed structured output is accepted. | T-235 | M21 |
+| HR-544 | Model output never executes; it is a draft or a shown query. | T-235 | M21 |
+| HR-545 | Every call is audited, and the key is write-only. | T-234 | M21 |
