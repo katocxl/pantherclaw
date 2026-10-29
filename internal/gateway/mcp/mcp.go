@@ -249,22 +249,32 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	switch req.Method {
-	case "tools/call":
+	switch {
+	case req.Method == "tools/call":
 		h.call(w, r, conn, req, p, in)
-	case "tasks/get", "tasks/cancel", "tasks/update":
+	case req.Method == "tasks/get" || req.Method == "tasks/cancel" || req.Method == "tasks/update":
 		h.task(w, r, conn, req, p, in)
-	case "tools/list", "server/discover":
+	case req.Method == "tools/list" || req.Method == "server/discover":
 		if _, ok := h.verify(w, r, req.ID, in); !ok {
 			return
 		}
 		if req.Method == "tools/list" {
 			write(w, http.StatusOK, response{ID: req.ID, Result: listResult(conn)})
 		} else {
-			write(w, http.StatusOK, response{ID: req.ID, Result: discoverResult()})
+			write(w, http.StatusOK, response{ID: req.ID, Result: discoverResult(conn)})
+		}
+	case isResourceMethod(req.Method) && resourceCapability(conn) != nil:
+		// Reviewed resources (resources.go, G0 M15 D31).
+		if req.Method == "resources/read" {
+			h.readResource(w, r, conn, req, p, in, true)
+			return
+		}
+		if _, ok := h.verify(w, r, req.ID, in); ok {
+			write(w, http.StatusOK, response{ID: req.ID, Result: listResources(conn, req.Method, true)})
 		}
 	default:
-		// Only tools are served: no resources, prompts or subscriptions.
+		// Only tools and reviewed resources are served: no prompts or
+		// subscriptions.
 		fail(w, http.StatusNotFound, req.ID, codeMethodNotFound, "Method not found: "+req.Method, nil)
 	}
 }
@@ -496,13 +506,17 @@ func serverInfo() map[string]any {
 	return map[string]any{metaServerInfo: map[string]string{"name": "pantherclaw-gateway", "version": version.Get().Version}}
 }
 
-func discoverResult() map[string]any {
+func discoverResult(conn *control.Connection) map[string]any {
+	caps := map[string]any{
+		"tools":      map[string]any{"listChanged": false},
+		"extensions": map[string]any{extTasks: map[string]any{}},
+	}
+	if rc := resourceCapability(conn); rc != nil {
+		caps["resources"] = rc
+	}
 	return map[string]any{
 		"resultType": "complete", "supportedVersions": []string{ProtocolVersion},
-		"capabilities": map[string]any{
-			"tools":      map[string]any{"listChanged": false},
-			"extensions": map[string]any{extTasks: map[string]any{}},
-		},
+		"capabilities": caps,
 		"instructions": "PantherClaw authorizes every tool call before it runs. A refused call is a tool error " +
 			"whose _meta io.pantherclaw/error says why; a held call carries io.pantherclaw/hold, or becomes a task " +
 			"when the client supports tasks.",

@@ -70,6 +70,19 @@ func (h *Handler) legacy(w http.ResponseWriter, r *http.Request, conn *control.C
 		h.legacyCall(w, r, conn, req, p, in, sid)
 	case req.Method == "tasks/get" || req.Method == "tasks/result" || req.Method == "tasks/cancel":
 		h.legacyTask(w, r, conn, req, p, in, sid, sess)
+	case isResourceMethod(req.Method) && resourceCapability(conn) != nil:
+		// Reviewed resources (resources.go, G0 M15 D31).
+		if req.Method == "resources/read" {
+			if res, ok := h.readResource(w, r, conn, req, p, in, false); ok && slices.Contains(res.Reasons, "RUN_MISMATCH") {
+				h.sessions.end(sid)
+			} else if ok {
+				h.sessions.touch(sid)
+			}
+			return
+		}
+		if h.verifySession(w, r, req.ID, in, sid, sess) {
+			write(w, http.StatusOK, response{ID: req.ID, Result: listResources(conn, req.Method, false)})
+		}
 	case req.Method == "ping" || req.Method == "tools/list":
 		if !h.verifySession(w, r, req.ID, in, sid, sess) {
 			return
@@ -123,14 +136,18 @@ func (h *Handler) initialize(w http.ResponseWriter, r *http.Request, conn *contr
 		return
 	}
 	w.Header().Set(HeaderSessionID, sid)
+	caps := map[string]any{
+		"tools": map[string]any{"listChanged": false},
+		"tasks": map[string]any{"cancel": map[string]any{}, "requests": map[string]any{"tools": map[string]any{"call": map[string]any{}}}},
+	}
+	if rc := resourceCapability(conn); rc != nil {
+		caps["resources"] = rc
+	}
 	write(w, http.StatusOK, response{ID: req.ID, Result: map[string]any{
 		"protocolVersion": LegacyVersion,
-		"capabilities": map[string]any{
-			"tools": map[string]any{"listChanged": false},
-			"tasks": map[string]any{"cancel": map[string]any{}, "requests": map[string]any{"tools": map[string]any{"call": map[string]any{}}}},
-		},
-		"serverInfo":   serverInfo()[metaServerInfo],
-		"instructions": discoverResult()["instructions"],
+		"capabilities":    caps,
+		"serverInfo":      serverInfo()[metaServerInfo],
+		"instructions":    discoverResult(conn)["instructions"],
 	}})
 }
 

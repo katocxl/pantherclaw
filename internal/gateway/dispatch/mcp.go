@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -59,6 +60,9 @@ import (
 func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection, def *defs.Definition, a actionir.Parsed, want permitWant,
 	t *timer,
 ) Result {
+	if m := mcpTemplate(def); m != nil && m.Resource != "" {
+		return e.sendResource(ctx, r, conn, def, a, want, t)
+	}
 	tool, args, buildErr := egress.BuildMCP(def, a.Action)
 	var params []byte
 	if buildErr == nil {
@@ -335,7 +339,7 @@ func (e *Engine) listCredential(ctx context.Context, conn *control.Connection) (
 func reviewedTools(conn *control.Connection) map[string][]string {
 	reviewed := map[string][]string{}
 	for i := range conn.Package.Definitions {
-		if m := mcpTemplate(&conn.Package.Definitions[i]); m != nil && !slices.Contains(reviewed[m.Tool], m.UpstreamDigest) {
+		if m := mcpTemplate(&conn.Package.Definitions[i]); m != nil && m.Resource == "" && !slices.Contains(reviewed[m.Tool], m.UpstreamDigest) {
 			reviewed[m.Tool] = append(reviewed[m.Tool], m.UpstreamDigest)
 		}
 	}
@@ -430,7 +434,7 @@ type pinned struct {
 func (e *Engine) refusedUpstream(conn *control.Connection, operation string) string {
 	def, ok := conn.Package.Definition(operation)
 	m := mcpTemplate(def)
-	if !ok || m == nil {
+	if !ok || m == nil || m.Resource != "" {
 		return ""
 	}
 	e.mu.Lock()
@@ -577,4 +581,140 @@ func descriptionOf(v jsontext.Value) *string {
 		return nil
 	}
 	return &s
+}
+
+// sendResource builds, commits, reads and records a resource read through
+// a kind-mcp connection (G0 M15 D31, HR-419): the URI is built from the
+// definition's reviewed upstream template and the permitted action alone,
+// each value percent-encoded, so no value changes the scheme or the
+// authority the template fixes; the request goes to the connection's own
+// endpoint. BeginDispatch binds the canonical {uri} (upstream.ReadParams).
+// A resource template has no listing to check here: discovery reports it
+// (S15b), and the reviewed package pins it.
+func (e *Engine) sendResource(ctx context.Context, r Result, conn *control.Connection, def *defs.Definition, a actionir.Parsed,
+	want permitWant, t *timer,
+) Result {
+	uri, buildErr := ResourceURI(def, a.Action)
+	var params []byte
+	if buildErr == nil {
+		params, buildErr = upstream.ReadParams(uri)
+	}
+	begin := &pb.BeginDispatchRequest{PermitId: want.PermitID, Epoch: want.Epoch}
+	if buildErr == nil {
+		sum := sha256.Sum256(params)
+		begin.OutboundMethod, begin.OutboundUrl, begin.OutboundBodySha256 = http.MethodPost, conn.GetBaseUrl(), sum[:]
+	}
+	bd, err := e.authority.BeginDispatch(ctx, begin)
+	t.lap("begin")
+	if err != nil {
+		r.Reasons = append(r.Reasons, strings.ToUpper(connect.CodeOf(err).String()))
+		return r.fail(EnforcementFailed, CodeDispatchRefused)
+	}
+	ctx = context.WithoutCancel(ctx)
+	ce, err := e.entry(conn)
+	if buildErr == nil && err != nil {
+		buildErr = err
+	}
+	if buildErr != nil {
+		e.log.WarnContext(ctx, "gateway.request_not_built", slog.String("transaction_id", want.Txn), pclog.Err(buildErr))
+		return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeRequest, t)
+	}
+	cred := &upstreamCredential{}
+	if conn.GetAccessMode() == "pantherclaw_held" {
+		if cred, err = e.mcpCredential(ctx, conn, def, a.Action.Target); err != nil {
+			return e.credentialFailed(ctx, r, conn, want, err, t)
+		}
+		defer cred.release()
+	}
+	secret := cred.secret
+	token := bd.GetActionToken()
+	decorate := func(req *http.Request) error {
+		if token != "" {
+			req.Header.Set(HeaderAction, token)
+		}
+		return cred.place(req)
+	}
+	callCtx, cancel := callWindow(ctx, conn)
+	defer cancel()
+	start := time.Now()
+	land, access, err := e.fly(callCtx, conn, a, want)
+	if err != nil {
+		outcome, class, code := classifyMCP(upstream.Result{}, fmt.Errorf("%w: %w", upstream.ErrNotSent, err))
+		e.log.WarnContext(ctx, "gateway.target_error", slog.String("transaction_id", want.Txn), slog.String("outcome", outcome.String()),
+			pclog.Err(err))
+		return e.record(ctx, r, want, outcome, 0, nil, 0, class, code, t)
+	}
+	res, err := ce.mcp.ReadResource(callCtx, uri, decorate)
+	land()
+	elapsed := time.Since(start)
+	t.lap("target")
+	outcome, class, code := classifyMCP(res, err)
+	e.breaker.record(ctx, conn, outcome)
+	if err != nil {
+		e.log.WarnContext(ctx, "gateway.target_error", slog.String("transaction_id", want.Txn), slog.String("outcome", outcome.String()),
+			pclog.Err(err))
+	}
+	var digest []byte
+	if body := answerBody(res); body != nil {
+		sum := sha256.Sum256(body)
+		digest = sum[:]
+		r.Response = &egress.Response{
+			Status: res.Status, Body: egress.Redacted(body, secret), ContentType: "application/json",
+			RequestID: string(egress.Redacted([]byte(res.RequestID), secret)),
+		}
+	}
+	cred.release()
+	return e.record(ctx, r, want, outcome, res.Status, digest, elapsed, class, code, t, func(req *pb.RecordExecutionRequest) {
+		req.CredentialAccess = access()
+		if minted := cred.granted(); minted != nil {
+			req.CredentialAccess = minted
+		}
+	})
+}
+
+// ResourceURI builds a resource read's upstream URI from the definition's
+// reviewed template and the action (HR-419): each variable is a canonical
+// reference to the target or an identifier, enum or integer param, and
+// its value is percent-encoded.
+func ResourceURI(def *defs.Definition, a actionir.ActionIR) (string, error) {
+	m := mcpTemplate(def)
+	tmpl, ok := m.DispatchTemplate()
+	if !ok {
+		return "", fmt.Errorf("%w: %s has no resource template", egress.ErrBuild, def.Operation)
+	}
+	vals, err := def.DecodeParams(a.Params)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", egress.ErrBuild, err)
+	}
+	out := make(map[string]string, len(tmpl.Vars))
+	for _, ref := range tmpl.Vars {
+		var v string
+		switch group, isPart := strings.CutPrefix(ref, "target.id."); {
+		case ref == "target.id":
+			v = a.Target.ID
+		case ref == "target.account":
+			v = a.Target.Account
+		case isPart:
+			v, _ = def.Target.Part(a.Target.ID, group)
+		default:
+			name, _ := strings.CutPrefix(ref, "params.")
+			p, ok := vals[name]
+			switch {
+			case !ok:
+			case p.Type == defs.TypeInteger:
+				v = strconv.FormatInt(p.Int, 10)
+			case p.Type == defs.TypeIdentifier || p.Type == defs.TypeEnum:
+				v = p.Str
+			}
+		}
+		if v == "" {
+			return "", fmt.Errorf("%w: %s has no value for the resource template", egress.ErrBuild, ref)
+		}
+		out[ref] = v
+	}
+	uri, ok := tmpl.Expand(out)
+	if !ok {
+		return "", fmt.Errorf("%w: the resource template does not expand", egress.ErrBuild)
+	}
+	return uri, nil
 }
