@@ -97,6 +97,11 @@ func (x *source) HoldSettings(context.Context, ids.OrgID) (pipeline.HoldSettings
 	return pipeline.HoldSettings{HoldDeadline: 30 * time.Minute}, nil
 }
 
+func (x *source) RunConsequences(context.Context, ids.OrgID, ids.UUID) (pipeline.RunConsequenceCounts, error) {
+	x.reads++
+	return pipeline.RunConsequenceCounts{}, nil
+}
+
 var catalog = map[string]fdomain.Type{"payments.charge.refundable": fdomain.TypeBoolean}
 
 // publish publishes rules as the world's policy and keeps its bundle for
@@ -319,7 +324,8 @@ func TestHR197_RemovedOrTruncatedInputsGiveAnIncompleteReplay(t *testing.T) {
 func TestHR197_ReplayHoldsNoStoreAndWritesNothing(t *testing.T) {
 	reads := map[string]bool{
 		"Receipt": true, "Inputs": true, "Definition": true, "Bundle": true, "PolicyVersion": true, "Catalog": true, "Open": true,
-		"HoldSettings": true, // a read in a READ ONLY transaction (D36)
+		"HoldSettings":    true, // a read in a READ ONLY transaction (D36)
+		"RunConsequences": true, // a read in a READ ONLY transaction (G0 M17 D103)
 	}
 	e := reflect.TypeFor[replay.Engine]()
 	store := reflect.TypeFor[finalize.Store]()

@@ -85,21 +85,22 @@ type Tampered struct {
 
 // Reads are the reads of one evaluation, by kind.
 type Reads struct {
-	Containment  *Containment  `json:"containment,omitzero"`
-	Controls     *Controls     `json:"controls,omitzero"`
-	Definitions  []Definition  `json:"definitions,omitzero"`
-	Policy       *Policy       `json:"policy,omitzero"`
-	Runs         []Run         `json:"runs,omitzero"`
-	Agents       []Agent       `json:"agents,omitzero"`
-	Chains       []Chain       `json:"chains,omitzero"`
-	Envelopes    []Envelopes   `json:"envelopes,omitzero"`
-	Facts        []Facts       `json:"facts,omitzero"`
-	Usage        []Usage       `json:"usage,omitzero"`
-	Claims       []Claim       `json:"claims,omitzero"`
-	Connections  []Connection  `json:"connections,omitzero"`
-	Holds        []Hold        `json:"holds,omitzero"`
-	Variants     []Variants    `json:"variants,omitzero"`
-	HoldSettings *HoldSettings `json:"hold_settings,omitzero"`
+	Containment     *Containment      `json:"containment,omitzero"`
+	Controls        *Controls         `json:"controls,omitzero"`
+	Definitions     []Definition      `json:"definitions,omitzero"`
+	Policy          *Policy           `json:"policy,omitzero"`
+	Runs            []Run             `json:"runs,omitzero"`
+	Agents          []Agent           `json:"agents,omitzero"`
+	Chains          []Chain           `json:"chains,omitzero"`
+	Envelopes       []Envelopes       `json:"envelopes,omitzero"`
+	Facts           []Facts           `json:"facts,omitzero"`
+	Usage           []Usage           `json:"usage,omitzero"`
+	Claims          []Claim           `json:"claims,omitzero"`
+	Connections     []Connection      `json:"connections,omitzero"`
+	Holds           []Hold            `json:"holds,omitzero"`
+	Variants        []Variants        `json:"variants,omitzero"`
+	HoldSettings    *HoldSettings     `json:"hold_settings,omitzero"`
+	RunConsequences []RunConsequences `json:"run_consequences,omitzero"`
 }
 
 // Containment is the org's containment state and the database time: the
@@ -419,6 +420,14 @@ type Variants struct {
 type HoldSettings struct {
 	HoldDeadlineNS int64  `json:"hold_deadline_ns,omitzero"`
 	Err            string `json:"err,omitzero"`
+}
+
+// RunConsequences is the read of a run's consequence counts (G0 M17 D103).
+type RunConsequences struct {
+	Run         string `json:"run"`
+	Pending     int    `json:"pending,omitzero"`
+	Unconfirmed int    `json:"unconfirmed,omitzero"`
+	Err         string `json:"err,omitzero"`
 }
 
 // Encode returns the recording's deterministic JSON: members in a fixed

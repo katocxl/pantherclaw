@@ -1423,6 +1423,68 @@ func (q *Queries) RequestAutomationExecutionCancel(ctx context.Context, arg Requ
 	return result.RowsAffected(), nil
 }
 
+const runDownstreamConfirmed = `-- name: RunDownstreamConfirmed :many
+SELECT t.id FROM pc.transactions t
+WHERE t.org_id = $1 AND t.run_id = $2 AND t.operation = $3
+    AND t.downstream_state = 'CONFIRMED'
+ORDER BY t.created_at
+LIMIT 16
+`
+
+func (q *Queries) RunDownstreamConfirmed(ctx context.Context, orgID ids.OrgID, runID ids.UUID, operation string) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, runDownstreamConfirmed, orgID, runID, operation)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const runDownstreamCounts = `-- name: RunDownstreamCounts :one
+SELECT count(*) FILTER (WHERE t.downstream_state = 'CONFIRMED')::int AS confirmed,
+       count(*) FILTER (WHERE t.downstream_state = 'PENDING'
+           OR (t.downstream_state IS NULL AND t.decision IN ('ALLOW', 'ALLOW_WITH_OBLIGATIONS')
+               AND (t.effect_state IS NULL OR t.effect_state = 'PROPAGATION_PENDING')
+               AND EXISTS (SELECT 1 FROM pc.decision_consequences c
+                           WHERE c.org_id = t.org_id AND c.transaction_id = t.id AND c.state = 'PREDICTED'
+                             AND c.evaluation = (SELECT max(d.evaluation) FROM pc.decision_consequences d
+                                                 WHERE d.org_id = t.org_id AND d.transaction_id = t.id))))::int AS pending,
+       count(*) FILTER (WHERE t.downstream_state IN ('UNCONFIRMED', 'NOT_VERIFIABLE'))::int AS unconfirmed
+FROM pc.transactions t
+WHERE t.org_id = $1 AND t.run_id = $2
+    AND ($3::text IS NULL OR t.operation = $3)
+`
+
+type RunDownstreamCountsRow struct {
+	Confirmed   int32
+	Pending     int32
+	Unconfirmed int32
+}
+
+// How a run's actions stand downstream (G0 M17 D103), for one operation
+// or (NULL) all of them: confirmed by their consequences' own evidence;
+// pending, which is a downstream state still PENDING or an allowed action
+// whose effect is not yet final while its latest evaluation predicted
+// consequences; and unconfirmed, which is UNCONFIRMED or NOT_VERIFIABLE.
+// An action that predicted no consequence is in none of them.
+func (q *Queries) RunDownstreamCounts(ctx context.Context, orgID ids.OrgID, runID ids.UUID, operation *string) (RunDownstreamCountsRow, error) {
+	row := q.db.QueryRow(ctx, runDownstreamCounts, orgID, runID, operation)
+	var i RunDownstreamCountsRow
+	err := row.Scan(&i.Confirmed, &i.Pending, &i.Unconfirmed)
+	return i, err
+}
+
 const runEffectCounts = `-- name: RunEffectCounts :one
 SELECT count(*) FILTER (WHERE t.effect_state = ANY($1::text[]))::int AS matched,
        count(*) FILTER (WHERE t.effect_state IN ('UNKNOWN', 'CONFLICTING', 'UNVERIFIABLE', 'PROPAGATION_PENDING'))::int AS unknown,

@@ -186,6 +186,33 @@ WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id) AND t.operatio
 ORDER BY t.created_at
 LIMIT 16;
 
+-- name: RunDownstreamCounts :one
+-- How a run's actions stand downstream (G0 M17 D103), for one operation
+-- or (NULL) all of them: confirmed by their consequences' own evidence;
+-- pending, which is a downstream state still PENDING or an allowed action
+-- whose effect is not yet final while its latest evaluation predicted
+-- consequences; and unconfirmed, which is UNCONFIRMED or NOT_VERIFIABLE.
+-- An action that predicted no consequence is in none of them.
+SELECT count(*) FILTER (WHERE t.downstream_state = 'CONFIRMED')::int AS confirmed,
+       count(*) FILTER (WHERE t.downstream_state = 'PENDING'
+           OR (t.downstream_state IS NULL AND t.decision IN ('ALLOW', 'ALLOW_WITH_OBLIGATIONS')
+               AND (t.effect_state IS NULL OR t.effect_state = 'PROPAGATION_PENDING')
+               AND EXISTS (SELECT 1 FROM pc.decision_consequences c
+                           WHERE c.org_id = t.org_id AND c.transaction_id = t.id AND c.state = 'PREDICTED'
+                             AND c.evaluation = (SELECT max(d.evaluation) FROM pc.decision_consequences d
+                                                 WHERE d.org_id = t.org_id AND d.transaction_id = t.id))))::int AS pending,
+       count(*) FILTER (WHERE t.downstream_state IN ('UNCONFIRMED', 'NOT_VERIFIABLE'))::int AS unconfirmed
+FROM pc.transactions t
+WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id)
+    AND (sqlc.narg(operation)::text IS NULL OR t.operation = sqlc.narg(operation));
+
+-- name: RunDownstreamConfirmed :many
+SELECT t.id FROM pc.transactions t
+WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id) AND t.operation = sqlc.arg(operation)
+    AND t.downstream_state = 'CONFIRMED'
+ORDER BY t.created_at
+LIMIT 16;
+
 -- name: RunTransactionCounts :one
 SELECT count(*)::int AS total,
        count(*) FILTER (WHERE t.effect_state IN ('UNKNOWN', 'CONFLICTING', 'UNVERIFIABLE'))::int AS unknown

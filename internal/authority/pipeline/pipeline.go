@@ -233,15 +233,18 @@ func (e *Evaluation) Decisive() Item {
 
 // state carries what earlier steps established.
 type state struct {
-	req     Request
-	a       actionir.ActionIR
-	cl      checklist
-	ev      *Evaluation
-	cont    Containment
-	pinned  *Pinned
-	conn    *Connection
-	def     *defs.Definition
-	run     *Run
+	req    Request
+	a      actionir.ActionIR
+	cl     checklist
+	ev     *Evaluation
+	cont   Containment
+	pinned *Pinned
+	conn   *Connection
+	def    *defs.Definition
+	run    *Run
+	// runCons are the run's consequence counts, read only for a policy
+	// that uses them (G0 M17 D103).
+	runCons RunConsequenceCounts
 	agent   *Agent
 	chain   gdomain.Chain
 	policy  *Policy
@@ -838,6 +841,14 @@ func (p *Pipeline) policyRules(ctx context.Context, s *state) {
 	if s.policy == nil {
 		return
 	}
+	if s.ownRun() && papp.ReadsRunConsequences(s.policy.Compiled.Bundle) {
+		c, err := p.Reader.RunConsequences(ctx, s.req.Org, s.ev.RunID)
+		if err != nil {
+			s.missing(StepBoundaries, err, "the run's consequences")
+			return
+		}
+		s.runCons = c
+	}
 	out, err := s.policy.Compiled.Evaluate(ctx, s.def, s.a, s.policyInput())
 	if err != nil {
 		s.cl.add(StepBoundaries, adomain.CannotAuthorize, ReasonPolicyEvaluation, "the policy could not be evaluated", "")
@@ -850,10 +861,13 @@ func (p *Pipeline) policyRules(ctx context.Context, s *state) {
 // policyInput is what the policy is evaluated with.
 func (s *state) policyInput() papp.Input {
 	in := papp.Input{Budget: s.policy.Budget, Facts: s.facts, Now: s.cont.Now, Waivers: s.waivers(s.a.Operation)}
-	if s.run != nil && s.run.AgentID == s.req.Identity.AgentID {
+	if s.ownRun() {
 		// The server's run record, found by the request's run id and checked
 		// against the agent's verified identity, never the request itself.
-		in.Run = &papp.Run{ID: s.ev.RunID.String(), AgentID: s.run.AgentID.String()}
+		in.Run = &papp.Run{
+			ID: s.ev.RunID.String(), AgentID: s.run.AgentID.String(),
+			ConsequencesPending: s.runCons.Pending, ConsequencesUnconfirmed: s.runCons.Unconfirmed,
+		}
 	}
 	if s.conn != nil {
 		// The class comes from the connection's record, never from the
@@ -862,6 +876,9 @@ func (s *state) policyInput() papp.Input {
 	}
 	return in
 }
+
+// ownRun reports whether the action's run is the verified agent's own.
+func (s *state) ownRun() bool { return s.run != nil && s.run.AgentID == s.req.Identity.AgentID }
 
 // waivers are the rules the agent's active policy exceptions waive for
 // an operation (G0 M11.1 D14): exceptable in the evaluated version, with

@@ -158,6 +158,9 @@ func (*waitEffect) check(ctx context.Context, tx pgx.Tx, sc autodomain.StepConte
 		return autodomain.StepResult{}, err
 	}
 	qq := q(tx)
+	if w.Consequences {
+		return downstream(ctx, qq, sc, w, launch.RunID, want, timedOut)
+	}
 	c, err := qq.RunEffectCounts(ctx, dbq.RunEffectCountsParams{
 		OrgID: sc.Org, RunID: launch.RunID, Operation: w.Operation, States: states,
 	})
@@ -200,6 +203,62 @@ func (*waitEffect) check(ctx context.Context, tx pgx.Tx, sc autodomain.StepConte
 		return autodomain.StepResult{
 			State: autodomain.StepUnknown, Effect: autodomain.EffectUnknown, Output: out,
 			Reason: engine.ReasonEffectUnknown, Refs: []reflexdomain.EvidenceRef{ref(reflexdomain.EvidenceRun, launch.RunID)},
+		}, nil
+	}
+	reason := ReasonNoEffect
+	if timedOut {
+		reason = engine.ReasonTimeout
+	}
+	return autodomain.StepResult{State: autodomain.StepFailed, Effect: autodomain.EffectNone, Output: out, Reason: reason}, nil
+}
+
+// downstream decides a wait on consequences (G0 M17 D103, HR-452): the
+// run's actions of the operation count by their downstream state. An
+// action whose consequences were all confirmed by their own evidence
+// counts toward min; one still pending keeps the step waiting; one whose
+// consequences are unconfirmed or not verifiable never passes and, once
+// nothing is left pending, needs reconciliation (as HR-280). An action
+// that predicted no consequence does not count.
+func downstream(ctx context.Context, qq *dbq.Queries, sc autodomain.StepContext, w *autodomain.WaitEffectWith,
+	run ids.UUID, want int, timedOut bool,
+) (autodomain.StepResult, error) {
+	op := w.Operation
+	c, err := qq.RunDownstreamCounts(ctx, sc.Org, run, &op)
+	if err != nil {
+		return autodomain.StepResult{}, err
+	}
+	out := map[string]string{
+		"consequences_confirmed": strconv.Itoa(int(c.Confirmed)), "consequences_pending": strconv.Itoa(int(c.Pending)),
+		"consequences_unconfirmed": strconv.Itoa(int(c.Unconfirmed)),
+	}
+	if int(c.Confirmed) >= want {
+		txs, err := qq.RunDownstreamConfirmed(ctx, sc.Org, run, op)
+		if err != nil {
+			return autodomain.StepResult{}, err
+		}
+		refs := make([]reflexdomain.EvidenceRef, 0, len(txs))
+		for _, id := range txs {
+			refs = append(refs, ref(reflexdomain.EvidenceTransaction, id))
+		}
+		return autodomain.StepResult{State: autodomain.StepDone, Effect: autodomain.EffectNone, Output: out, Refs: refs}, nil
+	}
+	r, err := qq.GetRun(ctx, sc.Org, run)
+	if err != nil {
+		return autodomain.StepResult{}, err
+	}
+	if !timedOut && (r.EffectiveState == "ACTIVE" || c.Pending > 0) {
+		return autodomain.StepResult{
+			State: autodomain.StepWaiting, Effect: autodomain.EffectNone, Output: out,
+			WakeAt: sc.Now.Add(engine.PollInterval),
+		}, nil
+	}
+	if c.Unconfirmed > 0 || c.Pending > 0 {
+		// The actions already happened; what followed them is not known,
+		// so the execution waits for a person, never retried or continued.
+		out[engine.OutputIrreversible] = "true"
+		return autodomain.StepResult{
+			State: autodomain.StepUnknown, Effect: autodomain.EffectUnknown, Output: out,
+			Reason: engine.ReasonEffectUnknown, Refs: []reflexdomain.EvidenceRef{ref(reflexdomain.EvidenceRun, run)},
 		}, nil
 	}
 	reason := ReasonNoEffect

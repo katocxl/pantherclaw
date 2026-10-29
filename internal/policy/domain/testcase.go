@@ -41,6 +41,10 @@ type TestGiven struct {
 	Approval         string              `json:"approval,omitzero"`
 	StepUp           string              `json:"step_up,omitzero"`
 	DestinationClass string              `json:"destination_class,omitzero"`
+	// RunConsequences are the run's consequence counts (G0 M17 D103), so a
+	// rule on run.consequences_pending or run.consequences_unconfirmed can be
+	// tested; unset, both are 0.
+	RunConsequences *TestRunConsequences `json:"run_consequences,omitzero"`
 }
 
 // Approval states a case may give.
@@ -103,4 +107,11 @@ func validateTests(tests []TestCase) error {
 		seen[tc.ID] = true
 	}
 	return nil
+}
+
+// TestRunConsequences are the counts of the run's actions whose
+// consequences are pending, or unconfirmed or not verifiable.
+type TestRunConsequences struct {
+	Pending     int `json:"pending,omitzero"`
+	Unconfirmed int `json:"unconfirmed,omitzero"`
 }

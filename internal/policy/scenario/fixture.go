@@ -84,6 +84,7 @@ type fixture struct {
 	budget  *pdomain.TestBudget
 	conn    pipeline.Connection
 	hold    *pipeline.HoldRequest
+	runs    pipeline.RunConsequenceCounts
 	req     pipeline.Request
 }
 
@@ -99,6 +100,12 @@ func build(org ids.OrgID, now time.Time, def *defs.Definition, rules []consequen
 		g = &pdomain.TestGiven{}
 	}
 	f := &fixture{org: org, now: now, def: def, rules: rules, agentID: DefaultAgentID, env: DefaultEnvironmentID, budget: g.Budget}
+	if c := g.RunConsequences; c != nil {
+		if c.Pending < 0 || c.Unconfirmed < 0 {
+			return nil, caseErr("given.run_consequences: a count cannot be negative")
+		}
+		f.runs = pipeline.RunConsequenceCounts{Pending: c.Pending, Unconfirmed: c.Unconfirmed}
+	}
 	if g.Agent != "" {
 		id, err := ids.ParseUUID(g.Agent)
 		if err != nil {
@@ -537,4 +544,9 @@ func wireType(raw jsontext.Value) fdomain.Type {
 		out = t
 	}
 	return out
+}
+
+// RunConsequences implements pipeline.Reader: the case's counts.
+func (f *fixture) RunConsequences(context.Context, ids.OrgID, ids.UUID) (pipeline.RunConsequenceCounts, error) {
+	return f.runs, nil
 }

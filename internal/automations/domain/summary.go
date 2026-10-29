@@ -179,6 +179,9 @@ func stepText(_ *Definition, s StepSpec, names Names) string {
 		t = "wait until the run of " + x.Step + " ends"
 	case *WaitEffectWith:
 		t = "wait until " + x.Operation + " is confirmed in the run of " + x.Step
+		if x.Consequences {
+			t += ", with every consequence it predicted"
+		}
 	case *GateWith:
 		t = fmt.Sprintf("wait for %d approval(s) with a security key, at most %s", x.Approvals(), human(x.Deadline.D()))
 	case *RevokeGrantWith:

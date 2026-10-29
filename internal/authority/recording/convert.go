@@ -653,6 +653,10 @@ func (r Reads) check() error {
 		add(parseHash(v.Key))
 		ok(v.Err)
 	}
+	for _, c := range r.RunConsequences {
+		add(ids.ParseUUID(c.Run))
+		ok(c.Err)
+	}
 	if h := r.HoldSettings; h != nil {
 		ok(h.Err)
 	}

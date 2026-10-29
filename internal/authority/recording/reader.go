@@ -60,6 +60,11 @@ type Served struct {
 	// none are served instead of a gap. They feed only a hold's display and
 	// binding, never the decision (D36); reproduction replays never set it.
 	NoVariants bool
+	// RunConsequences, when set, are the current consequence counts of the
+	// recorded runs, by run id, served when the evaluation did not read
+	// them: a replay under a proposed policy that reads them (G0 M17 D103).
+	// Reproduction replays never set it.
+	RunConsequences map[string]pipeline.RunConsequenceCounts
 }
 
 // Reader serves a recording to the pipeline. It reads nothing else and
@@ -457,4 +462,24 @@ func (r *Reader) Controls(_ context.Context, org ids.OrgID, k pipeline.ControlKe
 func sameKeys(a ControlKeys, b pipeline.ControlKeys) bool {
 	return a.Run == b.Run && a.Agent == b.Agent && a.Connection == b.Connection && a.TargetType == b.TargetType &&
 		slices.Equal(a.Grants, b.Grants) && slices.Equal(a.Principals, b.Principals)
+}
+
+// RunConsequences implements pipeline.Reader.
+func (r *Reader) RunConsequences(_ context.Context, org ids.OrgID, run ids.UUID) (pipeline.RunConsequenceCounts, error) {
+	const what = "run_consequences"
+	if err := r.otherOrg(org, what, pipeline.StepBoundaries); err != nil {
+		return pipeline.RunConsequenceCounts{}, r.gap(what, pipeline.StepBoundaries, "the run's consequences were not recorded")
+	}
+	i := slices.IndexFunc(r.rec.Reads.RunConsequences, func(x RunConsequences) bool { return x.Run == run.String() })
+	if i < 0 {
+		if c, ok := r.served.RunConsequences[run.String()]; ok {
+			return c, nil // read at replay time for a proposed policy (Served)
+		}
+		return pipeline.RunConsequenceCounts{}, r.gap(what, pipeline.StepBoundaries, "the run's consequences were not recorded")
+	}
+	c := r.rec.Reads.RunConsequences[i]
+	if err := errOf(c.Err); err != nil {
+		return pipeline.RunConsequenceCounts{}, err
+	}
+	return pipeline.RunConsequenceCounts{Pending: c.Pending, Unconfirmed: c.Unconfirmed}, nil
 }

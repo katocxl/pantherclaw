@@ -31,6 +31,7 @@ import (
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	papp "github.com/katocxl/pantherclaw/internal/policy/app"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 )
 
@@ -66,6 +67,10 @@ type Source interface {
 	// under a proposed policy of an evaluation that never read them
 	// (M11.1 D36).
 	HoldSettings(ctx context.Context, org ids.OrgID) (pipeline.HoldSettings, error)
+	// RunConsequences returns how a run's actions stand downstream now,
+	// for a replay under a proposed policy that reads them of an
+	// evaluation that never did (G0 M17 D103).
+	RunConsequences(ctx context.Context, org ids.OrgID, run ids.UUID) (pipeline.RunConsequenceCounts, error)
 }
 
 // Opener opens sealed inputs; recording.Sealer implements it.
@@ -134,6 +139,11 @@ const NoteHoldSettings = "hold settings read at replay time; the original decisi
 // NoteNoVariants is the note of a proposed replay of an evaluation that
 // read no earlier or approved requests (D36).
 const NoteNoVariants = "earlier and approved requests not read at replay time; the hold's display may differ, the decision does not depend on them"
+
+// NoteRunConsequences is the note of a proposed replay that served the
+// run's current consequence counts (G0 M17 D103): the original decision
+// did not read them, so the counts are today's, not the decision's.
+const NoteRunConsequences = "the run's consequence counts read at replay time; the original decision did not read them"
 
 // Original is the recorded decision, from its receipt.
 type Original struct {
@@ -326,6 +336,21 @@ func (e *Engine) served(ctx context.Context, org ids.OrgID, rec *recording.Recor
 			}
 			s.HoldSettings = &h
 			out.Notes = append(out.Notes, NoteHoldSettings)
+		}
+		if len(rec.Reads.RunConsequences) == 0 && papp.ReadsRunConsequences(proposed) {
+			s.RunConsequences = map[string]pipeline.RunConsequenceCounts{}
+			for _, r := range rec.Reads.Runs {
+				run, err := ids.ParseUUID(r.ID)
+				if err != nil || r.Err != "" {
+					continue // the reader reports it as a gap
+				}
+				c, err := e.Source.RunConsequences(ctx, org, run)
+				if err != nil {
+					return s, nil, fmt.Errorf("replay: run consequences: %w", err)
+				}
+				s.RunConsequences[r.ID] = c
+			}
+			out.Notes = append(out.Notes, NoteRunConsequences)
 		}
 		if len(rec.Reads.Variants) == 0 {
 			s.NoVariants = true

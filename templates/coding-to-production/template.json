@@ -4,6 +4,7 @@
   "task_ref": "template:coding-to-production",
   "protects": [
     "every merge into a named repository waits for an independent code reviewer, bound to the head SHA",
+    "a merge also waits for one while a consequence of the run's earlier actions is unconfirmed or not verifiable",
     "every deployment of a named repository waits for a release approver inside a change window",
     "no branch creation or contents write on a named repository's default branch",
     "with --agent: that agent does not merge or push from the shell (a heuristic over the command text); without --agent this rule is skipped",
