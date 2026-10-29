@@ -35,8 +35,12 @@ func TestHR451_DownstreamIsConfirmedOnlyByEveryConsequencesOwnEvidence(t *testin
 		{"one of two confirmed", []domain.Consequence{ok, pending}, false, domain.DownstreamPending},
 		{"every one confirmed", []domain.Consequence{ok, ok}, false, domain.DownstreamConfirmed},
 		{"a person was asked", []domain.Consequence{ok, asked}, false, domain.DownstreamUnconfirmed},
-		{"released as not occurred, though confirmed later", []domain.Consequence{{Effect: domain.Confirmed, Questioned: true}}, false,
-			domain.DownstreamUnconfirmed},
+		{
+			"released as not occurred, though confirmed later",
+			[]domain.Consequence{{Effect: domain.Confirmed, Questioned: true}},
+			false,
+			domain.DownstreamUnconfirmed,
+		},
 		{"no effect found", []domain.Consequence{ok, {Effect: domain.NoneConfirmed}}, false, domain.DownstreamUnconfirmed},
 		{"unknown at the deadline", []domain.Consequence{{Effect: domain.Unknown}}, false, domain.DownstreamUnconfirmed},
 		{"conflicting", []domain.Consequence{{Effect: domain.Conflicting}}, false, domain.DownstreamUnconfirmed},
@@ -49,14 +53,29 @@ func TestHR451_DownstreamIsConfirmedOnlyByEveryConsequencesOwnEvidence(t *testin
 		{"mixed, nothing opened", nil, true, domain.DownstreamNotVerifiable},
 		{"mixed, a negative outcome", []domain.Consequence{ok, asked}, true, domain.DownstreamUnconfirmed},
 		// The subtree: a consequence's own consequences count.
-		{"child confirmed, its subtree pending", []domain.Consequence{{Effect: domain.Confirmed, Downstream: domain.DownstreamPending}}, false,
-			domain.DownstreamPending},
-		{"child confirmed, its subtree confirmed", []domain.Consequence{{Effect: domain.Confirmed, Downstream: domain.DownstreamConfirmed}}, false,
-			domain.DownstreamConfirmed},
-		{"child confirmed, its subtree not verifiable", []domain.Consequence{ok, {Effect: domain.Confirmed, Downstream: domain.DownstreamNotVerifiable}},
-			false, domain.DownstreamNotVerifiable},
-		{"child confirmed, its subtree unconfirmed", []domain.Consequence{{Effect: domain.Confirmed, Downstream: domain.DownstreamUnconfirmed}}, true,
-			domain.DownstreamUnconfirmed},
+		{
+			"child confirmed, its subtree pending",
+			[]domain.Consequence{{Effect: domain.Confirmed, Downstream: domain.DownstreamPending}},
+			false,
+			domain.DownstreamPending,
+		},
+		{
+			"child confirmed, its subtree confirmed",
+			[]domain.Consequence{{Effect: domain.Confirmed, Downstream: domain.DownstreamConfirmed}},
+			false,
+			domain.DownstreamConfirmed,
+		},
+		{
+			"child confirmed, its subtree not verifiable",
+			[]domain.Consequence{ok, {Effect: domain.Confirmed, Downstream: domain.DownstreamNotVerifiable}},
+			false, domain.DownstreamNotVerifiable,
+		},
+		{
+			"child confirmed, its subtree unconfirmed",
+			[]domain.Consequence{{Effect: domain.Confirmed, Downstream: domain.DownstreamUnconfirmed}},
+			true,
+			domain.DownstreamUnconfirmed,
+		},
 	} {
 		if got := domain.Downstream(c.cs, c.capped); got != c.want {
 			t.Errorf("%s: %s, want %s", c.name, got, c.want)

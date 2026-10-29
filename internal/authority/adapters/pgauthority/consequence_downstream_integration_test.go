@@ -29,6 +29,9 @@ type downstream struct {
 	*world
 	s     *txapp.Service
 	runID ids.UUID
+	// bare: the refund's verifier captures nothing, so its read reports
+	// no /id.
+	bare bool
 }
 
 func newDownstream(t *testing.T, edit func(string) string) *downstream {
@@ -48,9 +51,13 @@ func (d *downstream) confirm(charge string, edit func(txn ids.UUID)) ids.UUID {
 	}
 	l := d.lease(d.s, r.TransactionID)
 	fields := refundOf(charge, "succeeded", "30.00")
-	fields["/id"] = ref
-	if a, err := d.s.Report(context.Background(), d.org, d.gwID, txapp.Report{Task: l.Task, Secret: l.Secret, HTTPStatus: 200, Found: true,
-		Fields: fields}); err != nil || a.State != txdomain.Confirmed {
+	if !d.bare {
+		fields["/id"] = ref
+	}
+	if a, err := d.s.Report(context.Background(), d.org, d.gwID, txapp.Report{
+		Task: l.Task, Secret: l.Secret, HTTPStatus: 200, Found: true,
+		Fields: fields,
+	}); err != nil || a.State != txdomain.Confirmed {
 		d.t.Fatalf("%s: confirm %+v %v", charge, a, err)
 	}
 	return r.TransactionID
@@ -141,6 +148,7 @@ func TestHR450_APredictedConsequenceThatCannotBeOpenedIsAuditedAsNotVerifiable(t
 	const notVerifiable = `SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.transaction.consequence_not_verifiable'
 		AND convert_from(body, 'UTF8')::jsonb #>> '{object,id}' = $2 AND convert_from(body, 'UTF8')::jsonb ->> 'reason_code' = 'NOT_VERIFIABLE'`
 	d := newDownstream(t, pipelinetest.PayoutConsequence)
+	d.bare = true
 	txn := d.confirm("ch_1", nil)
 	if n := d.count(notVerifiable, d.org, txn.String()); n != 1 || len(d.consequences(txn)) != 0 || d.state(txn) != "NOT_VERIFIABLE" {
 		t.Fatalf("a verifier that captures nothing: %d events, %d opened, downstream %q", n, len(d.consequences(txn)), d.state(txn))
@@ -288,6 +296,7 @@ func TestT198_AnUnverifiedDownstreamConsequenceHoldsFollowOnWork(t *testing.T) {
 	})
 	txn := d.confirm("ch_1", nil)
 	next := func(run ids.UUID, charge string) finalize.Result {
+		d.payouts(charge, `{"state": "scheduled", "environments": ["payroll"]}`)
 		return d.authorize(d.request(run, ids.NewV7(), charge, "10.00"))
 	}
 	if r := next(d.runID, "ch_2"); !r.Decision.Permits() {

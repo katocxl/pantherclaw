@@ -39,8 +39,12 @@ func TestHR452_AWaitOnConsequencesPassesOnlyOnConfirmed(t *testing.T) {
 		{"unconfirmed after the run ended", counts{Unconfirmed: 1}, 1, false, false, autodomain.StepUnknown, engine.ReasonEffectUnknown},
 		{"not verifiable at the timeout", counts{Unconfirmed: 1}, 1, true, true, autodomain.StepUnknown, engine.ReasonEffectUnknown},
 		{"pending at the timeout", counts{Pending: 1}, 1, true, true, autodomain.StepUnknown, engine.ReasonEffectUnknown},
-		{"unconfirmed with one short of min", counts{Confirmed: 1, Unconfirmed: 1}, 2, false, false, autodomain.StepUnknown,
-			engine.ReasonEffectUnknown},
+		{
+			"unconfirmed with one short of min",
+			counts{Confirmed: 1, Unconfirmed: 1},
+			2, false, false, autodomain.StepUnknown,
+			engine.ReasonEffectUnknown,
+		},
 		{"nothing predicted, run ended", counts{}, 1, false, false, autodomain.StepFailed, ReasonNoEffect},
 		{"nothing predicted at the timeout", counts{}, 1, true, true, autodomain.StepFailed, engine.ReasonTimeout},
 	} {
