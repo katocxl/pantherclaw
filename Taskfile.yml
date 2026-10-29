@@ -290,6 +290,11 @@ tasks:
     cmds:
       - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M13"}}
 
+  range:library:
+    desc: Regenerate the server's embedded scenario library (internal/redteam/library/library.json) from redteam/scenarios after changing a scenario (G0 M17 D125)
+    cmds:
+      - go test ./internal/redteam/library -run TestLibrary_MatchesTheShippedScenarios -count=1 -update
+
   sdk:vectors:
     desc: Regenerate the SDK conformance vectors in sdk/conformance from the Go implementation (review the diff)
     cmds:

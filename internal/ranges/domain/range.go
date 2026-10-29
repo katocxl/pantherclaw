@@ -72,6 +72,22 @@ const (
 	TierBusiness  = "business"
 )
 
+// Origins (G0 M17 D124): the server derives a scenario's origin from its
+// id, never from the runner. RT-### is the PantherClaw library, CX-### is
+// customer-authored.
+const (
+	OriginLibrary  = "library"
+	OriginCustomer = "customer"
+)
+
+// OriginOf returns the origin of a scenario id.
+func OriginOf(id string) string {
+	if strings.HasPrefix(id, "CX-") {
+		return OriginCustomer
+	}
+	return OriginLibrary
+}
+
 // Categories lists the report's categories in report order.
 var Categories = []string{"functional", "boundary", "recovery", "explanation"}
 
@@ -104,6 +120,8 @@ type Scenario struct {
 	// StepCount is how many steps the scenario has: a PASS records exactly
 	// that many.
 	StepCount int
+	// Origin is OriginOf(ID), set by the server.
+	Origin string
 }
 
 // SetDigest is the SHA-256 (hex) over the sorted "id:digest" lines of the
@@ -140,12 +158,15 @@ type Range struct {
 	StartedBy     string
 	RunnerVersion string
 	SetDigest     string
-	Scenarios     []Scenario
-	Versions      Versions
-	Baseline      *ids.UUID
-	State         State
-	Started       time.Time
-	Finished      *time.Time
+	// Origin is every scenario's origin: a range is all library or all
+	// customer (D126).
+	Origin    string
+	Scenarios []Scenario
+	Versions  Versions
+	Baseline  *ids.UUID
+	State     State
+	Started   time.Time
+	Finished  *time.Time
 }
 
 // Step is one recorded step.

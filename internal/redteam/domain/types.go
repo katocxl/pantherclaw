@@ -7,7 +7,26 @@
 // (HR-226). It is pure data and rules; running a scenario is internal/redteam/app.
 package domain
 
-import "encoding/json/jsontext"
+import (
+	"encoding/json/jsontext"
+	"strings"
+)
+
+// Origins (G0 M17 D124): a scenario's origin follows from its id, never
+// from what a file or a runner says. RT-### is the PantherClaw library;
+// CX-### is customer-authored.
+const (
+	OriginLibrary  = "library"
+	OriginCustomer = "customer"
+)
+
+// OriginOf returns the origin of a scenario id.
+func OriginOf(id string) string {
+	if strings.HasPrefix(id, "CX-") {
+		return OriginCustomer
+	}
+	return OriginLibrary
+}
 
 // APIVersion is the only scenario format version.
 const APIVersion = "pantherclaw.range/v1"

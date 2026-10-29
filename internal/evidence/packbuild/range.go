@@ -25,7 +25,13 @@ import (
 // finished.
 const CodeRangeUnavailable = "RANGE_UNAVAILABLE"
 
+// CodeRangeCustomer marks a range pack asked for a range of customer-authored
+// scenarios: those never go in an assurance pack (G0 M17 D126, HR-466).
+const CodeRangeCustomer = "RANGE_CUSTOMER_NOT_ATTESTED"
+
 var errRange = errors.New("packbuild: the range is not a finished range the creator may read")
+
+var errCustomer = errors.New("packbuild: a customer range has no assurance pack")
 
 // rangeData is the range a pack of scope range reports.
 type rangeData struct {
@@ -52,6 +58,9 @@ func (b *builder) loadRange() (*rangeData, error) {
 		}
 		if rng.State != domain.Finished || b.c.Require(td.PermRedteamRead, a.Path) != nil {
 			return errRange
+		}
+		if rng.Origin != domain.OriginLibrary {
+			return errCustomer
 		}
 		out.rng = rng
 		out.results, err = tx.Results(ctx, id)
