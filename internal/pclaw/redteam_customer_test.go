@@ -71,8 +71,10 @@ func TestRedteamCustomerEditionIsCheckedEarly(t *testing.T) {
 		plan planReader
 		ok   bool
 	}{
-		{planReader{edition: "community"}, false}, {planReader{edition: "team"}, false},
-		{planReader{edition: "business"}, true}, {planReader{edition: "enterprise"}, true},
+		{planReader{edition: "community"}, false},
+		{planReader{edition: "team"}, false},
+		{planReader{edition: "business"}, true},
+		{planReader{edition: "enterprise"}, true},
 		{planReader{err: errors.New("permission_denied")}, true},
 	} {
 		err := checkCustomerEdition(t.Context(), clients{entitlements: tc.plan})

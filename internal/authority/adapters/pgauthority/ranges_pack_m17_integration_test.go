@@ -37,8 +37,10 @@ func TestHR466_NoPackOfACustomerRange(t *testing.T) {
 	org := td.Scope{Type: td.ScopeOrg, ID: w.org.UUID()}
 	owner, auditor := p.person("owner", td.RoleAgentOwner, org), p.person("auditor", td.RoleAuditor, org)
 	svc := &rangeapp.Service{Store: pgranges.Store{Pool: w.pool}, Editions: licence{billing.Business}, Exporter: rangePacks{p}}
-	cx := rdomain.Scenario{ID: "CX-001", Digest: "c0ffee" + "0000000000000000000000000000000000000000000000000000000000", Tier: rdomain.TierBusiness,
-		Category: "boundary", Suite: "coding-agent", Title: "close a ticket", StepCount: 1}
+	cx := rdomain.Scenario{
+		ID: "CX-001", Digest: "c0ffee" + "0000000000000000000000000000000000000000000000000000000000", Tier: rdomain.TierBusiness,
+		Category: "boundary", Suite: "coding-agent", Title: "close a ticket", StepCount: 1,
+	}
 	rng, err := svc.StartRange(owner, rangeapp.StartInput{Agent: w.agent, Scenarios: []rdomain.Scenario{cx}, RunnerVersion: "test"})
 	if err != nil {
 		t.Fatal(err)
