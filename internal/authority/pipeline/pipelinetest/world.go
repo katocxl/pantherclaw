@@ -46,13 +46,13 @@ type World struct {
 	agentPolicies map[ids.UUID]*pipeline.Policy
 	// customer are the org's ACTIVE customer consequence rules (G0 M17).
 	customer []consequences.Rule
-	runs          map[ids.UUID]pipeline.Run
-	agents        map[ids.UUID]pipeline.Agent
-	facts         map[string]map[string]fdomain.Fact // subject → name → fact
-	accounts      map[bdomain.Ref]bdomain.Account
-	counters      map[bdomain.Ref]bdomain.Counter
-	claims        map[string]*pipeline.Claim
-	conns         map[ids.UUID]pipeline.Connection
+	runs     map[ids.UUID]pipeline.Run
+	agents   map[ids.UUID]pipeline.Agent
+	facts    map[string]map[string]fdomain.Fact // subject → name → fact
+	accounts map[bdomain.Ref]bdomain.Account
+	counters map[bdomain.Ref]bdomain.Counter
+	claims   map[string]*pipeline.Claim
+	conns    map[ids.UUID]pipeline.Connection
 	// Fail makes the named Reader method return ErrInjected.
 	Fail  map[string]bool
 	hold  *holdState
