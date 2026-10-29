@@ -46,7 +46,10 @@ type fakeApprovals struct {
 	lookAlike string
 	// findings adds a payload finding (HR-225).
 	findings bool
-	err      error
+	// noVerifier adds the condition limit of a target without a verifier
+	// (F159).
+	noVerifier bool
+	err        error
 
 	mu         sync.Mutex
 	responders []apapp.Responder
@@ -215,6 +218,9 @@ func (f *fakeApprovals) View(ctx context.Context, id ids.UUID) (apapp.View, erro
 	}
 	if f.findings {
 		v.Display.PayloadFindings = []apdomain.PayloadFindingLine{{Kind: "github_token", Location: "arg:content(base64)"}}
+	}
+	if f.noVerifier {
+		v.Display.V, v.Display.Consequence.ConditionLimits = apdomain.ConditionLimitsVersion, []string{apdomain.NoVerifierLimit}
 	}
 	if f.review {
 		v.Display.Consequence.Operation = "github.pull.merge"
@@ -643,5 +649,27 @@ func TestHR225_TheApprovalPageListsWhatLooksLikeACredential(t *testing.T) {
 	}
 	if plain := getAs(t, newApprovalsHandler(t, &fakeApprovals{}), authnapp.ApprovalsPath+"/"+knownRequest.String(), "good"); strings.Contains(plain.Body, "Credentials found") {
 		t.Fatal("a page without findings lists some")
+	}
+}
+
+// TestF159_TheApprovalPageSaysWhatTheTargetCannotConfirm: when the target
+// has no verifier for the operation, the page says, below the facts and
+// what is not bound, that the conditions are checked only when the action
+// is sent; a display without the limit says nothing of it.
+//
+// Covers: F159
+func TestF159_TheApprovalPageSaysWhatTheTargetCannotConfirm(t *testing.T) {
+	path := authnapp.ApprovalsPath + "/" + knownRequest.String()
+	want := "The target can&#39;t confirm these conditions while the action runs; they are checked only when it is sent."
+	resp := getAs(t, newApprovalsHandler(t, &fakeApprovals{noVerifier: true}), path, "good")
+	i := strings.Index(resp.Body, want)
+	if i < 0 {
+		t.Fatalf("the page lacks %q", want)
+	}
+	if j := strings.Index(resp.Body, "<h2>Facts used</h2>"); j < 0 || i < j {
+		t.Fatal("the condition limit must come below the facts")
+	}
+	if plain := getAs(t, newApprovalsHandler(t, &fakeApprovals{}), path, "good"); strings.Contains(plain.Body, "confirm these conditions") {
+		t.Fatal("a display without the limit shows it")
 	}
 }

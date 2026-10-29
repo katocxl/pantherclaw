@@ -69,6 +69,9 @@ const (
 	// CoverageServiceAcknowledgeFindingProcedure is the procedure name of the CoverageService's
 	// AcknowledgeFinding RPC.
 	CoverageServiceAcknowledgeFindingProcedure = "/pantherclaw.v1.CoverageService/AcknowledgeFinding"
+	// CoverageServiceGetCoverageGraphProcedure is the procedure name of the CoverageService's
+	// GetCoverageGraph RPC.
+	CoverageServiceGetCoverageGraphProcedure = "/pantherclaw.v1.CoverageService/GetCoverageGraph"
 )
 
 var (
@@ -188,6 +191,14 @@ var (
 			Procedure:  CoverageServiceAcknowledgeFindingProcedure,
 		}
 	})
+	coverageServiceGetCoverageGraphSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("GetCoverageGraph"),
+			Procedure:        CoverageServiceGetCoverageGraphProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // CoverageServiceClient is a client for the pantherclaw.v1.CoverageService service.
@@ -254,6 +265,14 @@ type CoverageServiceClient interface {
 	// when seen again with the same excess.
 	// permission: coverage.manage
 	AcknowledgeFinding(context.Context, *v1.AcknowledgeFindingRequest) (*v1.AcknowledgeFindingResponse, error)
+	// GetCoverageGraph returns an agent's coverage as a graph (F277; Team
+	// edition and above): the agent, its scopes, each scope's routes and
+	// where they go, with each route marked TESTED, POSSIBLE, EXCLUDED or
+	// UNVERIFIED. It is built only from the records the caller may read,
+	// filtered before any node is built (HR-402); unknown is UNVERIFIED,
+	// never controlled.
+	// permission: coverage.read
+	GetCoverageGraph(context.Context, *v1.GetCoverageGraphRequest) (*v1.GetCoverageGraphResponse, error)
 }
 
 // NewCoverageServiceClient constructs a client for the pantherclaw.v1.CoverageService service.
@@ -326,6 +345,14 @@ type CoverageServiceHandler interface {
 	// when seen again with the same excess.
 	// permission: coverage.manage
 	AcknowledgeFinding(context.Context, *v1.AcknowledgeFindingRequest) (*v1.AcknowledgeFindingResponse, error)
+	// GetCoverageGraph returns an agent's coverage as a graph (F277; Team
+	// edition and above): the agent, its scopes, each scope's routes and
+	// where they go, with each route marked TESTED, POSSIBLE, EXCLUDED or
+	// UNVERIFIED. It is built only from the records the caller may read,
+	// filtered before any node is built (HR-402); unknown is UNVERIFIED,
+	// never controlled.
+	// permission: coverage.read
+	GetCoverageGraph(context.Context, *v1.GetCoverageGraphRequest) (*v1.GetCoverageGraphResponse, error)
 }
 
 // RegisterCoverageServiceHandler registers svc as the pantherclaw.v1.CoverageService implementation
@@ -348,6 +375,7 @@ func RegisterCoverageServiceHandler(server *connect.Server, svc CoverageServiceH
 		connect.Method{Spec: coverageServiceGetAccessDetailSpec(), Handler: adapter.getAccessDetail},
 		connect.Method{Spec: coverageServiceListFindingsSpec(), Handler: adapter.listFindings},
 		connect.Method{Spec: coverageServiceAcknowledgeFindingSpec(), Handler: adapter.acknowledgeFinding},
+		connect.Method{Spec: coverageServiceGetCoverageGraphSpec(), Handler: adapter.getCoverageGraph},
 	)
 }
 
@@ -412,6 +440,10 @@ func (UnimplementedCoverageServiceHandler) ListFindings(context.Context, *v1.Lis
 
 func (UnimplementedCoverageServiceHandler) AcknowledgeFinding(context.Context, *v1.AcknowledgeFindingRequest) (*v1.AcknowledgeFindingResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.AcknowledgeFinding is not implemented")
+}
+
+func (UnimplementedCoverageServiceHandler) GetCoverageGraph(context.Context, *v1.GetCoverageGraphRequest) (*v1.GetCoverageGraphResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.GetCoverageGraph is not implemented")
 }
 
 type coverageServiceClient struct {
@@ -533,6 +565,14 @@ func (c *coverageServiceClient) ListFindings(ctx context.Context, req *v1.ListFi
 func (c *coverageServiceClient) AcknowledgeFinding(ctx context.Context, req *v1.AcknowledgeFindingRequest) (*v1.AcknowledgeFindingResponse, error) {
 	var res v1.AcknowledgeFindingResponse
 	if err := c.client.CallUnary(ctx, coverageServiceAcknowledgeFindingSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coverageServiceClient) GetCoverageGraph(ctx context.Context, req *v1.GetCoverageGraphRequest) (*v1.GetCoverageGraphResponse, error) {
+	var res v1.GetCoverageGraphResponse
+	if err := c.client.CallUnary(ctx, coverageServiceGetCoverageGraphSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -714,6 +754,18 @@ func (h coverageServiceHandler) acknowledgeFinding(ctx context.Context, _ connec
 		return err
 	}
 	res, err := h.svc.AcknowledgeFinding(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coverageServiceHandler) getCoverageGraph(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCoverageGraphRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCoverageGraph(ctx, &req)
 	if err != nil {
 		return err
 	}

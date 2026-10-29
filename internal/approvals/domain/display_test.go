@@ -412,3 +412,37 @@ func TestHR034_MixedScriptEnvironmentNamesAreFlagged(t *testing.T) {
 		t.Fatalf("a consequence without a look-alike: %s %v", raw, err)
 	}
 }
+
+// TestF159_ADisplaySaysWhenTheTargetCannotConfirmItsConditions: an
+// operation without a verifier gets exactly one condition limit, and one
+// with a verifier none; both are version 3 displays.
+//
+// Covers: F159
+func TestF159_ADisplaySaysWhenTheTargetCannotConfirmItsConditions(t *testing.T) {
+	in := refundInput(t, "")
+	with, err := domain.RenderAction(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if with.V != 2 || with.Consequence.Verifier == "" || with.Consequence.ConditionLimits != nil {
+		t.Fatalf("with a verifier: v %d, verifier %q, limits %q", with.V, with.Consequence.Verifier, with.Consequence.ConditionLimits)
+	}
+	d := *in.Definition
+	d.Verifier = nil
+	in.Definition = &d
+	without, err := domain.RenderAction(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "The target can't confirm these conditions while the action runs; they are checked only when it is sent."
+	if without.V != 3 || without.Consequence.Verifier != "" || !slices.Equal(without.Consequence.ConditionLimits, []string{want}) {
+		t.Fatalf("without a verifier: v %d, verifier %q, limits %q", without.V, without.Consequence.Verifier, without.Consequence.ConditionLimits)
+	}
+	raw, err := json.Marshal(without.Consequence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"condition_limits":[`) {
+		t.Errorf("the limits are not stored as condition_limits: %s", raw)
+	}
+}

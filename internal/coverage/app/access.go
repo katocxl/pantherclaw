@@ -5,11 +5,14 @@ package app
 
 import (
 	"context"
+	"encoding/json/v2"
 	"slices"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/coverage/domain"
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -76,7 +79,20 @@ type AccessDetail struct {
 	Closure     *dbq.PcCoverageClosure
 	Residual    []SnapshotRoute
 	Disclosures []string
+	// TargetAccount, Grants and Transactions link the detail to the
+	// account the access reaches and to the affected agents' grants and
+	// transactions on the connection (F423), ids only. TargetAccount is
+	// the GitHub App installation's account login, for a holder of
+	// connection.read; Grants need grant.read and Transactions
+	// evidence.read over each agent, and leave out the agents they lack.
+	TargetAccount string
+	Grants        []ids.UUID
+	Transactions  []ids.UUID
 }
+
+// MaxAccessTransactions caps the newest transactions an access detail
+// links to (F423).
+const MaxAccessTransactions = 20
 
 // VerifiedOperation is when the latest passing target-verifier test of
 // one operation ran.
@@ -171,6 +187,21 @@ func (s *Service) GetAccessDetail(ctx context.Context, connection ids.UUID, agen
 		if out.Custodian == "agent" {
 			out.Modes = append(out.Modes, ModeAgentHeld)
 		}
+		if config {
+			if out.TargetAccount, err = targetAccount(ctx, r.q, r.c.Org, connection); err != nil {
+				return err
+			}
+		}
+		affected := out.Agents
+		if agent != nil {
+			affected = []ids.UUID{*agent}
+		}
+		if out.Grants, err = s.grantsOn(ctx, r, connection, affected); err != nil {
+			return err
+		}
+		if out.Transactions, err = r.transactionsOn(ctx, connection, affected); err != nil {
+			return err
+		}
 		for _, m := range out.Modes {
 			out.Disclosures = append(out.Disclosures, disclosures[m])
 		}
@@ -209,6 +240,63 @@ func (s *Service) verifiedReads(ctx context.Context, r *readers, connection ids.
 		}
 	}
 	return out, nil
+}
+
+// targetAccount is the account login of the GitHub App installation whose
+// tokens the connection's credential issues; "" for any other credential.
+func targetAccount(ctx context.Context, q *dbq.Queries, org ids.OrgID, connection ids.UUID) (string, error) {
+	inst, err := q.CoverageInstallationOfConnection(ctx, org, connection)
+	if db.IsNoRows(err) {
+		return "", nil
+	}
+	return inst.AccountLogin, err
+}
+
+// grantsOn lists the active grants of the agents, among those the caller
+// holds grant.read over, that allow an operation the connection's pinned
+// package defines, newest first.
+func (s *Service) grantsOn(ctx context.Context, r *readers, connection ids.UUID, agents []ids.UUID) ([]ids.UUID, error) {
+	readable, err := r.holding(ctx, td.PermGrantRead, agents)
+	if err != nil || len(readable) == 0 {
+		return nil, err
+	}
+	b, err := r.q.CoverageBinding(ctx, r.c.Org, connection)
+	if err != nil || b.PackageVersionID == nil {
+		return nil, err
+	}
+	pkg, err := packages{}.get(ctx, r.q, r.c.Org, *b.PackageVersionID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := r.q.CoverageActiveGrantsOfAgents(ctx, r.c.Org, readable)
+	if err != nil {
+		return nil, err
+	}
+	out := []ids.UUID{}
+	for _, row := range rows {
+		var bounds gdomain.Bounds
+		if err := json.Unmarshal(row.Bounds, &bounds); err != nil {
+			return nil, err
+		}
+		if slices.ContainsFunc(pkg.Definitions, func(d defs.Definition) bool {
+			return bounds.Operations == nil || bounds.Operations.Matches(d.Operation)
+		}) {
+			out = append(out, row.ID)
+		}
+	}
+	return out, nil
+}
+
+// transactionsOn lists the newest transactions on the connection by the
+// agents' runs, among the agents the caller holds evidence.read over.
+func (r *readers) transactionsOn(ctx context.Context, connection ids.UUID, agents []ids.UUID) ([]ids.UUID, error) {
+	readable, err := r.holding(ctx, td.PermEvidenceRead, agents)
+	if err != nil || len(readable) == 0 {
+		return nil, err
+	}
+	return r.q.CoverageRecentTransactionsOfConnection(ctx, dbq.CoverageRecentTransactionsOfConnectionParams{
+		OrgID: r.c.Org, ConnectionID: &connection, AgentIds: readable, MaxRows: MaxAccessTransactions,
+	})
 }
 
 // agentsOf lists the agents with coverage on a connection that the caller

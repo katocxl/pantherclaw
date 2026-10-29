@@ -51,6 +51,8 @@
 {{end}}{{end}}</tbody>
 </table>
 {{end}}
+{{range .Display.Consequence.ConditionLimits}}<p class="note">{{.}}</p>
+{{end}}
 {{with .Display.Run}}
 <h2>The run</h2>
 <dl>
