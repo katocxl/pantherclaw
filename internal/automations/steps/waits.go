@@ -236,8 +236,7 @@ func downstream(ctx context.Context, qq *dbq.Queries, sc autodomain.StepContext,
 		active = r.EffectiveState == "ACTIVE"
 	}
 	state, reason := downstreamOutcome(c, want, active, timedOut)
-	switch state {
-	case autodomain.StepDone:
+	if state == autodomain.StepDone {
 		txs, err := qq.RunDownstreamConfirmed(ctx, sc.Org, run, op)
 		if err != nil {
 			return autodomain.StepResult{}, err
@@ -247,9 +246,11 @@ func downstream(ctx context.Context, qq *dbq.Queries, sc autodomain.StepContext,
 			refs = append(refs, ref(reflexdomain.EvidenceTransaction, id))
 		}
 		return autodomain.StepResult{State: state, Effect: autodomain.EffectNone, Output: out, Refs: refs}, nil
-	case autodomain.StepWaiting:
+	}
+	if state == autodomain.StepWaiting {
 		return autodomain.StepResult{State: state, Effect: autodomain.EffectNone, Output: out, WakeAt: sc.Now.Add(engine.PollInterval)}, nil
-	case autodomain.StepUnknown:
+	}
+	if state == autodomain.StepUnknown {
 		// The actions already happened; what followed them is not known,
 		// so the execution waits for a person, never retried or continued.
 		out[engine.OutputIrreversible] = "true"
