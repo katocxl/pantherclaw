@@ -279,13 +279,18 @@ func tokenOrg(token string) ids.OrgID {
 	return id.Org
 }
 
-// attestation maps the request's attestation to its preset.
+// attestation maps the request's attestation to its preset. A kind with no
+// preset maps to no kind, which attestation refuses (HR-465): it is never
+// defaulted to one.
 func attestation(a *pantherclawv1.Attestation) *app.Attestation {
 	if a == nil {
 		return nil
 	}
-	kind := issuers.KindGitHub
-	if a.GetKind() == pantherclawv1.AttestationKind_ATTESTATION_KIND_KUBERNETES {
+	var kind issuers.Kind
+	switch a.GetKind() {
+	case pantherclawv1.AttestationKind_ATTESTATION_KIND_GITHUB_ACTIONS:
+		kind = issuers.KindGitHub
+	case pantherclawv1.AttestationKind_ATTESTATION_KIND_KUBERNETES:
 		kind = issuers.KindKubernetes
 	}
 	return &app.Attestation{Kind: kind, Token: a.GetToken()}

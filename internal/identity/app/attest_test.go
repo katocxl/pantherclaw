@@ -4,12 +4,14 @@
 package app
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"strings"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	"github.com/katocxl/pantherclaw/internal/identity/issuers"
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -62,5 +64,19 @@ func TestHR147_EnrollmentPicksOneAgentsEntry(t *testing.T) {
 	}
 	if _, err := choose([]attested{elsewhere}, &a1); err == nil {
 		t.Fatal("matched another agent's entry")
+	}
+}
+
+// TestHR465_UnknownAttestationKindsAreRefused: a kind with no preset is
+// refused before any entry, issuer or cluster is consulted, never mapped to
+// a default preset.
+// Covers: PN-002.3
+func TestHR465_UnknownAttestationKindsAreRefused(t *testing.T) {
+	s := &Service{} // no pool: a refusal must come before any lookup
+	for _, k := range []issuers.Kind{"", "oidc", "GITHUB_ACTIONS", "github_actions "} {
+		_, err := s.attest(context.Background(), ids.New[ids.Org](), Attestation{Kind: k, Token: unsigned(`{}`)})
+		if !errors.Is(err, pap.Err(pap.CodeAttestationLow)) {
+			t.Errorf("kind %q: %v, want attestation_insufficient", k, err)
+		}
 	}
 }

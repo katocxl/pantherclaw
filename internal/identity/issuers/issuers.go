@@ -31,6 +31,13 @@ const (
 	KindKubernetes Kind = "kubernetes"
 )
 
+// kinds are the presets this build implements.
+var kinds = []Kind{KindGitHub, KindKubernetes}
+
+// Known reports whether k is a preset this build implements. Anything else
+// is refused, never mapped to a default preset (HR-465).
+func Known(k Kind) bool { return slices.Contains(kinds, k) }
+
 // MaxTokenLifetime bounds exp - iat of an attestation token (HR-143).
 const MaxTokenLifetime = time.Hour
 

@@ -6,6 +6,8 @@ package issuerkeys_test
 import (
 	"context"
 	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -184,5 +186,90 @@ func TestHR142_KeySourcesAreConstrained(t *testing.T) {
 	}
 	if _, err := issuerkeys.New(http.DefaultClient, "http://token.actions.githubusercontent.com", nil); err == nil { //nolint:forbidigo // the client is never used
 		t.Error("accepted an http issuer")
+	}
+}
+
+// ecToken signs header and payload with ES256 (raw r||s).
+func ecToken(t *testing.T, key *ecdsa.PrivateKey, header string) string {
+	t.Helper()
+	signing := b64([]byte(header)) + "." + b64([]byte(`{"sub":"spiffe://example.org/agent"}`))
+	sum := sha256.Sum256([]byte(signing))
+	r, s, err := ecdsa.Sign(rand.Reader, key, sum[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig := make([]byte, 64)
+	r.FillBytes(sig[:32])
+	s.FillBytes(sig[32:])
+	return signing + "." + b64(sig)
+}
+
+func ecJWKS(key *ecdsa.PrivateKey, kid, use string) string {
+	x, y := make([]byte, 32), make([]byte, 32)
+	key.X.FillBytes(x)
+	key.Y.FillBytes(y)
+	return `{"kty":"EC","crv":"P-256","kid":"` + kid + `","use":"` + use + `","x":"` + b64(x) + `","y":"` + b64(y) + `"}`
+}
+
+// TestHR142_PresetsChooseAlgorithmsUsesAndKeySources: the preset, never the
+// token, decides the algorithms, key uses and header members (D118); a
+// static key set is never fetched and a pinned JWKS URL replaces discovery.
+// Covers: PN-002.3
+func TestHR142_PresetsChooseAlgorithmsUsesAndKeySources(t *testing.T) {
+	ctx := context.Background()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	static := []byte(`{"spiffe_sequence":3,"keys":[` + ecJWKS(key, "j1", "jwt-svid") + `,` + ecJWKS(other, "x1", "x509-svid") + `]}`)
+	spiffe := issuerkeys.Config{
+		StaticJWKS: static, Algorithms: []string{"ES256", "RS256"}, Uses: []string{"jwt-svid"},
+		Header: []string{"alg", "kid", "typ"}, Types: []string{"JWT", "JOSE"},
+	}
+	f, err := issuerkeys.NewFetcher(nil, spiffe, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Verify(ctx, ecToken(t, key, `{"alg":"ES256","kid":"j1","typ":"JWT"}`)); err != nil {
+		t.Fatalf("ES256 with a jwt-svid key: %v", err)
+	}
+	for name, tok := range map[string]string{
+		"x509-svid key":       ecToken(t, other, `{"alg":"ES256","kid":"x1"}`),
+		"typ not allowed":     ecToken(t, key, `{"alg":"ES256","kid":"j1","typ":"at+jwt"}`),
+		"x5t not allowed":     ecToken(t, key, `{"alg":"ES256","kid":"j1","x5t":"abc"}`),
+		"RS256 on an EC key":  ecToken(t, key, `{"alg":"RS256","kid":"j1"}`),
+		"ES384 not in preset": ecToken(t, key, `{"alg":"ES384","kid":"j1"}`),
+		"wrong key under kid": ecToken(t, other, `{"alg":"ES256","kid":"j1"}`),
+	} {
+		if _, err := f.Verify(ctx, tok); err == nil {
+			t.Errorf("%s: verified", name)
+		}
+	}
+	// A sig-only preset ignores jwt-svid keys; a set with no usable key is refused.
+	if _, err := issuerkeys.NewFetcher(nil, issuerkeys.Config{StaticJWKS: static, Algorithms: []string{"ES256"}}, nil); err == nil {
+		t.Error("a sig preset accepted a set holding only SPIFFE keys")
+	}
+	if _, err := issuerkeys.NewFetcher(nil, issuerkeys.Config{StaticJWKS: static, Algorithms: []string{"HS256"}}, nil); err == nil {
+		t.Error("accepted a symmetric algorithm")
+	}
+	if _, err := issuerkeys.NewFetcher(nil, issuerkeys.Config{JWKSURL: "http://www.googleapis.com/oauth2/v3/certs"}, nil); err == nil {
+		t.Error("accepted an http JWKS URL")
+	}
+
+	// A pinned JWKS URL is fetched directly, with no discovery document.
+	is := newIssuer(t, 2048)
+	clk := &fakeClock{t: time.Unix(1791457200, 0)}
+	pinned, err := issuerkeys.NewFetcher(is.client(true), issuerkeys.Config{JWKSURL: is.srv.URL + "/jwks"}, clk.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pinned.Verify(ctx, is.token(t, goodHeader)); err != nil || is.jwksHits.Load() != 1 {
+		t.Fatalf("pinned JWKS URL: %v (%d fetches)", err, is.jwksHits.Load())
+	}
+	// It is still fetched only through the egress guards.
+	guarded, _ := issuerkeys.NewFetcher(is.client(false), issuerkeys.Config{JWKSURL: is.srv.URL + "/jwks"}, clk.now)
+	if _, err := guarded.Verify(ctx, is.token(t, goodHeader)); err == nil {
+		t.Error("fetched a pinned JWKS from a loopback address without an allowed prefix")
 	}
 }

@@ -28,10 +28,11 @@ type Attestation struct {
 	Token string
 }
 
-// GitHubVerifier checks a GitHub Actions OIDC token's signature with the
-// issuer's published keys and returns its payload (issuerkeys.Fetcher).
-type GitHubVerifier interface {
-	Verify(ctx context.Context, compact string) ([]byte, error)
+// Verifier checks one preset's attestation token with its issuer's keys
+// and returns the payload the issuer signed (issuerkeys.Fetcher). The
+// preset's claims are checked afterwards, by the issuers package.
+type Verifier interface {
+	Verify(ctx context.Context, token string) ([]byte, error)
 }
 
 // ClusterReviewer asks a configured cluster's API server (kube.Client).
@@ -43,7 +44,7 @@ type ClusterReviewer interface {
 // Attestors verify attestation tokens. A preset without its verifier
 // refuses every attestation (fail closed).
 type Attestors struct {
-	GitHub GitHubVerifier
+	GitHub Verifier
 	// Kube calls the clusters that Clusters allows for an org.
 	Kube     ClusterReviewer
 	Clusters Clusters
@@ -141,6 +142,10 @@ type attested struct {
 // attestation, after this verification (HR-143). An issuer or cluster
 // that cannot answer refuses the attestation (fail closed).
 func (s *Service) attest(ctx context.Context, org ids.OrgID, a Attestation) ([]attested, error) {
+	if !issuers.Known(a.Kind) {
+		// An unknown kind is refused, never mapped to a preset (HR-465).
+		return nil, attErr(fmt.Errorf("unknown preset %q", a.Kind))
+	}
 	if len(a.Token) > maxAttestation {
 		return nil, attErr(errors.New("token too large"))
 	}
