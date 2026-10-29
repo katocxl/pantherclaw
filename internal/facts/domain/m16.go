@@ -89,6 +89,8 @@ func (p Provider) validDeclaration(d Declaration) error {
 		return invalid("provider: fact %q has unknown kind %q", d.Name, d.Kind)
 	case d.Kind.Of() == KindClassification && d.Type != TypeIdentifier:
 		return invalid("provider: classification fact %q is an identifier whose value is a data class", d.Name)
+	case CELName(d.Name) == CELName(NameClassification) && d.Kind.Of() != KindClassification:
+		return invalid("provider: %q is a classification and needs the classification kind", d.Name)
 	case reservedFor(d.Name) && !p.Builtin:
 		return invalid("provider: %q is written only by PantherClaw's own signals receiver", d.Name)
 	}

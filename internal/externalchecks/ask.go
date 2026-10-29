@@ -141,7 +141,7 @@ func Body(org ids.OrgID, in pipeline.ExternalInput) ([]byte, error) {
 		Version: InputVersion, Org: org.String(), Operation: in.Operation, Access: in.Access,
 		Target: target{Type: in.Target.Type, ID: in.Target.ID}, Destinations: dests, DestinationClass: in.DestinationClass,
 		Principal: principal{Agent: in.Agent, Instance: in.Instance, Run: in.Run, RepresentedUser: in.RepresentedUser},
-		Mode: in.Mode, Params: params,
+		Mode:      in.Mode, Params: params,
 	}}, json.Deterministic(true))
 }
 

@@ -701,7 +701,7 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 		return
 	}
 	s.policy = pol
-	if !p.identityRisk(ctx, s) { // G0 M16 D82 (risk.go)
+	if !p.identityRisk(ctx, s) || !p.classify(ctx, s) { // G0 M16 D82 (risk.go), D80 (classification.go)
 		return
 	}
 	var reqs []fdomain.Requirement
