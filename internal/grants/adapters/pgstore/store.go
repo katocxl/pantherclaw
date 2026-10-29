@@ -118,6 +118,7 @@ type grantRow struct {
 	Bounds, Requirements, Limits                []byte
 	RevisedAt                                   time.Time
 	Ceiling, Execution                          *ids.UUID
+	Flows                                       []byte
 }
 
 func toGrant(org ids.OrgID, r grantRow) (domain.Grant, error) {
@@ -133,10 +134,14 @@ func toGrant(org ids.OrgID, r grantRow) (domain.Grant, error) {
 	if err != nil {
 		return domain.Grant{}, fmt.Errorf("grants: stored limits: %w", err)
 	}
+	flows, err := domain.DecodeFlows(r.Flows)
+	if err != nil {
+		return domain.Grant{}, fmt.Errorf("grants: stored flows: %w", err)
+	}
 	g := domain.Grant{
 		Org: org, Revision: int(r.CurrentRevision), State: domain.State(r.State),
 		AgentID: r.AgentID, Principal: principalOf(r.PrincipalUserID, r.PrincipalSaID), EnvironmentID: r.EnvironmentID,
-		TaskRef: r.TaskRef, NotBefore: r.NotBefore, ExpiresAt: r.ExpiresAt, Bounds: b, Requirements: reqs, Limits: lim,
+		TaskRef: r.TaskRef, NotBefore: r.NotBefore, ExpiresAt: r.ExpiresAt, Bounds: b, Requirements: reqs, Limits: lim, Flows: flows,
 		Delegation:     domain.Delegation{Depth: int(r.DelegationDepth), MaxChildren: int(r.MaxChildren)},
 		MinAttestation: int(r.MinAtt), Depth: int(r.Depth),
 		Grantor: domain.Principal{Kind: domain.PrincipalKind(r.GrantorKind), ID: r.GrantorID}, Basis: r.Basis,
@@ -167,7 +172,7 @@ func fromGetGrant(r dbq.GetGrantRow) grantRow {
 		r.ID, r.AgentID, r.EnvironmentID, r.GrantorID, r.InstanceID, r.PrincipalUserID, r.PrincipalSaID, r.ParentID,
 		r.Depth, r.DelegationDepth, r.MaxChildren, r.MinAttestation, r.State, r.GrantorKind, r.Basis, r.TaskRef,
 		r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt, r.CeilingID,
-		r.AutomationExecutionID,
+		r.AutomationExecutionID, r.Flows,
 	}
 }
 
@@ -176,7 +181,7 @@ func fromChain(r dbq.GetGrantChainRow) grantRow {
 		r.ID, r.AgentID, r.EnvironmentID, r.GrantorID, r.InstanceID, r.PrincipalUserID, r.PrincipalSaID, r.ParentID,
 		r.Depth, r.DelegationDepth, r.MaxChildren, r.MinAttestation, r.State, r.GrantorKind, r.Basis, r.TaskRef,
 		r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt, r.CeilingID,
-		r.AutomationExecutionID,
+		r.AutomationExecutionID, r.Flows,
 	}
 }
 
@@ -335,7 +340,7 @@ func (s *Store) ListGrants(ctx context.Context, org ids.OrgID, f app.GrantFilter
 			g, err := toGrant(org, grantRow{
 				r.ID, r.AgentID, r.EnvironmentID, r.GrantorID, r.InstanceID, r.PrincipalUserID, r.PrincipalSaID, r.ParentID,
 				r.Depth, r.DelegationDepth, r.MaxChildren, r.MinAttestation, r.State, r.GrantorKind, r.Basis, r.TaskRef,
-				r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt, nil, nil,
+				r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt, nil, nil, r.Flows,
 			})
 			if err != nil {
 				return err
@@ -482,6 +487,10 @@ func insertGrant(ctx context.Context, q *dbq.Queries, org ids.OrgID, g domain.Gr
 	if err != nil {
 		return err
 	}
+	flows, err := domain.EncodeFlows(g.Flows)
+	if err != nil {
+		return err
+	}
 	user, sa := principalCols(g.Principal)
 	if g.Revision == 1 {
 		var parent *ids.UUID
@@ -502,7 +511,7 @@ func insertGrant(ctx context.Context, q *dbq.Queries, org ids.OrgID, g domain.Gr
 		OrgID: org, ID: ids.NewV7(), GrantID: g.ID.UUID(), Revision: int32(g.Revision), TaskRef: g.TaskRef, //nolint:gosec // small
 		NotBefore: g.NotBefore, ExpiresAt: g.ExpiresAt, Bounds: enc.bounds, Requirements: enc.requirements, Limits: enc.limits,
 		DelegationDepth: int16(g.Delegation.Depth), MaxChildren: int16(g.Delegation.MaxChildren), //nolint:gosec // validated
-		MinAttestation: int16(g.MinAttestation), Widens: widens, CreatedBy: createdBy, //nolint:gosec // 0..2
+		MinAttestation: int16(g.MinAttestation), Widens: widens, CreatedBy: createdBy, Flows: flows, //nolint:gosec // 0..2
 	})
 }
 

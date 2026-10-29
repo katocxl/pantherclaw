@@ -125,7 +125,7 @@ func (a *Authority) receipt(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, e
 	for _, f := range ev.PayloadFindings {
 		pap.PayloadFindings = append(pap.PayloadFindings, ReceiptFinding{Kind: f.Kind, Location: f.Location})
 	}
-	if would, _, ok := ev.WouldUnknown(); ok {
+	if would, ok := ev.Would(); ok {
 		pap.Would = would
 	}
 	if ev.EffectiveHash != ev.ActionHash {

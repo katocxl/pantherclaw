@@ -100,6 +100,7 @@ type Reads struct {
 	Holds        []Hold        `json:"holds,omitzero"`
 	Variants     []Variants    `json:"variants,omitzero"`
 	HoldSettings *HoldSettings `json:"hold_settings,omitzero"`
+	Sensitive    *Sensitive    `json:"sensitive_reads,omitzero"`
 }
 
 // Containment is the org's containment state and the database time: the
@@ -249,6 +250,9 @@ type Grant struct {
 	Grantor         string         `json:"grantor,omitzero"`
 	Basis           string         `json:"basis,omitzero"`
 	RevisedAt       time.Time      `json:"revised_at,omitzero"`
+	// Flows are the grant's data flows (G0 M16 D75); none in recordings
+	// made before them, as no grant had any.
+	Flows jsontext.Value `json:"flows,omitzero"`
 }
 
 // Envelopes is a guardrails read for the scopes asked for.
@@ -419,6 +423,25 @@ type Variants struct {
 type HoldSettings struct {
 	HoldDeadlineNS int64  `json:"hold_deadline_ns,omitzero"`
 	Err            string `json:"err,omitzero"`
+}
+
+// Sensitive is the read of the run tree's sensitive reads (G0 M16 D73):
+// classes and ids, never content (HR-434). Recordings made before it have
+// none and replay as they did (no read class was recorded then), so the
+// format and pipeline versions are unchanged.
+type Sensitive struct {
+	Run   string          `json:"run"`
+	Reads []SensitiveRead `json:"reads,omitzero"`
+	Err   string          `json:"err,omitzero"`
+}
+
+// SensitiveRead is one sensitive read.
+type SensitiveRead struct {
+	Transaction string    `json:"transaction"`
+	Run         string    `json:"run"`
+	Operation   string    `json:"operation"`
+	Class       string    `json:"class"`
+	At          time.Time `json:"at"`
 }
 
 // Encode returns the recording's deterministic JSON: members in a fixed

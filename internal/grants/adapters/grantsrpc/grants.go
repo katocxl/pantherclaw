@@ -136,7 +136,7 @@ func GrantProto(g domain.Grant) (*pantherclawv1.Grant, error) {
 			Depth: int32(g.Delegation.Depth), MaxChildren: int32(g.Delegation.MaxChildren), //nolint:gosec // validated
 		},
 		MinAttestationLevel: int32(g.MinAttestation), Depth: int32(g.Depth), //nolint:gosec // 0..4
-		Grantor: actor(g.Grantor), Basis: g.Basis, CreateTime: ts(g.RevisedAt),
+		Grantor: actor(g.Grantor), Basis: g.Basis, CreateTime: ts(g.RevisedAt), Flows: FlowsProto(g.Flows),
 	}
 	if !g.InstanceID.IsZero() {
 		out.InstanceId = g.InstanceID.String()
@@ -164,7 +164,7 @@ func (s *Grants) IssueGrant(ctx context.Context, req *pantherclawv1.IssueGrantRe
 	in := app.IssueRequest{
 		AgentID: agent, Principal: p, TaskRef: req.GetTaskRef(), ExpiresAt: req.GetExpireTime().AsTime(),
 		Bounds: t.Bounds, Requirements: t.Requirements, Limits: t.Limits, Delegation: delegation(req.GetDelegation()),
-		MinAttestation: int(req.GetMinAttestationLevel()),
+		MinAttestation: int(req.GetMinAttestationLevel()), Flows: Flows(req.GetFlows()),
 	}
 	if req.InstanceId != nil {
 		if in.InstanceID, err = parseID(req.GetInstanceId()); err != nil {
@@ -198,7 +198,7 @@ func (s *Grants) ReviseGrant(ctx context.Context, req *pantherclawv1.ReviseGrant
 	in := app.ReviseRequest{
 		ID: id, Revision: int(req.GetRevision()), TaskRef: req.GetTaskRef(),
 		Bounds: t.Bounds, Requirements: t.Requirements, Limits: t.Limits, Delegation: delegation(req.GetDelegation()),
-		MinAttestation: int(req.GetMinAttestationLevel()),
+		MinAttestation: int(req.GetMinAttestationLevel()), Flows: Flows(req.GetFlows()),
 	}
 	if req.GetExpireTime() != nil {
 		in.ExpiresAt = req.GetExpireTime().AsTime()

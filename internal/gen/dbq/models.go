@@ -2083,6 +2083,7 @@ type PcGrantRevision struct {
 	Widens          bool
 	CreatedBy       string
 	CreatedAt       time.Time
+	Flows           []byte
 }
 
 type PcHoldSlot struct {
@@ -3498,6 +3499,7 @@ type PcTransaction struct {
 	Simulated           bool
 	DecidedVia          *string
 	EnforcementPointID  *ids.UUID
+	ReadClass           *string
 }
 
 type PcTransactionLink struct {

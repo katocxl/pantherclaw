@@ -294,7 +294,21 @@ type Reader interface {
 		[]apdomain.VariantLine, []apdomain.ContextLine, error)
 	// HoldSettings returns the org's hold settings.
 	HoldSettings(ctx context.Context, org ids.OrgID) (HoldSettings, error)
+	// SensitiveReads returns the 20 most recent pii and secret reads of the
+	// run tree that run belongs to (G0 M16 D73): every run sharing its
+	// root, newest first. Classes and ids only, never content (HR-434).
+	SensitiveReads(ctx context.Context, org ids.OrgID, run ids.UUID) ([]SensitiveRead, error)
 }
+
+// SensitiveRead is one allowed pii or secret read of a run tree (D73).
+type SensitiveRead struct {
+	TransactionID, RunID ids.UUID
+	Operation, Class     string
+	At                   time.Time
+}
+
+// MaxSensitiveReads is how many sensitive reads SensitiveReads returns.
+const MaxSensitiveReads = 20
 
 // Snapshotter is a Reader that can serve every read of one evaluation from
 // one snapshot of the org: one read-only transaction instead of one per
