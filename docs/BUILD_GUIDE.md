@@ -683,6 +683,16 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Pulled from M13:** PN-012.2 (per-organization entitlements and plan limits), PN-012.3 (invitations accepted in the browser), F322, F325, F335 (UI part), F336, F341. **Stays in M13:** hosted staging and production infrastructure, backups and the DR drill, rate limits and quotas, support access, data export and deletion, the Helm chart, the FIPS build, post-quantum TLS, SLOs under load, Schemathesis, the threat-model refresh (G4), the docs site and the OpenTelemetry exporter.
 - Migrations `00160`–`00164`, the last one `pc.billing_links` (server-recorded checkouts and subscriptions, one current subscription per organization) (`00165`–`00168` spare; `00169` became M13's platform migration, G0 M13 D40).
 
+### M20 — Integrations breadth
+**HR:** HR-510..529 · **PN:** PN-018, PN-017.3 · **F:** F517, F424, F756, F545, F161 · **ADR:** 0042 · **G0:** [g0/M20.md](g0/M20.md).
+- **Ed25519 webhooks** (founder decision G13, [ADR-0042](adr/0042-integrations-breadth.md)): one `webhooks` key per organization in a per-org JWKS; a destination that opts in receives `v1a,` next to `v1,`, and HMAC stays the default and is always sent; a rotated key verifies for 24 hours.
+- **Export destinations** (F517, Business): HTTPS PUT and S3-compatible destinations for packs, proof bundles and organization exports, activated with a step-up through the egress guards; a delivery receipt per push, streamed parts above 2 GiB, signed removal notices; SigV4 in-house.
+- **Target-confirmed rotation** (F424, G14): a GitHub App key is sealed as a candidate, tested at GitHub through a gateway lease, activated as a Custody protected change with a step-up, and the old key is revoked only when GitHub refuses it; rollback until confirmation.
+- **Connectors** (F756, G12, Team): GitLab, Jira, Microsoft Teams (Bot Framework, `oauth_client` credentials) and AWS (ECS deploys and IAM reads, `aws_sigv4` AssumeRole sessions), each with facts and a simulator; a validated package `coverage:` block; fixed mapping headers and AWS encodings.
+- **Ticket sync** (F545, G15, Business): Jira cases and incidents synced through gateway leases with one owner per field; a ticket status never restores authority.
+- **Approval channels** (F161, PN-017.3): Slack direct messages and Teams cards to eligible deciders, link only.
+- Migrations `00236`–`00244` (`00240` only if needed, `00245` spare); no new permissions.
+
 ---
 
 ## 9. CI/CD summary
