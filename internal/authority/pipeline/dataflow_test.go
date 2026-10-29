@@ -219,3 +219,21 @@ func TestHR434_TheHoldNamesClassesAndTransactionsNeverContent(t *testing.T) {
 		}
 	}
 }
+
+// TestHR431_AVersion4ReplayNeitherReadsNorHolds (G0 M16 D95): replaying a
+// version 4 recording, the pipeline does not read the run tree's history
+// and does not hold, so it decides as version 4 did; version 5 holds.
+func TestHR431_AVersion4ReplayNeitherReadsNorHolds(t *testing.T) {
+	f, gw, c := dataFlowFx(t, pipeline.ModeEnforce)
+	f.w.AddSensitiveRead(sensitiveRead(f.run, "pii"))
+	f.p.ReplayOf = 5
+	expect(t, f.disclose(f.run, gw, c, slackChannel), adomain.RequireApproval, pipeline.ReasonDataFlowHold)
+
+	f.p.ReplayOf = 4
+	f.w.Fail = map[string]bool{"SensitiveReads": true}
+	ev := f.disclose(f.run, gw, c, slackChannel)
+	expect(t, ev, adomain.Allow, pipeline.ReasonGrantCovers)
+	if _, ok := ev.Would(); ok {
+		t.Fatal("a version 4 replay reports a would-hold")
+	}
+}

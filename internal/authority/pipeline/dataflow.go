@@ -135,7 +135,8 @@ func (s *state) externalDisclosure() bool {
 // Approval binds the action as any requirement does; in monitor mode the
 // evaluation records the would-hold (Would, HR-433).
 func (p *Pipeline) dataFlow(ctx context.Context, s *state) {
-	if !s.externalDisclosure() {
+	// A version 4 recording neither read the history nor held (D95).
+	if !p.at(5) || !s.externalDisclosure() {
 		return
 	}
 	reads, err := p.Reader.SensitiveReads(ctx, s.req.Org, s.ev.RunID)

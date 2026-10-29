@@ -22,7 +22,8 @@ package pipeline
 //
 // 5: step 6 reads the identity-risk facts a policy using `principal` needs,
 // and step 7 asks the org's active external policy checks (G0 M16 D81,
-// D82), whose answers a recording does not hold.
+// D82), whose answers a recording does not hold. Step 7 also reads the run
+// tree's sensitive reads for the data-flow hold (D73, D76).
 const Version = 5
 
 // Replays reports whether this code replays inputs recorded by pipeline

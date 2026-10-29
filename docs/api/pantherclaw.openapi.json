@@ -54908,9 +54908,11 @@
           "kind": {
             "type": "string",
             "title": "kind",
-            "maxLength": 512,
-            "minLength": 1,
-            "description": "Destination kind."
+            "enum": [
+              "internal",
+              "external"
+            ],
+            "description": "Destination kind: \"internal\" or \"external\", as in the ActionIR."
           },
           "id": {
             "type": "string",
@@ -54930,9 +54932,11 @@
           "kind": {
             "type": "string",
             "title": "kind",
-            "maxLength": 512,
-            "minLength": 1,
-            "description": "Destination kind."
+            "enum": [
+              "internal",
+              "external"
+            ],
+            "description": "Destination kind: \"internal\" or \"external\", as in the ActionIR."
           },
           "id": {
             "type": "string",
