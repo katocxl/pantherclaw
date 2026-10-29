@@ -484,7 +484,7 @@
 
 | ID | Rule | Threats | MS |
 |---|---|---|---|
-| HR-430 | An allowed read records its data class (`read_class`), taken from the package's declared response classes, capped by a `data_classes` obligation, and raised by a classification fact; a fact or obligation never lowers it below what the package declares. | T-190, T-191 | M16 |
+| HR-430 | An allowed read records its data class (`read_class`): the strictest class the package declares for its response, capped by the decision's `data_classes` obligation when there is one, and raised, never lowered, by a classification fact. | T-190, T-191 | M16 |
 | HR-431 | An external disclosure (a write to a `public` destination or with a predicted `external_disclosure` effect) after a `pii` or `secret` read anywhere in the same run tree is held for approval (`DATA_FLOW_HOLD`) unless one flow allowance of the grant covers every sensitive class read and every destination of the action. | T-190 | M16 |
 | HR-432 | Flow allowances only narrow under delegation: each child allowance must be covered by one parent allowance (classes and destinations), and a grant without flows allows no flow. | T-197 | M16 |
 | HR-433 | In monitor mode a data-flow hold is recorded as a would-HOLD with the code `DATA_FLOW_HOLD`. | T-190 | M16 |
