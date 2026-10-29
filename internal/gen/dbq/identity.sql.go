@@ -599,7 +599,7 @@ const insertGatewayDiscovery = `-- name: InsertGatewayDiscovery :one
 INSERT INTO pc.discoveries (org_id, id, agent_id, source, key_jkt, public_jwk, observed)
 VALUES ($1, $2, $3, 'gateway', $4, $5,
     $6)
-RETURNING org_id, id, agent_id, source, key_jkt, public_jwk, scan_key, state, observed, seen_count, first_seen_at, last_seen_at, missed_scans, last_scan_run, scan_scope, vanish_notified_at
+RETURNING org_id, id, agent_id, source, key_jkt, public_jwk, scan_key, state, observed, seen_count, first_seen_at, last_seen_at, missed_scans, last_scan_run, scan_scope, vanish_notified_at, scan_principal
 `
 
 type InsertGatewayDiscoveryParams struct {
@@ -638,6 +638,7 @@ func (q *Queries) InsertGatewayDiscovery(ctx context.Context, arg InsertGatewayD
 		&i.LastScanRun,
 		&i.ScanScope,
 		&i.VanishNotifiedAt,
+		&i.ScanPrincipal,
 	)
 	return i, err
 }

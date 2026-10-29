@@ -160,8 +160,8 @@ func TestHR459_OnlyACompleteScanCountsAMiss(t *testing.T) {
 	// record all it saw, so it counts nothing.
 	w.exec(t, w.org, `INSERT INTO pc.agents (org_id, id, name, state, created_by)
 		SELECT $1, gen_random_uuid(), 'filler', 'DISCOVERED', 'test' FROM generate_series(1, $2)`, w.org, app.MaxOpenScanDiscoveries)
-	w.exec(t, w.org, `INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, scan_scope, observed)
-		SELECT $1, gen_random_uuid(), a.id, 'ci_scan', sha256(a.id::text::bytea), 'filler', '{}' FROM pc.agents a
+	w.exec(t, w.org, `INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, scan_scope, scan_principal, observed)
+		SELECT $1, gen_random_uuid(), a.id, 'ci_scan', sha256(a.id::text::bytea), 'filler', 'filler', '{}' FROM pc.agents a
 		WHERE a.org_id = $1 AND a.name = 'filler'`, w.org)
 	r, err := w.inv.SubmitScan(ci, "runner", []app.ScanFinding{server("new", "stdio")}, app.ScanMode{Scope: scope, Complete: true})
 	if err != nil || r.Dropped != 1 || r.Missed != 0 {
@@ -224,12 +224,12 @@ func TestHR460_MaterialChangeOnClaimedDiscoveryIsRecorded(t *testing.T) {
 			got = &ch[i]
 		}
 	}
-	if got == nil || got.Details["before.transport"] != "stdio" || got.Details["after.transport"] != "http" ||
-		got.Details["before.url_host"] != "(none)" || got.Details["after.url_host"] != "evil.example" {
+	if got == nil || got.Details["untrusted.before.transport"] != "stdio" || got.Details["untrusted.after.transport"] != "http" ||
+		got.Details["untrusted.before.url_host"] != "(none)" || got.Details["untrusted.after.url_host"] != "evil.example" {
 		t.Fatalf("change %+v", got)
 	}
 	for k := range got.Details {
-		if k == "before.client" || k == "after.client" || k == "before.name" {
+		if k == "untrusted.before.client" || k == "untrusted.after.client" || k == "untrusted.before.name" {
 			t.Errorf("a non-material key was recorded: %s", k)
 		}
 	}
@@ -240,5 +240,31 @@ func TestHR460_MaterialChangeOnClaimedDiscoveryIsRecorded(t *testing.T) {
 	}
 	if got := w.count(t, "SELECT count(*) FROM pc.agents WHERE org_id = $1 AND id = $2 AND state = 'CLAIMED'", w.org, agent); got != 1 {
 		t.Error("the claimed agent changed state")
+	}
+}
+
+// TestHR459_DismissedDiscoveriesCountNoMiss: a discovery people dismissed
+// never counts a miss and is never announced as vanished (D136).
+// Covers: PN-001.3
+func TestHR459_DismissedDiscoveriesCountNoMiss(t *testing.T) {
+	w := newWorld(t)
+	n := &notices{}
+	w.inv.WithNotify(n)
+	ci := as(w.org, td.KindServiceAccount, bind(td.RoleAgentOwner, td.ScopeOrg, w.org.UUID()))
+	repo := app.ScanMode{Scope: "acme/payments", Complete: true}
+	if _, err := w.inv.SubmitScan(ci, "runner", []app.ScanFinding{server("keep", "stdio"), server("set-aside", "stdio")}, repo); err != nil {
+		t.Fatal(err)
+	}
+	w.exec(t, w.org, "UPDATE pc.discoveries SET state = 'DISMISSED' WHERE org_id = $1 AND observed ->> 'name' = 'set-aside'", w.org)
+	for range 4 {
+		if r, err := w.inv.SubmitScan(ci, "runner", []app.ScanFinding{server("keep", "stdio")}, repo); err != nil || r.Missed != 0 {
+			t.Fatalf("%+v %v", r, err)
+		}
+	}
+	if got := w.count(t, "SELECT missed_scans FROM pc.discoveries WHERE org_id = $1 AND observed ->> 'name' = 'set-aside'", w.org); got != 0 {
+		t.Errorf("a dismissed discovery counted %d misses", got)
+	}
+	if len(n.msgs) != 0 {
+		t.Errorf("notices %+v", n.msgs)
 	}
 }

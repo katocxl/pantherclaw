@@ -181,9 +181,9 @@ WHERE org_id = sqlc.arg(org_id) AND scan_key = sqlc.arg(scan_key) AND source = s
 -- name: InsertScanDiscovery :one
 -- A local scan's (source scan) or a gateway's organization scan's
 -- (github_scan) finding.
-INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed, last_scan_run, scan_scope)
+INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed, last_scan_run, scan_scope, scan_principal)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(source), sqlc.arg(scan_key), sqlc.arg(observed),
-        sqlc.narg(last_scan_run), sqlc.narg(scan_scope))
+        sqlc.narg(last_scan_run), sqlc.narg(scan_scope), sqlc.narg(scan_principal))
 RETURNING *;
 
 -- CountOpenDiscoveriesOfSource counts the open discoveries of one source:
@@ -210,12 +210,14 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'DISMISSED';
 
 -- MissOrgScanDiscoveries counts a miss for each org-scan discovery of the
 -- connection that a finished, complete run did not see, of the kinds the
--- run read in full, and returns them.
+-- run read in full, and returns them. A dismissed one counts nothing:
+-- people already set it aside.
 -- name: MissOrgScanDiscoveries :many
 UPDATE pc.discoveries
 SET missed_scans = missed_scans + 1
 WHERE org_id = sqlc.arg(org_id) AND source = 'github_scan' AND observed ->> 'connection' = sqlc.arg(connection_id)::text
   AND last_scan_run IS DISTINCT FROM sqlc.arg(run)::uuid AND observed ->> 'kind' = ANY (sqlc.arg(kinds)::text[])
+  AND state <> 'DISMISSED'
 RETURNING id, agent_id, state, observed, missed_scans, vanish_notified_at;
 
 -- MarkDiscoveryVanished records that people were told a discovery
@@ -241,10 +243,12 @@ WHERE u.org_id = sqlc.arg(org_id) AND u.state = 'ACTIVE' AND r.role = 'org_admin
 ORDER BY u.id LIMIT 50;
 
 -- MissScopeDiscoveries counts a miss for each ci_scan discovery of the
--- scope that a complete CI-mode scan did not see (D115), and returns them.
+-- scope that a complete CI-mode scan by the same principal did not see
+-- (D115, D136), and returns them. A dismissed one counts nothing.
 -- name: MissScopeDiscoveries :many
 UPDATE pc.discoveries
 SET missed_scans = missed_scans + 1
 WHERE org_id = sqlc.arg(org_id) AND source = 'ci_scan' AND scan_scope = sqlc.arg(scope)::text
-  AND last_scan_run IS DISTINCT FROM sqlc.arg(run)::uuid
+  AND scan_principal = sqlc.arg(principal)::text AND last_scan_run IS DISTINCT FROM sqlc.arg(run)::uuid
+  AND state <> 'DISMISSED'
 RETURNING id, agent_id, state, observed, missed_scans, vanish_notified_at;

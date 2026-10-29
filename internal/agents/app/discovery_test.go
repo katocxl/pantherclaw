@@ -5,6 +5,7 @@ package app
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -40,5 +41,21 @@ func TestMissedKinds(t *testing.T) {
 		if got := missedKinds(tc.scanned, tc.notScanned); !slices.Equal(got, tc.want) {
 			t.Errorf("%s: missedKinds = %v, want %v", tc.name, got, tc.want)
 		}
+	}
+}
+
+// TestChangeValueTrimsAfterCutting: a long value cut at the limit keeps
+// its text, not a trailing space that would hide it (R-474 L4).
+// Covers: PN-001.3
+func TestChangeValueTrimsAfterCutting(t *testing.T) {
+	v := strings.Repeat("a", maxChangeValue-1) + " tail"
+	if got := changeValue(v); got != strings.Repeat("a", maxChangeValue-1) {
+		t.Errorf("changeValue = %q", got)
+	}
+	if got := changeValue(""); got != "(none)" {
+		t.Errorf("empty = %q", got)
+	}
+	if got := changeValue("a‮b"); got != "(not shown)" {
+		t.Errorf("bidi = %q", got)
 	}
 }

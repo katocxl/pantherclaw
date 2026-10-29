@@ -285,7 +285,7 @@ func (q *Queries) GetAgent(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (P
 }
 
 const getAgentDiscovery = `-- name: GetAgentDiscovery :one
-SELECT org_id, id, agent_id, source, key_jkt, public_jwk, scan_key, state, observed, seen_count, first_seen_at, last_seen_at, missed_scans, last_scan_run, scan_scope, vanish_notified_at FROM pc.discoveries WHERE org_id = $1 AND agent_id = $2
+SELECT org_id, id, agent_id, source, key_jkt, public_jwk, scan_key, state, observed, seen_count, first_seen_at, last_seen_at, missed_scans, last_scan_run, scan_scope, vanish_notified_at, scan_principal FROM pc.discoveries WHERE org_id = $1 AND agent_id = $2
 ORDER BY first_seen_at LIMIT 1
 `
 
@@ -309,6 +309,7 @@ func (q *Queries) GetAgentDiscovery(ctx context.Context, orgID ids.OrgID, agentI
 		&i.LastScanRun,
 		&i.ScanScope,
 		&i.VanishNotifiedAt,
+		&i.ScanPrincipal,
 	)
 	return i, err
 }
@@ -527,21 +528,22 @@ func (q *Queries) InsertDiscoveredAgent(ctx context.Context, arg InsertDiscovere
 }
 
 const insertScanDiscovery = `-- name: InsertScanDiscovery :one
-INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed, last_scan_run, scan_scope)
+INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed, last_scan_run, scan_scope, scan_principal)
 VALUES ($1, $2, $3, $4, $5, $6,
-        $7, $8)
-RETURNING org_id, id, agent_id, source, key_jkt, public_jwk, scan_key, state, observed, seen_count, first_seen_at, last_seen_at, missed_scans, last_scan_run, scan_scope, vanish_notified_at
+        $7, $8, $9)
+RETURNING org_id, id, agent_id, source, key_jkt, public_jwk, scan_key, state, observed, seen_count, first_seen_at, last_seen_at, missed_scans, last_scan_run, scan_scope, vanish_notified_at, scan_principal
 `
 
 type InsertScanDiscoveryParams struct {
-	OrgID       ids.OrgID
-	ID          ids.UUID
-	AgentID     ids.UUID
-	Source      string
-	ScanKey     []byte
-	Observed    []byte
-	LastScanRun *ids.UUID
-	ScanScope   *string
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	AgentID       ids.UUID
+	Source        string
+	ScanKey       []byte
+	Observed      []byte
+	LastScanRun   *ids.UUID
+	ScanScope     *string
+	ScanPrincipal *string
 }
 
 // A local scan's (source scan) or a gateway's organization scan's
@@ -556,6 +558,7 @@ func (q *Queries) InsertScanDiscovery(ctx context.Context, arg InsertScanDiscove
 		arg.Observed,
 		arg.LastScanRun,
 		arg.ScanScope,
+		arg.ScanPrincipal,
 	)
 	var i PcDiscovery
 	err := row.Scan(
@@ -575,6 +578,7 @@ func (q *Queries) InsertScanDiscovery(ctx context.Context, arg InsertScanDiscove
 		&i.LastScanRun,
 		&i.ScanScope,
 		&i.VanishNotifiedAt,
+		&i.ScanPrincipal,
 	)
 	return i, err
 }
@@ -752,6 +756,7 @@ UPDATE pc.discoveries
 SET missed_scans = missed_scans + 1
 WHERE org_id = $1 AND source = 'github_scan' AND observed ->> 'connection' = $2::text
   AND last_scan_run IS DISTINCT FROM $3::uuid AND observed ->> 'kind' = ANY ($4::text[])
+  AND state <> 'DISMISSED'
 RETURNING id, agent_id, state, observed, missed_scans, vanish_notified_at
 `
 
@@ -774,7 +779,8 @@ type MissOrgScanDiscoveriesRow struct {
 // Continuous discovery (PN-001.3, D114; HR-458, HR-459).
 // MissOrgScanDiscoveries counts a miss for each org-scan discovery of the
 // connection that a finished, complete run did not see, of the kinds the
-// run read in full, and returns them.
+// run read in full, and returns them. A dismissed one counts nothing:
+// people already set it aside.
 func (q *Queries) MissOrgScanDiscoveries(ctx context.Context, arg MissOrgScanDiscoveriesParams) ([]MissOrgScanDiscoveriesRow, error) {
 	rows, err := q.db.Query(ctx, missOrgScanDiscoveries,
 		arg.OrgID,
@@ -811,9 +817,17 @@ const missScopeDiscoveries = `-- name: MissScopeDiscoveries :many
 UPDATE pc.discoveries
 SET missed_scans = missed_scans + 1
 WHERE org_id = $1 AND source = 'ci_scan' AND scan_scope = $2::text
-  AND last_scan_run IS DISTINCT FROM $3::uuid
+  AND scan_principal = $3::text AND last_scan_run IS DISTINCT FROM $4::uuid
+  AND state <> 'DISMISSED'
 RETURNING id, agent_id, state, observed, missed_scans, vanish_notified_at
 `
+
+type MissScopeDiscoveriesParams struct {
+	OrgID     ids.OrgID
+	Scope     string
+	Principal string
+	Run       ids.UUID
+}
 
 type MissScopeDiscoveriesRow struct {
 	ID               ids.UUID
@@ -825,9 +839,15 @@ type MissScopeDiscoveriesRow struct {
 }
 
 // MissScopeDiscoveries counts a miss for each ci_scan discovery of the
-// scope that a complete CI-mode scan did not see (D115), and returns them.
-func (q *Queries) MissScopeDiscoveries(ctx context.Context, orgID ids.OrgID, scope string, run ids.UUID) ([]MissScopeDiscoveriesRow, error) {
-	rows, err := q.db.Query(ctx, missScopeDiscoveries, orgID, scope, run)
+// scope that a complete CI-mode scan by the same principal did not see
+// (D115, D136), and returns them. A dismissed one counts nothing.
+func (q *Queries) MissScopeDiscoveries(ctx context.Context, arg MissScopeDiscoveriesParams) ([]MissScopeDiscoveriesRow, error) {
+	rows, err := q.db.Query(ctx, missScopeDiscoveries,
+		arg.OrgID,
+		arg.Scope,
+		arg.Principal,
+		arg.Run,
+	)
 	if err != nil {
 		return nil, err
 	}

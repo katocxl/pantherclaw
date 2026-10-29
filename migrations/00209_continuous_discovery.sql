@@ -10,12 +10,16 @@
 -- - scan_scope is a CI-mode scan's scope (a repository or host), and source
 --   ci_scan is a complete CI-mode submit: its discoveries count misses
 --   within their scope only.
+-- - scan_principal is who ran a CI-mode scan (D136): a complete scan counts
+--   misses only for the discoveries of its own scope that the same principal
+--   recorded, so one service account cannot fake another's disappearance.
 -- +goose Up
 ALTER TABLE pc.discoveries
     ADD COLUMN missed_scans integer NOT NULL DEFAULT 0 CHECK (missed_scans >= 0),
     ADD COLUMN last_scan_run uuid,
     ADD COLUMN scan_scope text CHECK (scan_scope IS NULL OR char_length(scan_scope) BETWEEN 1 AND 256),
     ADD COLUMN vanish_notified_at timestamptz,
+    ADD COLUMN scan_principal text CHECK (scan_principal IS NULL OR char_length(scan_principal) BETWEEN 1 AND 200),
     DROP CONSTRAINT discoveries_source,
     DROP CONSTRAINT discoveries_source_key,
     ADD CONSTRAINT discoveries_source CHECK (source IN ('gateway', 'scan', 'github_scan', 'ci_scan')) NOT VALID,
@@ -23,7 +27,8 @@ ALTER TABLE pc.discoveries
         (source = 'gateway' AND key_jkt IS NOT NULL AND public_jwk IS NOT NULL AND scan_key IS NULL)
         OR (source IN ('scan', 'github_scan', 'ci_scan') AND scan_key IS NOT NULL AND key_jkt IS NULL AND public_jwk IS NULL))
         NOT VALID,
-    ADD CONSTRAINT discoveries_ci_scope CHECK ((source = 'ci_scan') = (scan_scope IS NOT NULL)) NOT VALID;
+    ADD CONSTRAINT discoveries_ci_scope CHECK ((source = 'ci_scan') = (scan_scope IS NOT NULL AND scan_principal IS NOT NULL))
+        NOT VALID;
 -- Discoveries are few (open ones are capped per source and org, HR-148), so
 -- validating and indexing them holds the lock briefly.
 -- squawk-ignore constraint-missing-not-valid
@@ -33,7 +38,7 @@ ALTER TABLE pc.discoveries VALIDATE CONSTRAINT discoveries_source_key;
 -- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.discoveries VALIDATE CONSTRAINT discoveries_ci_scope;
 -- squawk-ignore require-concurrent-index-creation
-CREATE INDEX discoveries_ci_scope_idx ON pc.discoveries (org_id, scan_scope) WHERE source = 'ci_scan';
+CREATE INDEX discoveries_ci_scope_idx ON pc.discoveries (org_id, scan_scope, scan_principal) WHERE source = 'ci_scan';
 
 GRANT UPDATE (missed_scans, last_scan_run, vanish_notified_at) ON pc.discoveries TO pc_app;
 
@@ -49,6 +54,7 @@ ALTER TABLE pc.discoveries
     ADD CONSTRAINT discoveries_source_key CHECK (
         (source = 'gateway' AND key_jkt IS NOT NULL AND public_jwk IS NOT NULL AND scan_key IS NULL)
         OR (source IN ('scan', 'github_scan') AND scan_key IS NOT NULL AND key_jkt IS NULL AND public_jwk IS NULL)),
+    DROP COLUMN scan_principal,
     DROP COLUMN vanish_notified_at,
     DROP COLUMN scan_scope,
     DROP COLUMN last_scan_run,

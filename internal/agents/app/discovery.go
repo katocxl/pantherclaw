@@ -173,13 +173,13 @@ func observedKind(observed []byte) string {
 }
 
 // scopeMissed counts the misses of a complete CI-mode scan (D115): each
-// ci_scan discovery of the scope that the scan's submission did not carry
-// misses once, and one that reaches domain.VanishAfterMisses is announced
+// ci_scan discovery of the scope recorded by the same principal (D136) that
+// the scan's submission did not carry misses once, and one that reaches domain.VanishAfterMisses is announced
 // as OrgScanFinished does. It returns how many missed.
-func scopeMissed(ctx context.Context, tx db.TenantTx, q *dbq.Queries, notify Notifier, ledger evdomain.Actor, scope string,
-	run ids.UUID,
+func scopeMissed(ctx context.Context, tx db.TenantTx, q *dbq.Queries, notify Notifier, ledger evdomain.Actor, scope,
+	principal string, run ids.UUID,
 ) (int, error) {
-	missed, err := q.MissScopeDiscoveries(ctx, tx.OrgID(), scope, run)
+	missed, err := q.MissScopeDiscoveries(ctx, dbq.MissScopeDiscoveriesParams{OrgID: tx.OrgID(), Scope: scope, Principal: principal, Run: run})
 	if err != nil {
 		return 0, err
 	}
@@ -198,6 +198,10 @@ func scopeMissed(ctx context.Context, tx db.TenantTx, q *dbq.Queries, notify Not
 // maxChangeValue bounds each before and after value of a discovery change:
 // they are untrusted observations, kept short (D116).
 const maxChangeValue = 256
+
+// untrustedPrefix marks the change details that hold untrusted
+// observations, as admission evidence keeps them under "untrusted".
+const untrustedPrefix = "untrusted."
 
 // changed records and announces a material change of an open or claimed
 // discovery (D116, HR-460): the agent change carries the before and after
@@ -220,7 +224,9 @@ func (w discoverer) changed(ctx context.Context, tx db.TenantTx, q *dbq.Queries,
 			continue
 		}
 		keys = append(keys, k)
-		details["before."+k], details["after."+k] = changeValue(before[k]), changeValue(now[k])
+		// Observed values are untrusted (D116): they sit under the untrusted
+		// prefix, apart from the trusted ids and kinds.
+		details[untrustedPrefix+"before."+k], details[untrustedPrefix+"after."+k] = changeValue(before[k]), changeValue(now[k])
 	}
 	if len(keys) == 0 {
 		return nil
@@ -265,7 +271,7 @@ func (w discoverer) changed(ctx context.Context, tx db.TenantTx, q *dbq.Queries,
 // cannot hold.
 func changeValue(v string) string {
 	if utf8.RuneCountInString(v) > maxChangeValue {
-		v = string([]rune(v)[:maxChangeValue])
+		v = strings.TrimSpace(string([]rune(v)[:maxChangeValue]))
 	}
 	if !plainScope(v) {
 		if v == "" {

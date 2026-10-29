@@ -103,11 +103,14 @@ func plainScope(s string) bool {
 	return true
 }
 
-// scopedKey is a CI-mode finding's key within its scope, so the same
-// finding in two scopes is two discoveries, each missed on its own.
-func scopedKey(scope string, key [32]byte) [32]byte {
+// scopedKey is a CI-mode finding's key within its scope and the principal
+// that scanned it, so the same finding in two scopes, or scanned by two
+// principals, is two discoveries, each missed on its own (D115, D136).
+func scopedKey(principal, scope string, key [32]byte) [32]byte {
 	h := sha256.New()
 	h.Write([]byte("pantherclaw ci_scan key v1\x00"))
+	h.Write([]byte(principal))
+	h.Write([]byte{0})
 	h.Write([]byte(scope))
 	h.Write([]byte{0})
 	h.Write(key[:])
@@ -175,11 +178,12 @@ func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []Sc
 			// A CI-mode scan: its submission is its run, which misses are counted
 			// against (D115).
 			run := ids.NewV7()
-			w.run, w.scope = &run, &mode.Scope
+			principal := c.Principal.String()
+			w.run, w.scope, w.principal = &run, &mode.Scope, &principal
 		}
 		for _, f := range findings {
 			if mode.Scope != "" {
-				f.Key = scopedKey(mode.Scope, f.Key)
+				f.Key = scopedKey(*w.principal, mode.Scope, f.Key)
 			}
 			observed := maps.Clone(f.Attributes)
 			if observed == nil {
@@ -236,7 +240,7 @@ func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []Sc
 		// dropped findings did not record all it saw, so it counts nothing
 		// (HR-459).
 		if mode.Complete && res.Dropped == 0 {
-			n, err := scopeMissed(ctx, tx, q, inv.notify, c.Actor(), mode.Scope, *w.run)
+			n, err := scopeMissed(ctx, tx, q, inv.notify, c.Actor(), mode.Scope, *w.principal, *w.run)
 			if err != nil {
 				return err
 			}
@@ -272,6 +276,8 @@ type discoverer struct {
 	// against (D114); scope is a CI-mode scan's scope (D115).
 	run   *ids.UUID
 	scope *string
+	// principal is who ran a CI-mode scan (D136).
+	principal *string
 	// notify announces a material change of an open or claimed discovery
 	// (D116); nil records it without a notice.
 	notify Notifier
@@ -328,7 +334,7 @@ func insertFinding(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.
 	if reopen.IsZero() {
 		if d, err = q.InsertScanDiscovery(ctx, dbq.InsertScanDiscoveryParams{
 			OrgID: org, ID: ids.NewV7(), AgentID: a.ID, Source: w.source, ScanKey: f.Key[:], Observed: obs,
-			LastScanRun: w.run, ScanScope: w.scope,
+			LastScanRun: w.run, ScanScope: w.scope, ScanPrincipal: w.principal,
 		}); err != nil {
 			return err
 		}

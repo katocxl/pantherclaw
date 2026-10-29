@@ -177,7 +177,7 @@ func TestHR459_PartialOrFailedOrgScanCountsNoMiss(t *testing.T) {
 
 // TestT201_PartialOrForgedScansNeitherHideNorFakeDisappearance: a CI-mode
 // scan, which a service account runs, never counts against an org scan's
-// discoveries, nor the reverse, nor names their findings; and a material
+// discoveries or another principal's, nor the reverse, nor names their findings; and a material
 // change is recorded even by a scan that missed other kinds.
 // Covers: PN-001.3
 func TestT201_PartialOrForgedScansNeitherHideNorFakeDisappearance(t *testing.T) {
@@ -204,11 +204,41 @@ func TestT201_PartialOrForgedScansNeitherHideNorFakeDisappearance(t *testing.T) 
 	if got := s.e.count(t, "SELECT missed_scans FROM pc.discoveries WHERE org_id = $1 AND source = 'ci_scan'", s.e.org); got != 0 {
 		t.Errorf("org scans counted %d misses of a CI-mode discovery", got)
 	}
+	// Another service account's complete scans of the same scope count
+	// nothing against this one's discoveries (D136).
+	sa2 := s.e.caller(td.KindServiceAccount, td.RoleAgentOwner)
+	for range 4 {
+		other := aapp.ScanFinding{Kind: "mcp_server", Key: [32]byte{10}, Attributes: map[string]string{"name": "y", "transport": "stdio"}}
+		if r, err := s.inv.SubmitScan(sa2, "runner", []aapp.ScanFinding{other}, aapp.ScanMode{Scope: "acme/payments", Complete: true}); err != nil || r.Missed != 0 {
+			t.Fatalf("another service account's scan: %+v %v", r, err)
+		}
+	}
+	if got := s.e.count(t, "SELECT missed_scans FROM pc.discoveries WHERE org_id = $1 AND source = 'ci_scan' AND observed ->> 'name' = 'x'", s.e.org); got != 0 {
+		t.Errorf("another service account's scans counted %d misses", got)
+	}
 	// A partial scan still records a material change of what it saw.
 	changed := workflow(1)
 	changed.Attributes["permissions"] = "contents:write"
 	s.run(t, []aapp.ScanFinding{changed}, map[string]string{"/scanned/repositories": "true", "/not_scanned/workflows": "rate limited"}, true)
-	if got := s.e.count(t, "SELECT count(*) FROM pc.agent_changes WHERE org_id = $1 AND kind = 'agent.discovery_changed' AND details ->> 'after.permissions' = 'contents:write'", s.e.org); got != 1 {
+	if got := s.e.count(t, "SELECT count(*) FROM pc.agent_changes WHERE org_id = $1 AND kind = 'agent.discovery_changed' AND details ->> 'untrusted.after.permissions' = 'contents:write'", s.e.org); got != 1 {
 		t.Errorf("%d recorded changes, want 1", got)
+	}
+}
+
+// TestHR459_DismissedOrgScanDiscoveryCountsNoMiss: a dismissed org-scan
+// discovery never counts a miss and is never announced (D136).
+// Covers: PN-001.3
+func TestHR459_DismissedOrgScanDiscoveryCountsNoMiss(t *testing.T) {
+	s := newOrgScans(t)
+	s.run(t, []aapp.ScanFinding{workflow(1), ghApp(2)}, complete, true)
+	s.e.exec(t, "UPDATE pc.discoveries SET state = 'DISMISSED' WHERE org_id = $1 AND observed ->> 'kind' = 'github_workflow'", s.e.org)
+	for range 4 {
+		s.run(t, []aapp.ScanFinding{ghApp(2)}, complete, true)
+	}
+	if got := s.missed(t, "github_workflow"); got != 0 {
+		t.Errorf("a dismissed discovery counted %d misses", got)
+	}
+	if s.notices.n != 0 {
+		t.Errorf("%d vanish notices for a dismissed discovery", s.notices.n)
 	}
 }

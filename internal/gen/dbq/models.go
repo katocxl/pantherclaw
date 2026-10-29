@@ -1626,6 +1626,7 @@ type PcDiscovery struct {
 	LastScanRun      *ids.UUID
 	ScanScope        *string
 	VanishNotifiedAt *time.Time
+	ScanPrincipal    *string
 }
 
 type PcDpopJti struct {
