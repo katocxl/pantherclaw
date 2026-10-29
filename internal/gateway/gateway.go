@@ -76,6 +76,8 @@ type Gateway struct {
 	verifyEvery, verifyHintGap time.Duration
 	// submitScan sends an organization scan's findings (orgscan.go, G0 M8).
 	submitScan ScanSubmitter
+	// status reports this replica's status (status.go, G0 M15 D10).
+	status *status
 }
 
 // Handler returns the gateway's agent-facing HTTP handler: `/mcp/{connection}`
@@ -147,6 +149,11 @@ type Deps struct {
 	// SubmitScan sends an organization scan's findings to the server (G0 M8,
 	// HR-209); nil submits none.
 	SubmitScan ScanSubmitter
+	// ReportStatus sends a status report (G0 M15 D10); nil sends none.
+	ReportStatus StatusReporter
+	// MCPState keeps the MCP face's holds, tasks and sessions on the server
+	// (G0 M15 D14); nil keeps them in this process's memory.
+	MCPState mcp.StateClient
 	// Run is background work (certificate renewal, the containment stream,
 	// configuration sync); nil for none.
 	Run []func(ctx context.Context) error
@@ -195,6 +202,11 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 			return err
 		},
 		SubmitScan: controlScans{ctl}.submit,
+		ReportStatus: func(ctx context.Context, r *pb.ReportStatusRequest) (int32, error) {
+			res, err := ctl.Gateway.ReportStatus(ctx, r)
+			return res.GetNextReportSeconds(), err
+		},
+		MCPState: ctl.Gateway,
 		ReportRevocation: func(ctx context.Context, conn, purpose string, a broker.Access) error {
 			req := &pb.ReportRevocationFailureRequest{
 				ConnectionId: conn, Purpose: purpose, InstallationId: a.Installation, Repository: a.Repository,
@@ -285,6 +297,14 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		log:  log, reportDrift: d.ReportDrift, driftEvery: DriftEvery, driftPoll: driftPoll,
 		verifications: d.Verifications, verifyEvery: VerifyEvery, verifyHintGap: verifyHintGap,
 		submitScan: d.SubmitScan,
+		status:     newStatus(d.ReportStatus),
+	}
+	if d.MCPState != nil {
+		var sealer mcp.Sealer
+		if d.Broker != nil {
+			sealer = d.Broker.key
+		}
+		g.mcp.WithServerState(d.MCPState, sealer, d.Org, d.GatewayID)
 	}
 	if e := cfg.Control.VerifyEvery.D(); e > 0 {
 		g.verifyEvery = e
@@ -301,6 +321,7 @@ func (g *Gateway) Run(ctx context.Context) error {
 	eg.Go(func() error { return g.watchDrift(ctx) })
 	eg.Go(func() error { return g.watchA2ACards(ctx) })
 	eg.Go(func() error { return g.watchVerifications(ctx) })
+	eg.Go(func() error { return g.watchStatus(ctx) })
 	eg.Go(func() error { <-ctx.Done(); return nil })
 	return eg.Wait()
 }
