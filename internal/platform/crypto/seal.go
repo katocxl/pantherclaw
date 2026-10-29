@@ -167,16 +167,20 @@ func ParseSealPublicKey(b []byte) (*SealPublicKey, error) {
 // Suite is the key's suite.
 func (p *SealPrivateKey) Suite() SealSuite { return p.suite }
 
-// Bytes serializes the private key. Treat the result as a secret.
+// Bytes serializes the private key into a new slice the caller may clear.
+// Treat the result as a secret. crypto/hpke returns the key's own seed,
+// which is copied and never cleared here: clearing it would change every
+// later serialization of the key.
 func (p *SealPrivateKey) Bytes() ([]byte, error) {
 	seed, err := p.k.Bytes()
-	if err != nil || p.suite == SuiteXWing {
-		return seed, err
+	if err != nil {
+		return nil, err
+	}
+	if p.suite == SuiteXWing {
+		return append([]byte(nil), seed...), nil
 	}
 	out := binary.BigEndian.AppendUint16(make([]byte, 0, 2+len(seed)), uint16(p.suite))
-	out = append(out, seed...)
-	clear(seed)
-	return out, nil
+	return append(out, seed...), nil
 }
 
 // PublicKey returns the matching public key.
