@@ -75,6 +75,8 @@ func Decode(raw []byte) (*domain.Package, error) {
 	if err := p.Validate(); err != nil {
 		return nil, err
 	}
+	// Each declared elicitation field becomes a material param (G0 M15 D32).
+	p.ExpandElicitation()
 	return &p, nil
 }
 

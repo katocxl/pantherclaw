@@ -273,7 +273,7 @@ func (d *Definition) Validate() error {
 		return invalid("%s: reversibility must be reversible, compensatable or irreversible", op)
 	case len(d.Effects) == 0 || len(d.Effects) > maxItems || len(d.SideEffects) > maxItems:
 		return invalid("%s: 1..%d effects and at most %d side effects", op, maxItems, maxItems)
-	case len(d.Params) > maxItems || len(d.Mappings) > maxItems:
+	case len(d.Params) > maxItems+MaxElicitationFields || len(d.Mappings) > maxItems:
 		return invalid("%s: at most %d params and %d mappings", op, maxItems, maxItems)
 	case len(d.Mappings) == 0 && d.Access != AccessRead && d.Dispatch != nil:
 		// A read without mappings is internal: only a verifier, a target
@@ -292,6 +292,12 @@ func (d *Definition) Validate() error {
 		return err
 	}
 	for _, name := range slices.Sorted(maps.Keys(d.Params)) {
+		if strings.HasPrefix(name, ElicitationPrefix) {
+			if err := d.checkElicitationParam(name); err != nil {
+				return err
+			}
+			continue
+		}
 		if !nameRe.MatchString(name) {
 			return invalid("%s: param name %q", op, name)
 		}
@@ -339,6 +345,9 @@ func (d *Definition) Validate() error {
 		if err := d.validateMapping(i); err != nil {
 			return err
 		}
+	}
+	if err := d.validateElicitationFields(); err != nil {
+		return err
 	}
 	if err := d.validateDispatch(); err != nil {
 		return err
