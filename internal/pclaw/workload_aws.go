@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"net/http"
 	"slices"
 	"strings"
 	"time"
@@ -56,9 +57,9 @@ func awsAttestation(c awsCredentials, audience string, now time.Time) (string, e
 	if c.sessionToken != "" {
 		headers["x-amz-security-token"] = c.sessionToken
 	}
-	auth := sigV4(c, region, "sts", "POST", "/", headers, issuers.AWSBody, amzDate)
+	auth := sigV4(c, region, "sts", http.MethodPost, "/", headers, issuers.AWSBody, amzDate)
 	headers["authorization"] = auth
-	return issuers.AWSRequest{Method: "POST", URL: "https://" + host + "/", Headers: headers, Body: issuers.AWSBody}.Encode()
+	return issuers.AWSRequest{Method: http.MethodPost, URL: "https://" + host + "/", Headers: headers, Body: issuers.AWSBody}.Encode()
 }
 
 // sigV4 returns the Authorization header value of a request with no query

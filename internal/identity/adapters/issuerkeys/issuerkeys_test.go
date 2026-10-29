@@ -298,7 +298,7 @@ func TestHR461_GitLabIssuersComeFromOperatorConfiguration(t *testing.T) {
 	}
 	if !self.Allowed("https://gitlab.example.com", org) || self.Allowed("https://gitlab.example.com", other) ||
 		self.Allowed("https://gitlab.com", org) {
-		t.Error("configured instances or orgs not honoured")
+		t.Error("configured instances or orgs not honored")
 	}
 	if _, err := self.Verify(context.Background(), "https://gitlab.evil.test", org, "a.b.c"); !errors.Is(err, issuerkeys.ErrUnverified) {
 		t.Errorf("rogue issuer: %v", err)
@@ -386,7 +386,7 @@ func TestHR469_EntraAppsMapToOneOrg(t *testing.T) {
 		t.Error("app to org mapping")
 	}
 	if !e.Allowed(tenant, app, org) || e.Allowed(tenant, app, other) || e.Allowed("bbbbcccc-0000-cccc-1111-dddd2222eeee", app, org) {
-		t.Error("tenant and app pairs not honoured")
+		t.Error("tenant and app pairs not honored")
 	}
 	if _, err := e.Verify(context.Background(), app, other, "a.b.c"); !errors.Is(err, issuerkeys.ErrUnverified) {
 		t.Errorf("app verified for another org: %v", err)

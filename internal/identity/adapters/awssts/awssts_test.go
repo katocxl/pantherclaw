@@ -66,7 +66,7 @@ func (s *sts) client() *http.Client {
 func token(t *testing.T, org ids.OrgID, host string, at time.Time) string {
 	t.Helper()
 	r := issuers.AWSRequest{
-		Method: "POST", URL: "https://" + host + "/", Body: issuers.AWSBody,
+		Method: http.MethodPost, URL: "https://" + host + "/", Body: issuers.AWSBody,
 		Headers: map[string]string{
 			"content-type": "application/x-www-form-urlencoded; charset=utf-8", "host": host,
 			"x-amz-date": at.UTC().Format("20060102T150405Z"), "x-pantherclaw-audience": "pantherclaw:" + org.String(),

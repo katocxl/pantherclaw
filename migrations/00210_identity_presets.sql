@@ -8,8 +8,16 @@ ALTER TABLE pc.trusted_issuers DROP CONSTRAINT trusted_issuers_kind_check;
 ALTER TABLE pc.trusted_issuers ADD CONSTRAINT trusted_issuers_kind_check
     CHECK (kind IN ('github_actions', 'kubernetes', 'gitlab_ci', 'spiffe_jwt', 'gcp_workload', 'aws_iam')) NOT VALID;
 ALTER TABLE pc.trusted_issuers VALIDATE CONSTRAINT trusted_issuers_kind_check;
+-- The SPIFFE preset accepts the eight JWT-SVID algorithms PantherClaw
+-- verifies (RS, PS and ES families).
+ALTER TABLE pc.trusted_issuers DROP CONSTRAINT trusted_issuers_algorithms_check;
+ALTER TABLE pc.trusted_issuers ADD CONSTRAINT trusted_issuers_algorithms_check
+    CHECK (cardinality(algorithms) BETWEEN 1 AND 8);
 
 -- +goose Down
 ALTER TABLE pc.trusted_issuers DROP CONSTRAINT trusted_issuers_kind_check;
 ALTER TABLE pc.trusted_issuers ADD CONSTRAINT trusted_issuers_kind_check
     CHECK (kind IN ('github_actions', 'kubernetes')) NOT VALID;
+ALTER TABLE pc.trusted_issuers DROP CONSTRAINT trusted_issuers_algorithms_check;
+ALTER TABLE pc.trusted_issuers ADD CONSTRAINT trusted_issuers_algorithms_check
+    CHECK (cardinality(algorithms) BETWEEN 1 AND 4) NOT VALID;

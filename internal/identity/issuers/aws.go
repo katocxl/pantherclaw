@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json/v2"
 	"fmt"
+	"net/http"
 	"net/url"
 	"regexp"
 	"slices"
@@ -105,7 +106,7 @@ func CheckAWSRequest(r AWSRequest, org ids.OrgID, hosts func(string) bool, now t
 	var out AWSSigned
 	u, err := url.Parse(r.URL)
 	switch {
-	case r.Method != "POST":
+	case r.Method != http.MethodPost:
 		return out, rejected("method %q", r.Method)
 	case err != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" || (u.Path != "/" && u.Path != "") ||
 		u.RawQuery != "" || u.Fragment != "" || u.Opaque != "":

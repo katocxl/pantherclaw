@@ -171,9 +171,10 @@ func (b Binding) issuer() string {
 		return issuers.AzureIssuer(b.AzureMI.TenantID)
 	case issuers.KindEntraAgent:
 		return issuers.AzureIssuer(b.EntraAgent.TenantID)
-	default:
+	case issuers.KindKubernetes:
 		return b.Kubernetes.Issuer()
 	}
+	return ""
 }
 
 // audience is the audience the entry's tokens must name: pantherclaw:<org>
@@ -203,9 +204,10 @@ func (b Binding) algorithms() []string {
 		return issuers.AWSAlgorithms
 	case issuers.KindAzureMI, issuers.KindEntraAgent:
 		return issuers.AzureAlgorithms
-	default:
+	case issuers.KindKubernetes:
 		return []string{"TokenReview"}
 	}
+	return nil
 }
 
 // widening lists what b accepts that prev did not; a kind change replaces

@@ -288,6 +288,8 @@ func attestation(a *pantherclawv1.Attestation) *app.Attestation {
 	}
 	var kind issuers.Kind
 	switch a.GetKind() {
+	case pantherclawv1.AttestationKind_ATTESTATION_KIND_UNSPECIFIED:
+		// No kind: attest refuses it (HR-465).
 	case pantherclawv1.AttestationKind_ATTESTATION_KIND_GITHUB_ACTIONS:
 		kind = issuers.KindGitHub
 	case pantherclawv1.AttestationKind_ATTESTATION_KIND_KUBERNETES:

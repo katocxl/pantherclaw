@@ -71,7 +71,7 @@ func TestHR461_GitLabEntriesAndAttestation(t *testing.T) {
 	w.svc.WithEntitlements(edition(billing.Enterprise))
 	agent := w.agent(t, adomain.ContextCI)
 
-	rogue := gl(glRef)
+	rogue := gl("gitlab.evil.test/acme/agents/runner//.gitlab-ci.yml@refs/heads/main")
 	rogue.GitLab.Issuer = "https://gitlab.evil.test"
 	if _, err := w.svc.ProposeIssuer(w.orgAdmin(), app.ProposeInput{AgentID: agent, Binding: rogue, Reason: "x"}, nil); !errors.Is(err, app.ErrUnknownIssuer) {
 		t.Errorf("unconfigured instance: %v", err)
