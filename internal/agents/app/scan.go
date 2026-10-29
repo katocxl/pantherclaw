@@ -91,6 +91,7 @@ func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []Sc
 			return err
 		}
 		by := actor(c)
+		w := discoverer{by: c.Principal.String(), actor: by, ledger: c.Actor(), source: "scan"}
 		for _, f := range findings {
 			observed := maps.Clone(f.Attributes)
 			if observed == nil {
@@ -116,7 +117,7 @@ func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []Sc
 			case prior.State == "DISMISSED" && riskChanged(f.Kind, prior.Observed, observed):
 				reopen = prior.ID
 			default:
-				if _, err := q.TouchScanDiscovery(ctx, dbq.TouchScanDiscoveryParams{Observed: obs, OrgID: c.Org, ScanKey: f.Key[:], Source: "scan"}); err != nil {
+				if err := touch(ctx, tx, q, c.Org, w, f, obs, prior); err != nil {
 					return err
 				}
 				res.Counted++
@@ -126,7 +127,6 @@ func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []Sc
 				res.Dropped++
 				continue
 			}
-			w := discoverer{by: c.Principal.String(), actor: actor(c), ledger: c.Actor(), source: "scan"}
 			if err := insertFinding(ctx, tx, q, c.Org, w, f, obs, observed, reopen); err != nil {
 				return err
 			}
@@ -162,6 +162,38 @@ type discoverer struct {
 	// trusted are more trusted facts for the admission entry (the scan and
 	// gateway of an organization scan).
 	trusted map[string]string
+	// run is the scan that saw the finding, which misses are counted
+	// against (D114); scope is a CI-mode scan's scope (D115).
+	run   *ids.UUID
+	scope *string
+}
+
+// touch records that a known finding was seen again: it is counted, its
+// misses reset, and a discovery people were told had vanished records its
+// reappearance, without a notice (D114).
+func touch(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, w discoverer, f ScanFinding, obs []byte,
+	prior dbq.GetScanDiscoveryRow,
+) error {
+	if _, err := q.TouchScanDiscovery(ctx, dbq.TouchScanDiscoveryParams{
+		Observed: obs, LastScanRun: w.run, OrgID: org, ScanKey: f.Key[:], Source: w.source,
+	}); err != nil {
+		return err
+	}
+	if prior.VanishNotifiedAt == nil {
+		return nil
+	}
+	details := map[string]string{"discovery_id": prior.ID.String(), "source": w.source, "kind": f.Kind}
+	if w.run != nil {
+		details["scan"] = w.run.String()
+	}
+	if err := RecordChange(ctx, q, org, prior.AgentID, domain.Change{Kind: domain.ChangeDiscoveryReappeared, Actor: w.actor, Details: details}); err != nil {
+		return err
+	}
+	_, err := audit.Record(ctx, tx, audit.Event{
+		Name: string(domain.ChangeDiscoveryReappeared), Actor: w.ledger, Outcome: audit.Success,
+		Object: &audit.Object{Type: "agent", ID: prior.AgentID.String()}, Details: details,
+	})
+	return err
 }
 
 // insertFinding records a new finding as a DISCOVERED agent with its
@@ -180,10 +212,13 @@ func insertFinding(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.
 	if reopen.IsZero() {
 		if d, err = q.InsertScanDiscovery(ctx, dbq.InsertScanDiscoveryParams{
 			OrgID: org, ID: ids.NewV7(), AgentID: a.ID, Source: w.source, ScanKey: f.Key[:], Observed: obs,
+			LastScanRun: w.run, ScanScope: w.scope,
 		}); err != nil {
 			return err
 		}
-	} else if n, err := q.ReopenScanDiscovery(ctx, dbq.ReopenScanDiscoveryParams{AgentID: a.ID, Observed: obs, OrgID: org, ID: reopen}); err != nil {
+	} else if n, err := q.ReopenScanDiscovery(ctx, dbq.ReopenScanDiscoveryParams{
+		AgentID: a.ID, Observed: obs, LastScanRun: w.run, OrgID: org, ID: reopen,
+	}); err != nil {
 		return err
 	} else if n != 1 {
 		return fmt.Errorf("agents: discovery %s was not dismissed", reopen)

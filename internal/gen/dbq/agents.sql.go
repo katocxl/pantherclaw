@@ -196,6 +196,64 @@ func (q *Queries) CountRangeAgents(ctx context.Context, orgID ids.OrgID) (int64,
 	return count, err
 }
 
+const discoveryNoticeAdmins = `-- name: DiscoveryNoticeAdmins :many
+SELECT DISTINCT u.id FROM pc.users u
+JOIN pc.role_bindings r ON r.org_id = u.org_id AND r.user_id = u.id
+WHERE u.org_id = $1 AND u.state = 'ACTIVE' AND r.role = 'org_admin' AND r.scope_type = 'ORG'
+ORDER BY u.id LIMIT 50
+`
+
+// DiscoveryNoticeAdmins are the org's active org admins, who hear about
+// unclaimed discoveries (D116).
+func (q *Queries) DiscoveryNoticeAdmins(ctx context.Context, orgID ids.OrgID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, discoveryNoticeAdmins, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const discoveryNoticeOwners = `-- name: DiscoveryNoticeOwners :many
+SELECT u.id FROM pc.agents a
+JOIN pc.users u ON u.org_id = a.org_id AND (u.id = a.owner_user_id OR u.id = a.backup_owner_user_id)
+WHERE a.org_id = $1 AND a.id = $2 AND a.claimed_at IS NOT NULL AND u.state = 'ACTIVE'
+ORDER BY u.id
+`
+
+// DiscoveryNoticeOwners are the active owner and backup owner of a claimed
+// agent (D116).
+func (q *Queries) DiscoveryNoticeOwners(ctx context.Context, orgID ids.OrgID, agentID ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, discoveryNoticeOwners, orgID, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAgent = `-- name: GetAgent :one
 SELECT org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type FROM pc.agents WHERE org_id = $1 AND id = $2
 `
@@ -227,7 +285,7 @@ func (q *Queries) GetAgent(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (P
 }
 
 const getAgentDiscovery = `-- name: GetAgentDiscovery :one
-SELECT org_id, id, agent_id, source, key_jkt, public_jwk, scan_key, state, observed, seen_count, first_seen_at, last_seen_at FROM pc.discoveries WHERE org_id = $1 AND agent_id = $2
+SELECT org_id, id, agent_id, source, key_jkt, public_jwk, scan_key, state, observed, seen_count, first_seen_at, last_seen_at, missed_scans, last_scan_run, scan_scope, vanish_notified_at FROM pc.discoveries WHERE org_id = $1 AND agent_id = $2
 ORDER BY first_seen_at LIMIT 1
 `
 
@@ -247,6 +305,10 @@ func (q *Queries) GetAgentDiscovery(ctx context.Context, orgID ids.OrgID, agentI
 		&i.SeenCount,
 		&i.FirstSeenAt,
 		&i.LastSeenAt,
+		&i.MissedScans,
+		&i.LastScanRun,
+		&i.ScanScope,
+		&i.VanishNotifiedAt,
 	)
 	return i, err
 }
@@ -268,15 +330,16 @@ func (q *Queries) GetEnvironmentPlacement(ctx context.Context, orgID ids.OrgID, 
 }
 
 const getScanDiscovery = `-- name: GetScanDiscovery :one
-SELECT id, agent_id, state, observed FROM pc.discoveries
+SELECT id, agent_id, state, observed, vanish_notified_at FROM pc.discoveries
 WHERE org_id = $1 AND source = $2 AND scan_key = $3
 `
 
 type GetScanDiscoveryRow struct {
-	ID       ids.UUID
-	AgentID  ids.UUID
-	State    string
-	Observed []byte
+	ID               ids.UUID
+	AgentID          ids.UUID
+	State            string
+	Observed         []byte
+	VanishNotifiedAt *time.Time
 }
 
 // GetScanDiscovery is a scan finding by its key within its source.
@@ -288,6 +351,7 @@ func (q *Queries) GetScanDiscovery(ctx context.Context, orgID ids.OrgID, source 
 		&i.AgentID,
 		&i.State,
 		&i.Observed,
+		&i.VanishNotifiedAt,
 	)
 	return i, err
 }
@@ -463,18 +527,21 @@ func (q *Queries) InsertDiscoveredAgent(ctx context.Context, arg InsertDiscovere
 }
 
 const insertScanDiscovery = `-- name: InsertScanDiscovery :one
-INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING org_id, id, agent_id, source, key_jkt, public_jwk, scan_key, state, observed, seen_count, first_seen_at, last_seen_at
+INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed, last_scan_run, scan_scope)
+VALUES ($1, $2, $3, $4, $5, $6,
+        $7, $8)
+RETURNING org_id, id, agent_id, source, key_jkt, public_jwk, scan_key, state, observed, seen_count, first_seen_at, last_seen_at, missed_scans, last_scan_run, scan_scope, vanish_notified_at
 `
 
 type InsertScanDiscoveryParams struct {
-	OrgID    ids.OrgID
-	ID       ids.UUID
-	AgentID  ids.UUID
-	Source   string
-	ScanKey  []byte
-	Observed []byte
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	AgentID     ids.UUID
+	Source      string
+	ScanKey     []byte
+	Observed    []byte
+	LastScanRun *ids.UUID
+	ScanScope   *string
 }
 
 // A local scan's (source scan) or a gateway's organization scan's
@@ -487,6 +554,8 @@ func (q *Queries) InsertScanDiscovery(ctx context.Context, arg InsertScanDiscove
 		arg.Source,
 		arg.ScanKey,
 		arg.Observed,
+		arg.LastScanRun,
+		arg.ScanScope,
 	)
 	var i PcDiscovery
 	err := row.Scan(
@@ -502,6 +571,10 @@ func (q *Queries) InsertScanDiscovery(ctx context.Context, arg InsertScanDiscove
 		&i.SeenCount,
 		&i.FirstSeenAt,
 		&i.LastSeenAt,
+		&i.MissedScans,
+		&i.LastScanRun,
+		&i.ScanScope,
+		&i.VanishNotifiedAt,
 	)
 	return i, err
 }
@@ -658,6 +731,82 @@ func (q *Queries) LockAgentLimit(ctx context.Context, orgID string) error {
 	return err
 }
 
+const markDiscoveryVanished = `-- name: MarkDiscoveryVanished :execrows
+UPDATE pc.discoveries SET vanish_notified_at = now()
+WHERE org_id = $1 AND id = $2 AND vanish_notified_at IS NULL
+`
+
+// MarkDiscoveryVanished records that people were told a discovery
+// vanished: once, until it is seen again.
+func (q *Queries) MarkDiscoveryVanished(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, markDiscoveryVanished, orgID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const missOrgScanDiscoveries = `-- name: MissOrgScanDiscoveries :many
+
+UPDATE pc.discoveries
+SET missed_scans = missed_scans + 1
+WHERE org_id = $1 AND source = 'github_scan' AND observed ->> 'connection' = $2::text
+  AND last_scan_run IS DISTINCT FROM $3::uuid AND observed ->> 'kind' = ANY ($4::text[])
+RETURNING id, agent_id, state, observed, missed_scans, vanish_notified_at
+`
+
+type MissOrgScanDiscoveriesParams struct {
+	OrgID        ids.OrgID
+	ConnectionID string
+	Run          ids.UUID
+	Kinds        []string
+}
+
+type MissOrgScanDiscoveriesRow struct {
+	ID               ids.UUID
+	AgentID          ids.UUID
+	State            string
+	Observed         []byte
+	MissedScans      int32
+	VanishNotifiedAt *time.Time
+}
+
+// Continuous discovery (PN-001.3, D114; HR-458, HR-459).
+// MissOrgScanDiscoveries counts a miss for each org-scan discovery of the
+// connection that a finished, complete run did not see, of the kinds the
+// run read in full, and returns them.
+func (q *Queries) MissOrgScanDiscoveries(ctx context.Context, arg MissOrgScanDiscoveriesParams) ([]MissOrgScanDiscoveriesRow, error) {
+	rows, err := q.db.Query(ctx, missOrgScanDiscoveries,
+		arg.OrgID,
+		arg.ConnectionID,
+		arg.Run,
+		arg.Kinds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MissOrgScanDiscoveriesRow{}
+	for rows.Next() {
+		var i MissOrgScanDiscoveriesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.State,
+			&i.Observed,
+			&i.MissedScans,
+			&i.VanishNotifiedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const moveDiscovery = `-- name: MoveDiscovery :exec
 UPDATE pc.discoveries SET agent_id = $1, state = 'CLAIMED'
 WHERE org_id = $2 AND agent_id = $3 AND state = 'OPEN'
@@ -681,15 +830,17 @@ func (q *Queries) OrgHasAgents(ctx context.Context, orgID ids.OrgID) (bool, erro
 
 const reopenScanDiscovery = `-- name: ReopenScanDiscovery :execrows
 UPDATE pc.discoveries
-SET state = 'OPEN', agent_id = $1, observed = $2, seen_count = seen_count + 1, last_seen_at = now()
-WHERE org_id = $3 AND id = $4 AND state = 'DISMISSED'
+SET state = 'OPEN', agent_id = $1, observed = $2, seen_count = seen_count + 1, last_seen_at = now(),
+    missed_scans = 0, vanish_notified_at = NULL, last_scan_run = $3
+WHERE org_id = $4 AND id = $5 AND state = 'DISMISSED'
 `
 
 type ReopenScanDiscoveryParams struct {
-	AgentID  ids.UUID
-	Observed []byte
-	OrgID    ids.OrgID
-	ID       ids.UUID
+	AgentID     ids.UUID
+	Observed    []byte
+	LastScanRun *ids.UUID
+	OrgID       ids.OrgID
+	ID          ids.UUID
 }
 
 // ReopenScanDiscovery reopens a dismissed finding for a new DISCOVERED
@@ -698,6 +849,7 @@ func (q *Queries) ReopenScanDiscovery(ctx context.Context, arg ReopenScanDiscove
 	result, err := q.db.Exec(ctx, reopenScanDiscovery,
 		arg.AgentID,
 		arg.Observed,
+		arg.LastScanRun,
 		arg.OrgID,
 		arg.ID,
 	)
@@ -829,24 +981,30 @@ func (q *Queries) SetAgentState(ctx context.Context, arg SetAgentStateParams) (P
 }
 
 const touchScanDiscovery = `-- name: TouchScanDiscovery :execrows
-UPDATE pc.discoveries SET seen_count = seen_count + 1, last_seen_at = now(), observed = $1
-WHERE org_id = $2 AND scan_key = $3 AND source = $4
+UPDATE pc.discoveries
+SET seen_count = seen_count + 1, last_seen_at = now(), observed = $1, missed_scans = 0,
+    vanish_notified_at = NULL, last_scan_run = $2
+WHERE org_id = $3 AND scan_key = $4 AND source = $5
 `
 
 type TouchScanDiscoveryParams struct {
-	Observed []byte
-	OrgID    ids.OrgID
-	ScanKey  []byte
-	Source   string
+	Observed    []byte
+	LastScanRun *ids.UUID
+	OrgID       ids.OrgID
+	ScanKey     []byte
+	Source      string
 }
 
 // Scan findings (PN-001.1, F015): a finding already submitted is only
 // counted, with its latest observations.
 // A finding is matched within its own source only: a person's scan never
 // touches a finding of the gateway's org scan, nor the reverse (HR-209).
+// A finding seen again has missed no scan (D114): its misses reset to 0, it
+// is no longer vanished, and it records the scan that saw it.
 func (q *Queries) TouchScanDiscovery(ctx context.Context, arg TouchScanDiscoveryParams) (int64, error) {
 	result, err := q.db.Exec(ctx, touchScanDiscovery,
 		arg.Observed,
+		arg.LastScanRun,
 		arg.OrgID,
 		arg.ScanKey,
 		arg.Source,

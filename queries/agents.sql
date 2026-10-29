@@ -170,15 +170,20 @@ SELECT
 -- counted, with its latest observations.
 -- A finding is matched within its own source only: a person's scan never
 -- touches a finding of the gateway's org scan, nor the reverse (HR-209).
+-- A finding seen again has missed no scan (D114): its misses reset to 0, it
+-- is no longer vanished, and it records the scan that saw it.
 -- name: TouchScanDiscovery :execrows
-UPDATE pc.discoveries SET seen_count = seen_count + 1, last_seen_at = now(), observed = sqlc.arg(observed)
+UPDATE pc.discoveries
+SET seen_count = seen_count + 1, last_seen_at = now(), observed = sqlc.arg(observed), missed_scans = 0,
+    vanish_notified_at = NULL, last_scan_run = sqlc.narg(last_scan_run)
 WHERE org_id = sqlc.arg(org_id) AND scan_key = sqlc.arg(scan_key) AND source = sqlc.arg(source);
 
 -- name: InsertScanDiscovery :one
 -- A local scan's (source scan) or a gateway's organization scan's
 -- (github_scan) finding.
-INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(source), sqlc.arg(scan_key), sqlc.arg(observed))
+INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed, last_scan_run, scan_scope)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(source), sqlc.arg(scan_key), sqlc.arg(observed),
+        sqlc.narg(last_scan_run), sqlc.narg(scan_scope))
 RETURNING *;
 
 -- CountOpenDiscoveriesOfSource counts the open discoveries of one source:
@@ -190,12 +195,47 @@ WHERE org_id = sqlc.arg(org_id) AND state = 'OPEN' AND source = sqlc.arg(source)
 
 -- GetScanDiscovery is a scan finding by its key within its source.
 -- name: GetScanDiscovery :one
-SELECT id, agent_id, state, observed FROM pc.discoveries
+SELECT id, agent_id, state, observed, vanish_notified_at FROM pc.discoveries
 WHERE org_id = sqlc.arg(org_id) AND source = sqlc.arg(source) AND scan_key = sqlc.arg(scan_key);
 
 -- ReopenScanDiscovery reopens a dismissed finding for a new DISCOVERED
 -- agent: what its route may do changed since it was dismissed (HR-209).
 -- name: ReopenScanDiscovery :execrows
 UPDATE pc.discoveries
-SET state = 'OPEN', agent_id = sqlc.arg(agent_id), observed = sqlc.arg(observed), seen_count = seen_count + 1, last_seen_at = now()
+SET state = 'OPEN', agent_id = sqlc.arg(agent_id), observed = sqlc.arg(observed), seen_count = seen_count + 1, last_seen_at = now(),
+    missed_scans = 0, vanish_notified_at = NULL, last_scan_run = sqlc.narg(last_scan_run)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'DISMISSED';
+
+-- Continuous discovery (PN-001.3, D114; HR-458, HR-459).
+
+-- MissOrgScanDiscoveries counts a miss for each org-scan discovery of the
+-- connection that a finished, complete run did not see, of the kinds the
+-- run read in full, and returns them.
+-- name: MissOrgScanDiscoveries :many
+UPDATE pc.discoveries
+SET missed_scans = missed_scans + 1
+WHERE org_id = sqlc.arg(org_id) AND source = 'github_scan' AND observed ->> 'connection' = sqlc.arg(connection_id)::text
+  AND last_scan_run IS DISTINCT FROM sqlc.arg(run)::uuid AND observed ->> 'kind' = ANY (sqlc.arg(kinds)::text[])
+RETURNING id, agent_id, state, observed, missed_scans, vanish_notified_at;
+
+-- MarkDiscoveryVanished records that people were told a discovery
+-- vanished: once, until it is seen again.
+-- name: MarkDiscoveryVanished :execrows
+UPDATE pc.discoveries SET vanish_notified_at = now()
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND vanish_notified_at IS NULL;
+
+-- DiscoveryNoticeOwners are the active owner and backup owner of a claimed
+-- agent (D116).
+-- name: DiscoveryNoticeOwners :many
+SELECT u.id FROM pc.agents a
+JOIN pc.users u ON u.org_id = a.org_id AND (u.id = a.owner_user_id OR u.id = a.backup_owner_user_id)
+WHERE a.org_id = sqlc.arg(org_id) AND a.id = sqlc.arg(agent_id) AND a.claimed_at IS NOT NULL AND u.state = 'ACTIVE'
+ORDER BY u.id;
+
+-- DiscoveryNoticeAdmins are the org's active org admins, who hear about
+-- unclaimed discoveries (D116).
+-- name: DiscoveryNoticeAdmins :many
+SELECT DISTINCT u.id FROM pc.users u
+JOIN pc.role_bindings r ON r.org_id = u.org_id AND r.user_id = u.id
+WHERE u.org_id = sqlc.arg(org_id) AND u.state = 'ACTIVE' AND r.role = 'org_admin' AND r.scope_type = 'ORG'
+ORDER BY u.id LIMIT 50;
