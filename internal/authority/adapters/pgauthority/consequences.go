@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json/v2"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -34,10 +36,13 @@ func writeConsequences(ctx context.Context, tx db.TenantTx, org ids.OrgID, txn i
 		if envs == nil {
 			envs = []string{}
 		}
+		depth, parent, chained, source := c.Chain()
+		parentPosition := pgtype.Int2{Int16: int16(parent), Valid: chained} //nolint:gosec // < position ≤ 255
 		if err := q.InsertDecisionConsequence(ctx, dbq.InsertDecisionConsequenceParams{
 			OrgID: org, TransactionID: txn, Evaluation: int32(evaluation), Position: int32(i), //nolint:gosec // ≤ 33 and ≤ 255
 			RuleID: c.Rule, Operation: c.Operation, TargetType: c.Target.Type, TargetID: c.Target.ID, Environments: envs,
 			State: string(c.State), Unknown: unknown, FactsDigest: c.FactsDigest,
+			Depth: int16(depth), ParentPosition: parentPosition, Source: string(source), //nolint:gosec // ≤ MaxDepth
 		}); err != nil {
 			return err
 		}

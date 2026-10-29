@@ -132,16 +132,29 @@ func (h *Handler) Authorize(ctx context.Context, req *pantherclawv1.AuthorizeReq
 // could not be evaluated is in the checklist, not here.
 func consequencesToProto(cs []consequences.Consequence) []*pantherclawv1.Consequence {
 	var out []*pantherclawv1.Consequence
-	for _, c := range cs {
+	index := map[int]int32{} // position in cs -> index in out
+	for i, c := range cs {
 		if c.Err != nil {
 			continue
 		}
-		out = append(out, &pantherclawv1.Consequence{
+		depth, parent, chained, source := c.Chain()
+		pc := &pantherclawv1.Consequence{
 			RuleId: c.Rule, Operation: c.Operation, TargetType: c.Target.Type, TargetId: c.Target.ID, Environments: c.Environments,
 			State: consequenceState[c.State], Unknown: c.Unknown, FactsDigest: c.FactsDigest,
-		})
+			Depth: int32(depth), Source: consequenceSource[source], //nolint:gosec // ≤ MaxDepth
+		}
+		if p, ok := index[parent]; chained && ok {
+			pc.ParentIndex = &p
+		}
+		index[i] = int32(len(out)) //nolint:gosec // ≤ 255
+		out = append(out, pc)
 	}
 	return out
+}
+
+var consequenceSource = map[consequences.Source]pantherclawv1.ConsequenceSource{
+	consequences.SourcePackage:  pantherclawv1.ConsequenceSource_CONSEQUENCE_SOURCE_PACKAGE,
+	consequences.SourceCustomer: pantherclawv1.ConsequenceSource_CONSEQUENCE_SOURCE_CUSTOMER,
 }
 
 var consequenceState = map[consequences.State]pantherclawv1.ConsequenceState{

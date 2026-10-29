@@ -113,10 +113,32 @@ type Input struct {
 	Now  time.Time
 }
 
+// Source is where a consequence rule comes from (G0 M17 D106).
+type Source string
+
+// Sources (00208's decision_consequences.source).
+const (
+	// SourcePackage: a rule of the action's signed package version.
+	SourcePackage Source = "package"
+	// SourceCustomer: one of the org's reviewed customer rules.
+	SourceCustomer Source = "customer"
+)
+
+// MaxDepth is how far down a chain a consequence may be (G0 M17 D109):
+// depth 1 is a consequence of the action itself.
+const MaxDepth = 4
+
 // Consequence is one rule's result.
 type Consequence struct {
 	Rule                           string
 	Operation, Effect, Description string
+	// Source is where the rule comes from; empty is SourcePackage.
+	Source Source
+	// Depth is the consequence's place in its chain, 1 (or 0) for a
+	// consequence of the action itself; Parent is, for a deeper one, the
+	// position among the evaluation's consequences of the consequence it
+	// follows from, which always comes before it (G0 M17 D109).
+	Depth, Parent int
 	// Definition is the consequence operation's definition.
 	Definition *defs.Definition
 	// Target is the consequence's target; Environments are the ones it
@@ -133,6 +155,16 @@ type Consequence struct {
 	// (F080).
 	Used        []fdomain.Fact
 	FactsDigest string
+}
+
+// Chain is the consequence's depth, its parent's position (ok false at
+// depth 1) and its source, as stored (00208).
+func (c *Consequence) Chain() (depth, parent int, ok bool, source Source) {
+	depth, source = max(c.Depth, 1), c.Source
+	if source == "" {
+		source = SourcePackage
+	}
+	return depth, c.Parent, depth > 1, source
 }
 
 // ErrRule reports a rule that cannot be evaluated: its consequence
@@ -168,7 +200,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, rules []Rule, in Input) []Cons
 func (e *Evaluator) one(ctx context.Context, r Rule, in Input) Consequence {
 	c := Consequence{
 		Rule: r.ID, Operation: r.Consequence.Operation, Effect: r.Consequence.Effect, Description: r.Consequence.Description,
-		Definition: r.Definition,
+		Source: SourcePackage, Depth: 1, Definition: r.Definition,
 	}
 	if r.Definition == nil {
 		c.Err = fmt.Errorf("%w: %s is not defined in the package", ErrRule, r.Consequence.Operation)

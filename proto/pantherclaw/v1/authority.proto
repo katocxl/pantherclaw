@@ -237,6 +237,23 @@ message Consequence {
   repeated string unknown = 7;
   // Digest of the facts the rule read (F080).
   string facts_digest = 8;
+  // The consequence's place in its chain (G0 M17 D109, F411): 1 for a
+  // consequence of the action itself.
+  int32 depth = 9;
+  // For a consequence deeper than 1, the index in this list of the
+  // consequence it follows from, which comes before it.
+  optional int32 parent_index = 10;
+  // Where the rule comes from (D106).
+  ConsequenceSource source = 11;
+}
+
+// ConsequenceSource is where a consequence rule comes from (G0 M17 D106).
+enum ConsequenceSource {
+  CONSEQUENCE_SOURCE_UNSPECIFIED = 0;
+  // A rule of the action's signed package version.
+  CONSEQUENCE_SOURCE_PACKAGE = 1;
+  // One of the org's reviewed customer rules (F405).
+  CONSEQUENCE_SOURCE_CUSTOMER = 2;
 }
 
 // WaitState is the state of a held action's approval request as a waiter

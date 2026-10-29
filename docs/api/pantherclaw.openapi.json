@@ -30601,6 +30601,16 @@
         ],
         "description": "ChecklistStatus is the outcome of one checklist item."
       },
+      "pantherclaw.v1.ConsequenceSource": {
+        "type": "string",
+        "title": "ConsequenceSource",
+        "enum": [
+          "CONSEQUENCE_SOURCE_UNSPECIFIED",
+          "CONSEQUENCE_SOURCE_PACKAGE",
+          "CONSEQUENCE_SOURCE_CUSTOMER"
+        ],
+        "description": "ConsequenceSource is where a consequence rule comes from (G0 M17 D106)."
+      },
       "pantherclaw.v1.ConsequenceState": {
         "type": "string",
         "title": "ConsequenceState",
@@ -31049,6 +31059,24 @@
             "type": "string",
             "title": "facts_digest",
             "description": "Digest of the facts the rule read (F080)."
+          },
+          "depth": {
+            "type": "integer",
+            "title": "depth",
+            "format": "int32",
+            "description": "The consequence's place in its chain (G0 M17 D109, F411): 1 for a\n consequence of the action itself."
+          },
+          "parentIndex": {
+            "type": "integer",
+            "title": "parent_index",
+            "format": "int32",
+            "description": "For a consequence deeper than 1, the index in this list of the\n consequence it follows from, which comes before it.",
+            "nullable": true
+          },
+          "source": {
+            "title": "source",
+            "description": "Where the rule comes from (D106).",
+            "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceSource"
           }
         },
         "title": "Consequence",
