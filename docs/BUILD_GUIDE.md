@@ -683,6 +683,16 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Pulled from M13:** PN-012.2 (per-organization entitlements and plan limits), PN-012.3 (invitations accepted in the browser), F322, F325, F335 (UI part), F336, F341. **Stays in M13:** hosted staging and production infrastructure, backups and the DR drill, rate limits and quotas, support access, data export and deletion, the Helm chart, the FIPS build, post-quantum TLS, SLOs under load, Schemathesis, the threat-model refresh (G4), the docs site and the OpenTelemetry exporter.
 - Migrations `00160`–`00164`, the last one `pc.billing_links` (server-recorded checkouts and subscriptions, one current subscription per organization) (`00165`–`00168` spare; `00169` became M13's platform migration, G0 M13 D40).
 
+### M18 — Platform administration (Root)
+**HR:** HR-470..488 · **PN:** PN-010.6 (fleet part), PN-012.7..PN-012.10 · **F:** F584, F602 · **ADR:** 0039 · **G0:** [g0/M18.md](g0/M18.md).
+- A post-1.0 milestone: it lands after M15, M16 and M17, in migration order, and builds once M16 is on `main`.
+- **Fleet** (PN-010.6): fleet policy, a fleet view of versions, replicas and configuration lag, an advisory minimum version and silent-gateway alerts, on top of M15's status reports.
+- **Delegated administration** (F584, G5): Scope Admins bind and unbind only roles they hold, only at their scope or below.
+- **Large fleets** (F602): exception groups snapshotted from a cohort, bulk simulation by cohort, a VERIFIED threshold on rollouts and per-cohort findings.
+- **Organization identity providers** (PN-012.7, G6) as two-person protected changes; **API-key IP allow lists** (PN-012.8).
+- **Platform** (G7): pclaw secrets in the OS keychain (PN-012.9); OpenBao Transit as a key service with in-place re-wrap, and BlobStore and fan-out ports (PN-012.10).
+- Migrations `00216`–`00224` (`00225` spare); SCIM and SAML follow M18 (G8).
+
 ---
 
 ## 9. CI/CD summary

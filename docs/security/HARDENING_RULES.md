@@ -462,3 +462,27 @@
 | HR-400 | A decision returned to an agent (AuthorizeResponse, gateway refusals, hook and A2A refusals) adds only the agent-safe explanation: presentation, failing category, decisive code, transaction id and recovery actions. It never adds the effective grant, policy, limits, budget values or request content (F330; founder 2026-10-28). | T-150, T-080 | M13 |
 | HR-401 | Run inspection reads each section only with that section's own permission and scope. A section the caller can't read is left out and listed in omitted_sections, never returned partially counted. | — (rows26 D22, F224) | M13 |
 | HR-402 | The coverage graph is assembled only from coverage records the caller may read, filtered before any node or count is built. Unknown stays UNVERIFIED and is never shown as controlled. | T-042, T-085 | M13 |
+
+## Platform administration (G0 M18)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
+| HR-470 | The minimum version is advisory, never a refusal. | T-212 | M18 |
+| HR-471 | A silent gateway alerts once per silence and once on recovery, per org. | T-212 | M18 |
+| HR-472 | A scoped admin binds only roles it holds at the target scope or above. | T-206 | M18 |
+| HR-473 | Org-scope roles need org-level `role.bind`. | T-206 | M18 |
+| HR-474 | Unbinding follows the same ceiling. | T-206 | M18 |
+| HR-475 | A CIDR-restricted key is refused from any other IP, with the bad-key error. | T-208 | M18 |
+| HR-476 | The client IP comes only from trusted proxies. | T-208 | M18 |
+| HR-477 | An exception group covers only the agents snapshotted at approval. | T-209 | M18 |
+| HR-478 | Bulk simulation is read-only and within the existing caps. | T-213 | M18 |
+| HR-479 | A gated rollout completes only at its VERIFIED threshold. | — (G0 M18 D154) | M18 |
+| HR-480 | Aggregates show only readable agents. | T-213 | M18 |
+| HR-481 | Org IdP changes are two-person protected changes, and every admin is notified. | T-207 | M18 |
+| HR-482 | Client secrets are sealed and never returned. | T-207 | M18 |
+| HR-483 | Discovery goes through the egress guard, HTTPS only. | T-207 | M18 |
+| HR-484 | The last admin sign-in path can't be disabled. | T-207 | M18 |
+| HR-485 | pclaw keeps its secrets in the OS keychain when one is available, never on a command line. The file fallback is warned. | T-211 | M18 |
+| HR-486 | An unwrap failure fails closed. | T-210 | M18 |
+| HR-487 | A re-wrap verifies before it writes and changes both columns together. | T-210 | M18 |
+| HR-488 | OpenBao is reached only at the configured address, with TLS. | T-210 | M18 |

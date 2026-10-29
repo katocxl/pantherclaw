@@ -1,0 +1,33 @@
+# ADR-0039 — Delegated administration, organization identity providers and the key service
+
+**Status:** Accepted (2026-10-29; G0 M18 founder decisions G5–G8, answered with the recommended option each time; the [G0 M18 brief](../g0/M18.md) records them with the coordinator's design decisions D150–D157). Builds on the organization hierarchy and role bindings ([ADR-0016](0016-human-and-service-authentication.md) self-grants), protected changes (HR-292) and the `KeyProvider` port (SB-3, TB6).
+
+**Context.** Administration is all-or-nothing today. `CreateRoleBinding` and `DeleteRoleBinding` require `role.bind` at the organization, so a business unit or team cannot have an administrator of its own. Identity providers are configured per deployment (`auth.oidc_providers`), so an organization on a shared, hosted deployment cannot bring its own provider. Key-encryption keys are files (`FileProvider`); there is no key service, and the wrapped keys in `pc.deks` and `pc.keys` can never be re-wrapped, because only their `state` column may change. The pclaw CLI keeps its refresh token and device key in a 0600 file.
+
+**Decision.**
+1. **Scoped administrators bind only what they hold, only inside their scope** (G5; HR-472..474).
+   - A new role, Scope Admin, is bindable only at business unit, team or environment scope and carries `role.bind`, `role.read` and `user.read`.
+   - Binding and unbinding require `role.bind` on the target scope's path. A caller without organization-level `role.bind` must also hold a binding of the same role at the target scope or an ancestor. Organization-scope roles need organization-level `role.bind`.
+   - Re-delegation is allowed below the caller's own scope. Invitations with roles and the service-account `noEscalation` shortcut stay organization-level. Paths use the current hierarchy; separation of duties is unchanged and a self-grant is still audited.
+2. **The organization's own admin configures its identity providers, as a protected change** (G6; HR-481..484).
+   - Organization identity providers are records (`pc.org_identity_providers`): issuer (immutable once active), client id, and a client secret sealed with the organization's DEK that is never returned.
+   - Every create, change, disable and the "own providers only" setting is a two-person protected change in every protect mode, and every organization admin is notified.
+   - Providers are resolved per request: the deployment's providers plus the organization's active ones, or only the organization's with "own providers only".
+   - Discovery is HTTPS only through the egress guard, with no private or loopback address, no insecure loopback and no development provider; subject tokens are off. The last provider through which an active admin can sign in cannot be disabled.
+3. **OpenBao first, cloud KMS later** (G7; HR-486..488).
+   - An in-house Transit client over `net/http` (encrypt, decrypt, rewrap; token file or AppRole), TLS required except on loopback, implements `KeyProvider`. A `kek_id` prefix (`file:` or `bao:`) routes each unwrap, so file and OpenBao keys work side by side during a migration.
+   - Re-wrapping happens in place: a column grant `UPDATE (wrapped_key, kek_id)` on `pc.deks` and `pc.keys`, with a trigger that allows only both columns changing together. The job unwraps the old key, re-wraps it, checks that the new one unwraps, then writes and audits.
+   - An outage fails closed; the bounded DEK cache keeps serving the keys it already holds.
+   - BlobStore and fan-out ports are extracted with Postgres adapters and no change in behaviour; the search port waits.
+4. **pclaw keeps its secrets in the OS keychain** (HR-485). The refresh token, the device key seed and, if it fits, the access token go to the keychain (`zalando/go-keyring`); metadata stays in the file. `--credential-store=auto|keychain|file`; `auto` falls back to the 0600 file with a warning. No secret ever goes on a command line.
+5. **SCIM and SAML come after M18** (G8), as a private enterprise module.
+
+**A customer's identity-provider admin can defeat separation of duties.** This is residual risk R-08 and stays accepted. Organization identity providers make it more direct: whoever administers the provider an organization signs in with can create identities that look like distinct people, and two such identities can satisfy any two-person rule, including the protected change that adds the provider. PantherClaw cannot tell two people from one person with two accounts at the provider. The compensating controls stay those of R-08 (distinct WebAuthn credentials, cooldowns, admin notices), plus the notice to every organization admin on any identity-provider change (HR-481) and the immutable issuer.
+
+**Consequences.**
+- Business units and teams can be administered locally without granting anyone organization-wide `role.bind`; delegation can never exceed the delegator's own roles.
+- A hosted, multi-organization deployment can sign each organization in through its own provider; the deployment providers keep working unless an organization opts out.
+- `pc.deks` and `pc.keys` gain their first update grant on key material; the trigger and the verify-before-write job are what keep it safe. Key-encryption keys can move from files to OpenBao without downtime.
+- The minimum gateway version is advisory (HR-470): versions are self-reported and are never used as a control.
+
+**Alternatives.** A scoped admin limited by a permission superset rather than the same role (harder to audit, and a union of bindings can create surprises); identity providers configured only by the deployment operator (no self-service for hosted organizations); identity-provider changes following the organization's protect category (OFF by default, so one compromised admin session could swap the provider); the official `openbao/api` module (MPL-2.0, with a large transitive dependency set); new DEK versions under a new key instead of re-wrapping (an old key-encryption key could never be retired); keeping pclaw secrets only in the file.
