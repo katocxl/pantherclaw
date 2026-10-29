@@ -73,7 +73,8 @@ func (e *env) itemID(t *testing.T, conn ids.UUID, name string) ids.UUID {
 // tool the pinned active version reviewed with that digest is COVERED with
 // no entry; another digest of it, an unknown tool and resources are NEW,
 // each with one TOOL_REVIEW entry; a reconcile after the pinned version
-// becomes active covers what it reviews and approves the entry.
+// becomes active covers what it reviews and approves the entry on the
+// next report, even one that does not list the item (D25).
 // Covers: F352
 func TestHR414_DiscoveredItemsStayNewUntilAnActiveVersionCoversThem(t *testing.T) {
 	e := newEnv(t)
@@ -113,8 +114,8 @@ func TestHR414_DiscoveredItemsStayNewUntilAnActiveVersionCoversThem(t *testing.T
 		t.Errorf("%d entries, want 4", got)
 	}
 
-	// A version reviewing delete_everything, pinned while REVIEWED: nothing
-	// changes until it is active.
+	// A version reviewing delete_everything, pinned while REVIEWED: an
+	// empty report changes nothing until it is active.
 	raw := strings.Replace(string(mcpPayments(t)), "version: "+"1.0.0", "version: 1.1.0", 1)
 	raw = strings.Replace(raw, "tool: get_refund\n        arguments", "tool: delete_everything\n        arguments", 1)
 	raw = strings.Replace(raw, "upstream_digest: "+upstreamDigest, "upstream_digest: "+digest("bb"), 1)
@@ -122,14 +123,14 @@ func TestHR414_DiscoveredItemsStayNewUntilAnActiveVersionCoversThem(t *testing.T
 		SELECT $1, $2, id, '1.1.0', $3, $4, 'REVIEWED' FROM pc.tool_packages WHERE name = $5 RETURNING id, package_id)
 		UPDATE pc.package_pins p SET version_id = v.id, version = '1.1.0', digest = $3 FROM v WHERE p.package_id = v.package_id`,
 		e.org, ids.NewV7(), manifest.FileDigest([]byte(raw)), []byte(raw), upstreamPackage)
-	if err := e.svc.ReconcileInventory(ctx, e.org, upstreamPackage); err != nil {
+	if _, err := e.svc.ReportInventory(ctx, e.org, e.gateway, app.InventoryReport{Connection: c.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if s, _ := e.item(t, c.ID, app.InventoryTool, "delete_everything", digest("bb")); s != app.InventoryNew {
 		t.Errorf("covered by a version that is not active: %s", s)
 	}
 	e.exec(t, "UPDATE pc.package_versions SET state = 'ACTIVE' WHERE version = '1.1.0'")
-	if err := e.svc.ReconcileInventory(ctx, e.org, upstreamPackage); err != nil {
+	if _, err := e.svc.ReportInventory(ctx, e.org, e.gateway, app.InventoryReport{Connection: c.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if s, o := e.item(t, c.ID, app.InventoryTool, "delete_everything", digest("bb")); s != app.InventoryCovered || o != 0 {

@@ -172,37 +172,6 @@ func (q *Queries) InsertInventoryItem(ctx context.Context, arg InsertInventoryIt
 	return err
 }
 
-const inventoryConnectionsOfPackage = `-- name: InventoryConnectionsOfPackage :many
-SELECT c.id FROM pc.connections c
-WHERE c.org_id = $1 AND c.package = $2 AND c.kind = 'mcp' AND c.state <> 'RETIRED'
-  AND EXISTS (SELECT 1 FROM pc.connection_inventory i
-              WHERE i.org_id = c.org_id AND i.connection_id = c.id AND i.state = 'NEW')
-ORDER BY c.id
-`
-
-// InventoryConnectionsOfPackage are the kind-mcp connections served
-// through a package that have NEW inventory items: the ones to check again
-// when the package's pin moves or a version of it becomes active.
-func (q *Queries) InventoryConnectionsOfPackage(ctx context.Context, orgID ids.OrgID, package_ string) ([]ids.UUID, error) {
-	rows, err := q.db.Query(ctx, inventoryConnectionsOfPackage, orgID, package_)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ids.UUID{}
-	for rows.Next() {
-		var id ids.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listConnectionInventory = `-- name: ListConnectionInventory :many
 SELECT org_id, id, connection_id, kind, name, display_name, mime_type, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at FROM pc.connection_inventory
 WHERE org_id = $1 AND connection_id = $2

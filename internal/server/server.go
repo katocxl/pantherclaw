@@ -614,9 +614,6 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err := txapp.Register(jreg, pool, verification); err != nil {
 			return err
 		}
-		if err := registerM15DiscoveryJobs(jreg, m6.connections); err != nil {
-			return err
-		}
 		coverageJobs, err := registerCoverageWorkers(jreg, cfg, pool)
 		if err != nil {
 			return err

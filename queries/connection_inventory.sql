@@ -63,13 +63,3 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'NEW';
 SELECT * FROM pc.connection_inventory
 WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND id = ANY (sqlc.arg(ids)::uuid[])
 ORDER BY kind, name, id;
-
--- InventoryConnectionsOfPackage are the kind-mcp connections served
--- through a package that have NEW inventory items: the ones to check again
--- when the package's pin moves or a version of it becomes active.
--- name: InventoryConnectionsOfPackage :many
-SELECT c.id FROM pc.connections c
-WHERE c.org_id = sqlc.arg(org_id) AND c.package = sqlc.arg(package) AND c.kind = 'mcp' AND c.state <> 'RETIRED'
-  AND EXISTS (SELECT 1 FROM pc.connection_inventory i
-              WHERE i.org_id = c.org_id AND i.connection_id = c.id AND i.state = 'NEW')
-ORDER BY c.id;

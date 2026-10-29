@@ -12,8 +12,6 @@ import (
 	"strconv"
 	"unicode/utf8"
 
-	"github.com/riverqueue/river"
-
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
@@ -24,7 +22,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
-	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 	"github.com/katocxl/pantherclaw/internal/waitlist/adapters/pgwaitlist"
@@ -120,9 +117,9 @@ func (r InventoryReport) check() error {
 // ReportInventory records a gateway's listing of a connection it serves
 // (G0 M15 D22): a new (kind, name, digest) becomes an item, NEW with a
 // TOOL_REVIEW entry unless the connection's pinned active package version
-// covers it; a listed NEW item that is now covered becomes COVERED; a
-// vanished item listed again is checked anew; a complete listing ends the
-// NEW and COVERED items it lacks. Only a kind-mcp connection of the
+// covers it; every NEW item of the connection that is now covered,
+// listed or not, becomes COVERED (D25); a vanished item listed again is
+// checked anew; a complete listing ends the NEW and COVERED items it lacks. Only a kind-mcp connection of the
 // calling gateway is accepted (HR-418). It returns how many items became
 // NEW.
 func (s *Service) ReportInventory(ctx context.Context, org ids.OrgID, gateway ids.UUID, r InventoryReport) (int32, error) {
@@ -155,6 +152,9 @@ func (s *Service) ReportInventory(ctx context.Context, org ids.OrgID, gateway id
 			if isNew {
 				added++
 			}
+		}
+		if err := recheck(ctx, tx, c, conn.ID, cov); err != nil {
+			return err
 		}
 		if !r.Complete {
 			return nil
@@ -344,73 +344,23 @@ func reviewedResources(raw []byte) map[string]bool {
 	return out
 }
 
-// ReconcileInventory checks the NEW items of every kind-mcp connection
-// served through pkg against the org's pinned version of it, as when a
-// version becomes active or the pin moves (G0 M15 D22): a covered item
-// becomes COVERED and its entry APPROVED.
-func (s *Service) ReconcileInventory(ctx context.Context, org ids.OrgID, pkg string) error {
-	c := actor{Org: org, By: pgwaitlist.System.Type, Audit: pgwaitlist.System}
-	return s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
-		conns, err := q.InventoryConnectionsOfPackage(ctx, org, pkg)
-		if err != nil {
-			return err
-		}
-		cov, err := pinnedCoverage(ctx, q, org, pkg)
-		if err != nil {
-			return err
-		}
-		for _, id := range conns {
-			if _, err := lock(ctx, q, org, id); err != nil {
-				return err
-			}
-			rows, err := q.ListNewInventory(ctx, org, id)
-			if err != nil {
-				return err
-			}
-			for _, r := range rows {
-				if cov.covers(r.Kind, r.Name, r.Digest) {
-					if err := cover(ctx, tx, c, id, r); err != nil {
-						return err
-					}
-				}
-			}
-		}
-		return nil
-	})
-}
-
-// InventoryReconcileArgs is the River job that runs ReconcileInventory
-// for one package of one org.
-type InventoryReconcileArgs struct {
-	Org     ids.OrgID `json:"org"`
-	Package string    `json:"package"`
-}
-
-// Kind implements river.JobArgs.
-func (InventoryReconcileArgs) Kind() string { return "connection_inventory.reconcile" }
-
-// EnqueueInventoryReconcile schedules ReconcileInventory for pkg in tx,
-// so it runs only if the change that moved the package commits.
-func EnqueueInventoryReconcile(ctx context.Context, tx db.TenantTx, jc *jobs.Client, pkg string) error {
-	if jc == nil {
-		return nil
+// recheck covers the connection's NEW items that the pinned active version
+// now reviews (G0 M15 D25), whether or not this report listed them: a
+// version that became active, or a pin that moved, takes effect on the
+// next report. Serving never waits for it (HR-414).
+func recheck(ctx context.Context, tx db.TenantTx, c actor, conn ids.UUID, cov coverage) error {
+	rows, err := dbq.New(tx).ListNewInventory(ctx, c.Org, conn)
+	if err != nil {
+		return err
 	}
-	return jobs.InsertTx(ctx, jc, tx, InventoryReconcileArgs{Org: tx.OrgID(), Package: pkg}, nil)
-}
-
-type inventoryReconcileWorker struct {
-	river.WorkerDefaults[InventoryReconcileArgs]
-	s *Service
-}
-
-// NewInventoryReconcileWorker runs connection_inventory.reconcile jobs.
-func NewInventoryReconcileWorker(s *Service) river.Worker[InventoryReconcileArgs] {
-	return &inventoryReconcileWorker{s: s}
-}
-
-func (w *inventoryReconcileWorker) Work(ctx context.Context, job *river.Job[InventoryReconcileArgs]) error {
-	return w.s.ReconcileInventory(ctx, job.Args.Org, job.Args.Package)
+	for _, r := range rows {
+		if cov.covers(r.Kind, r.Name, r.Digest) {
+			if err := cover(ctx, tx, c, conn, r); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // ListInventory lists a connection's inventory items, oldest first, of the
