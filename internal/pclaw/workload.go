@@ -34,10 +34,10 @@ func workloadCommands() map[string]command {
 	return map[string]command{
 		"workload init": {"workload init --key-file FILE", workloadInit},
 		"workload enroll": {
-			"workload enroll --key-file FILE --server URL [--enrollment-token-file FILE] [--github | --kubernetes-token FILE | --gitlab-token-env VAR] [--org ID] [--declared-release sha256:…]",
+			"workload enroll --key-file FILE --server URL [--enrollment-token-file FILE] [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE] [--org ID] [--declared-release sha256:…]",
 			workloadEnroll,
 		},
-		"workload token": {"workload token --key-file FILE [--github | --kubernetes-token FILE | --gitlab-token-env VAR] [--declared-release sha256:…] [--out FILE]", workloadToken},
+		"workload token": {"workload token --key-file FILE [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE] [--declared-release sha256:…] [--out FILE]", workloadToken},
 	}
 }
 
@@ -77,6 +77,7 @@ type attestationFlags struct {
 	github     *bool
 	kubernetes *string
 	gitlabEnv  *string
+	spiffe     *string
 }
 
 func declareAttestation(fs *flag.FlagSet) attestationFlags {
@@ -85,16 +86,18 @@ func declareAttestation(fs *flag.FlagSet) attestationFlags {
 		kubernetes: fs.String("kubernetes-token", "", "attest with this projected service-account token file"),
 		gitlabEnv: fs.String("gitlab-token-env", "", "attest with the GitLab CI ID token in this environment variable "+
 			"(id_tokens with aud pantherclaw:<org>)"),
+		spiffe: fs.String("spiffe-token", "", "attest with the JWT-SVID in this file (audience pantherclaw:<org>); "+
+			"it is read again at each renewal"),
 	}
 }
 
 // errAttestationSources is returned when more than one source is given.
-var errAttestationSources = errors.New("use one of --github, --kubernetes-token and --gitlab-token-env, not both")
+var errAttestationSources = errors.New("use one of --github, --kubernetes-token, --gitlab-token-env and --spiffe-token, not both")
 
 // check refuses more than one attestation source.
 func (f attestationFlags) check() error {
 	n := 0
-	for _, set := range []bool{*f.github, *f.kubernetes != "", *f.gitlabEnv != ""} {
+	for _, set := range []bool{*f.github, *f.kubernetes != "", *f.gitlabEnv != "", *f.spiffe != ""} {
 		if set {
 			n++
 		}
@@ -117,6 +120,12 @@ func (f attestationFlags) attestation(ctx context.Context, a *app, org ids.OrgID
 			return nil, fmt.Errorf("the environment variable %s holds no GitLab ID token", *f.gitlabEnv)
 		}
 		return &pantherclawv1.Attestation{Kind: pantherclawv1.AttestationKind_ATTESTATION_KIND_GITLAB_CI, Token: tok}, nil
+	case *f.spiffe != "":
+		tok, err := readSecret(*f.spiffe)
+		if err != nil {
+			return nil, err
+		}
+		return &pantherclawv1.Attestation{Kind: pantherclawv1.AttestationKind_ATTESTATION_KIND_SPIFFE_JWT, Token: tok}, nil
 	case *f.github:
 		if org.IsZero() {
 			return nil, errors.New("the org is unknown: pass --org")

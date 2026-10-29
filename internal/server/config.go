@@ -97,6 +97,9 @@ type IdentityConfig struct {
 	// GitLabIssuers are the GitLab instances the GitLab CI preset trusts
 	// (D119); none configured means https://gitlab.com for every org.
 	GitLabIssuers []issuerkeys.GitLabIssuer `json:"gitlab_issuers"`
+	// SPIFFETrustDomains are the trust domains the SPIFFE preset trusts
+	// (D120); none means the preset refuses every attestation.
+	SPIFFETrustDomains []issuerkeys.TrustDomain `json:"spiffe_trust_domains"`
 }
 
 // LogConfig configures logging.
@@ -189,6 +192,9 @@ func (c *Config) Validate() error {
 	}
 	if err := issuerkeys.ValidateGitLab(c.Identity.GitLabIssuers); err != nil {
 		errs = append(errs, fmt.Errorf("identity.gitlab_issuers: %w", err))
+	}
+	if err := issuerkeys.ValidateSPIFFE(c.Identity.SPIFFETrustDomains); err != nil {
+		errs = append(errs, fmt.Errorf("identity.spiffe_trust_domains: %w", err))
 	}
 	if (c.HTTP.TLSCertFile == "") != (c.HTTP.TLSKeyFile == "") {
 		errs = append(errs, errors.New("http.tls_cert_file and http.tls_key_file must be set together"))

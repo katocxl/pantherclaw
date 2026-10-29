@@ -50,6 +50,8 @@ type Attestors struct {
 	Clusters Clusters
 	// GitLab is the operator-configured GitLab instances (D119).
 	GitLab IssuerDirectory
+	// SPIFFE is the operator-configured trust domains, keyed by name (D120).
+	SPIFFE IssuerDirectory
 }
 
 // IssuerDirectory is a preset's operator-configured issuers, each with its
@@ -178,6 +180,8 @@ func (s *Service) attest(ctx context.Context, org ids.OrgID, a Attestation) ([]a
 		return s.attestKubernetes(ctx, org, a.Token, revs)
 	case issuers.KindGitLab:
 		return s.attestGitLab(ctx, org, a.Token, revs)
+	case issuers.KindSPIFFE:
+		return s.attestSPIFFE(ctx, org, a.Token, revs)
 	default:
 		return nil, attErr(fmt.Errorf("unknown preset %q", a.Kind))
 	}
@@ -236,6 +240,67 @@ func (s *Service) attestGitLab(ctx context.Context, org ids.OrgID, token string,
 		out = append(out, attested{
 			rev: r, match: m, issuer: c.Issuer, key: issuers.ReplayKey(w.JTI, token), window: w,
 			claims: withClaims(m.Binding, map[string]string{"ref": c.Ref, "sha": c.SHA, "pipeline_source": c.PipelineSource}),
+		})
+	}
+	if len(out) == 0 {
+		return nil, attErr(last)
+	}
+	return out, nil
+}
+
+// attestSPIFFE verifies a JWT-SVID with the bundle of the trust domain its
+// sub names, which must be configured for org; MatchSPIFFE then checks the
+// verified sub is in that same trust domain (HR-462).
+func (s *Service) attestSPIFFE(ctx context.Context, org ids.OrgID, token string, revs []dbq.PcTrustedIssuer) ([]attested, error) {
+	if s.att.SPIFFE == nil {
+		return nil, attErr(errors.New("no SPIFFE trust domain is configured"))
+	}
+	unverified, err := unverifiedPayload(token)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	var head struct {
+		Subject string `json:"sub"`
+	}
+	if err := json.Unmarshal(unverified, &head); err != nil {
+		return nil, attErr(err)
+	}
+	td, ok := issuers.ParseSPIFFEID(head.Subject)
+	if !ok {
+		return nil, attErr(errors.New("sub is not a SPIFFE ID"))
+	}
+	payload, err := s.att.SPIFFE.Verify(ctx, td, org, token)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	c, err := issuers.ParseSPIFFEClaims(payload)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	w, err := issuers.ParseWindow(payload)
+	if err == nil {
+		err = w.Check(s.clk.Now())
+	}
+	if err != nil {
+		return nil, attErr(err)
+	}
+	var out []attested
+	var last error
+	for _, r := range revs {
+		b, err := bindingOf(r)
+		if err != nil || b.SPIFFE == nil {
+			continue
+		}
+		m, err := issuers.MatchSPIFFE(*b.SPIFFE, org, td, c)
+		if err != nil {
+			last = err
+			continue
+		}
+		// JWT-SVIDs carry no required jti: the token itself is the
+		// single-use key (HR-143).
+		out = append(out, attested{
+			rev: r, match: m, issuer: b.SPIFFE.Issuer(), key: issuers.ReplayKey("", token), window: w,
+			claims: withClaims(m.Binding, nil),
 		})
 	}
 	if len(out) == 0 {

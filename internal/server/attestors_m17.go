@@ -15,6 +15,10 @@ func presetAttestors(att *iapp.Attestors, cfg IdentityConfig) error {
 	if err != nil {
 		return err
 	}
-	att.GitLab = gitlab
+	spiffe, err := issuerkeys.NewSPIFFEDirectory(cfg.SPIFFETrustDomains, attestTimeout)
+	if err != nil {
+		return err
+	}
+	att.GitLab, att.SPIFFE = gitlab, spiffe
 	return nil
 }

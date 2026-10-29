@@ -37,6 +37,8 @@ const (
 	AttestationKind_ATTESTATION_KIND_KUBERNETES AttestationKind = 2
 	// A GitLab CI ID token (id_tokens with aud pantherclaw:<org>).
 	AttestationKind_ATTESTATION_KIND_GITLAB_CI AttestationKind = 3
+	// A SPIFFE JWT-SVID (aud pantherclaw:<org>).
+	AttestationKind_ATTESTATION_KIND_SPIFFE_JWT AttestationKind = 4
 )
 
 // Enum value maps for AttestationKind.
@@ -46,12 +48,14 @@ var (
 		1: "ATTESTATION_KIND_GITHUB_ACTIONS",
 		2: "ATTESTATION_KIND_KUBERNETES",
 		3: "ATTESTATION_KIND_GITLAB_CI",
+		4: "ATTESTATION_KIND_SPIFFE_JWT",
 	}
 	AttestationKind_value = map[string]int32{
 		"ATTESTATION_KIND_UNSPECIFIED":    0,
 		"ATTESTATION_KIND_GITHUB_ACTIONS": 1,
 		"ATTESTATION_KIND_KUBERNETES":     2,
 		"ATTESTATION_KIND_GITLAB_CI":      3,
+		"ATTESTATION_KIND_SPIFFE_JWT":     4,
 	}
 )
 
@@ -1178,12 +1182,13 @@ const file_pantherclaw_v1_workload_proto_rawDesc = "" +
 	"\xbaH\ar\x05\x10\x01(\x80 R\x04note\"\x82\x01\n" +
 	"$WorkloadServiceRequestAccessResponse\x12\x19\n" +
 	"\bentry_id\x18\x01 \x01(\tR\aentryId\x12?\n" +
-	"\rdeadline_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\fdeadlineTime*\x99\x01\n" +
+	"\rdeadline_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\fdeadlineTime*\xba\x01\n" +
 	"\x0fAttestationKind\x12 \n" +
 	"\x1cATTESTATION_KIND_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fATTESTATION_KIND_GITHUB_ACTIONS\x10\x01\x12\x1f\n" +
 	"\x1bATTESTATION_KIND_KUBERNETES\x10\x02\x12\x1e\n" +
-	"\x1aATTESTATION_KIND_GITLAB_CI\x10\x032\x8b\x05\n" +
+	"\x1aATTESTATION_KIND_GITLAB_CI\x10\x03\x12\x1f\n" +
+	"\x1bATTESTATION_KIND_SPIFFE_JWT\x10\x042\x8b\x05\n" +
 	"\x0fWorkloadService\x12G\n" +
 	"\x06Enroll\x12\x1d.pantherclaw.v1.EnrollRequest\x1a\x1e.pantherclaw.v1.EnrollResponse\x12S\n" +
 	"\n" +

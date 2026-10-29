@@ -73,6 +73,8 @@ enum AttestationKind {
   ATTESTATION_KIND_KUBERNETES = 2;
   // A GitLab CI ID token (id_tokens with aud pantherclaw:<org>).
   ATTESTATION_KIND_GITLAB_CI = 3;
+  // A SPIFFE JWT-SVID (aud pantherclaw:<org>).
+  ATTESTATION_KIND_SPIFFE_JWT = 4;
 }
 
 // Attestation is a platform token offered as L2 evidence. It is verified,

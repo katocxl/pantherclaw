@@ -225,7 +225,30 @@ A label (`pull_request` with `types: [labeled]` cannot be used: it runs the PR's
    ```
    Each ID token attests once. A job has one, so L2 lasts until that token expires; `pclaw workload renew` keeps renewing at L1 afterwards.
 
-## 5. When something goes wrong
+## 5. SPIFFE JWT-SVIDs (L2, M17)
+
+1. The operator lists the SPIFFE trust domains PantherClaw trusts, each with its JWT-SVID bundle from a SPIFFE bundle endpoint (`https_web`) or a JWKS file. With none configured the preset refuses every attestation; a tenant can never supply a bundle:
+   ```json
+   "identity": {"spiffe_trust_domains": [
+     {"trust_domain": "prod.acme.example", "bundle_url": "https://spire.acme.example/bundle",
+      "ca_file": "/etc/pantherclaw/spire-ca.pem", "orgs": ["<org id>"]},
+     {"trust_domain": "edge.acme.example", "bundle_file": "/etc/pantherclaw/edge-bundle.json"}
+   ]}
+   ```
+   Only keys with `use` `jwt-svid` and a `kid` are kept. A bundle file is read when the server starts.
+2. An admin proposes an entry that pins the workload's **exact** SPIFFE ID (no prefixes or patterns) for a `service` agent, and an **Identity Publisher** activates it:
+   ```bash
+   pclaw issuer propose-spiffe --agent <agent> --trust-domain prod.acme.example \
+     --spiffe-id spiffe://prod.acme.example/ns/agents/sa/runner --auto-admit --reason "service agent"
+   ```
+   The token's `sub` must be in the trust domain whose bundle verified it, and its audience exactly `pantherclaw:<org id>`.
+3. Have the workload write a JWT-SVID for that audience to a file (for example with spiffe-helper), and pass it to `enroll`, `token` or `renew`:
+   ```bash
+   pclaw workload renew --key-file workload.json --out token.json --spiffe-token /run/spiffe/pantherclaw.jwt
+   ```
+   The file is read again at each renewal. Each JWT-SVID attests once; keep its lifetime at one hour or less (HR-143).
+
+## 6. When something goes wrong
 
 - **Disable an entry** at once: `pclaw issuer disable ENTRY --reason …`. It stops auto-admission, and its instances drop to L1 at their next token.
 - **Revoke an instance**: `pclaw instance revoke INSTANCE --reason …`. Outstanding permits fail at `BeginDispatch`.

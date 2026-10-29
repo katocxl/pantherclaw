@@ -102,3 +102,64 @@ func TestHR461_GitLabEntriesAndAttestation(t *testing.T) {
 		wantPAP(t, name, err, pap.CodeAttestationLow)
 	}
 }
+
+const spID = "spiffe://prod.acme.test/ns/agents/sa/runner"
+
+func sp() app.Binding {
+	return app.Binding{SPIFFE: &issuers.SPIFFEBinding{TrustDomain: "prod.acme.test", SPIFFEID: spID}}
+}
+
+// spAtt is a JWT-SVID with claims for w's org; it has no jti.
+func (w *world) spAtt(mutate func(map[string]any)) *app.Attestation {
+	now := time.Now()
+	c := map[string]any{
+		"sub": spID, "aud": []string{"pantherclaw:" + w.org.String()},
+		"iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix(),
+	}
+	if mutate != nil {
+		mutate(c)
+	}
+	return &app.Attestation{Kind: issuers.KindSPIFFE, Token: jwt(c)}
+}
+
+// TestHR462_SPIFFEEntriesAndAttestation: an entry names only a trust domain
+// the operator configured for the org and only a service agent; a JWT-SVID
+// of the pinned SPIFFE ID enrolls at L2 once, and other workloads or trust
+// domains enroll nothing.
+// Covers: PN-002.3
+func TestHR462_SPIFFEEntriesAndAttestation(t *testing.T) {
+	w := newWorld(t)
+	w.svc.WithAttestors(app.Attestors{SPIFFE: fakeIssuers{"prod.acme.test": w.org}})
+	agent := w.agent(t, adomain.ContextService)
+
+	rogue := app.Binding{SPIFFE: &issuers.SPIFFEBinding{TrustDomain: "evil.test", SPIFFEID: "spiffe://evil.test/w"}}
+	if _, err := w.svc.ProposeIssuer(w.orgAdmin(), app.ProposeInput{AgentID: agent, Binding: rogue, Reason: "x"}, nil); !errors.Is(err, app.ErrUnknownIssuer) {
+		t.Errorf("unconfigured trust domain: %v", err)
+	}
+	ciAgent := w.agent(t, adomain.ContextCI)
+	if _, err := w.svc.ProposeIssuer(w.orgAdmin(), app.ProposeInput{AgentID: ciAgent, Binding: sp(), Reason: "x"}, nil); !errors.Is(err, app.ErrContextMismatch) {
+		t.Errorf("ci agent: %v", err)
+	}
+	e := w.activeEntry(t, agent, sp(), true)
+	if e.Kind != issuers.KindSPIFFE || e.Issuer != "spiffe://prod.acme.test" {
+		t.Fatalf("revision: %+v", e)
+	}
+
+	att := w.spAtt(nil)
+	in, err := w.attestEnroll(t, w.svc, newWorkload(), "", att)
+	if err != nil || in.State != "ADMITTED" || in.Level != 2 || in.Instance.Agent != agent {
+		t.Fatalf("pinned workload: %+v, %v", in, err)
+	}
+	_, err = w.attestEnroll(t, w.svc, newWorkload(), "", att)
+	wantPAP(t, "reused JWT-SVID", err, pap.CodeInvalidToken)
+
+	for name, mutate := range map[string]func(map[string]any){
+		"other workload":     func(c map[string]any) { c["sub"] = "spiffe://prod.acme.test/ns/agents/sa/other" },
+		"other trust domain": func(c map[string]any) { c["sub"] = "spiffe://evil.test/ns/agents/sa/runner" },
+		"not a SPIFFE ID":    func(c map[string]any) { c["sub"] = "runner" },
+		"lives over an hour": func(c map[string]any) { c["exp"] = time.Now().Add(61 * time.Minute).Unix() },
+	} {
+		_, err := w.attestEnroll(t, w.svc, newWorkload(), "", w.spAtt(mutate))
+		wantPAP(t, name, err, pap.CodeAttestationLow)
+	}
+}

@@ -54892,7 +54892,8 @@
           "ISSUER_KIND_UNSPECIFIED",
           "ISSUER_KIND_GITHUB_ACTIONS",
           "ISSUER_KIND_KUBERNETES",
-          "ISSUER_KIND_GITLAB_CI"
+          "ISSUER_KIND_GITLAB_CI",
+          "ISSUER_KIND_SPIFFE_JWT"
         ],
         "description": "IssuerKind is a preset; only presets can be configured (HR-140)."
       },
@@ -55575,6 +55576,18 @@
             "required": [
               "kubernetes"
             ]
+          },
+          {
+            "properties": {
+              "spiffe": {
+                "title": "spiffe",
+                "$ref": "#/components/schemas/pantherclaw.v1.SpiffeBinding"
+              }
+            },
+            "title": "spiffe",
+            "required": [
+              "spiffe"
+            ]
           }
         ],
         "properties": {
@@ -55998,6 +56011,19 @@
             "required": [
               "kubernetes"
             ]
+          },
+          {
+            "properties": {
+              "spiffe": {
+                "title": "spiffe",
+                "description": "SPIFFE JWT-SVID.",
+                "$ref": "#/components/schemas/pantherclaw.v1.SpiffeBindingInput"
+              }
+            },
+            "title": "spiffe",
+            "required": [
+              "spiffe"
+            ]
           }
         ],
         "properties": {
@@ -56136,6 +56162,53 @@
         "title": "RevokeInstanceResponse",
         "additionalProperties": false,
         "description": "RevokeInstanceResponse returns the instance."
+      },
+      "pantherclaw.v1.SpiffeBinding": {
+        "type": "object",
+        "properties": {
+          "trustDomain": {
+            "type": "string",
+            "title": "trust_domain",
+            "pattern": "^[a-z0-9._-]{1,255}$",
+            "description": "Trust domain name from the server configuration\n (identity.spiffe_trust_domains)."
+          },
+          "spiffeId": {
+            "type": "string",
+            "title": "spiffe_id",
+            "maxLength": 2048,
+            "pattern": "^spiffe://[a-z0-9._-]+(/[A-Za-z0-9._-]+)+$",
+            "description": "The exact SPIFFE ID, spiffe://\u003ctrust domain\u003e/\u003cpath\u003e; never a prefix or\n pattern."
+          }
+        },
+        "title": "SpiffeBinding",
+        "additionalProperties": false,
+        "description": "SpiffeBinding binds JWT-SVIDs to one workload (HR-462)."
+      },
+      "pantherclaw.v1.SpiffeBindingInput": {
+        "type": "object",
+        "properties": {
+          "trustDomain": {
+            "type": "string",
+            "title": "trust_domain",
+            "pattern": "^[a-z0-9._-]{1,255}$",
+            "description": "Trust domain name from the server configuration\n (identity.spiffe_trust_domains)."
+          },
+          "spiffeId": {
+            "type": "string",
+            "title": "spiffe_id",
+            "maxLength": 2048,
+            "pattern": "^spiffe://[a-z0-9._-]+(/[A-Za-z0-9._-]+)+$",
+            "description": "The exact SPIFFE ID, spiffe://\u003ctrust domain\u003e/\u003cpath\u003e; never a prefix or\n pattern."
+          }
+        },
+        "title": "SpiffeBinding",
+        "additionalProperties": false,
+        "description": "SpiffeBinding binds JWT-SVIDs to one workload (HR-462).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.SpiffeBinding",
+        "required": [
+          "trustDomain",
+          "spiffeId"
+        ]
       },
       "pantherclaw.v1.Verification": {
         "type": "object",
@@ -77128,7 +77201,8 @@
           "ATTESTATION_KIND_UNSPECIFIED",
           "ATTESTATION_KIND_GITHUB_ACTIONS",
           "ATTESTATION_KIND_KUBERNETES",
-          "ATTESTATION_KIND_GITLAB_CI"
+          "ATTESTATION_KIND_GITLAB_CI",
+          "ATTESTATION_KIND_SPIFFE_JWT"
         ],
         "description": "AttestationKind names the preset an attestation token is for."
       },

@@ -34,7 +34,7 @@ const exitRefused = 3
 
 func init() {
 	commands["workload renew"] = command{
-		usage: "workload renew --key-file FILE --out FILE [--github | --kubernetes-token FILE | --gitlab-token-env VAR] [--declared-release sha256:…]",
+		usage: "workload renew --key-file FILE --out FILE [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE] [--declared-release sha256:…]",
 		run:   workloadRenew,
 	}
 }
@@ -137,10 +137,10 @@ func (tr *tokenRenewal) renewer(deliver func(workloadclient.Issued) error) *work
 func (tr *tokenRenewal) report(s string) { _, _ = fmt.Fprintf(tr.a.stderr, "%s: %s\n", tr.name, s) }
 
 // issue asks for one token. It attests with a fresh GitHub token every
-// time, and with a projected Kubernetes token or a GitLab ID token only
-// while it is one not yet sent (the kubelet rotates the first; a GitLab job
-// has one). A refused attestation is reported and the request is sent
-// again without one: the server then keeps L2 until the last accepted
+// time, and with a projected Kubernetes token, a GitLab ID token or a
+// JWT-SVID only while it is one not yet sent (the kubelet and SPIRE rotate
+// theirs; a GitLab job has one). A refused attestation is reported and the
+// request is sent again without one: the server then keeps L2 until the last accepted
 // attestation expires, and issues L1 after that (HR-143). A reused
 // attestation token is refused as invalid_token, so with an attestation
 // that code means the attestation, not the instance.

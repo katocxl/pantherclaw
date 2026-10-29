@@ -18,6 +18,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -312,6 +314,58 @@ func TestHR461_GitLabIssuersComeFromOperatorConfiguration(t *testing.T) {
 		"duplicate": {{Issuer: "https://gitlab.example.com"}, {Issuer: "https://gitlab.example.com/"}},
 	} {
 		if err := issuerkeys.ValidateGitLab(cfgs); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}
+
+// TestHR462_SPIFFETrustDomainsComeFromOperatorConfiguration: a JWT-SVID is
+// verified only with the bundle of a configured trust domain, for the orgs
+// it lists, and only with the JWT-SVID profile.
+// Covers: PN-002.3
+func TestHR462_SPIFFETrustDomainsComeFromOperatorConfiguration(t *testing.T) {
+	ctx := context.Background()
+	org, other := ids.New[ids.Org](), ids.New[ids.Org]()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle := filepath.Join(t.TempDir(), "bundle.json")
+	if err := os.WriteFile(bundle, []byte(`{"spiffe_sequence":1,"keys":[`+ecJWKS(key, "j1", "jwt-svid")+`]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	d, err := issuerkeys.NewSPIFFEDirectory([]issuerkeys.TrustDomain{
+		{TrustDomain: "prod.acme.test", BundleFile: bundle, Access: issuerkeys.Access{Orgs: []string{org.String()}}},
+	}, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok := ecToken(t, key, `{"alg":"ES256","kid":"j1","typ":"JWT"}`)
+	if _, err := d.Verify(ctx, "prod.acme.test", org, tok); err != nil {
+		t.Fatalf("configured trust domain: %v", err)
+	}
+	if _, err := d.Verify(ctx, "prod.acme.test", other, tok); !errors.Is(err, issuerkeys.ErrUnverified) {
+		t.Errorf("trust domain used by an org it is not configured for: %v", err)
+	}
+	if _, err := d.Verify(ctx, "evil.test", org, tok); !errors.Is(err, issuerkeys.ErrUnverified) {
+		t.Errorf("unconfigured trust domain: %v", err)
+	}
+	if _, err := d.Verify(ctx, "prod.acme.test", org, ecToken(t, key, `{"alg":"ES256","kid":"j1","jku":"https://evil.test"}`)); err == nil {
+		t.Error("a header member outside the JWT-SVID profile verified")
+	}
+	empty, err := issuerkeys.NewSPIFFEDirectory(nil, time.Second)
+	if err != nil || empty.Allowed("prod.acme.test", org) {
+		t.Errorf("no trust domains configured must trust none: %v", err)
+	}
+	for name, cfgs := range map[string][]issuerkeys.TrustDomain{
+		"no source":    {{TrustDomain: "prod.acme.test"}},
+		"two sources":  {{TrustDomain: "prod.acme.test", BundleFile: bundle, BundleURL: "https://spire.acme.test/bundle"}},
+		"http bundle":  {{TrustDomain: "prod.acme.test", BundleURL: "http://spire.acme.test/bundle"}},
+		"bad name":     {{TrustDomain: "Prod.acme.test", BundleFile: bundle}},
+		"spiffe:// in": {{TrustDomain: "spiffe://prod.acme.test", BundleFile: bundle}},
+		"duplicate":    {{TrustDomain: "prod.acme.test", BundleFile: bundle}, {TrustDomain: "prod.acme.test", BundleFile: bundle}},
+	} {
+		if err := issuerkeys.ValidateSPIFFE(cfgs); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}

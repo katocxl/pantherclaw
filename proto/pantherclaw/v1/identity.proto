@@ -101,6 +101,8 @@ enum IssuerKind {
   ISSUER_KIND_KUBERNETES = 2;
   // GitLab CI ID tokens from an operator-configured instance (HR-461).
   ISSUER_KIND_GITLAB_CI = 3;
+  // SPIFFE JWT-SVID.
+  ISSUER_KIND_SPIFFE_JWT = 4;
 }
 
 // IssuerEntryState is the state of one revision.
@@ -269,6 +271,19 @@ message GitlabBinding {
   }];
 }
 
+// SpiffeBinding binds JWT-SVIDs to one workload (HR-462).
+message SpiffeBinding {
+  // Trust domain name from the server configuration
+  // (identity.spiffe_trust_domains).
+  string trust_domain = 1 [(buf.validate.field).string.pattern = "^[a-z0-9._-]{1,255}$"];
+  // The exact SPIFFE ID, spiffe://<trust domain>/<path>; never a prefix or
+  // pattern.
+  string spiffe_id = 2 [(buf.validate.field).string = {
+    max_len: 2048
+    pattern: "^spiffe://[a-z0-9._-]+(/[A-Za-z0-9._-]+)+$"
+  }];
+}
+
 // KubernetesBinding binds Kubernetes service-account tokens to one agent
 // (HR-144).
 message KubernetesBinding {
@@ -325,6 +340,7 @@ message IssuerRevision {
     GithubBinding github = 9;
     KubernetesBinding kubernetes = 10;
     GitlabBinding gitlab = 20;
+    SpiffeBinding spiffe = 21;
   }
   // Admits matching instances without an owner.
   bool auto_admit = 11;
@@ -480,6 +496,8 @@ message ProposeIssuerEntryRequest {
     KubernetesBinding kubernetes = 4;
     // GitLab CI.
     GitlabBinding gitlab = 7;
+    // SPIFFE JWT-SVID.
+    SpiffeBinding spiffe = 8;
   }
   // Admit matching instances without an owner (a widening when turned on).
   bool auto_admit = 5;

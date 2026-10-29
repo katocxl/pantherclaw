@@ -294,6 +294,8 @@ func attestation(a *pantherclawv1.Attestation) *app.Attestation {
 		kind = issuers.KindKubernetes
 	case pantherclawv1.AttestationKind_ATTESTATION_KIND_GITLAB_CI:
 		kind = issuers.KindGitLab
+	case pantherclawv1.AttestationKind_ATTESTATION_KIND_SPIFFE_JWT:
+		kind = issuers.KindSPIFFE
 	}
 	return &app.Attestation{Kind: kind, Token: a.GetToken()}
 }

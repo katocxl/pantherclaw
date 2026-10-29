@@ -38,6 +38,9 @@ func bindingFromProto(req *pantherclawv1.ProposeIssuerEntryRequest) app.Binding 
 			RunnerEnvironment: gl.GetRunnerEnvironment(),
 		}
 	}
+	if sp := req.GetSpiffe(); sp != nil {
+		b.SPIFFE = &issuers.SPIFFEBinding{TrustDomain: sp.GetTrustDomain(), SPIFFEID: sp.GetSpiffeId()}
+	}
 	if gh != nil {
 		g := issuers.GitHubBinding{
 			RepositoryID: gh.GetRepositoryId(), RepositoryOwnerID: gh.GetRepositoryOwnerId(),
@@ -80,6 +83,10 @@ func revisionProto(r app.Revision) *pantherclawv1.IssuerRevision {
 			Issuer: g.Issuer, ProjectId: g.ProjectID, NamespaceId: g.NamespaceID, CiConfigRefUris: g.CIConfigRefURIs,
 			CiConfigShas: g.CIConfigSHAs, Environment: g.Environment, RunnerEnvironment: g.RunnerEnvironment,
 		}}
+	}
+	if sp := r.Binding.SPIFFE; sp != nil {
+		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_SPIFFE_JWT
+		out.Binding = &pantherclawv1.IssuerRevision_Spiffe{Spiffe: &pantherclawv1.SpiffeBinding{TrustDomain: sp.TrustDomain, SpiffeId: sp.SPIFFEID}}
 	}
 	if k := r.Binding.Kubernetes; k != nil {
 		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_KUBERNETES
