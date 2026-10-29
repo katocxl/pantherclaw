@@ -17,6 +17,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateways/app"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -304,7 +305,8 @@ func TestT182_TheServerKeepsEntriesBoundAndToServedConnections(t *testing.T) {
 	}
 	unserved := sess
 	unserved.Key, unserved.Connection = stateKey("unserved"), theirs
-	if _, err := svc.PutMCPState(ctx, a, unserved, 0); !errors.Is(err, app.ErrMCPStateConnection) {
+	// NotFound, as ReportDrift answers, so connections cannot be probed (D43).
+	if _, err := svc.PutMCPState(ctx, a, unserved, 0); !errors.Is(err, app.ErrMCPStateConnection) || pcerr.CodeOf(err) != pcerr.NotFound {
 		t.Fatalf("state for another gateway's connection: %v", err)
 	}
 	unserved.Connection = ids.NewV7()

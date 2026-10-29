@@ -54,8 +54,9 @@ var (
 	ErrMCPStateNotFound = pcerr.New(pcerr.NotFound, "MCP_STATE_NOT_FOUND", "no such MCP state entry")
 	ErrMCPStateInvalid  = pcerr.New(pcerr.InvalidArgument, "MCP_STATE_INVALID", "the MCP state entry does not fit its kind")
 	// ErrMCPStateConnection: the connection is not one the calling gateway
-	// serves (D42, as ReportStatus and HR-418).
-	ErrMCPStateConnection = pcerr.New(pcerr.PermissionDenied, "MCP_STATE_CONNECTION", "the gateway does not serve this connection")
+	// serves. It answers NotFound, as ReportDrift does, so a gateway cannot
+	// probe which connections exist (D42, D43).
+	ErrMCPStateConnection = pcerr.New(pcerr.NotFound, "MCP_STATE_CONNECTION", "no such connection of this gateway")
 )
 
 // MCPEntry is one entry to write.
