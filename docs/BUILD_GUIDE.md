@@ -503,6 +503,8 @@ M0 → M1 → M1.5 → M2 → M3 → M4 → M5 → M6 → M7 → M8 → M9 → M
    → M11.1 → M10 → M11 → M14 → UI → M13 → v1.0
 ```
 
+M19 is a post-1.0 milestone (founder, 2026-10-29: coding continues while the v1.0 testing steps are postponed); it lands after M15–M18, in migration order ([G0 M19](g0/M19.md)), and the delivery order above gains it at the exit.
+
 M11 is split in two (founder, 2026-10-15: "finish up with policies!"): **M11.1**, the policy lifecycle, comes after the preview and before M10; **M11**, governed automations, keeps its place after M10.
 
 The UI phase moves ahead of M13 as milestone **UI** (founder, 2026-10-20; [G0 UI](g0/UI.md)): the web console, hosted accounts and per-organization plans come right after M14, and the hosted control plane's product code is pulled forward with them; M13's production hardening follows, so hosted staging and production are hardened before paid sign-up opens at v1.0.
@@ -682,6 +684,26 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Website and interactive demo** (PN-025), in the commercial distribution: a static website and an interactive demo of the real console on simulated data in the browser, on its own origin with no sign-up, no cookies and no API.
 - **Pulled from M13:** PN-012.2 (per-organization entitlements and plan limits), PN-012.3 (invitations accepted in the browser), F322, F325, F335 (UI part), F336, F341. **Stays in M13:** hosted staging and production infrastructure, backups and the DR drill, rate limits and quotas, support access, data export and deletion, the Helm chart, the FIPS build, post-quantum TLS, SLOs under load, Schemathesis, the threat-model refresh (G4), the docs site and the OpenTelemetry exporter.
 - Migrations `00160`–`00164`, the last one `pc.billing_links` (server-recorded checkouts and subscriptions, one current subscription per organization) (`00165`–`00168` spare; `00169` became M13's platform migration, G0 M13 D40).
+
+### M19 — Scale: high availability, hosted per-org gateways and decision speed
+**HR:** HR-490..505 · **PN:** PN-010.7, PN-010.4, PN-011.1 (rest) · **ADR:** 0040, 0041 · **G0:** [g0/M19.md](g0/M19.md).
+- **High availability** (PN-010.7, [ADR-0040](adr/0040-high-availability-semantics.md)):
+  - The API's limits per organization and per credential are spent from leased chunks of the shared Postgres counter (R-58 closed).
+  - Stream and wait caps hold across replicas through leases.
+  - The gateway certificate cache forgets revocations through LISTEN.
+  - Every decision-path cache has a stated staleness bound of at most 2 s.
+  - The server connects to several database hosts (`target_session_attrs=read-write`, TLS verify-full per host) and makes no decision while no read-write primary answers. After an asynchronous promotion it starts in the maintenance hold with an epoch bump.
+  - Workers run with two or more replicas.
+  - A2A ownership is shared between gateway replicas on M15's state.
+  - The local failover test is `task failover` (a Postgres standby in Docker).
+- **Hosted gateways** (PN-010.4, founder decision G9, [ADR-0041](adr/0041-hosted-per-org-gateway-pool.md)):
+  - One gateway process per organization on shared hosts, each in its own isolated container.
+  - Provisioned from records by a worker job and the host agent `pantherclaw-host`, whose identity has no organization authority.
+  - Enrolment tokens go only through the process's private tmpfs, and deprovisioning revokes first.
+  - Reached by a per-org hostname with SNI passthrough.
+  - No connectors (HR-084 unchanged).
+- **Decision speed** (PN-011.1): Prepare merged into the snapshot transaction for the first refund of a period; at most one jittered retry on `BUDGET_BUSY`; measured side by side in `docs/perf/M19.md`. Finalize + BeginDispatch is not merged (follow-up founder decision).
+- Migrations `00226`–`00229` (`00230`–`00235` spare); a new `hosting.proto`.
 
 ---
 

@@ -462,3 +462,24 @@
 | HR-400 | A decision returned to an agent (AuthorizeResponse, gateway refusals, hook and A2A refusals) adds only the agent-safe explanation: presentation, failing category, decisive code, transaction id and recovery actions. It never adds the effective grant, policy, limits, budget values or request content (F330; founder 2026-10-28). | T-150, T-080 | M13 |
 | HR-401 | Run inspection reads each section only with that section's own permission and scope. A section the caller can't read is left out and listed in omitted_sections, never returned partially counted. | — (rows26 D22, F224) | M13 |
 | HR-402 | The coverage graph is assembled only from coverage records the caller may read, filtered before any node or count is built. Unknown stays UNVERIFIED and is never shown as controlled. | T-042, T-085 | M13 |
+
+## Scale: high availability, hosted per-org gateways and decision speed (G0 M19)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
+| HR-490 | The authenticated API's limits per organization and per credential are spent from leased chunks of the shared Postgres counter (k = max(1, limit/16) per lease, a chunk expiring at its window's end), so across N replicas the calls admitted in a window stay within limit + (N−1)·k; a store error refuses the call, except the safety and allow classes (G0 M13 D27). | T-214, T-170 | M19 |
+| HR-491 | Stream and wait caps (operations streams per caller, containment streams per certificate, wait handles per instance) hold across replicas: each open stream or wait holds a lease counted in the transaction that inserts it, heartbeated every 10 s and expiring after 30 s; only the per-server wait limit is local. | T-214 | M19 |
+| HR-492 | A gateway revocation or disablement reaches every replica's certificate cache through `LISTEN pc_containment`; otherwise a cached result lives at most its 1 s lifetime. | T-214 | M19 |
+| HR-493 | Every cache on the decision path has a stated staleness bound of at most 2 s, or is invalidated through LISTEN ([ADR-0040](../adr/0040-high-availability-semantics.md)), and each bound has a test. | T-214, T-171 | M19 |
+| HR-494 | Per-IP pre-authentication limiters (automation receiver, OAuth and browser sign-in, extension web routes) are per replica and documented as such (R-66); tenant-keyed limits (signal transmitters, evidence replays) are counted in the shared store. | T-214, T-170 | M19 |
+| HR-495 | No decision is made while no read-write primary answers: Authorize and BeginDispatch answer CANNOT_AUTHORIZE (HTTP 503 for other calls), `/readyz` is false, and nothing is served read-only. | T-215 | M19 |
+| HR-496 | After the promotion of an asynchronous standby, the server starts in the maintenance hold (HR-379) and leaves it only with an epoch bump (HR-373). | T-215, T-171 | M19 |
+| HR-497 | A multi-host database connection uses `target_session_attrs=read-write` and verifies TLS (verify-full) for every host. | T-215 | M19 |
+| HR-498 | Every River job is safe with two or more workers: running it concurrently or twice never duplicates an effect, a signature or a delivery. | T-215 | M19 |
+| HR-499 | A PantherClaw-hosted gateway runs as one process per organization, and its certificate names exactly that one organization (HR-181). | T-216 | M19 |
+| HR-500 | A hosting host's identity (certificate purpose `hosting`, no organization) has no organization authority: it can call only the hosting RPCs and never an organization RPC. | T-217 | M19 |
+| HR-501 | Each hosted gateway runs in its own container as a non-root uid, with a read-only root, all capabilities dropped, no Docker socket, cgroup CPU, memory and pids limits and its own network namespace, started through the Docker CLI with fixed arguments (HR-216); it runs no connector containers (HR-084). | T-216, T-218 | M19 |
+| HR-502 | A hosted gateway's single-use enrolment token is delivered only through a file on that process's private tmpfs, never in an environment variable, an argument or a log. | T-217 | M19 |
+| HR-503 | Deprovisioning a hosted gateway revokes its certificate (epoch bump) before the process is stopped. | T-217 | M19 |
+| HR-504 | A merged decision transaction keeps the HR-001 and HR-048 order: the reservation checks and order are unchanged, and the gateway still calls BeginDispatch before the target. | T-219 | M19 |
+| HR-505 | A budget or counter row still locked after 100 ms gives `BUDGET_BUSY`; the gateway retries such a decision at most once, with jitter, and then returns the refusal. | T-219 | M19 |
