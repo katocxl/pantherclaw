@@ -99,6 +99,8 @@ enum IssuerKind {
   ISSUER_KIND_GITHUB_ACTIONS = 1;
   // Kubernetes projected service-account tokens via TokenReview (HR-144).
   ISSUER_KIND_KUBERNETES = 2;
+  // GitLab CI ID tokens from an operator-configured instance (HR-461).
+  ISSUER_KIND_GITLAB_CI = 3;
 }
 
 // IssuerEntryState is the state of one revision.
@@ -127,7 +129,8 @@ enum GithubJobType {
 message Verification {
   // Attestation level now in force (1 or 2).
   int32 level = 1;
-  // How it was verified: "fingerprint", "github_actions" or "kubernetes".
+  // How it was verified: "fingerprint" or the preset kind ("github_actions",
+  // "kubernetes", "gitlab_ci", …).
   string method = 2;
   // When L2 lapses unless renewed.
   google.protobuf.Timestamp attested_until = 3;
@@ -221,6 +224,51 @@ message GithubBinding {
   }];
 }
 
+// GitlabBinding binds GitLab CI ID tokens to one agent (HR-461).
+message GitlabBinding {
+  // GitLab instance URL from the server configuration
+  // (identity.gitlab_issuers), for example https://gitlab.com.
+  string issuer = 1 [(buf.validate.field).string = {
+    max_len: 255
+    pattern: "^https://[^/?#@\\s]+/?$"
+  }];
+  // Numeric project id (paths can be renamed and reused; ids cannot).
+  string project_id = 2 [(buf.validate.field).string.pattern = "^[1-9][0-9]{0,19}$"];
+  // Numeric namespace (group) id.
+  string namespace_id = 3 [(buf.validate.field).string.pattern = "^[1-9][0-9]{0,19}$"];
+  // Accepted ci_config_ref_uri values, each
+  // "<host>/<project path>//<file>@refs/heads/…" or "…@refs/tags/…".
+  repeated string ci_config_ref_uris = 4 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 20
+    unique: true
+    items: {
+      string: {
+        max_len: 512
+        pattern: "^[a-z0-9.-]+(:[0-9]+)?/[^\\s@]+//[^@\\s]+@refs/(heads|tags)/[^\\s]+$"
+      }
+    }
+  }];
+  // Optional exact revisions of the pipeline definition (ci_config_sha).
+  repeated string ci_config_shas = 5 [(buf.validate.field).repeated = {
+    max_items: 20
+    unique: true
+    items: {
+      string: {pattern: "^[0-9a-f]{40}$"}
+    }
+  }];
+  // Optional deployment environment.
+  string environment = 6 [(buf.validate.field).string.max_len = 255];
+  // Optional runner environment ("gitlab-hosted" or "self-hosted").
+  string runner_environment = 7 [(buf.validate.field).string = {
+    in: [
+      "",
+      "gitlab-hosted",
+      "self-hosted"
+    ]
+  }];
+}
+
 // KubernetesBinding binds Kubernetes service-account tokens to one agent
 // (HR-144).
 message KubernetesBinding {
@@ -276,6 +324,7 @@ message IssuerRevision {
   oneof binding {
     GithubBinding github = 9;
     KubernetesBinding kubernetes = 10;
+    GitlabBinding gitlab = 20;
   }
   // Admits matching instances without an owner.
   bool auto_admit = 11;
@@ -429,6 +478,8 @@ message ProposeIssuerEntryRequest {
     GithubBinding github = 3;
     // Kubernetes.
     KubernetesBinding kubernetes = 4;
+    // GitLab CI.
+    GitlabBinding gitlab = 7;
   }
   // Admit matching instances without an owner (a widening when turned on).
   bool auto_admit = 5;

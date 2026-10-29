@@ -25,14 +25,16 @@ import (
 // Kind is a preset.
 type Kind string
 
-// Presets shipped in M3 (PN-002.2); further presets are PN-002.3.
+// Presets: GitHub Actions and Kubernetes shipped in M3 (PN-002.2), the
+// rest in M17 (PN-002.3).
 const (
 	KindGitHub     Kind = "github_actions"
 	KindKubernetes Kind = "kubernetes"
+	KindGitLab     Kind = "gitlab_ci"
 )
 
 // kinds are the presets this build implements.
-var kinds = []Kind{KindGitHub, KindKubernetes}
+var kinds = []Kind{KindGitHub, KindKubernetes, KindGitLab}
 
 // Known reports whether k is a preset this build implements. Anything else
 // is refused, never mapped to a default preset (HR-465).

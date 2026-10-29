@@ -78,6 +78,25 @@ func identityCommands() map[string]command {
 				})
 			}
 		}),
+		"issuer propose-gitlab": rpc("issuer propose-gitlab --agent ID [--issuer URL] --project-id N --namespace-id N --ci-config-ref-uri URI... [--ci-config-sha SHA...] [--environment E] [--runner gitlab-hosted|self-hosted] [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
+			agent, entry, reason := fs.String("agent", "", "agent the entry binds to"), fs.String("entry", "", "revise this entry"), fs.String("reason", "", "why")
+			issuer := fs.String("issuer", "https://gitlab.com", "GitLab instance from the server configuration (identity.gitlab_issuers)")
+			project, namespace := fs.String("project-id", "", "numeric project id"), fs.String("namespace-id", "", "numeric namespace (group) id")
+			env, runner := fs.String("environment", "", "pin a deployment environment"), fs.String("runner", "", "pin gitlab-hosted or self-hosted runners")
+			auto := fs.Bool("auto-admit", false, "admit matching workloads without an owner (needs activation by an Identity Publisher)")
+			var refs, shas list
+			fs.Var(&refs, "ci-config-ref-uri", "gitlab.com/group/project//.gitlab-ci.yml@refs/heads/main (repeatable)")
+			fs.Var(&shas, "ci-config-sha", "pin an exact pipeline definition revision (repeatable)")
+			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
+				return c.identity.ProposeIssuerEntry(ctx, &pantherclawv1.ProposeIssuerEntryRequest{
+					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason,
+					Binding: &pantherclawv1.ProposeIssuerEntryRequest_Gitlab{Gitlab: &pantherclawv1.GitlabBinding{
+						Issuer: *issuer, ProjectId: *project, NamespaceId: *namespace, CiConfigRefUris: refs, CiConfigShas: shas,
+						Environment: *env, RunnerEnvironment: *runner,
+					}},
+				})
+			}
+		}),
 		"issuer propose-kubernetes": rpc("issuer propose-kubernetes --agent ID --cluster NAME --namespace NS --service-account NAME --service-account-uid UID [--image-repository R...] [--image-digest D...] [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
 			agent, entry, reason := fs.String("agent", "", "agent the entry binds to"), fs.String("entry", "", "revise this entry"), fs.String("reason", "", "why")
 			cluster, ns := fs.String("cluster", "", "cluster name from the server configuration"), fs.String("namespace", "", "namespace")

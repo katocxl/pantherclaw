@@ -15,6 +15,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/oidcrp"
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
+	"github.com/katocxl/pantherclaw/internal/identity/adapters/issuerkeys"
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/kube"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/config"
@@ -93,6 +94,9 @@ type IdentityConfig struct {
 	// KubernetesClusters are the clusters the Kubernetes L2 preset may call
 	// (founder decision 3: operator configuration only).
 	KubernetesClusters []kube.ClusterConfig `json:"kubernetes_clusters"`
+	// GitLabIssuers are the GitLab instances the GitLab CI preset trusts
+	// (D119); none configured means https://gitlab.com for every org.
+	GitLabIssuers []issuerkeys.GitLabIssuer `json:"gitlab_issuers"`
 }
 
 // LogConfig configures logging.
@@ -182,6 +186,9 @@ func (c *Config) Validate() error {
 	}
 	if _, err := kube.NewDirectory(c.Identity.KubernetesClusters); err != nil {
 		errs = append(errs, fmt.Errorf("identity.kubernetes_clusters: %w", err))
+	}
+	if err := issuerkeys.ValidateGitLab(c.Identity.GitLabIssuers); err != nil {
+		errs = append(errs, fmt.Errorf("identity.gitlab_issuers: %w", err))
 	}
 	if (c.HTTP.TLSCertFile == "") != (c.HTTP.TLSKeyFile == "") {
 		errs = append(errs, errors.New("http.tls_cert_file and http.tls_key_file must be set together"))

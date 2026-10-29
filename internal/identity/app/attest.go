@@ -48,6 +48,16 @@ type Attestors struct {
 	// Kube calls the clusters that Clusters allows for an org.
 	Kube     ClusterReviewer
 	Clusters Clusters
+	// GitLab is the operator-configured GitLab instances (D119).
+	GitLab IssuerDirectory
+}
+
+// IssuerDirectory is a preset's operator-configured issuers, each with its
+// own keys (issuerkeys.Directory). A tenant names one only through an
+// entry, and only one configured for its org (HR-142).
+type IssuerDirectory interface {
+	Allowed(issuer string, org ids.OrgID) bool
+	Verify(ctx context.Context, issuer string, org ids.OrgID, token string) ([]byte, error)
 }
 
 // WithAttestors sets the attestation verifiers and returns s.
@@ -166,6 +176,8 @@ func (s *Service) attest(ctx context.Context, org ids.OrgID, a Attestation) ([]a
 		return s.attestGitHub(ctx, org, a.Token, revs)
 	case issuers.KindKubernetes:
 		return s.attestKubernetes(ctx, org, a.Token, revs)
+	case issuers.KindGitLab:
+		return s.attestGitLab(ctx, org, a.Token, revs)
 	default:
 		return nil, attErr(fmt.Errorf("unknown preset %q", a.Kind))
 	}
@@ -175,6 +187,61 @@ func bindingOf(r dbq.PcTrustedIssuer) (Binding, error) {
 	var b Binding
 	err := json.Unmarshal(r.Binding, &b)
 	return b, err
+}
+
+// attestGitLab verifies a GitLab CI ID token with the keys of the instance
+// its iss names, which must be configured for org; that iss only picks the
+// keys and is checked again, verified, against each entry (HR-461).
+func (s *Service) attestGitLab(ctx context.Context, org ids.OrgID, token string, revs []dbq.PcTrustedIssuer) ([]attested, error) {
+	if s.att.GitLab == nil {
+		return nil, attErr(errors.New("no GitLab instance is configured"))
+	}
+	unverified, err := unverifiedPayload(token)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	var head struct {
+		Issuer string `json:"iss"`
+	}
+	if err := json.Unmarshal(unverified, &head); err != nil {
+		return nil, attErr(err)
+	}
+	payload, err := s.att.GitLab.Verify(ctx, head.Issuer, org, token)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	c, err := issuers.ParseGitLabClaims(payload)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	w, err := issuers.ParseWindow(payload)
+	if err == nil {
+		err = w.Check(s.clk.Now())
+	}
+	if err != nil {
+		return nil, attErr(err)
+	}
+	var out []attested
+	var last error
+	for _, r := range revs {
+		b, err := bindingOf(r)
+		if err != nil || b.GitLab == nil {
+			continue
+		}
+		m, err := issuers.MatchGitLab(*b.GitLab, org, c)
+		if err != nil {
+			last = err
+			continue
+		}
+		out = append(out, attested{
+			rev: r, match: m, issuer: c.Issuer, key: issuers.ReplayKey(w.JTI, token), window: w,
+			claims: withClaims(m.Binding, map[string]string{"ref": c.Ref, "sha": c.SHA, "pipeline_source": c.PipelineSource}),
+		})
+	}
+	if len(out) == 0 {
+		return nil, attErr(last)
+	}
+	return out, nil
 }
 
 func (s *Service) attestGitHub(ctx context.Context, org ids.OrgID, token string, revs []dbq.PcTrustedIssuer) ([]attested, error) {

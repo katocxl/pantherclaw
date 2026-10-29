@@ -31,9 +31,11 @@ var (
 	ErrProposalOpen = pcerr.New(pcerr.FailedPrecondition, "ISSUER_PROPOSAL_OPEN",
 		"the entry already has a proposed revision; withdraw or activate it first")
 	ErrContextMismatch = pcerr.New(pcerr.InvalidArgument, "ISSUER_CONTEXT",
-		"the GitHub preset is for ci agents and the Kubernetes preset for kubernetes agents; desktop agents stay at L1")
+		"the GitHub and GitLab presets are for ci agents and the Kubernetes preset for kubernetes agents; desktop agents stay at L1")
 	ErrUnknownCluster = pcerr.New(pcerr.InvalidArgument, "ISSUER_CLUSTER",
 		"the cluster is not configured for this organization (identity.kubernetes_clusters)")
+	ErrUnknownIssuer = pcerr.New(pcerr.InvalidArgument, "ISSUER_NOT_CONFIGURED",
+		"the issuer is not configured for this organization (identity.gitlab_issuers)")
 	ErrConfirmReusable = pcerr.New(pcerr.FailedPrecondition, "CONFIRM_REUSABLE_REFS",
 		"confirm that every reusable workflow ref is a protected branch or tag of its repository")
 )
@@ -48,24 +50,45 @@ type Clusters interface {
 type Binding struct {
 	GitHub     *issuers.GitHubBinding     `json:"github,omitzero"`
 	Kubernetes *issuers.KubernetesBinding `json:"kubernetes,omitzero"`
+	GitLab     *issuers.GitLabBinding     `json:"gitlab,omitzero"`
+}
+
+// presetContext is the execution context each preset attests (D119-D121).
+var presetContext = map[issuers.Kind]adomain.ExecutionContext{
+	issuers.KindGitHub: adomain.ContextCI, issuers.KindKubernetes: adomain.ContextKubernetes, issuers.KindGitLab: adomain.ContextCI,
+}
+
+// kinds lists the kind of every field that is set.
+func (b Binding) kinds() []issuers.Kind {
+	var out []issuers.Kind
+	for k, set := range map[issuers.Kind]bool{
+		issuers.KindGitHub: b.GitHub != nil, issuers.KindKubernetes: b.Kubernetes != nil, issuers.KindGitLab: b.GitLab != nil,
+	} {
+		if set {
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 func (b Binding) kind() issuers.Kind {
-	if b.GitHub != nil {
-		return issuers.KindGitHub
+	if k := b.kinds(); len(k) == 1 {
+		return k[0]
 	}
-	return issuers.KindKubernetes
+	return ""
 }
 
 func (b Binding) validate() error {
-	if (b.GitHub == nil) == (b.Kubernetes == nil) {
-		return pcerr.New(pcerr.InvalidArgument, "ISSUER_BINDING", "exactly one preset binding is required")
-	}
 	var err error
-	if b.GitHub != nil {
+	switch b.kind() {
+	case issuers.KindGitHub:
 		err = b.GitHub.Validate()
-	} else {
+	case issuers.KindKubernetes:
 		err = b.Kubernetes.Validate()
+	case issuers.KindGitLab:
+		err = b.GitLab.Validate()
+	default:
+		return pcerr.New(pcerr.InvalidArgument, "ISSUER_BINDING", "exactly one preset binding is required")
 	}
 	if err != nil {
 		return pcerr.Wrap(err, pcerr.InvalidArgument, "ISSUER_BINDING", err.Error())
@@ -74,17 +97,25 @@ func (b Binding) validate() error {
 }
 
 func (b Binding) issuer() string {
-	if b.GitHub != nil {
+	switch b.kind() {
+	case issuers.KindGitHub:
 		return issuers.GitHubIssuer
+	case issuers.KindGitLab:
+		return strings.TrimSuffix(b.GitLab.Issuer, "/")
+	default:
+		return b.Kubernetes.Issuer()
 	}
-	return b.Kubernetes.Issuer()
 }
 
 func (b Binding) algorithms() []string {
-	if b.GitHub != nil {
+	switch b.kind() {
+	case issuers.KindGitHub:
 		return issuers.GitHubAlgorithms
+	case issuers.KindGitLab:
+		return issuers.GitLabAlgorithms
+	default:
+		return []string{"TokenReview"}
 	}
-	return []string{"TokenReview"}
 }
 
 // widening lists what b accepts that prev did not; a kind change replaces
@@ -97,6 +128,8 @@ func (b Binding) widening(prev *Binding) []string {
 		return []string{"preset changed"}
 	case b.GitHub != nil:
 		return b.GitHub.Widening(prev.GitHub)
+	case b.GitLab != nil:
+		return b.GitLab.Widening(prev.GitLab)
 	default:
 		return b.Kubernetes.Widening(prev.Kubernetes)
 	}
@@ -216,6 +249,9 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 	if k := in.Binding.Kubernetes; k != nil && (clusters == nil || !clusters.Allowed(k.Cluster, c.Org)) {
 		return Revision{}, ErrUnknownCluster
 	}
+	if g := in.Binding.GitLab; g != nil && (s.att.GitLab == nil || !s.att.GitLab.Allowed(strings.TrimSuffix(g.Issuer, "/"), c.Org)) {
+		return Revision{}, ErrUnknownIssuer
+	}
 	var out Revision
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
@@ -223,7 +259,7 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 		if err != nil {
 			return err
 		}
-		if want := map[issuers.Kind]adomain.ExecutionContext{issuers.KindGitHub: adomain.ContextCI, issuers.KindKubernetes: adomain.ContextKubernetes}[in.Binding.kind()]; deref(a.ExecutionContext) != string(want) {
+		if want := presetContext[in.Binding.kind()]; deref(a.ExecutionContext) != string(want) {
 			return ErrContextMismatch
 		}
 		entryID, number := in.EntryID, int32(1)

@@ -54891,7 +54891,8 @@
         "enum": [
           "ISSUER_KIND_UNSPECIFIED",
           "ISSUER_KIND_GITHUB_ACTIONS",
-          "ISSUER_KIND_KUBERNETES"
+          "ISSUER_KIND_KUBERNETES",
+          "ISSUER_KIND_GITLAB_CI"
         ],
         "description": "IssuerKind is a preset; only presets can be configured (HR-140)."
       },
@@ -55297,6 +55298,167 @@
           "workflowRefs"
         ]
       },
+      "pantherclaw.v1.GitlabBinding": {
+        "type": "object",
+        "properties": {
+          "issuer": {
+            "type": "string",
+            "title": "issuer",
+            "maxLength": 255,
+            "pattern": "^https://[^/?#@\\s]+/?$",
+            "description": "GitLab instance URL from the server configuration\n (identity.gitlab_issuers), for example https://gitlab.com."
+          },
+          "projectId": {
+            "type": "string",
+            "title": "project_id",
+            "pattern": "^[1-9][0-9]{0,19}$",
+            "description": "Numeric project id (paths can be renamed and reused; ids cannot)."
+          },
+          "namespaceId": {
+            "type": "string",
+            "title": "namespace_id",
+            "pattern": "^[1-9][0-9]{0,19}$",
+            "description": "Numeric namespace (group) id."
+          },
+          "ciConfigRefUris": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 512,
+              "pattern": "^[a-z0-9.-]+(:[0-9]+)?/[^\\s@]+//[^@\\s]+@refs/(heads|tags)/[^\\s]+$",
+              "maxItems": 20,
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "title": "ci_config_ref_uris",
+            "maxItems": 20,
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "Accepted ci_config_ref_uri values, each\n \"\u003chost\u003e/\u003cproject path\u003e//\u003cfile\u003e@refs/heads/…\" or \"…@refs/tags/…\"."
+          },
+          "ciConfigShas": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$",
+              "maxItems": 20,
+              "uniqueItems": true
+            },
+            "title": "ci_config_shas",
+            "maxItems": 20,
+            "uniqueItems": true,
+            "description": "Optional exact revisions of the pipeline definition (ci_config_sha)."
+          },
+          "environment": {
+            "type": "string",
+            "title": "environment",
+            "maxLength": 255,
+            "description": "Optional deployment environment."
+          },
+          "runnerEnvironment": {
+            "type": "string",
+            "title": "runner_environment",
+            "enum": [
+              "",
+              "gitlab-hosted",
+              "self-hosted"
+            ],
+            "description": "Optional runner environment (\"gitlab-hosted\" or \"self-hosted\")."
+          }
+        },
+        "title": "GitlabBinding",
+        "additionalProperties": false,
+        "description": "GitlabBinding binds GitLab CI ID tokens to one agent (HR-461)."
+      },
+      "pantherclaw.v1.GitlabBindingInput": {
+        "type": "object",
+        "properties": {
+          "issuer": {
+            "type": "string",
+            "title": "issuer",
+            "maxLength": 255,
+            "pattern": "^https://[^/?#@\\s]+/?$",
+            "description": "GitLab instance URL from the server configuration\n (identity.gitlab_issuers), for example https://gitlab.com."
+          },
+          "projectId": {
+            "type": "string",
+            "title": "project_id",
+            "pattern": "^[1-9][0-9]{0,19}$",
+            "description": "Numeric project id (paths can be renamed and reused; ids cannot)."
+          },
+          "namespaceId": {
+            "type": "string",
+            "title": "namespace_id",
+            "pattern": "^[1-9][0-9]{0,19}$",
+            "description": "Numeric namespace (group) id."
+          },
+          "ciConfigRefUris": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 512,
+              "pattern": "^[a-z0-9.-]+(:[0-9]+)?/[^\\s@]+//[^@\\s]+@refs/(heads|tags)/[^\\s]+$",
+              "maxItems": 20,
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "title": "ci_config_ref_uris",
+            "maxItems": 20,
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "Accepted ci_config_ref_uri values, each\n \"\u003chost\u003e/\u003cproject path\u003e//\u003cfile\u003e@refs/heads/…\" or \"…@refs/tags/…\"."
+          },
+          "ciConfigShas": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$",
+              "maxItems": 20,
+              "uniqueItems": true
+            },
+            "title": "ci_config_shas",
+            "maxItems": 20,
+            "uniqueItems": true,
+            "description": "Optional exact revisions of the pipeline definition (ci_config_sha)."
+          },
+          "environment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "environment",
+            "maxLength": 255,
+            "description": "Optional deployment environment."
+          },
+          "runnerEnvironment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "runner_environment",
+            "enum": [
+              "",
+              "gitlab-hosted",
+              "self-hosted",
+              null
+            ],
+            "description": "Optional runner environment (\"gitlab-hosted\" or \"self-hosted\")."
+          }
+        },
+        "title": "GitlabBinding",
+        "additionalProperties": false,
+        "description": "GitlabBinding binds GitLab CI ID tokens to one agent (HR-461).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.GitlabBinding",
+        "required": [
+          "issuer",
+          "projectId",
+          "namespaceId",
+          "ciConfigRefUris"
+        ]
+      },
       "pantherclaw.v1.Instance": {
         "type": "object",
         "properties": {
@@ -55388,6 +55550,18 @@
             "title": "github",
             "required": [
               "github"
+            ]
+          },
+          {
+            "properties": {
+              "gitlab": {
+                "title": "gitlab",
+                "$ref": "#/components/schemas/pantherclaw.v1.GitlabBinding"
+              }
+            },
+            "title": "gitlab",
+            "required": [
+              "gitlab"
             ]
           },
           {
@@ -55801,6 +55975,19 @@
           },
           {
             "properties": {
+              "gitlab": {
+                "title": "gitlab",
+                "description": "GitLab CI.",
+                "$ref": "#/components/schemas/pantherclaw.v1.GitlabBindingInput"
+              }
+            },
+            "title": "gitlab",
+            "required": [
+              "gitlab"
+            ]
+          },
+          {
+            "properties": {
               "kubernetes": {
                 "title": "kubernetes",
                 "description": "Kubernetes.",
@@ -55962,7 +56149,7 @@
           "method": {
             "type": "string",
             "title": "method",
-            "description": "How it was verified: \"fingerprint\", \"github_actions\" or \"kubernetes\"."
+            "description": "How it was verified: \"fingerprint\" or the preset kind (\"github_actions\",\n \"kubernetes\", \"gitlab_ci\", …)."
           },
           "attestedUntil": {
             "title": "attested_until",
@@ -76940,7 +77127,8 @@
         "enum": [
           "ATTESTATION_KIND_UNSPECIFIED",
           "ATTESTATION_KIND_GITHUB_ACTIONS",
-          "ATTESTATION_KIND_KUBERNETES"
+          "ATTESTATION_KIND_KUBERNETES",
+          "ATTESTATION_KIND_GITLAB_CI"
         ],
         "description": "AttestationKind names the preset an attestation token is for."
       },

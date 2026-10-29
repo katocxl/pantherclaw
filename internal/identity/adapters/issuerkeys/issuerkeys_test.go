@@ -25,6 +25,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/issuerkeys"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
 func b64(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
@@ -271,5 +272,47 @@ func TestHR142_PresetsChooseAlgorithmsUsesAndKeySources(t *testing.T) {
 	guarded, _ := issuerkeys.NewFetcher(is.client(false), issuerkeys.Config{JWKSURL: is.srv.URL + "/jwks"}, clk.now)
 	if _, err := guarded.Verify(ctx, is.token(t, goodHeader)); err == nil {
 		t.Error("fetched a pinned JWKS from a loopback address without an allowed prefix")
+	}
+}
+
+// TestHR461_GitLabIssuersComeFromOperatorConfiguration: only configured
+// instances verify tokens, only for the orgs they list, and gitlab.com is
+// the default when none are configured.
+// Covers: PN-002.3
+func TestHR461_GitLabIssuersComeFromOperatorConfiguration(t *testing.T) {
+	org, other := ids.New[ids.Org](), ids.New[ids.Org]()
+	def, err := issuerkeys.NewGitLabDirectory(nil, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !def.Allowed("https://gitlab.com", org) || def.Allowed("https://gitlab.example.com", org) {
+		t.Error("default directory is not exactly gitlab.com")
+	}
+	self, err := issuerkeys.NewGitLabDirectory([]issuerkeys.GitLabIssuer{
+		{Issuer: "https://gitlab.example.com/", Access: issuerkeys.Access{Orgs: []string{org.String()}}},
+	}, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !self.Allowed("https://gitlab.example.com", org) || self.Allowed("https://gitlab.example.com", other) ||
+		self.Allowed("https://gitlab.com", org) {
+		t.Error("configured instances or orgs not honoured")
+	}
+	if _, err := self.Verify(context.Background(), "https://gitlab.evil.test", org, "a.b.c"); !errors.Is(err, issuerkeys.ErrUnverified) {
+		t.Errorf("rogue issuer: %v", err)
+	}
+	if _, err := self.Verify(context.Background(), "https://gitlab.example.com", other, "a.b.c"); !errors.Is(err, issuerkeys.ErrUnverified) {
+		t.Errorf("issuer used by an org it is not configured for: %v", err)
+	}
+	for name, cfgs := range map[string][]issuerkeys.GitLabIssuer{
+		"http":      {{Issuer: "http://gitlab.example.com"}},
+		"path":      {{Issuer: "https://gitlab.example.com/evil"}},
+		"bad org":   {{Issuer: "https://gitlab.example.com", Access: issuerkeys.Access{Orgs: []string{"acme"}}}},
+		"bad cidr":  {{Issuer: "https://gitlab.example.com", Access: issuerkeys.Access{AllowedPrefixes: []string{"10.0.0.1"}}}},
+		"duplicate": {{Issuer: "https://gitlab.example.com"}, {Issuer: "https://gitlab.example.com/"}},
+	} {
+		if err := issuerkeys.ValidateGitLab(cfgs); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
 	}
 }

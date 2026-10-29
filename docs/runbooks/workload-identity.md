@@ -194,7 +194,38 @@ A label (`pull_request` with `types: [labeled]` cannot be used: it runs the PR's
    ```
    The image digest PantherClaw records is the pod's, read from the API server; a digest the workload reports is only `declared`.
 
-## 4. When something goes wrong
+## 4. GitLab CI (L2, M17)
+
+1. The operator lists the GitLab instances PantherClaw trusts. With none configured, only `https://gitlab.com` is trusted, for every org. A self-managed instance must be listed; a tenant can never name one of its own:
+   ```json
+   "identity": {"gitlab_issuers": [
+     {"issuer": "https://gitlab.com"},
+     {"issuer": "https://gitlab.example.com", "ca_file": "/etc/pantherclaw/gitlab-ca.pem",
+      "allowed_prefixes": ["10.0.2.0/24"], "orgs": ["<org id>"]}
+   ]}
+   ```
+   `orgs` limits which orgs may pin the instance (every org when omitted); `allowed_prefixes` are the private ranges its address may resolve to.
+2. An admin proposes an entry that pins the project and namespace **ids** (never paths) and the pipeline definitions (`ci_config_ref_uri`), and a person with the **Identity Publisher** role activates it:
+   ```bash
+   pclaw issuer propose-gitlab --agent <agent> --project-id 20 --namespace-id 72 \
+     --ci-config-ref-uri gitlab.com/acme/agents/runner//.gitlab-ci.yml@refs/heads/main \
+     --auto-admit --reason "CI agent"
+   ```
+   Find the ids on the project's overview page (Project ID) and the group's page (Group ID). The preset refuses tokens from unprotected refs and from `merge_request_event` or `external_pull_request_event` pipelines, whatever the entry says.
+3. In the job, request an ID token with the org's audience and enroll with it. **Keep the job timeout at 60 minutes or less**: GitLab sets the token's lifetime from the job timeout, and PantherClaw refuses attestation tokens that live longer than one hour (HR-143).
+   ```yaml
+   agent:
+     timeout: 60m
+     id_tokens:
+       PANTHERCLAW_ID_TOKEN:
+         aud: pantherclaw:<org id>
+     script:
+       - pclaw workload init --key-file "$CI_BUILDS_DIR/workload.json"
+       - pclaw workload enroll --key-file "$CI_BUILDS_DIR/workload.json" --server "$PANTHERCLAW_SERVER" --gitlab-token-env PANTHERCLAW_ID_TOKEN
+   ```
+   Each ID token attests once. A job has one, so L2 lasts until that token expires; `pclaw workload renew` keeps renewing at L1 afterwards.
+
+## 5. When something goes wrong
 
 - **Disable an entry** at once: `pclaw issuer disable ENTRY --reason …`. It stops auto-admission, and its instances drop to L1 at their next token.
 - **Revoke an instance**: `pclaw instance revoke INSTANCE --reason …`. Outstanding permits fail at `BeginDispatch`.

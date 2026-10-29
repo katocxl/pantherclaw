@@ -28,8 +28,16 @@ var jobType = map[issuers.JobType]pantherclawv1.GithubJobType{
 	issuers.JobReusable: pantherclawv1.GithubJobType_GITHUB_JOB_TYPE_REUSABLE_WORKFLOW,
 }
 
-func bindingFromProto(gh *pantherclawv1.GithubBinding, kb *pantherclawv1.KubernetesBinding) app.Binding {
+func bindingFromProto(req *pantherclawv1.ProposeIssuerEntryRequest) app.Binding {
+	gh, kb := req.GetGithub(), req.GetKubernetes()
 	var b app.Binding
+	if gl := req.GetGitlab(); gl != nil {
+		b.GitLab = &issuers.GitLabBinding{
+			Issuer: gl.GetIssuer(), ProjectID: gl.GetProjectId(), NamespaceID: gl.GetNamespaceId(),
+			CIConfigRefURIs: gl.GetCiConfigRefUris(), CIConfigSHAs: gl.GetCiConfigShas(), Environment: gl.GetEnvironment(),
+			RunnerEnvironment: gl.GetRunnerEnvironment(),
+		}
+	}
 	if gh != nil {
 		g := issuers.GitHubBinding{
 			RepositoryID: gh.GetRepositoryId(), RepositoryOwnerID: gh.GetRepositoryOwnerId(),
@@ -66,6 +74,13 @@ func revisionProto(r app.Revision) *pantherclawv1.IssuerRevision {
 			WorkflowRefs: g.WorkflowRefs, WorkflowShas: g.WorkflowSHAs, Environment: g.Environment, RunnerEnvironment: g.RunnerEnvironment,
 		}}
 	}
+	if g := r.Binding.GitLab; g != nil {
+		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_GITLAB_CI
+		out.Binding = &pantherclawv1.IssuerRevision_Gitlab{Gitlab: &pantherclawv1.GitlabBinding{
+			Issuer: g.Issuer, ProjectId: g.ProjectID, NamespaceId: g.NamespaceID, CiConfigRefUris: g.CIConfigRefURIs,
+			CiConfigShas: g.CIConfigSHAs, Environment: g.Environment, RunnerEnvironment: g.RunnerEnvironment,
+		}}
+	}
 	if k := r.Binding.Kubernetes; k != nil {
 		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_KUBERNETES
 		out.Binding = &pantherclawv1.IssuerRevision_Kubernetes{Kubernetes: &pantherclawv1.KubernetesBinding{
@@ -90,7 +105,7 @@ func (s *Identity) ProposeIssuerEntry(ctx context.Context, req *pantherclawv1.Pr
 		return nil, err
 	}
 	r, err := s.svc.ProposeIssuer(ctx, app.ProposeInput{
-		EntryID: entry, AgentID: agent, Binding: bindingFromProto(req.GetGithub(), req.GetKubernetes()),
+		EntryID: entry, AgentID: agent, Binding: bindingFromProto(req),
 		AutoAdmit: req.GetAutoAdmit(), Reason: req.GetReason(),
 	}, s.clusters)
 	if err != nil {
