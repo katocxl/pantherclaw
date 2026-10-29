@@ -53,3 +53,41 @@ func TestM17Rules_ConsequenceChainSchema(t *testing.T) {
 	f.want(t, m5Check, "a package rule as a customer one", m17rChained, f.org, f.txn, 3, 2, 0, "customer", pkgRule)
 	f.want(t, m5Check, "another rule id", m17rChained, f.org, f.txn, 3, 2, 0, "customer", "cx.")
 }
+
+const m17rRule = `INSERT INTO pc.customer_consequence_rules (org_id, id, rule_id, version, body, digest, proposed_by, approved_by, state)
+	VALUES ($1, $2, $3, $4, '{}', $5, $6, $7, $8)`
+
+// TestHR453_CustomerRuleVersionsNeedTwoPeople: a version is approved by
+// someone other than its proposer, is ACTIVE only with an approver, one
+// per rule, and only moves forward; its body never changes, and auditors
+// never read it. Rule ids start with cx.
+//
+// Covers: F405
+func TestHR453_CustomerRuleVersionsNeedTwoPeople(t *testing.T) {
+	d := dbtest.New(t)
+	f := newM5Fixture(t, d.AppPool(t))
+	bob := m5ID()
+	f.mustExec(t, "INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', 'bob')", f.org, bob)
+	digest := make([]byte, 32)
+	v1, v2 := m5ID(), m5ID()
+	f.mustExec(t, m17rRule, f.org, v1, "cx.deploy-pages", 1, digest, f.user, bob, "ACTIVE")
+	f.mustExec(t, m17rRule, f.org, v2, "cx.deploy-pages", 2, digest, f.user, nil, "PROPOSED")
+	f.want(t, m5Check, "approved by its proposer", m17rRule, f.org, m5ID(), "cx.deploy-pages", 3, digest, f.user, f.user, "PROPOSED")
+	f.want(t, m5Check, "ACTIVE without an approver", m17rRule, f.org, m5ID(), "cx.other", 1, digest, f.user, nil, "ACTIVE")
+	f.want(t, m5Unique, "two ACTIVE versions", m17rRule, f.org, m5ID(), "cx.deploy-pages", 3, digest, f.user, bob, "ACTIVE")
+	f.want(t, m5Check, "a package rule id", m17rRule, f.org, m5ID(), "deploy-pages", 1, digest, f.user, nil, "PROPOSED")
+	f.want(t, m5Check, "a short digest", m17rRule, f.org, m5ID(), "cx.other", 1, digest[:31], f.user, nil, "PROPOSED")
+	f.mustExec(t, "UPDATE pc.customer_consequence_rules SET state = 'RETIRED' WHERE id = $1", v1)
+	f.want(t, m5Check, "RETIRED back to ACTIVE", "UPDATE pc.customer_consequence_rules SET state = 'ACTIVE' WHERE id = $1", v1)
+	f.want(t, m5Check, "an approver without ACTIVE", "UPDATE pc.customer_consequence_rules SET approved_by = $2 WHERE id = $1", v2, bob)
+	f.mustExec(t, "UPDATE pc.customer_consequence_rules SET state = 'ACTIVE', approved_by = $2 WHERE id = $1", v2, bob)
+	f.want(t, m5Check, "another approver", "UPDATE pc.customer_consequence_rules SET approved_by = $2 WHERE id = $1", v2, f.user)
+	f.want(t, m5Denied, "UPDATE a body", "UPDATE pc.customer_consequence_rules SET body = body")
+	f.want(t, m5Denied, "DELETE a version", "DELETE FROM pc.customer_consequence_rules")
+	var body, meta bool
+	d.AdminQueryRow(t, `SELECT has_column_privilege('pc_audit_ro', 'pc.customer_consequence_rules', 'body', 'SELECT'),
+		has_column_privilege('pc_audit_ro', 'pc.customer_consequence_rules', 'digest', 'SELECT')`, nil, &body, &meta)
+	if body || !meta {
+		t.Fatalf("pc_audit_ro reads the body %v, the digest %v; want false, true", body, meta)
+	}
+}

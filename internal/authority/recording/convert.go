@@ -656,5 +656,12 @@ func (r Reads) check() error {
 	if h := r.HoldSettings; h != nil {
 		ok(h.Err)
 	}
+	if c := r.CustomerRules; c != nil && ok(c.Err) {
+		for _, x := range c.Rules {
+			if d, err := hex.DecodeString(x.Digest); err != nil || len(d) != 32 || x.ID == "" || x.Version < 1 {
+				errs = append(errs, fmt.Errorf("customer rule %q", x.ID))
+			}
+		}
+	}
 	return errors.Join(errs...)
 }

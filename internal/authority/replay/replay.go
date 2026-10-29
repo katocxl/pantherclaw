@@ -17,6 +17,7 @@ package replay
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -66,6 +67,9 @@ type Source interface {
 	// under a proposed policy of an evaluation that never read them
 	// (M11.1 D36).
 	HoldSettings(ctx context.Context, org ids.OrgID) (pipeline.HoldSettings, error)
+	// CustomerRule returns a stored customer consequence rule version by id
+	// and version, whose digest must be digest (G0 M17 D106).
+	CustomerRule(ctx context.Context, org ids.OrgID, ruleID string, version int, digest [32]byte) (defs.ConsequenceRule, error)
 }
 
 // Opener opens sealed inputs; recording.Sealer implements it.
@@ -319,6 +323,9 @@ func (e *Engine) served(ctx context.Context, org ids.OrgID, rec *recording.Recor
 		}
 		s.Definitions[d.Digest], s.Consequences[d.Digest] = pinned.Definition, pinned.Consequences
 	}
+	if err := e.customerRules(ctx, org, rec, &s); err != nil {
+		return s, nil, err
+	}
 	p := rec.Reads.Policy
 	if proposed != nil {
 		if rec.Reads.HoldSettings == nil {
@@ -461,4 +468,46 @@ type containedReader struct {
 // recorded; the pipeline decides which cover the action.
 func (r containedReader) Controls(context.Context, ids.OrgID, pipeline.ControlKeys) ([]pipeline.Control, error) {
 	return r.controls, nil
+}
+
+// customerRules loads the customer consequence rule versions the
+// evaluation read, each by id and version with its recorded digest, and
+// the definition of its consequence operation by its recorded pin (G0 M17
+// D106). One that cannot be loaded as it was is left out, which the
+// recording reader reports as a gap.
+func (e *Engine) customerRules(ctx context.Context, org ids.OrgID, rec *recording.Recording, s *recording.Served) error {
+	c := rec.Reads.CustomerRules
+	if c == nil || c.Err != "" {
+		return nil
+	}
+	for _, x := range c.Rules {
+		raw, err := hex.DecodeString(x.Digest)
+		if err != nil || len(raw) != 32 {
+			return nil
+		}
+		digest := [32]byte(raw)
+		r, err := e.Source.CustomerRule(ctx, org, x.ID, x.Version, digest)
+		switch {
+		case errors.Is(err, ErrNotFound):
+			return nil
+		case err != nil:
+			return fmt.Errorf("replay: customer rule %s: %w", x.ID, err)
+		}
+		ref := consequences.CustomerRef{Version: x.Version, Digest: digest}
+		var d *defs.Definition
+		if x.Pin != nil {
+			pinned, err := e.Source.Definition(ctx, org, *x.Pin)
+			switch {
+			case errors.Is(err, ErrNotFound):
+				return nil
+			case err != nil:
+				return fmt.Errorf("replay: customer rule %s definition: %w", x.ID, err)
+			}
+			d, ref.Pin = pinned.Definition, *x.Pin
+		}
+		s.CustomerRules = append(s.CustomerRules, consequences.Rule{
+			ConsequenceRule: r, Definition: d, Source: consequences.SourceCustomer, Customer: &ref,
+		})
+	}
+	return nil
 }

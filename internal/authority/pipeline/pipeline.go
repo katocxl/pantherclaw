@@ -259,6 +259,9 @@ type state struct {
 	// pending are the predicted and unknown consequences steps 4, 7 and 8
 	// decide with the action.
 	pending []pendingConsequence
+	// rules are the consequence rules step 6 evaluates: the package
+	// version's, then the org's customer rules (G0 M17 D108).
+	rules []consequences.Rule
 }
 
 // Snapshot calls fn with a Reader whose reads all come from one snapshot
@@ -699,10 +702,8 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 		reqs = append(reqs, pol.Compiled.FactRequirements(s.a.Operation, s.a.Env)...)
 	}
 	s.facts = map[string]fdomain.Value{}
-	var rules []consequences.Rule
-	if s.pinned != nil {
-		rules = consequences.Direct(s.pinned.Consequences, s.a.Operation)
-	}
+	s.rules = p.consequenceRules(ctx, s)
+	rules := consequences.Direct(s.rules, s.a.Operation)
 	names := factNames(reqs, rules)
 	if len(names) == 0 {
 		s.cl.note(StepFacts, StatusNotApplicable, ReasonFactsFresh, "no facts are required")

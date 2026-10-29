@@ -82,6 +82,9 @@ type Rule struct {
 	Definition *defs.Definition
 	// Source is where the rule comes from; empty is SourcePackage.
 	Source Source
+	// Customer is, for a customer rule (SourceCustomer), the stored version
+	// it is, which a recording names (G0 M17 D106).
+	Customer *CustomerRef
 }
 
 // Of returns the rules of package p that can apply to an action of
@@ -522,4 +525,14 @@ func reason(v any) string {
 		s = strings.ToValidUTF8(s[:maxReasonLen], "") + "…"
 	}
 	return s
+}
+
+// CustomerRef is the stored version of a customer rule: its version, the
+// SHA-256 of its canonical JSON, and the pin of the definition of its
+// consequence operation (zero when the org has no ACTIVE one, which the
+// rule then cannot be evaluated without).
+type CustomerRef struct {
+	Version int
+	Digest  [32]byte
+	Pin     actionir.Definition
 }

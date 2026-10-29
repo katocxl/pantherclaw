@@ -294,6 +294,11 @@ type Reader interface {
 		[]apdomain.VariantLine, []apdomain.ContextLine, error)
 	// HoldSettings returns the org's hold settings.
 	HoldSettings(ctx context.Context, org ids.OrgID) (HoldSettings, error)
+	// CustomerRules returns the org's ACTIVE customer consequence rules,
+	// in rule id order, each with the ACTIVE definition of its consequence
+	// operation (G0 M17 D106, D108; nil when the org has none). Step 6
+	// evaluates them after the package's rules and only adds them.
+	CustomerRules(ctx context.Context, org ids.OrgID) ([]consequences.Rule, error)
 }
 
 // Snapshotter is a Reader that can serve every read of one evaluation from

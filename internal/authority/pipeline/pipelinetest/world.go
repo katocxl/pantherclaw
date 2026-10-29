@@ -44,6 +44,8 @@ type World struct {
 	policy         *pipeline.Policy
 	// agentPolicies are the policies selected for single agents.
 	agentPolicies map[ids.UUID]*pipeline.Policy
+	// customer are the org's ACTIVE customer consequence rules (G0 M17).
+	customer []consequences.Rule
 	runs          map[ids.UUID]pipeline.Run
 	agents        map[ids.UUID]pipeline.Agent
 	facts         map[string]map[string]fdomain.Fact // subject → name → fact

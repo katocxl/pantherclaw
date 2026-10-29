@@ -102,10 +102,10 @@ func factNames(reqs []fdomain.Requirement, rules []consequences.Rule) []string {
 // chain from the facts about each predicted consequence's target (G0 M17
 // D109).
 func (p *Pipeline) consequences(ctx context.Context, s *state, ev *consequences.Evaluator, recorded map[string]fdomain.Fact, reqs []fdomain.Requirement) {
-	if s.pinned == nil || len(s.pinned.Consequences) == 0 {
+	if len(s.rules) == 0 {
 		return
 	}
-	s.ev.Consequences = ev.Evaluate(ctx, s.pinned.Consequences, consequences.Input{
+	s.ev.Consequences = ev.Evaluate(ctx, s.rules, consequences.Input{
 		On: s.def, TargetID: s.a.Target.ID, Facts: recorded, Ages: maxAges(reqs), Now: s.cont.Now, Direct: p.direct(),
 		More: func(ctx context.Context, on *defs.Definition, targetID string, names []string) (map[string]fdomain.Fact, map[string]time.Duration, error) {
 			var reqs []fdomain.Requirement
@@ -145,6 +145,27 @@ func (p *Pipeline) consequences(ctx context.Context, s *state, ev *consequences.
 		k.action, k.ir = s.consequenceAction(c)
 		s.pending = append(s.pending, k)
 	}
+}
+
+// consequenceRules are the rules step 6 evaluates: the action's package
+// version's, then, from pipeline version 6, the org's customer rules,
+// which only add consequences (G0 M17 D108, HR-454). When the customer
+// rules cannot be read the action cannot be authorized: it is never
+// decided without them.
+func (p *Pipeline) consequenceRules(ctx context.Context, s *state) []consequences.Rule {
+	if s.pinned == nil {
+		return nil
+	}
+	rules := s.pinned.Consequences
+	if p.direct() {
+		return rules
+	}
+	customer, err := p.Reader.CustomerRules(ctx, s.req.Org)
+	if err != nil {
+		s.missing(StepFacts, err, "the customer consequence rules")
+		return rules
+	}
+	return append(slices.Clone(rules), customer...)
 }
 
 // maxAges are the maximum ages requirements ask for their facts.
@@ -243,8 +264,9 @@ func (p *Pipeline) consequenceBoundaries(ctx context.Context, s *state) {
 		in.Facts = k.facts
 		// A known consequence is waived like the action, when an exception
 		// lists its operation; an unknown one is never waived: it could be
-		// any of its outcomes (G0 M11.1 D33, HR-206).
-		if k.c.State != consequences.Unknown {
+		// any of its outcomes (G0 M11.1 D33, HR-206). A customer rule's
+		// consequence is never waived either: it only adds (G0 M17 D108).
+		if k.c.State != consequences.Unknown && k.c.Source != consequences.SourceCustomer {
 			in.Waivers = s.waivers(k.ir.Operation)
 		}
 		in.Consequence = &papp.Consequence{Rule: k.c.Rule, State: string(k.c.State), Environments: k.c.Environments}
