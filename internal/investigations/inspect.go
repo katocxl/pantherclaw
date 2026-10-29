@@ -307,21 +307,8 @@ func lineage(ctx context.Context, q *dbq.Queries, org ids.OrgID, s Scope, r dbq.
 		return nil, err
 	}
 	run := r.ID
-	kids, err := q.InvRunChildren(ctx, org, &run, MaxChildren+1)
-	if err != nil {
+	if l.Children, l.ChildrenTruncated, err = children(ctx, q, org, s, run); err != nil {
 		return nil, err
-	}
-	if len(kids) > MaxChildren {
-		kids, l.ChildrenTruncated = kids[:MaxChildren], true
-	}
-	for _, k := range kids {
-		ok, err := s.Visible(ctx, k.AgentID)
-		if err != nil {
-			return nil, err
-		}
-		if ok {
-			l.Children = append(l.Children, Lane{Run: k.ID, Agent: k.AgentID, State: k.State, Created: k.CreatedAt, Ended: k.EndedAt})
-		}
 	}
 	up, err := q.InvRunUpstreamExecution(ctx, org, run)
 	switch {
@@ -349,6 +336,42 @@ func lineage(ctx context.Context, q *dbq.Queries, org ids.OrgID, s Scope, r dbq.
 		})
 	}
 	return l, nil
+}
+
+// children reads a run's child runs page by page and keeps those the
+// caller may read, up to MaxChildren; truncated is set only when more
+// than MaxChildren visible children exist, so a hidden child is never
+// counted (HR-401, rows26 D25).
+func children(ctx context.Context, q *dbq.Queries, org ids.OrgID, s Scope, run ids.UUID) ([]Lane, bool, error) {
+	var out []Lane
+	var after time.Time
+	var afterID ids.UUID
+	for {
+		kids, err := q.InvRunChildrenAfter(ctx, dbq.InvRunChildrenAfterParams{
+			OrgID: org, RunID: &run, AfterTime: after, AfterID: afterID, MaxRows: MaxChildren + 1,
+		})
+		if err != nil {
+			return nil, false, err
+		}
+		for _, k := range kids {
+			ok, err := s.Visible(ctx, k.AgentID)
+			if err != nil {
+				return nil, false, err
+			}
+			if !ok {
+				continue
+			}
+			if len(out) == MaxChildren {
+				return out, true, nil
+			}
+			out = append(out, Lane{Run: k.ID, Agent: k.AgentID, State: k.State, Created: k.CreatedAt, Ended: k.EndedAt})
+		}
+		if len(kids) <= MaxChildren {
+			return out, false, nil
+		}
+		last := kids[len(kids)-1]
+		after, afterID = last.CreatedAt, last.ID
+	}
 }
 
 func budget(ctx context.Context, q *dbq.Queries, org ids.OrgID, run ids.UUID) ([]BudgetLine, error) {

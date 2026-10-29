@@ -572,6 +572,65 @@ func (q *Queries) InvRunChildren(ctx context.Context, orgID ids.OrgID, runID *id
 	return items, nil
 }
 
+const invRunChildrenAfter = `-- name: InvRunChildrenAfter :many
+SELECT id, agent_id, state, created_at, ended_at
+FROM pc.runs
+WHERE org_id = $1 AND parent_run_id = $2
+  AND (created_at, id) > ($3::timestamptz, $4::uuid)
+ORDER BY created_at, id
+LIMIT $5
+`
+
+type InvRunChildrenAfterParams struct {
+	OrgID     ids.OrgID
+	RunID     *ids.UUID
+	AfterTime time.Time
+	AfterID   ids.UUID
+	MaxRows   int32
+}
+
+type InvRunChildrenAfterRow struct {
+	ID        ids.UUID
+	AgentID   ids.UUID
+	State     string
+	CreatedAt time.Time
+	EndedAt   *time.Time
+}
+
+// Child runs of a run after a (created_at, id) position, for reading
+// page by page until enough visible children are found (rows26 D25).
+func (q *Queries) InvRunChildrenAfter(ctx context.Context, arg InvRunChildrenAfterParams) ([]InvRunChildrenAfterRow, error) {
+	rows, err := q.db.Query(ctx, invRunChildrenAfter,
+		arg.OrgID,
+		arg.RunID,
+		arg.AfterTime,
+		arg.AfterID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []InvRunChildrenAfterRow{}
+	for rows.Next() {
+		var i InvRunChildrenAfterRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.State,
+			&i.CreatedAt,
+			&i.EndedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const invRunCoverage = `-- name: InvRunCoverage :many
 SELECT s.id AS snapshot_id, s.connection_id, s.operation, s.state, s.reasons, s.computed_at,
        bool_or(s.expires_at IS NOT NULL AND s.expires_at <= d.created_at)::boolean AS stale_at_decision
