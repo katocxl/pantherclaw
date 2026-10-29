@@ -3496,6 +3496,8 @@ type PcTransaction struct {
 	EnforcementPointID      *ids.UUID
 	DownstreamState         *string
 	DownstreamNotVerifiable bool
+	ConsequenceRoot         *ids.UUID
+	ConsequencePosition     *int32
 }
 
 type PcTransactionLink struct {

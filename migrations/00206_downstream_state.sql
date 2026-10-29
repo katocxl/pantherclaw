@@ -17,13 +17,21 @@
 -- action's predicted consequences could not be opened, so a later roll-up
 -- (a person's "occurred" after UNCONFIRMED) never lifts it above
 -- NOT_VERIFIABLE; once set it is never cleared.
+--
+-- Chains (D104): a consequence transaction names the action at the root of
+-- its chain and the position of the predicted consequence it was opened
+-- for in that action's latest evaluation, so that once it is confirmed it
+-- opens the consequences that follow from that position (depth + 1).
 
 -- +goose Up
 ALTER TABLE pc.transactions
     ADD COLUMN downstream_state text
         CHECK (downstream_state IN ('PENDING', 'CONFIRMED', 'UNCONFIRMED', 'NOT_VERIFIABLE')),
     ADD COLUMN downstream_not_verifiable boolean NOT NULL DEFAULT false,
-    ADD CONSTRAINT transactions_downstream CHECK (NOT downstream_not_verifiable OR downstream_state IS NOT NULL);
+    ADD COLUMN consequence_root uuid,
+    ADD COLUMN consequence_position integer CHECK (consequence_position BETWEEN 0 AND 255),
+    ADD CONSTRAINT transactions_downstream CHECK (NOT downstream_not_verifiable OR downstream_state IS NOT NULL),
+    ADD CONSTRAINT transactions_consequence_origin CHECK ((consequence_root IS NULL) = (consequence_position IS NULL));
 
 GRANT UPDATE (downstream_state, downstream_not_verifiable) ON pc.transactions TO pc_app;
 
@@ -42,5 +50,6 @@ ALTER TABLE pc.effect_receipts
 
 REVOKE UPDATE (downstream_state, downstream_not_verifiable) ON pc.transactions FROM pc_app;
 
-ALTER TABLE pc.transactions DROP CONSTRAINT transactions_downstream, DROP COLUMN downstream_not_verifiable,
+ALTER TABLE pc.transactions DROP CONSTRAINT transactions_consequence_origin, DROP COLUMN consequence_position,
+    DROP COLUMN consequence_root, DROP CONSTRAINT transactions_downstream, DROP COLUMN downstream_not_verifiable,
     DROP COLUMN downstream_state;

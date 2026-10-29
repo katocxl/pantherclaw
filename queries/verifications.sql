@@ -94,14 +94,25 @@ FOR UPDATE OF t;
 -- never dispatched, and verifies it.
 
 -- PredictedConsequences are what the transaction's latest evaluation
--- predicted, with the environments each deploys to.
+-- predicted, with the environments each deploys to: those of the action
+-- itself (depth 1) when parent_position is NULL, else those that follow
+-- from the consequence at parent_position (G0 M17 D104).
 -- name: PredictedConsequences :many
 SELECT c.position, c.operation, c.target_type, c.target_id, c.environments
 FROM pc.decision_consequences c
 WHERE c.org_id = sqlc.arg(org_id) AND c.transaction_id = sqlc.arg(transaction_id) AND c.state = 'PREDICTED'
   AND c.evaluation = (SELECT max(d.evaluation) FROM pc.decision_consequences d
                       WHERE d.org_id = c.org_id AND d.transaction_id = c.transaction_id)
+  AND CASE WHEN sqlc.narg(parent_position)::int IS NULL THEN c.depth = 1
+           ELSE c.parent_position = sqlc.narg(parent_position)::int END
 ORDER BY c.position;
+
+-- ConsequenceOrigin is the action at the root of a consequence
+-- transaction's chain and the position it was opened for (both NULL for
+-- an action that is not a consequence).
+-- name: ConsequenceOrigin :one
+SELECT consequence_root, consequence_position FROM pc.transactions
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 
 -- UnknownConsequences are the consequences the transaction's latest
 -- evaluation could not rule out (UNKNOWN). They name no environment, so
@@ -119,10 +130,11 @@ ORDER BY c.position;
 -- decided with it (ALLOW), never dispatched.
 -- name: InsertConsequenceTransaction :execrows
 INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code, gateway_id, state,
-                             grant_id, grant_revision, connection_id, mode, target_type, target_id, effect_level_required, simulated)
+                             grant_id, grant_revision, connection_id, mode, target_type, target_id, effect_level_required, simulated,
+                             consequence_root, consequence_position)
 SELECT t.org_id, sqlc.arg(id), t.run_id, sqlc.arg(action_id), sqlc.arg(action_hash), sqlc.arg(operation), 'ALLOW',
        'CONSEQUENCE', t.gateway_id, 'FINAL', t.grant_id, t.grant_revision, t.connection_id, t.mode, sqlc.arg(target_type),
-       sqlc.arg(target_id), sqlc.arg(level_required), t.simulated
+       sqlc.arg(target_id), sqlc.arg(level_required), t.simulated, sqlc.arg(root)::uuid, sqlc.arg(position)::int
 FROM pc.transactions t
 WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(parent);
 

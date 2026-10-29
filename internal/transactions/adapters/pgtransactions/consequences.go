@@ -37,30 +37,41 @@ const consequenceDelay = 5
 // openConsequences opens the consequences of transaction parent, whose
 // effect was just confirmed (by the verifier v of definition digest, with
 // the fields of what it observed, or by a person, with those of the
-// transaction's newest observation that holds them). A predicted
-// consequence that cannot be verified is audited as such, never left
-// silently (#349 review, HR-450): nothing captured to find it by, no
-// environment, no verifier that finds it, or an action whose verifier
-// captures nothing at all. UNKNOWN consequences are audited apart, by
-// auditUnknownConsequences. It then sets parent's downstream state (D102).
+// transaction's newest observation that holds them). For an action these
+// are the depth-1 consequences its decision predicted; for a consequence
+// transaction, those that follow from it in the chain of the action at its
+// root (G0 M17 D104). A predicted consequence that cannot be verified is
+// audited as such, never left silently (#349 review, HR-450): nothing
+// captured to find it by, no environment, no verifier that finds it, or an
+// action whose verifier captures nothing at all. UNKNOWN consequences are
+// audited apart, by auditUnknownConsequences. It then sets parent's
+// downstream state (D102).
 func openConsequences(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, parent ids.UUID, digest string,
 	v *defs.VerifierSpec, fields map[string]string, actor evdomain.Actor,
 ) error {
-	rows, err := q.PredictedConsequences(ctx, org, parent)
+	origin, err := q.ConsequenceOrigin(ctx, org, parent)
+	if err != nil {
+		return err
+	}
+	root, from := parent, origin.ConsequencePosition
+	if origin.ConsequenceRoot != nil {
+		root = *origin.ConsequenceRoot
+	}
+	rows, err := q.PredictedConsequences(ctx, org, root, from)
 	if err != nil || len(rows) == 0 {
 		return err
 	}
-	opened, skipped, err := openPredicted(ctx, tx, q, org, parent, digest, v, fields, rows, actor)
+	opened, skipped, err := openPredicted(ctx, tx, q, org, parent, root, digest, v, fields, rows, actor)
 	if err != nil {
 		return err
 	}
 	return setDownstream(ctx, q, org, parent, downstreamAfterOpen(opened, skipped))
 }
 
-// openPredicted opens the predicted consequences rows of parent. It
-// returns how many transactions it opened and how many consequences it
-// could not open.
-func openPredicted(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, parent ids.UUID, digest string,
+// openPredicted opens the predicted consequences rows of parent, rows of
+// the latest evaluation of root. It returns how many transactions it
+// opened and how many consequences it could not open.
+func openPredicted(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, parent, root ids.UUID, digest string,
 	v *defs.VerifierSpec, fields map[string]string, rows []dbq.PredictedConsequencesRow, actor evdomain.Actor,
 ) (opened, skipped int, err error) {
 	skip := func(operation, reason string) error {
@@ -125,7 +136,8 @@ func openPredicted(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.
 			if env != "" {
 				params["environment"] = env
 			}
-			if err := openConsequence(ctx, tx, q, org, parent, sib.Digest, d, actionir.Target{Type: c.TargetType, ID: c.TargetID},
+			if err := openConsequence(ctx, tx, q, org, parent, origin{root, c.Position}, sib.Digest, d,
+				actionir.Target{Type: c.TargetType, ID: c.TargetID},
 				params, actor); err != nil {
 				return 0, 0, err
 			}
@@ -198,8 +210,16 @@ func capturedOf(ctx context.Context, q *dbq.Queries, org ids.OrgID, txn ids.UUID
 	return nil, nil
 }
 
+// origin is where a consequence transaction comes from: the action at the
+// root of its chain and the position of its predicted consequence in that
+// action's latest evaluation (D104).
+type origin struct {
+	root     ids.UUID
+	position int32
+}
+
 // openConsequence opens one consequence transaction and its verification.
-func openConsequence(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, parent ids.UUID, digest string,
+func openConsequence(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, parent ids.UUID, o origin, digest string,
 	d *defs.Definition, target actionir.Target, params map[string]string, actor evdomain.Actor,
 ) error {
 	canonical, err := json.Marshal(map[string]any{"operation": d.Operation, "target": target, "params": params, "consequence_of": parent},
@@ -212,7 +232,7 @@ func openConsequence(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org id
 	level := string(d.Verifier.RequiredLevel())
 	n, err := q.InsertConsequenceTransaction(ctx, dbq.InsertConsequenceTransactionParams{
 		ID: id, ActionID: ids.NewV7(), ActionHash: hash[:], Operation: d.Operation, TargetType: &target.Type, TargetID: &target.ID,
-		LevelRequired: &level, OrgID: org, Parent: parent,
+		LevelRequired: &level, Root: o.root, Position: o.position, OrgID: org, Parent: parent,
 	})
 	if err != nil {
 		return err
