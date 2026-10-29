@@ -275,7 +275,7 @@ func TestExplorer_ExplainsAHeldAndADeniedDecision(t *testing.T) {
 		}
 		x := ev.Explanation
 		if x == nil || x.Decision != ev.Transaction.Decision || x.Category == "" || x.Decisive == nil || x.Decisive.Code == "" ||
-			x.Operation != "payments.refund.create" || x.Target == "" || x.Material["amount"] != tc.amount || x.Material["charge"] == "" ||
+			x.Operation != "payments.refund.create" || x.Target == "" || x.Material["amount"] != tc.amount || x.Material["reason"] != "duplicate" ||
 			x.Principal != "user:"+w.alice.String() || x.Environment != w.env.String() || x.Policy == "" || len(x.Gaps) == 0 ||
 			x.Execution == "" {
 			t.Fatalf("%s: explanation %+v", tc.name, x)
