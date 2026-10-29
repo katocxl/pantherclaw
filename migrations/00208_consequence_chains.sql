@@ -20,10 +20,22 @@ ALTER TABLE pc.decision_consequences
 ALTER TABLE pc.decision_consequences
     ADD CONSTRAINT decision_consequences_chain
     CHECK ((depth = 1) = (parent_position IS NULL) AND (parent_position IS NULL OR parent_position < position));
+-- A customer rule's id starts with cx. (00207), and only a customer rule's
+-- does.
+ALTER TABLE pc.decision_consequences DROP CONSTRAINT decision_consequences_rule_id_check;
+ALTER TABLE pc.decision_consequences
+    ADD CONSTRAINT decision_consequences_rule_id_check
+    CHECK (rule_id ~ '^[a-z][a-z0-9-]{0,63}$' OR rule_id ~ '^cx\.[a-z0-9][a-z0-9_.-]{0,63}$'),
+    ADD CONSTRAINT decision_consequences_source
+    CHECK ((source = 'customer') = (rule_id LIKE 'cx.%'));
 
 GRANT SELECT ON pc.decision_consequences TO pc_audit_ro;
 
 -- +goose Down
+ALTER TABLE pc.decision_consequences DROP CONSTRAINT decision_consequences_source;
+ALTER TABLE pc.decision_consequences DROP CONSTRAINT decision_consequences_rule_id_check;
+ALTER TABLE pc.decision_consequences
+    ADD CONSTRAINT decision_consequences_rule_id_check CHECK (rule_id ~ '^[a-z][a-z0-9-]{0,63}$');
 ALTER TABLE pc.decision_consequences DROP CONSTRAINT decision_consequences_chain;
 ALTER TABLE pc.decision_consequences DROP COLUMN source;
 ALTER TABLE pc.decision_consequences DROP COLUMN parent_position;

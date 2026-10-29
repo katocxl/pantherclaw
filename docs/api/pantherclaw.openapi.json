@@ -8214,6 +8214,222 @@
         }
       }
     },
+    "/pantherclaw.v1.ConsequenceRuleService/ProposeConsequenceRule": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ConsequenceRuleService"
+        ],
+        "summary": "ProposeConsequenceRule",
+        "description": "ProposeConsequenceRule stores the next version of a rule, PROPOSED,\n and returns the protected change that makes it ACTIVE (retiring the\n version it replaces) once a second person confirms it. The rule's\n operation and its consequence operation must each be defined by an\n ACTIVE package version of the org.\n permission: consequence_rule.manage",
+        "operationId": "pantherclaw.v1.ConsequenceRuleService.ProposeConsequenceRule",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ProposeConsequenceRuleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ProposeConsequenceRuleResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ConsequenceRuleService/RetireConsequenceRule": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ConsequenceRuleService"
+        ],
+        "summary": "RetireConsequenceRule",
+        "description": "RetireConsequenceRule returns the protected change that retires the\n rule's ACTIVE version once a second person confirms it.\n permission: consequence_rule.manage",
+        "operationId": "pantherclaw.v1.ConsequenceRuleService.RetireConsequenceRule",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RetireConsequenceRuleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RetireConsequenceRuleResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ConsequenceRuleService/ListConsequenceRules": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ConsequenceRuleService"
+        ],
+        "summary": "ListConsequenceRules",
+        "description": "ListConsequenceRules lists every version of the org's rules, by rule\n id, newest version first.\n permission: package.read",
+        "operationId": "pantherclaw.v1.ConsequenceRuleService.ListConsequenceRules",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListConsequenceRulesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListConsequenceRulesResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ConsequenceRuleService/GetConsequenceRule": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ConsequenceRuleService"
+        ],
+        "summary": "GetConsequenceRule",
+        "description": "GetConsequenceRule returns every version of one rule, newest first.\n permission: package.read",
+        "operationId": "pantherclaw.v1.ConsequenceRuleService.GetConsequenceRule",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetConsequenceRuleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetConsequenceRuleResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.ContainmentService/GetKillSwitch": {
       "post": {
         "tags": [
@@ -43877,6 +44093,410 @@
         "additionalProperties": false,
         "description": "UpdateConnectionResponse returns the connection."
       },
+      "pantherclaw.v1.ConsequenceRuleSpec": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "pattern": "^cx\\.[a-z0-9][a-z0-9_.-]{0,63}$",
+            "description": "The rule id: cx. first, then lower-case letters, digits, '_', '.' and\n '-' (for example cx.deploy-notifies-pager)."
+          },
+          "operation": {
+            "type": "string",
+            "title": "operation",
+            "maxLength": 200,
+            "minLength": 1,
+            "description": "The operation whose action the rule applies to."
+          },
+          "when": {
+            "type": "string",
+            "title": "when",
+            "maxLength": 4096,
+            "minLength": 1,
+            "description": "A CEL condition over the facts the rule requires: when it holds, the\n consequence is predicted."
+          },
+          "requiresFacts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 32,
+              "minItems": 1
+            },
+            "title": "requires_facts",
+            "maxItems": 32,
+            "minItems": 1,
+            "description": "The verified facts the condition reads (1..32): a fact that is\n missing, stale or unknown makes the consequence UNKNOWN, at least a\n hold. A consequence is never derived without one (F413)."
+          },
+          "consequence": {
+            "title": "consequence",
+            "description": "The predicted consequence.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceSpec"
+          },
+          "validUntil": {
+            "type": "string",
+            "title": "valid_until",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "description": "The last day the rule's review holds (YYYY-MM-DD); after it, the\n consequence is UNKNOWN, CONSEQUENCE_RULE_EXPIRED."
+          },
+          "maxDepth": {
+            "type": "integer",
+            "title": "max_depth",
+            "maximum": 4,
+            "minimum": 0,
+            "format": "int32",
+            "description": "How far down a chain the rule applies: 1 (the default) only to an\n action itself, up to 4."
+          }
+        },
+        "title": "ConsequenceRuleSpec",
+        "required": [
+          "consequence"
+        ],
+        "additionalProperties": false,
+        "description": "ConsequenceRuleSpec is a consequence rule as its author writes it: the\n format of a package's consequence rules, plus how deep down a chain it\n applies (F405, F411)."
+      },
+      "pantherclaw.v1.ConsequenceRuleSpecInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "pattern": "^cx\\.[a-z0-9][a-z0-9_.-]{0,63}$",
+            "description": "The rule id: cx. first, then lower-case letters, digits, '_', '.' and\n '-' (for example cx.deploy-notifies-pager)."
+          },
+          "operation": {
+            "type": "string",
+            "title": "operation",
+            "maxLength": 200,
+            "minLength": 1,
+            "description": "The operation whose action the rule applies to."
+          },
+          "when": {
+            "type": "string",
+            "title": "when",
+            "maxLength": 4096,
+            "minLength": 1,
+            "description": "A CEL condition over the facts the rule requires: when it holds, the\n consequence is predicted."
+          },
+          "requiresFacts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 32,
+              "minItems": 1
+            },
+            "title": "requires_facts",
+            "maxItems": 32,
+            "minItems": 1,
+            "description": "The verified facts the condition reads (1..32): a fact that is\n missing, stale or unknown makes the consequence UNKNOWN, at least a\n hold. A consequence is never derived without one (F413)."
+          },
+          "consequence": {
+            "title": "consequence",
+            "description": "The predicted consequence.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceSpecInput"
+          },
+          "validUntil": {
+            "type": "string",
+            "title": "valid_until",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "description": "The last day the rule's review holds (YYYY-MM-DD); after it, the\n consequence is UNKNOWN, CONSEQUENCE_RULE_EXPIRED."
+          },
+          "maxDepth": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "max_depth",
+            "maximum": 4,
+            "minimum": 0,
+            "format": "int32",
+            "description": "How far down a chain the rule applies: 1 (the default) only to an\n action itself, up to 4."
+          }
+        },
+        "title": "ConsequenceRuleSpec",
+        "required": [
+          "consequence",
+          "id",
+          "operation",
+          "when",
+          "requiresFacts",
+          "validUntil"
+        ],
+        "additionalProperties": false,
+        "description": "ConsequenceRuleSpec is a consequence rule as its author writes it: the\n format of a package's consequence rules, plus how deep down a chain it\n applies (F405, F411).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.ConsequenceRuleSpec"
+      },
+      "pantherclaw.v1.ConsequenceRuleVersion": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "The version's id."
+          },
+          "rule": {
+            "title": "rule",
+            "description": "The rule as written.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceRuleSpec"
+          },
+          "version": {
+            "type": "integer",
+            "title": "version",
+            "format": "int32",
+            "description": "Its version, from 1."
+          },
+          "digest": {
+            "type": "string",
+            "title": "digest",
+            "description": "SHA-256 of the rule's canonical JSON, hex: what a recorded evaluation\n names."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"PROPOSED\", \"ACTIVE\" or \"RETIRED\"."
+          },
+          "proposedBy": {
+            "type": "string",
+            "title": "proposed_by",
+            "description": "Who proposed it, and who confirmed it (a different person)."
+          },
+          "approvedBy": {
+            "type": "string",
+            "title": "approved_by"
+          },
+          "createTime": {
+            "title": "create_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "updateTime": {
+            "title": "update_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "ConsequenceRuleVersion",
+        "additionalProperties": false,
+        "description": "ConsequenceRuleVersion is one stored version of a rule."
+      },
+      "pantherclaw.v1.ConsequenceSpec": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "title": "operation",
+            "maxLength": 200,
+            "minLength": 1,
+            "description": "The consequence operation, decided with the action."
+          },
+          "effect": {
+            "type": "string",
+            "title": "effect",
+            "maxLength": 100,
+            "minLength": 1,
+            "description": "The effect kind, for example deployment.trigger."
+          },
+          "description": {
+            "type": "string",
+            "title": "description",
+            "maxLength": 500,
+            "minLength": 1,
+            "description": "What an approver reads."
+          },
+          "target": {
+            "type": "string",
+            "title": "target",
+            "maxLength": 256,
+            "description": "The consequence's target id, a template over the action's target id\n ({target.id} or {target.id.\u003cgroup\u003e}); empty: the action's own target."
+          },
+          "environments": {
+            "type": "string",
+            "title": "environments",
+            "maxLength": 4096,
+            "description": "A CEL expression over the rule's facts giving the environments the\n consequence reaches, a list of strings; empty: none."
+          }
+        },
+        "title": "ConsequenceSpec",
+        "additionalProperties": false,
+        "description": "ConsequenceSpec is a rule's predicted consequence."
+      },
+      "pantherclaw.v1.ConsequenceSpecInput": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "title": "operation",
+            "maxLength": 200,
+            "minLength": 1,
+            "description": "The consequence operation, decided with the action."
+          },
+          "effect": {
+            "type": "string",
+            "title": "effect",
+            "maxLength": 100,
+            "minLength": 1,
+            "description": "The effect kind, for example deployment.trigger."
+          },
+          "description": {
+            "type": "string",
+            "title": "description",
+            "maxLength": 500,
+            "minLength": 1,
+            "description": "What an approver reads."
+          },
+          "target": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "target",
+            "maxLength": 256,
+            "description": "The consequence's target id, a template over the action's target id\n ({target.id} or {target.id.\u003cgroup\u003e}); empty: the action's own target."
+          },
+          "environments": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "environments",
+            "maxLength": 4096,
+            "description": "A CEL expression over the rule's facts giving the environments the\n consequence reaches, a list of strings; empty: none."
+          }
+        },
+        "title": "ConsequenceSpec",
+        "additionalProperties": false,
+        "description": "ConsequenceSpec is a rule's predicted consequence.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.ConsequenceSpec",
+        "required": [
+          "operation",
+          "effect",
+          "description"
+        ]
+      },
+      "pantherclaw.v1.GetConsequenceRuleRequest": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "title": "rule_id",
+            "pattern": "^cx\\.[a-z0-9][a-z0-9_.-]{0,63}$"
+          }
+        },
+        "title": "GetConsequenceRuleRequest",
+        "additionalProperties": false,
+        "required": [
+          "ruleId"
+        ]
+      },
+      "pantherclaw.v1.GetConsequenceRuleResponse": {
+        "type": "object",
+        "properties": {
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceRuleVersion"
+            },
+            "title": "versions",
+            "description": "Newest first."
+          }
+        },
+        "title": "GetConsequenceRuleResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListConsequenceRulesRequest": {
+        "type": "object",
+        "title": "ListConsequenceRulesRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListConsequenceRulesResponse": {
+        "type": "object",
+        "properties": {
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceRuleVersion"
+            },
+            "title": "versions",
+            "description": "At most 500 versions."
+          }
+        },
+        "title": "ListConsequenceRulesResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.PendingRuleChange": {
+        "type": "object",
+        "properties": {
+          "protectedChangeId": {
+            "type": "string",
+            "title": "protected_change_id",
+            "description": "The protected change."
+          },
+          "changeRequestId": {
+            "type": "string",
+            "title": "change_request_id",
+            "description": "Its change request."
+          }
+        },
+        "title": "PendingRuleChange",
+        "additionalProperties": false,
+        "description": "PendingRuleChange is the protected change a proposal or a retirement\n opened: confirmed by a second person on its change request's page."
+      },
+      "pantherclaw.v1.ProposeConsequenceRuleRequest": {
+        "type": "object",
+        "properties": {
+          "rule": {
+            "title": "rule",
+            "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceRuleSpecInput"
+          }
+        },
+        "title": "ProposeConsequenceRuleRequest",
+        "required": [
+          "rule"
+        ],
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ProposeConsequenceRuleResponse": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "title": "version",
+            "description": "The PROPOSED version.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceRuleVersion"
+          },
+          "pending": {
+            "title": "pending",
+            "description": "The change that activates it.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PendingRuleChange"
+          }
+        },
+        "title": "ProposeConsequenceRuleResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.RetireConsequenceRuleRequest": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "title": "rule_id",
+            "pattern": "^cx\\.[a-z0-9][a-z0-9_.-]{0,63}$"
+          }
+        },
+        "title": "RetireConsequenceRuleRequest",
+        "additionalProperties": false,
+        "required": [
+          "ruleId"
+        ]
+      },
+      "pantherclaw.v1.RetireConsequenceRuleResponse": {
+        "type": "object",
+        "properties": {
+          "pending": {
+            "title": "pending",
+            "description": "The change that retires the rule's ACTIVE version.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PendingRuleChange"
+          }
+        },
+        "title": "RetireConsequenceRuleResponse",
+        "additionalProperties": false
+      },
       "pantherclaw.v1.GetKillSwitchRequest": {
         "type": "object",
         "title": "GetKillSwitchRequest",
@@ -77575,6 +78195,10 @@
     {
       "name": "pantherclaw.v1.ConnectionService",
       "description": "ConnectionService manages connections: one target (an HTTP API, a remote\n MCP server, or the agent's own machine for hooks) served by one gateway\n through one tool package (G0 M6). Each package route of a connection runs\n in monitor or enforce mode (PN-013). Credentials are sealed on the\n caller's machine to the gateway's broker key; the server stores only the\n sealed bytes and never returns them (HR-060, HR-061, HR-182). Changes that\n weaken enforcement need a person and are audited; changes that strengthen\n it apply at once (HR-183)."
+    },
+    {
+      "name": "pantherclaw.v1.ConsequenceRuleService",
+      "description": "ConsequenceRuleService manages the org's customer consequence rules (G0\n M17 D106–D108, D112; F405–F413, HR-453, HR-454; Team edition). A\n customer rule is evaluated in the decision pipeline after the rules of\n the action's package, and only adds to them: it predicts a further\n consequence whose authority, limits and requirements the action must\n also meet, and never suppresses, waives or rules out a package\n consequence. Proposing and retiring a rule are always protected changes:\n a second person holding consequence_rule.manage confirms each with a\n security key on its change request's page, in every protect mode and\n never as an emergency."
     },
     {
       "name": "pantherclaw.v1.ContainmentService",
