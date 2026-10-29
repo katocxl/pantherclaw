@@ -301,7 +301,24 @@ Azure managed identity tokens are Microsoft Entra access tokens for an app; they
    ```
    Each token attests once. Azure caches a managed identity's token for about a day, so L2 lasts an hour from the attestation and renewals continue at L1 until Azure hands out a new token.
 
-## 9. When something goes wrong
+## 9. Microsoft Entra Agent ID (L2, M17)
+
+Agent identities get Entra access tokens like managed identities, so the same `entra_apps` pinning, audience and one-hour rules apply (section 8, HR-469).
+
+1. Pin the Entra app to the org in `entra_apps` as in section 8.
+2. An admin proposes an entry for a `service` agent that pins the tenant, the app and the **agent identity's object id**, and an **Identity Publisher** activates it:
+   ```bash
+   pclaw issuer propose-entra-agent --agent <agent> --tenant-id <tenant id> --app-id <app id> \
+     --object-id <agent identity object id> --auto-admit --reason "Entra agent"
+   ```
+   Only an agent acting autonomously as itself attests: the token must be app-only (`idtyp` `app`), and both `xms_sub_fct` and `xms_act_fct` must name an agent identity (`11`). Agents acting on behalf of a user, or through their agent user account, never attest.
+3. The agent acquires an access token for the app with its agent identity (for example with the Microsoft Entra SDK) and passes it in an environment variable:
+   ```bash
+   pclaw workload renew --key-file workload.json --out token.json --entra-token-env PANTHERCLAW_ENTRA_TOKEN
+   ```
+   Each token attests once and grants L2 for at most an hour.
+
+## 10. When something goes wrong
 
 - **Disable an entry** at once: `pclaw issuer disable ENTRY --reason …`. It stops auto-admission, and its instances drop to L1 at their next token.
 - **Revoke an instance**: `pclaw instance revoke INSTANCE --reason …`. Outstanding permits fail at `BeginDispatch`.

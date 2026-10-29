@@ -52,6 +52,9 @@ func bindingFromProto(req *pantherclawv1.ProposeIssuerEntryRequest) app.Binding 
 			TenantID: az.GetTenantId(), AppID: az.GetAppId(), ObjectID: az.GetObjectId(), ResourceID: az.GetResourceId(),
 		}
 	}
+	if ea := req.GetEntraAgent(); ea != nil {
+		b.EntraAgent = &issuers.EntraAgentBinding{TenantID: ea.GetTenantId(), AppID: ea.GetAppId(), ObjectID: ea.GetObjectId()}
+	}
 	if gh != nil {
 		g := issuers.GitHubBinding{
 			RepositoryID: gh.GetRepositoryId(), RepositoryOwnerID: gh.GetRepositoryOwnerId(),
@@ -113,6 +116,12 @@ func revisionProto(r app.Revision) *pantherclawv1.IssuerRevision {
 		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_AZURE_MI
 		out.Binding = &pantherclawv1.IssuerRevision_AzureMi{AzureMi: &pantherclawv1.AzureMiBinding{
 			TenantId: az.TenantID, AppId: az.AppID, ObjectId: az.ObjectID, ResourceId: az.ResourceID,
+		}}
+	}
+	if ea := r.Binding.EntraAgent; ea != nil {
+		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_ENTRA_AGENT_ID
+		out.Binding = &pantherclawv1.IssuerRevision_EntraAgent{EntraAgent: &pantherclawv1.EntraAgentBinding{
+			TenantId: ea.TenantID, AppId: ea.AppID, ObjectId: ea.ObjectID,
 		}}
 	}
 	if k := r.Binding.Kubernetes; k != nil {

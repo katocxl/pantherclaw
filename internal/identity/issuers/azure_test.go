@@ -130,3 +130,63 @@ func TestHR469_AzureTokensAttestAtMostAnHour(t *testing.T) {
 		t.Errorf("a day-long token passed the HR-143 lifetime check: %v", err)
 	}
 }
+
+const azAgent = "aaaaaaaa-0000-1111-2222-bbbbbbbbbbbb"
+
+func agentClaims(t *testing.T, mutate func(*string)) issuers.EntraAgentClaims {
+	t.Helper()
+	payload := `{"iss":"https://sts.windows.net/` + azTenant + `/","aud":"` + azApp + `","tid":"` + azTenant + `",
+		"oid":"` + azAgent + `","sub":"bbbbbbbb-1111-2222-3333-cccccccccccc","idtyp":"app","uti":"m5RaaRnoFUyp2TbSCAAAAA",
+		"appid":"11112222-bbbb-3333-cccc-4444dddd5555","xms_act_fct":"3 9 11","xms_sub_fct":"9 3 11","xms_tnt_fct":"3 9",
+		"xms_idrel":"7 10","xms_par_app_azp":"30cf4c22-9985-4ef7-8756-91cc888176bd","ver":"1.0"}`
+	if mutate != nil {
+		mutate(&payload)
+	}
+	c, err := issuers.ParseEntraAgentClaims([]byte(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+// TestHR469_EntraAgentPresetRules: an agent identity acting autonomously
+// as itself (idtyp app, facet 11 for both subject and actor), in the pinned
+// tenant, for the pinned app, with the pinned object id. Agents acting for
+// a user or as their user account never match.
+// Covers: PN-002.3
+func TestHR469_EntraAgentPresetRules(t *testing.T) {
+	b := issuers.EntraAgentBinding{TenantID: azTenant, AppID: azApp, ObjectID: azAgent}
+	m, err := issuers.MatchEntraAgent(b, agentClaims(t, nil))
+	if err != nil || !m.Binding.Equal(issuers.Binding{"tenant_id": azTenant, "object_id": azAgent}) {
+		t.Fatalf("autonomous agent: %+v, %v", m, err)
+	}
+	for name, mutate := range map[string]func(*string){
+		"on behalf of a user":  replace(`"idtyp":"app"`, `"idtyp":"user"`),
+		"no idtyp":             replace(`"idtyp":"app",`, ``),
+		"agent user account":   replace(`"xms_sub_fct":"9 3 11"`, `"xms_sub_fct":"13"`),
+		"subject not an agent": replace(`"xms_sub_fct":"9 3 11"`, `"xms_sub_fct":"9 3"`),
+		"no subject facets":    replace(`"xms_sub_fct":"9 3 11",`, ``),
+		"actor not an agent":   replace(`"xms_act_fct":"3 9 11"`, `"xms_act_fct":"3 9"`),
+		"facet as a substring": replace(`"xms_sub_fct":"9 3 11"`, `"xms_sub_fct":"111"`),
+		"other agent":          replace(`"oid":"`+azAgent+`"`, `"oid":"aaaaaaaa-0000-1111-2222-bbbbbbbbbbbc"`),
+		"other tenant":         replace(`"tid":"`+azTenant+`"`, `"tid":"bbbbcccc-0000-cccc-1111-dddd2222eeee"`),
+		"first-party issuer":   replace(`"https://sts.windows.net/`+azTenant+`/"`, `"https://sts.windows.net/00000001-0000-0ff1-ce00-000000000000/"`),
+		"other app":            replace(`"aud":"`+azApp+`"`, `"aud":"00001111-aaaa-2222-bbbb-3333cccc4445"`),
+		"pantherclaw audience": replace(`"aud":"`+azApp+`"`, `"aud":"pantherclaw:`+org.String()+`"`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := issuers.MatchEntraAgent(b, agentClaims(t, mutate)); !errors.Is(err, issuers.ErrRejected) {
+				t.Fatalf("err = %v, want rejection", err)
+			}
+		})
+	}
+	// A managed identity entry never matches an agent token's identity, nor
+	// an agent entry a managed identity token (no facets).
+	if _, err := issuers.MatchEntraAgent(issuers.EntraAgentBinding{TenantID: azTenant, AppID: azApp, ObjectID: azObject},
+		issuers.EntraAgentClaims{AzureClaims: azClaims(t, nil)}); !errors.Is(err, issuers.ErrRejected) {
+		t.Errorf("managed identity token matched an agent entry: %v", err)
+	}
+	if err := (issuers.EntraAgentBinding{TenantID: azTenant, AppID: azApp}).Validate(); !errors.Is(err, issuers.ErrInvalidEntry) {
+		t.Errorf("no object id: %v", err)
+	}
+}

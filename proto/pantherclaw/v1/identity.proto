@@ -109,6 +109,8 @@ enum IssuerKind {
   ISSUER_KIND_AWS_IAM = 6;
   // Azure managed identity (Entra access token for a pinned app).
   ISSUER_KIND_AZURE_MI = 7;
+  // Microsoft Entra Agent ID (agent identity acting autonomously).
+  ISSUER_KIND_ENTRA_AGENT_ID = 8;
 }
 
 // IssuerEntryState is the state of one revision.
@@ -327,6 +329,19 @@ message AzureMiBinding {
   }];
 }
 
+// EntraAgentBinding binds Entra Agent ID tokens to one agent identity
+// acting autonomously (HR-469). The tenant and app must be a pair the
+// operator pinned to this org (identity.entra_apps); the tokens' audience
+// is that app.
+message EntraAgentBinding {
+  // Entra tenant id.
+  string tenant_id = 1 [(buf.validate.field).string.pattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"];
+  // Entra app (client) id the tokens are issued for.
+  string app_id = 2 [(buf.validate.field).string.pattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"];
+  // The agent identity's service principal object id.
+  string object_id = 3 [(buf.validate.field).string.pattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"];
+}
+
 // KubernetesBinding binds Kubernetes service-account tokens to one agent
 // (HR-144).
 message KubernetesBinding {
@@ -387,6 +402,7 @@ message IssuerRevision {
     GcpBinding gcp = 22;
     AwsBinding aws = 23;
     AzureMiBinding azure_mi = 24;
+    EntraAgentBinding entra_agent = 25;
   }
   // Admits matching instances without an owner.
   bool auto_admit = 11;
@@ -550,6 +566,8 @@ message ProposeIssuerEntryRequest {
     AwsBinding aws = 10;
     // Azure managed identity.
     AzureMiBinding azure_mi = 11;
+    // Microsoft Entra Agent ID.
+    EntraAgentBinding entra_agent = 12;
   }
   // Admit matching instances without an owner (a widening when turned on).
   bool auto_admit = 5;

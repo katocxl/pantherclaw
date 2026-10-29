@@ -35,10 +35,10 @@ func workloadCommands() map[string]command {
 	return map[string]command{
 		"workload init": {"workload init --key-file FILE", workloadInit},
 		"workload enroll": {
-			"workload enroll --key-file FILE --server URL [--enrollment-token-file FILE] [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp | --aws | --azure-app APP_ID [--azure-client-id ID]] [--org ID] [--declared-release sha256:…]",
+			"workload enroll --key-file FILE --server URL [--enrollment-token-file FILE] [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp | --aws | --azure-app APP_ID [--azure-client-id ID] | --entra-token-env VAR] [--org ID] [--declared-release sha256:…]",
 			workloadEnroll,
 		},
-		"workload token": {"workload token --key-file FILE [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp | --aws | --azure-app APP_ID [--azure-client-id ID]] [--declared-release sha256:…] [--out FILE]", workloadToken},
+		"workload token": {"workload token --key-file FILE [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp | --aws | --azure-app APP_ID [--azure-client-id ID] | --entra-token-env VAR] [--declared-release sha256:…] [--out FILE]", workloadToken},
 	}
 }
 
@@ -83,6 +83,7 @@ type attestationFlags struct {
 	aws        *bool
 	azureApp   *string
 	azureID    *string
+	entraEnv   *string
 }
 
 func declareAttestation(fs *flag.FlagSet) attestationFlags {
@@ -98,16 +99,17 @@ func declareAttestation(fs *flag.FlagSet) attestationFlags {
 			"AWS_SECRET_ACCESS_KEY and AWS_SESSION_TOKEN; AWS_REGION picks the regional endpoint)"),
 		azureApp: fs.String("azure-app", "", "attest with an Azure managed identity token for this Entra app id (from identity.entra_apps)"),
 		azureID:  fs.String("azure-client-id", "", "with --azure-app: the client id of the user-assigned managed identity to use"),
+		entraEnv: fs.String("entra-token-env", "", "attest with the Entra Agent ID access token (for the pinned Entra app) in this environment variable"),
 	}
 }
 
 // errAttestationSources is returned when more than one source is given.
-var errAttestationSources = errors.New("use one of --github, --kubernetes-token, --gitlab-token-env, --spiffe-token, --gcp, --aws and --azure-app, not both")
+var errAttestationSources = errors.New("use one of --github, --kubernetes-token, --gitlab-token-env, --spiffe-token, --gcp, --aws, --azure-app and --entra-token-env, not both")
 
 // check refuses more than one attestation source.
 func (f attestationFlags) check() error {
 	n := 0
-	for _, set := range []bool{*f.github, *f.kubernetes != "", *f.gitlabEnv != "", *f.spiffe != "", *f.gcp, *f.aws, *f.azureApp != ""} {
+	for _, set := range []bool{*f.github, *f.kubernetes != "", *f.gitlabEnv != "", *f.spiffe != "", *f.gcp, *f.aws, *f.azureApp != "", *f.entraEnv != ""} {
 		if set {
 			n++
 		}
@@ -164,6 +166,12 @@ func (f attestationFlags) attestation(ctx context.Context, a *app, org ids.OrgID
 			return nil, err
 		}
 		return &pantherclawv1.Attestation{Kind: pantherclawv1.AttestationKind_ATTESTATION_KIND_AZURE_MI, Token: tok}, nil
+	case *f.entraEnv != "":
+		tok := strings.TrimSpace(os.Getenv(*f.entraEnv))
+		if tok == "" {
+			return nil, fmt.Errorf("the environment variable %s holds no Entra Agent ID token", *f.entraEnv)
+		}
+		return &pantherclawv1.Attestation{Kind: pantherclawv1.AttestationKind_ATTESTATION_KIND_ENTRA_AGENT_ID, Token: tok}, nil
 	case *f.github:
 		if org.IsZero() {
 			return nil, errors.New("the org is unknown: pass --org")

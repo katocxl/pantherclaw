@@ -55,15 +55,17 @@ type Binding struct {
 	GCP        *issuers.GCPBinding        `json:"gcp,omitzero"`
 	AWS        *issuers.AWSBinding        `json:"aws,omitzero"`
 	AzureMI    *issuers.AzureMIBinding    `json:"azure_mi,omitzero"`
+	EntraAgent *issuers.EntraAgentBinding `json:"entra_agent,omitzero"`
 }
 
 // presetContext is the execution context each preset attests (D119-D121).
 var presetContext = map[issuers.Kind]adomain.ExecutionContext{
 	issuers.KindGitHub: adomain.ContextCI, issuers.KindKubernetes: adomain.ContextKubernetes, issuers.KindGitLab: adomain.ContextCI,
-	issuers.KindSPIFFE:  adomain.ContextService,
-	issuers.KindGCP:     adomain.ContextService,
-	issuers.KindAWS:     adomain.ContextService,
-	issuers.KindAzureMI: adomain.ContextService,
+	issuers.KindSPIFFE:     adomain.ContextService,
+	issuers.KindGCP:        adomain.ContextService,
+	issuers.KindAWS:        adomain.ContextService,
+	issuers.KindAzureMI:    adomain.ContextService,
+	issuers.KindEntraAgent: adomain.ContextService,
 }
 
 // kinds lists the kind of every field that is set.
@@ -71,10 +73,11 @@ func (b Binding) kinds() []issuers.Kind {
 	var out []issuers.Kind
 	for k, set := range map[issuers.Kind]bool{
 		issuers.KindGitHub: b.GitHub != nil, issuers.KindKubernetes: b.Kubernetes != nil, issuers.KindGitLab: b.GitLab != nil,
-		issuers.KindSPIFFE:  b.SPIFFE != nil,
-		issuers.KindGCP:     b.GCP != nil,
-		issuers.KindAWS:     b.AWS != nil,
-		issuers.KindAzureMI: b.AzureMI != nil,
+		issuers.KindSPIFFE:     b.SPIFFE != nil,
+		issuers.KindGCP:        b.GCP != nil,
+		issuers.KindAWS:        b.AWS != nil,
+		issuers.KindAzureMI:    b.AzureMI != nil,
+		issuers.KindEntraAgent: b.EntraAgent != nil,
 	} {
 		if set {
 			out = append(out, k)
@@ -107,6 +110,8 @@ func (b Binding) validate() error {
 		err = b.AWS.Validate()
 	case issuers.KindAzureMI:
 		err = b.AzureMI.Validate()
+	case issuers.KindEntraAgent:
+		err = b.EntraAgent.Validate()
 	default:
 		return pcerr.New(pcerr.InvalidArgument, "ISSUER_BINDING", "exactly one preset binding is required")
 	}
@@ -130,6 +135,8 @@ func (b Binding) issuer() string {
 		return issuers.AWSIssuer
 	case issuers.KindAzureMI:
 		return issuers.AzureIssuer(b.AzureMI.TenantID)
+	case issuers.KindEntraAgent:
+		return issuers.AzureIssuer(b.EntraAgent.TenantID)
 	default:
 		return b.Kubernetes.Issuer()
 	}
@@ -141,6 +148,9 @@ func (b Binding) issuer() string {
 func (b Binding) audience(org ids.OrgID) string {
 	if b.AzureMI != nil {
 		return b.AzureMI.AppID
+	}
+	if b.EntraAgent != nil {
+		return b.EntraAgent.AppID
 	}
 	return issuers.Audience(org)
 }
@@ -157,7 +167,7 @@ func (b Binding) algorithms() []string {
 		return issuers.GCPAlgorithms
 	case issuers.KindAWS:
 		return issuers.AWSAlgorithms
-	case issuers.KindAzureMI:
+	case issuers.KindAzureMI, issuers.KindEntraAgent:
 		return issuers.AzureAlgorithms
 	default:
 		return []string{"TokenReview"}
@@ -184,6 +194,8 @@ func (b Binding) widening(prev *Binding) []string {
 		return b.AWS.Widening(prev.AWS)
 	case b.AzureMI != nil:
 		return b.AzureMI.Widening(prev.AzureMI)
+	case b.EntraAgent != nil:
+		return b.EntraAgent.Widening(prev.EntraAgent)
 	default:
 		return b.Kubernetes.Widening(prev.Kubernetes)
 	}
@@ -310,6 +322,9 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 		return Revision{}, ErrUnknownIssuer
 	}
 	if az := in.Binding.AzureMI; az != nil && (s.att.Entra == nil || !s.att.Entra.Allowed(az.TenantID, az.AppID, c.Org)) {
+		return Revision{}, ErrUnknownIssuer
+	}
+	if ea := in.Binding.EntraAgent; ea != nil && (s.att.Entra == nil || !s.att.Entra.Allowed(ea.TenantID, ea.AppID, c.Org)) {
 		return Revision{}, ErrUnknownIssuer
 	}
 	var out Revision

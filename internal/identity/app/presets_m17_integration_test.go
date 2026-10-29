@@ -363,3 +363,49 @@ func TestHR469_AzureMIEntriesAndAttestation(t *testing.T) {
 	_, err = w.attestEnroll(t, w.svc, newWorkload(), "", azAtt(time.Now(), func(c map[string]any) { c["aud"] = "00001111-aaaa-2222-bbbb-3333cccc4445" }))
 	wantPAP(t, "unpinned app", err, pap.CodeAttestationLow)
 }
+
+// TestHR469_EntraAgentEntriesAndAttestation: an autonomous agent
+// identity's token for the pinned app enrolls at L2 once; a managed
+// identity token never attests for an agent entry, and an agent acting
+// for a user never attests.
+// Covers: PN-002.3
+func TestHR469_EntraAgentEntriesAndAttestation(t *testing.T) {
+	w := newWorld(t)
+	w.svc.WithAttestors(app.Attestors{Entra: entraApps{org: w.org}})
+	agent := w.agent(t, adomain.ContextService)
+	b := app.Binding{EntraAgent: &issuers.EntraAgentBinding{TenantID: azTenant, AppID: azApp, ObjectID: azObject}}
+	e := w.activeEntry(t, agent, b, true)
+	if e.Kind != issuers.KindEntraAgent || e.Audience != azApp {
+		t.Fatalf("revision: %+v", e)
+	}
+	agentTok := func(mutate func(map[string]any)) *app.Attestation {
+		a := azAtt(time.Now().Add(-time.Hour), func(c map[string]any) {
+			c["xms_sub_fct"], c["xms_act_fct"] = "9 3 11", "3 9 11"
+			if mutate != nil {
+				mutate(c)
+			}
+		})
+		a.Kind = issuers.KindEntraAgent
+		return a
+	}
+	att := agentTok(nil)
+	in, err := w.attestEnroll(t, w.svc, newWorkload(), "", att)
+	if err != nil || in.State != "ADMITTED" || in.Level != 2 || in.Instance.Agent != agent {
+		t.Fatalf("autonomous agent: %+v, %v", in, err)
+	}
+	_, err = w.attestEnroll(t, w.svc, newWorkload(), "", att)
+	wantPAP(t, "reused agent token", err, pap.CodeInvalidToken)
+	for name, mutate := range map[string]func(map[string]any){
+		"on behalf of a user": func(c map[string]any) { c["idtyp"] = "user" },
+		"agent user account":  func(c map[string]any) { c["xms_sub_fct"] = "13" },
+		"no agent facets":     func(c map[string]any) { delete(c, "xms_sub_fct"); delete(c, "xms_act_fct") },
+	} {
+		_, err := w.attestEnroll(t, w.svc, newWorkload(), "", agentTok(mutate))
+		wantPAP(t, name, err, pap.CodeAttestationLow)
+	}
+	// The same token offered as azure_mi finds no azure_mi entry.
+	mi := agentTok(nil)
+	mi.Kind = issuers.KindAzureMI
+	_, err = w.attestEnroll(t, w.svc, newWorkload(), "", mi)
+	wantPAP(t, "agent entry through azure_mi", err, pap.CodeAttestationLow)
+}

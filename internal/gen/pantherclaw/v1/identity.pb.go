@@ -162,6 +162,8 @@ const (
 	IssuerKind_ISSUER_KIND_AWS_IAM IssuerKind = 6
 	// Azure managed identity (Entra access token for a pinned app).
 	IssuerKind_ISSUER_KIND_AZURE_MI IssuerKind = 7
+	// Microsoft Entra Agent ID (agent identity acting autonomously).
+	IssuerKind_ISSUER_KIND_ENTRA_AGENT_ID IssuerKind = 8
 )
 
 // Enum value maps for IssuerKind.
@@ -175,6 +177,7 @@ var (
 		5: "ISSUER_KIND_GCP_WORKLOAD",
 		6: "ISSUER_KIND_AWS_IAM",
 		7: "ISSUER_KIND_AZURE_MI",
+		8: "ISSUER_KIND_ENTRA_AGENT_ID",
 	}
 	IssuerKind_value = map[string]int32{
 		"ISSUER_KIND_UNSPECIFIED":    0,
@@ -185,6 +188,7 @@ var (
 		"ISSUER_KIND_GCP_WORKLOAD":   5,
 		"ISSUER_KIND_AWS_IAM":        6,
 		"ISSUER_KIND_AZURE_MI":       7,
+		"ISSUER_KIND_ENTRA_AGENT_ID": 8,
 	}
 )
 
@@ -1067,6 +1071,73 @@ func (x *AzureMiBinding) GetResourceId() string {
 	return ""
 }
 
+// EntraAgentBinding binds Entra Agent ID tokens to one agent identity
+// acting autonomously (HR-469). The tenant and app must be a pair the
+// operator pinned to this org (identity.entra_apps); the tokens' audience
+// is that app.
+type EntraAgentBinding struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Entra tenant id.
+	TenantId string `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// Entra app (client) id the tokens are issued for.
+	AppId string `protobuf:"bytes,2,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
+	// The agent identity's service principal object id.
+	ObjectId      string `protobuf:"bytes,3,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EntraAgentBinding) Reset() {
+	*x = EntraAgentBinding{}
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EntraAgentBinding) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EntraAgentBinding) ProtoMessage() {}
+
+func (x *EntraAgentBinding) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EntraAgentBinding.ProtoReflect.Descriptor instead.
+func (*EntraAgentBinding) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *EntraAgentBinding) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+func (x *EntraAgentBinding) GetAppId() string {
+	if x != nil {
+		return x.AppId
+	}
+	return ""
+}
+
+func (x *EntraAgentBinding) GetObjectId() string {
+	if x != nil {
+		return x.ObjectId
+	}
+	return ""
+}
+
 // KubernetesBinding binds Kubernetes service-account tokens to one agent
 // (HR-144).
 type KubernetesBinding struct {
@@ -1090,7 +1161,7 @@ type KubernetesBinding struct {
 
 func (x *KubernetesBinding) Reset() {
 	*x = KubernetesBinding{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[8]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1102,7 +1173,7 @@ func (x *KubernetesBinding) String() string {
 func (*KubernetesBinding) ProtoMessage() {}
 
 func (x *KubernetesBinding) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[8]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1115,7 +1186,7 @@ func (x *KubernetesBinding) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KubernetesBinding.ProtoReflect.Descriptor instead.
 func (*KubernetesBinding) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{8}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *KubernetesBinding) GetCluster() string {
@@ -1190,6 +1261,7 @@ type IssuerRevision struct {
 	//	*IssuerRevision_Gcp
 	//	*IssuerRevision_Aws
 	//	*IssuerRevision_AzureMi
+	//	*IssuerRevision_EntraAgent
 	Binding isIssuerRevision_Binding `protobuf_oneof:"binding"`
 	// Admits matching instances without an owner.
 	AutoAdmit bool `protobuf:"varint,11,opt,name=auto_admit,json=autoAdmit,proto3" json:"auto_admit,omitempty"`
@@ -1215,7 +1287,7 @@ type IssuerRevision struct {
 
 func (x *IssuerRevision) Reset() {
 	*x = IssuerRevision{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1227,7 +1299,7 @@ func (x *IssuerRevision) String() string {
 func (*IssuerRevision) ProtoMessage() {}
 
 func (x *IssuerRevision) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1240,7 +1312,7 @@ func (x *IssuerRevision) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssuerRevision.ProtoReflect.Descriptor instead.
 func (*IssuerRevision) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{9}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *IssuerRevision) GetId() string {
@@ -1369,6 +1441,15 @@ func (x *IssuerRevision) GetAzureMi() *AzureMiBinding {
 	return nil
 }
 
+func (x *IssuerRevision) GetEntraAgent() *EntraAgentBinding {
+	if x != nil {
+		if x, ok := x.Binding.(*IssuerRevision_EntraAgent); ok {
+			return x.EntraAgent
+		}
+	}
+	return nil
+}
+
 func (x *IssuerRevision) GetAutoAdmit() bool {
 	if x != nil {
 		return x.AutoAdmit
@@ -1464,6 +1545,10 @@ type IssuerRevision_AzureMi struct {
 	AzureMi *AzureMiBinding `protobuf:"bytes,24,opt,name=azure_mi,json=azureMi,proto3,oneof"`
 }
 
+type IssuerRevision_EntraAgent struct {
+	EntraAgent *EntraAgentBinding `protobuf:"bytes,25,opt,name=entra_agent,json=entraAgent,proto3,oneof"`
+}
+
 func (*IssuerRevision_Github) isIssuerRevision_Binding() {}
 
 func (*IssuerRevision_Kubernetes) isIssuerRevision_Binding() {}
@@ -1478,6 +1563,8 @@ func (*IssuerRevision_Aws) isIssuerRevision_Binding() {}
 
 func (*IssuerRevision_AzureMi) isIssuerRevision_Binding() {}
 
+func (*IssuerRevision_EntraAgent) isIssuerRevision_Binding() {}
+
 // CreateEnrollmentTokenRequest creates an enrollment token.
 type CreateEnrollmentTokenRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1491,7 +1578,7 @@ type CreateEnrollmentTokenRequest struct {
 
 func (x *CreateEnrollmentTokenRequest) Reset() {
 	*x = CreateEnrollmentTokenRequest{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1503,7 +1590,7 @@ func (x *CreateEnrollmentTokenRequest) String() string {
 func (*CreateEnrollmentTokenRequest) ProtoMessage() {}
 
 func (x *CreateEnrollmentTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1516,7 +1603,7 @@ func (x *CreateEnrollmentTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateEnrollmentTokenRequest.ProtoReflect.Descriptor instead.
 func (*CreateEnrollmentTokenRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{10}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CreateEnrollmentTokenRequest) GetAgentId() string {
@@ -1548,7 +1635,7 @@ type CreateEnrollmentTokenResponse struct {
 
 func (x *CreateEnrollmentTokenResponse) Reset() {
 	*x = CreateEnrollmentTokenResponse{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1560,7 +1647,7 @@ func (x *CreateEnrollmentTokenResponse) String() string {
 func (*CreateEnrollmentTokenResponse) ProtoMessage() {}
 
 func (x *CreateEnrollmentTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1573,7 +1660,7 @@ func (x *CreateEnrollmentTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateEnrollmentTokenResponse.ProtoReflect.Descriptor instead.
 func (*CreateEnrollmentTokenResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{11}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CreateEnrollmentTokenResponse) GetId() string {
@@ -1614,7 +1701,7 @@ type ListInstancesRequest struct {
 
 func (x *ListInstancesRequest) Reset() {
 	*x = ListInstancesRequest{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1626,7 +1713,7 @@ func (x *ListInstancesRequest) String() string {
 func (*ListInstancesRequest) ProtoMessage() {}
 
 func (x *ListInstancesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1639,7 +1726,7 @@ func (x *ListInstancesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInstancesRequest.ProtoReflect.Descriptor instead.
 func (*ListInstancesRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{12}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ListInstancesRequest) GetAgentId() string {
@@ -1683,7 +1770,7 @@ type ListInstancesResponse struct {
 
 func (x *ListInstancesResponse) Reset() {
 	*x = ListInstancesResponse{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1695,7 +1782,7 @@ func (x *ListInstancesResponse) String() string {
 func (*ListInstancesResponse) ProtoMessage() {}
 
 func (x *ListInstancesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1708,7 +1795,7 @@ func (x *ListInstancesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInstancesResponse.ProtoReflect.Descriptor instead.
 func (*ListInstancesResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{13}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ListInstancesResponse) GetInstances() []*Instance {
@@ -1736,7 +1823,7 @@ type GetInstanceRequest struct {
 
 func (x *GetInstanceRequest) Reset() {
 	*x = GetInstanceRequest{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1748,7 +1835,7 @@ func (x *GetInstanceRequest) String() string {
 func (*GetInstanceRequest) ProtoMessage() {}
 
 func (x *GetInstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1761,7 +1848,7 @@ func (x *GetInstanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInstanceRequest.ProtoReflect.Descriptor instead.
 func (*GetInstanceRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{14}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GetInstanceRequest) GetId() string {
@@ -1782,7 +1869,7 @@ type GetInstanceResponse struct {
 
 func (x *GetInstanceResponse) Reset() {
 	*x = GetInstanceResponse{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1794,7 +1881,7 @@ func (x *GetInstanceResponse) String() string {
 func (*GetInstanceResponse) ProtoMessage() {}
 
 func (x *GetInstanceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1807,7 +1894,7 @@ func (x *GetInstanceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInstanceResponse.ProtoReflect.Descriptor instead.
 func (*GetInstanceResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{15}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *GetInstanceResponse) GetInstance() *Instance {
@@ -1830,7 +1917,7 @@ type AdmitInstanceRequest struct {
 
 func (x *AdmitInstanceRequest) Reset() {
 	*x = AdmitInstanceRequest{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[16]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1842,7 +1929,7 @@ func (x *AdmitInstanceRequest) String() string {
 func (*AdmitInstanceRequest) ProtoMessage() {}
 
 func (x *AdmitInstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[16]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1855,7 +1942,7 @@ func (x *AdmitInstanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdmitInstanceRequest.ProtoReflect.Descriptor instead.
 func (*AdmitInstanceRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{16}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *AdmitInstanceRequest) GetId() string {
@@ -1883,7 +1970,7 @@ type AdmitInstanceResponse struct {
 
 func (x *AdmitInstanceResponse) Reset() {
 	*x = AdmitInstanceResponse{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[17]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1895,7 +1982,7 @@ func (x *AdmitInstanceResponse) String() string {
 func (*AdmitInstanceResponse) ProtoMessage() {}
 
 func (x *AdmitInstanceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[17]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1908,7 +1995,7 @@ func (x *AdmitInstanceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdmitInstanceResponse.ProtoReflect.Descriptor instead.
 func (*AdmitInstanceResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{17}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *AdmitInstanceResponse) GetInstance() *Instance {
@@ -1931,7 +2018,7 @@ type RejectInstanceRequest struct {
 
 func (x *RejectInstanceRequest) Reset() {
 	*x = RejectInstanceRequest{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[18]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1943,7 +2030,7 @@ func (x *RejectInstanceRequest) String() string {
 func (*RejectInstanceRequest) ProtoMessage() {}
 
 func (x *RejectInstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[18]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1956,7 +2043,7 @@ func (x *RejectInstanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RejectInstanceRequest.ProtoReflect.Descriptor instead.
 func (*RejectInstanceRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{18}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *RejectInstanceRequest) GetId() string {
@@ -1984,7 +2071,7 @@ type RejectInstanceResponse struct {
 
 func (x *RejectInstanceResponse) Reset() {
 	*x = RejectInstanceResponse{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[19]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1996,7 +2083,7 @@ func (x *RejectInstanceResponse) String() string {
 func (*RejectInstanceResponse) ProtoMessage() {}
 
 func (x *RejectInstanceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[19]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2009,7 +2096,7 @@ func (x *RejectInstanceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RejectInstanceResponse.ProtoReflect.Descriptor instead.
 func (*RejectInstanceResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{19}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *RejectInstanceResponse) GetInstance() *Instance {
@@ -2032,7 +2119,7 @@ type RevokeInstanceRequest struct {
 
 func (x *RevokeInstanceRequest) Reset() {
 	*x = RevokeInstanceRequest{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2044,7 +2131,7 @@ func (x *RevokeInstanceRequest) String() string {
 func (*RevokeInstanceRequest) ProtoMessage() {}
 
 func (x *RevokeInstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2057,7 +2144,7 @@ func (x *RevokeInstanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeInstanceRequest.ProtoReflect.Descriptor instead.
 func (*RevokeInstanceRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{20}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *RevokeInstanceRequest) GetId() string {
@@ -2085,7 +2172,7 @@ type RevokeInstanceResponse struct {
 
 func (x *RevokeInstanceResponse) Reset() {
 	*x = RevokeInstanceResponse{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2097,7 +2184,7 @@ func (x *RevokeInstanceResponse) String() string {
 func (*RevokeInstanceResponse) ProtoMessage() {}
 
 func (x *RevokeInstanceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2110,7 +2197,7 @@ func (x *RevokeInstanceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeInstanceResponse.ProtoReflect.Descriptor instead.
 func (*RevokeInstanceResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{21}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *RevokeInstanceResponse) GetInstance() *Instance {
@@ -2138,6 +2225,7 @@ type ProposeIssuerEntryRequest struct {
 	//	*ProposeIssuerEntryRequest_Gcp
 	//	*ProposeIssuerEntryRequest_Aws
 	//	*ProposeIssuerEntryRequest_AzureMi
+	//	*ProposeIssuerEntryRequest_EntraAgent
 	Binding isProposeIssuerEntryRequest_Binding `protobuf_oneof:"binding"`
 	// Admit matching instances without an owner (a widening when turned on).
 	AutoAdmit bool `protobuf:"varint,5,opt,name=auto_admit,json=autoAdmit,proto3" json:"auto_admit,omitempty"`
@@ -2149,7 +2237,7 @@ type ProposeIssuerEntryRequest struct {
 
 func (x *ProposeIssuerEntryRequest) Reset() {
 	*x = ProposeIssuerEntryRequest{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[22]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2161,7 +2249,7 @@ func (x *ProposeIssuerEntryRequest) String() string {
 func (*ProposeIssuerEntryRequest) ProtoMessage() {}
 
 func (x *ProposeIssuerEntryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[22]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2174,7 +2262,7 @@ func (x *ProposeIssuerEntryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProposeIssuerEntryRequest.ProtoReflect.Descriptor instead.
 func (*ProposeIssuerEntryRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{22}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ProposeIssuerEntryRequest) GetEntryId() string {
@@ -2261,6 +2349,15 @@ func (x *ProposeIssuerEntryRequest) GetAzureMi() *AzureMiBinding {
 	return nil
 }
 
+func (x *ProposeIssuerEntryRequest) GetEntraAgent() *EntraAgentBinding {
+	if x != nil {
+		if x, ok := x.Binding.(*ProposeIssuerEntryRequest_EntraAgent); ok {
+			return x.EntraAgent
+		}
+	}
+	return nil
+}
+
 func (x *ProposeIssuerEntryRequest) GetAutoAdmit() bool {
 	if x != nil {
 		return x.AutoAdmit
@@ -2314,6 +2411,11 @@ type ProposeIssuerEntryRequest_AzureMi struct {
 	AzureMi *AzureMiBinding `protobuf:"bytes,11,opt,name=azure_mi,json=azureMi,proto3,oneof"`
 }
 
+type ProposeIssuerEntryRequest_EntraAgent struct {
+	// Microsoft Entra Agent ID.
+	EntraAgent *EntraAgentBinding `protobuf:"bytes,12,opt,name=entra_agent,json=entraAgent,proto3,oneof"`
+}
+
 func (*ProposeIssuerEntryRequest_Github) isProposeIssuerEntryRequest_Binding() {}
 
 func (*ProposeIssuerEntryRequest_Kubernetes) isProposeIssuerEntryRequest_Binding() {}
@@ -2328,6 +2430,8 @@ func (*ProposeIssuerEntryRequest_Aws) isProposeIssuerEntryRequest_Binding() {}
 
 func (*ProposeIssuerEntryRequest_AzureMi) isProposeIssuerEntryRequest_Binding() {}
 
+func (*ProposeIssuerEntryRequest_EntraAgent) isProposeIssuerEntryRequest_Binding() {}
+
 // ProposeIssuerEntryResponse returns the new revision: ACTIVE when it only
 // narrows, PROPOSED otherwise.
 type ProposeIssuerEntryResponse struct {
@@ -2340,7 +2444,7 @@ type ProposeIssuerEntryResponse struct {
 
 func (x *ProposeIssuerEntryResponse) Reset() {
 	*x = ProposeIssuerEntryResponse{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[23]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2352,7 +2456,7 @@ func (x *ProposeIssuerEntryResponse) String() string {
 func (*ProposeIssuerEntryResponse) ProtoMessage() {}
 
 func (x *ProposeIssuerEntryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[23]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2365,7 +2469,7 @@ func (x *ProposeIssuerEntryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProposeIssuerEntryResponse.ProtoReflect.Descriptor instead.
 func (*ProposeIssuerEntryResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{23}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ProposeIssuerEntryResponse) GetRevision() *IssuerRevision {
@@ -2391,7 +2495,7 @@ type ActivateIssuerEntryRequest struct {
 
 func (x *ActivateIssuerEntryRequest) Reset() {
 	*x = ActivateIssuerEntryRequest{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2403,7 +2507,7 @@ func (x *ActivateIssuerEntryRequest) String() string {
 func (*ActivateIssuerEntryRequest) ProtoMessage() {}
 
 func (x *ActivateIssuerEntryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2416,7 +2520,7 @@ func (x *ActivateIssuerEntryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivateIssuerEntryRequest.ProtoReflect.Descriptor instead.
 func (*ActivateIssuerEntryRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{24}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ActivateIssuerEntryRequest) GetEntryId() string {
@@ -2451,7 +2555,7 @@ type ActivateIssuerEntryResponse struct {
 
 func (x *ActivateIssuerEntryResponse) Reset() {
 	*x = ActivateIssuerEntryResponse{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2463,7 +2567,7 @@ func (x *ActivateIssuerEntryResponse) String() string {
 func (*ActivateIssuerEntryResponse) ProtoMessage() {}
 
 func (x *ActivateIssuerEntryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2476,7 +2580,7 @@ func (x *ActivateIssuerEntryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivateIssuerEntryResponse.ProtoReflect.Descriptor instead.
 func (*ActivateIssuerEntryResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{25}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ActivateIssuerEntryResponse) GetRevision() *IssuerRevision {
@@ -2499,7 +2603,7 @@ type WithdrawIssuerProposalRequest struct {
 
 func (x *WithdrawIssuerProposalRequest) Reset() {
 	*x = WithdrawIssuerProposalRequest{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2511,7 +2615,7 @@ func (x *WithdrawIssuerProposalRequest) String() string {
 func (*WithdrawIssuerProposalRequest) ProtoMessage() {}
 
 func (x *WithdrawIssuerProposalRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2524,7 +2628,7 @@ func (x *WithdrawIssuerProposalRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WithdrawIssuerProposalRequest.ProtoReflect.Descriptor instead.
 func (*WithdrawIssuerProposalRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{26}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *WithdrawIssuerProposalRequest) GetEntryId() string {
@@ -2552,7 +2656,7 @@ type WithdrawIssuerProposalResponse struct {
 
 func (x *WithdrawIssuerProposalResponse) Reset() {
 	*x = WithdrawIssuerProposalResponse{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[27]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2564,7 +2668,7 @@ func (x *WithdrawIssuerProposalResponse) String() string {
 func (*WithdrawIssuerProposalResponse) ProtoMessage() {}
 
 func (x *WithdrawIssuerProposalResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[27]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2577,7 +2681,7 @@ func (x *WithdrawIssuerProposalResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WithdrawIssuerProposalResponse.ProtoReflect.Descriptor instead.
 func (*WithdrawIssuerProposalResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{27}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *WithdrawIssuerProposalResponse) GetRevision() *IssuerRevision {
@@ -2600,7 +2704,7 @@ type DisableIssuerEntryRequest struct {
 
 func (x *DisableIssuerEntryRequest) Reset() {
 	*x = DisableIssuerEntryRequest{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[28]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2612,7 +2716,7 @@ func (x *DisableIssuerEntryRequest) String() string {
 func (*DisableIssuerEntryRequest) ProtoMessage() {}
 
 func (x *DisableIssuerEntryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[28]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2625,7 +2729,7 @@ func (x *DisableIssuerEntryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisableIssuerEntryRequest.ProtoReflect.Descriptor instead.
 func (*DisableIssuerEntryRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{28}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *DisableIssuerEntryRequest) GetEntryId() string {
@@ -2653,7 +2757,7 @@ type DisableIssuerEntryResponse struct {
 
 func (x *DisableIssuerEntryResponse) Reset() {
 	*x = DisableIssuerEntryResponse{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[29]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2665,7 +2769,7 @@ func (x *DisableIssuerEntryResponse) String() string {
 func (*DisableIssuerEntryResponse) ProtoMessage() {}
 
 func (x *DisableIssuerEntryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[29]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2678,7 +2782,7 @@ func (x *DisableIssuerEntryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisableIssuerEntryResponse.ProtoReflect.Descriptor instead.
 func (*DisableIssuerEntryResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{29}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *DisableIssuerEntryResponse) GetRevision() *IssuerRevision {
@@ -2703,7 +2807,7 @@ type ListIssuerEntriesRequest struct {
 
 func (x *ListIssuerEntriesRequest) Reset() {
 	*x = ListIssuerEntriesRequest{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[30]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2715,7 +2819,7 @@ func (x *ListIssuerEntriesRequest) String() string {
 func (*ListIssuerEntriesRequest) ProtoMessage() {}
 
 func (x *ListIssuerEntriesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[30]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2728,7 +2832,7 @@ func (x *ListIssuerEntriesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIssuerEntriesRequest.ProtoReflect.Descriptor instead.
 func (*ListIssuerEntriesRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{30}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ListIssuerEntriesRequest) GetPageSize() int32 {
@@ -2766,7 +2870,7 @@ type ListIssuerEntriesResponse struct {
 
 func (x *ListIssuerEntriesResponse) Reset() {
 	*x = ListIssuerEntriesResponse{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[31]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2778,7 +2882,7 @@ func (x *ListIssuerEntriesResponse) String() string {
 func (*ListIssuerEntriesResponse) ProtoMessage() {}
 
 func (x *ListIssuerEntriesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[31]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2791,7 +2895,7 @@ func (x *ListIssuerEntriesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIssuerEntriesResponse.ProtoReflect.Descriptor instead.
 func (*ListIssuerEntriesResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{31}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ListIssuerEntriesResponse) GetEntries() []*IssuerRevision {
@@ -2819,7 +2923,7 @@ type GetIssuerEntryRequest struct {
 
 func (x *GetIssuerEntryRequest) Reset() {
 	*x = GetIssuerEntryRequest{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[32]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2831,7 +2935,7 @@ func (x *GetIssuerEntryRequest) String() string {
 func (*GetIssuerEntryRequest) ProtoMessage() {}
 
 func (x *GetIssuerEntryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[32]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2844,7 +2948,7 @@ func (x *GetIssuerEntryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetIssuerEntryRequest.ProtoReflect.Descriptor instead.
 func (*GetIssuerEntryRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{32}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *GetIssuerEntryRequest) GetEntryId() string {
@@ -2865,7 +2969,7 @@ type GetIssuerEntryResponse struct {
 
 func (x *GetIssuerEntryResponse) Reset() {
 	*x = GetIssuerEntryResponse{}
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[33]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2877,7 +2981,7 @@ func (x *GetIssuerEntryResponse) String() string {
 func (*GetIssuerEntryResponse) ProtoMessage() {}
 
 func (x *GetIssuerEntryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_identity_proto_msgTypes[33]
+	mi := &file_pantherclaw_v1_identity_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2890,7 +2994,7 @@ func (x *GetIssuerEntryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetIssuerEntryResponse.ProtoReflect.Descriptor instead.
 func (*GetIssuerEntryResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{33}
+	return file_pantherclaw_v1_identity_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *GetIssuerEntryResponse) GetRevisions() []*IssuerRevision {
@@ -2980,14 +3084,18 @@ const file_pantherclaw_v1_identity_proto_rawDesc = "" +
 	"\x06app_id\x18\x02 \x01(\tBE\xbaHBr@2>^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$R\x05appId\x12b\n" +
 	"\tobject_id\x18\x03 \x01(\tBE\xbaHBr@2>^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$R\bobjectId\x12>\n" +
 	"\vresource_id\x18\x04 \x01(\tB\x1d\xbaH\x1ar\x18\x18\x80\x042\x13^$|^/subscriptions/R\n" +
-	"resourceId\"\x95\x04\n" +
+	"resourceId\"\xb9\x02\n" +
+	"\x11EntraAgentBinding\x12b\n" +
+	"\ttenant_id\x18\x01 \x01(\tBE\xbaHBr@2>^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$R\btenantId\x12\\\n" +
+	"\x06app_id\x18\x02 \x01(\tBE\xbaHBr@2>^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$R\x05appId\x12b\n" +
+	"\tobject_id\x18\x03 \x01(\tBE\xbaHBr@2>^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$R\bobjectId\"\x95\x04\n" +
 	"\x11KubernetesBinding\x12E\n" +
 	"\acluster\x18\x01 \x01(\tB+\xbaH(r&2$^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$R\acluster\x12I\n" +
 	"\tnamespace\x18\x02 \x01(\tB+\xbaH(r&2$^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$R\tnamespace\x12_\n" +
 	"\x14service_account_name\x18\x03 \x01(\tB-\xbaH*r(2&^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$R\x12serviceAccountName\x128\n" +
 	"\x13service_account_uid\x18\x04 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x11serviceAccountUid\x12\x86\x01\n" +
 	"\x12image_repositories\x18\x05 \x03(\tBW\xbaHT\x92\x01Q\x10\x14\x18\x01\"KrI\x18\xff\x012D^[a-z0-9]+([._-][a-z0-9]+)*(:[0-9]+)?(/[a-z0-9]+([._-][a-z0-9]+)*)+$R\x11imageRepositories\x12J\n" +
-	"\rimage_digests\x18\x06 \x03(\tB%\xbaH\"\x92\x01\x1f\x102\x18\x01\"\x19r\x172\x15^sha256:[0-9a-f]{64}$R\fimageDigests\"\x9d\b\n" +
+	"\rimage_digests\x18\x06 \x03(\tB%\xbaH\"\x92\x01\x1f\x102\x18\x01\"\x19r\x172\x15^sha256:[0-9a-f]{64}$R\fimageDigests\"\xe3\b\n" +
 	"\x0eIssuerRevision\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\bentry_id\x18\x02 \x01(\tR\aentryId\x12\x1a\n" +
@@ -3008,7 +3116,9 @@ const file_pantherclaw_v1_identity_proto_rawDesc = "" +
 	"\x06spiffe\x18\x15 \x01(\v2\x1d.pantherclaw.v1.SpiffeBindingH\x00R\x06spiffe\x12.\n" +
 	"\x03gcp\x18\x16 \x01(\v2\x1a.pantherclaw.v1.GcpBindingH\x00R\x03gcp\x12.\n" +
 	"\x03aws\x18\x17 \x01(\v2\x1a.pantherclaw.v1.AwsBindingH\x00R\x03aws\x12;\n" +
-	"\bazure_mi\x18\x18 \x01(\v2\x1e.pantherclaw.v1.AzureMiBindingH\x00R\aazureMi\x12\x1d\n" +
+	"\bazure_mi\x18\x18 \x01(\v2\x1e.pantherclaw.v1.AzureMiBindingH\x00R\aazureMi\x12D\n" +
+	"\ventra_agent\x18\x19 \x01(\v2!.pantherclaw.v1.EntraAgentBindingH\x00R\n" +
+	"entraAgent\x12\x1d\n" +
 	"\n" +
 	"auto_admit\x18\v \x01(\bR\tautoAdmit\x12\x1a\n" +
 	"\bwidening\x18\f \x03(\tR\bwidening\x126\n" +
@@ -3061,7 +3171,7 @@ const file_pantherclaw_v1_identity_proto_rawDesc = "" +
 	"\x06reason\x18\x02 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xe8\aR\x06reason\"N\n" +
 	"\x16RevokeInstanceResponse\x124\n" +
-	"\binstance\x18\x01 \x01(\v2\x18.pantherclaw.v1.InstanceR\binstance\"\x98\x05\n" +
+	"\binstance\x18\x01 \x01(\v2\x18.pantherclaw.v1.InstanceR\binstance\"\xde\x05\n" +
 	"\x19ProposeIssuerEntryRequest\x12t\n" +
 	"\bentry_id\x18\x01 \x01(\tBY\xbaHVrT\x18$2P^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})?$R\aentryId\x12#\n" +
 	"\bagent_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\aagentId\x127\n" +
@@ -3074,7 +3184,9 @@ const file_pantherclaw_v1_identity_proto_rawDesc = "" +
 	"\x03gcp\x18\t \x01(\v2\x1a.pantherclaw.v1.GcpBindingH\x00R\x03gcp\x12.\n" +
 	"\x03aws\x18\n" +
 	" \x01(\v2\x1a.pantherclaw.v1.AwsBindingH\x00R\x03aws\x12;\n" +
-	"\bazure_mi\x18\v \x01(\v2\x1e.pantherclaw.v1.AzureMiBindingH\x00R\aazureMi\x12\x1d\n" +
+	"\bazure_mi\x18\v \x01(\v2\x1e.pantherclaw.v1.AzureMiBindingH\x00R\aazureMi\x12D\n" +
+	"\ventra_agent\x18\f \x01(\v2!.pantherclaw.v1.EntraAgentBindingH\x00R\n" +
+	"entraAgent\x12\x1d\n" +
 	"\n" +
 	"auto_admit\x18\x05 \x01(\bR\tautoAdmit\x12\"\n" +
 	"\x06reason\x18\x06 \x01(\tB\n" +
@@ -3124,7 +3236,7 @@ const file_pantherclaw_v1_identity_proto_rawDesc = "" +
 	"\x1bENROLLMENT_PATH_UNSPECIFIED\x10\x00\x12$\n" +
 	" ENROLLMENT_PATH_ENROLLMENT_TOKEN\x10\x01\x12\x1f\n" +
 	"\x1bENROLLMENT_PATH_ATTESTATION\x10\x02\x12\x1d\n" +
-	"\x19ENROLLMENT_PATH_DISCOVERY\x10\x03*\xed\x01\n" +
+	"\x19ENROLLMENT_PATH_DISCOVERY\x10\x03*\x8d\x02\n" +
 	"\n" +
 	"IssuerKind\x12\x1b\n" +
 	"\x17ISSUER_KIND_UNSPECIFIED\x10\x00\x12\x1e\n" +
@@ -3134,7 +3246,8 @@ const file_pantherclaw_v1_identity_proto_rawDesc = "" +
 	"\x16ISSUER_KIND_SPIFFE_JWT\x10\x04\x12\x1c\n" +
 	"\x18ISSUER_KIND_GCP_WORKLOAD\x10\x05\x12\x17\n" +
 	"\x13ISSUER_KIND_AWS_IAM\x10\x06\x12\x18\n" +
-	"\x14ISSUER_KIND_AZURE_MI\x10\a*\xdc\x01\n" +
+	"\x14ISSUER_KIND_AZURE_MI\x10\a\x12\x1e\n" +
+	"\x1aISSUER_KIND_ENTRA_AGENT_ID\x10\b*\xdc\x01\n" +
 	"\x10IssuerEntryState\x12\"\n" +
 	"\x1eISSUER_ENTRY_STATE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bISSUER_ENTRY_STATE_PROPOSED\x10\x01\x12\x1d\n" +
@@ -3174,7 +3287,7 @@ func file_pantherclaw_v1_identity_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_identity_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_pantherclaw_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
+var file_pantherclaw_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 var file_pantherclaw_v1_identity_proto_goTypes = []any{
 	(InstanceState)(0),                     // 0: pantherclaw.v1.InstanceState
 	(EnrollmentPath)(0),                    // 1: pantherclaw.v1.EnrollmentPath
@@ -3189,108 +3302,111 @@ var file_pantherclaw_v1_identity_proto_goTypes = []any{
 	(*GcpBinding)(nil),                     // 10: pantherclaw.v1.GcpBinding
 	(*AwsBinding)(nil),                     // 11: pantherclaw.v1.AwsBinding
 	(*AzureMiBinding)(nil),                 // 12: pantherclaw.v1.AzureMiBinding
-	(*KubernetesBinding)(nil),              // 13: pantherclaw.v1.KubernetesBinding
-	(*IssuerRevision)(nil),                 // 14: pantherclaw.v1.IssuerRevision
-	(*CreateEnrollmentTokenRequest)(nil),   // 15: pantherclaw.v1.CreateEnrollmentTokenRequest
-	(*CreateEnrollmentTokenResponse)(nil),  // 16: pantherclaw.v1.CreateEnrollmentTokenResponse
-	(*ListInstancesRequest)(nil),           // 17: pantherclaw.v1.ListInstancesRequest
-	(*ListInstancesResponse)(nil),          // 18: pantherclaw.v1.ListInstancesResponse
-	(*GetInstanceRequest)(nil),             // 19: pantherclaw.v1.GetInstanceRequest
-	(*GetInstanceResponse)(nil),            // 20: pantherclaw.v1.GetInstanceResponse
-	(*AdmitInstanceRequest)(nil),           // 21: pantherclaw.v1.AdmitInstanceRequest
-	(*AdmitInstanceResponse)(nil),          // 22: pantherclaw.v1.AdmitInstanceResponse
-	(*RejectInstanceRequest)(nil),          // 23: pantherclaw.v1.RejectInstanceRequest
-	(*RejectInstanceResponse)(nil),         // 24: pantherclaw.v1.RejectInstanceResponse
-	(*RevokeInstanceRequest)(nil),          // 25: pantherclaw.v1.RevokeInstanceRequest
-	(*RevokeInstanceResponse)(nil),         // 26: pantherclaw.v1.RevokeInstanceResponse
-	(*ProposeIssuerEntryRequest)(nil),      // 27: pantherclaw.v1.ProposeIssuerEntryRequest
-	(*ProposeIssuerEntryResponse)(nil),     // 28: pantherclaw.v1.ProposeIssuerEntryResponse
-	(*ActivateIssuerEntryRequest)(nil),     // 29: pantherclaw.v1.ActivateIssuerEntryRequest
-	(*ActivateIssuerEntryResponse)(nil),    // 30: pantherclaw.v1.ActivateIssuerEntryResponse
-	(*WithdrawIssuerProposalRequest)(nil),  // 31: pantherclaw.v1.WithdrawIssuerProposalRequest
-	(*WithdrawIssuerProposalResponse)(nil), // 32: pantherclaw.v1.WithdrawIssuerProposalResponse
-	(*DisableIssuerEntryRequest)(nil),      // 33: pantherclaw.v1.DisableIssuerEntryRequest
-	(*DisableIssuerEntryResponse)(nil),     // 34: pantherclaw.v1.DisableIssuerEntryResponse
-	(*ListIssuerEntriesRequest)(nil),       // 35: pantherclaw.v1.ListIssuerEntriesRequest
-	(*ListIssuerEntriesResponse)(nil),      // 36: pantherclaw.v1.ListIssuerEntriesResponse
-	(*GetIssuerEntryRequest)(nil),          // 37: pantherclaw.v1.GetIssuerEntryRequest
-	(*GetIssuerEntryResponse)(nil),         // 38: pantherclaw.v1.GetIssuerEntryResponse
-	nil,                                    // 39: pantherclaw.v1.Verification.BindingEntry
-	(*timestamppb.Timestamp)(nil),          // 40: google.protobuf.Timestamp
+	(*EntraAgentBinding)(nil),              // 13: pantherclaw.v1.EntraAgentBinding
+	(*KubernetesBinding)(nil),              // 14: pantherclaw.v1.KubernetesBinding
+	(*IssuerRevision)(nil),                 // 15: pantherclaw.v1.IssuerRevision
+	(*CreateEnrollmentTokenRequest)(nil),   // 16: pantherclaw.v1.CreateEnrollmentTokenRequest
+	(*CreateEnrollmentTokenResponse)(nil),  // 17: pantherclaw.v1.CreateEnrollmentTokenResponse
+	(*ListInstancesRequest)(nil),           // 18: pantherclaw.v1.ListInstancesRequest
+	(*ListInstancesResponse)(nil),          // 19: pantherclaw.v1.ListInstancesResponse
+	(*GetInstanceRequest)(nil),             // 20: pantherclaw.v1.GetInstanceRequest
+	(*GetInstanceResponse)(nil),            // 21: pantherclaw.v1.GetInstanceResponse
+	(*AdmitInstanceRequest)(nil),           // 22: pantherclaw.v1.AdmitInstanceRequest
+	(*AdmitInstanceResponse)(nil),          // 23: pantherclaw.v1.AdmitInstanceResponse
+	(*RejectInstanceRequest)(nil),          // 24: pantherclaw.v1.RejectInstanceRequest
+	(*RejectInstanceResponse)(nil),         // 25: pantherclaw.v1.RejectInstanceResponse
+	(*RevokeInstanceRequest)(nil),          // 26: pantherclaw.v1.RevokeInstanceRequest
+	(*RevokeInstanceResponse)(nil),         // 27: pantherclaw.v1.RevokeInstanceResponse
+	(*ProposeIssuerEntryRequest)(nil),      // 28: pantherclaw.v1.ProposeIssuerEntryRequest
+	(*ProposeIssuerEntryResponse)(nil),     // 29: pantherclaw.v1.ProposeIssuerEntryResponse
+	(*ActivateIssuerEntryRequest)(nil),     // 30: pantherclaw.v1.ActivateIssuerEntryRequest
+	(*ActivateIssuerEntryResponse)(nil),    // 31: pantherclaw.v1.ActivateIssuerEntryResponse
+	(*WithdrawIssuerProposalRequest)(nil),  // 32: pantherclaw.v1.WithdrawIssuerProposalRequest
+	(*WithdrawIssuerProposalResponse)(nil), // 33: pantherclaw.v1.WithdrawIssuerProposalResponse
+	(*DisableIssuerEntryRequest)(nil),      // 34: pantherclaw.v1.DisableIssuerEntryRequest
+	(*DisableIssuerEntryResponse)(nil),     // 35: pantherclaw.v1.DisableIssuerEntryResponse
+	(*ListIssuerEntriesRequest)(nil),       // 36: pantherclaw.v1.ListIssuerEntriesRequest
+	(*ListIssuerEntriesResponse)(nil),      // 37: pantherclaw.v1.ListIssuerEntriesResponse
+	(*GetIssuerEntryRequest)(nil),          // 38: pantherclaw.v1.GetIssuerEntryRequest
+	(*GetIssuerEntryResponse)(nil),         // 39: pantherclaw.v1.GetIssuerEntryResponse
+	nil,                                    // 40: pantherclaw.v1.Verification.BindingEntry
+	(*timestamppb.Timestamp)(nil),          // 41: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_identity_proto_depIdxs = []int32{
-	40, // 0: pantherclaw.v1.Verification.attested_until:type_name -> google.protobuf.Timestamp
-	40, // 1: pantherclaw.v1.Verification.last_verify_time:type_name -> google.protobuf.Timestamp
-	39, // 2: pantherclaw.v1.Verification.binding:type_name -> pantherclaw.v1.Verification.BindingEntry
+	41, // 0: pantherclaw.v1.Verification.attested_until:type_name -> google.protobuf.Timestamp
+	41, // 1: pantherclaw.v1.Verification.last_verify_time:type_name -> google.protobuf.Timestamp
+	40, // 2: pantherclaw.v1.Verification.binding:type_name -> pantherclaw.v1.Verification.BindingEntry
 	0,  // 3: pantherclaw.v1.Instance.state:type_name -> pantherclaw.v1.InstanceState
 	1,  // 4: pantherclaw.v1.Instance.enrolled_via:type_name -> pantherclaw.v1.EnrollmentPath
 	5,  // 5: pantherclaw.v1.Instance.verification:type_name -> pantherclaw.v1.Verification
-	40, // 6: pantherclaw.v1.Instance.last_seen_time:type_name -> google.protobuf.Timestamp
-	40, // 7: pantherclaw.v1.Instance.decide_time:type_name -> google.protobuf.Timestamp
-	40, // 8: pantherclaw.v1.Instance.create_time:type_name -> google.protobuf.Timestamp
-	40, // 9: pantherclaw.v1.Instance.expire_time:type_name -> google.protobuf.Timestamp
+	41, // 6: pantherclaw.v1.Instance.last_seen_time:type_name -> google.protobuf.Timestamp
+	41, // 7: pantherclaw.v1.Instance.decide_time:type_name -> google.protobuf.Timestamp
+	41, // 8: pantherclaw.v1.Instance.create_time:type_name -> google.protobuf.Timestamp
+	41, // 9: pantherclaw.v1.Instance.expire_time:type_name -> google.protobuf.Timestamp
 	4,  // 10: pantherclaw.v1.GithubBinding.job_type:type_name -> pantherclaw.v1.GithubJobType
 	2,  // 11: pantherclaw.v1.IssuerRevision.kind:type_name -> pantherclaw.v1.IssuerKind
 	7,  // 12: pantherclaw.v1.IssuerRevision.github:type_name -> pantherclaw.v1.GithubBinding
-	13, // 13: pantherclaw.v1.IssuerRevision.kubernetes:type_name -> pantherclaw.v1.KubernetesBinding
+	14, // 13: pantherclaw.v1.IssuerRevision.kubernetes:type_name -> pantherclaw.v1.KubernetesBinding
 	8,  // 14: pantherclaw.v1.IssuerRevision.gitlab:type_name -> pantherclaw.v1.GitlabBinding
 	9,  // 15: pantherclaw.v1.IssuerRevision.spiffe:type_name -> pantherclaw.v1.SpiffeBinding
 	10, // 16: pantherclaw.v1.IssuerRevision.gcp:type_name -> pantherclaw.v1.GcpBinding
 	11, // 17: pantherclaw.v1.IssuerRevision.aws:type_name -> pantherclaw.v1.AwsBinding
 	12, // 18: pantherclaw.v1.IssuerRevision.azure_mi:type_name -> pantherclaw.v1.AzureMiBinding
-	3,  // 19: pantherclaw.v1.IssuerRevision.state:type_name -> pantherclaw.v1.IssuerEntryState
-	40, // 20: pantherclaw.v1.IssuerRevision.propose_time:type_name -> google.protobuf.Timestamp
-	40, // 21: pantherclaw.v1.IssuerRevision.activate_time:type_name -> google.protobuf.Timestamp
-	40, // 22: pantherclaw.v1.IssuerRevision.close_time:type_name -> google.protobuf.Timestamp
-	40, // 23: pantherclaw.v1.CreateEnrollmentTokenResponse.expire_time:type_name -> google.protobuf.Timestamp
-	0,  // 24: pantherclaw.v1.ListInstancesRequest.states:type_name -> pantherclaw.v1.InstanceState
-	6,  // 25: pantherclaw.v1.ListInstancesResponse.instances:type_name -> pantherclaw.v1.Instance
-	6,  // 26: pantherclaw.v1.GetInstanceResponse.instance:type_name -> pantherclaw.v1.Instance
-	6,  // 27: pantherclaw.v1.AdmitInstanceResponse.instance:type_name -> pantherclaw.v1.Instance
-	6,  // 28: pantherclaw.v1.RejectInstanceResponse.instance:type_name -> pantherclaw.v1.Instance
-	6,  // 29: pantherclaw.v1.RevokeInstanceResponse.instance:type_name -> pantherclaw.v1.Instance
-	7,  // 30: pantherclaw.v1.ProposeIssuerEntryRequest.github:type_name -> pantherclaw.v1.GithubBinding
-	13, // 31: pantherclaw.v1.ProposeIssuerEntryRequest.kubernetes:type_name -> pantherclaw.v1.KubernetesBinding
-	8,  // 32: pantherclaw.v1.ProposeIssuerEntryRequest.gitlab:type_name -> pantherclaw.v1.GitlabBinding
-	9,  // 33: pantherclaw.v1.ProposeIssuerEntryRequest.spiffe:type_name -> pantherclaw.v1.SpiffeBinding
-	10, // 34: pantherclaw.v1.ProposeIssuerEntryRequest.gcp:type_name -> pantherclaw.v1.GcpBinding
-	11, // 35: pantherclaw.v1.ProposeIssuerEntryRequest.aws:type_name -> pantherclaw.v1.AwsBinding
-	12, // 36: pantherclaw.v1.ProposeIssuerEntryRequest.azure_mi:type_name -> pantherclaw.v1.AzureMiBinding
-	14, // 37: pantherclaw.v1.ProposeIssuerEntryResponse.revision:type_name -> pantherclaw.v1.IssuerRevision
-	14, // 38: pantherclaw.v1.ActivateIssuerEntryResponse.revision:type_name -> pantherclaw.v1.IssuerRevision
-	14, // 39: pantherclaw.v1.WithdrawIssuerProposalResponse.revision:type_name -> pantherclaw.v1.IssuerRevision
-	14, // 40: pantherclaw.v1.DisableIssuerEntryResponse.revision:type_name -> pantherclaw.v1.IssuerRevision
-	14, // 41: pantherclaw.v1.ListIssuerEntriesResponse.entries:type_name -> pantherclaw.v1.IssuerRevision
-	14, // 42: pantherclaw.v1.GetIssuerEntryResponse.revisions:type_name -> pantherclaw.v1.IssuerRevision
-	15, // 43: pantherclaw.v1.IdentityService.CreateEnrollmentToken:input_type -> pantherclaw.v1.CreateEnrollmentTokenRequest
-	17, // 44: pantherclaw.v1.IdentityService.ListInstances:input_type -> pantherclaw.v1.ListInstancesRequest
-	19, // 45: pantherclaw.v1.IdentityService.GetInstance:input_type -> pantherclaw.v1.GetInstanceRequest
-	21, // 46: pantherclaw.v1.IdentityService.AdmitInstance:input_type -> pantherclaw.v1.AdmitInstanceRequest
-	23, // 47: pantherclaw.v1.IdentityService.RejectInstance:input_type -> pantherclaw.v1.RejectInstanceRequest
-	25, // 48: pantherclaw.v1.IdentityService.RevokeInstance:input_type -> pantherclaw.v1.RevokeInstanceRequest
-	27, // 49: pantherclaw.v1.IdentityService.ProposeIssuerEntry:input_type -> pantherclaw.v1.ProposeIssuerEntryRequest
-	29, // 50: pantherclaw.v1.IdentityService.ActivateIssuerEntry:input_type -> pantherclaw.v1.ActivateIssuerEntryRequest
-	31, // 51: pantherclaw.v1.IdentityService.WithdrawIssuerProposal:input_type -> pantherclaw.v1.WithdrawIssuerProposalRequest
-	33, // 52: pantherclaw.v1.IdentityService.DisableIssuerEntry:input_type -> pantherclaw.v1.DisableIssuerEntryRequest
-	35, // 53: pantherclaw.v1.IdentityService.ListIssuerEntries:input_type -> pantherclaw.v1.ListIssuerEntriesRequest
-	37, // 54: pantherclaw.v1.IdentityService.GetIssuerEntry:input_type -> pantherclaw.v1.GetIssuerEntryRequest
-	16, // 55: pantherclaw.v1.IdentityService.CreateEnrollmentToken:output_type -> pantherclaw.v1.CreateEnrollmentTokenResponse
-	18, // 56: pantherclaw.v1.IdentityService.ListInstances:output_type -> pantherclaw.v1.ListInstancesResponse
-	20, // 57: pantherclaw.v1.IdentityService.GetInstance:output_type -> pantherclaw.v1.GetInstanceResponse
-	22, // 58: pantherclaw.v1.IdentityService.AdmitInstance:output_type -> pantherclaw.v1.AdmitInstanceResponse
-	24, // 59: pantherclaw.v1.IdentityService.RejectInstance:output_type -> pantherclaw.v1.RejectInstanceResponse
-	26, // 60: pantherclaw.v1.IdentityService.RevokeInstance:output_type -> pantherclaw.v1.RevokeInstanceResponse
-	28, // 61: pantherclaw.v1.IdentityService.ProposeIssuerEntry:output_type -> pantherclaw.v1.ProposeIssuerEntryResponse
-	30, // 62: pantherclaw.v1.IdentityService.ActivateIssuerEntry:output_type -> pantherclaw.v1.ActivateIssuerEntryResponse
-	32, // 63: pantherclaw.v1.IdentityService.WithdrawIssuerProposal:output_type -> pantherclaw.v1.WithdrawIssuerProposalResponse
-	34, // 64: pantherclaw.v1.IdentityService.DisableIssuerEntry:output_type -> pantherclaw.v1.DisableIssuerEntryResponse
-	36, // 65: pantherclaw.v1.IdentityService.ListIssuerEntries:output_type -> pantherclaw.v1.ListIssuerEntriesResponse
-	38, // 66: pantherclaw.v1.IdentityService.GetIssuerEntry:output_type -> pantherclaw.v1.GetIssuerEntryResponse
-	55, // [55:67] is the sub-list for method output_type
-	43, // [43:55] is the sub-list for method input_type
-	43, // [43:43] is the sub-list for extension type_name
-	43, // [43:43] is the sub-list for extension extendee
-	0,  // [0:43] is the sub-list for field type_name
+	13, // 19: pantherclaw.v1.IssuerRevision.entra_agent:type_name -> pantherclaw.v1.EntraAgentBinding
+	3,  // 20: pantherclaw.v1.IssuerRevision.state:type_name -> pantherclaw.v1.IssuerEntryState
+	41, // 21: pantherclaw.v1.IssuerRevision.propose_time:type_name -> google.protobuf.Timestamp
+	41, // 22: pantherclaw.v1.IssuerRevision.activate_time:type_name -> google.protobuf.Timestamp
+	41, // 23: pantherclaw.v1.IssuerRevision.close_time:type_name -> google.protobuf.Timestamp
+	41, // 24: pantherclaw.v1.CreateEnrollmentTokenResponse.expire_time:type_name -> google.protobuf.Timestamp
+	0,  // 25: pantherclaw.v1.ListInstancesRequest.states:type_name -> pantherclaw.v1.InstanceState
+	6,  // 26: pantherclaw.v1.ListInstancesResponse.instances:type_name -> pantherclaw.v1.Instance
+	6,  // 27: pantherclaw.v1.GetInstanceResponse.instance:type_name -> pantherclaw.v1.Instance
+	6,  // 28: pantherclaw.v1.AdmitInstanceResponse.instance:type_name -> pantherclaw.v1.Instance
+	6,  // 29: pantherclaw.v1.RejectInstanceResponse.instance:type_name -> pantherclaw.v1.Instance
+	6,  // 30: pantherclaw.v1.RevokeInstanceResponse.instance:type_name -> pantherclaw.v1.Instance
+	7,  // 31: pantherclaw.v1.ProposeIssuerEntryRequest.github:type_name -> pantherclaw.v1.GithubBinding
+	14, // 32: pantherclaw.v1.ProposeIssuerEntryRequest.kubernetes:type_name -> pantherclaw.v1.KubernetesBinding
+	8,  // 33: pantherclaw.v1.ProposeIssuerEntryRequest.gitlab:type_name -> pantherclaw.v1.GitlabBinding
+	9,  // 34: pantherclaw.v1.ProposeIssuerEntryRequest.spiffe:type_name -> pantherclaw.v1.SpiffeBinding
+	10, // 35: pantherclaw.v1.ProposeIssuerEntryRequest.gcp:type_name -> pantherclaw.v1.GcpBinding
+	11, // 36: pantherclaw.v1.ProposeIssuerEntryRequest.aws:type_name -> pantherclaw.v1.AwsBinding
+	12, // 37: pantherclaw.v1.ProposeIssuerEntryRequest.azure_mi:type_name -> pantherclaw.v1.AzureMiBinding
+	13, // 38: pantherclaw.v1.ProposeIssuerEntryRequest.entra_agent:type_name -> pantherclaw.v1.EntraAgentBinding
+	15, // 39: pantherclaw.v1.ProposeIssuerEntryResponse.revision:type_name -> pantherclaw.v1.IssuerRevision
+	15, // 40: pantherclaw.v1.ActivateIssuerEntryResponse.revision:type_name -> pantherclaw.v1.IssuerRevision
+	15, // 41: pantherclaw.v1.WithdrawIssuerProposalResponse.revision:type_name -> pantherclaw.v1.IssuerRevision
+	15, // 42: pantherclaw.v1.DisableIssuerEntryResponse.revision:type_name -> pantherclaw.v1.IssuerRevision
+	15, // 43: pantherclaw.v1.ListIssuerEntriesResponse.entries:type_name -> pantherclaw.v1.IssuerRevision
+	15, // 44: pantherclaw.v1.GetIssuerEntryResponse.revisions:type_name -> pantherclaw.v1.IssuerRevision
+	16, // 45: pantherclaw.v1.IdentityService.CreateEnrollmentToken:input_type -> pantherclaw.v1.CreateEnrollmentTokenRequest
+	18, // 46: pantherclaw.v1.IdentityService.ListInstances:input_type -> pantherclaw.v1.ListInstancesRequest
+	20, // 47: pantherclaw.v1.IdentityService.GetInstance:input_type -> pantherclaw.v1.GetInstanceRequest
+	22, // 48: pantherclaw.v1.IdentityService.AdmitInstance:input_type -> pantherclaw.v1.AdmitInstanceRequest
+	24, // 49: pantherclaw.v1.IdentityService.RejectInstance:input_type -> pantherclaw.v1.RejectInstanceRequest
+	26, // 50: pantherclaw.v1.IdentityService.RevokeInstance:input_type -> pantherclaw.v1.RevokeInstanceRequest
+	28, // 51: pantherclaw.v1.IdentityService.ProposeIssuerEntry:input_type -> pantherclaw.v1.ProposeIssuerEntryRequest
+	30, // 52: pantherclaw.v1.IdentityService.ActivateIssuerEntry:input_type -> pantherclaw.v1.ActivateIssuerEntryRequest
+	32, // 53: pantherclaw.v1.IdentityService.WithdrawIssuerProposal:input_type -> pantherclaw.v1.WithdrawIssuerProposalRequest
+	34, // 54: pantherclaw.v1.IdentityService.DisableIssuerEntry:input_type -> pantherclaw.v1.DisableIssuerEntryRequest
+	36, // 55: pantherclaw.v1.IdentityService.ListIssuerEntries:input_type -> pantherclaw.v1.ListIssuerEntriesRequest
+	38, // 56: pantherclaw.v1.IdentityService.GetIssuerEntry:input_type -> pantherclaw.v1.GetIssuerEntryRequest
+	17, // 57: pantherclaw.v1.IdentityService.CreateEnrollmentToken:output_type -> pantherclaw.v1.CreateEnrollmentTokenResponse
+	19, // 58: pantherclaw.v1.IdentityService.ListInstances:output_type -> pantherclaw.v1.ListInstancesResponse
+	21, // 59: pantherclaw.v1.IdentityService.GetInstance:output_type -> pantherclaw.v1.GetInstanceResponse
+	23, // 60: pantherclaw.v1.IdentityService.AdmitInstance:output_type -> pantherclaw.v1.AdmitInstanceResponse
+	25, // 61: pantherclaw.v1.IdentityService.RejectInstance:output_type -> pantherclaw.v1.RejectInstanceResponse
+	27, // 62: pantherclaw.v1.IdentityService.RevokeInstance:output_type -> pantherclaw.v1.RevokeInstanceResponse
+	29, // 63: pantherclaw.v1.IdentityService.ProposeIssuerEntry:output_type -> pantherclaw.v1.ProposeIssuerEntryResponse
+	31, // 64: pantherclaw.v1.IdentityService.ActivateIssuerEntry:output_type -> pantherclaw.v1.ActivateIssuerEntryResponse
+	33, // 65: pantherclaw.v1.IdentityService.WithdrawIssuerProposal:output_type -> pantherclaw.v1.WithdrawIssuerProposalResponse
+	35, // 66: pantherclaw.v1.IdentityService.DisableIssuerEntry:output_type -> pantherclaw.v1.DisableIssuerEntryResponse
+	37, // 67: pantherclaw.v1.IdentityService.ListIssuerEntries:output_type -> pantherclaw.v1.ListIssuerEntriesResponse
+	39, // 68: pantherclaw.v1.IdentityService.GetIssuerEntry:output_type -> pantherclaw.v1.GetIssuerEntryResponse
+	57, // [57:69] is the sub-list for method output_type
+	45, // [45:57] is the sub-list for method input_type
+	45, // [45:45] is the sub-list for extension type_name
+	45, // [45:45] is the sub-list for extension extendee
+	0,  // [0:45] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_identity_proto_init() }
@@ -3298,7 +3414,7 @@ func file_pantherclaw_v1_identity_proto_init() {
 	if File_pantherclaw_v1_identity_proto != nil {
 		return
 	}
-	file_pantherclaw_v1_identity_proto_msgTypes[9].OneofWrappers = []any{
+	file_pantherclaw_v1_identity_proto_msgTypes[10].OneofWrappers = []any{
 		(*IssuerRevision_Github)(nil),
 		(*IssuerRevision_Kubernetes)(nil),
 		(*IssuerRevision_Gitlab)(nil),
@@ -3306,8 +3422,9 @@ func file_pantherclaw_v1_identity_proto_init() {
 		(*IssuerRevision_Gcp)(nil),
 		(*IssuerRevision_Aws)(nil),
 		(*IssuerRevision_AzureMi)(nil),
+		(*IssuerRevision_EntraAgent)(nil),
 	}
-	file_pantherclaw_v1_identity_proto_msgTypes[22].OneofWrappers = []any{
+	file_pantherclaw_v1_identity_proto_msgTypes[23].OneofWrappers = []any{
 		(*ProposeIssuerEntryRequest_Github)(nil),
 		(*ProposeIssuerEntryRequest_Kubernetes)(nil),
 		(*ProposeIssuerEntryRequest_Gitlab)(nil),
@@ -3315,15 +3432,16 @@ func file_pantherclaw_v1_identity_proto_init() {
 		(*ProposeIssuerEntryRequest_Gcp)(nil),
 		(*ProposeIssuerEntryRequest_Aws)(nil),
 		(*ProposeIssuerEntryRequest_AzureMi)(nil),
+		(*ProposeIssuerEntryRequest_EntraAgent)(nil),
 	}
-	file_pantherclaw_v1_identity_proto_msgTypes[30].OneofWrappers = []any{}
+	file_pantherclaw_v1_identity_proto_msgTypes[31].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_identity_proto_rawDesc), len(file_pantherclaw_v1_identity_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   35,
+			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

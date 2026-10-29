@@ -84,6 +84,9 @@ enum AttestationKind {
   // An Azure managed identity access token for the operator-pinned Entra
   // app (identity.entra_apps).
   ATTESTATION_KIND_AZURE_MI = 7;
+  // A Microsoft Entra Agent ID access token for the operator-pinned Entra
+  // app (identity.entra_apps).
+  ATTESTATION_KIND_ENTRA_AGENT_ID = 8;
 }
 
 // Attestation is a platform token offered as L2 evidence. It is verified,

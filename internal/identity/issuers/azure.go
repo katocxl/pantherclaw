@@ -182,3 +182,78 @@ func MatchAzureMI(b AzureMIBinding, c AzureClaims) (Match, error) {
 	}
 	return Match{Binding: Binding{"tenant_id": c.TenantID, "object_id": c.ObjectID}}, nil
 }
+
+// agentIdentityFacet is the facet value Entra uses for an agent identity
+// in xms_sub_fct and xms_act_fct (space-separated, any order).
+const agentIdentityFacet = "11"
+
+// EntraAgentBinding pins Entra Agent ID tokens to one agent identity
+// acting autonomously (HR-469).
+type EntraAgentBinding struct {
+	// TenantID and AppID are an operator-pinned pair (identity.entra_apps)
+	// listed for the entry's org; AppID is the token's audience.
+	TenantID string `json:"tenant_id"`
+	AppID    string `json:"app_id"`
+	// ObjectID is the agent identity's service principal object id.
+	ObjectID string `json:"object_id"`
+}
+
+// Validate checks the binding (HR-469).
+func (b EntraAgentBinding) Validate() error {
+	for _, v := range []string{b.TenantID, b.AppID, b.ObjectID} {
+		if !ValidGUID(v) {
+			return fmt.Errorf("%w: tenant_id, app_id and object_id must be lower-case GUIDs", ErrInvalidEntry)
+		}
+	}
+	return nil
+}
+
+// Widening lists what b accepts that prev did not (HR-141).
+func (b EntraAgentBinding) Widening(prev *EntraAgentBinding) []string {
+	switch {
+	case prev == nil:
+		return []string{"new trusted issuer entry"}
+	case *prev != b:
+		return []string{"tenant, app or agent identity changed"}
+	}
+	return nil
+}
+
+// EntraAgentClaims are the agent claims of a verified Entra token.
+type EntraAgentClaims struct {
+	AzureClaims
+	SubjectFacets string `json:"xms_sub_fct"`
+	ActorFacets   string `json:"xms_act_fct"`
+}
+
+// ParseEntraAgentClaims decodes a verified payload.
+func ParseEntraAgentClaims(payload []byte) (EntraAgentClaims, error) {
+	var c EntraAgentClaims
+	if err := json.Unmarshal(payload, &c); err != nil {
+		return c, rejected("entra agent claims: %v", err)
+	}
+	return c, nil
+}
+
+// MatchEntraAgent applies the Entra Agent ID preset (HR-469): the shared
+// Entra rules, an app-only token (idtyp app, required), and both the
+// subject and the actor marked as an agent identity (facet 11 in
+// xms_sub_fct and xms_act_fct): an agent acting autonomously as itself,
+// never on behalf of a user or as its user account.
+func MatchEntraAgent(b EntraAgentBinding, c EntraAgentClaims) (Match, error) {
+	if err := b.Validate(); err != nil {
+		return Match{}, err
+	}
+	if err := matchEntra(b.TenantID, b.AppID, b.ObjectID, c.AzureClaims); err != nil {
+		return Match{}, err
+	}
+	switch {
+	case c.IDType == nil || *c.IDType != "app":
+		return Match{}, rejected("not an app-only token")
+	case !slices.Contains(strings.Fields(c.SubjectFacets), agentIdentityFacet):
+		return Match{}, rejected("subject is not an agent identity")
+	case !slices.Contains(strings.Fields(c.ActorFacets), agentIdentityFacet):
+		return Match{}, rejected("actor is not an agent identity")
+	}
+	return Match{Binding: Binding{"tenant_id": c.TenantID, "object_id": c.ObjectID}}, nil
+}

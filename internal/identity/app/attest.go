@@ -140,7 +140,7 @@ func AttestationOrg(token string) ids.OrgID {
 // the one the operator pinned to the token's audience app
 // (identity.entra_apps), never a pantherclaw:<org> audience (HR-469).
 func (s *Service) AttestationOrg(a Attestation) ids.OrgID {
-	if a.Kind != issuers.KindAzureMI {
+	if a.Kind != issuers.KindAzureMI && a.Kind != issuers.KindEntraAgent {
 		return AttestationOrg(a.Token)
 	}
 	if s.att.Entra == nil {
@@ -257,7 +257,7 @@ func (s *Service) attest(ctx context.Context, org ids.OrgID, a Attestation) ([]a
 		return s.attestGCP(ctx, org, a.Token, revs)
 	case issuers.KindAWS:
 		return s.attestAWS(ctx, org, a.Token, revs)
-	case issuers.KindAzureMI:
+	case issuers.KindAzureMI, issuers.KindEntraAgent:
 		return s.attestAzure(ctx, org, a, revs)
 	default:
 		return nil, attErr(fmt.Errorf("unknown preset %q", a.Kind))
@@ -470,8 +470,9 @@ func (s *Service) attestAWS(ctx context.Context, org ids.OrgID, token string, re
 	return out, nil
 }
 
-// attestAzure verifies an Entra access token with the pinned keys of the
-// tenant of the app its audience names, which the operator pinned to org.
+// attestAzure verifies an Entra access token (azure_mi, entra_agent_id)
+// with the pinned keys of the tenant of the app its audience names, which
+// the operator pinned to org.
 // The token may live up to a day, but the attestation grants at most
 // AzureAssurance from now, and its uti (or the token) stays single use
 // (HR-469).
@@ -487,10 +488,11 @@ func (s *Service) attestAzure(ctx context.Context, org ids.OrgID, a Attestation,
 	if err != nil {
 		return nil, attErr(err)
 	}
-	c, err := issuers.ParseAzureClaims(payload)
+	ac, err := issuers.ParseEntraAgentClaims(payload)
 	if err != nil {
 		return nil, attErr(err)
 	}
+	c := ac.AzureClaims
 	tw, err := issuers.ParseWindow(payload)
 	if err != nil {
 		return nil, attErr(err)
@@ -503,10 +505,18 @@ func (s *Service) attestAzure(ctx context.Context, org ids.OrgID, a Attestation,
 	var last error
 	for _, r := range revs {
 		b, err := bindingOf(r)
-		if err != nil || b.AzureMI == nil {
+		if err != nil {
 			continue
 		}
-		m, err := issuers.MatchAzureMI(*b.AzureMI, c)
+		var m issuers.Match
+		switch {
+		case a.Kind == issuers.KindAzureMI && b.AzureMI != nil:
+			m, err = issuers.MatchAzureMI(*b.AzureMI, c)
+		case a.Kind == issuers.KindEntraAgent && b.EntraAgent != nil:
+			m, err = issuers.MatchEntraAgent(*b.EntraAgent, ac)
+		default:
+			continue
+		}
 		if err != nil {
 			last = err
 			continue

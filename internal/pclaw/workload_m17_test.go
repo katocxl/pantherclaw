@@ -118,3 +118,19 @@ func TestAzureManagedIdentitySource(t *testing.T) {
 		t.Errorf("request = %v %v", got.URL, got.Header)
 	}
 }
+
+// TestEntraAgentTokenFromTheEnvironment: --entra-token-env sends the
+// agent's access token as an Entra Agent ID attestation.
+// Covers: PN-002.3
+func TestEntraAgentTokenFromTheEnvironment(t *testing.T) {
+	fs := flag.NewFlagSet("x", flag.ContinueOnError)
+	f := declareAttestation(fs)
+	if err := fs.Parse([]string{"--entra-token-env", "PC_TEST_ENTRA_TOKEN"}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PC_TEST_ENTRA_TOKEN", "e.n.t\n")
+	att, err := f.attestation(context.Background(), nil, ids.OrgID{})
+	if err != nil || att.GetKind() != pantherclawv1.AttestationKind_ATTESTATION_KIND_ENTRA_AGENT_ID || att.GetToken() != "e.n.t" {
+		t.Fatalf("attestation = %v, %v", att, err)
+	}
+}

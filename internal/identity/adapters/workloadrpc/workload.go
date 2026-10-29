@@ -302,6 +302,8 @@ func attestation(a *pantherclawv1.Attestation) *app.Attestation {
 		kind = issuers.KindAWS
 	case pantherclawv1.AttestationKind_ATTESTATION_KIND_AZURE_MI:
 		kind = issuers.KindAzureMI
+	case pantherclawv1.AttestationKind_ATTESTATION_KIND_ENTRA_AGENT_ID:
+		kind = issuers.KindEntraAgent
 	}
 	return &app.Attestation{Kind: kind, Token: a.GetToken()}
 }
