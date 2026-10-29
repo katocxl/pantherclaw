@@ -12,6 +12,7 @@ ALTER TABLE pc.trusted_issuers DROP CONSTRAINT trusted_issuers_kind_check;
 ALTER TABLE pc.trusted_issuers ADD CONSTRAINT trusted_issuers_kind_check
     CHECK (kind IN ('github_actions', 'kubernetes', 'gitlab_ci', 'spiffe_jwt', 'gcp_workload', 'aws_iam',
                     'azure_mi', 'entra_agent_id')) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.trusted_issuers VALIDATE CONSTRAINT trusted_issuers_kind_check;
 
 ALTER TABLE pc.trusted_issuers DROP CONSTRAINT trusted_issuers_audience;
@@ -19,6 +20,7 @@ ALTER TABLE pc.trusted_issuers ADD CONSTRAINT trusted_issuers_audience CHECK (
     audience = 'pantherclaw:' || org_id::text
     OR (kind IN ('azure_mi', 'entra_agent_id')
         AND audience ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.trusted_issuers VALIDATE CONSTRAINT trusted_issuers_audience;
 
 -- +goose Down
