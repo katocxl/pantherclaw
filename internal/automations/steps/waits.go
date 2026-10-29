@@ -213,12 +213,8 @@ func (*waitEffect) check(ctx context.Context, tx pgx.Tx, sc autodomain.StepConte
 }
 
 // downstream decides a wait on consequences (G0 M17 D103, HR-452): the
-// run's actions of the operation count by their downstream state. An
-// action whose consequences were all confirmed by their own evidence
-// counts toward min; one still pending keeps the step waiting; one whose
-// consequences are unconfirmed or not verifiable never passes and, once
-// nothing is left pending, needs reconciliation (as HR-280). An action
-// that predicted no consequence does not count.
+// run's actions of the operation count by their downstream state, as
+// downstreamOutcome says.
 func downstream(ctx context.Context, qq *dbq.Queries, sc autodomain.StepContext, w *autodomain.WaitEffectWith,
 	run ids.UUID, want int, timedOut bool,
 ) (autodomain.StepResult, error) {
@@ -231,7 +227,17 @@ func downstream(ctx context.Context, qq *dbq.Queries, sc autodomain.StepContext,
 		"consequences_confirmed": strconv.Itoa(int(c.Confirmed)), "consequences_pending": strconv.Itoa(int(c.Pending)),
 		"consequences_unconfirmed": strconv.Itoa(int(c.Unconfirmed)),
 	}
-	if int(c.Confirmed) >= want {
+	active := false
+	if int(c.Confirmed) < want {
+		r, err := qq.GetRun(ctx, sc.Org, run)
+		if err != nil {
+			return autodomain.StepResult{}, err
+		}
+		active = r.EffectiveState == "ACTIVE"
+	}
+	state, reason := downstreamOutcome(c, want, active, timedOut)
+	switch state {
+	case autodomain.StepDone:
 		txs, err := qq.RunDownstreamConfirmed(ctx, sc.Org, run, op)
 		if err != nil {
 			return autodomain.StepResult{}, err
@@ -240,32 +246,40 @@ func downstream(ctx context.Context, qq *dbq.Queries, sc autodomain.StepContext,
 		for _, id := range txs {
 			refs = append(refs, ref(reflexdomain.EvidenceTransaction, id))
 		}
-		return autodomain.StepResult{State: autodomain.StepDone, Effect: autodomain.EffectNone, Output: out, Refs: refs}, nil
-	}
-	r, err := qq.GetRun(ctx, sc.Org, run)
-	if err != nil {
-		return autodomain.StepResult{}, err
-	}
-	if !timedOut && (r.EffectiveState == "ACTIVE" || c.Pending > 0) {
-		return autodomain.StepResult{
-			State: autodomain.StepWaiting, Effect: autodomain.EffectNone, Output: out,
-			WakeAt: sc.Now.Add(engine.PollInterval),
-		}, nil
-	}
-	if c.Unconfirmed > 0 || c.Pending > 0 {
+		return autodomain.StepResult{State: state, Effect: autodomain.EffectNone, Output: out, Refs: refs}, nil
+	case autodomain.StepWaiting:
+		return autodomain.StepResult{State: state, Effect: autodomain.EffectNone, Output: out, WakeAt: sc.Now.Add(engine.PollInterval)}, nil
+	case autodomain.StepUnknown:
 		// The actions already happened; what followed them is not known,
 		// so the execution waits for a person, never retried or continued.
 		out[engine.OutputIrreversible] = "true"
 		return autodomain.StepResult{
-			State: autodomain.StepUnknown, Effect: autodomain.EffectUnknown, Output: out,
-			Reason: engine.ReasonEffectUnknown, Refs: []reflexdomain.EvidenceRef{ref(reflexdomain.EvidenceRun, run)},
+			State: state, Effect: autodomain.EffectUnknown, Output: out,
+			Reason: reason, Refs: []reflexdomain.EvidenceRef{ref(reflexdomain.EvidenceRun, run)},
 		}, nil
 	}
-	reason := ReasonNoEffect
-	if timedOut {
-		reason = engine.ReasonTimeout
+	return autodomain.StepResult{State: state, Effect: autodomain.EffectNone, Output: out, Reason: reason}, nil
+}
+
+// downstreamOutcome decides a wait on consequences from the counts: an
+// action whose consequences were all confirmed by their own evidence
+// counts toward want, and only such an action (HR-452); while the run is
+// active or an action is pending, the step waits; after that, an action
+// with a consequence unconfirmed or not verifiable, or one still pending
+// at the timeout, needs reconciliation (as HR-280), and a want not reached
+// otherwise fails. An action that predicted no consequence is in no count.
+func downstreamOutcome(c dbq.RunDownstreamCountsRow, want int, active, timedOut bool) (autodomain.StepState, string) {
+	switch {
+	case int(c.Confirmed) >= want:
+		return autodomain.StepDone, ""
+	case !timedOut && (active || c.Pending > 0):
+		return autodomain.StepWaiting, ""
+	case c.Unconfirmed > 0 || c.Pending > 0:
+		return autodomain.StepUnknown, engine.ReasonEffectUnknown
+	case timedOut:
+		return autodomain.StepFailed, engine.ReasonTimeout
 	}
-	return autodomain.StepResult{State: autodomain.StepFailed, Effect: autodomain.EffectNone, Output: out, Reason: reason}, nil
+	return autodomain.StepFailed, ReasonNoEffect
 }
 
 // ceilingOperation reports whether op is one exact operation the ceiling
