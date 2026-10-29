@@ -152,6 +152,44 @@ LIMIT 1;
 SELECT EXISTS (SELECT 1 FROM pc.transaction_links
                WHERE org_id = sqlc.arg(org_id) AND to_transaction_id = sqlc.arg(id) AND kind = 'consequence');
 
+-- Downstream state (G0 M17 D102, F414, HR-451): a confirmed action's
+-- state of the consequences opened for it, apart from its own effect.
+
+-- ConsequenceParent is the transaction a consequence was opened for.
+-- name: ConsequenceParent :one
+SELECT from_transaction_id FROM pc.transaction_links
+WHERE org_id = sqlc.arg(org_id) AND to_transaction_id = sqlc.arg(id) AND kind = 'consequence';
+
+-- TransactionDownstream is a transaction's downstream and effect state,
+-- locked for the roll-up.
+-- name: TransactionDownstream :one
+SELECT t.downstream_state, t.downstream_not_verifiable, t.effect_state, t.effect_level_required
+FROM pc.transactions t
+WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(id)
+FOR UPDATE OF t;
+
+-- ConsequenceStates are the consequence transactions opened for parent,
+-- each with its effect state, its own downstream state and whether a person was asked about it and
+-- has not confirmed it occurred (an open reconciliation, or one released
+-- as not occurred).
+-- name: ConsequenceStates :many
+SELECT l.to_transaction_id AS id, t.effect_state, t.downstream_state,
+       EXISTS (SELECT 1 FROM pc.reconciliation_tasks k
+               WHERE k.org_id = t.org_id AND k.transaction_id = t.id AND k.kind = 'consequence_unconfirmed'
+                 AND k.state IN ('OPEN', 'NOT_OCCURRED')) AS questioned
+FROM pc.transaction_links l
+JOIN pc.transactions t ON t.org_id = l.org_id AND t.id = l.to_transaction_id
+WHERE l.org_id = sqlc.arg(org_id) AND l.from_transaction_id = sqlc.arg(parent) AND l.kind = 'consequence'
+ORDER BY l.to_transaction_id;
+
+-- SetDownstreamState records a downstream state; not_verifiable only ever
+-- sets the cap, never clears it (D131).
+-- name: SetDownstreamState :exec
+UPDATE pc.transactions
+SET downstream_state = sqlc.narg(state),
+    downstream_not_verifiable = downstream_not_verifiable OR sqlc.arg(not_verifiable)::bool
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
 -- name: NextEffectSeq :one
 SELECT (coalesce(max(seq), 0) + 1)::integer FROM pc.effect_receipts
 WHERE org_id = sqlc.arg(org_id) AND transaction_id = sqlc.arg(transaction_id);

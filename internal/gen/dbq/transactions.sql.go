@@ -619,7 +619,7 @@ const listTransactions = `-- name: ListTransactions :many
 
 WITH x AS (
     SELECT t.id, t.run_id, r.agent_id, t.operation, t.connection_id, t.decision, t.reason_code, t.effect_state,
-           t.effect_level_required, t.effect_level_achieved, t.mode, t.evaluations, t.created_at,
+           t.effect_level_required, t.effect_level_achieved, t.mode, t.evaluations, t.created_at, t.downstream_state,
            p.state AS permit_state, a.outcome,
            CASE
                WHEN t.decision IN ('REQUIRE_APPROVAL', 'REQUIRE_STEP_UP') THEN 'WAITING'
@@ -649,7 +649,7 @@ WITH x AS (
       AND ($12::timestamptz IS NULL OR t.created_at >= $12::timestamptz)
       AND ($13::timestamptz IS NULL OR t.created_at < $13::timestamptz)
 )
-SELECT id, run_id, agent_id, operation, connection_id, decision, reason_code, effect_state, effect_level_required, effect_level_achieved, mode, evaluations, created_at, permit_state, outcome, execution_state FROM x
+SELECT id, run_id, agent_id, operation, connection_id, decision, reason_code, effect_state, effect_level_required, effect_level_achieved, mode, evaluations, created_at, downstream_state, permit_state, outcome, execution_state FROM x
 WHERE cardinality($1::text[]) = 0 OR x.execution_state = ANY ($1::text[])
 ORDER BY x.id DESC
 LIMIT $2
@@ -685,6 +685,7 @@ type ListTransactionsRow struct {
 	Mode                string
 	Evaluations         int32
 	CreatedAt           time.Time
+	DownstreamState     *string
 	PermitState         *string
 	Outcome             *string
 	ExecutionState      string
@@ -737,6 +738,7 @@ func (q *Queries) ListTransactions(ctx context.Context, arg ListTransactionsPara
 			&i.Mode,
 			&i.Evaluations,
 			&i.CreatedAt,
+			&i.DownstreamState,
 			&i.PermitState,
 			&i.Outcome,
 			&i.ExecutionState,
@@ -1059,7 +1061,7 @@ func (q *Queries) TransactionSimulated(ctx context.Context, orgID ids.OrgID, iD 
 
 const transactionSummary = `-- name: TransactionSummary :one
 SELECT t.id, t.run_id, r.agent_id, t.operation, t.connection_id, t.decision, t.reason_code, t.effect_state,
-       t.effect_level_required, t.effect_level_achieved, t.mode, t.evaluations, t.created_at,
+       t.effect_level_required, t.effect_level_achieved, t.mode, t.evaluations, t.created_at, t.downstream_state,
        p.state AS permit_state, a.outcome
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
@@ -1082,6 +1084,7 @@ type TransactionSummaryRow struct {
 	Mode                string
 	Evaluations         int32
 	CreatedAt           time.Time
+	DownstreamState     *string
 	PermitState         *string
 	Outcome             *string
 }
@@ -1103,6 +1106,7 @@ func (q *Queries) TransactionSummary(ctx context.Context, orgID ids.OrgID, iD id
 		&i.Mode,
 		&i.Evaluations,
 		&i.CreatedAt,
+		&i.DownstreamState,
 		&i.PermitState,
 		&i.Outcome,
 	)

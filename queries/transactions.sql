@@ -12,7 +12,7 @@
 -- name: ListTransactions :many
 WITH x AS (
     SELECT t.id, t.run_id, r.agent_id, t.operation, t.connection_id, t.decision, t.reason_code, t.effect_state,
-           t.effect_level_required, t.effect_level_achieved, t.mode, t.evaluations, t.created_at,
+           t.effect_level_required, t.effect_level_achieved, t.mode, t.evaluations, t.created_at, t.downstream_state,
            p.state AS permit_state, a.outcome,
            CASE
                WHEN t.decision IN ('REQUIRE_APPROVAL', 'REQUIRE_STEP_UP') THEN 'WAITING'
@@ -49,7 +49,7 @@ LIMIT sqlc.arg(page_limit);
 
 -- name: TransactionSummary :one
 SELECT t.id, t.run_id, r.agent_id, t.operation, t.connection_id, t.decision, t.reason_code, t.effect_state,
-       t.effect_level_required, t.effect_level_achieved, t.mode, t.evaluations, t.created_at,
+       t.effect_level_required, t.effect_level_achieved, t.mode, t.evaluations, t.created_at, t.downstream_state,
        p.state AS permit_state, a.outcome
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id

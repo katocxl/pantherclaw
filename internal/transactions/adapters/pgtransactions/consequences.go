@@ -39,50 +39,75 @@ const consequenceDelay = 5
 // the fields of what it observed, or by a person, with those of the
 // transaction's newest observation that holds them). A predicted
 // consequence that cannot be verified is audited as such, never left
-// silently (#349 review): nothing captured to find it by, no environment,
-// no verifier that finds it. UNKNOWN consequences are audited apart, by
-// auditUnknownConsequences.
+// silently (#349 review, HR-450): nothing captured to find it by, no
+// environment, no verifier that finds it, or an action whose verifier
+// captures nothing at all. UNKNOWN consequences are audited apart, by
+// auditUnknownConsequences. It then sets parent's downstream state (D102).
 func openConsequences(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, parent ids.UUID, digest string,
 	v *defs.VerifierSpec, fields map[string]string, actor evdomain.Actor,
 ) error {
-	if len(v.Capture) == 0 {
-		return nil
-	}
 	rows, err := q.PredictedConsequences(ctx, org, parent)
 	if err != nil || len(rows) == 0 {
 		return err
+	}
+	opened, skipped, err := openPredicted(ctx, tx, q, org, parent, digest, v, fields, rows, actor)
+	if err != nil {
+		return err
+	}
+	return setDownstream(ctx, q, org, parent, downstreamAfterOpen(opened, skipped))
+}
+
+// openPredicted opens the predicted consequences rows of parent. It
+// returns how many transactions it opened and how many consequences it
+// could not open.
+func openPredicted(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, parent ids.UUID, digest string,
+	v *defs.VerifierSpec, fields map[string]string, rows []dbq.PredictedConsequencesRow, actor evdomain.Actor,
+) (opened, skipped int, err error) {
+	skip := func(operation, reason string) error {
+		skipped++
+		return notVerified(ctx, tx, parent, operation, reason, actor)
+	}
+	if v == nil || len(v.Capture) == 0 {
+		// The action's verifier reports nothing a consequence could be
+		// found by: each one is audited, never skipped silently (HR-450).
+		for _, c := range rows {
+			if err := notVerifiable(ctx, tx, parent, c.Operation, actor); err != nil {
+				return 0, 0, err
+			}
+		}
+		return 0, len(rows), nil
 	}
 	captured := map[string]string{}
 	for name, ptr := range v.Capture {
 		val, ok := fields[ptr]
 		if !ok || val == "" {
 			for _, c := range rows {
-				if err := notVerified(ctx, tx, parent, c.Operation, "NOTHING_CAPTURED", actor); err != nil {
-					return err
+				if err := skip(c.Operation, "NOTHING_CAPTURED"); err != nil {
+					return 0, 0, err
 				}
 			}
-			return nil
+			return 0, skipped, nil
 		}
 		captured[name] = val
 	}
 	for _, c := range rows {
 		sib, err := q.SiblingDefinitionWithDigest(ctx, org, digest, c.Operation)
 		if db.IsNoRows(err) {
-			if err := notVerified(ctx, tx, parent, c.Operation, "NO_DEFINITION", actor); err != nil {
-				return err
+			if err := skip(c.Operation, "NO_DEFINITION"); err != nil {
+				return 0, 0, err
 			}
 			continue
 		} else if err != nil {
-			return err
+			return 0, 0, err
 		}
 		d, err := definitionOf(sib.Canonical)
 		if err != nil {
-			return err
+			return 0, 0, err
 		}
 		cv := d.Verifier
 		if cv == nil || !cv.Extended() || cv.Lookup == nil || len(cv.Lookup.Match) == 0 {
-			if err := notVerified(ctx, tx, parent, c.Operation, "NO_VERIFIER", actor); err != nil {
-				return err
+			if err := skip(c.Operation, "NO_VERIFIER"); err != nil {
+				return 0, 0, err
 			}
 			continue
 		}
@@ -90,8 +115,8 @@ func openConsequences(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org i
 		if _, ok := d.Params["environment"]; !ok {
 			envs = []string{""}
 		} else if len(envs) == 0 {
-			if err := notVerified(ctx, tx, parent, c.Operation, "NO_ENVIRONMENT", actor); err != nil {
-				return err
+			if err := skip(c.Operation, "NO_ENVIRONMENT"); err != nil {
+				return 0, 0, err
 			}
 			continue
 		}
@@ -102,11 +127,12 @@ func openConsequences(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org i
 			}
 			if err := openConsequence(ctx, tx, q, org, parent, sib.Digest, d, actionir.Target{Type: c.TargetType, ID: c.TargetID},
 				params, actor); err != nil {
-				return err
+				return 0, 0, err
 			}
+			opened++
 		}
 	}
-	return nil
+	return opened, skipped, nil
 }
 
 // auditUnknownConsequences audits each consequence parent's decision could
@@ -133,6 +159,17 @@ func auditUnknownConsequences(ctx context.Context, tx db.TenantTx, q *dbq.Querie
 func notVerified(ctx context.Context, tx db.TenantTx, parent ids.UUID, operation, reason string, actor evdomain.Actor) error {
 	_, err := audit.Record(ctx, tx, audit.Event{
 		Name: "transaction.consequence_not_verified", Actor: actor, Outcome: audit.Failure, ReasonCode: reason,
+		Object: &audit.Object{Type: "transaction", ID: parent.String()}, Details: map[string]string{"operation": operation},
+	})
+	return err
+}
+
+// notVerifiable audits a predicted consequence of parent that cannot be
+// opened for verification because the action's verifier captures nothing
+// to find it by (HR-450).
+func notVerifiable(ctx context.Context, tx db.TenantTx, parent ids.UUID, operation string, actor evdomain.Actor) error {
+	_, err := audit.Record(ctx, tx, audit.Event{
+		Name: "transaction.consequence_not_verifiable", Actor: actor, Outcome: audit.Failure, ReasonCode: "NOT_VERIFIABLE",
 		Object: &audit.Object{Type: "transaction", ID: parent.String()}, Details: map[string]string{"operation": operation},
 	})
 	return err

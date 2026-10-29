@@ -3446,37 +3446,39 @@ type PcToolPackage struct {
 }
 
 type PcTransaction struct {
-	OrgID               ids.OrgID
-	ID                  ids.UUID
-	RunID               ids.UUID
-	ActionID            ids.UUID
-	ActionHash          []byte
-	Operation           string
-	Decision            string
-	ReasonCode          string
-	BudgetID            *ids.UUID
-	Amount              *money.Decimal
-	Currency            *string
-	GatewayID           string
-	CreatedAt           time.Time
-	State               string
-	Evaluations         int32
-	GrantID             *ids.UUID
-	GrantRevision       *int32
-	BasisDigest         *string
-	EffectiveHash       []byte
-	DedupeKey           *string
-	Mode                string
-	ConnectionID        *ids.UUID
-	Channel             *string
-	TargetType          *string
-	TargetID            *string
-	EffectState         *string
-	EffectLevelRequired *string
-	EffectLevelAchieved *string
-	Simulated           bool
-	DecidedVia          *string
-	EnforcementPointID  *ids.UUID
+	OrgID                   ids.OrgID
+	ID                      ids.UUID
+	RunID                   ids.UUID
+	ActionID                ids.UUID
+	ActionHash              []byte
+	Operation               string
+	Decision                string
+	ReasonCode              string
+	BudgetID                *ids.UUID
+	Amount                  *money.Decimal
+	Currency                *string
+	GatewayID               string
+	CreatedAt               time.Time
+	State                   string
+	Evaluations             int32
+	GrantID                 *ids.UUID
+	GrantRevision           *int32
+	BasisDigest             *string
+	EffectiveHash           []byte
+	DedupeKey               *string
+	Mode                    string
+	ConnectionID            *ids.UUID
+	Channel                 *string
+	TargetType              *string
+	TargetID                *string
+	EffectState             *string
+	EffectLevelRequired     *string
+	EffectLevelAchieved     *string
+	Simulated               bool
+	DecidedVia              *string
+	EnforcementPointID      *ids.UUID
+	DownstreamState         *string
+	DownstreamNotVerifiable bool
 }
 
 type PcTransactionLink struct {

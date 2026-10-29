@@ -74395,6 +74395,18 @@
         "additionalProperties": false,
         "description": "UpdateTeamResponse returns the result."
       },
+      "pantherclaw.v1.DownstreamState": {
+        "type": "string",
+        "title": "DownstreamState",
+        "enum": [
+          "DOWNSTREAM_STATE_UNSPECIFIED",
+          "DOWNSTREAM_STATE_PENDING",
+          "DOWNSTREAM_STATE_CONFIRMED",
+          "DOWNSTREAM_STATE_UNCONFIRMED",
+          "DOWNSTREAM_STATE_NOT_VERIFIABLE"
+        ],
+        "description": "DownstreamState is what is known about the consequences of a confirmed\n action, apart from its own effect (G0 M17, F414). Precedence over the\n whole chain of consequences: UNCONFIRMED, then NOT_VERIFIABLE, then\n PENDING, then CONFIRMED."
+      },
       "pantherclaw.v1.EffectState": {
         "type": "string",
         "title": "EffectState",
@@ -75568,6 +75580,11 @@
             "type": "string",
             "title": "enforcement_point_id",
             "description": "The enforcement point that asked, for decided_via authzen."
+          },
+          "downstreamState": {
+            "title": "downstream_state",
+            "description": "State of the consequences opened for it (G0 M17, F414).",
+            "$ref": "#/components/schemas/pantherclaw.v1.DownstreamState"
           }
         },
         "title": "Transaction",

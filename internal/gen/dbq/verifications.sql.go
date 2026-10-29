@@ -15,6 +15,69 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const consequenceParent = `-- name: ConsequenceParent :one
+
+SELECT from_transaction_id FROM pc.transaction_links
+WHERE org_id = $1 AND to_transaction_id = $2 AND kind = 'consequence'
+`
+
+// Downstream state (G0 M17 D102, F414, HR-451): a confirmed action's
+// state of the consequences opened for it, apart from its own effect.
+// ConsequenceParent is the transaction a consequence was opened for.
+func (q *Queries) ConsequenceParent(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, consequenceParent, orgID, iD)
+	var from_transaction_id ids.UUID
+	err := row.Scan(&from_transaction_id)
+	return from_transaction_id, err
+}
+
+const consequenceStates = `-- name: ConsequenceStates :many
+SELECT l.to_transaction_id AS id, t.effect_state, t.downstream_state,
+       EXISTS (SELECT 1 FROM pc.reconciliation_tasks k
+               WHERE k.org_id = t.org_id AND k.transaction_id = t.id AND k.kind = 'consequence_unconfirmed'
+                 AND k.state IN ('OPEN', 'NOT_OCCURRED')) AS questioned
+FROM pc.transaction_links l
+JOIN pc.transactions t ON t.org_id = l.org_id AND t.id = l.to_transaction_id
+WHERE l.org_id = $1 AND l.from_transaction_id = $2 AND l.kind = 'consequence'
+ORDER BY l.to_transaction_id
+`
+
+type ConsequenceStatesRow struct {
+	ID              ids.UUID
+	EffectState     *string
+	DownstreamState *string
+	Questioned      bool
+}
+
+// ConsequenceStates are the consequence transactions opened for parent,
+// each with its effect state, its own downstream state and whether a person was asked about it and
+// has not confirmed it occurred (an open reconciliation, or one released
+// as not occurred).
+func (q *Queries) ConsequenceStates(ctx context.Context, orgID ids.OrgID, parent ids.UUID) ([]ConsequenceStatesRow, error) {
+	rows, err := q.db.Query(ctx, consequenceStates, orgID, parent)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ConsequenceStatesRow{}
+	for rows.Next() {
+		var i ConsequenceStatesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EffectState,
+			&i.DownstreamState,
+			&i.Questioned,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const dueVerifications = `-- name: DueVerifications :many
 
 SELECT v.id, v.purpose, v.transaction_id, v.connection_id, v.operation, v.request, v.attempts, v.deadline_at
@@ -779,6 +842,32 @@ func (q *Queries) ScheduleTargetLog(ctx context.Context, arg ScheduleTargetLogPa
 	return err
 }
 
+const setDownstreamState = `-- name: SetDownstreamState :exec
+UPDATE pc.transactions
+SET downstream_state = $1,
+    downstream_not_verifiable = downstream_not_verifiable OR $2::bool
+WHERE org_id = $3 AND id = $4
+`
+
+type SetDownstreamStateParams struct {
+	State         *string
+	NotVerifiable bool
+	OrgID         ids.OrgID
+	ID            ids.UUID
+}
+
+// SetDownstreamState records a downstream state; not_verifiable only ever
+// sets the cap, never clears it (D131).
+func (q *Queries) SetDownstreamState(ctx context.Context, arg SetDownstreamStateParams) error {
+	_, err := q.db.Exec(ctx, setDownstreamState,
+		arg.State,
+		arg.NotVerifiable,
+		arg.OrgID,
+		arg.ID,
+	)
+	return err
+}
+
 const setEffectState = `-- name: SetEffectState :exec
 UPDATE pc.transactions SET effect_state = $1, effect_level_achieved = $2
 WHERE org_id = $3 AND id = $4
@@ -901,6 +990,34 @@ func (q *Queries) TransactionChannel(ctx context.Context, orgID ids.OrgID, iD id
 	var channel *string
 	err := row.Scan(&channel)
 	return channel, err
+}
+
+const transactionDownstream = `-- name: TransactionDownstream :one
+SELECT t.downstream_state, t.downstream_not_verifiable, t.effect_state, t.effect_level_required
+FROM pc.transactions t
+WHERE t.org_id = $1 AND t.id = $2
+FOR UPDATE OF t
+`
+
+type TransactionDownstreamRow struct {
+	DownstreamState         *string
+	DownstreamNotVerifiable bool
+	EffectState             *string
+	EffectLevelRequired     *string
+}
+
+// TransactionDownstream is a transaction's downstream and effect state,
+// locked for the roll-up.
+func (q *Queries) TransactionDownstream(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (TransactionDownstreamRow, error) {
+	row := q.db.QueryRow(ctx, transactionDownstream, orgID, iD)
+	var i TransactionDownstreamRow
+	err := row.Scan(
+		&i.DownstreamState,
+		&i.DownstreamNotVerifiable,
+		&i.EffectState,
+		&i.EffectLevelRequired,
+	)
+	return i, err
 }
 
 const transactionEffect = `-- name: TransactionEffect :one
