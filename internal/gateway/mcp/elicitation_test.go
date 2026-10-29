@@ -5,6 +5,7 @@ package mcp
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -37,8 +38,10 @@ func TestHR420_TheGateRelaysOnlyDeclaredFormFields(t *testing.T) {
 	body := inputRequired(form(`"channel":{"type":"string","enum":["sms"]},"note":{"type":"string","maxLength":100},`+
 		`"count":{"type":"integer","minimum":1},"ratio":{"type":"number","default":1.5}`) +
 		`,"second":{"method":"elicitation/create","params":{"mode":"form","message":"Sure?","requestedSchema":{"type":"object","properties":{"ok":{"type":"boolean"}}}}}`)
-	requests, state, qs, no := screen(spec, body)
-	if no != nil || len(qs) != 2 || qs[0].scan != injection.ScanClean || len(qs[0].sha256) != 64 || len(state) != 0 ||
+	requests, stored, qs, no := screen(spec, body)
+	if no != nil || len(qs) != 2 || qs[0].scan != injection.ScanClean || len(qs[0].sha256) != 64 || stored.RequestState != "" ||
+		len(stored.Requests) != 2 || !slices.Equal(stored.Requests[0].Fields, []string{"channel", "count", "note", "ratio"}) ||
+		len(stored.Requests[1].SchemaDigest) != 64 ||
 		!strings.Contains(string(requests), `"message":"Please confirm."`) {
 		t.Fatalf("screen = %s %v %+v", requests, qs, no)
 	}

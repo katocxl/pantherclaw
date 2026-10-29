@@ -654,8 +654,14 @@ func (h *Handler) callTool(w http.ResponseWriter, r *http.Request, conn *control
 	if len(p.InputResponses) > 0 {
 		// A retry answering the server's input requests: a new action whose
 		// answers are declared params, checked before anything is decided
-		// (G0 M15 D33, HR-420).
-		vals, ir, aerr := answers(conn.Mapper.Elicitation(p.Name), p.InputResponses, p.RequestState)
+		// (G0 M15 D33, HR-420). Its requestState is the handle the gateway
+		// gave out, which resolves, once, to what the server sent (D39).
+		stored, aerr := h.claimElicitation(c.b, p.Name, p.RequestState)
+		var vals domain.Values
+		var ir dispatch.InputResponses
+		if aerr == nil {
+			vals, ir, aerr = answers(conn.Mapper.Elicitation(p.Name), p.InputResponses, stored)
+		}
 		if aerr != nil {
 			c.res = dispatch.Result{Class: dispatch.CannotAuthorize, Code: "invalid_input_responses"}
 			c.result = errorResult(c.res, "The input responses do not answer the tool's reviewed elicitation fields.")

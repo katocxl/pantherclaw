@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net/http"
 	"slices"
 	"strings"
@@ -31,12 +32,15 @@ func (h *harness) localRefusals() []string {
 
 // TestHR420_AnElicitationIsRelayedAndAnsweredAsANewAction: a 2026-07-28
 // server's form-mode question for a declared field reaches the agent
-// unchanged, with its request state, and the first call stays recorded
-// FAILED. The agent's retry is a new action whose answer is the material
-// param elicitation.channel: the Authority decides it, a denied answer
-// never reaches the server, and an allowed one goes upstream as the
-// permitted action says, bound by BeginDispatch. Answers outside the
-// declared fields are tool errors before anything is decided.
+// unchanged, and the first call stays recorded FAILED. The server's
+// request state stays with the gateway: the agent gets a single-use handle
+// for its binding and tool (D39). The agent's retry is a new action whose
+// answer is the material param elicitation.channel: the Authority decides
+// it, a denied answer never reaches the server, and an allowed one goes
+// upstream with the server's own request state, as the permitted action
+// says, bound by BeginDispatch. Answers outside the declared fields or the
+// asked keys, and a handle that is forged, used, or another run's, are
+// tool errors before anything is decided.
 // Covers: PN-015.2
 func TestHR420_AnElicitationIsRelayedAndAnsweredAsANewAction(t *testing.T) {
 	sim, opt := withSurface(t, mcpsim.Faults{}, channelField)
@@ -44,39 +48,61 @@ func TestHR420_AnElicitationIsRelayedAndAnsweredAsANewAction(t *testing.T) {
 	sim.SetElicit(&mcpsim.Elicit{Message: "Where should the receipt go?", Schema: jsontext.Value(channelSchema), RequestState: "st-1"})
 	run := ids.NewV7().String()
 
-	first := h.rawCall(t, "tools/call", refundArgs, "create_refund", run, nil)
-	if first.Error != nil || string(first.Result["resultType"]) != `"input_required"` || string(first.Result["requestState"]) != `"st-1"` ||
-		!strings.Contains(string(first.Result["inputRequests"]), `"message":"Where should the receipt go?"`) ||
-		!strings.Contains(string(first.Result["inputRequests"]), `"enum":["email","sms"]`) {
-		t.Fatalf("input_required = %+v %v", first.Error, first.Result)
+	// ask makes the first call in run and returns the handle it got.
+	ask := func(run string) string {
+		t.Helper()
+		first := h.rawCall(t, "tools/call", refundArgs, "create_refund", run, nil)
+		var handle string
+		if first.Error != nil || string(first.Result["resultType"]) != `"input_required"` ||
+			json.Unmarshal(first.Result["requestState"], &handle) != nil || len(handle) != 43 || strings.Contains(string(first.Result["requestState"]), "st-1") ||
+			!strings.Contains(string(first.Result["inputRequests"]), `"message":"Where should the receipt go?"`) ||
+			!strings.Contains(string(first.Result["inputRequests"]), `"enum":["email","sms"]`) {
+			t.Fatalf("input_required = %+v %v", first.Error, first.Result)
+		}
+		return handle
 	}
+	handle := ask(run)
 	if s := h.auth.snap(); s.outcome() != pb.Outcome_OUTCOME_FAILED || sim.Calls() != 0 || len(h.localRefusals()) != 0 {
 		t.Fatalf("first call recorded %s, %d upstream runs, refusals %v", s.outcome(), sim.Calls(), h.localRefusals())
 	}
 
-	retry := func(answer string) rawReply {
-		return h.rawCall(t, "tools/call", refundArgs+`,"inputResponses":{"confirm":`+answer+`},"requestState":"st-1"`, "create_refund", run, nil)
+	retry := func(run, handle, responses string) rawReply {
+		return h.rawCall(t, "tools/call", refundArgs+`,"inputResponses":`+responses+`,"requestState":"`+handle+`"`, "create_refund", run, nil)
 	}
-	decided := h.auth.snap().authorize
-	for name, answer := range map[string]string{
-		"an undeclared field":   `{"action":"accept","content":{"note":"x"}}`,
-		"another type":          `{"action":"accept","content":{"channel":3}}`,
-		"a value not declared":  `{"action":"accept","content":{"channel":"fax"}}`,
-		"content with decline":  `{"action":"decline","content":{"channel":"sms"}}`,
-		"an accept without any": `{"action":"accept"}`,
-		"an unknown action":     `{"action":"maybe"}`,
-	} {
-		r := retry(answer)
-		if r.Error != nil || string(r.Result["isError"]) != "true" || !strings.Contains(string(r.Result["_meta"]), "cannot_authorize") {
+	accept := func(channel string) string {
+		return `{"confirm":{"action":"accept","content":{"channel":"` + channel + `"}}}`
+	}
+	refused := func(name string, r rawReply) {
+		t.Helper()
+		if r.Error != nil || string(r.Result["isError"]) != "true" || !strings.Contains(string(r.Result["_meta"]), "invalid_input_responses") {
 			t.Errorf("%s: %+v %v", name, r.Error, r.Result)
 		}
 	}
-	if n := h.auth.snap().authorize; n != decided {
-		t.Fatalf("%d decisions on answers outside the declared fields", n-decided)
+	decided := h.auth.snap().authorize
+	for name, responses := range map[string]string{
+		"an undeclared field":   `{"confirm":{"action":"accept","content":{"note":"x"}}}`,
+		"another type":          `{"confirm":{"action":"accept","content":{"channel":3}}}`,
+		"content with decline":  `{"confirm":{"action":"decline","content":{"channel":"sms"}}}`,
+		"an accept without any": `{"confirm":{"action":"accept"}}`,
+		"an unknown action":     `{"confirm":{"action":"maybe"}}`,
+		"a key not asked":       `{"other":{"action":"accept","content":{"channel":"sms"}}}`,
+	} {
+		refused(name, retry(run, ask(run), responses))
+	}
+	// A value outside the declared enum is refused when the action is
+	// mapped, before anything is decided too.
+	if r := retry(run, ask(run), accept("fax")); string(r.Result["isError"]) != "true" || !strings.Contains(string(r.Result["_meta"]), "cannot_authorize") {
+		t.Errorf("a value not declared: %v", r.Result)
+	}
+	refused("a forged handle", retry(run, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", accept("sms")))
+	refused("the server's own state", retry(run, "st-1", accept("sms")))
+	refused("another run's handle", retry(ids.NewV7().String(), ask(run), accept("sms")))
+	if n := h.auth.snap().authorize - decided; n != 8 {
+		t.Fatalf("%d decisions, want only the 8 first calls", n)
 	}
 
 	h.auth.decide(pb.Decision_DECISION_DENY)
-	if r := retry(`{"action":"accept","content":{"channel":"sms"}}`); string(r.Result["isError"]) != "true" ||
+	if r := retry(run, handle, accept("sms")); string(r.Result["isError"]) != "true" ||
 		!strings.Contains(string(r.Result["_meta"]), "policy_denied") {
 		t.Fatalf("a denied answer: %v", r.Result)
 	}
@@ -87,9 +113,10 @@ func TestHR420_AnElicitationIsRelayedAndAnsweredAsANewAction(t *testing.T) {
 	if a := s.actions[len(s.actions)-1].Action; !strings.Contains(string(a.Params), `"elicitation.channel":"sms"`) {
 		t.Fatalf("the denied action's params %s", a.Params)
 	}
+	refused("a used handle", retry(run, handle, accept("email")))
 
 	h.auth.decide(pb.Decision_DECISION_ALLOW)
-	ok := retry(`{"action":"accept","content":{"channel":"email"}}`)
+	ok := retry(run, ask(run), accept("email"))
 	if ok.Error != nil || string(ok.Result["isError"]) != "false" || sim.Calls() != 1 {
 		t.Fatalf("an allowed answer: %+v %v, %d runs", ok.Error, ok.Result, sim.Calls())
 	}

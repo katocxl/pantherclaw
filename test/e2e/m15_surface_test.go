@@ -114,11 +114,22 @@ func m15ResourceAndElicitation(t *testing.T) {
 	schema := jsontext.Value(`{"type":"object","properties":{"channel":{"type":"string","enum":["email","sms"]}},"required":["channel"]}`)
 	sim.SetElicit(&mcpsim.Elicit{Message: "Where should the receipt go?", Schema: schema})
 	runs := sim.Calls()
-	if _, body := call(30, ""); !strings.Contains(body, `"resultType":"input_required"`) || !strings.Contains(body, "Where should the receipt go?") {
-		t.Fatalf("the question: %s", body)
-	}
+	// Each answer answers its own question: the handle the gateway gives as
+	// requestState is single use (D39).
 	answer := func(id int, channel string) string {
-		_, body := call(id, `,"inputResponses":{"confirm":{"action":"accept","content":{"channel":"`+channel+`"}}}`)
+		_, body := call(id, "")
+		var q struct {
+			Result struct {
+				ResultType   string `json:"resultType"`
+				RequestState string `json:"requestState"`
+			} `json:"result"`
+		}
+		if json.Unmarshal([]byte(body), &q) != nil || q.Result.ResultType != "input_required" || q.Result.RequestState == "" ||
+			!strings.Contains(body, "Where should the receipt go?") {
+			t.Fatalf("the question: %s", body)
+		}
+		_, body = call(id+100, `,"inputResponses":{"confirm":{"action":"accept","content":{"channel":"`+channel+`"}}},"requestState":"`+
+			q.Result.RequestState+`"`)
 		return body
 	}
 	if body := answer(31, "sms"); !strings.Contains(body, `"isError":true`) || !strings.Contains(body, "NO_SMS") {

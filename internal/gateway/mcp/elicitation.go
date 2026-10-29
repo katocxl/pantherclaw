@@ -5,7 +5,9 @@ package mcp
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
@@ -15,12 +17,14 @@ import (
 	"maps"
 	"regexp"
 	"slices"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/detection/injection"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
+	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
 
@@ -34,9 +38,13 @@ import (
 // tool's refusal is reported as elicitation_refused. The first call stays
 // recorded as it is today (FAILED, upstream_input_required).
 //
-// The agent's retry carrying inputResponses is a new action: each accepted
-// answer is checked against its declared field before anything is
-// decided, becomes the material param elicitation.<field>, and goes
+// The server's requestState and request keys never reach the agent (D39,
+// HR-075): the gateway keeps them as an ELICITATION state entry, bound to
+// the call's connection, run and instance, and gives the agent a
+// single-use random handle as its requestState. The agent's retry carrying
+// inputResponses must present that handle for the same binding and tool;
+// it is a new action: each accepted answer is checked against the asked
+// and declared fields before anything is decided, becomes the material param elicitation.<field>, and goes
 // upstream only when the Authority permits the action (dispatch builds the
 // inputResponses from the permitted action). URL-mode elicitation,
 // sampling and roots stay declined, and so does an elicitation/create on a
@@ -109,25 +117,25 @@ type refusal struct {
 // elicitation fields (D33, D37, D39). It returns the requests and the
 // request state to relay, the questions seen and, when it refuses, why;
 // the refused question, if any, is the last one seen.
-func screen(spec *domain.ElicitationSpec, body []byte) (requests, state jsontext.Value, qs []question, no *refusal) {
+func screen(spec *domain.ElicitationSpec, body []byte) (requests jsontext.Value, stored storedElicitation, qs []question, no *refusal) {
 	var res struct {
 		InputRequests map[string]jsontext.Value `json:"inputRequests"`
 		RequestState  jsontext.Value            `json:"requestState"`
 	}
 	if err := json.Unmarshal(body, &res); err != nil || len(res.InputRequests) == 0 {
-		return nil, nil, nil, &refusal{why: "no input requests"}
+		return nil, stored, nil, &refusal{why: "no input requests"}
 	}
 	if len(res.InputRequests) > maxInputRequests {
-		return nil, nil, nil, &refusal{reasonTooManyFields, "too many input requests"}
+		return nil, stored, nil, &refusal{reasonTooManyFields, "too many input requests"}
 	}
 	if s := res.RequestState; len(s) > 0 && (s.Kind() != '"' || len(s) > maxRequestState) {
-		return nil, nil, nil, &refusal{why: "a request state that is not a short string"}
+		return nil, stored, nil, &refusal{why: "a request state that is not a short string"}
 	}
 	asked := map[string]bool{}
 	for _, key := range slices.Sorted(maps.Keys(res.InputRequests)) {
 		var ir inputRequest
 		if !inputKeyRe.MatchString(key) || json.Unmarshal(res.InputRequests[key], &ir) != nil {
-			return nil, nil, qs, &refusal{why: "an input request that does not decode"}
+			return nil, stored, qs, &refusal{why: "an input request that does not decode"}
 		}
 		sum := sha256.Sum256([]byte(ir.Params.Message))
 		q := question{key: key, sha256: hex.EncodeToString(sum[:]), scan: injection.ScanClean, sum: sum[:]}
@@ -157,14 +165,22 @@ func screen(spec *domain.ElicitationSpec, body []byte) (requests, state jsontext
 		}
 		qs = append(qs, q)
 		if no != nil {
-			return nil, nil, qs, no
+			return nil, stored, qs, no
 		}
+		schema, _ := json.Marshal(ir.Params.RequestedSchema, json.Deterministic(true))
+		digest := sha256.Sum256(schema)
+		stored.Requests = append(stored.Requests, storedRequest{
+			Key: key, Fields: slices.Sorted(maps.Keys(ir.Params.RequestedSchema.Properties)), SchemaDigest: hex.EncodeToString(digest[:]),
+		})
 	}
 	raw, err := json.Marshal(res.InputRequests, json.Deterministic(true))
 	if err != nil {
-		return nil, nil, qs, &refusal{why: "the input requests do not encode"}
+		return nil, stored, qs, &refusal{why: "the input requests do not encode"}
 	}
-	return raw, res.RequestState, qs, nil
+	if len(res.RequestState) > 0 && json.Unmarshal(res.RequestState, &stored.RequestState) != nil {
+		return nil, stored, qs, &refusal{why: "a request state that is not a string"}
+	}
+	return raw, stored, qs, nil
 }
 
 // checkRequest checks one input request: a form-mode elicitation for
@@ -237,7 +253,7 @@ func (h *Handler) relay(ctx context.Context, conn *control.Connection, tool stri
 	if spec == nil || c.res.Response == nil || c.res.Code != dispatch.CodeInputRequired {
 		return nil, false
 	}
-	requests, state, qs, no := screen(spec, c.res.Response.Body)
+	requests, stored, qs, no := screen(spec, c.res.Response.Body)
 	attrs := []any{slog.String("connection_id", conn.GetId()), slog.String("transaction_id", c.res.TransactionID)}
 	for _, q := range qs {
 		attrs = append(attrs, slog.Group("question_"+q.key, slog.String("sha256", q.sha256), slog.String("scan", q.scan)))
@@ -251,28 +267,93 @@ func (h *Handler) relay(ctx context.Context, conn *control.Connection, tool stri
 		h.engine.ReportElicitationRefused(ctx, conn, c.action.Action, detail)
 		return nil, false
 	}
+	// The server's request state and request keys stay with the gateway
+	// (D39, HR-075): the agent gets a single-use handle in their place.
+	stored.Tool = tool
+	handle, err := h.keepElicitation(c.b, stored)
+	if err != nil {
+		h.log.WarnContext(ctx, "gateway.elicitation_not_kept", append(attrs, pclog.Err(err))...)
+		return nil, false
+	}
 	h.log.InfoContext(ctx, "gateway.elicitation_relayed", attrs...)
-	out := map[string]any{
-		"resultType": "input_required", "inputRequests": requests,
+	return map[string]any{
+		"resultType": "input_required", "inputRequests": requests, "requestState": handle,
 		"_meta": map[string]any{metaResult: map[string]any{
 			"transaction_id": c.res.TransactionID, "outcome": outcome(c.res), "decision": decision(c.res), "mode": mode(c.res),
 			"receipt": c.res.Receipt,
 		}},
+	}, true
+}
+
+// elicitationTTL is how long a relayed elicitation can be answered (D39).
+const elicitationTTL = 10 * time.Minute
+
+// storedElicitation is what the gateway keeps of a relayed elicitation
+// (D39): the tool, the server's request state and, of each request, its
+// key, the fields it asked for and its schema's digest. Never the question.
+type storedElicitation struct {
+	Tool         string          `json:"tool"`
+	RequestState string          `json:"request_state,omitzero"`
+	Requests     []storedRequest `json:"requests"`
+}
+
+type storedRequest struct {
+	Key          string   `json:"key"`
+	Fields       []string `json:"fields"`
+	SchemaDigest string   `json:"schema_digest"`
+}
+
+// keepElicitation stores a relayed elicitation under the SHA-256 of a
+// fresh random handle, for b, and returns the handle (base64url).
+func (h *Handler) keepElicitation(b binding, s storedElicitation) (string, error) {
+	var handle [32]byte
+	if _, err := rand.Read(handle[:]); err != nil {
+		return "", err
 	}
-	if len(state) > 0 {
-		out["requestState"] = state
+	body, err := json.Marshal(s, json.Deterministic(true))
+	if err != nil {
+		return "", err
 	}
-	return out, true
+	if _, err := h.holds.putElicitation(sha256.Sum256(handle[:]), b, body, h.holds.now().Add(elicitationTTL), 0); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(handle[:]), nil
+}
+
+// claimElicitation resolves a retry's handle (D39): a live elicitation of
+// this binding and tool, deleted so the handle is single use. A handle
+// that does not resolve, or a lost race, is errAnswer.
+func (h *Handler) claimElicitation(b binding, tool string, raw jsontext.Value) (storedElicitation, error) {
+	var s storedElicitation
+	var text string
+	if raw.Kind() != '"' || json.Unmarshal(raw, &text) != nil {
+		return s, fmt.Errorf("%w: no requestState handle", errAnswer)
+	}
+	handle, err := base64.RawURLEncoding.DecodeString(text)
+	if err != nil || len(handle) != 32 {
+		return s, fmt.Errorf("%w: requestState is not a handle", errAnswer)
+	}
+	k := key(sha256.Sum256(handle))
+	e, found, err := h.holds.getElicitation(k)
+	if err != nil || !found || e.binding != b || json.Unmarshal(e.body, &s) != nil || s.Tool != tool {
+		return storedElicitation{}, fmt.Errorf("%w: the handle answers no elicitation of this call", errAnswer)
+	}
+	if deleted, err := h.holds.deleteElicitation(k, e.version); err != nil || !deleted {
+		return storedElicitation{}, fmt.Errorf("%w: the handle was used", errAnswer)
+	}
+	return s, nil
 }
 
 // errAnswer reports inputResponses the reviewed mapping does not allow.
 var errAnswer = errors.New("the input responses do not answer the reviewed elicitation fields")
 
-// answers reads a retry's inputResponses (D33): each key's action and, for
-// an accepted one, its content, every field declared, of its declared type
-// and answered once. It returns the answers as typed values and what the
-// dispatch needs to answer the server.
-func answers(spec *domain.ElicitationSpec, raw, rawState jsontext.Value) (domain.Values, dispatch.InputResponses, error) {
+// answers reads a retry's inputResponses (D33, D39): each key one the stored
+// elicitation asked, its action and, for an accepted one, its content,
+// every field one that request asked for and the mapping declares, of its
+// declared type and answered once. It returns the answers as typed values
+// and what the dispatch needs to answer the server, with the stored
+// request state.
+func answers(spec *domain.ElicitationSpec, raw jsontext.Value, stored storedElicitation) (domain.Values, dispatch.InputResponses, error) {
 	ir := dispatch.InputResponses{Keys: map[string]dispatch.InputResponse{}}
 	if spec == nil {
 		return nil, ir, fmt.Errorf("%w: the tool declares no elicitation", errAnswer)
@@ -281,11 +362,7 @@ func answers(spec *domain.ElicitationSpec, raw, rawState jsontext.Value) (domain
 	if raw.Kind() != '{' || json.Unmarshal(raw, &responses) != nil || len(responses) == 0 || len(responses) > maxInputRequests {
 		return nil, ir, errAnswer
 	}
-	if len(rawState) > 0 {
-		if rawState.Kind() != '"' || len(rawState) > maxRequestState || json.Unmarshal(rawState, &ir.RequestState) != nil {
-			return nil, ir, fmt.Errorf("%w: requestState", errAnswer)
-		}
-	}
+	ir.RequestState = stored.RequestState
 	vals := domain.Values{}
 	for _, key := range slices.Sorted(maps.Keys(responses)) {
 		var r struct {
@@ -294,6 +371,10 @@ func answers(spec *domain.ElicitationSpec, raw, rawState jsontext.Value) (domain
 		}
 		if !inputKeyRe.MatchString(key) || json.Unmarshal(responses[key], &r, json.RejectUnknownMembers(true)) != nil {
 			return nil, ir, errAnswer
+		}
+		i := slices.IndexFunc(stored.Requests, func(q storedRequest) bool { return q.Key == key })
+		if i < 0 {
+			return nil, ir, fmt.Errorf("%w: %s was not asked", errAnswer, key)
 		}
 		resp := dispatch.InputResponse{Action: r.Action}
 		switch {
@@ -304,7 +385,7 @@ func answers(spec *domain.ElicitationSpec, raw, rawState jsontext.Value) (domain
 		}
 		for _, name := range slices.Sorted(maps.Keys(r.Content)) {
 			f, ok := spec.Field(name)
-			if _, twice := vals[name]; !ok || twice {
+			if _, twice := vals[name]; !ok || twice || !slices.Contains(stored.Requests[i].Fields, name) {
 				return nil, ir, fmt.Errorf("%w: field %s", errAnswer, name)
 			}
 			v, err := answerValue(f.Type, r.Content[name])
