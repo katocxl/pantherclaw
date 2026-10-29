@@ -16,8 +16,8 @@ import (
 )
 
 const countGatewayMCPState = `-- name: CountGatewayMCPState :one
-SELECT count(*) FILTER (WHERE kind IN ('HOLD', 'TASK'))::bigint AS entries,
-       count(*) FILTER (WHERE kind IN ('HOLD', 'TASK') AND instance_id IS NOT DISTINCT FROM $1::uuid)::bigint AS instance_entries,
+SELECT count(*) FILTER (WHERE kind IN ('HOLD', 'TASK', 'ELICITATION'))::bigint AS entries,
+       count(*) FILTER (WHERE kind IN ('HOLD', 'TASK', 'ELICITATION') AND instance_id IS NOT DISTINCT FROM $1::uuid)::bigint AS instance_entries,
        count(*) FILTER (WHERE kind = 'SESSION')::bigint AS sessions,
        coalesce(sum(octet_length(sealed_body)), 0)::bigint AS body_bytes
 FROM pc.gateway_mcp_state
@@ -38,7 +38,7 @@ type CountGatewayMCPStateRow struct {
 	BodyBytes       int64
 }
 
-// The live entries of a gateway: holds and tasks in all and of one
+// The live entries of a gateway: holds, tasks and elicitations in all and of one
 // instance, sessions in all, and the bytes of sealed task bodies.
 func (q *Queries) CountGatewayMCPState(ctx context.Context, arg CountGatewayMCPStateParams) (CountGatewayMCPStateRow, error) {
 	row := q.db.QueryRow(ctx, countGatewayMCPState,

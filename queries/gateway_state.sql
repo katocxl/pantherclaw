@@ -52,10 +52,10 @@ WHERE org_id = sqlc.arg(org_id) AND gateway_id = sqlc.arg(gateway_id) AND kind =
   AND (sqlc.arg(if_version)::bigint = 0 OR version = sqlc.arg(if_version)::bigint);
 
 -- name: CountGatewayMCPState :one
--- The live entries of a gateway: holds and tasks in all and of one
+-- The live entries of a gateway: holds, tasks and elicitations in all and of one
 -- instance, sessions in all, and the bytes of sealed task bodies.
-SELECT count(*) FILTER (WHERE kind IN ('HOLD', 'TASK'))::bigint AS entries,
-       count(*) FILTER (WHERE kind IN ('HOLD', 'TASK') AND instance_id IS NOT DISTINCT FROM sqlc.narg(instance_id)::uuid)::bigint AS instance_entries,
+SELECT count(*) FILTER (WHERE kind IN ('HOLD', 'TASK', 'ELICITATION'))::bigint AS entries,
+       count(*) FILTER (WHERE kind IN ('HOLD', 'TASK', 'ELICITATION') AND instance_id IS NOT DISTINCT FROM sqlc.narg(instance_id)::uuid)::bigint AS instance_entries,
        count(*) FILTER (WHERE kind = 'SESSION')::bigint AS sessions,
        coalesce(sum(octet_length(sealed_body)), 0)::bigint AS body_bytes
 FROM pc.gateway_mcp_state

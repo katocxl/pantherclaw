@@ -200,6 +200,20 @@ func TestHR412_MCPStateConflictsAndBoundsOnlyCostANewAction(t *testing.T) {
 	if _, err := svc.PutMCPState(ctx, a, big, 0); !errors.Is(err, app.ErrMCPStateFull) {
 		t.Fatalf("a task past the instance bound: %v", err)
 	}
+	// So does a relayed elicitation (D39), which may carry a sealed body.
+	el := app.MCPEntry{Kind: app.MCPElicitation, Key: stateKey("el"), Connection: conn, Instance: &inst, SealedBody: []byte{1},
+		ExpireTime: clk.Now().Add(10 * time.Minute)}
+	if _, err := svc.PutMCPState(ctx, a, el, 0); !errors.Is(err, app.ErrMCPStateFull) {
+		t.Fatalf("an elicitation past the instance bound: %v", err)
+	}
+	other := ids.NewV7()
+	el.Instance = &other
+	if _, err := svc.PutMCPState(ctx, a, el, 0); err != nil {
+		t.Fatalf("an elicitation of another instance: %v", err)
+	}
+	if got, err := svc.GetMCPState(ctx, a, app.MCPElicitation, el.Key); err != nil || !bytes.Equal(got.SealedBody, el.SealedBody) {
+		t.Fatalf("elicitation: %+v %v", got, err)
+	}
 }
 
 // TestHR413_SessionsStayBoundAndAnInstanceKeepsSixteen: a session entry

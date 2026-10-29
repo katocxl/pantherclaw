@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
@@ -121,7 +122,32 @@ type holdStore interface {
 	cancel(id string, b binding) bool
 	// now is the store's clock.
 	now() time.Time
+
+	// An elicitation relayed to the agent (G0 M15 D39), kept like a task:
+	// bound to (connection, run, instance), its body sealed on the server,
+	// within the same bounds. putElicitation writes it compare-and-set
+	// (ifVersion 0: it must not exist) and returns its version;
+	// errStateConflict and errStateFull say why not, any other error that
+	// the store cannot be asked. getElicitation returns a live one;
+	// deleteElicitation deletes it (ifVersion 0: whatever version).
+	putElicitation(k key, b binding, body []byte, expires time.Time, ifVersion int64) (int64, error)
+	getElicitation(k key) (e elicitation, found bool, err error)
+	deleteElicitation(k key, ifVersion int64) (deleted bool, err error)
 }
+
+// elicitation is a stored elicitation (D39).
+type elicitation struct {
+	binding binding
+	body    []byte
+	version int64
+	expires time.Time
+}
+
+// Why a state write was refused (D39).
+var (
+	errStateConflict = errors.New("mcp: the state entry changed or exists")
+	errStateFull     = errors.New("mcp: the gateway keeps as much MCP state as it may")
+)
 
 // supportsTasks reports whether a request's client capabilities declare
 // the tasks extension; only then may a task be returned.

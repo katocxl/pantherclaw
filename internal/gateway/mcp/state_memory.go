@@ -23,11 +23,13 @@ type memoryStore struct {
 	mu    sync.Mutex
 	holds map[key]hold
 	tasks map[string]*task
-	bytes int
+	// elicits are relayed elicitations (D39).
+	elicits map[key]*elicitation
+	bytes   int
 }
 
 func newStore(now func() time.Time) *memoryStore {
-	return &memoryStore{clock: now, holds: map[key]hold{}, tasks: map[string]*task{}}
+	return &memoryStore{clock: now, holds: map[key]hold{}, tasks: map[string]*task{}, elicits: map[key]*elicitation{}}
 }
 
 func (s *memoryStore) now() time.Time { return s.clock() }
@@ -44,6 +46,12 @@ func (s *memoryStore) purgeLocked(now time.Time) {
 			s.dropLocked(id)
 		}
 	}
+	for k, e := range s.elicits {
+		if !now.Before(e.expires) {
+			s.bytes -= len(e.body)
+			delete(s.elicits, k)
+		}
+	}
 }
 
 func (s *memoryStore) dropLocked(id string) {
@@ -56,7 +64,7 @@ func (s *memoryStore) dropLocked(id string) {
 // fullLocked reports whether another entry for the instance, keeping
 // extra bytes, would pass the bounds.
 func (s *memoryStore) fullLocked(instance string, extra int) bool {
-	if len(s.holds)+len(s.tasks) >= maxEntries || s.bytes+extra > maxTaskBytes {
+	if len(s.holds)+len(s.tasks)+len(s.elicits) >= maxEntries || s.bytes+extra > maxTaskBytes {
 		return true
 	}
 	n := 0
@@ -67,6 +75,11 @@ func (s *memoryStore) fullLocked(instance string, extra int) bool {
 	}
 	for _, t := range s.tasks {
 		if t.binding.instance == instance {
+			n++
+		}
+	}
+	for _, e := range s.elicits {
+		if e.binding.instance == instance {
 			n++
 		}
 	}
@@ -278,4 +291,54 @@ func (s *memorySessions) end(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.m, sessionKey(id))
+}
+
+// putElicitation writes a relayed elicitation (D39).
+func (s *memoryStore) putElicitation(k key, b binding, body []byte, expires time.Time, ifVersion int64) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.purgeLocked(s.now())
+	cur, ok := s.elicits[k]
+	switch {
+	case (ifVersion == 0 && ok) || (ifVersion != 0 && (!ok || cur.version != ifVersion)):
+		return 0, errStateConflict
+	case !ok && s.fullLocked(b.instance, len(body)):
+		return 0, errStateFull
+	case ok && len(body) > len(cur.body) && s.bytes+len(body)-len(cur.body) > maxTaskBytes:
+		return 0, errStateFull
+	}
+	e := &elicitation{binding: b, body: append([]byte(nil), body...), version: ifVersion + 1, expires: expires}
+	if ok {
+		s.bytes -= len(cur.body)
+	}
+	s.bytes += len(body)
+	s.elicits[k] = e
+	return e.version, nil
+}
+
+// getElicitation returns a live relayed elicitation.
+func (s *memoryStore) getElicitation(k key) (elicitation, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e, ok := s.elicits[k]
+	if !ok || !s.now().Before(e.expires) {
+		return elicitation{}, false, nil
+	}
+	return *e, true, nil
+}
+
+// deleteElicitation deletes a relayed elicitation.
+func (s *memoryStore) deleteElicitation(k key, ifVersion int64) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e, ok := s.elicits[k]
+	if !ok || !s.now().Before(e.expires) {
+		return false, nil
+	}
+	if ifVersion != 0 && e.version != ifVersion {
+		return false, errStateConflict
+	}
+	s.bytes -= len(e.body)
+	delete(s.elicits, k)
+	return true, nil
 }

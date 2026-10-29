@@ -4,6 +4,8 @@
 package broker
 
 import (
+	"crypto/hkdf"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 
@@ -46,4 +48,20 @@ func (k *Key) OpenState(aad, sealed []byte) ([]byte, error) {
 		return nil, ErrStateOpen
 	}
 	return pt, nil
+}
+
+// TaskIDKey is the key a held MCP task's id is derived with (G0 M15 D16):
+// HKDF-SHA256 of the broker private key, salted with the gateway id. Every
+// replica of the gateway derives the same key, so an identical held call
+// names the same task on each; a rotated broker key names new tasks.
+func (k *Key) TaskIDKey(gateway string) ([]byte, error) {
+	if k == nil {
+		return nil, ErrNoBroker
+	}
+	raw, err := k.priv.Bytes()
+	if err != nil {
+		return nil, err
+	}
+	defer clear(raw)
+	return hkdf.Key(sha256.New, raw, []byte(gateway), "pc.mcp_task_id.v1", sha256.Size)
 }

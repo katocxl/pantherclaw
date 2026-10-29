@@ -13,13 +13,13 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
-// Shared MCP state (G0 M15 D12, HR-411..413): a gateway's MCP holds, tasks
-// and sessions, so that every replica of the gateway sees them and a
-// restart loses nothing. Rows belong to the calling gateway alone: the org
+// Shared MCP state (G0 M15 D12, HR-411..413): a gateway's MCP holds, tasks,
+// sessions and relayed elicitations (D39), so that every replica of the
+// gateway sees them and a restart loses nothing. Rows belong to the calling gateway alone: the org
 // and gateway come from the certificate, and no call names another
 // gateway. Each entry is bound to (connection, run, instance), a session
 // also to its key thumbprint; the gateway checks the binding on every read
-// (HR-412). A task's body is sealed to the gateway's broker key and the
+// (HR-412). A task's or elicitation's body is sealed to the gateway's broker key and the
 // server never opens it (HR-411). Writes are compare-and-set on version.
 //
 // The bounds are the gateway's memory bounds before M15: beyond them an
@@ -40,6 +40,9 @@ const (
 	MCPHold    = "HOLD"
 	MCPTask    = "TASK"
 	MCPSession = "SESSION"
+	// MCPElicitation is an elicitation relayed to the agent (D39): kept like
+	// a task, with a sealed body, within the same bounds.
+	MCPElicitation = "ELICITATION"
 )
 
 // Errors (D12).
@@ -82,6 +85,8 @@ func (e MCPEntry) valid(now time.Time) bool {
 		return e.ActionID != "" && e.JKT == "" && e.Status != ""
 	case MCPSession:
 		return e.ActionID == "" && e.Status == "" && !e.Busy && len(e.SealedBody) == 0
+	case MCPElicitation:
+		return e.JKT == ""
 	}
 	return false
 }

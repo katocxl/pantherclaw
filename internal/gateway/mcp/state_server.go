@@ -5,9 +5,11 @@ package mcp
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json/v2"
 	"sync"
 	"time"
@@ -46,11 +48,13 @@ type StateClient interface {
 	DeleteMCPState(ctx context.Context, req *pb.DeleteMCPStateRequest) (*pb.DeleteMCPStateResponse, error)
 }
 
-// Sealer seals and opens task bodies with the gateway's broker key
-// (*broker.Key); nil keeps no task on the server.
+// Sealer seals and opens task and elicitation bodies with the gateway's
+// broker key, and derives the key held tasks are named with (*broker.Key);
+// nil keeps no task or elicitation on the server.
 type Sealer interface {
 	SealState(aad, plaintext []byte) ([]byte, error)
 	OpenState(aad, sealed []byte) ([]byte, error)
+	TaskIDKey(gateway string) ([]byte, error)
 }
 
 // WithServerState keeps the face's holds, tasks and sessions on the server
@@ -71,6 +75,10 @@ type serverState struct {
 	// they are not shared. Holds and sessions are shared all the same.
 	local *memoryStore
 	clock func() time.Time
+
+	// idKey names held tasks (D16), derived once.
+	idOnce sync.Once
+	idKey  []byte
 }
 
 func newServerState(c StateClient, sealer Sealer, org, gateway string, now func() time.Time) *serverState {
@@ -350,8 +358,20 @@ func (s *serverState) cancel(id string, b binding) bool {
 	return err == nil && deleted
 }
 
-// taskID is a new task's id.
-func (s *serverState) taskID(_ bool, _ key, _ string) (string, bool) {
+// taskID is a new task's id (D16). A held call's is derived from the
+// call and its action id with a key every replica shares, so an identical
+// held call names the same task on any replica; any other is random. The
+// entry's key is the SHA-256 of the id.
+func (s *serverState) taskID(held bool, k key, actionID string) (string, bool) {
+	if held {
+		s.idOnce.Do(func() { s.idKey, _ = s.seal.TaskIDKey(s.gateway) })
+		if len(s.idKey) == 0 {
+			return "", false
+		}
+		m := hmac.New(sha256.New, s.idKey)
+		_, _ = m.Write([]byte("pc.mcp_task.v1|" + hex.EncodeToString(k[:]) + "|" + actionID))
+		return base64.RawURLEncoding.EncodeToString(m.Sum(nil)), true
+	}
 	var raw [32]byte
 	if _, err := rand.Read(raw[:]); err != nil {
 		return "", false
@@ -470,4 +490,62 @@ func (s *serverSessions) end(id string) {
 	s.mu.Lock()
 	delete(s.seen, k)
 	s.mu.Unlock()
+}
+
+// putElicitation writes a relayed elicitation, its body sealed with the
+// kind in the associated data (D39, D13). Without a broker key it stays
+// in this process, as tasks do.
+func (s *serverState) putElicitation(k key, b binding, body []byte, expires time.Time, ifVersion int64) (int64, error) {
+	if s.local != nil {
+		return s.local.putElicitation(k, b, body, expires, ifVersion)
+	}
+	sealed, err := s.seal.SealState(broker.StateAAD(s.org, s.gateway, "ELICITATION", k[:]), body)
+	if err != nil {
+		return 0, err
+	}
+	v, err := s.put(&pb.MCPStateEntry{
+		Kind: pb.MCPStateKind_MCP_STATE_KIND_ELICITATION, Key: k[:], ConnectionId: b.conn, RunId: b.run, InstanceId: b.instance,
+		SealedBody: sealed, ExpireTime: timestamppb.New(expires),
+	}, ifVersion)
+	switch {
+	case isCode(err, connect.CodeFailedPrecondition):
+		return 0, errStateConflict
+	case isCode(err, connect.CodeResourceExhausted):
+		return 0, errStateFull
+	}
+	return v, err
+}
+
+// getElicitation returns a live relayed elicitation; one whose body does
+// not open (the broker key rotated) is not found.
+func (s *serverState) getElicitation(k key) (elicitation, bool, error) {
+	if s.local != nil {
+		return s.local.getElicitation(k)
+	}
+	e, err := s.get(pb.MCPStateKind_MCP_STATE_KIND_ELICITATION, k[:])
+	if isCode(err, connect.CodeNotFound) {
+		return elicitation{}, false, nil
+	} else if err != nil {
+		return elicitation{}, false, err
+	}
+	if !s.now().Before(e.GetExpireTime().AsTime()) {
+		return elicitation{}, false, nil
+	}
+	body, err := s.seal.OpenState(broker.StateAAD(s.org, s.gateway, "ELICITATION", k[:]), e.GetSealedBody())
+	if err != nil {
+		return elicitation{}, false, nil
+	}
+	return elicitation{binding: entryBinding(e), body: body, version: e.GetVersion(), expires: e.GetExpireTime().AsTime()}, true, nil
+}
+
+// deleteElicitation deletes a relayed elicitation.
+func (s *serverState) deleteElicitation(k key, ifVersion int64) (bool, error) {
+	if s.local != nil {
+		return s.local.deleteElicitation(k, ifVersion)
+	}
+	deleted, err := s.del(pb.MCPStateKind_MCP_STATE_KIND_ELICITATION, k[:], ifVersion)
+	if isCode(err, connect.CodeFailedPrecondition) {
+		return false, errStateConflict
+	}
+	return deleted, err
 }

@@ -6,6 +6,7 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"crypto/hkdf"
 	"crypto/sha256"
 	"errors"
 	"strings"
@@ -89,8 +90,11 @@ func (f *fakeState) DeleteMCPState(_ context.Context, r *pb.DeleteMCPStateReques
 	}
 	id := fkey(r.GetKind(), r.GetKey())
 	cur, ok := f.live(id)
-	if !ok || (r.GetIfVersion() != 0 && cur.GetVersion() != r.GetIfVersion()) {
+	if !ok {
 		return &pb.DeleteMCPStateResponse{}, nil
+	}
+	if r.GetIfVersion() != 0 && cur.GetVersion() != r.GetIfVersion() {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, "MCP_STATE_CONFLICT")
 	}
 	delete(f.m, id)
 	return &pb.DeleteMCPStateResponse{Deleted: true}, nil
@@ -114,6 +118,14 @@ func (s testSealer) SealState(aad, pt []byte) ([]byte, error) {
 
 func (s testSealer) OpenState(aad, sealed []byte) ([]byte, error) {
 	return pccrypto.Open(s.k, []byte("pc.mcp_state.v1"), aad, sealed)
+}
+
+func (s testSealer) TaskIDKey(gateway string) ([]byte, error) {
+	raw, err := s.k.Bytes()
+	if err != nil {
+		return nil, err
+	}
+	return hkdf.Key(sha256.New, raw, []byte(gateway), "pc.mcp_task_id.v1", sha256.Size)
 }
 
 // replicas returns two server stores of one gateway sharing f and the
@@ -306,5 +318,100 @@ func TestHR413_SessionsAreSharedAndOnlyTheirHashIsSent(t *testing.T) {
 	}
 	if _, err := a.open(holdConn, holdInst, "jkt-1", holdRun, time.Time{}); err == nil || errors.Is(err, errSessionsFull) {
 		t.Fatalf("open with the server out of reach: %v", err)
+	}
+}
+
+// TestHR411_AnIdenticalHeldCallNamesTheSameTaskOnEveryReplica: a held
+// call's task id is derived from the call, its action id and the shared
+// broker key (G0 M15 D16), so an identical held call on another replica
+// returns the working task; another action id, or another broker key
+// after a rotation, names a new one.
+func TestHR411_AnIdenticalHeldCallNamesTheSameTaskOnEveryReplica(t *testing.T) {
+	c := &clock{t: time.Unix(1_800_000_000, 0)}
+	f := newFakeState(c.now)
+	a, b := replicas(t, f, c)
+	bind := binding{conn: holdConn, run: holdRun, instance: holdInst}
+	p := heldIR(t, nil)
+	k := actionKey(p.Action)
+	held := dispatch.Result{Class: dispatch.Held}
+	first := a.newTask(bind, p, k, held, toolResult{})
+	again := b.newTask(bind, p, k, held, toolResult{})
+	if first == nil || again == nil || again.id != first.id {
+		t.Fatalf("the identical held call on another replica: %+v %+v", first, again)
+	}
+	other := heldIR(t, nil)
+	if tk := b.newTask(bind, other, actionKey(other.Action), held, toolResult{}); tk == nil || tk.id == first.id {
+		t.Fatal("another action id named the same task")
+	}
+	rotated := newServerState(f, newTestSealer(t), holdOrg, "gw-1", c.now)
+	if tk := rotated.newTask(bind, p, k, held, toolResult{}); tk == nil || tk.id == first.id {
+		t.Fatal("a rotated broker key named the same task")
+	}
+	done := a.newTask(bind, p, k, dispatch.Result{}, toolResult{})
+	if done == nil || done.id == first.id || done.status != statusCompleted {
+		t.Fatalf("a completed task: %+v", done)
+	}
+}
+
+// TestHR412_ElicitationsAreSharedAndBounded: a relayed elicitation (D39)
+// written on one replica is read on another with its binding and body;
+// the server sees only the sealed body; writes are compare-and-set; it
+// expires and is deleted; without a broker key it stays in its process.
+func TestHR412_ElicitationsAreSharedAndBounded(t *testing.T) {
+	c := &clock{t: time.Unix(1_800_000_000, 0)}
+	f := newFakeState(c.now)
+	a, b := replicas(t, f, c)
+	bind := binding{conn: holdConn, run: holdRun, instance: holdInst}
+	k := key{0xe1}
+	body := []byte(`{"question":"which account?"}`)
+	for name, s := range map[string]holdStore{"memory": newStore(c.now), "server": a} {
+		read := s
+		if name == "server" {
+			read = b
+		}
+		v, err := s.putElicitation(k, bind, body, c.t.Add(10*time.Minute), 0)
+		if err != nil || v != 1 {
+			t.Fatalf("%s put: %d %v", name, v, err)
+		}
+		if _, err := s.putElicitation(k, bind, body, c.t.Add(10*time.Minute), 0); !errors.Is(err, errStateConflict) {
+			t.Fatalf("%s created twice: %v", name, err)
+		}
+		e, ok, err := read.getElicitation(k)
+		if err != nil || !ok || e.binding != bind || !bytes.Equal(e.body, body) || e.version != 1 {
+			t.Fatalf("%s get: %+v %v %v", name, e, ok, err)
+		}
+		if v, err := s.putElicitation(k, bind, body, e.expires, 1); err != nil || v != 2 {
+			t.Fatalf("%s update: %d %v", name, v, err)
+		}
+		if _, err := read.deleteElicitation(k, 1); !errors.Is(err, errStateConflict) {
+			t.Fatalf("%s delete of a stale version: %v", name, err)
+		}
+		if ok, err := read.deleteElicitation(k, 2); err != nil || !ok {
+			t.Fatalf("%s delete: %v %v", name, ok, err)
+		}
+		if _, err := s.putElicitation(k, bind, body, c.t.Add(time.Minute), 0); err != nil {
+			t.Fatal(err)
+		}
+		c.t = c.t.Add(time.Minute)
+		if _, ok, _ := read.getElicitation(k); ok {
+			t.Fatalf("%s an expired elicitation was found", name)
+		}
+	}
+	for _, sent := range f.seen {
+		if bytes.Contains(sent, []byte("which account")) {
+			t.Fatal("the server saw an elicitation body")
+		}
+	}
+	m := newStore(c.now)
+	for i := range maxPerInstance {
+		m.settle(key{byte(i), 2}, bind, "act", dispatch.Result{Class: dispatch.Held})
+	}
+	if _, err := m.putElicitation(k, bind, body, c.t.Add(time.Minute), 0); !errors.Is(err, errStateFull) {
+		t.Fatalf("an elicitation past the instance bound: %v", err)
+	}
+	sent := len(f.seen)
+	local := newServerState(f, nil, holdOrg, "gw-1", c.now)
+	if _, err := local.putElicitation(k, bind, body, c.t.Add(time.Minute), 0); err != nil || len(f.seen) != sent {
+		t.Fatalf("without a broker key: %v, sent %d", err, len(f.seen)-sent)
 	}
 }
