@@ -65,8 +65,12 @@ func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection
 	}
 	tool, args, buildErr := egress.BuildMCP(def, a.Action)
 	var params []byte
+	var extra map[string]any
 	if buildErr == nil {
-		params, buildErr = upstream.Params(tool, args)
+		// A retry's answers come from the permitted action only (G0 M15 D33).
+		if extra, buildErr = retryParams(ctx, def, a.Action); buildErr == nil {
+			params, buildErr = upstream.ParamsWith(tool, args, extra)
+		}
 	}
 	begin := &pb.BeginDispatchRequest{PermitId: want.PermitID, Epoch: want.Epoch}
 	if buildErr == nil {
@@ -140,7 +144,7 @@ func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection
 			pclog.Err(err))
 		return e.record(ctx, r, want, outcome, 0, nil, 0, class, code, t)
 	}
-	res, err := ce.mcp.Call(callCtx, tool, args, declared, decorate)
+	res, err := ce.mcp.CallWith(callCtx, tool, args, extra, declared, decorate)
 	land()
 	elapsed := time.Since(start)
 	t.lap("target")
@@ -717,4 +721,89 @@ func ResourceURI(def *defs.Definition, a actionir.ActionIR) (string, error) {
 		return "", fmt.Errorf("%w: the resource template does not expand", egress.ErrBuild)
 	}
 	return uri, nil
+}
+
+// CodeElicitationRefused is the local refusal of an upstream server's
+// elicitation that the reviewed mapping does not allow (G0 M15 D33).
+const CodeElicitationRefused = "elicitation_refused"
+
+// ReportElicitationRefused tells the server an upstream elicitation was
+// refused (G0 M15 D33): machine metadata only, never the question.
+func (e *Engine) ReportElicitationRefused(ctx context.Context, conn *control.Connection, a actionir.ActionIR) {
+	e.reportLocalRefusal(ctx, conn, CodeElicitationRefused, a)
+}
+
+// InputResponses is how a retry answers an upstream server's input
+// requests (G0 M15 D33): for each of its request keys, the agent's action
+// and, when it accepted, the fields its answer filled. The answers
+// themselves travel only as the action's elicitation.<field> params, so
+// what reaches the server is what the Authority permitted. RequestState is
+// the server's opaque state, passed back as it sent it.
+type InputResponses struct {
+	Keys         map[string]InputResponse
+	RequestState string
+}
+
+// InputResponse is the answer to one input request.
+type InputResponse struct {
+	// Action is accept, decline or cancel.
+	Action string
+	// Fields are the elicitation fields an accepted answer filled.
+	Fields []string
+}
+
+type inputResponsesKey struct{}
+
+// WithInputResponses marks a call as the retry of an input_required
+// result.
+func WithInputResponses(ctx context.Context, ir InputResponses) context.Context {
+	return context.WithValue(ctx, inputResponsesKey{}, ir)
+}
+
+// retryParams are the extra tools/call params of a retry: inputResponses
+// built from the permitted action's elicitation params, and requestState;
+// nil for any other call.
+func retryParams(ctx context.Context, def *defs.Definition, a actionir.ActionIR) (map[string]any, error) {
+	ir, ok := ctx.Value(inputResponsesKey{}).(InputResponses)
+	if !ok {
+		return nil, nil
+	}
+	vals, err := def.DecodeParams(a.Params)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", egress.ErrBuild, err)
+	}
+	responses := make(map[string]any, len(ir.Keys))
+	for key, resp := range ir.Keys {
+		out := map[string]any{"action": resp.Action}
+		if resp.Action == "accept" {
+			content := make(map[string]any, len(resp.Fields))
+			for _, f := range resp.Fields {
+				v, ok := vals[defs.ElicitationPrefix+f]
+				if !ok {
+					return nil, fmt.Errorf("%w: the permitted action has no answer for %s", egress.ErrBuild, f)
+				}
+				content[f] = elicitValue(v)
+			}
+			out["content"] = content
+		}
+		responses[key] = out
+	}
+	extra := map[string]any{"inputResponses": responses}
+	if ir.RequestState != "" {
+		extra["requestState"] = ir.RequestState
+	}
+	return extra, nil
+}
+
+// elicitValue is an answer in the JSON type of an elicitation form field.
+func elicitValue(v defs.Value) any {
+	switch v.Type {
+	case defs.TypeInteger:
+		return v.Int
+	case defs.TypeDecimal:
+		return jsontext.Value(v.Decimal.String())
+	case defs.TypeBoolean:
+		return v.Bool
+	}
+	return v.Str
 }

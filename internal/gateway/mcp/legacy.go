@@ -198,6 +198,8 @@ func (h *Handler) endSession(w http.ResponseWriter, r *http.Request, conn *contr
 // legacyCall serves a 2025-11-25 tools/call; a task-augmented one always
 // answers with a task.
 func (h *Handler) legacyCall(w http.ResponseWriter, r *http.Request, conn *control.Connection, req request, p params, in dispatch.Inbound, sid string) {
+	// 2025-11-25 has no input responses: a retry's are ignored, as before.
+	p.InputResponses, p.RequestState = nil, nil
 	c, ok := h.callTool(w, r, conn, req, p, in)
 	if !ok {
 		return

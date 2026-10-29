@@ -13,7 +13,8 @@
 // 2025-11-25 server that asks for one on a stream is answered with a
 // decline (elicitation) or "method not found" (anything else), and a
 // 2026-07-28 input_required result is reported as such, for the caller to
-// turn into a tool error. JSON-RPC ids are the gateway's own, per client,
+// relay through the elicitation gate or turn into a tool error (G0 M15
+// D33); a retry's answers go out with CallWith. JSON-RPC ids are the gateway's own, per client,
 // never the agent's.
 package upstream
 
@@ -133,8 +134,17 @@ func (c *Client) Version() string {
 // Params is the canonical form of a tools/call, independent of the
 // protocol version and the JSON-RPC id: what BeginDispatch records and an
 // action token binds.
-func Params(tool string, args jsontext.Value) ([]byte, error) {
-	b, err := json.Marshal(map[string]any{"name": tool, "arguments": args}, json.Deterministic(true))
+func Params(tool string, args jsontext.Value) ([]byte, error) { return ParamsWith(tool, args, nil) }
+
+// ParamsWith is Params of a tools/call that also carries extra params: a
+// retry's inputResponses and requestState (G0 M15 D33), which the body
+// BeginDispatch binds then fixes too.
+func ParamsWith(tool string, args jsontext.Value, extra map[string]any) ([]byte, error) {
+	p := map[string]any{"name": tool, "arguments": args}
+	for k, v := range extra {
+		p[k] = v
+	}
+	b, err := json.Marshal(p, json.Deterministic(true))
 	if err != nil {
 		return nil, err
 	}
@@ -152,11 +162,22 @@ func Params(tool string, args jsontext.Value) ([]byte, error) {
 // An error wrapping ErrNotSent means the call never left the gateway; any
 // other error may have left it, and its outcome is unknown.
 func (c *Client) Call(ctx context.Context, tool string, args jsontext.Value, params []mcpheader.Param, decorate Decorate) (Result, error) {
+	return c.CallWith(ctx, tool, args, nil, params, decorate)
+}
+
+// CallWith is Call with extra tools/call params (ParamsWith).
+func (c *Client) CallWith(ctx context.Context, tool string, args jsontext.Value, extra map[string]any, params []mcpheader.Param,
+	decorate Decorate,
+) (Result, error) {
 	mirrored, err := mcpheader.Mirror(params, args)
 	if err != nil {
 		return Result{}, fmt.Errorf("%w: %w", ErrNotSent, err)
 	}
-	ex, err := c.do(ctx, "tools/call", tool, map[string]any{"name": tool, "arguments": args}, mirrored, decorate)
+	p := map[string]any{"name": tool, "arguments": args}
+	for k, v := range extra {
+		p[k] = v
+	}
+	ex, err := c.do(ctx, "tools/call", tool, p, mirrored, decorate)
 	if err != nil {
 		return Result{}, err
 	}

@@ -143,8 +143,7 @@ type request struct {
 	Params  jsontext.Value `json:"params,omitzero"`
 }
 
-// params are the fields this face reads; others (extensions, input
-// responses) are ignored.
+// params are the fields this face reads; others (extensions) are ignored.
 type params struct {
 	Meta      map[string]jsontext.Value `json:"_meta,omitzero"`
 	Name      string                    `json:"name,omitzero"`
@@ -153,6 +152,10 @@ type params struct {
 	TaskID    string                    `json:"taskId,omitzero"`
 	// Task marks a 2025-11-25 task-augmented tools/call.
 	Task jsontext.Value `json:"task,omitzero"`
+	// InputResponses and RequestState are a 2026-07-28 retry's answers to an
+	// upstream server's input requests (elicitation.go).
+	InputResponses jsontext.Value `json:"inputResponses,omitzero"`
+	RequestState   jsontext.Value `json:"requestState,omitzero"`
 }
 
 type rpcError struct {
@@ -593,6 +596,10 @@ func (h *Handler) call(w http.ResponseWriter, r *http.Request, conn *control.Con
 	if !ok {
 		return
 	}
+	if out, relayed := h.relay(r.Context(), conn, p.Name, c); relayed {
+		write(w, http.StatusOK, response{ID: req.ID, Result: out})
+		return
+	}
 	if c.res.Class == dispatch.Held && supportsTasks(p.Meta) {
 		if t := h.holds.newTask(c.b, c.action, c.key, c.res, c.result); t != nil {
 			write(w, http.StatusOK, response{ID: req.ID, Result: t.view("task", c.res.TransactionID)})
@@ -639,9 +646,26 @@ func (h *Handler) callTool(w http.ResponseWriter, r *http.Request, conn *control
 	if len(args) == 0 {
 		args = jsontext.Value("{}")
 	}
-	parsed, err := conn.Mapper.MCP(ctx, mapping.Context{
+	tc := mapping.Context{
 		Org: h.config.Current().Org, Env: in.Env, RunID: in.Run, ActionID: action, AgentInstance: in.Instance, Connection: conn.GetId(),
-	}, p.Name, args)
+	}
+	var parsed actionir.Parsed
+	var err error
+	if len(p.InputResponses) > 0 {
+		// A retry answering the server's input requests: a new action whose
+		// answers are declared params, checked before anything is decided
+		// (G0 M15 D33, HR-420).
+		vals, ir, aerr := answers(conn.Mapper.Elicitation(p.Name), p.InputResponses, p.RequestState)
+		if aerr != nil {
+			c.res = dispatch.Result{Class: dispatch.CannotAuthorize, Code: "invalid_input_responses"}
+			c.result = errorResult(c.res, "The input responses do not answer the tool's reviewed elicitation fields.")
+			return c, true
+		}
+		parsed, err = conn.Mapper.MCPAnswered(ctx, tc, p.Name, args, vals)
+		ctx = dispatch.WithInputResponses(ctx, ir)
+	} else {
+		parsed, err = conn.Mapper.MCP(ctx, tc, p.Name, args)
+	}
 	k := actionKey(parsed.Action)
 	if err == nil && fresh {
 		if held, ok := h.holds.heldAction(k); ok {
@@ -845,7 +869,12 @@ func errorResult(res dispatch.Result, detail string) toolResult {
 	}
 	if res.Response != nil {
 		facts["target_status"] = res.Response.Status
-		text += "\n\nThe target answered " + http.StatusText(res.Response.Status) + ":\n" + string(res.Response.Body)
+		// An upstream server's questions reach the agent only through the
+		// elicitation gate (G0 M15 D33, HR-420): an input_required answer is
+		// never echoed.
+		if res.Code != dispatch.CodeInputRequired {
+			text += "\n\nThe target answered " + http.StatusText(res.Response.Status) + ":\n" + string(res.Response.Body)
+		}
 	}
 	meta := map[string]any{metaError: facts}
 	if res.Class == dispatch.Held {

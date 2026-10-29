@@ -3978,10 +3978,10 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"repository\x12;\n" +
 	"\vexpire_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"expireTime\"!\n" +
-	"\x1fReportRevocationFailureResponse\"\xaa\x02\n" +
+	"\x1fReportRevocationFailureResponse\"\xbf\x02\n" +
 	"\x19ReportLocalRefusalRequest\x12-\n" +
-	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12,\n" +
-	"\x04code\x18\x02 \x01(\tB\x18\xbaH\x15r\x13R\x11secret_in_payloadR\x04code\x12O\n" +
+	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12A\n" +
+	"\x04code\x18\x02 \x01(\tB-\xbaH*r(R\x11secret_in_payloadR\x13elicitation_refusedR\x04code\x12O\n" +
 	"\toperation\x18\x03 \x01(\tB1\xbaH.r,\x18\x80\x012'^([a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7})?$R\toperation\x12_\n" +
 	"\x06run_id\x18\x04 \x01(\tBH\xbaHErC2A^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$R\x05runId\"\x1c\n" +
 	"\x1aReportLocalRefusalResponse\"C\n" +

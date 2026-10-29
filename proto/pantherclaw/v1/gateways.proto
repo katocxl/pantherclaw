@@ -711,7 +711,7 @@ message ReportLocalRefusalRequest {
   string connection_id = 1 [(buf.validate.field).string.uuid = true];
   // The refusal code.
   string code = 2 [(buf.validate.field).string = {
-    in: ["secret_in_payload"]
+    in: ["secret_in_payload", "elicitation_refused"]
   }];
   // The refused action's operation.
   string operation = 3 [(buf.validate.field).string = {
