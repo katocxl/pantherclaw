@@ -51,7 +51,7 @@ import (
 )
 
 // TestE2E_M18_Exit is M18's exit journey (G0 M18 exit criteria, D178), one
-// path per feature on one Enterprise stack. Fleet alerts, the Scope Admin
+// path per feature on one Enterprise stack. The fleet sweep and view, the Scope Admin
 // and the CIDR key go through the running server; exception groups, the
 // identity provider and the re-wrap run their services in the test against
 // the stack's database, with an in-memory change ceremony. The re-wrap
@@ -121,10 +121,11 @@ func (s *stack) m18Client(m m18Transport) *connect.Client {
 // flagged and alerted once, while the running gateway, flagged too, keeps
 // serving (HR-470). It then stops reporting, raises one silent alert however
 // often the sweep runs, and one recovery alert when it reports again
-// (HR-471). The sweeps are the server's own job.
+// (HR-471). The sweeps are the server's own job and the view its RPC; a
+// person sets the policy in the test, since gateway.manage is human-only.
 func (s *stack) m18Fleet(t *testing.T) {
 	ctx := context.Background()
-	sa, key := s.m18Account(t, "m18-fleet", []string{string(td.PermGatewayManage), string(td.PermGatewayRead)}, nil)
+	sa, key := s.m18Account(t, "m18-fleet", []string{string(td.PermGatewayRead)}, nil)
 	s.m18BindOrg(t, sa, td.RoleGatewayAdmin)
 	admin := pantherclawv1connect.NewGatewayAdminServiceClient(s.m18Client(m18Transport{key: key}))
 
@@ -134,13 +135,14 @@ func (s *stack) m18Fleet(t *testing.T) {
 	report := func() {
 		t.Helper()
 		if err := svc.ReportStatus(ctx, gwapp.Identity{Org: s.org, Gateway: gw}, gwapp.ReplicaStatus{
-			Replica: "r1", Version: "v1.2.3", Build: "e2e", ConfigVersion: 1,
+			Replica: "m18-replica-0000000001", Version: "v1.2.3", Build: "e2e", ConfigVersion: 1,
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	report()
-	if _, err := admin.SetFleetPolicy(ctx, &pantherclawv1.SetFleetPolicyRequest{MinimumVersion: "v2.0.0", SilenceAfterSeconds: 120}); err != nil {
+	fleet := gwapp.NewFleet(svc, enterprise{}, nil)
+	if _, err := fleet.SetFleetPolicy(s.person(t, "m18-gateway-admin", td.RoleGatewayAdmin).ctx, "v2.0.0", 2*time.Minute); err != nil {
 		t.Fatalf("SetFleetPolicy: %v", err)
 	}
 
@@ -194,7 +196,7 @@ func (s *stack) m18Fleet(t *testing.T) {
 	s.db.AdminExec(t, "UPDATE pc.gateway_alert_state SET last_report_at = now() - interval '10 minutes' WHERE org_id = $1 AND gateway_id = $2", s.org, gw)
 	s.db.AdminExec(t, "UPDATE pc.gateway_replicas SET last_seen = now() - interval '10 minutes' WHERE org_id = $1 AND gateway_id = $2", s.org, gw)
 	alerted("gateway.silent")
-	again, err := gwapp.NewFleet(svc, enterprise{}, nil).Sweep(ctx, s.org)
+	again, err := fleet.Sweep(ctx, s.org)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -563,7 +565,7 @@ func (s *stack) m18IdentityProvider(t *testing.T, kp keys.KeyProvider) {
 	if err != nil || in.Reason != "" || in.Secret == "" || in.Org != s.org {
 		t.Fatalf("signing in through the org's provider: %+v %v", in, err)
 	}
-	if got := s.row(t, "SELECT user_id::text || ' ' || provider FROM pc.browser_sessions WHERE org_id = $1 AND id = $2", s.org, in.Session); got != alice.String()+" acme" {
+	if got := s.row(t, "SELECT user_id::text || ' ' || provider FROM pc.sessions WHERE org_id = $1 AND id = $2", s.org, in.Session); got != alice.String()+" acme" {
 		t.Fatalf("the session: %q", got)
 	}
 
