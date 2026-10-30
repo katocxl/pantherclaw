@@ -446,7 +446,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			oauth: oauthhttp.New(authnapp.NewOAuth(pool, tokens, cfg.Auth.PublicURL, clock.System{}, log),
 				cfg.Auth.PublicURL, limiter),
 			device:    device,
-			publicURL: cfg.Auth.PublicURL, clientIP: limiter.ClientIP, clusters: clusters, subjects: subjects,
+			publicURL: cfg.Auth.PublicURL, clientIP: limiter.ClientIP, clusters: clusters, subjects: subjects, identity: cfg.Identity,
 			logOrigin:    cfg.logOrigin(),
 			packageRoots: roots,
 			github:       cfg.GitHub,
@@ -724,6 +724,8 @@ type apiDeps struct {
 	clientIP httpx.ClientIPFunc
 	// clusters are the configured Kubernetes clusters (identity.kubernetes_clusters).
 	clusters *kube.Directory
+	// identity is the workload identity configuration (presets, M17).
+	identity IdentityConfig
 	// subjects are the providers configured for subject tokens (HR-145).
 	subjects oidcrp.Subjects
 	// packageRoots are the trusted package roots (nil: the embedded ones).
@@ -795,11 +797,11 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 			return autos.identities(ctx)
 		})))
 	pantherclawv1connect.RegisterWaitlistServiceHandler(rs, d.m5p2.waitlist())
-	attestors, err := newAttestors(d.clusters)
+	attestors, err := newAttestors(d.clusters, d.identity)
 	if err != nil {
 		return nil, err
 	}
-	identity := iapp.New(pool, reg, d.publicURL, clock.System{}).WithAttestors(attestors)
+	identity := iapp.New(pool, reg, d.publicURL, clock.System{}).WithAttestors(attestors).WithEntitlements(d.billing)
 	pantherclawv1connect.RegisterIdentityServiceHandler(rs, identityrpc.NewIdentity(identity, d.clusters))
 	grants, runs := m11Issuance(d)
 	wireM14Grants(grants, d)
@@ -938,8 +940,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 const attestTimeout = 10 * time.Second
 
 // newAttestors returns the L2 verifiers: GitHub keys through the egress
-// client (public addresses only) and the configured clusters (HR-142).
-func newAttestors(clusters *kube.Directory) (iapp.Attestors, error) {
+// client (public addresses only), the configured clusters (HR-142) and
+// the M17 presets (attestors_m17.go).
+func newAttestors(clusters *kube.Directory, cfg IdentityConfig) (iapp.Attestors, error) {
 	gh, err := issuerkeys.New(httpx.NewEgressClient(httpx.EgressConfig{Timeout: attestTimeout}), issuers.GitHubIssuer, nil)
 	if err != nil {
 		return iapp.Attestors{}, err
@@ -948,7 +951,11 @@ func newAttestors(clusters *kube.Directory) (iapp.Attestors, error) {
 	if err != nil {
 		return iapp.Attestors{}, err
 	}
-	return iapp.Attestors{GitHub: gh, Kube: kc, Clusters: clusters}, nil
+	att := iapp.Attestors{GitHub: gh, Kube: kc, Clusters: clusters}
+	if err := presetAttestors(&att, cfg); err != nil {
+		return iapp.Attestors{}, err
+	}
+	return att, nil
 }
 
 // startupActor records start-up actions in the audit log.

@@ -25,11 +25,25 @@ import (
 // Kind is a preset.
 type Kind string
 
-// Presets shipped in M3 (PN-002.2); further presets are PN-002.3.
+// Presets: GitHub Actions and Kubernetes shipped in M3 (PN-002.2), the
+// rest in M17 (PN-002.3).
 const (
 	KindGitHub     Kind = "github_actions"
 	KindKubernetes Kind = "kubernetes"
+	KindGitLab     Kind = "gitlab_ci"
+	KindSPIFFE     Kind = "spiffe_jwt"
+	KindGCP        Kind = "gcp_workload"
+	KindAWS        Kind = "aws_iam"
+	KindAzureMI    Kind = "azure_mi"
+	KindEntraAgent Kind = "entra_agent_id"
 )
+
+// kinds are the presets this build implements.
+var kinds = []Kind{KindGitHub, KindKubernetes, KindGitLab, KindSPIFFE, KindGCP, KindAWS, KindAzureMI, KindEntraAgent}
+
+// Known reports whether k is a preset this build implements. Anything else
+// is refused, never mapped to a default preset (HR-465).
+func Known(k Kind) bool { return slices.Contains(kinds, k) }
 
 // MaxTokenLifetime bounds exp - iat of an attestation token (HR-143).
 const MaxTokenLifetime = time.Hour
@@ -177,3 +191,8 @@ func widenedPin(name, prev, next string) []string {
 		return []string{name + " changed: " + prev + " to " + next}
 	}
 }
+
+// Extended reports whether k is one of the M17 presets, which need the
+// Enterprise edition (PN-002.3); GitHub Actions and Kubernetes are in
+// every edition.
+func Extended(k Kind) bool { return Known(k) && k != KindGitHub && k != KindKubernetes }

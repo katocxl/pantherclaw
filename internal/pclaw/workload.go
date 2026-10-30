@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
@@ -34,10 +35,10 @@ func workloadCommands() map[string]command {
 	return map[string]command{
 		"workload init": {"workload init --key-file FILE", workloadInit},
 		"workload enroll": {
-			"workload enroll --key-file FILE --server URL [--enrollment-token-file FILE] [--github | --kubernetes-token FILE] [--org ID] [--declared-release sha256:…]",
+			"workload enroll --key-file FILE --server URL [--enrollment-token-file FILE] [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp | --aws | --azure-app APP_ID [--azure-client-id ID] | --entra-token-env VAR] [--org ID] [--declared-release sha256:…]",
 			workloadEnroll,
 		},
-		"workload token": {"workload token --key-file FILE [--github | --kubernetes-token FILE] [--declared-release sha256:…] [--out FILE]", workloadToken},
+		"workload token": {"workload token --key-file FILE [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp | --aws | --azure-app APP_ID [--azure-client-id ID] | --entra-token-env VAR] [--declared-release sha256:…] [--out FILE]", workloadToken},
 	}
 }
 
@@ -76,20 +77,101 @@ func workloadInit(_ context.Context, a *app, args []string) error {
 type attestationFlags struct {
 	github     *bool
 	kubernetes *string
+	gitlabEnv  *string
+	spiffe     *string
+	gcp        *bool
+	aws        *bool
+	azureApp   *string
+	azureID    *string
+	entraEnv   *string
 }
 
 func declareAttestation(fs *flag.FlagSet) attestationFlags {
 	return attestationFlags{
 		github:     fs.Bool("github", false, "attest with this GitHub Actions job's OIDC token (the job needs id-token: write)"),
 		kubernetes: fs.String("kubernetes-token", "", "attest with this projected service-account token file"),
+		gitlabEnv: fs.String("gitlab-token-env", "", "attest with the GitLab CI ID token in this environment variable "+
+			"(id_tokens with aud pantherclaw:<org>)"),
+		spiffe: fs.String("spiffe-token", "", "attest with the JWT-SVID in this file (audience pantherclaw:<org>); "+
+			"it is read again at each renewal"),
+		gcp: fs.Bool("gcp", false, "attest with a Google-signed ID token from the GCP metadata server (audience pantherclaw:<org>)"),
+		aws: fs.Bool("aws", false, "attest with a signed sts:GetCallerIdentity request (role session credentials from AWS_ACCESS_KEY_ID, "+
+			"AWS_SECRET_ACCESS_KEY and AWS_SESSION_TOKEN; AWS_REGION picks the regional endpoint)"),
+		azureApp: fs.String("azure-app", "", "attest with an Azure managed identity token for this Entra app id (from identity.entra_apps)"),
+		azureID:  fs.String("azure-client-id", "", "with --azure-app: the client id of the user-assigned managed identity to use"),
+		entraEnv: fs.String("entra-token-env", "", "attest with the Entra Agent ID access token (for the pinned Entra app) in this environment variable"),
 	}
+}
+
+// errAttestationSources is returned when more than one source is given.
+var errAttestationSources = errors.New("use one of --github, --kubernetes-token, --gitlab-token-env, --spiffe-token, --gcp, --aws, --azure-app and --entra-token-env, not both")
+
+// check refuses more than one attestation source.
+func (f attestationFlags) check() error {
+	n := 0
+	for _, set := range []bool{*f.github, *f.kubernetes != "", *f.gitlabEnv != "", *f.spiffe != "", *f.gcp, *f.aws, *f.azureApp != "", *f.entraEnv != ""} {
+		if set {
+			n++
+		}
+	}
+	if n > 1 {
+		return errAttestationSources
+	}
+	return nil
 }
 
 // attestation returns the platform token for org's audience, or nil.
 func (f attestationFlags) attestation(ctx context.Context, a *app, org ids.OrgID) (*pantherclawv1.Attestation, error) {
+	if err := f.check(); err != nil {
+		return nil, err
+	}
 	switch {
-	case *f.github && *f.kubernetes != "":
-		return nil, errors.New("use --github or --kubernetes-token, not both")
+	case *f.gitlabEnv != "":
+		tok := strings.TrimSpace(os.Getenv(*f.gitlabEnv))
+		if tok == "" {
+			return nil, fmt.Errorf("the environment variable %s holds no GitLab ID token", *f.gitlabEnv)
+		}
+		return &pantherclawv1.Attestation{Kind: pantherclawv1.AttestationKind_ATTESTATION_KIND_GITLAB_CI, Token: tok}, nil
+	case *f.spiffe != "":
+		tok, err := readSecret(*f.spiffe)
+		if err != nil {
+			return nil, err
+		}
+		return &pantherclawv1.Attestation{Kind: pantherclawv1.AttestationKind_ATTESTATION_KIND_SPIFFE_JWT, Token: tok}, nil
+	case *f.gcp:
+		if org.IsZero() {
+			return nil, errors.New("the org is unknown: pass --org")
+		}
+		tok, err := gcpIdentity(ctx, a, "pantherclaw:"+org.String())
+		if err != nil {
+			return nil, err
+		}
+		return &pantherclawv1.Attestation{Kind: pantherclawv1.AttestationKind_ATTESTATION_KIND_GCP_WORKLOAD, Token: tok}, nil
+	case *f.aws:
+		if org.IsZero() {
+			return nil, errors.New("the org is unknown: pass --org")
+		}
+		creds, err := awsFromEnv(a)
+		if err != nil {
+			return nil, err
+		}
+		tok, err := awsAttestation(creds, "pantherclaw:"+org.String(), time.Now())
+		if err != nil {
+			return nil, err
+		}
+		return &pantherclawv1.Attestation{Kind: pantherclawv1.AttestationKind_ATTESTATION_KIND_AWS_IAM, Token: tok}, nil
+	case *f.azureApp != "":
+		tok, err := azureMIToken(ctx, a, *f.azureApp, *f.azureID)
+		if err != nil {
+			return nil, err
+		}
+		return &pantherclawv1.Attestation{Kind: pantherclawv1.AttestationKind_ATTESTATION_KIND_AZURE_MI, Token: tok}, nil
+	case *f.entraEnv != "":
+		tok := strings.TrimSpace(os.Getenv(*f.entraEnv))
+		if tok == "" {
+			return nil, fmt.Errorf("the environment variable %s holds no Entra Agent ID token", *f.entraEnv)
+		}
+		return &pantherclawv1.Attestation{Kind: pantherclawv1.AttestationKind_ATTESTATION_KIND_ENTRA_AGENT_ID, Token: tok}, nil
 	case *f.github:
 		if org.IsZero() {
 			return nil, errors.New("the org is unknown: pass --org")
@@ -146,6 +228,39 @@ func githubOIDC(ctx context.Context, a *app, audience string) (string, error) {
 		return "", errors.New("github oidc: no token in the response")
 	}
 	return v.Value, nil
+}
+
+// gcpIdentity asks the GCP metadata server (GCE_METADATA_HOST, default
+// metadata.google.internal) for an ID token of the instance's service
+// account with audience, including the Compute Engine claims.
+func gcpIdentity(ctx context.Context, a *app, audience string) (string, error) {
+	host, ok := a.env("GCE_METADATA_HOST")
+	if !ok || host == "" {
+		host = "metadata.google.internal"
+	}
+	u := url.URL{
+		Scheme: "http", Host: host, Path: "/computeMetadata/v1/instance/service-accounts/default/identity",
+		RawQuery: url.Values{"audience": {audience}, "format": {"full"}}.Encode(),
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Metadata-Flavor", "Google")
+	resp, err := a.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("gcp metadata: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 16<<10))
+	if err != nil || resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("gcp metadata: status %d", resp.StatusCode)
+	}
+	tok := strings.TrimSpace(string(b))
+	if strings.Count(tok, ".") != 2 {
+		return "", errors.New("gcp metadata: no ID token in the response")
+	}
+	return tok, nil
 }
 
 func (a *app) workloadClient(server string, kf workloadclient.KeyFile) (pantherclawv1connect.WorkloadServiceClient, error) {
