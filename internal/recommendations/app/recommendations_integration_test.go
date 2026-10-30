@@ -158,14 +158,14 @@ func TestHR536_DiscoveriesCoverOnlyVisibleAgents(t *testing.T) {
 	if !mine.Restricted {
 		t.Fatal("a team viewer is not restricted")
 	}
-	if _, ok := item(mine, domain.AWSCredentials); ok {
+	if _, ok := item(mine, domain.AWSKeys); ok {
 		t.Fatal("team A sees team B's discovery")
 	}
-	theirs, ok := item(list(team(o, b), t, o, false), domain.AWSCredentials)
+	theirs, ok := item(list(team(o, b), t, o, false), domain.AWSKeys)
 	if !ok || theirs.Evidence.Count != 1 || records(theirs)[0] != hidden {
 		t.Fatalf("team B: %+v %v", theirs, ok)
 	}
-	all, ok := item(list(orgWide(o), t, o, false), domain.AWSCredentials)
+	all, ok := item(list(orgWide(o), t, o, false), domain.AWSKeys)
 	if !ok || all.Evidence.Count != 1 {
 		t.Fatalf("org: %+v %v", all, ok)
 	}
@@ -323,12 +323,12 @@ func TestIntDismissalLifecycle(t *testing.T) {
 	if _, ok := item(list(ctx, t, o, false), domain.CIWorkload); !ok {
 		t.Fatal("no recommendation to dismiss")
 	}
-	for _, reason := range []string{"", "too short", "   padded   ", strings.Repeat("x", 1001)} {
+	for _, reason := range []string{"", "too short", "   padded   ", strings.Repeat("x", 501)} {
 		if err := svc.Dismiss(ctx, domain.CIWorkload, reason); !errors.Is(err, app.ErrReason) {
 			t.Errorf("reason %q: %v", reason, err)
 		}
 	}
-	if err := svc.Dismiss(ctx, "identity.not_in_the_catalogue", "A long enough reason."); !errors.Is(err, app.ErrNotFound) {
+	if err := svc.Dismiss(ctx, "identity.not_in_the_catalog", "A long enough reason."); !errors.Is(err, app.ErrNotFound) {
 		t.Fatalf("%v", err)
 	}
 	if err := svc.Dismiss(ctx, domain.CIWorkload, "A long enough reason."); err != nil {
@@ -354,6 +354,44 @@ func TestIntDismissalLifecycle(t *testing.T) {
 	}
 	if n := count(t, o, `SELECT count(*) FROM pc.ledger_entries WHERE kind IN ('audit.recommendation.dismissed', 'audit.recommendation.undismissed')`); n != 2 {
 		t.Fatalf("audit events: %d", n)
+	}
+}
+
+// TestIntLongestReasonsAreKept: a reason of the longest length dismisses in
+// any script, and the table keeps all of it.
+//
+// Covers: F343
+func TestIntLongestReasonsAreKept(t *testing.T) {
+	for _, char := range []string{"x", "é", "漢", "😀"} {
+		t.Run(char, func(t *testing.T) {
+			o := exposuretest.New(t)
+			o.Claim(t, o.Agent)
+			reason := strings.Repeat(char, 500)
+			if err := service(o).Dismiss(orgWide(o), domain.CIWorkload, reason); err != nil {
+				t.Fatal(err)
+			}
+			if n := count(t, o, `SELECT count(*) FROM pc.recommendation_dismissals WHERE reason = $1`, reason); n != 1 {
+				t.Fatalf("stored reasons: %d", n)
+			}
+		})
+	}
+}
+
+// TestIntRetiredAgentsDoNotCount: a discovery on a retired agent is no
+// signal.
+//
+// Covers: F343
+func TestIntRetiredAgentsDoNotCount(t *testing.T) {
+	o := exposuretest.New(t)
+	o.Claim(t, o.Agent)
+	discover(t, o, o.Agent, "aws_access_key_id")
+	ctx := orgWide(o)
+	if _, ok := item(list(ctx, t, o, false), domain.AWSKeys); !ok {
+		t.Fatal("no recommendation from a live agent's discovery")
+	}
+	o.D.AdminExec(t, `UPDATE pc.agents SET state = 'RETIRED', retired_at = now() WHERE id = $1`, o.Agent)
+	if _, ok := item(list(ctx, t, o, false), domain.AWSKeys); ok {
+		t.Fatal("a retired agent's discovery still counts")
 	}
 }
 
@@ -405,15 +443,15 @@ func TestIntIntegrationsCloseRecommendations(t *testing.T) {
 	o.Claim(t, o.Agent)
 	discover(t, o, o.Agent, "aws_secret_access_key")
 	ctx := orgWide(o)
-	if _, ok := item(list(ctx, t, o, false), domain.AWSCredentials); !ok {
+	if _, ok := item(list(ctx, t, o, false), domain.AWSKeys); !ok {
 		t.Fatal("no AWS recommendation")
 	}
 	o.D.AdminExec(t, `UPDATE pc.connections SET package = $2 WHERE id = $1`, o.Conn, domain.PackageAWS)
-	if _, ok := item(list(ctx, t, o, false), domain.AWSCredentials); ok {
+	if _, ok := item(list(ctx, t, o, false), domain.AWSKeys); ok {
 		t.Fatal("still recommended with the connection active")
 	}
 	o.D.AdminExec(t, `UPDATE pc.connections SET state = 'RETIRED' WHERE id = $1`, o.Conn)
-	if _, ok := item(list(ctx, t, o, false), domain.AWSCredentials); !ok {
+	if _, ok := item(list(ctx, t, o, false), domain.AWSKeys); !ok {
 		t.Fatal("a retired connection closed it")
 	}
 }

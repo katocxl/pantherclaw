@@ -389,7 +389,7 @@ func (x *RecommendationDismissal) GetDismissedAt() *timestamppb.Timestamp {
 
 type Recommendation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// id is the catalogue entry's stable id, e.g. identity.ci_workload.
+	// id is the catalog entry's stable id, e.g. identity.ci_workload.
 	Id       string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Category RecommendationCategory `protobuf:"varint,2,opt,name=category,proto3,enum=pantherclaw.v1.RecommendationCategory" json:"category,omitempty"`
 	Title    string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
@@ -826,7 +826,7 @@ const file_pantherclaw_v1_recommendations_proto_rawDesc = "" +
 	"\xbaH\ar\x05\x10\x03\x18\x80\x01R\x02id\x12\"\n" +
 	"\x06reason\x18\x02 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\n" +
-	"\x18\xe8\aR\x06reason\"\x1f\n" +
+	"\x18\xf4\x03R\x06reason\"\x1f\n" +
 	"\x1dDismissRecommendationResponse\"<\n" +
 	"\x1eUndismissRecommendationRequest\x12\x1a\n" +
 	"\x02id\x18\x01 \x01(\tB\n" +

@@ -12,7 +12,7 @@ import "google/protobuf/timestamp.proto";
 // agents and credentials need (G0 M21 D302, D308; F343; HR-535, HR-536; Team
 // edition).
 //
-// Recommendations are computed on each read from a closed catalogue, over
+// Recommendations are computed on each read from a closed catalog, over
 // discoveries, coverage, onboarding and connections. A recommendation
 // changes nothing: it names what would help, what that enables and what
 // stays unsupported. Reads show only what the viewer may see: signals from
@@ -22,7 +22,7 @@ import "google/protobuf/timestamp.proto";
 // posture.manage at org scope.
 service RecommendationService {
   // ListRecommendations computes the recommendations the viewer may see, in
-  // catalogue order.
+  // catalog order.
   // permission: posture.read
   rpc ListRecommendations(ListRecommendationsRequest) returns (ListRecommendationsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
@@ -90,7 +90,7 @@ message RecommendationDismissal {
 }
 
 message Recommendation {
-  // id is the catalogue entry's stable id, e.g. identity.ci_workload.
+  // id is the catalog entry's stable id, e.g. identity.ci_workload.
   string id = 1;
   RecommendationCategory category = 2;
   string title = 3;
@@ -125,7 +125,7 @@ message DismissRecommendationRequest {
   }];
   string reason = 2 [(buf.validate.field).string = {
     min_len: 10
-    max_len: 1000
+    max_len: 500
   }];
 }
 

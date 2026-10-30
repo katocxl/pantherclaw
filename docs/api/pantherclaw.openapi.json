@@ -20751,7 +20751,7 @@
           "pantherclaw.v1.RecommendationService"
         ],
         "summary": "ListRecommendations",
-        "description": "ListRecommendations computes the recommendations the viewer may see, in\n catalogue order.\n permission: posture.read",
+        "description": "ListRecommendations computes the recommendations the viewer may see, in\n catalog order.\n permission: posture.read",
         "operationId": "pantherclaw.v1.RecommendationService.ListRecommendations",
         "parameters": [
           {
@@ -68492,7 +68492,7 @@
           "reason": {
             "type": "string",
             "title": "reason",
-            "maxLength": 1000,
+            "maxLength": 500,
             "minLength": 10
           }
         },
@@ -68552,7 +68552,7 @@
           "id": {
             "type": "string",
             "title": "id",
-            "description": "id is the catalogue entry's stable id, e.g. identity.ci_workload."
+            "description": "id is the catalog entry's stable id, e.g. identity.ci_workload."
           },
           "category": {
             "title": "category",
@@ -79726,7 +79726,7 @@
     },
     {
       "name": "pantherclaw.v1.RecommendationService",
-      "description": "RecommendationService says which integrations would close what discovered\n agents and credentials need (G0 M21 D302, D308; F343; HR-535, HR-536; Team\n edition).\n\n Recommendations are computed on each read from a closed catalogue, over\n discoveries, coverage, onboarding and connections. A recommendation\n changes nothing: it names what would help, what that enables and what\n stays unsupported. Reads show only what the viewer may see: signals from\n agents count only the agents the viewer's posture.read reaches, and\n org-wide integration gaps need posture.read at org scope. Dismissing hides\n a recommendation for the whole org until it is undone, so it needs\n posture.manage at org scope."
+      "description": "RecommendationService says which integrations would close what discovered\n agents and credentials need (G0 M21 D302, D308; F343; HR-535, HR-536; Team\n edition).\n\n Recommendations are computed on each read from a closed catalog, over\n discoveries, coverage, onboarding and connections. A recommendation\n changes nothing: it names what would help, what that enables and what\n stays unsupported. Reads show only what the viewer may see: signals from\n agents count only the agents the viewer's posture.read reaches, and\n org-wide integration gaps need posture.read at org scope. Dismissing hides\n a recommendation for the whole org until it is undone, so it needs\n posture.manage at org scope."
     },
     {
       "name": "pantherclaw.v1.RangeService",

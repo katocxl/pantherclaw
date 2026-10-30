@@ -4,8 +4,6 @@
 package domain_test
 
 import (
-	"errors"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -27,7 +25,7 @@ var storedID = regexp.MustCompile(`^[a-z][a-z_]*(\.[a-z0-9_]+){1,3}$`)
 // Covers: F343
 func TestHR535_EveryEntryStatesWhatStaysUnsupported(t *testing.T) {
 	seen := map[domain.ID]bool{}
-	for _, e := range domain.Catalogue() {
+	for _, e := range domain.Catalog() {
 		if seen[e.ID] {
 			t.Errorf("%s: duplicate id", e.ID)
 		}
@@ -53,7 +51,7 @@ func TestHR535_EveryEntryStatesWhatStaysUnsupported(t *testing.T) {
 	}
 }
 
-// TestHR535_EvaluationLeavesFactsUnchanged: the catalogue is closed,
+// TestHR535_EvaluationLeavesFactsUnchanged: the catalog is closed,
 // and evaluating it leaves its facts as they were.
 //
 // Covers: F343
@@ -65,24 +63,24 @@ func TestHR535_EvaluationLeavesFactsUnchanged(t *testing.T) {
 			Issuers: []string{}, Packages: []string{"pc.github"}, Channels: []string{},
 		},
 	}
-	for _, e := range domain.Catalogue() {
+	for _, e := range domain.Catalog() {
 		e.Evaluate(f)
 	}
 	if got := f.Agents[domain.ContextCI]; got.Count != 1 || got.IDs[0] != a || len(f.Integrations.Packages) != 1 {
 		t.Fatalf("facts changed: %+v", f)
 	}
 	if _, ok := domain.Lookup("identity.customer_rule"); ok {
-		t.Fatal("an id outside the catalogue was found")
+		t.Fatal("an id outside the catalog was found")
 	}
 }
 
-// TestCatalogueTargets: the M20 integrations are named by their D254 package
+// TestCatalogTargets: the M20 integrations are named by their D254 package
 // names.
 //
 // Covers: F343
-func TestCatalogueTargets(t *testing.T) {
+func TestCatalogTargets(t *testing.T) {
 	var names, packages []string
-	for _, e := range domain.Catalogue() {
+	for _, e := range domain.Catalog() {
 		for _, x := range e.Targets {
 			names = append(names, x.Name)
 			if x.Package != "" {
@@ -103,25 +101,48 @@ func TestCatalogueTargets(t *testing.T) {
 	}
 }
 
-// TestCataloguePackagesExist runs against the merged tree at M21's exit
-// (D306): each named package has a directory whose manifest carries that
-// name. It skips only while M20's packages are not on this branch.
+// TestCatalogPackagesExist checks the merged tree (D306, D313): each named
+// package has a directory whose manifest carries that name. It fails, and
+// never skips, while a package is missing.
 //
 // Covers: F343
-func TestCataloguePackagesExist(t *testing.T) {
+func TestCatalogPackagesExist(t *testing.T) {
 	for dir, name := range map[string]string{
 		"pc-gitlab": domain.PackageGitLab, "pc-jira": domain.PackageJira,
 		"pc-teams": domain.PackageTeams, "pc-aws": domain.PackageAWS,
 	} {
 		raw, err := os.ReadFile(filepath.Join("..", "..", "..", "packages", dir, "package.yaml"))
-		if errors.Is(err, fs.ErrNotExist) {
-			t.Skipf("%s is not on this branch until M20 lands", dir)
-		}
 		if err != nil {
-			t.Fatal(err)
+			t.Error(err)
+			continue
 		}
 		if !regexp.MustCompile(`(?m)^name: ` + regexp.QuoteMeta(name) + `\r?$`).Match(raw) {
 			t.Errorf("packages/%s is not named %s", dir, name)
+		}
+	}
+}
+
+// TestCatalogKindsExist checks the merged tree (D313): an issuer or channel
+// kind no migration allows would keep its entry open after the integration
+// is added.
+//
+// Covers: F343
+func TestCatalogKindsExist(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join("..", "..", "..", "migrations", "*.sql"))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("migrations: %d, %v", len(files), err)
+	}
+	var all strings.Builder
+	for _, f := range files {
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		all.Write(raw)
+	}
+	for _, kind := range domain.IntegrationKinds() {
+		if !strings.Contains(all.String(), "'"+kind+"'") {
+			t.Errorf("no migration allows kind %s", kind)
 		}
 	}
 }
@@ -134,11 +155,11 @@ func group(n int) domain.Group {
 	return g
 }
 
-// TestCatalogueSignals: each entry applies on its signal and goes away once
+// TestCatalogSignals: each entry applies on its signal and goes away once
 // the integration exists.
 //
 // Covers: F343
-func TestCatalogueSignals(t *testing.T) {
+func TestCatalogSignals(t *testing.T) {
 	txn := ids.NewV7()
 	for _, c := range []struct {
 		id        domain.ID
@@ -162,7 +183,7 @@ func TestCatalogueSignals(t *testing.T) {
 			func(f *domain.Facts) { f.Integrations.Issuers = []string{"aws_iam"} }, domain.RecordAgent,
 		},
 		{
-			domain.AWSCredentials,
+			domain.AWSKeys,
 			domain.Facts{Secrets: map[string]domain.Group{"aws_access_key_id": group(1)}},
 			func(f *domain.Facts) { f.Integrations.Packages = []string{domain.PackageAWS} }, domain.RecordDiscovery,
 		},
@@ -194,7 +215,7 @@ func TestCatalogueSignals(t *testing.T) {
 	} {
 		e, ok := domain.Lookup(c.id)
 		if !ok {
-			t.Fatalf("%s: not in the catalogue", c.id)
+			t.Fatalf("%s: not in the catalog", c.id)
 		}
 		if _, ok := e.Evaluate(domain.Facts{}); ok {
 			t.Errorf("%s: applies with no signal", c.id)
@@ -210,12 +231,12 @@ func TestCatalogueSignals(t *testing.T) {
 	}
 }
 
-// TestCatalogueCapsRecords: a recommendation lists at most MaxRecords
+// TestCatalogCapsRecords: a recommendation lists at most MaxRecords
 // records and still counts them all.
 //
 // Covers: F343
-func TestCatalogueCapsRecords(t *testing.T) {
-	e, _ := domain.Lookup(domain.AWSCredentials)
+func TestCatalogCapsRecords(t *testing.T) {
+	e, _ := domain.Lookup(domain.AWSKeys)
 	ev, ok := e.Evaluate(domain.Facts{Secrets: map[string]domain.Group{
 		"aws_access_key_id": group(15), "aws_secret_access_key": group(15),
 	}})
@@ -224,7 +245,7 @@ func TestCatalogueCapsRecords(t *testing.T) {
 	}
 }
 
-// TestSecretKindsAreClosed: only the credential kinds the catalogue reads
+// TestSecretKindsAreClosed: only the credential kinds the catalog reads
 // reach the discovery query.
 //
 // Covers: F343

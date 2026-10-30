@@ -31,13 +31,21 @@ import (
 // LedgerKind is the ledger entry kind of a dismissal or its undoing.
 const LedgerKind = "recommendation.dismissal"
 
+const (
+	// maxReason is the longest dismissal reason, in characters (D313).
+	maxReason = 500
+	// maxAuditReason is what an audit detail holds, in bytes. The table keeps
+	// the whole reason, which in a multi-byte script may be longer than this.
+	maxAuditReason = 512
+)
+
 // API errors of the service.
 var (
 	ErrEdition = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED",
 		"recommendations need the Team edition or above")
 	ErrNotFound = pcerr.New(pcerr.NotFound, "RECOMMENDATION_NOT_FOUND", "recommendation not found")
 	ErrReason   = pcerr.New(pcerr.InvalidArgument, "RECOMMENDATION_REASON_INVALID",
-		"a dismissal needs a reason of 10-1000 characters")
+		"a dismissal needs a reason of 10-500 characters")
 	ErrDismissed = pcerr.New(pcerr.FailedPrecondition, "RECOMMENDATION_ALREADY_DISMISSED",
 		"the recommendation is already dismissed")
 	ErrNotDismissed = pcerr.New(pcerr.FailedPrecondition, "RECOMMENDATION_NOT_DISMISSED",
@@ -91,7 +99,7 @@ func (s *Service) entitled(ctx context.Context) error {
 	return nil
 }
 
-// List computes the recommendations the caller may see, in catalogue order.
+// List computes the recommendations the caller may see, in catalog order.
 // Dismissed ones are left out unless includeDismissed.
 func (s *Service) List(ctx context.Context, includeDismissed bool) (Listing, error) {
 	c, err := tenancy.CallerFrom(ctx)
@@ -132,10 +140,10 @@ func (s *Service) List(ctx context.Context, includeDismissed bool) (Listing, err
 	return out, err
 }
 
-// evaluate applies the catalogue to facts.
+// evaluate applies the catalog to facts.
 func evaluate(facts domain.Facts, dismissals map[domain.ID]dbq.PcRecommendationDismissal, restricted, includeDismissed bool) []Item {
 	var out []Item
-	for _, e := range domain.Catalogue() {
+	for _, e := range domain.Catalog() {
 		if restricted && e.Reach == domain.OrgWide {
 			continue
 		}
@@ -240,7 +248,7 @@ func (s *Service) Dismiss(ctx context.Context, id domain.ID, reason string) erro
 		return ErrNotFound
 	}
 	reason = strings.TrimSpace(reason)
-	if n := utf8.RuneCountInString(reason); n < 10 || n > 1000 {
+	if n := utf8.RuneCountInString(reason); n < 10 || n > maxReason {
 		return ErrReason
 	}
 	return s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
@@ -290,13 +298,25 @@ func recordChange(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, id 
 	}
 	details := map[string]string{}
 	if reason != "" {
-		details["reason"] = reason
+		details["reason"] = excerpt(reason)
 	}
 	_, err = audit.Record(ctx, tx, audit.Event{
 		Name: "recommendation." + event, Actor: actor, Outcome: audit.Success,
 		Object: &audit.Object{Type: "recommendation", ID: string(id)}, Details: details,
 	})
 	return err
+}
+
+// excerpt cuts s to what an audit detail holds, between characters.
+func excerpt(s string) string {
+	if len(s) <= maxAuditReason {
+		return s
+	}
+	n := maxAuditReason
+	for !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 func actorString(a evdomain.Actor) string {

@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
-// Package domain holds the closed recommendation catalogue (G0 M21 D302,
+// Package domain holds the closed recommendation catalog (G0 M21 D302,
 // D306; F343; HR-535). An entry maps a signal to an integration: what it
 // enables, what stays unsupported and where the evidence is. Customers add
 // no entries. Evaluation is a pure function of Facts, and nothing here can
 // act: an entry only has text and a signal.
 //
 // GitLab, Jira, Teams and AWS are named by their D254 package names; this
-// package imports no M20 code. Anything the catalogue has no integration for
+// package imports no M20 code. Anything the catalog has no integration for
 // is stated as unsupported.
 package domain
 
@@ -18,7 +18,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
-// ID is a catalogue entry's stable id; dismissals store it.
+// ID is a catalog entry's stable id; dismissals store it.
 type ID string
 
 // Entry ids.
@@ -26,7 +26,7 @@ const (
 	CIWorkload     ID = "identity.ci_workload"
 	KubeWorkload   ID = "identity.kubernetes_workload"
 	CloudWorkload  ID = "identity.cloud_workload"
-	AWSCredentials ID = "identity.aws_credentials"
+	AWSKeys        ID = "identity.aws_credentials"
 	DataClasses    ID = "classification.data_connections"
 	ApprovalChat   ID = "approval.chat_channel"
 	IncidentTicket ID = "incident.ticket_sync"
@@ -138,7 +138,7 @@ type Target struct {
 	Package string
 }
 
-// Entry is one catalogue entry.
+// Entry is one catalog entry.
 type Entry struct {
 	ID               ID
 	Category         Category
@@ -168,7 +168,7 @@ func (e Entry) Evaluate(f Facts) (Evidence, bool) {
 	return ev, true
 }
 
-// Tool packages the catalogue points to. The GitLab, Jira, Teams and AWS
+// Tool packages the catalog points to. The GitLab, Jira, Teams and AWS
 // names come from the G0 M20 D254 plans.
 const (
 	PackageGitLab = "pc.gitlab"
@@ -194,8 +194,21 @@ var (
 	modelSecrets = []string{"anthropic_api_key", "google_api_key", "openai_api_key"}
 )
 
-// SecretKinds returns every credential kind the catalogue reads.
+// SecretKinds returns every credential kind the catalog reads.
 func SecretKinds() []string { return slices.Concat(awsSecrets, modelSecrets) }
+
+// The integration kinds that close an entry, as the database stores them.
+var (
+	ciIssuers    = []string{"github_actions", "gitlab_ci"}
+	kubeIssuers  = []string{"kubernetes", "spiffe_jwt"}
+	cloudIssuers = []string{"aws_iam", "gcp_workload", "azure_mi", "entra_agent_id", "spiffe_jwt"}
+	chatChannels = []string{"slack", "slack_app", "teams_app"}
+)
+
+// IntegrationKinds returns every issuer and channel kind the catalog reads.
+func IntegrationKinds() []string {
+	return slices.Concat(ciIssuers, kubeIssuers, cloudIssuers, chatChannels)
+}
 
 func anyOf(have []string, want ...string) bool {
 	return slices.ContainsFunc(want, func(w string) bool { return slices.Contains(have, w) })
@@ -229,8 +242,8 @@ func record(id *ids.UUID) Group {
 	return Group{Count: 1, IDs: []ids.UUID{*id}}
 }
 
-// Catalogue returns every entry, in the order reads return them.
-func Catalogue() []Entry {
+// Catalog returns every entry, in the order reads return them.
+func Catalog() []Entry {
 	return []Entry{
 		{
 			ID: CIWorkload, Category: Identity, Reach: AgentBacked, Source: FromAgents, Link: linkAgents,
@@ -241,14 +254,14 @@ func Catalogue() []Entry {
 				{Name: "GitLab CI workload identity"},
 			},
 			Enables: []string{
-				"Agents enrol from the pipeline's own short-lived token, with no stored secret.",
+				"Agents enroll from the pipeline's own short-lived token, with no stored secret.",
 				"Policy can tell a protected branch's pipeline from any other.",
 			},
 			StillUnsupported: []string{
 				"Other CI systems have no preset; they need a SPIFFE JWT-SVID issuer.",
 				"X.509 and instance attestation are not supported.",
 			},
-			signal: agents(ContextCI, "github_actions", "gitlab_ci"),
+			signal: agents(ContextCI, ciIssuers...),
 		},
 		{
 			ID: KubeWorkload, Category: Identity, Reach: AgentBacked, Source: FromAgents, Link: linkAgents,
@@ -256,11 +269,11 @@ func Catalogue() []Entry {
 			Detail:  "Agents run in Kubernetes, and no cluster or SPIFFE issuer is active.",
 			Targets: []Target{{Name: "Kubernetes service account tokens"}, {Name: "SPIFFE JWT-SVID"}},
 			Enables: []string{
-				"Agents enrol from a projected service account token, with no stored secret.",
+				"Agents enroll from a projected service account token, with no stored secret.",
 				"Policy can tell one namespace's or workload's agent from another's.",
 			},
 			StillUnsupported: []string{"X.509 SVIDs and node attestation are not supported."},
-			signal:           agents(ContextKubernetes, "kubernetes", "spiffe_jwt"),
+			signal:           agents(ContextKubernetes, kubeIssuers...),
 		},
 		{
 			ID: CloudWorkload, Category: Identity, Reach: AgentBacked, Source: FromAgents, Link: linkAgents,
@@ -272,15 +285,15 @@ func Catalogue() []Entry {
 				{Name: "Azure managed identity"},
 				{Name: "Microsoft Entra Agent ID"},
 			},
-			Enables: []string{"Services enrol from their cloud identity, with no stored secret."},
+			Enables: []string{"Services enroll from their cloud identity, with no stored secret."},
 			StillUnsupported: []string{
 				"Instance attestation is not supported.",
 				"Other clouds need a SPIFFE JWT-SVID issuer.",
 			},
-			signal: agents(ContextService, "aws_iam", "gcp_workload", "azure_mi", "entra_agent_id", "spiffe_jwt"),
+			signal: agents(ContextService, cloudIssuers...),
 		},
 		{
-			ID: AWSCredentials, Category: Identity, Reach: AgentBacked, Source: FromDiscoveries, Link: linkAgents,
+			ID: AWSKeys, Category: Identity, Reach: AgentBacked, Source: FromDiscoveries, Link: linkAgents,
 			Title:  "Put AWS access behind a connection",
 			Detail: "A scan found AWS credentials beside an agent, and no AWS connection is active.",
 			Targets: []Target{
@@ -329,7 +342,7 @@ func Catalogue() []Entry {
 			},
 			signal: func(f Facts) (Group, string, bool) {
 				return record(f.FirstHold), RecordTransaction,
-					f.FirstHold != nil && !anyOf(f.Integrations.Channels, "slack", "slack_app", "teams_app")
+					f.FirstHold != nil && !anyOf(f.Integrations.Channels, chatChannels...)
 			},
 		},
 		{
@@ -378,7 +391,7 @@ func Catalogue() []Entry {
 
 // Lookup returns the entry with id.
 func Lookup(id ID) (Entry, bool) {
-	for _, e := range Catalogue() {
+	for _, e := range Catalog() {
 		if e.ID == id {
 			return e, true
 		}

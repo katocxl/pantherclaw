@@ -103,7 +103,7 @@ type RecommendationAgentContextsRow struct {
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 //
 // Recommendations (G0 M21 D302, D308): the read-only signals of the closed
-// catalogue, and dismissals. Agent-backed signals are filtered to the
+// catalog, and dismissals. Agent-backed signals are filtered to the
 // viewer's agents before anything is counted (HR-536). Range agents never
 // count.
 // The live agents the viewer may read, per execution context.
@@ -190,7 +190,7 @@ SELECT (d.observed->>'secret_kind')::text AS secret_kind, count(*)::int AS disco
     (array_agg(d.id ORDER BY d.id))[1:20]::uuid[] AS refs
 FROM pc.discoveries d
 JOIN pc.agents a ON a.org_id = d.org_id AND a.id = d.agent_id
-WHERE d.org_id = $1 AND d.state = 'OPEN' AND d.source = 'scan' AND NOT a.range_agent
+WHERE d.org_id = $1 AND d.state = 'OPEN' AND d.source = 'scan' AND a.state <> 'RETIRED' AND NOT a.range_agent
   AND d.observed->>'kind' = 'env_secret' AND d.observed->>'secret_kind' = ANY ($2::text[])
   AND ($3::boolean OR d.agent_id = ANY ($4::uuid[]))
 GROUP BY d.observed->>'secret_kind'

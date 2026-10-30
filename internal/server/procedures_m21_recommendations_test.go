@@ -9,12 +9,12 @@ import (
 	"github.com/katocxl/pantherclaw/internal/recommendations/domain"
 )
 
-// TestRecommendationLinksAreProcedures: every catalogue entry's evidence
+// TestRecommendationLinksAreProcedures: every catalog entry's evidence
 // link is a procedure the API serves.
 //
 // Covers: F343
 func TestRecommendationLinksAreProcedures(t *testing.T) {
-	for _, e := range domain.Catalogue() {
+	for _, e := range domain.Catalog() {
 		if _, ok := procedurePermissions[e.Link]; !ok {
 			t.Errorf("%s: %s is not a procedure", e.ID, e.Link)
 		}

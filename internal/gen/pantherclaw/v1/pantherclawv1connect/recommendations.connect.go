@@ -66,7 +66,7 @@ var (
 // RecommendationServiceClient is a client for the pantherclaw.v1.RecommendationService service.
 type RecommendationServiceClient interface {
 	// ListRecommendations computes the recommendations the viewer may see, in
-	// catalogue order.
+	// catalog order.
 	// permission: posture.read
 	ListRecommendations(context.Context, *v1.ListRecommendationsRequest) (*v1.ListRecommendationsResponse, error)
 	// DismissRecommendation hides a recommendation for the org, with a reason.
@@ -87,7 +87,7 @@ func NewRecommendationServiceClient(client *connect.Client) RecommendationServic
 // service.
 type RecommendationServiceHandler interface {
 	// ListRecommendations computes the recommendations the viewer may see, in
-	// catalogue order.
+	// catalog order.
 	// permission: posture.read
 	ListRecommendations(context.Context, *v1.ListRecommendationsRequest) (*v1.ListRecommendationsResponse, error)
 	// DismissRecommendation hides a recommendation for the org, with a reason.

@@ -1,17 +1,17 @@
 -- SPDX-License-Identifier: BUSL-1.1
 -- Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 -- F343 recommendations (G0 M21 D302, D308): recommendations are computed on
--- read from a closed catalogue, so the only stored state is a person's
--- dismissal of a catalogue entry for the whole org. It stays until undone;
+-- read from a closed catalog, so the only stored state is a person's
+-- dismissal of a catalog entry for the whole org. It stays until undone;
 -- each change is audited and in the ledger. recommendation_id names a
--- catalogue entry, which lives in Go, so it has no foreign key.
+-- catalog entry, which lives in Go, so it has no foreign key.
 -- +goose Up
 CREATE TABLE pc.recommendation_dismissals (
     org_id            uuid        NOT NULL REFERENCES pc.orgs (id),
     recommendation_id text        NOT NULL CHECK (recommendation_id ~ '^[a-z][a-z_]*(\.[a-z0-9_]+){1,3}$'),
     dismissed_by      text        NOT NULL CHECK (char_length(dismissed_by) BETWEEN 1 AND 128),
     -- UNTRUSTED: the person's reason.
-    reason            text        NOT NULL CHECK (char_length(btrim(reason)) BETWEEN 10 AND 1000),
+    reason            text        NOT NULL CHECK (char_length(btrim(reason)) BETWEEN 10 AND 500),
     dismissed_at      timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (org_id, recommendation_id)
 );
