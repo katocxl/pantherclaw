@@ -69,9 +69,10 @@ func idpsWarnShadowed(ctx context.Context, pool *db.Pool, m m18IdPs, log *slog.L
 
 // closeM18IdPs lets the Gate lapse an organization provider whose
 // activation was declined or expired, in every role: the jobs role
-// expires requests (D169).
-func closeM18IdPs(g *protect.Gate) {
+// expires requests (D169). A Closer's failure goes to log (D175).
+func closeM18IdPs(g *protect.Gate, log *slog.Logger) {
 	if g != nil {
+		g.Log = log
 		g.OnClose(protect.SurfaceIdentityProviderPut, (&idps.Store{}).ClosePut)
 	}
 }
