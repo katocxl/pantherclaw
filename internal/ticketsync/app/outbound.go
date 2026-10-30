@@ -81,7 +81,7 @@ func (s *Service) open(ctx context.Context, perm td.Permission, kase, incident *
 		if cfg.State != StateActive {
 			return ErrNotFound
 		}
-		title, subject := "", ""
+		var title, subject string
 		var refs []dbq.PcExternalRef
 		if kase != nil {
 			k, err := casesstore.Get(ctx, tx, *kase)

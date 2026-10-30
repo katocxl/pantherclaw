@@ -292,17 +292,21 @@ func (s *Service) ActivateTeamsApp(ctx context.Context, id ids.UUID, su stepup.S
 		return ChannelView{}, err
 	}
 	checkErr := s.checkTeams(ctx, cfg, secret)
-	var out ChannelView
-	err = s.inOrg(ctx, td.PermNotificationManage, func(ctx context.Context, c tapp.Caller, q *dbq.Queries, tx db.TenantTx) error {
-		if errors.Is(checkErr, ErrTeamsShared) {
+	if errors.Is(checkErr, ErrTeamsShared) {
+		if err := s.inOrg(ctx, td.PermNotificationManage, func(ctx context.Context, c tapp.Caller, q *dbq.Queries, tx db.TenantTx) error {
 			if _, err := q.MarkTeamsAppChannelShared(ctx, c.Org, id); err != nil {
 				return err
 			}
 			return s.audit(ctx, tx, c, "notification.teams_app_refused_shared", id, nil)
+		}); err != nil {
+			return ChannelView{}, err
 		}
-		if checkErr != nil {
-			return nil
-		}
+	}
+	if checkErr != nil {
+		return ChannelView{}, checkErr
+	}
+	var out ChannelView
+	err = s.inOrg(ctx, td.PermNotificationManage, func(ctx context.Context, c tapp.Caller, q *dbq.Queries, tx db.TenantTx) error {
 		if err := stepup.Check(ctx, tx, c, su, s.clock.Now()); err != nil {
 			return err
 		}
@@ -324,9 +328,6 @@ func (s *Service) ActivateTeamsApp(ctx context.Context, id ids.UUID, su stepup.S
 			"teams_channel": cfg.TeamsChannel, "tenant": cfg.TenantID.String(), "security_key": su.Credential.String(),
 		})
 	})
-	if err == nil && checkErr != nil {
-		return ChannelView{}, checkErr
-	}
 	return out, err
 }
 

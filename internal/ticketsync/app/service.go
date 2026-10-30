@@ -40,11 +40,11 @@ import (
 )
 
 // SecretPurpose is the DEK purpose of webhook secrets (HR-062).
-const SecretPurpose = "ticket_sync_secrets"
+const SecretPurpose = "ticket_sync_secrets" //nolint:gosec // G101: a DEK purpose name, not a credential
 
 const (
 	configsTable     = "ticket_sync_configs"
-	secretColumn     = "webhook_secret"
+	secretColumn     = "webhook_secret" //nolint:gosec // G101: a column name, not a credential
 	prevSecretColumn = "prev_webhook_secret"
 )
 

@@ -90,7 +90,7 @@ func TestHR528_DecideDropsOwnedChanges(t *testing.T) {
 }
 
 func TestClean(t *testing.T) {
-	if got := domain.Clean(" a\n\tb‮ c ", 100); got != "a b c" {
+	if got := domain.Clean(" a\n\tb\xe2\x80\xae c ", 100); got != "a b c" {
 		t.Errorf("Clean = %q", got)
 	}
 	if got := domain.Clean(strings.Repeat("x", 300), 10); len([]rune(got)) != 10 || !strings.HasSuffix(got, "…") {

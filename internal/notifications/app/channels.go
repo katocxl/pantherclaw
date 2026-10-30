@@ -107,8 +107,8 @@ func (s *Service) CreateChannelTx(ctx context.Context, tx db.TenantTx, in NewCha
 			return CreatedChannel{}, err
 		}
 		plain = []byte(in.TeamsApp.ClientSecret)
-	case domain.KindLog:
-		// nothing to store beyond the subscription
+	case domain.KindLog, domain.KindSlackDM:
+		// nothing to store beyond the subscription (no channel is a DM)
 	}
 	if plain != nil {
 		blob, err := s.envelope.Encrypt(ctx, s.field(in.Org, out.ID, secretColumn), SecretPurpose, plain)
