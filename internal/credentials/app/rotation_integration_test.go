@@ -268,7 +268,9 @@ func TestHR518_ActivationNeedsAPassedTestAndAStepUp(t *testing.T) {
 	}
 }
 
-// TestHR519_RollbackOnlyBeforeConfirmation: a rollback restores the old
+// TestHR519_RollbackOnlyBeforeConfirmation: a rollback, gated as activation
+// is (credential.rotate with a fresh step-up of the person's own key; D274),
+// restores the old
 // key and revokes the candidate while the rotation is ACTIVATING; once
 // confirmation started it is refused.
 // Covers: F424
@@ -278,7 +280,16 @@ func TestHR519_RollbackOnlyBeforeConfirmation(t *testing.T) {
 	if _, err := e.svc.ActivateRotation(e.person, r.ID, e.stepUp()); err != nil {
 		t.Fatal(err)
 	}
-	r, err := e.svc.RollBackRotation(e.person, r.ID, "dispatches fail with the new key")
+	if _, err := e.svc.RollBackRotation(e.person, r.ID, "dispatches fail with the new key", stepup.StepUp{}); !stepup.Is(err) {
+		t.Fatalf("roll back without a step-up: %v", err)
+	}
+	if _, err := e.svc.RollBackRotation(e.sealer, r.ID, "dispatches fail with the new key", e.stepUp()); !stepup.Is(err) {
+		t.Fatalf("roll back with another person's key: %v", err)
+	}
+	if s := e.credentialStates(t); s[1] != "SUPERSEDED" || s[2] != "ACTIVE" {
+		t.Fatalf("a refused rollback changed credentials: %v", s)
+	}
+	r, err := e.svc.RollBackRotation(e.person, r.ID, "dispatches fail with the new key", e.stepUp())
 	if err != nil || r.State != string(domain.RotationRolledBack) {
 		t.Fatalf("roll back: %+v %v", r, err)
 	}
@@ -296,20 +307,23 @@ func TestHR519_RollbackOnlyBeforeConfirmation(t *testing.T) {
 	if r, err = e.svc.ConfirmRotation(e.person, r.ID); err != nil || r.State != string(domain.RotationConfirming) {
 		t.Fatalf("confirm: %+v %v", r, err)
 	}
-	if _, err := e.svc.RollBackRotation(e.person, r.ID, "too late"); !is(err, app.ErrRollbackClosed) {
+	if _, err := e.svc.RollBackRotation(e.person, r.ID, "too late", e.stepUp()); !is(err, app.ErrRollbackClosed) {
 		t.Fatalf("roll back while confirming: %v", err)
 	}
 	l, _ := e.lease(t, e.gateway)
-	e.report(t, l, domain.Probe{AppStatus: 200, AppMatches: true})
-	if _, err := e.svc.RollBackRotation(e.person, r.ID, "still too late"); !is(err, app.ErrRollbackClosed) {
+	e.report(t, l, domain.Probe{AppStatus: 200, AppMatches: true, ActiveStatus: 200, ActiveMatches: true})
+	if _, err := e.svc.RollBackRotation(e.person, r.ID, "still too late", e.stepUp()); !is(err, app.ErrRollbackClosed) {
 		t.Fatalf("roll back after a confirmation: %v", err)
 	}
 }
 
-// TestHR520_TheOldKeyIsRevokedOnlyWhenGitHubRefusesIt: a confirmation
-// GitHub answers with anything but 401 returns the rotation to
-// AWAITING_OLD_REMOVAL and leaves the old credential SUPERSEDED; a 401
-// revokes it and confirms the rotation, audited.
+// TestHR520_TheOldKeyIsRevokedOnlyWhenGitHubRefusesIt: the confirmation
+// lease carries the old key and names the active (new) key as its control
+// (D274). A confirmation in which GitHub did not refuse the old key, or
+// refused both keys (a skewed clock), returns the rotation to
+// AWAITING_OLD_REMOVAL and leaves the old credential SUPERSEDED; only a 401
+// for the old key while the active key gets 200 for the App revokes it and
+// confirms the rotation, audited.
 // Covers: F424
 func TestHR520_TheOldKeyIsRevokedOnlyWhenGitHubRefusesIt(t *testing.T) {
 	e := newRotationEnv(t)
@@ -317,28 +331,36 @@ func TestHR520_TheOldKeyIsRevokedOnlyWhenGitHubRefusesIt(t *testing.T) {
 	if _, err := e.svc.ActivateRotation(e.person, r.ID, e.stepUp()); err != nil {
 		t.Fatal(err)
 	}
-	for _, status := range []int{200, 403, 500, 0} {
+	for name, p := range map[string]domain.Probe{
+		"old accepted":        {AppStatus: 200, AppMatches: true, ActiveStatus: 200, ActiveMatches: true},
+		"old forbidden":       {AppStatus: 403, ActiveStatus: 200, ActiveMatches: true},
+		"server error":        {AppStatus: 500, ActiveStatus: 200, ActiveMatches: true},
+		"no answer":           {ActiveStatus: 200, ActiveMatches: true},
+		"both refused (skew)": {AppStatus: 401, ActiveStatus: 401},
+		"no control":          {AppStatus: 401},
+	} {
 		if _, err := e.svc.ConfirmRotation(e.person, r.ID); err != nil {
-			t.Fatalf("confirm (%d): %v", status, err)
+			t.Fatalf("confirm (%s): %v", name, err)
 		}
 		l, ok := e.lease(t, e.gateway)
 		if !ok {
 			t.Fatal("no confirmation lease")
 		}
 		var req domain.RotationLease
-		if err := json.Unmarshal(l.Request, &req); err != nil || req.Credential.ID != r.OldCredentialID.String() {
-			t.Fatalf("the confirmation lease carries %+v (%v)", req.Credential.ID, err)
+		if err := json.Unmarshal(l.Request, &req); err != nil || req.Credential.ID != r.OldCredentialID.String() ||
+			req.Active != r.CandidateCredentialID.String() {
+			t.Fatalf("the confirmation lease carries %s with control %s (%v)", req.Credential.ID, req.Active, err)
 		}
-		e.report(t, l, domain.Probe{AppStatus: status})
+		e.report(t, l, p)
 		if got := e.get(t, r.ID); got.State != string(domain.RotationAwaitingOldRemoval) || e.credentialStates(t)[1] != "SUPERSEDED" {
-			t.Fatalf("status %d: %s %v", status, got.State, e.credentialStates(t))
+			t.Fatalf("%s: %s %v", name, got.State, e.credentialStates(t))
 		}
 	}
 	if _, err := e.svc.ConfirmRotation(e.person, r.ID); err != nil {
 		t.Fatal(err)
 	}
 	l, _ := e.lease(t, e.gateway)
-	e.report(t, l, domain.Probe{AppStatus: 401})
+	e.report(t, l, domain.Probe{AppStatus: 401, ActiveStatus: 200, ActiveMatches: true})
 	if got := e.get(t, r.ID); got.State != string(domain.RotationConfirmed) || e.credentialStates(t)[1] != "REVOKED" {
 		t.Fatalf("401: %s %v", got.State, e.credentialStates(t))
 	}
@@ -405,5 +427,96 @@ func TestT224_RotationLockoutAndRollbackAbuse(t *testing.T) {
 	}
 	if l.Purpose != txdomain.PurposeRotationTest || strconv.Itoa(l.Attempt) != "1" {
 		t.Fatalf("lease %s attempt %d", l.Purpose, l.Attempt)
+	}
+}
+
+// TestT224_AnInconclusiveTestLeavesTheRotationTesting: no answer, a rate
+// limit or a server error from GitHub neither passes nor fails the
+// candidate; the rotation stays TESTING, the candidate stays sealed, and
+// another test may be asked for (D274).
+// Covers: F424
+func TestT224_AnInconclusiveTestLeavesTheRotationTesting(t *testing.T) {
+	e := newRotationEnv(t)
+	r := e.sealed(t)
+	for _, p := range []domain.Probe{{}, {AppStatus: 429}, {AppStatus: 502}, {AppStatus: 200, AppMatches: true, InstallationStatus: 503}} {
+		if _, err := e.svc.TestRotation(e.person, r.ID); err != nil {
+			t.Fatalf("test (%+v): %v", p, err)
+		}
+		l, ok := e.lease(t, e.gateway)
+		if !ok {
+			t.Fatal("no test lease")
+		}
+		e.report(t, l, p)
+		if got := e.get(t, r.ID); got.State != string(domain.RotationTesting) || got.TestPassedAt != nil || e.credentialStates(t)[2] != "CANDIDATE" {
+			t.Fatalf("%+v: %s %v", p, got.State, e.credentialStates(t))
+		}
+	}
+	if _, err := e.svc.TestRotation(e.person, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	l, _ := e.lease(t, e.gateway)
+	e.report(t, l, passed)
+	if got := e.get(t, r.ID); got.TestPassedAt == nil {
+		t.Fatal("the retried test did not pass")
+	}
+}
+
+// TestT224_EveryRotationChangeEnqueuesARecompute: activation, the closing
+// of a rollback window, a confirmation, a rollback and a failure each run
+// the recompute hook in their transaction (D259, D274), so
+// unconfirmed_rotation is raised and remediated without waiting for the
+// periodic recompute.
+// Covers: F424
+func TestT224_EveryRotationChangeEnqueuesARecompute(t *testing.T) {
+	e := newRotationEnv(t)
+	events := map[string]int{}
+	var last []string
+	e.svc.OnRotationChange(func(ctx context.Context, tx db.TenantTx) error {
+		if tx.OrgID() != e.org {
+			t.Error("the hook ran outside the org's transaction")
+		}
+		var kind string
+		if err := tx.QueryRow(ctx, "SELECT kind FROM pc.ledger_entries WHERE xid = pg_current_xact_id() ORDER BY id DESC LIMIT 1").Scan(&kind); err != nil {
+			return err
+		}
+		events[kind]++
+		last = append(last, kind)
+		return nil
+	})
+	r := e.tested(t)
+	if _, err := e.svc.ActivateRotation(e.person, r.ID, e.stepUp()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.RollBackRotation(e.person, r.ID, "back", e.stepUp()); err != nil {
+		t.Fatal(err)
+	}
+	r = e.sealed(t)
+	if _, err := e.svc.CancelRotation(e.person, r.ID, "wrong key"); err != nil {
+		t.Fatal(err)
+	}
+	r = e.tested(t)
+	if _, err := e.svc.ActivateRotation(e.person, r.ID, e.stepUp()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.ConfirmRotation(e.person, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	l, _ := e.lease(t, e.gateway)
+	e.report(t, l, domain.Probe{AppStatus: 401, ActiveStatus: 200, ActiveMatches: true})
+	for _, k := range []string{"audit.credential.rotation_activated", "audit.credential.rotation_rolled_back", "audit.credential.rotation_failed",
+		"audit.credential.rotation_confirmed", "audit.credential.rotation_tested"} {
+		if events[k] == 0 {
+			t.Errorf("%s ran no recompute (ran for %v)", k, last)
+		}
+	}
+	// The sweep that closes a passed rollback window is a change too.
+	r = e.tested(t)
+	e.exec(t, `UPDATE pc.credential_rotations SET state = 'ACTIVATING', activated_by = 'test', activated_at = now() - interval '25 hours',
+		rollback_until = now() - interval '1 hour' WHERE id = $1`, r.ID)
+	if _, err := e.svc.ListRotations(e.person, e.conn.ID); err != nil {
+		t.Fatal(err)
+	}
+	if events["audit.credential.rotation_window_closed"] != 1 || e.get(t, r.ID).State != string(domain.RotationAwaitingOldRemoval) {
+		t.Fatalf("closing the window: %v", last)
 	}
 }

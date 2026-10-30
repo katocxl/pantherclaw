@@ -139,6 +139,8 @@ func New(log *slog.Logger) *Server {
 
 // WithClock replaces the simulator's clock (tests), and returns it.
 func (s *Server) WithClock(now func() time.Time) *Server {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.now = now
 	return s
 }

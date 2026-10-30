@@ -90,14 +90,15 @@ func TestHR519_RollbackOnlyBeforeConfirmation(t *testing.T) {
 	}
 }
 
-// TestHR520_OldKeyRevokedOnlyWhenRefused: only a 401 for the old key
-// confirms the rotation; an acceptance, a rate limit, an error or no
-// answer returns it to AWAITING_OLD_REMOVAL.
+// TestHR520_OldKeyRevokedOnlyWhenRefused: only a 401 for the old key while
+// the active key gets 200 for the App at the same moment confirms the
+// rotation (D274); an acceptance, a rate limit, an error, no answer, or a
+// 401 for both keys (a skewed clock) returns it to AWAITING_OLD_REMOVAL.
 // Covers: F424
 func TestHR520_OldKeyRevokedOnlyWhenRefused(t *testing.T) {
 	for _, status := range []int{0, http.StatusOK, http.StatusForbidden, http.StatusNotFound, http.StatusTooManyRequests,
 		http.StatusInternalServerError, http.StatusBadGateway} {
-		p := domain.Probe{AppStatus: status}
+		p := domain.Probe{AppStatus: status, ActiveStatus: http.StatusOK, ActiveMatches: true}
 		if p.OldKeyRefused() {
 			t.Fatalf("status %d counted as a refusal", status)
 		}
@@ -106,8 +107,18 @@ func TestHR520_OldKeyRevokedOnlyWhenRefused(t *testing.T) {
 			t.Fatalf("status %d: %v, %s", status, err, r.State)
 		}
 	}
+	for name, p := range map[string]domain.Probe{
+		"both refused (a skewed clock)": {AppStatus: http.StatusUnauthorized, ActiveStatus: http.StatusUnauthorized},
+		"no control":                    {AppStatus: http.StatusUnauthorized},
+		"the control names another App": {AppStatus: http.StatusUnauthorized, ActiveStatus: http.StatusOK},
+		"the control rate limited":      {AppStatus: http.StatusUnauthorized, ActiveStatus: http.StatusTooManyRequests, ActiveMatches: true},
+	} {
+		if p.OldKeyRefused() {
+			t.Fatalf("%s counted as a refusal", name)
+		}
+	}
 	r := domain.Rotation{State: domain.RotationConfirming}
-	if err := r.Confirmed(domain.Probe{AppStatus: http.StatusUnauthorized}.OldKeyRefused()); err != nil || r.State != domain.RotationConfirmed {
+	if err := r.Confirmed(domain.Probe{AppStatus: http.StatusUnauthorized, ActiveStatus: http.StatusOK, ActiveMatches: true}.OldKeyRefused()); err != nil || r.State != domain.RotationConfirmed {
 		t.Fatalf("401: %v, %s", err, r.State)
 	}
 	early := domain.Rotation{State: domain.RotationAwaitingOldRemoval}
@@ -153,6 +164,29 @@ func TestT224_RotationMovesMatchTheSchema(t *testing.T) {
 		}
 		if p.TestPassed() {
 			t.Fatalf("%+v passed", p)
+		}
+	}
+}
+
+// TestT224_ATestFailsOnlyOnADefiniteRefusal: 401, 403 or 404 for the App
+// or the installation, or the App named wrongly, fail a candidate; no
+// answer, a rate limit or a server error leave it for another test (D274).
+// Covers: F424
+func TestT224_ATestFailsOnlyOnADefiniteRefusal(t *testing.T) {
+	for _, p := range []domain.Probe{
+		{AppStatus: 401}, {AppStatus: 403}, {AppStatus: 404}, {AppStatus: 200},
+		{AppStatus: 200, AppMatches: true, InstallationStatus: 404}, {AppStatus: 200, AppMatches: true, InstallationStatus: 403},
+	} {
+		if !p.TestRefused() || p.TestPassed() {
+			t.Errorf("%+v is not a refusal", p)
+		}
+	}
+	for _, p := range []domain.Probe{
+		{}, {AppStatus: 429}, {AppStatus: 500}, {AppStatus: 502}, {AppStatus: 200, AppMatches: true},
+		{AppStatus: 200, AppMatches: true, InstallationStatus: 429}, {AppStatus: 200, AppMatches: true, InstallationStatus: 503},
+	} {
+		if p.TestRefused() {
+			t.Errorf("%+v counted as a refusal", p)
 		}
 	}
 }

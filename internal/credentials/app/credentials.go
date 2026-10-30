@@ -73,6 +73,9 @@ type Service struct {
 	// preview is the digest of who shares a credential, which a rotation
 	// request confirms (WithRotations).
 	preview Previewer
+	// changed, when set, runs in the transaction of every rotation change:
+	// it enqueues the org's exposure and posture recompute (D259, D274).
+	changed func(ctx context.Context, tx db.TenantTx) error
 }
 
 // OnGitHubInstallation sets what runs, in the sealing transaction, when a

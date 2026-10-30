@@ -556,17 +556,19 @@ func (q *Queries) RollBackCredentialRotation(ctx context.Context, reason *string
 
 const rotationOfTask = `-- name: RotationOfTask :one
 SELECT r.id, r.state, r.connection_id, r.test_passed_at,
-       CASE WHEN r.test_verification_id = $1 THEN r.candidate_credential_id ELSE r.old_credential_id END::uuid AS credential_id
+       CASE WHEN r.test_verification_id = $1 THEN r.candidate_credential_id ELSE r.old_credential_id END::uuid AS credential_id,
+       r.candidate_credential_id
 FROM pc.credential_rotations r
 WHERE r.org_id = $2 AND (r.test_verification_id = $1 OR r.confirm_verification_id = $1)
 `
 
 type RotationOfTaskRow struct {
-	ID           ids.UUID
-	State        string
-	ConnectionID ids.UUID
-	TestPassedAt *time.Time
-	CredentialID ids.UUID
+	ID                    ids.UUID
+	State                 string
+	ConnectionID          ids.UUID
+	TestPassedAt          *time.Time
+	CredentialID          ids.UUID
+	CandidateCredentialID *ids.UUID
 }
 
 // RotationOfTask is the rotation a claimed rotation task belongs to, with
@@ -580,6 +582,7 @@ func (q *Queries) RotationOfTask(ctx context.Context, task *ids.UUID, orgID ids.
 		&i.ConnectionID,
 		&i.TestPassedAt,
 		&i.CredentialID,
+		&i.CandidateCredentialID,
 	)
 	return i, err
 }

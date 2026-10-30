@@ -217,6 +217,12 @@ type Probe struct {
 	AppStatus, InstallationStatus int
 	// AppMatches: GET /app named the App the credential was sealed for.
 	AppMatches bool
+	// ActiveStatus and ActiveMatches are what GET /app answered, at the same
+	// moment, for the ACTIVE (new) key during a confirmation: the control
+	// that tells a deleted old key from a JWT GitHub refuses for any other
+	// reason, such as a skewed clock (D274).
+	ActiveStatus  int
+	ActiveMatches bool
 }
 
 // TestPassed reports whether a target test passed: GitHub accepted the
@@ -225,10 +231,25 @@ func (p Probe) TestPassed() bool {
 	return p.AppStatus == http.StatusOK && p.AppMatches && p.InstallationStatus == http.StatusOK
 }
 
-// OldKeyRefused reports whether GitHub refused the old key (HR-520): GET
-// /app answered 401. Anything else (an acceptance, a rate limit, an error,
-// no answer) proves nothing, so the old credential is not revoked.
-func (p Probe) OldKeyRefused() bool { return p.AppStatus == http.StatusUnauthorized }
+// OldKeyRefused reports whether GitHub refused the old key (HR-520, D274):
+// GET /app answered 401 for it while, at the same moment, it answered 200
+// for the active key and named the App. Anything else (an acceptance, a
+// refusal of both, a rate limit, an error, no answer) proves nothing, so
+// the old credential is not revoked.
+func (p Probe) OldKeyRefused() bool {
+	return p.AppStatus == http.StatusUnauthorized && p.ActiveStatus == http.StatusOK && p.ActiveMatches
+}
+
+// TestRefused reports whether GitHub definitely refused a candidate (D274):
+// 401, 403 or 404 for GET /app or the installation, or GET /app naming
+// another App. No answer, a rate limit or a server error proves nothing:
+// the rotation stays TESTING for another test.
+func (p Probe) TestRefused() bool {
+	refused := func(s int) bool {
+		return s == http.StatusUnauthorized || s == http.StatusForbidden || s == http.StatusNotFound
+	}
+	return refused(p.AppStatus) || (p.AppStatus == http.StatusOK && !p.AppMatches) || refused(p.InstallationStatus)
+}
 
 // The fields a rotation lease's report carries (JSON pointers, as a
 // verification report's fields are).
@@ -236,6 +257,8 @@ const (
 	FieldAppStatus          = "/app"
 	FieldAppMatches         = "/app_matches"
 	FieldInstallationStatus = "/installation"
+	FieldActiveStatus       = "/active_app"
+	FieldActiveMatches      = "/active_app_matches"
 )
 
 // Fields is p as a report's fields.
@@ -243,6 +266,7 @@ func (p Probe) Fields() map[string]string {
 	return map[string]string{
 		FieldAppStatus: strconv.Itoa(p.AppStatus), FieldAppMatches: strconv.FormatBool(p.AppMatches),
 		FieldInstallationStatus: strconv.Itoa(p.InstallationStatus),
+		FieldActiveStatus:       strconv.Itoa(p.ActiveStatus), FieldActiveMatches: strconv.FormatBool(p.ActiveMatches),
 	}
 }
 
@@ -256,7 +280,10 @@ func ProbeOf(fields map[string]string) Probe {
 		}
 		return n
 	}
-	return Probe{AppStatus: status(FieldAppStatus), AppMatches: fields[FieldAppMatches] == "true", InstallationStatus: status(FieldInstallationStatus)}
+	return Probe{
+		AppStatus: status(FieldAppStatus), AppMatches: fields[FieldAppMatches] == "true", InstallationStatus: status(FieldInstallationStatus),
+		ActiveStatus: status(FieldActiveStatus), ActiveMatches: fields[FieldActiveMatches] == "true",
+	}
 }
 
 // RotationLease is a rotation lease's request as the claiming gateway
@@ -267,6 +294,10 @@ func ProbeOf(fields map[string]string) Probe {
 type RotationLease struct {
 	Rotation   string             `json:"rotation"`
 	Credential RotationCredential `json:"credential"`
+	// Active is, for a confirmation, the id of the ACTIVE credential (the
+	// rotation's new key, in the gateway's configuration) that GET /app is
+	// also asked with, as the control (D274).
+	Active string `json:"active,omitzero"`
 }
 
 // RotationCredential is the sealed credential of a rotation lease.

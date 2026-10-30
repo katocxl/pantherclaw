@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/credentials/domain"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
@@ -45,10 +46,14 @@ func rotationLease(t *testing.T, h *harness, purpose string, key *rsa.PrivateKey
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := json.Marshal(domain.RotationLease{Rotation: "r-1", Credential: domain.RotationCredential{
+	lease := domain.RotationLease{Rotation: "r-1", Credential: domain.RotationCredential{
 		ID: "cand", Version: 2, BrokerKey: "bk-1", Sealed: blob, AllowedHosts: hosts, Header: "Authorization", Scheme: "Bearer",
 		Kind: domain.KindGitHubApp,
-	}})
+	}}
+	if purpose == dispatch.PurposeRotationConfirm {
+		lease.Active = h.conn.Credential.GetId() // the control: the configuration's key
+	}
+	req, err := json.Marshal(lease)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,31 +123,51 @@ func TestHR517_TheGatewayTestsACandidateOnlyFromItsLease(t *testing.T) {
 	}
 }
 
-// TestHR520_TheGatewayConfirmsTheOldKeyIsRefused: before the old key is
-// deleted on GitHub the confirmation reports GitHub's acceptance; after,
-// its 401; a deletion GitHub has not applied yet, or an /app failure,
-// reports no refusal (the sim's key-revocation faults).
+// TestHR520_TheGatewayConfirmsTheOldKeyIsRefused: a confirmation asks GET
+// /app with the old key and, at the same moment, with the active key of the
+// configuration (D274). Before the old key is deleted both are accepted; a
+// deletion GitHub has not applied yet (a key-revocation fault) is no
+// refusal; with a skewed clock GitHub refuses both, which is no refusal
+// either; after the deletion only the old key is refused, which confirms.
+// A lease whose control is not the active credential is refused unsent.
 // Covers: F424
 func TestHR520_TheGatewayConfirmsTheOldKeyIsRefused(t *testing.T) {
 	w := newGitHubWorld(t)
-	h := setup(t, withGitHubApp(t, w))
-	confirm := rotationLease(t, h, dispatch.PurposeRotationConfirm, w.key, 7)
-	if p, ok := probe(t, h, confirm); !ok || p.OldKeyRefused() || p.AppStatus != http.StatusOK || p.InstallationStatus != 0 {
+	h := setup(t, withGitHubApp(t, w)) // w.key is the active (new) key
+	old := newAppKey(t)
+	w.sim.AddAppKey(&old.PublicKey)
+	confirm := rotationLease(t, h, dispatch.PurposeRotationConfirm, old, 7)
+	if p, ok := probe(t, h, confirm); !ok || p.OldKeyRefused() || p.AppStatus != http.StatusOK || p.ActiveStatus != http.StatusOK || !p.ActiveMatches {
 		t.Fatalf("before deletion: %+v %v", p, ok)
 	}
-	w.sim.RevokeAppKey(&w.key.PublicKey)
+	w.sim.RevokeAppKey(&old.PublicKey)
 	w.sim.SetFaults(github.Faults{KeepRevokedKeys: true})
 	if p, _ := probe(t, h, confirm); p.OldKeyRefused() {
 		t.Fatalf("a deletion GitHub has not applied counted: %+v", p)
 	}
 	w.sim.SetFaults(github.Faults{})
+	w.sim.WithClock(func() time.Time { return time.Now().Add(20 * time.Minute) })
+	if p, ok := probe(t, h, confirm); !ok || p.OldKeyRefused() || p.AppStatus != http.StatusUnauthorized || p.ActiveStatus != http.StatusUnauthorized {
+		t.Fatalf("a skewed clock: %+v %v", p, ok)
+	}
+	w.sim.WithClock(time.Now)
 	if p, ok := probe(t, h, confirm); !ok || !p.OldKeyRefused() {
 		t.Fatalf("after deletion: %+v %v", p, ok)
+	}
+	var lease domain.RotationLease
+	if err := json.Unmarshal(confirm.Request, &lease); err != nil {
+		t.Fatal(err)
+	}
+	lease.Active = "another credential"
+	confirm.Request, _ = json.Marshal(lease)
+	before := len(w.sim.Requests())
+	if _, ok := probe(t, h, confirm); ok || len(w.sim.Requests()) != before {
+		t.Fatal("a confirmation without the active key as its control was sent")
 	}
 	candidate := newAppKey(t)
 	w.sim.AddAppKey(&candidate.PublicKey)
 	w.sim.SetFaults(github.Faults{AppStatus: http.StatusInternalServerError})
-	if p, _ := probe(t, h, rotationLease(t, h, dispatch.PurposeRotationTest, candidate, 7)); p.TestPassed() || p.OldKeyRefused() {
+	if p, _ := probe(t, h, rotationLease(t, h, dispatch.PurposeRotationTest, candidate, 7)); p.TestPassed() || p.TestRefused() {
 		t.Fatalf("an /app failure: %+v", p)
 	}
 }

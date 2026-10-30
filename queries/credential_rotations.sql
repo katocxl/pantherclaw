@@ -123,7 +123,8 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(purpose), sqlc.arg(connection_i
 -- the credential it tests or confirms.
 -- name: RotationOfTask :one
 SELECT r.id, r.state, r.connection_id, r.test_passed_at,
-       CASE WHEN r.test_verification_id = sqlc.arg(task) THEN r.candidate_credential_id ELSE r.old_credential_id END::uuid AS credential_id
+       CASE WHEN r.test_verification_id = sqlc.arg(task) THEN r.candidate_credential_id ELSE r.old_credential_id END::uuid AS credential_id,
+       r.candidate_credential_id
 FROM pc.credential_rotations r
 WHERE r.org_id = sqlc.arg(org_id) AND (r.test_verification_id = sqlc.arg(task) OR r.confirm_verification_id = sqlc.arg(task));
 

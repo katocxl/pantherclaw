@@ -83,6 +83,12 @@ func (s *Service) WithRotations(p Previewer) *Service {
 	return s
 }
 
+// OnRotationChange sets what runs in the transaction of every rotation
+// change: the recompute that raises or remediates unconfirmed_rotation.
+func (s *Service) OnRotationChange(f func(ctx context.Context, tx db.TenantTx) error) {
+	s.changed = f
+}
+
 func rotationOf(r Rotation) domain.Rotation {
 	out := domain.Rotation{State: domain.RotationState(r.State)}
 	if r.TestPassedAt != nil {
@@ -101,8 +107,8 @@ func digestText(d []byte) string { return "sha256:" + hex.EncodeToString(d) }
 
 // lockRotation locks a rotation after closing the org's passed rollback
 // windows.
-func lockRotation(ctx context.Context, tx db.TenantTx, c tenancy.Caller, id ids.UUID) (Rotation, error) {
-	if err := closeWindows(ctx, tx); err != nil {
+func (s *Service) lockRotation(ctx context.Context, tx db.TenantTx, c tenancy.Caller, id ids.UUID) (Rotation, error) {
+	if err := s.closeWindows(ctx, tx); err != nil {
 		return Rotation{}, err
 	}
 	r, err := dbq.New(tx).LockCredentialRotation(ctx, c.Org, id)
@@ -114,13 +120,13 @@ func lockRotation(ctx context.Context, tx db.TenantTx, c tenancy.Caller, id ids.
 
 // closeWindows moves the org's ACTIVATING rotations whose rollback window
 // passed to AWAITING_OLD_REMOVAL, audited.
-func closeWindows(ctx context.Context, tx db.TenantTx) error {
+func (s *Service) closeWindows(ctx context.Context, tx db.TenantTx) error {
 	closed, err := dbq.New(tx).CloseRollbackWindows(ctx, tx.OrgID())
 	if err != nil {
 		return err
 	}
 	for _, r := range closed {
-		if err := rotationAudit(ctx, tx, evdomain.Actor{Type: "system", ID: rotationSystem}, "credential.rotation_window_closed",
+		if err := s.rotationAudit(ctx, tx, evdomain.Actor{Type: "system", ID: rotationSystem}, "credential.rotation_window_closed",
 			r.ConnectionID, r.ID, nil); err != nil {
 			return err
 		}
@@ -128,7 +134,7 @@ func closeWindows(ctx context.Context, tx db.TenantTx) error {
 	return nil
 }
 
-func rotationAudit(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, name string, conn, rotation ids.UUID,
+func (s *Service) rotationAudit(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, name string, conn, rotation ids.UUID,
 	details map[string]string,
 ) error {
 	if details == nil {
@@ -138,7 +144,10 @@ func rotationAudit(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, na
 	_, err := audit.Record(ctx, tx, audit.Event{
 		Name: name, Actor: actor, Outcome: audit.Success, Object: &audit.Object{Type: "connection", ID: conn.String()}, Details: details,
 	})
-	return err
+	if err != nil || s.changed == nil {
+		return err
+	}
+	return s.changed(ctx, tx)
 }
 
 // RequestRotation opens a rotation of a connection's GitHub App key
@@ -184,7 +193,7 @@ func (s *Service) RequestRotation(ctx context.Context, connection ids.UUID, dige
 		if err != nil {
 			return err
 		}
-		return rotationAudit(ctx, tx, c.Actor(), "credential.rotation_requested", conn.ID, out.ID, map[string]string{
+		return s.rotationAudit(ctx, tx, c.Actor(), "credential.rotation_requested", conn.ID, out.ID, map[string]string{
 			"old_version": strconv.Itoa(int(active.Version)), "preview_digest": out.PreviewDigest,
 		})
 	})
@@ -209,7 +218,7 @@ func (s *Service) SealCandidate(ctx context.Context, rotation ids.UUID, in PutIn
 	var out Metadata
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		r, err := lockRotation(ctx, tx, c, rotation)
+		r, err := s.lockRotation(ctx, tx, c, rotation)
 		if err != nil {
 			return err
 		}
@@ -254,7 +263,7 @@ func (s *Service) SealCandidate(ctx context.Context, rotation ids.UUID, in PutIn
 			AllowedHosts: conn.AllowedHosts, Header: in.Header, Scheme: scheme, State: row.State, CreatedBy: c.Principal.String(),
 			CreatedAt: row.CreatedAt, Kind: in.Kind,
 		}
-		return rotationAudit(ctx, tx, c.Actor(), "credential.rotation_candidate_sealed", conn.ID, r.ID, map[string]string{
+		return s.rotationAudit(ctx, tx, c.Actor(), "credential.rotation_candidate_sealed", conn.ID, r.ID, map[string]string{
 			"version": strconv.Itoa(int(row.Version)), "broker_key_fingerprint": key.Fingerprint, "sealed_sha256": hex.EncodeToString(sum[:]),
 		})
 	})
@@ -298,7 +307,7 @@ func (s *Service) TestRotation(ctx context.Context, rotation ids.UUID) (Rotation
 	var out Rotation
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		r, err := lockRotation(ctx, tx, c, rotation)
+		r, err := s.lockRotation(ctx, tx, c, rotation)
 		if err != nil {
 			return err
 		}
@@ -321,7 +330,7 @@ func (s *Service) TestRotation(ctx context.Context, rotation ids.UUID) (Rotation
 		} else if n != 1 {
 			return ErrRotationState
 		}
-		if err := rotationAudit(ctx, tx, c.Actor(), "credential.rotation_test_requested", r.ConnectionID, r.ID,
+		if err := s.rotationAudit(ctx, tx, c.Actor(), "credential.rotation_test_requested", r.ConnectionID, r.ID,
 			map[string]string{"task": task.String()}); err != nil {
 			return err
 		}
@@ -356,7 +365,7 @@ func (s *Service) ActivateRotation(ctx context.Context, rotation ids.UUID, su St
 		if err := stepup.Check(ctx, tx, c, su, now); err != nil {
 			return err
 		}
-		r, err := lockRotation(ctx, tx, c, rotation)
+		r, err := s.lockRotation(ctx, tx, c, rotation)
 		if err != nil {
 			return err
 		}
@@ -367,7 +376,7 @@ func (s *Service) ActivateRotation(ctx context.Context, rotation ids.UUID, su St
 		if err != nil {
 			return err
 		}
-		pending, err = s.protect.Hold(ctx, tx, c, rotationChange(conn, r), func(ctx context.Context) error {
+		pending, err = s.protect.Hold(ctx, tx, c, rotationChange(conn, r, rotationPayload{Rotation: r.ID}), func(ctx context.Context) error {
 			return s.activate(ctx, tx, c, r.ID)
 		})
 		if err != nil {
@@ -396,23 +405,41 @@ func activatable(r Rotation) error {
 	return nil
 }
 
-// rotationPayload is a protected activation's stored payload: ids only.
+// Protected rotation actions: both go through credential.rotate (D274).
+const (
+	actionActivate = "activate"
+	actionRollback = "rollback"
+)
+
+// rotationPayload is a protected activation's or rollback's stored
+// payload: ids and the person's reason only.
 type rotationPayload struct {
 	Rotation ids.UUID `json:"rotation"`
+	// Action is actionRollback for a rollback; empty is an activation.
+	Action string `json:"action,omitzero"`
+	Reason string `json:"reason,omitzero"`
 }
 
-// rotationChange is an activation as a protected change: metadata only.
-func rotationChange(conn dbq.PcConnection, r Rotation) protect.Change {
+// rotationChange is an activation or a rollback as a protected change:
+// metadata only.
+func rotationChange(conn dbq.PcConnection, r Rotation, p rotationPayload) protect.Change {
+	action := actionActivate
+	if p.Action == actionRollback {
+		action = actionRollback
+	}
 	summary := map[string]string{
-		"connection": conn.ID.String(), "connection_name": conn.Name, "rotation": r.ID.String(),
+		"connection": conn.ID.String(), "connection_name": conn.Name, "rotation": r.ID.String(), "action": action,
 		"old_version_id": r.OldCredentialID.String(), "preview_digest": r.PreviewDigest,
 	}
 	if r.CandidateCredentialID != nil {
 		summary["candidate_version_id"] = r.CandidateCredentialID.String()
 	}
+	if p.Reason != "" {
+		summary["reason"] = p.Reason
+	}
 	return protect.Change{
 		Category: protect.Custody, Surface: protect.SurfaceCredentialRotate, Subject: conn.ID.String(), SubjectID: conn.ID,
-		Summary: summary, Widening: []string{"credential"}, Payload: rotationPayload{Rotation: r.ID},
+		Summary: summary, Widening: []string{"credential"}, Payload: p,
 	}
 }
 
@@ -451,7 +478,7 @@ func (s *Service) activate(ctx context.Context, tx db.TenantTx, c tenancy.Caller
 	if _, err := q.BumpGatewayConfig(ctx, c.Org, conn.GatewayID); err != nil {
 		return err
 	}
-	if err := rotationAudit(ctx, tx, c.Actor(), "credential.rotation_activated", conn.ID, r.ID, map[string]string{
+	if err := s.rotationAudit(ctx, tx, c.Actor(), "credential.rotation_activated", conn.ID, r.ID, map[string]string{
 		"old_version_id": r.OldCredentialID.String(), "candidate_version_id": r.CandidateCredentialID.String(),
 		"weakening": "sealed_replaced",
 	}); err != nil {
@@ -467,8 +494,8 @@ func (s *Service) activate(ctx context.Context, tx db.TenantTx, c tenancy.Caller
 	return nil
 }
 
-// ApplyProtectedRotate re-runs a confirmed protected activation as its
-// author (a protect.Applier).
+// ApplyProtectedRotate re-runs a confirmed protected activation or
+// rollback as its author (a protect.Applier).
 func (s *Service) ApplyProtectedRotate(ctx context.Context, tx db.TenantTx, author tenancy.Caller, payload []byte) error {
 	var p rotationPayload
 	if err := json.Unmarshal(payload, &p); err != nil || p.Rotation.IsZero() {
@@ -477,6 +504,9 @@ func (s *Service) ApplyProtectedRotate(ctx context.Context, tx db.TenantTx, auth
 	c, err := s.caller(tenancy.WithCaller(ctx, author), protect.SurfaceCredentialRotate.Permission())
 	if err != nil {
 		return err
+	}
+	if p.Action == actionRollback {
+		return s.rollBack(ctx, tx, c, p.Rotation, p.Reason)
 	}
 	return s.activate(ctx, tx, c, p.Rotation)
 }
@@ -506,11 +536,14 @@ func (s *Service) ProtectedRotateState(ctx context.Context, tx db.TenantTx, payl
 }
 
 // RollBackRotation makes the old key ACTIVE again and revokes the
-// candidate (connection.manage; HR-519): only while the rotation is
-// ACTIVATING, before confirmation starts and within 24 hours of
-// activation.
-func (s *Service) RollBackRotation(ctx context.Context, rotation ids.UUID, reason string) (Rotation, error) {
-	c, err := s.caller(ctx, td.PermConnectionManage)
+// candidate (HR-519): only while the rotation is ACTIVATING, before
+// confirmation starts and within 24 hours of activation. It puts a key
+// the org may believe compromised back into the gateway's configuration,
+// so it is gated as activation is (credential.rotate, CUSTODY; D274): a
+// person with credential.seal and a fresh security-key step-up, held for a
+// distinct publisher when the org protects CUSTODY.
+func (s *Service) RollBackRotation(ctx context.Context, rotation ids.UUID, reason string, su StepUp) (Rotation, error) {
+	c, err := s.caller(ctx, protect.SurfaceCredentialRotate.Permission())
 	if err != nil {
 		return Rotation{}, err
 	}
@@ -518,59 +551,96 @@ func (s *Service) RollBackRotation(ctx context.Context, rotation ids.UUID, reaso
 		return Rotation{}, ErrRotationReason
 	}
 	var out Rotation
+	var pending *protect.PendingError
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		r, err := lockRotation(ctx, tx, c, rotation)
+		now, err := q.DBNow(ctx)
 		if err != nil {
 			return err
 		}
-		now, err := q.DBNow(ctx)
+		if err := stepup.Check(ctx, tx, c, su, now); err != nil {
+			return err
+		}
+		r, err := s.lockRotation(ctx, tx, c, rotation)
 		if err != nil {
 			return err
 		}
 		if !rotationOf(r).CanRollBack(now) {
 			return ErrRollbackClosed
 		}
-		conn, err := q.LockConnection(ctx, c.Org, r.ConnectionID)
+		conn, err := q.GetConnection(ctx, c.Org, r.ConnectionID)
 		if err != nil {
 			return err
 		}
-		by := c.Principal.String()
-		// The candidate leaves ACTIVE first: one ACTIVE per connection.
-		if n, err := q.RevokeCredentialByID(ctx, &by, c.Org, *r.CandidateCredentialID); err != nil {
+		p := rotationPayload{Rotation: r.ID, Action: actionRollback, Reason: reason}
+		pending, err = s.protect.Hold(ctx, tx, c, rotationChange(conn, r, p), func(ctx context.Context) error {
+			return s.rollBack(ctx, tx, c, r.ID, reason)
+		})
+		if err != nil {
 			return err
-		} else if n != 1 {
-			return ErrRotationState
-		}
-		if n, err := q.ReactivateCredential(ctx, c.Org, r.OldCredentialID); err != nil {
-			return err
-		} else if n != 1 {
-			return ErrRotationState
-		}
-		if n, err := q.RollBackCredentialRotation(ctx, &reason, c.Org, r.ID); err != nil {
-			return err
-		} else if n != 1 {
-			return ErrRollbackClosed
-		}
-		if _, err := q.BumpGatewayConfig(ctx, c.Org, conn.GatewayID); err != nil {
-			return err
-		}
-		if err := rotationAudit(ctx, tx, c.Actor(), "credential.rotation_rolled_back", conn.ID, r.ID, map[string]string{
-			"reason": reason, "weakening": "sealed_restored",
-		}); err != nil {
-			return err
-		}
-		if s.notify != nil {
-			if _, err := s.notify.Enqueue(ctx, tx, napp.Message{Org: c.Org, Type: "security.connection_weakened", Params: map[string]string{
-				"connection": conn.Name, "user": by, "change": "credential rotation rolled back",
-			}}); err != nil {
-				return err
-			}
 		}
 		out, err = q.GetCredentialRotation(ctx, c.Org, r.ID)
 		return err
 	})
+	if err == nil && pending != nil {
+		return Rotation{}, pending
+	}
 	return out, err
+}
+
+// rollBack revokes the candidate, makes the old key ACTIVE again and ends
+// the rotation ROLLED_BACK, in that order while it is still ACTIVATING
+// within its window, and bumps the gateway's configuration.
+func (s *Service) rollBack(ctx context.Context, tx db.TenantTx, c tenancy.Caller, id ids.UUID, reason string) error {
+	q := dbq.New(tx)
+	r, err := q.LockCredentialRotation(ctx, c.Org, id)
+	if err != nil {
+		return err
+	}
+	now, err := q.DBNow(ctx)
+	if err != nil {
+		return err
+	}
+	if !rotationOf(r).CanRollBack(now) {
+		return ErrRollbackClosed
+	}
+	conn, err := q.LockConnection(ctx, c.Org, r.ConnectionID)
+	if err != nil {
+		return err
+	}
+	by := c.Principal.String()
+	// The candidate leaves ACTIVE first: one ACTIVE per connection.
+	if n, err := q.RevokeCredentialByID(ctx, &by, c.Org, *r.CandidateCredentialID); err != nil {
+		return err
+	} else if n != 1 {
+		return ErrRotationState
+	}
+	if n, err := q.ReactivateCredential(ctx, c.Org, r.OldCredentialID); err != nil {
+		return err
+	} else if n != 1 {
+		return ErrRotationState
+	}
+	if n, err := q.RollBackCredentialRotation(ctx, &reason, c.Org, r.ID); err != nil {
+		return err
+	} else if n != 1 {
+		return ErrRollbackClosed
+	}
+	if _, err := q.BumpGatewayConfig(ctx, c.Org, conn.GatewayID); err != nil {
+		return err
+	}
+	if err := s.rotationAudit(ctx, tx, c.Actor(), "credential.rotation_rolled_back", conn.ID, r.ID, map[string]string{
+		"reason": reason, "weakening": "sealed_restored",
+	}); err != nil {
+		return err
+	}
+	if s.notify != nil {
+		if _, err := s.notify.Enqueue(ctx, tx, napp.Message{Org: c.Org, Type: "security.connection_weakened", Params: map[string]string{
+			"connection": conn.Name, "user": by, "change": "credential rotation rolled back",
+		}}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ConfirmRotation leases the confirmation that GitHub refuses the old key
@@ -586,7 +656,7 @@ func (s *Service) ConfirmRotation(ctx context.Context, rotation ids.UUID) (Rotat
 	var out Rotation
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		r, err := lockRotation(ctx, tx, c, rotation)
+		r, err := s.lockRotation(ctx, tx, c, rotation)
 		if err != nil {
 			return err
 		}
@@ -617,7 +687,7 @@ func (s *Service) ConfirmRotation(ctx context.Context, rotation ids.UUID) (Rotat
 		} else if n != 1 {
 			return ErrRotationState
 		}
-		if err := rotationAudit(ctx, tx, c.Actor(), "credential.rotation_confirm_requested", r.ConnectionID, r.ID,
+		if err := s.rotationAudit(ctx, tx, c.Actor(), "credential.rotation_confirm_requested", r.ConnectionID, r.ID,
 			map[string]string{"task": task.String()}); err != nil {
 			return err
 		}
@@ -640,11 +710,11 @@ func (s *Service) CancelRotation(ctx context.Context, rotation ids.UUID, reason 
 	var out Rotation
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		r, err := lockRotation(ctx, tx, c, rotation)
+		r, err := s.lockRotation(ctx, tx, c, rotation)
 		if err != nil {
 			return err
 		}
-		if err := fail(ctx, tx, c.Actor(), r, reason); err != nil {
+		if err := s.fail(ctx, tx, c.Actor(), r, reason); err != nil {
 			return err
 		}
 		out, err = q.GetCredentialRotation(ctx, c.Org, r.ID)
@@ -654,7 +724,7 @@ func (s *Service) CancelRotation(ctx context.Context, rotation ids.UUID, reason 
 }
 
 // fail ends a rotation before activation and revokes its candidate.
-func fail(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, r Rotation, reason string) error {
+func (s *Service) fail(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, r Rotation, reason string) error {
 	q, org := dbq.New(tx), tx.OrgID()
 	if n, err := q.FailCredentialRotation(ctx, &reason, org, r.ID); err != nil {
 		return err
@@ -667,7 +737,7 @@ func fail(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, r Rotation,
 			return err
 		}
 	}
-	return rotationAudit(ctx, tx, actor, "credential.rotation_failed", r.ConnectionID, r.ID, map[string]string{"reason": reason})
+	return s.rotationAudit(ctx, tx, actor, "credential.rotation_failed", r.ConnectionID, r.ID, map[string]string{"reason": reason})
 }
 
 // GetRotation returns a rotation (connection.read).
@@ -678,7 +748,7 @@ func (s *Service) GetRotation(ctx context.Context, rotation ids.UUID) (Rotation,
 	}
 	var out Rotation
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		if err := closeWindows(ctx, tx); err != nil {
+		if err := s.closeWindows(ctx, tx); err != nil {
 			return err
 		}
 		var err error
@@ -700,7 +770,7 @@ func (s *Service) ListRotations(ctx context.Context, connection ids.UUID) ([]Rot
 	}
 	var out []Rotation
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		if err := closeWindows(ctx, tx); err != nil {
+		if err := s.closeWindows(ctx, tx); err != nil {
 			return err
 		}
 		var err error
@@ -739,18 +809,26 @@ func (s *Service) LeaseRequest(ctx context.Context, tx db.TenantTx, gateway, tas
 	} else if err != nil {
 		return nil, err
 	}
-	return json.Marshal(domain.RotationLease{Rotation: r.ID.String(), Credential: domain.RotationCredential{
+	lease := domain.RotationLease{Rotation: r.ID.String(), Credential: domain.RotationCredential{
 		ID: cred.ID.String(), Version: cred.Version, BrokerKey: cred.BrokerKeyID.String(), Sealed: cred.Sealed, AllowedHosts: cred.AllowedHosts,
 		Header: cred.Header, Scheme: deref(cred.Scheme), Kind: cred.Kind,
-	}}, json.Deterministic(true))
+	}}
+	if purpose == txdomain.PurposeRotationConfirm && r.CandidateCredentialID != nil {
+		// The control: GET /app is asked with the active (new) key too (D274).
+		lease.Active = r.CandidateCredentialID.String()
+	}
+	return json.Marshal(lease, json.Deterministic(true))
 }
 
 // ReportRotation applies a rotation lease's report
 // (pgtransactions.RotationLeases). A test passes only when GitHub accepted
-// the candidate as the App and for the installation; a failed one fails
-// the rotation and revokes the candidate. A confirmation confirms only on
-// GitHub's 401 for the old key, which then is REVOKED (HR-520); any other
-// answer returns the rotation to AWAITING_OLD_REMOVAL.
+// the candidate as the App and for the installation; only a definite
+// refusal (401, 403, 404, or another App) fails the rotation and revokes
+// the candidate, and anything else leaves it TESTING (D274). A confirmation
+// confirms only when GitHub refused the old key with 401 while accepting
+// the active key for the App at the same moment, and the old key then is
+// REVOKED (HR-520, D274); any other answer returns the rotation to
+// AWAITING_OLD_REMOVAL.
 func (s *Service) ReportRotation(ctx context.Context, tx db.TenantTx, gateway ids.UUID, task dbq.LeasedRotationTaskRow, rep txapp.Report,
 ) (txapp.Applied, error) {
 	q, org := dbq.New(tx), tx.OrgID()
@@ -762,7 +840,7 @@ func (s *Service) ReportRotation(ctx context.Context, tx db.TenantTx, gateway id
 	actor := evdomain.Actor{Type: "gateway", ID: gateway.String()}
 	details := map[string]string{
 		"task": task.ID.String(), "app_status": strconv.Itoa(p.AppStatus), "app_matches": strconv.FormatBool(p.AppMatches),
-		"installation_status": strconv.Itoa(p.InstallationStatus),
+		"installation_status": strconv.Itoa(p.InstallationStatus), "active_app_status": strconv.Itoa(p.ActiveStatus),
 	}
 	r, err := q.LockCredentialRotation(ctx, org, task.RotationID)
 	if err != nil {
@@ -773,19 +851,25 @@ func (s *Service) ReportRotation(ctx context.Context, tx db.TenantTx, gateway id
 		if r.State != string(domain.RotationTesting) || r.TestPassedAt != nil || r.TestVerificationID == nil || *r.TestVerificationID != task.ID {
 			return done, nil
 		}
+		if !p.TestPassed() && !p.TestRefused() {
+			// No answer, a rate limit or a server error proves nothing: the
+			// rotation stays TESTING for another test (D274).
+			details["result"] = "inconclusive"
+			return done, s.rotationAudit(ctx, tx, actor, "credential.rotation_tested", r.ConnectionID, r.ID, details)
+		}
 		if !p.TestPassed() {
 			details["result"] = "failed"
 			reason := fmt.Sprintf("the candidate failed its test at GitHub (GET /app %d, installation %d)", p.AppStatus, p.InstallationStatus)
-			if err := fail(ctx, tx, actor, r, reason); err != nil {
+			if err := s.fail(ctx, tx, actor, r, reason); err != nil {
 				return done, err
 			}
-			return done, rotationAudit(ctx, tx, actor, "credential.rotation_tested", r.ConnectionID, r.ID, details)
+			return done, s.rotationAudit(ctx, tx, actor, "credential.rotation_tested", r.ConnectionID, r.ID, details)
 		}
 		if _, err := q.PassRotationTest(ctx, org, r.ID); err != nil {
 			return done, err
 		}
 		details["result"] = "passed"
-		return done, rotationAudit(ctx, tx, actor, "credential.rotation_tested", r.ConnectionID, r.ID, details)
+		return done, s.rotationAudit(ctx, tx, actor, "credential.rotation_tested", r.ConnectionID, r.ID, details)
 	case txdomain.PurposeRotationConfirm:
 		if r.State != string(domain.RotationConfirming) || r.ConfirmVerificationID == nil || *r.ConfirmVerificationID != task.ID {
 			return done, nil
@@ -794,7 +878,7 @@ func (s *Service) ReportRotation(ctx context.Context, tx db.TenantTx, gateway id
 			if _, err := q.AwaitOldRemoval(ctx, org, r.ID); err != nil {
 				return done, err
 			}
-			return done, rotationAudit(ctx, tx, actor, "credential.rotation_not_confirmed", r.ConnectionID, r.ID, details)
+			return done, s.rotationAudit(ctx, tx, actor, "credential.rotation_not_confirmed", r.ConnectionID, r.ID, details)
 		}
 		by := rotationSystem
 		if n, err := q.RevokeCredentialByID(ctx, &by, org, r.OldCredentialID); err != nil {
@@ -808,7 +892,7 @@ func (s *Service) ReportRotation(ctx context.Context, tx db.TenantTx, gateway id
 			return done, ErrRotationState
 		}
 		details["old_version_id"] = r.OldCredentialID.String()
-		return done, rotationAudit(ctx, tx, actor, "credential.rotation_confirmed", r.ConnectionID, r.ID, details)
+		return done, s.rotationAudit(ctx, tx, actor, "credential.rotation_confirmed", r.ConnectionID, r.ID, details)
 	}
 	return done, txapp.ErrLease
 }
