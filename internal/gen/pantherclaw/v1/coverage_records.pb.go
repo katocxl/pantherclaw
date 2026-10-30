@@ -3788,8 +3788,10 @@ func (x *GetCoverageGraphRequest) GetOperation() string {
 // CoverageGraphNode is one node of a coverage graph.
 type CoverageGraphNode struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// "agent:<id>", "scope:<connection_id>/<operation>", "route:<route id>"
-	// or "target:<host>".
+	// "agent:<id>", "scope:<connection_id>/<operation>",
+	// "route:<connection_id>/<operation>/<route id or kind>" (one per scope),
+	// or "target:<host>" (the connection's base URL host) or
+	// "target:<connection_id>" for a connection without one.
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// "AGENT", "SCOPE", "ROUTE" or "TARGET".
 	Kind string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
@@ -3952,9 +3954,11 @@ type GetCoverageGraphResponse struct {
 	// Edges.
 	Edges []*CoverageGraphEdge `protobuf:"bytes,2,rep,name=edges,proto3" json:"edges,omitempty"`
 	// What the scopes shown say about the agent, as the agent lifecycle
-	// derives it: "PROTECTED", "PARTIALLY_PROTECTED" or "OBSERVED".
+	// derives it: "PROTECTED", "PARTIALLY_PROTECTED" or "OBSERVED"; "UNKNOWN"
+	// when scope_limited is set, since a scope not shown could be weaker.
 	BoundaryState string `protobuf:"bytes,3,opt,name=boundary_state,json=boundaryState,proto3" json:"boundary_state,omitempty"`
-	// Set when the caller may not read every scope of the agent.
+	// Set when the caller may not read every scope of the agent, or when the
+	// agent has more scopes than one graph shows (200).
 	ScopeLimited  bool `protobuf:"varint,4,opt,name=scope_limited,json=scopeLimited,proto3" json:"scope_limited,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

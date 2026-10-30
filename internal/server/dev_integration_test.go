@@ -396,7 +396,7 @@ func TestIntDevSeedAudits(t *testing.T) {
 	org, _, _, _ := seed(t, testConfig(t, d, RoleAPI, gatewayAt("127.0.0.1:8443")), "50.00", true)
 	var kinds []string
 	err := d.AppPool(t).InTenantTx(context.Background(), org, func(ctx context.Context, tx db.TenantTx) error {
-		rows, err := tx.Query(ctx, "SELECT kind, body FROM pc.ledger_entries ORDER BY id")
+		rows, err := tx.Query(ctx, "SELECT kind, body FROM pc.ledger_entries ORDER BY xid, id")
 		if err != nil {
 			return err
 		}
@@ -418,9 +418,15 @@ func TestIntDevSeedAudits(t *testing.T) {
 	want := []string{
 		// Importing the reviewed package opens its TOOL_REVIEW entry, which
 		// activating it settles (G0 M5 part 2).
-		"audit.dev.org_seeded", "audit.dev.workload_seeded", "audit.waitlist.entry_opened", "audit.package.imported",
+		// The two are written in one transaction, so they share an xid and the
+		// chainer's (xid, id) order between them is the random uuid order:
+		// that pair is compared unordered, sorted below.
+		"audit.dev.org_seeded", "audit.dev.workload_seeded", "audit.package.imported", "audit.waitlist.entry_opened",
 		"audit.package.transitioned", "audit.policy.version_created", "audit.policy.published",
 		"audit.dev.gateway_seeded", "audit.connection.created", "audit.facts.provider_registered", "audit.grant.issued", "audit.run.started",
+	}
+	if len(kinds) >= 4 {
+		slices.Sort(kinds[2:4])
 	}
 	if err != nil || !slices.Equal(kinds, want) {
 		t.Fatalf("org ledger = %v, %v; want %v", kinds, err, want)

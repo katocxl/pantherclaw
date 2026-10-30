@@ -18,8 +18,15 @@ import (
 const coverageActiveGrantsOfAgents = `-- name: CoverageActiveGrantsOfAgents :many
 SELECT g.id, g.agent_id, r.bounds FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+CROSS JOIN LATERAL (SELECT CASE WHEN jsonb_typeof(b->'operations') = 'array' THEN b->'operations' END AS ops
+    FROM (SELECT convert_from(r.bounds, 'UTF8')::jsonb AS b) j) o
 WHERE g.org_id = $1 AND g.agent_id = ANY($2::uuid[]) AND g.state = 'ACTIVE'
   AND r.not_before <= now() AND r.expires_at > now()
+  -- Bounds without operations allow every operation; a pattern "x.*" allows
+  -- the names that start with "x." (grants domain Ops.Matches).
+  AND (o.ops IS NULL OR EXISTS (
+    SELECT 1 FROM jsonb_array_elements_text(o.ops) p(pat), unnest($3::text[]) op(name)
+    WHERE p.pat = op.name OR (right(p.pat, 1) = '*' AND starts_with(op.name, left(p.pat, -1)))))
 ORDER BY g.id DESC
 LIMIT 500
 `
@@ -30,11 +37,12 @@ type CoverageActiveGrantsOfAgentsRow struct {
 	Bounds  []byte
 }
 
-// The active grants in effect now of some agents, with their bounds: the
-// access detail links those that allow an operation of the connection
-// (F423).
-func (q *Queries) CoverageActiveGrantsOfAgents(ctx context.Context, orgID ids.OrgID, agentIds []ids.UUID) ([]CoverageActiveGrantsOfAgentsRow, error) {
-	rows, err := q.db.Query(ctx, coverageActiveGrantsOfAgents, orgID, agentIds)
+// The active grants in effect now of some agents that allow one of some
+// operations, with their bounds: the access detail links them (F423). The
+// operations are filtered here, before the limit, so no matching grant is
+// cut.
+func (q *Queries) CoverageActiveGrantsOfAgents(ctx context.Context, orgID ids.OrgID, agentIds []ids.UUID, operations []string) ([]CoverageActiveGrantsOfAgentsRow, error) {
+	rows, err := q.db.Query(ctx, coverageActiveGrantsOfAgents, orgID, agentIds, operations)
 	if err != nil {
 		return nil, err
 	}
@@ -1861,17 +1869,19 @@ FROM pc.coverage_snapshots
 WHERE org_id = $1
   AND ($2::uuid IS NULL OR connection_id = $2::uuid)
   AND ($3::uuid IS NULL OR agent_id = $3::uuid)
-  AND ($4::uuid IS NULL
-       OR (agent_id, connection_id, operation) > ($4::uuid, $5::uuid,
-                                                 $6::text))
+  AND ($4::text IS NULL OR operation = $4::text)
+  AND ($5::uuid IS NULL
+       OR (agent_id, connection_id, operation) > ($5::uuid, $6::uuid,
+                                                 $7::text))
 ORDER BY agent_id, connection_id, operation, id DESC
-LIMIT $7
+LIMIT $8
 `
 
 type ListCurrentCoverageSnapshotsPageParams struct {
 	OrgID           ids.OrgID
 	ConnectionID    *ids.UUID
 	AgentID         *ids.UUID
+	Operation       *string
 	AfterAgent      *ids.UUID
 	AfterConnection *ids.UUID
 	AfterOperation  *string
@@ -1885,6 +1895,7 @@ func (q *Queries) ListCurrentCoverageSnapshotsPage(ctx context.Context, arg List
 		arg.OrgID,
 		arg.ConnectionID,
 		arg.AgentID,
+		arg.Operation,
 		arg.AfterAgent,
 		arg.AfterConnection,
 		arg.AfterOperation,
