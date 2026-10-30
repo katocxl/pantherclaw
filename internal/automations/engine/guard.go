@@ -24,10 +24,7 @@ type guards struct {
 }
 
 // GuardVariables are the variables a step guard may read.
-var GuardVariables = []celenv.Variable{
-	{Name: "trigger", Type: cel.MapType(cel.StringType, cel.DynType)},
-	{Name: "steps", Type: cel.MapType(cel.StringType, cel.DynType)},
-}
+var GuardVariables = autodomain.GuardVariables
 
 func newGuards() (*guards, error) {
 	env, err := celenv.New(celenv.DefaultLimits, nil, GuardVariables...)
@@ -69,6 +66,18 @@ func (g *guards) eval(ctx context.Context, src string, t autodomain.TriggerRef, 
 	ok, _, err := p.EvalBool(ctx, guardVars(t, outputs))
 	return ok, err
 }
+
+// EvalGuard evaluates a guard outside an execution, for replays. A guard
+// that cannot be evaluated on what the trigger carries returns an error.
+func EvalGuard(ctx context.Context, src string, t autodomain.TriggerRef) (bool, error) {
+	g, err := replayGuards()
+	if err != nil {
+		return false, err
+	}
+	return g.eval(ctx, src, t, nil)
+}
+
+var replayGuards = sync.OnceValues(newGuards)
 
 // guardVars maps the trigger and outputs to CEL values: parameters keep
 // their declared types.

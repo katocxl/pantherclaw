@@ -174,6 +174,10 @@ message AutomationStepAttempt {
   google.protobuf.Timestamp started_at = 13;
   google.protobuf.Timestamp ended_at = 14;
   google.protobuf.Timestamp wake_at = 15;
+  // The node this attempt worked; a v1 attempt's is its step id.
+  string node_id = 16;
+  // How many times the node was entered.
+  int32 visit = 17;
 }
 
 // AutomationFinishStatus is one finish condition and its evidence.
@@ -236,6 +240,10 @@ message AutomationExecution {
   string cancel_reason = 23;
   string cancel_requested_by = 24;
   AutomationExecutionResult result = 25;
+  // A v2 execution: the node being worked and every node entered, in
+  // order. Empty on a v1 execution, which reports current_step.
+  string current_node = 26;
+  repeated string path = 27;
 }
 
 // AutomationExecutionGrant is a grant an execution issued.

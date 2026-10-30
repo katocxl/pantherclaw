@@ -90,7 +90,10 @@ func (e *Engine) build(ctx context.Context, q *dbq.Queries, row dbq.PcAutomation
 	x := &engine.Exec{
 		ID: row.ID, Org: org, Automation: row.AutomationID, Version: row.VersionID, Mode: autodomain.Mode(row.Mode),
 		Def: def, State: autodomain.ExecutionState(row.State), Current: int(row.CurrentStep),
-		Compensating: row.Compensating, DeadlineAt: row.DeadlineAt, Transitions: int(row.Transitions),
+		Compensating: row.Compensating, DeadlineAt: row.DeadlineAt, Transitions: int(row.Transitions), Path: row.Path,
+	}
+	if row.CurrentNode != nil {
+		x.CurrentNode = *row.CurrentNode
 	}
 	if row.Reason != nil {
 		x.Reason = *row.Reason
@@ -159,7 +162,7 @@ func attemptOf(s dbq.PcAutomationStepAttempt) (*engine.Attempt, error) {
 		return nil, err
 	}
 	a := &engine.Attempt{
-		ID: s.ID, Index: int(s.StepIndex), StepID: s.StepID, Number: int(s.Attempt), Kind: s.Kind,
+		ID: s.ID, Index: int(s.StepIndex), StepID: s.StepID, NodeID: s.NodeID, Visit: int(s.Visit), Number: int(s.Attempt), Kind: s.Kind,
 		Compensation: s.Compensation, State: autodomain.StepState(s.State), Refused: s.Decision == "REFUSED",
 		Output: out, Refs: refs, Effect: autodomain.Effect(s.Effect), StartedAt: s.StartedAt,
 	}
@@ -195,7 +198,7 @@ func (e *Engine) save(ctx context.Context, q *dbq.Queries, x *engine.Exec) error
 		}
 		if a.New {
 			err = q.InsertAutomationStepAttempt(ctx, dbq.InsertAutomationStepAttemptParams{
-				OrgID: x.Org, ID: a.ID, ExecutionID: x.ID, StepIndex: int16(a.Index), StepID: a.StepID, //nolint:gosec // ≤ 40
+				OrgID: x.Org, ID: a.ID, ExecutionID: x.ID, StepIndex: int16(a.Index), StepID: a.StepID, NodeID: a.NodeID, //nolint:gosec // ≤ 40
 				Attempt: int16(a.Number), Kind: a.Kind, Compensation: a.Compensation, State: string(a.State), //nolint:gosec // ≤ 5
 				Decision: decision, Reason: nonEmpty(a.Reason), Output: out, Refs: refs, Effect: string(effectOr(a.Effect)),
 				WakeAt: timeOrNil(a.WakeAt),
@@ -226,7 +229,7 @@ func (e *Engine) save(ctx context.Context, q *dbq.Queries, x *engine.Exec) error
 	n, err := q.SaveAutomationExecution(ctx, dbq.SaveAutomationExecutionParams{
 		OrgID: x.Org, ID: x.ID, State: string(x.State), Reason: nonEmpty(x.Reason), CurrentStep: int16(x.Current), //nolint:gosec // ≤ 40
 		Compensating: x.Compensating, Result: result, Transitions: int32(min(x.Transitions, 1<<30)), //nolint:gosec // bounded
-		StartedAt: timeOrNil(x.StartedAt), WakeAt: timeOrNil(x.WakeAt),
+		StartedAt: timeOrNil(x.StartedAt), WakeAt: timeOrNil(x.WakeAt), CurrentNode: nonEmpty(x.CurrentNode), Path: pathOf(x.Path),
 	})
 	if err != nil {
 		return err
@@ -235,6 +238,14 @@ func (e *Engine) save(ctx context.Context, q *dbq.Queries, x *engine.Exec) error
 		return fmt.Errorf("pgengine: execution %s not saved", x.ID)
 	}
 	return nil
+}
+
+// pathOf is never NULL: a v1 execution stores an empty path.
+func pathOf(p []string) []string {
+	if p == nil {
+		return []string{}
+	}
+	return p
 }
 
 func effectOr(e autodomain.Effect) autodomain.Effect {

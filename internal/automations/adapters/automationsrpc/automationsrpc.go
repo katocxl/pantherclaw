@@ -317,9 +317,13 @@ func (h *Handler) GetVersionGraph(ctx context.Context, r *pantherclawv1.GetVersi
 		})
 	}
 	for _, e := range edges {
-		out.Edges = append(out.Edges, &pantherclawv1.AutomationGraphEdge{From: e.From, To: e.To, Type: e.Type})
+		out.Edges = append(out.Edges, graphEdge(e))
 	}
 	return out, nil
+}
+
+func graphEdge(e autodomain.GraphEdge) *pantherclawv1.AutomationGraphEdge {
+	return &pantherclawv1.AutomationGraphEdge{From: e.From, To: e.To, Type: e.Type, Label: e.Label, Guard: e.Guard}
 }
 
 // RequestEnable implements AutomationServiceHandler.

@@ -602,6 +602,8 @@ type PcAutomationExecution struct {
 	CancelRequestedBy *string
 	CancelReason      *string
 	CancelRequestedAt *time.Time
+	CurrentNode       *string
+	Path              []string
 }
 
 type PcAutomationFeedCursor struct {
@@ -696,6 +698,8 @@ type PcAutomationStepAttempt struct {
 	StartedAt    time.Time
 	EndedAt      *time.Time
 	WakeAt       *time.Time
+	NodeID       string
+	Visit        int16
 }
 
 type PcAutomationTestCase struct {

@@ -821,7 +821,7 @@ func (q *Queries) FailAutomationExecution(ctx context.Context, arg FailAutomatio
 }
 
 const getAutomationExecution = `-- name: GetAutomationExecution :one
-SELECT org_id, id, automation_id, version_id, trigger_id, mode, state, reason, current_step, compensating, ceiling_id, service_account_id, principal_user_id, principal_sa_id, trigger_kind, params, subjects, evidence, occurred_at, root_trigger_id, ancestry, depth, result, transitions, engine_errors, created_at, started_at, deadline_at, updated_at, ended_at, wake_at, cancel_requested_by, cancel_reason, cancel_requested_at FROM pc.automation_executions WHERE org_id = $1 AND id = $2
+SELECT org_id, id, automation_id, version_id, trigger_id, mode, state, reason, current_step, compensating, ceiling_id, service_account_id, principal_user_id, principal_sa_id, trigger_kind, params, subjects, evidence, occurred_at, root_trigger_id, ancestry, depth, result, transitions, engine_errors, created_at, started_at, deadline_at, updated_at, ended_at, wake_at, cancel_requested_by, cancel_reason, cancel_requested_at, current_node, path FROM pc.automation_executions WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetAutomationExecution(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcAutomationExecution, error) {
@@ -862,6 +862,8 @@ func (q *Queries) GetAutomationExecution(ctx context.Context, orgID ids.OrgID, i
 		&i.CancelRequestedBy,
 		&i.CancelReason,
 		&i.CancelRequestedAt,
+		&i.CurrentNode,
+		&i.Path,
 	)
 	return i, err
 }
@@ -1051,11 +1053,11 @@ func (q *Queries) InsertAutomationLaunch(ctx context.Context, arg InsertAutomati
 }
 
 const insertAutomationStepAttempt = `-- name: InsertAutomationStepAttempt :exec
-INSERT INTO pc.automation_step_attempts (org_id, id, execution_id, step_index, step_id, attempt, kind, compensation,
+INSERT INTO pc.automation_step_attempts (org_id, id, execution_id, step_index, step_id, node_id, attempt, kind, compensation,
     state, decision, reason, output, refs, effect, wake_at)
-VALUES ($1, $2, $3, $4, $5,
-    $6, $7, $8, $9, $10, $11,
-    $12, $13, $14, $15)
+VALUES ($1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10, $11, $12,
+    $13, $14, $15, $16)
 `
 
 type InsertAutomationStepAttemptParams struct {
@@ -1064,6 +1066,7 @@ type InsertAutomationStepAttemptParams struct {
 	ExecutionID  ids.UUID
 	StepIndex    int16
 	StepID       string
+	NodeID       string
 	Attempt      int16
 	Kind         string
 	Compensation bool
@@ -1083,6 +1086,7 @@ func (q *Queries) InsertAutomationStepAttempt(ctx context.Context, arg InsertAut
 		arg.ExecutionID,
 		arg.StepIndex,
 		arg.StepID,
+		arg.NodeID,
 		arg.Attempt,
 		arg.Kind,
 		arg.Compensation,
@@ -1115,7 +1119,7 @@ func (q *Queries) InstanceAgent(ctx context.Context, orgID ids.OrgID, iD ids.UUI
 }
 
 const listAutomationExecutions = `-- name: ListAutomationExecutions :many
-SELECT org_id, id, automation_id, version_id, trigger_id, mode, state, reason, current_step, compensating, ceiling_id, service_account_id, principal_user_id, principal_sa_id, trigger_kind, params, subjects, evidence, occurred_at, root_trigger_id, ancestry, depth, result, transitions, engine_errors, created_at, started_at, deadline_at, updated_at, ended_at, wake_at, cancel_requested_by, cancel_reason, cancel_requested_at FROM pc.automation_executions
+SELECT org_id, id, automation_id, version_id, trigger_id, mode, state, reason, current_step, compensating, ceiling_id, service_account_id, principal_user_id, principal_sa_id, trigger_kind, params, subjects, evidence, occurred_at, root_trigger_id, ancestry, depth, result, transitions, engine_errors, created_at, started_at, deadline_at, updated_at, ended_at, wake_at, cancel_requested_by, cancel_reason, cancel_requested_at, current_node, path FROM pc.automation_executions
 WHERE org_id = $1
     AND ($2::uuid IS NULL OR automation_id = $2)
     AND (cardinality($3::text[]) = 0 OR state = ANY($3::text[]))
@@ -1192,6 +1196,8 @@ func (q *Queries) ListAutomationExecutions(ctx context.Context, arg ListAutomati
 			&i.CancelRequestedBy,
 			&i.CancelReason,
 			&i.CancelRequestedAt,
+			&i.CurrentNode,
+			&i.Path,
 		); err != nil {
 			return nil, err
 		}
@@ -1204,7 +1210,7 @@ func (q *Queries) ListAutomationExecutions(ctx context.Context, arg ListAutomati
 }
 
 const listAutomationStepAttempts = `-- name: ListAutomationStepAttempts :many
-SELECT org_id, id, execution_id, step_index, step_id, attempt, kind, compensation, state, decision, reason, output, refs, effect, started_at, ended_at, wake_at FROM pc.automation_step_attempts
+SELECT org_id, id, execution_id, step_index, step_id, attempt, kind, compensation, state, decision, reason, output, refs, effect, started_at, ended_at, wake_at, node_id, visit FROM pc.automation_step_attempts
 WHERE org_id = $1 AND execution_id = $2
 ORDER BY compensation, step_index, attempt
 `
@@ -1236,6 +1242,8 @@ func (q *Queries) ListAutomationStepAttempts(ctx context.Context, orgID ids.OrgI
 			&i.StartedAt,
 			&i.EndedAt,
 			&i.WakeAt,
+			&i.NodeID,
+			&i.Visit,
 		); err != nil {
 			return nil, err
 		}
@@ -1248,7 +1256,7 @@ func (q *Queries) ListAutomationStepAttempts(ctx context.Context, orgID ids.OrgI
 }
 
 const lockAutomationExecution = `-- name: LockAutomationExecution :one
-SELECT org_id, id, automation_id, version_id, trigger_id, mode, state, reason, current_step, compensating, ceiling_id, service_account_id, principal_user_id, principal_sa_id, trigger_kind, params, subjects, evidence, occurred_at, root_trigger_id, ancestry, depth, result, transitions, engine_errors, created_at, started_at, deadline_at, updated_at, ended_at, wake_at, cancel_requested_by, cancel_reason, cancel_requested_at FROM pc.automation_executions WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, automation_id, version_id, trigger_id, mode, state, reason, current_step, compensating, ceiling_id, service_account_id, principal_user_id, principal_sa_id, trigger_kind, params, subjects, evidence, occurred_at, root_trigger_id, ancestry, depth, result, transitions, engine_errors, created_at, started_at, deadline_at, updated_at, ended_at, wake_at, cancel_requested_by, cancel_reason, cancel_requested_at, current_node, path FROM pc.automation_executions WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockAutomationExecution(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcAutomationExecution, error) {
@@ -1289,6 +1297,8 @@ func (q *Queries) LockAutomationExecution(ctx context.Context, orgID ids.OrgID, 
 		&i.CancelRequestedBy,
 		&i.CancelReason,
 		&i.CancelRequestedAt,
+		&i.CurrentNode,
+		&i.Path,
 	)
 	return i, err
 }
@@ -1618,8 +1628,9 @@ const saveAutomationExecution = `-- name: SaveAutomationExecution :execrows
 UPDATE pc.automation_executions
 SET state = $1, reason = $2, current_step = $3,
     compensating = $4, result = $5, transitions = $6, engine_errors = 0,
-    started_at = $7, wake_at = $8
-WHERE org_id = $9 AND id = $10
+    started_at = $7, wake_at = $8, current_node = $9,
+    path = $10
+WHERE org_id = $11 AND id = $12
 `
 
 type SaveAutomationExecutionParams struct {
@@ -1631,6 +1642,8 @@ type SaveAutomationExecutionParams struct {
 	Transitions  int32
 	StartedAt    *time.Time
 	WakeAt       *time.Time
+	CurrentNode  *string
+	Path         []string
 	OrgID        ids.OrgID
 	ID           ids.UUID
 }
@@ -1645,6 +1658,8 @@ func (q *Queries) SaveAutomationExecution(ctx context.Context, arg SaveAutomatio
 		arg.Transitions,
 		arg.StartedAt,
 		arg.WakeAt,
+		arg.CurrentNode,
+		arg.Path,
 		arg.OrgID,
 		arg.ID,
 	)

@@ -1202,11 +1202,15 @@ func (x *SimulationSample) GetAgentIds() []string {
 }
 
 type SimulationStep struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	StepId        string                 `protobuf:"bytes,1,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
-	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
-	Decision      string                 `protobuf:"bytes,3,opt,name=decision,proto3" json:"decision,omitempty"`
-	Reason        string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	StepId   string                 `protobuf:"bytes,1,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
+	Kind     string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	Decision string                 `protobuf:"bytes,3,opt,name=decision,proto3" json:"decision,omitempty"`
+	Reason   string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	// On a v2 version, the branch that leads here when more than one was
+	// possible: "<node> <label>". A guard that could not be evaluated shows
+	// every way out as possible.
+	Branch        string `protobuf:"bytes,5,opt,name=branch,proto3" json:"branch,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1265,6 +1269,13 @@ func (x *SimulationStep) GetDecision() string {
 func (x *SimulationStep) GetReason() string {
 	if x != nil {
 		return x.Reason
+	}
+	return ""
+}
+
+func (x *SimulationStep) GetBranch() string {
+	if x != nil {
+		return x.Branch
 	}
 	return ""
 }
@@ -2218,18 +2229,74 @@ func (x *InspectedStep) GetScopes() []string {
 	return nil
 }
 
+// InspectedPath is one path of a v2 version.
+type InspectedPath struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	NodeIds []string               `protobuf:"bytes,1,rep,name=node_ids,json=nodeIds,proto3" json:"node_ids,omitempty"`
+	// The outcome its terminal declares.
+	Outcome       string `protobuf:"bytes,2,opt,name=outcome,proto3" json:"outcome,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InspectedPath) Reset() {
+	*x = InspectedPath{}
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InspectedPath) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InspectedPath) ProtoMessage() {}
+
+func (x *InspectedPath) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InspectedPath.ProtoReflect.Descriptor instead.
+func (*InspectedPath) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *InspectedPath) GetNodeIds() []string {
+	if x != nil {
+		return x.NodeIds
+	}
+	return nil
+}
+
+func (x *InspectedPath) GetOutcome() string {
+	if x != nil {
+		return x.Outcome
+	}
+	return ""
+}
+
 type InspectVersionResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Steps []*InspectedStep       `protobuf:"bytes,1,rep,name=steps,proto3" json:"steps,omitempty"`
 	// notes: what could not be read (a connection without a package).
-	Notes         []string `protobuf:"bytes,2,rep,name=notes,proto3" json:"notes,omitempty"`
+	Notes []string `protobuf:"bytes,2,rep,name=notes,proto3" json:"notes,omitempty"`
+	// Every path of a v2 version; empty on v1.
+	Paths         []*InspectedPath `protobuf:"bytes,3,rep,name=paths,proto3" json:"paths,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *InspectVersionResponse) Reset() {
 	*x = InspectVersionResponse{}
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[32]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2241,7 +2308,7 @@ func (x *InspectVersionResponse) String() string {
 func (*InspectVersionResponse) ProtoMessage() {}
 
 func (x *InspectVersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[32]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2254,7 +2321,7 @@ func (x *InspectVersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InspectVersionResponse.ProtoReflect.Descriptor instead.
 func (*InspectVersionResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{32}
+	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *InspectVersionResponse) GetSteps() []*InspectedStep {
@@ -2271,6 +2338,13 @@ func (x *InspectVersionResponse) GetNotes() []string {
 	return nil
 }
 
+func (x *InspectVersionResponse) GetPaths() []*InspectedPath {
+	if x != nil {
+		return x.Paths
+	}
+	return nil
+}
+
 type PreviewBlastRadiusRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	VersionId     string                 `protobuf:"bytes,1,opt,name=version_id,json=versionId,proto3" json:"version_id,omitempty"`
@@ -2280,7 +2354,7 @@ type PreviewBlastRadiusRequest struct {
 
 func (x *PreviewBlastRadiusRequest) Reset() {
 	*x = PreviewBlastRadiusRequest{}
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[33]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2292,7 +2366,7 @@ func (x *PreviewBlastRadiusRequest) String() string {
 func (*PreviewBlastRadiusRequest) ProtoMessage() {}
 
 func (x *PreviewBlastRadiusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[33]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2305,7 +2379,7 @@ func (x *PreviewBlastRadiusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewBlastRadiusRequest.ProtoReflect.Descriptor instead.
 func (*PreviewBlastRadiusRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{33}
+	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *PreviewBlastRadiusRequest) GetVersionId() string {
@@ -2330,7 +2404,7 @@ type BlastRadiusReach struct {
 
 func (x *BlastRadiusReach) Reset() {
 	*x = BlastRadiusReach{}
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[34]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2342,7 +2416,7 @@ func (x *BlastRadiusReach) String() string {
 func (*BlastRadiusReach) ProtoMessage() {}
 
 func (x *BlastRadiusReach) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[34]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2355,7 +2429,7 @@ func (x *BlastRadiusReach) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BlastRadiusReach.ProtoReflect.Descriptor instead.
 func (*BlastRadiusReach) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{34}
+	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *BlastRadiusReach) GetResourceGroup() string {
@@ -2419,7 +2493,7 @@ type SharedCredential struct {
 
 func (x *SharedCredential) Reset() {
 	*x = SharedCredential{}
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[35]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2431,7 +2505,7 @@ func (x *SharedCredential) String() string {
 func (*SharedCredential) ProtoMessage() {}
 
 func (x *SharedCredential) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[35]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2444,7 +2518,7 @@ func (x *SharedCredential) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SharedCredential.ProtoReflect.Descriptor instead.
 func (*SharedCredential) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{35}
+	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *SharedCredential) GetConnectionId() string {
@@ -2499,7 +2573,7 @@ type PreviewBlastRadiusResponse struct {
 
 func (x *PreviewBlastRadiusResponse) Reset() {
 	*x = PreviewBlastRadiusResponse{}
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[36]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2511,7 +2585,7 @@ func (x *PreviewBlastRadiusResponse) String() string {
 func (*PreviewBlastRadiusResponse) ProtoMessage() {}
 
 func (x *PreviewBlastRadiusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[36]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2524,7 +2598,7 @@ func (x *PreviewBlastRadiusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewBlastRadiusResponse.ProtoReflect.Descriptor instead.
 func (*PreviewBlastRadiusResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{36}
+	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *PreviewBlastRadiusResponse) GetReach() []*BlastRadiusReach {
@@ -2651,7 +2725,7 @@ type CompareRestrictionRequest struct {
 
 func (x *CompareRestrictionRequest) Reset() {
 	*x = CompareRestrictionRequest{}
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[37]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2663,7 +2737,7 @@ func (x *CompareRestrictionRequest) String() string {
 func (*CompareRestrictionRequest) ProtoMessage() {}
 
 func (x *CompareRestrictionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[37]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2676,7 +2750,7 @@ func (x *CompareRestrictionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompareRestrictionRequest.ProtoReflect.Descriptor instead.
 func (*CompareRestrictionRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{37}
+	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *CompareRestrictionRequest) GetVersionId() string {
@@ -2709,7 +2783,7 @@ type CompareRestrictionResponse struct {
 
 func (x *CompareRestrictionResponse) Reset() {
 	*x = CompareRestrictionResponse{}
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[38]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2721,7 +2795,7 @@ func (x *CompareRestrictionResponse) String() string {
 func (*CompareRestrictionResponse) ProtoMessage() {}
 
 func (x *CompareRestrictionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[38]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2734,7 +2808,7 @@ func (x *CompareRestrictionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompareRestrictionResponse.ProtoReflect.Descriptor instead.
 func (*CompareRestrictionResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{38}
+	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *CompareRestrictionResponse) GetBeforeRights() int32 {
@@ -2791,7 +2865,7 @@ type GetAutomationMetricsRequest struct {
 
 func (x *GetAutomationMetricsRequest) Reset() {
 	*x = GetAutomationMetricsRequest{}
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[39]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2803,7 +2877,7 @@ func (x *GetAutomationMetricsRequest) String() string {
 func (*GetAutomationMetricsRequest) ProtoMessage() {}
 
 func (x *GetAutomationMetricsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[39]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2816,7 +2890,7 @@ func (x *GetAutomationMetricsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAutomationMetricsRequest.ProtoReflect.Descriptor instead.
 func (*GetAutomationMetricsRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{39}
+	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *GetAutomationMetricsRequest) GetAutomationId() string {
@@ -2856,7 +2930,7 @@ type AutomationOutcomes struct {
 
 func (x *AutomationOutcomes) Reset() {
 	*x = AutomationOutcomes{}
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[40]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2868,7 +2942,7 @@ func (x *AutomationOutcomes) String() string {
 func (*AutomationOutcomes) ProtoMessage() {}
 
 func (x *AutomationOutcomes) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[40]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2881,7 +2955,7 @@ func (x *AutomationOutcomes) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AutomationOutcomes.ProtoReflect.Descriptor instead.
 func (*AutomationOutcomes) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{40}
+	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *AutomationOutcomes) GetBucketTime() *timestamppb.Timestamp {
@@ -2942,7 +3016,7 @@ type GetAutomationMetricsResponse struct {
 
 func (x *GetAutomationMetricsResponse) Reset() {
 	*x = GetAutomationMetricsResponse{}
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[41]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2954,7 +3028,7 @@ func (x *GetAutomationMetricsResponse) String() string {
 func (*GetAutomationMetricsResponse) ProtoMessage() {}
 
 func (x *GetAutomationMetricsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[41]
+	mi := &file_pantherclaw_v1_automation_assurance_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2967,7 +3041,7 @@ func (x *GetAutomationMetricsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAutomationMetricsResponse.ProtoReflect.Descriptor instead.
 func (*GetAutomationMetricsResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{41}
+	return file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *GetAutomationMetricsResponse) GetHours() []*AutomationOutcomes {
@@ -3084,12 +3158,13 @@ const file_pantherclaw_v1_automation_assurance_proto_rawDesc = "" +
 	"\n" +
 	"source_ref\x18\x03 \x01(\tR\tsourceRef\x124\n" +
 	"\x05steps\x18\x04 \x03(\v2\x1e.pantherclaw.v1.SimulationStepR\x05steps\x12\x1b\n" +
-	"\tagent_ids\x18\x05 \x03(\tR\bagentIds\"q\n" +
+	"\tagent_ids\x18\x05 \x03(\tR\bagentIds\"\x89\x01\n" +
 	"\x0eSimulationStep\x12\x17\n" +
 	"\astep_id\x18\x01 \x01(\tR\x06stepId\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x1a\n" +
 	"\bdecision\x18\x03 \x01(\tR\bdecision\x12\x16\n" +
-	"\x06reason\x18\x04 \x01(\tR\x06reason\"\xf5\x01\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\x12\x16\n" +
+	"\x06branch\x18\x05 \x01(\tR\x06branch\"\xf5\x01\n" +
 	"\x12SimulationForecast\x12,\n" +
 	"\x12executions_per_day\x18\x01 \x01(\x01R\x10executionsPerDay\x12\"\n" +
 	"\rgates_per_day\x18\x02 \x01(\x01R\vgatesPerDay\x12-\n" +
@@ -3185,10 +3260,14 @@ const file_pantherclaw_v1_automation_assurance_proto_rawDesc = "" +
 	"\n" +
 	"operations\x18\x04 \x03(\v2\".pantherclaw.v1.InspectedOperationR\n" +
 	"operations\x12\x16\n" +
-	"\x06scopes\x18\x05 \x03(\tR\x06scopes\"c\n" +
+	"\x06scopes\x18\x05 \x03(\tR\x06scopes\"D\n" +
+	"\rInspectedPath\x12\x19\n" +
+	"\bnode_ids\x18\x01 \x03(\tR\anodeIds\x12\x18\n" +
+	"\aoutcome\x18\x02 \x01(\tR\aoutcome\"\x98\x01\n" +
 	"\x16InspectVersionResponse\x123\n" +
 	"\x05steps\x18\x01 \x03(\v2\x1d.pantherclaw.v1.InspectedStepR\x05steps\x12\x14\n" +
-	"\x05notes\x18\x02 \x03(\tR\x05notes\"D\n" +
+	"\x05notes\x18\x02 \x03(\tR\x05notes\x123\n" +
+	"\x05paths\x18\x03 \x03(\v2\x1d.pantherclaw.v1.InspectedPathR\x05paths\"D\n" +
 	"\x19PreviewBlastRadiusRequest\x12'\n" +
 	"\n" +
 	"version_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\tversionId\"\xeb\x01\n" +
@@ -3284,7 +3363,7 @@ func file_pantherclaw_v1_automation_assurance_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_automation_assurance_proto_rawDescData
 }
 
-var file_pantherclaw_v1_automation_assurance_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
+var file_pantherclaw_v1_automation_assurance_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
 var file_pantherclaw_v1_automation_assurance_proto_goTypes = []any{
 	(*AutomationStubResult)(nil),              // 0: pantherclaw.v1.AutomationStubResult
 	(*AutomationStepStub)(nil),                // 1: pantherclaw.v1.AutomationStepStub
@@ -3318,101 +3397,103 @@ var file_pantherclaw_v1_automation_assurance_proto_goTypes = []any{
 	(*InspectVersionRequest)(nil),             // 29: pantherclaw.v1.InspectVersionRequest
 	(*InspectedOperation)(nil),                // 30: pantherclaw.v1.InspectedOperation
 	(*InspectedStep)(nil),                     // 31: pantherclaw.v1.InspectedStep
-	(*InspectVersionResponse)(nil),            // 32: pantherclaw.v1.InspectVersionResponse
-	(*PreviewBlastRadiusRequest)(nil),         // 33: pantherclaw.v1.PreviewBlastRadiusRequest
-	(*BlastRadiusReach)(nil),                  // 34: pantherclaw.v1.BlastRadiusReach
-	(*SharedCredential)(nil),                  // 35: pantherclaw.v1.SharedCredential
-	(*PreviewBlastRadiusResponse)(nil),        // 36: pantherclaw.v1.PreviewBlastRadiusResponse
-	(*CompareRestrictionRequest)(nil),         // 37: pantherclaw.v1.CompareRestrictionRequest
-	(*CompareRestrictionResponse)(nil),        // 38: pantherclaw.v1.CompareRestrictionResponse
-	(*GetAutomationMetricsRequest)(nil),       // 39: pantherclaw.v1.GetAutomationMetricsRequest
-	(*AutomationOutcomes)(nil),                // 40: pantherclaw.v1.AutomationOutcomes
-	(*GetAutomationMetricsResponse)(nil),      // 41: pantherclaw.v1.GetAutomationMetricsResponse
-	nil,                                       // 42: pantherclaw.v1.AutomationStubResult.OutputEntry
-	nil,                                       // 43: pantherclaw.v1.AutomationTestExpectation.StepsEntry
-	nil,                                       // 44: pantherclaw.v1.AutomationTestCase.ParamsEntry
-	nil,                                       // 45: pantherclaw.v1.AutomationCaseResult.StepsEntry
-	nil,                                       // 46: pantherclaw.v1.GetRolloutReportResponse.ExecutionsEntry
-	nil,                                       // 47: pantherclaw.v1.GetRolloutReportResponse.WouldBeRefusalsEntry
-	nil,                                       // 48: pantherclaw.v1.InspectedOperation.CoverageEntry
-	(*durationpb.Duration)(nil),               // 49: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil),             // 50: google.protobuf.Timestamp
+	(*InspectedPath)(nil),                     // 32: pantherclaw.v1.InspectedPath
+	(*InspectVersionResponse)(nil),            // 33: pantherclaw.v1.InspectVersionResponse
+	(*PreviewBlastRadiusRequest)(nil),         // 34: pantherclaw.v1.PreviewBlastRadiusRequest
+	(*BlastRadiusReach)(nil),                  // 35: pantherclaw.v1.BlastRadiusReach
+	(*SharedCredential)(nil),                  // 36: pantherclaw.v1.SharedCredential
+	(*PreviewBlastRadiusResponse)(nil),        // 37: pantherclaw.v1.PreviewBlastRadiusResponse
+	(*CompareRestrictionRequest)(nil),         // 38: pantherclaw.v1.CompareRestrictionRequest
+	(*CompareRestrictionResponse)(nil),        // 39: pantherclaw.v1.CompareRestrictionResponse
+	(*GetAutomationMetricsRequest)(nil),       // 40: pantherclaw.v1.GetAutomationMetricsRequest
+	(*AutomationOutcomes)(nil),                // 41: pantherclaw.v1.AutomationOutcomes
+	(*GetAutomationMetricsResponse)(nil),      // 42: pantherclaw.v1.GetAutomationMetricsResponse
+	nil,                                       // 43: pantherclaw.v1.AutomationStubResult.OutputEntry
+	nil,                                       // 44: pantherclaw.v1.AutomationTestExpectation.StepsEntry
+	nil,                                       // 45: pantherclaw.v1.AutomationTestCase.ParamsEntry
+	nil,                                       // 46: pantherclaw.v1.AutomationCaseResult.StepsEntry
+	nil,                                       // 47: pantherclaw.v1.GetRolloutReportResponse.ExecutionsEntry
+	nil,                                       // 48: pantherclaw.v1.GetRolloutReportResponse.WouldBeRefusalsEntry
+	nil,                                       // 49: pantherclaw.v1.InspectedOperation.CoverageEntry
+	(*durationpb.Duration)(nil),               // 50: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil),             // 51: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_automation_assurance_proto_depIdxs = []int32{
-	42, // 0: pantherclaw.v1.AutomationStubResult.output:type_name -> pantherclaw.v1.AutomationStubResult.OutputEntry
-	49, // 1: pantherclaw.v1.AutomationStubResult.wait:type_name -> google.protobuf.Duration
+	43, // 0: pantherclaw.v1.AutomationStubResult.output:type_name -> pantherclaw.v1.AutomationStubResult.OutputEntry
+	50, // 1: pantherclaw.v1.AutomationStubResult.wait:type_name -> google.protobuf.Duration
 	0,  // 2: pantherclaw.v1.AutomationStepStub.results:type_name -> pantherclaw.v1.AutomationStubResult
-	43, // 3: pantherclaw.v1.AutomationTestExpectation.steps:type_name -> pantherclaw.v1.AutomationTestExpectation.StepsEntry
-	44, // 4: pantherclaw.v1.AutomationTestCase.params:type_name -> pantherclaw.v1.AutomationTestCase.ParamsEntry
+	44, // 3: pantherclaw.v1.AutomationTestExpectation.steps:type_name -> pantherclaw.v1.AutomationTestExpectation.StepsEntry
+	45, // 4: pantherclaw.v1.AutomationTestCase.params:type_name -> pantherclaw.v1.AutomationTestCase.ParamsEntry
 	1,  // 5: pantherclaw.v1.AutomationTestCase.stubs:type_name -> pantherclaw.v1.AutomationStepStub
 	2,  // 6: pantherclaw.v1.AutomationTestCase.expect:type_name -> pantherclaw.v1.AutomationTestExpectation
 	3,  // 7: pantherclaw.v1.SetTestCasesRequest.cases:type_name -> pantherclaw.v1.AutomationTestCase
 	3,  // 8: pantherclaw.v1.ListTestCasesResponse.cases:type_name -> pantherclaw.v1.AutomationTestCase
-	45, // 9: pantherclaw.v1.AutomationCaseResult.steps:type_name -> pantherclaw.v1.AutomationCaseResult.StepsEntry
-	49, // 10: pantherclaw.v1.AutomationCaseResult.elapsed:type_name -> google.protobuf.Duration
+	46, // 9: pantherclaw.v1.AutomationCaseResult.steps:type_name -> pantherclaw.v1.AutomationCaseResult.StepsEntry
+	50, // 10: pantherclaw.v1.AutomationCaseResult.elapsed:type_name -> google.protobuf.Duration
 	9,  // 11: pantherclaw.v1.AutomationTestRun.cases:type_name -> pantherclaw.v1.AutomationCaseResult
-	50, // 12: pantherclaw.v1.AutomationTestRun.create_time:type_name -> google.protobuf.Timestamp
+	51, // 12: pantherclaw.v1.AutomationTestRun.create_time:type_name -> google.protobuf.Timestamp
 	10, // 13: pantherclaw.v1.RunTestsResponse.run:type_name -> pantherclaw.v1.AutomationTestRun
 	10, // 14: pantherclaw.v1.GetTestRunResponse.run:type_name -> pantherclaw.v1.AutomationTestRun
-	50, // 15: pantherclaw.v1.StartAutomationSimulationRequest.start_time:type_name -> google.protobuf.Timestamp
-	50, // 16: pantherclaw.v1.StartAutomationSimulationRequest.end_time:type_name -> google.protobuf.Timestamp
-	50, // 17: pantherclaw.v1.SimulationSample.occur_time:type_name -> google.protobuf.Timestamp
+	51, // 15: pantherclaw.v1.StartAutomationSimulationRequest.start_time:type_name -> google.protobuf.Timestamp
+	51, // 16: pantherclaw.v1.StartAutomationSimulationRequest.end_time:type_name -> google.protobuf.Timestamp
+	51, // 17: pantherclaw.v1.SimulationSample.occur_time:type_name -> google.protobuf.Timestamp
 	19, // 18: pantherclaw.v1.SimulationSample.steps:type_name -> pantherclaw.v1.SimulationStep
 	21, // 19: pantherclaw.v1.SimulationForecast.budget:type_name -> pantherclaw.v1.SimulationBudget
-	50, // 20: pantherclaw.v1.AutomationSimulation.start_time:type_name -> google.protobuf.Timestamp
-	50, // 21: pantherclaw.v1.AutomationSimulation.end_time:type_name -> google.protobuf.Timestamp
+	51, // 20: pantherclaw.v1.AutomationSimulation.start_time:type_name -> google.protobuf.Timestamp
+	51, // 21: pantherclaw.v1.AutomationSimulation.end_time:type_name -> google.protobuf.Timestamp
 	17, // 22: pantherclaw.v1.AutomationSimulation.days:type_name -> pantherclaw.v1.SimulationDay
 	18, // 23: pantherclaw.v1.AutomationSimulation.samples:type_name -> pantherclaw.v1.SimulationSample
 	20, // 24: pantherclaw.v1.AutomationSimulation.forecast:type_name -> pantherclaw.v1.SimulationForecast
-	50, // 25: pantherclaw.v1.AutomationSimulation.create_time:type_name -> google.protobuf.Timestamp
-	50, // 26: pantherclaw.v1.AutomationSimulation.finish_time:type_name -> google.protobuf.Timestamp
+	51, // 25: pantherclaw.v1.AutomationSimulation.create_time:type_name -> google.protobuf.Timestamp
+	51, // 26: pantherclaw.v1.AutomationSimulation.finish_time:type_name -> google.protobuf.Timestamp
 	22, // 27: pantherclaw.v1.GetAutomationSimulationResponse.simulation:type_name -> pantherclaw.v1.AutomationSimulation
-	46, // 28: pantherclaw.v1.GetRolloutReportResponse.executions:type_name -> pantherclaw.v1.GetRolloutReportResponse.ExecutionsEntry
-	47, // 29: pantherclaw.v1.GetRolloutReportResponse.would_be_refusals:type_name -> pantherclaw.v1.GetRolloutReportResponse.WouldBeRefusalsEntry
-	50, // 30: pantherclaw.v1.GetAutomationStatusResponse.next_run_time:type_name -> google.protobuf.Timestamp
-	50, // 31: pantherclaw.v1.GetAutomationStatusResponse.latest_end_time:type_name -> google.protobuf.Timestamp
+	47, // 28: pantherclaw.v1.GetRolloutReportResponse.executions:type_name -> pantherclaw.v1.GetRolloutReportResponse.ExecutionsEntry
+	48, // 29: pantherclaw.v1.GetRolloutReportResponse.would_be_refusals:type_name -> pantherclaw.v1.GetRolloutReportResponse.WouldBeRefusalsEntry
+	51, // 30: pantherclaw.v1.GetAutomationStatusResponse.next_run_time:type_name -> google.protobuf.Timestamp
+	51, // 31: pantherclaw.v1.GetAutomationStatusResponse.latest_end_time:type_name -> google.protobuf.Timestamp
 	27, // 32: pantherclaw.v1.GetAutomationStatusResponse.budgets:type_name -> pantherclaw.v1.AutomationBudget
-	50, // 33: pantherclaw.v1.GetAutomationStatusResponse.review_by:type_name -> google.protobuf.Timestamp
-	48, // 34: pantherclaw.v1.InspectedOperation.coverage:type_name -> pantherclaw.v1.InspectedOperation.CoverageEntry
+	51, // 33: pantherclaw.v1.GetAutomationStatusResponse.review_by:type_name -> google.protobuf.Timestamp
+	49, // 34: pantherclaw.v1.InspectedOperation.coverage:type_name -> pantherclaw.v1.InspectedOperation.CoverageEntry
 	30, // 35: pantherclaw.v1.InspectedStep.operations:type_name -> pantherclaw.v1.InspectedOperation
 	31, // 36: pantherclaw.v1.InspectVersionResponse.steps:type_name -> pantherclaw.v1.InspectedStep
-	34, // 37: pantherclaw.v1.PreviewBlastRadiusResponse.reach:type_name -> pantherclaw.v1.BlastRadiusReach
-	21, // 38: pantherclaw.v1.PreviewBlastRadiusResponse.max_spend_per_day:type_name -> pantherclaw.v1.SimulationBudget
-	35, // 39: pantherclaw.v1.PreviewBlastRadiusResponse.shared_credentials:type_name -> pantherclaw.v1.SharedCredential
-	34, // 40: pantherclaw.v1.CompareRestrictionResponse.removed:type_name -> pantherclaw.v1.BlastRadiusReach
-	50, // 41: pantherclaw.v1.GetAutomationMetricsRequest.start_time:type_name -> google.protobuf.Timestamp
-	50, // 42: pantherclaw.v1.GetAutomationMetricsRequest.end_time:type_name -> google.protobuf.Timestamp
-	50, // 43: pantherclaw.v1.AutomationOutcomes.bucket_time:type_name -> google.protobuf.Timestamp
-	40, // 44: pantherclaw.v1.GetAutomationMetricsResponse.hours:type_name -> pantherclaw.v1.AutomationOutcomes
-	4,  // 45: pantherclaw.v1.AssuranceService.SetTestCases:input_type -> pantherclaw.v1.SetTestCasesRequest
-	6,  // 46: pantherclaw.v1.AssuranceService.ListTestCases:input_type -> pantherclaw.v1.ListTestCasesRequest
-	8,  // 47: pantherclaw.v1.AssuranceService.RunTests:input_type -> pantherclaw.v1.RunTestsRequest
-	12, // 48: pantherclaw.v1.AssuranceService.GetTestRun:input_type -> pantherclaw.v1.GetTestRunRequest
-	14, // 49: pantherclaw.v1.AssuranceService.StartAutomationSimulation:input_type -> pantherclaw.v1.StartAutomationSimulationRequest
-	16, // 50: pantherclaw.v1.AssuranceService.GetAutomationSimulation:input_type -> pantherclaw.v1.GetAutomationSimulationRequest
-	24, // 51: pantherclaw.v1.AssuranceService.GetRolloutReport:input_type -> pantherclaw.v1.GetRolloutReportRequest
-	26, // 52: pantherclaw.v1.AssuranceService.GetAutomationStatus:input_type -> pantherclaw.v1.GetAutomationStatusRequest
-	29, // 53: pantherclaw.v1.AssuranceService.InspectVersion:input_type -> pantherclaw.v1.InspectVersionRequest
-	33, // 54: pantherclaw.v1.AssuranceService.PreviewBlastRadius:input_type -> pantherclaw.v1.PreviewBlastRadiusRequest
-	37, // 55: pantherclaw.v1.AssuranceService.CompareRestriction:input_type -> pantherclaw.v1.CompareRestrictionRequest
-	39, // 56: pantherclaw.v1.AssuranceService.GetAutomationMetrics:input_type -> pantherclaw.v1.GetAutomationMetricsRequest
-	5,  // 57: pantherclaw.v1.AssuranceService.SetTestCases:output_type -> pantherclaw.v1.SetTestCasesResponse
-	7,  // 58: pantherclaw.v1.AssuranceService.ListTestCases:output_type -> pantherclaw.v1.ListTestCasesResponse
-	11, // 59: pantherclaw.v1.AssuranceService.RunTests:output_type -> pantherclaw.v1.RunTestsResponse
-	13, // 60: pantherclaw.v1.AssuranceService.GetTestRun:output_type -> pantherclaw.v1.GetTestRunResponse
-	15, // 61: pantherclaw.v1.AssuranceService.StartAutomationSimulation:output_type -> pantherclaw.v1.StartAutomationSimulationResponse
-	23, // 62: pantherclaw.v1.AssuranceService.GetAutomationSimulation:output_type -> pantherclaw.v1.GetAutomationSimulationResponse
-	25, // 63: pantherclaw.v1.AssuranceService.GetRolloutReport:output_type -> pantherclaw.v1.GetRolloutReportResponse
-	28, // 64: pantherclaw.v1.AssuranceService.GetAutomationStatus:output_type -> pantherclaw.v1.GetAutomationStatusResponse
-	32, // 65: pantherclaw.v1.AssuranceService.InspectVersion:output_type -> pantherclaw.v1.InspectVersionResponse
-	36, // 66: pantherclaw.v1.AssuranceService.PreviewBlastRadius:output_type -> pantherclaw.v1.PreviewBlastRadiusResponse
-	38, // 67: pantherclaw.v1.AssuranceService.CompareRestriction:output_type -> pantherclaw.v1.CompareRestrictionResponse
-	41, // 68: pantherclaw.v1.AssuranceService.GetAutomationMetrics:output_type -> pantherclaw.v1.GetAutomationMetricsResponse
-	57, // [57:69] is the sub-list for method output_type
-	45, // [45:57] is the sub-list for method input_type
-	45, // [45:45] is the sub-list for extension type_name
-	45, // [45:45] is the sub-list for extension extendee
-	0,  // [0:45] is the sub-list for field type_name
+	32, // 37: pantherclaw.v1.InspectVersionResponse.paths:type_name -> pantherclaw.v1.InspectedPath
+	35, // 38: pantherclaw.v1.PreviewBlastRadiusResponse.reach:type_name -> pantherclaw.v1.BlastRadiusReach
+	21, // 39: pantherclaw.v1.PreviewBlastRadiusResponse.max_spend_per_day:type_name -> pantherclaw.v1.SimulationBudget
+	36, // 40: pantherclaw.v1.PreviewBlastRadiusResponse.shared_credentials:type_name -> pantherclaw.v1.SharedCredential
+	35, // 41: pantherclaw.v1.CompareRestrictionResponse.removed:type_name -> pantherclaw.v1.BlastRadiusReach
+	51, // 42: pantherclaw.v1.GetAutomationMetricsRequest.start_time:type_name -> google.protobuf.Timestamp
+	51, // 43: pantherclaw.v1.GetAutomationMetricsRequest.end_time:type_name -> google.protobuf.Timestamp
+	51, // 44: pantherclaw.v1.AutomationOutcomes.bucket_time:type_name -> google.protobuf.Timestamp
+	41, // 45: pantherclaw.v1.GetAutomationMetricsResponse.hours:type_name -> pantherclaw.v1.AutomationOutcomes
+	4,  // 46: pantherclaw.v1.AssuranceService.SetTestCases:input_type -> pantherclaw.v1.SetTestCasesRequest
+	6,  // 47: pantherclaw.v1.AssuranceService.ListTestCases:input_type -> pantherclaw.v1.ListTestCasesRequest
+	8,  // 48: pantherclaw.v1.AssuranceService.RunTests:input_type -> pantherclaw.v1.RunTestsRequest
+	12, // 49: pantherclaw.v1.AssuranceService.GetTestRun:input_type -> pantherclaw.v1.GetTestRunRequest
+	14, // 50: pantherclaw.v1.AssuranceService.StartAutomationSimulation:input_type -> pantherclaw.v1.StartAutomationSimulationRequest
+	16, // 51: pantherclaw.v1.AssuranceService.GetAutomationSimulation:input_type -> pantherclaw.v1.GetAutomationSimulationRequest
+	24, // 52: pantherclaw.v1.AssuranceService.GetRolloutReport:input_type -> pantherclaw.v1.GetRolloutReportRequest
+	26, // 53: pantherclaw.v1.AssuranceService.GetAutomationStatus:input_type -> pantherclaw.v1.GetAutomationStatusRequest
+	29, // 54: pantherclaw.v1.AssuranceService.InspectVersion:input_type -> pantherclaw.v1.InspectVersionRequest
+	34, // 55: pantherclaw.v1.AssuranceService.PreviewBlastRadius:input_type -> pantherclaw.v1.PreviewBlastRadiusRequest
+	38, // 56: pantherclaw.v1.AssuranceService.CompareRestriction:input_type -> pantherclaw.v1.CompareRestrictionRequest
+	40, // 57: pantherclaw.v1.AssuranceService.GetAutomationMetrics:input_type -> pantherclaw.v1.GetAutomationMetricsRequest
+	5,  // 58: pantherclaw.v1.AssuranceService.SetTestCases:output_type -> pantherclaw.v1.SetTestCasesResponse
+	7,  // 59: pantherclaw.v1.AssuranceService.ListTestCases:output_type -> pantherclaw.v1.ListTestCasesResponse
+	11, // 60: pantherclaw.v1.AssuranceService.RunTests:output_type -> pantherclaw.v1.RunTestsResponse
+	13, // 61: pantherclaw.v1.AssuranceService.GetTestRun:output_type -> pantherclaw.v1.GetTestRunResponse
+	15, // 62: pantherclaw.v1.AssuranceService.StartAutomationSimulation:output_type -> pantherclaw.v1.StartAutomationSimulationResponse
+	23, // 63: pantherclaw.v1.AssuranceService.GetAutomationSimulation:output_type -> pantherclaw.v1.GetAutomationSimulationResponse
+	25, // 64: pantherclaw.v1.AssuranceService.GetRolloutReport:output_type -> pantherclaw.v1.GetRolloutReportResponse
+	28, // 65: pantherclaw.v1.AssuranceService.GetAutomationStatus:output_type -> pantherclaw.v1.GetAutomationStatusResponse
+	33, // 66: pantherclaw.v1.AssuranceService.InspectVersion:output_type -> pantherclaw.v1.InspectVersionResponse
+	37, // 67: pantherclaw.v1.AssuranceService.PreviewBlastRadius:output_type -> pantherclaw.v1.PreviewBlastRadiusResponse
+	39, // 68: pantherclaw.v1.AssuranceService.CompareRestriction:output_type -> pantherclaw.v1.CompareRestrictionResponse
+	42, // 69: pantherclaw.v1.AssuranceService.GetAutomationMetrics:output_type -> pantherclaw.v1.GetAutomationMetricsResponse
+	58, // [58:70] is the sub-list for method output_type
+	46, // [46:58] is the sub-list for method input_type
+	46, // [46:46] is the sub-list for extension type_name
+	46, // [46:46] is the sub-list for extension extendee
+	0,  // [0:46] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_automation_assurance_proto_init() }
@@ -3426,7 +3507,7 @@ func file_pantherclaw_v1_automation_assurance_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_automation_assurance_proto_rawDesc), len(file_pantherclaw_v1_automation_assurance_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   49,
+			NumMessages:   50,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

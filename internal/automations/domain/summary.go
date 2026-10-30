@@ -49,6 +49,16 @@ func Summary(d *Definition, names Names) string {
 	if len(waits) > 0 {
 		line("Wait when", strings.Join(waits, "; ")+".")
 	}
+	if d.IsV2() {
+		f := d.Flow()
+		for i := range f.Nodes {
+			for _, e := range f.Nodes[i].Edges() {
+				if e.Label != "" {
+					line("Branch", branchText(f.Nodes[i].ID, e))
+				}
+			}
+		}
+	}
 	fails := "stop"
 	if d.IfFails != nil && d.IfFails.Default == OnFailureEscalate {
 		fails = "stop and escalate to the owner"
@@ -61,12 +71,33 @@ func Summary(d *Definition, names Names) string {
 		fails += ", then run compensation (never reported as an undo): " + strings.Join(cs, "; ")
 	}
 	line("If work fails", fails+".")
+	within := ", within " + human(d.Limits.DeadlineOrDefault()) + "."
+	if d.IsV2() {
+		f := d.Flow()
+		for i := range f.Nodes {
+			if n := &f.Nodes[i]; n.Kind() == NodeKindTerminal {
+				line("Finish when", n.ID+" ends "+strings.ToLower(strings.ReplaceAll(string(n.Outcome), "_", " "))+" once "+finishText(n.FinishWhen)+within)
+			}
+		}
+		return b.String()
+	}
+	line("Finish when", finishText(d.Finish)+within)
+	return b.String()
+}
+
+func finishText(fs []Finish) string {
 	var fin []string
-	for _, f := range d.Finish {
+	for _, f := range fs {
 		fin = append(fin, "step "+f.Step+" shows "+strings.ToLower(strings.ReplaceAll(string(f.Condition), "_", " ")))
 	}
-	line("Finish when", strings.Join(fin, " and ")+", within "+human(d.Limits.DeadlineOrDefault())+".")
-	return b.String()
+	return strings.Join(fin, " and ")
+}
+
+func branchText(id string, e Edge) string {
+	if e.Guard == "" {
+		return id + " otherwise goes to " + e.To + "."
+	}
+	return id + " goes to " + e.To + " when " + e.Guard + "."
 }
 
 func human(d time.Duration) string {

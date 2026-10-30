@@ -111,3 +111,39 @@ func TestHR530_FormatsStayApart(t *testing.T) {
 		})
 	}
 }
+
+// TestV2GraphAndSummary: the graph has a BRANCH edge per way out with its
+// label and guard, one finish node per terminal, and the summary says both.
+//
+// Covers: F678
+func TestV2GraphAndSummary(t *testing.T) {
+	d, err := autodomain.Parse([]byte(refundDoc(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodes, edges := autodomain.Graph(d)
+	var branches []autodomain.GraphEdge
+	for _, e := range edges {
+		if e.Type == autodomain.EdgeBranch {
+			branches = append(branches, e)
+		}
+	}
+	if len(branches) != 2 || branches[0].Label != "then" || branches[0].Guard == "" || branches[1].Label != "else" || branches[1].Guard != "" {
+		t.Fatalf("branch edges %+v", branches)
+	}
+	finishes := 0
+	for _, n := range nodes {
+		if n.Type == autodomain.NodeFinish {
+			finishes++
+		}
+	}
+	if finishes != 2 {
+		t.Errorf("%d finish nodes", finishes)
+	}
+	s := autodomain.Summary(d, nil)
+	for _, want := range []string{"Branch: size goes to launch when", "Branch: size otherwise goes to file.", "Finish when: filed ends failed once step file shows case opened"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("summary lacks %q:\n%s", want, s)
+		}
+	}
+}

@@ -117,7 +117,14 @@ func (h *Handler) InspectVersion(ctx context.Context, req *pb.InspectVersionRequ
 	if err != nil {
 		return nil, err
 	}
+	return inspection(in), nil
+}
+
+func inspection(in assurance.Inspection) *pb.InspectVersionResponse {
 	out := &pb.InspectVersionResponse{Notes: in.Notes}
+	for _, p := range in.Paths {
+		out.Paths = append(out.Paths, &pb.InspectedPath{NodeIds: p.Nodes, Outcome: p.Outcome})
+	}
 	for _, s := range in.Steps {
 		x := &pb.InspectedStep{StepId: s.ID, Kind: s.Kind, Effectful: s.Effectful, Scopes: s.Scopes}
 		for _, o := range s.Operations {
@@ -128,7 +135,11 @@ func (h *Handler) InspectVersion(ctx context.Context, req *pb.InspectVersionRequ
 		}
 		out.Steps = append(out.Steps, x)
 	}
-	return out, nil
+	return out
+}
+
+func simStep(st assurance.SimStep) *pb.SimulationStep {
+	return &pb.SimulationStep{StepId: st.ID, Kind: st.Kind, Decision: st.Decision, Reason: st.Reason, Branch: st.Branch}
 }
 
 func reachPB(r assurance.Reach) *pb.BlastRadiusReach {
@@ -251,7 +262,7 @@ func (h *Handler) GetAutomationSimulation(ctx context.Context, req *pb.GetAutoma
 		for _, x := range r.Samples {
 			sample := &pb.SimulationSample{OccurTime: timestamppb.New(x.At), TriggerKind: x.Kind, SourceRef: x.SourceRef, AgentIds: x.Agents}
 			for _, st := range x.Steps {
-				sample.Steps = append(sample.Steps, &pb.SimulationStep{StepId: st.ID, Kind: st.Kind, Decision: st.Decision, Reason: st.Reason})
+				sample.Steps = append(sample.Steps, simStep(st))
 			}
 			out.Samples = append(out.Samples, sample)
 		}

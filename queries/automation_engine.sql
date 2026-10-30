@@ -28,7 +28,8 @@ SELECT * FROM pc.automation_executions WHERE org_id = sqlc.arg(org_id) AND id = 
 UPDATE pc.automation_executions
 SET state = sqlc.arg(state), reason = sqlc.narg(reason), current_step = sqlc.arg(current_step),
     compensating = sqlc.arg(compensating), result = sqlc.narg(result), transitions = sqlc.arg(transitions), engine_errors = 0,
-    started_at = sqlc.narg(started_at), wake_at = sqlc.narg(wake_at)
+    started_at = sqlc.narg(started_at), wake_at = sqlc.narg(wake_at), current_node = sqlc.narg(current_node),
+    path = sqlc.arg(path)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 
 -- name: RequestAutomationExecutionCancel :execrows
@@ -66,9 +67,9 @@ WHERE org_id = sqlc.arg(org_id) AND execution_id = sqlc.arg(execution_id)
 ORDER BY compensation, step_index, attempt;
 
 -- name: InsertAutomationStepAttempt :exec
-INSERT INTO pc.automation_step_attempts (org_id, id, execution_id, step_index, step_id, attempt, kind, compensation,
+INSERT INTO pc.automation_step_attempts (org_id, id, execution_id, step_index, step_id, node_id, attempt, kind, compensation,
     state, decision, reason, output, refs, effect, wake_at)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(execution_id), sqlc.arg(step_index), sqlc.arg(step_id),
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(execution_id), sqlc.arg(step_index), sqlc.arg(step_id), sqlc.arg(node_id),
     sqlc.arg(attempt), sqlc.arg(kind), sqlc.arg(compensation), sqlc.arg(state), sqlc.arg(decision), sqlc.narg(reason),
     sqlc.arg(output), sqlc.arg(refs), sqlc.arg(effect), sqlc.narg(wake_at));
 

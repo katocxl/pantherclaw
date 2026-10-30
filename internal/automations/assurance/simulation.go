@@ -12,6 +12,7 @@ import (
 	"time"
 
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
+	"github.com/katocxl/pantherclaw/internal/automations/engine"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/cron"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -86,6 +87,9 @@ type SimStep struct {
 	Kind     string `json:"kind"`
 	Decision string `json:"decision"`
 	Reason   string `json:"reason,omitzero"`
+	// Branch names the way out that leads here when a guard could not be
+	// evaluated, so more than one was possible: "<node> <label>".
+	Branch string `json:"branch,omitzero"`
 }
 
 // Sample is one would-be execution.
@@ -218,7 +222,7 @@ func Replay(ctx context.Context, def *autodomain.Definition, h History, from, to
 		if d, ok := byDay[day]; ok {
 			d.WouldFire++
 		}
-		steps := prospective(def, h.Issuance, grantsByDay, day)
+		steps := prospective(ctx, def, autodomain.TriggerRef{Kind: w.Kind(), OccurredAt: f.at}, h.Issuance, grantsByDay, day)
 		if i%every == 0 && len(out.Samples) < maxSamples {
 			agents := slices.Compact(slices.Sorted(slices.Values(slices.Concat(f.agents, launched))))
 			if len(agents) > maxSampleAgents {
@@ -474,26 +478,102 @@ func limitHourly(def *autodomain.Definition, fires []fire, refused map[string]in
 // prospective lists what a would-be execution's steps would do: a launch
 // is checked against the ceiling, its issuance preview (DryRun, D94 S5)
 // when there is one, and its per-day grant cap; effectful steps would run;
-// gates wait for a person.
-func prospective(def *autodomain.Definition, issuance map[string]IssueDecision, grantsByDay map[string]int, day string) []SimStep {
+// gates wait for a person. A v2 version is walked along the guards the
+// trigger's history can answer.
+func prospective(ctx context.Context, def *autodomain.Definition, t autodomain.TriggerRef, issuance map[string]IssueDecision,
+	grantsByDay map[string]int, day string,
+) []SimStep {
+	if def.IsV2() {
+		return prospectivePaths(ctx, def, t, issuance, grantsByDay, day)
+	}
 	var out []SimStep
 	for _, s := range def.Do {
-		st := SimStep{ID: s.ID, Kind: s.Step, Decision: "WOULD_RUN"}
-		spec := autodomain.Catalog[s.Step]
-		switch {
-		case s.Step == autodomain.KindLaunchRun:
-			st.Decision, st.Reason = launchDecision(def, s, issuance, grantsByDay, day)
-		case s.Step == autodomain.KindGate:
-			st.Decision = "GATE"
-		case spec.Wait:
-			st.Decision = "WAIT"
-		}
-		if s.When != "" {
-			st.Decision, st.Reason = "UNEVALUABLE", "GUARD"
-		}
-		out = append(out, st)
+		out = append(out, prospectiveStep(def, s, issuance, grantsByDay, day))
 	}
 	return out
+}
+
+func prospectiveStep(def *autodomain.Definition, s autodomain.StepSpec, issuance map[string]IssueDecision, grantsByDay map[string]int,
+	day string,
+) SimStep {
+	st := SimStep{ID: s.ID, Kind: s.Step, Decision: "WOULD_RUN"}
+	spec := autodomain.Catalog[s.Step]
+	switch {
+	case s.Step == autodomain.KindLaunchRun:
+		st.Decision, st.Reason = launchDecision(def, s, issuance, grantsByDay, day)
+	case s.Step == autodomain.KindGate:
+		st.Decision = "GATE"
+	case spec.Wait:
+		st.Decision = "WAIT"
+	}
+	if s.When != "" {
+		st.Decision, st.Reason = "UNEVALUABLE", "GUARD"
+	}
+	return st
+}
+
+// prospectivePaths walks a v2 version from its entry. History keeps no
+// trigger parameters and no step ran, so a guard reading them cannot be
+// evaluated: it is listed UNEVALUABLE and every way out is shown, each node
+// once (D301, HR-288).
+func prospectivePaths(ctx context.Context, def *autodomain.Definition, t autodomain.TriggerRef, issuance map[string]IssueDecision,
+	grantsByDay map[string]int, day string,
+) []SimStep {
+	f := def.Flow()
+	var out []SimStep
+	seen := map[string]bool{}
+	var walk func(id, branch string)
+	walk = func(id, branch string) {
+		n := f.Node(id)
+		if n == nil || seen[id] {
+			return
+		}
+		seen[id] = true
+		switch n.Kind() {
+		case autodomain.NodeKindStep:
+			st := prospectiveStep(def, n.Spec(), issuance, grantsByDay, day)
+			st.Branch = branch
+			out = append(out, st)
+		case autodomain.NodeKindBranch, autodomain.NodeKindSwitch:
+			edges, open := wayOut(ctx, n, t)
+			if open {
+				out = append(out, SimStep{ID: id, Kind: string(n.Kind()), Decision: "UNEVALUABLE", Reason: "GUARD", Branch: branch})
+			}
+			for _, e := range edges {
+				via := branch
+				if open {
+					via = id + " " + e.Label
+				}
+				walk(e.To, via)
+			}
+			return
+		case autodomain.NodeKindJoin, autodomain.NodeKindTerminal:
+		}
+		for _, e := range n.Edges() {
+			walk(e.To, branch)
+		}
+	}
+	walk(f.Entry, "")
+	return out
+}
+
+// wayOut is the ways out a replay shows: the one the guards pick, or from
+// the first guard that cannot be evaluated on, every one still open.
+func wayOut(ctx context.Context, n *autodomain.NodeSpec, t autodomain.TriggerRef) ([]autodomain.Edge, bool) {
+	edges := n.Edges()
+	for i, e := range edges {
+		if e.Guard == "" {
+			return edges[i : i+1], false
+		}
+		ok, err := engine.EvalGuard(ctx, e.Guard, t)
+		if err != nil {
+			return edges[i:], true
+		}
+		if ok {
+			return edges[i : i+1], false
+		}
+	}
+	return nil, false
 }
 
 func launchDecision(def *autodomain.Definition, s autodomain.StepSpec, issuance map[string]IssueDecision, grantsByDay map[string]int,
