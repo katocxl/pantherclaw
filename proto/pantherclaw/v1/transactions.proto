@@ -77,6 +77,26 @@ enum EffectState {
   EFFECT_STATE_COMPENSATED = 8;
 }
 
+// DownstreamState is what is known about the consequences of a confirmed
+// action, apart from its own effect (G0 M17, F414). Precedence over the
+// whole chain of consequences: UNCONFIRMED, then NOT_VERIFIABLE, then
+// PENDING, then CONFIRMED.
+enum DownstreamState {
+  // Its decision predicted no consequence, or it is not confirmed yet.
+  DOWNSTREAM_STATE_UNSPECIFIED = 0;
+  // A consequence opened for verification is not confirmed yet.
+  DOWNSTREAM_STATE_PENDING = 1;
+  // Every consequence was confirmed by its own evidence; the action has an
+  // effect receipt at level downstream.
+  DOWNSTREAM_STATE_CONFIRMED = 2;
+  // A consequence's verifier or deadline asked a person, or its effect
+  // state says it did not take effect.
+  DOWNSTREAM_STATE_UNCONFIRMED = 3;
+  // A predicted consequence could not be opened for verification; it never
+  // becomes CONFIRMED.
+  DOWNSTREAM_STATE_NOT_VERIFIABLE = 4;
+}
+
 // VerificationLevel is how far verification reached.
 enum VerificationLevel {
   VERIFICATION_LEVEL_UNSPECIFIED = 0;
@@ -162,6 +182,8 @@ message Transaction {
   string decided_via = 17;
   // The enforcement point that asked, for decided_via authzen.
   string enforcement_point_id = 18;
+  // State of the consequences opened for it (G0 M17, F414).
+  DownstreamState downstream_state = 19;
 }
 
 // ListTransactionsRequest pages through transactions, newest first.

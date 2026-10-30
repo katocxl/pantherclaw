@@ -35,6 +35,22 @@ const (
 	AttestationKind_ATTESTATION_KIND_GITHUB_ACTIONS AttestationKind = 1
 	// A Kubernetes projected service-account token.
 	AttestationKind_ATTESTATION_KIND_KUBERNETES AttestationKind = 2
+	// A GitLab CI ID token (id_tokens with aud pantherclaw:<org>).
+	AttestationKind_ATTESTATION_KIND_GITLAB_CI AttestationKind = 3
+	// A SPIFFE JWT-SVID (aud pantherclaw:<org>).
+	AttestationKind_ATTESTATION_KIND_SPIFFE_JWT AttestationKind = 4
+	// A Google-signed ID token from the GCP metadata server (audience
+	// pantherclaw:<org>, format=full).
+	AttestationKind_ATTESTATION_KIND_GCP_WORKLOAD AttestationKind = 5
+	// A SigV4-signed sts:GetCallerIdentity request that PantherClaw sends to
+	// STS (signed X-Pantherclaw-Audience: pantherclaw:<org>).
+	AttestationKind_ATTESTATION_KIND_AWS_IAM AttestationKind = 6
+	// An Azure managed identity access token for the operator-pinned Entra
+	// app (identity.entra_apps).
+	AttestationKind_ATTESTATION_KIND_AZURE_MI AttestationKind = 7
+	// A Microsoft Entra Agent ID access token for the operator-pinned Entra
+	// app (identity.entra_apps).
+	AttestationKind_ATTESTATION_KIND_ENTRA_AGENT_ID AttestationKind = 8
 )
 
 // Enum value maps for AttestationKind.
@@ -43,11 +59,23 @@ var (
 		0: "ATTESTATION_KIND_UNSPECIFIED",
 		1: "ATTESTATION_KIND_GITHUB_ACTIONS",
 		2: "ATTESTATION_KIND_KUBERNETES",
+		3: "ATTESTATION_KIND_GITLAB_CI",
+		4: "ATTESTATION_KIND_SPIFFE_JWT",
+		5: "ATTESTATION_KIND_GCP_WORKLOAD",
+		6: "ATTESTATION_KIND_AWS_IAM",
+		7: "ATTESTATION_KIND_AZURE_MI",
+		8: "ATTESTATION_KIND_ENTRA_AGENT_ID",
 	}
 	AttestationKind_value = map[string]int32{
 		"ATTESTATION_KIND_UNSPECIFIED":    0,
 		"ATTESTATION_KIND_GITHUB_ACTIONS": 1,
 		"ATTESTATION_KIND_KUBERNETES":     2,
+		"ATTESTATION_KIND_GITLAB_CI":      3,
+		"ATTESTATION_KIND_SPIFFE_JWT":     4,
+		"ATTESTATION_KIND_GCP_WORKLOAD":   5,
+		"ATTESTATION_KIND_AWS_IAM":        6,
+		"ATTESTATION_KIND_AZURE_MI":       7,
+		"ATTESTATION_KIND_ENTRA_AGENT_ID": 8,
 	}
 )
 
@@ -1186,11 +1214,17 @@ const file_pantherclaw_v1_workload_proto_rawDesc = "" +
 	"\xbaH\ar\x05\x10\x01(\x80 R\x04note\"\x82\x01\n" +
 	"$WorkloadServiceRequestAccessResponse\x12\x19\n" +
 	"\bentry_id\x18\x01 \x01(\tR\aentryId\x12?\n" +
-	"\rdeadline_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\fdeadlineTime*y\n" +
+	"\rdeadline_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\fdeadlineTime*\xbf\x02\n" +
 	"\x0fAttestationKind\x12 \n" +
 	"\x1cATTESTATION_KIND_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fATTESTATION_KIND_GITHUB_ACTIONS\x10\x01\x12\x1f\n" +
-	"\x1bATTESTATION_KIND_KUBERNETES\x10\x022\x8b\x05\n" +
+	"\x1bATTESTATION_KIND_KUBERNETES\x10\x02\x12\x1e\n" +
+	"\x1aATTESTATION_KIND_GITLAB_CI\x10\x03\x12\x1f\n" +
+	"\x1bATTESTATION_KIND_SPIFFE_JWT\x10\x04\x12!\n" +
+	"\x1dATTESTATION_KIND_GCP_WORKLOAD\x10\x05\x12\x1c\n" +
+	"\x18ATTESTATION_KIND_AWS_IAM\x10\x06\x12\x1d\n" +
+	"\x19ATTESTATION_KIND_AZURE_MI\x10\a\x12#\n" +
+	"\x1fATTESTATION_KIND_ENTRA_AGENT_ID\x10\b2\x8b\x05\n" +
 	"\x0fWorkloadService\x12G\n" +
 	"\x06Enroll\x12\x1d.pantherclaw.v1.EnrollRequest\x1a\x1e.pantherclaw.v1.EnrollResponse\x12S\n" +
 	"\n" +

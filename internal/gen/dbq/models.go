@@ -1432,6 +1432,20 @@ type PcCustomDetectionRuleTest struct {
 	CreatedAt time.Time
 }
 
+type PcCustomerConsequenceRule struct {
+	OrgID      ids.OrgID
+	ID         ids.UUID
+	RuleID     string
+	Version    int32
+	Body       []byte
+	Digest     []byte
+	State      string
+	ProposedBy ids.UUID
+	ApprovedBy *ids.UUID
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
 type PcDataRequest struct {
 	OrgID            ids.OrgID
 	ID               ids.UUID
@@ -1465,19 +1479,23 @@ type PcDataRequestPart struct {
 }
 
 type PcDecisionConsequence struct {
-	OrgID         ids.OrgID
-	TransactionID ids.UUID
-	Evaluation    int32
-	Position      int32
-	RuleID        string
-	Operation     string
-	TargetType    string
-	TargetID      string
-	Environments  []string
-	State         string
-	Unknown       []byte
-	FactsDigest   string
-	CreatedAt     time.Time
+	OrgID          ids.OrgID
+	TransactionID  ids.UUID
+	Evaluation     int32
+	Position       int32
+	RuleID         string
+	Operation      string
+	TargetType     string
+	TargetID       string
+	Environments   []string
+	State          string
+	Unknown        []byte
+	FactsDigest    string
+	CreatedAt      time.Time
+	Depth          int16
+	ParentPosition pgtype.Int2
+	// The chain's provenance (G0 M17 D145): customer when a customer rule gave the consequence or it is below one a customer rule gave, even from a package rule; such a consequence is never waived.
+	Source string
 }
 
 type PcDecisionReceipt struct {
@@ -1631,18 +1649,23 @@ type PcDeviceCode struct {
 }
 
 type PcDiscovery struct {
-	OrgID       ids.OrgID
-	ID          ids.UUID
-	AgentID     ids.UUID
-	Source      string
-	KeyJkt      *string
-	PublicJwk   []byte
-	ScanKey     []byte
-	State       string
-	Observed    []byte
-	SeenCount   int64
-	FirstSeenAt time.Time
-	LastSeenAt  time.Time
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	AgentID          ids.UUID
+	Source           string
+	KeyJkt           *string
+	PublicJwk        []byte
+	ScanKey          []byte
+	State            string
+	Observed         []byte
+	SeenCount        int64
+	FirstSeenAt      time.Time
+	LastSeenAt       time.Time
+	MissedScans      int32
+	LastScanRun      *ids.UUID
+	ScanScope        *string
+	VanishNotifiedAt *time.Time
+	ScanPrincipal    *string
 }
 
 type PcDpopJti struct {
@@ -2979,6 +3002,7 @@ type PcRedteamResult struct {
 	ObservedBy     string
 	Mismatches     int32
 	RecordedAt     time.Time
+	Origin         string
 }
 
 type PcRedteamRun struct {
@@ -2995,6 +3019,7 @@ type PcRedteamRun struct {
 	State             string
 	StartedAt         time.Time
 	FinishedAt        *time.Time
+	Origin            string
 }
 
 type PcReflexDigest struct {
@@ -3545,38 +3570,42 @@ type PcToolPackage struct {
 }
 
 type PcTransaction struct {
-	OrgID               ids.OrgID
-	ID                  ids.UUID
-	RunID               ids.UUID
-	ActionID            ids.UUID
-	ActionHash          []byte
-	Operation           string
-	Decision            string
-	ReasonCode          string
-	BudgetID            *ids.UUID
-	Amount              *money.Decimal
-	Currency            *string
-	GatewayID           string
-	CreatedAt           time.Time
-	State               string
-	Evaluations         int32
-	GrantID             *ids.UUID
-	GrantRevision       *int32
-	BasisDigest         *string
-	EffectiveHash       []byte
-	DedupeKey           *string
-	Mode                string
-	ConnectionID        *ids.UUID
-	Channel             *string
-	TargetType          *string
-	TargetID            *string
-	EffectState         *string
-	EffectLevelRequired *string
-	EffectLevelAchieved *string
-	Simulated           bool
-	DecidedVia          *string
-	EnforcementPointID  *ids.UUID
-	ReadClass           *string
+	OrgID                   ids.OrgID
+	ID                      ids.UUID
+	RunID                   ids.UUID
+	ActionID                ids.UUID
+	ActionHash              []byte
+	Operation               string
+	Decision                string
+	ReasonCode              string
+	BudgetID                *ids.UUID
+	Amount                  *money.Decimal
+	Currency                *string
+	GatewayID               string
+	CreatedAt               time.Time
+	State                   string
+	Evaluations             int32
+	GrantID                 *ids.UUID
+	GrantRevision           *int32
+	BasisDigest             *string
+	EffectiveHash           []byte
+	DedupeKey               *string
+	Mode                    string
+	ConnectionID            *ids.UUID
+	Channel                 *string
+	TargetType              *string
+	TargetID                *string
+	EffectState             *string
+	EffectLevelRequired     *string
+	EffectLevelAchieved     *string
+	Simulated               bool
+	DecidedVia              *string
+	EnforcementPointID      *ids.UUID
+	ReadClass               *string
+	DownstreamState         *string
+	DownstreamNotVerifiable bool
+	ConsequenceRoot         *ids.UUID
+	ConsequencePosition     *int32
 }
 
 type PcTransactionLink struct {

@@ -282,7 +282,8 @@ func scheduleFires(s *autodomain.Schedule, from, to time.Time, miss func(string,
 }
 
 func eventFires(ctx context.Context, on, where string, events []feed.Event, from, to time.Time, miss func(string, int)) []fire {
-	if on == triggers.VocabCaseClosed || on == triggers.VocabAgentDiscovered {
+	if on == triggers.VocabCaseClosed || on == triggers.VocabAgentDiscovered || on == triggers.VocabDiscoveryChanged ||
+		on == triggers.VocabDiscoveryVanished {
 		miss(MissingEvent+":"+on, 1)
 		return nil
 	}

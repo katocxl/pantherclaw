@@ -166,7 +166,7 @@ func (s *Service) Enroll(ctx context.Context, in EnrollInput) (Enrolled, error) 
 		}
 		org = tok.Org()
 	case in.Attestation != nil:
-		if org = AttestationOrg(in.Attestation.Token); org.IsZero() {
+		if org = s.AttestationOrg(*in.Attestation); org.IsZero() {
 			return Enrolled{}, attErr(errors.New("the audience names no org"))
 		}
 	default:

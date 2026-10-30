@@ -241,6 +241,11 @@ func (e Entitlements) PolicySimulation() bool { return e.Edition.Paid() }
 // Enterprise).
 func (e Entitlements) MLDSACosign() bool { return e.Edition == Enterprise }
 
+// IdentityPresetsExtended reports whether the edition includes the M17
+// workload identity presets: GitLab CI, SPIFFE, GCP, AWS, Azure managed
+// identities and Entra Agent ID (D121, D129, PN-002.3: Enterprise).
+func (e Entitlements) IdentityPresetsExtended() bool { return e.Edition == Enterprise }
+
 // Reflex editions (G0 M10 D5). Community keeps the core detections,
 // graduated containment, the kill switch, search, the run's "what actually
 // happened" view and the HR-037 variant-shopping rule: a hardening rule is

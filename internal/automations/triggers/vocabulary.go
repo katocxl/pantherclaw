@@ -27,6 +27,8 @@ import (
 //	                   reopened)
 //	case.closed        reflex.case whose case entry moves the case to CLOSED
 //	agent.discovered   audit.agent.discovered (D18a)
+//	agent.discovery_changed  audit.agent.discovery_changed (G0 M17 D116)
+//	agent.discovery_vanished audit.agent.discovery_vanished (G0 M17 D114)
 //	approval.expired   audit.approval.expired
 //	automation.finished audit.automation.execution_finished (the engine, D24)
 const (
@@ -42,6 +44,8 @@ const (
 	VocabIncidentOpened     = "incident.opened"
 	VocabCaseClosed         = "case.closed"
 	VocabAgentDiscovered    = "agent.discovered"
+	VocabDiscoveryChanged   = "agent.discovery_changed"
+	VocabDiscoveryVanished  = "agent.discovery_vanished"
 	VocabApprovalExpired    = "approval.expired"
 	VocabAutomationFinished = "automation.finished"
 )
@@ -60,7 +64,7 @@ const (
 var vocabulary = []string{
 	VocabActionDecided, VocabActionHeld, VocabActionDenied, VocabEffectRecorded, VocabRunEnded, VocabGrantIssued,
 	VocabGrantRevoked, VocabCoverageLost, VocabAlertRaised, VocabIncidentOpened, VocabCaseClosed,
-	VocabAgentDiscovered, VocabApprovalExpired, VocabAutomationFinished,
+	VocabAgentDiscovered, VocabApprovalExpired, VocabAutomationFinished, VocabDiscoveryChanged, VocabDiscoveryVanished,
 }
 
 // Vocabulary lists the event names.
@@ -113,6 +117,10 @@ func Means(name string, e feed.Event, f Facts) bool {
 		return e.Kind == kindCase && f.CaseClosed
 	case VocabAgentDiscovered:
 		return e.Kind == "audit.agent.discovered"
+	case VocabDiscoveryChanged:
+		return e.Kind == "audit.agent.discovery_changed"
+	case VocabDiscoveryVanished:
+		return e.Kind == "audit.agent.discovery_vanished"
 	case VocabApprovalExpired:
 		return e.Kind == "audit.approval.expired"
 	case VocabAutomationFinished:

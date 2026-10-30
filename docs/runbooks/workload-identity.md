@@ -194,7 +194,131 @@ A label (`pull_request` with `types: [labeled]` cannot be used: it runs the PR's
    ```
    The image digest PantherClaw records is the pod's, read from the API server; a digest the workload reports is only `declared`.
 
-## 4. When something goes wrong
+## 4. GitLab CI (L2, M17)
+
+1. The operator lists the GitLab instances PantherClaw trusts. With none configured, only `https://gitlab.com` is trusted, for every org. A self-managed instance must be listed; a tenant can never name one of its own:
+   ```json
+   "identity": {"gitlab_issuers": [
+     {"issuer": "https://gitlab.com"},
+     {"issuer": "https://gitlab.example.com", "ca_file": "/etc/pantherclaw/gitlab-ca.pem",
+      "allowed_prefixes": ["10.0.2.0/24"], "orgs": ["<org id>"]}
+   ]}
+   ```
+   `orgs` limits which orgs may pin the instance (every org when omitted); `allowed_prefixes` are the private ranges its address may resolve to.
+2. An admin proposes an entry that pins the project and namespace **ids** (never paths) and the pipeline definitions (`ci_config_ref_uri`), and a person with the **Identity Publisher** role activates it:
+   ```bash
+   pclaw issuer propose-gitlab --agent <agent> --project-id 20 --namespace-id 72 \
+     --ci-config-ref-uri gitlab.com/acme/agents/runner//.gitlab-ci.yml@refs/heads/main \
+     --auto-admit --reason "CI agent"
+   ```
+   Find the ids on the project's overview page (Project ID) and the group's page (Group ID). The preset refuses tokens from unprotected refs and from `merge_request_event` or `external_pull_request_event` pipelines, whatever the entry says.
+3. In the job, request an ID token with the org's audience and enroll with it. **Keep the job timeout at 60 minutes or less**: GitLab sets the token's lifetime from the job timeout, and PantherClaw refuses attestation tokens that live longer than one hour (HR-143).
+   ```yaml
+   agent:
+     timeout: 60m
+     id_tokens:
+       PANTHERCLAW_ID_TOKEN:
+         aud: pantherclaw:<org id>
+     script:
+       - pclaw workload init --key-file "$CI_BUILDS_DIR/workload.json"
+       - pclaw workload enroll --key-file "$CI_BUILDS_DIR/workload.json" --server "$PANTHERCLAW_SERVER" --gitlab-token-env PANTHERCLAW_ID_TOKEN
+   ```
+   Each ID token attests once. A job has one, so L2 lasts until that token expires; `pclaw workload renew` keeps renewing at L1 afterwards.
+
+## 5. SPIFFE JWT-SVIDs (L2, M17)
+
+1. The operator lists the SPIFFE trust domains PantherClaw trusts, each with its JWT-SVID bundle from a SPIFFE bundle endpoint (`https_web`) or a JWKS file. With none configured the preset refuses every attestation; a tenant can never supply a bundle:
+   ```json
+   "identity": {"spiffe_trust_domains": [
+     {"trust_domain": "prod.acme.example", "bundle_url": "https://spire.acme.example/bundle",
+      "ca_file": "/etc/pantherclaw/spire-ca.pem", "orgs": ["<org id>"]},
+     {"trust_domain": "edge.acme.example", "bundle_file": "/etc/pantherclaw/edge-bundle.json"}
+   ]}
+   ```
+   Only keys with `use` `jwt-svid` and a `kid` are kept. A bundle file is read when the server starts.
+2. An admin proposes an entry that pins the workload's **exact** SPIFFE ID (no prefixes or patterns) for a `service` agent, and an **Identity Publisher** activates it:
+   ```bash
+   pclaw issuer propose-spiffe --agent <agent> --trust-domain prod.acme.example \
+     --spiffe-id spiffe://prod.acme.example/ns/agents/sa/runner --auto-admit --reason "service agent"
+   ```
+   The token's `sub` must be in the trust domain whose bundle verified it, and its audience exactly `pantherclaw:<org id>`.
+3. Have the workload write a JWT-SVID for that audience to a file (for example with spiffe-helper), and pass it to `enroll`, `token` or `renew`:
+   ```bash
+   pclaw workload renew --key-file workload.json --out token.json --spiffe-token /run/spiffe/pantherclaw.jwt
+   ```
+   The file is read again at each renewal. Each JWT-SVID attests once; keep its lifetime at one hour or less (HR-143).
+
+## 6. Google Cloud (L2, M17)
+
+1. Nothing to configure on the server: Google ID tokens are verified only with Google's keys at `https://www.googleapis.com/oauth2/v3/certs`, and their issuer must be `https://accounts.google.com`.
+2. An admin proposes an entry for a `service` agent that pins the service account's **numeric unique id** (never its email, which can be deleted and recreated), optionally with the Compute Engine project and instance, and an **Identity Publisher** activates it:
+   ```bash
+   pclaw issuer propose-gcp --agent <agent> --service-account-id 113524806285125460987 \
+     --project-id acme-prod --auto-admit --reason "service agent"
+   ```
+   The unique id is shown as **Unique ID** on the service account's details page, or by `gcloud iam service-accounts describe EMAIL --format 'value(uniqueId)'`.
+3. On the instance, attest with `--gcp`: pclaw asks the metadata server for an ID token with audience `pantherclaw:<org id>` and the Compute Engine claims (`format=full`), in the same way as `--github` (section 2).
+   ```bash
+   pclaw workload renew --key-file workload.json --out token.json --gcp
+   ```
+
+## 7. AWS (L2, M17)
+
+1. The workload never sends AWS credentials. It signs an `sts:GetCallerIdentity` request with SigV4, including the signed header `X-Pantherclaw-Audience: pantherclaw:<org id>`, and PantherClaw sends that request to STS itself. STS's answer says which role session signed it. By default the request may go only to the global and regional `sts.*.amazonaws.com` endpoints; to list the endpoints explicitly (for example only your regions):
+   ```json
+   "identity": {"aws_sts_hosts": ["sts.eu-west-1.amazonaws.com", "sts.us-east-1.amazonaws.com"]}
+   ```
+2. An admin proposes an entry for a `service` agent that pins the account and the IAM role name, and an **Identity Publisher** activates it. Only sessions of that role attest; IAM users never do.
+   ```bash
+   pclaw issuer propose-aws --agent <agent> --account-id 123456789012 --role-name agent-runner \
+     --auto-admit --reason "service agent"
+   ```
+3. Attest with `--aws`. pclaw signs with the role session credentials in `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` (for example from `eval "$(aws configure export-credentials --format env)"`), on the regional endpoint of `AWS_REGION` when it is set:
+   ```bash
+   pclaw workload renew --key-file workload.json --out token.json --aws
+   ```
+   A signed request attests once, within 15 minutes of signing; pclaw signs a new one at each renewal.
+
+## 8. Azure managed identities (L2, M17)
+
+Azure managed identity tokens are Microsoft Entra access tokens for an app; they cannot carry `pantherclaw:<org id>`, and they live up to a day. So for this preset only, the operator pins each Entra app to one org, the token's audience is that app, and an attestation grants at most one hour of L2 whatever the token's lifetime (HR-469).
+
+1. In the customer's tenant, register an app to stand for PantherClaw (no secrets or permissions needed). The operator pins it to the org; each app id may be listed once:
+   ```json
+   "identity": {"entra_apps": [
+     {"tenant_id": "<tenant id>", "app_id": "<app id>", "org_id": "<org id>"}
+   ]}
+   ```
+   Tokens are verified only with the tenant's keys at `https://login.microsoftonline.com/<tenant id>/discovery/v2.0/keys`.
+2. An admin proposes an entry for a `service` agent that pins the tenant, the app and the managed identity's **object (principal) id**, and an **Identity Publisher** activates it:
+   ```bash
+   pclaw issuer propose-azure-mi --agent <agent> --tenant-id <tenant id> --app-id <app id> \
+     --object-id <principal id> --auto-admit --reason "service agent"
+   ```
+3. Attest with `--azure-app <app id>` (and `--azure-client-id` for a user-assigned identity). pclaw asks the instance metadata service, or the `IDENTITY_ENDPOINT` of App Service, Functions and Container Apps, for a token for that app.
+   ```bash
+   pclaw workload renew --key-file workload.json --out token.json --azure-app <app id>
+   ```
+   Each token attests once. Azure caches a managed identity's token for about 24 hours (IMDS returns the same token until it expires), so a managed identity gets **about one hour of L2 per day**: L2 lasts at most an hour from the attestation, and renewals continue at L1 until Azure hands out a new token.
+
+## 9. Microsoft Entra Agent ID (L2, M17)
+
+Agent identities get Entra access tokens like managed identities, so the same `entra_apps` pinning, audience and one-hour rules apply (section 8, HR-469).
+
+1. Pin the Entra app to the org in `entra_apps` as in section 8.
+2. An admin proposes an entry for a `service` agent that pins the tenant, the app and the **agent identity's object id**, and an **Identity Publisher** activates it:
+   ```bash
+   pclaw issuer propose-entra-agent --agent <agent> --tenant-id <tenant id> --app-id <app id> \
+     --object-id <agent identity object id> --auto-admit --reason "Entra agent"
+   ```
+   Only an agent acting autonomously as itself attests: the token must be app-only (`idtyp` `app`), and both `xms_sub_fct` and `xms_act_fct` must name an agent identity (`11`). Agents acting on behalf of a user, or through their agent user account, never attest. These claims follow Microsoft's [Token claims reference for agent IDs](https://learn.microsoft.com/en-us/entra/agent-id/agent-token-claims) (retrieved 2026-10-29); if Microsoft changes them, attestation fails closed.
+3. The agent acquires an access token for the app with its agent identity (for example with the Microsoft Entra SDK) and passes it in an environment variable:
+   ```bash
+   pclaw workload renew --key-file workload.json --out token.json --entra-token-env PANTHERCLAW_ENTRA_TOKEN
+   ```
+   Each token attests once and grants L2 for at most an hour.
+
+## 10. When something goes wrong
 
 - **Disable an entry** at once: `pclaw issuer disable ENTRY --reason …`. It stops auto-admission, and its instances drop to L1 at their next token.
 - **Revoke an instance**: `pclaw instance revoke INSTANCE --reason …`. Outstanding permits fail at `BeginDispatch`.

@@ -54,6 +54,12 @@ const (
 	ReasonPredicted = "CONSEQUENCE_PREDICTED"
 	// ReasonEvaluation: a rule could not be evaluated (HR-040).
 	ReasonEvaluation = "CONSEQUENCE_EVALUATION_ERROR"
+	// ReasonExpired: the rule's review has expired, so its consequence
+	// cannot be ruled out (G0 M17 D110, HR-456).
+	ReasonExpired = "CONSEQUENCE_RULE_EXPIRED"
+	// ReasonFanout: the action's rules give more consequences than
+	// MaxConsequences, so the rest cannot be ruled out (D109, HR-455).
+	ReasonFanout = "CONSEQUENCE_FANOUT"
 )
 
 // FactMaxAge is how old a fact a consequence rule needs may be, unless the
@@ -74,18 +80,56 @@ const (
 type Rule struct {
 	defs.ConsequenceRule
 	Definition *defs.Definition
+	// Source is where the rule comes from; empty is SourcePackage.
+	Source Source
+	// Customer is, for a customer rule (SourceCustomer), the stored version
+	// it is, which a recording names (G0 M17 D106).
+	Customer *CustomerRef
 }
 
-// Of returns the rules of package p for operation op, in order, each with
-// the definition of its consequence operation in p.
+// Of returns the rules of package p that can apply to an action of
+// operation op, in package order, each with the definition of its
+// consequence operation in p: those for op, then, down a chain (G0 M17
+// D109), those for the operation of a consequence they predict that apply
+// that deep (MaxDepth). A package without such rules gives the rules for
+// op alone, as before chains.
 func Of(p *defs.Package, op string) []Rule {
+	reached := map[string]bool{op: true}
+	in := map[int]bool{}
+	frontier := []string{op}
+	for depth := 1; depth <= MaxDepth && len(frontier) > 0; depth++ {
+		var next []string
+		for i, r := range p.Consequences {
+			if in[i] || !slices.Contains(frontier, r.Operation) || r.Depth() < depth {
+				continue
+			}
+			in[i] = true
+			if c := r.Consequence.Operation; !reached[c] {
+				reached[c] = true
+				next = append(next, c)
+			}
+		}
+		frontier = next
+	}
 	var out []Rule
-	for _, r := range p.Consequences {
-		if r.Operation != op {
+	for i, r := range p.Consequences {
+		if !in[i] {
 			continue
 		}
 		d, _ := p.Definition(r.Consequence.Operation)
 		out = append(out, Rule{ConsequenceRule: r, Definition: d})
+	}
+	return out
+}
+
+// Direct are the rules for operation op itself: those whose facts are
+// about the action's own target.
+func Direct(rules []Rule, op string) []Rule {
+	var out []Rule
+	for _, r := range rules {
+		if r.Operation == op {
+			out = append(out, r)
+		}
 	}
 	return out
 }
@@ -111,12 +155,55 @@ type Input struct {
 	// some of those facts; a younger one than FactMaxAge applies.
 	Ages map[string]time.Duration
 	Now  time.Time
+	// More reads, for a predicted consequence that rules further down a
+	// chain apply to, the current facts about its target (of definition
+	// on) that those rules name, and the maximum ages the policy asks for
+	// them (G0 M17 D109). Without it those rules have no facts, so their
+	// consequences are UNKNOWN.
+	More func(ctx context.Context, on *defs.Definition, targetID string, names []string) (map[string]fdomain.Fact, map[string]time.Duration, error)
+	// Direct decides as pipeline version 4 did, for its replay (G0 M17
+	// D133, D134): the rules for the action's operation only, no chain and no
+	// expiry.
+	Direct bool
 }
+
+// MaxConsequences is how many consequences each pass of one action's rules
+// gives at most (G0 M17 D109, D144). A rule that would give one more is UNKNOWN,
+// CONSEQUENCE_FANOUT, and nothing after it is derived in that pass.
+const MaxConsequences = 16
+
+// Source is where a consequence rule comes from (G0 M17 D106) and, for a
+// consequence, its chain's provenance (D145): a consequence is a customer
+// one when a customer rule gave it or it is below one a customer rule
+// gave, even when a package rule gave it there. A customer consequence is
+// never waived (D108).
+type Source string
+
+// Sources (00208's decision_consequences.source).
+const (
+	// SourcePackage: a rule of the action's signed package version, on a
+	// chain of package consequences only.
+	SourcePackage Source = "package"
+	// SourceCustomer: one of the org's reviewed customer rules, or any rule
+	// below a consequence one gave.
+	SourceCustomer Source = "customer"
+)
+
+// MaxDepth is how far down a chain a consequence may be (G0 M17 D109):
+// depth 1 is a consequence of the action itself.
+const MaxDepth = defs.MaxConsequenceDepth
 
 // Consequence is one rule's result.
 type Consequence struct {
 	Rule                           string
 	Operation, Effect, Description string
+	// Source is the consequence's provenance (D145); empty is SourcePackage.
+	Source Source
+	// Depth is the consequence's place in its chain, 1 (or 0) for a
+	// consequence of the action itself; Parent is, for a deeper one, the
+	// position among the evaluation's consequences of the consequence it
+	// follows from, which always comes before it (G0 M17 D109).
+	Depth, Parent int
 	// Definition is the consequence operation's definition.
 	Definition *defs.Definition
 	// Target is the consequence's target; Environments are the ones it
@@ -125,14 +212,31 @@ type Consequence struct {
 	Environments []string
 	State        State
 	// Unknown says, for an UNKNOWN consequence, why each fact could not
-	// be used.
+	// be used, or why the rule could not be, and where derivation stopped.
 	Unknown []string
+	// Requires are the names of the facts the rule needs, and ValidUntil
+	// the last day of its review (G0 M17 D111, F407, F409).
+	Requires   []string
+	ValidUntil string
+	// Reason is an UNKNOWN consequence's reason code: ReasonUnknown, or
+	// ReasonExpired or ReasonFanout.
+	Reason string
 	// Err is set when the rule could not be evaluated.
 	Err error
 	// Used are the facts the rule read, and FactsDigest their digest
 	// (F080).
 	Used        []fdomain.Fact
 	FactsDigest string
+}
+
+// Chain is the consequence's depth, its parent's position (ok false at
+// depth 1) and its source, as stored (00208).
+func (c *Consequence) Chain() (depth, parent int, ok bool, source Source) {
+	depth, source = max(c.Depth, 1), c.Source
+	if source == "" {
+		source = SourcePackage
+	}
+	return depth, c.Parent, depth > 1, source
 }
 
 // ErrRule reports a rule that cannot be evaluated: its consequence
@@ -156,20 +260,184 @@ func NewEvaluator(limits celenv.Limits) *Evaluator {
 	return &Evaluator{limits: limits, programs: map[string]*celenv.Program{}}
 }
 
-// Evaluate evaluates every rule, in order.
+// hop is what the rules at one place in a chain are evaluated against: the
+// action itself (depth 1, no parent) or a predicted consequence.
+type hop struct {
+	in            Input
+	depth, parent int
+	// err is set when the consequence's facts could not be read.
+	err error
+	// rules are the rules evaluated at the hop.
+	rules []Rule
+	// source is the hop's provenance: SourceCustomer below a customer
+	// consequence, so everything derived there is customer too (D145).
+	source Source
+}
+
+// Evaluate evaluates the consequence rules in two passes (G0 M17 D109,
+// D144, F411, F412). The package's rules come first: the rules for the
+// action's operation, in order, and then, down each chain, the rules for
+// the operation of each consequence they predict that apply that deep,
+// with the facts about that consequence's target. The org's customer rules
+// come after, from the action and from each package consequence in turn,
+// and down a chain a customer consequence starts, both kinds of rule apply.
+// Each pass gives at most MaxConsequences, and a rule that would give one
+// more is UNKNOWN and ends the pass, so customer rules can never take the
+// package's place (HR-454). Each consequence comes after the one it
+// follows from. A chain stops at a consequence that is not predicted: an
+// UNKNOWN one that further rules apply to says derivation stopped there,
+// and stays UNKNOWN (HR-206). A consequence whose operation and target
+// were already reached is not derived from again, and chains are at most
+// MaxDepth deep (HR-455).
 func (e *Evaluator) Evaluate(ctx context.Context, rules []Rule, in Input) []Consequence {
-	out := make([]Consequence, 0, len(rules))
+	var pkg, cx []Rule
 	for _, r := range rules {
-		out = append(out, e.one(ctx, r, in))
+		if r.Source == SourceCustomer {
+			cx = append(cx, r)
+		} else {
+			pkg = append(pkg, r)
+		}
+	}
+	action := [2]string{in.On.Operation, in.TargetID}
+	reached := map[[2]string]bool{action: true}
+	out := e.walk(ctx, in, make([]Consequence, 0, len(rules)), reached, pkg, []hop{{in: in, depth: 1, parent: -1, rules: pkg}})
+	if len(cx) == 0 {
+		return out
+	}
+	queue := []hop{{in: in, depth: 1, parent: -1, rules: cx}}
+	if !in.Direct {
+		seeded := map[[2]string]bool{action: true}
+		for i := range out {
+			c := &out[i]
+			names := next(cx, c.Operation, c.Depth+1)
+			if len(names) == 0 || c.Err != nil || c.Reason == ReasonFanout {
+				continue
+			}
+			key := [2]string{c.Operation, c.Target.ID}
+			switch {
+			case c.State == Unknown && len(next(pkg, c.Operation, c.Depth+1)) == 0:
+				c.Unknown = append(c.Unknown, stopped(c.Rule, c.Depth))
+			case c.State == Predicted && !seeded[key]:
+				seeded[key], reached[key] = true, true
+				h := e.more(ctx, in, *c, names, c.Depth+1, i)
+				h.rules = cx
+				queue = append(queue, h)
+			}
+		}
+	}
+	return e.walk(ctx, in, out, reached, rules, queue)
+}
+
+// walk derives breadth-first from the hops in queue, appending to out at
+// most MaxConsequences; a consequence the hop's rules predict is derived
+// from with all.
+func (e *Evaluator) walk(ctx context.Context, in Input, out []Consequence, reached map[[2]string]bool, all []Rule, queue []hop) []Consequence {
+	n := 0
+	for len(queue) > 0 {
+		h := queue[0]
+		queue = queue[1:]
+		for _, r := range h.rules {
+			if r.Operation != h.in.On.Operation || r.Depth() < h.depth || (in.Direct && h.depth > 1) {
+				continue
+			}
+			if n == MaxConsequences {
+				return append(out, fanout(r, h))
+			}
+			c := e.one(ctx, r, h)
+			at := len(out)
+			if names := next(all, c.Operation, h.depth+1); len(names) > 0 && c.Err == nil && !in.Direct {
+				switch {
+				case c.State == Unknown:
+					c.Unknown = append(c.Unknown, stopped(c.Rule, h.depth))
+				case c.State == Predicted && !reached[[2]string{c.Operation, c.Target.ID}]:
+					reached[[2]string{c.Operation, c.Target.ID}] = true
+					nh := e.more(ctx, in, c, names, h.depth+1, at)
+					nh.rules, nh.source = all, c.Source
+					queue = append(queue, nh)
+				}
+			}
+			out = append(out, c)
+			n++
+		}
 	}
 	return out
 }
 
-func (e *Evaluator) one(ctx context.Context, r Rule, in Input) Consequence {
-	c := Consequence{
-		Rule: r.ID, Operation: r.Consequence.Operation, Effect: r.Consequence.Effect, Description: r.Consequence.Description,
-		Definition: r.Definition,
+// stopped is the note on an UNKNOWN consequence that further rules apply to.
+func stopped(rule string, depth int) string {
+	return fmt.Sprintf("derivation stopped at %s, depth %d: its consequences are not derived", rule, depth)
+}
+
+// next are the facts the rules for operation op that apply at depth need,
+// or none when no rule applies there.
+func next(rules []Rule, op string, depth int) []string {
+	if depth > MaxDepth {
+		return nil
 	}
+	var names []string
+	for _, r := range rules {
+		if r.Operation != op || r.Depth() < depth {
+			continue
+		}
+		for _, n := range r.RequiresFacts {
+			if !slices.Contains(names, n) {
+				names = append(names, n)
+			}
+		}
+	}
+	return names
+}
+
+// more is the hop of predicted consequence c, at position parent: its
+// definition and target, with the facts about that target the rules there
+// need.
+func (e *Evaluator) more(ctx context.Context, in Input, c Consequence, names []string, depth, parent int) hop {
+	h := hop{in: Input{On: c.Definition, TargetID: c.Target.ID, Now: in.Now}, depth: depth, parent: parent}
+	if in.More != nil {
+		h.in.Facts, h.in.Ages, h.err = in.More(ctx, c.Definition, c.Target.ID, names)
+	}
+	return h
+}
+
+// fanout is rule r's consequence at hop h when the action already has
+// MaxConsequences: it cannot be ruled out, and nothing is derived after it.
+func fanout(r Rule, h hop) Consequence {
+	c := base(r, h)
+	if r.Definition == nil {
+		c.Err = fmt.Errorf("%w: %s is not defined", ErrRule, r.Consequence.Operation)
+		return c
+	}
+	id, ok := r.TargetID(h.in.On.Target, h.in.TargetID)
+	if !ok || !r.Definition.Target.MatchID(id) {
+		c.Err = fmt.Errorf("%w: its target is not a %s", ErrRule, r.Definition.Target.Type)
+		return c
+	}
+	c.Target = actionir.Target{Type: r.Definition.Target.Type, ID: id}
+	c.State, c.Reason, c.FactsDigest = Unknown, ReasonFanout, fdomain.Digest(nil)
+	c.Unknown = []string{fmt.Sprintf("more than %d consequences: derivation stopped at %s, depth %d", MaxConsequences, r.ID, h.depth)}
+	return c
+}
+
+// base is rule r's consequence at hop h before it is evaluated. It is a
+// customer consequence when r is a customer rule or h is below one, even
+// when r is a package rule: provenance is inherited (G0 M17 D145).
+func base(r Rule, h hop) Consequence {
+	source := r.Source
+	if h.source == SourceCustomer {
+		source = SourceCustomer
+	}
+	if source == "" {
+		source = SourcePackage
+	}
+	return Consequence{
+		Rule: r.ID, Operation: r.Consequence.Operation, Effect: r.Consequence.Effect, Description: r.Consequence.Description,
+		Source: source, Depth: h.depth, Parent: h.parent, Definition: r.Definition, Requires: r.RequiresFacts, ValidUntil: r.ValidUntil,
+	}
+}
+
+func (e *Evaluator) one(ctx context.Context, r Rule, h hop) Consequence {
+	in := h.in
+	c := base(r, h)
 	if r.Definition == nil {
 		c.Err = fmt.Errorf("%w: %s is not defined in the package", ErrRule, r.Consequence.Operation)
 		return c
@@ -180,6 +448,16 @@ func (e *Evaluator) one(ctx context.Context, r Rule, in Input) Consequence {
 		return c
 	}
 	c.Target = actionir.Target{Type: r.Definition.Target.Type, ID: id}
+	if h.err != nil {
+		c.Err = fmt.Errorf("%w: the facts about %s could not be read", ErrRule, in.TargetID) // never h.err: it may describe storage
+		return c
+	}
+	// An expired rule cannot rule its consequence out (D110, HR-456).
+	if !in.Direct && r.Expired(in.Now) {
+		c.State, c.Reason, c.FactsDigest = Unknown, ReasonExpired, fdomain.Digest(nil)
+		c.Unknown = []string{"the rule's review expired on " + r.ValidUntil}
+		return c
+	}
 
 	values := map[string]fdomain.Value{}
 	types := map[string]fdomain.Type{}
@@ -212,7 +490,7 @@ func (e *Evaluator) one(ctx context.Context, r Rule, in Input) Consequence {
 	}
 	c.FactsDigest = fdomain.Digest(c.Used)
 	if len(c.Unknown) > 0 {
-		c.State = Unknown
+		c.State, c.Reason = Unknown, ReasonUnknown
 		return c
 	}
 	vars := map[string]any{
@@ -320,4 +598,14 @@ func reason(v any) string {
 		s = strings.ToValidUTF8(s[:maxReasonLen], "") + "…"
 	}
 	return s
+}
+
+// CustomerRef is the stored version of a customer rule: its version, the
+// SHA-256 of its canonical JSON, and the pin of the definition of its
+// consequence operation (zero when the org has no ACTIVE one, which the
+// rule then cannot be evaluated without).
+type CustomerRef struct {
+	Version int
+	Digest  [32]byte
+	Pin     actionir.Definition
 }

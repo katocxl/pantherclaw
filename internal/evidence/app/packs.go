@@ -58,8 +58,11 @@ var (
 	// ErrExecutionNotFound: no automation execution of the org (D30).
 	ErrExecutionNotFound = pcerr.New(pcerr.NotFound, "EXECUTION_NOT_FOUND", "automation execution not found")
 	ErrRangeNotDone      = pcerr.New(pcerr.FailedPrecondition, "RANGE_NOT_FINISHED", "the range has not finished")
-	ErrPacksUnwired      = pcerr.New(pcerr.Unavailable, "PACKS_UNAVAILABLE", "evidence packs are not available on this server")
-	errPackNoContent     = errors.New("app: a ready pack without content")
+	// ErrRangeCustomer: a range of customer-authored scenarios never goes in
+	// an assurance pack (G0 M17 D126, HR-466).
+	ErrRangeCustomer = pcerr.New(pcerr.FailedPrecondition, "RANGE_CUSTOMER_NOT_ATTESTED", "a range of customer-authored scenarios has no assurance pack")
+	ErrPacksUnwired  = pcerr.New(pcerr.Unavailable, "PACKS_UNAVAILABLE", "evidence packs are not available on this server")
+	errPackNoContent = errors.New("app: a ready pack without content")
 )
 
 // PackEnqueuer enqueues a pack's build job in the creating transaction.
@@ -227,6 +230,9 @@ func (s *Service) CreateEvidencePack(ctx context.Context, req PackRequest) (Pack
 			}
 			if rng.State != "FINISHED" {
 				return ErrRangeNotDone
+			}
+			if rng.Origin != "library" {
+				return ErrRangeCustomer
 			}
 		}
 		if err := q.InsertEvidencePack(ctx, dbq.InsertEvidencePackParams{

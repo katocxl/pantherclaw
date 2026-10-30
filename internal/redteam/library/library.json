@@ -1,0 +1,246 @@
+{
+  "RT-001": {
+    "digest": "0e0d6be595970a79e9aa6f0f0e22ef4f1f765dabb178570d9457f9dcf64076f9",
+    "tier": "community"
+  },
+  "RT-002": {
+    "digest": "20a433e484d1e5fabec2dd789e66392a5c25a6b8414ab35938d9d9043f18fb4b",
+    "tier": "community"
+  },
+  "RT-003": {
+    "digest": "ed6424e4fbbb07cb6733a394de129ceb88f0fe60dad4300467fb22cba76adfcd",
+    "tier": "community"
+  },
+  "RT-004": {
+    "digest": "927ee1cbdc950a1f02a33df4cd5e2589d3cece201ded23b0fce48f8970dcd742",
+    "tier": "community"
+  },
+  "RT-005": {
+    "digest": "9c04358b9d355a93a17c36b643171b66a3a69e230ffd3adad02ef6988922f802",
+    "tier": "community"
+  },
+  "RT-006": {
+    "digest": "5846e3d9b9d71b4b2cc304e64295185f900b2d1731d59aae8f914fef336da12d",
+    "tier": "community"
+  },
+  "RT-007": {
+    "digest": "8145227aae41d94b3733796882d3f442b5c7a2f8ff6e77eabae08dc96057dfba",
+    "tier": "community"
+  },
+  "RT-008": {
+    "digest": "42cf26959b879e001f0e34d933defbb3911cdca6028a2d42431646f62a0236b1",
+    "tier": "community"
+  },
+  "RT-009": {
+    "digest": "ed242a24b1d43bbf00c340d0c2fb5fd9341da28bac3460cae5b9b4264ae6195a",
+    "tier": "community"
+  },
+  "RT-010": {
+    "digest": "8febaabb170500294efa2d286d06f153bed1f6ebd82499e08d041394a6386dec",
+    "tier": "community"
+  },
+  "RT-011": {
+    "digest": "9df7bedefcda5e2bfd8eeffa1c80f04f13935b15e88c6d9b0ff4a697f6c948c2",
+    "tier": "community"
+  },
+  "RT-012": {
+    "digest": "28cf2d37b99660e7a505b3167732b6d11a68de6e74316d8a809f6305bf15b1b3",
+    "tier": "community"
+  },
+  "RT-013": {
+    "digest": "e8d2a2403a17d9d229a327ed47677b3675a59118f7fe6afe7be504ea110c677d",
+    "tier": "community"
+  },
+  "RT-014": {
+    "digest": "13bc3d1e263b53a7ad0f9f830f5fb76080efaa7e44d597f7a6684d236d48e21b",
+    "tier": "community"
+  },
+  "RT-015": {
+    "digest": "c392ef95e4e5f6b678ad85f0a3a61f59ffd83d0cb11d179f91318252b71fd8c7",
+    "tier": "community"
+  },
+  "RT-016": {
+    "digest": "35dabf624754835d9c4b04d75f4f1b32d716eed6856772ee31ac4c354116eed2",
+    "tier": "community"
+  },
+  "RT-017": {
+    "digest": "2863b98e620c12e713f9cc6e7ac6445f62d9df68ed189bec06c4ae970da1f119",
+    "tier": "community"
+  },
+  "RT-018": {
+    "digest": "311b6f112de07ea48d8223cd0f3de70de5543348c3f55867c0f5f3f56f9afd0c",
+    "tier": "community"
+  },
+  "RT-019": {
+    "digest": "11fdbbf7b1c3ca6a1b6dbb8ae5b359430f55f8a2615ca57701ac2280131ba91a",
+    "tier": "community"
+  },
+  "RT-020": {
+    "digest": "17282e91a6875abde7af9f469b8a4359061619b3a39706f96812a557db1bd02e",
+    "tier": "community"
+  },
+  "RT-021": {
+    "digest": "309faa932ae7bd0476863414430947c29a2737cf366da106be0277d9e448016e",
+    "tier": "community"
+  },
+  "RT-022": {
+    "digest": "5d8194c942a1e44800a13bba639e8a2644fed06e6ecd2bbff89082e144277a35",
+    "tier": "community"
+  },
+  "RT-023": {
+    "digest": "62b6073cb9ffc07d5bfdb0bd77b59f971f65d010562abbe11e4418e70aa54f7c",
+    "tier": "community"
+  },
+  "RT-024": {
+    "digest": "af254e724e839fb9c6f00954954d2f6de9786e56e117bda2fa77fc47b868ea72",
+    "tier": "business"
+  },
+  "RT-025": {
+    "digest": "a1c3aca5963fee9728259e687124b31b4d2552e73740babff1ee8e162cd705b8",
+    "tier": "business"
+  },
+  "RT-026": {
+    "digest": "8d7c9a83053eea3dc5f8f20bb3e79682ffbbc025e1bc1dd5255a70fc8602bacb",
+    "tier": "business"
+  },
+  "RT-027": {
+    "digest": "4e5ff452fbe7d1085345338b63fcdcaaa0b8e1f0038e1f7ef10436f31624327d",
+    "tier": "business"
+  },
+  "RT-028": {
+    "digest": "b29904bef6c8a6d0b504f81968e81cbec704dd3cc2099b232a778e6779c3a17a",
+    "tier": "business"
+  },
+  "RT-029": {
+    "digest": "b7a1a7c9e39d7a6e8f592e60b6f51625ea7b6e1f0e9b0dc2c386e322ba614fba",
+    "tier": "business"
+  },
+  "RT-030": {
+    "digest": "a872fb9ff7eae5623f4a88db0fe1cce83566d0e2631d97c7258eb6c1e0fe216d",
+    "tier": "business"
+  },
+  "RT-031": {
+    "digest": "6940a55ec186142a06726cbc20ac90e1934de7393d25b3bbf3bc5bd99c1121e2",
+    "tier": "business"
+  },
+  "RT-032": {
+    "digest": "23471520d9166d2af2748fbb3c28b221d9f01719b23e47b353190c5814c14e74",
+    "tier": "business"
+  },
+  "RT-033": {
+    "digest": "8b9deb4ee5c77af0ca0f171e2dd35d3485ab307dc51fb40b18bcf55b9b3c5158",
+    "tier": "business"
+  },
+  "RT-034": {
+    "digest": "2697200b06b0a04feea62061a61139647d3e5aa50ea5608942da97a7cd785829",
+    "tier": "business"
+  },
+  "RT-035": {
+    "digest": "18ed2dee3d1e1d15257b6ff48a8ae3b1d9f94153620e1fbdac83b7c106ff7c8d",
+    "tier": "business"
+  },
+  "RT-036": {
+    "digest": "66cffa99e054dfcbf03ab3747593a28e4569e0bfdd728c106521751d292f7ed6",
+    "tier": "business"
+  },
+  "RT-037": {
+    "digest": "a0c36f9ee828e0f832c83df689fba58f6db9cac8d8ff2d195afd621d4265188e",
+    "tier": "business"
+  },
+  "RT-038": {
+    "digest": "647ec2c971b9e89c5e88ee294bac29c0e5e8a402ecc033cb2d14f80aeb693ef4",
+    "tier": "business"
+  },
+  "RT-039": {
+    "digest": "735e689ba1ffc1c0047b213f869b1fe4e8dbe724db60e15de5ea9e597f2552cf",
+    "tier": "business"
+  },
+  "RT-040": {
+    "digest": "8e846f5da7fececba96cf506192bf3b9d710efcb67829d2d5656e3490a378216",
+    "tier": "business"
+  },
+  "RT-041": {
+    "digest": "208e998300bed4dfe7033c3c1aeed9b3904ba7aad428b31269255c3f680b4e67",
+    "tier": "business"
+  },
+  "RT-042": {
+    "digest": "eccbc053259fa2797eadc9252c2e35611e4189a93cec45021d4c6ceb307a2ca5",
+    "tier": "business"
+  },
+  "RT-043": {
+    "digest": "279589d31e7c378bd6c748d299ae43cdfad628388015cfac0d93905f8f13fa10",
+    "tier": "business"
+  },
+  "RT-044": {
+    "digest": "d819028714e448caf392b00cfb430a13ffd6897de317476ff2f8dca1041f9349",
+    "tier": "business"
+  },
+  "RT-045": {
+    "digest": "f00c0fa81b95d678a7fd01fe2106e6657a626cc7b672ea1b043290bf3fa76b47",
+    "tier": "business"
+  },
+  "RT-046": {
+    "digest": "91c00e1f50b7f04fa6aa61d82758bb620e6099746df9efa37154b3b3ab467ca7",
+    "tier": "business"
+  },
+  "RT-047": {
+    "digest": "07336b7c6293b97ddd533f9c6ffb2897a2e7ea0eac8c78d8825bf0fae2c2018a",
+    "tier": "business"
+  },
+  "RT-048": {
+    "digest": "e5118af9c52c9944e6dae70a7fc8d600fd26159dda12abed6016eb48f0efad46",
+    "tier": "business"
+  },
+  "RT-049": {
+    "digest": "ae855931a80a5ce4b2a4eed80752029f6bb53b4f2fb2b064303f051efcad1d8b",
+    "tier": "business"
+  },
+  "RT-050": {
+    "digest": "18c5fce434147495e8755d137cd6086f79194ed5aa9b44d7e58a0c0237fa0100",
+    "tier": "business"
+  },
+  "RT-051": {
+    "digest": "dc8e4fb1aa8429fff5c9c23075fa0051f4576576f998990a9dd60c24e320c46e",
+    "tier": "business"
+  },
+  "RT-060": {
+    "digest": "0a30167bb11ae3da8a01e00a78a7f017e45452ca2a831c72d177c4db89331ff1",
+    "tier": "business"
+  },
+  "RT-061": {
+    "digest": "d6ea54bbb7b2fb9468a59f613f78b6fd9dbbff803cbf045ec52ac829095d8a78",
+    "tier": "business"
+  },
+  "RT-062": {
+    "digest": "5197456f8154fd42730819fc60d6afb9902ac6d607eb5a92800911a3886f40d1",
+    "tier": "business"
+  },
+  "RT-063": {
+    "digest": "60122b0316a96919eb78a15929642c52cbfa4165c4585282fac64683e269a17a",
+    "tier": "business"
+  },
+  "RT-064": {
+    "digest": "6e94abf8d9590d7c5c2168927c3abebe46e2ef654518a3ac0bdb4597cf7ef5fe",
+    "tier": "business"
+  },
+  "RT-065": {
+    "digest": "60d6b94508c286f76ccbde87a6ff0a7a579e2045f9b6fc0cac4ae617f0efaeda",
+    "tier": "business"
+  },
+  "RT-066": {
+    "digest": "35a7e4464d41db3885d1ec289cca0380b9b33372322a676c99cee5fa3c1c5692",
+    "tier": "business"
+  },
+  "RT-067": {
+    "digest": "405c91076f1c28ff3d397b55a792a95b98a938869ab82ebbc916bcb07164fe6f",
+    "tier": "business"
+  },
+  "RT-068": {
+    "digest": "9c77e8569fb9738577c618157975eb6267729b8bfc2fa969d01e74abf5a675fb",
+    "tier": "business"
+  },
+  "RT-069": {
+    "digest": "efde33e0f4ba74987f082dee0113667e98e22784936d28719dd35e37a3469a7d",
+    "tier": "business"
+  }
+}

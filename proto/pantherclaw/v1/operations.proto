@@ -65,8 +65,8 @@ message WorkAction {
 // WorkItem is one work-queue item.
 message WorkItem {
   // "INCIDENT", "UNCONFIRMED_CONTAINMENT", "ALERT", "PROTECTION_FAILURE",
-  // "AUTOMATION_EXCEPTION", "WAITING_DECISION", "POSTURE_FINDING" or
-  // "AUTHORITY_EXPANSION".
+  // "AUTOMATION_EXCEPTION", "WAITING_DECISION", "POSTURE_FINDING",
+  // "AUTHORITY_EXPANSION" or "DISCOVERY_CHANGE".
   string kind = 1;
   string id = 2;
   // Untrusted text where it comes from a rule or a report.
