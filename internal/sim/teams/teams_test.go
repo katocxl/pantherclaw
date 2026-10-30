@@ -39,7 +39,7 @@ func newSim(t *testing.T) (*Server, *httptest.Server) {
 func token(t *testing.T, srv *httptest.Server, secret string) (int, string) {
 	t.Helper()
 	form := url.Values{"grant_type": {"client_credentials"}, "client_id": {AppID}, "client_secret": {secret}, "scope": {Scope}}
-	res, err := srv.Client().Post(srv.URL+"/botframework.com/oauth2/v2.0/token", "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
+	res, err := srv.Client().Post(srv.URL+"/"+TenantID+"/oauth2/v2.0/token", "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
 	if err != nil {
 		t.Fatal(err)
 	}

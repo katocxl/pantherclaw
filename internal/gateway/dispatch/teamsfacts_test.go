@@ -5,6 +5,7 @@ package dispatch
 
 import (
 	"context"
+	"encoding/json/v2"
 	"log/slog"
 	"net/http/httptest"
 	"net/netip"
@@ -99,11 +100,11 @@ func TestT226_TheGatewayReadsWhetherATeamsChannelIsExternal(t *testing.T) {
 		t.Fatalf("%d tokens for one three-page read", s.Issued()-issued)
 	}
 
-	// A credential that pins no tenant (the multi-tenant endpoint) reads
-	// nothing: the fact is unread, never internal.
-	multi, err := credentials.OAuthClient{
+	// A credential sealed before D279 that pins no tenant (the multi-tenant
+	// endpoint) reads nothing: the fact is unread, never internal.
+	multi, err := json.Marshal(credentials.OAuthClient{
 		V: 1, TokenURL: srv.URL + "/botframework.com/oauth2/v2.0/token", ClientID: teams.AppID, Scope: teams.Scope, ClientSecret: []byte("bot~secret"),
-	}.Encode()
+	}, json.Deterministic(true))
 	if err != nil {
 		t.Fatal(err)
 	}

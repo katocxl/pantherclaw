@@ -40,7 +40,7 @@ func newTeams(t *testing.T) *teamsWorld {
 	return &teamsWorld{
 		sim: sim, srv: srv, client: c, hosts: []string{u.Host},
 		oc: domain.OAuthClient{
-			V: 1, TokenURL: srv.URL + "/botframework.com/oauth2/v2.0/token", ClientID: teams.AppID, Scope: teams.Scope,
+			V: 1, TokenURL: srv.URL + "/" + teams.TenantID + "/oauth2/v2.0/token", ClientID: teams.AppID, Scope: teams.Scope,
 			ClientSecret: []byte("s3cret~value"),
 		},
 	}
