@@ -90,6 +90,11 @@ type m11Case struct {
 		DestinationClass string `json:"destination_class,omitzero"`
 		// Agent sets the fixture agent and its run (D20).
 		Agent string `json:"agent,omitzero"`
+		// RunConsequences sets the run's consequence counts (G0 M17 D103).
+		RunConsequences *struct {
+			Pending     int `json:"pending,omitzero"`
+			Unconfirmed int `json:"unconfirmed,omitzero"`
+		} `json:"run_consequences,omitzero"`
 	} `json:"given,omitzero"`
 	Expect struct {
 		Decision string `json:"decision"`

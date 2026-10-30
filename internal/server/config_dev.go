@@ -27,6 +27,11 @@ type DevConfig struct {
 	// (pantherclaw-sim slack, G0 M14 D22) instead of https://slack.com/api.
 	// Loopback only, and refused unless the server is local only; file only.
 	SlackAPIURL string `json:"slack_api_url"`
+	// ExternalChecksLoopback lets external policy checks reach 127.0.0.1
+	// and ::1, and no other denied range, so a local OPA or a test server
+	// can answer (G0 M16 D93b). Refused unless the server is local only;
+	// file only.
+	ExternalChecksLoopback bool `json:"external_checks_loopback"`
 }
 
 const (

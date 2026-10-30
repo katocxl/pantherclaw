@@ -59,6 +59,9 @@ type Summary struct {
 	Monitor            bool
 	Evaluations        int
 	Created            time.Time
+	// Downstream is the state of the consequences opened for it (G0 M17
+	// D102); empty when none was predicted.
+	Downstream domain.DownstreamState
 }
 
 // TransactionPage is one page of transactions, newest first.
@@ -255,7 +258,8 @@ func (e *Explorer) ListTransactions(ctx context.Context, pr page.Request, f Filt
 				ID: r.ID, RunID: r.RunID, AgentID: r.AgentID, Operation: r.Operation, ConnectionID: r.ConnectionID,
 				Decision: r.Decision, ReasonCode: r.ReasonCode, EffectState: r.EffectState,
 				EffectLevelRequired: r.EffectLevelRequired, EffectLevelAchieved: r.EffectLevelAchieved, Mode: r.Mode,
-				Evaluations: r.Evaluations, CreatedAt: r.CreatedAt, PermitState: r.PermitState, Outcome: r.Outcome,
+				Evaluations: r.Evaluations, CreatedAt: r.CreatedAt, DownstreamState: r.DownstreamState, PermitState: r.PermitState,
+				Outcome: r.Outcome,
 			}))
 		}
 		return nil
@@ -401,7 +405,7 @@ func summary(t dbq.TransactionSummaryRow) Summary {
 		ID: t.ID, Run: t.RunID, Agent: t.AgentID, Operation: t.Operation, Connection: t.ConnectionID, Decision: t.Decision,
 		Reason: t.ReasonCode, Effect: domain.EffectState(deref(t.EffectState)), Required: defs.Level(deref(t.EffectLevelRequired)),
 		Achieved: defs.Level(deref(t.EffectLevelAchieved)), Monitor: t.Mode == "monitor", Evaluations: int(t.Evaluations),
-		Created: t.CreatedAt,
+		Created: t.CreatedAt, Downstream: domain.DownstreamState(deref(t.DownstreamState)),
 		Execution: domain.Execution(domain.Record{
 			Decision: t.Decision, Reason: t.ReasonCode, PermitState: deref(t.PermitState), Outcome: deref(t.Outcome),
 		}),

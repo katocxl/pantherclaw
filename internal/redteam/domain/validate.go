@@ -14,12 +14,12 @@ import (
 )
 
 var (
-	idPattern     = regexp.MustCompile(`^RT-[0-9]{3}$`)
+	idPattern     = regexp.MustCompile(`^(RT-[0-9]{3}|CX-[0-9]{3,5})$`)
 	stepIDPattern = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
 	attackerRE    = regexp.MustCompile(`^A([1-9]|1[0-2])$`)
 	threatRE      = regexp.MustCompile(`^T-[0-9]{3}$`)
 	ruleRE        = regexp.MustCompile(`^HR-[0-9]{3}$`)
-	fileNameRE    = regexp.MustCompile(`^(RT-[0-9]{3})-[a-z0-9]+(-[a-z0-9]+)*\.yaml$`)
+	fileNameRE    = regexp.MustCompile(`^(RT-[0-9]{3}|CX-[0-9]{3,5})-[a-z0-9]+(-[a-z0-9]+)*\.yaml$`)
 	roleRE        = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
 	toolRE        = regexp.MustCompile(`^[A-Za-z0-9_.:/-]{1,120}$`)
 	tokenRE       = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
@@ -159,6 +159,47 @@ var (
 	browserBodies  = []string{"json", "proto", "form", "text"}
 )
 
+// CustomerStepKinds are the step kinds a customer (CX-###) scenario may
+// use: the kinds the live driver runs, none with harness powers (G0 M17
+// D126). internal/redteam/adapters/live tests that the two agree.
+var CustomerStepKinds = []string{
+	"agent.call", "agent.child", "agent.steal", "target.replay", "wait", "check.receipt", "person.approve", "person.decline",
+}
+
+// CustomerCapabilities are the requires a customer scenario may name: what
+// a live range can set up. Sandbox probes, a second org, a browser session
+// and the simulator swaps belong to the harness.
+var CustomerCapabilities = []string{
+	"github", "payments", "mcp", "person", "stripe.refund", "stripe.transfer", "pg.query", "slack.post",
+	"authzen.evaluate", "a2a.send",
+}
+
+// KnownCapabilities returns every capability a scenario may require.
+func KnownCapabilities() []string { return slices.Clone(capabilities) }
+
+// validateCustomer applies the limits of a customer scenario (D126): it is
+// business-tier, never harness-only, uses only live-driver step kinds and
+// requires only what a live range provides.
+func (s *Scenario) validateCustomer() error {
+	switch {
+	case s.Tier != "business":
+		return invalid("a customer scenario (CX-###) is tier business")
+	case s.HarnessOnly:
+		return invalid("a customer scenario (CX-###) cannot be harness_only")
+	}
+	for _, r := range s.Requires {
+		if !slices.Contains(CustomerCapabilities, r) {
+			return invalid("a customer scenario (CX-###) requires only %v, not %q", CustomerCapabilities, r)
+		}
+	}
+	for i, st := range s.Steps {
+		if !slices.Contains(CustomerStepKinds, st.Do) {
+			return invalid("step %d (%s): a customer scenario (CX-###) uses only %v, not %q", i+1, st.ID, CustomerStepKinds, st.Do)
+		}
+	}
+	return nil
+}
+
 // CheckFileName checks that a file named <id>-<slug>.yaml carries this scenario's id.
 func (s *Scenario) CheckFileName(base string) error {
 	m := fileNameRE.FindStringSubmatch(base)
@@ -174,7 +215,7 @@ func (s *Scenario) Validate() error {
 	case s.APIVersion != APIVersion:
 		return invalid("apiVersion must be %s", APIVersion)
 	case !idPattern.MatchString(s.ID):
-		return invalid("id %q must match RT-###", s.ID)
+		return invalid("id %q must match RT-### or CX-###", s.ID)
 	case s.Title == "" || len(s.Title) > MaxTitleLen:
 		return invalid("title must be 1..%d bytes", MaxTitleLen)
 	case hasUnsafeRune(s.Title):
@@ -190,10 +231,18 @@ func (s *Scenario) Validate() error {
 	case len(s.Steps) == 0 || len(s.Steps) > MaxSteps:
 		return invalid("a scenario has 1..%d steps", MaxSteps)
 	}
-	if err := listOf("threats", s.Threats, threatRE, true); err != nil {
+	customer := OriginOf(s.ID) == OriginCustomer
+	if customer {
+		if err := s.validateCustomer(); err != nil {
+			return err
+		}
+	}
+	// A customer scenario may leave threats and rules out; any it names are
+	// real T-### and HR-### ids (D126).
+	if err := listOf("threats", s.Threats, threatRE, !customer); err != nil {
 		return err
 	}
-	if err := listOf("rules", s.Rules, ruleRE, true); err != nil {
+	if err := listOf("rules", s.Rules, ruleRE, !customer); err != nil {
 		return err
 	}
 	for _, r := range s.Requires {

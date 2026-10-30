@@ -227,7 +227,9 @@ func (s *Service) ApplyEmergency(ctx context.Context, request ids.UUID, su stepu
 			return err
 		}
 		if row.State != StatePending || row.ChangeRequestID == nil || *row.ChangeRequestID != request ||
-			Surface(row.Surface) == SurfaceSettings {
+			Surface(row.Surface) == SurfaceSettings || Surface(row.Surface).AlwaysProtected() {
+			// Settings, and a change that always needs a second person
+			// (HR-453), have no emergency.
 			return ErrState
 		}
 		// The change request must still be pending: a declined or expired

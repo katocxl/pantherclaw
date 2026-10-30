@@ -66,6 +66,76 @@ const (
 	PurposeConsequence Purpose = "consequence"
 )
 
+// DownstreamState is what is known about the consequences of a confirmed
+// action, apart from its own effect (G0 M17 D102, F414, HR-451). It is
+// empty when its decision predicted none.
+type DownstreamState string
+
+// Downstream states.
+const (
+	// DownstreamPending: a consequence opened for verification is not
+	// confirmed yet.
+	DownstreamPending DownstreamState = "PENDING"
+	// DownstreamConfirmed: every consequence opened for it is confirmed,
+	// by its own evidence.
+	DownstreamConfirmed DownstreamState = "CONFIRMED"
+	// DownstreamUnconfirmed: a consequence's verifier or deadline asked a
+	// person, or its effect state says it did not take effect.
+	DownstreamUnconfirmed DownstreamState = "UNCONFIRMED"
+	// DownstreamNotVerifiable: a predicted consequence could not be opened
+	// for verification (HR-450). It never becomes CONFIRMED.
+	DownstreamNotVerifiable DownstreamState = "NOT_VERIFIABLE"
+)
+
+// Consequence is one consequence transaction as a roll-up sees it.
+type Consequence struct {
+	Effect EffectState
+	// Downstream is its own downstream state, for a consequence that has
+	// consequences of its own.
+	Downstream DownstreamState
+	// Questioned: a person was asked whether it took effect (an open
+	// consequence_unconfirmed reconciliation, or one released as not
+	// occurred).
+	Questioned bool
+}
+
+// Downstream is the downstream state of an action from the consequences
+// opened for it, and whether one of its predicted consequences could not
+// be opened (capped). Precedence over the whole subtree is UNCONFIRMED >
+// NOT_VERIFIABLE > PENDING > CONFIRMED (D102, D131):
+//   - UNCONFIRMED when any consequence is questioned, has an effect state
+//     other than confirmed or still pending, or is unconfirmed downstream;
+//   - otherwise NOT_VERIFIABLE when capped or any consequence is not
+//     verifiable downstream: it never becomes CONFIRMED (HR-450);
+//   - CONFIRMED only when every one is confirmed, with its own subtree
+//     confirmed, by its own evidence (HR-451);
+//   - PENDING otherwise.
+func Downstream(cs []Consequence, capped bool) DownstreamState {
+	unverifiable, confirmed := capped, len(cs) > 0
+	for _, c := range cs {
+		switch {
+		case c.Questioned, c.Downstream == DownstreamUnconfirmed:
+			return DownstreamUnconfirmed
+		case c.Effect == Confirmed:
+			unverifiable = unverifiable || c.Downstream == DownstreamNotVerifiable
+			confirmed = confirmed && (c.Downstream == "" || c.Downstream == DownstreamConfirmed)
+		case c.Effect == "" || c.Effect == PropagationPending:
+			unverifiable = unverifiable || c.Downstream == DownstreamNotVerifiable
+			confirmed = false
+		default:
+			return DownstreamUnconfirmed
+		}
+	}
+	switch {
+	case unverifiable:
+		return DownstreamNotVerifiable
+	case confirmed:
+		return DownstreamConfirmed
+	default:
+		return DownstreamPending
+	}
+}
+
 // Observation is what one verification read reported (HR-190): only the
 // fields the verifier declares, by JSON pointer, as their JSON text (a
 // string without quotes, a number or a boolean as written), never a body.

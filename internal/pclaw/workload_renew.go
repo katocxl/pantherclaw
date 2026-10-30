@@ -34,7 +34,7 @@ const exitRefused = 3
 
 func init() {
 	commands["workload renew"] = command{
-		usage: "workload renew --key-file FILE --out FILE [--github | --kubernetes-token FILE] [--declared-release sha256:…]",
+		usage: "workload renew --key-file FILE --out FILE [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp | --aws | --azure-app APP_ID [--azure-client-id ID] | --entra-token-env VAR] [--declared-release sha256:…]",
 		run:   workloadRenew,
 	}
 }
@@ -52,8 +52,8 @@ func workloadRenew(ctx context.Context, a *app, args []string) error {
 	if *keyFile == "" || *out == "" || fs.NArg() != 0 {
 		return errUsage
 	}
-	if *att.github && *att.kubernetes != "" {
-		return errors.New("use --github or --kubernetes-token, not both")
+	if err := att.check(); err != nil {
+		return err
 	}
 	kf, err := workloadclient.ReadKeyFile(*keyFile)
 	if err != nil {
@@ -136,10 +136,11 @@ func (tr *tokenRenewal) renewer(deliver func(workloadclient.Issued) error) *work
 
 func (tr *tokenRenewal) report(s string) { _, _ = fmt.Fprintf(tr.a.stderr, "%s: %s\n", tr.name, s) }
 
-// issue asks for one token. It attests with a fresh GitHub token every
-// time, and with the projected Kubernetes token only once the kubelet has
-// rotated it. A refused attestation is reported and the request is sent
-// again without one: the server then keeps L2 until the last accepted
+// issue asks for one token. It attests with a fresh GitHub, GCP or AWS token every
+// time, and with a projected Kubernetes token, a GitLab ID token or a
+// JWT-SVID only while it is one not yet sent (the kubelet and SPIRE rotate
+// theirs; a GitLab job has one). A refused attestation is reported and the
+// request is sent again without one: the server then keeps L2 until the last accepted
 // attestation expires, and issues L1 after that (HR-143). A reused
 // attestation token is refused as invalid_token, so with an attestation
 // that code means the attestation, not the instance.
@@ -151,7 +152,11 @@ func (tr *tokenRenewal) issue(ctx context.Context) (workloadclient.Issued, error
 		switch {
 		case err != nil:
 			tr.report(fmt.Sprintf("renewing without an attestation: %v", err))
-		case att.GetKind() == pantherclawv1.AttestationKind_ATTESTATION_KIND_KUBERNETES:
+		case att != nil && att.GetKind() != pantherclawv1.AttestationKind_ATTESTATION_KIND_GITHUB_ACTIONS &&
+			att.GetKind() != pantherclawv1.AttestationKind_ATTESTATION_KIND_GCP_WORKLOAD &&
+			att.GetKind() != pantherclawv1.AttestationKind_ATTESTATION_KIND_AWS_IAM:
+			// A token read from a file or the environment is sent once:
+			// the server refuses it again (HR-143).
 			if sum = sha256.Sum256([]byte(att.GetToken())); sum != tr.seen {
 				req.Attestation = att
 			}

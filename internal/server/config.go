@@ -15,6 +15,8 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/oidcrp"
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
+	"github.com/katocxl/pantherclaw/internal/identity/adapters/awssts"
+	"github.com/katocxl/pantherclaw/internal/identity/adapters/issuerkeys"
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/kube"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/config"
@@ -60,6 +62,8 @@ type Config struct {
 	// WebAuthn and Notifications are M5 part 1 (config_m5.go).
 	WebAuthn      WebAuthnConfig      `json:"webauthn"`
 	Notifications NotificationsConfig `json:"notifications"`
+	// ExternalChecks is M16 (config_m16.go).
+	ExternalChecks ExternalChecksConfig `json:"external_checks"`
 	// Waitlist is M5 part 2 (config_m5p2.go).
 	Waitlist WaitlistConfig `json:"waitlist"`
 	// GatewayAPI is M6 (config_m6.go).
@@ -93,6 +97,20 @@ type IdentityConfig struct {
 	// KubernetesClusters are the clusters the Kubernetes L2 preset may call
 	// (founder decision 3: operator configuration only).
 	KubernetesClusters []kube.ClusterConfig `json:"kubernetes_clusters"`
+	// GitLabIssuers are the GitLab instances the GitLab CI preset trusts
+	// (D119); none configured means https://gitlab.com for every org.
+	GitLabIssuers []issuerkeys.GitLabIssuer `json:"gitlab_issuers"`
+	// SPIFFETrustDomains are the trust domains the SPIFFE preset trusts
+	// (D120); none means the preset refuses every attestation.
+	SPIFFETrustDomains []issuerkeys.TrustDomain `json:"spiffe_trust_domains"`
+	// AWSSTSHosts are the STS endpoints the AWS preset sends signed
+	// requests to (D121); none means the global and regional
+	// sts.*.amazonaws.com endpoints.
+	AWSSTSHosts []string `json:"aws_sts_hosts"`
+	// EntraApps pin each Entra app the Azure presets accept to one tenant
+	// and one org (D129); none means those presets refuse every
+	// attestation.
+	EntraApps []issuerkeys.EntraApp `json:"entra_apps"`
 }
 
 // LogConfig configures logging.
@@ -183,6 +201,18 @@ func (c *Config) Validate() error {
 	if _, err := kube.NewDirectory(c.Identity.KubernetesClusters); err != nil {
 		errs = append(errs, fmt.Errorf("identity.kubernetes_clusters: %w", err))
 	}
+	if err := issuerkeys.ValidateGitLab(c.Identity.GitLabIssuers); err != nil {
+		errs = append(errs, fmt.Errorf("identity.gitlab_issuers: %w", err))
+	}
+	if err := issuerkeys.ValidateSPIFFE(c.Identity.SPIFFETrustDomains); err != nil {
+		errs = append(errs, fmt.Errorf("identity.spiffe_trust_domains: %w", err))
+	}
+	if err := awssts.ValidateHosts(c.Identity.AWSSTSHosts); err != nil {
+		errs = append(errs, fmt.Errorf("identity.aws_sts_hosts: %w", err))
+	}
+	if err := issuerkeys.ValidateEntra(c.Identity.EntraApps); err != nil {
+		errs = append(errs, fmt.Errorf("identity.entra_apps: %w", err))
+	}
 	if (c.HTTP.TLSCertFile == "") != (c.HTTP.TLSKeyFile == "") {
 		errs = append(errs, errors.New("http.tls_cert_file and http.tls_key_file must be set together"))
 	}
@@ -218,6 +248,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateDevSlack()...)
 	errs = append(errs, c.validateObservability()...)
 	errs = append(errs, c.validateLimits()...)
+	errs = append(errs, c.validateExternalChecks()...)
 	if err := c.CEL.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("cel: %w", err))
 	}

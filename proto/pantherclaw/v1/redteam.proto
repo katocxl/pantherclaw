@@ -86,8 +86,11 @@ enum RangeObservedBy {
 
 // RangeScenarioDecl declares a scenario of the set a range runs. The
 // digest is the SHA-256 (lowercase hex) of the scenario's canonical form.
+// RT-### is the PantherClaw library: the server accepts it only with the
+// library's digest and takes its tier from the library. CX-### is
+// customer-authored (G0 M17 D124, D125).
 message RangeScenarioDecl {
-  string id = 1 [(buf.validate.field).string.pattern = "^RT-[0-9]{3}$"];
+  string id = 1 [(buf.validate.field).string.pattern = "^(RT-[0-9]{3}|CX-[0-9]{3,5})$"];
   string digest = 2 [(buf.validate.field).string.pattern = "^[0-9a-f]{64}$"];
   string tier = 3 [(buf.validate.field).string = {
     in: [
@@ -210,7 +213,7 @@ message RangeStepInput {
 
 message RecordResultRequest {
   string range_id = 1 [(buf.validate.field).string.uuid = true];
-  string scenario_id = 2 [(buf.validate.field).string.pattern = "^RT-[0-9]{3}$"];
+  string scenario_id = 2 [(buf.validate.field).string.pattern = "^(RT-[0-9]{3}|CX-[0-9]{3,5})$"];
   string scenario_digest = 3 [(buf.validate.field).string.pattern = "^[0-9a-f]{64}$"];
   // verdict is the runner's claim; the server recomputes PASS and FAIL
   // from the steps (ERROR and SKIPPED are kept as claimed).
@@ -254,6 +257,9 @@ message RangeResult {
   RangeVerdict claimed_verdict = 6;
   repeated RangeStep steps = 7;
   google.protobuf.Timestamp record_time = 8;
+  // origin is "library" or "customer" (customer-authored), derived by the
+  // server from the scenario id.
+  string origin = 9;
 }
 
 message RecordResultResponse {
@@ -286,6 +292,9 @@ message Range {
   google.protobuf.Timestamp start_time = 9;
   google.protobuf.Timestamp finish_time = 10;
   RangeCounts counts = 11;
+  // origin is "library" or "customer": a range runs one or the other. A
+  // customer range is customer-authored and has no assurance report.
+  string origin = 12;
 }
 
 message FinishRangeResponse {

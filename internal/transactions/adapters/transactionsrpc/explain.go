@@ -51,6 +51,13 @@ func explanationProto(x *app.Explanation, txn, consoleURL string) *pantherclawv1
 			AccountId: b.Account, OwnerId: b.Owner, Rule: b.Rule, Currency: b.Currency, Limit: b.Limit, Reserved: b.Reserved, Spent: b.Spent, Unknown: b.Unknown,
 		})
 	}
+	for _, c := range x.Consequences {
+		out.Consequences = append(out.Consequences, &pantherclawv1.ExplainedConsequence{
+			RuleId: c.Rule, Source: c.Source, Chain: c.Chain, Operation: c.Operation, Target: c.Target, Environments: c.Environments,
+			Description: c.Description, Evidence: c.Evidence, ValidUntil: c.ValidUntil, UnknownLinks: c.UnknownLinks,
+			Label: pantherclawv1.ConsequenceLabel(pantherclawv1.ConsequenceLabel_value["CONSEQUENCE_LABEL_"+string(c.Label)]),
+		})
+	}
 	for _, a := range adomain.NextActions(consoleURL, txn) {
 		out.NextActions = append(out.NextActions, &pantherclawv1.NextAction{Code: a.Code, Label: a.Label, Url: a.URL})
 	}

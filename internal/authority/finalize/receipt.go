@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/approvals/proof"
+	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
@@ -103,6 +104,18 @@ type ReceiptConsequence struct {
 	Target       string   `json:"target"`
 	Environments []string `json:"envs,omitzero"`
 	Facts        string   `json:"facts"`
+	// From pipeline 6 (G0 M17 D111), when not their zero value: where the
+	// rule comes from ("customer"; a package rule has none), how deep the
+	// consequence is (above 1), the rule ids from the action to it, what
+	// the rule says, the names of the facts it needs (never their values)
+	// and the last day of its review. Receipts before them verify as they
+	// did.
+	Source      string   `json:"src,omitzero"`
+	Depth       int      `json:"depth,omitzero"`
+	Chain       []string `json:"chain,omitzero"`
+	Description string   `json:"desc,omitzero"`
+	Evidence    []string `json:"evidence,omitzero"`
+	ValidUntil  string   `json:"until,omitzero"`
 }
 
 // ReceiptApproval names a consumed approval request and its binding.
@@ -125,7 +138,7 @@ func (a *Authority) receipt(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, e
 	for _, f := range ev.PayloadFindings {
 		pap.PayloadFindings = append(pap.PayloadFindings, ReceiptFinding{Kind: f.Kind, Location: f.Location})
 	}
-	if would, _, ok := ev.WouldUnknown(); ok {
+	if would, ok := ev.Would(); ok {
 		pap.Would = would
 	}
 	if ev.EffectiveHash != ev.ActionHash {
@@ -134,12 +147,22 @@ func (a *Authority) receipt(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, e
 	if ev.Connection != nil {
 		pap.Connection, pap.DestinationClass = ev.Connection.ID.String(), ev.Connection.DestinationClass
 	}
-	for _, c := range ev.Consequences {
+	for i, c := range ev.Consequences {
 		if c.Err == nil {
-			pap.Consequences = append(pap.Consequences, ReceiptConsequence{
+			rc := ReceiptConsequence{
 				Rule: c.Rule, State: string(c.State), Operation: c.Operation, Target: c.Target.Type + ":" + c.Target.ID,
-				Environments: c.Environments, Facts: c.FactsDigest,
-			})
+				Environments: c.Environments, Facts: c.FactsDigest, Description: c.Description, Evidence: c.Requires,
+				ValidUntil: c.ValidUntil,
+			}
+			if depth, _, chained, source := c.Chain(); source == consequences.SourceCustomer || chained {
+				if chained {
+					rc.Depth, rc.Chain = depth, consequences.RuleChain(ev.Consequences, i)
+				}
+				if source == consequences.SourceCustomer {
+					rc.Source = string(source)
+				}
+			}
+			pap.Consequences = append(pap.Consequences, rc)
 		}
 	}
 	if h := ev.Hold; h != nil && h.Satisfied && h.Request != nil && ev.Permits() {
@@ -179,13 +202,21 @@ func (a *Authority) receipt(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, e
 // the decisive one (F2, G0 M11.1 D33).
 func fit(r DecisionReceipt) ([]byte, error) {
 	const budget = MaxReceiptBytes / 2 // the JWS is base64 and signed
-	for range 3 {
+	for range 4 {
 		b, err := json.Marshal(r, json.Deterministic(true))
 		if err != nil {
 			return nil, err
 		}
 		if len(b) <= budget {
 			return b, nil
+		}
+		// The rules' words and fact names go first: the rules say them, and
+		// the rule ids and digests stay (G0 M17 D111).
+		if slices.ContainsFunc(r.Pap.Consequences, func(c ReceiptConsequence) bool { return c.Description != "" || c.Evidence != nil }) {
+			for i := range r.Pap.Consequences {
+				r.Pap.Consequences[i].Description, r.Pap.Consequences[i].Evidence = "", nil
+			}
+			continue
 		}
 		kept := r.Pap.Checklist[:0:0]
 		for i, it := range r.Pap.Checklist {

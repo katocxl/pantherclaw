@@ -7,10 +7,10 @@
 
 -- name: InsertRedteamRun :one
 INSERT INTO pc.redteam_runs (org_id, id, range_agent_id, started_by, runner_version, scenario_set_digest, scenarios,
-    policy_versions, package_versions, baseline_range_id)
+    policy_versions, package_versions, baseline_range_id, origin)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(range_agent_id), sqlc.arg(started_by), sqlc.arg(runner_version),
     sqlc.arg(scenario_set_digest), sqlc.arg(scenarios), sqlc.arg(policy_versions), sqlc.arg(package_versions),
-    sqlc.narg(baseline_range_id))
+    sqlc.narg(baseline_range_id), sqlc.arg(origin))
 RETURNING *;
 
 -- name: GetRedteamRun :one
@@ -44,10 +44,10 @@ FOR UPDATE SKIP LOCKED;
 
 -- name: InsertRedteamResult :one
 INSERT INTO pc.redteam_results (org_id, range_id, scenario_id, scenario_digest, title, suite, category, tier, verdict,
-    claimed_verdict, steps, observed_by, mismatches)
+    claimed_verdict, steps, observed_by, mismatches, origin)
 VALUES (sqlc.arg(org_id), sqlc.arg(range_id), sqlc.arg(scenario_id), sqlc.arg(scenario_digest), sqlc.arg(title),
     sqlc.arg(suite), sqlc.arg(category), sqlc.arg(tier), sqlc.arg(verdict), sqlc.narg(claimed_verdict), sqlc.arg(steps),
-    sqlc.arg(observed_by), sqlc.arg(mismatches))
+    sqlc.arg(observed_by), sqlc.arg(mismatches), sqlc.arg(origin))
 ON CONFLICT (org_id, range_id, scenario_id) DO NOTHING
 RETURNING recorded_at;
 
