@@ -83,7 +83,7 @@ func policyRolloutCommands() map[string]command {
 					if *verified < 1 || *verified > 100 {
 						return nil, fmt.Errorf("--require-verified-percent must be 1 to 100")
 					}
-					n := int32(*verified) //nolint:gosec // 1..100
+					n := int32(*verified)
 					req.RequireVerifiedPercent = &n
 				}
 				return c.rollouts.StartPolicyRollout(ctx, req)
