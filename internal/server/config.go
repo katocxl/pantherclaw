@@ -130,13 +130,16 @@ type DBConfig struct {
 	// (G0 M7 design decision 9): only the worker's retention job connects
 	// with them. Without the password file nothing is removed and the job
 	// reports ROLE_UNAVAILABLE (config_retention.go).
-	RetentionUser         string          `json:"retention_user" env:"PC_DB_RETENTION_USER"`
-	RetentionPasswordFile string          `json:"retention_password_file" env:"PC_DB_RETENTION_PASSWORD_FILE"`
-	DeleterPasswordFile   string          `json:"deleter_password_file" env:"PC_DB_DELETER_PASSWORD_FILE"`
-	MaxConns              int             `json:"max_conns" env:"PC_DB_MAX_CONNS"`
-	StatementTimeout      config.Duration `json:"statement_timeout" env:"PC_DB_STATEMENT_TIMEOUT"`
-	LockTimeout           config.Duration `json:"lock_timeout" env:"PC_DB_LOCK_TIMEOUT"`
-	IdleInTxTimeout       config.Duration `json:"idle_in_transaction_timeout" env:"PC_DB_IDLE_IN_TX_TIMEOUT"`
+	RetentionUser         string `json:"retention_user" env:"PC_DB_RETENTION_USER"`
+	RetentionPasswordFile string `json:"retention_password_file" env:"PC_DB_RETENTION_PASSWORD_FILE"`
+	DeleterPasswordFile   string `json:"deleter_password_file" env:"PC_DB_DELETER_PASSWORD_FILE"`
+	// KeystorePasswordFile is pc_keystore's: only the worker's re-wrap
+	// job connects with it (wiring_m18_keys.go, D171).
+	KeystorePasswordFile string          `json:"keystore_password_file" env:"PC_DB_KEYSTORE_PASSWORD_FILE"`
+	MaxConns             int             `json:"max_conns" env:"PC_DB_MAX_CONNS"`
+	StatementTimeout     config.Duration `json:"statement_timeout" env:"PC_DB_STATEMENT_TIMEOUT"`
+	LockTimeout          config.Duration `json:"lock_timeout" env:"PC_DB_LOCK_TIMEOUT"`
+	IdleInTxTimeout      config.Duration `json:"idle_in_transaction_timeout" env:"PC_DB_IDLE_IN_TX_TIMEOUT"`
 }
 
 // DefaultConfig returns safe defaults: loopback listener, TLS-verified DB.
@@ -195,7 +198,7 @@ func (c *Config) Validate() error {
 	if c.DB.AppUser == db.RoleMigrator || c.DB.AppUser == "postgres" {
 		errs = append(errs, errors.New("database.app_user must be the unprivileged application role"))
 	}
-	errs = append(errs, c.KeyService.Validate(len(c.KEKFiles))...)
+	errs = append(errs, c.validateKeyService()...)
 	if c.WorkerConcurrency < 1 || c.WorkerConcurrency > 1000 {
 		errs = append(errs, errors.New("worker_concurrency must be 1..1000"))
 	}

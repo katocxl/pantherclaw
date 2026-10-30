@@ -392,13 +392,13 @@ func TestTransitClientConcurrentCallersShareOneLogin(t *testing.T) {
 	if n := f.Logins.Load(); n != 1 {
 		t.Fatalf("20 concurrent callers logged in %d times; want 1", n)
 	}
-	// A cancelled first caller does not fail the others' shared login.
+	// A canceled first caller does not fail the others' shared login.
 	f.Token = "s.rotated"
 	c.dropToken()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := c.currentToken(ctx); err != nil {
-		t.Fatalf("login with a cancelled caller context: %v", err)
+		t.Fatalf("login with a canceled caller context: %v", err)
 	}
 }
 

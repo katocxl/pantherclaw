@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
@@ -43,5 +44,17 @@ func TestHR486_StoredKEKIDMustMatchTheEnvelope(t *testing.T) {
 		if pt, err := unwrapStored(ctx, r, id, w, aad); !errors.Is(err, keys.ErrUnwrap) || pt != nil {
 			t.Fatalf("kek_id %q: %q, %v; want ErrUnwrap", id, pt, err)
 		}
+	}
+}
+
+func TestAuditErrorNamesTheKey(t *testing.T) {
+	cause := errors.New("ledger unavailable")
+	var err error = &AuditError{Object: "dek audit/3", KEKID: "bao:pc-kek", Err: cause}
+	var ae *AuditError
+	if !errors.As(err, &ae) || !errors.Is(err, cause) || ae.Object != "dek audit/3" {
+		t.Fatalf("AuditError = %v", err)
+	}
+	if msg := err.Error(); !strings.Contains(msg, "dek audit/3") || !strings.Contains(msg, "bao:pc-kek") || !strings.Contains(msg, "not audited") {
+		t.Fatalf("message %q", msg)
 	}
 }

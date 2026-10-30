@@ -73,7 +73,7 @@ func (s *session) bearer(ctx context.Context) (string, error) {
 	}
 	s.creds.AccessToken, s.creds.RefreshToken = tr.AccessToken, tr.RefreshToken
 	s.creds.AccessExpiry = time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second)
-	if err := saveCreds(s.a.env, s.creds); err != nil {
+	if err := saveCredsTo(s.a.env, s.creds, s.a.stderr); err != nil {
 		return "", fmt.Errorf("pclaw: saving the refreshed session: %w", err)
 	}
 	return s.creds.AccessToken, nil
