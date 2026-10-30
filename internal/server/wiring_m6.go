@@ -66,6 +66,8 @@ type m6Services struct {
 	// hold is the operator's maintenance hold: the gateway listener refuses
 	// every procedure (G0 M13 D26, HR-379).
 	hold bool
+	// fleet serves the fleet policy, view and sweep (G0 M18 D151).
+	fleet *gwapp.Fleet
 }
 
 // newM6 builds the M6 services; notify (M5 notifications) may be nil.
@@ -96,7 +98,7 @@ func (m *m6Services) registerPublic(rs *connect.Server) {
 	if m == nil {
 		return
 	}
-	pantherclawv1connect.RegisterGatewayAdminServiceHandler(rs, gatewaysrpc.NewAdmin(m.gateways).WithRPID(m.rpID))
+	pantherclawv1connect.RegisterGatewayAdminServiceHandler(rs, gatewaysrpc.WithFleet(gatewaysrpc.NewAdmin(m.gateways).WithRPID(m.rpID), m.fleet))
 	pantherclawv1connect.RegisterGatewayServiceHandler(rs, gatewaysrpc.NewGateway(m.gateways))
 	pantherclawv1connect.RegisterContainmentServiceHandler(rs, responserpc.New(m.response))
 	pantherclawv1connect.RegisterConnectionServiceHandler(rs, connectionsrpc.New(m.connections, m.credentials))

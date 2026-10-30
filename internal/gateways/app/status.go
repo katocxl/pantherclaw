@@ -79,10 +79,15 @@ func (s *Service) ReportStatus(ctx context.Context, id Identity, r ReplicaStatus
 		if err != nil {
 			return err
 		}
-		return q.UpsertGatewayReplica(ctx, dbq.UpsertGatewayReplicaParams{
+		if err := q.UpsertGatewayReplica(ctx, dbq.UpsertGatewayReplicaParams{
 			OrgID: id.Org, GatewayID: id.Gateway, ReplicaID: r.Replica, Version: r.Version, Build: r.Build, StartTime: r.StartTime,
 			ConfigVersion: r.ConfigVersion, Connections: conns, LastSeen: s.clk.Now(),
-		})
+		}); err != nil {
+			return err
+		}
+		// The fleet sweep's last report time, never pruned (G0 M18 D167).
+		now := s.clk.Now()
+		return q.RecordGatewayReport(ctx, id.Org, id.Gateway, &now)
 	})
 }
 

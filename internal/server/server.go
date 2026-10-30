@@ -333,6 +333,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	m6.fleet = newM18Fleet(m6, bill, m5.notifications)
 	m6.hold = cfg.Maintenance.Hold
 	m14core := wireM14Core(m6)
 	wireM14A2A(m14core)
@@ -616,6 +617,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		if evidenceJobs, err = registerM15GatewayJobs(evidenceJobs, jreg, pool, log); err != nil {
+			return err
+		}
+		if evidenceJobs, err = registerM18FleetJobs(evidenceJobs, jreg, m6.fleet, log); err != nil {
 			return err
 		}
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {
