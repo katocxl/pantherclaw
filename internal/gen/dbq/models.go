@@ -1880,6 +1880,70 @@ type PcExecutionReceipt struct {
 	RemovedByPolicy *ids.UUID
 }
 
+type PcExportDestination struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Name                string
+	Kind                string
+	Url                 string
+	Bucket              *string
+	Region              *string
+	KeyPrefix           string
+	PathStyle           bool
+	Internal            bool
+	DataClasses         []string
+	State               string
+	Secret              []byte
+	SecretReplacedAt    *time.Time
+	CreatedBy           string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	UpdatedAt           time.Time
+	ConfirmedAt         *time.Time
+	LastDeliveredAt     *time.Time
+	ConsecutiveFailures int32
+	FailingSince        *time.Time
+	LastFailureAt       *time.Time
+	LastFailureCode     *string
+	DeliveredPushes     int64
+	FailedPushes        int64
+}
+
+type PcExportReceipt struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	DestinationID  ids.UUID
+	Class          string
+	ArtifactID     *ids.UUID
+	Streamed       bool
+	FromSeq        pgtype.Int8
+	ToSeq          pgtype.Int8
+	RequestedBy    ids.UUID
+	ObjectKey      string
+	State          string
+	UploadID       *string
+	AbortState     string
+	AbortTriedAt   *time.Time
+	SizeBytes      int64
+	Sha256         []byte
+	Parts          int32
+	Etag           *string
+	Attempts       int32
+	LastStatus     *int32
+	FailureCode    *string
+	CreatedAt      time.Time
+	StartedAt      *time.Time
+	DeliveredAt    *time.Time
+	RemovedHereAt  *time.Time
+	NoticeState    string
+	NoticeKey      *string
+	NoticeSha256   []byte
+	NoticeSentAt   *time.Time
+	NoticeAttempts int32
+}
+
 type PcExposureChange struct {
 	OrgID     ids.OrgID
 	ChangeSeq int64

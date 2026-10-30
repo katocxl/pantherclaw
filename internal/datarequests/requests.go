@@ -43,8 +43,10 @@ var (
 // Service owns only the application's pool; Deleter is the separately
 // authenticated pc_deleter pool and is used exclusively by DeleteOrg.
 type Service struct {
-	Pool                *db.Pool
-	Deleter             *db.Pool
+	Pool    *db.Pool
+	Deleter *db.Pool
+	// Stream, when set, lets a waiting push take an export as it builds.
+	Stream              PushStream
 	Keys                *keys.Registry
 	Jobs                *jobs.Client
 	Notify              *napp.Service
@@ -336,7 +338,8 @@ func (s *Service) Download(ctx context.Context, id ids.UUID, part int32) (dbq.Ge
 		if err != nil {
 			return err
 		}
-		if r.State != "READY" || r.ExpiresAt == nil || !now.Before(*r.ExpiresAt) {
+		// Parts == 0 is a streamed export: it was pushed, never stored.
+		if r.State != "READY" || r.ExpiresAt == nil || !now.Before(*r.ExpiresAt) || r.Parts == 0 {
 			return ErrExportUnavailable
 		}
 		out, err = q.GetDataRequestPart(ctx, c.Org, id, part)

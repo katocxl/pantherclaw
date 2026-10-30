@@ -69,6 +69,28 @@ type ExportManifest struct {
 	Cosign          *pack.Cosign `json:"mldsa,omitzero"`
 }
 
+// PushStream streams an export straight to a destination while it builds
+// (G0 M20 D252, internal/exports): above 2 GiB nothing else could carry it,
+// because stored exports and downloads keep that cap.
+type PushStream interface {
+	// Open returns the writer of the push waiting for request, or nil when
+	// none is: the export is then stored as usual.
+	Open(ctx context.Context, org ids.OrgID, request, requestedBy ids.UUID) (PushWriter, error)
+}
+
+// PushWriter takes an export's archive parts. The network must not hold the
+// build's transaction idle, so keepAlive is called while it waits.
+type PushWriter interface {
+	Write(ctx context.Context, part []byte, keepAlive func(context.Context) error) error
+	Finish(ctx context.Context, manifest string, keepAlive func(context.Context) error) error
+	// Abort stops a push that did not finish; after Finish it does nothing.
+	Abort()
+}
+
+// maxStreamParts bounds a streamed export's archive parts: 6.4 TiB, far
+// above what maxExportFiles lets through.
+const maxStreamParts = 100_000
+
 type archiveBuilder struct {
 	q        *dbq.Queries
 	org      ids.OrgID
@@ -77,6 +99,20 @@ type archiveBuilder struct {
 	buf      bytes.Buffer
 	zip      *zip.Writer
 	total    int64
+	// sink, when set, receives the parts instead of the database.
+	sink      PushWriter
+	keepAlive func(context.Context) error
+}
+
+// partNumber is the number of parts so far as the manifest stores it.
+func (b *archiveBuilder) partNumber() (int32, error) {
+	if b.sink == nil {
+		return partCount(b.manifest.Parts)
+	}
+	if len(b.manifest.Parts) > maxStreamParts {
+		return 0, ErrTooLarge
+	}
+	return int32(len(b.manifest.Parts)), nil //nolint:gosec // G115: bounded above
 }
 
 func (b *archiveBuilder) add(ctx context.Context, name string, content []byte) error {
@@ -99,7 +135,7 @@ func (b *archiveBuilder) add(ctx context.Context, name string, content []byte) e
 		return err
 	}
 	h := sha256.Sum256(content)
-	parts, err := partCount(b.manifest.Parts)
+	parts, err := b.partNumber()
 	if err != nil {
 		return err
 	}
@@ -115,16 +151,21 @@ func (b *archiveBuilder) flush(ctx context.Context) error {
 		return err
 	}
 	n := b.buf.Len()
-	if n > MaxPartBytes || b.total+int64(n) > MaxExportBytes || len(b.manifest.Parts) >= maxParts {
+	if n > MaxPartBytes || (b.sink == nil && (b.total+int64(n) > MaxExportBytes || len(b.manifest.Parts) >= maxParts)) {
 		return ErrTooLarge
 	}
-	parts, err := partCount(b.manifest.Parts)
+	parts, err := b.partNumber()
 	if err != nil {
 		return err
 	}
 	part := parts + 1
 	sum := sha256.Sum256(b.buf.Bytes())
-	if err := b.q.InsertDataRequestPart(ctx, dbq.InsertDataRequestPartParams{OrgID: b.org, RequestID: b.id, Number: part, Content: b.buf.Bytes(), Sha256: sum[:]}); err != nil {
+	if b.sink != nil {
+		err = b.sink.Write(ctx, b.buf.Bytes(), b.keepAlive)
+	} else {
+		err = b.q.InsertDataRequestPart(ctx, dbq.InsertDataRequestPartParams{OrgID: b.org, RequestID: b.id, Number: part, Content: b.buf.Bytes(), Sha256: sum[:]})
+	}
+	if err != nil {
 		return err
 	}
 	b.manifest.Parts = append(b.manifest.Parts, ExportPart{Number: part, Size: int64(n), SHA256: hex.EncodeToString(sum[:])})
@@ -180,6 +221,16 @@ func (s *Service) Build(ctx context.Context, org ids.OrgID, id ids.UUID) error {
 		return nil
 	}
 	ctx = tapp.WithCaller(ctx, caller)
+	var stream PushWriter
+	if s.Stream != nil {
+		if stream, err = s.Stream.Open(ctx, org, id, *request.CreatedBy); err != nil {
+			return err
+		}
+	}
+	if stream != nil {
+		// Whatever ends the build, a push that did not finish is aborted.
+		defer stream.Abort()
+	}
 	// The proof exporter bounds each standard bundle. Keep at most one
 	// bundle in memory; never accumulate the org's full evidence history.
 	bundles := s.Bundles
@@ -225,7 +276,11 @@ func (s *Service) Build(ctx context.Context, org ids.OrgID, id ids.UUID) error {
 			Format: ExportFormat, RegistryVersion: 1, Org: org.String(), Request: id.String(), CreatedAt: now, ExpiresAt: now.Add(7 * 24 * time.Hour), LedgerThrough: through,
 			Excluded: []string{"credentials and sealed material", "DEKs and wrapped keys", "tokens and secret hashes", "browser and CLI session storage", "provider client secrets and connection authentication", "payload captures and raw evaluation inputs", "tables and columns outside the explicit projection registry"},
 		}
-		b := archiveBuilder{q: q, org: org, id: id, manifest: &m}
+		keepAlive := func(ctx context.Context) error {
+			_, err := tx.Exec(ctx, "SELECT 1")
+			return err
+		}
+		b := archiveBuilder{q: q, org: org, id: id, manifest: &m, sink: stream, keepAlive: keepAlive}
 		for _, t := range exportTables {
 			m.Projections = append(m.Projections, Projection{Table: t.Name, Columns: t.Columns})
 			if err := exportTableRows(ctx, tx, &b, t); err != nil {
@@ -282,11 +337,19 @@ func (s *Service) Build(ctx context.Context, org ids.OrgID, id ids.UUID) error {
 		if len(manifest) > 1<<20 {
 			return ErrTooLarge
 		}
-		parts, err := partCount(m.Parts)
-		if err != nil {
+		// A streamed export stores no parts: nothing here can be downloaded,
+		// and its receipt holds its size. The signed manifest stays.
+		var parts int32
+		total := b.total
+		if stream != nil {
+			if err := stream.Finish(ctx, manifest, keepAlive); err != nil {
+				return err
+			}
+			total = 0
+		} else if parts, err = partCount(m.Parts); err != nil {
 			return err
 		}
-		n, err := q.MarkExportReady(ctx, dbq.MarkExportReadyParams{OrgID: org, ID: id, ReadyAt: &now, Parts: parts, TotalSize: b.total, Manifest: &manifest})
+		n, err := q.MarkExportReady(ctx, dbq.MarkExportReadyParams{OrgID: org, ID: id, ReadyAt: &now, Parts: parts, TotalSize: total, Manifest: &manifest})
 		if err != nil {
 			return err
 		}
@@ -297,6 +360,11 @@ func (s *Service) Build(ctx context.Context, org ids.OrgID, id ids.UUID) error {
 	}, db.RepeatableRead())
 	if errors.Is(err, ErrTooLarge) {
 		return s.failExport(ctx, org, id, "EXPORT_TOO_LARGE")
+	}
+	if err != nil && stream != nil {
+		// The upload is gone and the receipt says why: a retry would start
+		// the whole stream again.
+		return s.failExport(ctx, org, id, "EXPORT_PUSH_FAILED")
 	}
 	return err
 }
