@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	wire "github.com/katocxl/pantherclaw/internal/a2a"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	pccrypto "github.com/katocxl/pantherclaw/internal/platform/crypto"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
@@ -212,5 +213,29 @@ func TestA2ASendReservesItsTaskFirst(t *testing.T) {
 	}
 	if _, err := (&owned{}).reserve(ctx, w, "msg-3"); err != nil {
 		t.Fatalf("memory reservation: %v", err)
+	}
+}
+
+// TestA2AOnlyASendThatMayCreateATaskReserves: a send naming a task continues
+// it and takes no place; other methods take none (G0 M19 D221).
+// Covers: PN-010.7
+func TestA2AOnlyASendThatMayCreateATaskReserves(t *testing.T) {
+	send := func(task string) *wire.SendMessageRequest {
+		return &wire.SendMessageRequest{Message: wire.Message{MessageID: "m1", TaskID: task}}
+	}
+	for _, c := range []struct {
+		method string
+		send   *wire.SendMessageRequest
+		want   bool
+	}{
+		{wire.MethodSendMessage, send(""), true},
+		{wire.MethodSendStreamingMessage, send(""), true},
+		{wire.MethodSendMessage, send("task-1"), false},
+		{wire.MethodSendStreamingMessage, send("task-1"), false},
+		{wire.MethodGetTask, nil, false},
+	} {
+		if got := (call{method: c.method, send: c.send}).createsTask(); got != c.want {
+			t.Errorf("%s with %+v: %v, want %v", c.method, c.send, got, c.want)
+		}
 	}
 }

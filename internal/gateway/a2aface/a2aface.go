@@ -36,6 +36,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
 
@@ -164,6 +165,13 @@ type call struct {
 	release func()
 }
 
+// createsTask reports a send that may create a task: one that names a
+// task continues it, and needs no place (D221).
+func (c call) createsTask() bool {
+	return c.send != nil && c.send.Message.TaskID == "" &&
+		(c.method == wire.MethodSendMessage || c.method == wire.MethodSendStreamingMessage)
+}
+
 // releaseSlot frees the send's reserved place, before its answer is
 // recorded.
 func (c call) releaseSlot() {
@@ -274,10 +282,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, c, ferr)
 		return
 	}
-	if c.send != nil && (c.method == wire.MethodSendMessage || c.method == wire.MethodSendStreamingMessage) {
+	if c.createsTask() {
 		// A send may create a task: its place is kept before the peer sees
 		// the call, so a full or unreachable store refuses it here (D218).
-		release, err := h.owned.reserve(ctx, c.owner(), c.send.Message.MessageID)
+		// The key is this request's, since two sends may name one message
+		// id and each releases only its own (D221).
+		release, err := h.owned.reserve(ctx, c.owner(), ids.NewV7().String())
 		if err != nil {
 			h.fail(w, c, &faceError{
 				status: http.StatusServiceUnavailable, rpc: codeUnavailable, reason: CodeStateFull,

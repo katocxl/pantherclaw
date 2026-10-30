@@ -83,6 +83,41 @@ func TestHR496_PromotionHoldOnTheDatabase(t *testing.T) {
 	}
 }
 
+// TestHR496_TheRunningPathReadsTheAcknowledgedRow: a process that verified
+// sync at start accepts a verified new primary only while the row still
+// says sync was verified on the acknowledged timeline; a later start may
+// have cleared it, and that process's memory does not count (G0 M19 D221).
+// Covers: PN-010.7
+func TestHR496_TheRunningPathReadsTheAcknowledgedRow(t *testing.T) {
+	d := dbtest.New(t)
+	ctx := context.Background()
+	row := func() (timeline int64, verified bool) {
+		d.AdminQueryRow(t, "SELECT timeline, sync_verified FROM pc.db_primary_timeline", nil, &timeline, &verified)
+		return timeline, verified
+	}
+
+	d.AdminExec(t, "UPDATE pc.db_primary_timeline SET timeline = 7, sync_verified = false")
+	app := d.AppPool(t)
+	if err := db.PromoteForTest(ctx, app, 7, 8); !errors.Is(err, db.ErrTimelineChanged) {
+		t.Fatalf("row not verified: %v, want refused", err)
+	}
+	if !app.TimelineChanged() {
+		t.Fatal("the pool serves after a refused promotion")
+	}
+	if tl, verified := row(); tl != 7 || verified {
+		t.Fatalf("a refused promotion wrote the row: %d %v", tl, verified)
+	}
+
+	d.AdminExec(t, "UPDATE pc.db_primary_timeline SET sync_verified = true")
+	app = d.AppPool(t)
+	if err := db.PromoteForTest(ctx, app, 7, 8); err != nil || app.TimelineChanged() {
+		t.Fatalf("row verified: %v changed=%v", err, app.TimelineChanged())
+	}
+	if tl, verified := row(); tl != 8 || !verified {
+		t.Fatalf("the accepted timeline was not recorded: %d %v", tl, verified)
+	}
+}
+
 // TestHR496_NothingServesAfterAnUnacceptedPromotion: once the running
 // process sees a promotion it cannot accept, no connection serves a
 // decision: not the idle one opened before, not one in use at the time

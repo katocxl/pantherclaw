@@ -83,6 +83,7 @@ func TestHR496_RunningProcessRefusesAnUnverifiedPromotion(t *testing.T) {
 			if !rec || err != nil {
 				t.Fatalf("%s: %v %v, want accepted and recorded", c.name, rec, err)
 			}
+			w.accept(2)
 			if rec, err := w.observe(2, false); rec || err != nil {
 				t.Fatalf("%s: the accepted timeline again: %v %v", c.name, rec, err)
 			}
@@ -94,6 +95,28 @@ func TestHR496_RunningProcessRefusesAnUnverifiedPromotion(t *testing.T) {
 		if _, err := w.observe(1, true); !errors.Is(err, ErrTimelineChanged) {
 			t.Fatalf("%s: a later connection was accepted: %v", c.name, err)
 		}
+	}
+}
+
+// TestHR496_AHeldStartNeverVouchesForTheNextPromotion: T1 unverified, then
+// T2 starts in the hold on a primary configured sync, then T3 stays held:
+// sync verified only on the new primary carries nothing forward (G0 M19
+// D221).
+// Covers: PN-010.7
+func TestHR496_AHeldStartNeverVouchesForTheNextPromotion(t *testing.T) {
+	one := int64(1)
+	t2, record := decidePromotion(ReplicationSync, 2, &one, false, true)
+	if !t2.Hold || record {
+		t.Fatalf("T2 = %+v record=%v, want the hold, unrecorded", t2, record)
+	}
+	w := &timelineWatch{}
+	w.arm(t2)
+	if rec, err := w.observe(3, true); rec || !errors.Is(err, ErrTimelineChanged) || !w.isBroken() {
+		t.Fatalf("T3 = %v %v broken=%v, want refused", rec, err, w.isBroken())
+	}
+	// Restarted on T3 before anyone acknowledged: the row still says T1.
+	if t3, record := decidePromotion(ReplicationSync, 3, &one, false, true); !t3.Hold || record {
+		t.Fatalf("restart on T3 = %+v record=%v, want the hold", t3, record)
 	}
 }
 

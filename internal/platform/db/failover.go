@@ -182,14 +182,16 @@ var ErrTimelineChanged = errors.New("db: the primary was promoted without verifi
 // timelineWatch is the running process's view of the primary's timeline,
 // armed by CheckPromotion. Every new connection reads the timeline again:
 // the same one passes; a new one passes only when this process verified
-// sync at start and the new primary verifies it too, and is then
-// recorded; anything else breaks the pool for good (D213): every
-// connection is refused at acquire and the idle ones are closed (D218).
+// sync at start, the new primary verifies it too, and the acknowledged row
+// still says sync was verified on the timeline it replaces, read under
+// lock since another start may have changed it, and is then recorded;
+// anything else breaks the pool for good (D213): every connection is
+// refused at acquire and the idle ones are closed (D218, D221).
 type timelineWatch struct {
 	mu       sync.Mutex
 	armed    bool
 	timeline int64
-	sync     bool // sync verified at start
+	sync     bool // sync verified at start, on a timeline it did not hold on
 	broken   bool
 	// onBreak closes the pool's idle connections when the watch breaks.
 	onBreak func()
@@ -198,7 +200,9 @@ type timelineWatch struct {
 func (w *timelineWatch) arm(p Promotion) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.armed, w.timeline, w.sync = true, p.Timeline, p.Sync
+	// A held start's timeline is unacknowledged: nothing vouches for it,
+	// however the new primary is configured.
+	w.armed, w.timeline, w.sync = true, p.Timeline, p.Sync && !p.Hold
 }
 
 func (w *timelineWatch) isBroken() bool {
@@ -210,9 +214,9 @@ func (w *timelineWatch) isBroken() bool {
 	return w.broken
 }
 
-// observe decides one connection's timeline; record says the caller must
-// record tl as the acknowledged timeline before using the connection.
-func (w *timelineWatch) observe(tl int64, newSync bool) (record bool, err error) {
+// observe decides one connection's timeline; verify says the caller must
+// check the acknowledged row (acknowledge) before using the connection.
+func (w *timelineWatch) observe(tl int64, newSync bool) (verify bool, err error) {
 	w.mu.Lock()
 	switch {
 	case !w.armed:
@@ -225,17 +229,30 @@ func (w *timelineWatch) observe(tl int64, newSync bool) (record bool, err error)
 		w.mu.Unlock()
 		return false, nil
 	case w.sync && newSync:
-		w.timeline = tl
 		w.mu.Unlock()
 		return true, nil
 	}
+	w.mu.Unlock()
+	return false, w.fail()
+}
+
+// fail breaks the watch for good.
+func (w *timelineWatch) fail() error {
+	w.mu.Lock()
 	w.broken = true
 	onBreak := w.onBreak
 	w.mu.Unlock()
 	if onBreak != nil {
 		onBreak()
 	}
-	return false, ErrTimelineChanged
+	return ErrTimelineChanged
+}
+
+// accept makes tl the timeline this process runs on.
+func (w *timelineWatch) accept(tl int64) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.timeline = tl
 }
 
 // prepare runs before a pooled connection is handed out (PrepareConn):
@@ -260,16 +277,46 @@ func (w *timelineWatch) check(ctx context.Context, conn *pgx.Conn) error {
 	if err := conn.QueryRow(ctx, primaryStateSQL).Scan(&tl, &configured); err != nil {
 		return err
 	}
-	record, err := w.observe(tl, configured)
-	if err != nil || !record {
+	return w.decide(ctx, conn, tl, configured)
+}
+
+// decide applies one connection's timeline and the primary's verification.
+func (w *timelineWatch) decide(ctx context.Context, conn *pgx.Conn, tl int64, configured bool) error {
+	verify, err := w.observe(tl, configured)
+	if err != nil || !verify {
 		return err
 	}
-	// The new primary applied every commit before it was promoted, so
-	// nothing was lost: record its timeline, verified, so a restart does
-	// not hold.
+	if err := acknowledge(ctx, conn, tl); err != nil {
+		if errors.Is(err, errRowUnverified) {
+			return w.fail()
+		}
+		return err
+	}
+	w.accept(tl)
+	return nil
+}
+
+// errRowUnverified reports an acknowledged row that does not vouch for the
+// timeline before the promotion.
+var errRowUnverified = errors.New("db: sync was not verified on the acknowledged timeline")
+
+// acknowledge records tl, verified, if the row says sync was verified on
+// the acknowledged timeline: the new primary then applied every commit
+// before it was promoted, so nothing was lost, and a restart does not hold.
+func acknowledge(ctx context.Context, conn *pgx.Conn, tl int64) error {
 	return pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, globalSetup, string(GlobalFailover)); err != nil {
 			return err
+		}
+		var ack *int64
+		var ackSync bool
+		switch err := tx.QueryRow(ctx, acknowledgedSQL).Scan(&ack, &ackSync); {
+		case IsNoRows(err):
+			return ErrNoTimelineRow
+		case err != nil:
+			return err
+		case ack == nil || !ackSync:
+			return errRowUnverified
 		}
 		tag, err := tx.Exec(ctx, recordSQL, tl, true)
 		if err == nil && tag.RowsAffected() != 1 {
