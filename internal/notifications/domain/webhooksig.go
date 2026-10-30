@@ -81,7 +81,7 @@ func V1a(sig []byte) string { return "v1a," + base64.StdEncoding.EncodeToString(
 
 // VerifyV1a reports whether value is a `v1a,` signature of the content by
 // pub (receivers do this with a key from the org's JWKS).
-func VerifyV1a(pub ed25519.PublicKey, value string, msgID string, timestamp int64, body []byte) bool {
+func VerifyV1a(pub ed25519.PublicKey, value, msgID string, timestamp int64, body []byte) bool {
 	const prefix = "v1a,"
 	if len(value) <= len(prefix) || value[:len(prefix)] != prefix || len(pub) != ed25519.PublicKeySize {
 		return false

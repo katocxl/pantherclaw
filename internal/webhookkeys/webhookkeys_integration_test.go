@@ -57,8 +57,10 @@ func newFixture(t *testing.T) *fixture {
 
 func (f *fixture) as(kind td.PrincipalKind, cred tenancy.Credential, role td.RoleName) context.Context {
 	return tenancy.WithCaller(context.Background(), tenancy.Caller{
-		Subject: td.Subject{Org: f.org, Principal: td.PrincipalRef{Kind: kind, ID: f.alice},
-			Bindings: []td.Binding{{Role: role, Scope: td.Scope{Type: td.ScopeOrg, ID: f.org.UUID()}}}},
+		Subject: td.Subject{
+			Org: f.org, Principal: td.PrincipalRef{Kind: kind, ID: f.alice},
+			Bindings: []td.Binding{{Role: role, Scope: td.Scope{Type: td.ScopeOrg, ID: f.org.UUID()}}},
+		},
 		Credential: cred, Session: f.session,
 	})
 }
