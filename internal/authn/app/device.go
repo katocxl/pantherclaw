@@ -100,7 +100,7 @@ type Device struct {
 	tokens    *token.Service
 	issuer    string
 	audiences []string
-	idps      map[string]IdP
+	idps      providers
 	clock     clock.Clock
 	log       *slog.Logger
 }
@@ -110,14 +110,17 @@ func NewDevice(pool *db.Pool, tokens *token.Service, issuer string, idps []IdP, 
 	if log == nil {
 		log = pclog.Discard()
 	}
-	m := map[string]IdP{}
-	for _, p := range idps {
-		m[p.Name()] = p
-	}
 	return &Device{
 		pool: pool, tokens: tokens, issuer: issuer, audiences: []string{issuer, issuer + TokenPath},
-		idps: m, clock: clk, log: log,
+		idps: newProviders(idps), clock: clk, log: log,
 	}
+}
+
+// WithOrgProviders resolves organizations' own providers on each step of
+// a device login (G0 M18 D155).
+func (d *Device) WithOrgProviders(r OrgIdPs) *Device {
+	d.idps.orgs = r
+	return d
 }
 
 // RedirectURI is the callback URL registered at the provider.
@@ -143,27 +146,20 @@ type DeviceAuthorization struct {
 	Interval                int    `json:"interval"`
 }
 
-func (d *Device) provider(name string) (IdP, bool) {
-	if name == "" && len(d.idps) == 1 {
-		for _, p := range d.idps {
-			return p, true
-		}
-	}
-	p, ok := d.idps[name]
-	return p, ok
-}
-
 // Start begins a device login for an org. The device key must be an
 // Ed25519 public JWK: every later step proves possession of it.
 func (d *Device) Start(ctx context.Context, in DeviceStart) (DeviceAuthorization, error) {
-	if in.Org == "" || len(d.idps) == 0 {
+	if in.Org == "" || !d.idps.any() {
 		return DeviceAuthorization{}, ErrInvalidRequest
 	}
 	org, err := ids.Parse[ids.Org](in.Org)
 	if err != nil {
 		return DeviceAuthorization{}, ErrInvalidRequest
 	}
-	idp, ok := d.provider(in.Provider)
+	idp, ok, err := d.idps.forOrg(ctx, org, in.Provider)
+	if err != nil {
+		return DeviceAuthorization{}, err
+	}
 	if !ok {
 		return DeviceAuthorization{}, ErrInvalidRequest
 	}
@@ -275,8 +271,11 @@ func (d *Device) Confirm(ctx context.Context, orgParam, userCode string) (Redire
 	if err != nil {
 		return Redirect{}, err
 	}
-	idp, ok := d.idps[p.Provider]
-	if !ok {
+	idp, ok, err := d.idps.forOrg(ctx, p.Org, p.Provider)
+	if err != nil {
+		return Redirect{}, err
+	}
+	if !ok || p.Provider == "" {
 		return Redirect{}, ErrUnknownCode
 	}
 	state, err := credential.New(credential.OAuthState, "", p.Org)
@@ -338,15 +337,20 @@ var ErrBadCallback = errors.New("authn: invalid or expired sign-in response")
 // and the device code is approved. After the state is consumed every
 // failure denies the device code.
 func (d *Device) Callback(ctx context.Context, providerName string, params url.Values, binding string) (Outcome, error) {
-	idp, ok := d.idps[providerName]
-	if !ok {
-		return Outcome{}, ErrBadCallback
-	}
 	state, err := credential.Parse(credential.OAuthState, params.Get("state"))
 	if err != nil {
 		return Outcome{}, ErrBadCallback
 	}
 	org := state.Org()
+	// The org's providers now: one disabled since the login started no
+	// longer completes it (D155).
+	idp, ok, err := d.idps.forOrg(ctx, org, providerName)
+	if err != nil {
+		return Outcome{}, err
+	}
+	if !ok || providerName == "" {
+		return Outcome{}, ErrBadCallback
+	}
 	var row dbq.ConsumeDeviceStateRow
 	err = d.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		var err error

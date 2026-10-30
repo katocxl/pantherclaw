@@ -64,6 +64,12 @@ type Config struct {
 	// HTTPClient overrides the default client (tests); it must not follow
 	// redirects or read proxy variables.
 	HTTPClient *http.Client
+	// Org marks an organization's own provider (G0 M18 D155, HR-483): its
+	// issuer and every discovered endpoint must be HTTPS on a host the
+	// egress guard allows, AllowInsecureLoopback and subject tokens are
+	// refused, and the default client is the egress client, which also
+	// refuses private and loopback addresses at dial time.
+	Org bool
 }
 
 // Provider is a configured OpenID provider.
@@ -93,6 +99,14 @@ func New(cfg Config) (*Provider, error) {
 	if err := checkURL(cfg.Issuer, cfg.AllowInsecureLoopback); err != nil {
 		errs = append(errs, fmt.Errorf("issuer: %w", err))
 	}
+	if cfg.Org {
+		if cfg.AllowInsecureLoopback || cfg.SubjectTokenAudience != "" {
+			errs = append(errs, errors.New("an organization's provider has no insecure loopback issuer and no subject tokens"))
+		}
+		if err := CheckOrgURL(cfg.Issuer); err != nil {
+			errs = append(errs, fmt.Errorf("issuer: %w", err))
+		}
+	}
 	if cfg.ClientID == "" || len(cfg.ClientSecret.Reveal()) == 0 {
 		errs = append(errs, errors.New("client_id and a client secret are required"))
 	}
@@ -109,6 +123,11 @@ func New(cfg Config) (*Provider, error) {
 		cfg.Scopes = []string{"email", "profile"}
 	}
 	client := cfg.HTTPClient
+	if client == nil && cfg.Org {
+		// An organization's provider is customer input: the egress client
+		// checks the address actually dialed (HR-071, HR-483).
+		client = httpx.NewEgressClient(httpx.EgressConfig{Timeout: 10 * time.Second})
+	}
 	if client == nil {
 		// Only the configured issuer and its discovered endpoints are ever
 		// contacted: no redirects, no proxy variables (HR-070, HR-072).
@@ -130,6 +149,22 @@ func checkURL(raw string, insecureLoopback bool) error {
 		return nil
 	}
 	return errors.New("must use https (http only for a loopback development issuer)")
+}
+
+// CheckOrgURL is checkURL for an organization's provider (HR-483): HTTPS
+// only, on a host that is neither localhost nor an address or metadata
+// name the egress guard denies. Other names are checked when they are
+// dialed.
+func CheckOrgURL(raw string) error {
+	if err := checkURL(raw, false); err != nil {
+		return err
+	}
+	u, _ := url.Parse(raw)
+	h := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+	if h == "localhost" || strings.HasSuffix(h, ".localhost") || httpx.DeniedHost(u.Hostname(), nil) {
+		return errors.New("must not be a private, loopback or metadata address")
+	}
+	return nil
 }
 
 func isLoopback(host string) bool {
@@ -175,6 +210,11 @@ func (p *Provider) load(ctx context.Context) (*discovered, error) {
 		if err := checkURL(u, p.cfg.AllowInsecureLoopback); err != nil {
 			return nil, fmt.Errorf("oidc %s: endpoint %q: %w", p.cfg.Name, u, err)
 		}
+		if p.cfg.Org {
+			if err := CheckOrgURL(u); err != nil {
+				return nil, fmt.Errorf("oidc %s: endpoint %q: %w", p.cfg.Name, u, err)
+			}
+		}
 	}
 	if len(meta.PKCEMethods) > 0 && !slices.Contains(meta.PKCEMethods, "S256") {
 		return nil, fmt.Errorf("oidc %s: provider does not support PKCE S256", p.cfg.Name)
@@ -213,6 +253,13 @@ func (p *Provider) oauth(d *discovered, redirectURI string) *oauth2.Config {
 		ClientID: p.cfg.ClientID, ClientSecret: string(p.cfg.ClientSecret.Reveal()), Endpoint: d.endpoint,
 		RedirectURL: redirectURI, Scopes: append([]string{oidc.ScopeOpenID}, p.cfg.Scopes...),
 	}
+}
+
+// Discover fetches and checks the provider's discovery document now (an
+// organization's provider is checked before it is stored).
+func (p *Provider) Discover(ctx context.Context) error {
+	_, err := p.load(ctx)
+	return err
 }
 
 // RequireIssParam implements authnapp.IdP (RFC 9207).
