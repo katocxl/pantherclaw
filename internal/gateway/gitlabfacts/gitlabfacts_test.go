@@ -69,6 +69,39 @@ func TestT229_EnvironmentsNeverGuess(t *testing.T) {
 	}
 }
 
+// TestT229_AProjectThatDeploysFromElsewhereIsNotReadAsNone: a custom CI path
+// or Auto DevOps may deploy without .gitlab-ci.yml, and an answer that does
+// not state both settings says neither (D289, T-229).
+//
+// Covers: F756
+func TestT229_AProjectThatDeploysFromElsewhereIsNotReadAsNone(t *testing.T) {
+	for name, body := range map[string]string{
+		"no setting": `{"id":42,"ci_config_path":"","auto_devops_enabled":false}`,
+		"null path":  `{"id":42,"ci_config_path":null,"auto_devops_enabled":false}`,
+	} {
+		if why := ProjectCI(200, []byte(body), 42); why != "" {
+			t.Errorf("%s: %s", name, why)
+		}
+	}
+	for name, c := range map[string]struct {
+		status int
+		body   string
+	}{
+		"custom path":   {200, `{"id":42,"ci_config_path":"ci/deploy.yml","auto_devops_enabled":false}`},
+		"auto devops":   {200, `{"id":42,"ci_config_path":"","auto_devops_enabled":true}`},
+		"no path key":   {200, `{"id":42,"auto_devops_enabled":false}`},
+		"no devops key": {200, `{"id":42,"ci_config_path":""}`},
+		"null devops":   {200, `{"id":42,"ci_config_path":"","auto_devops_enabled":null}`},
+		"other project": {200, `{"id":43,"ci_config_path":"","auto_devops_enabled":false}`},
+		"not JSON":      {200, `{`},
+		"refused":       {403, ""},
+	} {
+		if ProjectCI(c.status, []byte(c.body), 42) == "" {
+			t.Errorf("%s: read", name)
+		}
+	}
+}
+
 // TestT229_ANewProjectIsReadForItsPipelineConfiguration: no file deploys
 // nothing, and a file that mentions environment or include, in any case, or
 // one that could not be read, is unread (D287, T-229).

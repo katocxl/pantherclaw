@@ -292,7 +292,8 @@ definitions:
         the project, stopped ones included, so one this branch never deploys
         to ends with no deployment, which a person decides. An environment
         name that does not exist yet, in a project that already has others,
-        is not predicted.
+        is not predicted, and a compliance pipeline cannot be read, so a
+        project with no environment can deploy through one unpredicted.
     approval:
       title: Release a deployment from GitLab project {target.id}
       fields: [target.id]
@@ -405,9 +406,10 @@ definitions:
 # head pipeline before a merge. A project with environments is a deployment,
 # and one whose head pipeline did not pass at the head leaves the fact missing:
 # the consequence is unknown and the merge at least held (HR-521, T-229). A
-# project with none is read for .gitlab-ci.yml at the head: no file deploys
-# nothing, and one that mentions environment or include, or that could not be
-# read, leaves the fact missing too (D287).
+# project with none is read for how its pipeline is configured and for
+# .gitlab-ci.yml at the head: no file deploys nothing, and a custom
+# configuration path, Auto DevOps, a file that mentions environment or include,
+# or anything that could not be read leaves the fact missing too (D287, D289).
 consequences:
   - id: merge-triggers-deployment
     operation: gitlab.merge_request.merge

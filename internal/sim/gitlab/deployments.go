@@ -80,6 +80,18 @@ func (s *Server) SetCIConfig(project int, text string) bool {
 	return ok
 }
 
+// SetCIProject sets a project's custom CI configuration path and its Auto
+// DevOps setting.
+func (s *Server) SetCIProject(project int, path string, autoDevOps bool) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.projects[project]
+	if ok {
+		p.CIConfigPath, p.AutoDevOps = path, autoDevOps
+	}
+	return ok
+}
+
 // SetFastForward makes a project merge without a merge commit.
 func (s *Server) SetFastForward(project int, on bool) bool {
 	s.mu.Lock()

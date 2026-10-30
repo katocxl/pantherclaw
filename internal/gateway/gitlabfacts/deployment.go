@@ -61,6 +61,36 @@ func Deployment(envs []any, pipeline map[string]any) map[string]any {
 	return map[string]any{"state": "verified", "environments": envs, "pipeline": pipeline["id"]}
 }
 
+// ProjectCI parses GET /projects/:id for a project with no environment
+// (D289). Its result says why the project's pipeline cannot be read from
+// .gitlab-ci.yml, "" when it can: a custom configuration path or Auto DevOps
+// may deploy from elsewhere, and an answer that does not state both settings
+// says neither, which a token without the rights to see them gets.
+func ProjectCI(status int, body []byte, project int) string {
+	if why := refused(status); why != "" {
+		return why
+	}
+	var a struct {
+		ID         int     `json:"id"`
+		Path       *string `json:"ci_config_path"`
+		AutoDevOps *bool   `json:"auto_devops_enabled"`
+	}
+	var keys map[string]any
+	if json.Unmarshal(body, &a) != nil || json.Unmarshal(body, &keys) != nil {
+		return "GitLab's answer could not be read"
+	}
+	_, hasPath := keys["ci_config_path"]
+	switch {
+	case a.ID != project || !hasPath || a.AutoDevOps == nil:
+		return "GitLab's answer does not state how the project's pipeline is configured"
+	case a.Path != nil && *a.Path != "":
+		return "the project has a custom CI configuration path"
+	case *a.AutoDevOps:
+		return "the project uses Auto DevOps"
+	}
+	return ""
+}
+
 // NoEnvironments is the value of MergeRequestDeployment for a project with
 // no environment yet, which its first deployment creates, from GET
 // /projects/:id/repository/files/.gitlab-ci.yml/raw at the head (D287). No

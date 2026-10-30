@@ -137,7 +137,7 @@ func (e *Engine) readGitLab(ctx context.Context, conn *control.Connection, def *
 		return unread(why)
 	}
 	out[gitlabfacts.MergeRequestApprovals] = gitlabfacts.Approvals(status, body, project, iid)
-	if out[gitlabfacts.MergeRequestDeployment], why = e.readGitLabDeployment(get, base, mr); why != "" {
+	if out[gitlabfacts.MergeRequestDeployment], why = e.readGitLabDeployment(get, base, project, mr); why != "" {
 		return unread(why)
 	}
 	if mr.TargetBranch == "" {

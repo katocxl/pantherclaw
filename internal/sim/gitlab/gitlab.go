@@ -64,6 +64,10 @@ type Project struct {
 	Stopped []string `json:"stopped_environments,omitzero"`
 	// CIConfig is the file .gitlab-ci.yml at every commit, "" for none.
 	CIConfig string `json:"ci_config,omitzero"`
+	// CIConfigPath is the project's custom CI configuration path, "" for
+	// none, and AutoDevOps its Auto DevOps setting.
+	CIConfigPath string `json:"ci_config_path,omitzero"`
+	AutoDevOps   bool   `json:"auto_devops_enabled,omitzero"`
 	// FastForward merges without a merge commit: merge_commit_sha stays
 	// null.
 	FastForward bool `json:"fast_forward,omitzero"`
@@ -516,6 +520,7 @@ func projectJSON(p *Project) map[string]any {
 	return map[string]any{
 		"id": p.ID, "path_with_namespace": p.Path, "default_branch": p.DefaultBranch,
 		"only_allow_merge_if_pipeline_succeeds": p.PipelineMustSucceed,
+		"ci_config_path":                        p.CIConfigPath, "auto_devops_enabled": p.AutoDevOps,
 	}
 }
 
