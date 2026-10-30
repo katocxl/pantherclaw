@@ -242,5 +242,13 @@
   "RT-069": {
     "digest": "efde33e0f4ba74987f082dee0113667e98e22784936d28719dd35e37a3469a7d",
     "tier": "business"
+  },
+  "RT-120": {
+    "digest": "be7ea23408f8d7d8d7b8394c003d03bd95c2738d1d37892712ad55b5e6f7c2fb",
+    "tier": "business"
+  },
+  "RT-121": {
+    "digest": "3e37933cf52e03158ebe7f20091f27dfcd8e59a75944e76d73410e2231c7b467",
+    "tier": "business"
   }
 }

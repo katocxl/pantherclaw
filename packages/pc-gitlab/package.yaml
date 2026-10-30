@@ -21,12 +21,21 @@
 # whose pipeline passed at that head; what cannot be read is missing, never
 # passed (HR-160).
 #
+# A merge into a project with environments may start a deployment to each of
+# them, so the deployment is a consequence (G0 M20 D258, HR-521, T-229): the
+# grant must cover gitlab.deployment.trigger and a policy can require an
+# approver for it. It is a verified one only when the head pipeline passed
+# at the head; otherwise the consequence is unknown and the merge is at
+# least held. After the merge each deployment is verified as its own
+# transaction, from GitLab's deployment of the merge commit, and the merge
+# stays downstream PENDING until then (G0 M17 D102).
+#
 # Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
 format: 1
 name: pc.gitlab
 version: 1.0.0
 publisher: pantherclaw
-summary: Read and merge GitLab merge requests at an exact head commit
+summary: Read and merge GitLab merge requests at an exact head commit, and verify the deployments a merge starts
 
 definitions:
   - operation: gitlab.merge_request.read
@@ -142,10 +151,16 @@ definitions:
         field: /state
         confirmed: [merged]
         pending: [opened, locked]
+      # The merge commit fills the sha of the deployments the merge starts,
+      # which their own verifier then finds (G0 M17 D102). A squash or
+      # fast-forward merge names no merge commit, so its deployments are
+      # not verifiable, and the merge says so.
+      capture:
+        sha: /merge_commit_sha
       limits: >-
         Shows that GitLab reports this merge request merged with this head
-        commit. It does not show that a pipeline or deployment the merge
-        starts ran or finished.
+        commit and names its merge commit. It does not show that a pipeline
+        or deployment the merge starts ran or finished.
     approval:
       title: Merge GitLab merge request {target.id} at {params.sha}
       fields:
@@ -215,6 +230,145 @@ definitions:
           sha: params.sha
           squash: params.squash
 
+  # Virtual: never mapped or dispatched. It names the deployment a merge may
+  # start, so a grant must cover it and policies can require a release
+  # approver for it (G0 M20 D258, HR-521).
+  - operation: gitlab.deployment.trigger
+    summary: A deployment that a merge starts
+    access: write
+    target:
+      type: gitlab_project
+      id_pattern: '^[1-9][0-9]{0,9}$'
+      account: none
+    # Filled when the merge that starts it is confirmed: the merge commit
+    # (captured by the merge's verifier) and one environment the consequence
+    # names. A consequence is decided without them.
+    params:
+      sha:
+        type: identifier
+        material: true
+        pattern: '^[0-9a-f]{40}$'
+      environment:
+        type: identifier
+        material: true
+        max_length: 255
+        pattern: '^[A-Za-z0-9_.-][A-Za-z0-9 _./-]{0,254}$'
+    effects:
+      - kind: deployment.trigger
+        description: Starts a pipeline that deploys to an environment
+    reversibility: compensatable
+    retry:
+      safe: false
+      on_unknown: reconcile
+    # The deployment's own effect: GitLab's deployment of the merge commit
+    # to the environment. A failure, matching deployments that disagree, or
+    # no deployment within the hour: a person decides (HR-192).
+    verifier:
+      operation: gitlab.deployment.read
+      establishes: deployment.succeeded
+      within_seconds: 3600
+      level: domain_effect
+      lookup:
+        operation: gitlab.deployment.list
+        list:
+          items: ''
+          id: /id
+        match:
+          - field: /sha
+            equals: params.sha
+          - field: /environment/name
+            equals: params.environment
+        id_param: deployment_id
+      states:
+        field: /status
+        confirmed: [success]
+        pending: [created, running, blocked]
+        reconcile: [failed, canceled, skipped, disagreement]
+      limits: >-
+        Shows the status GitLab reports for its deployment of this merge
+        commit to this environment. It does not show what the deployed job
+        did beyond that status, and it counts a deployment of this commit
+        made by anyone, because GitLab names no reserved deployer as GitHub
+        does. Environments are predicted from the project's available
+        environments, so an environment this branch never deploys to ends
+        with no deployment, which a person decides.
+    approval:
+      title: Release a deployment from GitLab project {target.id}
+      fields: [target.id]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+
+  # The deployment verifier's reads: a project's deployments to an
+  # environment, newest first, and one deployment. Agents do not call them.
+  - operation: gitlab.deployment.list
+    summary: List a project's deployments to an environment
+    access: read
+    target:
+      type: gitlab_project
+      id_pattern: '^[1-9][0-9]{0,9}$'
+      account: none
+    params:
+      sha:
+        type: identifier
+        required: true
+        pattern: '^[0-9a-f]{40}$'
+      environment:
+        type: identifier
+        required: true
+        max_length: 255
+        pattern: '^[A-Za-z0-9_.-][A-Za-z0-9 _./-]{0,254}$'
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+    dispatch:
+      credential_pattern: '^glpat-[A-Za-z0-9_.-]{20,300}$'
+      http:
+        method: GET
+        path: /api/v4/projects/{target.id}/deployments
+        query:
+          environment: params.environment
+          order_by: literal.id
+          sort: literal.desc
+
+  - operation: gitlab.deployment.read
+    summary: Read one deployment
+    access: read
+    target:
+      type: gitlab_project
+      id_pattern: '^[1-9][0-9]{0,9}$'
+      account: none
+    params:
+      deployment_id:
+        type: identifier
+        required: true
+        pattern: '^[1-9][0-9]{0,18}$'
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+    dispatch:
+      credential_pattern: '^glpat-[A-Za-z0-9_.-]{20,300}$'
+      http:
+        method: GET
+        path: /api/v4/projects/{target.id}/deployments/{params.deployment_id}
+
   # The connection test (C2): a harmless read that needs no input, listing
   # the projects the token is a member of.
   - operation: gitlab.project.read
@@ -246,10 +400,30 @@ definitions:
           membership: literal.true
           simple: literal.true
 
-# What the package covers (F756, HR-523): no environment yet, records scoped
-# by merge request, and its two channels.
+# The gateway reads the project's environments and the head pipeline before
+# a merge. A project with environments is a deployment, and one whose head
+# pipeline did not pass at the head leaves the fact missing: the consequence
+# is unknown and the merge at least held (HR-521, T-229).
+consequences:
+  - id: merge-triggers-deployment
+    operation: gitlab.merge_request.merge
+    when: facts.gitlab_merge_request_deployment.state != 'none'
+    requires_facts: [gitlab.merge_request.deployment]
+    consequence:
+      operation: gitlab.deployment.trigger
+      effect: deployment.trigger
+      target: '{target.id.project}'
+      environments: facts.gitlab_merge_request_deployment.environments
+      description: >-
+        The project has environments, and a pipeline on the target branch
+        may deploy to them when the merge lands.
+    valid_until: 2027-10-30
+
+# What the package covers (F756, HR-523): the environment a deployment names,
+# records scoped by merge request and project, and its two channels.
 coverage:
   environment:
-    source: none
-  record_scope: [gitlab_merge_request]
+    source: param
+    param: environment
+  record_scope: [gitlab_merge_request, gitlab_project]
   channels: [http, mcp]

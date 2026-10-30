@@ -57,6 +57,9 @@ type Project struct {
 	// PipelineMustSucceed refuses a merge whose head pipeline did not
 	// succeed (GitLab's "pipelines must succeed").
 	PipelineMustSucceed bool `json:"only_allow_merge_if_pipeline_succeeds"`
+	// Environments are the project's available environments: a merge
+	// starts a deployment to each.
+	Environments []string `json:"environments,omitzero"`
 }
 
 // Protection is one protected branch's rules.
@@ -131,6 +134,7 @@ type Server struct {
 	projects  map[int]*Project
 	mrs       map[string]*MergeRequest
 	pipelines map[int]*Pipeline
+	deploys   map[int]*Deployment
 	calls     Calls
 	tokens    []string
 	seq       int
@@ -142,7 +146,7 @@ func mrKey(project, iid int) string { return strconv.Itoa(project) + "!" + strco
 // pipelines.
 func New(projects []Project, mrs []MergeRequest, pipelines []Pipeline, f Faults, log *slog.Logger) *Server {
 	s := &Server{
-		faults: f, log: log, projects: map[int]*Project{}, mrs: map[string]*MergeRequest{}, pipelines: map[int]*Pipeline{}, calls: Calls{},
+		faults: f, log: log, projects: map[int]*Project{}, mrs: map[string]*MergeRequest{}, pipelines: map[int]*Pipeline{}, deploys: map[int]*Deployment{}, calls: Calls{},
 		seq: 1000,
 	}
 	for _, p := range projects {
@@ -285,6 +289,16 @@ func (s *Server) Handler() http.Handler {
 				return
 			}
 			w.WriteHeader(http.StatusNoContent)
+		case r.URL.Path == "/__sim/deployment" && r.Method == http.MethodPost:
+			var in struct {
+				ID     int    `json:"id"`
+				Status string `json:"status"`
+			}
+			if json.UnmarshalRead(io.LimitReader(r.Body, maxBody), &in) != nil || !s.SetDeployment(in.ID, in.Status) {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
 		case r.URL.Path == "/__sim/approve" && r.Method == http.MethodPost:
 			var in struct {
 				Project int    `json:"project"`
@@ -350,6 +364,9 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, segs []string) {
 		return
 	}
 	rest := segs[2:]
+	if s.deployments(w, r, p, rest) {
+		return
+	}
 	switch {
 	case r.Method == http.MethodGet && len(rest) == 0:
 		writeJSON(w, http.StatusOK, projectJSON(p))
@@ -429,6 +446,7 @@ func (s *Server) merge(w http.ResponseWriter, r *http.Request, p *Project, m *Me
 	}
 	m.State, m.Merges = "merged", m.Merges+1
 	m.MergeCommit = fmt.Sprintf("%040x", 0xa000+m.Merges+m.IID*16)
+	s.startDeployments(p, m)
 	s.log.Info("sim.gitlab_merged", slog.String("merge_request", mrKey(m.Project, m.IID)))
 	if s.faults.DropAnswer > 0 {
 		s.faults.DropAnswer--

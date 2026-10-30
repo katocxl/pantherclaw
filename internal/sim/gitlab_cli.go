@@ -16,26 +16,40 @@ import (
 	"github.com/katocxl/pantherclaw/internal/sim/gitlab"
 )
 
-// The simulated GitLab project acme/payments (id GitLabProject), with an
+// The simulated GitLab project acme/payments (id GitLabProject), which
+// deploys to GitLabEnvironment on a merge, with an
 // open merge request GitLabMergeRequest at GitLabHead whose pipeline
-// GitLabPipeline succeeded, needing one approval.
+// GitLabPipeline succeeded, needing one approval, and an open merge request
+// GitLabUnverifiedMergeRequest at GitLabUnverifiedHead whose pipeline
+// GitLabRunningPipeline is still running.
 const (
 	GitLabProject      = 42
 	GitLabMergeRequest = 7
 	GitLabPipeline     = 900
 	GitLabHead         = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+	GitLabEnvironment  = "production"
+
+	GitLabUnverifiedMergeRequest = 8
+	GitLabRunningPipeline        = 901
+	GitLabUnverifiedHead         = "9daeafb9864cf43055ae93beb0afd6c7d144bfa4"
 )
 
 // GitLabStart is the simulator's starting instance.
 func GitLabStart() ([]gitlab.Project, []gitlab.MergeRequest, []gitlab.Pipeline) {
 	return []gitlab.Project{{
 		ID: GitLabProject, Path: "acme/payments", DefaultBranch: "main", PipelineMustSucceed: true,
-		Protected: map[string]gitlab.Protection{"main": {}},
+		Environments: []string{GitLabEnvironment},
+		Protected:    map[string]gitlab.Protection{"main": {}},
 	}}, []gitlab.MergeRequest{{
 		Project: GitLabProject, IID: GitLabMergeRequest, Title: "Retry failed refunds", Source: "retry-refunds", Target: "main",
 		SHA: GitLabHead, Author: "developer", ApprovalsRequired: 1, Pipeline: GitLabPipeline,
+	}, {
+		Project: GitLabProject, IID: GitLabUnverifiedMergeRequest, Title: "Change the refund limit", Source: "refund-limit", Target: "main",
+		SHA: GitLabUnverifiedHead, Author: "developer", Pipeline: GitLabRunningPipeline,
 	}}, []gitlab.Pipeline{{
 		ID: GitLabPipeline, Project: GitLabProject, Ref: "retry-refunds", SHA: GitLabHead, Status: gitlab.PipelineSuccess, Source: "push",
+	}, {
+		ID: GitLabRunningPipeline, Project: GitLabProject, Ref: "refund-limit", SHA: GitLabUnverifiedHead, Status: gitlab.PipelineRunning, Source: "push",
 	}}
 }
 

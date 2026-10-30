@@ -98,12 +98,12 @@ func (d *rangeDriver) jiraComment(t *testing.T, issue, body string) domain.Obser
 	return obs
 }
 
-// gitlabMerge has the scenario's agent merge the simulated merge request
-// at sha through the gateway's connection "gitlab" over the REST route.
-func (d *rangeDriver) gitlabMerge(t *testing.T, sha string) domain.Observation {
+// gitlabMerge has the scenario's agent merge a simulated merge request at
+// sha through the gateway's connection "gitlab" over the REST route.
+func (d *rangeDriver) gitlabMerge(t *testing.T, iid int, sha string) domain.Observation {
 	t.Helper()
 	b, _ := json.Marshal(map[string]string{"sha": sha})
-	path := "/api/v4/projects/" + strconv.Itoa(sim.GitLabProject) + "/merge_requests/" + strconv.Itoa(sim.GitLabMergeRequest) + "/merge"
+	path := "/api/v4/projects/" + strconv.Itoa(sim.GitLabProject) + "/merge_requests/" + strconv.Itoa(iid) + "/merge"
 	obs, _, err := d.callOnce(callWith{Face: "http", Connection: "gitlab", Method: http.MethodPut, Path: path, Body: b}, nil, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -165,15 +165,14 @@ func TestHR521_AGitLabMergeIsBoundToItsHead(t *testing.T) {
 	d.s, d.people = s, &m2Stack{url: s.apiURL, cfg: s.serverCfg, idp: p}
 	d.sc = domain.Scenario{ID: "M20-GITLAB", Requires: []string{string(capGitLabMerge)}}
 	d.setupM20Connectors()
-	s.gitlab.sim.Approve(sim.GitLabProject, sim.GitLabMergeRequest, "reviewer")
 	stale := "1111111111111111111111111111111111111111"
-	if obs := d.gitlabMerge(t, stale); obs.Outcome == domain.OutcomeAllow {
+	if obs := d.gitlabMerge(t, sim.GitLabMergeRequest, stale); obs.Outcome == domain.OutcomeAllow {
 		t.Fatalf("a merge at a moved head: %+v", obs)
 	}
 	if m, _ := s.gitlab.sim.MergeRequest(sim.GitLabProject, sim.GitLabMergeRequest); m.Merges != 0 {
 		t.Fatalf("merged at a moved head: %+v", m)
 	}
-	if obs := d.gitlabMerge(t, sim.GitLabHead); obs.Outcome != domain.OutcomeAllow {
+	if obs := d.gitlabMerge(t, sim.GitLabMergeRequest, sim.GitLabHead); obs.Outcome != domain.OutcomeAllow {
 		t.Fatalf("merge: %+v", obs)
 	}
 	if m, _ := s.gitlab.sim.MergeRequest(sim.GitLabProject, sim.GitLabMergeRequest); m.State != "merged" || m.Merges != 1 {
@@ -191,10 +190,13 @@ func TestHR521_AGitLabMergeIsBoundToItsHead(t *testing.T) {
 const (
 	capJiraComment app.Capability = "jira.comment"
 	capGitLabMerge app.Capability = "gitlab.merge"
+	// capGitLabDeploy: with gitlab.merge, a deployment a merge starts needs
+	// a release approver.
+	capGitLabDeploy app.Capability = "gitlab.deploy"
 )
 
 func m20ConnectorCapabilities() map[app.Capability]bool {
-	return map[app.Capability]bool{capJiraComment: true, capGitLabMerge: true}
+	return map[app.Capability]bool{capJiraComment: true, capGitLabMerge: true, capGitLabDeploy: true}
 }
 
 // setupM20Connectors gives the scenario's agent a grant of its own for
@@ -213,8 +215,11 @@ func (d *rangeDriver) setupM20Connectors() {
 			"destinations": {"ids": ["`+sim.JiraIssue+`", "`+sim.JiraTicket+`"]}}`, "")
 	}
 	if requires(d.sc, string(capGitLabMerge)) {
-		target := strconv.Itoa(sim.GitLabProject) + "!" + strconv.Itoa(sim.GitLabMergeRequest)
-		d.ownGrant(`{"operations": ["gitlab.merge_request.merge", "gitlab.merge_request.read"],
-			"targets": {"gitlab_merge_request": {"ids": ["`+target+`"]}}}`, "")
+		d.gitlabMergeFixtures()
+		requirements := ""
+		if requires(d.sc, string(capGitLabDeploy)) {
+			requirements = gitlabDeployRequirements
+		}
+		d.defaultRun = d.grantRunWith(gitlabMergeBounds(true), "", requirements)
 	}
 }

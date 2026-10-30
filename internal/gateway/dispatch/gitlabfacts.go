@@ -34,8 +34,8 @@ func needsGitLabFacts(def *defs.Definition) bool {
 	return slices.ContainsFunc(def.Prerequisites, func(p defs.Prerequisite) bool { return slices.Contains(gitlabfacts.Names, p.Fact) })
 }
 
-// reportGitLabFacts reads a merge request's head, approvals, head pipeline
-// and target branch protection with the connection's token, within the
+// reportGitLabFacts reads a merge request's head, approvals, head pipeline,
+// target branch protection and deployment with the connection's token, within the
 // fact timeout, and reports them before the decision (G0 M20 D254,
 // HR-160, HR-521). What it could not read is reported unread, so the
 // server counts the fact missing. It reports whether it tried, and
@@ -134,6 +134,12 @@ func (e *Engine) readGitLab(ctx context.Context, conn *control.Connection, def *
 		return unread(why)
 	}
 	out[gitlabfacts.MergeRequestApprovals] = gitlabfacts.Approvals(status, body, project, iid)
+	if status, body, why = get(base + "/environments?" + url.Values{
+		"states": {"available"}, "per_page": {strconv.Itoa(gitlabfacts.EnvironmentsPageSize)},
+	}.Encode()); why != "" {
+		return unread(why)
+	}
+	out[gitlabfacts.MergeRequestDeployment] = gitlabfacts.Deployment(status, body, mr.Pipeline)
 	if mr.TargetBranch == "" {
 		return unread("the merge request's target branch was not read")
 	}

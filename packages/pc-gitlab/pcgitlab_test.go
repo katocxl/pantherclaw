@@ -8,11 +8,15 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"slices"
 	"testing"
+	"time"
 
+	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
+	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	pcgitlab "github.com/katocxl/pantherclaw/packages/pc-gitlab"
@@ -173,13 +177,88 @@ func TestHR521_TheGitLabTokenGoesOnlyToItsBoundHost(t *testing.T) {
 	}
 }
 
-// TestHR523_PCGitLabDeclaresItsCoverage: pc.gitlab declares its records
-// scoped by merge request and its two channels (F756).
+// TestHR523_PCGitLabDeclaresItsCoverage: pc.gitlab declares the environment
+// a deployment names, its records scoped by merge request and project, and
+// its two channels (F756).
 //
 // Covers: F756
 func TestHR523_PCGitLabDeclaresItsCoverage(t *testing.T) {
 	c := decode(t).Coverage
-	if c == nil || len(c.RecordScope) != 1 || c.RecordScope[0] != "gitlab_merge_request" || len(c.Channels) != 2 {
+	if c == nil || c.Environment.Source != domain.EnvironmentParam || c.Environment.Param != "environment" ||
+		len(c.RecordScope) != 2 || c.RecordScope[0] != "gitlab_merge_request" || c.RecordScope[1] != "gitlab_project" || len(c.Channels) != 2 {
 		t.Fatalf("coverage: %+v", c)
+	}
+}
+
+// TestT229_ADeployIsAVirtualConsequenceOfAMerge: nothing maps to
+// gitlab.deployment.trigger, so an agent cannot call it; a merge names it as
+// a consequence, on the project, of the merge request's deployment fact,
+// and the merge's verifier captures the commit its own verifier finds
+// (HR-521, T-229).
+//
+// Covers: F756
+func TestT229_ADeployIsAVirtualConsequenceOfAMerge(t *testing.T) {
+	p := decode(t)
+	d, ok := p.Definition("gitlab.deployment.trigger")
+	if !ok || len(d.Mappings) != 0 || d.Dispatch != nil || d.Target.Type != "gitlab_project" {
+		t.Fatalf("trigger: %+v", d)
+	}
+	if v := d.Verifier; v == nil || v.Lookup == nil || v.Operation != "gitlab.deployment.read" || v.Lookup.IDParam != "deployment_id" ||
+		len(v.Lookup.Match) != 2 || v.Reaches() != domain.LevelDomainEffect {
+		t.Fatalf("verifier: %+v", d.Verifier)
+	}
+	if len(p.Consequences) != 1 {
+		t.Fatalf("consequences: %+v", p.Consequences)
+	}
+	r := p.Consequences[0]
+	if r.Operation != "gitlab.merge_request.merge" || r.Consequence.Operation != d.Operation || r.Consequence.Effect != "deployment.trigger" ||
+		r.Consequence.Target != "{target.id.project}" || len(r.RequiresFacts) != 1 || r.RequiresFacts[0] != "gitlab.merge_request.deployment" {
+		t.Fatalf("rule: %+v", r)
+	}
+	merge, _ := p.Definition("gitlab.merge_request.merge")
+	if merge.Verifier.Capture["sha"] != "/merge_commit_sha" {
+		t.Fatalf("capture: %+v", merge.Verifier.Capture)
+	}
+	// The fact is no prerequisite: unread, it must hold the merge as an
+	// unknown consequence, not refuse it.
+	for _, pr := range merge.Prerequisites {
+		if pr.Fact == "gitlab.merge_request.deployment" {
+			t.Fatalf("prerequisite: %+v", pr)
+		}
+	}
+}
+
+// TestT229_AnUnverifiedPipelineLeavesTheDeployUnknown: the rule predicts a
+// deployment of a verified pipeline to the fact's environments, predicts
+// none for a project without environments, and a fact the gateway left
+// unread is unknown, which is at least a hold (HR-160, HR-521, T-229).
+//
+// Covers: F756
+func TestT229_AnUnverifiedPipelineLeavesTheDeployUnknown(t *testing.T) {
+	p := decode(t)
+	on, _ := p.Definition("gitlab.merge_request.merge")
+	d, _ := p.Definition("gitlab.deployment.trigger")
+	rules := []consequences.Rule{{ConsequenceRule: p.Consequences[0], Definition: d}}
+	now := time.Now()
+	ev := consequences.NewEvaluator(celenv.DefaultLimits)
+	for name, c := range map[string]struct {
+		members map[string]any
+		want    consequences.State
+	}{
+		"verified": {map[string]any{"state": "verified", "environments": []any{"production"}, "pipeline": "900"}, consequences.Predicted},
+		"none":     {map[string]any{"state": "none", "environments": []any{}}, consequences.NotTriggered},
+		"unread":   {map[string]any{"unread": "the head pipeline did not pass at the head"}, consequences.Unknown},
+	} {
+		facts := map[string]fdomain.Fact{"gitlab.merge_request.deployment": {
+			Name: "gitlab.merge_request.deployment", SubjectType: "gitlab_merge_request", SubjectID: "42!7",
+			Value: fdomain.Value{Type: fdomain.TypeObject, Object: c.members}, ObservedAt: now.Add(-time.Second),
+		}}
+		out := ev.Evaluate(context.Background(), rules, consequences.Input{On: on, TargetID: "42!7", Facts: facts, Now: now})
+		if len(out) != 1 || out[0].Err != nil || out[0].State != c.want {
+			t.Fatalf("%s: %+v", name, out)
+		}
+		if c.want == consequences.Predicted && (out[0].Target.ID != "42" || !slices.Equal(out[0].Environments, []string{"production"})) {
+			t.Fatalf("%s: %+v", name, out[0])
+		}
 	}
 }
