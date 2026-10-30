@@ -23,10 +23,13 @@ import (
 )
 
 // TestT226_TheGatewayReadsWhetherATeamsChannelIsExternal: the gateway's own
-// channel reader, with a token minted for the read, reports a channel with
-// a member of another tenant external and one of the tenant's own people
-// internal; a channel the bot was never added to, and an id the post's
-// pattern refuses, are unread, never internal (HR-160).
+// channel reader, with one token minted for the read, reports a channel
+// with a member of another tenant external and one of the home tenant's own
+// people internal; a channel wholly in another tenant is external whatever
+// tenant the agent names, since the home tenant is pinned by the sealed
+// token endpoint (D273); a channel the bot was never added to, an id the
+// post's pattern refuses and a credential that pins no tenant are unread,
+// never internal (HR-160).
 // Covers: T-226, HR-524
 func TestT226_TheGatewayReadsWhetherATeamsChannelIsExternal(t *testing.T) {
 	s := teams.New(sim.TeamsChannels(), teams.Faults{}, slog.New(slog.DiscardHandler))
@@ -34,7 +37,7 @@ func TestT226_TheGatewayReadsWhetherATeamsChannelIsExternal(t *testing.T) {
 	t.Cleanup(srv.Close)
 	u, _ := url.Parse(srv.URL)
 	plain, err := credentials.OAuthClient{
-		V: 1, TokenURL: srv.URL + "/botframework.com/oauth2/v2.0/token", ClientID: teams.AppID, Scope: teams.Scope, ClientSecret: []byte("bot~secret"),
+		V: 1, TokenURL: srv.URL + "/" + teams.TenantID + "/oauth2/v2.0/token", ClientID: teams.AppID, Scope: teams.Scope, ClientSecret: []byte("bot~secret"),
 	}.Encode()
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +65,46 @@ func TestT226_TheGatewayReadsWhetherATeamsChannelIsExternal(t *testing.T) {
 			t.Fatalf("%s: %v", ch, v)
 		}
 	}
-	if s.Issued() == 0 || s.Calls()["conversation.members"] != 3 {
+	if s.Issued() != 3 || s.Calls()["conversation.members"] != 3 {
 		t.Fatalf("issued %d, member reads %d", s.Issued(), s.Calls()["conversation.members"])
+	}
+
+	// A channel wholly in tenant B, with the agent naming B: external,
+	// without a read, because the pin is the home tenant (D273).
+	partnerOnly := "19:partneronly000000000000000000000@thread.tacv2"
+	s.SetChannel(teams.Channel{ID: partnerOnly, Name: "partner", Installed: true, Members: []teams.Member{
+		{ID: "29:p", Name: "P", TenantID: teams.OtherTenantID, UserRole: "user"},
+	}})
+	v := e.readTeamsChannel(context.Background(), conn, def, actionir.Target{Type: "teams_channel", ID: partnerOnly, Account: teams.OtherTenantID})
+	if v["external"] != true || v["home_tenant"] != false {
+		t.Fatalf("a channel of tenant B named as B: %v", v)
+	}
+
+	// One token serves every page of a read.
+	var many []teams.Member
+	for range 1200 {
+		many = append(many, teams.Member{ID: "29:o", Name: "O", TenantID: teams.TenantID, UserRole: "user"})
+	}
+	big := "19:bigchannel0000000000000000000000@thread.tacv2"
+	s.SetChannel(teams.Channel{ID: big, Name: "big", Installed: true, Members: many})
+	issued := s.Issued()
+	if v := read(big); v["external"] != false || v["members"] != 1200 {
+		t.Fatalf("big channel: %v", v)
+	}
+	if s.Issued() != issued+1 {
+		t.Fatalf("%d tokens for one three-page read", s.Issued()-issued)
+	}
+
+	// A credential that pins no tenant (the multi-tenant endpoint) reads
+	// nothing: the fact is unread, never internal.
+	multi, err := credentials.OAuthClient{
+		V: 1, TokenURL: srv.URL + "/botframework.com/oauth2/v2.0/token", ClientID: teams.AppID, Scope: teams.Scope, ClientSecret: []byte("bot~secret"),
+	}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.broker = &plainOpener{plain: multi}
+	if v := read(sim.TeamsGeneral); v["unread"] == nil {
+		t.Fatalf("no pinned tenant: %v", v)
 	}
 }

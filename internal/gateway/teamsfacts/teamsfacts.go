@@ -2,16 +2,17 @@
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
 // Package teamsfacts reads the Microsoft Teams facts pc.teams names (G0 M20
-// D254, HR-524): whether a channel admits people from outside the tenant
-// the bot posts for. It parses the Bot Connector's paged channel members
-// and never guesses: a channel it cannot read whole is unread, so the
-// decision sees the fact missing (HR-160), never an internal channel.
+// D254, HR-524, D273): whether a channel admits people from outside the
+// home tenant the bot's sealed credential pins. It parses the Bot
+// Connector's paged channel members and never guesses: a channel it cannot
+// read whole is unread, so the decision sees the fact missing (HR-160),
+// never an internal channel.
 //
 // Microsoft advises against relying on a channel's type to tell shared
 // channels apart, so the fact is read from the members themselves: a
 // channel is external when any member belongs to another tenant than the
-// target's, is a guest or anonymous, or when its members span more than
-// one tenant.
+// home tenant, is a guest or anonymous, or when its members span more than
+// one tenant. A channel of any other tenant is external without a read.
 package teamsfacts
 
 import (
@@ -44,10 +45,11 @@ type Tally struct {
 	members int
 }
 
-// Page parses one pagedmembers answer into t against the host tenant, and
-// returns the next page's continuation token ("" for the last page). A
-// page that is not a 200, cannot be parsed, or lists a member without a
-// tenant or a role gives why it is unread.
+// Page parses one pagedmembers answer into t against the home tenant (the
+// one the connection's credential pins, D273), and returns the next page's
+// continuation token ("" for the last page). A page that is not a 200,
+// cannot be parsed, or lists a member without a tenant or a role gives why
+// it is unread.
 func (t *Tally) Page(status int, body []byte, tenant string) (next, unread string) {
 	if status < 200 || status >= 300 {
 		return "", "Teams answered " + httpStatus(status)
@@ -87,14 +89,16 @@ func (t *Tally) Page(status int, body []byte, tenant string) (next, unread strin
 }
 
 // Value is the fact's value once every page was read: {external,
-// other_tenant, guests, members}. A channel with no members at all is
+// other_tenant, guests, members, home_tenant}. A channel with no members at all is
 // unread: the bot itself would be one.
 func (t *Tally) Value() map[string]any {
 	if t.members == 0 {
 		return Unread("Teams listed no members")
 	}
 	foreign := t.foreign || len(t.tenants) > 1
-	return map[string]any{"external": foreign || t.guests, "other_tenant": foreign, "guests": t.guests, "members": t.members}
+	return map[string]any{
+		"external": foreign || t.guests, "other_tenant": foreign, "guests": t.guests, "members": t.members, "home_tenant": true,
+	}
 }
 
 // Unread is the value of a fact that was not read, with why.
@@ -105,4 +109,11 @@ func httpStatus(s int) string {
 		return "nothing"
 	}
 	return "HTTP " + strconv.Itoa(s)
+}
+
+// OtherTenant is the value for a channel of another tenant than the home
+// tenant the connection's credential pins (D273): always external, read or
+// not, whatever tenant the agent names.
+func OtherTenant() map[string]any {
+	return map[string]any{"external": true, "other_tenant": true, "guests": false, "home_tenant": false}
 }

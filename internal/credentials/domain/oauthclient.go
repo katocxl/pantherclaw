@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/url"
 	"regexp"
+	"strings"
 )
 
 // KindOAuthClient is an OAuth 2.0 client-credentials credential (G0 M20
@@ -88,3 +89,22 @@ func DecodeOAuthClient(plain []byte) (OAuthClient, error) {
 
 // Clear overwrites the client secret's bytes.
 func (o *OAuthClient) Clear() { clear(o.ClientSecret) }
+
+var tenantRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// Tenant is the Microsoft Entra tenant the token endpoint pins, the first
+// segment of a single-tenant endpoint's path (/{tenant}/oauth2/v2.0/token),
+// or "" for an endpoint that names none, such as the multi-tenant
+// botframework.com (G0 M20 D273). The seal binds the endpoint, so the agent
+// can never choose it.
+func (o OAuthClient) Tenant() string {
+	u, err := o.Token()
+	if err != nil {
+		return ""
+	}
+	first, _, _ := strings.Cut(strings.TrimPrefix(u.Path, "/"), "/")
+	if !tenantRe.MatchString(first) {
+		return ""
+	}
+	return first
+}
