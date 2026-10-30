@@ -522,6 +522,72 @@ func TestHR516_AFailedCompleteRemovesTheManifest(t *testing.T) {
 	}
 }
 
+// TestHR516_ALateAbortLeavesARetrysManifest: a sweep that loaded a pending
+// abort before a retry ended it changes nothing: neither the retry's newer
+// upload nor the manifest the retry delivered.
+// Covers: F517
+func TestHR516_ALateAbortLeavesARetrysManifest(t *testing.T) {
+	f := newPushFixture(t)
+	dest := f.destination(t, "vault", ClassOrgExports)
+	request := ids.NewV7()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	f.d.AdminExec(t, `INSERT INTO pc.data_requests (org_id, id, kind, state, created_by, ready_at, expires_at, parts, total_size, manifest)
+		VALUES ($1, $2, 'EXPORT', 'READY', $3, $4, $4::timestamptz + interval '7 days', 1, 50, 'signed-manifest')`, f.org, request, f.user, now)
+	part := bytes.Repeat([]byte("p"), 50)
+	sum := sha256.Sum256(part)
+	f.d.AdminExec(t, `INSERT INTO pc.data_request_parts (org_id, request_id, number, content, sha256) VALUES ($1, $2, 1, $3, $4)`, f.org, request, part, sum[:])
+	r, err := f.svc.Push(f.admin, PushRequest{Destination: dest, Class: ClassOrgExports, Artifact: request})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	f.sim.completeError, f.sim.failAborts = true, abortAttempts
+	if err := f.svc.Run(ctx, f.org, r.ID, false); err == nil {
+		t.Fatal("a failed Complete reported success")
+	}
+	late, err := f.svc.load(ctx, f.org, r.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if late.uploadID == "" || !late.manifest {
+		t.Fatalf("nothing pending: %+v", late)
+	}
+	first := late.uploadID
+
+	// A retry's newer upload is under way.
+	f.d.AdminExec(t, "UPDATE pc.export_receipts SET upload_id = 'newer' WHERE org_id = $1 AND id = $2", f.org, r.ID)
+	if err := f.svc.abortUpload(ctx, late); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.receipt(t, r.ID); got.AbortState != "PENDING" {
+		t.Fatalf("a late abort ended the newer upload: %+v", got)
+	}
+	if len(f.sim.deletes) != 0 {
+		t.Fatalf("deleted %v", f.sim.deletes)
+	}
+
+	// The retry has delivered.
+	f.d.AdminExec(t, "UPDATE pc.export_receipts SET upload_id = $3 WHERE org_id = $1 AND id = $2", f.org, r.ID, first)
+	if late, err = f.svc.load(ctx, f.org, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	f.sim.completeError = false
+	if err := f.svc.Run(ctx, f.org, r.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	got := f.receipt(t, r.ID)
+	if got.State != ReceiptDelivered {
+		t.Fatalf("receipt %+v", got)
+	}
+	f.sim.deletes = nil
+	if err := f.svc.abortUpload(ctx, late); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := f.sim.object("bkt/" + got.ObjectKey + ManifestSuffix); string(b) != "signed-manifest" || len(f.sim.deletes) != 0 {
+		t.Fatalf("manifest %q, deleted %v", b, f.sim.deletes)
+	}
+}
+
 // TestF517_AnExpiredArtifactNeverLeaves: past its expiry by the database
 // clock an artifact is gone, whether or not the expiry job has run yet, at
 // the request and again when the push starts.

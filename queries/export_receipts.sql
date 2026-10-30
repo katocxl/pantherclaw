@@ -57,8 +57,9 @@ UPDATE pc.export_receipts SET parts = sqlc.arg(parts)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PUSHING';
 
 -- name: SetExportAborted :execrows
+-- Only that upload's: a retry's newer upload is not this abort's to end.
 UPDATE pc.export_receipts SET abort_state = 'ABORTED'
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND abort_state = 'PENDING';
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND upload_id = sqlc.arg(upload_id) AND abort_state = 'PENDING';
 
 -- name: DeliverExportReceipt :execrows
 -- A completed upload needs no abort.

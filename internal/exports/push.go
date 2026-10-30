@@ -641,8 +641,8 @@ func (s *Service) newUploadFor(p *push) *upload {
 // fails stays PENDING and the sweep tries again. A manifest sent for it
 // goes too, best effort: it lists what never arrived.
 func (s *Service) abortUpload(ctx context.Context, p *push) error {
-	s.removeManifest(ctx, p)
 	if p.uploadID == "" {
+		s.removeManifest(ctx, p)
 		return nil
 	}
 	s.abortTried(ctx, p.org, p.id)
@@ -659,14 +659,23 @@ func (s *Service) abortUpload(ctx context.Context, p *push) error {
 		s.log.WarnContext(ctx, "exports.abort_failed", slog.String("receipt", p.id.String()), pclog.Err(err))
 		return err
 	}
+	var won int64
 	if err := s.pool.InTenantTx(context.WithoutCancel(ctx), p.org, func(ctx context.Context, tx db.TenantTx) error {
-		_, err := dbq.New(tx).SetExportAborted(ctx, p.org, p.id)
+		var err error
+		won, err = dbq.New(tx).SetExportAborted(ctx, p.org, p.id, &p.uploadID)
 		return err
 	}); err != nil {
 		s.log.WarnContext(ctx, "exports.abort_unrecorded", slog.String("receipt", p.id.String()), pclog.Err(err))
 		return err
 	}
 	p.uploadID = ""
+	// Only the abort that ended the upload owns its manifest: a retry may
+	// already be delivering under the same key.
+	if won == 0 {
+		p.manifest = false
+		return nil
+	}
+	s.removeManifest(ctx, p)
 	return nil
 }
 

@@ -738,11 +738,12 @@ func (q *Queries) SetExportAbortTried(ctx context.Context, orgID ids.OrgID, iD i
 
 const setExportAborted = `-- name: SetExportAborted :execrows
 UPDATE pc.export_receipts SET abort_state = 'ABORTED'
-WHERE org_id = $1 AND id = $2 AND abort_state = 'PENDING'
+WHERE org_id = $1 AND id = $2 AND upload_id = $3 AND abort_state = 'PENDING'
 `
 
-func (q *Queries) SetExportAborted(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, setExportAborted, orgID, iD)
+// Only that upload's: a retry's newer upload is not this abort's to end.
+func (q *Queries) SetExportAborted(ctx context.Context, orgID ids.OrgID, iD ids.UUID, uploadID *string) (int64, error) {
+	result, err := q.db.Exec(ctx, setExportAborted, orgID, iD, uploadID)
 	if err != nil {
 		return 0, err
 	}
