@@ -277,7 +277,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	}
 	workers := newWorkerHeartbeat(cfg.Role)
 
-	kp, err := keys.NewFileProvider(cfg.KEKFiles)
+	kp, err := newKeyProvider(cfg)
 	if err != nil {
 		return err
 	}

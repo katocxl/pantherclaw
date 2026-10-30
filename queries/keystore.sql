@@ -21,12 +21,12 @@ WHERE org_id = sqlc.arg(org_id) AND kid = sqlc.arg(kid) AND state = sqlc.arg(fro
 SELECT pg_advisory_xact_lock(hashtextextended('pc.keystore:' || sqlc.arg(org_id)::uuid::text, 0));
 
 -- name: ActiveDEK :one
-SELECT version, wrapped_key
+SELECT version, wrapped_key, kek_id
 FROM pc.deks
 WHERE org_id = sqlc.arg(org_id) AND purpose = sqlc.arg(purpose) AND state = 'ACTIVE';
 
 -- name: GetDEK :one
-SELECT wrapped_key
+SELECT wrapped_key, kek_id
 FROM pc.deks
 WHERE org_id = sqlc.arg(org_id) AND purpose = sqlc.arg(purpose) AND version = sqlc.arg(version);
 
@@ -46,3 +46,33 @@ SELECT kid, purpose, algorithm, public_key, state, created_at, state_changed_at
 FROM pc.keys
 WHERE org_id = sqlc.arg(org_id) AND purpose = ANY(sqlc.arg(purposes)::text[])
 ORDER BY created_at, kid;
+
+-- name: ListDEKsToRewrap :many
+-- DEKs not under the current KEK (any of its kek_id spellings), for the
+-- re-wrap job (D157, migration 00224).
+SELECT purpose, version, wrapped_key, kek_id
+FROM pc.deks
+WHERE org_id = sqlc.arg(org_id) AND kek_id <> ALL(sqlc.arg(current_kek_ids)::text[])
+ORDER BY purpose, version
+LIMIT sqlc.arg(row_limit);
+
+-- name: RewrapDEK :execrows
+-- A compare-and-swap on both old columns; the 00224 trigger refuses a
+-- change of one without the other (HR-487).
+UPDATE pc.deks
+SET wrapped_key = sqlc.arg(wrapped_key), kek_id = sqlc.arg(kek_id)
+WHERE org_id = sqlc.arg(org_id) AND purpose = sqlc.arg(purpose) AND version = sqlc.arg(version)
+  AND wrapped_key = sqlc.arg(old_wrapped_key) AND kek_id = sqlc.arg(old_kek_id);
+
+-- name: ListSigningKeysToRewrap :many
+SELECT kid, purpose, wrapped_private_key, kek_id
+FROM pc.keys
+WHERE org_id = sqlc.arg(org_id) AND kek_id <> ALL(sqlc.arg(current_kek_ids)::text[])
+ORDER BY created_at, kid
+LIMIT sqlc.arg(row_limit);
+
+-- name: RewrapSigningKey :execrows
+UPDATE pc.keys
+SET wrapped_private_key = sqlc.arg(wrapped_private_key), kek_id = sqlc.arg(kek_id)
+WHERE org_id = sqlc.arg(org_id) AND kid = sqlc.arg(kid)
+  AND wrapped_private_key = sqlc.arg(old_wrapped_private_key) AND kek_id = sqlc.arg(old_kek_id);
