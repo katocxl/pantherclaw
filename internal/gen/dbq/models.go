@@ -3374,6 +3374,16 @@ type PcSsfTransmitter struct {
 	LastRefusalCode     *string
 }
 
+type PcStreamLease struct {
+	OrgID     ids.OrgID
+	Kind      string
+	Key       string
+	ID        ids.UUID
+	Holder    string
+	ExpiresAt time.Time
+	CreatedAt time.Time
+}
+
 type PcSupportAccessGrant struct {
 	OrgID              ids.OrgID
 	ID                 ids.UUID

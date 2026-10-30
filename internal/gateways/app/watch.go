@@ -15,6 +15,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/ratelimit"
 )
 
 // Containment stream timing (HR-010, G0 M6 design decision 4).
@@ -32,8 +33,11 @@ const (
 	// StreamLifetime caps a stream; the gateway reconnects and loads a new
 	// snapshot.
 	StreamLifetime = 15 * time.Minute
-	// MaxStreamsPerCert caps concurrent streams of one certificate.
+	// MaxStreamsPerCert caps concurrent streams of one certificate across
+	// every replica (pc.stream_leases, G0 M19 D201, HR-491).
 	MaxStreamsPerCert = 4
+	// leaseWithin bounds taking a stream's lease.
+	leaseWithin = 5 * time.Second
 )
 
 // ErrTooManyStreams reports a certificate that already has
@@ -85,10 +89,11 @@ type Hub struct {
 	// or not: the gateway certificate cache forgets the org's entries
 	// (HR-492).
 	notified func(ids.OrgID)
+	// leases counts each certificate's streams across replicas.
+	leases *ratelimit.Leases
 
-	mu      sync.Mutex
-	orgs    map[ids.OrgID]*orgWatch
-	streams map[ids.UUID]int // per certificate
+	mu   sync.Mutex
+	orgs map[ids.OrgID]*orgWatch
 }
 
 type orgWatch struct {
@@ -107,7 +112,10 @@ func NewHub(pool *db.Pool, log *slog.Logger) *Hub {
 	if log == nil {
 		log = pclog.Discard()
 	}
-	return &Hub{pool: pool, log: log, now: time.Now, done: make(chan struct{}), orgs: map[ids.OrgID]*orgWatch{}, streams: map[ids.UUID]int{}}
+	return &Hub{
+		pool: pool, log: log, now: time.Now, done: make(chan struct{}), leases: ratelimit.NewLeases(pool, log),
+		orgs: map[ids.OrgID]*orgWatch{},
+	}
 }
 
 // ForgetOnNotify makes every pc_containment notification also forget the
@@ -118,8 +126,9 @@ func (h *Hub) ForgetOnNotify(svc *Service) *Hub {
 	return h
 }
 
-// Done closes when the hub stops; streams end with it.
-func (s *Subscription) Done() <-chan struct{} { return s.hub.done }
+// Done closes when the hub stops or the stream's lease is lost; the stream
+// ends with it.
+func (s *Subscription) Done() <-chan struct{} { return s.done }
 
 // Subscription is one stream's view of its gateway's containment.
 type Subscription struct {
@@ -129,15 +138,25 @@ type Subscription struct {
 	cert    ids.UUID
 	ch      chan struct{}
 	w       *orgWatch
+	lease   *ratelimit.Lease
+	done    chan struct{}
+	closed  chan struct{}
 }
 
-// Subscribe opens a view for a gateway certificate.
+// Subscribe opens a view for a gateway certificate. It takes one of the
+// certificate's MaxStreamsPerCert leases first; if the leases cannot be
+// read, the stream is refused.
 func (h *Hub) Subscribe(id Identity) (*Subscription, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), leaseWithin)
+	defer cancel()
+	lease, err := h.leases.Acquire(ctx, id.Org, ratelimit.LeaseContainmentStream, id.Cert.String(), MaxStreamsPerCert)
+	if errors.Is(err, ratelimit.ErrLeaseLimit) {
+		return nil, ErrTooManyStreams
+	} else if err != nil {
+		return nil, err
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.streams[id.Cert] >= MaxStreamsPerCert {
-		return nil, ErrTooManyStreams
-	}
 	w, ok := h.orgs[id.Org]
 	if !ok {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -145,10 +164,20 @@ func (h *Hub) Subscribe(id Identity) (*Subscription, error) {
 		h.orgs[id.Org] = w
 		go h.poll(ctx, id.Org, w)
 	}
-	s := &Subscription{hub: h, org: id.Org, gateway: id.Gateway, cert: id.Cert, ch: make(chan struct{}, 1), w: w}
+	s := &Subscription{
+		hub: h, org: id.Org, gateway: id.Gateway, cert: id.Cert, ch: make(chan struct{}, 1), w: w, lease: lease,
+		done: make(chan struct{}), closed: make(chan struct{}),
+	}
 	w.subs[s] = struct{}{}
-	h.streams[id.Cert]++
 	signal(w.wake)
+	go func() {
+		select {
+		case <-h.done:
+		case <-lease.Lost():
+		case <-s.closed:
+		}
+		close(s.done)
+	}()
 	return s, nil
 }
 
@@ -159,22 +188,23 @@ func signal(ch chan struct{}) {
 	}
 }
 
-// Close ends the subscription; the org's poller stops with its last one.
+// Close ends the subscription and releases its lease; the org's poller
+// stops with its last one.
 func (s *Subscription) Close() {
 	h := s.hub
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	if _, ok := s.w.subs[s]; !ok {
+		h.mu.Unlock()
 		return
 	}
 	delete(s.w.subs, s)
-	if h.streams[s.cert]--; h.streams[s.cert] <= 0 {
-		delete(h.streams, s.cert)
-	}
+	close(s.closed)
 	if len(s.w.subs) == 0 {
 		s.w.stop()
 		delete(h.orgs, s.org)
 	}
+	h.mu.Unlock()
+	s.lease.Release()
 }
 
 // Changed is signaled after every read of the org's containment.

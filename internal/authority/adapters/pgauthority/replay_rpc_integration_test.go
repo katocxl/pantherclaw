@@ -58,14 +58,19 @@ func (b bearerRT) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 // replayAPI serves EvidenceService for w's org over HTTP, with the replay
-// engine of the server and a fake clock for the rate limit.
+// engine of the server; the rate limit counts in the shared store on the
+// database's clock (G0 M19 D201).
 type replayAPI struct {
 	url     string
 	clk     *clock.Fake
 	callers callers
 }
 
-func (w *world) replayAPI() *replayAPI {
+func (w *world) replayAPI() *replayAPI { return w.replayAPIWindow(0) }
+
+// replayAPIWindow is replayAPI with the replay limit counted in windows of
+// window on the database's clock (0: the minute).
+func (w *world) replayAPIWindow(window time.Duration) *replayAPI {
 	w.t.Helper()
 	declared, err := protoperms.Declared(filepath.Join("..", "..", "..", "..", "proto"))
 	if err != nil {
@@ -80,7 +85,7 @@ func (w *world) replayAPI() *replayAPI {
 	if err != nil {
 		w.t.Fatal(err)
 	}
-	svc := evapp.New(w.pool, "pc.test").WithReplay(w.replayEngine(), api.clk)
+	svc := evapp.New(w.pool, "pc.test").WithReplay(w.replayEngine(), api.clk).WithReplayWindow(window)
 	pantherclawv1connect.RegisterEvidenceServiceHandler(s, evidencerpc.New(svc))
 	mux := http.NewServeMux()
 	rpc.Mount(mux, s)
@@ -280,13 +285,19 @@ func TestHR197_ReplayIsScopedLikeRunRead(t *testing.T) {
 
 // TestHR197_ReplayIsRateLimitedPerCaller: at most 10 replays per minute per
 // caller (design decision 11); another caller is not affected, and the
-// limit resets after the minute.
+// limit resets after the window. The limit counts in the shared store on
+// the database's clock (G0 M19 D201, D214), so the test uses a 10-second
+// window, starts at a window's beginning and really waits for its end.
 func TestHR197_ReplayIsRateLimitedPerCaller(t *testing.T) {
 	w := newWorld(t)
 	w.keepInputs()
 	w.refundable("ch_1")
 	r := w.authorize(w.request(w.run(w.grant("500").ID, ids.UUID{}), ids.NewV7(), "ch_1", "30.00"))
-	api := w.replayAPI()
+	const window = 10 * time.Second
+	api := w.replayAPIWindow(window)
+	// Windows are aligned to the Unix epoch: begin just after a boundary.
+	nextWindow := func() { time.Sleep(time.Until(time.Now().Truncate(window).Add(window + 300*time.Millisecond))) }
+	nextWindow()
 	org := td.Scope{Type: td.ScopeOrg, ID: w.org.UUID()}
 	ctx := context.Background()
 	req := &pantherclawv1.ReplayDecisionRequest{TransactionId: r.TransactionID.String()}
@@ -302,8 +313,8 @@ func TestHR197_ReplayIsRateLimitedPerCaller(t *testing.T) {
 	if _, err := second.ReplayDecision(ctx, req); err != nil {
 		t.Fatalf("another caller: %v", err)
 	}
-	api.clk.Advance(time.Minute)
+	nextWindow()
 	if _, err := first.ReplayDecision(ctx, req); err != nil {
-		t.Fatalf("after the minute: %v", err)
+		t.Fatalf("after the window: %v", err)
 	}
 }

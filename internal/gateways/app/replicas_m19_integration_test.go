@@ -11,6 +11,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -34,6 +35,8 @@ type replicaEnv struct {
 	clkB   *clock.Fake
 	org    ids.OrgID
 	admin  context.Context
+	// gateways counts the gateways enrolled, for unique names.
+	gateways int
 }
 
 func newReplicaEnv(t *testing.T) *replicaEnv {
@@ -70,7 +73,8 @@ func newReplicaEnv(t *testing.T) *replicaEnv {
 // enroll enrolls a gateway through replica a.
 func (e *replicaEnv) enroll(t *testing.T) Identity {
 	t.Helper()
-	g, err := e.a.CreateGateway(e.admin, "edge")
+	e.gateways++
+	g, err := e.a.CreateGateway(e.admin, "edge-"+strconv.Itoa(e.gateways))
 	if err != nil {
 		t.Fatal(err)
 	}

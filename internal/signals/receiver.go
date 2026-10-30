@@ -21,6 +21,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/ratelimit"
 	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	"github.com/katocxl/pantherclaw/internal/signals/setverify"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -31,8 +32,9 @@ const (
 	// MaxBody is the largest request body read.
 	MaxBody = setverify.MaxToken
 	// RateLimit and RateWindow bound the header-valid tokens of one
-	// transmitter; IPRateLimit bounds the requests of one source address
-	// before anything is parsed (D64 L2).
+	// transmitter, across every replica in the shared store (G0 M19 D201);
+	// IPRateLimit bounds the requests of one source address before
+	// anything is parsed (D64 L2), per replica (HR-494).
 	RateLimit   = 120
 	IPRateLimit = 240
 	RateWindow  = time.Minute
@@ -98,16 +100,27 @@ type Sink interface {
 
 // Receiver serves POST /v1/ssf/{org}/{transmitter} (RFC 8935 push).
 type Receiver struct {
-	s       *Service
-	limiter *httpx.Limiter
-	byIP    *httpx.Limiter
+	s *Service
+	// limiter counts each transmitter's tokens in the shared store; a
+	// counter error refuses the request (HR-376).
+	limiter ratelimit.Limiter
+	// byIP is per replica: counting unauthenticated floods in the
+	// database would amplify them (HR-494).
+	byIP *httpx.Limiter
 }
+
+// scopeTransmitter is the shared counter's scope of a transmitter's tokens.
+const scopeTransmitter = "signals.transmitter"
 
 // Receiver returns the push endpoint's handler; clientIP resolves the
 // source address behind trusted proxies (nil: the remote address).
 func (s *Service) Receiver(clientIP httpx.ClientIPFunc) *Receiver {
+	var limiter ratelimit.Limiter = ratelimit.NewMemory(s.clock)
+	if s.pool != nil {
+		limiter = ratelimit.NewStore(s.pool)
+	}
 	return &Receiver{
-		s: s, limiter: httpx.NewLimiter(RateLimit, RateWindow, s.clock),
+		s: s, limiter: limiter,
 		byIP: httpx.NewLimiter(IPRateLimit, RateWindow, s.clock).WithClientIP(clientIP),
 	}
 }
@@ -167,7 +180,12 @@ func (h *Receiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, setverify.CodeOf(err), desc)
 		return
 	}
-	if !h.limiter.Allow(org.String() + "/" + tid.String()) {
+	// Counted between transactions, never inside one (ratelimit.Store).
+	if d, err := h.limiter.Take(r.Context(), scopeTransmitter, org.String()+"/"+tid.String(), RateWindow, 1, RateLimit); err != nil {
+		h.s.log.ErrorContext(r.Context(), "signals.rate_unavailable", pclog.Err(err))
+		tooMany(w, r)
+		return
+	} else if !d.Allowed {
 		tooMany(w, r)
 		return
 	}
