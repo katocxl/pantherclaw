@@ -207,19 +207,26 @@ func (d *Definition) reference(at, ref string, where place) error {
 
 // fields checks a body or arguments template. A form body's keys may use
 // the bracket syntax the form parser accepts (a[b], a[b][c], a[]); a list
-// value goes only under a key ending in [] (G0 M14 D8, D52).
+// value goes only under a key ending in [] (G0 M14 D8, D52). A JSON HTTP
+// body's keys may use the same grammar without [] to name nested objects
+// (a[b][c] is {"a":{"b":{"c":…}}}, G0 M20 D260); MCP arguments stay flat.
 func (d *Definition) fields(at string, f map[string]string, where place, enc Encoding) error {
 	if len(f) > maxTemplateFields {
 		return invalid("%s: at most %d fields", at, maxTemplateFields)
 	}
 	keys := slices.Sorted(maps.Keys(f))
-	if enc == EncodingForm {
+	nested := where == inBody && enc != EncodingForm
+	if enc == EncodingForm || nested {
 		if err := CheckFormKeys(keys); err != nil {
 			return invalid("%s: %v", at, err)
 		}
 	}
 	for _, k := range keys {
-		if enc != EncodingForm && !fieldRe.MatchString(k) {
+		if nested && strings.Contains(k, "[") {
+			if p, err := ParseFormKey(k); err != nil || p.List {
+				return invalid("%s: field name %q: a JSON body nests objects only, never a [] list", at, k)
+			}
+		} else if enc != EncodingForm && !fieldRe.MatchString(k) {
 			return invalid("%s: field name %q", at, k)
 		}
 		if err := d.reference(at+"."+k, f[k], where); err != nil {

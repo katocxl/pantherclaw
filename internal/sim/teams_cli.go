@@ -40,7 +40,7 @@ func TeamsChannels() []teams.Channel {
 func runTeams(ctx context.Context, args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("teams", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	addr := fs.String("addr", "127.0.0.1:9096", "listen address (loopback)")
+	addr := fs.String("addr", "127.0.0.1:9098", "listen address (loopback)")
 	clientFile := fs.String("client-file", "", "file holding the only accepted client as CLIENT_ID:SECRET (otherwise any client is)")
 	rate := fs.Int("rate-limit", 0, "answer the first N Bot Connector requests with 429 and Retry-After")
 	invalidClient := fs.Bool("invalid-client", false, "refuse every token request (a deleted client secret)")

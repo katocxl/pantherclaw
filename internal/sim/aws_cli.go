@@ -20,7 +20,7 @@ import (
 func runAWS(ctx context.Context, args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("aws", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	addr := fs.String("addr", "127.0.0.1:9097", "listen address (loopback)")
+	addr := fs.String("addr", "127.0.0.1:9099", "listen address (loopback)")
 	secretFile := fs.String("secret-file", "", "file holding the base access key's secret (required); the key id is "+aws.BaseKeyID)
 	externalID := fs.String("external-id", "", "external id every AssumeRole must carry")
 	actions := fs.String("role-actions", "*", "comma-separated actions the role's own policies allow (service:Action, or *)")

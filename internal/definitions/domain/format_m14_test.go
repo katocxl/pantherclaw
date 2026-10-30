@@ -70,7 +70,11 @@ func TestM14_FormTemplates(t *testing.T) {
 		"literal in the path":         func(h *domain.HTTPDispatch) { h.Path = "/v1/{literal.x}" },
 		"form on GET":                 func(h *domain.HTTPDispatch) { h.Method, h.Body = "GET", nil },
 		"unknown encoding":            func(h *domain.HTTPDispatch) { h.Encoding = "xml" },
-		"bracket key in JSON":         func(h *domain.HTTPDispatch) { h.Encoding = domain.EncodingJSON },
+		// A JSON body nests objects through bracket keys but never takes a []
+		// list (G0 M20 D260).
+		"list key in JSON": func(h *domain.HTTPDispatch) {
+			h.Encoding, h.Body = domain.EncodingJSON, map[string]string{"metadata[]": "literal.v"}
+		},
 	} {
 		d := formWrite(map[string]string{"metadata[k]": "literal.v"})
 		edit(d.Dispatch.HTTP)

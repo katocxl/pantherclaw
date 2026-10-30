@@ -215,7 +215,8 @@ func TestHR300_FormRefundIsRebuiltFromTheAction(t *testing.T) {
 // TestM14_TemplateReferences: an optional, unmatched target group leaves
 // its body field out but still fails in a path (D49); minor units refuse a
 // currency outside their list at dispatch (D8); literals and the
-// transaction key are plain strings in a JSON body (D50, D52).
+// transaction key are plain strings in a JSON body (D50, D52), except
+// literal.true and literal.false, which are JSON booleans (G0 M20 D263).
 func TestM14_TemplateReferences(t *testing.T) {
 	d := &defs.Definition{
 		Operation: "shop.refund.create",
@@ -223,11 +224,12 @@ func TestM14_TemplateReferences(t *testing.T) {
 		Params:    map[string]defs.ParamSpec{"amount": {Type: defs.TypeMoney, Material: true, Required: true, Currencies: []string{"USD", "KWD"}}},
 		Dispatch: &defs.Dispatch{HTTP: &defs.HTTPDispatch{Method: "POST", Path: "/r", Body: map[string]string{
 			"pi": "target.id.pi", "ch": "target.id.ch", "minor": "params.amount.minor", "key": "transaction.key", "mode": "literal.true",
+			"kind": "literal.refund",
 		}}},
 	}
 	a := actionir.ActionIR{Target: actionir.Target{Type: "shop.payment", ID: "ch_abc"}, Params: []byte(`{"amount":{"currency":"USD","value":"0.05"}}`)}
 	r, err := Build("https://x.example.test", d, a, txn)
-	if err != nil || string(r.Body) != `{"ch":"ch_abc","key":"pc-`+txn+`","minor":"5","mode":"true"}` || r.ContentType != JSONContentType {
+	if err != nil || string(r.Body) != `{"ch":"ch_abc","key":"pc-`+txn+`","kind":"refund","minor":"5","mode":true}` || r.ContentType != JSONContentType {
 		t.Fatalf("built %s %v", r.Body, err)
 	}
 	kwd := a
