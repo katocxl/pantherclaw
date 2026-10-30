@@ -37,7 +37,7 @@
      - `aws_iam`: a presigned `GetCallerIdentity` to allow-listed STS hosts, with a signed `x-pantherclaw-audience` header, at most 15 minutes old, single use, replayed through the egress client.
    - HR-140 and HR-143 are unchanged for all four.
 5. **Azure and Entra attest under a narrow relaxation** (G18; D129; HR-469).
-   - Two more Enterprise kinds: `azure_mi` (pins `tid` and the managed identity's `oid`, optionally `xms_mirid`; `idtyp` must be `app` when present) and `entra_agent_id` (pins `tid`, the agent identity's `oid`, and the claim that marks an agent identity).
+   - Two more Enterprise kinds: `azure_mi` (pins `tid` and the managed identity's `oid`; `idtyp` must be `app` when present) and `entra_agent_id` (pins `tid`, the agent identity's `oid`, and the claim that marks an agent identity).
    - For these two kinds only, HR-140 and HR-143 carry an exception clause that points to HR-469. Their meaning for every other kind is unchanged.
      - *Audience.* The audience is the operator-pinned app id, or `api://<app_id>`. The operator's `entra_apps` table maps each app id to exactly one organization; duplicates are refused at start-up. The organization is found through that table, never from a `pantherclaw:` prefix. An organization may configure only a pair pinned to it.
      - *Lifetime.* The token may live up to 24 hours. The assurance, and any credential issued from the attestation, still ends at most 1 hour after the attestation. The token stays single use until its `exp`.
