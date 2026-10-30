@@ -54,6 +54,24 @@ service NotificationService {
   rpc ListDeliveries(ListDeliveriesRequest) returns (ListDeliveriesResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // ProposeSlackLink looks the caller up in the workspace of the org's Slack
+  // DM channel by their own email and proposes the link (G0 M20 D256,
+  // D265): a full, confirmed member with that email, on one of the
+  // channel's email domains. The caller confirms it with ConfirmChatLink.
+  // permission: authenticated
+  rpc ProposeSlackLink(ProposeSlackLinkRequest) returns (ProposeSlackLinkResponse);
+  // ConfirmChatLink confirms the caller's own proposed link: approval DMs
+  // for requests they may decide then reach them.
+  // permission: authenticated
+  rpc ConfirmChatLink(ConfirmChatLinkRequest) returns (ConfirmChatLinkResponse);
+  // RevokeChatLink revokes the caller's own link.
+  // permission: authenticated
+  rpc RevokeChatLink(RevokeChatLinkRequest) returns (RevokeChatLinkResponse);
+  // ListChatLinks lists the caller's own links, newest first.
+  // permission: authenticated
+  rpc ListChatLinks(ListChatLinksRequest) returns (ListChatLinksResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // ChannelKind is where a channel delivers.
@@ -444,4 +462,59 @@ message SetChannelSignatureSchemeResponse {
   Channel channel = 1;
   // The org's webhook JWKS: its ACTIVE and RETIRING webhooks keys.
   string jwks_url = 2;
+}
+
+// ChatLinkState is a chat identity link's state (G0 M20 D256, D265).
+enum ChatLinkState {
+  CHAT_LINK_STATE_UNSPECIFIED = 0;
+  // Looked up in Slack, waiting for the person to confirm it.
+  CHAT_LINK_STATE_PROPOSED = 1;
+  // Confirmed by the person: approval DMs reach them.
+  CHAT_LINK_STATE_CONFIRMED = 2;
+  // Slack no longer answered the email with this member before a DM.
+  CHAT_LINK_STATE_STALE = 3;
+  CHAT_LINK_STATE_REVOKED = 4;
+}
+
+// ChatLink is a person's Slack identity link.
+message ChatLink {
+  string id = 1;
+  // Always "slack".
+  string provider = 2;
+  // The Slack workspace and user ids.
+  string team_id = 3;
+  string external_user_id = 4;
+  // The email Slack matched.
+  string email = 5;
+  ChatLinkState state = 6;
+  google.protobuf.Timestamp create_time = 7;
+  google.protobuf.Timestamp confirm_time = 8;
+}
+
+message ProposeSlackLinkRequest {}
+
+message ProposeSlackLinkResponse {
+  ChatLink link = 1;
+}
+
+message ConfirmChatLinkRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message ConfirmChatLinkResponse {
+  ChatLink link = 1;
+}
+
+message RevokeChatLinkRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message RevokeChatLinkResponse {
+  ChatLink link = 1;
+}
+
+message ListChatLinksRequest {}
+
+message ListChatLinksResponse {
+  repeated ChatLink links = 1;
 }

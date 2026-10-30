@@ -116,7 +116,7 @@ type slackUser struct {
 // channel by the email PantherClaw has for them and proposes the link. It
 // is used only once the caller confirms it (ConfirmChatLink).
 //
-// permission: none (a person links their own identity)
+// permission: authenticated (a person links their own identity)
 func (s *Service) ProposeSlackLink(ctx context.Context) (ChatLink, error) {
 	c, err := self(ctx)
 	if err != nil {
@@ -172,14 +172,14 @@ func (s *Service) ProposeSlackLink(ctx context.Context) (ChatLink, error) {
 // ConfirmChatLink confirms the caller's own PROPOSED link: from now on
 // approval DMs for requests they may decide reach them in Slack.
 //
-// permission: none (a person confirms their own link)
+// permission: authenticated (a person confirms their own link)
 func (s *Service) ConfirmChatLink(ctx context.Context, id ids.UUID) (ChatLink, error) {
 	return s.moveLink(ctx, id, LinkProposed, LinkConfirmed, "notification.chat_link_confirmed")
 }
 
 // RevokeChatLink revokes the caller's own link, proposed or confirmed.
 //
-// permission: none (a person revokes their own link)
+// permission: authenticated (a person revokes their own link)
 func (s *Service) RevokeChatLink(ctx context.Context, id ids.UUID) (ChatLink, error) {
 	link, err := s.moveLink(ctx, id, LinkConfirmed, LinkRevoked, "notification.chat_link_revoked")
 	if errors.Is(err, ErrSlackLinkState) {
@@ -222,7 +222,7 @@ func (s *Service) moveLink(ctx context.Context, id ids.UUID, from, to, event str
 
 // ChatLinks lists the caller's own links, newest first.
 //
-// permission: none (a person reads their own links)
+// permission: authenticated (a person reads their own links)
 func (s *Service) ChatLinks(ctx context.Context) ([]ChatLink, error) {
 	c, err := self(ctx)
 	if err != nil {

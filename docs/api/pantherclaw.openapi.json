@@ -16425,6 +16425,222 @@
         }
       }
     },
+    "/pantherclaw.v1.NotificationService/ProposeSlackLink": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.NotificationService"
+        ],
+        "summary": "ProposeSlackLink",
+        "description": "ProposeSlackLink looks the caller up in the workspace of the org's Slack\n DM channel by their own email and proposes the link (G0 M20 D256,\n D265): a full, confirmed member with that email, on one of the\n channel's email domains. The caller confirms it with ConfirmChatLink.\n permission: authenticated",
+        "operationId": "pantherclaw.v1.NotificationService.ProposeSlackLink",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ProposeSlackLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ProposeSlackLinkResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.NotificationService/ConfirmChatLink": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.NotificationService"
+        ],
+        "summary": "ConfirmChatLink",
+        "description": "ConfirmChatLink confirms the caller's own proposed link: approval DMs\n for requests they may decide then reach them.\n permission: authenticated",
+        "operationId": "pantherclaw.v1.NotificationService.ConfirmChatLink",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ConfirmChatLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ConfirmChatLinkResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.NotificationService/RevokeChatLink": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.NotificationService"
+        ],
+        "summary": "RevokeChatLink",
+        "description": "RevokeChatLink revokes the caller's own link.\n permission: authenticated",
+        "operationId": "pantherclaw.v1.NotificationService.RevokeChatLink",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RevokeChatLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RevokeChatLinkResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.NotificationService/ListChatLinks": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.NotificationService"
+        ],
+        "summary": "ListChatLinks",
+        "description": "ListChatLinks lists the caller's own links, newest first.\n permission: authenticated",
+        "operationId": "pantherclaw.v1.NotificationService.ListChatLinks",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListChatLinksRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListChatLinksResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.OnboardingService/GetProgress": {
       "post": {
         "tags": [
@@ -26189,6 +26405,546 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.ArchiveEnvironmentResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/CreateTicketSyncConfig": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "CreateTicketSyncConfig",
+        "description": "CreateTicketSyncConfig binds a project behind a connection. The webhook\n secret is returned once, with the webhook URL to give the ticket\n system. A person only; audited.\n permission: connection.manage",
+        "operationId": "pantherclaw.v1.TicketSyncService.CreateTicketSyncConfig",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.CreateTicketSyncConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.CreateTicketSyncConfigResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/ListTicketSyncConfigs": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "ListTicketSyncConfigs",
+        "description": "ListTicketSyncConfigs lists the organization's configurations.\n permission: connection.read",
+        "operationId": "pantherclaw.v1.TicketSyncService.ListTicketSyncConfigs",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListTicketSyncConfigsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListTicketSyncConfigsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/RotateTicketSyncSecret": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "RotateTicketSyncSecret",
+        "description": "RotateTicketSyncSecret replaces a configuration's webhook secret; the\n previous one verifies for 24 hours. The new one is returned once.\n permission: connection.manage",
+        "operationId": "pantherclaw.v1.TicketSyncService.RotateTicketSyncSecret",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RotateTicketSyncSecretRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RotateTicketSyncSecretResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/SetTicketSyncPaused": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "SetTicketSyncPaused",
+        "description": "SetTicketSyncPaused pauses or resumes a configuration.\n permission: connection.manage",
+        "operationId": "pantherclaw.v1.TicketSyncService.SetTicketSyncPaused",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetTicketSyncPausedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetTicketSyncPausedResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/LinkCaseTicket": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "LinkCaseTicket",
+        "description": "LinkCaseTicket links a case to an existing ticket of the\n configuration's project.\n permission: case.manage",
+        "operationId": "pantherclaw.v1.TicketSyncService.LinkCaseTicket",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.LinkCaseTicketRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.LinkCaseTicketResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/LinkIncidentTicket": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "LinkIncidentTicket",
+        "description": "LinkIncidentTicket links an incident to an existing ticket.\n permission: incident.manage",
+        "operationId": "pantherclaw.v1.TicketSyncService.LinkIncidentTicket",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.LinkIncidentTicketRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.LinkIncidentTicketResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/OpenCaseTicket": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "OpenCaseTicket",
+        "description": "OpenCaseTicket opens a ticket for a case through the gateway; the new\n issue is linked when the gateway reports it.\n permission: case.manage",
+        "operationId": "pantherclaw.v1.TicketSyncService.OpenCaseTicket",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.OpenCaseTicketRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.OpenCaseTicketResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/OpenIncidentTicket": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "OpenIncidentTicket",
+        "description": "OpenIncidentTicket opens a ticket for an incident through the gateway.\n permission: incident.manage",
+        "operationId": "pantherclaw.v1.TicketSyncService.OpenIncidentTicket",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.OpenIncidentTicketRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.OpenIncidentTicketResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/GetTicketFieldOwners": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "GetTicketFieldOwners",
+        "description": "GetTicketFieldOwners returns the owner of every field.\n permission: case.read",
+        "operationId": "pantherclaw.v1.TicketSyncService.GetTicketFieldOwners",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetTicketFieldOwnersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetTicketFieldOwnersResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/SetTicketFieldOwner": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "SetTicketFieldOwner",
+        "description": "SetTicketFieldOwner sets a field's owner. Containment and restoration\n are refused for the ticket system; giving another field to it may wait\n for a second person (PROTECTED_CHANGE_PENDING).\n permission: connection.manage",
+        "operationId": "pantherclaw.v1.TicketSyncService.SetTicketFieldOwner",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetTicketFieldOwnerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetTicketFieldOwnerResponse"
                 }
               }
             }
@@ -60681,6 +61437,18 @@
         ],
         "description": "ChannelState is whether a channel delivers."
       },
+      "pantherclaw.v1.ChatLinkState": {
+        "type": "string",
+        "title": "ChatLinkState",
+        "enum": [
+          "CHAT_LINK_STATE_UNSPECIFIED",
+          "CHAT_LINK_STATE_PROPOSED",
+          "CHAT_LINK_STATE_CONFIRMED",
+          "CHAT_LINK_STATE_STALE",
+          "CHAT_LINK_STATE_REVOKED"
+        ],
+        "description": "ChatLinkState is a chat identity link's state (G0 M20 D256, D265)."
+      },
       "pantherclaw.v1.DeliveryState": {
         "type": "string",
         "title": "DeliveryState",
@@ -60823,6 +61591,75 @@
         "title": "Channel",
         "additionalProperties": false,
         "description": "Channel is one notification channel."
+      },
+      "pantherclaw.v1.ChatLink": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "provider": {
+            "type": "string",
+            "title": "provider",
+            "description": "Always \"slack\"."
+          },
+          "teamId": {
+            "type": "string",
+            "title": "team_id",
+            "description": "The Slack workspace and user ids."
+          },
+          "externalUserId": {
+            "type": "string",
+            "title": "external_user_id"
+          },
+          "email": {
+            "type": "string",
+            "title": "email",
+            "description": "The email Slack matched."
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/pantherclaw.v1.ChatLinkState"
+          },
+          "createTime": {
+            "title": "create_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "confirmTime": {
+            "title": "confirm_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "ChatLink",
+        "additionalProperties": false,
+        "description": "ChatLink is a person's Slack identity link."
+      },
+      "pantherclaw.v1.ConfirmChatLinkRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          }
+        },
+        "title": "ConfirmChatLinkRequest",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.ConfirmChatLinkResponse": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "title": "link",
+            "$ref": "#/components/schemas/pantherclaw.v1.ChatLink"
+          }
+        },
+        "title": "ConfirmChatLinkResponse",
+        "additionalProperties": false
       },
       "pantherclaw.v1.CreateChannelRequest": {
         "type": "object",
@@ -61130,6 +61967,25 @@
         "additionalProperties": false,
         "description": "ListChannelsResponse is one page of channels."
       },
+      "pantherclaw.v1.ListChatLinksRequest": {
+        "type": "object",
+        "title": "ListChatLinksRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListChatLinksResponse": {
+        "type": "object",
+        "properties": {
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ChatLink"
+            },
+            "title": "links"
+          }
+        },
+        "title": "ListChatLinksResponse",
+        "additionalProperties": false
+      },
       "pantherclaw.v1.ListDeliveriesRequest": {
         "type": "object",
         "properties": {
@@ -61215,6 +62071,48 @@
         "title": "ListDeliveriesResponse",
         "additionalProperties": false,
         "description": "ListDeliveriesResponse is one page of deliveries."
+      },
+      "pantherclaw.v1.ProposeSlackLinkRequest": {
+        "type": "object",
+        "title": "ProposeSlackLinkRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ProposeSlackLinkResponse": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "title": "link",
+            "$ref": "#/components/schemas/pantherclaw.v1.ChatLink"
+          }
+        },
+        "title": "ProposeSlackLinkResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.RevokeChatLinkRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          }
+        },
+        "title": "RevokeChatLinkRequest",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.RevokeChatLinkResponse": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "title": "link",
+            "$ref": "#/components/schemas/pantherclaw.v1.ChatLink"
+          }
+        },
+        "title": "RevokeChatLinkResponse",
+        "additionalProperties": false
       },
       "pantherclaw.v1.RotateChannelSecretRequest": {
         "type": "object",
@@ -76485,6 +77383,403 @@
         "additionalProperties": false,
         "description": "UpdateTeamResponse returns the result."
       },
+      "pantherclaw.v1.CreateTicketSyncConfigRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid"
+          },
+          "projectKey": {
+            "type": "string",
+            "title": "project_key",
+            "pattern": "^[A-Z][A-Z0-9_]{1,9}$"
+          }
+        },
+        "title": "CreateTicketSyncConfigRequest",
+        "additionalProperties": false,
+        "required": [
+          "connectionId",
+          "projectKey"
+        ]
+      },
+      "pantherclaw.v1.CreateTicketSyncConfigResponse": {
+        "type": "object",
+        "properties": {
+          "config": {
+            "title": "config",
+            "$ref": "#/components/schemas/pantherclaw.v1.TicketSyncConfig"
+          },
+          "webhookSecret": {
+            "type": "string",
+            "title": "webhook_secret",
+            "description": "Returned once; PantherClaw keeps it only encrypted."
+          }
+        },
+        "title": "CreateTicketSyncConfigResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.GetTicketFieldOwnersRequest": {
+        "type": "object",
+        "title": "GetTicketFieldOwnersRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.GetTicketFieldOwnersResponse": {
+        "type": "object",
+        "properties": {
+          "owners": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.TicketFieldOwner"
+            },
+            "title": "owners"
+          }
+        },
+        "title": "GetTicketFieldOwnersResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.LinkCaseTicketRequest": {
+        "type": "object",
+        "properties": {
+          "caseId": {
+            "type": "string",
+            "title": "case_id",
+            "format": "uuid"
+          },
+          "configId": {
+            "type": "string",
+            "title": "config_id",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string",
+            "title": "key",
+            "pattern": "^[A-Z][A-Z0-9_]{1,9}-[1-9][0-9]{0,9}$"
+          }
+        },
+        "title": "LinkCaseTicketRequest",
+        "additionalProperties": false,
+        "required": [
+          "caseId",
+          "configId",
+          "key"
+        ]
+      },
+      "pantherclaw.v1.LinkCaseTicketResponse": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "title": "ref",
+            "$ref": "#/components/schemas/pantherclaw.v1.TicketRef"
+          }
+        },
+        "title": "LinkCaseTicketResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.LinkIncidentTicketRequest": {
+        "type": "object",
+        "properties": {
+          "incidentId": {
+            "type": "string",
+            "title": "incident_id",
+            "format": "uuid"
+          },
+          "configId": {
+            "type": "string",
+            "title": "config_id",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string",
+            "title": "key",
+            "pattern": "^[A-Z][A-Z0-9_]{1,9}-[1-9][0-9]{0,9}$"
+          }
+        },
+        "title": "LinkIncidentTicketRequest",
+        "additionalProperties": false,
+        "required": [
+          "incidentId",
+          "configId",
+          "key"
+        ]
+      },
+      "pantherclaw.v1.LinkIncidentTicketResponse": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "title": "ref",
+            "$ref": "#/components/schemas/pantherclaw.v1.TicketRef"
+          }
+        },
+        "title": "LinkIncidentTicketResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListTicketSyncConfigsRequest": {
+        "type": "object",
+        "title": "ListTicketSyncConfigsRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListTicketSyncConfigsResponse": {
+        "type": "object",
+        "properties": {
+          "configs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.TicketSyncConfig"
+            },
+            "title": "configs"
+          }
+        },
+        "title": "ListTicketSyncConfigsResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.OpenCaseTicketRequest": {
+        "type": "object",
+        "properties": {
+          "caseId": {
+            "type": "string",
+            "title": "case_id",
+            "format": "uuid"
+          },
+          "configId": {
+            "type": "string",
+            "title": "config_id",
+            "format": "uuid"
+          }
+        },
+        "title": "OpenCaseTicketRequest",
+        "additionalProperties": false,
+        "required": [
+          "caseId",
+          "configId"
+        ]
+      },
+      "pantherclaw.v1.OpenCaseTicketResponse": {
+        "type": "object",
+        "properties": {
+          "outboundId": {
+            "type": "string",
+            "title": "outbound_id",
+            "description": "The outbound task; the ticket is linked once the gateway reports it."
+          }
+        },
+        "title": "OpenCaseTicketResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.OpenIncidentTicketRequest": {
+        "type": "object",
+        "properties": {
+          "incidentId": {
+            "type": "string",
+            "title": "incident_id",
+            "format": "uuid"
+          },
+          "configId": {
+            "type": "string",
+            "title": "config_id",
+            "format": "uuid"
+          }
+        },
+        "title": "OpenIncidentTicketRequest",
+        "additionalProperties": false,
+        "required": [
+          "incidentId",
+          "configId"
+        ]
+      },
+      "pantherclaw.v1.OpenIncidentTicketResponse": {
+        "type": "object",
+        "properties": {
+          "outboundId": {
+            "type": "string",
+            "title": "outbound_id"
+          }
+        },
+        "title": "OpenIncidentTicketResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.RotateTicketSyncSecretRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          }
+        },
+        "title": "RotateTicketSyncSecretRequest",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.RotateTicketSyncSecretResponse": {
+        "type": "object",
+        "properties": {
+          "webhookSecret": {
+            "type": "string",
+            "title": "webhook_secret"
+          }
+        },
+        "title": "RotateTicketSyncSecretResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.SetTicketFieldOwnerRequest": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "field",
+            "enum": [
+              "state",
+              "severity",
+              "containment",
+              "restoration",
+              "assignee",
+              "labels",
+              "priority",
+              "comments"
+            ]
+          },
+          "owner": {
+            "type": "string",
+            "title": "owner",
+            "enum": [
+              "PANTHERCLAW",
+              "TICKET"
+            ]
+          }
+        },
+        "title": "SetTicketFieldOwnerRequest",
+        "additionalProperties": false,
+        "required": [
+          "field",
+          "owner"
+        ]
+      },
+      "pantherclaw.v1.SetTicketFieldOwnerResponse": {
+        "type": "object",
+        "title": "SetTicketFieldOwnerResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.SetTicketSyncPausedRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          },
+          "paused": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "paused"
+          }
+        },
+        "title": "SetTicketSyncPausedRequest",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.SetTicketSyncPausedResponse": {
+        "type": "object",
+        "title": "SetTicketSyncPausedResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.TicketFieldOwner": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "field",
+            "description": "state, severity, containment, restoration, assignee, labels, priority\n or comments."
+          },
+          "owner": {
+            "type": "string",
+            "title": "owner",
+            "description": "PANTHERCLAW or TICKET."
+          },
+          "movable": {
+            "type": "boolean",
+            "title": "movable",
+            "description": "Whether the organization may choose its owner (not for containment or\n restoration)."
+          }
+        },
+        "title": "TicketFieldOwner",
+        "additionalProperties": false,
+        "description": "TicketFieldOwner is one field and its owner."
+      },
+      "pantherclaw.v1.TicketRef": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "caseId": {
+            "type": "string",
+            "title": "case_id"
+          },
+          "incidentId": {
+            "type": "string",
+            "title": "incident_id"
+          },
+          "system": {
+            "type": "string",
+            "title": "system"
+          },
+          "key": {
+            "type": "string",
+            "title": "key"
+          }
+        },
+        "title": "TicketRef",
+        "additionalProperties": false,
+        "description": "TicketRef is a link between a case or an incident and a ticket."
+      },
+      "pantherclaw.v1.TicketSyncConfig": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id"
+          },
+          "system": {
+            "type": "string",
+            "title": "system",
+            "description": "Always \"jira\"."
+          },
+          "projectKey": {
+            "type": "string",
+            "title": "project_key"
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "ACTIVE or PAUSED."
+          },
+          "createTime": {
+            "title": "create_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "webhookUrl": {
+            "type": "string",
+            "title": "webhook_url",
+            "description": "Where the ticket system sends its webhooks."
+          }
+        },
+        "title": "TicketSyncConfig",
+        "additionalProperties": false,
+        "description": "TicketSyncConfig is a sync configuration, without its secrets."
+      },
       "pantherclaw.v1.EffectState": {
         "type": "string",
         "title": "EffectState",
@@ -79893,6 +81188,10 @@
     {
       "name": "pantherclaw.v1.TenancyService",
       "description": "TenancyService manages the organization hierarchy (F573): the org,\n business units (Business edition), teams and their members, and\n environments. The org always comes from the caller's credential; ids of\n other orgs are reported as not found. Each call also checks the permission\n at the scope of the resource (a binding applies to its scope and below)."
+    },
+    {
+      "name": "pantherclaw.v1.TicketSyncService",
+      "description": "TicketSyncService links cases and incidents to tickets in an outside\n ticket system, Jira first (G0 M20 D255, D264; F545, HR-527, HR-528).\n Ticket sync needs the Business edition.\n\n A sync configuration binds one project behind one connection; the\n ticket system's credential stays sealed to the gateway, which sends\n every call (a lease of purpose ticket_sync). Inbound changes come as\n webhooks signed with the configuration's secret. A ticket status never\n restores authority or lifts containment: an inbound change to a field\n PantherClaw owns is ignored and recorded, a Done is only noted, and a\n change to a field the ticket system owns is mirrored as a note.\n Containment and restoration are always PantherClaw's; giving another\n field to the ticket system is a protected change."
     },
     {
       "name": "pantherclaw.v1.TransactionService",

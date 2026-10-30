@@ -375,6 +375,65 @@ func (DeliveryState) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_notifications_proto_rawDescGZIP(), []int{5}
 }
 
+// ChatLinkState is a chat identity link's state (G0 M20 D256, D265).
+type ChatLinkState int32
+
+const (
+	ChatLinkState_CHAT_LINK_STATE_UNSPECIFIED ChatLinkState = 0
+	// Looked up in Slack, waiting for the person to confirm it.
+	ChatLinkState_CHAT_LINK_STATE_PROPOSED ChatLinkState = 1
+	// Confirmed by the person: approval DMs reach them.
+	ChatLinkState_CHAT_LINK_STATE_CONFIRMED ChatLinkState = 2
+	// Slack no longer answered the email with this member before a DM.
+	ChatLinkState_CHAT_LINK_STATE_STALE   ChatLinkState = 3
+	ChatLinkState_CHAT_LINK_STATE_REVOKED ChatLinkState = 4
+)
+
+// Enum value maps for ChatLinkState.
+var (
+	ChatLinkState_name = map[int32]string{
+		0: "CHAT_LINK_STATE_UNSPECIFIED",
+		1: "CHAT_LINK_STATE_PROPOSED",
+		2: "CHAT_LINK_STATE_CONFIRMED",
+		3: "CHAT_LINK_STATE_STALE",
+		4: "CHAT_LINK_STATE_REVOKED",
+	}
+	ChatLinkState_value = map[string]int32{
+		"CHAT_LINK_STATE_UNSPECIFIED": 0,
+		"CHAT_LINK_STATE_PROPOSED":    1,
+		"CHAT_LINK_STATE_CONFIRMED":   2,
+		"CHAT_LINK_STATE_STALE":       3,
+		"CHAT_LINK_STATE_REVOKED":     4,
+	}
+)
+
+func (x ChatLinkState) Enum() *ChatLinkState {
+	p := new(ChatLinkState)
+	*p = x
+	return p
+}
+
+func (x ChatLinkState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ChatLinkState) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_notifications_proto_enumTypes[6].Descriptor()
+}
+
+func (ChatLinkState) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_notifications_proto_enumTypes[6]
+}
+
+func (x ChatLinkState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ChatLinkState.Descriptor instead.
+func (ChatLinkState) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_notifications_proto_rawDescGZIP(), []int{6}
+}
+
 // SlackAppConfig is a slack_app channel's configuration (G0 M14 D22). The
 // bot token is input only: it is stored encrypted and never returned.
 type SlackAppConfig struct {
@@ -1856,6 +1915,446 @@ func (x *SetChannelSignatureSchemeResponse) GetJwksUrl() string {
 	return ""
 }
 
+// ChatLink is a person's Slack identity link.
+type ChatLink struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Always "slack".
+	Provider string `protobuf:"bytes,2,opt,name=provider,proto3" json:"provider,omitempty"`
+	// The Slack workspace and user ids.
+	TeamId         string `protobuf:"bytes,3,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	ExternalUserId string `protobuf:"bytes,4,opt,name=external_user_id,json=externalUserId,proto3" json:"external_user_id,omitempty"`
+	// The email Slack matched.
+	Email         string                 `protobuf:"bytes,5,opt,name=email,proto3" json:"email,omitempty"`
+	State         ChatLinkState          `protobuf:"varint,6,opt,name=state,proto3,enum=pantherclaw.v1.ChatLinkState" json:"state,omitempty"`
+	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	ConfirmTime   *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=confirm_time,json=confirmTime,proto3" json:"confirm_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChatLink) Reset() {
+	*x = ChatLink{}
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChatLink) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChatLink) ProtoMessage() {}
+
+func (x *ChatLink) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChatLink.ProtoReflect.Descriptor instead.
+func (*ChatLink) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_notifications_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *ChatLink) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ChatLink) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *ChatLink) GetTeamId() string {
+	if x != nil {
+		return x.TeamId
+	}
+	return ""
+}
+
+func (x *ChatLink) GetExternalUserId() string {
+	if x != nil {
+		return x.ExternalUserId
+	}
+	return ""
+}
+
+func (x *ChatLink) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+func (x *ChatLink) GetState() ChatLinkState {
+	if x != nil {
+		return x.State
+	}
+	return ChatLinkState_CHAT_LINK_STATE_UNSPECIFIED
+}
+
+func (x *ChatLink) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *ChatLink) GetConfirmTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ConfirmTime
+	}
+	return nil
+}
+
+type ProposeSlackLinkRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProposeSlackLinkRequest) Reset() {
+	*x = ProposeSlackLinkRequest{}
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProposeSlackLinkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProposeSlackLinkRequest) ProtoMessage() {}
+
+func (x *ProposeSlackLinkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProposeSlackLinkRequest.ProtoReflect.Descriptor instead.
+func (*ProposeSlackLinkRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_notifications_proto_rawDescGZIP(), []int{22}
+}
+
+type ProposeSlackLinkResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Link          *ChatLink              `protobuf:"bytes,1,opt,name=link,proto3" json:"link,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProposeSlackLinkResponse) Reset() {
+	*x = ProposeSlackLinkResponse{}
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProposeSlackLinkResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProposeSlackLinkResponse) ProtoMessage() {}
+
+func (x *ProposeSlackLinkResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProposeSlackLinkResponse.ProtoReflect.Descriptor instead.
+func (*ProposeSlackLinkResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_notifications_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ProposeSlackLinkResponse) GetLink() *ChatLink {
+	if x != nil {
+		return x.Link
+	}
+	return nil
+}
+
+type ConfirmChatLinkRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfirmChatLinkRequest) Reset() {
+	*x = ConfirmChatLinkRequest{}
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfirmChatLinkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfirmChatLinkRequest) ProtoMessage() {}
+
+func (x *ConfirmChatLinkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfirmChatLinkRequest.ProtoReflect.Descriptor instead.
+func (*ConfirmChatLinkRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_notifications_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ConfirmChatLinkRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type ConfirmChatLinkResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Link          *ChatLink              `protobuf:"bytes,1,opt,name=link,proto3" json:"link,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfirmChatLinkResponse) Reset() {
+	*x = ConfirmChatLinkResponse{}
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfirmChatLinkResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfirmChatLinkResponse) ProtoMessage() {}
+
+func (x *ConfirmChatLinkResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfirmChatLinkResponse.ProtoReflect.Descriptor instead.
+func (*ConfirmChatLinkResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_notifications_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ConfirmChatLinkResponse) GetLink() *ChatLink {
+	if x != nil {
+		return x.Link
+	}
+	return nil
+}
+
+type RevokeChatLinkRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeChatLinkRequest) Reset() {
+	*x = RevokeChatLinkRequest{}
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeChatLinkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeChatLinkRequest) ProtoMessage() {}
+
+func (x *RevokeChatLinkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeChatLinkRequest.ProtoReflect.Descriptor instead.
+func (*RevokeChatLinkRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_notifications_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *RevokeChatLinkRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type RevokeChatLinkResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Link          *ChatLink              `protobuf:"bytes,1,opt,name=link,proto3" json:"link,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeChatLinkResponse) Reset() {
+	*x = RevokeChatLinkResponse{}
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeChatLinkResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeChatLinkResponse) ProtoMessage() {}
+
+func (x *RevokeChatLinkResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeChatLinkResponse.ProtoReflect.Descriptor instead.
+func (*RevokeChatLinkResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_notifications_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *RevokeChatLinkResponse) GetLink() *ChatLink {
+	if x != nil {
+		return x.Link
+	}
+	return nil
+}
+
+type ListChatLinksRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListChatLinksRequest) Reset() {
+	*x = ListChatLinksRequest{}
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListChatLinksRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListChatLinksRequest) ProtoMessage() {}
+
+func (x *ListChatLinksRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListChatLinksRequest.ProtoReflect.Descriptor instead.
+func (*ListChatLinksRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_notifications_proto_rawDescGZIP(), []int{28}
+}
+
+type ListChatLinksResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Links         []*ChatLink            `protobuf:"bytes,1,rep,name=links,proto3" json:"links,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListChatLinksResponse) Reset() {
+	*x = ListChatLinksResponse{}
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListChatLinksResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListChatLinksResponse) ProtoMessage() {}
+
+func (x *ListChatLinksResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListChatLinksResponse.ProtoReflect.Descriptor instead.
+func (*ListChatLinksResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_notifications_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ListChatLinksResponse) GetLinks() []*ChatLink {
+	if x != nil {
+		return x.Links
+	}
+	return nil
+}
+
 var File_pantherclaw_v1_notifications_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_notifications_proto_rawDesc = "" +
@@ -1985,7 +2484,31 @@ const file_pantherclaw_v1_notifications_proto_rawDesc = "" +
 	"\x10signature_scheme\x18\x02 \x01(\tB\x19\xbaH\x16r\x14R\x04hmacR\fhmac+ed25519R\x0fsignatureScheme\"q\n" +
 	"!SetChannelSignatureSchemeResponse\x121\n" +
 	"\achannel\x18\x01 \x01(\v2\x17.pantherclaw.v1.ChannelR\achannel\x12\x19\n" +
-	"\bjwks_url\x18\x02 \x01(\tR\ajwksUrl*\xa7\x01\n" +
+	"\bjwks_url\x18\x02 \x01(\tR\ajwksUrl\"\xc0\x02\n" +
+	"\bChatLink\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
+	"\bprovider\x18\x02 \x01(\tR\bprovider\x12\x17\n" +
+	"\ateam_id\x18\x03 \x01(\tR\x06teamId\x12(\n" +
+	"\x10external_user_id\x18\x04 \x01(\tR\x0eexternalUserId\x12\x14\n" +
+	"\x05email\x18\x05 \x01(\tR\x05email\x123\n" +
+	"\x05state\x18\x06 \x01(\x0e2\x1d.pantherclaw.v1.ChatLinkStateR\x05state\x12;\n" +
+	"\vcreate_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12=\n" +
+	"\fconfirm_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\vconfirmTime\"\x19\n" +
+	"\x17ProposeSlackLinkRequest\"H\n" +
+	"\x18ProposeSlackLinkResponse\x12,\n" +
+	"\x04link\x18\x01 \x01(\v2\x18.pantherclaw.v1.ChatLinkR\x04link\"2\n" +
+	"\x16ConfirmChatLinkRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"G\n" +
+	"\x17ConfirmChatLinkResponse\x12,\n" +
+	"\x04link\x18\x01 \x01(\v2\x18.pantherclaw.v1.ChatLinkR\x04link\"1\n" +
+	"\x15RevokeChatLinkRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"F\n" +
+	"\x16RevokeChatLinkResponse\x12,\n" +
+	"\x04link\x18\x01 \x01(\v2\x18.pantherclaw.v1.ChatLinkR\x04link\"\x16\n" +
+	"\x14ListChatLinksRequest\"G\n" +
+	"\x15ListChatLinksResponse\x12.\n" +
+	"\x05links\x18\x01 \x03(\v2\x18.pantherclaw.v1.ChatLinkR\x05links*\xa7\x01\n" +
 	"\vChannelKind\x12\x1c\n" +
 	"\x18CHANNEL_KIND_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10CHANNEL_KIND_LOG\x10\x01\x12\x16\n" +
@@ -2019,7 +2542,14 @@ const file_pantherclaw_v1_notifications_proto_rawDesc = "" +
 	"\x16DELIVERY_STATE_EXPIRED\x10\x04\x12\x1a\n" +
 	"\x16DELIVERY_STATE_SKIPPED\x10\x05\x12\x1a\n" +
 	"\x16DELIVERY_STATE_DROPPED\x10\x06\x12\x1b\n" +
-	"\x17DELIVERY_STATE_CANCELED\x10\a2\x9a\a\n" +
+	"\x17DELIVERY_STATE_CANCELED\x10\a*\xa5\x01\n" +
+	"\rChatLinkState\x12\x1f\n" +
+	"\x1bCHAT_LINK_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18CHAT_LINK_STATE_PROPOSED\x10\x01\x12\x1d\n" +
+	"\x19CHAT_LINK_STATE_CONFIRMED\x10\x02\x12\x19\n" +
+	"\x15CHAT_LINK_STATE_STALE\x10\x03\x12\x1b\n" +
+	"\x17CHAT_LINK_STATE_REVOKED\x10\x042\xa9\n" +
+	"\n" +
 	"\x13NotificationService\x12\\\n" +
 	"\rCreateChannel\x12$.pantherclaw.v1.CreateChannelRequest\x1a%.pantherclaw.v1.CreateChannelResponse\x12X\n" +
 	"\n" +
@@ -2030,7 +2560,11 @@ const file_pantherclaw_v1_notifications_proto_rawDesc = "" +
 	"\x13RotateChannelSecret\x12*.pantherclaw.v1.RotateChannelSecretRequest\x1a+.pantherclaw.v1.RotateChannelSecretResponse\x12\x80\x01\n" +
 	"\x19SetChannelSignatureScheme\x120.pantherclaw.v1.SetChannelSignatureSchemeRequest\x1a1.pantherclaw.v1.SetChannelSignatureSchemeResponse\x12V\n" +
 	"\vTestChannel\x12\".pantherclaw.v1.TestChannelRequest\x1a#.pantherclaw.v1.TestChannelResponse\x12d\n" +
-	"\x0eListDeliveries\x12%.pantherclaw.v1.ListDeliveriesRequest\x1a&.pantherclaw.v1.ListDeliveriesResponse\"\x03\x90\x02\x01B\xcb\x01\n" +
+	"\x0eListDeliveries\x12%.pantherclaw.v1.ListDeliveriesRequest\x1a&.pantherclaw.v1.ListDeliveriesResponse\"\x03\x90\x02\x01\x12e\n" +
+	"\x10ProposeSlackLink\x12'.pantherclaw.v1.ProposeSlackLinkRequest\x1a(.pantherclaw.v1.ProposeSlackLinkResponse\x12b\n" +
+	"\x0fConfirmChatLink\x12&.pantherclaw.v1.ConfirmChatLinkRequest\x1a'.pantherclaw.v1.ConfirmChatLinkResponse\x12_\n" +
+	"\x0eRevokeChatLink\x12%.pantherclaw.v1.RevokeChatLinkRequest\x1a&.pantherclaw.v1.RevokeChatLinkResponse\x12a\n" +
+	"\rListChatLinks\x12$.pantherclaw.v1.ListChatLinksRequest\x1a%.pantherclaw.v1.ListChatLinksResponse\"\x03\x90\x02\x01B\xcb\x01\n" +
 	"\x12com.pantherclaw.v1B\x12NotificationsProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -2045,8 +2579,8 @@ func file_pantherclaw_v1_notifications_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_notifications_proto_rawDescData
 }
 
-var file_pantherclaw_v1_notifications_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_pantherclaw_v1_notifications_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_pantherclaw_v1_notifications_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
+var file_pantherclaw_v1_notifications_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_pantherclaw_v1_notifications_proto_goTypes = []any{
 	(ChannelKind)(0),                          // 0: pantherclaw.v1.ChannelKind
 	(SlackDataLevel)(0),                       // 1: pantherclaw.v1.SlackDataLevel
@@ -2054,28 +2588,38 @@ var file_pantherclaw_v1_notifications_proto_goTypes = []any{
 	(ChannelState)(0),                         // 3: pantherclaw.v1.ChannelState
 	(ChannelHealth)(0),                        // 4: pantherclaw.v1.ChannelHealth
 	(DeliveryState)(0),                        // 5: pantherclaw.v1.DeliveryState
-	(*SlackAppConfig)(nil),                    // 6: pantherclaw.v1.SlackAppConfig
-	(*Channel)(nil),                           // 7: pantherclaw.v1.Channel
-	(*Delivery)(nil),                          // 8: pantherclaw.v1.Delivery
-	(*CreateChannelRequest)(nil),              // 9: pantherclaw.v1.CreateChannelRequest
-	(*CreateChannelResponse)(nil),             // 10: pantherclaw.v1.CreateChannelResponse
-	(*GetChannelRequest)(nil),                 // 11: pantherclaw.v1.GetChannelRequest
-	(*GetChannelResponse)(nil),                // 12: pantherclaw.v1.GetChannelResponse
-	(*ListChannelsRequest)(nil),               // 13: pantherclaw.v1.ListChannelsRequest
-	(*ListChannelsResponse)(nil),              // 14: pantherclaw.v1.ListChannelsResponse
-	(*UpdateChannelRequest)(nil),              // 15: pantherclaw.v1.UpdateChannelRequest
-	(*UpdateChannelResponse)(nil),             // 16: pantherclaw.v1.UpdateChannelResponse
-	(*DeleteChannelRequest)(nil),              // 17: pantherclaw.v1.DeleteChannelRequest
-	(*DeleteChannelResponse)(nil),             // 18: pantherclaw.v1.DeleteChannelResponse
-	(*RotateChannelSecretRequest)(nil),        // 19: pantherclaw.v1.RotateChannelSecretRequest
-	(*RotateChannelSecretResponse)(nil),       // 20: pantherclaw.v1.RotateChannelSecretResponse
-	(*TestChannelRequest)(nil),                // 21: pantherclaw.v1.TestChannelRequest
-	(*TestChannelResponse)(nil),               // 22: pantherclaw.v1.TestChannelResponse
-	(*ListDeliveriesRequest)(nil),             // 23: pantherclaw.v1.ListDeliveriesRequest
-	(*ListDeliveriesResponse)(nil),            // 24: pantherclaw.v1.ListDeliveriesResponse
-	(*SetChannelSignatureSchemeRequest)(nil),  // 25: pantherclaw.v1.SetChannelSignatureSchemeRequest
-	(*SetChannelSignatureSchemeResponse)(nil), // 26: pantherclaw.v1.SetChannelSignatureSchemeResponse
-	(*timestamppb.Timestamp)(nil),             // 27: google.protobuf.Timestamp
+	(ChatLinkState)(0),                        // 6: pantherclaw.v1.ChatLinkState
+	(*SlackAppConfig)(nil),                    // 7: pantherclaw.v1.SlackAppConfig
+	(*Channel)(nil),                           // 8: pantherclaw.v1.Channel
+	(*Delivery)(nil),                          // 9: pantherclaw.v1.Delivery
+	(*CreateChannelRequest)(nil),              // 10: pantherclaw.v1.CreateChannelRequest
+	(*CreateChannelResponse)(nil),             // 11: pantherclaw.v1.CreateChannelResponse
+	(*GetChannelRequest)(nil),                 // 12: pantherclaw.v1.GetChannelRequest
+	(*GetChannelResponse)(nil),                // 13: pantherclaw.v1.GetChannelResponse
+	(*ListChannelsRequest)(nil),               // 14: pantherclaw.v1.ListChannelsRequest
+	(*ListChannelsResponse)(nil),              // 15: pantherclaw.v1.ListChannelsResponse
+	(*UpdateChannelRequest)(nil),              // 16: pantherclaw.v1.UpdateChannelRequest
+	(*UpdateChannelResponse)(nil),             // 17: pantherclaw.v1.UpdateChannelResponse
+	(*DeleteChannelRequest)(nil),              // 18: pantherclaw.v1.DeleteChannelRequest
+	(*DeleteChannelResponse)(nil),             // 19: pantherclaw.v1.DeleteChannelResponse
+	(*RotateChannelSecretRequest)(nil),        // 20: pantherclaw.v1.RotateChannelSecretRequest
+	(*RotateChannelSecretResponse)(nil),       // 21: pantherclaw.v1.RotateChannelSecretResponse
+	(*TestChannelRequest)(nil),                // 22: pantherclaw.v1.TestChannelRequest
+	(*TestChannelResponse)(nil),               // 23: pantherclaw.v1.TestChannelResponse
+	(*ListDeliveriesRequest)(nil),             // 24: pantherclaw.v1.ListDeliveriesRequest
+	(*ListDeliveriesResponse)(nil),            // 25: pantherclaw.v1.ListDeliveriesResponse
+	(*SetChannelSignatureSchemeRequest)(nil),  // 26: pantherclaw.v1.SetChannelSignatureSchemeRequest
+	(*SetChannelSignatureSchemeResponse)(nil), // 27: pantherclaw.v1.SetChannelSignatureSchemeResponse
+	(*ChatLink)(nil),                          // 28: pantherclaw.v1.ChatLink
+	(*ProposeSlackLinkRequest)(nil),           // 29: pantherclaw.v1.ProposeSlackLinkRequest
+	(*ProposeSlackLinkResponse)(nil),          // 30: pantherclaw.v1.ProposeSlackLinkResponse
+	(*ConfirmChatLinkRequest)(nil),            // 31: pantherclaw.v1.ConfirmChatLinkRequest
+	(*ConfirmChatLinkResponse)(nil),           // 32: pantherclaw.v1.ConfirmChatLinkResponse
+	(*RevokeChatLinkRequest)(nil),             // 33: pantherclaw.v1.RevokeChatLinkRequest
+	(*RevokeChatLinkResponse)(nil),            // 34: pantherclaw.v1.RevokeChatLinkResponse
+	(*ListChatLinksRequest)(nil),              // 35: pantherclaw.v1.ListChatLinksRequest
+	(*ListChatLinksResponse)(nil),             // 36: pantherclaw.v1.ListChatLinksResponse
+	(*timestamppb.Timestamp)(nil),             // 37: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_notifications_proto_depIdxs = []int32{
 	1,  // 0: pantherclaw.v1.SlackAppConfig.data_level:type_name -> pantherclaw.v1.SlackDataLevel
@@ -2083,53 +2627,68 @@ var file_pantherclaw_v1_notifications_proto_depIdxs = []int32{
 	3,  // 2: pantherclaw.v1.Channel.state:type_name -> pantherclaw.v1.ChannelState
 	2,  // 3: pantherclaw.v1.Channel.min_severity:type_name -> pantherclaw.v1.NotificationSeverity
 	4,  // 4: pantherclaw.v1.Channel.health:type_name -> pantherclaw.v1.ChannelHealth
-	27, // 5: pantherclaw.v1.Channel.last_success_time:type_name -> google.protobuf.Timestamp
-	27, // 6: pantherclaw.v1.Channel.last_failure_time:type_name -> google.protobuf.Timestamp
-	27, // 7: pantherclaw.v1.Channel.previous_secret_expire_time:type_name -> google.protobuf.Timestamp
-	27, // 8: pantherclaw.v1.Channel.create_time:type_name -> google.protobuf.Timestamp
-	27, // 9: pantherclaw.v1.Channel.update_time:type_name -> google.protobuf.Timestamp
-	6,  // 10: pantherclaw.v1.Channel.slack_app:type_name -> pantherclaw.v1.SlackAppConfig
+	37, // 5: pantherclaw.v1.Channel.last_success_time:type_name -> google.protobuf.Timestamp
+	37, // 6: pantherclaw.v1.Channel.last_failure_time:type_name -> google.protobuf.Timestamp
+	37, // 7: pantherclaw.v1.Channel.previous_secret_expire_time:type_name -> google.protobuf.Timestamp
+	37, // 8: pantherclaw.v1.Channel.create_time:type_name -> google.protobuf.Timestamp
+	37, // 9: pantherclaw.v1.Channel.update_time:type_name -> google.protobuf.Timestamp
+	7,  // 10: pantherclaw.v1.Channel.slack_app:type_name -> pantherclaw.v1.SlackAppConfig
 	0,  // 11: pantherclaw.v1.Delivery.kind:type_name -> pantherclaw.v1.ChannelKind
 	5,  // 12: pantherclaw.v1.Delivery.state:type_name -> pantherclaw.v1.DeliveryState
-	27, // 13: pantherclaw.v1.Delivery.create_time:type_name -> google.protobuf.Timestamp
-	27, // 14: pantherclaw.v1.Delivery.next_attempt_time:type_name -> google.protobuf.Timestamp
-	27, // 15: pantherclaw.v1.Delivery.finish_time:type_name -> google.protobuf.Timestamp
+	37, // 13: pantherclaw.v1.Delivery.create_time:type_name -> google.protobuf.Timestamp
+	37, // 14: pantherclaw.v1.Delivery.next_attempt_time:type_name -> google.protobuf.Timestamp
+	37, // 15: pantherclaw.v1.Delivery.finish_time:type_name -> google.protobuf.Timestamp
 	0,  // 16: pantherclaw.v1.CreateChannelRequest.kind:type_name -> pantherclaw.v1.ChannelKind
 	2,  // 17: pantherclaw.v1.CreateChannelRequest.min_severity:type_name -> pantherclaw.v1.NotificationSeverity
-	6,  // 18: pantherclaw.v1.CreateChannelRequest.slack_app:type_name -> pantherclaw.v1.SlackAppConfig
-	7,  // 19: pantherclaw.v1.CreateChannelResponse.channel:type_name -> pantherclaw.v1.Channel
-	7,  // 20: pantherclaw.v1.GetChannelResponse.channel:type_name -> pantherclaw.v1.Channel
-	8,  // 21: pantherclaw.v1.GetChannelResponse.recent_deliveries:type_name -> pantherclaw.v1.Delivery
-	7,  // 22: pantherclaw.v1.ListChannelsResponse.channels:type_name -> pantherclaw.v1.Channel
+	7,  // 18: pantherclaw.v1.CreateChannelRequest.slack_app:type_name -> pantherclaw.v1.SlackAppConfig
+	8,  // 19: pantherclaw.v1.CreateChannelResponse.channel:type_name -> pantherclaw.v1.Channel
+	8,  // 20: pantherclaw.v1.GetChannelResponse.channel:type_name -> pantherclaw.v1.Channel
+	9,  // 21: pantherclaw.v1.GetChannelResponse.recent_deliveries:type_name -> pantherclaw.v1.Delivery
+	8,  // 22: pantherclaw.v1.ListChannelsResponse.channels:type_name -> pantherclaw.v1.Channel
 	2,  // 23: pantherclaw.v1.UpdateChannelRequest.min_severity:type_name -> pantherclaw.v1.NotificationSeverity
-	7,  // 24: pantherclaw.v1.UpdateChannelResponse.channel:type_name -> pantherclaw.v1.Channel
-	27, // 25: pantherclaw.v1.RotateChannelSecretResponse.previous_secret_expire_time:type_name -> google.protobuf.Timestamp
+	8,  // 24: pantherclaw.v1.UpdateChannelResponse.channel:type_name -> pantherclaw.v1.Channel
+	37, // 25: pantherclaw.v1.RotateChannelSecretResponse.previous_secret_expire_time:type_name -> google.protobuf.Timestamp
 	5,  // 26: pantherclaw.v1.ListDeliveriesRequest.state:type_name -> pantherclaw.v1.DeliveryState
-	8,  // 27: pantherclaw.v1.ListDeliveriesResponse.deliveries:type_name -> pantherclaw.v1.Delivery
-	7,  // 28: pantherclaw.v1.SetChannelSignatureSchemeResponse.channel:type_name -> pantherclaw.v1.Channel
-	9,  // 29: pantherclaw.v1.NotificationService.CreateChannel:input_type -> pantherclaw.v1.CreateChannelRequest
-	11, // 30: pantherclaw.v1.NotificationService.GetChannel:input_type -> pantherclaw.v1.GetChannelRequest
-	13, // 31: pantherclaw.v1.NotificationService.ListChannels:input_type -> pantherclaw.v1.ListChannelsRequest
-	15, // 32: pantherclaw.v1.NotificationService.UpdateChannel:input_type -> pantherclaw.v1.UpdateChannelRequest
-	17, // 33: pantherclaw.v1.NotificationService.DeleteChannel:input_type -> pantherclaw.v1.DeleteChannelRequest
-	19, // 34: pantherclaw.v1.NotificationService.RotateChannelSecret:input_type -> pantherclaw.v1.RotateChannelSecretRequest
-	25, // 35: pantherclaw.v1.NotificationService.SetChannelSignatureScheme:input_type -> pantherclaw.v1.SetChannelSignatureSchemeRequest
-	21, // 36: pantherclaw.v1.NotificationService.TestChannel:input_type -> pantherclaw.v1.TestChannelRequest
-	23, // 37: pantherclaw.v1.NotificationService.ListDeliveries:input_type -> pantherclaw.v1.ListDeliveriesRequest
-	10, // 38: pantherclaw.v1.NotificationService.CreateChannel:output_type -> pantherclaw.v1.CreateChannelResponse
-	12, // 39: pantherclaw.v1.NotificationService.GetChannel:output_type -> pantherclaw.v1.GetChannelResponse
-	14, // 40: pantherclaw.v1.NotificationService.ListChannels:output_type -> pantherclaw.v1.ListChannelsResponse
-	16, // 41: pantherclaw.v1.NotificationService.UpdateChannel:output_type -> pantherclaw.v1.UpdateChannelResponse
-	18, // 42: pantherclaw.v1.NotificationService.DeleteChannel:output_type -> pantherclaw.v1.DeleteChannelResponse
-	20, // 43: pantherclaw.v1.NotificationService.RotateChannelSecret:output_type -> pantherclaw.v1.RotateChannelSecretResponse
-	26, // 44: pantherclaw.v1.NotificationService.SetChannelSignatureScheme:output_type -> pantherclaw.v1.SetChannelSignatureSchemeResponse
-	22, // 45: pantherclaw.v1.NotificationService.TestChannel:output_type -> pantherclaw.v1.TestChannelResponse
-	24, // 46: pantherclaw.v1.NotificationService.ListDeliveries:output_type -> pantherclaw.v1.ListDeliveriesResponse
-	38, // [38:47] is the sub-list for method output_type
-	29, // [29:38] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	9,  // 27: pantherclaw.v1.ListDeliveriesResponse.deliveries:type_name -> pantherclaw.v1.Delivery
+	8,  // 28: pantherclaw.v1.SetChannelSignatureSchemeResponse.channel:type_name -> pantherclaw.v1.Channel
+	6,  // 29: pantherclaw.v1.ChatLink.state:type_name -> pantherclaw.v1.ChatLinkState
+	37, // 30: pantherclaw.v1.ChatLink.create_time:type_name -> google.protobuf.Timestamp
+	37, // 31: pantherclaw.v1.ChatLink.confirm_time:type_name -> google.protobuf.Timestamp
+	28, // 32: pantherclaw.v1.ProposeSlackLinkResponse.link:type_name -> pantherclaw.v1.ChatLink
+	28, // 33: pantherclaw.v1.ConfirmChatLinkResponse.link:type_name -> pantherclaw.v1.ChatLink
+	28, // 34: pantherclaw.v1.RevokeChatLinkResponse.link:type_name -> pantherclaw.v1.ChatLink
+	28, // 35: pantherclaw.v1.ListChatLinksResponse.links:type_name -> pantherclaw.v1.ChatLink
+	10, // 36: pantherclaw.v1.NotificationService.CreateChannel:input_type -> pantherclaw.v1.CreateChannelRequest
+	12, // 37: pantherclaw.v1.NotificationService.GetChannel:input_type -> pantherclaw.v1.GetChannelRequest
+	14, // 38: pantherclaw.v1.NotificationService.ListChannels:input_type -> pantherclaw.v1.ListChannelsRequest
+	16, // 39: pantherclaw.v1.NotificationService.UpdateChannel:input_type -> pantherclaw.v1.UpdateChannelRequest
+	18, // 40: pantherclaw.v1.NotificationService.DeleteChannel:input_type -> pantherclaw.v1.DeleteChannelRequest
+	20, // 41: pantherclaw.v1.NotificationService.RotateChannelSecret:input_type -> pantherclaw.v1.RotateChannelSecretRequest
+	26, // 42: pantherclaw.v1.NotificationService.SetChannelSignatureScheme:input_type -> pantherclaw.v1.SetChannelSignatureSchemeRequest
+	22, // 43: pantherclaw.v1.NotificationService.TestChannel:input_type -> pantherclaw.v1.TestChannelRequest
+	24, // 44: pantherclaw.v1.NotificationService.ListDeliveries:input_type -> pantherclaw.v1.ListDeliveriesRequest
+	29, // 45: pantherclaw.v1.NotificationService.ProposeSlackLink:input_type -> pantherclaw.v1.ProposeSlackLinkRequest
+	31, // 46: pantherclaw.v1.NotificationService.ConfirmChatLink:input_type -> pantherclaw.v1.ConfirmChatLinkRequest
+	33, // 47: pantherclaw.v1.NotificationService.RevokeChatLink:input_type -> pantherclaw.v1.RevokeChatLinkRequest
+	35, // 48: pantherclaw.v1.NotificationService.ListChatLinks:input_type -> pantherclaw.v1.ListChatLinksRequest
+	11, // 49: pantherclaw.v1.NotificationService.CreateChannel:output_type -> pantherclaw.v1.CreateChannelResponse
+	13, // 50: pantherclaw.v1.NotificationService.GetChannel:output_type -> pantherclaw.v1.GetChannelResponse
+	15, // 51: pantherclaw.v1.NotificationService.ListChannels:output_type -> pantherclaw.v1.ListChannelsResponse
+	17, // 52: pantherclaw.v1.NotificationService.UpdateChannel:output_type -> pantherclaw.v1.UpdateChannelResponse
+	19, // 53: pantherclaw.v1.NotificationService.DeleteChannel:output_type -> pantherclaw.v1.DeleteChannelResponse
+	21, // 54: pantherclaw.v1.NotificationService.RotateChannelSecret:output_type -> pantherclaw.v1.RotateChannelSecretResponse
+	27, // 55: pantherclaw.v1.NotificationService.SetChannelSignatureScheme:output_type -> pantherclaw.v1.SetChannelSignatureSchemeResponse
+	23, // 56: pantherclaw.v1.NotificationService.TestChannel:output_type -> pantherclaw.v1.TestChannelResponse
+	25, // 57: pantherclaw.v1.NotificationService.ListDeliveries:output_type -> pantherclaw.v1.ListDeliveriesResponse
+	30, // 58: pantherclaw.v1.NotificationService.ProposeSlackLink:output_type -> pantherclaw.v1.ProposeSlackLinkResponse
+	32, // 59: pantherclaw.v1.NotificationService.ConfirmChatLink:output_type -> pantherclaw.v1.ConfirmChatLinkResponse
+	34, // 60: pantherclaw.v1.NotificationService.RevokeChatLink:output_type -> pantherclaw.v1.RevokeChatLinkResponse
+	36, // 61: pantherclaw.v1.NotificationService.ListChatLinks:output_type -> pantherclaw.v1.ListChatLinksResponse
+	49, // [49:62] is the sub-list for method output_type
+	36, // [36:49] is the sub-list for method input_type
+	36, // [36:36] is the sub-list for extension type_name
+	36, // [36:36] is the sub-list for extension extendee
+	0,  // [0:36] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_notifications_proto_init() }
@@ -2143,8 +2702,8 @@ func file_pantherclaw_v1_notifications_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_notifications_proto_rawDesc), len(file_pantherclaw_v1_notifications_proto_rawDesc)),
-			NumEnums:      6,
-			NumMessages:   21,
+			NumEnums:      7,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

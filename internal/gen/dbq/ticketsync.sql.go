@@ -142,6 +142,31 @@ func (q *Queries) ExternalRefsOfIncident(ctx context.Context, orgID ids.OrgID, i
 	return items, nil
 }
 
+const finishTicketOutbound = `-- name: FinishTicketOutbound :execrows
+UPDATE pc.ticket_outbound SET state = $1, result_code = $2, finished_at = now()
+WHERE org_id = $3 AND id = $4 AND state = 'PENDING'
+`
+
+type FinishTicketOutboundParams struct {
+	State      string
+	ResultCode *string
+	OrgID      ids.OrgID
+	ID         ids.UUID
+}
+
+func (q *Queries) FinishTicketOutbound(ctx context.Context, arg FinishTicketOutboundParams) (int64, error) {
+	result, err := q.db.Exec(ctx, finishTicketOutbound,
+		arg.State,
+		arg.ResultCode,
+		arg.OrgID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getTicketSyncConfig = `-- name: GetTicketSyncConfig :one
 SELECT org_id, id, system, connection_id, project_key, state, webhook_secret, prev_webhook_secret, prev_secret_expires_at, created_by, created_at, updated_at FROM pc.ticket_sync_configs WHERE org_id = $1 AND id = $2
 `
@@ -166,21 +191,15 @@ func (q *Queries) GetTicketSyncConfig(ctx context.Context, orgID ids.OrgID, iD i
 	return i, err
 }
 
-const incidentForTicketSync = `-- name: IncidentForTicketSync :one
-SELECT id, state, severity FROM pc.incidents WHERE org_id = $1 AND id = $2
+const incidentTitle = `-- name: IncidentTitle :one
+SELECT title FROM pc.incidents WHERE org_id = $1 AND id = $2
 `
 
-type IncidentForTicketSyncRow struct {
-	ID       ids.UUID
-	State    string
-	Severity string
-}
-
-func (q *Queries) IncidentForTicketSync(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (IncidentForTicketSyncRow, error) {
-	row := q.db.QueryRow(ctx, incidentForTicketSync, orgID, iD)
-	var i IncidentForTicketSyncRow
-	err := row.Scan(&i.ID, &i.State, &i.Severity)
-	return i, err
+func (q *Queries) IncidentTitle(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, incidentTitle, orgID, iD)
+	var title string
+	err := row.Scan(&title)
+	return title, err
 }
 
 const insertExternalRef = `-- name: InsertExternalRef :one
@@ -266,6 +285,35 @@ func (q *Queries) InsertTicketInboundEvent(ctx context.Context, arg InsertTicket
 	return result.RowsAffected(), nil
 }
 
+const insertTicketOutbound = `-- name: InsertTicketOutbound :exec
+INSERT INTO pc.ticket_outbound (org_id, id, config_id, case_id, incident_id, action, verification_id)
+VALUES ($1, $2, $3, $4, $5, $6,
+    $7)
+`
+
+type InsertTicketOutboundParams struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	ConfigID       ids.UUID
+	CaseID         *ids.UUID
+	IncidentID     *ids.UUID
+	Action         string
+	VerificationID ids.UUID
+}
+
+func (q *Queries) InsertTicketOutbound(ctx context.Context, arg InsertTicketOutboundParams) error {
+	_, err := q.db.Exec(ctx, insertTicketOutbound,
+		arg.OrgID,
+		arg.ID,
+		arg.ConfigID,
+		arg.CaseID,
+		arg.IncidentID,
+		arg.Action,
+		arg.VerificationID,
+	)
+	return err
+}
+
 const insertTicketSyncConfig = `-- name: InsertTicketSyncConfig :one
 
 INSERT INTO pc.ticket_sync_configs (org_id, id, system, connection_id, project_key, webhook_secret, created_by)
@@ -314,6 +362,90 @@ func (q *Queries) InsertTicketSyncConfig(ctx context.Context, arg InsertTicketSy
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertTicketSyncVerification = `-- name: InsertTicketSyncVerification :exec
+INSERT INTO pc.verifications (org_id, id, purpose, connection_id, operation, request, next_at, deadline_at)
+VALUES ($1, $2, 'ticket_sync', $3, $4, $5,
+    now(), now() + interval '1 hour')
+`
+
+type InsertTicketSyncVerificationParams struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	ConnectionID ids.UUID
+	Operation    string
+	Request      []byte
+}
+
+// A ticket sync call is a verification task of its own purpose, with no
+// transaction (00243).
+func (q *Queries) InsertTicketSyncVerification(ctx context.Context, arg InsertTicketSyncVerificationParams) error {
+	_, err := q.db.Exec(ctx, insertTicketSyncVerification,
+		arg.OrgID,
+		arg.ID,
+		arg.ConnectionID,
+		arg.Operation,
+		arg.Request,
+	)
+	return err
+}
+
+const leasedTicketSync = `-- name: LeasedTicketSync :one
+SELECT v.id AS verification_id, v.connection_id, v.operation, o.id AS outbound_id, o.config_id, o.case_id, o.incident_id, o.action,
+       c.system, c.project_key
+FROM pc.verifications v
+JOIN pc.ticket_outbound o ON o.org_id = v.org_id AND o.verification_id = v.id
+JOIN pc.ticket_sync_configs c ON c.org_id = o.org_id AND c.id = o.config_id
+WHERE v.org_id = $1 AND v.id = $2 AND v.purpose = 'ticket_sync' AND v.state = 'LEASED'
+  AND v.leased_by = $3 AND v.lease_hash = $4 AND v.lease_expires_at >= now()
+  AND o.state = 'PENDING'
+FOR UPDATE OF v, o
+`
+
+type LeasedTicketSyncParams struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	GatewayID *ids.UUID
+	LeaseHash []byte
+}
+
+type LeasedTicketSyncRow struct {
+	VerificationID ids.UUID
+	ConnectionID   ids.UUID
+	Operation      string
+	OutboundID     ids.UUID
+	ConfigID       ids.UUID
+	CaseID         *ids.UUID
+	IncidentID     *ids.UUID
+	Action         string
+	System         string
+	ProjectKey     string
+}
+
+// A ticket sync task under a live lease of this gateway, with what it was
+// for: nothing else accepts its report.
+func (q *Queries) LeasedTicketSync(ctx context.Context, arg LeasedTicketSyncParams) (LeasedTicketSyncRow, error) {
+	row := q.db.QueryRow(ctx, leasedTicketSync,
+		arg.OrgID,
+		arg.ID,
+		arg.GatewayID,
+		arg.LeaseHash,
+	)
+	var i LeasedTicketSyncRow
+	err := row.Scan(
+		&i.VerificationID,
+		&i.ConnectionID,
+		&i.Operation,
+		&i.OutboundID,
+		&i.ConfigID,
+		&i.CaseID,
+		&i.IncidentID,
+		&i.Action,
+		&i.System,
+		&i.ProjectKey,
 	)
 	return i, err
 }
@@ -459,4 +591,43 @@ func (q *Queries) TicketInboundDeliverySeen(ctx context.Context, orgID ids.OrgID
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const ticketOutboundOf = `-- name: TicketOutboundOf :many
+SELECT org_id, id, config_id, case_id, incident_id, action, verification_id, state, result_code, created_at, finished_at FROM pc.ticket_outbound
+WHERE org_id = $1 AND (case_id = $2 OR incident_id = $3)
+ORDER BY created_at DESC, id
+LIMIT 20
+`
+
+func (q *Queries) TicketOutboundOf(ctx context.Context, orgID ids.OrgID, caseID *ids.UUID, incidentID *ids.UUID) ([]PcTicketOutbound, error) {
+	rows, err := q.db.Query(ctx, ticketOutboundOf, orgID, caseID, incidentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcTicketOutbound{}
+	for rows.Next() {
+		var i PcTicketOutbound
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.ConfigID,
+			&i.CaseID,
+			&i.IncidentID,
+			&i.Action,
+			&i.VerificationID,
+			&i.State,
+			&i.ResultCode,
+			&i.CreatedAt,
+			&i.FinishedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

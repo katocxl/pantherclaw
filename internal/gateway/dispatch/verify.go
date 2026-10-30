@@ -110,6 +110,8 @@ func (e *Engine) VerifyEffect(ctx context.Context, conn *control.Connection, l L
 		return e.connectionTest(ctx, conn, l)
 	case "target_log":
 		return e.targetLog(ctx, conn, l)
+	case "ticket_sync":
+		return e.ticketSync(ctx, conn, l)
 	}
 	read, v, list, err := reviewedRead(conn, l.Operation)
 	if err != nil {

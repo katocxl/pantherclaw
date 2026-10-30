@@ -54,6 +54,18 @@ const (
 	// NotificationServiceListDeliveriesProcedure is the procedure name of the NotificationService's
 	// ListDeliveries RPC.
 	NotificationServiceListDeliveriesProcedure = "/pantherclaw.v1.NotificationService/ListDeliveries"
+	// NotificationServiceProposeSlackLinkProcedure is the procedure name of the NotificationService's
+	// ProposeSlackLink RPC.
+	NotificationServiceProposeSlackLinkProcedure = "/pantherclaw.v1.NotificationService/ProposeSlackLink"
+	// NotificationServiceConfirmChatLinkProcedure is the procedure name of the NotificationService's
+	// ConfirmChatLink RPC.
+	NotificationServiceConfirmChatLinkProcedure = "/pantherclaw.v1.NotificationService/ConfirmChatLink"
+	// NotificationServiceRevokeChatLinkProcedure is the procedure name of the NotificationService's
+	// RevokeChatLink RPC.
+	NotificationServiceRevokeChatLinkProcedure = "/pantherclaw.v1.NotificationService/RevokeChatLink"
+	// NotificationServiceListChatLinksProcedure is the procedure name of the NotificationService's
+	// ListChatLinks RPC.
+	NotificationServiceListChatLinksProcedure = "/pantherclaw.v1.NotificationService/ListChatLinks"
 )
 
 var (
@@ -123,6 +135,35 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	notificationServiceProposeSlackLinkSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_notifications_proto.Services().ByName("NotificationService").Methods().ByName("ProposeSlackLink"),
+			Procedure:  NotificationServiceProposeSlackLinkProcedure,
+		}
+	})
+	notificationServiceConfirmChatLinkSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_notifications_proto.Services().ByName("NotificationService").Methods().ByName("ConfirmChatLink"),
+			Procedure:  NotificationServiceConfirmChatLinkProcedure,
+		}
+	})
+	notificationServiceRevokeChatLinkSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_notifications_proto.Services().ByName("NotificationService").Methods().ByName("RevokeChatLink"),
+			Procedure:  NotificationServiceRevokeChatLinkProcedure,
+		}
+	})
+	notificationServiceListChatLinksSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_notifications_proto.Services().ByName("NotificationService").Methods().ByName("ListChatLinks"),
+			Procedure:        NotificationServiceListChatLinksProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // NotificationServiceClient is a client for the pantherclaw.v1.NotificationService service.
@@ -160,6 +201,22 @@ type NotificationServiceClient interface {
 	// ListDeliveries lists deliveries, newest first.
 	// permission: notification.read
 	ListDeliveries(context.Context, *v1.ListDeliveriesRequest) (*v1.ListDeliveriesResponse, error)
+	// ProposeSlackLink looks the caller up in the workspace of the org's Slack
+	// DM channel by their own email and proposes the link (G0 M20 D256,
+	// D265): a full, confirmed member with that email, on one of the
+	// channel's email domains. The caller confirms it with ConfirmChatLink.
+	// permission: authenticated
+	ProposeSlackLink(context.Context, *v1.ProposeSlackLinkRequest) (*v1.ProposeSlackLinkResponse, error)
+	// ConfirmChatLink confirms the caller's own proposed link: approval DMs
+	// for requests they may decide then reach them.
+	// permission: authenticated
+	ConfirmChatLink(context.Context, *v1.ConfirmChatLinkRequest) (*v1.ConfirmChatLinkResponse, error)
+	// RevokeChatLink revokes the caller's own link.
+	// permission: authenticated
+	RevokeChatLink(context.Context, *v1.RevokeChatLinkRequest) (*v1.RevokeChatLinkResponse, error)
+	// ListChatLinks lists the caller's own links, newest first.
+	// permission: authenticated
+	ListChatLinks(context.Context, *v1.ListChatLinksRequest) (*v1.ListChatLinksResponse, error)
 }
 
 // NewNotificationServiceClient constructs a client for the pantherclaw.v1.NotificationService
@@ -204,6 +261,22 @@ type NotificationServiceHandler interface {
 	// ListDeliveries lists deliveries, newest first.
 	// permission: notification.read
 	ListDeliveries(context.Context, *v1.ListDeliveriesRequest) (*v1.ListDeliveriesResponse, error)
+	// ProposeSlackLink looks the caller up in the workspace of the org's Slack
+	// DM channel by their own email and proposes the link (G0 M20 D256,
+	// D265): a full, confirmed member with that email, on one of the
+	// channel's email domains. The caller confirms it with ConfirmChatLink.
+	// permission: authenticated
+	ProposeSlackLink(context.Context, *v1.ProposeSlackLinkRequest) (*v1.ProposeSlackLinkResponse, error)
+	// ConfirmChatLink confirms the caller's own proposed link: approval DMs
+	// for requests they may decide then reach them.
+	// permission: authenticated
+	ConfirmChatLink(context.Context, *v1.ConfirmChatLinkRequest) (*v1.ConfirmChatLinkResponse, error)
+	// RevokeChatLink revokes the caller's own link.
+	// permission: authenticated
+	RevokeChatLink(context.Context, *v1.RevokeChatLinkRequest) (*v1.RevokeChatLinkResponse, error)
+	// ListChatLinks lists the caller's own links, newest first.
+	// permission: authenticated
+	ListChatLinks(context.Context, *v1.ListChatLinksRequest) (*v1.ListChatLinksResponse, error)
 }
 
 // RegisterNotificationServiceHandler registers svc as the pantherclaw.v1.NotificationService
@@ -220,6 +293,10 @@ func RegisterNotificationServiceHandler(server *connect.Server, svc Notification
 		connect.Method{Spec: notificationServiceSetChannelSignatureSchemeSpec(), Handler: adapter.setChannelSignatureScheme},
 		connect.Method{Spec: notificationServiceTestChannelSpec(), Handler: adapter.testChannel},
 		connect.Method{Spec: notificationServiceListDeliveriesSpec(), Handler: adapter.listDeliveries},
+		connect.Method{Spec: notificationServiceProposeSlackLinkSpec(), Handler: adapter.proposeSlackLink},
+		connect.Method{Spec: notificationServiceConfirmChatLinkSpec(), Handler: adapter.confirmChatLink},
+		connect.Method{Spec: notificationServiceRevokeChatLinkSpec(), Handler: adapter.revokeChatLink},
+		connect.Method{Spec: notificationServiceListChatLinksSpec(), Handler: adapter.listChatLinks},
 	)
 }
 
@@ -260,6 +337,22 @@ func (UnimplementedNotificationServiceHandler) TestChannel(context.Context, *v1.
 
 func (UnimplementedNotificationServiceHandler) ListDeliveries(context.Context, *v1.ListDeliveriesRequest) (*v1.ListDeliveriesResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.NotificationService.ListDeliveries is not implemented")
+}
+
+func (UnimplementedNotificationServiceHandler) ProposeSlackLink(context.Context, *v1.ProposeSlackLinkRequest) (*v1.ProposeSlackLinkResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.NotificationService.ProposeSlackLink is not implemented")
+}
+
+func (UnimplementedNotificationServiceHandler) ConfirmChatLink(context.Context, *v1.ConfirmChatLinkRequest) (*v1.ConfirmChatLinkResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.NotificationService.ConfirmChatLink is not implemented")
+}
+
+func (UnimplementedNotificationServiceHandler) RevokeChatLink(context.Context, *v1.RevokeChatLinkRequest) (*v1.RevokeChatLinkResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.NotificationService.RevokeChatLink is not implemented")
+}
+
+func (UnimplementedNotificationServiceHandler) ListChatLinks(context.Context, *v1.ListChatLinksRequest) (*v1.ListChatLinksResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.NotificationService.ListChatLinks is not implemented")
 }
 
 type notificationServiceClient struct {
@@ -333,6 +426,38 @@ func (c *notificationServiceClient) TestChannel(ctx context.Context, req *v1.Tes
 func (c *notificationServiceClient) ListDeliveries(ctx context.Context, req *v1.ListDeliveriesRequest) (*v1.ListDeliveriesResponse, error) {
 	var res v1.ListDeliveriesResponse
 	if err := c.client.CallUnary(ctx, notificationServiceListDeliveriesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *notificationServiceClient) ProposeSlackLink(ctx context.Context, req *v1.ProposeSlackLinkRequest) (*v1.ProposeSlackLinkResponse, error) {
+	var res v1.ProposeSlackLinkResponse
+	if err := c.client.CallUnary(ctx, notificationServiceProposeSlackLinkSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *notificationServiceClient) ConfirmChatLink(ctx context.Context, req *v1.ConfirmChatLinkRequest) (*v1.ConfirmChatLinkResponse, error) {
+	var res v1.ConfirmChatLinkResponse
+	if err := c.client.CallUnary(ctx, notificationServiceConfirmChatLinkSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *notificationServiceClient) RevokeChatLink(ctx context.Context, req *v1.RevokeChatLinkRequest) (*v1.RevokeChatLinkResponse, error) {
+	var res v1.RevokeChatLinkResponse
+	if err := c.client.CallUnary(ctx, notificationServiceRevokeChatLinkSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *notificationServiceClient) ListChatLinks(ctx context.Context, req *v1.ListChatLinksRequest) (*v1.ListChatLinksResponse, error) {
+	var res v1.ListChatLinksResponse
+	if err := c.client.CallUnary(ctx, notificationServiceListChatLinksSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -442,6 +567,54 @@ func (h notificationServiceHandler) listDeliveries(ctx context.Context, _ connec
 		return err
 	}
 	res, err := h.svc.ListDeliveries(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h notificationServiceHandler) proposeSlackLink(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ProposeSlackLinkRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ProposeSlackLink(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h notificationServiceHandler) confirmChatLink(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ConfirmChatLinkRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ConfirmChatLink(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h notificationServiceHandler) revokeChatLink(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeChatLinkRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeChatLink(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h notificationServiceHandler) listChatLinks(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListChatLinksRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListChatLinks(ctx, &req)
 	if err != nil {
 		return err
 	}
