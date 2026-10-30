@@ -104,7 +104,7 @@ func ServerName(conn net.Conn) (string, []byte, error) {
 			name = h.ServerName
 			return nil, errHello
 		},
-	}).Handshake()
+	}).Handshake() //nolint:noctx // reads one hello from memory-bounded input under the connection's deadline
 	if name == "" {
 		if err == nil || errors.Is(err, errHello) {
 			err = errors.New("sni: no server name")
@@ -124,7 +124,7 @@ func (r *Router) Serve(ctx context.Context, ln net.Listener) error {
 		c, err := ln.Accept()
 		if err != nil {
 			if ctx.Err() != nil {
-				return nil
+				return nil //nolint:nilerr // shutdown, not a failure
 			}
 			var ne net.Error
 			if errors.As(err, &ne) && ne.Timeout() {

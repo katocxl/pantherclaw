@@ -133,7 +133,7 @@ func (a *Agent) reconcileOne(ctx context.Context, as *pb.HostingAssignment) (str
 		return "", err
 	}
 	names := profile.NamesOf(hosted)
-	switch as.GetState() {
+	switch as.GetState() { //nolint:exhaustive // the server assigns only these states
 	case pb.HostedGatewayState_HOSTED_GATEWAY_STATE_DEPROVISIONING:
 		// The server revoked the gateway before it got here (HR-503).
 		return "", a.stop(ctx, as, hosted)
@@ -146,7 +146,7 @@ func (a *Agent) reconcileOne(ctx context.Context, as *pb.HostingAssignment) (str
 			// its volume, so it needs no token.
 			_ = a.Engine.RemoveContainer(ctx, names.Container)
 			img, _ := a.image(as.GetVersion())
-			if err := a.run(ctx, hosted, a.spec(hosted, as.GetLimits(), img)); err != nil {
+			if err := a.run(ctx, a.spec(hosted, as.GetLimits(), img)); err != nil {
 				return "", err
 			}
 			return "", nil
@@ -203,11 +203,11 @@ func (a *Agent) start(ctx context.Context, as *pb.HostingAssignment, hosted ids.
 		return err
 	}
 	img, _ := a.image(as.GetTargetVersion())
-	return a.run(ctx, hosted, a.spec(hosted, as.GetLimits(), img))
+	return a.run(ctx, a.spec(hosted, as.GetLimits(), img))
 }
 
 // run creates the org's network and container and starts it.
-func (a *Agent) run(ctx context.Context, hosted ids.UUID, s profile.Spec) error {
+func (a *Agent) run(ctx context.Context, s profile.Spec) error {
 	c, err := s.Container()
 	if err != nil {
 		return err

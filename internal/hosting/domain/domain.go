@@ -61,7 +61,7 @@ func Allowed(e billing.Entitlements) bool { return e.HostedGateways() }
 // (T-218): the Team edition gets the default profile, larger editions up
 // to the profile's ceilings.
 func Quota(e billing.Entitlements) profile.Limits {
-	switch e.Edition {
+	switch e.Edition { //nolint:exhaustive // every other edition has no quota
 	case billing.Business, billing.Enterprise:
 		return profile.Ceilings
 	case billing.Team:

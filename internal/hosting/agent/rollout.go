@@ -137,7 +137,7 @@ func (a *Agent) replace(ctx context.Context, as *pb.HostingAssignment, hosted id
 	if err := a.Engine.RemoveContainer(ctx, names.Container); err != nil && !notFound(err) {
 		return "", err
 	}
-	if err := a.run(ctx, hosted, a.spec(hosted, as.GetLimits(), img)); err != nil {
+	if err := a.run(ctx, a.spec(hosted, as.GetLimits(), img)); err != nil {
 		return "", err
 	}
 	timeout := a.RollTimeout

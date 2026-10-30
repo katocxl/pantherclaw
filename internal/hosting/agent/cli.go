@@ -191,7 +191,7 @@ func cmdInstall(args []string, stdout, stderr io.Writer) error {
 	if *dir == "" || *certFile == "" || !pinRE.MatchString(*pin) {
 		return errors.New("install needs --identity-dir, --cert and --ca-sha256")
 	}
-	seedB64, err := os.ReadFile(filepath.Join(*dir, pendingKey)) //nolint:gosec // G304: operator-chosen identity directory
+	seedB64, err := os.ReadFile(filepath.Join(*dir, pendingKey))
 	if err != nil {
 		return err
 	}
@@ -199,7 +199,7 @@ func cmdInstall(args []string, stdout, stderr io.Writer) error {
 	if err != nil || len(seed) != ed25519.SeedSize {
 		return ErrIdentity
 	}
-	b, err := os.ReadFile(*certFile) //nolint:gosec // G304: operator-chosen bundle
+	b, err := os.ReadFile(*certFile)
 	if err != nil {
 		return err
 	}

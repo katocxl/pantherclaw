@@ -142,7 +142,7 @@ func (s *Service) Request(ctx context.Context, slug string, asked profile.Limits
 			return err
 		}
 		h, err := q.InsertHostedGateway(ctx, dbq.InsertHostedGatewayParams{
-			OrgID: c.Org, ID: ids.NewV7(), Slug: slug, MilliCpus: int32(l.MilliCPUs), MemoryMib: int32(l.MemoryMiB), Pids: int32(l.PIDs),
+			OrgID: c.Org, ID: ids.NewV7(), Slug: slug, MilliCpus: int32(l.MilliCPUs), MemoryMib: int32(l.MemoryMiB), Pids: int32(l.PIDs), //nolint:gosec // G115: within the profile's ceilings (domain.Fit)
 			CreatedBy: c.Principal.String(),
 		})
 		if db.IsUniqueViolation(err) {

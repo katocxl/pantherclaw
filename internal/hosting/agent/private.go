@@ -35,7 +35,7 @@ func NewPrivate(root string) (*Private, error) {
 	if !filepath.IsAbs(root) || filepath.Clean(root) != root {
 		return nil, errors.New("hosting agent: the private root must be an absolute clean path")
 	}
-	if err := os.MkdirAll(root, 0o711); err != nil {
+	if err := os.MkdirAll(root, 0o711); err != nil { //nolint:gosec // G301: a container's uid walks through to its own directory; no one lists it
 		return nil, err
 	}
 	if err := checkTmpfs(root); err != nil {
@@ -74,7 +74,7 @@ func (p *Private) Prepare(hosted ids.UUID, apiURL, pin string) (string, error) {
 		return "", err
 	}
 	uid := profile.UID(hosted)
-	if err := os.Chmod(dir, 0o700); err != nil {
+	if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // G302: a directory, owner only
 		return "", err
 	}
 	var c GatewayConfig
@@ -94,7 +94,7 @@ func (p *Private) Prepare(hosted ids.UUID, apiURL, pin string) (string, error) {
 	if err := p.chown(dir, uid); err != nil {
 		return "", err
 	}
-	return dir, os.Chmod(dir, 0o500)
+	return dir, os.Chmod(dir, 0o500) //nolint:gosec // G302: a directory, owner only
 }
 
 // WriteToken writes the single-use token to the hosted gateway's private
@@ -102,10 +102,10 @@ func (p *Private) Prepare(hosted ids.UUID, apiURL, pin string) (string, error) {
 // never a variable or a log line (HR-502).
 func (p *Private) WriteToken(hosted ids.UUID, token pclog.Secret[string]) error {
 	dir := p.Dir(hosted)
-	if err := os.Chmod(dir, 0o700); err != nil {
+	if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // G302: a directory, owner only
 		return err
 	}
-	defer func() { _ = os.Chmod(dir, 0o500) }()
+	defer func() { _ = os.Chmod(dir, 0o500) }() //nolint:gosec // G302: a directory, owner only
 	name := filepath.Base(profile.TokenFile)
 	if err := writeAtomic(dir, name, []byte(token.Reveal()), 0o400); err != nil {
 		return err
@@ -116,10 +116,10 @@ func (p *Private) WriteToken(hosted ids.UUID, token pclog.Secret[string]) error 
 // RemoveToken deletes the token once the gateway enrolled.
 func (p *Private) RemoveToken(hosted ids.UUID) error {
 	dir := p.Dir(hosted)
-	if err := os.Chmod(dir, 0o700); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := os.Chmod(dir, 0o700); err != nil && !errors.Is(err, os.ErrNotExist) { //nolint:gosec // G302: a directory, owner only
 		return err
 	}
-	defer func() { _ = os.Chmod(dir, 0o500) }()
+	defer func() { _ = os.Chmod(dir, 0o500) }() //nolint:gosec // G302: a directory, owner only
 	err := os.Remove(filepath.Join(dir, filepath.Base(profile.TokenFile)))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -136,6 +136,6 @@ func (p *Private) HasToken(hosted ids.UUID) bool {
 // Remove deletes the hosted gateway's private directory.
 func (p *Private) Remove(hosted ids.UUID) error {
 	dir := p.Dir(hosted)
-	_ = os.Chmod(dir, 0o700)
+	_ = os.Chmod(dir, 0o700) //nolint:gosec // G302: a directory, owner only
 	return os.RemoveAll(dir)
 }
