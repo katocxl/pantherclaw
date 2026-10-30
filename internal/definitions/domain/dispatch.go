@@ -109,6 +109,9 @@ var (
 		"authorization", "proxy-authorization", "cookie", "host", "content-length", "content-type",
 		"transfer-encoding", "connection", "te", "upgrade", "trailer", "keep-alive", "pap-action", "expect",
 		"accept-encoding", // the gateway reads answers as identity (HR-076, G0 M14 D85)
+		// Set by the gateway's SigV4 signer for an AWS session (G0 M20 D254,
+		// HR-525, HR-526).
+		"x-amz-date", "x-amz-security-token", "x-amz-content-sha256",
 	}
 )
 
@@ -304,6 +307,9 @@ func (d *Definition) validateHTTPDispatch(at string, h *HTTPDispatch) error {
 		return invalid("%s: a method %v and a path template starting with /", at, methods)
 	}
 	segs := strings.Split(h.Path[1:], "/")
+	if h.Path == RootPath && h.Encoding.AWS() {
+		segs = nil // an AWS protocol posts to the service root (D254)
+	}
 	for i, seg := range segs {
 		if ref, ok := strings.CutSuffix(seg, "*}"); ok && strings.HasPrefix(seg, "{") {
 			// The rest of the path from an identifier param, one segment
@@ -328,8 +334,12 @@ func (d *Definition) validateHTTPDispatch(at string, h *HTTPDispatch) error {
 		if slices.Contains(bodiless, h.Method) {
 			return invalid("%s: %s sends no body to encode as a form", at, h.Method)
 		}
+	case EncodingAWSJSON, EncodingAWSQuery:
+		if err := d.validateAWSDispatch(at, h); err != nil {
+			return err
+		}
 	default:
-		return invalid("%s.encoding must be json or form", at)
+		return invalid("%s.encoding must be json, form, aws-json or aws-query", at)
 	}
 	if err := d.fields(at+".body", h.Body, inBody, h.Encoding); err != nil {
 		return err

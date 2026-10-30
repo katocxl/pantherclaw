@@ -54,8 +54,8 @@ type Binding struct {
 	AllowedHosts    []string
 	BrokerKey       string
 	Header, Scheme  string
-	// Kind is KindStatic (or empty) or KindGitHubApp; only a GitHub App
-	// credential adds it to the info, so every credential sealed before
+	// Kind is KindStatic (or empty), KindGitHubApp or KindOAuthClient; only
+	// a kind other than static adds it to the info, so every credential sealed before
 	// kinds existed still opens.
 	Kind string
 }

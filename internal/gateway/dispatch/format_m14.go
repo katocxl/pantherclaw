@@ -32,13 +32,13 @@ var ErrCredentialPattern = errors.New("dispatch: the credential does not match t
 // credential pattern before any byte is sent (G0 M14 D8, D85, HR-301):
 // every dispatch path that opens a credential calls it, kind senders
 // included. A pattern is for a static credential, so a credential of
-// another kind (kind, as sealed: a GitHub App) is refused under one. A
+// another kind (kind, as sealed: a GitHub App, an OAuth client) is refused under one. A
 // definition without a pattern (or none at all) accepts any credential.
 func CheckCredentialPattern(def *defs.Definition, kind string, credential []byte) error {
 	if def == nil || def.Dispatch == nil || def.Dispatch.CredentialPattern == "" {
 		return nil
 	}
-	if kind == credentials.KindGitHubApp || !def.Dispatch.CredentialMatches(credential) {
+	if credentials.Minted(kind) || !def.Dispatch.CredentialMatches(credential) {
 		return ErrCredentialPattern
 	}
 	return nil

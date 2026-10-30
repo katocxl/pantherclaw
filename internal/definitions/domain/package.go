@@ -67,9 +67,15 @@ type Mapping struct {
 	Method  string  `json:"method,omitzero"`
 	Path    string  `json:"path,omitzero"`
 	// Encoding is how an http mapping's request body is read: json (the
-	// default) or form (application/x-www-form-urlencoded only, G0 M14 D8).
+	// default), form (application/x-www-form-urlencoded only, G0 M14 D8) or
+	// aws-json (G0 M20 D254).
 	Encoding Encoding `json:"encoding,omitzero"`
-	Route    string   `json:"route"`
+	// Headers are fixed request headers an http mapping matches on, by
+	// exact value, such as an aws-json X-Amz-Target (G0 M20 D254): they only
+	// select the route, and nothing the agent sends reaches the target
+	// except through the reviewed dispatch template (HR-526).
+	Headers map[string]string `json:"headers,omitzero"`
+	Route   string            `json:"route"`
 	// Description and InputSchema are what MCP clients receive for an mcp
 	// mapping (HR-081); the MCP face lists only tools that have both.
 	Description string  `json:"description,omitzero"`
@@ -199,8 +205,8 @@ func (d *Definition) validateMapping(i int) error {
 	if m.Channel != ChannelMCPResource && m.Resource != "" {
 		return invalid("%s: resource belongs to mcp_resource mappings", at)
 	}
-	if m.Channel != ChannelHTTP && m.Encoding != EncodingDefault {
-		return invalid("%s: encoding belongs to http mappings", at)
+	if m.Channel != ChannelHTTP && (m.Encoding != EncodingDefault || len(m.Headers) > 0) {
+		return invalid("%s: encoding and headers belong to http mappings", at)
 	}
 	switch m.Channel {
 	case ChannelMCP, ChannelHook:
@@ -228,7 +234,8 @@ func (d *Definition) validateMapping(i int) error {
 			return err
 		}
 	case ChannelHTTP:
-		if m.Tool != "" || !slices.Contains(methods, m.Method) || !pathRe.MatchString(m.Path) || len(m.Path) > 512 {
+		root := m.Path == RootPath && m.Encoding.AWS() // an AWS protocol posts to the root (D254)
+		if m.Tool != "" || !slices.Contains(methods, m.Method) || (!root && !pathRe.MatchString(m.Path)) || len(m.Path) > 512 {
 			return invalid("%s: an http mapping names a method %v and a path template", at, methods)
 		}
 		for seg := range strings.SplitSeq(m.Path[1:], "/") {
@@ -248,8 +255,15 @@ func (d *Definition) validateMapping(i int) error {
 			if slices.Contains(bodiless, m.Method) {
 				return invalid("%s: %s has no body to read as a form", at, m.Method)
 			}
+		case EncodingAWSJSON:
+			if m.Method != "POST" || m.Path != RootPath {
+				return invalid("%s: aws-json is a POST to %s", at, RootPath)
+			}
 		default:
-			return invalid("%s: encoding must be json or form", at)
+			return invalid("%s: encoding must be json, form or aws-json", at)
+		}
+		if err := validateMatchHeaders(at, m); err != nil {
+			return err
 		}
 	case ChannelSDK:
 		return invalid("%s: the sdk channel maps through hook and mcp mappings and has none of its own", at)
@@ -331,7 +345,7 @@ func (p *Package) Validate() error {
 		}
 		ops[d.Operation] = d
 		for _, m := range d.Mappings {
-			key := string(m.Channel) + " " + m.Tool + m.Method + " " + varRe.ReplaceAllString(m.Path+m.Resource, "{}")
+			key := string(m.Channel) + " " + m.Tool + m.Method + " " + varRe.ReplaceAllString(m.Path+m.Resource, "{}") + matchKey(m.Headers)
 			if prev, dup := routes[key]; dup {
 				return invalid("%s and %s both map %s", prev, d.Operation, key)
 			}
