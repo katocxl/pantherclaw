@@ -144,10 +144,13 @@ func TestT224_RotationMovesMatchTheSchema(t *testing.T) {
 			}
 		}
 	}
-	if !(domain.Probe{AppStatus: 200, InstallationStatus: 200}).TestPassed() {
+	if !(domain.Probe{AppStatus: 200, AppMatches: true, InstallationStatus: 200}).TestPassed() {
 		t.Fatal("a 200/200 test did not pass")
 	}
-	for _, p := range []domain.Probe{{AppStatus: 200}, {InstallationStatus: 200}, {AppStatus: 401, InstallationStatus: 200}, {}} {
+	for _, p := range []domain.Probe{{AppStatus: 200, AppMatches: true}, {AppStatus: 200, InstallationStatus: 200}, {AppMatches: true, InstallationStatus: 200}, {AppStatus: 401, AppMatches: true, InstallationStatus: 200}, {}} {
+		if got := domain.ProbeOf(p.Fields()); got != p {
+			t.Fatalf("fields round trip: %+v != %+v", got, p)
+		}
 		if p.TestPassed() {
 			t.Fatalf("%+v passed", p)
 		}

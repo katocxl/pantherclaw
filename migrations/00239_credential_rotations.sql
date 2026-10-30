@@ -60,6 +60,10 @@ CREATE TABLE pc.credential_rotations (
     rollback_until          timestamptz,
     confirm_verification_id uuid,
     confirmed_at            timestamptz,
+    -- When the rotation first entered AWAITING_OLD_REMOVAL; an ACTIVATING
+    -- rotation past its rollback window awaits the removal from
+    -- rollback_until (the unconfirmed_rotation finding counts from either).
+    awaiting_since          timestamptz,
     end_reason              text        CHECK (char_length(end_reason) BETWEEN 1 AND 500),
     created_at              timestamptz NOT NULL DEFAULT now(),
     updated_at              timestamptz NOT NULL DEFAULT now(),
@@ -79,6 +83,7 @@ CREATE TABLE pc.credential_rotations (
     -- Activation needs a passed target test (HR-518).
     CHECK (activated_at IS NULL OR test_passed_at IS NOT NULL),
     CHECK ((state = 'CONFIRMED') = (confirmed_at IS NOT NULL)),
+    CHECK ((state IN ('AWAITING_OLD_REMOVAL', 'CONFIRMING', 'CONFIRMED')) = (awaiting_since IS NOT NULL)),
     CHECK ((state IN ('CONFIRMED', 'FAILED', 'ROLLED_BACK')) = (finished_at IS NOT NULL)),
     CHECK ((state IN ('FAILED', 'ROLLED_BACK')) = (end_reason IS NOT NULL))
 );
@@ -104,7 +109,8 @@ BEGIN
         OR (OLD.candidate_credential_id IS NOT NULL AND NEW.candidate_credential_id IS DISTINCT FROM OLD.candidate_credential_id)
         OR (OLD.activated_at IS NOT NULL AND (NEW.activated_at IS DISTINCT FROM OLD.activated_at
                                               OR NEW.rollback_until IS DISTINCT FROM OLD.rollback_until))
-        OR (OLD.test_passed_at IS NOT NULL AND NEW.test_passed_at IS DISTINCT FROM OLD.test_passed_at) THEN
+        OR (OLD.test_passed_at IS NOT NULL AND NEW.test_passed_at IS DISTINCT FROM OLD.test_passed_at)
+        OR (OLD.awaiting_since IS NOT NULL AND NEW.awaiting_since IS DISTINCT FROM OLD.awaiting_since) THEN
         RAISE EXCEPTION 'credential rotation % keeps what it rotates', OLD.id USING ERRCODE = 'check_violation';
     END IF;
     IF NEW.state <> OLD.state AND NOT (OLD.state, NEW.state) IN (
@@ -172,7 +178,7 @@ CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.credential_rotation
 
 GRANT SELECT, INSERT ON pc.credential_rotations TO pc_app;
 GRANT UPDATE (state, candidate_credential_id, test_verification_id, test_passed_at, activated_by, activated_at, rollback_until,
-    confirm_verification_id, confirmed_at, end_reason, updated_at, finished_at) ON pc.credential_rotations TO pc_app;
+    confirm_verification_id, confirmed_at, awaiting_since, end_reason, updated_at, finished_at) ON pc.credential_rotations TO pc_app;
 GRANT SELECT ON pc.credential_rotations TO pc_audit_ro;
 -- +goose StatementBegin
 DO $$ BEGIN
@@ -181,6 +187,15 @@ DO $$ BEGIN
     END IF;
 END $$;
 -- +goose StatementEnd
+
+-- A rotation left in AWAITING_OLD_REMOVAL or CONFIRMING for more than 24
+-- hours is a posture finding (D259).
+ALTER TABLE pc.posture_findings
+    DROP CONSTRAINT posture_findings_kind_check,
+    ADD CONSTRAINT posture_findings_kind CHECK (kind IN ('excessive_grant', 'uncovered_path', 'unowned_agent', 'unsafe_delegation',
+        'stale_credential', 'unused_authority', 'unverified_sensitive_tool', 'credential_overreach', 'unconfirmed_rotation')) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.posture_findings VALIDATE CONSTRAINT posture_findings_kind;
 
 -- The purpose checks gain the two rotation purposes, whatever their names
 -- (00081, 00084 and 00095 rewrote them); neither belongs to a transaction.
@@ -201,7 +216,9 @@ BEGIN
         IF purposes IS NULL OR purposes LIKE '%credential_rotation%' THEN
             RAISE EXCEPTION '00239: unexpected check % on pc.verifications: %', c.conname, c.def;
         END IF;
-        purposes := purposes || ', ''credential_rotation_test'', ''credential_rotation_confirm''';
+        -- Prepended: 00084's and 00095's Downs and Ups remove and append their
+        -- own purposes last, and must find the list as they left it.
+        purposes := '''credential_rotation_test'', ''credential_rotation_confirm'', ' || purposes;
         IF c.def LIKE '%transaction_id IS NULL%' THEN
             EXECUTE format('ALTER TABLE pc.verifications DROP CONSTRAINT %I, ADD CONSTRAINT %I CHECK ((purpose IN (%s)) = (transaction_id IS NULL)) NOT VALID',
                            c.conname, c.conname, purposes);
@@ -248,12 +265,24 @@ BEGIN
              WHERE conrelid = 'pc.verifications'::regclass AND contype = 'c'
                AND pg_get_constraintdef(oid) LIKE '%''credential_rotation_test''%' LOOP
         EXECUTE format('ALTER TABLE pc.verifications DROP CONSTRAINT %I, ADD CONSTRAINT %I CHECK (%s)', c.conname, c.conname,
-                       replace(replace(regexp_replace(c.def, '^CHECK \((.*)\)$', '\1'),
-                               ', ''credential_rotation_test''::text', ''), ', ''credential_rotation_confirm''::text', ''));
+                       replace(regexp_replace(c.def, '^CHECK \((.*)\)$', '\1'),
+                               '''credential_rotation_test''::text, ''credential_rotation_confirm''::text, ', ''));
     END LOOP;
 END
 $$;
 -- +goose StatementEnd
+ALTER TABLE pc.posture_finding_events NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE pc.posture_findings NO FORCE ROW LEVEL SECURITY;
+DELETE FROM pc.posture_finding_events e USING pc.posture_findings f
+ WHERE e.org_id = f.org_id AND e.finding_id = f.id AND f.kind = 'unconfirmed_rotation';
+DELETE FROM pc.posture_findings WHERE kind = 'unconfirmed_rotation';
+ALTER TABLE pc.posture_finding_events FORCE ROW LEVEL SECURITY;
+ALTER TABLE pc.posture_findings FORCE ROW LEVEL SECURITY;
+ALTER TABLE pc.posture_findings
+    DROP CONSTRAINT posture_findings_kind,
+    ADD CONSTRAINT posture_findings_kind_check CHECK (kind IN ('excessive_grant', 'uncovered_path', 'unowned_agent',
+        'unsafe_delegation', 'stale_credential', 'unused_authority', 'unverified_sensitive_tool', 'credential_overreach')) NOT VALID;
+ALTER TABLE pc.posture_findings VALIDATE CONSTRAINT posture_findings_kind_check;
 DROP INDEX pc.credentials_candidate;
 ALTER TABLE pc.credentials
     DROP CONSTRAINT credentials_state_check,

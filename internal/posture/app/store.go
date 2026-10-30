@@ -82,7 +82,16 @@ func Reconcile(ctx context.Context, tx db.TenantTx, rec exapp.Recomputed) (Summa
 			AcceptedUntil: r.AcceptedUntil, Connection: r.ConnectionID, PathsTruncated: r.PathsTruncated,
 		})
 	}
-	cands := domain.Derive(Inputs(rec))
+	in := Inputs(rec)
+	// Activated, unconfirmed GitHub App key rotations (G0 M20 S20c, D259).
+	rots, err := q.UnconfirmedRotations(ctx, org)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rots {
+		in.Rotations = append(in.Rotations, domain.RotationInfo{ID: r.ID, Connection: r.ConnectionID, Name: r.ConnectionName, Since: r.Since})
+	}
+	cands := domain.Derive(in)
 	acts := domain.Reconcile(stored, cands, domain.Snapshot{
 		Now: rec.Loaded.Inputs.Now, Rights: rec.Rights, Truncated: rec.Snapshot.Truncated, Gaps: rec.Snapshot.Gaps,
 	})

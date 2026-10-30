@@ -79,6 +79,7 @@ func TestDeriveKinds(t *testing.T) {
 		CoverageFindings: []domain.CoverageFinding{{ID: cf, Connection: p(conn), Subject: "App 7", Excess: []string{"administration:write"}, Severity: "high"}},
 		Unverified:       map[string]bool{"payments.refund.create": true},
 		Irreversible:     map[string]bool{"payments.refund.create": true},
+		Rotations:        []domain.RotationInfo{{ID: ids.NewV7(), Connection: conn, Name: "payments", Since: now.Add(-25 * time.Hour)}},
 	})
 	var kinds []domain.Kind
 	for _, c := range got {
@@ -210,7 +211,7 @@ func TestReconcilePerKind(t *testing.T) {
 		t.Fatalf("truncated paths: %+v", acts)
 	}
 	for _, k := range domain.Kinds {
-		want := k == domain.UnownedAgent || k == domain.UnverifiedSensitiveTool || k == domain.StaleCredential
+		want := k == domain.UnownedAgent || k == domain.UnverifiedSensitiveTool || k == domain.StaleCredential || k == domain.UnconfirmedRotation
 		if k.CauseType() != want {
 			t.Errorf("%s cause-type %v", k, !want)
 		}

@@ -118,8 +118,19 @@ func (g *Gateway) verifyDue(ctx context.Context) {
 			}()
 			continue
 		}
-		o, err := g.engine.VerifyEffect(ctx, conn, l)
+		var o dispatch.Observation
+		var err error
+		if l.Purpose == dispatch.PurposeRotationTest || l.Purpose == dispatch.PurposeRotationConfirm {
+			// A GitHub App key rotation: the lease carries the sealed key (G0 M20 S20c).
+			o, err = g.engine.ProbeRotation(ctx, conn, l)
+		} else {
+			o, err = g.engine.VerifyEffect(ctx, conn, l)
+		}
 		switch {
+		case errors.Is(err, dispatch.ErrRotationLease):
+			g.log.ErrorContext(ctx, "security.rotation_lease_refused", slog.String("task_id", l.Task),
+				slog.String("connection_id", l.Connection), pclog.Err(err))
+			continue
 		case errors.Is(err, dispatch.ErrNotReviewedRead):
 			g.log.ErrorContext(ctx, "security.verification_refused", slog.String("task_id", l.Task),
 				slog.String("connection_id", l.Connection), slog.String("operation", l.Operation))

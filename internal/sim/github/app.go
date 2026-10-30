@@ -33,7 +33,7 @@ const (
 // client id.
 func (s *Server) verifyJWT(raw string) (AppJWT, error) {
 	parts := strings.Split(raw, ".")
-	if len(parts) != 3 || s.appKey == nil {
+	if len(parts) != 3 || len(s.liveKeys()) == 0 {
 		return AppJWT{}, errors.New("malformed")
 	}
 	var head struct {
@@ -47,7 +47,7 @@ func (s *Server) verifyJWT(raw string) (AppJWT, error) {
 		return AppJWT{}, err
 	}
 	sum := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
-	if err := rsa.VerifyPKCS1v15(s.appKey, crypto.SHA256, sum[:], sig); err != nil {
+	if err := s.verifySignature(sum[:], sig); err != nil {
 		return AppJWT{}, err
 	}
 	var c struct {
@@ -197,4 +197,75 @@ func (s *Server) revoke(w http.ResponseWriter, r *http.Request) {
 		rec.Status = http.StatusNoContent
 	}
 	s.requests = append(s.requests, rec)
+}
+
+// AddAppKey adds another private key to the App, as its settings allow
+// (G0 M20 S20c): its JWTs are accepted as the registered key's are.
+func (s *Server) AddAppKey(key *rsa.PublicKey) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.keys = append(s.keys, key)
+}
+
+// RevokeAppKey deletes one of the App's keys, as a person does in its
+// settings: its JWTs are refused from then on (401), unless the
+// KeepRevokedKeys fault holds.
+func (s *Server) RevokeAppKey(key *rsa.PublicKey) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.revoked = append(s.revoked, key)
+}
+
+// liveKeys are the App's keys whose JWTs are accepted.
+func (s *Server) liveKeys() []*rsa.PublicKey {
+	var out []*rsa.PublicKey
+	for _, k := range append([]*rsa.PublicKey{s.appKey}, s.keys...) {
+		if k == nil {
+			continue
+		}
+		if !s.faults.KeepRevokedKeys && slices.ContainsFunc(s.revoked, func(r *rsa.PublicKey) bool { return r.Equal(k) }) {
+			continue
+		}
+		out = append(out, k)
+	}
+	return out
+}
+
+// verifySignature checks an RS256 signature against the App's live keys.
+func (s *Server) verifySignature(sum, sig []byte) error {
+	err := errors.New("no key")
+	for _, k := range s.liveKeys() {
+		if err = rsa.VerifyPKCS1v15(k, crypto.SHA256, sum, sig); err == nil {
+			return nil
+		}
+	}
+	return err
+}
+
+// app answers GET /app for the App's JWT: the App's id and client id, as
+// GitHub names the App a key belongs to. A deleted key's JWT gets 401.
+func (s *Server) app(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec := Request{Method: r.Method, Path: r.URL.Path}
+	rec.Status = s.describeApp(w, r)
+	s.requests = append(s.requests, rec)
+}
+
+func (s *Server) describeApp(w http.ResponseWriter, r *http.Request) int {
+	bearer, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok {
+		return fail(w, http.StatusUnauthorized, "A JSON web token could not be decoded")
+	}
+	jwt, err := s.verifyJWT(bearer)
+	if err != nil {
+		return fail(w, http.StatusUnauthorized, err.Error())
+	}
+	s.jwts = append(s.jwts, jwt)
+	if s.faults.AppStatus != 0 {
+		return fail(w, s.faults.AppStatus, "Simulated app endpoint failure")
+	}
+	return reply(w, http.StatusOK, map[string]any{
+		"id": s.appID, "client_id": s.clientID, "slug": "pantherclaw-sim", "name": "PantherClaw (simulated)", "simulated": true,
+	})
 }

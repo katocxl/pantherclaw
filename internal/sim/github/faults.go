@@ -31,6 +31,12 @@ type Faults struct {
 	// whose contents GitHub refuses to return (403) while still listing
 	// them: a workflow file that cannot be read.
 	UnreadableFiles []string
+	// AppStatus, when set, is what GET /app answers instead of naming the
+	// App (G0 M20 S20c).
+	AppStatus int
+	// KeepRevokedKeys still accepts the JWTs of App keys deleted in the
+	// App's settings: a deletion GitHub has not applied yet.
+	KeepRevokedKeys bool
 }
 
 // SetFaults replaces the simulator's faults from the next request on.

@@ -1409,6 +1409,7 @@ type PcCredentialRotation struct {
 	RollbackUntil         *time.Time
 	ConfirmVerificationID *ids.UUID
 	ConfirmedAt           *time.Time
+	AwaitingSince         *time.Time
 	EndReason             *string
 	CreatedAt             time.Time
 	UpdatedAt             time.Time

@@ -6,6 +6,7 @@ package domain
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -214,15 +215,68 @@ type Probe struct {
 	// AppStatus and InstallationStatus are the HTTP statuses; zero when
 	// the call was not made or got no answer.
 	AppStatus, InstallationStatus int
+	// AppMatches: GET /app named the App the credential was sealed for.
+	AppMatches bool
 }
 
 // TestPassed reports whether a target test passed: GitHub accepted the
-// candidate for both the App and the installation.
+// candidate as the App it was sealed for, and for the installation.
 func (p Probe) TestPassed() bool {
-	return p.AppStatus == http.StatusOK && p.InstallationStatus == http.StatusOK
+	return p.AppStatus == http.StatusOK && p.AppMatches && p.InstallationStatus == http.StatusOK
 }
 
 // OldKeyRefused reports whether GitHub refused the old key (HR-520): GET
 // /app answered 401. Anything else (an acceptance, a rate limit, an error,
 // no answer) proves nothing, so the old credential is not revoked.
 func (p Probe) OldKeyRefused() bool { return p.AppStatus == http.StatusUnauthorized }
+
+// The fields a rotation lease's report carries (JSON pointers, as a
+// verification report's fields are).
+const (
+	FieldAppStatus          = "/app"
+	FieldAppMatches         = "/app_matches"
+	FieldInstallationStatus = "/installation"
+)
+
+// Fields is p as a report's fields.
+func (p Probe) Fields() map[string]string {
+	return map[string]string{
+		FieldAppStatus: strconv.Itoa(p.AppStatus), FieldAppMatches: strconv.FormatBool(p.AppMatches),
+		FieldInstallationStatus: strconv.Itoa(p.InstallationStatus),
+	}
+}
+
+// ProbeOf reads a report's fields; anything missing or malformed reads as
+// no answer, which passes no test and confirms nothing.
+func ProbeOf(fields map[string]string) Probe {
+	status := func(k string) int {
+		n, err := strconv.Atoi(fields[k])
+		if err != nil || n < 0 || n > 599 {
+			return 0
+		}
+		return n
+	}
+	return Probe{AppStatus: status(FieldAppStatus), AppMatches: fields[FieldAppMatches] == "true", InstallationStatus: status(FieldInstallationStatus)}
+}
+
+// RotationLease is a rotation lease's request as the claiming gateway
+// reads it (D259): the rotation and the sealed credential to test (the
+// candidate) or to confirm dead (the old key), in the same sealed form as
+// the gateway's configuration and sealed to that gateway's broker key. The
+// task row holds the rotation's id only (HR-061).
+type RotationLease struct {
+	Rotation   string             `json:"rotation"`
+	Credential RotationCredential `json:"credential"`
+}
+
+// RotationCredential is the sealed credential of a rotation lease.
+type RotationCredential struct {
+	ID           string   `json:"id"`
+	Version      int32    `json:"version"`
+	BrokerKey    string   `json:"broker_key_id"`
+	Sealed       []byte   `json:"sealed"`
+	AllowedHosts []string `json:"allowed_hosts"`
+	Header       string   `json:"header"`
+	Scheme       string   `json:"scheme"`
+	Kind         string   `json:"kind"`
+}

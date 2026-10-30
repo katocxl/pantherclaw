@@ -110,6 +110,11 @@ type Server struct {
 	appID    int64
 	clientID string
 	appKey   *rsa.PublicKey
+	// keys are the App's other private keys' public halves, and revoked
+	// those deleted in its settings (G0 M20 S20c): GitHub accepts a JWT of
+	// any key not deleted.
+	keys     []*rsa.PublicKey
+	revoked  []*rsa.PublicKey
 	installs map[int64]*Installation
 	tokens   map[string]*Token
 	repos    map[string]*Repo
@@ -226,6 +231,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /app/installations/{id}/access_tokens", s.accessToken)
 	mux.HandleFunc("DELETE /installation/token", s.revoke)
 	mux.HandleFunc("GET /app/installations/{id}", s.installation)
+	mux.HandleFunc("GET /app", s.app)
 	mux.HandleFunc("GET /installation/repositories", s.installationRepositories)
 	mux.HandleFunc("GET /orgs/{org}/installations", s.orgInstallations)
 	s.repoRoutes(mux)

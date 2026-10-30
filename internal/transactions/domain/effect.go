@@ -64,7 +64,16 @@ const (
 	// merge starts; G0 M8 W1c): never dispatched, it is found by a
 	// matched lookup.
 	PurposeConsequence Purpose = "consequence"
+	// PurposeRotationTest tests a GitHub App key rotation's candidate at
+	// GitHub, and PurposeRotationConfirm confirms GitHub refuses the old
+	// key (G0 M20 S20c, D253). Neither belongs to a transaction; the lease
+	// carries the sealed credential.
+	PurposeRotationTest    Purpose = "credential_rotation_test"
+	PurposeRotationConfirm Purpose = "credential_rotation_confirm"
 )
+
+// Rotation reports whether p is a rotation lease's purpose.
+func (p Purpose) Rotation() bool { return p == PurposeRotationTest || p == PurposeRotationConfirm }
 
 // Observation is what one verification read reported (HR-190): only the
 // fields the verifier declares, by JSON pointer, as their JSON text (a

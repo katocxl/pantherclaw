@@ -146,7 +146,7 @@ func TestHR519_RollbackOnlyBeforeConfirmationInSchema(t *testing.T) {
 
 	moved := newM20Fixture(t, d.AppPool(t))
 	moved.activate(t, "1 hour")
-	moved.mustExec(t, "UPDATE pc.credential_rotations SET state = 'AWAITING_OLD_REMOVAL' WHERE id = $1", moved.rotation)
+	moved.mustExec(t, "UPDATE pc.credential_rotations SET state = 'AWAITING_OLD_REMOVAL', awaiting_since = now() WHERE id = $1", moved.rotation)
 	moved.mustExec(t, "UPDATE pc.credentials SET state = 'REVOKED', revoked_at = now(), revoked_by = 'test' WHERE id = $1", moved.candidate)
 	moved.want(t, m5Check, "the old key made ACTIVE after the window closed",
 		"UPDATE pc.credentials SET state = 'ACTIVE', superseded_at = NULL WHERE id = $1", moved.old)
@@ -166,8 +166,9 @@ func TestT224_RotationScheduleInSchema(t *testing.T) {
 	f.want(t, m5Check, "TESTING back to CANDIDATE_SEALED", "UPDATE pc.credential_rotations SET state = 'CANDIDATE_SEALED' WHERE id = $1", f.rotation)
 	f.want(t, m5Check, "confirmed without activation", "UPDATE pc.credential_rotations SET state = 'CONFIRMED', confirmed_at = now(), finished_at = now() WHERE id = $1", f.rotation)
 	f.activate(t, "0 seconds")
-	f.mustExec(t, "UPDATE pc.credential_rotations SET state = 'AWAITING_OLD_REMOVAL' WHERE id = $1", f.rotation)
+	f.mustExec(t, "UPDATE pc.credential_rotations SET state = 'AWAITING_OLD_REMOVAL', awaiting_since = now() WHERE id = $1", f.rotation)
 	f.mustExec(t, "UPDATE pc.credential_rotations SET state = 'CONFIRMING' WHERE id = $1", f.rotation)
+	f.want(t, m5Check, "awaiting_since moved", "UPDATE pc.credential_rotations SET awaiting_since = now() - interval '1 day' WHERE id = $1", f.rotation)
 	f.mustExec(t, "UPDATE pc.credential_rotations SET state = 'AWAITING_OLD_REMOVAL' WHERE id = $1", f.rotation)
 	f.mustExec(t, "UPDATE pc.credential_rotations SET state = 'CONFIRMING' WHERE id = $1", f.rotation)
 	f.mustExec(t, "UPDATE pc.credential_rotations SET state = 'CONFIRMED', confirmed_at = now(), finished_at = now() WHERE id = $1", f.rotation)
