@@ -54568,7 +54568,9 @@
           "MCP_STATE_KIND_HOLD",
           "MCP_STATE_KIND_TASK",
           "MCP_STATE_KIND_SESSION",
-          "MCP_STATE_KIND_ELICITATION"
+          "MCP_STATE_KIND_ELICITATION",
+          "MCP_STATE_KIND_A2A_TASK",
+          "MCP_STATE_KIND_A2A_CONTEXT"
         ],
         "description": "MCPStateKind is what an MCP state entry holds (G0 M15 D12)."
       },

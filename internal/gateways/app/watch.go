@@ -98,6 +98,8 @@ type Hub struct {
 	// or not: the gateway certificate cache forgets the org's entries
 	// (HR-492).
 	notified func(ids.OrgID)
+	// reconnected, when set, runs on each new LISTEN.
+	reconnected func()
 	// leases counts each certificate's streams across replicas.
 	leases *ratelimit.Leases
 
@@ -128,10 +130,11 @@ func NewHub(pool *db.Pool, log *slog.Logger) *Hub {
 }
 
 // ForgetOnNotify makes every pc_containment notification also forget the
-// org's cached certificate checks in svc (G0 M19 D201, HR-492). Call it
-// before Run.
+// org's cached certificate checks in svc (G0 M19 D201, HR-492), and each
+// new LISTEN forget them all: a notification missed while it was down could
+// be for any org, watched or not (D224). Call it before Run.
 func (h *Hub) ForgetOnNotify(svc *Service) *Hub {
-	h.notified = svc.ForgetOrg
+	h.notified, h.reconnected = svc.ForgetOrg, svc.ForgetAll
 	return h
 }
 
@@ -309,6 +312,9 @@ func (h *Hub) Run(ctx context.Context) error {
 	for ctx.Err() == nil {
 		err := h.listen(ctx, func() {
 			backoff = listenRetryFirst
+			if h.reconnected != nil {
+				h.reconnected()
+			}
 			h.wakeAll()
 		})
 		if ctx.Err() != nil {

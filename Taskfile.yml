@@ -186,7 +186,7 @@ tasks:
         cmd: >-
           PC_TEST_REQUIRE_DB=1
           PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5434/postgres?sslmode=disable"
-          go test -tags "integration failover" -count=1 -timeout 20m -run '{{.ITEM}}' ./test/e2e/
+          go test -tags "integration failover" -count=1 -v -timeout 20m -run '{{.ITEM}}' ./test/e2e/
 
   test:github-live:
     desc: "Manual and opt-in: the M8 GitHub run and the v0.1.0 three routes and coding to production against GitHub itself with your sandbox App (needs Docker; docs/runbooks/github-live.md); never part of check"

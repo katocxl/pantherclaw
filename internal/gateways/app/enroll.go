@@ -341,6 +341,13 @@ func (c *authCache) forget(cert ids.UUID) {
 	delete(c.entries, cert)
 }
 
+func (c *authCache) forgetAll() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.all++
+	clear(c.entries)
+}
+
 func (c *authCache) forgetGateway(gateway ids.UUID) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -378,3 +385,7 @@ func (c *authCache) forgetOrg(org ids.OrgID) {
 // at most authTTL (HR-492). The payload names the org only (HR-056), so
 // all of its entries go.
 func (s *Service) ForgetOrg(org ids.OrgID) { s.auth.forgetOrg(org) }
+
+// ForgetAll drops every cached certificate check, and any check still
+// being read is not cached (D224). The hub calls it on each new LISTEN.
+func (s *Service) ForgetAll() { s.auth.forgetAll() }

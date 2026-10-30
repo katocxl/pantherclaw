@@ -74,6 +74,9 @@ type stack struct {
 	// a restart (serve).
 	serverCfg string
 	logs      syncBuffer
+	// logGateways keeps the gateways' logs in gatewayLogs (failover).
+	logGateways bool
+	gatewayLogs syncBuffer
 
 	// The gateway's configuration and its enrollment file (mTLS, M6), the
 	// running gateway and the seeded payments connection.
@@ -113,10 +116,12 @@ type stack struct {
 }
 
 type options struct {
-	budget   string
-	maxCount int
-	faults   payments.Faults
-	timeout  time.Duration
+	// logGateways keeps the gateways' logs (stack.gatewayLogs).
+	logGateways bool
+	budget      string
+	maxCount    int
+	faults      payments.Faults
+	timeout     time.Duration
 	// access is the payments connection's access mode (dev seed
 	// --access-mode); empty is none.
 	access string
@@ -466,11 +471,11 @@ func (s *stack) startGateway(t *testing.T) *gateway.Gateway {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	id, err := gateway.LoadOrEnroll(ctx, &s.gatewayCfg, s.gatewayEnroll, pclog.Discard())
+	id, err := gateway.LoadOrEnroll(ctx, &s.gatewayCfg, s.gatewayEnroll, s.gatewayLog())
 	if err != nil {
 		t.Fatal(err)
 	}
-	g, err := gateway.New(ctx, &s.gatewayCfg, id, pclog.Discard())
+	g, err := gateway.New(ctx, &s.gatewayCfg, id, s.gatewayLog())
 	if err != nil {
 		t.Fatal(err)
 	}

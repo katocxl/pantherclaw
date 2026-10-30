@@ -52,10 +52,16 @@ func failoverStack(t *testing.T, v failover.Variant, replication db.Replication)
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = c.Stop(context.Background()) })
-	s := start(t, options{budget: "1000.00", brokerKey: true})
+	s := start(t, options{budget: "1000.00", brokerKey: true, logGateways: true})
 	t.Cleanup(func() {
 		if t.Failed() {
 			t.Logf("server log:\n%s", s.logs.String())
+		}
+		// Every gateway stream reconnect, for the gate's record (D225).
+		for line := range strings.SplitSeq(s.gatewayLogs.String(), "\n") {
+			if strings.Contains(line, "containment_stream_ended") {
+				t.Logf("gateway: %s", line)
+			}
 		}
 	})
 

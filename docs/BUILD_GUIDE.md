@@ -725,6 +725,7 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Organization identity providers** (PN-012.7, G6) as two-person protected changes; **API-key IP allow lists** (PN-012.8).
 - **Platform** (G7): pclaw secrets in the OS keychain (PN-012.9); OpenBao Transit as a key service with in-place re-wrap, and BlobStore and fan-out ports (PN-012.10).
 - Migrations `00216`–`00224` (`00225` spare); SCIM and SAML follow M18 (G8).
+
 ### M19 — Scale: high availability, hosted per-org gateways and decision speed
 **HR:** HR-490..505 · **PN:** PN-010.7, PN-010.4, PN-011.1 (rest) · **ADR:** 0040, 0041 · **G0:** [g0/M19.md](g0/M19.md).
 - **High availability** (PN-010.7, [ADR-0040](adr/0040-high-availability-semantics.md)):

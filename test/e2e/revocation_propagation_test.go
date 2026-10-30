@@ -22,7 +22,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	gwapp "github.com/katocxl/pantherclaw/internal/gateways/app"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
-	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	rapp "github.com/katocxl/pantherclaw/internal/response/app"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -170,11 +169,11 @@ func (s *stack) watchingGateway(t *testing.T) *gateway.Gateway {
 	cfg := s.gatewayCfg
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	id, err := gateway.LoadOrEnroll(ctx, &cfg, s.gatewayEnroll, pclog.Discard())
+	id, err := gateway.LoadOrEnroll(ctx, &cfg, s.gatewayEnroll, s.gatewayLog())
 	if err != nil {
 		t.Fatal(err)
 	}
-	g, err := gateway.New(ctx, &cfg, id, pclog.Discard())
+	g, err := gateway.New(ctx, &cfg, id, s.gatewayLog())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,6 +210,7 @@ func reachesWhen(t *testing.T, gws []*gateway.Gateway, since time.Time, shows fu
 		}
 		time.Sleep(time.Millisecond)
 	}
+	t.Logf("seen by each gateway after %v", took)
 	return slices.Max(took)
 }
 

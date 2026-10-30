@@ -12,6 +12,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -187,6 +188,68 @@ func TestHR492_RevocationReachesEveryReplicaThroughListen(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.refusedWithin(t, id2, 2*time.Second)
+}
+
+// TestHR492_AReconnectForgetsTheWholeCache: a certificate revoked on
+// replica a while b's LISTEN is down notifies nobody, and b watches no org,
+// yet the reconnect drops every cached check, so b refuses it (b's own
+// clock stands still) (G0 M19 D224).
+// Covers: HR-492, T-214
+func TestHR492_AReconnectForgetsTheWholeCache(t *testing.T) {
+	e := newReplicaEnv(t)
+	id := e.enroll(t)
+	if err := e.b.Authenticate(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	h := NewHub(e.pb, nil).ForgetOnNotify(e.b)
+	missed := make(chan error, 1)
+	var once sync.Once
+	h.listenDown = func() {
+		once.Do(func() { missed <- e.a.RevokeCertificate(e.admin, id.Gateway, id.Cert) })
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = h.Run(ctx) }()
+
+	// Drop the LISTEN connection once it is up; then the check is cached
+	// again, so only the reconnect can remove it.
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		var n int
+		if err := e.pb.InTenantTx(ctx, e.org, func(ctx context.Context, tx db.TenantTx) error {
+			return tx.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity
+				WHERE datname = current_database() AND query = 'LISTEN pc_containment'`).Scan(&n)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if n == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d LISTEN connections", n)
+		}
+	}
+	if err := e.b.Authenticate(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	if !e.b.auth.has(id.Cert) {
+		t.Fatal("replica b did not cache the check")
+	}
+	if err := e.pb.InTenantTx(ctx, e.org, func(ctx context.Context, tx db.TenantTx) error {
+		var n int
+		return tx.QueryRow(ctx, `SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity
+			WHERE datname = current_database() AND query = 'LISTEN pc_containment'`).Scan(&n)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-missed:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the hub did not see LISTEN go down")
+	}
+	e.refusedWithin(t, id, 2*time.Second)
 }
 
 // TestHR492_WithoutListenTheCacheLifetimeBoundsIt: with no hub on replica
