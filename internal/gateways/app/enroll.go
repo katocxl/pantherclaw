@@ -233,7 +233,12 @@ func Fingerprint(public []byte) string {
 // row on every call (HR-181): the gateway must be ACTIVE and the
 // certificate unexpired by the database clock and ACTIVE, or SUPERSEDED by
 // a renewal less than SupersededGrace ago. Results are cached at most one
-// second, so revocation applies within a second.
+// second. The replica that revokes forgets at once, and every other
+// replica forgets the org's entries on its LISTEN pc_containment
+// notification (ForgetOrg, G0 M19 D201, HR-492). A check read before a
+// forget is not cached after it (the generations, D215), so a revocation
+// whose notification arrives is applied from then on; a missed
+// notification costs at most authTTL.
 func (s *Service) Authenticate(ctx context.Context, id Identity) error {
 	if ok, hit := s.auth.get(id, s.clk.Now()); hit {
 		if ok {
@@ -241,6 +246,7 @@ func (s *Service) Authenticate(ctx context.Context, id Identity) error {
 		}
 		return ErrGatewayCredentials
 	}
+	gen := s.auth.generation(id.Org)
 	ok := false
 	err := s.pool.InTenantTx(ctx, id.Org, func(ctx context.Context, tx db.TenantTx) error {
 		r, err := dbq.New(tx).GatewayCertAuth(ctx, id.Org, id.Cert)
@@ -260,31 +266,43 @@ func (s *Service) Authenticate(ctx context.Context, id Identity) error {
 	if err != nil {
 		return err // fail closed, not cached
 	}
-	s.auth.put(id, ok, s.clk.Now())
+	s.auth.put(id, ok, s.clk.Now(), gen)
 	if !ok {
 		return ErrGatewayCredentials
 	}
 	return nil
 }
 
-// authCache remembers recent certificate checks for at most authTTL.
+// authCache remembers recent certificate checks for at most authTTL. Every
+// forget moves a generation: the cache's own (forget, forgetGateway) or
+// the org's (forgetOrg). A check is cached only if neither moved while it
+// was read, so a check read before a revocation was forgotten never
+// outlives the forget.
 type authCache struct {
 	mu      sync.Mutex
 	entries map[ids.UUID]authEntry
+	all     uint64
+	orgs    map[ids.OrgID]uint64
 }
 
 type authEntry struct {
+	org     ids.OrgID
 	gateway ids.UUID
 	ok      bool
 	until   time.Time
 }
+
+// authGen is the cache's and an org's generation when a check began.
+type authGen struct{ all, org uint64 }
 
 const (
 	authTTL        = time.Second
 	authCacheLimit = 4096
 )
 
-func newAuthCache() authCache { return authCache{entries: map[ids.UUID]authEntry{}} }
+func newAuthCache() authCache {
+	return authCache{entries: map[ids.UUID]authEntry{}, orgs: map[ids.OrgID]uint64{}}
+}
 
 func (c *authCache) get(id Identity, now time.Time) (ok, hit bool) {
 	c.mu.Lock()
@@ -296,27 +314,67 @@ func (c *authCache) get(id Identity, now time.Time) (ok, hit bool) {
 	return e.ok, true
 }
 
-func (c *authCache) put(id Identity, ok bool, now time.Time) {
+// generation is taken before a check is read from the database.
+func (c *authCache) generation(org ids.OrgID) authGen {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return authGen{all: c.all, org: c.orgs[org]}
+}
+
+// put caches a check read at generation gen, unless a forget came since.
+func (c *authCache) put(id Identity, ok bool, now time.Time, gen authGen) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if gen.all != c.all || gen.org != c.orgs[id.Org] {
+		return
+	}
 	if len(c.entries) >= authCacheLimit {
 		clear(c.entries)
 	}
-	c.entries[id.Cert] = authEntry{gateway: id.Gateway, ok: ok, until: now.Add(authTTL)}
+	c.entries[id.Cert] = authEntry{org: id.Org, gateway: id.Gateway, ok: ok, until: now.Add(authTTL)}
 }
 
 func (c *authCache) forget(cert ids.UUID) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.all++
 	delete(c.entries, cert)
 }
 
 func (c *authCache) forgetGateway(gateway ids.UUID) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.all++
 	for k, e := range c.entries {
 		if e.gateway == gateway {
 			delete(c.entries, k)
 		}
 	}
 }
+
+func (c *authCache) forgetOrg(org ids.OrgID) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.orgs) >= authCacheLimit {
+		// Bounded: dropping the org generations moves the cache's own, so
+		// no check read before this one is cached either.
+		clear(c.orgs)
+		c.all++
+	}
+	c.orgs[org]++
+	for k, e := range c.entries {
+		if e.org == org {
+			delete(c.entries, k)
+		}
+	}
+}
+
+// ForgetOrg drops the cached certificate checks of org's gateways, and
+// any check of the org still being read is not cached (D215). The
+// containment hub calls it on every pc_containment notification of the
+// org, which a revocation (an epoch bump) and a gateway's disable or
+// revoke (its state) send, so another replica's revocation applies here
+// from the moment its notification arrives; a missed notification costs
+// at most authTTL (HR-492). The payload names the org only (HR-056), so
+// all of its entries go.
+func (s *Service) ForgetOrg(org ids.OrgID) { s.auth.forgetOrg(org) }

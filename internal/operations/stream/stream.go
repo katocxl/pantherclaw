@@ -35,6 +35,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/ratelimit"
 	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/reflex/feed"
@@ -130,9 +131,11 @@ type Handler struct {
 	// session cookie (browser.go, HR-344).
 	sessions *webguard.Sessions
 
-	mu sync.Mutex
-	// active counts open streams per principal in this process: the
-	// limit is per replica, so N replicas allow N times MaxPerCaller.
+	// leases counts open streams per principal across every replica
+	// (pc.stream_leases, G0 M19 D201, HR-491) when the feed is the
+	// database's; otherwise active counts them in this process (tests).
+	leases *ratelimit.Leases
+	mu     sync.Mutex
 	active map[string]int
 }
 
@@ -152,10 +155,14 @@ func New(feed Feed, auth Authenticator, scoper Scoper, expiry func(string) (time
 	if expiry == nil {
 		expiry = func(string) (time.Time, bool) { return time.Time{}, false }
 	}
-	return &Handler{
+	h := &Handler{
 		feed: feed, auth: auth, scoper: scoper, expiry: expiry, clk: clk, cfg: cfg.withDefaults(), log: log,
 		active: map[string]int{},
-	}, nil
+	}
+	if pf, ok := feed.(PoolFeed); ok && pf.Pool != nil {
+		h.leases = ratelimit.NewLeases(pf.Pool, log)
+	}
+	return h, nil
 }
 
 // Mount adds the stream to mux.
@@ -203,22 +210,31 @@ var (
 	errBadParam   = errors.New("the only parameter is after, a sequence number")
 )
 
-func (h *Handler) acquire(principal string) bool {
+// acquire takes one of the caller's MaxPerCaller streams. It returns
+// ratelimit.ErrLeaseLimit when the caller has them all, another error when
+// the leases cannot be read (the stream is refused), and a release and a
+// channel closed if the slot is lost.
+func (h *Handler) acquire(ctx context.Context, org ids.OrgID, principal string) (func(), <-chan struct{}, error) {
+	if h.leases != nil {
+		l, err := h.leases.Acquire(ctx, org, ratelimit.LeaseOpsStream, principal, h.cfg.MaxPerCaller)
+		if err != nil {
+			return nil, nil, err
+		}
+		return l.Release, l.Lost(), nil
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.active[principal] >= h.cfg.MaxPerCaller {
-		return false
+		return nil, nil, ratelimit.ErrLeaseLimit
 	}
 	h.active[principal]++
-	return true
-}
-
-func (h *Handler) release(principal string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.active[principal]--; h.active[principal] <= 0 {
-		delete(h.active, principal)
-	}
+	return func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		if h.active[principal]--; h.active[principal] <= 0 {
+			delete(h.active, principal)
+		}
+	}, nil, nil
 }
 
 // ServeHTTP serves one stream.
@@ -245,13 +261,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	principal := c.Org.String() + "/" + c.Principal.String()
-	if !h.acquire(principal) {
+	release, lost, err := h.acquire(ctx, c.Org, principal)
+	switch {
+	case errors.Is(err, ratelimit.ErrLeaseLimit):
 		telemetry.RateLimited(r.Context(), telemetry.ScopeOpsStream)
 		w.Header().Set("Retry-After", "30")
 		http.Error(w, "too many streams", http.StatusTooManyRequests)
 		return
+	case err != nil:
+		h.log.ErrorContext(ctx, "operations.stream_lease", pclog.Err(err))
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+		return
 	}
-	defer h.release(principal)
+	defer release()
 	if !resume {
 		if after, err = h.feed.Head(ctx, c.Org); err != nil {
 			h.log.ErrorContext(ctx, "operations.stream_head", pclog.Err(err))
@@ -261,7 +283,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	s := &session{
 		h: h, w: w, rc: http.NewResponseController(w), reauth: reauth, caller: c, scopes: scopes, cursor: after,
-		checked: h.clk.Now(), expires: expires,
+		checked: h.clk.Now(), expires: expires, lost: lost,
 	}
 	hd := w.Header()
 	hd.Set("Content-Type", "text/event-stream")
@@ -299,6 +321,8 @@ type session struct {
 	expires time.Time
 	// checked is when the credential and scopes were last checked.
 	checked time.Time
+	// lost closes when the stream's lease lapsed (nil without leases).
+	lost <-chan struct{}
 }
 
 // Close reasons (logged; the client sees the stream end).
@@ -309,6 +333,7 @@ const (
 	closedPermission = "permission_removed"
 	closedWrite      = "write_failed"
 	closedFeed       = "feed_failed"
+	closedLease      = "lease_lost"
 )
 
 func (s *session) run(ctx context.Context) string {
@@ -341,6 +366,8 @@ func (s *session) run(ctx context.Context) string {
 			return closedClient
 		case <-expired:
 			return closedExpired
+		case <-s.lost:
+			return closedLease
 		case <-recheck.C:
 			if reason := s.recheck(ctx); reason != "" {
 				return reason

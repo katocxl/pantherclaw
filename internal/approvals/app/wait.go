@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ import (
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/ratelimit"
 )
 
 // Wait handles (slice 212, HR-174). A held agent waits on its
@@ -74,17 +76,19 @@ func (v WaitView) same(o WaitView) bool {
 
 // Waits serves wait handles: reads, long polls and streams, woken by
 // LISTEN pc_wait (whose payload is "org_id:transaction_id" only, HR-056),
-// within per-instance and per-server limits.
+// within per-instance and per-server limits. The per-instance limit holds
+// across every replica (pc.stream_leases, G0 M19 D201, HR-491); the
+// per-server limit bounds this process only.
 type Waits struct {
 	pool                   *db.Pool
 	log                    *slog.Logger
 	perInstance, perServer int
 	longPoll               time.Duration
+	leases                 *ratelimit.Leases
 
-	mu        sync.Mutex
-	instances map[ids.UUID]int
-	total     int
-	waiters   map[waitKey]map[chan struct{}]struct{}
+	mu      sync.Mutex
+	total   int
+	waiters map[waitKey]map[chan struct{}]struct{}
 }
 
 type waitKey struct {
@@ -105,7 +109,7 @@ func NewWaits(pool *db.Pool, perInstance, perServer int, log *slog.Logger) *Wait
 	}
 	return &Waits{
 		pool: pool, log: log, perInstance: perInstance, perServer: perServer, longPoll: LongPollMax,
-		instances: map[ids.UUID]int{}, waiters: map[waitKey]map[chan struct{}]struct{}{},
+		leases: ratelimit.NewLeases(pool, log), waiters: map[waitKey]map[chan struct{}]struct{}{},
 	}
 }
 
@@ -161,23 +165,34 @@ func (w *Waits) Read(ctx context.Context, org ids.OrgID, instance, run, handle i
 	return v, nil
 }
 
-// acquire takes one of the instance's and the server's wait slots.
-func (w *Waits) acquire(instance ids.UUID) (func(), error) {
+// acquire takes one of the server's wait slots, then one of the instance's
+// leases (across replicas). It also returns a channel closed if the lease
+// is lost. A lease that cannot be read refuses the wait.
+func (w *Waits) acquire(ctx context.Context, org ids.OrgID, instance ids.UUID) (func(), <-chan struct{}, error) {
 	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.total >= w.perServer || w.instances[instance] >= w.perInstance {
-		return nil, ErrTooManyWaits
+	if w.total >= w.perServer {
+		w.mu.Unlock()
+		return nil, nil, ErrTooManyWaits
 	}
 	w.total++
-	w.instances[instance]++
-	return func() {
+	w.mu.Unlock()
+	free := func() {
 		w.mu.Lock()
 		defer w.mu.Unlock()
 		w.total--
-		if w.instances[instance]--; w.instances[instance] <= 0 {
-			delete(w.instances, instance)
+	}
+	l, err := w.leases.Acquire(ctx, org, ratelimit.LeaseWait, instance.String(), w.perInstance)
+	if err != nil {
+		free()
+		if errors.Is(err, ratelimit.ErrLeaseLimit) {
+			return nil, nil, ErrTooManyWaits
 		}
-	}, nil
+		return nil, nil, err
+	}
+	return func() {
+		l.Release()
+		free()
+	}, l.Lost(), nil
 }
 
 // subscribe returns a channel woken when the handle's request changes.
@@ -220,11 +235,11 @@ func (w *Waits) Wait(ctx context.Context, org ids.OrgID, instance, run, handle i
 	if timeout <= 0 || timeout > w.longPoll {
 		timeout = w.longPoll
 	}
-	release, err := w.acquire(instance)
+	release, _, err := w.acquire(ctx, org, instance)
 	if err != nil {
 		return WaitView{}, false, err
 	}
-	defer release()
+	defer release() // a long poll ends within LongPollMax, before a lease could lapse
 	ch, unsubscribe := w.subscribe(org, handle)
 	defer unsubscribe()
 	until := time.NewTimer(timeout)
@@ -248,7 +263,7 @@ func (w *Waits) Wait(ctx context.Context, org ids.OrgID, instance, run, handle i
 // heartbeat every StreamHeartbeat, until the state is final, StreamLifetime
 // passes, ctx ends or send fails (the SSE route, HR-174).
 func (w *Waits) Stream(ctx context.Context, org ids.OrgID, instance, handle ids.UUID, send func(v WaitView, heartbeat bool) error) error {
-	release, err := w.acquire(instance)
+	release, lost, err := w.acquire(ctx, org, instance)
 	if err != nil {
 		return err
 	}
@@ -271,6 +286,8 @@ func (w *Waits) Stream(ctx context.Context, org ids.OrgID, instance, handle ids.
 			return nil
 		case <-life.C:
 			return nil
+		case <-lost:
+			return nil // the client waits again and takes a new lease
 		case <-beat.C:
 			if err := send(last, true); err != nil {
 				return err

@@ -132,3 +132,55 @@ func TestHR376_CountersAreVisibleOnlyInTheirPurpose(t *testing.T) {
 		t.Fatal("another purpose's insert was accepted")
 	}
 }
+
+// TestHR490_LeasedLimitsHoldAcrossReplicas: two replicas (two pools, each
+// with its own Leased limiter over its own Store) spending one key
+// concurrently admit at most limit + (N−1)·k between them, and here no
+// more than the limit, which the shared window caps; a closed store with
+// no chunk left refuses (an error).
+// Covers: HR-490, T-214
+func TestHR490_LeasedLimitsHoldAcrossReplicas(t *testing.T) {
+	d := dbtest.New(t)
+	pools := []*db.Pool{d.AppPool(t), d.AppPool(t)}
+	replicas := []*ratelimit.Leased{
+		ratelimit.NewLeased(ratelimit.NewStore(pools[0]), nil), ratelimit.NewLeased(ratelimit.NewStore(pools[1]), nil),
+	}
+	ctx := context.Background()
+	const limit = 64
+	startFreshWindow()
+	k := ratelimit.ChunkSize(limit)
+	key := ids.NewV7().String()
+	var allowed atomic.Int32
+	var wg sync.WaitGroup
+	for i := range 200 {
+		wg.Go(func() {
+			dec, err := replicas[i%2].Take(ctx, "api.org", key, freshWindow, 1, limit)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			if dec.Allowed {
+				allowed.Add(1)
+			}
+		})
+	}
+	wg.Wait()
+	if n := int(allowed.Load()); n > limit || n > limit+k || n < limit-k {
+		t.Fatalf("%d of 200 allowed across two replicas, limit %d, k %d", n, limit, k)
+	}
+	pools[0].Close()
+	other := ids.NewV7().String()
+	if dec, err := replicas[0].Take(ctx, "api.org", other, time.Hour, 1, limit); err == nil || dec.Allowed {
+		t.Fatalf("a closed store: %+v %v", dec, err)
+	}
+}
+
+// freshWindow is the window of the tests that fill one shared window from
+// two replicas; startFreshWindow waits until one has just begun, so the
+// takes never straddle a boundary (windows are aligned to the Unix epoch,
+// D215).
+const freshWindow = 30 * time.Second
+
+func startFreshWindow() {
+	time.Sleep(time.Until(time.Now().Truncate(freshWindow).Add(freshWindow + 300*time.Millisecond)))
+}

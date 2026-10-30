@@ -59,10 +59,11 @@ var ExportProcedures = []string{
 func isExport(procedure string) bool { return slices.Contains(ExportProcedures, procedure) }
 
 // APILimits is the rpcauth option of limits.api.*: per org and per
-// credential a minute on this replica, procedures the plan gate classes
-// safety or allow skipping the per-org limit (D27), and the export cap per
-// org an hour counted in the shared store over pool (D45; in memory when
-// pool is nil, tests only).
+// credential a minute, spent from leased chunks of the shared store so
+// they hold across replicas (G0 M19 D201, HR-490), procedures the plan
+// gate classes safety or allow skipping the per-org limit (D27), and the
+// export cap per org an hour counted in the shared store (D45). Both are
+// in memory when pool is nil (tests only).
 func (c *Config) APILimits(pool *db.Pool, log *slog.Logger) rpcauth.Option {
 	l := rpcauth.APILimits{
 		PerOrg: c.Limits.API.PerOrgPerMinute, PerCredential: c.Limits.API.PerCredentialPerMinute,
@@ -70,6 +71,7 @@ func (c *Config) APILimits(pool *db.Pool, log *slog.Logger) rpcauth.Option {
 	}
 	if pool != nil {
 		l.Shared = ratelimit.NewStore(pool)
+		l.Limiter = ratelimit.NewLeased(l.Shared, nil)
 	}
 	return rpcauth.WithAPILimits(l)
 }

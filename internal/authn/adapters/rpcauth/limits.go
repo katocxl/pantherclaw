@@ -21,10 +21,12 @@ import (
 // counted per organization and per credential in one-minute windows, after
 // the permission check and before the plan gate. Gateway, workload,
 // gateway-enrollment and public procedures return before this layer, so
-// enforcement is never throttled. The counters are in memory: the limits
-// hold per replica. Procedures the plan gate classes safety or allow
-// (containment, revocations, WhoAmI) skip the per-org limit and are
-// counted per credential only (D27).
+// enforcement is never throttled. The server counts in leased chunks of the
+// shared store, so the limits hold across replicas (G0 M19 D201, HR-490).
+// Procedures the plan gate classes safety or allow (containment,
+// revocations, WhoAmI) skip the per-org limit and are counted per
+// credential only (D27). A counter error refuses the call, except for
+// those procedures, which a broken counter never locks out (D201).
 
 // APIWindow is the API limits' window.
 const APIWindow = time.Minute
@@ -46,7 +48,8 @@ type APILimits struct {
 	// PerCredential bounds one credential's calls a minute: an API key, a
 	// service-account key, or a person's CLI or browser session.
 	PerCredential int
-	// Limiter counts the calls (ratelimit.NewMemory when nil).
+	// Limiter counts the calls: ratelimit.Leased over the shared store in
+	// the server, ratelimit.NewMemory when nil (tests).
 	Limiter ratelimit.Limiter
 	// OrgExempt reports procedures that skip the per-org limit (still
 	// counted per credential): the plan gate's safety and allow classes,
@@ -108,7 +111,8 @@ func (l *APILimits) limit(ctx context.Context, info *connect.CallInfo, c tapp.Ca
 	}
 	org := c.Org.String()
 	perOrg := l.PerOrg
-	if l.OrgExempt != nil && l.OrgExempt(procedure) {
+	exempt := l.OrgExempt != nil && l.OrgExempt(procedure)
+	if exempt {
 		perOrg = 0
 	}
 	for _, k := range []struct {
@@ -123,7 +127,17 @@ func (l *APILimits) limit(ctx context.Context, info *connect.CallInfo, c tapp.Ca
 		}
 		d, err := l.Limiter.Take(ctx, k.scope, k.key, APIWindow, 1, k.limit)
 		if err != nil {
-			return err
+			// The shared counter is unavailable: refuse (HR-376, HR-490),
+			// except a safety or allow procedure (D27, D201).
+			if l.Log != nil {
+				l.Log.ErrorContext(ctx, "rpc.rate_unavailable", slog.String("procedure", procedure),
+					slog.Bool("admitted", exempt), pclog.Err(err))
+			}
+			if exempt {
+				continue
+			}
+			info.ResponseHeader().Set("Retry-After", "60")
+			return ErrRateLimited
 		}
 		if !d.Allowed {
 			info.ResponseHeader().Set("Retry-After", strconv.Itoa(ratelimit.RetryAfterSeconds(d.RetryAfter)))

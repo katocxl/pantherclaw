@@ -32,7 +32,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
-	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -69,7 +68,7 @@ type Service struct {
 	logOrigin string
 	// replay and its per-caller limit; nil until WithReplay.
 	replay      Replayer
-	replayLimit *httpx.Limiter
+	replayLimit *replayLimiter
 	// Evidence packs; nil until WithPacks.
 	enqueuePack PackEnqueuer
 	editions    Editions

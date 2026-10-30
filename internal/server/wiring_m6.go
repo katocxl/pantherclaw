@@ -230,6 +230,8 @@ func (m *m6Services) serveGateways(ctx context.Context, g *errgroup.Group, cfg *
 		return nil
 	})
 	// The containment streams' early wake-ups; stopping it ends the streams.
+	// Its notifications also reach the certificate cache (G0 M19 D201).
+	m.hub.ForgetOnNotify(m.gateways)
 	g.Go(func() error { return m.hub.Run(ctx) })
 	g.Go(func() error {
 		<-ctx.Done()

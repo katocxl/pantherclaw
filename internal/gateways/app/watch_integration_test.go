@@ -229,8 +229,15 @@ func TestHR010_StreamsArePerCertificateCapped(t *testing.T) {
 		s.Close()
 	}
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	if len(h.orgs) != 0 || len(h.streams) != 0 {
-		t.Fatalf("the hub kept %d orgs and %d certificates after every stream closed", len(h.orgs), len(h.streams))
+	orgs := len(h.orgs)
+	h.mu.Unlock()
+	var leases int
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, "SELECT count(*) FROM pc.stream_leases").Scan(&leases)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if orgs != 0 || leases != 0 {
+		t.Fatalf("the hub kept %d orgs and %d leases after every stream closed", orgs, leases)
 	}
 }
