@@ -85,11 +85,15 @@ func TestHR522_JiraRoutesAreOneActionOnEveryRoute(t *testing.T) {
 	for tool, c := range map[string]struct {
 		method, path, body, args, op, target string
 	}{
-		"jira_create_issue": {"POST", "/rest/api/2/issue",
+		"jira_create_issue": {
+			"POST", "/rest/api/2/issue",
 			`{"fields":{"project":{"key":"HELP"},"summary":"Refund","description":"Sent","issuetype":{"name":"Task"}}}`,
-			`{"project_key":"HELP","summary":"Refund","description":"Sent","issue_type":"Task"}`, "jira.issue.create", "HELP"},
-		"jira_transition_issue": {"POST", "/rest/api/2/issue/HELP-1/transitions", `{"transition":{"id":"31"}}`,
-			`{"issue_key":"HELP-1","transition_id":"31"}`, "jira.issue.transition", "HELP-1"},
+			`{"project_key":"HELP","summary":"Refund","description":"Sent","issue_type":"Task"}`, "jira.issue.create", "HELP",
+		},
+		"jira_transition_issue": {
+			"POST", "/rest/api/2/issue/HELP-1/transitions", `{"transition":{"id":"31"}}`,
+			`{"issue_key":"HELP-1","transition_id":"31"}`, "jira.issue.transition", "HELP-1",
+		},
 	} {
 		h, err := m.HTTPRequest(ctx, tc, c.method, c.path, "", "application/json", []byte(c.body))
 		if err != nil {
