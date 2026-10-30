@@ -330,6 +330,7 @@ func (s *Store) subject(ctx context.Context, q *dbq.Queries, org ids.OrgID, conn
 		out[r.Name] = domain.Fact{
 			Name: r.Name, SubjectType: subjectType, SubjectID: subjectID, Value: v,
 			ObservedAt: r.ObservedAt, RecordedAt: r.RecordedAt, ProviderID: r.ProviderID,
+			Kind: domain.Kind(r.Kind), Source: deref(r.Source), Method: deref(r.Method),
 		}
 	}
 	return out, nil

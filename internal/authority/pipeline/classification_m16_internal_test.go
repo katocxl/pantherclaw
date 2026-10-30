@@ -31,7 +31,7 @@ func (r classReader) Facts(_ context.Context, _ ids.OrgID, _ ids.UUID, subjectTy
 func classified(class string, age time.Duration, now time.Time) *fdomain.Fact {
 	return &fdomain.Fact{
 		Name: fdomain.NameClassification, SubjectType: "crm.contact", SubjectID: "c_1", ObservedAt: now.Add(-age),
-		Value: fdomain.Value{Type: fdomain.TypeIdentifier, Str: class}, Source: "catalog", Method: "rule",
+		Value: fdomain.Value{Type: fdomain.TypeIdentifier, Str: class}, Source: "catalog", Method: "rule", Kind: fdomain.KindClassification,
 	}
 }
 
@@ -90,5 +90,25 @@ func TestT191_APublicClassificationCannotHideASensitiveRead(t *testing.T) {
 	s.readClass()
 	if s.ev.ReadClass != "pii" {
 		t.Fatalf("read class %q, want pii", s.ev.ReadClass)
+	}
+}
+
+// TestHR435_OnlyAClassificationWithProvenanceRaises: a pc.classification
+// fact of a value-kind declaration (from before M16), or one without its
+// provenance, is ignored with a note.
+// Covers: F366
+func TestHR435_OnlyAClassificationWithProvenanceRaises(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	value := classified("secret", time.Minute, now)
+	value.Kind = fdomain.KindValue
+	bare := classified("secret", time.Minute, now)
+	bare.Source, bare.Method = "", ""
+	for name, f := range map[string]*fdomain.Fact{"value kind": value, "no provenance": bare} {
+		s := readState(now, "internal")
+		(&Pipeline{Reader: classReader{fact: f}}).classify(context.Background(), s)
+		s.readClass()
+		if s.ev.ReadClass != "internal" || len(s.cl.items) != 1 || s.cl.items[0].Code != ReasonClassificationIgnored {
+			t.Errorf("%s: %q %+v", name, s.ev.ReadClass, s.cl.items)
+		}
 	}
 }

@@ -305,6 +305,11 @@ type Fact struct {
 	ObservedAt time.Time      `json:"observed_at"`
 	RecordedAt time.Time      `json:"recorded_at,omitzero"`
 	Provider   string         `json:"provider,omitzero"`
+	// Kind, Source and Method are a classification's declaration kind and
+	// provenance (G0 M16 D80); empty for a value fact without provenance.
+	Kind   string `json:"kind,omitzero"`
+	Source string `json:"source,omitzero"`
+	Method string `json:"method,omitzero"`
 }
 
 // Usage is a budget and counter read: the refs of the plan asked for, and

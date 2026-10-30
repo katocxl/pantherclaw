@@ -6,6 +6,8 @@ package domain
 import (
 	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 )
@@ -103,8 +105,8 @@ func checkProvenance(d Declaration, o Observation) error {
 	switch {
 	case (o.Source == "") != (o.Method == ""):
 		return invalid("%s: a source and a method go together", o.Name)
-	case len(o.Source) > MaxSourceLen || strings.ContainsFunc(o.Source, func(r rune) bool { return r < 0x20 || r == 0x7f }):
-		return invalid("%s: the source is at most %d printable characters", o.Name, MaxSourceLen)
+	case strings.ContainsFunc(o.Source, lineBreak) || len(o.Source) > MaxSourceLen || (o.Source != "" && cleanSource(o.Source) == ""):
+		return invalid("%s: the source is one line of at most %d characters", o.Name, MaxSourceLen)
 	case o.Method != "" && !slices.Contains(Methods, o.Method):
 		return invalid("%s: the method is one of %v", o.Name, Methods)
 	case d.Kind.Of() == KindClassification && o.Source == "":
@@ -129,3 +131,22 @@ func (f Fact) Class() string {
 	}
 	return f.Value.Str
 }
+
+// cleanSource strips from a fact's source the characters the approvals
+// untrusted-text cleaner removes (approvals/domain.Clean, HR-034, HR-102):
+// controls, format and bidi characters and invisible marks. Newlines are
+// refused before (checkProvenance).
+func cleanSource(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == utf8.RuneError, unicode.IsControl(r), unicode.Is(unicode.Cf, r), unicode.Is(unicode.Bidi_Control, r),
+			(r >= 0xFE00 && r <= 0xFE0F) || (r >= 0xE0100 && r <= 0xE01EF) || r == 0x034F:
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// lineBreak reports a carriage return, line feed, line or paragraph
+// separator.
+func lineBreak(r rune) bool { return r == 0x0a || r == 0x0d || r == 0x2028 || r == 0x2029 }

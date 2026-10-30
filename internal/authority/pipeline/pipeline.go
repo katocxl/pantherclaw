@@ -90,6 +90,9 @@ type Pipeline struct {
 	// External asks the org's active external policy checks (G0 M16 D81;
 	// external.go). Unset, none is asked (replay and simulation).
 	External ExternalCheck
+	// SimulateExternal: a simulation (the grant narrower) lists the matching
+	// external checks as not evaluated and never calls them (D96).
+	SimulateExternal bool
 	// ReplayOf is the version of the recording a replay decides (Replays);
 	// 0 is Version. A replay of version 4 makes none of version 5's reads.
 	ReplayOf int
@@ -168,6 +171,9 @@ type Evaluation struct {
 	// transaction records it only when the read is allowed
 	// (RecordedReadClass).
 	ReadClass string
+	// ExternalCalls are the external checks pass 1 found, for the caller to
+	// ask before pass 2 (G0 M16 D96, AskExternal).
+	ExternalCalls []ExternalCall
 }
 
 // VerifyPlan is fixed when a permit is issued: the digest of the
@@ -287,15 +293,27 @@ func (p *Pipeline) Snapshot(ctx context.Context, org ids.OrgID, fn func(ctx cont
 	return fn(ctx, p.Reader)
 }
 
-// Evaluate runs steps 1–8 on one snapshot (see Snapshot).
+// Evaluate runs steps 1–8 on one snapshot (see Snapshot), and again on a
+// second one with the answers of the external checks the first found,
+// asked between the two with no snapshot open (G0 M16 D96).
 func (p *Pipeline) Evaluate(ctx context.Context, req Request) (*Evaluation, error) {
-	var ev *Evaluation
-	err := p.Snapshot(ctx, req.Org, func(ctx context.Context, r Reader) error {
-		var err error
-		ev, err = p.EvaluateWith(ctx, r, req)
-		return err
-	})
-	return ev, err
+	once := func(ctx context.Context) (*Evaluation, error) {
+		var ev *Evaluation
+		err := p.Snapshot(ctx, req.Org, func(ctx context.Context, r Reader) error {
+			var err error
+			ev, err = p.EvaluateWith(ctx, r, req)
+			return err
+		})
+		return ev, err
+	}
+	ev, err := once(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if answered, again := p.AskExternal(ctx, req.Org, ev); again {
+		return once(answered)
+	}
+	return ev, nil
 }
 
 // EvaluateWith runs steps 1–8, reading through r (a snapshot's Reader). It
