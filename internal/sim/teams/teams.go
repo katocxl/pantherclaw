@@ -6,7 +6,8 @@
 // Bot Framework bot talks to, as Microsoft documents them:
 //
 //   - the Microsoft Entra token endpoint, POST /{tenant}/oauth2/v2.0/token
-//     (botframework.com for a multi-tenant bot), which issues an access
+//     (a bot pins its tenant, D279; Microsoft also serves botframework.com
+//     for a multi-tenant bot), which issues an access
 //     token for the client-credentials grant and scope
 //     https://api.botframework.com/.default;
 //   - the Bot Connector service under /teams/ (the service URL): the

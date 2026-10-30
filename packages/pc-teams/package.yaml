@@ -7,8 +7,11 @@
 # credential is of kind oauth_client: PantherClaw holds the bot's client
 # secret and mints an access token for every dispatch at the Microsoft
 # Entra token endpoint; the token, never the secret, is placed on the
-# request, and the agent holds neither (HR-524). The bot must be installed
-# in the team, and added to a shared or private channel, to post there.
+# request, and the agent holds neither (HR-524). The token endpoint must
+# name the bot's home tenant, which pins what counts as external (D273);
+# sealing refuses one that does not, such as botframework.com (D279). The
+# bot must be installed in the team, and added to a shared or private
+# channel, to post there.
 #
 # A message goes to one channel of one tenant, the action's target and its
 # destination, so a grant or policy can bound where an agent may post. Its

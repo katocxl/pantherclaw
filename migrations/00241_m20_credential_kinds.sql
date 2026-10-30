@@ -16,9 +16,20 @@
 -- +goose Up
 ALTER TABLE pc.credentials
     DROP CONSTRAINT credentials_kind,
-    ADD CONSTRAINT credentials_kind CHECK (kind IN ('static', 'github_app', 'oauth_client', 'aws_sigv4')),
-    ADD CONSTRAINT credentials_oauth_client_bearer CHECK (kind <> 'oauth_client' OR (header = 'Authorization' AND scheme = 'Bearer')),
-    ADD CONSTRAINT credentials_aws_sigv4_header CHECK (kind <> 'aws_sigv4' OR (header = 'Authorization' AND scheme = 'AWS4-HMAC-SHA256'));
+    ADD CONSTRAINT credentials_kind
+        CHECK (kind IN ('static', 'github_app', 'oauth_client', 'aws_sigv4')) NOT VALID,
+    ADD CONSTRAINT credentials_oauth_client_bearer
+        CHECK (kind <> 'oauth_client' OR (header = 'Authorization' AND scheme = 'Bearer')) NOT VALID,
+    ADD CONSTRAINT credentials_aws_sigv4_header
+        CHECK (kind <> 'aws_sigv4' OR (header = 'Authorization' AND scheme = 'AWS4-HMAC-SHA256')) NOT VALID;
+-- Every existing row is static or github_app, so the scans below find
+-- nothing to refuse, and validating blocks neither reads nor writes.
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.credentials VALIDATE CONSTRAINT credentials_kind;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.credentials VALIDATE CONSTRAINT credentials_oauth_client_bearer;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.credentials VALIDATE CONSTRAINT credentials_aws_sigv4_header;
 
 -- +goose Down
 ALTER TABLE pc.credentials

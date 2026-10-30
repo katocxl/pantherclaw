@@ -146,7 +146,6 @@ func AssumeRole(ctx context.Context, s Sender, hosts []string, c domain.AWSSigV4
 	}
 	base := sigv4.Credentials{AccessKeyID: c.AccessKeyID, SecretAccessKey: string(c.SecretAccessKey)}
 	err = sigv4.Signer{Region: c.STSRegion, Service: "sts"}.Sign(req, base, sigv4.HashPayload(body), now)
-	base = sigv4.Credentials{}
 	if err != nil {
 		return nil, errors.Join(ErrAssumeRole, err)
 	}

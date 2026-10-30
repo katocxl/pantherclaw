@@ -260,9 +260,11 @@ func (d *Definition) validateMapping(i int) error {
 				return invalid("%s: %s has no body to read as a form", at, m.Method)
 			}
 		case EncodingAWSJSON:
-			if m.Method != "POST" || m.Path != RootPath {
+			if m.Method != methodPost || m.Path != RootPath {
 				return invalid("%s: aws-json is a POST to %s", at, RootPath)
 			}
+		case EncodingAWSQuery:
+			return invalid("%s: aws-query is outbound only", at)
 		default:
 			return invalid("%s: encoding must be json, form or aws-json", at)
 		}

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
@@ -26,8 +27,17 @@ const (
 	OAuthClientScheme = "Bearer"
 )
 
+// BotFrameworkScope is the scope of a Microsoft Teams bot's tokens.
+const BotFrameworkScope = "https://api.botframework.com/.default"
+
 // ErrOAuthClient reports an OAuth client credential that cannot be used.
 var ErrOAuthClient = errors.New("credentials: not an OAuth client credential")
+
+// ErrOAuthClientTenant reports a Teams bot credential that pins no home
+// tenant (G0 M20 D279): sealed, every post would fail on a missing
+// teams.channel.external fact (D273).
+var ErrOAuthClientTenant = fmt.Errorf("%w: a Microsoft Teams bot's token endpoint must name its home tenant, "+
+	"https://login.microsoftonline.com/<tenant id, a lowercase GUID>/oauth2/v2.0/token, not botframework.com; nothing was sealed", ErrOAuthClient)
 
 // OAuthClient is the sealed content of an OAuth client credential: the
 // token endpoint, the client id, the one scope asked for, and the client
@@ -70,10 +80,15 @@ func (o OAuthClient) Validate() error {
 	return err
 }
 
-// Encode returns the plaintext to seal.
+// Encode returns the plaintext to seal. A Teams bot must pin its home tenant
+// here, where the plaintext is still in the sealer's hands; a decoded
+// credential that pins none only leaves its facts unread (D273, D279).
 func (o OAuthClient) Encode() ([]byte, error) {
 	if err := o.Validate(); err != nil {
 		return nil, err
+	}
+	if o.Scope == BotFrameworkScope && o.Tenant() == "" {
+		return nil, ErrOAuthClientTenant
 	}
 	return json.Marshal(o, json.Deterministic(true))
 }

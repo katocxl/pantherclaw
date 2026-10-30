@@ -5,6 +5,7 @@ package dispatch
 
 import (
 	"context"
+	"encoding/json/v2"
 	"log/slog"
 	"net/http/httptest"
 	"net/netip"
@@ -46,10 +47,14 @@ func TestT226_TheGatewayReadsWhetherATeamsChannelIsExternal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &Engine{broker: &plainOpener{plain: plain}, allowed: []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")},
-		clients: map[string]clientEntry{}, tokenClients: map[string]clientEntry{}, log: pclog.Discard()}
-	conn := &control.Connection{GatewayConnection: &pb.GatewayConnection{Id: "c", Kind: "http", BaseUrl: srv.URL + "/teams"}, Package: p,
-		Credential: &pb.SealedCredential{Kind: credentials.KindOAuthClient, AllowedHosts: []string{u.Host}, Header: "Authorization", Scheme: "Bearer"}}
+	e := &Engine{
+		broker: &plainOpener{plain: plain}, allowed: []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")},
+		clients: map[string]clientEntry{}, tokenClients: map[string]clientEntry{}, log: pclog.Discard(),
+	}
+	conn := &control.Connection{
+		GatewayConnection: &pb.GatewayConnection{Id: "c", Kind: "http", BaseUrl: srv.URL + "/teams"}, Package: p,
+		Credential: &pb.SealedCredential{Kind: credentials.KindOAuthClient, AllowedHosts: []string{u.Host}, Header: "Authorization", Scheme: "Bearer"},
+	}
 	def, _ := p.Definition("teams.message.post")
 	read := func(channel string) map[string]any {
 		return e.readTeamsChannel(context.Background(), conn, def, actionir.Target{Type: "teams_channel", ID: channel, Account: teams.TenantID})
@@ -95,11 +100,11 @@ func TestT226_TheGatewayReadsWhetherATeamsChannelIsExternal(t *testing.T) {
 		t.Fatalf("%d tokens for one three-page read", s.Issued()-issued)
 	}
 
-	// A credential that pins no tenant (the multi-tenant endpoint) reads
-	// nothing: the fact is unread, never internal.
-	multi, err := credentials.OAuthClient{
+	// A credential sealed before D279 that pins no tenant (the multi-tenant
+	// endpoint) reads nothing: the fact is unread, never internal.
+	multi, err := json.Marshal(credentials.OAuthClient{
 		V: 1, TokenURL: srv.URL + "/botframework.com/oauth2/v2.0/token", ClientID: teams.AppID, Scope: teams.Scope, ClientSecret: []byte("bot~secret"),
-	}.Encode()
+	}, json.Deterministic(true))
 	if err != nil {
 		t.Fatal(err)
 	}

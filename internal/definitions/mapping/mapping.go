@@ -323,7 +323,7 @@ func (m *Mapper) HTTPRequestHeader(ctx context.Context, tc Context, method, rawP
 		return actionir.Parsed{}, err
 	}
 	var input map[string]any
-	switch match.m.Encoding {
+	switch match.m.Encoding { //nolint:exhaustive // every other encoding is JSON
 	case domain.EncodingForm:
 		input, err = DecodeForm(contentType, body)
 	case domain.EncodingAWSJSON:

@@ -114,7 +114,7 @@ func TestHR524_TheTeamsPostIsBuiltFromTheActionAndPostedWithAMintedToken(t *test
 	}
 	u, _ := url.Parse(srv.URL)
 	tok, err := broker.MintClientToken(context.Background(), client, []string{u.Host}, credentials.OAuthClient{
-		V: 1, TokenURL: srv.URL + "/botframework.com/oauth2/v2.0/token", ClientID: teams.AppID, Scope: teams.Scope, ClientSecret: []byte("bot~secret"),
+		V: 1, TokenURL: srv.URL + "/" + teams.TenantID + "/oauth2/v2.0/token", ClientID: teams.AppID, Scope: teams.Scope, ClientSecret: []byte("bot~secret"),
 	})
 	if err != nil {
 		t.Fatal(err)

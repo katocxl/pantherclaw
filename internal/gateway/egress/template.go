@@ -117,7 +117,7 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 		if err != nil {
 			return Request{}, err
 		}
-		switch t.Encoding {
+		switch t.Encoding { //nolint:exhaustive // every other encoding is JSON
 		case defs.EncodingForm:
 			out.ContentType = FormContentType
 			out.Body, err = EncodeForm(obj)

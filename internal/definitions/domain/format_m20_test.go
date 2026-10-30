@@ -43,8 +43,10 @@ func TestHR526_HeadersAndEncodingsAreFixedByThePackage(t *testing.T) {
 	}
 	q := awsDef()
 	q.Mappings = nil
-	q.Dispatch.HTTP = &HTTPDispatch{Method: "POST", Path: "/", Encoding: EncodingAWSQuery,
-		Body: map[string]string{"Action": "literal.GetRole", "Version": "literal.2010-05-08", "RoleName": "target.id"}}
+	q.Dispatch.HTTP = &HTTPDispatch{
+		Method: "POST", Path: "/", Encoding: EncodingAWSQuery,
+		Body: map[string]string{"Action": "literal.GetRole", "Version": "literal.2010-05-08", "RoleName": "target.id"},
+	}
 	if err := q.Validate(); err != nil {
 		t.Fatalf("valid aws-query definition: %v", err)
 	}
@@ -91,8 +93,10 @@ func TestHR526_HeadersAndEncodingsAreFixedByThePackage(t *testing.T) {
 	l := awsDef()
 	l.Mappings = nil
 	l.Params = map[string]ParamSpec{"names": {Type: TypeIdentifierList, Material: true, Pattern: `^[a-z]{1,8}$`, MaxItems: 4}}
-	l.Dispatch.HTTP = &HTTPDispatch{Method: "POST", Path: "/", Encoding: EncodingAWSQuery,
-		Body: map[string]string{"Action": "literal.GetRole", "Version": "literal.2010-05-08", "Names": "params.names"}}
+	l.Dispatch.HTTP = &HTTPDispatch{
+		Method: "POST", Path: "/", Encoding: EncodingAWSQuery,
+		Body: map[string]string{"Action": "literal.GetRole", "Version": "literal.2010-05-08", "Names": "params.names"},
+	}
 	if err := l.Validate(); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "sends no lists") {
 		t.Errorf("aws-query list: %v", err)
 	}
@@ -107,13 +111,17 @@ func TestHR525_AWSActionIsTheOneThePackageFixes(t *testing.T) {
 	if a, ok := d.AWSAction(); !ok || a != "DescribeThing" {
 		t.Fatalf("aws-json: %q %v", a, ok)
 	}
-	d.Dispatch.HTTP = &HTTPDispatch{Method: "POST", Path: "/", Encoding: EncodingAWSQuery,
-		Body: map[string]string{"Action": "literal.GetRole", "Version": "literal.2010-05-08"}}
+	d.Dispatch.HTTP = &HTTPDispatch{
+		Method: "POST", Path: "/", Encoding: EncodingAWSQuery,
+		Body: map[string]string{"Action": "literal.GetRole", "Version": "literal.2010-05-08"},
+	}
 	if a, ok := d.AWSAction(); !ok || a != "GetRole" {
 		t.Fatalf("aws-query: %q %v", a, ok)
 	}
-	d.Dispatch.HTTP = &HTTPDispatch{Method: "GET", Path: "/", Encoding: EncodingAWSQuery,
-		Query: map[string]string{"Action": "literal.GetAccountSummary", "Version": "literal.2010-05-08"}}
+	d.Dispatch.HTTP = &HTTPDispatch{
+		Method: "GET", Path: "/", Encoding: EncodingAWSQuery,
+		Query: map[string]string{"Action": "literal.GetAccountSummary", "Version": "literal.2010-05-08"},
+	}
 	if err := d.validateHTTPDispatch("t", d.Dispatch.HTTP); err != nil {
 		t.Fatalf("aws-query GET: %v", err)
 	}
@@ -128,9 +136,11 @@ func TestHR525_AWSActionIsTheOneThePackageFixes(t *testing.T) {
 	if _, ok := d.AWSAction(); ok {
 		t.Fatal("a JSON template named an AWS action")
 	}
-	post := &HTTPDispatch{Method: "POST", Path: "/", Encoding: EncodingAWSQuery,
+	post := &HTTPDispatch{
+		Method: "POST", Path: "/", Encoding: EncodingAWSQuery,
 		Body:  map[string]string{"Action": "literal.GetRole", "Version": "literal.2010-05-08"},
-		Query: map[string]string{"Action": "literal.DeleteRole"}}
+		Query: map[string]string{"Action": "literal.DeleteRole"},
+	}
 	if err := d.validateHTTPDispatch("t", post); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a POST with a query Action: %v", err)
 	}

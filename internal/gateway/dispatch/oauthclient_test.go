@@ -49,7 +49,7 @@ func TestHR524_TheDispatchPlacesAMintedTokenNeverTheSecret(t *testing.T) {
 	t.Cleanup(srv.Close)
 	u, _ := url.Parse(srv.URL)
 	plain, err := credentials.OAuthClient{
-		V: 1, TokenURL: srv.URL + "/botframework.com/oauth2/v2.0/token", ClientID: teams.AppID, Scope: teams.Scope,
+		V: 1, TokenURL: srv.URL + "/" + teams.TenantID + "/oauth2/v2.0/token", ClientID: teams.AppID, Scope: teams.Scope,
 		ClientSecret: []byte("client~secret"),
 	}.Encode()
 	if err != nil {

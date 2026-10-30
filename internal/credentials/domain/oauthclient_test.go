@@ -11,8 +11,8 @@ import (
 
 func validOAuthClient() OAuthClient {
 	return OAuthClient{
-		V: 1, TokenURL: "https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token",
-		ClientID: "00000000-0000-4000-8000-0000000000b0", Scope: "https://api.botframework.com/.default", ClientSecret: []byte("abc~DEF.123"),
+		V: 1, TokenURL: "https://login.microsoftonline.com/5a1e0000-0000-4000-8000-000000000001/oauth2/v2.0/token",
+		ClientID: "00000000-0000-4000-8000-0000000000b0", Scope: BotFrameworkScope, ClientSecret: []byte("abc~DEF.123"),
 	}
 }
 
@@ -85,5 +85,34 @@ func TestHR524_TheHomeTenantIsPinnedByTheTokenEndpoint(t *testing.T) {
 		if got := o.Tenant(); got != want {
 			t.Errorf("%s: %q", url, got)
 		}
+	}
+}
+
+// TestHR524_ATeamsBotIsSealedOnlyWithItsHomeTenant: a Bot Framework credential
+// whose token endpoint pins no tenant is refused at seal, with an error that
+// says so, since every post would otherwise fail on a missing fact; another
+// OAuth client needs no tenant. A credential already sealed still opens, and
+// its facts stay unread (D279).
+// Covers: HR-524
+func TestHR524_ATeamsBotIsSealedOnlyWithItsHomeTenant(t *testing.T) {
+	for _, u := range []string{
+		"https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token",
+		"https://login.microsoftonline.com/common/oauth2/v2.0/token",
+		"https://login.microsoftonline.com/5A1E0000-0000-4000-8000-000000000001/oauth2/v2.0/token",
+	} {
+		o := validOAuthClient()
+		o.TokenURL = u
+		_, err := o.Encode()
+		if !errors.Is(err, ErrOAuthClientTenant) || !errors.Is(err, ErrOAuthClient) || !strings.Contains(err.Error(), "home tenant") {
+			t.Errorf("%s: %v", u, err)
+		}
+		if err := o.Validate(); err != nil {
+			t.Errorf("%s: an already sealed credential no longer opens: %v", u, err)
+		}
+	}
+	o := validOAuthClient()
+	o.Scope, o.TokenURL = "https://example.com/.default", "https://auth.example.com/token"
+	if _, err := o.Encode(); err != nil {
+		t.Errorf("another client: %v", err)
 	}
 }

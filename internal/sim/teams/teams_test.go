@@ -39,7 +39,7 @@ func newSim(t *testing.T) (*Server, *httptest.Server) {
 func token(t *testing.T, srv *httptest.Server, secret string) (int, string) {
 	t.Helper()
 	form := url.Values{"grant_type": {"client_credentials"}, "client_id": {AppID}, "client_secret": {secret}, "scope": {Scope}}
-	res, err := http.Post(srv.URL+"/botframework.com/oauth2/v2.0/token", "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
+	res, err := srv.Client().Post(srv.URL+"/"+TenantID+"/oauth2/v2.0/token", "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func token(t *testing.T, srv *httptest.Server, secret string) (int, string) {
 	return res.StatusCode, a.AccessToken
 }
 
-func call(t *testing.T, method, u, tok, body string) (int, map[string]any) {
+func call(t *testing.T, srv *httptest.Server, method, u, tok, body string) (int, map[string]any) {
 	t.Helper()
 	req, _ := http.NewRequestWithContext(t.Context(), method, u, strings.NewReader(body))
 	if tok != "" {
@@ -60,7 +60,7 @@ func call(t *testing.T, method, u, tok, body string) (int, map[string]any) {
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := srv.Client().Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,19 +81,19 @@ func TestTeamsSimIssuesTokensAndPosts(t *testing.T) {
 		t.Fatalf("token: %d %q", code, tok)
 	}
 	base := srv.URL + "/teams/v3"
-	if code, _ := call(t, http.MethodGet, base+"/teams/"+url.PathEscape(TeamID)+"/conversations", "bogus", ""); code != http.StatusUnauthorized {
+	if code, _ := call(t, srv, http.MethodGet, base+"/teams/"+url.PathEscape(TeamID)+"/conversations", "bogus", ""); code != http.StatusUnauthorized {
 		t.Fatalf("bogus token: %d", code)
 	}
-	code, out := call(t, http.MethodPost, base+"/conversations", tok,
+	code, out := call(t, srv, http.MethodPost, base+"/conversations", tok,
 		`{"isGroup":true,"channelData":{"channel":{"id":"`+general+`"},"tenant":{"id":"`+TenantID+`"}},"activity":{"type":"message","text":"hi"}}`)
 	if code != http.StatusCreated || out["activityId"] == nil {
 		t.Fatalf("create: %d %v", code, out)
 	}
-	code, _ = call(t, http.MethodPost, base+"/conversations/"+general+"/activities", tok, `{"type":"message","text":"again"}`)
+	code, _ = call(t, srv, http.MethodPost, base+"/conversations/"+general+"/activities", tok, `{"type":"message","text":"again"}`)
 	if code != http.StatusCreated {
 		t.Fatalf("send: %d", code)
 	}
-	code, _ = call(t, http.MethodPost, base+"/conversations/"+shared+"/activities", tok, `{"type":"message","text":"x"}`)
+	code, _ = call(t, srv, http.MethodPost, base+"/conversations/"+shared+"/activities", tok, `{"type":"message","text":"x"}`)
 	if code != http.StatusForbidden {
 		t.Fatalf("not installed: %d", code)
 	}
@@ -101,12 +101,12 @@ func TestTeamsSimIssuesTokensAndPosts(t *testing.T) {
 		t.Fatalf("messages %+v", m)
 	}
 	s.SetFaults(Faults{Blocked: true})
-	if code, _ := call(t, http.MethodPost, base+"/conversations/"+general+"/activities", tok, `{"type":"message","text":"x"}`); code != http.StatusForbidden {
+	if code, _ := call(t, srv, http.MethodPost, base+"/conversations/"+general+"/activities", tok, `{"type":"message","text":"x"}`); code != http.StatusForbidden {
 		t.Fatalf("blocked: %d", code)
 	}
 	s.SetFaults(Faults{})
 	s.SetClock(func() time.Time { return time.Now().Add(2 * TokenLifetime) })
-	if code, _ := call(t, http.MethodGet, base+"/conversations/"+general+"/pagedmembers", tok, ""); code != http.StatusUnauthorized {
+	if code, _ := call(t, srv, http.MethodGet, base+"/conversations/"+general+"/pagedmembers", tok, ""); code != http.StatusUnauthorized {
 		t.Fatalf("expired token: %d", code)
 	}
 }
@@ -121,7 +121,7 @@ func TestTeamsSimPagesMembers(t *testing.T) {
 		if next != "" {
 			q += "&continuationToken=" + next
 		}
-		code, out := call(t, http.MethodGet, q, tok, "")
+		code, out := call(t, srv, http.MethodGet, q, tok, "")
 		if code != http.StatusOK {
 			t.Fatalf("page: %d", code)
 		}
@@ -136,7 +136,7 @@ func TestTeamsSimPagesMembers(t *testing.T) {
 	if total != 120 || pages != 3 {
 		t.Fatalf("total %d in %d pages", total, pages)
 	}
-	if code, _ := call(t, http.MethodGet, u[:len(u)-2]+"10", tok, ""); code != http.StatusBadRequest {
+	if code, _ := call(t, srv, http.MethodGet, u[:len(u)-2]+"10", tok, ""); code != http.StatusBadRequest {
 		t.Fatalf("page size 10: %d", code)
 	}
 }
@@ -144,7 +144,7 @@ func TestTeamsSimPagesMembers(t *testing.T) {
 func TestTeamsSimListsTheBotsConversations(t *testing.T) {
 	_, srv := newSim(t)
 	_, tok := token(t, srv, "secret")
-	code, out := call(t, http.MethodGet, srv.URL+"/teams/v3/conversations", tok, "")
+	code, out := call(t, srv, http.MethodGet, srv.URL+"/teams/v3/conversations", tok, "")
 	if code != http.StatusOK || len(out["conversations"].([]any)) != 1 {
 		t.Fatalf("%d %v", code, out)
 	}
