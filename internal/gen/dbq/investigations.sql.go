@@ -529,49 +529,6 @@ func (q *Queries) InvRunBudget(ctx context.Context, orgID ids.OrgID, runID ids.U
 	return items, nil
 }
 
-const invRunChildren = `-- name: InvRunChildren :many
-SELECT id, agent_id, state, created_at, ended_at
-FROM pc.runs
-WHERE org_id = $1 AND parent_run_id = $2
-ORDER BY created_at, id
-LIMIT $3
-`
-
-type InvRunChildrenRow struct {
-	ID        ids.UUID
-	AgentID   ids.UUID
-	State     string
-	CreatedAt time.Time
-	EndedAt   *time.Time
-}
-
-// Child runs (lanes) of a run.
-func (q *Queries) InvRunChildren(ctx context.Context, orgID ids.OrgID, runID *ids.UUID, maxRows int32) ([]InvRunChildrenRow, error) {
-	rows, err := q.db.Query(ctx, invRunChildren, orgID, runID, maxRows)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []InvRunChildrenRow{}
-	for rows.Next() {
-		var i InvRunChildrenRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.AgentID,
-			&i.State,
-			&i.CreatedAt,
-			&i.EndedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const invRunChildrenAfter = `-- name: InvRunChildrenAfter :many
 SELECT id, agent_id, state, created_at, ended_at
 FROM pc.runs

@@ -268,7 +268,11 @@ func (s *Service) grantsOn(ctx context.Context, r *readers, connection ids.UUID,
 	if err != nil {
 		return nil, err
 	}
-	rows, err := r.q.CoverageActiveGrantsOfAgents(ctx, r.c.Org, readable)
+	ops := make([]string, 0, len(pkg.Definitions))
+	for _, d := range pkg.Definitions {
+		ops = append(ops, d.Operation)
+	}
+	rows, err := r.q.CoverageActiveGrantsOfAgents(ctx, r.c.Org, readable, ops)
 	if err != nil {
 		return nil, err
 	}
