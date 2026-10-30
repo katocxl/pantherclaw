@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -242,8 +243,13 @@ func TestT222_WebhookKeyMisuseAcrossOrgs(t *testing.T) {
 		t.Fatal(err)
 	}
 	// a's wrapped key on b's row (b's public key kept).
+	// The tamper is the insider's, so it goes past the re-wrap guard (00224).
+	const guard = "ALTER TABLE pc.keys %s TRIGGER keystore_rewrap_guard"
+	t.Cleanup(func() { f.d.AdminExec(t, fmt.Sprintf(guard, "ENABLE")) })
+	f.d.AdminExec(t, fmt.Sprintf(guard, "DISABLE"))
 	f.d.AdminExec(t, `UPDATE pc.keys k SET wrapped_private_key = s.wrapped_private_key, kek_id = s.kek_id
 		FROM pc.keys s WHERE k.kid = $1 AND s.kid = $2`, kb, ka)
+	f.d.AdminExec(t, fmt.Sprintf(guard, "ENABLE"))
 	if _, err := keystore.NewWebhookKeys(f.p, f.kp).SignWebhook(ctx, f.b, []byte("x")); !errors.Is(err, keys.ErrUnwrap) {
 		t.Fatalf("b signed with a's wrapped key: %v", err)
 	}
