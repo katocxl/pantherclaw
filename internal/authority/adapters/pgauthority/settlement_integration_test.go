@@ -8,6 +8,7 @@ package pgauthority_test
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -32,8 +33,12 @@ func (w *world) holdBudgetRows() func() {
 	locked, release, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
 	go func() {
 		done <- w.pool.InTenantTx(context.Background(), w.org, func(ctx context.Context, tx db.TenantTx) error {
-			if _, err := tx.Exec(ctx, "UPDATE pc.budget_accounts SET reserved = reserved"); err != nil {
+			tag, err := tx.Exec(ctx, "UPDATE pc.budget_accounts SET reserved = reserved")
+			if err != nil {
 				return err
+			}
+			if tag.RowsAffected() == 0 {
+				return errors.New("no budget rows to hold")
 			}
 			close(locked)
 			<-release
