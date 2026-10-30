@@ -34,7 +34,7 @@ const (
 	dateFormat = "20060102"
 
 	headerDate          = "X-Amz-Date"
-	headerSecurityToken = "X-Amz-Security-Token"
+	headerSecurityToken = "X-Amz-Security-Token" //nolint:gosec // a header name, not a credential
 	headerContentSHA256 = "X-Amz-Content-Sha256"
 )
 

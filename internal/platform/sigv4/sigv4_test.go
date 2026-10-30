@@ -4,6 +4,7 @@
 package sigv4
 
 import (
+	"errors"
 	"io/fs"
 	"net/http"
 	"os"
@@ -210,13 +211,13 @@ func TestS3PathEncoding(t *testing.T) {
 func TestSignRefusesBadInput(t *testing.T) {
 	req, _ := http.NewRequest(http.MethodGet, "https://example.amazonaws.com/", nil)
 	now := time.Now()
-	if err := suiteSigner.Sign(req, Credentials{}, EmptyPayloadHash, now); err != ErrNoCredentials {
+	if err := suiteSigner.Sign(req, Credentials{}, EmptyPayloadHash, now); !errors.Is(err, ErrNoCredentials) {
 		t.Fatalf("no creds: %v", err)
 	}
-	if err := (Signer{}).Sign(req, suiteCreds, EmptyPayloadHash, now); err != ErrNoScope {
+	if err := (Signer{}).Sign(req, suiteCreds, EmptyPayloadHash, now); !errors.Is(err, ErrNoScope) {
 		t.Fatalf("no scope: %v", err)
 	}
-	if err := suiteSigner.Sign(req, suiteCreds, "abc", now); err != ErrPayloadHash {
+	if err := suiteSigner.Sign(req, suiteCreds, "abc", now); !errors.Is(err, ErrPayloadHash) {
 		t.Fatalf("bad hash: %v", err)
 	}
 	if strings.Contains(suiteCreds.String(), suiteCreds.SecretAccessKey) {
