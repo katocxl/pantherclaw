@@ -59,6 +59,63 @@ func TestT176_OrgErasureWaitsForExactExternalIntentACK(t *testing.T) {
 	}
 }
 
+// TestT176_RemovalHoldsNoTransactionOpen: while the org's rows are being
+// removed on the Deleter's connection, the application holds no transaction
+// on the journal row. One held there sits idle until the idle-in-transaction
+// timeout ends it, which a large org reaches.
+func TestT176_RemovalHoldsNoTransactionOpen(t *testing.T) {
+	d, s, org := setup(t)
+	id := deletionRequest(t, s, org, time.Now().Add(-time.Hour))
+	if err := s.DeleteOrg(t.Context(), org, id); !errors.Is(err, ErrAwaitingSecurityCopy) {
+		t.Fatalf("unacknowledged: %v", err)
+	}
+	acknowledgeIntents(t, s)
+
+	// A held write barrier stops the removal at its first statement.
+	locked, release, held := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	go func() {
+		held <- s.Pool.InTenantTx(context.Background(), org, func(ctx context.Context, tx db.TenantTx) error {
+			if err := writeBarrier(ctx, tx); err != nil {
+				return err
+			}
+			close(locked)
+			<-release
+			return nil
+		})
+	}()
+	<-locked
+	deleted := make(chan error, 1)
+	go func() { deleted <- s.DeleteOrg(context.Background(), org, id) }()
+	deadline := time.Now().Add(30 * time.Second)
+	for waiting := 0; waiting == 0; {
+		if time.Now().After(deadline) {
+			close(release)
+			t.Fatal("the removal never reached the write barrier")
+		}
+		time.Sleep(10 * time.Millisecond)
+		d.AdminQueryRow(t, "SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND NOT granted AND database=(SELECT oid FROM pg_database WHERE datname=current_database())", nil, &waiting)
+	}
+	lock := s.Pool.InTenantTx(t.Context(), ids.PlatformOrg, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := tx.Exec(ctx, "SELECT 1 FROM pc.org_deletion_journal WHERE org_id=$1 AND id=$2 FOR UPDATE NOWAIT", ids.PlatformOrg, id)
+		return err
+	})
+	close(release)
+	if err := <-held; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-deleted; err != nil {
+		t.Fatal(err)
+	}
+	if lock != nil {
+		t.Fatalf("the journal row was locked during removal: %v", lock)
+	}
+	var completions int
+	d.AdminQueryRow(t, "SELECT count(*) FROM pc.deletion_records WHERE deleted_org_id=$1", []any{org}, &completions)
+	if completions != 1 {
+		t.Fatalf("completions=%d", completions)
+	}
+}
+
 func TestT176_AccountIntentAndCompletionHaveSeparateDedupe(t *testing.T) {
 	d, s, _ := setup(t)
 	ctx := t.Context()
