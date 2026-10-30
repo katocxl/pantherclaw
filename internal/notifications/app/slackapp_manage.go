@@ -55,10 +55,13 @@ type SlackAppView struct {
 	ActivatedAt, TokenReplacedAt               *time.Time
 	// DirectMessages: the bot also sends approval DMs (G0 M20 D256).
 	DirectMessages bool
+	// AllowedEmailDomains are the domains a Slack link may use (D265).
+	AllowedEmailDomains []string
 }
 
 // checkSlackAppConfig validates a new configuration (D22, D56): Slack
-// channel id, data level (unset is MINIMAL) and bot token.
+// channel id, data level (unset is MINIMAL), bot token, and the email
+// domains of a DM channel (D265).
 func checkSlackAppConfig(c *domain.SlackAppConfig) error {
 	if c.DataLevel == "" {
 		c.DataLevel = domain.SlackMinimal
@@ -67,7 +70,7 @@ func checkSlackAppConfig(c *domain.SlackAppConfig) error {
 		(c.DataLevel != domain.SlackMinimal && c.DataLevel != domain.SlackSummary) {
 		return domain.ErrInvalid
 	}
-	return nil
+	return checkEmailDomains(c)
 }
 
 // requireSlackApprovals refuses slack_app channels below the Team edition.
@@ -86,7 +89,7 @@ func slackAppView(a dbq.PcSlackAppChannel) *SlackAppView {
 	return &SlackAppView{
 		ChannelID: a.SlackChannel, DataLevel: a.DataLevel, TeamID: deref(a.TeamID), BotID: deref(a.BotID), State: a.State,
 		ActivatedAt: a.ActivatedAt, TokenReplacedAt: a.TokenReplacedAt,
-		DirectMessages: a.DirectMessages,
+		DirectMessages: a.DirectMessages, AllowedEmailDomains: a.AllowedEmailDomains,
 	}
 }
 

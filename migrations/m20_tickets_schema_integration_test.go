@@ -164,3 +164,37 @@ func TestTenancy_approval_channels(t *testing.T) {
 		t.Fatalf("another org sees %d Teams channels", n)
 	}
 }
+
+// TestM20_DMChannelEmailDomains: a DM channel stores 1 to 20 lowercase
+// exact domains and other channels none, and pc_app cannot change them or
+// the DM setting after creation (D265).
+func TestM20_DMChannelEmailDomains(t *testing.T) {
+	d := dbtest.New(t)
+	p := d.AppPool(t)
+	a := newM5Fixture(t, p)
+	insert := `INSERT INTO pc.slack_app_channels (org_id, channel_record_id, slack_channel, direct_messages, allowed_email_domains)
+		VALUES ($1, $2, 'C0APPROVAL1', $3, $4)`
+	channel := func() string {
+		id := m5ID()
+		a.mustExec(t, `INSERT INTO pc.notification_channels (org_id, id, name, kind, event_types, secret, created_by)
+			VALUES ($1, $2, $3, 'slack_app', '{approval.*}', $4, 'test')`, a.org, id, "s-"+id[30:], m5Secret(5))
+		return id
+	}
+	for name, c := range map[string]struct {
+		dm      bool
+		domains []string
+	}{
+		"a DM channel without domains": {true, []string{}},
+		"a card channel with domains":  {false, []string{"example.test"}},
+		"a wildcard":                   {true, []string{"*.example.test"}},
+		"upper case":                   {true, []string{"Example.test"}},
+		"no dot":                       {true, []string{"localhost"}},
+	} {
+		a.want(t, "23514", name, insert, a.org, channel(), c.dm, c.domains)
+	}
+	id := channel()
+	a.mustExec(t, insert, a.org, id, true, []string{"example.test", "corp.example.test"})
+	a.want(t, "42501", "the domains changed", "UPDATE pc.slack_app_channels SET allowed_email_domains = '{evil.test}' WHERE channel_record_id = $1", id)
+	a.want(t, "42501", "DMs turned off", "UPDATE pc.slack_app_channels SET direct_messages = false WHERE channel_record_id = $1", id)
+	a.want(t, "23505", "a second DM channel", insert, a.org, channel(), true, []string{"example.test"})
+}

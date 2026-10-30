@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/notifications/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -39,6 +40,7 @@ import (
 const (
 	LinkProposed  = "PROPOSED"
 	LinkConfirmed = "CONFIRMED"
+	LinkStale     = "STALE"
 	LinkRevoked   = "REVOKED"
 )
 
@@ -139,36 +141,22 @@ func (s *Service) ProposeSlackLink(ctx context.Context) (ChatLink, error) {
 		return ChatLink{}, err
 	}
 	email = strings.TrimSpace(email)
-	if email == "" || ch.TeamID == nil || len(email) > 320 || !strings.Contains(email, "@") {
+	if email == "" || ch.TeamID == nil || len(email) > 320 {
 		return ChatLink{}, ErrSlackLinkRefused
 	}
 	token, err := s.envelope.Decrypt(ctx, s.field(c.Org, ch.ChannelRecordID, secretColumn), SecretPurpose, ch.Secret)
 	if err != nil {
 		return ChatLink{}, err
 	}
-	a, out := s.slackCall(ctx, string(token), "users.lookupByEmail", nil, map[string][]string{"email": {email}})
-	switch {
-	case out.ok:
-	case out.gone || out.permanent:
-		return ChatLink{}, ErrSlackLinkRefused
-	default:
-		return ChatLink{}, ErrSlackUnavailable
-	}
-	var u slackUser
-	if err := json.Unmarshal(a.body, &u); err != nil {
-		return ChatLink{}, ErrSlackLinkRefused
-	}
-	switch {
-	case !slackUserPattern.MatchString(u.User.ID), u.User.TeamID != *ch.TeamID, u.User.Deleted, u.User.IsBot,
-		u.User.IsRestricted, u.User.IsUltraRestricted, !u.User.IsEmailConfirmed,
-		!strings.EqualFold(strings.TrimSpace(u.User.Profile.Email), email):
-		return ChatLink{}, ErrSlackLinkRefused
+	u, err := s.slackMember(ctx, string(token), *ch.TeamID, email, ch.AllowedEmailDomains)
+	if err != nil {
+		return ChatLink{}, err
 	}
 	var link ChatLink
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		row, err := dbq.New(tx).InsertChatIdentityLink(ctx, dbq.InsertChatIdentityLinkParams{
 			OrgID: c.Org, ID: ids.NewV7(), UserID: c.Principal.ID, Provider: "slack", TeamID: *ch.TeamID,
-			ExternalUserID: u.User.ID, Email: email, ProposedBy: c.Principal.String(),
+			ExternalUserID: u, Email: email, ProposedBy: c.Principal.String(),
 		})
 		if db.IsUniqueViolation(err) {
 			return ErrSlackLinkState // a live link exists for the person or the Slack user
@@ -301,6 +289,7 @@ func (s *Service) sendSlackDM(ctx context.Context, org ids.OrgID, d dbq.LoadDeli
 	user := *d.RecipientUserID
 	var ch dbq.SlackDMChannelRow
 	var target string
+	var chat dbq.ConfirmedSlackLinksRow
 	var facts dbq.SlackCardFactsRow
 	var stored *dbq.PcSlackDirectMessage
 	skip := ""
@@ -332,7 +321,7 @@ func (s *Service) sendSlackDM(ctx context.Context, org ids.OrgID, d dbq.LoadDeli
 			skip = "not_linked"
 			return nil
 		}
-		target = links[0].ExternalUserID
+		chat, target = links[0], links[0].ExternalUserID
 		if facts, err = q.SlackCardFacts(ctx, org, request); db.IsNoRows(err) {
 			skip = "no_card_subject"
 			return nil
@@ -373,6 +362,17 @@ func (s *Service) sendSlackDM(ctx context.Context, org ids.OrgID, d dbq.LoadDeli
 	token, err := s.envelope.Decrypt(ctx, s.field(org, ch.ChannelRecordID, secretColumn), SecretPurpose, ch.Secret)
 	if err != nil {
 		return outcome{code: "secret_unavailable"}
+	}
+	// Slack must still answer the link's email with the same full member,
+	// on an allowed domain (D265); otherwise the link is stale and no DM goes.
+	switch now, err := s.slackMember(ctx, string(token), *ch.TeamID, chat.Email, ch.AllowedEmailDomains); {
+	case errors.Is(err, ErrSlackUnavailable):
+		return outcome{code: "slack_unavailable"}
+	case err != nil || now != target:
+		if err := s.staleLink(ctx, org, chat); err != nil {
+			return outcome{code: "store_failed"}
+		}
+		return outcome{skip: true, code: "link_stale"}
 	}
 	dmID := ids.NewV7()
 	var claimed int64
@@ -454,4 +454,100 @@ func (s *Service) dmRecipientsFor(ctx context.Context, tx db.TenantTx, q *dbq.Qu
 		}
 	}
 	return len(users), nil
+}
+
+// maxEmailDomains bounds a DM channel's email domains (D265).
+const maxEmailDomains = 20
+
+var emailDomainPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?([.][a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$`)
+
+// checkEmailDomains refuses a slack_app configuration whose email domains
+// do not fit its DM setting: 1 to 20 distinct lowercase exact domains for
+// a DM channel, none otherwise (D265).
+func checkEmailDomains(c *domain.SlackAppConfig) error {
+	if !c.DirectMessages {
+		if len(c.AllowedEmailDomains) > 0 {
+			return domain.ErrInvalid
+		}
+		return nil
+	}
+	if len(c.AllowedEmailDomains) < 1 || len(c.AllowedEmailDomains) > maxEmailDomains {
+		return domain.ErrInvalid
+	}
+	seen := map[string]bool{}
+	for _, d := range c.AllowedEmailDomains {
+		if len(d) > 253 || !emailDomainPattern.MatchString(d) || seen[d] {
+			return domain.ErrInvalid
+		}
+		seen[d] = true
+	}
+	return nil
+}
+
+// emailAllowed reports whether email's domain is exactly one of domains.
+func emailAllowed(email string, domains []string) bool {
+	at := strings.LastIndexByte(email, '@')
+	if at < 1 || at == len(email)-1 {
+		return false
+	}
+	d := strings.ToLower(email[at+1:])
+	for _, x := range domains {
+		if d == x {
+			return true
+		}
+	}
+	return false
+}
+
+func emptyIfNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
+// slackMember asks Slack who has email and returns their user id when
+// that is a full member of team (not a guest, a bot or deleted) whose
+// confirmed email is exactly email, on one of domains (D256, D265).
+// ErrSlackLinkRefused when not; ErrSlackUnavailable when Slack could not
+// answer.
+func (s *Service) slackMember(ctx context.Context, token, team, email string, domains []string) (string, error) {
+	if !emailAllowed(email, domains) {
+		return "", ErrSlackLinkRefused
+	}
+	a, out := s.slackCall(ctx, token, "users.lookupByEmail", nil, map[string][]string{"email": {email}})
+	switch {
+	case out.ok:
+	case out.gone || out.permanent:
+		return "", ErrSlackLinkRefused
+	default:
+		return "", ErrSlackUnavailable
+	}
+	var u slackUser
+	if err := json.Unmarshal(a.body, &u); err != nil {
+		return "", ErrSlackLinkRefused
+	}
+	switch {
+	case !slackUserPattern.MatchString(u.User.ID), u.User.TeamID != team, u.User.Deleted, u.User.IsBot,
+		u.User.IsRestricted, u.User.IsUltraRestricted, !u.User.IsEmailConfirmed,
+		!strings.EqualFold(strings.TrimSpace(u.User.Profile.Email), email):
+		return "", ErrSlackLinkRefused
+	}
+	return u.User.ID, nil
+}
+
+// staleLink marks a confirmed link STALE and audits it (D265).
+func (s *Service) staleLink(ctx context.Context, org ids.OrgID, l dbq.ConfirmedSlackLinksRow) error {
+	return s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		n, err := dbq.New(tx).MarkChatIdentityLinkStale(ctx, org, l.ID)
+		if err != nil || n == 0 {
+			return err
+		}
+		_, err = audit.Record(ctx, tx, audit.Event{
+			Name: "notification.chat_link_stale", Actor: evdomain.Actor{Type: "system", ID: "notification-health"},
+			Outcome: audit.Success, ReasonCode: "SLACK_MEMBER_CHANGED", Object: &audit.Object{Type: "chat_identity_link", ID: l.ID.String()},
+			Details: map[string]string{"provider": "slack", "slack_user": l.ExternalUserID, "user": l.UserID.String()},
+		})
+		return err
+	})
 }

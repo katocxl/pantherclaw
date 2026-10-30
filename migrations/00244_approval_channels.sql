@@ -7,7 +7,8 @@
 -- Slack DMs. A person's Slack identity is linked from Slack's
 -- users.lookupByEmail, only for a verified email on one of the
 -- organization's domains, and is used only once that person confirmed it in
--- the console (PROPOSED -> CONFIRMED; either may be REVOKED). The bot token
+-- the console (PROPOSED -> CONFIRMED; either may be REVOKED; a link Slack no
+-- longer confirms before a DM becomes STALE, D265). The bot token
 -- of the organization's one slack_app channel that allows direct messages
 -- sends them (direct_messages is fixed when the channel is created, like
 -- its data level, so it was confirmed with the channel's activation). A DM
@@ -50,9 +51,20 @@ ALTER TABLE pc.deliveries
 ALTER TABLE pc.deliveries VALIDATE CONSTRAINT deliveries_kind_check;
 ALTER TABLE pc.deliveries VALIDATE CONSTRAINT deliveries_check1;
 
--- Whether a slack_app channel's bot also sends approval DMs: set at
--- creation only (pc_app has no UPDATE on it), one such channel per org.
-ALTER TABLE pc.slack_app_channels ADD COLUMN direct_messages boolean NOT NULL DEFAULT false;
+-- Whether a slack_app channel's bot also sends approval DMs, and the email
+-- domains a person's Slack link may use (D265: at most 20 lowercase exact
+-- domains, no wildcards, at least one for a DM channel). Both are set at
+-- creation only (pc_app has no UPDATE on them) and confirmed by the
+-- channel's activation; a change is a new channel. One DM channel per org.
+ALTER TABLE pc.slack_app_channels
+    ADD COLUMN direct_messages boolean NOT NULL DEFAULT false,
+    ADD COLUMN allowed_email_domains text[] NOT NULL DEFAULT '{}',
+    ADD CONSTRAINT slack_app_channels_email_domains CHECK (
+        cardinality(allowed_email_domains) <= 20
+        AND (cardinality(allowed_email_domains) >= 1) = direct_messages
+        AND array_position(allowed_email_domains, NULL) IS NULL
+        AND (cardinality(allowed_email_domains) = 0 OR array_to_string(allowed_email_domains, ',')
+             ~ '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?([.][a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+(,[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?([.][a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+)*$'));
 CREATE UNIQUE INDEX slack_app_channels_dm ON pc.slack_app_channels (org_id) WHERE direct_messages;
 
 CREATE TABLE pc.chat_identity_links (
@@ -62,26 +74,31 @@ CREATE TABLE pc.chat_identity_links (
     provider         text        NOT NULL CHECK (provider IN ('slack')),
     team_id          text        NOT NULL CHECK (team_id ~ '^T[A-Z0-9]{4,30}$'),
     external_user_id text        NOT NULL CHECK (external_user_id ~ '^[UW][A-Z0-9]{4,30}$'),
-    -- The verified email Slack matched, on one of the org's domains.
+    -- The verified email Slack matched, on one of the DM channel's domains.
     email            text        NOT NULL CHECK (char_length(email) BETWEEN 3 AND 320),
-    state            text        NOT NULL DEFAULT 'PROPOSED' CHECK (state IN ('PROPOSED', 'CONFIRMED', 'REVOKED')),
+    -- STALE: before a DM, Slack no longer answered the email with this full
+    -- member (D265); the link sends nothing more.
+    state            text        NOT NULL DEFAULT 'PROPOSED' CHECK (state IN ('PROPOSED', 'CONFIRMED', 'STALE', 'REVOKED')),
     proposed_by      text        NOT NULL CHECK (char_length(proposed_by) BETWEEN 1 AND 300),
     created_at       timestamptz NOT NULL DEFAULT now(),
     confirmed_at     timestamptz,
+    stale_at         timestamptz,
     revoked_at       timestamptz,
     updated_at       timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (org_id, id),
     FOREIGN KEY (org_id, user_id) REFERENCES pc.users (org_id, id),
-    CHECK ((state = 'CONFIRMED') = (confirmed_at IS NOT NULL AND revoked_at IS NULL)),
+    CHECK ((state = 'CONFIRMED') = (confirmed_at IS NOT NULL AND stale_at IS NULL AND revoked_at IS NULL)),
+    CHECK ((state = 'STALE') = (stale_at IS NOT NULL AND revoked_at IS NULL)),
     CHECK ((state = 'REVOKED') = (revoked_at IS NOT NULL))
 );
 -- One live link per person and provider, and per Slack user.
-CREATE UNIQUE INDEX chat_identity_links_user ON pc.chat_identity_links (org_id, user_id, provider) WHERE state <> 'REVOKED';
+CREATE UNIQUE INDEX chat_identity_links_user ON pc.chat_identity_links (org_id, user_id, provider)
+    WHERE state IN ('PROPOSED', 'CONFIRMED');
 CREATE UNIQUE INDEX chat_identity_links_external ON pc.chat_identity_links (org_id, provider, team_id, external_user_id)
-    WHERE state <> 'REVOKED';
+    WHERE state IN ('PROPOSED', 'CONFIRMED');
 
--- A link is inserted PROPOSED; it moves PROPOSED -> CONFIRMED, and either
--- to REVOKED, never back.
+-- A link is inserted PROPOSED; it moves PROPOSED -> CONFIRMED, a live link
+-- to STALE, and any to REVOKED; never back.
 -- +goose StatementBegin
 CREATE FUNCTION pc.chat_identity_link_guard() RETURNS trigger
 LANGUAGE plpgsql
@@ -96,12 +113,15 @@ BEGIN
         NEW.updated_at := now();
         RETURN NEW;
     END IF;
-    IF NOT ((OLD.state = 'PROPOSED' AND NEW.state IN ('CONFIRMED', 'REVOKED'))
-            OR (OLD.state = 'CONFIRMED' AND NEW.state = 'REVOKED')) THEN
+    IF NOT ((OLD.state = 'PROPOSED' AND NEW.state IN ('CONFIRMED', 'STALE', 'REVOKED'))
+            OR (OLD.state = 'CONFIRMED' AND NEW.state IN ('STALE', 'REVOKED'))
+            OR (OLD.state = 'STALE' AND NEW.state = 'REVOKED')) THEN
         RAISE EXCEPTION 'a chat identity link cannot go from % to %', OLD.state, NEW.state USING ERRCODE = 'check_violation';
     END IF;
     IF NEW.state = 'CONFIRMED' THEN
         NEW.confirmed_at := now();
+    ELSIF NEW.state = 'STALE' THEN
+        NEW.stale_at := now();
     ELSE
         NEW.revoked_at := now();
     END IF;
@@ -254,7 +274,7 @@ $$;
 -- +goose StatementEnd
 
 GRANT SELECT, INSERT ON pc.chat_identity_links, pc.slack_direct_messages, pc.teams_app_channels, pc.teams_cards TO pc_app;
-GRANT UPDATE (state, confirmed_at, revoked_at, updated_at) ON pc.chat_identity_links TO pc_app;
+GRANT UPDATE (state, confirmed_at, stale_at, revoked_at, updated_at) ON pc.chat_identity_links TO pc_app;
 GRANT UPDATE (im_channel, ts, state, updated_at) ON pc.slack_direct_messages TO pc_app;
 GRANT UPDATE (state, membership_type, activated_by, activated_credential, activated_at, secret_replaced_by, secret_replaced_at,
     shared_at, last_checked_at, updated_at) ON pc.teams_app_channels TO pc_app;
@@ -271,7 +291,8 @@ DROP TABLE pc.slack_direct_messages;
 DROP TABLE pc.chat_identity_links;
 DROP FUNCTION pc.chat_identity_link_guard();
 DROP INDEX pc.slack_app_channels_dm;
-ALTER TABLE pc.slack_app_channels DROP COLUMN direct_messages;
+ALTER TABLE pc.slack_app_channels DROP CONSTRAINT slack_app_channels_email_domains, DROP COLUMN allowed_email_domains,
+    DROP COLUMN direct_messages;
 -- DM and Teams deliveries, and teams_app channels, go before their kinds
 -- do. RLS is forced even for the owner, so it is lifted for these deletes
 -- only, inside this migration's transaction.

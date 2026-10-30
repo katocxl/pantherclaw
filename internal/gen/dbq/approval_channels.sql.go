@@ -45,14 +45,16 @@ func (q *Queries) ClaimSlackDM(ctx context.Context, arg ClaimSlackDMParams) (int
 }
 
 const confirmedSlackLinks = `-- name: ConfirmedSlackLinks :many
-SELECT user_id, external_user_id FROM pc.chat_identity_links
+SELECT id, user_id, external_user_id, email FROM pc.chat_identity_links
 WHERE org_id = $1 AND provider = 'slack' AND team_id = $2 AND state = 'CONFIRMED'
   AND user_id = ANY ($3::uuid[])
 `
 
 type ConfirmedSlackLinksRow struct {
+	ID             ids.UUID
 	UserID         ids.UUID
 	ExternalUserID string
+	Email          string
 }
 
 // The people among users with a confirmed Slack link in team.
@@ -65,7 +67,12 @@ func (q *Queries) ConfirmedSlackLinks(ctx context.Context, orgID ids.OrgID, team
 	items := []ConfirmedSlackLinksRow{}
 	for rows.Next() {
 		var i ConfirmedSlackLinksRow
-		if err := rows.Scan(&i.UserID, &i.ExternalUserID); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ExternalUserID,
+			&i.Email,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -77,7 +84,7 @@ func (q *Queries) ConfirmedSlackLinks(ctx context.Context, orgID ids.OrgID, team
 }
 
 const getChatIdentityLink = `-- name: GetChatIdentityLink :one
-SELECT org_id, id, user_id, provider, team_id, external_user_id, email, state, proposed_by, created_at, confirmed_at, revoked_at, updated_at FROM pc.chat_identity_links WHERE org_id = $1 AND id = $2
+SELECT org_id, id, user_id, provider, team_id, external_user_id, email, state, proposed_by, created_at, confirmed_at, stale_at, revoked_at, updated_at FROM pc.chat_identity_links WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetChatIdentityLink(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcChatIdentityLink, error) {
@@ -95,6 +102,7 @@ func (q *Queries) GetChatIdentityLink(ctx context.Context, orgID ids.OrgID, iD i
 		&i.ProposedBy,
 		&i.CreatedAt,
 		&i.ConfirmedAt,
+		&i.StaleAt,
 		&i.RevokedAt,
 		&i.UpdatedAt,
 	)
@@ -127,7 +135,7 @@ const insertChatIdentityLink = `-- name: InsertChatIdentityLink :one
 INSERT INTO pc.chat_identity_links (org_id, id, user_id, provider, team_id, external_user_id, email, proposed_by)
 VALUES ($1, $2, $3, $4, $5, $6,
     $7, $8)
-RETURNING org_id, id, user_id, provider, team_id, external_user_id, email, state, proposed_by, created_at, confirmed_at, revoked_at, updated_at
+RETURNING org_id, id, user_id, provider, team_id, external_user_id, email, state, proposed_by, created_at, confirmed_at, stale_at, revoked_at, updated_at
 `
 
 type InsertChatIdentityLinkParams struct {
@@ -165,10 +173,25 @@ func (q *Queries) InsertChatIdentityLink(ctx context.Context, arg InsertChatIden
 		&i.ProposedBy,
 		&i.CreatedAt,
 		&i.ConfirmedAt,
+		&i.StaleAt,
 		&i.RevokedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const markChatIdentityLinkStale = `-- name: MarkChatIdentityLinkStale :execrows
+UPDATE pc.chat_identity_links SET state = 'STALE'
+WHERE org_id = $1 AND id = $2 AND state = 'CONFIRMED'
+`
+
+// Slack no longer confirms a confirmed link (D265); the guard sets the time.
+func (q *Queries) MarkChatIdentityLinkStale(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, markChatIdentityLinkStale, orgID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const markSlackDMUnknown = `-- name: MarkSlackDMUnknown :execrows
@@ -268,17 +291,18 @@ func (q *Queries) SetSlackDMPosted(ctx context.Context, arg SetSlackDMPostedPara
 
 const slackDMChannel = `-- name: SlackDMChannel :one
 
-SELECT s.channel_record_id, s.team_id, s.activated_at, c.secret
+SELECT s.channel_record_id, s.team_id, s.activated_at, s.allowed_email_domains, c.secret
 FROM pc.slack_app_channels s
 JOIN pc.notification_channels c ON c.org_id = s.org_id AND c.id = s.channel_record_id
 WHERE s.org_id = $1 AND s.direct_messages AND s.state = 'ACTIVE' AND c.state = 'ACTIVE'
 `
 
 type SlackDMChannelRow struct {
-	ChannelRecordID ids.UUID
-	TeamID          *string
-	ActivatedAt     *time.Time
-	Secret          []byte
+	ChannelRecordID     ids.UUID
+	TeamID              *string
+	ActivatedAt         *time.Time
+	AllowedEmailDomains []string
+	Secret              []byte
 }
 
 // SPDX-License-Identifier: BUSL-1.1
@@ -294,13 +318,14 @@ func (q *Queries) SlackDMChannel(ctx context.Context, orgID ids.OrgID) (SlackDMC
 		&i.ChannelRecordID,
 		&i.TeamID,
 		&i.ActivatedAt,
+		&i.AllowedEmailDomains,
 		&i.Secret,
 	)
 	return i, err
 }
 
 const userChatIdentityLinks = `-- name: UserChatIdentityLinks :many
-SELECT org_id, id, user_id, provider, team_id, external_user_id, email, state, proposed_by, created_at, confirmed_at, revoked_at, updated_at FROM pc.chat_identity_links WHERE org_id = $1 AND user_id = $2 ORDER BY created_at DESC, id
+SELECT org_id, id, user_id, provider, team_id, external_user_id, email, state, proposed_by, created_at, confirmed_at, stale_at, revoked_at, updated_at FROM pc.chat_identity_links WHERE org_id = $1 AND user_id = $2 ORDER BY created_at DESC, id
 LIMIT 20
 `
 
@@ -325,6 +350,7 @@ func (q *Queries) UserChatIdentityLinks(ctx context.Context, orgID ids.OrgID, us
 			&i.ProposedBy,
 			&i.CreatedAt,
 			&i.ConfirmedAt,
+			&i.StaleAt,
 			&i.RevokedAt,
 			&i.UpdatedAt,
 		); err != nil {

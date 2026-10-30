@@ -392,8 +392,12 @@ type SlackAppConfig struct {
 	// channel is created and confirmed by its activation; it never changes,
 	// and at most one channel of an organization has it.
 	DirectMessages bool `protobuf:"varint,5,opt,name=direct_messages,json=directMessages,proto3" json:"direct_messages,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The email domains a person's Slack link may use: lowercase exact
+	// domains, no wildcards, 1 to 20 for a DM channel and none otherwise (G0
+	// M20 D265). Set when the channel is created; it never changes.
+	AllowedEmailDomains []string `protobuf:"bytes,6,rep,name=allowed_email_domains,json=allowedEmailDomains,proto3" json:"allowed_email_domains,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *SlackAppConfig) Reset() {
@@ -459,6 +463,13 @@ func (x *SlackAppConfig) GetDirectMessages() bool {
 		return x.DirectMessages
 	}
 	return false
+}
+
+func (x *SlackAppConfig) GetAllowedEmailDomains() []string {
+	if x != nil {
+		return x.AllowedEmailDomains
+	}
+	return nil
 }
 
 // Channel is one notification channel.
@@ -1729,7 +1740,7 @@ var File_pantherclaw_v1_notifications_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_notifications_proto_rawDesc = "" +
 	"\n" +
-	"\"pantherclaw/v1/notifications.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbd\x02\n" +
+	"\"pantherclaw/v1/notifications.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd1\x03\n" +
 	"\x0eSlackAppConfig\x12:\n" +
 	"\n" +
 	"channel_id\x18\x01 \x01(\tB\x1b\xbaH\x18r\x162\x14^[CG][A-Z0-9]{8,12}$R\tchannelId\x12G\n" +
@@ -1737,7 +1748,8 @@ const file_pantherclaw_v1_notifications_proto_rawDesc = "" +
 	"data_level\x18\x02 \x01(\x0e2\x1e.pantherclaw.v1.SlackDataLevelB\b\xbaH\x05\x82\x01\x02\x10\x01R\tdataLevel\x126\n" +
 	"\ateam_id\x18\x03 \x01(\tB\x1d\xbaH\x1ar\x18\x18 2\x14^(T[A-Z0-9]{4,30})?$R\x06teamId\x12E\n" +
 	"\tbot_token\x18\x04 \x01(\tB(\xbaH%r#\x18\x80\x022\x1e^(xoxb-[A-Za-z0-9-]{20,250})?$R\bbotToken\x12'\n" +
-	"\x0fdirect_messages\x18\x05 \x01(\bR\x0edirectMessages\"\x90\a\n" +
+	"\x0fdirect_messages\x18\x05 \x01(\bR\x0edirectMessages\x12\x91\x01\n" +
+	"\x15allowed_email_domains\x18\x06 \x03(\tB]\xbaHZ\x92\x01W\x10\x14\"SrQ\x18\xfd\x012L^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?([.][a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$R\x13allowedEmailDomains\"\x90\a\n" +
 	"\aChannel\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12/\n" +

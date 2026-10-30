@@ -39,7 +39,9 @@ func newDMEnv(t *testing.T) *dmEnv {
 	s := newSlackEnv(t, slackToken)
 	c, _, err := s.svc.CreateChannel(s.admin(), napp.ChannelInput{
 		Name: "approvals-dm", Kind: domain.KindSlackApp, EventTypes: []string{"channel.test"},
-		SlackApp: &domain.SlackAppConfig{ChannelID: slackApproval, BotToken: slackToken, DirectMessages: true},
+		SlackApp: &domain.SlackAppConfig{
+			ChannelID: slackApproval, BotToken: slackToken, DirectMessages: true, AllowedEmailDomains: []string{"example.test"},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -232,6 +234,7 @@ func TestHR529_SlackLinkNeedsAFullMemberWithTheSameEmail(t *testing.T) {
 	ctx := e.person(e.erin, td.RoleViewer)
 	for name, u := range map[string]slack.User{
 		"a guest":              {ID: erinSlack, Email: "erin@example.test", EmailConfirmed: true, Restricted: true},
+		"another email":        {ID: erinSlack, Email: "erin.other@example.test", EmailConfirmed: true},
 		"a bot":                {ID: erinSlack, Email: "erin@example.test", EmailConfirmed: true, Bot: true},
 		"an unconfirmed email": {ID: erinSlack, Email: "erin@example.test"},
 		"another workspace":    {ID: erinSlack, Email: "erin@example.test", EmailConfirmed: true, Team: "T0OTHER0001"},
@@ -245,5 +248,88 @@ func TestHR529_SlackLinkNeedsAFullMemberWithTheSameEmail(t *testing.T) {
 	// An API key is not the person.
 	if _, err := e.svc.ChatLinks(e.as(td.KindServiceAccount, ids.NewV7(), td.RoleViewer)); !errors.Is(err, napp.ErrLinkHumanOnly) {
 		t.Fatalf("a service account: %v", err)
+	}
+}
+
+// TestHR529_SlackLinkNeedsAnAllowedDomain: a person whose email is not on
+// one of the DM channel's domains gets no link, whatever Slack says; a DM
+// channel needs 1 to 20 lowercase exact domains and other channels none
+// (D265).
+//
+// Covers: F161
+func TestHR529_SlackLinkNeedsAnAllowedDomain(t *testing.T) {
+	e := newDMEnv(t)
+	e.exec(t, "UPDATE pc.users SET email = 'erin@elsewhere.test' WHERE org_id = $1 AND id = $2", e.org, e.erin)
+	e.sim.SetUser(slack.User{ID: erinSlack, Email: "erin@elsewhere.test", EmailConfirmed: true})
+	if _, err := e.svc.ProposeSlackLink(e.person(e.erin, td.RoleViewer)); !errors.Is(err, napp.ErrSlackLinkRefused) {
+		t.Fatalf("another domain: %v", err)
+	}
+	for name, domains := range map[string][]string{
+		"none":     nil,
+		"wildcard": {"*.example.test"},
+		"upper":    {"Example.test"},
+		"too many": {"a.test", "b.test", "c.test", "d.test", "e.test", "f.test", "g.test", "h.test", "i.test", "j.test", "k.test",
+			"l.test", "m.test", "n.test", "o.test", "p.test", "q.test", "r.test", "s.test", "t.test", "u.test"},
+	} {
+		if _, _, err := e.svc.CreateChannel(e.admin(), napp.ChannelInput{
+			Name: "dm-" + strings.ReplaceAll(name, " ", "-"), Kind: domain.KindSlackApp, EventTypes: []string{"channel.test"},
+			SlackApp: &domain.SlackAppConfig{ChannelID: "C0OTHER0001", BotToken: slackToken, DirectMessages: true, AllowedEmailDomains: domains},
+		}); err == nil {
+			t.Errorf("a DM channel with %s domains was created", name)
+		}
+	}
+	if _, _, err := e.svc.CreateChannel(e.admin(), napp.ChannelInput{
+		Name: "cards", Kind: domain.KindSlackApp, EventTypes: []string{"channel.test"},
+		SlackApp: &domain.SlackAppConfig{ChannelID: "C0OTHER0001", BotToken: slackToken, AllowedEmailDomains: []string{"example.test"}},
+	}); err == nil {
+		t.Error("a card channel with email domains was created")
+	}
+}
+
+// TestHR529_AChangedSlackMemberMakesTheLinkStale: before each DM Slack is
+// asked again; when the email now belongs to another Slack user (a reused
+// address) or the member's email changed, no DM goes, the link is STALE
+// and audited, and later requests send none (D265).
+//
+// Covers: F161, PN-017.3
+func TestHR529_AChangedSlackMemberMakesTheLinkStale(t *testing.T) {
+	for name, change := range map[string]func(*dmEnv){
+		"a reused address": func(e *dmEnv) {
+			e.sim.SetUser(slack.User{ID: daveSlack, Email: "dave.old@example.test", EmailConfirmed: true})
+			e.sim.SetUser(slack.User{ID: "U0MALLORY01", Email: "dave@example.test", EmailConfirmed: true})
+		},
+		"a changed email": func(e *dmEnv) {
+			e.sim.SetUser(slack.User{ID: daveSlack, Email: "dave.new@example.test", EmailConfirmed: true})
+		},
+		"a guest now": func(e *dmEnv) {
+			e.sim.SetUser(slack.User{ID: daveSlack, Email: "dave@example.test", EmailConfirmed: true, Restricted: true})
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newDMEnv(t)
+			l := e.link(t, e.dave.id, td.RoleApprover)
+			e.hold(t, 3600e9)
+			change(e)
+			ds := e.dmDeliveries(t, e.dave.id)
+			if len(ds) != 1 {
+				t.Fatalf("%d DM deliveries", len(ds))
+			}
+			if err := e.svc.Deliver(context.Background(), e.org, ds[0]); err != nil {
+				t.Fatal(err)
+			}
+			if n := len(e.sim.Messages()); n != 0 {
+				t.Fatalf("%d messages posted: %+v", n, e.sim.Messages())
+			}
+			if got := e.str(t, "SELECT state FROM pc.chat_identity_links WHERE id = $1", l.ID); got != napp.LinkStale {
+				t.Fatalf("link state %s", got)
+			}
+			if got := e.str(t, "SELECT count(*)::text FROM pc.ledger_entries WHERE kind = 'audit.notification.chat_link_stale'"); got != "1" {
+				t.Fatalf("%s stale audits", got)
+			}
+			e.hold(t, 3600e9)
+			if n := len(e.dmDeliveries(t, e.dave.id)); n != 1 {
+				t.Fatalf("a stale link got %d DM deliveries", n)
+			}
+		})
 	}
 }

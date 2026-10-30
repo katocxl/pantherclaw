@@ -6,14 +6,14 @@
 
 -- The org's slack_app channel that sends DMs, when it is active.
 -- name: SlackDMChannel :one
-SELECT s.channel_record_id, s.team_id, s.activated_at, c.secret
+SELECT s.channel_record_id, s.team_id, s.activated_at, s.allowed_email_domains, c.secret
 FROM pc.slack_app_channels s
 JOIN pc.notification_channels c ON c.org_id = s.org_id AND c.id = s.channel_record_id
 WHERE s.org_id = sqlc.arg(org_id) AND s.direct_messages AND s.state = 'ACTIVE' AND c.state = 'ACTIVE';
 
 -- The people among users with a confirmed Slack link in team.
 -- name: ConfirmedSlackLinks :many
-SELECT user_id, external_user_id FROM pc.chat_identity_links
+SELECT id, user_id, external_user_id, email FROM pc.chat_identity_links
 WHERE org_id = sqlc.arg(org_id) AND provider = 'slack' AND team_id = sqlc.arg(team_id) AND state = 'CONFIRMED'
   AND user_id = ANY (sqlc.arg(users)::uuid[]);
 
@@ -66,3 +66,8 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND user_id = sqlc.arg(use
 
 -- name: UserEmail :one
 SELECT email FROM pc.users WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'ACTIVE';
+
+-- Slack no longer confirms a confirmed link (D265); the guard sets the time.
+-- name: MarkChatIdentityLinkStale :execrows
+UPDATE pc.chat_identity_links SET state = 'STALE'
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'CONFIRMED';

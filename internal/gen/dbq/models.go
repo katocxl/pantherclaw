@@ -1019,6 +1019,7 @@ type PcChatIdentityLink struct {
 	ProposedBy     string
 	CreatedAt      time.Time
 	ConfirmedAt    *time.Time
+	StaleAt        *time.Time
 	RevokedAt      *time.Time
 	UpdatedAt      time.Time
 }
@@ -3341,6 +3342,7 @@ type PcSlackAppChannel struct {
 	LastCheckedAt       *time.Time
 	UpdatedAt           time.Time
 	DirectMessages      bool
+	AllowedEmailDomains []string
 }
 
 type PcSlackCard struct {

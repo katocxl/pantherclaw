@@ -60958,6 +60958,18 @@
             "type": "boolean",
             "title": "direct_messages",
             "description": "Whether the bot also sends approval direct messages to eligible\n deciders who linked their Slack identity (G0 M20 D256). Set when the\n channel is created and confirmed by its activation; it never changes,\n and at most one channel of an organization has it."
+          },
+          "allowedEmailDomains": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 253,
+              "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?([.][a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$",
+              "maxItems": 20
+            },
+            "title": "allowed_email_domains",
+            "maxItems": 20,
+            "description": "The email domains a person's Slack link may use: lowercase exact\n domains, no wildcards, 1 to 20 for a DM channel and none otherwise (G0\n M20 D265). Set when the channel is created; it never changes."
           }
         },
         "title": "SlackAppConfig",
@@ -61026,6 +61038,21 @@
             ],
             "title": "direct_messages",
             "description": "Whether the bot also sends approval direct messages to eligible\n deciders who linked their Slack identity (G0 M20 D256). Set when the\n channel is created and confirmed by its activation; it never changes,\n and at most one channel of an organization has it."
+          },
+          "allowedEmailDomains": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "maxLength": 253,
+              "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?([.][a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$",
+              "maxItems": 20
+            },
+            "title": "allowed_email_domains",
+            "maxItems": 20,
+            "description": "The email domains a person's Slack link may use: lowercase exact\n domains, no wildcards, 1 to 20 for a DM channel and none otherwise (G0\n M20 D265). Set when the channel is created; it never changes."
           }
         },
         "title": "SlackAppConfig",

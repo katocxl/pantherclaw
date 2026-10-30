@@ -115,7 +115,7 @@ func (s *Service) CreateChannelTx(ctx context.Context, tx db.TenantTx, in NewCha
 	if err == nil && in.Kind == domain.KindSlackApp {
 		err = dbq.New(tx).InsertSlackAppChannel(ctx, dbq.InsertSlackAppChannelParams{
 			OrgID: in.Org, ChannelRecordID: out.ID, SlackChannel: in.SlackApp.ChannelID, DataLevel: in.SlackApp.DataLevel,
-			DirectMessages: in.SlackApp.DirectMessages,
+			DirectMessages: in.SlackApp.DirectMessages, AllowedEmailDomains: emptyIfNil(in.SlackApp.AllowedEmailDomains),
 		})
 	}
 	return out, err

@@ -99,6 +99,18 @@ message SlackAppConfig {
   // channel is created and confirmed by its activation; it never changes,
   // and at most one channel of an organization has it.
   bool direct_messages = 5;
+  // The email domains a person's Slack link may use: lowercase exact
+  // domains, no wildcards, 1 to 20 for a DM channel and none otherwise (G0
+  // M20 D265). Set when the channel is created; it never changes.
+  repeated string allowed_email_domains = 6 [(buf.validate.field).repeated = {
+    max_items: 20
+    items: {
+      string: {
+        max_len: 253
+        pattern: "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?([.][a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+      }
+    }
+  }];
 }
 
 // NotificationSeverity orders notifications.
