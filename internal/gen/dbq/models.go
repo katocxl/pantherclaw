@@ -1010,6 +1010,23 @@ type PcChangeWindow struct {
 	RetiredAt   *time.Time
 }
 
+type PcChatIdentityLink struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	UserID         ids.UUID
+	Provider       string
+	TeamID         string
+	ExternalUserID string
+	Email          string
+	State          string
+	ProposedBy     string
+	CreatedAt      time.Time
+	ConfirmedAt    *time.Time
+	StaleAt        *time.Time
+	RevokedAt      *time.Time
+	UpdatedAt      time.Time
+}
+
 type PcCheckpoint struct {
 	OrgID     ids.OrgID
 	TreeSize  int64
@@ -2024,6 +2041,21 @@ type PcExternalPolicyCheck struct {
 	ActivatedAt         *time.Time
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
+}
+
+type PcExternalRef struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	CaseID          *ids.UUID
+	IncidentID      *ids.UUID
+	System          string
+	ConnectionID    ids.UUID
+	ExternalKey     string
+	ExternalID      *string
+	CreatedBy       string
+	CreatedAt       time.Time
+	RemoteUpdatedAt *time.Time
+	UpdatedAt       time.Time
 }
 
 type PcFact struct {
@@ -3610,6 +3642,8 @@ type PcSlackAppChannel struct {
 	SharedExternallyAt  *time.Time
 	LastCheckedAt       *time.Time
 	UpdatedAt           time.Time
+	DirectMessages      bool
+	AllowedEmailDomains []string
 }
 
 type PcSlackCard struct {
@@ -3624,6 +3658,19 @@ type PcSlackCard struct {
 	CloseAttempts   int32
 	CloseRetries    int32
 	CloseAfter      *time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+type PcSlackDirectMessage struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	RequestID       ids.UUID
+	UserID          ids.UUID
+	ChannelRecordID ids.UUID
+	ImChannel       *string
+	Ts              *string
+	State           string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }
@@ -3787,6 +3834,86 @@ type PcTeam struct {
 	State          string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+}
+
+type PcTeamsAppChannel struct {
+	OrgID               ids.OrgID
+	ChannelRecordID     ids.UUID
+	TenantID            ids.UUID
+	TeamID              string
+	TeamsChannel        string
+	AppID               ids.UUID
+	ServiceUrl          string
+	State               string
+	MembershipType      *string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	SecretReplacedBy    *string
+	SecretReplacedAt    *time.Time
+	SharedAt            *time.Time
+	LastCheckedAt       *time.Time
+	UpdatedAt           time.Time
+}
+
+type PcTeamsCard struct {
+	OrgID           ids.OrgID
+	CardID          ids.UUID
+	RequestID       ids.UUID
+	ChannelRecordID ids.UUID
+	ActivityID      *string
+	State           string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+type PcTicketFieldOwner struct {
+	OrgID     ids.OrgID
+	Field     string
+	Owner     string
+	ChangedBy string
+	ChangedAt time.Time
+}
+
+type PcTicketInboundEvent struct {
+	OrgID      ids.OrgID
+	ID         ids.UUID
+	ConfigID   ids.UUID
+	DeliveryID string
+	BodySha256 []byte
+	IssueKey   *string
+	Outcome    string
+	ReceivedAt time.Time
+}
+
+type PcTicketOutbound struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	ConfigID       ids.UUID
+	CaseID         *ids.UUID
+	IncidentID     *ids.UUID
+	Action         string
+	VerificationID ids.UUID
+	State          string
+	ResultCode     *string
+	CreatedAt      time.Time
+	FinishedAt     *time.Time
+}
+
+type PcTicketSyncConfig struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	System              string
+	ConnectionID        ids.UUID
+	ProjectKey          string
+	State               string
+	WebhookSecret       []byte
+	PrevWebhookSecret   []byte
+	PrevSecretExpiresAt *time.Time
+	CreatedBy           string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 type PcToolObservation struct {
