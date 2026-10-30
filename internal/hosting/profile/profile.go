@@ -87,6 +87,9 @@ type Names struct {
 	Container, Network, Volume string
 }
 
+// LabelHosted marks a hosted gateway's resources with its record's id.
+const LabelHosted = "io.pantherclaw.hosted"
+
 // NamesOf derives the engine names of a hosted gateway: "pc-hg…", the
 // record id's 32 hex digits.
 func NamesOf(hosted ids.UUID) Names {
@@ -130,7 +133,7 @@ func clamp(l Limits) Limits {
 // Network is the org's own bridge network: not internal, since the gateway
 // calls the server and its targets; no other org's container joins it.
 func (s Spec) Network() docker.Network {
-	return docker.Network{Name: NamesOf(s.Hosted).Network, Labels: map[string]string{"io.pantherclaw.hosted": s.Hosted.String()}}
+	return docker.Network{Name: NamesOf(s.Hosted).Network, Labels: map[string]string{LabelHosted: s.Hosted.String()}}
 }
 
 // Container is the org's gateway container (HR-501). Its arguments are
@@ -166,6 +169,6 @@ func (s Spec) Container() (docker.Container, error) {
 		BindRoot: filepath.Dir(s.Root),
 		Runtime:  s.Runtime,
 		Limits:   docker.Limits{PIDs: l.PIDs, MemoryMiB: l.MemoryMiB, MilliCPUs: l.MilliCPUs},
-		Labels:   map[string]string{"io.pantherclaw.hosted": s.Hosted.String()},
+		Labels:   map[string]string{LabelHosted: s.Hosted.String()},
 	}, nil
 }

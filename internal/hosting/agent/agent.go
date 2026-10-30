@@ -48,6 +48,9 @@ type Agent struct {
 	Engine  Engine
 	// Volumes removes a hosted gateway's state volume on deprovision.
 	Volumes func(ctx context.Context, name string) error
+	// Running lists the hosted gateways with a container on this host. Unset,
+	// nothing is swept.
+	Running func(ctx context.Context) ([]ids.UUID, error)
 	Private *Private
 	Router  *sni.Router
 	// Images maps a gateway version to its image, pinned by digest; the
@@ -104,10 +107,39 @@ func (a *Agent) Reconcile(ctx context.Context) error {
 			routes[as.GetSlug()] = addr
 		}
 	}
+	if err := a.sweep(ctx, res.GetAssignments()); err != nil {
+		errs = append(errs, err)
+		a.Log.WarnContext(ctx, "hosting.sweep_failed", pclog.Err(err))
+	}
 	a.Router.Set(routes)
 	if err := a.roll(ctx, res.GetAssignments(), routes); err != nil {
 		errs = append(errs, err)
 		a.Log.WarnContext(ctx, "hosting.upgrade_failed", pclog.Err(err))
+	}
+	return errors.Join(errs...)
+}
+
+// sweep removes every process no assignment names: the record is gone, as
+// after the org's deletion, so nothing else ever stops it (D228).
+func (a *Agent) sweep(ctx context.Context, assignments []*pb.HostingAssignment) error {
+	if a.Running == nil {
+		return nil
+	}
+	running, err := a.Running(ctx)
+	if err != nil {
+		return err
+	}
+	assigned := make(map[string]bool, len(assignments))
+	for _, as := range assignments {
+		assigned[as.GetId()] = true
+	}
+	var errs []error
+	for _, hosted := range running {
+		if assigned[hosted.String()] {
+			continue
+		}
+		a.Log.InfoContext(ctx, "hosting.unassigned_removed", slog.String("hosted_gateway", hosted.String()))
+		errs = append(errs, a.remove(ctx, hosted))
 	}
 	return errors.Join(errs...)
 }
@@ -225,6 +257,15 @@ func (a *Agent) run(ctx context.Context, s profile.Spec) error {
 // stop removes a deprovisioned hosted gateway's container, network, volume
 // and private directory, then reports it gone.
 func (a *Agent) stop(ctx context.Context, as *pb.HostingAssignment, hosted ids.UUID) error {
+	if err := a.remove(ctx, hosted); err != nil {
+		return err
+	}
+	_, err := a.Control.ReportStopped(ctx, &pb.ReportStoppedRequest{OrgId: as.GetOrgId(), Id: as.GetId()})
+	return err
+}
+
+// remove deletes everything a hosted gateway has on this host.
+func (a *Agent) remove(ctx context.Context, hosted ids.UUID) error {
 	names := profile.NamesOf(hosted)
 	if err := a.Engine.RemoveContainer(ctx, names.Container); err != nil && !notFound(err) {
 		return err
@@ -237,11 +278,7 @@ func (a *Agent) stop(ctx context.Context, as *pb.HostingAssignment, hosted ids.U
 			return err
 		}
 	}
-	if err := a.Private.Remove(hosted); err != nil {
-		return err
-	}
-	_, err := a.Control.ReportStopped(ctx, &pb.ReportStoppedRequest{OrgId: as.GetOrgId(), Id: as.GetId()})
-	return err
+	return a.Private.Remove(hosted)
 }
 
 func alreadyExists(err error) bool {

@@ -172,15 +172,21 @@ func (s *Service) ProvisionOrg(ctx context.Context, org ids.OrgID) (int, error) 
 	return n, nil
 }
 
-// errNotRequested ends a placement whose record moved on, so its slug claim
-// goes with it.
+// errNotRequested ends a placement whose record moved on.
 var errNotRequested = errors.New("hosted gateway no longer requested")
 
 // placeAndProvision places a requested hosted gateway on a host and
 // provisions it there. It reports false if another worker got there first.
-// A slug another record holds fails the request (D222).
+// The slug's claim commits first: a crash leaves a slug held, never a record
+// without its claim. A slug another record holds fails the request (D222,
+// D228).
 func (s *Service) placeAndProvision(ctx context.Context, h dbq.PcHostedGateway) (bool, error) {
-	err := s.place(ctx, h, func(host dbq.PcHostingHost) error {
+	if err := s.claim(ctx, h); errors.Is(err, domain.ErrSlugTaken) {
+		return false, errors.Join(err, s.failTaken(ctx, h))
+	} else if err != nil {
+		return false, err
+	}
+	err := s.place(ctx, func(host dbq.PcHostingHost) error {
 		return s.pool.InTenantTx(ctx, h.OrgID, func(ctx context.Context, tx db.TenantTx) error {
 			q := dbq.New(tx)
 			if state, err := q.OrgState(ctx, h.OrgID); err != nil {
@@ -202,13 +208,48 @@ func (s *Service) placeAndProvision(ctx context.Context, h dbq.PcHostedGateway) 
 	case err == nil:
 		return true, nil
 	case errors.Is(err, errNotRequested):
-		return false, nil
-	case errors.Is(err, domain.ErrSlugTaken):
-		if ferr := s.failTaken(ctx, h); ferr != nil {
-			return false, ferr
-		}
+		return false, s.dropStaleClaim(ctx, h)
+	case errors.Is(err, domain.ErrNoCapacity):
+		return false, errors.Join(err, s.dropStaleClaim(ctx, h))
 	}
 	return false, err
+}
+
+// claim holds the slug for h in its own committed transaction.
+func (s *Service) claim(ctx context.Context, h dbq.PcHostedGateway) error {
+	return s.pool.InGlobalTx(ctx, db.GlobalHosting, func(ctx context.Context, tx db.GlobalTx) error {
+		n, err := dbq.New(tx).ClaimHostingSlug(ctx, h.Slug, h.OrgID, h.ID)
+		if err == nil && n == 0 {
+			return domain.ErrSlugTaken
+		}
+		return err
+	})
+}
+
+// release frees the slug if h holds it.
+func (s *Service) release(ctx context.Context, slug string, hosted ids.UUID) error {
+	return s.pool.InGlobalTx(ctx, db.GlobalHosting, func(ctx context.Context, tx db.GlobalTx) error {
+		return dbq.New(tx).ReleaseHostingSlug(ctx, slug, hosted)
+	})
+}
+
+// dropStaleClaim frees the slug of a record that ended while a worker
+// claimed it for placement; the worker that placed it keeps the claim.
+func (s *Service) dropStaleClaim(ctx context.Context, h dbq.PcHostedGateway) error {
+	var ended bool
+	err := s.pool.InTenantTx(ctx, h.OrgID, func(ctx context.Context, tx db.TenantTx) error {
+		cur, err := dbq.New(tx).GetHostedGateway(ctx, h.OrgID, h.ID)
+		if db.IsNoRows(err) {
+			ended = true
+			return nil
+		}
+		ended = err == nil && (cur.State == domain.StateDeprovisioned || cur.State == domain.StateFailed)
+		return err
+	}, db.ReadOnly())
+	if err != nil || !ended {
+		return err
+	}
+	return s.release(ctx, h.Slug, h.ID)
 }
 
 // failTaken ends a request that lost its slug. The org may ask for another.
@@ -299,7 +340,7 @@ func (s *Service) mint(ctx context.Context, q *dbq.Queries, h dbq.PcHostedGatewa
 // host's row: the checks repeat under the lock, so two placements on one
 // host are one after the other (G0 M19 D219). Both are counted across orgs
 // through the audited lister.
-func (s *Service) place(ctx context.Context, h dbq.PcHostedGateway, fn func(dbq.PcHostingHost) error) error {
+func (s *Service) place(ctx context.Context, fn func(dbq.PcHostingHost) error) error {
 	var hosts []dbq.PcHostingHost
 	if err := s.pool.InGlobalTx(ctx, db.GlobalHosting, func(ctx context.Context, tx db.GlobalTx) error {
 		var err error
@@ -335,11 +376,6 @@ func (s *Service) place(ctx context.Context, h dbq.PcHostedGateway, fn func(dbq.
 			if _, ok, err := s.fits(ctx, host); err != nil || !ok {
 				return err
 			}
-			if n, err := dbq.New(tx).ClaimHostingSlug(gctx, h.Slug, h.ID); err != nil {
-				return err
-			} else if n == 0 {
-				return domain.ErrSlugTaken
-			}
 			placed = true
 			return fn(host)
 		})
@@ -356,8 +392,6 @@ func (s *Service) fits(ctx context.Context, h dbq.PcHostingHost) (int, bool, err
 	refs, err := s.assigned(ctx, h.ID)
 	return len(refs), err == nil && len(refs) < int(h.Capacity), err
 }
-
-// through the audited lister.
 
 // maxPerHost bounds a host's assignments the lister returns: above every
 // host capacity (migration 00228).

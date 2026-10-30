@@ -151,7 +151,7 @@ func writePrivate(path string, b []byte) error {
 }
 
 func (h *hostedTLS) loadCert() (*tls.Certificate, error) {
-	b, err := os.ReadFile(h.certFile) //nolint:gosec // G304: the gateway's own volume
+	b, err := os.ReadFile(h.certFile)
 	if err != nil {
 		return nil, err
 	}

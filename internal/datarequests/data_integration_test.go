@@ -323,3 +323,43 @@ func chainPlatform(t *testing.T, s *Service) {
 		time.Sleep(100 * time.Millisecond)
 	}
 }
+
+// TestHR390_DeletingAnOrgEndsItsHostedGatewayAndFreesItsSlug: the freeze
+// marks the org's hosted gateway for stopping while the host can still see
+// it, and the finished deletion leaves no record and no customer-chosen
+// name behind. The host agent removes a process with no record
+// (TestAProcessNoAssignmentNamesIsRemoved) (D228).
+//
+// Covers: PN-010.4
+func TestHR390_DeletingAnOrgEndsItsHostedGatewayAndFreesItsSlug(t *testing.T) {
+	d, s, org := setup(t)
+	gateway, hosted := ids.NewV7(), ids.NewV7()
+	d.AdminExec(t, `INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'hosted-acme', 'test')`, org, gateway)
+	d.AdminExec(t, `INSERT INTO pc.hosted_gateways (org_id, id, slug, state, gateway_id, host_id, milli_cpus, memory_mib, pids, created_by)
+		VALUES ($1, $2, 'acme', 'RUNNING', $3, $4, 500, 256, 128, 'test')`, org, hosted, gateway, ids.NewV7())
+	d.AdminExec(t, `INSERT INTO pc.hosting_slugs (slug, org_id, hosted_id) VALUES ('acme', $1, $2)`, org, hosted)
+	d.AdminExec(t, `INSERT INTO pc.hosting_slugs (slug, org_id, hosted_id) VALUES ('other', $1, $2)`, ids.NewV7(), ids.NewV7())
+	id := deletionRequest(t, s, org, time.Now().Add(-time.Hour))
+	if err := s.DeleteOrg(t.Context(), org, id); !errors.Is(err, ErrAwaitingSecurityCopy) {
+		t.Fatalf("first erasure must wait for external intent: %v", err)
+	}
+	var state string
+	d.AdminQueryRow(t, `SELECT state FROM pc.hosted_gateways WHERE id = $1`, []any{hosted}, &state)
+	if state != "DEPROVISIONING" {
+		t.Fatalf("after the freeze: %s", state)
+	}
+	acknowledgeIntents(t, s)
+	if err := s.DeleteOrg(t.Context(), org, id); err != nil {
+		t.Fatal(err)
+	}
+	var records, slugs int
+	d.AdminQueryRow(t, `SELECT (SELECT count(*) FROM pc.hosted_gateways WHERE org_id = $1), (SELECT count(*) FROM pc.hosting_slugs WHERE slug = 'acme')`, []any{org}, &records, &slugs)
+	if records != 0 || slugs != 0 {
+		t.Fatalf("%d records and %d slugs left", records, slugs)
+	}
+	var others int
+	d.AdminQueryRow(t, `SELECT count(*) FROM pc.hosting_slugs WHERE slug = 'other'`, nil, &others)
+	if others != 1 {
+		t.Fatal("another org's slug went too")
+	}
+}

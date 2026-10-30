@@ -2195,6 +2195,7 @@ type PcHostingHostCert struct {
 
 type PcHostingSlug struct {
 	Slug      string
+	OrgID     ids.OrgID
 	HostedID  ids.UUID
 	ClaimedAt time.Time
 }

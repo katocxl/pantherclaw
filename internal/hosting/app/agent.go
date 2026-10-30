@@ -218,21 +218,43 @@ func rolloutTarget(reported string, minimum gwapp.Version) *string {
 }
 
 // Stopped records that the host stopped and removed a deprovisioned
-// process, and frees its slug. Its gateway was revoked before (HR-503).
+// process, and frees its slug. Its gateway was revoked before (HR-503). The
+// release commits first and repeats harmlessly, so a retry finishes the
+// record, and a report for a record already finished still releases
+// (D228).
 func (s *Service) Stopped(ctx context.Context, id HostIdentity, org ids.OrgID, hosted ids.UUID) error {
-	return s.pool.InGlobalTx(ctx, db.GlobalHosting, func(gctx context.Context, global db.GlobalTx) error {
-		return s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-			slug, err := dbq.New(tx).FinishDeprovisionHostedGateway(ctx, org, hosted, &id.Host)
-			if db.IsNoRows(err) {
-				return ErrNotAssigned
-			} else if err != nil {
-				return err
-			}
-			if err := dbq.New(global).ReleaseHostingSlug(gctx, slug, hosted); err != nil {
-				return err
-			}
-			return record(ctx, tx, hostActor(id.Host), "hosted_gateway.stopped", hosted, nil)
-		})
+	var h dbq.PcHostedGateway
+	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		h, err = dbq.New(tx).GetHostedGateway(ctx, org, hosted)
+		if db.IsNoRows(err) {
+			return ErrNotAssigned
+		} else if err != nil {
+			return err
+		}
+		if h.HostID == nil || *h.HostID != id.Host || (h.State != domain.StateDeprovisioning && h.State != domain.StateDeprovisioned) {
+			return ErrNotAssigned
+		}
+		return nil
+	}, db.ReadOnly())
+	if err != nil {
+		return err
+	}
+	if err := s.release(ctx, h.Slug, hosted); err != nil {
+		return err
+	}
+	if h.State == domain.StateDeprovisioned {
+		return nil
+	}
+	return s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		n, err := dbq.New(tx).FinishDeprovisionHostedGateway(ctx, org, hosted, &id.Host)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return ErrNotAssigned
+		}
+		return record(ctx, tx, hostActor(id.Host), "hosted_gateway.stopped", hosted, nil)
 	})
 }
 

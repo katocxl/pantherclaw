@@ -53,7 +53,7 @@ CREATE TABLE pc.hosted_gateways (
     PRIMARY KEY (org_id, id),
     FOREIGN KEY (org_id, gateway_id) REFERENCES pc.gateways (org_id, id),
     FOREIGN KEY (org_id, enrolled_cert_id) REFERENCES pc.gateway_certs (org_id, id),
-    CHECK ((state IN ('REQUESTED', 'FAILED')) OR (gateway_id IS NOT NULL AND host_id IS NOT NULL)),
+    CHECK ((state IN ('REQUESTED', 'FAILED', 'DEPROVISIONED')) OR (gateway_id IS NOT NULL AND host_id IS NOT NULL)),
     CHECK ((state = 'DEPROVISIONED') = (deprovisioned_at IS NOT NULL))
 );
 -- One live hosted gateway per org (HR-499).
@@ -78,11 +78,12 @@ GRANT SELECT ON pc.hosted_gateways TO pc_audit_ro;
 -- The lister reads only what its two purposes select (HR-053).
 GRANT SELECT (org_id, id, slug, state, host_id, token_pulled_at, updated_at) ON pc.hosted_gateways TO pc_lister;
 -- The slugs in use (D222): operator-level like pc.hosting_hosts (00228), no
--- org, rows only in purpose hosting. A slug is a public hostname. hosted_id
--- is the record that holds it; no foreign key, its table is a tenant's
--- (HR-050).
+-- tenant policy, rows only in purpose hosting. A slug is a public hostname.
+-- hosted_id is the record that holds it and org_id its org, whose deletion
+-- frees it (HR-390); no foreign keys, those tables are a tenant's (HR-050).
 CREATE TABLE pc.hosting_slugs (
     slug       text        PRIMARY KEY CHECK (slug ~ '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'),
+    org_id     uuid        NOT NULL,
     hosted_id  uuid        NOT NULL,
     claimed_at timestamptz NOT NULL DEFAULT now()
 );

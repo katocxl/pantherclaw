@@ -11,6 +11,8 @@ import (
 
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/hosting/profile"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/sandbox/docker"
 )
 
 const newImg = "ghcr.io/katocxl/pantherclaw-gateway@sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
@@ -142,5 +144,42 @@ func TestNoUpgradeWhileAProcessIsDown(t *testing.T) {
 	}
 	if e.containers[names[0]].Image != img || e.containers[names[1]].Image != img {
 		t.Fatal("rolled while a process was down")
+	}
+}
+
+// TestAProcessNoAssignmentNamesIsRemoved: the record of a deleted org is
+// gone, so its container, network, volume and directory go with no report,
+// and an assigned process stays. A failed listing removes nothing (D228).
+//
+// Covers: PN-010.4
+func TestAProcessNoAssignmentNamesIsRemoved(t *testing.T) {
+	a, c, e, _ := newAgent(t)
+	as, hosted := assignment(pb.HostedGatewayState_HOSTED_GATEWAY_STATE_PROVISIONED)
+	c.assignments = append(c.assignments, as)
+	if err := a.Reconcile(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	gone := ids.NewV7()
+	names := profile.NamesOf(gone)
+	e.containers[names.Container] = docker.Container{Name: names.Container}
+	e.running[names.Container] = true
+	var volumes []string
+	a.Volumes = func(_ context.Context, name string) error {
+		volumes = append(volumes, name)
+		return nil
+	}
+	a.Running = func(context.Context) ([]ids.UUID, error) { return nil, errors.New("no engine") }
+	if err := a.Reconcile(context.Background()); err == nil || e.containers[names.Container].Name == "" {
+		t.Fatalf("a failed listing: %v, %d containers", err, len(e.containers))
+	}
+	a.Running = func(context.Context) ([]ids.UUID, error) { return []ids.UUID{hosted, gone}, nil }
+	if err := a.Reconcile(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := e.containers[names.Container]; ok || len(volumes) != 1 || volumes[0] != names.Volume {
+		t.Fatalf("still there: %v, volumes %v", e.containers, volumes)
+	}
+	if _, ok := e.containers[profile.NamesOf(hosted).Container]; !ok {
+		t.Fatal("removed an assigned process")
 	}
 }

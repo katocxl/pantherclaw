@@ -28,9 +28,11 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	"github.com/katocxl/pantherclaw/internal/hosting/profile"
 	"github.com/katocxl/pantherclaw/internal/hosting/sni"
 	"github.com/katocxl/pantherclaw/internal/platform/config"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/platform/version"
 	"github.com/katocxl/pantherclaw/internal/sandbox/docker"
@@ -269,6 +271,21 @@ func serve(ctx context.Context, args []string, stderr io.Writer, env config.Look
 			}
 			_, err := cli.Run(ctx, "volume", "rm", name)
 			return err
+		},
+		Running: func(ctx context.Context) ([]ids.UUID, error) {
+			out, err := cli.Run(ctx, "ps", "--all", "--filter", "label="+profile.LabelHosted, "--format", `{{.Label "`+profile.LabelHosted+`"}}`)
+			if err != nil {
+				return nil, err
+			}
+			var running []ids.UUID
+			for _, l := range strings.Fields(string(out)) {
+				id, err := ids.ParseUUID(l)
+				if err != nil {
+					return nil, err
+				}
+				running = append(running, id)
+			}
+			return running, nil
 		},
 		Private: private, Router: router, Images: cfg.Images, Default: cfg.DefaultVersion, Runtime: cfg.Runtime,
 		Version: version.Get().Version, Log: log,

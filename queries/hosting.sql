@@ -27,7 +27,7 @@ SELECT * FROM pc.hosting_hosts WHERE id = sqlc.arg(id) AND state = 'ACTIVE' FOR 
 -- name: ClaimHostingSlug :execrows
 -- Holds a slug for one hosted gateway across all hosts (D222). A second try
 -- for the same record keeps the claim; another record's claim wins: no row.
-INSERT INTO pc.hosting_slugs (slug, hosted_id) VALUES (sqlc.arg(slug), sqlc.arg(hosted_id))
+INSERT INTO pc.hosting_slugs (slug, org_id, hosted_id) VALUES (sqlc.arg(slug), sqlc.arg(org_id), sqlc.arg(hosted_id))
 ON CONFLICT (slug) DO UPDATE SET hosted_id = EXCLUDED.hosted_id
 WHERE pc.hosting_slugs.hosted_id = EXCLUDED.hosted_id;
 
@@ -36,6 +36,10 @@ SELECT EXISTS (SELECT 1 FROM pc.hosting_slugs WHERE slug = sqlc.arg(slug))::bool
 
 -- name: ReleaseHostingSlug :exec
 DELETE FROM pc.hosting_slugs WHERE slug = sqlc.arg(slug) AND hosted_id = sqlc.arg(hosted_id);
+
+-- name: ReleaseOrgHostingSlugs :exec
+-- The org's deletion frees its slugs (HR-390).
+DELETE FROM pc.hosting_slugs WHERE org_id = sqlc.arg(org_id);
 
 -- name: TouchHostingHost :exec
 UPDATE pc.hosting_hosts SET last_seen = now(), agent_version = sqlc.arg(agent_version) WHERE id = sqlc.arg(id);
@@ -172,10 +176,18 @@ SET state = CASE WHEN host_id IS NULL THEN 'DEPROVISIONED' ELSE 'DEPROVISIONING'
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state NOT IN ('DEPROVISIONING', 'DEPROVISIONED', 'FAILED')
 RETURNING *;
 
--- name: FinishDeprovisionHostedGateway :one
+-- name: DeprovisionOrgHostedGateways :exec
+-- The org's deletion stops its hosted gateways while the host still sees
+-- them; the tombstone ends their credentials (HR-392).
+UPDATE pc.hosted_gateways
+SET state = CASE WHEN host_id IS NULL THEN 'DEPROVISIONED' ELSE 'DEPROVISIONING' END,
+    deprovisioned_at = CASE WHEN host_id IS NULL THEN now() END,
+    token_sealed = NULL, updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND state NOT IN ('DEPROVISIONING', 'DEPROVISIONED', 'FAILED');
+
+-- name: FinishDeprovisionHostedGateway :execrows
 UPDATE pc.hosted_gateways SET state = 'DEPROVISIONED', deprovisioned_at = now(), updated_at = now()
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND host_id = sqlc.arg(host_id) AND state = 'DEPROVISIONING'
-RETURNING slug;
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND host_id = sqlc.arg(host_id) AND state = 'DEPROVISIONING';
 
 -- name: FailHostedGateway :execrows
 UPDATE pc.hosted_gateways SET state = 'FAILED', failure = sqlc.arg(failure), token_sealed = NULL, updated_at = now()
