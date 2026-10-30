@@ -405,6 +405,46 @@ func TestHR538_ACaseIsContainedOnlyThroughConfirmedContainment(t *testing.T) {
 	}
 }
 
+// alertCase opens a case on an alert of its own, and requests an action on it.
+func (f *fx) alertCase(test bool) ids.UUID {
+	f.t.Helper()
+	alert := ids.NewV7()
+	f.exec(`INSERT INTO pc.alerts (org_id, id, source, title, severity, attention, basis, dedupe_key, first_seen, last_seen, test)
+		VALUES ($1, $2, 'detection', 'stolen key', 'HIGH', 'ALERT', 'RULE_MATCH', $3, now(), now(), $4)`,
+		f.org, alert, alert.String(), test)
+	c, err := f.cases.Open(f.responder(), capp.OpenRequest{
+		Title: "stolen key", Alert: &alert, Subjects: []reflexdomain.Subject{{Type: reflexdomain.SubjectAgent, ID: f.agent.String()}},
+	})
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return f.action(nil, &c.ID)
+}
+
+// TestHR538_AnActionOnATestAlertNeverCounts: an action on a case opened from
+// a test alert is neither listed as unconfirmed nor measured once confirmed.
+// The same action on a real alert's case is both.
+// Covers: F774
+func TestHR538_AnActionOnATestAlertNeverCounts(t *testing.T) {
+	f := newFx(t)
+	f.collecting()
+	real, test := f.alertCase(false), f.alertCase(true)
+
+	f.rollup()
+	p := f.read(f.auditor(), outcomes.MetricRequestedToConfirm, "")
+	if r, ok := reason(p, outcomes.ReasonRequestedNotConfirmed); p.State != outcomes.NotCollected || !ok || r.Count != 1 {
+		t.Fatalf("only the real alert's request stands unconfirmed: %+v", p)
+	}
+
+	f.settle(real, "CONFIRMED")
+	f.settle(test, "CONFIRMED")
+	f.rollup()
+	p = f.read(f.auditor(), outcomes.MetricRequestedToConfirm, "")
+	if p.State != outcomes.Collected || p.Measured != 1 {
+		t.Fatalf("only the real alert's action is measured: %+v", p)
+	}
+}
+
 // TestHR539_AVolumeIsOnlyADenominator: more records change a share or a
 // duration and the count of measured cases, and nothing else; the samples
 // have no column for a total.
