@@ -7,6 +7,9 @@ package e2e
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -14,21 +17,32 @@ import (
 	"time"
 
 	gwapp "github.com/katocxl/pantherclaw/internal/gateways/app"
+	"github.com/katocxl/pantherclaw/internal/gateways/ca"
+	hostingapp "github.com/katocxl/pantherclaw/internal/hosting/app"
+	hostingdomain "github.com/katocxl/pantherclaw/internal/hosting/domain"
+	"github.com/katocxl/pantherclaw/internal/hosting/profile"
+	"github.com/katocxl/pantherclaw/internal/keystore"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
+	pccrypto "github.com/katocxl/pantherclaw/internal/platform/crypto"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/keys"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/platform/ratelimit"
+	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // TestE2E_M19_Exit is M19's exit journey (G0 M19 exit criteria, D225), one
 // path per feature on one stack. The held budget row goes through the
 // running gateway and server. The shared limit and the stream lease run two
 // in-process replicas of their services against the stack's database, which
-// is what they share. Failover has its own run (`task failover`), since CI
-// does not run it.
+// is what they share. The hosted gateway runs the hosting service in the
+// test against that database, with its own CA and a Team edition; no host
+// process starts. Failover has its own run (`task failover`), since CI does
+// not run it.
 //
-// Covers: PN-010.7, PN-011.1
+// Covers: PN-010.4, PN-010.7, PN-011.1
 func TestE2E_M19_Exit(t *testing.T) {
 	s := start(t, options{budget: "1000.00"})
 	t.Run("a held budget row is retried, not refused", func(t *testing.T) {
@@ -109,6 +123,83 @@ func TestE2E_M19_Exit(t *testing.T) {
 			t.Fatalf("after a close on the other replica: %v", err)
 		}
 		open[0] = sub
+	})
+
+	t.Run("a hosted gateway serves one org", func(t *testing.T) {
+		ctx := context.Background()
+		reg := keys.NewRegistry()
+		k, err := keys.GenerateSigningKey(keys.PurposeGatewayCA)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := reg.Put(k); err != nil {
+			t.Fatal(err)
+		}
+		authority, err := ca.New(reg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		kp, err := keys.NewFileProvider([]string{s.kek})
+		if err != nil {
+			t.Fatal(err)
+		}
+		const api = "https://gw-api.example.test:8443"
+		hosting := hostingapp.New(s.pool, authority, pccrypto.NewEnvelope(keystore.NewDEKStore(s.pool, kp)), teamEdition{}, api, clock.System{})
+		gateways := gwapp.New(s.pool, authority, api, nil)
+
+		pub, _, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		added, err := hosting.AddHost(ctx, "h1", "h1.example.test", 10, 4000, 8192, pub)
+		if err != nil {
+			t.Fatal(err)
+		}
+		admin := func(org ids.OrgID) context.Context {
+			return tapp.WithCaller(ctx, tapp.Caller{Subject: td.Subject{
+				Org: org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: ids.NewV7()},
+				Bindings: []td.Binding{{Role: td.RoleGatewayAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}},
+			}, Credential: tapp.CredAccessToken})
+		}
+		other := ids.New[ids.Org]()
+		s.db.AdminExec(t, "INSERT INTO pc.orgs (id, name) VALUES ($1, 'other')", other)
+
+		h, err := hosting.Request(admin(s.org), "exit", profile.Limits{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n, err := hosting.ProvisionOrg(ctx, s.org); err != nil || n != 1 {
+			t.Fatalf("provision: %d %v", n, err)
+		}
+		if _, err := hosting.Request(admin(s.org), "exit-two", profile.Limits{}); !errors.Is(err, hostingdomain.ErrOneOnly) {
+			t.Fatalf("a second hosted gateway: %v", err)
+		}
+		if _, err := hosting.Request(admin(other), "exit", profile.Limits{}); !errors.Is(err, hostingdomain.ErrSlugTaken) {
+			t.Fatalf("another org on this slug: %v", err)
+		}
+		tok, err := hosting.PullToken(ctx, added.Identity, s.org, h.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, priv, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		csr, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{}, priv)
+		if err != nil {
+			t.Fatal(err)
+		}
+		enrolled, err := gateways.Enroll(ctx, tok.Secret.Reveal(), csr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cert, err := x509.ParseCertificate(enrolled.Certificate)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if id, err := ca.ParseIdentity(cert); err != nil || id.Org != s.org {
+			t.Fatalf("the certificate names %+v %v, want only org %s", id, err, s.org)
+		}
 	})
 }
 

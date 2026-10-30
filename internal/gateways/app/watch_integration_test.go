@@ -6,9 +6,13 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -89,6 +93,64 @@ func TestHR010_ContainmentChangesReachTheStreamWithinASecond(t *testing.T) {
 	waitFor(t, s, time.Second, func(c Containment) bool { return c.ConfigVersion == 2 })
 	e.exec(t, "UPDATE pc.gateways SET state = 'REVOKED', revoked_by = 'x', revoked_at = now() WHERE id = $1", e.gw)
 	waitFor(t, s, time.Second, func(c Containment) bool { return !c.GatewayActive })
+}
+
+// logWriter counts the log lines that name a containment read failure.
+type logWriter struct{ failed *atomic.Int32 }
+
+func (l logWriter) Write(p []byte) (int, error) {
+	if bytes.Contains(p, []byte("containment_read_failed")) {
+		l.failed.Add(1)
+	}
+	return len(p), nil
+}
+
+// TestHR010_AReadStuckOnASilentHostFailsAndIsTriedAgain: the first database
+// host accepts and never answers, so a new connection waits out its 5 s
+// connect timeout there. Each read gives up well before that and the next
+// tick reads again, and a failed read confirms nothing, so the stream stays
+// quiet (G0 M19 D227).
+// Covers: PN-010.7
+func TestHR010_AReadStuckOnASilentHostFailsAndIsTriedAgain(t *testing.T) {
+	d := dbtest.New(t)
+	silent, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = silent.Close() }()
+	go func() {
+		for {
+			c, err := silent.Accept()
+			if err != nil {
+				return
+			}
+			defer func() { _ = c.Close() }()
+		}
+	}()
+	port := silent.Addr().(*net.TCPAddr).Port
+
+	e := newWatchEnv(t)
+	cfg := d.App
+	cfg.Hosts = []db.Endpoint{{Host: "127.0.0.1", Port: port}, {Host: cfg.Host, Port: cfg.Port}}
+	stuck := d.Pool(t, cfg)
+	stuck.Pgx().Reset() // the next read has to connect
+
+	var failed atomic.Int32
+	h := NewHub(e.pool, slog.New(slog.NewTextHandler(logWriter{&failed}, nil)))
+	h.pool = stuck
+	s, err := h.Subscribe(Identity{Org: e.org, Gateway: e.gw, Cert: ids.NewV7()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for deadline := time.Now().Add(2 * time.Second); failed.Load() < 2; time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d failed reads in 2 s, want at least 2: a read waited on the silent host", failed.Load())
+		}
+	}
+	if c, fresh := s.State(); fresh {
+		t.Fatalf("a failed read confirmed %+v", c)
+	}
 }
 
 // TestHR010_WithoutNotificationsThePollStillCatchesChanges: with no LISTEN

@@ -23,6 +23,10 @@ const (
 	// PollEvery is how often each watched org's containment is read, so a
 	// missed notification costs at most this long.
 	PollEvery = 250 * time.Millisecond
+	// readWithin bounds one read, well inside ConfirmedWithin: a read stuck
+	// on a connection attempt fails, confirming nothing, and the next tick
+	// tries again (G0 M19 D227).
+	readWithin = 500 * time.Millisecond
 	// HeartbeatEvery is how often a stream sends its state when nothing
 	// changed.
 	HeartbeatEvery = 500 * time.Millisecond
@@ -238,7 +242,10 @@ func (h *Hub) poll(ctx context.Context, org ids.OrgID, w *orgWatch) {
 	t := time.NewTicker(h.pollEvery)
 	defer t.Stop()
 	for {
-		if err := h.read(ctx, org, w); err != nil && ctx.Err() == nil && !errors.Is(err, errOrgInactive) {
+		read, cancel := context.WithTimeout(ctx, readWithin)
+		err := h.read(read, org, w)
+		cancel()
+		if err != nil && ctx.Err() == nil && !errors.Is(err, errOrgInactive) {
 			h.log.WarnContext(ctx, "gateways.containment_read_failed", slog.String("org_id", org.String()), pclog.Err(err))
 		}
 		select {
