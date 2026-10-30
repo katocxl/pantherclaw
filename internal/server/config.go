@@ -19,6 +19,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/config"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/keys"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
@@ -46,8 +47,10 @@ type Config struct {
 	// Support is customer-approved support access (config_m13_support.go).
 	Support SupportConfig `json:"support"`
 	// KEKFiles are key-encryption-key files; the first wraps new keys.
-	KEKFiles    []string `json:"kek_files" env:"PC_KEK_FILES"`
-	LicenceFile string   `json:"licence_file" env:"PC_LICENCE_FILE"`
+	KEKFiles []string `json:"kek_files" env:"PC_KEK_FILES"`
+	// KeyService picks the provider that wraps new keys (wiring_m18_keys.go).
+	KeyService  keys.ServiceConfig `json:"key_service"`
+	LicenceFile string             `json:"licence_file" env:"PC_LICENCE_FILE"`
 	// WorkerConcurrency is the number of concurrent jobs per worker process.
 	WorkerConcurrency int             `json:"worker_concurrency" env:"PC_WORKER_CONCURRENCY"`
 	Authority         AuthorityConfig `json:"authority"`
@@ -192,9 +195,7 @@ func (c *Config) Validate() error {
 	if c.DB.AppUser == db.RoleMigrator || c.DB.AppUser == "postgres" {
 		errs = append(errs, errors.New("database.app_user must be the unprivileged application role"))
 	}
-	if len(c.KEKFiles) == 0 {
-		errs = append(errs, errors.New("kek_files is required (generate one with: pantherclaw-server keys gen-kek --out FILE)"))
-	}
+	errs = append(errs, c.KeyService.Validate(len(c.KEKFiles))...)
 	if c.WorkerConcurrency < 1 || c.WorkerConcurrency > 1000 {
 		errs = append(errs, errors.New("worker_concurrency must be 1..1000"))
 	}
