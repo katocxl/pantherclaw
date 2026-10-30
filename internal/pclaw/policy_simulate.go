@@ -97,16 +97,17 @@ func waitSimulation(ctx context.Context, c pantherclawv1connect.PolicySimulation
 func init() {
 	categoryList := strings.Join(slices.Sorted(maps.Keys(simulationCategories)), ", ")
 	for name, c := range map[string]command{
-		"policy simulate": simulationRPC("policy simulate VERSION_ID [--days N] [--max N] [--wait]", 1, func(fs *flag.FlagSet) simulationCall {
+		"policy simulate": simulationRPC("policy simulate VERSION_ID [--days N] [--max N] [--cohort COHORT_ID] [--wait]", 1, func(fs *flag.FlagSet) simulationCall {
 			days := fs.Int("days", 0, "the window ending now, in days (default 7, at most 30, inside retention)")
 			maxN := fs.Int("max", 0, "most recorded decisions to replay (default 10000, at most 50000)")
 			wait := fs.Bool("wait", false, "wait for the simulation to finish and print its report")
+			cohort := fs.String("cohort", "", "replay only this fleet cohort's agents you may read now (Enterprise; G0 M18 D154)")
 			return func(ctx context.Context, c pantherclawv1connect.PolicySimulationServiceClient, a []string) (proto.Message, error) {
 				if *days < 0 || *days > 30 || *maxN < 0 || *maxN > 50000 {
 					return nil, fmt.Errorf("--days must be 1 to 30 and --max 1 to 50000")
 				}
 				res, err := c.SimulatePolicyVersion(ctx, &pantherclawv1.SimulatePolicyVersionRequest{
-					VersionId: a[0], Days: int32(*days), MaxEvaluations: int32(*maxN),
+					VersionId: a[0], Days: int32(*days), MaxEvaluations: int32(*maxN), CohortId: optString(*cohort),
 				})
 				if err != nil || !*wait {
 					return res, err

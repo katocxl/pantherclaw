@@ -70,7 +70,13 @@ func (w *world) count(sql string) int {
 
 func newWorld(t *testing.T) *world {
 	t.Helper()
-	p := dbtest.New(t).AppPool(t)
+	return newWorldOn(t, dbtest.New(t))
+}
+
+// newWorldOn builds the world on a test database.
+func newWorldOn(t *testing.T, d *dbtest.DB) *world {
+	t.Helper()
+	p := d.AppPool(t)
 	w := &world{
 		t: t, pool: p, org: ids.New[ids.Org](), teamA: ids.NewV7(), teamB: ids.NewV7(), envA: ids.NewV7(), envB: ids.NewV7(),
 		owner: ids.NewV7(), a1: ids.NewV7(), b1: ids.NewV7(),

@@ -116,6 +116,9 @@ type Service struct {
 	Pool    *db.Pool
 	Notify  Notifier
 	Changes ChangeRequester
+	// Editions reports the licence; nil: no exception group can be
+	// requested (fail closed, D161).
+	Editions Editions
 }
 
 // Exception is one stored exception.
@@ -302,7 +305,8 @@ func (s *Service) RequestException(ctx context.Context, r Request) (Exception, C
 
 // Apply is the EXCEPTION change request's apply callback (register it
 // with papp.Changes.Register(papp.ChangeException, s.Apply)): it activates
-// the exception in the confirming transaction, or voids the request with
+// the exception, or the exception group, in the confirming transaction,
+// or voids the request with
 // BASE_CHANGED or EXPIRED when the base no longer holds (D23), or with
 // EXCEPTION_REVOKED when the exception was revoked meanwhile (D33).
 func (s *Service) Apply(ctx context.Context, tx db.TenantTx, req papp.ChangeRequest) error {
@@ -311,6 +315,10 @@ func (s *Service) Apply(ctx context.Context, tx db.TenantTx, req papp.ChangeRequ
 		return err
 	}
 	_, err = s.Activate(ctx, tx, c.Org, req.Subject)
+	if errors.Is(err, ErrNotFound) {
+		// An exception group's request (D154): same kind, same path.
+		_, err = s.ActivateGroup(ctx, tx, c.Org, req.Subject)
+	}
 	switch {
 	case errors.Is(err, ErrBaseChanged):
 		return &papp.VoidError{Reason: papp.VoidBaseChanged}
@@ -387,7 +395,20 @@ func (s *Service) Activate(ctx context.Context, tx db.TenantTx, org ids.OrgID, i
 // the published version, exceptable and unchanged, and its agent is not
 // retired.
 func baseHolds(ctx context.Context, q *dbq.Queries, x Exception) error {
-	pub, err := q.GetPublishedPolicy(ctx, x.OrgID)
+	if err := ruleHolds(ctx, q, x.OrgID, x.BundleID, x.RuleID, x.RuleDigest); err != nil {
+		return err
+	}
+	agent, err := q.GetAgent(ctx, x.OrgID, x.AgentID)
+	if db.IsNoRows(err) || (err == nil && agent.State == "RETIRED") {
+		return ErrBaseChanged
+	}
+	return err
+}
+
+// ruleHolds reports ErrBaseChanged unless the rule is still in the
+// published version, exceptable and unchanged.
+func ruleHolds(ctx context.Context, q *dbq.Queries, org ids.OrgID, bundle, rule string, digest []byte) error {
+	pub, err := q.GetPublishedPolicy(ctx, org)
 	if db.IsNoRows(err) {
 		return ErrBaseChanged
 	} else if err != nil {
@@ -397,18 +418,14 @@ func baseHolds(ctx context.Context, q *dbq.Queries, x Exception) error {
 	if err != nil {
 		return err
 	}
-	i := slices.IndexFunc(b.Rules, func(r pdomain.Rule) bool { return r.ID == x.RuleID })
-	if b.ID != x.BundleID || i < 0 || !b.Rules[i].Exceptable {
+	i := slices.IndexFunc(b.Rules, func(r pdomain.Rule) bool { return r.ID == rule })
+	if b.ID != bundle || i < 0 || !b.Rules[i].Exceptable {
 		return ErrBaseChanged
 	}
-	if d := pdomain.RuleDigest(b.Rules[i]); !bytes.Equal(d[:], x.RuleDigest) {
+	if d := pdomain.RuleDigest(b.Rules[i]); !bytes.Equal(d[:], digest) {
 		return ErrBaseChanged
 	}
-	agent, err := q.GetAgent(ctx, x.OrgID, x.AgentID)
-	if db.IsNoRows(err) || (err == nil && agent.State == "RETIRED") {
-		return ErrBaseChanged
-	}
-	return err
+	return nil
 }
 
 // Decline closes a pending exception whose change request ended without
@@ -524,7 +541,7 @@ func listed(x dbq.ListPolicyExceptionsPageRow) Listed {
 		OrgID: x.OrgID, ID: x.ID, BundleID: x.BundleID, RuleID: x.RuleID, RuleDigest: x.RuleDigest, AgentID: x.AgentID,
 		Operations: x.Operations, Reason: x.Reason, OwnerID: x.OwnerID, RequestedBy: x.RequestedBy,
 		RequestedExpiry: x.RequestedExpiry, State: x.State, ActivatedAt: x.ActivatedAt, ExpiresAt: x.ExpiresAt,
-		RevokedBy: x.RevokedBy, RevokedReason: x.RevokedReason, CreatedAt: x.CreatedAt,
+		RevokedBy: x.RevokedBy, RevokedReason: x.RevokedReason, CreatedAt: x.CreatedAt, GroupID: x.GroupID,
 	}, EffectiveState: x.EffectiveState}
 }
 

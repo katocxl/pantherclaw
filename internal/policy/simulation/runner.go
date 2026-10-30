@@ -81,7 +81,7 @@ func (r *Runner) Step(ctx context.Context, org ids.OrgID, id ids.UUID) (more boo
 	if err != nil || !running {
 		return false, err
 	}
-	if ok, err := r.licensed(ctx); err != nil {
+	if ok, err := r.licensed(ctx, sim.Cohort != nil); err != nil {
 		return false, err
 	} else if !ok {
 		return false, r.Fail(ctx, org, id, FailEdition)
@@ -90,6 +90,15 @@ func (r *Runner) Step(ctx context.Context, org ids.OrgID, id ids.UUID) (more boo
 	if errors.Is(err, replay.ErrNotFound) {
 		return false, r.Fail(ctx, org, id, FailVersionGone)
 	} else if err != nil {
+		return false, err
+	}
+	// The cohorts holding each agent, read once a step, for the counts
+	// per cohort (D154).
+	var memberships map[ids.UUID][]ids.UUID
+	if err := r.Store.InTx(ctx, org, true, func(ctx context.Context, tx Tx) error {
+		memberships, err = tx.Memberships(ctx)
+		return err
+	}); err != nil {
 		return false, err
 	}
 	for {
@@ -105,6 +114,9 @@ func (r *Runner) Step(ctx context.Context, org ids.OrgID, id ids.UUID) (more boo
 			res, err := r.evaluate(ctx, org, sim.Version, bundle, rec)
 			if err != nil {
 				return false, err
+			}
+			for _, co := range memberships[rec.Agent] {
+				res.Cohorts = append(res.Cohorts, co.String())
 			}
 			results = append(results, res)
 		}
@@ -144,8 +156,9 @@ func (r *Runner) start(ctx context.Context, org ids.OrgID, id ids.UUID) (Simulat
 	return sim, running, err
 }
 
-// licensed reports whether the edition still includes simulation.
-func (r *Runner) licensed(ctx context.Context) (bool, error) {
+// licensed reports whether the edition still includes simulation, and
+// for a bulk simulation by cohort large-fleet administration (D161).
+func (r *Runner) licensed(ctx context.Context, bulk bool) (bool, error) {
 	if r.Editions == nil {
 		return false, nil
 	}
@@ -153,7 +166,7 @@ func (r *Runner) licensed(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return e.PolicySimulation(), nil
+	return e.PolicySimulation() && (!bulk || e.LargeFleetAdmin()), nil
 }
 
 // samePosition reports whether two cursors name the same recorded

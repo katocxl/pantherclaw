@@ -98,6 +98,10 @@ func simulationPB(s simulation.Simulation) *pantherclawv1.PolicySimulation {
 	if s.Finished != nil {
 		out.FinishTime = timestamppb.New(*s.Finished)
 	}
+	if s.Cohort != nil {
+		out.CohortId, out.CohortAgents, out.CohortTruncated = s.Cohort.String(), n(len(s.CohortAgents)), s.CohortTruncated
+	}
+	out.ByCohort = groupsPB(s.Report.ByCohort)
 	return out
 }
 
@@ -115,7 +119,15 @@ func (h *Handler) SimulatePolicyVersion(ctx context.Context, r *pantherclawv1.Si
 	if err != nil {
 		return nil, simulation.ErrVersionNotFound
 	}
-	s, err := h.svc.Simulate(ctx, simulation.Request{Version: v, Days: int(r.GetDays()), Max: int(r.GetMaxEvaluations())})
+	in := simulation.Request{Version: v, Days: int(r.GetDays()), Max: int(r.GetMaxEvaluations())}
+	if r.CohortId != nil {
+		cohort, err := ids.ParseUUID(r.GetCohortId())
+		if err != nil {
+			return nil, simulation.ErrCohortNotFound
+		}
+		in.Cohort = &cohort
+	}
+	s, err := h.svc.Simulate(ctx, in)
 	if err != nil {
 		return nil, err
 	}

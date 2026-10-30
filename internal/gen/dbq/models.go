@@ -2721,18 +2721,43 @@ type PcPolicyException struct {
 	RevokedBy       *ids.UUID
 	RevokedReason   *string
 	CreatedAt       time.Time
+	GroupID         *ids.UUID
+}
+
+type PcPolicyExceptionGroup struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	CohortID        ids.UUID
+	BundleID        string
+	RuleID          string
+	RuleDigest      []byte
+	Operations      []string
+	Reason          string
+	OwnerID         ids.UUID
+	RequestedBy     ids.UUID
+	CohortDigest    []byte
+	RequestedExpiry time.Time
+	State           string
+	ActivatedAt     *time.Time
+	ExpiresAt       *time.Time
+	Members         *int32
+	Truncated       pgtype.Bool
+	RevokedBy       *ids.UUID
+	RevokedReason   *string
+	CreatedAt       time.Time
 }
 
 type PcPolicyRollout struct {
-	OrgID          ids.OrgID
-	ID             ids.UUID
-	VersionID      ids.UUID
-	BaseVersionID  *ids.UUID
-	Stage          string
-	CreatedBy      string
-	CreatedAt      time.Time
-	StageChangedAt time.Time
-	CompletedAt    *time.Time
+	OrgID                  ids.OrgID
+	ID                     ids.UUID
+	VersionID              ids.UUID
+	BaseVersionID          *ids.UUID
+	Stage                  string
+	CreatedBy              string
+	CreatedAt              time.Time
+	StageChangedAt         time.Time
+	CompletedAt            *time.Time
+	RequireVerifiedPercent *int32
 }
 
 type PcPolicyRolloutCohort struct {
@@ -2808,6 +2833,10 @@ type PcPolicySimulation struct {
 	StartedAt        *time.Time
 	FinishedAt       *time.Time
 	Error            *string
+	CohortID         *ids.UUID
+	CohortAgents     []ids.UUID
+	CohortTruncated  pgtype.Bool
+	ByCohort         []byte
 }
 
 type PcPolicySimulationSample struct {

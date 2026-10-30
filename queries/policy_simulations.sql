@@ -6,9 +6,11 @@
 -- is the database's: it ends when the simulation is asked for.
 
 -- name: InsertPolicySimulation :one
-INSERT INTO pc.policy_simulations (org_id, id, version_id, content_digest, window_start, window_end, max_evaluations, requested_by)
+INSERT INTO pc.policy_simulations (org_id, id, version_id, content_digest, window_start, window_end, max_evaluations, requested_by,
+    cohort_id, cohort_agents, cohort_truncated)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(version_id), sqlc.arg(content_digest),
-    now() - make_interval(days => sqlc.arg(days)::integer), now(), sqlc.arg(max_evaluations), sqlc.arg(requested_by))
+    now() - make_interval(days => sqlc.arg(days)::integer), now(), sqlc.arg(max_evaluations), sqlc.arg(requested_by),
+    sqlc.narg(cohort_id)::uuid, sqlc.narg(cohort_agents)::uuid[], sqlc.narg(cohort_truncated)::boolean)
 RETURNING *;
 
 -- How many days back recorded decisions can still be replayed: the shorter
@@ -45,7 +47,7 @@ RETURNING *;
 -- name: AdvancePolicySimulation :one
 UPDATE pc.policy_simulations
 SET state = sqlc.arg(state), evaluated = sqlc.arg(evaluated), counts = sqlc.arg(counts), by_workflow = sqlc.arg(by_workflow),
-    burden = sqlc.arg(burden), cursor_created_at = sqlc.narg(cursor_created_at), cursor_txn = sqlc.narg(cursor_txn),
+    burden = sqlc.arg(burden), by_cohort = sqlc.arg(by_cohort), cursor_created_at = sqlc.narg(cursor_created_at), cursor_txn = sqlc.narg(cursor_txn),
     cursor_evaluation = sqlc.narg(cursor_evaluation), error = sqlc.narg(error)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'RUNNING'
   AND evaluated = sqlc.arg(prev_evaluated)
@@ -59,7 +61,8 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('QUEUED', 'R
 RETURNING *;
 
 -- The next recorded decisions of a window, newest first, after the
--- cursor: ids, the agent and the operation only.
+-- cursor: ids, the agent and the operation only; for a cohort simulation,
+-- only those of its snapshotted agents (00221).
 -- name: SimulationReceipts :many
 SELECT d.transaction_id, d.evaluation, d.created_at, r.agent_id, t.operation
 FROM pc.decision_receipts d
@@ -67,6 +70,7 @@ JOIN pc.transactions t ON t.org_id = d.org_id AND t.id = d.transaction_id
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 WHERE d.org_id = sqlc.arg(org_id)
   AND d.created_at >= sqlc.arg(window_start) AND d.created_at <= sqlc.arg(window_end)
+  AND (sqlc.narg(cohort_agents)::uuid[] IS NULL OR r.agent_id = ANY (sqlc.narg(cohort_agents)::uuid[]))
   AND (sqlc.narg(cursor_created_at)::timestamptz IS NULL
        OR (d.created_at, d.transaction_id, d.evaluation) < (sqlc.narg(cursor_created_at)::timestamptz, sqlc.narg(cursor_txn)::uuid,
                                                             sqlc.narg(cursor_evaluation)::integer))

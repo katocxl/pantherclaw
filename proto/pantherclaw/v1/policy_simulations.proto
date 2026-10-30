@@ -96,6 +96,10 @@ message SimulatePolicyVersionRequest {
     gte: 0
     lte: 50000
   }];
+  // cohort_id makes it a bulk simulation (Enterprise; G0 M18 D154): only
+  // the decisions of the fleet cohort's agents the caller may read now
+  // are replayed, under the same caps.
+  optional string cohort_id = 4 [(buf.validate.field).string.uuid = true];
 }
 
 // PolicySimulationCounts counts recorded decisions by category.
@@ -162,6 +166,16 @@ message PolicySimulation {
   google.protobuf.Timestamp finish_time = 19;
   // error is why a FAILED simulation stopped.
   string error = 20;
+  // cohort_id is a bulk simulation's fleet cohort; empty: the whole org.
+  string cohort_id = 21;
+  // cohort_agents is how many agents its snapshot holds.
+  int32 cohort_agents = 22;
+  // by_cohort counts decisions per fleet cohort (key: the cohort id),
+  // only for cohorts the caller may read.
+  repeated PolicySimulationGroup by_cohort = 23;
+  // cohort_truncated says the cohort held more agents than its snapshot
+  // could (2000): later ones were not replayed.
+  bool cohort_truncated = 24;
 }
 
 message SimulatePolicyVersionResponse {

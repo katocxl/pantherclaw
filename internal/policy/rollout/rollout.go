@@ -446,12 +446,27 @@ func sameVersion(a, b *ids.UUID) bool {
 // policy.publish): the sweeper replays the new decisions of the agents of
 // shadowCohorts (none: every agent) under it, and nothing is enforced.
 func (s *Service) StartRollout(ctx context.Context, version ids.UUID, shadowCohorts []string) (Rollout, error) {
+	return s.StartGatedRollout(ctx, version, shadowCohorts, nil)
+}
+
+// StartGatedRollout is StartRollout with an optional VERIFIED threshold in
+// percent (nil: none; D154, HR-479): the rollout then completes only while
+// at least that share of its targets other than EXCEPTION are VERIFIED.
+func (s *Service) StartGatedRollout(ctx context.Context, version ids.UUID, shadowCohorts []string, verifiedPercent *int32) (Rollout, error) {
+	if verifiedPercent != nil && (*verifiedPercent < MinVerifiedPercent || *verifiedPercent > MaxVerifiedPercent) {
+		return Rollout{}, ErrVerifiedPercent
+	}
 	c, err := publisher(ctx)
 	if err != nil {
 		return Rollout{}, err
 	}
 	if err := s.team(ctx); err != nil {
 		return Rollout{}, err
+	}
+	if verifiedPercent != nil {
+		if err := s.largeFleet(ctx); err != nil {
+			return Rollout{}, err
+		}
 	}
 	var id ids.UUID
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
@@ -476,6 +491,7 @@ func (s *Service) StartRollout(ctx context.Context, version ids.UUID, shadowCoho
 		}
 		r, err := q.InsertPolicyRollout(ctx, dbq.InsertPolicyRolloutParams{
 			OrgID: c.Org, ID: ids.NewV7(), VersionID: version, BaseVersionID: base, Stage: StageShadow, CreatedBy: c.Principal.String(),
+			RequireVerifiedPercent: verifiedPercent,
 		})
 		if db.IsUniqueViolation(err) {
 			return ErrRolloutOpen
@@ -491,9 +507,13 @@ func (s *Service) StartRollout(ctx context.Context, version ids.UUID, shadowCoho
 				return err
 			}
 		}
-		return s.audit(ctx, tx, c, "policy.rollout_started", r.ID, map[string]string{
+		details := map[string]string{
 			"version_id": version.String(), "stage": StageShadow, "shadow_cohorts": strconv.Itoa(len(shadowCohorts)),
-		})
+		}
+		if verifiedPercent != nil {
+			details["require_verified_percent"] = strconv.Itoa(int(*verifiedPercent))
+		}
+		return s.audit(ctx, tx, c, "policy.rollout_started", r.ID, details)
 	})
 	if err != nil {
 		return Rollout{}, err
@@ -759,7 +779,9 @@ func (s *Service) CompleteRollout(ctx context.Context, rollout ids.UUID) (Rollou
 		if !sameVersion(cur, r.BaseVersionID) {
 			return ErrBaseChanged
 		}
-		return nil
+		// HR-479: checked here so no PUBLISH request is made below the
+		// threshold, and again when the rollout becomes COMPLETE.
+		return verifiedGate(ctx, q, c.Org, r)
 	}); err != nil {
 		return Rollout{}, nil, err
 	}
@@ -906,6 +928,11 @@ func (s *Service) Published(ctx context.Context, tx db.TenantTx, org ids.OrgID, 
 				return err
 			}
 			continue
+		}
+		// A gated rollout's version is published only at its threshold
+		// (HR-479), however the publish was asked for; 00222 checks it too.
+		if err := verifiedGate(ctx, q, org, r); err != nil {
+			return err
 		}
 		if _, err := q.SetPolicyRolloutStage(ctx, dbq.SetPolicyRolloutStageParams{
 			Stage: StageComplete, OrgID: org, ID: r.ID, FromStages: []string{StageShadow, StagePilot},

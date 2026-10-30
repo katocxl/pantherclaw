@@ -52,8 +52,9 @@ WHERE org_id = sqlc.arg(org_id) AND cohort_id = sqlc.arg(cohort_id)
 ORDER BY agent_id;
 
 -- name: InsertPolicyRollout :one
-INSERT INTO pc.policy_rollouts (org_id, id, version_id, base_version_id, stage, created_by)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(version_id), sqlc.narg(base_version_id), sqlc.arg(stage), sqlc.arg(created_by))
+INSERT INTO pc.policy_rollouts (org_id, id, version_id, base_version_id, stage, created_by, require_verified_percent)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(version_id), sqlc.narg(base_version_id), sqlc.arg(stage), sqlc.arg(created_by),
+    sqlc.narg(require_verified_percent)::integer)
 RETURNING *;
 
 -- name: GetPolicyRollout :one

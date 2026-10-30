@@ -66,7 +66,7 @@ func (s *Service) Sweep(ctx context.Context, org ids.OrgID) (int, error) {
 				return err
 			}
 		}
-		return nil
+		return s.sweepGroups(ctx, tx, org)
 	})
 	return n, err
 }

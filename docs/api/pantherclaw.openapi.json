@@ -6864,6 +6864,60 @@
         }
       }
     },
+    "/pantherclaw.v1.CohortService/GetCohortFindings": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.CohortService"
+        ],
+        "summary": "GetCohortFindings",
+        "description": "GetCohortFindings counts a cohort's findings over its agents the\n caller may read (G0 M18 D154): open coverage findings, grants beyond\n the baseline, FAILED rollout targets and active exceptions. A kind\n the caller may not read is left out.\n permission: agent.read",
+        "operationId": "pantherclaw.v1.CohortService.GetCohortFindings",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetCohortFindingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetCohortFindingsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.GitHubService/ProveIdentity": {
       "post": {
         "tags": [
@@ -19439,6 +19493,222 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.RevokePolicyExceptionResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PolicyExceptionService/RequestPolicyExceptionGroup": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PolicyExceptionService"
+        ],
+        "summary": "RequestPolicyExceptionGroup",
+        "description": "RequestPolicyExceptionGroup asks for an exception group (a person only;\n Enterprise, G0 M18 D154): as RequestPolicyException, for the agents a\n fleet cohort holds when the change request is approved. Agents that\n join the cohort later are not covered.\n permission: policy.exception.request",
+        "operationId": "pantherclaw.v1.PolicyExceptionService.RequestPolicyExceptionGroup",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RequestPolicyExceptionGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RequestPolicyExceptionGroupResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PolicyExceptionService/GetPolicyExceptionGroup": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PolicyExceptionService"
+        ],
+        "summary": "GetPolicyExceptionGroup",
+        "description": "GetPolicyExceptionGroup returns one group and the agents it covers.\n permission: policy.read",
+        "operationId": "pantherclaw.v1.PolicyExceptionService.GetPolicyExceptionGroup",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetPolicyExceptionGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetPolicyExceptionGroupResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PolicyExceptionService/ListPolicyExceptionGroups": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PolicyExceptionService"
+        ],
+        "summary": "ListPolicyExceptionGroups",
+        "description": "ListPolicyExceptionGroups lists groups, newest first.\n permission: policy.read",
+        "operationId": "pantherclaw.v1.PolicyExceptionService.ListPolicyExceptionGroups",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListPolicyExceptionGroupsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListPolicyExceptionGroupsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PolicyExceptionService/RevokePolicyExceptionGroup": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PolicyExceptionService"
+        ],
+        "summary": "RevokePolicyExceptionGroup",
+        "description": "RevokePolicyExceptionGroup ends a pending or active group and each of\n its exceptions at once (a person only; every edition).\n permission: policy.publish",
+        "operationId": "pantherclaw.v1.PolicyExceptionService.RevokePolicyExceptionGroup",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RevokePolicyExceptionGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RevokePolicyExceptionGroupResponse"
                 }
               }
             }
@@ -40799,6 +41069,35 @@
         "additionalProperties": false,
         "description": "CohortChange is one thing that moved, oldest first."
       },
+      "pantherclaw.v1.CohortFindingCount": {
+        "type": "object",
+        "properties": {
+          "findings": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "findings",
+            "format": "int64"
+          },
+          "agents": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "agents",
+            "format": "int64"
+          },
+          "shown": {
+            "type": "boolean",
+            "title": "shown",
+            "description": "shown is false when the caller may not read this kind; the counts\n are then zero."
+          }
+        },
+        "title": "CohortFindingCount",
+        "additionalProperties": false,
+        "description": "CohortFindingCount is one kind of finding: how many, on how many agents."
+      },
       "pantherclaw.v1.CreateFleetCohortRequest": {
         "type": "object",
         "properties": {
@@ -41162,6 +41461,59 @@
           }
         },
         "title": "GetCohortChangesResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.GetCohortFindingsRequest": {
+        "type": "object",
+        "properties": {
+          "cohortId": {
+            "type": "string",
+            "title": "cohort_id",
+            "format": "uuid"
+          }
+        },
+        "title": "GetCohortFindingsRequest",
+        "additionalProperties": false,
+        "required": [
+          "cohortId"
+        ]
+      },
+      "pantherclaw.v1.GetCohortFindingsResponse": {
+        "type": "object",
+        "properties": {
+          "agents": {
+            "type": "integer",
+            "title": "agents",
+            "format": "int32",
+            "description": "agents is how many of the cohort's agents the counts cover: those the\n caller may read."
+          },
+          "coverage": {
+            "title": "coverage",
+            "description": "coverage counts open coverage findings (coverage.read).",
+            "$ref": "#/components/schemas/pantherclaw.v1.CohortFindingCount"
+          },
+          "departures": {
+            "title": "departures",
+            "description": "departures counts active grants beyond the cohort's baseline.",
+            "$ref": "#/components/schemas/pantherclaw.v1.CohortFindingCount"
+          },
+          "failedTargets": {
+            "title": "failed_targets",
+            "description": "failed_targets counts FAILED targets of open rollouts and of those\n completed in the last 7 days (policy.read).",
+            "$ref": "#/components/schemas/pantherclaw.v1.CohortFindingCount"
+          },
+          "activeExceptions": {
+            "title": "active_exceptions",
+            "description": "active_exceptions counts exceptions that waive something now\n (policy.read).",
+            "$ref": "#/components/schemas/pantherclaw.v1.CohortFindingCount"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "truncated",
+            "description": "truncated: the cohort has more agents or grants than are read."
+          }
+        },
+        "title": "GetCohortFindingsResponse",
         "additionalProperties": false
       },
       "pantherclaw.v1.GetCohortQueueRequest": {
@@ -68044,6 +68396,44 @@
         "additionalProperties": false,
         "description": "ValidationReport is one validation (G0 M11.1 design decision 8)."
       },
+      "pantherclaw.v1.GetPolicyExceptionGroupRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Group id."
+          }
+        },
+        "title": "GetPolicyExceptionGroupRequest",
+        "additionalProperties": false,
+        "description": "GetPolicyExceptionGroupRequest names a group.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetPolicyExceptionGroupResponse": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "title": "group",
+            "description": "The group.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PolicyExceptionGroup"
+          },
+          "agentIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "agent_ids",
+            "description": "The agents its snapshot covers, by id."
+          }
+        },
+        "title": "GetPolicyExceptionGroupResponse",
+        "additionalProperties": false,
+        "description": "GetPolicyExceptionGroupResponse returns it."
+      },
       "pantherclaw.v1.GetPolicyExceptionRequest": {
         "type": "object",
         "properties": {
@@ -68073,6 +68463,90 @@
         "title": "GetPolicyExceptionResponse",
         "additionalProperties": false,
         "description": "GetPolicyExceptionResponse returns it."
+      },
+      "pantherclaw.v1.ListPolicyExceptionGroupsRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default 50, at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 64,
+            "description": "Token from a previous response.",
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "cohortId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "cohort_id",
+            "format": "uuid",
+            "description": "Only this cohort.",
+            "nullable": true
+          },
+          "state": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "state",
+            "enum": [
+              "PENDING",
+              "ACTIVE",
+              "DECLINED",
+              "REVOKED",
+              "EXPIRED",
+              null
+            ],
+            "description": "Only this state.",
+            "nullable": true
+          }
+        },
+        "title": "ListPolicyExceptionGroupsRequest",
+        "additionalProperties": false,
+        "description": "ListPolicyExceptionGroupsRequest filters groups."
+      },
+      "pantherclaw.v1.ListPolicyExceptionGroupsResponse": {
+        "type": "object",
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PolicyExceptionGroup"
+            },
+            "title": "groups",
+            "description": "Groups, newest first."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Token for the next page; empty at the end."
+          }
+        },
+        "title": "ListPolicyExceptionGroupsResponse",
+        "additionalProperties": false,
+        "description": "ListPolicyExceptionGroupsResponse is one page."
       },
       "pantherclaw.v1.ListPolicyExceptionsRequest": {
         "type": "object",
@@ -68254,11 +68728,215 @@
             "title": "create_time",
             "description": "When it was requested.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "groupId": {
+            "type": "string",
+            "title": "group_id",
+            "description": "The exception group it belongs to; empty for one agent's exception."
           }
         },
         "title": "PolicyException",
         "additionalProperties": false,
         "description": "PolicyException is one exception."
+      },
+      "pantherclaw.v1.PolicyExceptionGroup": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Group id."
+          },
+          "cohortId": {
+            "type": "string",
+            "title": "cohort_id",
+            "description": "The fleet cohort whose agents it covers, as they were at approval."
+          },
+          "bundleId": {
+            "type": "string",
+            "title": "bundle_id",
+            "description": "The policy bundle id."
+          },
+          "ruleId": {
+            "type": "string",
+            "title": "rule_id",
+            "description": "The waived rule."
+          },
+          "ruleDigest": {
+            "type": "string",
+            "title": "rule_digest",
+            "description": "SHA-256 of the rule as requested, hex."
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "operations",
+            "description": "The exact operations it applies to."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Why, in the requester's words (untrusted text)."
+          },
+          "ownerId": {
+            "type": "string",
+            "title": "owner_id",
+            "description": "The person accountable for it."
+          },
+          "requestedBy": {
+            "type": "string",
+            "title": "requested_by",
+            "description": "The person who requested it."
+          },
+          "requestedExpireTime": {
+            "title": "requested_expire_time",
+            "description": "The expiry asked for.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"PENDING\", \"ACTIVE\", \"DECLINED\", \"REVOKED\" or \"EXPIRED\"."
+          },
+          "activateTime": {
+            "title": "activate_time",
+            "description": "When it became active; unset before.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "expireTime": {
+            "title": "expire_time",
+            "description": "When it ends; unset before it is active.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "members": {
+            "type": "integer",
+            "title": "members",
+            "format": "int32",
+            "description": "How many agents the snapshot at approval holds; unset before.",
+            "nullable": true
+          },
+          "revokedBy": {
+            "type": "string",
+            "title": "revoked_by",
+            "description": "Who revoked it; empty unless revoked."
+          },
+          "revokedReason": {
+            "type": "string",
+            "title": "revoked_reason",
+            "description": "Why it was revoked (untrusted text)."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was requested.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "truncated",
+            "description": "Whether the cohort held more agents than the snapshot at approval\n could (2000), so later ones were left out; unset before.",
+            "nullable": true
+          }
+        },
+        "title": "PolicyExceptionGroup",
+        "additionalProperties": false,
+        "description": "PolicyExceptionGroup is one exception group (G0 M18 D154)."
+      },
+      "pantherclaw.v1.RequestPolicyExceptionGroupRequest": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "title": "rule_id",
+            "maxLength": 64,
+            "minLength": 1,
+            "description": "The rule id in the published version."
+          },
+          "cohortId": {
+            "type": "string",
+            "title": "cohort_id",
+            "format": "uuid",
+            "description": "Fleet cohort id."
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7}$",
+              "maxItems": 16,
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "title": "operations",
+            "maxItems": 16,
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "Exact operations inside the rule's scope."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1,
+            "description": "Why the rule should not apply (1 to 500 characters)."
+          },
+          "expiresInSeconds": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "expires_in_seconds",
+            "maximum": 2592000,
+            "minimum": 60,
+            "format": "int64",
+            "description": "How long it should last, in seconds: at most 30 days."
+          },
+          "ownerId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "owner_id",
+            "format": "uuid",
+            "description": "The person accountable for it; unset: the requester.",
+            "nullable": true
+          }
+        },
+        "title": "RequestPolicyExceptionGroupRequest",
+        "additionalProperties": false,
+        "description": "RequestPolicyExceptionGroupRequest describes an exception group.",
+        "required": [
+          "ruleId",
+          "cohortId",
+          "operations",
+          "reason",
+          "expiresInSeconds"
+        ]
+      },
+      "pantherclaw.v1.RequestPolicyExceptionGroupResponse": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "title": "group",
+            "description": "The group, PENDING.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PolicyExceptionGroup"
+          },
+          "changeRequestId": {
+            "type": "string",
+            "title": "change_request_id",
+            "description": "The change request to confirm."
+          },
+          "changeRequestUrl": {
+            "type": "string",
+            "title": "change_request_url",
+            "description": "The page where it is confirmed."
+          }
+        },
+        "title": "RequestPolicyExceptionGroupResponse",
+        "additionalProperties": false,
+        "description": "RequestPolicyExceptionGroupResponse returns the pending group."
       },
       "pantherclaw.v1.RequestPolicyExceptionRequest": {
         "type": "object",
@@ -68354,6 +69032,44 @@
         "title": "RequestPolicyExceptionResponse",
         "additionalProperties": false,
         "description": "RequestPolicyExceptionResponse returns the pending exception."
+      },
+      "pantherclaw.v1.RevokePolicyExceptionGroupRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Group id."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1,
+            "description": "Why (1 to 500 characters)."
+          }
+        },
+        "title": "RevokePolicyExceptionGroupRequest",
+        "additionalProperties": false,
+        "description": "RevokePolicyExceptionGroupRequest names a group.",
+        "required": [
+          "id",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.RevokePolicyExceptionGroupResponse": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "title": "group",
+            "description": "The group, REVOKED.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PolicyExceptionGroup"
+          }
+        },
+        "title": "RevokePolicyExceptionGroupResponse",
+        "additionalProperties": false,
+        "description": "RevokePolicyExceptionGroupResponse returns it."
       },
       "pantherclaw.v1.RevokePolicyExceptionRequest": {
         "type": "object",
@@ -68986,6 +69702,13 @@
               "format": "int64"
             },
             "description": "target_counts counts the targets by state name."
+          },
+          "requireVerifiedPercent": {
+            "type": "integer",
+            "title": "require_verified_percent",
+            "format": "int32",
+            "description": "require_verified_percent is the VERIFIED threshold (G0 M18 D154):\n COMPLETE needs at least this share of the targets other than\n EXCEPTION VERIFIED. Unset: no threshold.",
+            "nullable": true
           }
         },
         "title": "PolicyRollout",
@@ -69254,6 +69977,18 @@
             },
             "title": "shadow_cohorts",
             "maxItems": 50
+          },
+          "requireVerifiedPercent": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "require_verified_percent",
+            "maximum": 100,
+            "minimum": 1,
+            "format": "int32",
+            "description": "require_verified_percent, 1 to 100, gates completion on VERIFIED\n targets (Enterprise; G0 M18 D154). It is fixed for the rollout.",
+            "nullable": true
           }
         },
         "title": "StartPolicyRolloutRequest",
@@ -69589,6 +70324,30 @@
             "type": "string",
             "title": "error",
             "description": "error is why a FAILED simulation stopped."
+          },
+          "cohortId": {
+            "type": "string",
+            "title": "cohort_id",
+            "description": "cohort_id is a bulk simulation's fleet cohort; empty: the whole org."
+          },
+          "cohortAgents": {
+            "type": "integer",
+            "title": "cohort_agents",
+            "format": "int32",
+            "description": "cohort_agents is how many agents its snapshot holds."
+          },
+          "byCohort": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PolicySimulationGroup"
+            },
+            "title": "by_cohort",
+            "description": "by_cohort counts decisions per fleet cohort (key: the cohort id),\n only for cohorts the caller may read."
+          },
+          "cohortTruncated": {
+            "type": "boolean",
+            "title": "cohort_truncated",
+            "description": "cohort_truncated says the cohort held more agents than its snapshot\n could (2000): later ones were not replayed."
           }
         },
         "title": "PolicySimulation",
@@ -69773,6 +70532,16 @@
             "minimum": 0,
             "format": "int32",
             "description": "max_evaluations bounds the recorded decisions replayed (0: 10 000)."
+          },
+          "cohortId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "cohort_id",
+            "format": "uuid",
+            "description": "cohort_id makes it a bulk simulation (Enterprise; G0 M18 D154): only\n the decisions of the fleet cohort's agents the caller may read now\n are replayed, under the same caps.",
+            "nullable": true
           }
         },
         "title": "SimulatePolicyVersionRequest",
