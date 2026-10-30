@@ -200,9 +200,11 @@ func m20ConnectorCapabilities() map[app.Capability]bool {
 // setupM20Connectors gives the scenario's agent a grant of its own for
 // what it requires: comments on the internal issue and the help desk
 // ticket, whose disclosure it is not granted (HR-522), and merges of the
-// simulated merge request (HR-521).
+// simulated merge request (HR-521). The Jira fixtures jira_internal_issue
+// and jira_customer_issue name the internal issue and the help desk ticket.
 func (d *rangeDriver) setupM20Connectors() {
 	if requires(d.sc, string(capJiraComment)) {
+		d.fix["jira_internal_issue"], d.fix["jira_customer_issue"] = sim.JiraIssue, sim.JiraTicket
 		d.ownGrant(`{"operations": ["jira.issue.comment", "jira.issue.read"],
 			"targets": {"jira_issue": {"ids": ["`+sim.JiraIssue+`", "`+sim.JiraTicket+`"]}},
 			"destinations": {"ids": ["`+sim.JiraIssue+`", "`+sim.JiraTicket+`"]}}`, "")

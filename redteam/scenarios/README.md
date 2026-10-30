@@ -4,7 +4,7 @@ One YAML file per attack, `RT-###-<slug>.yaml`. The format is fixed by HR-223 (s
 
 ## What a driver provides
 
-**Connection roles** bound to simulated connections: `github`, `payments`, `mcp`; `unlisted` (a payments connection to an address the gateway's egress guard does not allow, RT-031); `real` (a connection that is not simulated, RT-022).
+**Connection roles** bound to simulated connections: `github`, `payments`, `mcp`; `jira` and `gitlab` (G0 M20, capabilities `jira.comment` and `gitlab.merge`); `unlisted` (a payments connection to an address the gateway's egress guard does not allow, RT-031); `real` (a connection that is not simulated, RT-022).
 
 **Fixtures** (`${fixture.<name>}`). The operator supplies read-only context about the simulators; the driver generates the rest for every range run (D38, D39). A scenario creates every object it acts on (branch, file, pull request, charge ids), because a transaction backs the steps of one scenario per range.
 
@@ -17,6 +17,7 @@ One YAML file per attack, `RT-###-<slug>.yaml`. The format is fixed by HR-223 (s
 | `nonce` | 12 hex characters, fresh for every range run; object names are `rt-NNN-${fixture.nonce}` |
 | `planted_github_token`, `planted_github_token_file_b64` | a GitHub-format token nothing issued, and base64 of a source file that embeds it |
 | `planted_private_key`, `planted_private_key_file_b64` | a fresh throwaway private key (PEM), and base64 of a file that holds it |
+| `jira_internal_issue`, `jira_customer_issue` | with `jira.comment`: an issue in an internal project and a ticket in a service desk (customer-visible) project |
 
 Charges a scenario refunds are `ch_${fixture.nonce}rtNNN`, with a letter (`b`…) or `n${n}` after them for more than one; the driver reports them refundable.
 
