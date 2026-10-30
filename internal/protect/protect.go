@@ -119,11 +119,7 @@ func (s Surface) Permission() td.Permission {
 // second person, in every mode of its category, and can never be applied
 // as an emergency (G0 M18 D155, HR-481).
 func (s Surface) AlwaysProtected() bool {
-	switch s {
-	case SurfaceIdentityProviderPut, SurfaceIdentityProviderDisable, SurfaceIdentityProviderOwnOnly:
-		return true
-	}
-	return false
+	return s == SurfaceIdentityProviderPut || s == SurfaceIdentityProviderDisable || s == SurfaceIdentityProviderOwnOnly
 }
 
 // Change domains and kinds of internal/changes (D6).

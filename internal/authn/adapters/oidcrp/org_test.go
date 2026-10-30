@@ -81,7 +81,11 @@ func TestHR483_OrgDiscoveryThroughEgressGuard(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.client.Get(srv.URL); !errors.Is(err, httpx.ErrDestinationDenied) {
+	res, err := p.client.Get(srv.URL)
+	if err == nil {
+		_ = res.Body.Close()
+	}
+	if !errors.Is(err, httpx.ErrDestinationDenied) {
 		t.Fatalf("the org provider's client reached a loopback server: %v", err)
 	}
 	if err := p.Discover(context.Background()); err == nil {
@@ -111,7 +115,7 @@ func TestHR483_OrgDiscoveryThroughEgressGuard(t *testing.T) {
 		tr.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
 			return (&net.Dialer{}).DialContext(ctx, network, addr)
 		}
-		tr.TLSClientConfig.InsecureSkipVerify = true //nolint:gosec // G402: the test server stands in for idp.example.com
+		tr.TLSClientConfig.InsecureSkipVerify = true // the test server stands in for idp.example.com
 		client.Transport = tr
 		c := orgConfig("https://idp.example.com")
 		c.HTTPClient = client

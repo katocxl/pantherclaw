@@ -429,11 +429,20 @@ func (s *Store) Lapse(ctx context.Context, tx db.TenantTx, author, id ids.UUID) 
 // registered in every role, since the jobs role expires requests): a
 // provider that was never activated is disabled (D169).
 func (s *Store) ClosePut(ctx context.Context, tx db.TenantTx, author ids.UUID, payload []byte) error {
+	id, ok := payloadID(payload)
+	if !ok {
+		return nil // nothing of ours to lapse
+	}
+	return s.Lapse(ctx, tx, author, id)
+}
+
+// payloadID is the provider id of a stored change's payload.
+func payloadID(payload []byte) (ids.UUID, bool) {
 	var p struct {
 		ID ids.UUID `json:"id"`
 	}
-	if err := json.Unmarshal(payload, &p); err != nil || p.ID.IsZero() {
-		return nil // nothing of ours to lapse
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return ids.UUID{}, false
 	}
-	return s.Lapse(ctx, tx, author, p.ID)
+	return p.ID, !p.ID.IsZero()
 }
