@@ -103,7 +103,8 @@ type Handler struct {
 	policyBindings Bindings
 	// integrations is the integration activation pages (G0 M10); nil when
 	// not mounted.
-	integrations Integrations
+	integrations       Integrations
+	exportDestinations ExportDestinations
 	// playbook is the identity playbook page (G0 M10 D38); nil when not
 	// mounted.
 	playbook         PlaybookRequests
@@ -164,6 +165,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	h.mountCoverage(mux)
 	h.mountPolicyChanges(mux)
 	h.mountIntegrations(mux)
+	h.mountExportDestinations(mux)
 	h.mountPlaybook(mux)
 	h.mountChanges(mux)
 	h.mountPromotions(mux)

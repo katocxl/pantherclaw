@@ -1847,6 +1847,37 @@ type PcExecutionReceipt struct {
 	RemovedByPolicy *ids.UUID
 }
 
+type PcExportDestination struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Name                string
+	Kind                string
+	Url                 string
+	Bucket              *string
+	Region              *string
+	KeyPrefix           string
+	PathStyle           bool
+	Internal            bool
+	DataClasses         []string
+	State               string
+	Secret              []byte
+	SecretReplacedAt    *time.Time
+	CreatedBy           string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	UpdatedAt           time.Time
+	ConfirmedAt         *time.Time
+	LastDeliveredAt     *time.Time
+	ConsecutiveFailures int32
+	FailingSince        *time.Time
+	LastFailureAt       *time.Time
+	LastFailureCode     *string
+	DeliveredPushes     int64
+	FailedPushes        int64
+}
+
 type PcExposureChange struct {
 	OrgID     ids.OrgID
 	ChangeSeq int64

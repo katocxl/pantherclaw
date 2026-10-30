@@ -848,6 +848,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := registerM20Exports(rs, d); err != nil {
+		return nil, err
+	}
 	registerReflexCore(rs, d)
 	registerM11Govern(rs, d)
 	registerSlackChannels(d)
