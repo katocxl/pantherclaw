@@ -97,6 +97,12 @@ func (w *rewrapOrgWorker) Work(ctx context.Context, job *river.Job[RewrapOrgArgs
 		w.log.InfoContext(ctx, "keystore.rewrapped", slog.String("org", job.Args.Org.String()),
 			slog.Int("deks", res.DEKs), slog.Int("signing_keys", res.SigningKeys), slog.String("kek_id", w.kp.CurrentKEK()))
 	}
+	var ae *AuditError
+	if errors.As(err, &ae) {
+		w.log.ErrorContext(ctx, "keystore.rewrap_audit_failed", slog.String("org", job.Args.Org.String()),
+			slog.String("object", ae.Object), slog.String("kek_id", ae.KEKID), slog.Any("error", ae.Err))
+		return err
+	}
 	if err != nil {
 		w.log.WarnContext(ctx, "keystore.rewrap_failed", slog.String("org", job.Args.Org.String()), slog.Any("error", err))
 	}

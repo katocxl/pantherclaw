@@ -21,8 +21,11 @@ import (
 // Re-wrap in place (G0 M18 S18e, D157, migration 00224). Each stored key
 // that is not under the current KEK is unwrapped, wrapped again, verified
 // by unwrapping the new value, then written together with its new kek_id
-// and audited in one transaction (HR-487). Any failure writes nothing and
-// stops the batch (HR-486): the old value stays and still unwraps.
+// as pc_keystore (HR-487). Any failure before the write writes nothing and
+// stops the batch (HR-486): the old value stays and still unwraps. The
+// audit is a second, pc_app transaction after the write, as in the org
+// deletion job (D171, D173): if it fails, the key stays re-wrapped and
+// verified, and the job logs an ERROR naming it (AuditError).
 
 // RewrapBatch bounds the keys re-wrapped per org and table in one run.
 const RewrapBatch = 100
@@ -127,8 +130,9 @@ func RewrapOrg(ctx context.Context, pool, ks *db.Pool, kp keys.KeyProvider, org 
 // rewrapOne verifies before it writes (HR-487). The write, as pc_keystore
 // (the only role with the two columns, D171), is a compare-and-swap on
 // both old columns, and the 00224 trigger refuses a change of one column
-// without the other. The audit follows in a pc_app transaction, as for the
-// org deletion job: pc_keystore cannot write the ledger.
+// without the other. The audit is a separate pc_app transaction after the
+// write (pc_keystore cannot write the ledger), not atomic with it: a failed
+// audit returns an AuditError naming the key, which stays re-wrapped.
 func rewrapOne(ctx context.Context, pool, ks *db.Pool, kp keys.KeyProvider, org ids.OrgID, oldKEK string, oldWrapped, aad []byte,
 	objType, objID string, write func(*dbq.Queries, []byte, string) (int64, error),
 ) error {
@@ -155,7 +159,7 @@ func rewrapOne(ctx context.Context, pool, ks *db.Pool, kp keys.KeyProvider, org 
 	if err != nil {
 		return err
 	}
-	return pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+	err = pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		_, err := audit.Record(ctx, tx, audit.Event{
 			Name: objType + ".rewrapped", Actor: Actor, Outcome: audit.Success,
 			Object:  &audit.Object{Type: objType, ID: objID},
@@ -163,7 +167,25 @@ func rewrapOne(ctx context.Context, pool, ks *db.Pool, kp keys.KeyProvider, org 
 		})
 		return err
 	})
+	if err != nil {
+		return &AuditError{Object: objType + " " + objID, KEKID: kek, Err: err}
+	}
+	return nil
 }
+
+// AuditError reports a key that was re-wrapped and written, but whose
+// audit entry could not be recorded (D173).
+type AuditError struct {
+	Object string // "dek purpose/version" or "signing_key kid"
+	KEKID  string
+	Err    error
+}
+
+func (e *AuditError) Error() string {
+	return "keystore: " + e.Object + " re-wrapped to " + e.KEKID + " but not audited: " + e.Err.Error()
+}
+
+func (e *AuditError) Unwrap() error { return e.Err }
 
 // reportUnroutable audits each stored kek_id of org that r cannot route.
 func reportUnroutable(ctx context.Context, pool *db.Pool, org ids.OrgID, r KEKRouter) ([]string, error) {
