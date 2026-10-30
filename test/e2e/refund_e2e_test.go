@@ -233,7 +233,7 @@ var (
 
 func start(t *testing.T, o options) *stack {
 	t.Helper()
-	s := &stack{db: dbtest.New(t), simCalls: &atomic.Int64{}, gwCalls: &atomic.Int64{}}
+	s := &stack{db: dbtest.New(t), simCalls: &atomic.Int64{}, gwCalls: &atomic.Int64{}, logGateways: o.logGateways}
 	dir := t.TempDir()
 	kek := filepath.Join(dir, "kek")
 	s.kek = kek

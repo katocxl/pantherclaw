@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	gwapp "github.com/katocxl/pantherclaw/internal/gateways/app"
 	"github.com/katocxl/pantherclaw/internal/gateways/ca"
 	hostingapp "github.com/katocxl/pantherclaw/internal/hosting/app"
@@ -49,8 +51,8 @@ func TestE2E_M19_Exit(t *testing.T) {
 		if code, r := s.refund(t, ids.NewV7(), "5.01"); code != http.StatusOK || r.Outcome != "ACCEPTED" {
 			t.Fatalf("the first refund prepares the row: %d %+v", code, r)
 		}
+		s.waitSettled(t, "5.01") // so only the next refund waits on the row
 		release := holdBudgetRows(t, s)
-		began := time.Now()
 		type answer struct {
 			code int
 			r    reply
@@ -61,25 +63,33 @@ func TestE2E_M19_Exit(t *testing.T) {
 			code, r, err := s.tryRefund(ids.NewV7(), "5.02")
 			done <- answer{code, r, err}
 		}()
-		time.Sleep(150 * time.Millisecond) // past the 100 ms budget lock timeout
+		// Held past the 100 ms budget lock timeout from the moment the
+		// refund waits, so its first attempt is busy: only the one retry
+		// can accept it (T-219).
+		waitBudgetLock(t, s)
+		time.Sleep(110 * time.Millisecond)
 		release()
 		a := <-done
 		if a.err != nil || a.code != http.StatusOK || a.r.Outcome != "ACCEPTED" {
-			t.Fatalf("held 150 ms: %d %+v %v, want accepted", a.code, a.r, a.err)
-		}
-		if took := time.Since(began); took < 100*time.Millisecond {
-			t.Fatalf("answered after %s: the row was never waited on", took)
+			t.Fatalf("held 110 ms past the wait: %d %+v %v, want accepted by the retry", a.code, a.r, a.err)
 		}
 	})
 
 	t.Run("shared limits hold across two replicas", func(t *testing.T) {
 		ctx := context.Background()
 		const replicas, limit = 2, 160
+		const window = 30 * time.Second
+		// Windows are aligned to the epoch: start well inside one, so the
+		// whole count falls in it.
+		if left := window - time.Duration(time.Now().UnixNano())%window; left < 10*time.Second {
+			time.Sleep(left + 200*time.Millisecond)
+		}
+		key := ids.NewV7().String() // a scope and key no real traffic shares
 		store := ratelimit.NewStore(s.pool)
 		rs := [replicas]*ratelimit.Leased{ratelimit.NewLeased(store, clock.System{}), ratelimit.NewLeased(store, clock.System{})}
 		allowed := 0
 		for i := range 2 * limit {
-			d, err := rs[i%replicas].Take(ctx, "api.org", s.org.String(), time.Hour, 1, limit)
+			d, err := rs[i%replicas].Take(ctx, "e2e.m19_exit", key, window, 1, limit)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -209,6 +219,26 @@ func (s *stack) gatewayLog() *slog.Logger {
 		return pclog.Discard()
 	}
 	return slog.New(slog.NewJSONHandler(&s.gatewayLogs, nil))
+}
+
+// waitBudgetLock returns once a statement on pc.budget_accounts is waiting
+// for a lock, the moment its lock timeout starts.
+func waitBudgetLock(t *testing.T, s *stack) {
+	t.Helper()
+	s.db.AdminDo(t, func(conn *pgx.Conn) error {
+		ctx := context.Background()
+		for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(2 * time.Millisecond) {
+			var waiting int
+			if err := conn.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()
+				AND wait_event_type = 'Lock' AND query LIKE '%budget_accounts%'`).Scan(&waiting); err != nil {
+				return err
+			}
+			if waiting > 0 {
+				return nil
+			}
+		}
+		return errors.New("no statement waited for a budget row")
+	})
 }
 
 // holdBudgetRows locks the org's budget rows until the returned func runs.
