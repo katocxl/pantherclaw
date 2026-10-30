@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	gwapp "github.com/katocxl/pantherclaw/internal/gateways/app"
@@ -21,10 +22,13 @@ type FleetAdminHandler struct {
 	f *gwapp.Fleet
 }
 
-// WithFleet returns h serving the fleet procedures from f.
+// WithFleet returns h serving the fleet procedures from f; with a nil f
+// they are unimplemented.
 func WithFleet(h *AdminHandler, f *gwapp.Fleet) *FleetAdminHandler {
 	return &FleetAdminHandler{AdminHandler: h, f: f}
 }
+
+var errNoFleet = connect.NewError(connect.CodeUnimplemented, "the gateway fleet is not served here")
 
 var compliances = map[gwapp.Compliance]pb.VersionCompliance{
 	gwapp.NoMinimum:        pb.VersionCompliance_VERSION_COMPLIANCE_NO_MINIMUM,
@@ -46,6 +50,9 @@ func fleetPolicyOf(p gwapp.FleetPolicy) *pb.FleetPolicy {
 
 // GetFleetPolicy implements GatewayAdminServiceHandler.
 func (h *FleetAdminHandler) GetFleetPolicy(ctx context.Context, _ *pb.GetFleetPolicyRequest) (*pb.GetFleetPolicyResponse, error) {
+	if h.f == nil {
+		return nil, errNoFleet
+	}
 	p, err := h.f.GetFleetPolicy(ctx)
 	if err != nil {
 		return nil, err
@@ -55,6 +62,9 @@ func (h *FleetAdminHandler) GetFleetPolicy(ctx context.Context, _ *pb.GetFleetPo
 
 // SetFleetPolicy implements GatewayAdminServiceHandler.
 func (h *FleetAdminHandler) SetFleetPolicy(ctx context.Context, req *pb.SetFleetPolicyRequest) (*pb.SetFleetPolicyResponse, error) {
+	if h.f == nil {
+		return nil, errNoFleet
+	}
 	p, err := h.f.SetFleetPolicy(ctx, req.GetMinimumVersion(), time.Duration(req.GetSilenceAfterSeconds())*time.Second)
 	if err != nil {
 		return nil, err
@@ -64,6 +74,9 @@ func (h *FleetAdminHandler) SetFleetPolicy(ctx context.Context, req *pb.SetFleet
 
 // ListFleet implements GatewayAdminServiceHandler.
 func (h *FleetAdminHandler) ListFleet(ctx context.Context, req *pb.ListFleetRequest) (*pb.ListFleetResponse, error) {
+	if h.f == nil {
+		return nil, errNoFleet
+	}
 	v, err := h.f.ListFleet(ctx, req.GetPageSize(), req.GetPageToken())
 	if err != nil {
 		return nil, err

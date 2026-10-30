@@ -35,3 +35,9 @@ func registerM18FleetJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, fle
 	}
 	return append(periodic, gwapp.FleetPeriodicJobs()...), nil
 }
+
+// newM18Fleet builds the fleet use cases over the M6 gateway service: the
+// licence decides the editions per org, notify sends the sweep's alerts.
+func newM18Fleet(m6 *m6Services, editions gwapp.Editions, notify gwapp.Notifier) *gwapp.Fleet {
+	return gwapp.NewFleet(m6.gateways, editions, notify)
+}
