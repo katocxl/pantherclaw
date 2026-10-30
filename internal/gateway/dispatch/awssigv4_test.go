@@ -75,7 +75,7 @@ func TestHR525_TheDispatchSignsWithANarrowedSessionNeverTheBaseKey(t *testing.T)
 		req.Header.Get("X-Amz-Security-Token") == "" {
 		t.Fatalf("signed %q", auth)
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := srv.Client().Do(req)
 	if err != nil || res.StatusCode != http.StatusOK {
 		t.Fatalf("GetRole: %v %v", res, err)
 	}

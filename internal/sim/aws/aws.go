@@ -181,40 +181,40 @@ var credRe = regexp.MustCompile(`^AWS4-HMAC-SHA256 Credential=([A-Z0-9]+)/([0-9]
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxBody+1))
 	if err != nil || len(body) > maxBody {
-		writeError(w, http.StatusBadRequest, "Sender", "MalformedInput", "body")
+		writeError(w, http.StatusBadRequest, "MalformedInput", "body")
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.faults.Throttle > 0 {
 		s.faults.Throttle--
-		writeError(w, http.StatusBadRequest, "Sender", "Throttling", "Rate exceeded")
+		writeError(w, http.StatusBadRequest, "Throttling", "Rate exceeded")
 		return
 	}
 	m := credRe.FindStringSubmatch(r.Header.Get("Authorization"))
 	if m == nil {
-		writeError(w, http.StatusForbidden, "Sender", "MissingAuthenticationToken", "the request is not signed with SigV4")
+		writeError(w, http.StatusForbidden, "MissingAuthenticationToken", "the request is not signed with SigV4")
 		return
 	}
 	keyID, region, service := m[1], m[3], m[4]
 	secret, sess, key := s.secretOf(keyID)
 	if secret == "" {
-		writeError(w, http.StatusForbidden, "Sender", "InvalidClientTokenId", "the security token included in the request is invalid")
+		writeError(w, http.StatusForbidden, "InvalidClientTokenId", "the security token included in the request is invalid")
 		return
 	}
 	now := s.now()
 	if sess != nil && (!now.Before(sess.expires) || r.Header.Get("X-Amz-Security-Token") != sess.token) {
-		writeError(w, http.StatusForbidden, "Sender", "ExpiredToken", "the security token included in the request is expired or invalid")
+		writeError(w, http.StatusForbidden, "ExpiredToken", "the security token included in the request is expired or invalid")
 		return
 	}
 	if !s.verify(r, body, m, secret, sess, now) {
-		writeError(w, http.StatusForbidden, "Sender", "SignatureDoesNotMatch", "the request signature we calculated does not match")
+		writeError(w, http.StatusForbidden, "SignatureDoesNotMatch", "the request signature we calculated does not match")
 		return
 	}
-	in := url.Values{}
+	var in url.Values
 	if r.Method == http.MethodPost {
 		if in, err = url.ParseQuery(string(body)); err != nil {
-			writeError(w, http.StatusBadRequest, "Sender", "MalformedInput", "form")
+			writeError(w, http.StatusBadRequest, "MalformedInput", "form")
 			return
 		}
 	} else {
@@ -228,7 +228,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	call.Allowed = s.allowed(service, action, call.Resource, sess)
 	s.calls = append(s.calls, call)
 	if !call.Allowed {
-		writeError(w, http.StatusForbidden, "Sender", "AccessDenied", fmt.Sprintf("not authorized to perform %s:%s", service, action))
+		writeError(w, http.StatusForbidden, "AccessDenied", fmt.Sprintf("not authorized to perform %s:%s", service, action))
 		return
 	}
 	switch service + ":" + action {
@@ -243,7 +243,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	case "iam:GetAccountSummary":
 		writeXML(w, "GetAccountSummary", "iam", `<SummaryMap><entry><key>Roles</key><value>1</value></entry></SummaryMap>`)
 	default:
-		writeError(w, http.StatusBadRequest, "Sender", "InvalidAction", "unknown action "+action)
+		writeError(w, http.StatusBadRequest, "InvalidAction", "unknown action "+action)
 	}
 }
 
@@ -268,7 +268,7 @@ func (s *Server) verify(r *http.Request, body []byte, m []string, secret string,
 	}
 	u := *r.URL
 	u.Scheme, u.Host = "http", r.Host
-	c, err := http.NewRequest(r.Method, u.String(), bytes.NewReader(body))
+	c, err := http.NewRequestWithContext(r.Context(), r.Method, u.String(), bytes.NewReader(body)) //nolint:gosec // G704: a copy to sign, never sent
 	if err != nil {
 		return false
 	}
@@ -358,18 +358,18 @@ func (s *Server) assumeRole(w http.ResponseWriter, in url.Values, region string,
 	secs, err := strconv.Atoi(in.Get("DurationSeconds"))
 	switch {
 	case s.faults.DenyAssumeRole, in.Get("RoleArn") != RoleARN, s.externalID != "" && in.Get("ExternalId") != s.externalID:
-		writeError(w, http.StatusForbidden, "Sender", "AccessDenied", "not authorized to perform sts:AssumeRole")
+		writeError(w, http.StatusForbidden, "AccessDenied", "not authorized to perform sts:AssumeRole")
 		return
 	case err != nil || secs < 900 || secs > 3600:
-		writeError(w, http.StatusBadRequest, "Sender", "ValidationError", "DurationSeconds must be 900..3600")
+		writeError(w, http.StatusBadRequest, "ValidationError", "DurationSeconds must be 900..3600")
 		return
 	case region != Region:
-		writeError(w, http.StatusBadRequest, "Sender", "SignatureDoesNotMatch", "STS signs in "+Region)
+		writeError(w, http.StatusBadRequest, "SignatureDoesNotMatch", "STS signs in "+Region)
 		return
 	}
 	grants, ok := policyGrants(in.Get("Policy"))
 	if !ok {
-		writeError(w, http.StatusBadRequest, "Sender", "MalformedPolicyDocument", "the session policy")
+		writeError(w, http.StatusBadRequest, "MalformedPolicyDocument", "the session policy")
 		return
 	}
 	if s.faults.LongSessions {
@@ -439,7 +439,7 @@ func strs(v any) ([]string, bool) {
 
 func (s *Server) getRole(w http.ResponseWriter, in url.Values) {
 	if in.Get("RoleName") != RoleName {
-		writeError(w, http.StatusNotFound, "Sender", "NoSuchEntity", "the role cannot be found")
+		writeError(w, http.StatusNotFound, "NoSuchEntity", "the role cannot be found")
 		return
 	}
 	trust := url.QueryEscape(`{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"arn:aws:iam::` + Account + `:user/pantherclaw"},"Action":"sts:AssumeRole"}]}`)
@@ -451,7 +451,7 @@ func (s *Server) getRole(w http.ResponseWriter, in url.Values) {
 
 func (s *Server) listAttached(w http.ResponseWriter, in url.Values) {
 	if in.Get("RoleName") != RoleName {
-		writeError(w, http.StatusNotFound, "Sender", "NoSuchEntity", "the role cannot be found")
+		writeError(w, http.StatusNotFound, "NoSuchEntity", "the role cannot be found")
 		return
 	}
 	writeXML(w, "ListAttachedRolePolicies", "iam",
@@ -460,7 +460,7 @@ func (s *Server) listAttached(w http.ResponseWriter, in url.Values) {
 
 func (s *Server) getRolePolicy(w http.ResponseWriter, in url.Values) {
 	if in.Get("RoleName") != RoleName || in.Get("PolicyName") != InlinePolicy {
-		writeError(w, http.StatusNotFound, "Sender", "NoSuchEntity", "the role policy cannot be found")
+		writeError(w, http.StatusNotFound, "NoSuchEntity", "the role policy cannot be found")
 		return
 	}
 	doc := url.QueryEscape(`{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"ecs:Describe*","Resource":"*"}]}`)
@@ -475,11 +475,11 @@ func writeXML(w http.ResponseWriter, action, service, result string) {
 		action, ns, action, result, action, random(8), action)
 }
 
-func writeError(w http.ResponseWriter, status int, kind, code, message string) {
+func writeError(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "text/xml")
 	w.WriteHeader(status)
-	_, _ = fmt.Fprintf(w, `<ErrorResponse><Error><Type>%s</Type><Code>%s</Code><Message>SIMULATED: %s</Message></Error><RequestId>%s</RequestId></ErrorResponse>`,
-		kind, code, xmlText(message), random(8))
+	_, _ = fmt.Fprintf(w, `<ErrorResponse><Error><Type>Sender</Type><Code>%s</Code><Message>SIMULATED: %s</Message></Error><RequestId>%s</RequestId></ErrorResponse>`,
+		code, xmlText(message), random(8))
 }
 
 func xmlText(s string) string {

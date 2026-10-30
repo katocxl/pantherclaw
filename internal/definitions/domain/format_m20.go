@@ -54,8 +54,8 @@ func matchKey(h map[string]string) string {
 func (d *Definition) validateAWSDispatch(at string, h *HTTPDispatch) error {
 	// aws-query may also be a GET with its operation in the query (a
 	// connection test reads that way); aws-json is always a POST.
-	get := h.Encoding == EncodingAWSQuery && h.Method == "GET"
-	if (h.Method != "POST" && !get) || h.Path != RootPath {
+	get := h.Encoding == EncodingAWSQuery && h.Method == methodGet
+	if (h.Method != methodPost && !get) || h.Path != RootPath {
 		return invalid("%s: %s is a POST to %s (aws-query also a GET)", at, h.Encoding, RootPath)
 	}
 	if h.IdempotencyHeader != "" {
@@ -64,12 +64,12 @@ func (d *Definition) validateAWSDispatch(at string, h *HTTPDispatch) error {
 	if err := d.validateAWSResource(at, h.AWSResource); err != nil {
 		return err
 	}
-	switch h.Encoding {
-	case EncodingAWSJSON:
+	switch {
+	case h.Encoding == EncodingAWSJSON:
 		if !slices.ContainsFunc(slices.Collect(maps.Keys(h.Headers)), func(k string) bool { return strings.EqualFold(k, AWSTargetHeader) }) {
 			return invalid("%s: aws-json names its operation in a literal %s header", at, AWSTargetHeader)
 		}
-	case EncodingAWSQuery:
+	case h.Encoding == EncodingAWSQuery:
 		named, where := h.Body, "body"
 		if get {
 			named, where = h.Query, "query"
@@ -104,17 +104,17 @@ func (d *Definition) AWSAction() (string, bool) {
 		return "", false
 	}
 	h := d.Dispatch.HTTP
-	switch h.Encoding {
-	case EncodingAWSJSON:
+	switch {
+	case h.Encoding == EncodingAWSJSON:
 		for k, v := range h.Headers {
 			if strings.EqualFold(k, AWSTargetHeader) {
 				i := strings.LastIndexByte(v, '.')
 				return v[i+1:], i >= 0 && i < len(v)-1
 			}
 		}
-	case EncodingAWSQuery:
+	case h.Encoding == EncodingAWSQuery:
 		ref := h.Body["Action"]
-		if h.Method == "GET" {
+		if h.Method == methodGet {
 			ref = h.Query["Action"]
 		}
 		a, ok := strings.CutPrefix(ref, "literal.")
@@ -122,6 +122,13 @@ func (d *Definition) AWSAction() (string, bool) {
 	}
 	return "", false
 }
+
+// The HTTP methods an AWS template uses, spelled here because domain
+// packages stay free of net/http.
+const (
+	methodGet  = "GET"
+	methodPost = "POST"
+)
 
 // AWS resource ARN template references (G0 M20 D270): besides the
 // decision's target (target.id, target.id.<group>, target.account), the
