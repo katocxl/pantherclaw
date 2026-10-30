@@ -273,7 +273,7 @@ func (d *Definition) validateVerifier() error {
 			return invalid("%s.lookup correlates by the idempotency key, so it needs target_idempotency", at)
 		case !matched && l.IDParam != "":
 			return invalid("%s.lookup.id_param needs match", at)
-		case matched && (l.List.Correlate != "" || !nameRe.MatchString(l.IDParam)):
+		case matched && (l.List.Correlate != "" || (l.IDParam != "" && !nameRe.MatchString(l.IDParam))):
 			return invalid("%s.lookup.match replaces correlate and needs id_param", at)
 		case len(l.Match) > maxExpect:
 			return invalid("%s.lookup: at most %d matches", at, maxExpect)
@@ -395,6 +395,17 @@ func (d *Definition) validateVerifierRefs(ops map[string]*Definition) error {
 		if err := list.pageParam(l.List); err != nil {
 			return err
 		}
+		if len(l.Match) > 0 && l.IDParam == "" {
+			// Only the read that already returns every item needs no second
+			// read by id (D284): the matched items are the observation, and
+			// items that differ are a disagreement for a person (HR-191).
+			if !list.PostVerificationRead() || v.Operation != l.Operation {
+				return invalid("%s: verifier.lookup.match replaces correlate and needs id_param", d.Operation)
+			}
+			if v.States == nil || !slices.Contains(v.States.Reconcile, VerdictDisagreement) {
+				return invalid("%s: verifier.states.reconcile needs %s for a lookup without id_param", d.Operation, VerdictDisagreement)
+			}
+		}
 		if l.IDParam != "" {
 			if p, ok := read.Params[l.IDParam]; !ok || (p.Type != TypeIdentifier && p.Type != TypeInteger) || !p.Required {
 				return invalid("%s: lookup.id_param %q must be a required identifier or integer param of %s", d.Operation, l.IDParam, v.Operation)
@@ -456,7 +467,7 @@ func readOperation(at string, ops map[string]*Definition, op string, listing boo
 		return nil, invalid("%s: %s must be a read operation in this package", at, op)
 	}
 	switch x := r.Dispatch; {
-	case x != nil && x.HTTP != nil && x.HTTP.Method == methods[0]: // GET
+	case x != nil && x.HTTP != nil && r.VerificationRead(): // GET, or the D283 exception (HR-190)
 	case x != nil && x.MCP != nil && !listing:
 	case listing:
 		return nil, invalid("%s: %s needs an HTTP GET dispatch template", at, op)
@@ -474,7 +485,7 @@ func (p *Package) HTTPReads() []string {
 	var out []string
 	for i := range p.Definitions {
 		d := &p.Definitions[i]
-		if x := d.Dispatch; d.Access == AccessRead && x != nil && x.HTTP != nil && x.HTTP.Method == methods[0] {
+		if d.VerificationRead() {
 			out = append(out, d.Operation)
 		}
 	}

@@ -9,7 +9,9 @@
 //     the requested duration (900..3600 s), under the request's session
 //     policy, for the base access key only;
 //   - IAM GetRole, ListAttachedRolePolicies, GetRolePolicy and
-//     GetAccountSummary (aws-query, answered in XML as IAM does).
+//     GetAccountSummary (aws-query, answered in XML as IAM does);
+//   - ECS UpdateService and DescribeServices (aws-json) for one service,
+//     whose rollout state a test sets.
 //
 // Every request must be signed with SigV4 by a key the simulator knows, and
 // is verified by signing it again. The base key may call only
@@ -112,6 +114,7 @@ type Server struct {
 	sessions map[string]*session
 	calls    []Call
 	now      func() time.Time
+	ecs      *ecsService
 }
 
 // New returns a simulator whose base key has baseSecret and whose role
@@ -120,7 +123,7 @@ type Server struct {
 func New(baseSecret, externalID string, roleActions []string, f Faults, log *slog.Logger) *Server {
 	return &Server{
 		baseSecret: baseSecret, externalID: externalID, log: log, faults: f, role: slices.Clone(roleActions),
-		sessions: map[string]*session{}, now: time.Now,
+		sessions: map[string]*session{}, now: time.Now, ecs: newECSService(),
 	}
 }
 
@@ -209,6 +212,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	if !s.verify(r, body, m, secret, sess, now) {
 		writeError(w, http.StatusForbidden, "SignatureDoesNotMatch", "the request signature we calculated does not match")
+		return
+	}
+	if target := r.Header.Get("X-Amz-Target"); target != "" {
+		s.serveECS(w, body, target, service, key, sess)
 		return
 	}
 	var in url.Values

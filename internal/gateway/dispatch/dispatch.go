@@ -442,6 +442,9 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	if read, unreported := e.reportJiraFacts(ctx, conn, c.Action.Action); read && unreported != nil {
 		return Result{Class: CannotAuthorize, Code: CodeFactsUnreported, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
 	}
+	if read, unreported := e.reportECSFacts(ctx, conn, c.Action.Action); read && unreported != nil {
+		return Result{Class: CannotAuthorize, Code: CodeFactsUnreported, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
+	}
 	if read, unreported := e.reportGitLabFacts(ctx, conn, c.Action.Action); read && unreported != nil {
 		return Result{Class: CannotAuthorize, Code: CodeFactsUnreported, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
 	}

@@ -1,0 +1,301 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for agents that deploy to Amazon ECS (G0 M20 D254,
+# D284; founder decision G12). It reaches ECS's JSON API through an http
+# connection whose credential is of kind aws_sigv4, sealed with
+# --aws-service ecs: PantherClaw holds a base access key that signs nothing
+# but an sts:AssumeRole of one role, once per dispatch, for 15 minutes, with
+# a session policy that allows exactly the one ECS action the operation
+# names below, on exactly the target service for a write (HR-525). The agent
+# never holds a key, and the base key never reaches ECS.
+#
+# It is its own package because a connection has one host, and IAM and ECS
+# are two (D284). It has no connection test: a test read is a GET (HR-188),
+# and ECS has none. The first fact read proves the connection.
+#
+# ECS speaks aws-json: a POST to / whose fixed X-Amz-Target names the
+# operation, never the agent (HR-526). Every aws-json operation shares
+# POST /, so the deploy is an MCP tool only (D262, D284). The two reads are
+# the one POST verification read HR-190 allows (founder decision D283):
+# aws-json, access: read, exactly DescribeServices.
+#
+# A deploy is two effects. The write's verifier shows the service now names
+# the task definition; the rollout is the write's consequence (G0 M17), so
+# the action reaches the downstream level only when ECS reports it COMPLETED.
+#
+# The verification reads carry no account, because the server sends none:
+# they run in the role's account, and the deploy they follow was refused
+# unless it named that account (T-225).
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
+format: 1
+name: pc.aws.ecs
+version: 1.0.0
+publisher: pantherclaw
+summary: Deploy a task definition to an Amazon ECS service and follow its rollout
+
+definitions:
+  - operation: aws.ecs.service.deploy
+    summary: Deploy one revision of a task definition to an ECS service
+    access: write
+    target:
+      type: aws_ecs_service
+      id_pattern: '^(?P<cluster>[A-Za-z0-9_-]{1,255})/(?P<service>[A-Za-z0-9_-]{1,255})$'
+      account: required
+      account_pattern: '^[0-9]{12}$'
+    params:
+      # A full ARN with a revision: ECS reads it back in this form, so the
+      # verifier compares it exactly, and a family alone would mean whatever
+      # is latest when ECS resolves it.
+      task_definition:
+        type: identifier
+        material: true
+        required: true
+        max_length: 512
+        pattern: '^arn:aws[a-z-]{0,16}:ecs:[a-z0-9-]{1,32}:[0-9]{12}:task-definition/[A-Za-z0-9_-]{1,255}:[1-9][0-9]{0,8}$'
+      # Fixed by the mapping, never by the agent: the service's deployment
+      # controller must be this one, or its rollout cannot be verified
+      # (HR-191, D284).
+      deployment_controller:
+        type: enum
+        material: true
+        required: true
+        values: [ECS]
+    effects:
+      - kind: deployment.update
+        description: Changes the task definition an ECS service runs, which starts a rollout
+    reversibility: compensatable
+    prerequisites:
+      - fact: aws.ecs.service.controller
+        max_age_seconds: 30
+        binds: {member: type, param: deployment_controller, reason: VERIFIER_UNSUPPORTED}
+    retry:
+      safe: false
+      on_unknown: reconcile
+    verifier:
+      operation: aws.ecs.service.read
+      establishes: service.task_definition
+      within_seconds: 600
+      level: domain_effect
+      expect:
+        - field: /services/0/taskDefinition
+          equals: params.task_definition
+      states:
+        field: /services/0/status
+        confirmed: [ACTIVE]
+        reconcile: [DRAINING, INACTIVE]
+      # The revision fills the task definition of the rollout it starts,
+      # which its own verifier then finds.
+      capture:
+        task_definition: /services/0/taskDefinition
+      limits: >-
+        Shows that ECS reports this service active and naming this revision
+        of the task definition. It does not show that any task of that
+        revision is running; the rollout is verified on its own.
+    approval:
+      title: Deploy {params.task_definition} to ECS service {target.id} in account {target.account}
+      fields:
+        - target.id
+        - target.account
+        - params.task_definition
+        - facts.aws.ecs.service.controller
+      invalidate_on: aws.ecs.service.controller
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+    mappings:
+      - channel: mcp
+        tool: aws_ecs_deploy_service
+        route: aws-ecs-service-deploy
+        description: >-
+          Deploy one revision of a task definition to an ECS service, by the
+          service's cluster and name in an AWS account and the task
+          definition's full ARN with its revision.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [account_id, cluster, service, task_definition]
+          properties:
+            account_id:
+              type: string
+              description: The 12-digit AWS account id
+              pattern: '^[0-9]{12}$'
+            cluster:
+              type: string
+              description: The cluster's short name
+              pattern: '^[A-Za-z0-9_-]{1,255}$'
+            service:
+              type: string
+              description: The service's short name
+              pattern: '^[A-Za-z0-9_-]{1,255}$'
+            task_definition:
+              type: string
+              description: The task definition's full ARN, with its revision
+              maxLength: 512
+        extract:
+          target_id: input.cluster + '/' + input.service
+          target_account: input.account_id
+          params:
+            task_definition: input.task_definition
+            deployment_controller: "'ECS'"
+    dispatch:
+      http:
+        method: POST
+        path: /
+        encoding: aws-json
+        aws_resource: 'arn:{aws.partition}:ecs:{aws.region}:{target.account}:service/{target.id.cluster}/{target.id.service}'
+        headers:
+          X-Amz-Target: AmazonEC2ContainerServiceV20141113.UpdateService
+        body:
+          cluster: target.id.cluster
+          service: target.id.service
+          taskDefinition: params.task_definition
+
+  # The rollout a deploy starts (a consequence, never dispatched). It is
+  # found among the service's deployments by the revision the deploy's
+  # verifier captured. A rollout that failed, deployments of that revision
+  # that disagree, or a rollout state ECS does not report within the hour:
+  # a person decides (HR-192, D284).
+  - operation: aws.ecs.service.rollout
+    summary: The rollout of a task definition that a deploy starts
+    access: write
+    target:
+      type: aws_ecs_service
+      id_pattern: '^(?P<cluster>[A-Za-z0-9_-]{1,255})/(?P<service>[A-Za-z0-9_-]{1,255})$'
+      account: none
+    # Filled when the deploy that starts it is confirmed. A consequence is
+    # decided without it.
+    params:
+      task_definition:
+        type: identifier
+        material: true
+        max_length: 512
+        pattern: '^arn:aws[a-z-]{0,16}:ecs:[a-z0-9-]{1,32}:[0-9]{12}:task-definition/[A-Za-z0-9_-]{1,255}:[1-9][0-9]{0,8}$'
+    effects:
+      - kind: deployment.rollout
+        description: Replaces an ECS service's tasks with those of a task definition
+    reversibility: compensatable
+    retry:
+      safe: false
+      on_unknown: reconcile
+    verifier:
+      operation: aws.ecs.service.deployments.read
+      establishes: deployment.completed
+      within_seconds: 3600
+      level: domain_effect
+      lookup:
+        operation: aws.ecs.service.deployments.read
+        list:
+          items: /services/0/deployments
+          id: /id
+        match:
+          - field: /taskDefinition
+            equals: params.task_definition
+      states:
+        field: /rolloutState
+        confirmed: [COMPLETED]
+        pending: [IN_PROGRESS]
+        reconcile: [FAILED, disagreement]
+      limits: >-
+        Shows that ECS reports the rollout of this revision complete: the
+        service reached a steady state on it. It does not show that the
+        revision behaves correctly. ECS reports no rollout state for a
+        service behind a Classic Load Balancer, so such a rollout is never
+        confirmed here and goes to a person.
+    approval:
+      title: Release a rollout on ECS service {target.id}
+      fields: [target.id]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+
+  # The verification reads (D283): DescribeServices, and agents do not call
+  # them. Two operations, because a read is either a write's verifier or a
+  # lookup, and the gateway finds out which from the operation.
+  - operation: aws.ecs.service.read
+    summary: Read an ECS service's status, task definition and deployment controller
+    access: read
+    target:
+      type: aws_ecs_service
+      id_pattern: '^(?P<cluster>[A-Za-z0-9_-]{1,255})/(?P<service>[A-Za-z0-9_-]{1,255})$'
+      account: none
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+    dispatch:
+      http:
+        method: POST
+        path: /
+        encoding: aws-json
+        headers:
+          X-Amz-Target: AmazonEC2ContainerServiceV20141113.DescribeServices
+        body:
+          cluster: target.id.cluster
+          services[]: target.id.service
+
+  - operation: aws.ecs.service.deployments.read
+    summary: List an ECS service's deployments
+    access: read
+    target:
+      type: aws_ecs_service
+      id_pattern: '^(?P<cluster>[A-Za-z0-9_-]{1,255})/(?P<service>[A-Za-z0-9_-]{1,255})$'
+      account: none
+    # What the lookup matches on, in the response: never sent.
+    params:
+      task_definition:
+        type: identifier
+        material: true
+        max_length: 512
+        pattern: '^arn:aws[a-z-]{0,16}:ecs:[a-z0-9-]{1,32}:[0-9]{12}:task-definition/[A-Za-z0-9_-]{1,255}:[1-9][0-9]{0,8}$'
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+    dispatch:
+      http:
+        method: POST
+        path: /
+        encoding: aws-json
+        headers:
+          X-Amz-Target: AmazonEC2ContainerServiceV20141113.DescribeServices
+        body:
+          cluster: target.id.cluster
+          services[]: target.id.service
+
+consequences:
+  - id: deploy-starts-rollout
+    operation: aws.ecs.service.deploy
+    when: facts.aws_ecs_service_controller.type == 'ECS'
+    requires_facts: [aws.ecs.service.controller]
+    consequence:
+      operation: aws.ecs.service.rollout
+      effect: deployment.rollout
+      description: >-
+        Changing the task definition of a service whose deployment controller
+        is ECS starts a rollout of that revision.
+    valid_until: 2027-10-30
+
+coverage:
+  environment:
+    source: none
+  record_scope: [aws_ecs_service]
+  channels: [mcp]

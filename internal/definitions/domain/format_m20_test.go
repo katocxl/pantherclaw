@@ -205,3 +205,39 @@ func TestT225_AWSWritesNameTheirResourceFromTheDecision(t *testing.T) {
 		t.Errorf("aws_resource on a json template: %v", err)
 	}
 }
+
+// TestHR190_AMatchedLookupNeedsAnIDParamOnEveryOtherRead: the GET lookup a
+// package always declared still needs its id_param, and an aws-json list key
+// holds the target, never a param (D283, D284).
+// Covers: HR-190
+func TestHR190_AMatchedLookupNeedsAnIDParamOnEveryOtherRead(t *testing.T) {
+	list := awsDef()
+	list.Operation, list.Mappings = "svc.thing.list", nil
+	list.Dispatch.HTTP = &HTTPDispatch{Method: "GET", Path: "/things/{target.id}"}
+	write := awsDef()
+	write.Operation, write.Access, write.Mappings = "svc.thing.put", AccessWrite, nil
+	write.Effects = []Effect{{Kind: "thing.put", Description: "Puts a thing"}}
+	write.Retry = RetrySpec{OnUnknown: OnUnknownReconcile}
+	write.Reversibility = Compensatable
+	write.Dispatch = nil
+	write.Verifier = &VerifierSpec{
+		Operation: list.Operation, Establishes: "thing.put", WithinSeconds: 60, Level: LevelDomainEffect,
+		Lookup: &VerifierLookup{
+			Operation: list.Operation, List: ListSpec{Items: "/items", ID: "/id"},
+			Match: []Expectation{{Field: "/name", Equals: "params.name"}},
+		},
+		States: &StateMap{Field: "/state", Confirmed: []string{"ok"}, Reconcile: []string{VerdictDisagreement}},
+	}
+	write.Params = map[string]ParamSpec{"name": {Type: TypeIdentifier, Material: true}}
+	ops := map[string]*Definition{list.Operation: &list, write.Operation: &write}
+	if err := write.validateVerifierRefs(ops); err == nil || !strings.Contains(err.Error(), "needs id_param") {
+		t.Fatalf("a GET lookup without id_param: %v", err)
+	}
+
+	d := awsDef()
+	d.Dispatch.HTTP.Body = map[string]string{"names[]": "params.name"}
+	d.Params = map[string]ParamSpec{"name": {Type: TypeIdentifier, Material: true}}
+	if err := d.Validate(); err == nil || !strings.Contains(err.Error(), "one value of the target") {
+		t.Fatalf("a list of a param: %v", err)
+	}
+}

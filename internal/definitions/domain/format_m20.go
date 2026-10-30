@@ -64,6 +64,11 @@ func (d *Definition) validateAWSDispatch(at string, h *HTTPDispatch) error {
 	if err := d.validateAWSResource(at, h.AWSResource); err != nil {
 		return err
 	}
+	for _, k := range slices.Sorted(maps.Keys(h.Body)) {
+		if strings.HasSuffix(k, "[]") && !strings.HasPrefix(h.Body[k], "target.") {
+			return invalid("%s.body.%s: an aws-json list holds one value of the target", at, k)
+		}
+	}
 	switch h.Encoding { //nolint:exhaustive // only called for the two AWS encodings
 	case EncodingAWSJSON:
 		if !slices.ContainsFunc(slices.Collect(maps.Keys(h.Headers)), func(k string) bool { return strings.EqualFold(k, AWSTargetHeader) }) {
@@ -121,6 +126,44 @@ func (d *Definition) AWSAction() (string, bool) {
 		return a, ok && a != ""
 	}
 	return "", false
+}
+
+// ECSDescribeServicesTarget is the one X-Amz-Target a verification read may
+// POST (founder decision D283, HR-190).
+const ECSDescribeServicesTarget = "AmazonEC2ContainerServiceV20141113.DescribeServices"
+
+// PostVerificationRead reports the one verification read that is not a GET
+// (founder decision D283, HR-190): an aws-json access: read definition whose
+// fixed X-Amz-Target is exactly ECSDescribeServicesTarget, so its session is
+// narrowed to that one action (D270). ECS has no GET. Nothing else that
+// POSTs is ever a verification read.
+func (d *Definition) PostVerificationRead() bool {
+	if d.Access != AccessRead || d.Dispatch == nil || d.Dispatch.HTTP == nil {
+		return false
+	}
+	h := d.Dispatch.HTTP
+	if h.Method != methodPost || h.Path != RootPath || h.Encoding != EncodingAWSJSON {
+		return false
+	}
+	named := 0
+	for k, v := range h.Headers {
+		if strings.EqualFold(k, AWSTargetHeader) {
+			if v != ECSDescribeServicesTarget {
+				return false
+			}
+			named++
+		}
+	}
+	return named == 1
+}
+
+// VerificationRead reports whether a definition's HTTP dispatch may be a
+// verification read: an access: read GET, or the D283 exception (HR-190).
+func (d *Definition) VerificationRead() bool {
+	if d.Access != AccessRead || d.Dispatch == nil || d.Dispatch.HTTP == nil {
+		return false
+	}
+	return d.Dispatch.HTTP.Method == methodGet || d.PostVerificationRead()
 }
 
 // The HTTP methods an AWS template uses, spelled here because domain

@@ -229,7 +229,9 @@ func (d *Definition) reference(at, ref string, where place) error {
 // the bracket syntax the form parser accepts (a[b], a[b][c], a[]); a list
 // value goes only under a key ending in [] (G0 M14 D8, D52). A JSON HTTP
 // body's keys may use the same grammar without [] to name nested objects
-// (a[b][c] is {"a":{"b":{"c":…}}}, G0 M20 D260); MCP arguments stay flat.
+// (a[b][c] is {"a":{"b":{"c":…}}}, G0 M20 D260), and an aws-json body's a
+// key ending in [] for a list of that one value (D283: DescribeServices
+// takes a list of services); MCP arguments stay flat.
 func (d *Definition) fields(at string, f map[string]string, where place, enc Encoding) error {
 	if len(f) > maxTemplateFields {
 		return invalid("%s: at most %d fields", at, maxTemplateFields)
@@ -243,7 +245,7 @@ func (d *Definition) fields(at string, f map[string]string, where place, enc Enc
 	}
 	for _, k := range keys {
 		if nested && strings.Contains(k, "[") {
-			if p, err := ParseFormKey(k); err != nil || p.List {
+			if p, err := ParseFormKey(k); err != nil || (p.List && enc != EncodingAWSJSON) {
 				return invalid("%s: field name %q: a JSON body nests objects only, never a [] list", at, k)
 			}
 		} else if enc != EncodingForm && !fieldRe.MatchString(k) {
