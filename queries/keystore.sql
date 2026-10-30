@@ -48,11 +48,11 @@ WHERE org_id = sqlc.arg(org_id) AND purpose = ANY(sqlc.arg(purposes)::text[])
 ORDER BY created_at, kid;
 
 -- name: ListDEKsToRewrap :many
--- DEKs not under the current KEK (any of its kek_id spellings), for the
--- re-wrap job (D157, migration 00224).
+-- DEKs to re-wrap (D157, migration 00224): all but those whose kek_id is
+-- skipped (the current KEK in any spelling, and KEKs no provider holds).
 SELECT purpose, version, wrapped_key, kek_id
 FROM pc.deks
-WHERE org_id = sqlc.arg(org_id) AND kek_id <> ALL(sqlc.arg(current_kek_ids)::text[])
+WHERE org_id = sqlc.arg(org_id) AND kek_id <> ALL(sqlc.arg(skip_kek_ids)::text[])
 ORDER BY purpose, version
 LIMIT sqlc.arg(row_limit);
 
@@ -65,9 +65,10 @@ WHERE org_id = sqlc.arg(org_id) AND purpose = sqlc.arg(purpose) AND version = sq
   AND wrapped_key = sqlc.arg(old_wrapped_key) AND kek_id = sqlc.arg(old_kek_id);
 
 -- name: ListSigningKeysToRewrap :many
+-- Revoked keys are never unwrapped, so they stay as they are.
 SELECT kid, purpose, wrapped_private_key, kek_id
 FROM pc.keys
-WHERE org_id = sqlc.arg(org_id) AND kek_id <> ALL(sqlc.arg(current_kek_ids)::text[])
+WHERE org_id = sqlc.arg(org_id) AND state <> 'REVOKED' AND kek_id <> ALL(sqlc.arg(skip_kek_ids)::text[])
 ORDER BY created_at, kid
 LIMIT sqlc.arg(row_limit);
 

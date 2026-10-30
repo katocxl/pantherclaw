@@ -123,10 +123,10 @@ type ListDEKsToRewrapRow struct {
 	KekID      string
 }
 
-// DEKs not under the current KEK (any of its kek_id spellings), for the
-// re-wrap job (D157, migration 00224).
-func (q *Queries) ListDEKsToRewrap(ctx context.Context, orgID ids.OrgID, currentKekIds []string, rowLimit int32) ([]ListDEKsToRewrapRow, error) {
-	rows, err := q.db.Query(ctx, listDEKsToRewrap, orgID, currentKekIds, rowLimit)
+// DEKs to re-wrap (D157, migration 00224): all but those whose kek_id is
+// skipped (the current KEK in any spelling, and KEKs no provider holds).
+func (q *Queries) ListDEKsToRewrap(ctx context.Context, orgID ids.OrgID, skipKekIds []string, rowLimit int32) ([]ListDEKsToRewrapRow, error) {
+	rows, err := q.db.Query(ctx, listDEKsToRewrap, orgID, skipKekIds, rowLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +250,7 @@ func (q *Queries) ListSigningKeys(ctx context.Context, orgID ids.OrgID) ([]ListS
 const listSigningKeysToRewrap = `-- name: ListSigningKeysToRewrap :many
 SELECT kid, purpose, wrapped_private_key, kek_id
 FROM pc.keys
-WHERE org_id = $1 AND kek_id <> ALL($2::text[])
+WHERE org_id = $1 AND state <> 'REVOKED' AND kek_id <> ALL($2::text[])
 ORDER BY created_at, kid
 LIMIT $3
 `
@@ -262,8 +262,9 @@ type ListSigningKeysToRewrapRow struct {
 	KekID             string
 }
 
-func (q *Queries) ListSigningKeysToRewrap(ctx context.Context, orgID ids.OrgID, currentKekIds []string, rowLimit int32) ([]ListSigningKeysToRewrapRow, error) {
-	rows, err := q.db.Query(ctx, listSigningKeysToRewrap, orgID, currentKekIds, rowLimit)
+// Revoked keys are never unwrapped, so they stay as they are.
+func (q *Queries) ListSigningKeysToRewrap(ctx context.Context, orgID ids.OrgID, skipKekIds []string, rowLimit int32) ([]ListSigningKeysToRewrapRow, error) {
+	rows, err := q.db.Query(ctx, listSigningKeysToRewrap, orgID, skipKekIds, rowLimit)
 	if err != nil {
 		return nil, err
 	}
