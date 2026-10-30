@@ -119,7 +119,7 @@ definitions:
         method: POST
         path: /v3/conversations
         body:
-          isGroup: literal.true
+          isGroup: bool.true
           tenantId: target.account
           channelData[channel][id]: target.id
           channelData[tenant][id]: target.account
