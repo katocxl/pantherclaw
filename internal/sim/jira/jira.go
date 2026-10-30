@@ -296,7 +296,7 @@ func (s *Server) Handler() http.Handler {
 			}
 			w.WriteHeader(http.StatusNoContent)
 		case strings.HasPrefix(r.URL.Path, "/rest/api/2/"), strings.HasPrefix(r.URL.Path, "/rest/api/3/"):
-			s.api(w, r, r.URL.Path[len("/rest/api/2/"):], r.URL.Path[len("/rest/api/")])
+			s.api(w, r, r.URL.Path[len("/rest/api/2/"):], r.URL.Path[len("/rest/api/")]) //nolint:contextcheck // api takes its context from r
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -567,7 +567,7 @@ func (s *Server) post(ctx context.Context, ev map[string]any) {
 		mac.Write(body)
 		req.Header.Set("X-Hub-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
 	}
-	resp, err := s.client.Do(req)
+	resp, err := s.client.Do(req) //nolint:gosec // G704: the operator of the simulator sets the webhook URL
 	if err != nil {
 		s.log.Warn("sim.jira_webhook_failed", slog.String("error", err.Error()))
 		return
