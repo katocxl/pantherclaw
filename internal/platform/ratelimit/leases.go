@@ -156,6 +156,8 @@ func (x *Lease) renew() {
 
 // Release ends the lease and deletes it. It is safe to call more than
 // once; a delete that fails leaves a lease that expires after LeaseExpiry.
+//
+//nolint:contextcheck,nolintlint // a release runs after the request's context has ended; contextcheck reads this on its callers
 func (x *Lease) Release() {
 	x.once.Do(func() {
 		close(x.stop)
