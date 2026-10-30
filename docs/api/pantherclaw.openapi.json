@@ -12428,6 +12428,168 @@
         }
       }
     },
+    "/pantherclaw.v1.GatewayAdminService/GetFleetPolicy": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.GatewayAdminService"
+        ],
+        "summary": "GetFleetPolicy",
+        "description": "GetFleetPolicy returns the org's gateway fleet policy: the advisory\n minimum version and the silence threshold (G0 M18 D151). Every edition.\n permission: gateway.manage",
+        "operationId": "pantherclaw.v1.GatewayAdminService.GetFleetPolicy",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetFleetPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetFleetPolicyResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.GatewayAdminService/SetFleetPolicy": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.GatewayAdminService"
+        ],
+        "summary": "SetFleetPolicy",
+        "description": "SetFleetPolicy sets the org's gateway fleet policy (Enterprise). The\n minimum version is advisory: a gateway below it is flagged and alerted,\n never refused (HR-470).\n permission: gateway.manage",
+        "operationId": "pantherclaw.v1.GatewayAdminService.SetFleetPolicy",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetFleetPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetFleetPolicyResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.GatewayAdminService/ListFleet": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.GatewayAdminService"
+        ],
+        "summary": "ListFleet",
+        "description": "ListFleet lists the org's active gateways with each replica's version,\n its compliance with the minimum and its config lag (Team).\n permission: gateway.read",
+        "operationId": "pantherclaw.v1.GatewayAdminService.ListFleet",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListFleetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListFleetResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.GatewayService/Enroll": {
       "post": {
         "tags": [
@@ -52644,6 +52806,18 @@
         ],
         "description": "MCPStateKind is what an MCP state entry holds (G0 M15 D12)."
       },
+      "pantherclaw.v1.VersionCompliance": {
+        "type": "string",
+        "title": "VersionCompliance",
+        "enum": [
+          "VERSION_COMPLIANCE_UNSPECIFIED",
+          "VERSION_COMPLIANCE_NO_MINIMUM",
+          "VERSION_COMPLIANCE_COMPLIANT",
+          "VERSION_COMPLIANCE_BELOW_MINIMUM",
+          "VERSION_COMPLIANCE_UNKNOWN"
+        ],
+        "description": "VersionCompliance is how a reported version meets the minimum."
+      },
       "pantherclaw.v1.ApproverKey": {
         "type": "object",
         "properties": {
@@ -52968,6 +53142,117 @@
         "title": "DeleteMCPStateResponse",
         "additionalProperties": false,
         "description": "DeleteMCPStateResponse says whether an entry was deleted."
+      },
+      "pantherclaw.v1.FleetGateway": {
+        "type": "object",
+        "properties": {
+          "gatewayId": {
+            "type": "string",
+            "title": "gateway_id",
+            "description": "Gateway id."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "Its name."
+          },
+          "configVersion": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "config_version",
+            "format": "int64",
+            "description": "The config version it should serve."
+          },
+          "connected": {
+            "type": "boolean",
+            "title": "connected",
+            "description": "Whether some replica reported in the last 90 seconds."
+          },
+          "silentSinceTime": {
+            "title": "silent_since_time",
+            "description": "Set while it is alerted as silent: its last report before the silence.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "belowMinimum": {
+            "type": "boolean",
+            "title": "below_minimum",
+            "description": "Whether some replica's version misses the minimum (or is unknown)."
+          },
+          "replicas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FleetReplica"
+            },
+            "title": "replicas",
+            "description": "The replicas that reported in the last 24 hours."
+          }
+        },
+        "title": "FleetGateway",
+        "additionalProperties": false,
+        "description": "FleetGateway is one gateway in the fleet view."
+      },
+      "pantherclaw.v1.FleetPolicy": {
+        "type": "object",
+        "properties": {
+          "minimumVersion": {
+            "type": "string",
+            "title": "minimum_version",
+            "description": "The advisory minimum version, vMAJOR.MINOR.PATCH[-pre]; empty for none."
+          },
+          "silenceAfterSeconds": {
+            "type": "integer",
+            "title": "silence_after_seconds",
+            "format": "int32",
+            "description": "How long a gateway may go without a status report before it is\n alerted as silent."
+          },
+          "updatedBy": {
+            "type": "string",
+            "title": "updated_by",
+            "description": "Who last set it; empty for the default policy."
+          },
+          "updateTime": {
+            "title": "update_time",
+            "description": "When.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "FleetPolicy",
+        "additionalProperties": false,
+        "description": "FleetPolicy is an org's gateway fleet policy (G0 M18 D151)."
+      },
+      "pantherclaw.v1.FleetReplica": {
+        "type": "object",
+        "properties": {
+          "replica": {
+            "title": "replica",
+            "description": "What it reported.",
+            "$ref": "#/components/schemas/pantherclaw.v1.GatewayReplica"
+          },
+          "parsedVersion": {
+            "type": "string",
+            "title": "parsed_version",
+            "description": "Its parsed version, vMAJOR.MINOR.PATCH[-pre], or \"unknown\"."
+          },
+          "compliance": {
+            "title": "compliance",
+            "description": "How it meets the minimum.",
+            "$ref": "#/components/schemas/pantherclaw.v1.VersionCompliance"
+          },
+          "configLag": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "config_lag",
+            "format": "int64",
+            "description": "How many config versions it serves behind the gateway's current one."
+          }
+        },
+        "title": "FleetReplica",
+        "additionalProperties": false,
+        "description": "FleetReplica is one replica in the fleet view."
       },
       "pantherclaw.v1.Gateway": {
         "type": "object",
@@ -53479,6 +53764,25 @@
         "additionalProperties": false,
         "description": "GetConfigurationResponse is what the gateway serves."
       },
+      "pantherclaw.v1.GetFleetPolicyRequest": {
+        "type": "object",
+        "title": "GetFleetPolicyRequest",
+        "additionalProperties": false,
+        "description": "GetFleetPolicyRequest reads the caller's org's fleet policy."
+      },
+      "pantherclaw.v1.GetFleetPolicyResponse": {
+        "type": "object",
+        "properties": {
+          "policy": {
+            "title": "policy",
+            "description": "The policy, or the default when the org set none.",
+            "$ref": "#/components/schemas/pantherclaw.v1.FleetPolicy"
+          }
+        },
+        "title": "GetFleetPolicyResponse",
+        "additionalProperties": false,
+        "description": "GetFleetPolicyResponse is the policy."
+      },
       "pantherclaw.v1.GetGatewayRequest": {
         "type": "object",
         "properties": {
@@ -53820,6 +54124,68 @@
         "title": "ListApproverKeysResponse",
         "additionalProperties": false,
         "description": "ListApproverKeysResponse is one page, with what every page shares."
+      },
+      "pantherclaw.v1.ListFleetRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default 50, at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 64,
+            "description": "Token from a previous response.",
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ListFleetRequest",
+        "additionalProperties": false,
+        "description": "ListFleetRequest pages through the fleet view."
+      },
+      "pantherclaw.v1.ListFleetResponse": {
+        "type": "object",
+        "properties": {
+          "policy": {
+            "title": "policy",
+            "description": "The org's fleet policy.",
+            "$ref": "#/components/schemas/pantherclaw.v1.FleetPolicy"
+          },
+          "gateways": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FleetGateway"
+            },
+            "title": "gateways",
+            "description": "Active gateways."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Token for the next page; empty at the end."
+          }
+        },
+        "title": "ListFleetResponse",
+        "additionalProperties": false,
+        "description": "ListFleetResponse is one page."
       },
       "pantherclaw.v1.ListGatewaysRequest": {
         "type": "object",
@@ -55101,6 +55467,55 @@
         "title": "SealedCredential",
         "additionalProperties": false,
         "description": "SealedCredential is one connection's sealed credential (HR-060). Only\n the gateway holding the broker key can open it."
+      },
+      "pantherclaw.v1.SetFleetPolicyRequest": {
+        "type": "object",
+        "properties": {
+          "minimumVersion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "minimum_version",
+            "maxLength": 64,
+            "description": "The advisory minimum version; empty clears it.",
+            "anyOf": [
+              {
+                "pattern": "^(v?(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)(-[0-9A-Za-z-]+([.][0-9A-Za-z-]+)*)?)?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "silenceAfterSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "silence_after_seconds",
+            "maximum": 86400,
+            "minimum": 0,
+            "format": "int32",
+            "description": "The silence threshold; 0 for the default 300."
+          }
+        },
+        "title": "SetFleetPolicyRequest",
+        "additionalProperties": false,
+        "description": "SetFleetPolicyRequest replaces the caller's org's fleet policy."
+      },
+      "pantherclaw.v1.SetFleetPolicyResponse": {
+        "type": "object",
+        "properties": {
+          "policy": {
+            "title": "policy",
+            "description": "The policy.",
+            "$ref": "#/components/schemas/pantherclaw.v1.FleetPolicy"
+          }
+        },
+        "title": "SetFleetPolicyResponse",
+        "additionalProperties": false,
+        "description": "SetFleetPolicyResponse is the policy as stored."
       },
       "pantherclaw.v1.TargetLogItem": {
         "type": "object",

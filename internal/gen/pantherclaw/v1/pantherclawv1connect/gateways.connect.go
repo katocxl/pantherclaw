@@ -50,6 +50,15 @@ const (
 	// GatewayAdminServiceListApproverKeysProcedure is the procedure name of the GatewayAdminService's
 	// ListApproverKeys RPC.
 	GatewayAdminServiceListApproverKeysProcedure = "/pantherclaw.v1.GatewayAdminService/ListApproverKeys"
+	// GatewayAdminServiceGetFleetPolicyProcedure is the procedure name of the GatewayAdminService's
+	// GetFleetPolicy RPC.
+	GatewayAdminServiceGetFleetPolicyProcedure = "/pantherclaw.v1.GatewayAdminService/GetFleetPolicy"
+	// GatewayAdminServiceSetFleetPolicyProcedure is the procedure name of the GatewayAdminService's
+	// SetFleetPolicy RPC.
+	GatewayAdminServiceSetFleetPolicyProcedure = "/pantherclaw.v1.GatewayAdminService/SetFleetPolicy"
+	// GatewayAdminServiceListFleetProcedure is the procedure name of the GatewayAdminService's
+	// ListFleet RPC.
+	GatewayAdminServiceListFleetProcedure = "/pantherclaw.v1.GatewayAdminService/ListFleet"
 	// GatewayServiceEnrollProcedure is the procedure name of the GatewayService's Enroll RPC.
 	GatewayServiceEnrollProcedure = "/pantherclaw.v1.GatewayService/Enroll"
 	// GatewayServiceRenewCertificateProcedure is the procedure name of the GatewayService's
@@ -157,6 +166,29 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	gatewayAdminServiceGetFleetPolicySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayAdminService").Methods().ByName("GetFleetPolicy"),
+			Procedure:        GatewayAdminServiceGetFleetPolicyProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	gatewayAdminServiceSetFleetPolicySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayAdminService").Methods().ByName("SetFleetPolicy"),
+			Procedure:  GatewayAdminServiceSetFleetPolicyProcedure,
+		}
+	})
+	gatewayAdminServiceListFleetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayAdminService").Methods().ByName("ListFleet"),
+			Procedure:        GatewayAdminServiceListFleetProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // GatewayAdminServiceClient is a client for the pantherclaw.v1.GatewayAdminService service.
@@ -191,6 +223,19 @@ type GatewayAdminServiceClient interface {
 	// gateway never asks the server for keys.
 	// permission: gateway.read
 	ListApproverKeys(context.Context, *v1.ListApproverKeysRequest) (*v1.ListApproverKeysResponse, error)
+	// GetFleetPolicy returns the org's gateway fleet policy: the advisory
+	// minimum version and the silence threshold (G0 M18 D151). Every edition.
+	// permission: gateway.manage
+	GetFleetPolicy(context.Context, *v1.GetFleetPolicyRequest) (*v1.GetFleetPolicyResponse, error)
+	// SetFleetPolicy sets the org's gateway fleet policy (Enterprise). The
+	// minimum version is advisory: a gateway below it is flagged and alerted,
+	// never refused (HR-470).
+	// permission: gateway.manage
+	SetFleetPolicy(context.Context, *v1.SetFleetPolicyRequest) (*v1.SetFleetPolicyResponse, error)
+	// ListFleet lists the org's active gateways with each replica's version,
+	// its compliance with the minimum and its config lag (Team).
+	// permission: gateway.read
+	ListFleet(context.Context, *v1.ListFleetRequest) (*v1.ListFleetResponse, error)
 }
 
 // NewGatewayAdminServiceClient constructs a client for the pantherclaw.v1.GatewayAdminService
@@ -232,6 +277,19 @@ type GatewayAdminServiceHandler interface {
 	// gateway never asks the server for keys.
 	// permission: gateway.read
 	ListApproverKeys(context.Context, *v1.ListApproverKeysRequest) (*v1.ListApproverKeysResponse, error)
+	// GetFleetPolicy returns the org's gateway fleet policy: the advisory
+	// minimum version and the silence threshold (G0 M18 D151). Every edition.
+	// permission: gateway.manage
+	GetFleetPolicy(context.Context, *v1.GetFleetPolicyRequest) (*v1.GetFleetPolicyResponse, error)
+	// SetFleetPolicy sets the org's gateway fleet policy (Enterprise). The
+	// minimum version is advisory: a gateway below it is flagged and alerted,
+	// never refused (HR-470).
+	// permission: gateway.manage
+	SetFleetPolicy(context.Context, *v1.SetFleetPolicyRequest) (*v1.SetFleetPolicyResponse, error)
+	// ListFleet lists the org's active gateways with each replica's version,
+	// its compliance with the minimum and its config lag (Team).
+	// permission: gateway.read
+	ListFleet(context.Context, *v1.ListFleetRequest) (*v1.ListFleetResponse, error)
 }
 
 // RegisterGatewayAdminServiceHandler registers svc as the pantherclaw.v1.GatewayAdminService
@@ -246,6 +304,9 @@ func RegisterGatewayAdminServiceHandler(server *connect.Server, svc GatewayAdmin
 		connect.Method{Spec: gatewayAdminServiceRevokeGatewaySpec(), Handler: adapter.revokeGateway},
 		connect.Method{Spec: gatewayAdminServiceRevokeGatewayCertificateSpec(), Handler: adapter.revokeGatewayCertificate},
 		connect.Method{Spec: gatewayAdminServiceListApproverKeysSpec(), Handler: adapter.listApproverKeys},
+		connect.Method{Spec: gatewayAdminServiceGetFleetPolicySpec(), Handler: adapter.getFleetPolicy},
+		connect.Method{Spec: gatewayAdminServiceSetFleetPolicySpec(), Handler: adapter.setFleetPolicy},
+		connect.Method{Spec: gatewayAdminServiceListFleetSpec(), Handler: adapter.listFleet},
 	)
 }
 
@@ -278,6 +339,18 @@ func (UnimplementedGatewayAdminServiceHandler) RevokeGatewayCertificate(context.
 
 func (UnimplementedGatewayAdminServiceHandler) ListApproverKeys(context.Context, *v1.ListApproverKeysRequest) (*v1.ListApproverKeysResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayAdminService.ListApproverKeys is not implemented")
+}
+
+func (UnimplementedGatewayAdminServiceHandler) GetFleetPolicy(context.Context, *v1.GetFleetPolicyRequest) (*v1.GetFleetPolicyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayAdminService.GetFleetPolicy is not implemented")
+}
+
+func (UnimplementedGatewayAdminServiceHandler) SetFleetPolicy(context.Context, *v1.SetFleetPolicyRequest) (*v1.SetFleetPolicyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayAdminService.SetFleetPolicy is not implemented")
+}
+
+func (UnimplementedGatewayAdminServiceHandler) ListFleet(context.Context, *v1.ListFleetRequest) (*v1.ListFleetResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayAdminService.ListFleet is not implemented")
 }
 
 type gatewayAdminServiceClient struct {
@@ -335,6 +408,30 @@ func (c *gatewayAdminServiceClient) RevokeGatewayCertificate(ctx context.Context
 func (c *gatewayAdminServiceClient) ListApproverKeys(ctx context.Context, req *v1.ListApproverKeysRequest) (*v1.ListApproverKeysResponse, error) {
 	var res v1.ListApproverKeysResponse
 	if err := c.client.CallUnary(ctx, gatewayAdminServiceListApproverKeysSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayAdminServiceClient) GetFleetPolicy(ctx context.Context, req *v1.GetFleetPolicyRequest) (*v1.GetFleetPolicyResponse, error) {
+	var res v1.GetFleetPolicyResponse
+	if err := c.client.CallUnary(ctx, gatewayAdminServiceGetFleetPolicySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayAdminServiceClient) SetFleetPolicy(ctx context.Context, req *v1.SetFleetPolicyRequest) (*v1.SetFleetPolicyResponse, error) {
+	var res v1.SetFleetPolicyResponse
+	if err := c.client.CallUnary(ctx, gatewayAdminServiceSetFleetPolicySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayAdminServiceClient) ListFleet(ctx context.Context, req *v1.ListFleetRequest) (*v1.ListFleetResponse, error) {
+	var res v1.ListFleetResponse
+	if err := c.client.CallUnary(ctx, gatewayAdminServiceListFleetSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -420,6 +517,42 @@ func (h gatewayAdminServiceHandler) listApproverKeys(ctx context.Context, _ conn
 		return err
 	}
 	res, err := h.svc.ListApproverKeys(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayAdminServiceHandler) getFleetPolicy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetFleetPolicyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetFleetPolicy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayAdminServiceHandler) setFleetPolicy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetFleetPolicyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetFleetPolicy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayAdminServiceHandler) listFleet(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListFleetRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListFleet(ctx, &req)
 	if err != nil {
 		return err
 	}
