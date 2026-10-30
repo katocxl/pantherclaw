@@ -1,0 +1,317 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// HostedGatewayService manages an org's PantherClaw-hosted gateway (G0 M19
+// D203, ADR-0041): one gateway process for the org on a shared host, on
+// the Team edition and above, reached by its agents as <slug>.gw.<domain>
+// with the gateway's own TLS end to end. The org's people request it and
+// deprovision it; PantherClaw provisions and runs it.
+service HostedGatewayService {
+  // RequestHostedGateway asks for the org's hosted gateway: one per org
+  // (HR-499), within the plan's quota. A worker provisions it.
+  // permission: gateway.manage
+  rpc RequestHostedGateway(RequestHostedGatewayRequest) returns (RequestHostedGatewayResponse);
+  // GetHostedGateway returns one of the org's hosted gateway records.
+  // permission: gateway.read
+  rpc GetHostedGateway(GetHostedGatewayRequest) returns (GetHostedGatewayResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListHostedGateways lists the org's hosted gateway records.
+  // permission: gateway.read
+  rpc ListHostedGateways(ListHostedGatewaysRequest) returns (ListHostedGatewaysResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // DeprovisionHostedGateway revokes the hosted gateway, its certificates
+  // and its permits first, then has its host stop the process (HR-503).
+  // permission: gateway.manage
+  rpc DeprovisionHostedGateway(DeprovisionHostedGatewayRequest) returns (DeprovisionHostedGatewayResponse);
+}
+
+// HostingAgentService is what the host agent of a shared hosting host
+// calls on the gateway listener, over its own host certificate: one host,
+// the purpose "hosting" and no org (HR-500). It is the only service such a
+// certificate reaches; it never reaches an org RPC.
+service HostingAgentService {
+  // ListAssignments returns the hosted gateways placed on the calling host.
+  // permission: hosting.agent
+  rpc ListAssignments(ListAssignmentsRequest) returns (ListAssignmentsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // PullEnrollmentToken returns a placed gateway's single-use enrollment
+  // token, once (HR-502). The agent writes it only to the process's
+  // private tmpfs directory.
+  // permission: hosting.agent
+  rpc PullEnrollmentToken(PullEnrollmentTokenRequest) returns (PullEnrollmentTokenResponse);
+  // ReportHostedGateway records a running process's health and version.
+  // permission: hosting.agent
+  rpc ReportHostedGateway(ReportHostedGatewayRequest) returns (ReportHostedGatewayResponse);
+  // ReportStopped records that a deprovisioned process is gone.
+  // permission: hosting.agent
+  rpc ReportStopped(ReportStoppedRequest) returns (ReportStoppedResponse);
+  // RenewHostCertificate issues the host a certificate for a new key.
+  // permission: hosting.agent
+  rpc RenewHostCertificate(RenewHostCertificateRequest) returns (RenewHostCertificateResponse);
+}
+
+// HostedGatewayIdentityService is what a hosted gateway calls on the gateway
+// listener over its own mTLS identity (G0 M19 D210).
+service HostedGatewayIdentityService {
+  // IssueServerCertificate returns the calling hosted gateway's 7-day
+  // agent-facing server certificate for the key in its request. Its one
+  // name, <slug>.gw.<domain>, comes from the org's hosted gateway record,
+  // never from the request; a gateway no live record names gets NotFound.
+  // permission: gateway.sync
+  rpc IssueServerCertificate(IssueServerCertificateRequest) returns (IssueServerCertificateResponse);
+}
+
+// HostedGatewayState is a hosted gateway's lifecycle.
+enum HostedGatewayState {
+  HOSTED_GATEWAY_STATE_UNSPECIFIED = 0;
+  // Requested; waiting for the provisioner.
+  HOSTED_GATEWAY_STATE_REQUESTED = 1;
+  // Its gateway and token exist and a host was chosen.
+  HOSTED_GATEWAY_STATE_PROVISIONED = 2;
+  // Its host pulled the token; the process is enrolling.
+  HOSTED_GATEWAY_STATE_ENROLLED = 3;
+  // Its host reports it healthy.
+  HOSTED_GATEWAY_STATE_RUNNING = 4;
+  // Revoked; its host is stopping the process.
+  HOSTED_GATEWAY_STATE_DEPROVISIONING = 5;
+  // Gone.
+  HOSTED_GATEWAY_STATE_DEPROVISIONED = 6;
+  // The provisioner could not provision it.
+  HOSTED_GATEWAY_STATE_FAILED = 7;
+}
+
+// HostedGatewayLimits are a hosted gateway's cgroup limits; zero takes the
+// default, and the plan's quota caps each.
+message HostedGatewayLimits {
+  // CPU in thousandths of a core.
+  int32 milli_cpus = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 2000
+  }];
+  // Memory in MiB.
+  int32 memory_mib = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 1024
+  }];
+  // Processes.
+  int32 pids = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 512
+  }];
+}
+
+// HostedGateway is an org's hosted gateway record.
+message HostedGateway {
+  // Record id.
+  string id = 1;
+  // The slug: agents reach it as <slug>.gw.<domain>.
+  string slug = 2;
+  // Lifecycle state.
+  HostedGatewayState state = 3;
+  // The org's gateway, once provisioned.
+  string gateway_id = 4;
+  // Its limits.
+  HostedGatewayLimits limits = 5;
+  // The version its host reports.
+  string version = 6;
+  // The version its host rolls it to.
+  string target_version = 7;
+  // Who asked for it.
+  string created_by = 8;
+  // When.
+  google.protobuf.Timestamp create_time = 9;
+  // When it was last changed.
+  google.protobuf.Timestamp update_time = 10;
+}
+
+// RequestHostedGatewayRequest asks for the org's hosted gateway.
+message RequestHostedGatewayRequest {
+  // A DNS label, unique among live hosted gateways.
+  string slug = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 63
+    pattern: "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+  }];
+  // Limits; unset ones take the default.
+  HostedGatewayLimits limits = 2;
+}
+
+// RequestHostedGatewayResponse returns the record.
+message RequestHostedGatewayResponse {
+  // The record.
+  HostedGateway hosted_gateway = 1;
+}
+
+// GetHostedGatewayRequest names a record.
+message GetHostedGatewayRequest {
+  // Record id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetHostedGatewayResponse returns it.
+message GetHostedGatewayResponse {
+  // The record.
+  HostedGateway hosted_gateway = 1;
+}
+
+// ListHostedGatewaysRequest pages through the org's records.
+message ListHostedGatewaysRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {max_len: 64}];
+}
+
+// ListHostedGatewaysResponse is one page.
+message ListHostedGatewaysResponse {
+  // The records.
+  repeated HostedGateway hosted_gateways = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// DeprovisionHostedGatewayRequest names the record to deprovision.
+message DeprovisionHostedGatewayRequest {
+  // Record id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // Why (stored and shown as untrusted text).
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+// DeprovisionHostedGatewayResponse returns the record.
+message DeprovisionHostedGatewayResponse {
+  // The record.
+  HostedGateway hosted_gateway = 1;
+}
+
+// HostingAssignment is one hosted gateway a host runs.
+message HostingAssignment {
+  // The org.
+  string org_id = 1;
+  // Record id.
+  string id = 2;
+  // The slug.
+  string slug = 3;
+  // The server name agents use: <slug>.gw.<domain>.
+  string hostname = 4;
+  // Lifecycle state.
+  HostedGatewayState state = 5;
+  // The org's gateway.
+  string gateway_id = 6;
+  // Its limits.
+  HostedGatewayLimits limits = 7;
+  // The version it runs.
+  string version = 8;
+  // The version to roll it to.
+  string target_version = 9;
+}
+
+// ListAssignmentsRequest carries the agent's version.
+message ListAssignmentsRequest {
+  // The host agent's version.
+  string agent_version = 1 [(buf.validate.field).string = {max_len: 64}];
+}
+
+// ListAssignmentsResponse lists the host's hosted gateways.
+message ListAssignmentsResponse {
+  // The assignments.
+  repeated HostingAssignment assignments = 1;
+}
+
+// PullEnrollmentTokenRequest names a placed hosted gateway.
+message PullEnrollmentTokenRequest {
+  // The org.
+  string org_id = 1 [(buf.validate.field).string.uuid = true];
+  // Record id.
+  string id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+// PullEnrollmentTokenResponse returns the token, once.
+message PullEnrollmentTokenResponse {
+  // The single-use pcg_ token.
+  string token = 1;
+  // The server's gateway listener.
+  string gateway_api_url = 2;
+  // SHA-256 pin of the CA certificate.
+  string ca_sha256 = 3;
+}
+
+// ReportHostedGatewayRequest reports a process.
+message ReportHostedGatewayRequest {
+  // The org.
+  string org_id = 1 [(buf.validate.field).string.uuid = true];
+  // Record id.
+  string id = 2 [(buf.validate.field).string.uuid = true];
+  // Whether its health check passed.
+  bool healthy = 3;
+  // The version it runs.
+  string version = 4 [(buf.validate.field).string = {max_len: 64}];
+}
+
+// ReportHostedGatewayResponse is empty.
+message ReportHostedGatewayResponse {}
+
+// ReportStoppedRequest names a stopped process.
+message ReportStoppedRequest {
+  // The org.
+  string org_id = 1 [(buf.validate.field).string.uuid = true];
+  // Record id.
+  string id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+// ReportStoppedResponse is empty.
+message ReportStoppedResponse {}
+
+// RenewHostCertificateRequest carries a request for a new key.
+message RenewHostCertificateRequest {
+  // DER PKCS #10 certificate request for a new Ed25519 key.
+  bytes csr = 1 [(buf.validate.field).bytes = {
+    min_len: 64
+    max_len: 4096
+  }];
+}
+
+// RenewHostCertificateResponse returns the certificate.
+message RenewHostCertificateResponse {
+  // DER certificate.
+  bytes certificate = 1;
+  // DER CA certificate.
+  bytes ca_certificate = 2;
+}
+
+// IssueServerCertificateRequest carries a request for the gateway's
+// agent-facing key.
+message IssueServerCertificateRequest {
+  // DER PKCS #10 certificate request for an Ed25519 key; only its key is
+  // used.
+  bytes csr = 1 [(buf.validate.field).bytes = {
+    min_len: 64
+    max_len: 4096
+  }];
+}
+
+// IssueServerCertificateResponse returns the certificate.
+message IssueServerCertificateResponse {
+  // DER certificate naming exactly hostname.
+  bytes certificate = 1;
+  // DER CA certificate.
+  bytes ca_certificate = 2;
+  // The one DNS name: <slug>.gw.<domain>.
+  string hostname = 3;
+}

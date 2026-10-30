@@ -438,15 +438,19 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 		if spec, err = in.Connector.check(); err != nil {
 			return Connection{}, err
 		}
-		if s.hosted[in.Gateway] {
-			return Connection{}, ErrHostedGateway
-		}
 	}
 	var out Connection
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		if err := activeGateway(ctx, q, c.Org, in.Gateway); err != nil {
 			return err
+		}
+		if in.Connector != nil {
+			if hosted, err := s.hostedIn(ctx, q, c.Org, in.Gateway); err != nil {
+				return err
+			} else if hosted {
+				return ErrHostedGateway
+			}
 		}
 		rs, err := routes(ctx, q, c.Org, in.Package, in.Kind)
 		if err != nil {

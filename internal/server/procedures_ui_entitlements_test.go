@@ -18,7 +18,7 @@ import (
 func gateExempt(p td.Permission) bool {
 	exempt := []td.Permission{
 		td.PermPublic, td.PermOrgsCreate, td.PermOrgsListMine, td.PermInvitationsAccept, td.PermGatewayEnroll,
-		td.PermAccountDelete, td.PermDeletionRecordsRead,
+		td.PermAccountDelete, td.PermDeletionRecordsRead, td.PermHostingAgent,
 	}
 	return slices.Contains(exempt, p) || p.Gateway() || p.Workload()
 }

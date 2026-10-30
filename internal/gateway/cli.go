@@ -175,9 +175,10 @@ func cmdEnroll(ctx context.Context, args []string, stdout, stderr io.Writer, env
 }
 
 func serve(ctx context.Context, args []string, stderr io.Writer, env config.LookupEnv, onStart func(addr string)) error {
-	var enrollFile string
+	var enrollFile, hostedTokenFile string
 	cfg, err := loadConfig(args, stderr, env, "serve", func(fs *flag.FlagSet) {
 		fs.StringVar(&enrollFile, "enroll-file", "", "enroll from this file when no identity is saved (development)")
+		fs.StringVar(&hostedTokenFile, "hosted-token-file", "", "PantherClaw-hosted: enroll from this single-use token file when no identity is saved")
 	})
 	if err != nil {
 		return err
@@ -185,9 +186,17 @@ func serve(ctx context.Context, args []string, stderr io.Writer, env config.Look
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
+	if err := checkHosted(&cfg, enrollFile, hostedTokenFile); err != nil {
+		return err
+	}
 	level, _ := pclog.ParseLevel(cfg.Log.Level)
 	log := pclog.New(stderr, pclog.Options{Service: "pantherclaw-gateway", Version: version.Get().Version, Level: level})
-	id, err := LoadOrEnroll(ctx, &cfg, enrollFile, log)
+	var id *control.Identity
+	if hostedTokenFile != "" {
+		id, err = LoadOrEnrollHosted(ctx, &cfg, hostedTokenFile, log)
+	} else {
+		id, err = LoadOrEnroll(ctx, &cfg, enrollFile, log)
+	}
 	if err != nil {
 		return err
 	}
@@ -196,7 +205,15 @@ func serve(ctx context.Context, args []string, stderr io.Writer, env config.Look
 		return err
 	}
 	var tlsConf *tls.Config
-	if cfg.TLS.CertFile != "" {
+	var hostedCert *hostedTLS
+	if hostedTokenFile != "" {
+		// A hosted gateway's own agent-facing certificate (G0 M19 D210).
+		if hostedCert, err = newHostedTLS(ctx, &cfg, log); err != nil {
+			return err
+		}
+		tlsConf = hostedCert.Config()
+	}
+	if tlsConf == nil && cfg.TLS.CertFile != "" {
 		cert, err := tls.LoadX509KeyPair(cfg.TLS.CertFile, cfg.TLS.KeyFile)
 		if err != nil {
 			return fmt.Errorf("gateway: TLS key pair: %w", err)
@@ -213,6 +230,9 @@ func serve(ctx context.Context, args []string, stderr io.Writer, env config.Look
 	}
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error { return g.Run(ctx) })
+	if hostedCert != nil {
+		eg.Go(func() error { return hostedCert.Run(ctx) })
+	}
 	// Serve nothing until the first containment snapshot arrived (HR-010).
 	if err := g.WaitReady(ctx, 30*time.Second); err != nil {
 		return err

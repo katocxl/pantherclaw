@@ -44,6 +44,12 @@ var globalTables = []string{
 	"schema_info",          // single global row: the applied schema version; pc_app reads it (G0 M13 D19, HR-370)
 	"db_primary_timeline",  // single global row: the acknowledged primary timeline; rows only in purpose failover (G0 M19 D207, HR-496)
 	"rate_counters",        // the shared rate limiter's counters: opaque keys, no tenant data; rows only in purpose rate_limit (G0 M13 D9, D28, HR-376)
+	// The shared hosting hosts, their agents' certificates (G0 M19 D203,
+	// HR-500) and the slugs in use (D222): operator-level, no org; rows only
+	// in purpose hosting.
+	"hosting_hosts",
+	"hosting_host_certs",
+	"hosting_slugs",
 }
 
 func createOrg(t *testing.T, p *db.Pool, name string) ids.OrgID {

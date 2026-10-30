@@ -347,7 +347,8 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	ghScans := &githubapp.Scans{Pool: pool, Ents: bill}
 	m6.credentials.OnGitHubInstallation(ghScans.InstallationRecorded)
 	svc.WithToolObservations(m6.connections)
-	m6.connections.WithEntitlements(bill) // the inventory draft is Team and above (G0 M15 D23)
+	m6.connections.WithEntitlements(bill)                                      // the inventory draft is Team and above (G0 M15 D23)
+	m6.hosting = newHosting(cfg, pool, m6.ca, kp, bill).WithFleet(m6.gateways) // hosted gateways (G0 M19 D203)
 	m5p2, err := newM5p2(cfg, pool, bill, m5.notifications, log)
 	if err != nil {
 		return err
@@ -620,6 +621,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		if evidenceJobs, err = registerM15GatewayJobs(evidenceJobs, jreg, pool, log); err != nil {
+			return err
+		}
+		if evidenceJobs, err = registerM19HostingJobs(evidenceJobs, jreg, cfg, pool, kp, log); err != nil {
 			return err
 		}
 		if evidenceJobs, err = registerM18FleetJobs(evidenceJobs, jreg, m6.fleet, log); err != nil {

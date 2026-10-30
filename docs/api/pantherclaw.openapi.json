@@ -14859,6 +14859,546 @@
         }
       }
     },
+    "/pantherclaw.v1.HostedGatewayService/RequestHostedGateway": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.HostedGatewayService"
+        ],
+        "summary": "RequestHostedGateway",
+        "description": "RequestHostedGateway asks for the org's hosted gateway: one per org\n (HR-499), within the plan's quota. A worker provisions it.\n permission: gateway.manage",
+        "operationId": "pantherclaw.v1.HostedGatewayService.RequestHostedGateway",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RequestHostedGatewayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RequestHostedGatewayResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.HostedGatewayService/GetHostedGateway": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.HostedGatewayService"
+        ],
+        "summary": "GetHostedGateway",
+        "description": "GetHostedGateway returns one of the org's hosted gateway records.\n permission: gateway.read",
+        "operationId": "pantherclaw.v1.HostedGatewayService.GetHostedGateway",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetHostedGatewayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetHostedGatewayResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.HostedGatewayService/ListHostedGateways": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.HostedGatewayService"
+        ],
+        "summary": "ListHostedGateways",
+        "description": "ListHostedGateways lists the org's hosted gateway records.\n permission: gateway.read",
+        "operationId": "pantherclaw.v1.HostedGatewayService.ListHostedGateways",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListHostedGatewaysRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListHostedGatewaysResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.HostedGatewayService/DeprovisionHostedGateway": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.HostedGatewayService"
+        ],
+        "summary": "DeprovisionHostedGateway",
+        "description": "DeprovisionHostedGateway revokes the hosted gateway, its certificates\n and its permits first, then has its host stop the process (HR-503).\n permission: gateway.manage",
+        "operationId": "pantherclaw.v1.HostedGatewayService.DeprovisionHostedGateway",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DeprovisionHostedGatewayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DeprovisionHostedGatewayResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.HostingAgentService/ListAssignments": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.HostingAgentService"
+        ],
+        "summary": "ListAssignments",
+        "description": "ListAssignments returns the hosted gateways placed on the calling host.\n permission: hosting.agent",
+        "operationId": "pantherclaw.v1.HostingAgentService.ListAssignments",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListAssignmentsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListAssignmentsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.HostingAgentService/PullEnrollmentToken": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.HostingAgentService"
+        ],
+        "summary": "PullEnrollmentToken",
+        "description": "PullEnrollmentToken returns a placed gateway's single-use enrollment\n token, once (HR-502). The agent writes it only to the process's\n private tmpfs directory.\n permission: hosting.agent",
+        "operationId": "pantherclaw.v1.HostingAgentService.PullEnrollmentToken",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.PullEnrollmentTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.PullEnrollmentTokenResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.HostingAgentService/ReportHostedGateway": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.HostingAgentService"
+        ],
+        "summary": "ReportHostedGateway",
+        "description": "ReportHostedGateway records a running process's health and version.\n permission: hosting.agent",
+        "operationId": "pantherclaw.v1.HostingAgentService.ReportHostedGateway",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ReportHostedGatewayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ReportHostedGatewayResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.HostingAgentService/ReportStopped": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.HostingAgentService"
+        ],
+        "summary": "ReportStopped",
+        "description": "ReportStopped records that a deprovisioned process is gone.\n permission: hosting.agent",
+        "operationId": "pantherclaw.v1.HostingAgentService.ReportStopped",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ReportStoppedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ReportStoppedResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.HostingAgentService/RenewHostCertificate": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.HostingAgentService"
+        ],
+        "summary": "RenewHostCertificate",
+        "description": "RenewHostCertificate issues the host a certificate for a new key.\n permission: hosting.agent",
+        "operationId": "pantherclaw.v1.HostingAgentService.RenewHostCertificate",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RenewHostCertificateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RenewHostCertificateResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.HostedGatewayIdentityService/IssueServerCertificate": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.HostedGatewayIdentityService"
+        ],
+        "summary": "IssueServerCertificate",
+        "description": "IssueServerCertificate returns the calling hosted gateway's 7-day\n agent-facing server certificate for the key in its request. Its one\n name, \u003cslug\u003e.gw.\u003cdomain\u003e, comes from the org's hosted gateway record,\n never from the request; a gateway no live record names gets NotFound.\n permission: gateway.sync",
+        "operationId": "pantherclaw.v1.HostedGatewayIdentityService.IssueServerCertificate",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.IssueServerCertificateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.IssueServerCertificateResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.IdentityService/CreateEnrollmentToken": {
       "post": {
         "tags": [
@@ -59353,6 +59893,607 @@
         "additionalProperties": false,
         "description": "RevokeGrantResponse says what was revoked."
       },
+      "pantherclaw.v1.HostedGatewayState": {
+        "type": "string",
+        "title": "HostedGatewayState",
+        "enum": [
+          "HOSTED_GATEWAY_STATE_UNSPECIFIED",
+          "HOSTED_GATEWAY_STATE_REQUESTED",
+          "HOSTED_GATEWAY_STATE_PROVISIONED",
+          "HOSTED_GATEWAY_STATE_ENROLLED",
+          "HOSTED_GATEWAY_STATE_RUNNING",
+          "HOSTED_GATEWAY_STATE_DEPROVISIONING",
+          "HOSTED_GATEWAY_STATE_DEPROVISIONED",
+          "HOSTED_GATEWAY_STATE_FAILED"
+        ],
+        "description": "HostedGatewayState is a hosted gateway's lifecycle."
+      },
+      "pantherclaw.v1.DeprovisionHostedGatewayRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Record id."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1,
+            "description": "Why (stored and shown as untrusted text)."
+          }
+        },
+        "title": "DeprovisionHostedGatewayRequest",
+        "additionalProperties": false,
+        "description": "DeprovisionHostedGatewayRequest names the record to deprovision.",
+        "required": [
+          "id",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.DeprovisionHostedGatewayResponse": {
+        "type": "object",
+        "properties": {
+          "hostedGateway": {
+            "title": "hosted_gateway",
+            "description": "The record.",
+            "$ref": "#/components/schemas/pantherclaw.v1.HostedGateway"
+          }
+        },
+        "title": "DeprovisionHostedGatewayResponse",
+        "additionalProperties": false,
+        "description": "DeprovisionHostedGatewayResponse returns the record."
+      },
+      "pantherclaw.v1.GetHostedGatewayRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Record id."
+          }
+        },
+        "title": "GetHostedGatewayRequest",
+        "additionalProperties": false,
+        "description": "GetHostedGatewayRequest names a record.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetHostedGatewayResponse": {
+        "type": "object",
+        "properties": {
+          "hostedGateway": {
+            "title": "hosted_gateway",
+            "description": "The record.",
+            "$ref": "#/components/schemas/pantherclaw.v1.HostedGateway"
+          }
+        },
+        "title": "GetHostedGatewayResponse",
+        "additionalProperties": false,
+        "description": "GetHostedGatewayResponse returns it."
+      },
+      "pantherclaw.v1.HostedGateway": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Record id."
+          },
+          "slug": {
+            "type": "string",
+            "title": "slug",
+            "description": "The slug: agents reach it as \u003cslug\u003e.gw.\u003cdomain\u003e."
+          },
+          "state": {
+            "title": "state",
+            "description": "Lifecycle state.",
+            "$ref": "#/components/schemas/pantherclaw.v1.HostedGatewayState"
+          },
+          "gatewayId": {
+            "type": "string",
+            "title": "gateway_id",
+            "description": "The org's gateway, once provisioned."
+          },
+          "limits": {
+            "title": "limits",
+            "description": "Its limits.",
+            "$ref": "#/components/schemas/pantherclaw.v1.HostedGatewayLimits"
+          },
+          "version": {
+            "type": "string",
+            "title": "version",
+            "description": "The version its host reports."
+          },
+          "targetVersion": {
+            "type": "string",
+            "title": "target_version",
+            "description": "The version its host rolls it to."
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "created_by",
+            "description": "Who asked for it."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "updateTime": {
+            "title": "update_time",
+            "description": "When it was last changed.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "HostedGateway",
+        "additionalProperties": false,
+        "description": "HostedGateway is an org's hosted gateway record."
+      },
+      "pantherclaw.v1.HostedGatewayLimits": {
+        "type": "object",
+        "properties": {
+          "milliCpus": {
+            "type": "integer",
+            "title": "milli_cpus",
+            "maximum": 2000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "CPU in thousandths of a core."
+          },
+          "memoryMib": {
+            "type": "integer",
+            "title": "memory_mib",
+            "maximum": 1024,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Memory in MiB."
+          },
+          "pids": {
+            "type": "integer",
+            "title": "pids",
+            "maximum": 512,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Processes."
+          }
+        },
+        "title": "HostedGatewayLimits",
+        "additionalProperties": false,
+        "description": "HostedGatewayLimits are a hosted gateway's cgroup limits; zero takes the\n default, and the plan's quota caps each."
+      },
+      "pantherclaw.v1.HostedGatewayLimitsInput": {
+        "type": "object",
+        "properties": {
+          "milliCpus": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "milli_cpus",
+            "maximum": 2000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "CPU in thousandths of a core."
+          },
+          "memoryMib": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "memory_mib",
+            "maximum": 1024,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Memory in MiB."
+          },
+          "pids": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "pids",
+            "maximum": 512,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Processes."
+          }
+        },
+        "title": "HostedGatewayLimits",
+        "additionalProperties": false,
+        "description": "HostedGatewayLimits are a hosted gateway's cgroup limits; zero takes the\n default, and the plan's quota caps each.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.HostedGatewayLimits"
+      },
+      "pantherclaw.v1.HostingAssignment": {
+        "type": "object",
+        "properties": {
+          "orgId": {
+            "type": "string",
+            "title": "org_id",
+            "description": "The org."
+          },
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Record id."
+          },
+          "slug": {
+            "type": "string",
+            "title": "slug",
+            "description": "The slug."
+          },
+          "hostname": {
+            "type": "string",
+            "title": "hostname",
+            "description": "The server name agents use: \u003cslug\u003e.gw.\u003cdomain\u003e."
+          },
+          "state": {
+            "title": "state",
+            "description": "Lifecycle state.",
+            "$ref": "#/components/schemas/pantherclaw.v1.HostedGatewayState"
+          },
+          "gatewayId": {
+            "type": "string",
+            "title": "gateway_id",
+            "description": "The org's gateway."
+          },
+          "limits": {
+            "title": "limits",
+            "description": "Its limits.",
+            "$ref": "#/components/schemas/pantherclaw.v1.HostedGatewayLimits"
+          },
+          "version": {
+            "type": "string",
+            "title": "version",
+            "description": "The version it runs."
+          },
+          "targetVersion": {
+            "type": "string",
+            "title": "target_version",
+            "description": "The version to roll it to."
+          }
+        },
+        "title": "HostingAssignment",
+        "additionalProperties": false,
+        "description": "HostingAssignment is one hosted gateway a host runs."
+      },
+      "pantherclaw.v1.IssueServerCertificateRequest": {
+        "type": "object",
+        "properties": {
+          "csr": {
+            "type": "string",
+            "title": "csr",
+            "maxLength": 4096,
+            "minLength": 64,
+            "format": "byte",
+            "description": "DER PKCS #10 certificate request for an Ed25519 key; only its key is\n used."
+          }
+        },
+        "title": "IssueServerCertificateRequest",
+        "additionalProperties": false,
+        "description": "IssueServerCertificateRequest carries a request for the gateway's\n agent-facing key.",
+        "required": [
+          "csr"
+        ]
+      },
+      "pantherclaw.v1.IssueServerCertificateResponse": {
+        "type": "object",
+        "properties": {
+          "certificate": {
+            "type": "string",
+            "title": "certificate",
+            "format": "byte",
+            "description": "DER certificate naming exactly hostname."
+          },
+          "caCertificate": {
+            "type": "string",
+            "title": "ca_certificate",
+            "format": "byte",
+            "description": "DER CA certificate."
+          },
+          "hostname": {
+            "type": "string",
+            "title": "hostname",
+            "description": "The one DNS name: \u003cslug\u003e.gw.\u003cdomain\u003e."
+          }
+        },
+        "title": "IssueServerCertificateResponse",
+        "additionalProperties": false,
+        "description": "IssueServerCertificateResponse returns the certificate."
+      },
+      "pantherclaw.v1.ListAssignmentsRequest": {
+        "type": "object",
+        "properties": {
+          "agentVersion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "agent_version",
+            "maxLength": 64,
+            "description": "The host agent's version."
+          }
+        },
+        "title": "ListAssignmentsRequest",
+        "additionalProperties": false,
+        "description": "ListAssignmentsRequest carries the agent's version."
+      },
+      "pantherclaw.v1.ListAssignmentsResponse": {
+        "type": "object",
+        "properties": {
+          "assignments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.HostingAssignment"
+            },
+            "title": "assignments",
+            "description": "The assignments."
+          }
+        },
+        "title": "ListAssignmentsResponse",
+        "additionalProperties": false,
+        "description": "ListAssignmentsResponse lists the host's hosted gateways."
+      },
+      "pantherclaw.v1.ListHostedGatewaysRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default 50, at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 64,
+            "description": "Token from a previous response."
+          }
+        },
+        "title": "ListHostedGatewaysRequest",
+        "additionalProperties": false,
+        "description": "ListHostedGatewaysRequest pages through the org's records."
+      },
+      "pantherclaw.v1.ListHostedGatewaysResponse": {
+        "type": "object",
+        "properties": {
+          "hostedGateways": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.HostedGateway"
+            },
+            "title": "hosted_gateways",
+            "description": "The records."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Token for the next page; empty at the end."
+          }
+        },
+        "title": "ListHostedGatewaysResponse",
+        "additionalProperties": false,
+        "description": "ListHostedGatewaysResponse is one page."
+      },
+      "pantherclaw.v1.PullEnrollmentTokenRequest": {
+        "type": "object",
+        "properties": {
+          "orgId": {
+            "type": "string",
+            "title": "org_id",
+            "format": "uuid",
+            "description": "The org."
+          },
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Record id."
+          }
+        },
+        "title": "PullEnrollmentTokenRequest",
+        "additionalProperties": false,
+        "description": "PullEnrollmentTokenRequest names a placed hosted gateway.",
+        "required": [
+          "orgId",
+          "id"
+        ]
+      },
+      "pantherclaw.v1.PullEnrollmentTokenResponse": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "token",
+            "description": "The single-use pcg_ token."
+          },
+          "gatewayApiUrl": {
+            "type": "string",
+            "title": "gateway_api_url",
+            "description": "The server's gateway listener."
+          },
+          "caSha256": {
+            "type": "string",
+            "title": "ca_sha256",
+            "description": "SHA-256 pin of the CA certificate."
+          }
+        },
+        "title": "PullEnrollmentTokenResponse",
+        "additionalProperties": false,
+        "description": "PullEnrollmentTokenResponse returns the token, once."
+      },
+      "pantherclaw.v1.RenewHostCertificateRequest": {
+        "type": "object",
+        "properties": {
+          "csr": {
+            "type": "string",
+            "title": "csr",
+            "maxLength": 4096,
+            "minLength": 64,
+            "format": "byte",
+            "description": "DER PKCS #10 certificate request for a new Ed25519 key."
+          }
+        },
+        "title": "RenewHostCertificateRequest",
+        "additionalProperties": false,
+        "description": "RenewHostCertificateRequest carries a request for a new key.",
+        "required": [
+          "csr"
+        ]
+      },
+      "pantherclaw.v1.RenewHostCertificateResponse": {
+        "type": "object",
+        "properties": {
+          "certificate": {
+            "type": "string",
+            "title": "certificate",
+            "format": "byte",
+            "description": "DER certificate."
+          },
+          "caCertificate": {
+            "type": "string",
+            "title": "ca_certificate",
+            "format": "byte",
+            "description": "DER CA certificate."
+          }
+        },
+        "title": "RenewHostCertificateResponse",
+        "additionalProperties": false,
+        "description": "RenewHostCertificateResponse returns the certificate."
+      },
+      "pantherclaw.v1.ReportHostedGatewayRequest": {
+        "type": "object",
+        "properties": {
+          "orgId": {
+            "type": "string",
+            "title": "org_id",
+            "format": "uuid",
+            "description": "The org."
+          },
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Record id."
+          },
+          "healthy": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "healthy",
+            "description": "Whether its health check passed."
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "version",
+            "maxLength": 64,
+            "description": "The version it runs."
+          }
+        },
+        "title": "ReportHostedGatewayRequest",
+        "additionalProperties": false,
+        "description": "ReportHostedGatewayRequest reports a process.",
+        "required": [
+          "orgId",
+          "id"
+        ]
+      },
+      "pantherclaw.v1.ReportHostedGatewayResponse": {
+        "type": "object",
+        "title": "ReportHostedGatewayResponse",
+        "additionalProperties": false,
+        "description": "ReportHostedGatewayResponse is empty."
+      },
+      "pantherclaw.v1.ReportStoppedRequest": {
+        "type": "object",
+        "properties": {
+          "orgId": {
+            "type": "string",
+            "title": "org_id",
+            "format": "uuid",
+            "description": "The org."
+          },
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Record id."
+          }
+        },
+        "title": "ReportStoppedRequest",
+        "additionalProperties": false,
+        "description": "ReportStoppedRequest names a stopped process.",
+        "required": [
+          "orgId",
+          "id"
+        ]
+      },
+      "pantherclaw.v1.ReportStoppedResponse": {
+        "type": "object",
+        "title": "ReportStoppedResponse",
+        "additionalProperties": false,
+        "description": "ReportStoppedResponse is empty."
+      },
+      "pantherclaw.v1.RequestHostedGatewayRequest": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "slug",
+            "maxLength": 63,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+            "description": "A DNS label, unique among live hosted gateways."
+          },
+          "limits": {
+            "title": "limits",
+            "description": "Limits; unset ones take the default.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.HostedGatewayLimitsInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "RequestHostedGatewayRequest",
+        "additionalProperties": false,
+        "description": "RequestHostedGatewayRequest asks for the org's hosted gateway.",
+        "required": [
+          "slug"
+        ]
+      },
+      "pantherclaw.v1.RequestHostedGatewayResponse": {
+        "type": "object",
+        "properties": {
+          "hostedGateway": {
+            "title": "hosted_gateway",
+            "description": "The record.",
+            "$ref": "#/components/schemas/pantherclaw.v1.HostedGateway"
+          }
+        },
+        "title": "RequestHostedGatewayResponse",
+        "additionalProperties": false,
+        "description": "RequestHostedGatewayResponse returns the record."
+      },
       "pantherclaw.v1.EnrollmentPath": {
         "type": "string",
         "title": "EnrollmentPath",
@@ -84010,6 +85151,18 @@
     {
       "name": "pantherclaw.v1.GrantService",
       "description": "GrantService issues, revises, revokes and reads grants (G0 M4 part 2;\n HR-045..048, HR-161). Only people issue grants until M11 (decision 7): a\n service account or API key is refused even when it holds grant.issue.\n Bounds, requirements and limits are JSON documents (grant bounds v1) that\n the server decodes strictly (duplicate keys, unknown members, nulls and\n JSON numbers are rejected). Workloads delegate with\n WorkloadService.DelegateGrant, never here."
+    },
+    {
+      "name": "pantherclaw.v1.HostedGatewayService",
+      "description": "HostedGatewayService manages an org's PantherClaw-hosted gateway (G0 M19\n D203, ADR-0041): one gateway process for the org on a shared host, on\n the Team edition and above, reached by its agents as \u003cslug\u003e.gw.\u003cdomain\u003e\n with the gateway's own TLS end to end. The org's people request it and\n deprovision it; PantherClaw provisions and runs it."
+    },
+    {
+      "name": "pantherclaw.v1.HostingAgentService",
+      "description": "HostingAgentService is what the host agent of a shared hosting host\n calls on the gateway listener, over its own host certificate: one host,\n the purpose \"hosting\" and no org (HR-500). It is the only service such a\n certificate reaches; it never reaches an org RPC."
+    },
+    {
+      "name": "pantherclaw.v1.HostedGatewayIdentityService",
+      "description": "HostedGatewayIdentityService is what a hosted gateway calls on the gateway\n listener over its own mTLS identity (G0 M19 D210)."
     },
     {
       "name": "pantherclaw.v1.IdentityService",
