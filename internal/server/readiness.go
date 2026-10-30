@@ -144,8 +144,16 @@ func (rd readiness) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		c.Hold = checkFailed
 	}
 	err := rd.pool.InGlobalTx(ctx, db.GlobalHealth, func(ctx context.Context, tx db.GlobalTx) error {
-		var one int
-		return tx.QueryRow(ctx, "SELECT 1").Scan(&one)
+		// Ready only on the read-write primary: never on a standby, not
+		// even for reads (G0 M19 D202, G11, HR-495).
+		var primary bool
+		if err := tx.QueryRow(ctx, "SELECT NOT pg_is_in_recovery()").Scan(&primary); err != nil {
+			return err
+		}
+		if !primary {
+			return db.ErrNotPrimary
+		}
+		return nil
 	}, db.ReadOnly())
 	if err != nil {
 		rd.log.WarnContext(ctx, "server.not_ready", slog.String("check", "db"), pclog.Err(err))

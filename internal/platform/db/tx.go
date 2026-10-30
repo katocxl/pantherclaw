@@ -90,10 +90,14 @@ const (
 	// GlobalRateLimit is the shared rate limiter's pc.rate_counters (G0
 	// M13 D9, HR-376): counters only, keyed by opaque ids, no tenant data.
 	GlobalRateLimit GlobalPurpose = "rate_limit"
+	// GlobalFailover is pc.db_primary_timeline (G0 M19 D207, HR-496): the
+	// one row with the acknowledged primary timeline, no tenant data.
+	GlobalFailover GlobalPurpose = "failover"
 )
 
 var globalPurposes = []GlobalPurpose{
 	GlobalLicence, GlobalJobs, GlobalCrossOrgList, GlobalHealth, GlobalAnchors, GlobalAccounts, GlobalRateLimit,
+	GlobalFailover,
 }
 
 // TxOption customizes a transaction.

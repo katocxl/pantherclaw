@@ -1,0 +1,42 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+package db
+
+import "testing"
+
+// TestHR496_PromotionHoldDecision: a moved timeline holds unless declared
+// sync is confirmed by the primary's settings; a first start records the
+// timeline and does not hold (G0 M19 D207).
+// Covers: PN-010.7
+func TestHR496_PromotionHoldDecision(t *testing.T) {
+	one, two := int64(1), int64(2)
+	cases := []struct {
+		name             string
+		r                Replication
+		ack              *int64
+		commit, standbys string
+		hold, record     bool
+		unverified       bool
+	}{
+		{name: "first start records the timeline", r: ReplicationAsync, record: true},
+		{name: "first start with sync records the timeline", r: ReplicationSync, commit: "remote_apply", standbys: "FIRST 1 (standby)", record: true},
+		{name: "same timeline", r: ReplicationAsync, ack: &two},
+		{name: "async promotion holds", r: ReplicationAsync, ack: &one, commit: "remote_apply", standbys: "FIRST 1 (standby)", hold: true},
+		{name: "declared sync without a standby holds", r: ReplicationSync, ack: &one, commit: "remote_apply", standbys: " ", hold: true, unverified: true},
+		{name: "declared sync without remote_apply holds", r: ReplicationSync, ack: &one, commit: "on", standbys: "FIRST 1 (standby)", hold: true, unverified: true},
+		{name: "verified sync records the new timeline", r: ReplicationSync, ack: &one, commit: "remote_apply", standbys: "FIRST 1 (standby)", record: true},
+	}
+	for _, c := range cases {
+		p, record := decidePromotion(c.r, 2, c.ack, c.commit, c.standbys)
+		if p.Hold != c.hold || record != c.record || p.Unverified != c.unverified || p.Timeline != 2 {
+			t.Errorf("%s: hold=%v record=%v unverified=%v timeline=%d", c.name, p.Hold, record, p.Unverified, p.Timeline)
+		}
+		if p.Hold && p.Acknowledged != 1 {
+			t.Errorf("%s: acknowledged = %d, want 1", c.name, p.Acknowledged)
+		}
+	}
+	if Replication("semi").Valid() || !ReplicationSync.Valid() || !ReplicationAsync.Valid() {
+		t.Fatal("Replication.Valid")
+	}
+}

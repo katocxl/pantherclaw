@@ -275,6 +275,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err := checkSchemaAtStart(ctx, cfg, pool, log); err != nil {
 		return err
 	}
+	if err := holdAfterPromotion(ctx, cfg, pool, log); err != nil {
+		return err
+	}
 	workers := newWorkerHeartbeat(cfg.Role)
 
 	kp, err := keys.NewFileProvider(cfg.KEKFiles)
