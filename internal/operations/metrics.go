@@ -463,7 +463,7 @@ const (
 	OutcomePartial       = "partial"
 	OutcomeFailed        = "failed"
 	OutcomeReconcile     = "needs_reconciliation"
-	OutcomeCancelled     = "cancelled"
+	OutcomeCancelled     = "cancelled" //nolint:misspell // stored value, British spelling as in ARCHITECTURE §6.2
 	OutcomeInterventions = "interventions"
 	OutcomeRefused       = "triggers_refused"
 )

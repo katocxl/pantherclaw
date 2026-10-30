@@ -5,7 +5,7 @@ package outcomes
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -186,7 +186,7 @@ func protectedWork(ctx context.Context, q *dbq.Queries, org ids.OrgID, started t
 	}
 	seconds, reasons := journeys(w, cases)
 	reasons = append(reasons, Reason{Code: ReasonEnrolledBeforeTracking, Count: before})
-	return []Sample{duration(MetricProtectedWorkTime, "", w, seconds, reasons)}, nil
+	return []Sample{duration(MetricProtectedWorkTime, w, seconds, reasons)}, nil
 }
 
 // explanation is M2.
@@ -205,7 +205,7 @@ func explanation(ctx context.Context, q *dbq.Queries, org ids.OrgID, _ time.Time
 	}
 	return []Sample{
 		share(MetricExplanationShare, "", w, d.Delivered, d.Decisions, nil),
-		duration(MetricExplanationTime, "", w, seconds, []Reason{reasonWith(ReasonUnread, unread.N, unread.OldestAgeSeconds)}),
+		duration(MetricExplanationTime, w, seconds, []Reason{reasonWith(ReasonUnread, unread.N, unread.OldestAgeSeconds)}),
 	}, nil
 }
 
@@ -251,8 +251,8 @@ func containment(ctx context.Context, q *dbq.Queries, org ids.OrgID, _ time.Time
 		unconfirmed = merge(unconfirmed, reasonWith(code, p.N, p.OldestAgeSeconds))
 	}
 	return []Sample{
-		duration(MetricContainmentTime, "", w, seconds, reasons),
-		duration(MetricRequestedToConfirm, "", w, confirmed, unconfirmed),
+		duration(MetricContainmentTime, w, seconds, reasons),
+		duration(MetricRequestedToConfirm, w, confirmed, unconfirmed),
 	}, nil
 }
 
@@ -300,7 +300,7 @@ func friction(ctx context.Context, q *dbq.Queries, org ids.OrgID, _ time.Time, w
 		return nil, err
 	}
 	return []Sample{
-		duration(MetricApprovalWait, "", w, waits, open),
+		duration(MetricApprovalWait, w, waits, open),
 		share(MetricHoldShare, "", w, holds.Held, holds.Decisions, nil),
 		share(MetricOverrideShare, "", w, over.Overridden, over.Denies, []Reason{{Code: ReasonFollowUpRunning, Count: over.Following}}),
 	}, nil

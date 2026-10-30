@@ -161,7 +161,7 @@ var Definitions = []Definition{
 	},
 	{
 		Name: MetricOverrideShare, Group: "M4", Kind: KindShare, Title: "Override rate",
-		Measures: "DENYs followed within 7 days by an activated exception for the same agent.",
+		Measures: "DENYs followed within 7 days by an activated exception for the same agent and operation.",
 		NotSeen:  notSeenM4Override, Status: DefinitionDraft, Reads: readsDecisions,
 	},
 	{
@@ -215,8 +215,8 @@ var Definitions = []Definition{
 		NotSeen:  notSeenM6, Status: DefinitionDraft, Reads: readsAutomations,
 	},
 	{
-		Name: MetricCancelledShare, Group: "M6", Kind: KindShare, Title: "Cancelled",
-		Measures: "Per automation, the share of live executions ended in the window that were cancelled.",
+		Name: MetricCancelledShare, Group: "M6", Kind: KindShare, Title: "Cancelled", //nolint:misspell // the state's name, British spelling as in ARCHITECTURE §6.2
+		Measures: "Per automation, the share of live executions ended in the window that were cancelled.", //nolint:misspell // the state's name, British spelling as in ARCHITECTURE §6.2
 		NotSeen:  notSeenM6, Status: DefinitionDraft, Reads: readsAutomations,
 	},
 	{

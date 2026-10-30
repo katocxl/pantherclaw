@@ -90,6 +90,7 @@ BEGIN
         EXECUTE format($p$CREATE POLICY tenant_isolation ON pc.%I
             USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
             WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))$p$, t);
+        EXECUTE format('CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.%I FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard()', t);
     END LOOP;
 END
 $$;

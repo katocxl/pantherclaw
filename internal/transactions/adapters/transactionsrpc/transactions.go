@@ -8,6 +8,7 @@ package transactionsrpc
 import (
 	"context"
 	"encoding/hex"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
 	"github.com/katocxl/pantherclaw/internal/runs/adapters/runsrpc"
 	"github.com/katocxl/pantherclaw/internal/transactions/app"
@@ -103,7 +105,10 @@ func (s *Transactions) GetTransactionEvidence(ctx context.Context, req *pantherc
 	if err != nil {
 		return nil, err
 	}
-	_ = s.svc.NoteExplanationView(ctx, id) // a lost first view reads as unread, never as a failed read (F774 M2)
+	// A lost first view reads as unread, never as a failed read (F774 M2).
+	if err := s.svc.NoteExplanationView(ctx, id); err != nil {
+		slog.WarnContext(ctx, "transactions.first_view_not_recorded", slog.String("transaction", id.String()), pclog.Err(err))
+	}
 	out := &pantherclawv1.GetTransactionEvidenceResponse{Transaction: TransactionProto(e.Transaction)}
 	for _, d := range e.Decisions {
 		out.DecisionReceipts = append(out.DecisionReceipts, &pantherclawv1.DecisionReceipt{

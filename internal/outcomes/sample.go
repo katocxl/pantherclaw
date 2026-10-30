@@ -81,8 +81,9 @@ type Sample struct {
 func (s Sample) Collected() bool { return s.Measured > 0 }
 
 // finish totals the reasons and says why a sample without a value has none.
+// Reasons is never nil: the column holds a JSON array, never null.
 func (s Sample) finish() Sample {
-	s.Reasons = slices.DeleteFunc(slices.Clone(s.Reasons), func(r Reason) bool { return r.Count == 0 })
+	s.Reasons = slices.DeleteFunc(append([]Reason{}, s.Reasons...), func(r Reason) bool { return r.Count == 0 })
 	s.Unmeasured = 0
 	for _, r := range s.Reasons {
 		s.Unmeasured += r.Count
@@ -97,8 +98,8 @@ func (s Sample) finish() Sample {
 }
 
 // duration is a distribution of seconds; nil seconds is not collected.
-func duration(metric, dim string, w Window, seconds []float64, reasons []Reason) Sample {
-	s := Sample{Metric: metric, Dimension: dim, Window: w, Reasons: reasons, Measured: int64(len(seconds))}
+func duration(metric string, w Window, seconds []float64, reasons []Reason) Sample {
+	s := Sample{Metric: metric, Window: w, Reasons: reasons, Measured: int64(len(seconds))}
 	if len(seconds) > 0 {
 		sorted := slices.Sorted(slices.Values(seconds))
 		p50, p90 := percentile(sorted, 0.5), percentile(sorted, 0.9)

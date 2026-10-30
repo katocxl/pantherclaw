@@ -51,6 +51,7 @@ type fx struct {
 	roll            *outcomes.Rollup
 	cases           *capp.Service
 	sa, auto, ver   ids.UUID
+	ceiling         ids.UUID
 	automationReady bool
 }
 
@@ -152,10 +153,16 @@ func reason(p outcomes.Point, code string) (outcomes.Reason, bool) {
 // txn records a decision two days ago, inside tonight's 7-day window.
 func (f *fx) txn(decision, mode string, simulated bool) ids.UUID {
 	f.t.Helper()
+	return f.txnAt(decision, mode, simulated, "2 days")
+}
+
+// txnAt records a decision that long ago.
+func (f *fx) txnAt(decision, mode string, simulated bool, ago string) ids.UUID {
+	f.t.Helper()
 	id := ids.NewV7()
 	f.exec(`INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code, gateway_id, mode, simulated, created_at)
-		VALUES ($1, $2, $3, $4, $5, 'payments.refund.create', $6, 'R', 'gw', $7, $8, now() - interval '2 days')`,
-		f.org, id, f.run, ids.NewV7(), make([]byte, 32), decision, mode, simulated)
+		VALUES ($1, $2, $3, $4, $5, 'payments.refund.create', $6, 'R', 'gw', $7, $8, now() - $9::interval)`,
+		f.org, id, f.run, ids.NewV7(), make([]byte, 32), decision, mode, simulated, ago)
 	return id
 }
 
@@ -299,7 +306,7 @@ func TestHR538_RequestedContainmentIsNeverConfirmed(t *testing.T) {
 	act := f.action(&inc, nil)
 	f.setIncident(inc, "OPEN", "CONTAINED")
 	test := f.incident(true)
-	f.action(&test, nil)
+	testAct := f.action(&test, nil)
 
 	f.rollup()
 	p := f.read(f.auditor(), outcomes.MetricContainmentTime, "")
@@ -313,8 +320,8 @@ func TestHR538_RequestedContainmentIsNeverConfirmed(t *testing.T) {
 	if q.State != outcomes.NotCollected || q.Measured != 0 {
 		t.Fatalf("requested to confirmed: %+v", q)
 	}
-	if r, ok := reason(q, outcomes.ReasonRequestedNotConfirmed); !ok || r.Count != 2 {
-		t.Fatalf("both requests stand unconfirmed: %+v", q.Reasons)
+	if r, ok := reason(q, outcomes.ReasonRequestedNotConfirmed); !ok || r.Count != 1 {
+		t.Fatalf("only the real request stands unconfirmed: %+v", q.Reasons)
 	}
 
 	f.settle(act, "FAILED")
@@ -326,6 +333,7 @@ func TestHR538_RequestedContainmentIsNeverConfirmed(t *testing.T) {
 
 	f.d.AdminExec(t, "UPDATE pc.response_actions SET status = 'REQUESTED', settled_at = NULL WHERE org_id = $1 AND id = $2", f.org, act)
 	f.settle(act, "CONFIRMED")
+	f.settle(testAct, "CONFIRMED")
 	f.rollup()
 	p = f.read(f.auditor(), outcomes.MetricContainmentTime, "")
 	// From the alert, four days ago, to the action, two days ago.
@@ -356,6 +364,10 @@ func TestHR538_ACaseIsContainedOnlyThroughConfirmedContainment(t *testing.T) {
 	if at := f.caseContainedAt(none.ID); at != nil {
 		t.Fatalf("no containment needed set contained_at: %v", at)
 	}
+	// The window ends at the last midnight; a case's time is otherwise fixed.
+	f.d.AdminExec(t, "ALTER TABLE pc.cases DISABLE TRIGGER USER")
+	f.d.AdminExec(t, "UPDATE pc.cases SET created_at = now() - interval '3 days' WHERE org_id = $1 AND id = $2", f.org, none.ID)
+	f.d.AdminExec(t, "ALTER TABLE pc.cases ENABLE TRIGGER USER")
 	f.rollup()
 	p := f.read(f.auditor(), outcomes.MetricContainmentTime, "")
 	if _, ok := reason(p, outcomes.ReasonNoContainmentNeeded); p.State != outcomes.NotCollected || !ok {
@@ -630,15 +642,17 @@ func TestF774_ExplanationFirstViews(t *testing.T) {
 	}
 }
 
-// approval records a waiting restoration approval an hour ago.
+// approval records a waiting restoration approval, on an agent of its own:
+// an agent has one live restoration.
 func (f *fx) approval() ids.UUID {
 	f.t.Helper()
-	id := ids.NewV7()
+	id, agent := ids.NewV7(), ids.NewV7()
+	f.exec(`INSERT INTO pc.agents (org_id, id, name, state, created_by) VALUES ($1, $2, $3, 'DISCOVERED', 'test')`, f.org, agent, "bot-"+agent.String())
 	f.exec(`INSERT INTO pc.approval_requests (org_id, id, subject_kind, agent_id, requested_by, operation, binding, binding_input,
-		requirements, display, display_hash, created_at, deadline_at)
-		VALUES ($1, $2, 'RESTORATION', $3, $4, 'agent.restore', $5, '{}', '[{"kind":"approver"}]', '{}', $6, now(),
-		        date_trunc('second', now()) + interval '1 day')`,
-		f.org, id, f.agent, f.user, id[:], make([]byte, 32))
+		requirements, display, display_hash, deadline_at)
+		VALUES ($1, $2, 'RESTORATION', $3, $4, 'agent.restore', $5, '\x7b7d', '[{"kind":"approval","role":"approver","count":1,"sources":[]}]',
+		        '{}', $5, date_trunc('second', now()) + interval '1 day')`,
+		f.org, id, agent, f.user, append(append([]byte{}, id[:]...), id[:]...))
 	return id
 }
 
@@ -715,6 +729,43 @@ func TestF774_FirstDecisionSurvivesARequeue(t *testing.T) {
 	}
 }
 
+// exception records an activated exception for the fixture's agent and the
+// operation of txn, created that long ago. Its time is the database's.
+func (f *fx) exception(ago string) {
+	f.t.Helper()
+	f.d.AdminExec(f.t, "ALTER TABLE pc.policy_exceptions DISABLE TRIGGER USER")
+	defer f.d.AdminExec(f.t, "ALTER TABLE pc.policy_exceptions ENABLE TRIGGER USER")
+	f.d.AdminExec(f.t, `INSERT INTO pc.policy_exceptions (org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason,
+		owner_id, requested_by, requested_expiry, state, activated_at, expires_at, created_at)
+		VALUES ($1, $2, 'refunds', 'r1', $3, $4, ARRAY['payments.refund.create'], 'a known refund', $5, $5,
+		        now() - $6::interval + interval '2 days', 'ACTIVE', now() - $6::interval + interval '1 hour',
+		        now() - $6::interval + interval '2 days', now() - $6::interval)`,
+		f.org, ids.NewV7(), make([]byte, 32), f.agent, f.user, ago)
+}
+
+// TestF774_TheOverrideRateIsMeasuredOnSevenDays: the 7-day window measures
+// the DENYs whose 7 days after ended inside it, so a DENY older than the
+// window counts, and one younger than 7 days is listed as still running.
+// Covers: F774
+func TestF774_TheOverrideRateIsMeasuredOnSevenDays(t *testing.T) {
+	f := newFx(t)
+	f.collecting()
+	f.txnAt("DENY", "enforce", false, "9 days")
+	f.txnAt("DENY", "enforce", false, "10 days")
+	f.txnAt("DENY", "enforce", false, "20 days") // Its 7 days ended before the window.
+	f.txn("DENY", "enforce", false)
+	f.exception("8 days")
+	f.rollup()
+	p := f.read(f.auditor(), outcomes.MetricOverrideShare, "")
+	// Both settled DENYs came before the exception, and within 7 days of it.
+	if p.State != outcomes.Collected || p.Measured != 2 || p.Share == nil || *p.Share != 1 {
+		t.Fatalf("overrides: %+v", p)
+	}
+	if r, ok := reason(p, outcomes.ReasonFollowUpRunning); !ok || r.Count != 1 {
+		t.Fatalf("running: %+v", p.Reasons)
+	}
+}
+
 // TestF774_RolloutStagesAreKept: every stage a rollout reaches is recorded,
 // which stage_changed_at overwrites. M5 shows each check of a published
 // version apart.
@@ -727,10 +778,12 @@ func TestF774_RolloutStagesAreKept(t *testing.T) {
 	f.exec(`INSERT INTO pc.policy_versions (org_id, id, policy_id, version, bundle, content_digest, created_by)
 		VALUES ($1, $2, $3, 1, '{}', $4, 'test')`, f.org, version, policy, make([]byte, 32))
 	f.exec(`INSERT INTO pc.policy_rollouts (org_id, id, version_id, stage, created_by) VALUES ($1, $2, $3, 'SHADOW', 'test')`, f.org, rollout, version)
-	for _, s := range []string{"PILOT", "COMPLETE"} {
-		f.exec("UPDATE pc.policy_rollouts SET stage = $3, completed_at = CASE WHEN $3 = 'COMPLETE' THEN now() END WHERE org_id = $1 AND id = $2", f.org, rollout, s)
+	// Before it ends: a finished rollout takes no write.
+	f.d.AdminExec(t, "UPDATE pc.policy_rollouts SET created_at = now() - interval '2 days' WHERE org_id = $1", f.org)
+	// PILOT twice: a write that keeps the stage records nothing.
+	for _, s := range []string{"PILOT", "PILOT", "COMPLETE"} {
+		f.exec("UPDATE pc.policy_rollouts SET stage = $3 WHERE org_id = $1 AND id = $2", f.org, rollout, s)
 	}
-	f.exec("UPDATE pc.policy_rollouts SET stage_changed_at = stage_changed_at WHERE org_id = $1 AND id = $2", f.org, rollout)
 	var got []string
 	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
 		rows, err := tx.Query(ctx, "SELECT coalesce(from_stage, '') || '>' || to_stage FROM pc.policy_rollout_stage_events WHERE org_id = $1 ORDER BY at, to_stage DESC", f.org)
@@ -761,7 +814,6 @@ func TestF774_RolloutStagesAreKept(t *testing.T) {
 
 	f.exec(`UPDATE pc.policy_versions SET state = 'PUBLISHED', published_by = 'test', published_at = now() WHERE org_id = $1 AND id = $2`, f.org, version)
 	f.d.AdminExec(t, "UPDATE pc.policy_versions SET published_at = now() - interval '1 day' WHERE org_id = $1", f.org)
-	f.d.AdminExec(t, "UPDATE pc.policy_rollouts SET created_at = now() - interval '2 days' WHERE org_id = $1", f.org)
 	f.rollup()
 	if p := f.read(f.auditor(), outcomes.MetricStagedShare, outcomes.DimensionPolicy); p.State != outcomes.Collected || *p.Share != 1 {
 		t.Fatalf("staged: %+v", p)
@@ -779,25 +831,35 @@ func TestF774_RolloutStagesAreKept(t *testing.T) {
 func (f *fx) automationExec(state string) ids.UUID {
 	f.t.Helper()
 	if !f.automationReady {
-		f.sa, f.auto, f.ver = ids.NewV7(), ids.NewV7(), ids.NewV7()
-		f.exec(`INSERT INTO pc.service_accounts (org_id, id, name, created_by, automation_id) VALUES ($1, $2, 'triage-sa', 'test', $3)`, f.org, f.sa, f.auto)
-		f.exec(`INSERT INTO pc.automations (org_id, id, name, purpose, kind, owner_user_id, service_account_id, created_by)
-			VALUES ($1, $2, 'triage', 'Triage alerts', 'SECURITY_WORK', $3, $4, $3)`, f.org, f.auto, f.user, f.sa)
+		f.sa, f.auto, f.ver, f.ceiling = ids.NewV7(), ids.NewV7(), ids.NewV7(), ids.NewV7()
+		// The account and the automation reference each other: one statement.
+		f.exec(`WITH sa AS (
+				INSERT INTO pc.service_accounts (org_id, id, name, created_by, automation_id)
+				VALUES ($1, $2, 'triage-sa', 'test', $3) RETURNING id)
+			INSERT INTO pc.automations (org_id, id, name, purpose, kind, owner_user_id, service_account_id, created_by)
+			SELECT $1, $3, 'triage', 'Triage alerts', 'SECURITY_WORK', $4, sa.id, $4 FROM sa`, f.org, f.sa, f.auto, f.user)
 		f.exec(`INSERT INTO pc.automation_versions (org_id, id, automation_id, number, definition, digest, created_by)
 			VALUES ($1, $2, $3, 1, '{}', $5, $4)`, f.org, f.ver, f.auto, f.user, make([]byte, 32))
+		request := ids.NewV7()
+		f.exec(`INSERT INTO pc.change_requests (org_id, id, domain, kind, subject_id, content_digest, binding, summary, required,
+			requested_by, expires_at) VALUES ($1, $2, 'automation', 'ENABLE', $3, $4, $4, '{}', 1, 'user:test', now() + interval '1 hour')`,
+			f.org, request, f.auto, make([]byte, 32))
+		f.exec(`INSERT INTO pc.automation_ceilings (org_id, id, automation_id, version_id, digest, approved_by, change_request_id,
+			review_by) VALUES ($1, $2, $3, $4, $5, ARRAY[$6::uuid], $7, now() + interval '30 days')`,
+			f.org, f.ceiling, f.auto, f.ver, make([]byte, 32), f.user, request)
 		f.automationReady = true
 	}
 	trigger, id := ids.NewV7(), ids.NewV7()
 	f.exec(`INSERT INTO pc.automation_triggers (org_id, id, automation_id, version_id, kind, mode, source_ref, authenticity,
 		root_trigger_id, state, occurred_at) VALUES ($1, $4, $3, $2, 'MANUAL', 'LIVE', 'test', 'USER_SESSION', $4, 'ACCEPTED', now())`,
 		f.org, f.ver, f.auto, trigger)
-	f.exec(`INSERT INTO pc.automation_executions (org_id, id, automation_id, version_id, trigger_id, mode, service_account_id,
-		principal_user_id, trigger_kind, occurred_at, root_trigger_id, deadline_at)
-		VALUES ($1, $2, $3, $4, $5, 'LIVE', $6, $7, 'MANUAL', now(), $5, now() + interval '1 hour')`,
-		f.org, id, f.auto, f.ver, trigger, f.sa, f.user)
+	f.exec(`INSERT INTO pc.automation_executions (org_id, id, automation_id, version_id, trigger_id, mode, ceiling_id,
+		service_account_id, principal_sa_id, trigger_kind, occurred_at, root_trigger_id, deadline_at)
+		VALUES ($1, $2, $3, $4, $5, 'LIVE', $6, $7, $7, 'MANUAL', now(), $5, now() + interval '1 hour')`,
+		f.org, id, f.auto, f.ver, trigger, f.ceiling, f.sa)
 	f.d.AdminExec(f.t, "ALTER TABLE pc.automation_executions DISABLE TRIGGER USER")
 	defer f.d.AdminExec(f.t, "ALTER TABLE pc.automation_executions ENABLE TRIGGER USER")
-	f.d.AdminExec(f.t, "UPDATE pc.automation_executions SET state = $3, ended_at = now() - interval '2 days' WHERE org_id = $1 AND id = $2", f.org, id, state)
+	f.d.AdminExec(f.t, "UPDATE pc.automation_executions SET state = $3, ended_at = now() - interval '2 days', result = '{}', reason = 'TEST_END' WHERE org_id = $1 AND id = $2", f.org, id, state)
 	return id
 }
 

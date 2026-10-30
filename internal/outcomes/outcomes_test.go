@@ -4,6 +4,7 @@
 package outcomes
 
 import (
+	"encoding/json/v2"
 	"regexp"
 	"slices"
 	"strings"
@@ -26,6 +27,25 @@ func reasonOf(reasons []Reason, code string) (Reason, bool) {
 	return reasons[i], true
 }
 
+// TestHR537_AFullyMeasuredSampleHasAnEmptyReasonList: the column holds a JSON
+// array, so a sample with nothing unmeasured has an empty list, never nil.
+// Covers: F774
+func TestHR537_AFullyMeasuredSampleHasAnEmptyReasonList(t *testing.T) {
+	w := testWindow()
+	for name, s := range map[string]Sample{
+		"no reasons":      share(MetricHoldShare, "", w, 1, 2, nil),
+		"reasons of none": duration(MetricApprovalWait, w, []float64{1}, []Reason{{Code: ReasonOpenWaiting}}),
+	} {
+		if s.Reasons == nil || len(s.Reasons) != 0 {
+			t.Fatalf("%s: %#v", name, s.Reasons)
+		}
+		b, err := json.Marshal(s.Reasons)
+		if err != nil || string(b) != "[]" {
+			t.Fatalf("%s: %s %v", name, b, err)
+		}
+	}
+}
+
 // TestHR537_NothingMeasuredHasNoValue: a window with no measured case has
 // no value and says why. Zero seconds or a zero share is a measured result,
 // so it never stands in for "not collected".
@@ -33,7 +53,7 @@ func reasonOf(reasons []Reason, code string) (Reason, bool) {
 func TestHR537_NothingMeasuredHasNoValue(t *testing.T) {
 	w := testWindow()
 	for name, s := range map[string]Sample{
-		"duration": duration(MetricApprovalWait, "", w, nil, nil),
+		"duration": duration(MetricApprovalWait, w, nil, nil),
 		"share":    share(MetricHoldShare, "", w, 0, 0, nil),
 	} {
 		if s.Collected() || s.P50 != nil || s.P90 != nil || s.Share != nil {
@@ -47,11 +67,11 @@ func TestHR537_NothingMeasuredHasNoValue(t *testing.T) {
 	if s := share(MetricHoldShare, "", w, 0, 12, nil); !s.Collected() || s.Share == nil || *s.Share != 0 {
 		t.Fatalf("a measured zero: %+v", s)
 	}
-	if s := duration(MetricApprovalWait, "", w, []float64{0}, nil); !s.Collected() || s.P50 == nil {
+	if s := duration(MetricApprovalWait, w, []float64{0}, nil); !s.Collected() || s.P50 == nil {
 		t.Fatalf("a measured zero duration: %+v", s)
 	}
 	// What was unmeasured is the reason, and stays countable.
-	s := duration(MetricApprovalWait, "", w, nil, []Reason{reasonWith(ReasonOpenWaiting, 3, 60)})
+	s := duration(MetricApprovalWait, w, nil, []Reason{reasonWith(ReasonOpenWaiting, 3, 60)})
 	if s.Collected() || s.Unmeasured != 3 {
 		t.Fatalf("open cases: %+v", s)
 	}
@@ -159,7 +179,7 @@ func TestHR539_NoMetricIsARawVolume(t *testing.T) {
 	if s := share(MetricHoldShare, "", testWindow(), 500, 1000, nil); s.Share == nil || *s.Share != 0.5 || s.P50 != nil {
 		t.Fatalf("share: %+v", s)
 	}
-	if s := duration(MetricApprovalWait, "", testWindow(), []float64{1, 2, 3}, nil); s.P50 == nil || *s.P50 != 2 || s.Share != nil {
+	if s := duration(MetricApprovalWait, testWindow(), []float64{1, 2, 3}, nil); s.P50 == nil || *s.P50 != 2 || s.Share != nil {
 		t.Fatalf("duration: %+v", s)
 	}
 }
@@ -215,11 +235,11 @@ func TestF774_OutcomeMetricsNeedBusiness(t *testing.T) {
 // TestF774_Percentiles interpolates as percentile_cont does.
 // Covers: F774
 func TestF774_Percentiles(t *testing.T) {
-	s := duration(MetricApprovalWait, "", testWindow(), []float64{40, 10, 30, 20}, nil)
+	s := duration(MetricApprovalWait, testWindow(), []float64{40, 10, 30, 20}, nil)
 	if *s.P50 != 25 || *s.P90 != 37 {
 		t.Fatalf("%v %v", *s.P50, *s.P90)
 	}
-	if s := duration(MetricApprovalWait, "", testWindow(), []float64{7}, nil); *s.P50 != 7 || *s.P90 != 7 {
+	if s := duration(MetricApprovalWait, testWindow(), []float64{7}, nil); *s.P50 != 7 || *s.P90 != 7 {
 		t.Fatalf("one case: %v %v", *s.P50, *s.P90)
 	}
 }

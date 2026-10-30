@@ -126,7 +126,11 @@ const outcomeActionsNotConfirmed = `-- name: OutcomeActionsNotConfirmed :many
 SELECT a.status, count(*)::bigint AS n,
        extract(epoch FROM $1::timestamptz - min(a.requested_at))::double precision AS oldest_age_seconds
 FROM pc.response_actions a
+LEFT JOIN pc.cases c ON c.org_id = a.org_id AND c.id = a.case_id
+LEFT JOIN pc.incidents i ON i.org_id = a.org_id AND i.id = coalesce(a.incident_id, c.incident_id)
+LEFT JOIN pc.alerts x ON x.org_id = a.org_id AND x.id = c.alert_id
 WHERE a.org_id = $2 AND a.requested_at < $1::timestamptz
+  AND NOT coalesce(i.test, false) AND NOT coalesce(x.test, false)
   AND ((a.status IN ('REQUESTED', 'PARTIAL'))
        OR (a.status IN ('FAILED', 'UNSUPPORTED') AND a.settled_at >= $3::timestamptz
            AND a.settled_at < $1::timestamptz))
@@ -624,7 +628,7 @@ SELECT count(*) FILTER (WHERE t.created_at < $1::timestamptz)::bigint AS denies,
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 WHERE t.org_id = $2 AND t.mode = 'enforce' AND NOT t.simulated AND t.decision = 'DENY'
-  AND t.created_at >= $3::timestamptz AND t.created_at < $4::timestamptz
+  AND t.created_at >= $3::timestamptz - interval '7 days' AND t.created_at < $4::timestamptz
 `
 
 type OutcomeOverridesParams struct {
@@ -640,9 +644,10 @@ type OutcomeOverridesRow struct {
 	Following  int64
 }
 
-// M4: DENYs whose 7 days after ended inside the window, those followed by
-// an activated exception for the agent and operation, and the DENYs whose
-// 7 days are still running. A decision's rule is not stored in a column.
+// M4: DENYs whose 7 days after ended inside the window, so made in
+// [start - 7d, end - 7d), those followed by an activated exception for the
+// agent and operation, and the DENYs of [end - 7d, end), whose 7 days are
+// still running. A decision's rule is not stored in a column.
 func (q *Queries) OutcomeOverrides(ctx context.Context, arg OutcomeOverridesParams) (OutcomeOverridesRow, error) {
 	row := q.db.QueryRow(ctx, outcomeOverrides,
 		arg.SettledBefore,
@@ -715,7 +720,10 @@ func (q *Queries) OutcomePolicyChecks(ctx context.Context, orgID ids.OrgID, star
 const outcomeRequestedToConfirmed = `-- name: OutcomeRequestedToConfirmed :many
 SELECT extract(epoch FROM a.settled_at - a.requested_at)::double precision AS seconds
 FROM pc.response_actions a
-WHERE a.org_id = $1 AND a.status = 'CONFIRMED'
+LEFT JOIN pc.cases c ON c.org_id = a.org_id AND c.id = a.case_id
+LEFT JOIN pc.incidents i ON i.org_id = a.org_id AND i.id = coalesce(a.incident_id, c.incident_id)
+LEFT JOIN pc.alerts x ON x.org_id = a.org_id AND x.id = c.alert_id
+WHERE a.org_id = $1 AND a.status = 'CONFIRMED' AND NOT coalesce(i.test, false) AND NOT coalesce(x.test, false)
   AND a.settled_at >= $2::timestamptz AND a.settled_at < $3::timestamptz
 `
 
@@ -839,7 +847,8 @@ INSERT INTO pc.outcome_collection (org_id) VALUES ($1) ON CONFLICT (org_id) DO N
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 // Outcome metrics (G0 M21 D303, F774). Each metric reads non-simulated,
-// enforced or LIVE work only; test and range records never count.
+// enforced or LIVE work only. Work on a test incident or alert, and range
+// agents, never count.
 func (q *Queries) StartOutcomeCollection(ctx context.Context, orgID ids.OrgID) error {
 	_, err := q.db.Exec(ctx, startOutcomeCollection, orgID)
 	return err

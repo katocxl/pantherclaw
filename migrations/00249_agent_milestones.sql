@@ -25,6 +25,9 @@ CREATE POLICY tenant_isolation ON pc.agent_milestones
     USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
     WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
 
+CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.agent_milestones
+    FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
+
 GRANT SELECT ON pc.agent_milestones TO pc_app;
 GRANT INSERT (org_id, agent_id, kind, at) ON pc.agent_milestones TO pc_app;
 GRANT SELECT ON pc.agent_milestones TO pc_audit_ro;

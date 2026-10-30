@@ -2,7 +2,8 @@
 -- Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
 -- Outcome metrics (G0 M21 D303, F774). Each metric reads non-simulated,
--- enforced or LIVE work only; test and range records never count.
+-- enforced or LIVE work only. Work on a test incident or alert, and range
+-- agents, never count.
 
 -- name: StartOutcomeCollection :exec
 INSERT INTO pc.outcome_collection (org_id) VALUES (sqlc.arg(org_id)) ON CONFLICT (org_id) DO NOTHING;
@@ -166,7 +167,10 @@ WHERE x.org_id = sqlc.arg(org_id) AND x.state = 'REVOKED'
 -- M3: requested to confirmed, for actions confirmed in the window.
 SELECT extract(epoch FROM a.settled_at - a.requested_at)::double precision AS seconds
 FROM pc.response_actions a
-WHERE a.org_id = sqlc.arg(org_id) AND a.status = 'CONFIRMED'
+LEFT JOIN pc.cases c ON c.org_id = a.org_id AND c.id = a.case_id
+LEFT JOIN pc.incidents i ON i.org_id = a.org_id AND i.id = coalesce(a.incident_id, c.incident_id)
+LEFT JOIN pc.alerts x ON x.org_id = a.org_id AND x.id = c.alert_id
+WHERE a.org_id = sqlc.arg(org_id) AND a.status = 'CONFIRMED' AND NOT coalesce(i.test, false) AND NOT coalesce(x.test, false)
   AND a.settled_at >= sqlc.arg(start_at)::timestamptz AND a.settled_at < sqlc.arg(end_at)::timestamptz;
 
 -- name: OutcomeActionsNotConfirmed :many
@@ -175,7 +179,11 @@ WHERE a.org_id = sqlc.arg(org_id) AND a.status = 'CONFIRMED'
 SELECT a.status, count(*)::bigint AS n,
        extract(epoch FROM sqlc.arg(end_at)::timestamptz - min(a.requested_at))::double precision AS oldest_age_seconds
 FROM pc.response_actions a
+LEFT JOIN pc.cases c ON c.org_id = a.org_id AND c.id = a.case_id
+LEFT JOIN pc.incidents i ON i.org_id = a.org_id AND i.id = coalesce(a.incident_id, c.incident_id)
+LEFT JOIN pc.alerts x ON x.org_id = a.org_id AND x.id = c.alert_id
 WHERE a.org_id = sqlc.arg(org_id) AND a.requested_at < sqlc.arg(end_at)::timestamptz
+  AND NOT coalesce(i.test, false) AND NOT coalesce(x.test, false)
   AND ((a.status IN ('REQUESTED', 'PARTIAL'))
        OR (a.status IN ('FAILED', 'UNSUPPORTED') AND a.settled_at >= sqlc.arg(start_at)::timestamptz
            AND a.settled_at < sqlc.arg(end_at)::timestamptz))
@@ -209,9 +217,10 @@ WHERE t.org_id = sqlc.arg(org_id) AND t.mode = 'enforce' AND NOT t.simulated
   AND t.created_at >= sqlc.arg(start_at)::timestamptz AND t.created_at < sqlc.arg(end_at)::timestamptz;
 
 -- name: OutcomeOverrides :one
--- M4: DENYs whose 7 days after ended inside the window, those followed by
--- an activated exception for the agent and operation, and the DENYs whose
--- 7 days are still running. A decision's rule is not stored in a column.
+-- M4: DENYs whose 7 days after ended inside the window, so made in
+-- [start - 7d, end - 7d), those followed by an activated exception for the
+-- agent and operation, and the DENYs of [end - 7d, end), whose 7 days are
+-- still running. A decision's rule is not stored in a column.
 SELECT count(*) FILTER (WHERE t.created_at < sqlc.arg(settled_before)::timestamptz)::bigint AS denies,
        count(*) FILTER (WHERE t.created_at < sqlc.arg(settled_before)::timestamptz AND EXISTS (
            SELECT 1 FROM pc.policy_exceptions x
@@ -222,7 +231,7 @@ SELECT count(*) FILTER (WHERE t.created_at < sqlc.arg(settled_before)::timestamp
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 WHERE t.org_id = sqlc.arg(org_id) AND t.mode = 'enforce' AND NOT t.simulated AND t.decision = 'DENY'
-  AND t.created_at >= sqlc.arg(start_at)::timestamptz AND t.created_at < sqlc.arg(end_at)::timestamptz;
+  AND t.created_at >= sqlc.arg(start_at)::timestamptz - interval '7 days' AND t.created_at < sqlc.arg(end_at)::timestamptz;
 
 -- name: OutcomePolicyChecks :many
 -- M5: what each policy version published in the window had before it was.

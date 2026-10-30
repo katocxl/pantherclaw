@@ -21,6 +21,9 @@ CREATE POLICY tenant_isolation ON pc.explanation_views
     USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
     WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
 
+CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.explanation_views
+    FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
+
 GRANT SELECT ON pc.explanation_views TO pc_app;
 GRANT INSERT (org_id, transaction_id) ON pc.explanation_views TO pc_app;
 GRANT SELECT ON pc.explanation_views TO pc_audit_ro;
