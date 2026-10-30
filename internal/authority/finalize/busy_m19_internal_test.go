@@ -10,7 +10,7 @@ import (
 )
 
 // TestHR505_TheRetryWaitIsJittered: the wait before the one retry is spread
-// over [5 ms, 25 ms), and a cancelled request does not wait.
+// over [5 ms, 25 ms), and a canceled request does not wait.
 // Covers: PN-011.1
 func TestHR505_TheRetryWaitIsJittered(t *testing.T) {
 	seen := map[time.Duration]bool{}
@@ -27,6 +27,6 @@ func TestHR505_TheRetryWaitIsJittered(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if err := busyWait(ctx); err == nil {
-		t.Fatal("a cancelled request waited")
+		t.Fatal("a canceled request waited")
 	}
 }

@@ -5,10 +5,11 @@ package finalize
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand/v2"
 	"time"
 
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
@@ -314,7 +315,9 @@ func busyWait(ctx context.Context) error {
 // busyJitter is a random wait in [5 ms, 25 ms), so retries that collided
 // on a row do not collide again in step.
 func busyJitter() time.Duration {
-	return busyJitterMin + rand.N(busyJitterSpan) //nolint:gosec // jitter, not a secret
+	var b [2]byte
+	_, _ = rand.Read(b[:]) // never fails since Go 1.24
+	return busyJitterMin + busyJitterSpan*time.Duration(binary.BigEndian.Uint16(b[:]))/(1<<16)
 }
 
 func retryable(err error) bool {
