@@ -28801,7 +28801,17 @@
           "type": {
             "type": "string",
             "title": "type",
-            "description": "NEXT, ON_FAILURE, COMPENSATE, FINISHES or USES."
+            "description": "NEXT, BRANCH, ON_FAILURE, COMPENSATE or FINISHES."
+          },
+          "label": {
+            "type": "string",
+            "title": "label",
+            "description": "A BRANCH edge: which way it is (\"then\", \"else\", \"case 0\", \"default\")."
+          },
+          "guard": {
+            "type": "string",
+            "title": "guard",
+            "description": "A BRANCH edge: the guard that selects it; empty for else and default."
           }
         },
         "title": "AutomationGraphEdge",
@@ -28818,7 +28828,7 @@
           "type": {
             "type": "string",
             "title": "type",
-            "description": "TRIGGER, CONDITION, STEP, GATE or FINISH."
+            "description": "TRIGGER, CONDITION, STEP, GATE, BRANCH, SWITCH, JOIN or FINISH."
           },
           "kind": {
             "type": "string",
@@ -34492,6 +34502,14 @@
             },
             "title": "notes",
             "description": "notes: what could not be read (a connection without a package)."
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.InspectedPath"
+            },
+            "title": "paths",
+            "description": "Every path of a v2 version; empty on v1."
           }
         },
         "title": "InspectVersionResponse",
@@ -34565,6 +34583,26 @@
         },
         "title": "CoverageEntry",
         "additionalProperties": false
+      },
+      "pantherclaw.v1.InspectedPath": {
+        "type": "object",
+        "properties": {
+          "nodeIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "node_ids"
+          },
+          "outcome": {
+            "type": "string",
+            "title": "outcome",
+            "description": "The outcome its terminal declares."
+          }
+        },
+        "title": "InspectedPath",
+        "additionalProperties": false,
+        "description": "InspectedPath is one path of a v2 version."
       },
       "pantherclaw.v1.InspectedStep": {
         "type": "object",
@@ -34994,6 +35032,11 @@
           "reason": {
             "type": "string",
             "title": "reason"
+          },
+          "branch": {
+            "type": "string",
+            "title": "branch",
+            "description": "On a v2 version, the branch that leads here when more than one was\n possible: \"\u003cnode\u003e \u003clabel\u003e\". A guard that could not be evaluated shows\n every way out as possible."
           }
         },
         "title": "SimulationStep",
@@ -35358,6 +35401,18 @@
           "result": {
             "title": "result",
             "$ref": "#/components/schemas/pantherclaw.v1.AutomationExecutionResult"
+          },
+          "currentNode": {
+            "type": "string",
+            "title": "current_node",
+            "description": "A v2 execution: the node being worked and every node entered, in\n order. Empty on a v1 execution, which reports current_step."
+          },
+          "path": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "path"
           }
         },
         "title": "AutomationExecution",
@@ -35917,6 +35972,17 @@
           "wakeAt": {
             "title": "wake_at",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "nodeId": {
+            "type": "string",
+            "title": "node_id",
+            "description": "The node this attempt worked; a v1 attempt's is its step id."
+          },
+          "visit": {
+            "type": "integer",
+            "title": "visit",
+            "format": "int32",
+            "description": "How many times the node was entered."
           }
         },
         "title": "AutomationStepAttempt",
