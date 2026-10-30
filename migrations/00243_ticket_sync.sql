@@ -142,7 +142,9 @@ BEGIN
         IF purposes IS NULL OR purposes LIKE '%ticket_sync%' THEN
             RAISE EXCEPTION '00243: unexpected check % on pc.verifications: %', c.conname, c.def;
         END IF;
-        purposes := purposes || ', ''ticket_sync''';
+        -- First, not last: the Up and Down of 00084 and 00095 keep their own
+        -- purposes last, and must find the list as they left it.
+        purposes := '''ticket_sync'', ' || purposes;
         IF c.def LIKE '%transaction_id IS NULL%' THEN
             EXECUTE format('ALTER TABLE pc.verifications DROP CONSTRAINT %I, ADD CONSTRAINT %I CHECK ((purpose IN (%s)) = (transaction_id IS NULL)) NOT VALID',
                            c.conname, c.conname, purposes);
