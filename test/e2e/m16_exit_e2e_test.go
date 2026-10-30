@@ -31,6 +31,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // TestE2E_M16_DataFlowHold is M16's data-flow exit path (F123, HR-431):
@@ -42,6 +43,8 @@ import (
 // DATA_FLOW_HOLD and reaches nothing.
 func TestE2E_M16_DataFlowHold(t *testing.T) {
 	s := start(t, options{budget: "1000.00"})
+	// The destination is public, so a refund through it discloses data (D74).
+	s.db.AdminExec(t, `UPDATE pc.connections SET destination_class = 'public' WHERE org_id = $1 AND name = 'payments'`, s.org)
 	if code, r := s.refund(t, ids.NewV7(), "10.00"); code != http.StatusOK {
 		t.Fatalf("a refund before any sensitive read: %d %+v", code, r)
 	}
@@ -118,8 +121,8 @@ func (s *stack) gatewayGet(t *testing.T, path string) int {
 // endpoint on this machine (dev.external_checks_loopback, D93b), for
 // refunds. Its deny is a DENY that reaches nothing, and when it answers
 // later than its timeout the refund is CANNOT_AUTHORIZE, never a guess.
-// Activation with a security key is HR-438's own test; here the seeded
-// administrator's key stands in.
+// Activation with a security key is HR-438's own test; here a seeded
+// security key stands in.
 func TestE2E_M16_ExternalPolicyCheck(t *testing.T) {
 	var slow atomic.Bool
 	opa := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -137,8 +140,14 @@ func TestE2E_M16_ExternalPolicyCheck(t *testing.T) {
 	check := ids.NewV7()
 	s.exec(t, `INSERT INTO pc.external_policy_checks (org_id, id, name, endpoint, ca_pem, timeout_ms, operations, created_by)
 		VALUES ($1, $2, 'opa', $3, $4, 250, '{payments.refund.create}', 'user:e2e')`, s.org, check, opa.URL+"/v1/data/pantherclaw/allow", ca)
-	s.db.AdminExec(t, `UPDATE pc.external_policy_checks c SET state = 'ACTIVE', activated_by = k.user_id, activated_credential = k.id
-		FROM (SELECT user_id, id FROM pc.webauthn_credentials WHERE org_id = $1 LIMIT 1) k WHERE c.org_id = $1 AND c.id = $2`, s.org, check)
+	activator := s.person(t, "opa-activator", td.RoleSecurityAdmin)
+	s.db.AdminExec(t, `UPDATE pc.external_policy_checks c SET state = 'ACTIVE', activated_by = k.user_id, activated_credential = k.id, activated_at = now()
+		FROM pc.webauthn_credentials k WHERE c.org_id = $1 AND c.id = $2 AND k.org_id = $1 AND k.id = $3`, s.org, check, activator.key)
+	var state string
+	s.query(t, "SELECT state FROM pc.external_policy_checks WHERE id = $1", []any{check}, &state)
+	if state != "ACTIVE" {
+		t.Fatalf("the check is %s", state)
+	}
 
 	writes := s.simCalls.Load()
 	code, r := s.refund(t, ids.NewV7(), "10.00")
