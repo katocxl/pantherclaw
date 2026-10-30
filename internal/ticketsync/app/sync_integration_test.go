@@ -82,7 +82,7 @@ func (f *fixture) as() context.Context {
 	return tenancy.WithCaller(context.Background(), tenancy.Caller{Subject: td.Subject{
 		Org: f.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: f.alice},
 		Bindings: []td.Binding{{Role: td.RoleGatewayAdmin, Scope: org}, {Role: td.RoleSecurityAdmin, Scope: org}, {Role: td.RoleResponder, Scope: org}},
-	}})
+	}, Credential: tenancy.CredBrowserSession})
 }
 
 func (f *fixture) exec(sql string, args ...any) {

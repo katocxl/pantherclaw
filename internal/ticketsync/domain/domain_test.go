@@ -11,19 +11,26 @@ import (
 	"github.com/katocxl/pantherclaw/internal/ticketsync/domain"
 )
 
-// TestHR528_OwnedFieldsNeverMoveToTheTicket: state, severity, containment
-// and restoration are PantherClaw's whatever an organization stored; the
-// other fields default to the ticket system and may be taken back.
+// TestHR527_ContainmentAndRestorationNeverGoToTheTicket: containment and
+// restoration are PantherClaw's whatever an organization stored, and
+// cannot be chosen (D264); state and severity default to PantherClaw and
+// may be given to the ticket system; the other fields default to the
+// ticket system and may be taken back.
 //
 // Covers: F545
-func TestHR528_OwnedFieldsNeverMoveToTheTicket(t *testing.T) {
+func TestHR527_ContainmentAndRestorationNeverGoToTheTicket(t *testing.T) {
 	stored := domain.Owners{}
 	for _, f := range domain.Fields {
 		stored[f] = domain.OwnerTicket
 	}
-	for _, f := range []domain.Field{domain.FieldState, domain.FieldSeverity, domain.FieldContainment, domain.FieldRestoration} {
-		if !f.Locked() || stored.Of(f) != domain.OwnerPantherClaw || domain.DefaultOwner(f) != domain.OwnerPantherClaw {
+	for _, f := range []domain.Field{domain.FieldContainment, domain.FieldRestoration} {
+		if !f.Locked() || f.Movable() || stored.Of(f) != domain.OwnerPantherClaw || domain.DefaultOwner(f) != domain.OwnerPantherClaw {
 			t.Errorf("%s is not always PantherClaw's", f)
+		}
+	}
+	for _, f := range []domain.Field{domain.FieldState, domain.FieldSeverity} {
+		if f.Locked() || !f.Movable() || domain.DefaultOwner(f) != domain.OwnerPantherClaw || stored.Of(f) != domain.OwnerTicket {
+			t.Errorf("%s does not default to PantherClaw or cannot be given away", f)
 		}
 	}
 	for _, f := range []domain.Field{domain.FieldAssignee, domain.FieldLabels, domain.FieldPriority, domain.FieldComments} {
@@ -148,5 +155,23 @@ func TestT227_ForgedWebhookSignature(t *testing.T) {
 		if domain.VerifyJiraSignature(c.sig, c.body, secret, nil) {
 			t.Errorf("%s verifies", name)
 		}
+	}
+}
+
+// TestHR527_ATicketOwnedStateIsOnlyMirrored: when the organization gave
+// state to the ticket system, a status change, Done included, is a mirror
+// note that says it restores nothing; containment stays ignored.
+//
+// Covers: F545
+func TestHR527_ATicketOwnedStateIsOnlyMirrored(t *testing.T) {
+	own := domain.Owners{domain.FieldState: domain.OwnerTicket, domain.FieldContainment: domain.OwnerTicket}
+	got := domain.Decide(own, "SEC-7", []domain.Change{
+		{Field: domain.FieldState, To: "Done", Done: true}, {Field: domain.FieldContainment, To: "Lifted"},
+	}, nil)
+	if len(got) != 2 || got[0].Action != domain.ActionMirror || got[1].Action != domain.ActionIgnore {
+		t.Fatalf("verdicts %+v", got)
+	}
+	if !strings.Contains(got[0].Text, "never restores authority") {
+		t.Fatalf("a mirrored state does not say it restores nothing: %q", got[0].Text)
 	}
 }

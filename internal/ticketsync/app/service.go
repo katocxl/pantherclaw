@@ -33,6 +33,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/protect"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 	"github.com/katocxl/pantherclaw/internal/ticketsync/domain"
@@ -86,6 +87,9 @@ type Service struct {
 	Pool     *db.Pool
 	Envelope *pccrypto.Envelope
 	Editions Editions
+	// Gate holds giving a field to the ticket system (D264); nil applies
+	// every change directly.
+	Gate *protect.Gate
 	// Now is the clock (nil: time.Now).
 	Now func() time.Time
 }

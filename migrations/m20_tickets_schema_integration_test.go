@@ -97,7 +97,7 @@ func TestM20_TicketSyncGuards(t *testing.T) {
 	d := dbtest.New(t)
 	p := d.AppPool(t)
 	a := newM20Org(t, newM5Fixture(t, p))
-	for _, field := range []string{"state", "severity", "containment", "restoration"} {
+	for _, field := range []string{"containment", "restoration"} {
 		a.want(t, "23514", field+" given to the ticket",
 			"INSERT INTO pc.ticket_field_owners (org_id, field, owner, changed_by) VALUES ($1, $2, 'TICKET', 'test')", a.org, field)
 	}

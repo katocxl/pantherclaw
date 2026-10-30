@@ -81,6 +81,9 @@ const (
 	SurfaceConnectionUpdate Surface = "connection.update"
 	SurfaceRouteMode        Surface = "connection.route_mode"
 	SurfaceExclusionCreate  Surface = "coverage.exclusion.create"
+	// SurfaceTicketFieldOwner gives a field of an org's ticket sync to the
+	// ticket system (G0 M20 D264); taking one back applies directly.
+	SurfaceTicketFieldOwner Surface = "ticket.field_owner"
 	// SurfaceSettings turns a category OFF (a change request of kind
 	// SETTINGS, D42).
 	SurfaceSettings Surface = "protect.settings"
@@ -100,6 +103,8 @@ func (s Surface) Permission() td.Permission {
 		return td.PermConnectionManage
 	case SurfaceExclusionCreate:
 		return td.PermCoverageManage
+	case SurfaceTicketFieldOwner:
+		return td.PermConnectionManage
 	case SurfaceSettings:
 		return td.PermProtectedChangeManage
 	}

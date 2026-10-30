@@ -11,12 +11,14 @@
 -- newer one.
 --
 -- Field ownership is per organization and per field
--- (pc.ticket_field_owners). PantherClaw always owns state, severity,
--- containment and restoration: no row can give one of them to the ticket
--- system. The other fields (assignee, labels, the ticket's own priority and
--- its comments) belong to the ticket system unless the organization takes
--- them back; a missing row means that default. A change of owner is a
--- protected change in the application.
+-- (pc.ticket_field_owners). PantherClaw always owns containment and
+-- restoration: no row can give either to the ticket system (D264). State
+-- and severity are PantherClaw's, and assignee, labels, the ticket's own
+-- priority and its comments the ticket system's, unless the organization
+-- chooses otherwise; a missing row means that default. Giving a field to
+-- the ticket system is a protected change in the application. Even a
+-- ticket-owned state is only mirrored as a note: no change from a ticket
+-- moves a case, an incident or a containment control.
 --
 -- An inbound change to a PantherClaw-owned field is dropped and written as
 -- a case entry of the new kind EXTERNAL (and audited
@@ -258,8 +260,8 @@ CREATE TABLE pc.ticket_field_owners (
     changed_by text        NOT NULL CHECK (char_length(changed_by) BETWEEN 1 AND 300),
     changed_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (org_id, field),
-    -- PantherClaw always owns what decides authority (HR-527, HR-528).
-    CHECK (field NOT IN ('state', 'severity', 'containment', 'restoration') OR owner = 'PANTHERCLAW')
+    -- PantherClaw always owns containment and restoration (HR-527, D264).
+    CHECK (field NOT IN ('containment', 'restoration') OR owner = 'PANTHERCLAW')
 );
 
 -- +goose StatementBegin

@@ -5,12 +5,15 @@
 // HR-528, T-227): which side owns each field, what an inbound ticket
 // change becomes, and the sync actor.
 //
-// A ticket status never restores authority. PantherClaw always owns state,
-// severity, containment and restoration; an inbound change to a field
-// PantherClaw owns is dropped and recorded (an EXTERNAL case entry and the
-// audit event ticket.owned_field_ignored), and a ticket moved to Done is
-// only noted. Fields the ticket system owns (assignee, labels, its own
-// priority and comments) are mirrored as notes. Nothing here can reach a
+// A ticket status never restores authority. PantherClaw always owns
+// containment and restoration (D264); state and severity are PantherClaw's
+// unless the organization gives them to the ticket system, and assignee,
+// labels, the ticket's own priority and comments are the ticket system's
+// unless it takes them back. An inbound change to a field PantherClaw owns
+// is dropped and recorded (an EXTERNAL case entry and the audit event
+// ticket.owned_field_ignored), and a ticket moved to Done is only noted.
+// A change to a field the ticket system owns is mirrored as a note: even
+// a ticket-owned state never moves a case, an incident or a control. Nothing here can reach a
 // containment control, a restoration plan, an approval or a kill switch:
 // the sync actor holds no permission on those services and its packages do
 // not import them.
@@ -65,11 +68,13 @@ var Fields = []Field{
 // Valid reports whether f is a known field.
 func (f Field) Valid() bool { return slices.Contains(Fields, f) }
 
-// Locked reports whether PantherClaw always owns f: what decides authority
-// never moves to the ticket system (HR-527, HR-528; migration 00242).
-func (f Field) Locked() bool {
-	return f == FieldState || f == FieldSeverity || f == FieldContainment || f == FieldRestoration
-}
+// Locked reports whether PantherClaw always owns f: containment and
+// restoration never move to the ticket system (HR-527, D264; migration
+// 00242).
+func (f Field) Locked() bool { return f == FieldContainment || f == FieldRestoration }
+
+// Movable reports whether an organization may choose f's owner (D264).
+func (f Field) Movable() bool { return f.Valid() && !f.Locked() }
 
 // Owner is the side that owns a field.
 type Owner string
@@ -84,9 +89,10 @@ const (
 func (o Owner) Valid() bool { return o == OwnerPantherClaw || o == OwnerTicket }
 
 // DefaultOwner is f's owner when the organization set none: PantherClaw
-// for the locked fields, the ticket system for the rest.
+// for state, severity and the locked fields, the ticket system for the
+// rest (D255).
 func DefaultOwner(f Field) Owner {
-	if f.Locked() || !f.Valid() {
+	if f.Locked() || !f.Valid() || f == FieldState || f == FieldSeverity {
 		return OwnerPantherClaw
 	}
 	return OwnerTicket
@@ -161,8 +167,12 @@ func Decide(owners Owners, key string, changes []Change, comment *Comment) []Ver
 		val := Clean(c.To, MaxValue)
 		switch {
 		case owners.Of(c.Field) == OwnerTicket:
-			out = append(out, Verdict{Field: c.Field, Action: ActionMirror,
-				Text: string(SystemJira) + " " + key + ": " + string(c.Field) + " changed to " + quote(val)})
+			text := string(SystemJira) + " " + key + ": " + string(c.Field) + " changed to " + quote(val)
+			if c.Field == FieldState {
+				// A ticket-owned state is mirrored as a note only (HR-527).
+				text += "; a ticket status never restores authority or lifts containment"
+			}
+			out = append(out, Verdict{Field: c.Field, Action: ActionMirror, Text: text})
 		case c.Field == FieldState && c.Done:
 			out = append(out, Verdict{Field: c.Field, Action: ActionNote,
 				Text: string(SystemJira) + " " + key + ": status moved to " + quote(val) +
