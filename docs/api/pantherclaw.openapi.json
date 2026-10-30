@@ -75183,11 +75183,13 @@
           },
           "dismissedBy": {
             "type": "string",
-            "title": "dismissed_by"
+            "title": "dismissed_by",
+            "description": "dismissed_by: UNTRUSTED, the dismissing person's actor reference."
           },
           "dismissReason": {
             "type": "string",
-            "title": "dismiss_reason"
+            "title": "dismiss_reason",
+            "description": "dismiss_reason: UNTRUSTED person-written text (10-1000 characters,\n without control, format or bidi characters); show it as text only."
           },
           "createTime": {
             "title": "create_time",
