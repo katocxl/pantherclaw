@@ -59,6 +59,18 @@ enum FactType {
   FACT_TYPE_OBJECT = 7;
 }
 
+// FactKind is what a declared fact says (G0 M16 D80).
+enum FactKind {
+  // A value (the default).
+  FACT_KIND_UNSPECIFIED = 0;
+  // A value about the target.
+  FACT_KIND_VALUE = 1;
+  // The data class of the target: public, internal, pii or secret, as an
+  // identifier value ({"id": "pii"}). It can only raise the class of a read
+  // and needs provenance (HR-435).
+  FACT_KIND_CLASSIFICATION = 2;
+}
+
 // ProviderState is a provider's state.
 enum ProviderState {
   PROVIDER_STATE_UNSPECIFIED = 0;
@@ -91,6 +103,9 @@ message FactDeclaration {
       lte: {seconds: 86400}
     }
   ];
+  // What the fact says; unspecified is a value. A classification is an
+  // identifier fact.
+  FactKind kind = 5 [(buf.validate.field).enum.defined_only = true];
 }
 
 // FactProvider is a registered provider.
@@ -110,6 +125,9 @@ message FactProvider {
   string gateway_id = 6;
   // The connection.
   string connection_id = 7;
+  // A built-in provider (G0 M16 D82): PantherClaw itself writes its facts,
+  // such as pc.signals's pc.identity.risk; no RPC creates one.
+  bool builtin = 8;
 }
 
 // RegisterProviderRequest registers a provider.
@@ -201,6 +219,20 @@ message FactObservation {
   // When the provider observed it; neither later than the server's clock
   // nor older than the declaration's maximum lag.
   google.protobuf.Timestamp observe_time = 5 [(buf.validate.field).required = true];
+  // Provenance (G0 M16 D80): the source that classified or observed it, for
+  // example a data catalog's name. Required, with method, for a
+  // classification fact (HR-435).
+  string source = 6 [(buf.validate.field).string.max_len = 128];
+  // How it was established: "manual", "rule" or "model"; empty with no
+  // source.
+  string method = 7 [(buf.validate.field).string = {
+    in: [
+      "",
+      "manual",
+      "rule",
+      "model"
+    ]
+  }];
 }
 
 // PutFactsRequest carries observations.
@@ -247,6 +279,10 @@ message Fact {
   google.protobuf.Timestamp record_time = 6;
   // Provider.
   string provider_id = 7;
+  // Provenance: source and method, when the provider sent them.
+  string source = 8;
+  // "manual", "rule" or "model".
+  string method = 9;
 }
 
 // ListFactsRequest names a subject.

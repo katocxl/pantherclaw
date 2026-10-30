@@ -233,7 +233,7 @@ const getGrant = `-- name: GetGrant :one
 SELECT g.id, g.agent_id, g.instance_id, g.principal_user_id, g.principal_sa_id, g.environment_id, g.parent_id,
        g.depth, g.state, g.current_revision, g.grantor_kind, g.grantor_id, g.basis,
        r.task_ref, r.not_before, r.expires_at, r.bounds, r.requirements, r.limits,
-       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id
+       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id, r.flows
 FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
 WHERE g.org_id = $1 AND g.id = $2
@@ -265,6 +265,7 @@ type GetGrantRow struct {
 	CreatedAt             time.Time
 	CeilingID             *ids.UUID
 	AutomationExecutionID *ids.UUID
+	Flows                 []byte
 }
 
 // SPDX-License-Identifier: BUSL-1.1
@@ -303,6 +304,7 @@ func (q *Queries) GetGrant(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (G
 		&i.CreatedAt,
 		&i.CeilingID,
 		&i.AutomationExecutionID,
+		&i.Flows,
 	)
 	return i, err
 }
@@ -311,7 +313,7 @@ const getGrantChain = `-- name: GetGrantChain :many
 SELECT g.id, g.agent_id, g.instance_id, g.principal_user_id, g.principal_sa_id, g.environment_id, g.parent_id,
        g.depth, g.state, g.current_revision, g.grantor_kind, g.grantor_id, g.basis,
        r.task_ref, r.not_before, r.expires_at, r.bounds, r.requirements, r.limits,
-       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id
+       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id, r.flows
 FROM pc.grant_lineage l
 JOIN pc.grants g ON g.org_id = l.org_id AND g.id = l.ancestor_id
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
@@ -345,6 +347,7 @@ type GetGrantChainRow struct {
 	CreatedAt             time.Time
 	CeilingID             *ids.UUID
 	AutomationExecutionID *ids.UUID
+	Flows                 []byte
 }
 
 // GetGrantChain returns a grant and every ancestor, root first.
@@ -383,6 +386,7 @@ func (q *Queries) GetGrantChain(ctx context.Context, orgID ids.OrgID, iD ids.UUI
 			&i.CreatedAt,
 			&i.CeilingID,
 			&i.AutomationExecutionID,
+			&i.Flows,
 		); err != nil {
 			return nil, err
 		}
@@ -547,11 +551,12 @@ func (q *Queries) InsertGrantLineageSelf(ctx context.Context, orgID ids.OrgID, g
 
 const insertGrantRevision = `-- name: InsertGrantRevision :exec
 INSERT INTO pc.grant_revisions (org_id, id, grant_id, revision, task_ref, not_before, expires_at, bounds,
-                                requirements, limits, delegation_depth, max_children, min_attestation, widens, created_by)
+                                requirements, limits, delegation_depth, max_children, min_attestation, widens, created_by,
+                                flows)
 VALUES ($1, $2, $3, $4, $5,
         $6, $7, $8, $9, $10,
         $11, $12, $13, $14,
-        $15)
+        $15, $16)
 `
 
 type InsertGrantRevisionParams struct {
@@ -570,6 +575,7 @@ type InsertGrantRevisionParams struct {
 	MinAttestation  int16
 	Widens          bool
 	CreatedBy       string
+	Flows           []byte
 }
 
 func (q *Queries) InsertGrantRevision(ctx context.Context, arg InsertGrantRevisionParams) error {
@@ -589,6 +595,7 @@ func (q *Queries) InsertGrantRevision(ctx context.Context, arg InsertGrantRevisi
 		arg.MinAttestation,
 		arg.Widens,
 		arg.CreatedBy,
+		arg.Flows,
 	)
 	return err
 }
@@ -676,7 +683,7 @@ const listGrants = `-- name: ListGrants :many
 SELECT g.id, g.agent_id, g.instance_id, g.principal_user_id, g.principal_sa_id, g.environment_id, g.parent_id,
        g.depth, g.state, g.current_revision, g.grantor_kind, g.grantor_id, g.basis,
        r.task_ref, r.not_before, r.expires_at, r.bounds, r.requirements, r.limits,
-       r.delegation_depth, r.max_children, r.min_attestation, r.created_at
+       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, r.flows
 FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
 WHERE g.org_id = $1
@@ -721,6 +728,7 @@ type ListGrantsRow struct {
 	MaxChildren     int16
 	MinAttestation  int16
 	CreatedAt       time.Time
+	Flows           []byte
 }
 
 // ListGrants pages through an org's grants, newest first.
@@ -764,6 +772,7 @@ func (q *Queries) ListGrants(ctx context.Context, arg ListGrantsParams) ([]ListG
 			&i.MaxChildren,
 			&i.MinAttestation,
 			&i.CreatedAt,
+			&i.Flows,
 		); err != nil {
 			return nil, err
 		}

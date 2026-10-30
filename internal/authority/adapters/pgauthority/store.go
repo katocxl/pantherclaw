@@ -367,6 +367,11 @@ func (s *Store) idempotency(ctx context.Context, q *dbq.Queries, org ids.OrgID, 
 		grantID, grantRev = &g, &r
 	}
 	basis := ev.Basis.Digest()
+	// An allowed read records its class, never its content (G0 M16 D72, HR-434).
+	var readClass *string
+	if c := ev.RecordedReadClass(); c != "" {
+		readClass = &c
+	}
 	effective, err := hex.DecodeString(ev.EffectiveHash)
 	if err != nil {
 		return err
@@ -386,12 +391,12 @@ func (s *Store) idempotency(ctx context.Context, q *dbq.Queries, org ids.OrgID, 
 			OrgID: org, ID: w.TransactionID, RunID: ev.RunID, ActionID: ev.ActionID, ActionHash: act, Operation: ev.Operation,
 			Decision: string(ev.Decision), ReasonCode: w.Reason, GatewayID: w.GatewayID, State: state,
 			GrantID: grantID, GrantRevision: grantRev, BasisDigest: &basis, EffectiveHash: effective, DedupeKey: dedupe,
-			Mode: ev.Mode, ConnectionID: connectionOf(ev), Channel: &channel, TargetType: &ttype, TargetID: &tid,
+			Mode: ev.Mode, ConnectionID: connectionOf(ev), Channel: &channel, TargetType: &ttype, TargetID: &tid, ReadClass: readClass,
 		})
 	}
 	return expect(q.UpdateDecision(ctx, dbq.UpdateDecisionParams{
 		Decision: string(ev.Decision), ReasonCode: w.Reason, State: state, Evaluations: int32(w.Evaluation), //nolint:gosec // ≤ 33
-		GrantID: grantID, GrantRevision: grantRev, BasisDigest: &basis, EffectiveHash: effective, Mode: ev.Mode,
+		GrantID: grantID, GrantRevision: grantRev, BasisDigest: &basis, EffectiveHash: effective, Mode: ev.Mode, ReadClass: readClass,
 		OrgID: org, ID: w.TransactionID, PrevEvaluations: int32(w.Prev.Evaluations), //nolint:gosec // ≤ 32
 	}))
 }

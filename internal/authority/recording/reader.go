@@ -458,3 +458,20 @@ func sameKeys(a ControlKeys, b pipeline.ControlKeys) bool {
 	return a.Run == b.Run && a.Agent == b.Agent && a.Connection == b.Connection && a.TargetType == b.TargetType &&
 		slices.Equal(a.Grants, b.Grants) && slices.Equal(a.Principals, b.Principals)
 }
+
+// SensitiveReads implements pipeline.Reader. A recording made before the
+// read existed has none and replays as it did: no read class was recorded
+// then (G0 M16 D73).
+func (r *Reader) SensitiveReads(_ context.Context, org ids.OrgID, run ids.UUID) ([]pipeline.SensitiveRead, error) {
+	if err := r.otherOrg(org, "sensitive reads", pipeline.StepBoundaries); err != nil {
+		return nil, err
+	}
+	x := r.rec.Reads.Sensitive
+	if x == nil {
+		return nil, nil
+	}
+	if x.Run != run.String() {
+		return nil, r.gap("sensitive reads", pipeline.StepBoundaries, "the run tree's sensitive reads were read for another run")
+	}
+	return x.value()
+}

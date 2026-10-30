@@ -98,6 +98,8 @@ type IssueRequest struct {
 	Limits         domain.Limits
 	Delegation     domain.Delegation
 	MinAttestation int
+	// Flows are the data flows allowed after a sensitive read (G0 M16 D75).
+	Flows []domain.FlowAllowance
 }
 
 // Issue issues a root grant. Only a person holding grant.issue on the
@@ -127,6 +129,7 @@ func (s *Service) Issue(ctx context.Context, req IssueRequest) (domain.Grant, er
 		AgentID: agent.ID, InstanceID: req.InstanceID, Principal: req.Principal, EnvironmentID: agent.EnvironmentID,
 		TaskRef: req.TaskRef, NotBefore: req.NotBefore, ExpiresAt: req.ExpiresAt,
 		Bounds: req.Bounds, Requirements: req.Requirements, Limits: req.Limits, Delegation: req.Delegation, MinAttestation: req.MinAttestation,
+		Flows:   req.Flows,
 		Grantor: domain.Principal{Kind: domain.PrincipalUser, ID: c.Principal.ID},
 		Basis:   fmt.Sprintf("%s on team %s", PermGrantIssue, agent.TeamID),
 	}
@@ -172,6 +175,8 @@ type ReviseRequest struct {
 	// AccessRequest, when set, is the open access request of this grant
 	// the revision answers: it is closed in the same transaction (HR-176).
 	AccessRequest ids.UUID
+	// Flows are the data flows allowed after a sensitive read (G0 M16 D75).
+	Flows []domain.FlowAllowance
 }
 
 // Revise stores a new revision of a grant. Only a person holding
@@ -201,7 +206,7 @@ func (s *Service) Revise(ctx context.Context, req ReviseRequest) (domain.Grant, 
 	next := cur
 	next.Revision++
 	next.TaskRef, next.Bounds, next.Requirements, next.Limits = req.TaskRef, req.Bounds, req.Requirements, req.Limits
-	next.Delegation, next.MinAttestation = req.Delegation, req.MinAttestation
+	next.Delegation, next.MinAttestation, next.Flows = req.Delegation, req.MinAttestation, req.Flows
 	if !req.ExpiresAt.IsZero() {
 		next.ExpiresAt = req.ExpiresAt
 	}

@@ -11780,6 +11780,276 @@
         }
       }
     },
+    "/pantherclaw.v1.ExternalCheckService/CreateExternalCheck": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExternalCheckService"
+        ],
+        "summary": "CreateExternalCheck",
+        "description": "CreateExternalCheck adds a PENDING check (a person only).\n permission: policy.external_check.manage",
+        "operationId": "pantherclaw.v1.ExternalCheckService.CreateExternalCheck",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.CreateExternalCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.CreateExternalCheckResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExternalCheckService/ActivateExternalCheck": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExternalCheckService"
+        ],
+        "summary": "ActivateExternalCheck",
+        "description": "ActivateExternalCheck is refused over the API (STEP_UP_REQUIRED): a\n person activates a check on its page with a security key.\n permission: policy.external_check.manage",
+        "operationId": "pantherclaw.v1.ExternalCheckService.ActivateExternalCheck",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ActivateExternalCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ActivateExternalCheckResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExternalCheckService/DisableExternalCheck": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExternalCheckService"
+        ],
+        "summary": "DisableExternalCheck",
+        "description": "DisableExternalCheck disables a check (a person only). Disabling is\n final and takes effect at the next decision.\n permission: policy.external_check.manage",
+        "operationId": "pantherclaw.v1.ExternalCheckService.DisableExternalCheck",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DisableExternalCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DisableExternalCheckResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExternalCheckService/ListExternalChecks": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExternalCheckService"
+        ],
+        "summary": "ListExternalChecks",
+        "description": "ListExternalChecks lists the org's checks.\n permission: policy.read",
+        "operationId": "pantherclaw.v1.ExternalCheckService.ListExternalChecks",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListExternalChecksRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListExternalChecksResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExternalCheckService/TestExternalCheck": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExternalCheckService"
+        ],
+        "summary": "TestExternalCheck",
+        "description": "TestExternalCheck asks a check about a synthetic action and returns its\n answer; no decision uses it (a person only).\n permission: policy.external_check.manage",
+        "operationId": "pantherclaw.v1.ExternalCheckService.TestExternalCheck",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.TestExternalCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.TestExternalCheckResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.FactService/RegisterProvider": {
       "post": {
         "tags": [
@@ -45268,7 +45538,7 @@
           "id": {
             "type": "string",
             "title": "id",
-            "description": "\"agent:\u003cid\u003e\", \"scope:\u003cconnection_id\u003e/\u003coperation\u003e\", \"route:\u003croute id\u003e\"\n or \"target:\u003chost\u003e\"."
+            "description": "\"agent:\u003cid\u003e\", \"scope:\u003cconnection_id\u003e/\u003coperation\u003e\",\n \"route:\u003cconnection_id\u003e/\u003coperation\u003e/\u003croute id or kind\u003e\" (one per scope),\n or \"target:\u003chost\u003e\" (the connection's base URL host) or\n \"target:\u003cconnection_id\u003e\" for a connection without one."
           },
           "kind": {
             "type": "string",
@@ -45929,12 +46199,12 @@
           "boundaryState": {
             "type": "string",
             "title": "boundary_state",
-            "description": "What the scopes shown say about the agent, as the agent lifecycle\n derives it: \"PROTECTED\", \"PARTIALLY_PROTECTED\" or \"OBSERVED\"."
+            "description": "What the scopes shown say about the agent, as the agent lifecycle\n derives it: \"PROTECTED\", \"PARTIALLY_PROTECTED\" or \"OBSERVED\"; \"UNKNOWN\"\n when scope_limited is set, since a scope not shown could be weaker."
           },
           "scopeLimited": {
             "type": "boolean",
             "title": "scope_limited",
-            "description": "Set when the caller may not read every scope of the agent."
+            "description": "Set when the caller may not read every scope of the agent, or when the\n agent has more scopes than one graph shows (200)."
           }
         },
         "title": "GetCoverageGraphResponse",
@@ -51489,6 +51759,324 @@
           "id"
         ]
       },
+      "pantherclaw.v1.ActivateExternalCheckRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Check id."
+          }
+        },
+        "title": "ActivateExternalCheckRequest",
+        "additionalProperties": false,
+        "description": "ActivateExternalCheckRequest names a check.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.ActivateExternalCheckResponse": {
+        "type": "object",
+        "properties": {
+          "check": {
+            "title": "check",
+            "description": "The check.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExternalCheck"
+          }
+        },
+        "title": "ActivateExternalCheckResponse",
+        "additionalProperties": false,
+        "description": "ActivateExternalCheckResponse is never returned over the API."
+      },
+      "pantherclaw.v1.CreateExternalCheckRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "maxLength": 63,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+            "description": "Name: lowercase letters, digits and dashes."
+          },
+          "endpoint": {
+            "type": "string",
+            "title": "endpoint",
+            "maxLength": 2048,
+            "minLength": 9,
+            "description": "The https endpoint, for example https://opa.example.com/v1/data/pc/decision."
+          },
+          "caPem": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "ca_pem",
+            "maxLength": 16384,
+            "description": "A PEM CA bundle the endpoint's certificate chains to; empty for the\n system roots."
+          },
+          "timeoutMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "timeout_ms",
+            "maximum": 1000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Milliseconds a decision waits (50-1000); 0 for 250."
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1,
+              "maxItems": 32,
+              "minItems": 1
+            },
+            "title": "operations",
+            "maxItems": 32,
+            "minItems": 1,
+            "description": "Operations: exact names or a prefix ending in * (1-32)."
+          }
+        },
+        "title": "CreateExternalCheckRequest",
+        "additionalProperties": false,
+        "description": "CreateExternalCheckRequest describes a check.",
+        "required": [
+          "name",
+          "endpoint",
+          "operations"
+        ]
+      },
+      "pantherclaw.v1.CreateExternalCheckResponse": {
+        "type": "object",
+        "properties": {
+          "check": {
+            "title": "check",
+            "description": "The PENDING check.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExternalCheck"
+          }
+        },
+        "title": "CreateExternalCheckResponse",
+        "additionalProperties": false,
+        "description": "CreateExternalCheckResponse returns the check."
+      },
+      "pantherclaw.v1.DisableExternalCheckRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Check id."
+          }
+        },
+        "title": "DisableExternalCheckRequest",
+        "additionalProperties": false,
+        "description": "DisableExternalCheckRequest names a check.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.DisableExternalCheckResponse": {
+        "type": "object",
+        "properties": {
+          "check": {
+            "title": "check",
+            "description": "The DISABLED check.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExternalCheck"
+          }
+        },
+        "title": "DisableExternalCheckResponse",
+        "additionalProperties": false,
+        "description": "DisableExternalCheckResponse returns the check."
+      },
+      "pantherclaw.v1.ExternalCheck": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Check id."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "Name."
+          },
+          "endpoint": {
+            "type": "string",
+            "title": "endpoint",
+            "description": "The https endpoint the input is posted to."
+          },
+          "customCa": {
+            "type": "boolean",
+            "title": "custom_ca",
+            "description": "Whether the check trusts its own CA bundle instead of the system roots."
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "title": "timeout_ms",
+            "format": "int32",
+            "description": "How long a decision waits for its answer, in milliseconds (50-1000)."
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "operations",
+            "description": "The operations it is asked about: exact names or a prefix ending in *."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"PENDING\", \"ACTIVE\" or \"DISABLED\"."
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "created_by",
+            "description": "Who created it."
+          },
+          "activatedBy": {
+            "type": "string",
+            "title": "activated_by",
+            "description": "Who activated it with a security key; empty while PENDING."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was created.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "activateTime": {
+            "title": "activate_time",
+            "description": "When it was activated.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "updateTime": {
+            "title": "update_time",
+            "description": "When its state last changed.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "confirmUrl": {
+            "type": "string",
+            "title": "confirm_url",
+            "description": "The page where a person activates it."
+          }
+        },
+        "title": "ExternalCheck",
+        "additionalProperties": false,
+        "description": "ExternalCheck is one external policy check."
+      },
+      "pantherclaw.v1.ListExternalChecksRequest": {
+        "type": "object",
+        "properties": {
+          "includeDisabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "include_disabled",
+            "description": "Also disabled checks."
+          }
+        },
+        "title": "ListExternalChecksRequest",
+        "additionalProperties": false,
+        "description": "ListExternalChecksRequest lists checks."
+      },
+      "pantherclaw.v1.ListExternalChecksResponse": {
+        "type": "object",
+        "properties": {
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ExternalCheck"
+            },
+            "title": "checks",
+            "description": "Checks, by name."
+          }
+        },
+        "title": "ListExternalChecksResponse",
+        "additionalProperties": false,
+        "description": "ListExternalChecksResponse returns them."
+      },
+      "pantherclaw.v1.TestExternalCheckRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Check id (PENDING or ACTIVE)."
+          },
+          "operation": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "operation",
+            "maxLength": 128,
+            "description": "The operation of the synthetic action; empty for the check's first\n exact operation, or \"test.operation\"."
+          }
+        },
+        "title": "TestExternalCheckRequest",
+        "additionalProperties": false,
+        "description": "TestExternalCheckRequest asks a check about a synthetic action.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.TestExternalCheckResponse": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "title": "decision",
+            "description": "\"allow\", \"deny\" or \"hold\"; empty when the check did not answer."
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "reasons",
+            "description": "Its reasons, UNTRUSTED text from the endpoint (at most 5 of 200\n characters)."
+          },
+          "errorCode": {
+            "type": "string",
+            "title": "error_code",
+            "description": "Why there is no answer: TIMEOUT, HTTP_STATUS, BAD_ANSWER or\n UNREACHABLE; empty with an answer."
+          },
+          "latencyMs": {
+            "type": "integer",
+            "title": "latency_ms",
+            "format": "int32",
+            "description": "How long the call took, in milliseconds."
+          },
+          "input": {
+            "type": "string",
+            "title": "input",
+            "format": "byte",
+            "description": "The input that was sent."
+          }
+        },
+        "title": "TestExternalCheckResponse",
+        "additionalProperties": false,
+        "description": "TestExternalCheckResponse is the check's answer."
+      },
+      "pantherclaw.v1.FactKind": {
+        "type": "string",
+        "title": "FactKind",
+        "enum": [
+          "FACT_KIND_UNSPECIFIED",
+          "FACT_KIND_VALUE",
+          "FACT_KIND_CLASSIFICATION"
+        ],
+        "description": "FactKind is what a declared fact says (G0 M16 D80)."
+      },
       "pantherclaw.v1.FactType": {
         "type": "string",
         "title": "FactType",
@@ -51575,6 +52163,16 @@
             "type": "string",
             "title": "provider_id",
             "description": "Provider."
+          },
+          "source": {
+            "type": "string",
+            "title": "source",
+            "description": "Provenance: source and method, when the provider sent them."
+          },
+          "method": {
+            "type": "string",
+            "title": "method",
+            "description": "\"manual\", \"rule\" or \"model\"."
           }
         },
         "title": "Fact",
@@ -51612,6 +52210,11 @@
             "title": "max_lag",
             "description": "How old an observation may be when it is recorded.",
             "$ref": "#/components/schemas/google.protobuf.Duration"
+          },
+          "kind": {
+            "title": "kind",
+            "description": "What the fact says; unspecified is a value. A classification is an\n identifier fact.",
+            "$ref": "#/components/schemas/pantherclaw.v1.FactKind"
           }
         },
         "title": "FactDeclaration",
@@ -51652,6 +52255,18 @@
             "title": "max_lag",
             "description": "How old an observation may be when it is recorded.",
             "$ref": "#/components/schemas/google.protobuf.Duration"
+          },
+          "kind": {
+            "title": "kind",
+            "description": "What the fact says; unspecified is a value. A classification is an\n identifier fact.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.FactKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "FactDeclaration",
@@ -51701,6 +52316,30 @@
             "title": "observe_time",
             "description": "When the provider observed it; neither later than the server's clock\n nor older than the declaration's maximum lag.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "source",
+            "maxLength": 128,
+            "description": "Provenance (G0 M16 D80): the source that classified or observed it, for\n example a data catalog's name. Required, with method, for a\n classification fact (HR-435)."
+          },
+          "method": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "method",
+            "enum": [
+              "",
+              "manual",
+              "rule",
+              "model",
+              null
+            ],
+            "description": "How it was established: \"manual\", \"rule\" or \"model\"; empty with no\n source."
           }
         },
         "title": "FactObservation",
@@ -51754,6 +52393,11 @@
             "type": "string",
             "title": "connection_id",
             "description": "The connection."
+          },
+          "builtin": {
+            "type": "boolean",
+            "title": "builtin",
+            "description": "A built-in provider (G0 M16 D82): PantherClaw itself writes its facts,\n such as pc.signals's pc.identity.risk; no RPC creates one."
           }
         },
         "title": "FactProvider",
@@ -55811,6 +56455,136 @@
         "additionalProperties": false,
         "description": "BudgetAccount is the state of one budget account. Amounts are decimal\n strings in the account's currency."
       },
+      "pantherclaw.v1.FlowAllowance": {
+        "type": "object",
+        "properties": {
+          "classes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 2,
+              "minItems": 1,
+              "uniqueItems": true,
+              "enum": [
+                "pii",
+                "secret"
+              ]
+            },
+            "title": "classes",
+            "maxItems": 2,
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "A subset of \"pii\" and \"secret\"."
+          },
+          "destinations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FlowDestination"
+            },
+            "title": "destinations",
+            "maxItems": 64,
+            "minItems": 1,
+            "description": "Exact ActionIR destinations, at least one."
+          }
+        },
+        "title": "FlowAllowance",
+        "additionalProperties": false,
+        "description": "FlowAllowance lets data of its classes, read anywhere in the run tree, go\n to its destinations without a DATA_FLOW_HOLD (G0 M16 D75, HR-431). Under\n delegation each child allowance must be covered by one of the parent's\n (HR-432)."
+      },
+      "pantherclaw.v1.FlowAllowanceInput": {
+        "type": "object",
+        "properties": {
+          "classes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 2,
+              "minItems": 1,
+              "uniqueItems": true,
+              "enum": [
+                "pii",
+                "secret"
+              ]
+            },
+            "title": "classes",
+            "maxItems": 2,
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "A subset of \"pii\" and \"secret\"."
+          },
+          "destinations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FlowDestinationInput"
+            },
+            "title": "destinations",
+            "maxItems": 64,
+            "minItems": 1,
+            "description": "Exact ActionIR destinations, at least one."
+          }
+        },
+        "title": "FlowAllowance",
+        "additionalProperties": false,
+        "description": "FlowAllowance lets data of its classes, read anywhere in the run tree, go\n to its destinations without a DATA_FLOW_HOLD (G0 M16 D75, HR-431). Under\n delegation each child allowance must be covered by one of the parent's\n (HR-432).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.FlowAllowance",
+        "required": [
+          "classes",
+          "destinations"
+        ]
+      },
+      "pantherclaw.v1.FlowDestination": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "enum": [
+              "internal",
+              "external"
+            ],
+            "description": "Destination kind: \"internal\" or \"external\", as in the ActionIR."
+          },
+          "id": {
+            "type": "string",
+            "title": "id",
+            "maxLength": 512,
+            "minLength": 1,
+            "description": "Destination id."
+          }
+        },
+        "title": "FlowDestination",
+        "additionalProperties": false,
+        "description": "FlowDestination is one ActionIR destination: its kind and id."
+      },
+      "pantherclaw.v1.FlowDestinationInput": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "enum": [
+              "internal",
+              "external"
+            ],
+            "description": "Destination kind: \"internal\" or \"external\", as in the ActionIR."
+          },
+          "id": {
+            "type": "string",
+            "title": "id",
+            "maxLength": 512,
+            "minLength": 1,
+            "description": "Destination id."
+          }
+        },
+        "title": "FlowDestination",
+        "additionalProperties": false,
+        "description": "FlowDestination is one ActionIR destination: its kind and id.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.FlowDestination",
+        "required": [
+          "kind",
+          "id"
+        ]
+      },
       "pantherclaw.v1.GetBudgetStateRequest": {
         "type": "object",
         "properties": {
@@ -56004,6 +56778,14 @@
             "title": "create_time",
             "description": "When this revision was created.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "flows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FlowAllowance"
+            },
+            "title": "flows",
+            "description": "Data flows allowed after a pii or secret read in the run tree (G0 M16\n D75); none allows no flow."
           }
         },
         "title": "Grant",
@@ -56189,6 +56971,18 @@
             "minimum": 0,
             "format": "int32",
             "description": "Lowest attestation level (0-2)."
+          },
+          "flows": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FlowAllowanceInput"
+            },
+            "title": "flows",
+            "maxItems": 16,
+            "description": "Data flows allowed after a sensitive read (G0 M16 D75); none allows no\n flow."
           }
         },
         "title": "IssueGrantRequest",
@@ -56400,6 +57194,18 @@
             "format": "uuid",
             "description": "The ACCESS_REQUEST waitlist entry this revision answers (F051); the\n revision closes it as approved. The entry must be open and about this\n grant.",
             "nullable": true
+          },
+          "flows": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FlowAllowanceInput"
+            },
+            "title": "flows",
+            "maxItems": 16,
+            "description": "Data flows allowed after a sensitive read (G0 M16 D75, D94); none allows\n no flow. Adding or widening one widens the grant."
           }
         },
         "title": "ReviseGrantRequest",
@@ -78689,6 +79495,18 @@
             "minimum": 0,
             "format": "int32",
             "description": "Lowest attestation level (0-2); at least the parent's."
+          },
+          "flows": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FlowAllowanceInput"
+            },
+            "title": "flows",
+            "maxItems": 16,
+            "description": "Data flows allowed after a sensitive read (G0 M16 D75, D94); each must\n be covered by one of the parent grant's, and none allows no flow."
           }
         },
         "title": "DelegateGrantRequest",
@@ -79217,6 +80035,10 @@
     {
       "name": "pantherclaw.v1.GraphService",
       "description": "GraphService reads activity, causal, authority, exposure and change\n graphs (F272, F274, F289, F293, F298; HR-254). Graphs need the Team\n edition; the activity edge table (ListGraphEdges in activity mode, F298)\n is Community. Every graph\n shares one edge vocabulary. Edges the caller may not see are dropped\n before expansion, collapsing, capping and counting; historical and\n expired edges are kept but never counted as current authority; a revoked\n grant's reach shows as HISTORICAL. Filters match an edge's ends and the\n agent, run and principal it belongs to. Graphs\n are capped at 2000 nodes and 5000 edges and say when they were cut.\n Every graph has a tabular twin with the same filters."
+    },
+    {
+      "name": "pantherclaw.v1.ExternalCheckService",
+      "description": "ExternalCheckService manages an org's external policy checks (G0 M16\n D81, founder decision F7; HR-436..440; Business edition). A check is an\n Open Policy Agent endpoint the Authority asks, after the policy rules,\n about the actions whose operation matches one of its patterns. It can\n only restrict: \"deny\" is DENY EXTERNAL_POLICY_DENY, \"hold\" is\n REQUIRE_APPROVAL EXTERNAL_POLICY_HOLD, \"allow\" only passes a checklist\n item, and a timeout, an error or a bad answer is CANNOT_AUTHORIZE\n EXTERNAL_CHECK_UNAVAILABLE. A check is created PENDING and asks nothing\n until a person activates it on its page (confirm_url) with a security\n key; its endpoint must be https and start with a prefix the server's\n external_checks.allowed_prefixes allows. At most three are active per\n org. The input never carries the content of disclosure-capable\n parameters, only their length, and the check's reasons are shown to\n people only, never to agents."
     },
     {
       "name": "pantherclaw.v1.FactService",

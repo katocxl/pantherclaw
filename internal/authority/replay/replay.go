@@ -91,6 +91,9 @@ const (
 	// IncompleteReceiptRemoved: retention removed the decision receipt's
 	// body (HR-198), so there is no original decision to reproduce.
 	IncompleteReceiptRemoved = "RECEIPT_REMOVED"
+	// IncompleteExternalCheck: an external policy check took part in the
+	// decision, and a replay never calls one (G0 M16 D81).
+	IncompleteExternalCheck = pipeline.ReasonExternalNotEvaluated
 )
 
 // Outcome is what a replay found. It carries decisions and checklists,
@@ -235,12 +238,12 @@ func (e *Engine) replay(ctx context.Context, org ids.OrgID, txn ids.UUID, evalua
 	if err != nil {
 		return out.incomplete(Limitation{Code: IncompleteInputsUnreadable, Detail: "the recorded request does not parse"}), nil //nolint:nilerr // incomplete, not a failure
 	}
-	ev, err := (&pipeline.Pipeline{}).EvaluateWith(ctx, reader, req)
+	ev, err := (&pipeline.Pipeline{ReplayOf: rec.Pipeline}).EvaluateWith(ctx, reader, req)
 	if err != nil {
 		return out.incomplete(gaps(rd.Gaps())...), nil //nolint:nilerr // incomplete, not a failure
 	}
 	out.Decision, out.Reason, out.BasisDigest, out.Checklist = ev.Decision, ev.Decisive().Code, ev.Basis.Digest(), ev.Checklist
-	out.Incomplete = gaps(rd.Gaps())
+	out.Incomplete = append(gaps(rd.Gaps()), externalChecks(orig)...)
 	out.Complete = len(out.Incomplete) == 0
 	out.SameDecision = out.Decision == orig.Decision && out.Reason == orig.Reason
 	out.Reproduced = !out.Proposed && controls == nil && out.Complete && out.SameDecision && out.BasisDigest == orig.BasisDigest
@@ -279,10 +282,10 @@ func (e *Engine) open(ctx context.Context, org ids.OrgID, txn ids.UUID, evaluati
 		return nil, &Limitation{Code: IncompleteInputsTruncated, Detail: "the inputs were larger than 32 KiB compressed and only their digest was kept"}
 	case row.Format != recording.FormatVersion:
 		return nil, &Limitation{Code: IncompleteFormatUnsupported, Detail: fmt.Sprintf("the inputs use format %d; this server reads format %d", row.Format, recording.FormatVersion)}
-	case row.Pipeline != pipeline.Version:
+	case !pipeline.Replays(row.Pipeline):
 		return nil, &Limitation{
 			Code:   IncompletePipelineVersion,
-			Detail: fmt.Sprintf("the evaluation ran pipeline version %d; this server replays version %d", row.Pipeline, pipeline.Version),
+			Detail: fmt.Sprintf("the evaluation ran pipeline version %d; this server replays versions 4 and %d", row.Pipeline, pipeline.Version),
 		}
 	}
 	rec, err := e.Inputs.Open(ctx, org, txn, evaluation, row)
@@ -456,4 +459,18 @@ type containedReader struct {
 // recorded; the pipeline decides which cover the action.
 func (r containedReader) Controls(context.Context, ids.OrgID, pipeline.ControlKeys) ([]pipeline.Control, error) {
 	return r.controls, nil
+}
+
+// externalChecks reports the external policy checks the original decision
+// asked: a replay never calls one, so it reports "external check not
+// evaluated" for each (G0 M16 D81).
+func externalChecks(orig Original) []Limitation {
+	var out []Limitation
+	for _, it := range orig.Checklist {
+		switch it.Code {
+		case pipeline.ReasonExternalAllow, pipeline.ReasonExternalDeny, pipeline.ReasonExternalHold, pipeline.ReasonExternalUnavailable:
+			out = append(out, Limitation{Code: IncompleteExternalCheck, Step: it.Step, Detail: "external check not evaluated: " + it.Level})
+		}
+	}
+	return out
 }

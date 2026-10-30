@@ -92,6 +92,8 @@ type Declaration struct {
 	SubjectType string
 	// MaxLag is how old an observation may be when it is recorded.
 	MaxLag time.Duration
+	// Kind is a value or a classification (G0 M16 D80); empty is a value.
+	Kind Kind
 }
 
 // ProviderState is a provider's state.
@@ -116,8 +118,11 @@ type Provider struct {
 	// of a service account or a gateway and connection.
 	GatewayID    ids.UUID
 	ConnectionID ids.UUID
-	State        ProviderState
-	Facts        []Declaration
+	// Builtin marks PantherClaw's own provider, pc.signals (G0 M16 D82): it
+	// has neither a service account nor a gateway.
+	Builtin bool
+	State   ProviderState
+	Facts   []Declaration
 }
 
 // Validate checks a provider. taken reports fact names (and their policy
@@ -125,7 +130,7 @@ type Provider struct {
 // provider.
 func (p Provider) Validate(taken func(name string) bool) error {
 	switch {
-	case p.ID.IsZero() || p.Org.IsZero() || p.ServiceAccountID.IsZero() == p.GatewayID.IsZero() || p.GatewayID.IsZero() != p.ConnectionID.IsZero():
+	case p.ID.IsZero() || p.Org.IsZero() || !p.validSources():
 		return invalid("provider: id, org and exactly one of a service account or a gateway and connection are required")
 	case !typePattern.MatchString(p.Name):
 		return invalid("provider: name %q must be a lowercase dotted name", p.Name)
@@ -149,6 +154,9 @@ func (p Provider) Validate(taken func(name string) bool) error {
 			return invalid("provider: fact %q needs a subject type", d.Name)
 		case d.MaxLag < time.Second || d.MaxLag > MaxLagCeiling:
 			return invalid("provider: fact %q needs a maximum lag of 1s..%s", d.Name, MaxLagCeiling)
+		}
+		if err := p.validDeclaration(d); err != nil {
+			return err
 		}
 		seen[CELName(d.Name)] = true
 	}
@@ -298,6 +306,10 @@ type Fact struct {
 	ObservedAt  time.Time
 	RecordedAt  time.Time
 	ProviderID  ids.UUID
+	// Kind is its declaration's kind (G0 M16 D80) as the pipeline reads it.
+	Kind Kind
+	// Source and Method are its provenance (G0 M16 D80), when sent.
+	Source, Method string
 }
 
 // Observation is what a provider sends.
@@ -307,6 +319,9 @@ type Observation struct {
 	SubjectID   string
 	Value       jsontext.Value
 	ObservedAt  time.Time
+	// Source and Method are its provenance (G0 M16 D80): both or neither,
+	// and both for a classification (HR-435).
+	Source, Method string
 }
 
 // Accept turns an observation into a fact (HR-160). The provider must be
@@ -329,8 +344,14 @@ func Accept(p Provider, o Observation, now time.Time, prev *Fact) (Fact, error) 
 	if err := actionir.CheckIdentifier("subject", o.SubjectID); err != nil {
 		return Fact{}, invalid("subject id: %v", err)
 	}
+	if err := checkProvenance(d, o); err != nil {
+		return Fact{}, err
+	}
 	v, err := DecodeValue(d.Type, o.Value)
 	if err != nil {
+		return Fact{}, err
+	}
+	if err := checkClass(d, v); err != nil {
 		return Fact{}, err
 	}
 	observed := o.ObservedAt.UTC()
@@ -345,7 +366,10 @@ func Accept(p Provider, o Observation, now time.Time, prev *Fact) (Fact, error) 
 	if prev != nil && observed.Before(prev.ObservedAt) {
 		return Fact{}, fmt.Errorf("%w: a newer observation of %s is already recorded", ErrStale, o.Name)
 	}
-	return Fact{Name: o.Name, SubjectType: o.SubjectType, SubjectID: o.SubjectID, Value: v, ObservedAt: observed, RecordedAt: now.UTC(), ProviderID: p.ID}, nil
+	return Fact{
+		Name: o.Name, SubjectType: o.SubjectType, SubjectID: o.SubjectID, Value: v, ObservedAt: observed, RecordedAt: now.UTC(), ProviderID: p.ID,
+		Source: cleanSource(o.Source), Method: o.Method,
+	}, nil
 }
 
 // Requirement is a fact an action needs, with its maximum age and who asks

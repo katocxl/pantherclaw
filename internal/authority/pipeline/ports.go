@@ -294,7 +294,24 @@ type Reader interface {
 		[]apdomain.VariantLine, []apdomain.ContextLine, error)
 	// HoldSettings returns the org's hold settings.
 	HoldSettings(ctx context.Context, org ids.OrgID) (HoldSettings, error)
+	// SensitiveReads returns the pii and secret reads of the run tree that
+	// run belongs to (G0 M16 D73, D97): every run sharing its root, newest
+	// first, the MaxSensitiveReads most recent plus the most recent of each
+	// class not among them, so every class read is there. Classes and ids
+	// only, never content (HR-434).
+	SensitiveReads(ctx context.Context, org ids.OrgID, run ids.UUID) ([]SensitiveRead, error)
 }
+
+// SensitiveRead is one allowed pii or secret read of a run tree (D73).
+type SensitiveRead struct {
+	TransactionID, RunID ids.UUID
+	Operation, Class     string
+	At                   time.Time
+}
+
+// MaxSensitiveReads is how many of the newest sensitive reads
+// SensitiveReads returns, and how many transactions the hold names.
+const MaxSensitiveReads = 20
 
 // Snapshotter is a Reader that can serve every read of one evaluation from
 // one snapshot of the org: one read-only transaction instead of one per
@@ -312,3 +329,71 @@ type Snapshotter interface {
 // other reason refuses it. It reads through its own store; the pipeline
 // holds no transaction.
 type PeerCheck func(ctx context.Context, org ids.OrgID, conn Connection, grant gdomain.Grant) (reason string)
+
+// ExternalCheck is the org's ACTIVE external policy checks (G0 M16 D81,
+// D96; HR-436..440). An evaluation never calls one inside its snapshot:
+//
+//   - Preload, before the snapshot opens, puts the org's active checks on
+//     the context, from a short in-process cache (a read only on a miss);
+//   - pass 1 (inside the snapshot) finds the checks whose operations match
+//     the action and returns them with their input (Evaluation.ExternalCalls);
+//   - the caller ends the snapshot, Calls them with no database connection
+//     held (AskExternal), and runs pass 2 in a new snapshot with the answers;
+//   - pass 2 uses the answers only for the same checks and the same input;
+//     anything else is CANNOT_AUTHORIZE. There is one round per decision.
+//
+// Unset (replay and simulation), no check is asked: replay reports
+// "external check not evaluated".
+type ExternalCheck interface {
+	Preload(ctx context.Context, org ids.OrgID) context.Context
+	// Matching returns the preloaded active checks whose operations cover the
+	// operation; an error (checks not readable, or not preloaded) is
+	// CANNOT_AUTHORIZE.
+	Matching(ctx context.Context, org ids.OrgID, operation string) ([]ExternalTarget, error)
+	// Call asks each check about its input, one verdict per call in order.
+	Call(ctx context.Context, org ids.OrgID, calls []ExternalCall) []ExternalVerdict
+}
+
+// ExternalTarget names one check.
+type ExternalTarget struct {
+	ID   ids.UUID
+	Name string
+}
+
+// ExternalCall is one check to ask and what to ask it; Digest is the
+// SHA-256 of the input, which pass 2 compares.
+type ExternalCall struct {
+	Check  ExternalTarget
+	Input  ExternalInput
+	Digest string
+}
+
+// ExternalInput is what an external check is asked: the action's meaning
+// and who stands behind it, never the content of a disclosure-capable
+// parameter (HR-439).
+type ExternalInput struct {
+	Operation        string
+	Access           string
+	Target           actionir.Target
+	Destinations     []actionir.Destination
+	DestinationClass string
+	Agent, Instance  string
+	Run              string
+	// RepresentedUser is the run's principal ("user:<id>"), when a person.
+	RepresentedUser string
+	Mode            string
+	// Params are the material params, by name, as ActionIR JSON; each
+	// disclosure-capable one is {"bytes": n} instead.
+	Params map[string]any
+}
+
+// ExternalVerdict is one check's answer. Decision is "allow", "deny" or
+// "hold", or "" when the check did not answer (Unavailable says why);
+// Reasons are UNTRUSTED text for people only (HR-440).
+type ExternalVerdict struct {
+	CheckID     ids.UUID
+	Check       string
+	Decision    string
+	Reasons     []string
+	Unavailable string
+}

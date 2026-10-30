@@ -13,6 +13,8 @@ import (
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/coverage/app"
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -68,5 +70,50 @@ func TestIntCoverageGraphIsTeamAndAboveAndReadsTheAgentsScopes(t *testing.T) {
 	}
 	if _, err := f.svc.GetCoverageGraph(f.as(td.RoleViewer), f.agent, app.GraphFilter{}); err == nil {
 		t.Fatal("a viewer read the graph")
+	}
+}
+
+// TestIntAGraphFilteredByOperationIsNotCutByOtherOperations: the operation
+// filter applies in the query, before the scope cap, so a page of one row
+// filtered by an operation holds that operation's scope even when another
+// scope sorts first, and the filtered graph is not scope-limited.
+//
+// Covers: F277
+func TestIntAGraphFilteredByOperationIsNotCutByOtherOperations(t *testing.T) {
+	f := newFixture(t)
+	for _, op := range []string{"payments.refund.create", "payments.refund.get"} {
+		f.exec(t, `INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code,
+			gateway_id, connection_id, channel, mode, created_at) VALUES ($1, $2, $3, $4, $5, $7, 'ALLOW', 'OK',
+			'gw', $6, 'http', 'enforce', now() - interval '2 minutes')`, f.org, ids.NewV7(), f.run, ids.NewV7(), make([]byte, 32), f.conn, op)
+	}
+	f.reassessOrg(t)
+	op := "payments.refund.get"
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		params := dbq.ListCurrentCoverageSnapshotsPageParams{OrgID: f.org, AgentID: &f.agent, MaxRows: 1}
+		first, err := dbq.New(tx).ListCurrentCoverageSnapshotsPage(ctx, params)
+		if err != nil || len(first) != 1 || first[0].Operation != "payments.refund.create" {
+			t.Fatalf("unfiltered first page %+v (%v)", first, err)
+		}
+		params.Operation = &op
+		got, err := dbq.New(tx).ListCurrentCoverageSnapshotsPage(ctx, params)
+		if err != nil || len(got) != 1 || got[0].Operation != op {
+			t.Fatalf("filtered page %+v (%v)", got, err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	f.svc.Ents = edition(billing.Team)
+	g, err := f.svc.GetCoverageGraph(f.as(td.RoleAuditor), f.agent, app.GraphFilter{Operation: &op})
+	if err != nil || g.ScopeLimited {
+		t.Fatalf("graph %+v (%v)", g, err)
+	}
+	for _, n := range g.Nodes {
+		if n.Kind == app.NodeScope && n.Label != op {
+			t.Errorf("a scope of another operation: %+v", n)
+		}
+	}
+	if !slices.ContainsFunc(g.Nodes, func(n app.GraphNode) bool { return n.ID == "scope:"+f.conn.String()+"/"+op }) {
+		t.Fatalf("no %s scope: %+v", op, g.Nodes)
 	}
 }
