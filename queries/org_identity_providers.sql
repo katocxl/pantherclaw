@@ -65,12 +65,12 @@ VALUES (sqlc.arg(org_id), sqlc.arg(own_providers_only), sqlc.arg(updated_by))
 ON CONFLICT (org_id) DO UPDATE
 SET own_providers_only = EXCLUDED.own_providers_only, updated_by = EXCLUDED.updated_by, updated_at = now();
 
--- The identity issuers of the org's active admins (enabled users holding
--- org_admin at the org), for the lock-out guard (HR-484).
--- name: OrgAdminIssuers :many
-SELECT u.issuer, count(DISTINCT u.id)::bigint AS admins
+-- The org's active admins (enabled people holding org_admin at the org)
+-- with their identity issuers, for the lock-out guard (HR-484, D162).
+-- name: OrgAdminIdentities :many
+SELECT DISTINCT u.id, u.issuer
 FROM pc.role_bindings b
 JOIN pc.users u ON u.org_id = b.org_id AND u.id = b.user_id
 WHERE b.org_id = sqlc.arg(org_id) AND b.role = 'org_admin' AND b.scope_type = 'ORG' AND u.state = 'ACTIVE'
-GROUP BY u.issuer
-ORDER BY u.issuer;
+ORDER BY u.id
+LIMIT 1000;

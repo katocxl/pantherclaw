@@ -81,6 +81,13 @@ const (
 	SurfaceConnectionUpdate Surface = "connection.update"
 	SurfaceRouteMode        Surface = "connection.route_mode"
 	SurfaceExclusionCreate  Surface = "coverage.exclusion.create"
+	// The organization identity provider surfaces (G0 M18 D155, D162):
+	// always held for a second person, whatever the CUSTODY mode
+	// (AlwaysProtected). Put activates or changes a provider, Disable
+	// turns one off, OwnOnly sets "own providers only".
+	SurfaceIdentityProviderPut     Surface = "identity_provider.put"
+	SurfaceIdentityProviderDisable Surface = "identity_provider.disable"
+	SurfaceIdentityProviderOwnOnly Surface = "identity_provider.own_only"
 	// SurfaceSettings turns a category OFF (a change request of kind
 	// SETTINGS, D42).
 	SurfaceSettings Surface = "protect.settings"
@@ -100,10 +107,23 @@ func (s Surface) Permission() td.Permission {
 		return td.PermConnectionManage
 	case SurfaceExclusionCreate:
 		return td.PermCoverageManage
+	case SurfaceIdentityProviderPut, SurfaceIdentityProviderDisable, SurfaceIdentityProviderOwnOnly:
+		return td.PermIdentityProviderManage
 	case SurfaceSettings:
 		return td.PermProtectedChangeManage
 	}
 	return ""
+}
+
+// AlwaysProtected reports whether every change of the surface waits for a
+// second person, in every mode of its category, and can never be applied
+// as an emergency (G0 M18 D155, HR-481).
+func (s Surface) AlwaysProtected() bool {
+	switch s {
+	case SurfaceIdentityProviderPut, SurfaceIdentityProviderDisable, SurfaceIdentityProviderOwnOnly:
+		return true
+	}
+	return false
 }
 
 // Change domains and kinds of internal/changes (D6).
@@ -242,3 +262,13 @@ func (e *VoidError) Unwrap() error {
 
 // VoidReason is the reason the request is voided with.
 func (e *VoidError) VoidReason() string { return e.Reason }
+
+type publisherKey struct{}
+
+// Publisher is, inside the confirmed re-run of a stored change, the
+// person who confirmed it: a customer consequence rule's approver (G0 M17
+// D106). It reports false anywhere else, an emergency included.
+func Publisher(ctx context.Context) (ids.UUID, bool) {
+	p, ok := ctx.Value(publisherKey{}).(ids.UUID)
+	return p, ok && !p.IsZero()
+}

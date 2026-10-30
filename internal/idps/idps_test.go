@@ -6,28 +6,40 @@ package idps
 import (
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
 
-// TestHR484_LockOutRule: a change is refused when no active org admin's
-// identity issuer is among the providers left to sign in with, and allowed
-// while one is (G0 M18 D155).
+// TestHR484_LockOutRule: a change that leaves no active org admin a
+// provider to sign in with is refused; one that strands one of two admins
+// is allowed and names that admin; an admin who had no provider before is
+// not counted as stranded (G0 M18 D155, D162).
 //
 // Covers: PN-012.7
 func TestHR484_LockOutRule(t *testing.T) {
-	admins := []dbq.OrgAdminIssuersRow{{Issuer: "https://a.example.com", Admins: 1}, {Issuer: "https://b.example.com", Admins: 2}}
-	if err := lockOut(admins, map[string]bool{"https://b.example.com": true}); err != nil {
-		t.Fatalf("an admin can still sign in: %v", err)
+	alice, bob := ids.NewV7(), ids.NewV7()
+	const a, b, c = "https://a.example.com", "https://b.example.com", "https://c.example.com"
+	admins := []dbq.OrgAdminIdentitiesRow{{ID: alice, Issuer: a}, {ID: bob, Issuer: b}}
+	both := map[string]bool{a: true, b: true}
+
+	stranded, err := lockOut(admins, both, map[string]bool{b: true})
+	if err != nil || !slices.Equal(stranded, []ids.UUID{alice}) {
+		t.Fatalf("one of two stranded: %v %v", stranded, err)
 	}
-	if err := lockOut(admins, map[string]bool{"https://c.example.com": true}); !errors.Is(err, ErrLockOut) {
-		t.Fatalf("no admin can sign in: %v", err)
+	if _, err := lockOut(admins, both, map[string]bool{c: true}); !errors.Is(err, ErrLockOut) {
+		t.Fatalf("no admin left: %v", err)
 	}
-	if err := lockOut(admins, nil); !errors.Is(err, ErrLockOut) {
+	if _, err := lockOut(admins, both, nil); !errors.Is(err, ErrLockOut) {
 		t.Fatalf("no provider at all: %v", err)
+	}
+	stranded, err = lockOut(admins, map[string]bool{b: true}, map[string]bool{b: true})
+	if err != nil || len(stranded) != 0 {
+		t.Fatalf("an admin without a provider before is not stranded: %v %v", stranded, err)
 	}
 }
 

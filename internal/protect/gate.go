@@ -113,6 +113,9 @@ func (g *Gate) Register(s Surface, a Applier, st State) {
 // (package activation is TOOL_MEANING and CONSEQUENCE_RULES, D42a (2));
 // the first one that is on names the request.
 func (g *Gate) Hold(ctx context.Context, tx db.TenantTx, author tenancy.Caller, c Change, apply func(context.Context) error, fallback ...Category) (*PendingError, error) {
+	if g == nil && c.Surface.AlwaysProtected() {
+		return nil, ErrUnavailable // nothing can confirm it
+	}
 	if g == nil {
 		return nil, apply(ctx)
 	}
@@ -123,7 +126,9 @@ func (g *Gate) Hold(ctx context.Context, tx db.TenantTx, author tenancy.Caller, 
 		return nil, apply(ctx)
 	}
 	q := dbq.New(tx)
-	on := false
+	// A surface that is always protected waits whatever the modes say
+	// (HR-453).
+	on := c.Surface.AlwaysProtected()
 	for _, cat := range append([]Category{c.Category}, fallback...) {
 		mode, err := q.ProtectedCategoryMode(ctx, tx.OrgID(), string(cat))
 		if err != nil {
@@ -305,7 +310,7 @@ func (g *Gate) Apply(ctx context.Context, tx db.TenantTx, request ids.UUID, conf
 	if row.State != StatePending || row.Author == publisher {
 		return ErrState
 	}
-	if err := g.run(ctx, tx, row); err != nil {
+	if err := g.run(context.WithValue(ctx, publisherKey{}, publisher), tx, row); err != nil {
 		return err
 	}
 	p := publisher

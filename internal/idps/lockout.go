@@ -11,46 +11,58 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
-// guardLockOut refuses a change after which no active org admin has a
-// provider to sign in with (HR-484): without is the provider the change
-// disables (zero for none) and ownOnly the "own providers only" setting
-// after it. An admin signs in through a provider whose issuer is the one
-// of their identity: the org's ACTIVE providers, and the deployment's
-// unless the org uses its own only. An org without active admins has
-// nobody to lock out.
-func (s *Store) guardLockOut(ctx context.Context, tx db.TenantTx, without ids.UUID, ownOnly bool) error {
+// guardLockOut checks a change for lock-out (HR-484, D162): without is the
+// provider the change disables (zero for none) and ownOnly the "own
+// providers only" setting after it. An active org admin (an enabled
+// person holding org_admin at the org) signs in through a provider whose
+// issuer is the one of their identity: the org's ACTIVE providers, and
+// the deployment's unless the org uses its own only.
+//
+// It returns ErrLockOut when no active admin would have a provider left,
+// and otherwise the admins who would lose their last one, for the change
+// request and its notification. An org without active admins has nobody
+// to lock out.
+func (s *Store) guardLockOut(ctx context.Context, tx db.TenantTx, without ids.UUID, ownOnly bool) ([]ids.UUID, error) {
 	q := dbq.New(tx)
-	admins, err := q.OrgAdminIssuers(ctx, tx.OrgID())
-	if err != nil {
-		return err
-	}
-	if len(admins) == 0 {
-		return nil
-	}
-	issuers := map[string]bool{}
-	if !ownOnly {
-		for _, d := range s.Deployment {
-			issuers[d.Issuer] = true
-		}
+	admins, err := q.OrgAdminIdentities(ctx, tx.OrgID())
+	if err != nil || len(admins) == 0 {
+		return nil, err
 	}
 	own, err := q.ActiveOrgIdentityProviders(ctx, tx.OrgID())
 	if err != nil {
-		return err
+		return nil, err
+	}
+	nowOnly, err := s.OwnOnly(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	before, after := map[string]bool{}, map[string]bool{}
+	for _, d := range s.Deployment {
+		before[d.Issuer] = !nowOnly
+		after[d.Issuer] = !ownOnly
 	}
 	for _, p := range own {
-		if p.ID != without {
-			issuers[p.Issuer] = true
-		}
+		before[p.Issuer] = true
+		after[p.Issuer] = after[p.Issuer] || p.ID != without
 	}
-	return lockOut(admins, issuers)
+	return lockOut(admins, before, after)
 }
 
-// lockOut is ErrLockOut unless some admin's issuer is available.
-func lockOut(admins []dbq.OrgAdminIssuersRow, available map[string]bool) error {
+// lockOut is ErrLockOut when no admin's issuer is available after the
+// change, else the admins who had one before and have none after.
+func lockOut(admins []dbq.OrgAdminIdentitiesRow, before, after map[string]bool) ([]ids.UUID, error) {
+	var stranded []ids.UUID
+	left := false
 	for _, a := range admins {
-		if a.Admins > 0 && available[a.Issuer] {
-			return nil
+		switch {
+		case after[a.Issuer]:
+			left = true
+		case before[a.Issuer]:
+			stranded = append(stranded, a.ID)
 		}
 	}
-	return ErrLockOut
+	if !left {
+		return nil, ErrLockOut
+	}
+	return stranded, nil
 }

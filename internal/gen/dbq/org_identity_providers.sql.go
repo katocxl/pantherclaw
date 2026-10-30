@@ -304,32 +304,32 @@ func (q *Queries) LockOrgIdentityProviderSettings(ctx context.Context, orgID ids
 	return err
 }
 
-const orgAdminIssuers = `-- name: OrgAdminIssuers :many
-SELECT u.issuer, count(DISTINCT u.id)::bigint AS admins
+const orgAdminIdentities = `-- name: OrgAdminIdentities :many
+SELECT DISTINCT u.id, u.issuer
 FROM pc.role_bindings b
 JOIN pc.users u ON u.org_id = b.org_id AND u.id = b.user_id
 WHERE b.org_id = $1 AND b.role = 'org_admin' AND b.scope_type = 'ORG' AND u.state = 'ACTIVE'
-GROUP BY u.issuer
-ORDER BY u.issuer
+ORDER BY u.id
+LIMIT 1000
 `
 
-type OrgAdminIssuersRow struct {
+type OrgAdminIdentitiesRow struct {
+	ID     ids.UUID
 	Issuer string
-	Admins int64
 }
 
-// The identity issuers of the org's active admins (enabled users holding
-// org_admin at the org), for the lock-out guard (HR-484).
-func (q *Queries) OrgAdminIssuers(ctx context.Context, orgID ids.OrgID) ([]OrgAdminIssuersRow, error) {
-	rows, err := q.db.Query(ctx, orgAdminIssuers, orgID)
+// The org's active admins (enabled people holding org_admin at the org)
+// with their identity issuers, for the lock-out guard (HR-484, D162).
+func (q *Queries) OrgAdminIdentities(ctx context.Context, orgID ids.OrgID) ([]OrgAdminIdentitiesRow, error) {
+	rows, err := q.db.Query(ctx, orgAdminIdentities, orgID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []OrgAdminIssuersRow{}
+	items := []OrgAdminIdentitiesRow{}
 	for rows.Next() {
-		var i OrgAdminIssuersRow
-		if err := rows.Scan(&i.Issuer, &i.Admins); err != nil {
+		var i OrgAdminIdentitiesRow
+		if err := rows.Scan(&i.ID, &i.Issuer); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

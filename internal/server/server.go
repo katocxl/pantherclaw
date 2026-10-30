@@ -404,8 +404,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			log.WarnContext(ctx, "server.no_trusted_proxies", slog.String("note",
 				"behind a proxy without http.trusted_proxies: sign-in rate limits are shared by all clients of the proxy"))
 		}
-		device, err := devicehttp.New(authnapp.NewDevice(pool, tokens, cfg.Auth.PublicURL, idps, clock.System{}, log),
-			cfg.Auth.PublicURL, limiter, log)
+		orgIdPs := newM18IdPs(cfg, pool, kp, log)
+		device, err := devicehttp.New(authnapp.NewDevice(pool, tokens, cfg.Auth.PublicURL, idps, clock.System{}, log).
+			WithOrgProviders(orgIdPs.resolver), cfg.Auth.PublicURL, limiter, log)
 		if err != nil {
 			return err
 		}
@@ -413,6 +414,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err != nil {
 			return err
 		}
+		m5.browser.WithOrgProviders(orgIdPs.resolver)
 		ui.wireBrowser(m5.browser, web)
 		m6.mountPages(web)
 		m5p2.mountPages(web, m5)
@@ -464,6 +466,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			workers:      workers,
 			hold:         cfg.Maintenance.Hold,
 			data:         dataRequests,
+			idps:         orgIdPs,
 		})
 		if err != nil {
 			return err
@@ -696,6 +699,8 @@ func publicProcedures() []string {
 // call the Authority only on the mTLS gateway listener (HR-181).
 type apiDeps struct {
 	data *datarequests.Service
+	// idps are the organization identity providers (G0 M18 D155).
+	idps m18IdPs
 	pool *db.Pool
 	// cel are the configured CEL limits (cel).
 	cel       celenv.Limits
@@ -866,6 +871,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		return nil, err
 	}
 	registerM11Protect(rs, d, autos)
+	registerM18IdPs(rs, d)
 	authzen := registerAuthZEN(rs, d)
 	registerUITenancy(rs, d)
 	registerUsage(rs, d)

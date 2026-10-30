@@ -56,7 +56,7 @@ func TestTenancy_org_identity_providers(t *testing.T) {
 	}
 	b.mustExec(t, "UPDATE pc.org_identity_providers SET client_id = 'x'")
 	b.mustExec(t, "UPDATE pc.org_identity_provider_settings SET own_providers_only = false")
-	b.want(t, m5Denied, "a provider in another org", m18idpsInsert, a.org, m5ID(), "other", "https://idp.example.com", m5Secret(1), b.user)
+	b.want(t, m5Check, "a provider in another org (org write guard)", m18idpsInsert, a.org, m5ID(), "other", "https://idp.example.com", m5Secret(1), b.user)
 	if n := m10Count(t, p, a.org, "SELECT count(*) FROM pc.org_identity_providers WHERE client_id = 'client'"); n != 1 {
 		t.Fatalf("another org changed our provider: %d", n)
 	}

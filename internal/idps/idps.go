@@ -259,7 +259,7 @@ func (s *Store) Put(ctx context.Context, tx db.TenantTx, by evdomain.Actor, auth
 	if err != nil {
 		return err
 	}
-	return record(ctx, tx, by, "identity_provider.activated", p, "secret_changed", fmt.Sprint(c.SealedSecret != nil))
+	return record(ctx, tx, by, "identity_provider.activated", p, "client_auth_changed", fmt.Sprint(c.SealedSecret != nil))
 }
 
 // Disable turns provider id off, unless that leaves no active org admin a
@@ -279,11 +279,7 @@ func (s *Store) Disable(ctx context.Context, tx db.TenantTx, by evdomain.Actor, 
 	if cur.State == StateDisabled {
 		return ErrState
 	}
-	own, err := s.OwnOnly(ctx, tx)
-	if err != nil {
-		return err
-	}
-	if err := s.guardLockOut(ctx, tx, id, own); err != nil {
+	if _, err := s.StrandedByDisable(ctx, tx, id); err != nil {
 		return err
 	}
 	a := author
@@ -310,10 +306,8 @@ func (s *Store) SetOwnOnly(ctx context.Context, tx db.TenantTx, by evdomain.Acto
 	if err := q.LockOrgIdentityProviderSettings(ctx, org.UUID()); err != nil {
 		return err
 	}
-	if on {
-		if err := s.guardLockOut(ctx, tx, ids.UUID{}, true); err != nil {
-			return err
-		}
+	if _, err := s.StrandedByOwnOnly(ctx, tx, on); err != nil {
+		return err
 	}
 	if err := q.SetOwnProvidersOnly(ctx, org, on, author); err != nil {
 		return err
@@ -324,6 +318,25 @@ func (s *Store) SetOwnOnly(ctx context.Context, tx db.TenantTx, by evdomain.Acto
 		Details: map[string]string{"own_providers_only": fmt.Sprint(on)},
 	})
 	return err
+}
+
+// StrandedByDisable checks disabling provider id for lock-out (HR-484):
+// ErrLockOut, or the active admins who would lose their last provider.
+func (s *Store) StrandedByDisable(ctx context.Context, tx db.TenantTx, id ids.UUID) ([]ids.UUID, error) {
+	own, err := s.OwnOnly(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	return s.guardLockOut(ctx, tx, id, own)
+}
+
+// StrandedByOwnOnly checks setting "own providers only" to on the same
+// way; turning it off strands nobody.
+func (s *Store) StrandedByOwnOnly(ctx context.Context, tx db.TenantTx, on bool) ([]ids.UUID, error) {
+	if !on {
+		return nil, nil
+	}
+	return s.guardLockOut(ctx, tx, ids.UUID{}, true)
 }
 
 // OwnOnly reports whether the org signs in with its own providers alone.
