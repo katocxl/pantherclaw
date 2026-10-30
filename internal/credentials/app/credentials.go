@@ -70,6 +70,12 @@ type Service struct {
 	// protect holds uploads for a distinct publisher when the org protects
 	// CUSTODY (WithProtect, G0 M11 D42); nil holds none.
 	protect *protect.Gate
+	// preview is the digest of who shares a credential, which a rotation
+	// request confirms (WithRotations).
+	preview Previewer
+	// changed, when set, runs in the transaction of every rotation change:
+	// it enqueues the org's exposure and posture recompute (D259, D274).
+	changed func(ctx context.Context, tx db.TenantTx) error
 }
 
 // OnGitHubInstallation sets what runs, in the sealing transaction, when a
@@ -264,6 +270,7 @@ func (s *Service) WithProtect(g *protect.Gate) *Service {
 	s.protect = g
 	if g != nil {
 		g.Register(protect.SurfaceCredentialPut, s.ApplyProtectedPut, s.ProtectedPutState)
+		g.Register(protect.SurfaceCredentialRotate, s.ApplyProtectedRotate, s.ProtectedRotateState)
 	}
 	return s
 }
@@ -291,35 +298,15 @@ func (s *Service) put(ctx context.Context, tx db.TenantTx, c tenancy.Caller, in 
 	var pending *protect.PendingError
 	err := func() error {
 		q := dbq.New(tx)
-		conn, err := held(q.LockConnection(ctx, c.Org, in.Connection))
+		conn, key, err := sealable(ctx, q, c.Org, in)
 		if err != nil {
 			return err
 		}
-		if err := checkPattern(ctx, q, conn, in.Kind); err != nil {
+		// A rotation in progress owns the connection's credential (G0 M20 S20c).
+		if _, err := q.OpenCredentialRotation(ctx, c.Org, conn.ID); err == nil {
+			return ErrRotationOpen
+		} else if !db.IsNoRows(err) {
 			return err
-		}
-		if err := live(q.LockGateway(ctx, c.Org, conn.GatewayID)); err != nil {
-			return err
-		}
-		key, err := q.GetActiveBrokerKey(ctx, c.Org, conn.GatewayID)
-		if db.IsNoRows(err) {
-			return ErrNoBrokerKey
-		} else if err != nil {
-			return err
-		}
-		if key.ID != in.BrokerKey {
-			return ErrStaleKey
-		}
-		next, err := q.NextCredentialVersion(ctx, c.Org, conn.ID)
-		if err != nil {
-			return err
-		}
-		if in.Version != next {
-			return ErrStale
-		}
-		want, got := slices.Sorted(slices.Values(conn.AllowedHosts)), slices.Sorted(slices.Values(in.AllowedHosts))
-		if !slices.Equal(want, got) || in.Header != deref(conn.CredentialHeader) || in.Scheme != deref(conn.CredentialScheme) {
-			return ErrBinding
 		}
 		pending, err = s.protect.Hold(ctx, tx, c, credentialChange(conn, key, in), func(ctx context.Context) error {
 			replaced, err := q.SupersedeCredentials(ctx, c.Org, conn.ID)
@@ -476,4 +463,42 @@ func (s *Service) ProtectedPutState(ctx context.Context, tx db.TenantTx, payload
 		return nil, err
 	}
 	return fmt.Appendf(nil, "%s/%d/%s/%d/%s", conn.ID, conn.Revision, conn.State, next, key), nil
+}
+
+// sealable checks an upload against the connection it is for, with the
+// connection and its gateway locked: a held connection, its credential
+// pattern, an active gateway, its current broker key, the next version and
+// the binding it was sealed for.
+func sealable(ctx context.Context, q *dbq.Queries, org ids.OrgID, in PutInput) (dbq.PcConnection, dbq.PcBrokerKey, error) {
+	conn, err := held(q.LockConnection(ctx, org, in.Connection))
+	if err != nil {
+		return conn, dbq.PcBrokerKey{}, err
+	}
+	if err := checkPattern(ctx, q, conn, in.Kind); err != nil {
+		return conn, dbq.PcBrokerKey{}, err
+	}
+	if err := live(q.LockGateway(ctx, org, conn.GatewayID)); err != nil {
+		return conn, dbq.PcBrokerKey{}, err
+	}
+	key, err := q.GetActiveBrokerKey(ctx, org, conn.GatewayID)
+	if db.IsNoRows(err) {
+		return conn, key, ErrNoBrokerKey
+	} else if err != nil {
+		return conn, key, err
+	}
+	if key.ID != in.BrokerKey {
+		return conn, key, ErrStaleKey
+	}
+	next, err := q.NextCredentialVersion(ctx, org, conn.ID)
+	if err != nil {
+		return conn, key, err
+	}
+	if in.Version != next {
+		return conn, key, ErrStale
+	}
+	want, got := slices.Sorted(slices.Values(conn.AllowedHosts)), slices.Sorted(slices.Values(in.AllowedHosts))
+	if !slices.Equal(want, got) || in.Header != deref(conn.CredentialHeader) || in.Scheme != deref(conn.CredentialScheme) {
+		return conn, key, ErrBinding
+	}
+	return conn, key, nil
 }

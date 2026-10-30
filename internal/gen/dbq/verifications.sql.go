@@ -753,9 +753,11 @@ const releaseExpiredLeases = `-- name: ReleaseExpiredLeases :many
 UPDATE pc.verifications
 SET state = CASE WHEN deadline_at <= now() OR (purpose = 'connection_test' AND attempts >= $1::integer)
                       OR (purpose = 'org_scan' AND attempts >= 3)
+                      OR (purpose IN ('credential_rotation_test', 'credential_rotation_confirm') AND attempts >= 3)
                  THEN 'EXPIRED' ELSE 'PENDING' END,
     finished_at = CASE WHEN deadline_at <= now() OR (purpose = 'connection_test' AND attempts >= $1::integer)
                             OR (purpose = 'org_scan' AND attempts >= 3)
+                            OR (purpose IN ('credential_rotation_test', 'credential_rotation_confirm') AND attempts >= 3)
                        THEN now() END,
     lease_hash = NULL, leased_by = NULL, leased_at = NULL, lease_expires_at = NULL
 WHERE org_id = $2 AND state = 'LEASED' AND lease_expires_at < now()
@@ -772,7 +774,8 @@ type ReleaseExpiredLeasesRow struct {
 // or ends them when the task's deadline passed too, when it is a
 // connection test leased max_test_attempts times (HR-188), or when it is an
 // organization scan leased three times, each a whole scan's worth of the
-// installation's API quota (HR-209).
+// installation's API quota (HR-209), or a rotation test or confirmation
+// leased three times (G0 M20 S20c).
 func (q *Queries) ReleaseExpiredLeases(ctx context.Context, maxTestAttempts int32, orgID ids.OrgID) ([]ReleaseExpiredLeasesRow, error) {
 	rows, err := q.db.Query(ctx, releaseExpiredLeases, maxTestAttempts, orgID)
 	if err != nil {

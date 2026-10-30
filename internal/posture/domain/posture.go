@@ -35,12 +35,17 @@ const (
 	UnusedAuthority         Kind = "unused_authority"
 	UnverifiedSensitiveTool Kind = "unverified_sensitive_tool"
 	CredentialOverreach     Kind = "credential_overreach" //nolint:gosec // G101: a finding kind, not a credential
+	// UnconfirmedRotation: a GitHub App key rotation whose old key GitHub has
+	// not been shown to refuse, 24 hours after the rollback window closed
+	// (G0 M20 S20c, D259).
+	UnconfirmedRotation Kind = "unconfirmed_rotation"
 )
 
 // Kinds lists every kind.
 var Kinds = []Kind{
 	ExcessiveGrant, UncoveredPath, UnownedAgent, UnsafeDelegation, StaleCredential, UnusedAuthority,
 	UnverifiedSensitiveTool, CredentialOverreach,
+	UnconfirmedRotation,
 }
 
 // State is a finding's lifecycle state (D30).
@@ -167,6 +172,8 @@ type Inputs struct {
 	Unverified map[string]bool
 	// Irreversible names the irreversible operations.
 	Irreversible map[string]bool
+	// Rotations are the activated, unconfirmed GitHub App key rotations.
+	Rotations []RotationInfo
 }
 
 // Thresholds.
@@ -278,6 +285,21 @@ func Derive(in Inputs) []Candidate {
 			Kind: StaleCredential, RootCause: "connection:" + conn.String(), Connection: &conn,
 			Title: "Credential not rotated in 90 days", Severity: "medium",
 			Detail: map[string]string{"age_days": strconv.Itoa(int(in.Now.Sub(c.CreatedAt).Hours() / 24))},
+		}, paths...)
+	}
+	for _, r := range in.Rotations {
+		if r.Since.IsZero() || in.Now.Sub(r.Since) <= UnconfirmedAfter {
+			continue
+		}
+		conn := r.Connection
+		paths := credentialPaths(in.Rights, conn)
+		if len(paths) == 0 {
+			paths = []string{exposure.PathKey(nil, &conn, "", "credential:"+r.Name, exposure.VerbRead)}
+		}
+		d.add(Candidate{
+			Kind: UnconfirmedRotation, RootCause: "connection:" + conn.String(), Connection: &conn,
+			Title: "GitHub App key rotation not confirmed: the old key may still work", Severity: "medium",
+			Detail: map[string]string{"rotation": r.ID.String(), "awaiting_hours": strconv.Itoa(int(in.Now.Sub(r.Since).Hours()))},
 		}, paths...)
 	}
 	for _, f := range in.CoverageFindings {
@@ -569,5 +591,18 @@ const MaxPaths = 256
 // are remediated only when none of their affected paths is reachable
 // (HR-255, D63 M1).
 func (k Kind) CauseType() bool {
-	return k == UnownedAgent || k == UnverifiedSensitiveTool || k == StaleCredential
+	return k == UnownedAgent || k == UnverifiedSensitiveTool || k == StaleCredential || k == UnconfirmedRotation
 }
+
+// RotationInfo is what derivation reads of an activated, unconfirmed
+// GitHub App key rotation (G0 M20 S20c, D259): since when it awaits the
+// old key's removal (zero while its rollback window is open).
+type RotationInfo struct {
+	ID, Connection ids.UUID
+	Name           string
+	Since          time.Time
+}
+
+// UnconfirmedAfter is how long a rotation may await the old key's removal
+// (AWAITING_OLD_REMOVAL or CONFIRMING) before it is a finding.
+const UnconfirmedAfter = 24 * time.Hour
