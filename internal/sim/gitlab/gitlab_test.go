@@ -23,8 +23,10 @@ const (
 
 func start(t *testing.T) (*Server, string) {
 	t.Helper()
-	s := New([]Project{{ID: 42, Path: "acme/payments", DefaultBranch: "main", PipelineMustSucceed: true,
-		Protected: map[string]Protection{"main": {}}}},
+	s := New([]Project{{
+		ID: 42, Path: "acme/payments", DefaultBranch: "main", PipelineMustSucceed: true,
+		Protected: map[string]Protection{"main": {}},
+	}},
 		[]MergeRequest{{Project: 42, IID: 7, Title: "Fix", Source: "fix", Target: "main", SHA: head, Author: "dev", ApprovalsRequired: 1, Pipeline: 900}},
 		[]Pipeline{{ID: 900, Project: 42, Ref: "fix", SHA: head, Status: PipelineSuccess, Source: "push"}},
 		Faults{}, pclog.Discard()).WithRequire(Require{Token: token})
