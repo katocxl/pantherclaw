@@ -8,12 +8,19 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"sync"
+	"time"
 
 	"connectrpc.com/connect/v2"
+	"github.com/riverqueue/river"
 
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/keystore"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/jobs"
+	"github.com/katocxl/pantherclaw/internal/platform/keys"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 	"github.com/katocxl/pantherclaw/internal/webhookkeys"
 	"github.com/katocxl/pantherclaw/internal/webhookkeys/webhookkeysrpc"
@@ -43,11 +50,23 @@ type webhookJWKS interface {
 // does not tell orgs apart.
 var emptyJWKS = []byte(`{"keys":[]}`)
 
+// webhookJWKSRateLimit is how many JWKS requests one client address may make
+// a minute (D271): receivers cache the document, so this only stops floods.
+const webhookJWKSRateLimit = 60
+
 // mountWebhookJWKS serves GET /.well-known/pantherclaw/orgs/{org}/webhook-jwks.json
 // (D251), public like the platform JWKS. Receivers of opted-in webhooks
-// verify `v1a,` signatures with it.
-func mountWebhookJWKS(mux *http.ServeMux, src webhookJWKS, log *slog.Logger) {
+// verify `v1a,` signatures with it. It is rate limited per client address
+// (clientIP, nil for the direct peer) and the keystore serves it from
+// memory, so a flood of org ids never reaches the database (D271).
+func mountWebhookJWKS(mux *http.ServeMux, src webhookJWKS, clientIP httpx.ClientIPFunc, log *slog.Logger) {
+	limiter := httpx.NewLimiter(webhookJWKSRateLimit, time.Minute, nil).WithClientIP(clientIP)
 	mux.HandleFunc("GET /.well-known/pantherclaw/orgs/{org}/webhook-jwks.json", func(w http.ResponseWriter, r *http.Request) {
+		if !limiter.AllowRequest(r) {
+			w.Header().Set("Retry-After", "60")
+			http.Error(w, "too many requests", http.StatusTooManyRequests)
+			return
+		}
 		org, err := ids.Parse[ids.Org](r.PathValue("org"))
 		if err != nil || org == ids.PlatformOrg {
 			http.NotFound(w, r)
@@ -73,7 +92,7 @@ func webhookJWKSOf(d apiDeps) webhookJWKS {
 	if d.pool == nil || d.kp == nil {
 		return nil
 	}
-	return keystore.NewWebhookKeys(d.pool, d.kp)
+	return processWebhookKeys(d.pool, d.kp)
 }
 
 // registerM20Webhooks serves WebhookKeyService (D261).
@@ -81,6 +100,35 @@ func registerM20Webhooks(rs *connect.Server, d apiDeps) {
 	if d.pool == nil || d.kp == nil {
 		return
 	}
-	svc := webhookkeys.New(d.pool, keystore.NewWebhookKeys(d.pool, d.kp), d.publicURL)
+	svc := webhookkeys.New(d.pool, processWebhookKeys(d.pool, d.kp), d.publicURL)
 	pantherclawv1connect.RegisterWebhookKeyServiceHandler(rs, webhookkeysrpc.New(svc))
+}
+
+// processKeys holds one webhook key store per pool in this process, so the
+// senders, the JWKS route and WebhookKeyService share its caches: a
+// rotation or a first key here drops the cached JWKS at once (D271).
+var processKeys = struct {
+	sync.Mutex
+	m map[*db.Pool]*keystore.WebhookKeys
+}{m: map[*db.Pool]*keystore.WebhookKeys{}}
+
+func processWebhookKeys(pool *db.Pool, kp keys.KeyProvider) *keystore.WebhookKeys {
+	processKeys.Lock()
+	defer processKeys.Unlock()
+	w, ok := processKeys.m[pool]
+	if !ok {
+		w = keystore.NewWebhookKeys(pool, kp)
+		processKeys.m[pool] = w
+	}
+	return w
+}
+
+// registerM20WebhookJobs adds the hourly sweep that revokes expired
+// RETIRING webhook keys (D271, HR-512).
+func registerM20WebhookJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, pool *db.Pool, kp keys.KeyProvider, log *slog.Logger,
+) ([]*river.PeriodicJob, error) {
+	if err := webhookkeys.RegisterJobs(reg, pool, processWebhookKeys(pool, kp), log); err != nil {
+		return nil, err
+	}
+	return append(periodic, webhookkeys.PeriodicJobs()...), nil
 }

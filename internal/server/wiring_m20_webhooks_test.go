@@ -32,7 +32,7 @@ func TestHR511_WebhookJWKSRouteServesThePathsOrgOnly(t *testing.T) {
 	a, b := ids.New[ids.Org](), ids.New[ids.Org]()
 	src := orgJWKS{a: `{"keys":[{"kid":"webhooks-a"}]}`, b: `{"keys":[{"kid":"webhooks-b"}]}`}
 	mux := http.NewServeMux()
-	mountWebhookJWKS(mux, src, pclog.Discard())
+	mountWebhookJWKS(mux, src, nil, pclog.Discard())
 	get := func(org string) (int, string, string) {
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/.well-known/pantherclaw/orgs/"+org+"/webhook-jwks.json", nil))
@@ -55,8 +55,35 @@ func TestHR511_WebhookJWKSRouteServesThePathsOrgOnly(t *testing.T) {
 	}
 	// Without a source the route serves the empty set.
 	mux = http.NewServeMux()
-	mountWebhookJWKS(mux, nil, pclog.Discard())
+	mountWebhookJWKS(mux, nil, nil, pclog.Discard())
 	if code, body, _ := get(a.String()); code != http.StatusOK || body != string(emptyJWKS) {
 		t.Fatalf("no source: %d %s", code, body)
+	}
+}
+
+// TestHR511_WebhookJWKSRouteIsRateLimitedPerClient: one client address
+// gets webhookJWKSRateLimit requests a minute, then 429 with Retry-After;
+// another address is unaffected (D271).
+// Covers: PN-018
+func TestHR511_WebhookJWKSRouteIsRateLimitedPerClient(t *testing.T) {
+	mux := http.NewServeMux()
+	mountWebhookJWKS(mux, nil, nil, pclog.Discard())
+	get := func(addr string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/.well-known/pantherclaw/orgs/"+ids.New[ids.Org]().String()+"/webhook-jwks.json", nil)
+		req.RemoteAddr = addr
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+	for i := range webhookJWKSRateLimit {
+		if rec := get("203.0.113.7:4000"); rec.Code != http.StatusOK {
+			t.Fatalf("request %d: %d", i+1, rec.Code)
+		}
+	}
+	if rec := get("203.0.113.7:4001"); rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") == "" {
+		t.Fatalf("over the limit: %d %q", rec.Code, rec.Header().Get("Retry-After"))
+	}
+	if rec := get("198.51.100.9:4000"); rec.Code != http.StatusOK {
+		t.Fatalf("another client: %d", rec.Code)
 	}
 }

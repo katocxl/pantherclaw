@@ -32,6 +32,12 @@ const (
 	// before reading the org's ACTIVE key again. A key rotated elsewhere
 	// keeps verifying for the overlap, far longer than this.
 	webhookKeyCache = time.Minute
+	// webhookJWKSCache is how long a process serves an org's JWKS document
+	// from memory (D271); a rotation or a first key in this process drops it.
+	webhookJWKSCache = time.Minute
+	// maxCachedJWKS bounds the JWKS cache: the public route takes any org
+	// id, so past this many entries the cache starts over.
+	maxCachedJWKS = 10_000
 )
 
 // Webhook key errors.
@@ -65,6 +71,13 @@ type WebhookKeys struct {
 
 	mu    sync.Mutex
 	cache map[ids.OrgID]cachedWebhookKey
+	// jwks caches each org's JWKS document, an unknown org's empty set too.
+	jwks map[ids.OrgID]cachedJWKS
+}
+
+type cachedJWKS struct {
+	doc []byte
+	at  time.Time
 }
 
 type cachedWebhookKey struct {
@@ -75,7 +88,7 @@ type cachedWebhookKey struct {
 
 // NewWebhookKeys returns the per-org webhook key store.
 func NewWebhookKeys(pool *db.Pool, kp keys.KeyProvider) *WebhookKeys {
-	return &WebhookKeys{pool: pool, kp: kp, now: time.Now, cache: map[ids.OrgID]cachedWebhookKey{}}
+	return &WebhookKeys{pool: pool, kp: kp, now: time.Now, cache: map[ids.OrgID]cachedWebhookKey{}, jwks: map[ids.OrgID]cachedJWKS{}}
 }
 
 func tenantOrg(org ids.OrgID) error {
@@ -87,6 +100,14 @@ func tenantOrg(org ids.OrgID) error {
 
 func overlapSeconds() int32 { return int32(WebhookKeyOverlap / time.Second) }
 
+// forget drops org's cached signing key and JWKS after its keys changed.
+func (w *WebhookKeys) forget(org ids.OrgID) {
+	w.mu.Lock()
+	delete(w.cache, org)
+	delete(w.jwks, org)
+	w.mu.Unlock()
+}
+
 // EnsureWebhookKey returns the kid of org's ACTIVE webhooks key, creating
 // (and auditing) it when the org has none.
 func (w *WebhookKeys) EnsureWebhookKey(ctx context.Context, org ids.OrgID) (string, error) {
@@ -94,6 +115,7 @@ func (w *WebhookKeys) EnsureWebhookKey(ctx context.Context, org ids.OrgID) (stri
 		return "", err
 	}
 	var kid string
+	created := false
 	err := w.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		if err := q.LockKeystore(ctx, org.UUID()); err != nil {
@@ -109,9 +131,13 @@ func (w *WebhookKeys) EnsureWebhookKey(ctx context.Context, org ids.OrgID) (stri
 				return nil
 			}
 		}
+		created = true
 		kid, err = createSigningKey(ctx, tx, w.kp, nil, keys.PurposeWebhooks, Actor)
 		return err
 	})
+	if created && err == nil {
+		w.forget(org)
+	}
 	return kid, err
 }
 
@@ -206,8 +232,33 @@ func (w *WebhookKeys) ListWebhookKeys(ctx context.Context, org ids.OrgID) ([]Web
 }
 
 // WebhookJWKS is org's webhook JWKS document: its ACTIVE and live RETIRING
-// webhooks keys, sorted by kid, and no other org's (HR-511, HR-512).
+// webhooks keys, sorted by kid, and no other org's (HR-511, HR-512). The
+// public route serves it, so it is kept in memory for webhookJWKSCache
+// (D271), an unknown org's empty set included.
 func (w *WebhookKeys) WebhookJWKS(ctx context.Context, org ids.OrgID) ([]byte, error) {
+	if err := tenantOrg(org); err != nil {
+		return nil, err
+	}
+	w.mu.Lock()
+	c, ok := w.jwks[org]
+	w.mu.Unlock()
+	if ok && w.now().Sub(c.at) < webhookJWKSCache {
+		return c.doc, nil
+	}
+	doc, err := w.buildJWKS(ctx, org)
+	if err != nil {
+		return nil, err
+	}
+	w.mu.Lock()
+	if len(w.jwks) >= maxCachedJWKS {
+		w.jwks = map[ids.OrgID]cachedJWKS{}
+	}
+	w.jwks[org] = cachedJWKS{doc: doc, at: w.now()}
+	w.mu.Unlock()
+	return doc, nil
+}
+
+func (w *WebhookKeys) buildJWKS(ctx context.Context, org ids.OrgID) ([]byte, error) {
 	ks, err := w.ListWebhookKeys(ctx, org)
 	if err != nil {
 		return nil, err
@@ -247,24 +298,12 @@ func (w *WebhookKeys) RotateWebhookKey(ctx context.Context, org ids.OrgID, actor
 			return err
 		}
 		for _, r := range rows {
-			if r.State != string(keys.StateRetiring) {
-				continue
-			}
-			if r.Live {
+			if r.State == string(keys.StateRetiring) && r.Live {
 				return ErrWebhookKeyRotating
 			}
-			if err := db.ExpectOneRow(q.TransitionSigningKey(ctx, dbq.TransitionSigningKeyParams{
-				OrgID: org, Kid: r.Kid, FromState: string(keys.StateRetiring), ToState: string(keys.StateRevoked),
-			})); err != nil {
-				return err
-			}
-			if _, err := audit.Record(ctx, tx, audit.Event{
-				Name: "signing_key.revoked", Actor: actor, Outcome: audit.Success,
-				Object:  &audit.Object{Type: "signing_key", ID: r.Kid},
-				Details: map[string]string{"purpose": string(keys.PurposeWebhooks), "reason": "overlap_ended"},
-			}); err != nil {
-				return err
-			}
+		}
+		if _, err := revokeExpired(ctx, tx, q, rows, actor); err != nil {
+			return err
 		}
 		for _, r := range rows {
 			if r.State == string(keys.StateActive) {
@@ -286,8 +325,60 @@ func (w *WebhookKeys) RotateWebhookKey(ctx context.Context, org ids.OrgID, actor
 	if err != nil {
 		return "", "", err
 	}
-	w.mu.Lock()
-	delete(w.cache, org)
-	w.mu.Unlock()
+	w.forget(org)
 	return newKID, retiringKID, nil
+}
+
+// revokeExpired moves the RETIRING webhooks keys in rows whose overlap has
+// ended to REVOKED, each audited `overlap_ended` (HR-512: "then is gone").
+func revokeExpired(ctx context.Context, tx db.TenantTx, q *dbq.Queries, rows []dbq.ListWebhookKeysRow, actor domain.Actor) (int, error) {
+	n := 0
+	for _, r := range rows {
+		if r.State != string(keys.StateRetiring) || r.Live {
+			continue
+		}
+		if err := db.ExpectOneRow(q.TransitionSigningKey(ctx, dbq.TransitionSigningKeyParams{
+			OrgID: tx.OrgID(), Kid: r.Kid, FromState: string(keys.StateRetiring), ToState: string(keys.StateRevoked),
+		})); err != nil {
+			return n, err
+		}
+		if _, err := audit.Record(ctx, tx, audit.Event{
+			Name: "signing_key.revoked", Actor: actor, Outcome: audit.Success,
+			Object:  &audit.Object{Type: "signing_key", ID: r.Kid},
+			Details: map[string]string{"purpose": string(keys.PurposeWebhooks), "reason": "overlap_ended"},
+		}); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
+}
+
+// RevokeExpiredWebhookKeys revokes org's RETIRING webhooks keys whose
+// overlap has ended, as the keystore (the sweep, D271), and returns how
+// many it revoked.
+func (w *WebhookKeys) RevokeExpiredWebhookKeys(ctx context.Context, org ids.OrgID) (int, error) {
+	if err := tenantOrg(org); err != nil {
+		return 0, err
+	}
+	n := 0
+	err := w.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		if err := q.LockKeystore(ctx, org.UUID()); err != nil {
+			return err
+		}
+		rows, err := q.ListWebhookKeys(ctx, overlapSeconds(), org)
+		if err != nil {
+			return err
+		}
+		n, err = revokeExpired(ctx, tx, q, rows, Actor)
+		return err
+	})
+	if err != nil {
+		return 0, err
+	}
+	if n > 0 {
+		w.forget(org)
+	}
+	return n, nil
 }

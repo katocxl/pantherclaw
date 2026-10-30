@@ -46,7 +46,7 @@ func newM5(ctx context.Context, cfg *Config, pool *db.Pool, kp keys.KeyProvider,
 		return nil, err
 	}
 	notif.SetEditions(bill)
-	notif.SetWebhookKeys(keystore.NewWebhookKeys(pool, kp))
+	notif.SetWebhookKeys(processWebhookKeys(pool, kp))
 	probeM14("m14.notifications", notif)
 	if err := cfg.devSlack(notif); err != nil {
 		return nil, err

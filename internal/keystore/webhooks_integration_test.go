@@ -195,6 +195,9 @@ func TestHR512_ARotatedWebhookKeyVerifiesFor24HoursThenIsGone(t *testing.T) {
 	}
 
 	// After the overlap the old key is gone from the JWKS and the list.
+	// (Read as a fresh process: this one serves its JWKS from memory for a
+	// minute, D271.)
+	w = keystore.NewWebhookKeys(f.p, f.kp)
 	set = jwks(t, w, f.a)
 	if _, ok := set[old]; ok || len(set) != 1 {
 		t.Fatalf("JWKS after the overlap %v", set)
@@ -256,5 +259,94 @@ func TestT222_WebhookKeyMisuseAcrossOrgs(t *testing.T) {
 	sig, err := keystore.NewWebhookKeys(f.p, f.kp).SignWebhook(ctx, f.a, []byte("x"))
 	if err != nil || !ed25519.Verify(jwks(t, w, f.a)[ka], []byte("x"), sig) {
 		t.Fatalf("org a after the tampering: %v", err)
+	}
+}
+
+// TestHR512_TheSweepRevokesExpiredRetiringKeys: the sweep leaves an
+// ACTIVE key and a RETIRING key within its overlap alone, and moves a
+// RETIRING key whose 24 hours have ended to REVOKED, audited
+// `overlap_ended` by the keystore; a second sweep finds nothing (D271).
+// Covers: PN-018
+func TestHR512_TheSweepRevokesExpiredRetiringKeys(t *testing.T) {
+	f := newWebhookFixture(t)
+	ctx := context.Background()
+	w := keystore.NewWebhookKeys(f.p, f.kp)
+	old, err := w.EnsureWebhookKey(ctx, f.a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := w.RotateWebhookKey(ctx, f.a, person, nil); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := w.RevokeExpiredWebhookKeys(ctx, f.a); err != nil || n != 0 {
+		t.Fatalf("sweep within the overlap: %d %v", n, err)
+	}
+	f.d.AdminExec(t, "UPDATE pc.keys SET state_changed_at = now() - interval '25 hours' WHERE kid = $1", old)
+	if n, err := w.RevokeExpiredWebhookKeys(ctx, f.a); err != nil || n != 1 {
+		t.Fatalf("sweep after the overlap: %d %v", n, err)
+	}
+	if n := f.count(t, f.a, "SELECT count(*) FROM pc.keys WHERE state = 'REVOKED' AND kid = '"+old+"'"); n != 1 {
+		t.Fatal("the expired key is not REVOKED")
+	}
+	if n := f.count(t, f.a, `SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.signing_key.revoked' AND actor_id = 'keystore'
+		AND convert_from(body, 'UTF8')::jsonb -> 'details' ->> 'reason' = 'overlap_ended'`); n != 1 {
+		t.Fatalf("revocation audits %d", n)
+	}
+	if n := f.count(t, f.a, "SELECT count(*) FROM pc.keys WHERE purpose = 'webhooks' AND state = 'ACTIVE'"); n != 1 {
+		t.Fatal("the sweep touched the ACTIVE key")
+	}
+	if n, err := w.RevokeExpiredWebhookKeys(ctx, f.a); err != nil || n != 0 {
+		t.Fatalf("second sweep: %d %v", n, err)
+	}
+	if _, err := w.RevokeExpiredWebhookKeys(ctx, ids.PlatformOrg); err == nil {
+		t.Fatal("the sweep ran for the platform org")
+	}
+}
+
+// TestHR511_TheJWKSIsServedFromMemory: the JWKS, an unknown org's empty
+// set included, is read once per minute per process; a first key or a
+// rotation in this process shows at once, one made by another process
+// shows when the minute is up (D271).
+// Covers: PN-018
+func TestHR511_TheJWKSIsServedFromMemory(t *testing.T) {
+	f := newWebhookFixture(t)
+	ctx := context.Background()
+	now := time.Now()
+	w := keystore.NewWebhookKeys(f.p, f.kp)
+	w.SetClock(func() time.Time { return now })
+	other := keystore.NewWebhookKeys(f.p, f.kp)
+	if set := jwks(t, w, f.a); len(set) != 0 {
+		t.Fatalf("empty org %v", set)
+	}
+	// Another process makes the key: this one keeps its cached empty set.
+	ka, err := other.EnsureWebhookKey(ctx, f.a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if set := jwks(t, w, f.a); len(set) != 0 {
+		t.Fatalf("the cached JWKS was read again: %v", set)
+	}
+	now = now.Add(61 * time.Second)
+	if set := jwks(t, w, f.a); len(set) != 1 || set[ka] == nil {
+		t.Fatalf("after the minute %v", set)
+	}
+	// A rotation in this process shows at once.
+	next, _, err := w.RotateWebhookKey(ctx, f.a, person, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if set := jwks(t, w, f.a); len(set) != 2 || set[next] == nil {
+		t.Fatalf("after a rotation here %v", set)
+	}
+	// So does a first key made in this process.
+	if set := jwks(t, w, f.b); len(set) != 0 {
+		t.Fatalf("org b %v", set)
+	}
+	kb, err := w.EnsureWebhookKey(ctx, f.b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if set := jwks(t, w, f.b); len(set) != 1 || set[kb] == nil {
+		t.Fatalf("org b after its first key %v", set)
 	}
 }
