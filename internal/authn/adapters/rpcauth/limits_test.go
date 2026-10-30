@@ -310,3 +310,43 @@ func TestHR490_AStoreErrorRefusesButSafetyCalls(t *testing.T) {
 		t.Fatalf("a safety call with the counter down: %d", st)
 	}
 }
+
+// stalledShared is a shared counter that hangs for stall, then fails.
+type stalledShared struct{ stall time.Duration }
+
+func (s stalledShared) Take(ctx context.Context, _, _ string, _ time.Duration, _, _ int) (ratelimit.Decision, error) {
+	select {
+	case <-time.After(s.stall):
+		return ratelimit.Decision{}, errors.New("statement timeout")
+	case <-ctx.Done():
+		return ratelimit.Decision{}, ctx.Err()
+	}
+}
+
+// TestHR490_ASafetyCallIsNotQueuedBehindAStalledStore (D215): while the
+// shared counter hangs and ordinary calls of a credential wait on it, a
+// safety call of the same credential is admitted within one store timeout,
+// not after every queued call's timeout in turn.
+// Covers: HR-490, HR-376
+func TestHR490_ASafetyCallIsNotQueuedBehindAStalledStore(t *testing.T) {
+	const stall = 400 * time.Millisecond
+	who := pantherclawv1connect.AccessServiceWhoAmIProcedure
+	contain := pantherclawv1connect.AccessServiceListRolesProcedure // stands in for a safety procedure
+	limits := rpcauth.APILimits{
+		PerOrg: 100, PerCredential: 100, Limiter: ratelimit.NewLeased(stalledShared{stall: stall}, nil),
+		OrgExempt: func(p string) bool { return p == contain },
+	}
+	perms := map[string]td.Permission{who: td.PermAuthenticated, contain: td.PermAuthenticated}
+	call := limitServer(t, perms, nil, limits, nil)
+	for range 6 {
+		go call(who, "key-a")
+	}
+	time.Sleep(20 * time.Millisecond)
+	begin := time.Now()
+	if st, _ := call(contain, "key-a"); st != http.StatusOK {
+		t.Fatalf("a safety call with the counter stalled: %d", st)
+	}
+	if d := time.Since(begin); d > 2*stall {
+		t.Fatalf("the safety call took %v, one store timeout is %v", d, stall)
+	}
+}

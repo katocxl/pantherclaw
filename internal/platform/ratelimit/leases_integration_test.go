@@ -190,11 +190,14 @@ func TestT214_ACallerSpreadAcrossReplicasIsBounded(t *testing.T) {
 		t.Fatal(err)
 	}
 	const limit = 48
+	// One 30-second window, begun just now: the takes never straddle a
+	// boundary (windows are aligned to the Unix epoch, D215).
+	time.Sleep(time.Until(time.Now().Truncate(30 * time.Second).Add(30*time.Second + 300*time.Millisecond)))
 	limiters := []*Leased{NewLeased(NewStore(pa), nil), NewLeased(NewStore(pb), nil)}
 	key := org.String() + "/key:" + ids.NewV7().String()
 	allowed := 0
 	for i := range 3 * limit {
-		dec, err := limiters[i%2].Take(ctx, "api.credential", key, time.Hour, 1, limit)
+		dec, err := limiters[i%2].Take(ctx, "api.credential", key, 30*time.Second, 1, limit)
 		if err != nil {
 			t.Fatal(err)
 		}

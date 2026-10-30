@@ -161,3 +161,63 @@ func TestLeasedKeysAreBounded(t *testing.T) {
 		t.Fatalf("%d chunks kept, bound 8", n)
 	}
 }
+
+// stalledLimiter answers every Take after stall, with an error: a store
+// that hangs until its statement timeout.
+type stalledLimiter struct {
+	stall time.Duration
+	takes atomic.Int32
+}
+
+func (s *stalledLimiter) Take(ctx context.Context, _, _ string, _ time.Duration, _, _ int) (Decision, error) {
+	s.takes.Add(1)
+	select {
+	case <-time.After(s.stall):
+		return Decision{}, errors.New("statement timeout")
+	case <-ctx.Done():
+		return Decision{}, ctx.Err()
+	}
+}
+
+// TestHR490_AStalledStoreDelaysEachCallByOneTimeoutAtMost (D215): callers
+// of one key never queue behind each other's store calls; with the store
+// stalled, every one of them gets the error (the caller refuses, or admits
+// a safety call) within about one store timeout, from a single refill.
+// Covers: HR-490
+func TestHR490_AStalledStoreDelaysEachCallByOneTimeoutAtMost(t *testing.T) {
+	const stall = 400 * time.Millisecond
+	shared := &stalledLimiter{stall: stall}
+	l := NewLeased(shared, nil)
+	const callers = 8
+	took := make(chan time.Duration, callers)
+	start := time.Now()
+	for range callers {
+		go func() {
+			_, err := l.Take(context.Background(), "api.credential", "key", time.Minute, 1, 100)
+			if err == nil {
+				t.Error("a stalled store admitted a call")
+			}
+			took <- time.Since(start)
+		}()
+	}
+	for range callers {
+		if d := <-took; d > 2*stall {
+			t.Fatalf("a caller waited %v behind the others, one store timeout is %v", d, stall)
+		}
+	}
+	if n := shared.takes.Load(); n != 1 {
+		t.Fatalf("%d store calls for one refill, want 1", n)
+	}
+	// A caller whose own context ends stops waiting at once.
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	go func() { _, _ = l.Take(context.Background(), "api.credential", "key2", time.Minute, 1, 100) }()
+	time.Sleep(10 * time.Millisecond)
+	begin := time.Now()
+	if _, err := l.Take(ctx, "api.credential", "key2", time.Minute, 1, 100); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("a waiter whose context ended: %v", err)
+	}
+	if d := time.Since(begin); d > stall {
+		t.Fatalf("the waiter took %v after its context ended", d)
+	}
+}

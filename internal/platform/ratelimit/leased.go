@@ -5,6 +5,7 @@ package ratelimit
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -43,6 +44,8 @@ type chunk struct {
 	// fullAt or more events are refused here.
 	full   bool
 	fullAt int
+	// refill is the lease in flight, if any; mu is never held across it.
+	refill *refill
 }
 
 // ChunkSize is the number of events one lease takes of a window with
@@ -64,28 +67,77 @@ func (l *Leased) Take(ctx context.Context, scope, key string, window time.Durati
 		return l.shared.Take(ctx, scope, key, window, n, limit) // the shared limiter's answer or error
 	}
 	c := l.chunk(memKey{scope, key})
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	for {
+		c.mu.Lock()
+		if d, ok := c.spend(l.clock.Now(), n); ok {
+			c.mu.Unlock()
+			return d, nil
+		}
+		if r := c.refill; r != nil {
+			// One refill per key at a time: wait for it without holding the
+			// chunk, then look again (D215). A waiter never queues behind
+			// more than the refill in flight, so a stalled store delays
+			// each call by at most one store timeout.
+			c.mu.Unlock()
+			select {
+			case <-ctx.Done():
+				return Decision{}, ctx.Err()
+			case <-r.done:
+			}
+			if r.err != nil && !(isCtxErr(r.err) && ctx.Err() == nil) {
+				return Decision{}, r.err
+			}
+			continue
+		}
+		r := &refill{done: make(chan struct{})}
+		c.refill = r
+		c.mu.Unlock()
+		return l.lease(ctx, c, r, scope, key, window, n, limit)
+	}
+}
+
+// refill is one lease of a chunk in flight; waiters share its outcome.
+type refill struct {
+	done chan struct{}
+	err  error
+}
+
+// spend answers from the chunk alone, when it can: a remembered refusal,
+// or events left of the lease. c.mu is held.
+func (c *chunk) spend(now time.Time, n int) (Decision, bool) {
+	if !now.Before(c.end) {
+		c.left, c.full, c.fullAt = 0, false, 0 // the window ended
+		return Decision{}, false
+	}
+	if c.full && n >= c.fullAt {
+		return Decision{RetryAfter: c.end.Sub(now)}, true
+	}
+	if c.left >= n {
+		c.left -= n
+		return Decision{Allowed: true, WindowLeft: c.end.Sub(now)}, true
+	}
+	return Decision{}, false
+}
+
+// lease takes a chunk from the shared limiter for n events, without
+// holding c.mu, and publishes the outcome to the waiters of r.
+func (l *Leased) lease(ctx context.Context, c *chunk, r *refill, scope, key string, window time.Duration, n, limit int,
+) (Decision, error) {
 	// The chunk's end is measured from before the lease was asked for, so
 	// it never outlives the shared window.
 	now := l.clock.Now()
-	if now.Before(c.end) {
-		if c.full && n >= c.fullAt {
-			return Decision{RetryAfter: c.end.Sub(now)}, nil
-		}
-		if c.left >= n {
-			c.left -= n
-			return Decision{Allowed: true, WindowLeft: c.end.Sub(now)}, nil
-		}
-	} else {
-		c.left, c.full, c.fullAt = 0, false, 0 // the window ended
-	}
 	k := min(max(ChunkSize(limit), n), limit)
 	d, err := l.shared.Take(ctx, scope, key, window, k, limit)
 	if err == nil && !d.Allowed && k > n {
 		k = n
 		d, err = l.shared.Take(ctx, scope, key, window, n, limit)
 	}
+	c.mu.Lock()
+	defer func() {
+		c.refill, r.err = nil, err
+		close(r.done)
+		c.mu.Unlock()
+	}()
 	switch {
 	case err != nil:
 		return Decision{}, err
@@ -96,6 +148,10 @@ func (l *Leased) Take(ctx context.Context, scope, key string, window time.Durati
 	// A refusal of more events stays true within the window (c.full).
 	c.left, c.end = k-n, now.Add(d.WindowLeft)
 	return Decision{Allowed: true, WindowLeft: d.WindowLeft}, nil
+}
+
+func isCtxErr(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 // chunk returns key's chunk, creating it. At most maxKeys chunks are kept:
