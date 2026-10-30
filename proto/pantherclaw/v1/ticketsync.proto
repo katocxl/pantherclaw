@@ -1,0 +1,189 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// TicketSyncService links cases and incidents to tickets in an outside
+// ticket system, Jira first (G0 M20 D255, D264; F545, HR-527, HR-528).
+// Ticket sync needs the Business edition.
+//
+// A sync configuration binds one project behind one connection; the
+// ticket system's credential stays sealed to the gateway, which sends
+// every call (a lease of purpose ticket_sync). Inbound changes come as
+// webhooks signed with the configuration's secret. A ticket status never
+// restores authority or lifts containment: an inbound change to a field
+// PantherClaw owns is ignored and recorded, a Done is only noted, and a
+// change to a field the ticket system owns is mirrored as a note.
+// Containment and restoration are always PantherClaw's; giving another
+// field to the ticket system is a protected change.
+service TicketSyncService {
+  // CreateTicketSyncConfig binds a project behind a connection. The webhook
+  // secret is returned once, with the webhook URL to give the ticket
+  // system. A person only; audited.
+  // permission: connection.manage
+  rpc CreateTicketSyncConfig(CreateTicketSyncConfigRequest) returns (CreateTicketSyncConfigResponse);
+  // ListTicketSyncConfigs lists the organization's configurations.
+  // permission: connection.read
+  rpc ListTicketSyncConfigs(ListTicketSyncConfigsRequest) returns (ListTicketSyncConfigsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // RotateTicketSyncSecret replaces a configuration's webhook secret; the
+  // previous one verifies for 24 hours. The new one is returned once.
+  // permission: connection.manage
+  rpc RotateTicketSyncSecret(RotateTicketSyncSecretRequest) returns (RotateTicketSyncSecretResponse);
+  // SetTicketSyncPaused pauses or resumes a configuration.
+  // permission: connection.manage
+  rpc SetTicketSyncPaused(SetTicketSyncPausedRequest) returns (SetTicketSyncPausedResponse);
+  // LinkCaseTicket links a case to an existing ticket of the
+  // configuration's project.
+  // permission: case.manage
+  rpc LinkCaseTicket(LinkCaseTicketRequest) returns (LinkCaseTicketResponse);
+  // LinkIncidentTicket links an incident to an existing ticket.
+  // permission: incident.manage
+  rpc LinkIncidentTicket(LinkIncidentTicketRequest) returns (LinkIncidentTicketResponse);
+  // OpenCaseTicket opens a ticket for a case through the gateway; the new
+  // issue is linked when the gateway reports it.
+  // permission: case.manage
+  rpc OpenCaseTicket(OpenCaseTicketRequest) returns (OpenCaseTicketResponse);
+  // OpenIncidentTicket opens a ticket for an incident through the gateway.
+  // permission: incident.manage
+  rpc OpenIncidentTicket(OpenIncidentTicketRequest) returns (OpenIncidentTicketResponse);
+  // GetTicketFieldOwners returns the owner of every field.
+  // permission: case.read
+  rpc GetTicketFieldOwners(GetTicketFieldOwnersRequest) returns (GetTicketFieldOwnersResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SetTicketFieldOwner sets a field's owner. Containment and restoration
+  // are refused for the ticket system; giving another field to it may wait
+  // for a second person (PROTECTED_CHANGE_PENDING).
+  // permission: connection.manage
+  rpc SetTicketFieldOwner(SetTicketFieldOwnerRequest) returns (SetTicketFieldOwnerResponse);
+}
+
+// TicketSyncConfig is a sync configuration, without its secrets.
+message TicketSyncConfig {
+  string id = 1;
+  string connection_id = 2;
+  // Always "jira".
+  string system = 3;
+  string project_key = 4;
+  // ACTIVE or PAUSED.
+  string state = 5;
+  google.protobuf.Timestamp create_time = 6;
+  // Where the ticket system sends its webhooks.
+  string webhook_url = 7;
+}
+
+message CreateTicketSyncConfigRequest {
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  string project_key = 2 [(buf.validate.field).string.pattern = "^[A-Z][A-Z0-9_]{1,9}$"];
+}
+
+message CreateTicketSyncConfigResponse {
+  TicketSyncConfig config = 1;
+  // Returned once; PantherClaw keeps it only encrypted.
+  string webhook_secret = 2;
+}
+
+message ListTicketSyncConfigsRequest {}
+
+message ListTicketSyncConfigsResponse {
+  repeated TicketSyncConfig configs = 1;
+}
+
+message RotateTicketSyncSecretRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message RotateTicketSyncSecretResponse {
+  string webhook_secret = 1;
+}
+
+message SetTicketSyncPausedRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  bool paused = 2;
+}
+
+message SetTicketSyncPausedResponse {}
+
+// TicketRef is a link between a case or an incident and a ticket.
+message TicketRef {
+  string id = 1;
+  string case_id = 2;
+  string incident_id = 3;
+  string system = 4;
+  string key = 5;
+}
+
+message LinkCaseTicketRequest {
+  string case_id = 1 [(buf.validate.field).string.uuid = true];
+  string config_id = 2 [(buf.validate.field).string.uuid = true];
+  string key = 3 [(buf.validate.field).string.pattern = "^[A-Z][A-Z0-9_]{1,9}-[1-9][0-9]{0,9}$"];
+}
+
+message LinkCaseTicketResponse {
+  TicketRef ref = 1;
+}
+
+message LinkIncidentTicketRequest {
+  string incident_id = 1 [(buf.validate.field).string.uuid = true];
+  string config_id = 2 [(buf.validate.field).string.uuid = true];
+  string key = 3 [(buf.validate.field).string.pattern = "^[A-Z][A-Z0-9_]{1,9}-[1-9][0-9]{0,9}$"];
+}
+
+message LinkIncidentTicketResponse {
+  TicketRef ref = 1;
+}
+
+message OpenCaseTicketRequest {
+  string case_id = 1 [(buf.validate.field).string.uuid = true];
+  string config_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+message OpenCaseTicketResponse {
+  // The outbound task; the ticket is linked once the gateway reports it.
+  string outbound_id = 1;
+}
+
+message OpenIncidentTicketRequest {
+  string incident_id = 1 [(buf.validate.field).string.uuid = true];
+  string config_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+message OpenIncidentTicketResponse {
+  string outbound_id = 1;
+}
+
+// TicketFieldOwner is one field and its owner.
+message TicketFieldOwner {
+  // state, severity, containment, restoration, assignee, labels, priority
+  // or comments.
+  string field = 1;
+  // PANTHERCLAW or TICKET.
+  string owner = 2;
+  // Whether the organization may choose its owner (not for containment or
+  // restoration).
+  bool movable = 3;
+}
+
+message GetTicketFieldOwnersRequest {}
+
+message GetTicketFieldOwnersResponse {
+  repeated TicketFieldOwner owners = 1;
+}
+
+message SetTicketFieldOwnerRequest {
+  string field = 1 [(buf.validate.field).string = {
+    in: ["state", "severity", "containment", "restoration", "assignee", "labels", "priority", "comments"]
+  }];
+  string owner = 2 [(buf.validate.field).string = {
+    in: ["PANTHERCLAW", "TICKET"]
+  }];
+}
+
+message SetTicketFieldOwnerResponse {}

@@ -44,8 +44,9 @@ func mountM7Pages(web *webhttp.Handler, pool *db.Pool, verification *txapp.Servi
 // newVerification builds the server side of verification (G0 M7 track A):
 // leases, reports and the expiry of leases and windows. Effect receipts are
 // signed with the receipts key, like decision and execution receipts; notify
-// (M5 notifications) tells admins about effects without a receipt.
-func newVerification(pool *db.Pool, reg *keys.Registry, notify pgtransactions.Notifier) (*txapp.Service, error) {
+// (M5 notifications) tells admins about effects without a receipt; tickets
+// takes ticket sync reports (G0 M20 D255; nil: none accepted).
+func newVerification(pool *db.Pool, reg *keys.Registry, notify pgtransactions.Notifier, tickets pgtransactions.TicketReporter) (*txapp.Service, error) {
 	receipts, err := reg.Signer(keys.PurposeReceipts)
 	if err != nil {
 		return nil, err
@@ -54,5 +55,5 @@ func newVerification(pool *db.Pool, reg *keys.Registry, notify pgtransactions.No
 	if err != nil {
 		return nil, err
 	}
-	return &txapp.Service{Store: &pgtransactions.Store{Pool: pool, Notify: notify}, Receipts: receipts, ActionTokens: actionTokens}, nil
+	return &txapp.Service{Store: &pgtransactions.Store{Pool: pool, Notify: notify, Tickets: tickets}, Receipts: receipts, ActionTokens: actionTokens}, nil
 }

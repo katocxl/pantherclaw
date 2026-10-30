@@ -17,6 +17,8 @@ JOIN pc.org_containment o ON o.org_id = v.org_id
 WHERE v.org_id = sqlc.arg(org_id) AND v.state = 'PENDING' AND v.next_at <= now() AND v.deadline_at > now()
   AND c.gateway_id = sqlc.arg(gateway_id) AND c.state = 'ACTIVE' AND NOT o.kill_switch
   AND (v.purpose <> 'connection_test' OR v.attempts < sqlc.arg(max_test_attempts)::integer)
+  -- A ticket sync write is leased once: it is never sent twice (D255).
+  AND (v.purpose <> 'ticket_sync' OR v.attempts = 0)
 ORDER BY v.next_at
 LIMIT sqlc.arg(max_tasks)
 FOR UPDATE OF v SKIP LOCKED;

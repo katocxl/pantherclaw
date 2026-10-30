@@ -52,6 +52,9 @@ type Store struct {
 	// Rotations builds and applies the leases of GitHub App key rotations
 	// (G0 M20 S20c); nil leases none of them.
 	Rotations RotationLeases
+	// Tickets takes ticket sync reports (G0 M20 D255); nil: no ticket sync
+	// task is accepted.
+	Tickets TicketReporter
 }
 
 var _ app.Store = (*Store)(nil)
@@ -149,10 +152,13 @@ func (s *Store) Report(ctx context.Context, org ids.OrgID, gateway ids.UUID, r a
 					if db.IsNoRows(err) {
 						// A rotation test or confirmation (G0 M20 S20c).
 						rt, err := q.LeasedRotationTask(ctx, dbq.LeasedRotationTaskParams{OrgID: org, ID: r.Task, GatewayID: &gw, LeaseHash: hash[:]})
-						if db.IsNoRows(err) || (err == nil && s.Rotations == nil) {
-							return app.ErrLease
+						if db.IsNoRows(err) {
+							return s.ticketSync(ctx, tx, org, gateway, r, hash[:], &out)
 						} else if err != nil {
 							return err
+						}
+						if s.Rotations == nil {
+							return app.ErrLease
 						}
 						out, err = s.Rotations.ReportRotation(ctx, tx, gateway, rt, r)
 						return err
@@ -348,6 +354,12 @@ func (s *Store) Expire(ctx context.Context, org ids.OrgID, sign app.Sign) (int, 
 		if _, err := q.FailExpiredOrgScans(ctx, org); err != nil {
 			return err
 		}
+		// A ticket sync task that expired has no report coming.
+		if s.Tickets != nil {
+			if err := s.Tickets.EndUnreported(ctx, tx, org); err != nil {
+				return err
+			}
+		}
 		slices.SortFunc(closed, compareUUID)
 		for _, txn := range slices.Compact(closed) {
 			if err := deadline(ctx, tx, q, org, txn, sign, now); err != nil {
@@ -533,4 +545,30 @@ func compareUUID(a, b ids.UUID) int {
 		}
 	}
 	return 0
+}
+
+// TicketReporter takes the report of a ticket sync task (G0 M20 D255,
+// ticketsync/app.Service): false when the task is not one under the
+// gateway's live lease.
+type TicketReporter interface {
+	EndUnreported(ctx context.Context, tx db.TenantTx, org ids.OrgID) error
+	ReportTicketSync(ctx context.Context, tx db.TenantTx, org ids.OrgID, gateway, task ids.UUID, leaseHash []byte,
+		status int, fields map[string]string) (bool, error)
+}
+
+// ticketSync hands a report that matched no other lease to the ticket
+// sync; app.ErrLease when it is not a ticket sync task either.
+func (s *Store) ticketSync(ctx context.Context, tx db.TenantTx, org ids.OrgID, gateway ids.UUID, r app.Report, hash []byte, out *app.Applied) error {
+	if s.Tickets == nil {
+		return app.ErrLease
+	}
+	ok, err := s.Tickets.ReportTicketSync(ctx, tx, org, gateway, r.Task, hash, r.HTTPStatus, r.Fields)
+	switch {
+	case err != nil:
+		return err
+	case !ok:
+		return app.ErrLease
+	}
+	out.Done = true
+	return nil
 }

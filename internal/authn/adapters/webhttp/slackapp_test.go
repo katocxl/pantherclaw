@@ -24,11 +24,12 @@ type fakeSlack struct {
 	stepUps  []stepup.StepUp
 	versions []string
 	previews int
+	domains  []string
 }
 
 func (f *fakeSlack) view(id ids.UUID) napp.ChannelView {
 	return napp.ChannelView{ID: id, Name: "approvals", Kind: domain.KindSlackApp, SlackApp: &napp.SlackAppView{
-		ChannelID: "C0APPROVAL1", DataLevel: domain.SlackMinimal, State: f.state,
+		ChannelID: "C0APPROVAL1", DataLevel: domain.SlackMinimal, State: f.state, DirectMessages: f.domains != nil, AllowedEmailDomains: f.domains,
 	}}
 }
 
@@ -100,5 +101,36 @@ func TestHR315_TheSlackChannelPageCarriesTheSessionsStepUp(t *testing.T) {
 		if resp := do(t, mux, postAs(path, "org-admin", `{"version":"v7"}`)); !strings.Contains(resp.Body, `"error":"`+code+`"`) {
 			t.Fatalf("%v: %d %s", err, resp.StatusCode, resp.Body)
 		}
+	}
+}
+
+// TestHR315_TheSlackActivationShowsWhatItConfirms (D265): the Org Admin's
+// step-up confirms the channel's direct messages and email domains, so the
+// page shows both, or that it sends none.
+func TestHR315_TheSlackActivationShowsWhatItConfirms(t *testing.T) {
+	h, err := webhttp.New(&fakeBrowser{}, origin, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := &fakeSlack{state: napp.SlackPending, domains: []string{"example.test", "corp.example"}}
+	h.WithSlackChannels(f)
+	mux := http.NewServeMux()
+	h.Mount(mux)
+	get := func() string {
+		t.Helper()
+		r := httptest.NewRequest(http.MethodGet, origin+napp.SlackConfirmPath(ids.NewV7()), nil)
+		r.AddCookie(&http.Cookie{Name: "__Host-pc_session", Value: "org-admin"})
+		resp := do(t, mux, r)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("page: %d %s", resp.StatusCode, resp.Body)
+		}
+		return resp.Body
+	}
+	if b := get(); !strings.Contains(b, "<code>example.test</code>, <code>corp.example</code>") || !strings.Contains(b, "Direct messages</dt><dd>On") {
+		t.Fatalf("the domains are not shown: %s", b)
+	}
+	f.domains = nil
+	if b := get(); !strings.Contains(b, "Direct messages</dt><dd>Off") || strings.Contains(b, "Allowed email domains") {
+		t.Fatalf("no DMs: %s", b)
 	}
 }

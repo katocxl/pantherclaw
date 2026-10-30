@@ -81,6 +81,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/runs/adapters/runsrpc"
 	"github.com/katocxl/pantherclaw/internal/tenancy/adapters/tenancyrpc"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
+	tsapp "github.com/katocxl/pantherclaw/internal/ticketsync/app"
 	txapp "github.com/katocxl/pantherclaw/internal/transactions/app"
 )
 
@@ -362,7 +363,8 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
-	verification, err := newVerification(pool, reg, m5.notifications)
+	tickets := newTicketSync(pool, kp, bill)
+	verification, err := newVerification(pool, reg, m5.notifications, tickets)
 	if err != nil {
 		return err
 	}
@@ -482,6 +484,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			m6:           m6,
 			m5p2:         m5p2,
 			verification: verification,
+			tickets:      tickets,
 			kp:           kp,
 			freshness:    freshnessOf(cfg),
 			m10ops:       m10OpsDeps{authn: authn, tokens: tokens, sessions: sessions},
@@ -815,6 +818,9 @@ type apiDeps struct {
 	// support is customer-approved support access (wiring_m13_support.go);
 	// nil or off when not configured.
 	support supportService
+	// tickets is ticket sync (wiring_m20_tickets.go); nil: apiHandler builds
+	// one.
+	tickets *tsapp.Service
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
@@ -913,6 +919,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerReflexCore(rs, d)
 	registerM11Govern(rs, d)
 	registerSlackChannels(d)
+	registerTeamsChannels(d)
 	autos = registerAutomationsCore(rs, d, grants, runs)
 	if err := registerAutomationAssurance(rs, d, autos); err != nil {
 		return nil, err
@@ -935,12 +942,14 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerUsage(rs, d)
 	registerDataRequests(rs, d)
 	registerM20Webhooks(rs, d)
+	registerM20Tickets(rs, d)
 	registerSupport(rs, d)
 	registerM16External(rs, d)
 	mux := http.NewServeMux()
 	edges.mount(mux)
 	automationTriggers.mount(mux)
 	authzen.mount(mux)
+	mountTicketWebhooks(mux, d)
 	if err := mountM14A2A(mux, d); err != nil {
 		return nil, err
 	}

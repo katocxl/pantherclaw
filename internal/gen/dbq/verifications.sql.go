@@ -107,6 +107,8 @@ JOIN pc.org_containment o ON o.org_id = v.org_id
 WHERE v.org_id = $1 AND v.state = 'PENDING' AND v.next_at <= now() AND v.deadline_at > now()
   AND c.gateway_id = $2 AND c.state = 'ACTIVE' AND NOT o.kill_switch
   AND (v.purpose <> 'connection_test' OR v.attempts < $3::integer)
+  -- A ticket sync write is leased once: it is never sent twice (D255).
+  AND (v.purpose <> 'ticket_sync' OR v.attempts = 0)
 ORDER BY v.next_at
 LIMIT $4
 FOR UPDATE OF v SKIP LOCKED

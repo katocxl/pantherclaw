@@ -77,6 +77,8 @@ type ChannelView struct {
 	CreatedAt, UpdatedAt time.Time
 	// SlackApp is a slack_app channel's configuration (nil for other kinds).
 	SlackApp *SlackAppView
+	// TeamsApp is a teams_app channel's configuration, on GetChannel only.
+	TeamsApp *TeamsAppView
 }
 
 func channelView(c dbq.PcNotificationChannel) ChannelView {
@@ -147,6 +149,8 @@ type ChannelInput struct {
 	URL           string
 	// SlackApp is a slack_app channel's configuration (G0 M14 D22).
 	SlackApp *domain.SlackAppConfig
+	// TeamsApp is a teams_app channel's configuration (G0 M20 D256).
+	TeamsApp *domain.TeamsAppConfig
 }
 
 // CreateChannel adds a channel (notification.manage); the webhook signing
@@ -155,7 +159,10 @@ func (s *Service) CreateChannel(ctx context.Context, in ChannelInput) (ChannelVi
 	if (in.Kind == domain.KindSlackApp) != (in.SlackApp != nil) {
 		return ChannelView{}, "", ErrInvalidChannel
 	}
-	if in.Kind == domain.KindSlackApp {
+	if (in.Kind == domain.KindTeamsApp) != (in.TeamsApp != nil) {
+		return ChannelView{}, "", ErrInvalidChannel
+	}
+	if in.Kind == domain.KindSlackApp || in.Kind == domain.KindTeamsApp {
 		if err := s.requireSlackApprovals(ctx); err != nil {
 			return ChannelView{}, "", err
 		}
@@ -179,7 +186,7 @@ func (s *Service) CreateChannel(ctx context.Context, in ChannelInput) (ChannelVi
 		created, err := s.CreateChannelTx(ctx, tx, NewChannel{
 			Org: c.Org, Name: in.Name, Kind: in.Kind, EventTypes: in.EventTypes, MinSeverity: in.MinSeverity,
 			RecipientRole: in.RecipientRole, URL: in.URL, CreatedBy: c.Actor().Type + ":" + c.Actor().ID,
-			SlackApp: in.SlackApp,
+			SlackApp: in.SlackApp, TeamsApp: in.TeamsApp,
 		})
 		if err != nil {
 			return apiError(err)
@@ -229,6 +236,9 @@ func (s *Service) GetChannel(ctx context.Context, id ids.UUID) (ChannelView, []D
 			return notFoundAs(err, ErrChannelNotFound)
 		}
 		if out, err = s.withSlackApp(ctx, q, c.Org, channelView(row)); err != nil {
+			return err
+		}
+		if out, err = s.withTeamsApp(ctx, q, c.Org, out); err != nil {
 			return err
 		}
 		rows, err := q.ListDeliveries(ctx, dbq.ListDeliveriesParams{OrgID: c.Org, ChannelID: &id, PageLimit: recentDeliveries})

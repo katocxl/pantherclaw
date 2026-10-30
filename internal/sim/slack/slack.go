@@ -2,10 +2,11 @@
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
 // Package slack is a simulated Slack Web API for tests and demos
-// (pantherclaw-sim slack, G0 M14 D24). It answers the four methods
-// PantherClaw uses — auth.test, conversations.info, chat.postMessage and
-// chat.update — under /api/, the way Slack does: HTTP 200 with "ok" true or
-// false and an error code, and HTTP 429 with Retry-After when rate limited.
+// (pantherclaw-sim slack, G0 M14 D24). It answers the methods PantherClaw
+// uses — auth.test, conversations.info, chat.postMessage, chat.update, and
+// for approval DMs users.lookupByEmail and conversations.open — under
+// /api/, the way Slack does: HTTP 200 with "ok" true or false and an error
+// code, and HTTP 429 with Retry-After when rate limited.
 // Every request must carry a bot token (Bearer xoxb-...), and the one in
 // Require when one is set. It can mark channels externally shared or the
 // bot not a member, and inject 429s, invalid_auth and channel_not_found.
@@ -45,7 +46,7 @@ const (
 const maxBody = 64 << 10
 
 var (
-	channelPattern = regexp.MustCompile(`^[CG][A-Z0-9]{8,12}$`)
+	channelPattern = regexp.MustCompile(`^[CGD][A-Z0-9]{8,12}$`)
 	tsPattern      = regexp.MustCompile(`^[0-9]{10}\.[0-9]{6}$`)
 )
 
@@ -115,6 +116,7 @@ type Server struct {
 	mu       sync.Mutex
 	faults   Faults
 	channels map[string]Channel
+	users    map[string]User
 	messages []Message
 	calls    Calls
 	tokens   []string
@@ -304,6 +306,10 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, method string) {
 		s.post(w, in)
 	case "chat.update":
 		s.update(w, in)
+	case "users.lookupByEmail":
+		s.lookupByEmail(w, in)
+	case "conversations.open":
+		s.openDM(w, in)
 	default:
 		writeJSON(w, http.StatusOK, fail("unknown_method"))
 	}
