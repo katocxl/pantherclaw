@@ -512,6 +512,13 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.BreakGlassService/EndBreakGlass":                      entitlements.ClassSafety,
 	"/pantherclaw.v1.BreakGlassService/GetMyBreakGlass":                    entitlements.ClassRead,
 	"/pantherclaw.v1.BreakGlassService/ListBreakGlassActivations":          entitlements.ClassRead,
+	// G0 M18 D155, D161: disabling a provider narrows sign-in.
+	"/pantherclaw.v1.IdentityProviderService/CreateIdentityProvider":  entitlements.ClassChange,
+	"/pantherclaw.v1.IdentityProviderService/UpdateIdentityProvider":  entitlements.ClassChange,
+	"/pantherclaw.v1.IdentityProviderService/DisableIdentityProvider": entitlements.ClassSafety,
+	"/pantherclaw.v1.IdentityProviderService/SetOwnProvidersOnly":     entitlements.ClassChange,
+	"/pantherclaw.v1.IdentityProviderService/GetIdentityProvider":     entitlements.ClassRead,
+	"/pantherclaw.v1.IdentityProviderService/ListIdentityProviders":   entitlements.ClassRead,
 }
 
 // ProcedureClass is the plan-gate class of a procedure (D43), for the

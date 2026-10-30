@@ -167,7 +167,7 @@ func unhex(c byte) byte {
 type Browser struct {
 	pool   *db.Pool
 	issuer string
-	idps   map[string]IdP
+	idps   providers
 	clock  clock.Clock
 	log    *slog.Logger
 	// Hosted accounts (accounts.go); nil: every sign-in names an org.
@@ -182,21 +182,15 @@ func NewBrowser(pool *db.Pool, issuer string, idps []IdP, clk clock.Clock, log *
 	if log == nil {
 		log = pclog.Discard()
 	}
-	m := map[string]IdP{}
-	for _, p := range idps {
-		m[p.Name()] = p
-	}
-	return &Browser{pool: pool, issuer: issuer, idps: m, clock: clk, log: log}
+	return &Browser{pool: pool, issuer: issuer, idps: newProviders(idps), clock: clk, log: log}
 }
 
-func (b *Browser) provider(name string) (IdP, bool) {
-	if name == "" && len(b.idps) == 1 {
-		for _, p := range b.idps {
-			return p, true
-		}
-	}
-	p, ok := b.idps[name]
-	return p, ok
+// WithOrgProviders resolves organizations' own providers on each sign-in
+// to an org (G0 M18 D155); a sign-in without an org uses the deployment's
+// providers alone.
+func (b *Browser) WithOrgProviders(r OrgIdPs) *Browser {
+	b.idps.orgs = r
+	return b
 }
 
 func (b *Browser) redirectURI(provider string) string { return b.issuer + CallbackPath + provider }
@@ -219,10 +213,6 @@ type BrowserStart struct {
 // browser binding, which the caller sets as an HttpOnly cookie. Without an
 // org it is a sign-in without an org (hosted accounts, when enabled).
 func (b *Browser) Start(ctx context.Context, in BrowserStart) (Redirect, error) {
-	idp, ok := b.provider(in.Provider)
-	if !ok {
-		return Redirect{}, ErrSignInUnavailable
-	}
 	next := in.Next
 	if next == "" {
 		next = AccountPath
@@ -231,6 +221,10 @@ func (b *Browser) Start(ctx context.Context, in BrowserStart) (Redirect, error) 
 		return Redirect{}, ErrSignInUnavailable
 	}
 	if in.Org == "" {
+		idp, ok := b.idps.named(in.Provider)
+		if !ok {
+			return Redirect{}, ErrSignInUnavailable
+		}
 		if (next == AccountDeletePath) != !in.DeletionAccount.IsZero() {
 			return Redirect{}, ErrSignInUnavailable
 		}
@@ -244,6 +238,13 @@ func (b *Browser) Start(ctx context.Context, in BrowserStart) (Redirect, error) 
 	}
 	org, err := ids.Parse[ids.Org](in.Org)
 	if err != nil {
+		return Redirect{}, ErrSignInUnavailable
+	}
+	idp, ok, err := b.idps.forOrg(ctx, org, in.Provider)
+	if err != nil {
+		return Redirect{}, err
+	}
+	if !ok {
 		return Redirect{}, ErrSignInUnavailable
 	}
 	state, err := credential.New(credential.LoginState, "", org)
@@ -322,11 +323,11 @@ type BrowserSignIn struct {
 // an enabled user of the org, and a new session is created with a secret
 // that did not exist before this moment (no fixation, HR-150).
 func (b *Browser) Callback(ctx context.Context, providerName string, params url.Values, binding string, meta ClientMeta) (BrowserSignIn, error) {
-	idp, ok := b.idps[providerName]
-	if !ok {
-		return BrowserSignIn{}, ErrBadCallback
-	}
 	if strings.HasPrefix(params.Get("state"), string(credential.AccountLoginState)+"_") {
+		idp, ok := b.idps.named(providerName)
+		if !ok || providerName == "" {
+			return BrowserSignIn{}, ErrBadCallback
+		}
 		return b.accountCallback(ctx, idp, providerName, params, binding, meta)
 	}
 	state, err := credential.Parse(credential.LoginState, params.Get("state"))
@@ -334,6 +335,15 @@ func (b *Browser) Callback(ctx context.Context, providerName string, params url.
 		return BrowserSignIn{}, ErrBadCallback
 	}
 	org := state.Org()
+	// The org's providers now: one disabled since the sign-in started no
+	// longer completes it (D155).
+	idp, ok, err := b.idps.forOrg(ctx, org, providerName)
+	if err != nil {
+		return BrowserSignIn{}, err
+	}
+	if !ok || providerName == "" {
+		return BrowserSignIn{}, ErrBadCallback
+	}
 	var row dbq.ConsumeLoginStateRow
 	err = b.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		var err error

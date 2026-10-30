@@ -2516,6 +2516,31 @@ type PcOrgEntitlement struct {
 	LapsedAt    *time.Time
 }
 
+type PcOrgIdentityProvider struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	Name         string
+	Issuer       string
+	ClientID     string
+	ClientSecret []byte
+	TrustEmail   bool
+	State        string
+	CreatedBy    ids.UUID
+	CreatedAt    time.Time
+	UpdatedBy    ids.UUID
+	UpdatedAt    time.Time
+	ActivatedAt  *time.Time
+	DisabledBy   *ids.UUID
+	DisabledAt   *time.Time
+}
+
+type PcOrgIdentityProviderSetting struct {
+	OrgID            ids.OrgID
+	OwnProvidersOnly bool
+	UpdatedBy        ids.UUID
+	UpdatedAt        time.Time
+}
+
 type PcOrgTermsAcceptance struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID

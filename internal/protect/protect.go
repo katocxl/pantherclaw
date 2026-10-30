@@ -85,6 +85,13 @@ const (
 	// rule (G0 M17 D107): always held for a second person, whatever the
 	// CONSEQUENCE_RULES mode (AlwaysProtected).
 	SurfaceConsequenceRule Surface = "consequence.rule.put"
+	// The organization identity provider surfaces (G0 M18 D155, D162):
+	// always held for a second person, whatever the CUSTODY mode
+	// (AlwaysProtected). Put activates or changes a provider, Disable
+	// turns one off, OwnOnly sets "own providers only".
+	SurfaceIdentityProviderPut     Surface = "identity_provider.put"
+	SurfaceIdentityProviderDisable Surface = "identity_provider.disable"
+	SurfaceIdentityProviderOwnOnly Surface = "identity_provider.own_only"
 	// SurfaceSettings turns a category OFF (a change request of kind
 	// SETTINGS, D42).
 	SurfaceSettings Surface = "protect.settings"
@@ -106,6 +113,8 @@ func (s Surface) Permission() td.Permission {
 		return td.PermCoverageManage
 	case SurfaceConsequenceRule:
 		return td.PermConsequenceRuleManage
+	case SurfaceIdentityProviderPut, SurfaceIdentityProviderDisable, SurfaceIdentityProviderOwnOnly:
+		return td.PermIdentityProviderManage
 	case SurfaceSettings:
 		return td.PermProtectedChangeManage
 	}
@@ -114,8 +123,11 @@ func (s Surface) Permission() td.Permission {
 
 // AlwaysProtected reports whether every change of the surface waits for a
 // second person, in every mode of its category, and can never be applied
-// as an emergency (G0 M17 D107, HR-453).
-func (s Surface) AlwaysProtected() bool { return s == SurfaceConsequenceRule }
+// as an emergency (G0 M17 D107, HR-453; G0 M18 D155, HR-481).
+func (s Surface) AlwaysProtected() bool {
+	return s == SurfaceConsequenceRule ||
+		s == SurfaceIdentityProviderPut || s == SurfaceIdentityProviderDisable || s == SurfaceIdentityProviderOwnOnly
+}
 
 // Change domains and kinds of internal/changes (D6).
 const (

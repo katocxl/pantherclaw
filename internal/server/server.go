@@ -367,6 +367,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	// jobs share it, so every port set on it reaches both (D91 K6).
 	// protect sets its ports on it in every role (D110 P1).
 	autos, m11protect := newM11Core(pool, bill, cfg.Auth.PublicURL)
+	closeM18IdPs(m11protect.gate, log)
 	wireM11Process(autos, m11protect, pool)
 	wireM14Process(autos, bill)
 	wireM14A2APeer(svc, authorityStore, autos, pool)
@@ -414,8 +415,10 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			log.WarnContext(ctx, "server.api_key_ranges_use_peer", slog.String("note",
 				"http.trusted_proxies is empty: API keys limited to address ranges are checked against the direct peer address"))
 		}
-		device, err := devicehttp.New(authnapp.NewDevice(pool, tokens, cfg.Auth.PublicURL, idps, clock.System{}, log),
-			cfg.Auth.PublicURL, limiter, log)
+		orgIdPs := newM18IdPs(cfg, pool, kp, log)
+		go idpsWarnShadowed(ctx, pool, orgIdPs, log)
+		device, err := devicehttp.New(authnapp.NewDevice(pool, tokens, cfg.Auth.PublicURL, idps, clock.System{}, log).
+			WithOrgProviders(orgIdPs.resolver), cfg.Auth.PublicURL, limiter, log)
 		if err != nil {
 			return err
 		}
@@ -423,6 +426,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err != nil {
 			return err
 		}
+		m5.browser.WithOrgProviders(orgIdPs.resolver)
 		ui.wireBrowser(m5.browser, web)
 		m6.mountPages(web)
 		m5p2.mountPages(web, m5)
@@ -475,6 +479,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			hold:         cfg.Maintenance.Hold,
 			data:         dataRequests,
 			external:     external,
+			idps:         orgIdPs,
 		})
 		if err != nil {
 			return err
@@ -718,7 +723,9 @@ type apiDeps struct {
 	// external is the external policy check service (G0 M16 D81).
 	external *externalchecks.Service
 	data     *datarequests.Service
-	pool     *db.Pool
+	// idps are the organization identity providers (G0 M18 D155).
+	idps m18IdPs
+	pool *db.Pool
 	// cel are the configured CEL limits (cel).
 	cel       celenv.Limits
 	reg       *keys.Registry
@@ -892,6 +899,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	registerM11Protect(rs, d, autos)
 	registerM17Rules(rs, d)
+	registerM18IdPs(rs, d)
 	authzen := registerAuthZEN(rs, d)
 	registerUITenancy(rs, d)
 	registerUsage(rs, d)
