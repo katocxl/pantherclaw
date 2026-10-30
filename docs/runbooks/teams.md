@@ -14,6 +14,14 @@ https://login.microsoftonline.com/<tenant id>/oauth2/v2.0/token
 
 The tenant id is a lowercase GUID. The token endpoint is what pins your home tenant, and the agent can never choose it.
 
+The connection's credential header and scheme must be `Authorization` and `Bearer`, and its allowed hosts must include both `login.microsoftonline.com` and the bot's service URL host. Put the client secret in a file outside the repository, or pipe it in with `--from-file -`. It is never a command-line argument:
+
+```bash
+pclaw seal --connection <connection id> --from-file bot.secret \
+  --oauth-token-url https://login.microsoftonline.com/<tenant id>/oauth2/v2.0/token \
+  --oauth-client-id <bot app id> --oauth-scope https://api.botframework.com/.default
+```
+
 Sealing refuses any other form, including the multi-tenant `https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token`, because `pc.teams` can't tell an internal channel from an external one without a pinned tenant. Every post would then fail on a missing `teams.channel.external` fact.
 
 ## What counts as external
