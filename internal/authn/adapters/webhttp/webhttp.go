@@ -104,6 +104,9 @@ type Handler struct {
 	// integrations is the integration activation pages (G0 M10); nil when
 	// not mounted.
 	integrations Integrations
+	// modelDrafting is the model drafting settings page (G0 M21 D309); nil
+	// when not mounted.
+	modelDrafting ModelDrafting
 	// playbook is the identity playbook page (G0 M10 D38); nil when not
 	// mounted.
 	playbook         PlaybookRequests
@@ -164,6 +167,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	h.mountCoverage(mux)
 	h.mountPolicyChanges(mux)
 	h.mountIntegrations(mux)
+	h.mountModelDrafting(mux)
 	h.mountPlaybook(mux)
 	h.mountChanges(mux)
 	h.mountPromotions(mux)
@@ -496,6 +500,7 @@ func (h *Handler) static(w http.ResponseWriter, r *http.Request) {
 		"approvals.js": "text/javascript; charset=utf-8", "reconciliations.js": "text/javascript; charset=utf-8",
 		"policy_changes.js": "text/javascript; charset=utf-8", "changes.js": "text/javascript; charset=utf-8", "integrations.js": "text/javascript; charset=utf-8", "playbook.js": "text/javascript; charset=utf-8",
 		"automation_endpoints.js": "text/javascript; charset=utf-8",
+		"model_drafting.js":       "text/javascript; charset=utf-8",
 		"promotions.js":           "text/javascript; charset=utf-8",
 		"pc.css":                  "text/css; charset=utf-8",
 		"protect.js":              "text/javascript; charset=utf-8",

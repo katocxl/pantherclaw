@@ -1,0 +1,101 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// ModelService is an organization's optional model drafting (G0 M21 D304,
+// D309; G16, F181, F304, HR-541, HR-545). It is off by default, Business
+// edition, and uses the organization's own provider key. A person turns it
+// on and sets the key only on the browser settings page, with a security-key
+// step-up; no RPC does either, and no RPC ever returns the key.
+service ModelService {
+  // GetModelSettings returns the organization's settings, never its key.
+  // permission: org.read
+  rpc GetModelSettings(GetModelSettingsRequest) returns (GetModelSettingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // UpdateModelSettings sets the model id and the organization's caps, which
+  // can only be lower than the server's. A person only.
+  // permission: org.update
+  rpc UpdateModelSettings(UpdateModelSettingsRequest) returns (UpdateModelSettingsResponse);
+  // DisableModelDrafting turns drafting off. A person only; no step-up.
+  // permission: org.update
+  rpc DisableModelDrafting(DisableModelDraftingRequest) returns (DisableModelDraftingResponse);
+  // ClearModelKey removes the key and turns drafting off. A person only; no
+  // step-up.
+  // permission: org.update
+  rpc ClearModelKey(ClearModelKeyRequest) returns (ClearModelKeyResponse);
+}
+
+// ModelSettings is an organization's settings, without its key.
+message ModelSettings {
+  // Whether the organization turned drafting on.
+  bool enabled = 1;
+  // Whether this server and edition allow it at all.
+  bool available = 2;
+  // Whether a key is stored.
+  bool key_set = 3;
+  // When the key was set.
+  google.protobuf.Timestamp key_set_at = 4;
+  // The provider's model id.
+  string model = 5;
+  // The caps in force.
+  int32 calls_per_minute = 6;
+  // Tokens a UTC day.
+  int64 tokens_per_day = 7;
+  // The server's caps, which the organization can only lower.
+  int32 max_calls_per_minute = 8;
+  // The server's tokens a UTC day.
+  int64 max_tokens_per_day = 9;
+}
+
+// GetModelSettingsRequest has no fields.
+message GetModelSettingsRequest {}
+
+// GetModelSettingsResponse carries the settings.
+message GetModelSettingsResponse {
+  // The settings.
+  ModelSettings settings = 1;
+}
+
+// UpdateModelSettingsRequest sets the model and the caps.
+message UpdateModelSettingsRequest {
+  // The provider's model id.
+  string model = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 63
+  }];
+  // Calls a minute; 0 means the server's cap.
+  int32 calls_per_minute = 2 [(buf.validate.field).int32.gte = 0];
+  // Tokens a UTC day; 0 means the server's cap.
+  int64 tokens_per_day = 3 [(buf.validate.field).int64.gte = 0];
+}
+
+// UpdateModelSettingsResponse carries the settings.
+message UpdateModelSettingsResponse {
+  // The settings.
+  ModelSettings settings = 1;
+}
+
+// DisableModelDraftingRequest has no fields.
+message DisableModelDraftingRequest {}
+
+// DisableModelDraftingResponse carries the settings.
+message DisableModelDraftingResponse {
+  // The settings.
+  ModelSettings settings = 1;
+}
+
+// ClearModelKeyRequest has no fields.
+message ClearModelKeyRequest {}
+
+// ClearModelKeyResponse carries the settings.
+message ClearModelKeyResponse {
+  // The settings.
+  ModelSettings settings = 1;
+}

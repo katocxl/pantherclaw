@@ -2337,6 +2337,43 @@ type PcMetricSample struct {
 	SampledAt time.Time
 }
 
+type PcModelCall struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	Actor        string
+	Task         string
+	Model        string
+	Outcome      string
+	InputTokens  int32
+	OutputTokens int32
+	CreatedAt    time.Time
+	FinishedAt   *time.Time
+}
+
+type PcModelDraft struct {
+	OrgID     ids.OrgID
+	VersionID ids.UUID
+	CallID    ids.UUID
+	Kind      string
+	Origin    string
+	CreatedAt time.Time
+}
+
+type PcModelSetting struct {
+	OrgID             ids.OrgID
+	Enabled           bool
+	Model             string
+	KeyCiphertext     []byte
+	KeySetAt          *time.Time
+	KeySetBy          *ids.UUID
+	CallsPerMinute    *int32
+	TokensPerDay      pgtype.Int8
+	EnabledAt         *time.Time
+	EnabledBy         *ids.UUID
+	EnabledCredential *ids.UUID
+	UpdatedAt         time.Time
+}
+
 type PcNotification struct {
 	OrgID           ids.OrgID
 	ID              ids.UUID

@@ -86,6 +86,8 @@ type Config struct {
 	// config_m13_limits.go).
 	Limits  LimitsConfig  `json:"limits"`
 	Backups BackupsConfig `json:"backups"`
+	// Model is optional model drafting (G0 M21 D309; config_m21_model.go).
+	Model ModelConfig `json:"model"`
 }
 
 // IdentityConfig configures workload identity (M3).
@@ -168,6 +170,7 @@ func DefaultConfig() Config {
 		CEL:       celenv.DefaultLimits,
 		Telemetry: defaultTelemetry(),
 		Limits:    defaultLimits(),
+		Model:     defaultModel(),
 	}
 }
 
@@ -218,6 +221,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateDevSlack()...)
 	errs = append(errs, c.validateObservability()...)
 	errs = append(errs, c.validateLimits()...)
+	errs = append(errs, c.validateModel()...)
 	if err := c.CEL.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("cel: %w", err))
 	}
