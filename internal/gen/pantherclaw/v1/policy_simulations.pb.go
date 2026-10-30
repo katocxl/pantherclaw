@@ -167,8 +167,12 @@ type SimulatePolicyVersionRequest struct {
 	Days int32 `protobuf:"varint,2,opt,name=days,proto3" json:"days,omitempty"`
 	// max_evaluations bounds the recorded decisions replayed (0: 10 000).
 	MaxEvaluations int32 `protobuf:"varint,3,opt,name=max_evaluations,json=maxEvaluations,proto3" json:"max_evaluations,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// cohort_id makes it a bulk simulation (Enterprise; G0 M18 D154): only
+	// the decisions of the fleet cohort's agents the caller may read now
+	// are replayed, under the same caps.
+	CohortId      *string `protobuf:"bytes,4,opt,name=cohort_id,json=cohortId,proto3,oneof" json:"cohort_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SimulatePolicyVersionRequest) Reset() {
@@ -220,6 +224,13 @@ func (x *SimulatePolicyVersionRequest) GetMaxEvaluations() int32 {
 		return x.MaxEvaluations
 	}
 	return 0
+}
+
+func (x *SimulatePolicyVersionRequest) GetCohortId() string {
+	if x != nil && x.CohortId != nil {
+		return *x.CohortId
+	}
+	return ""
 }
 
 // PolicySimulationCounts counts recorded decisions by category.
@@ -509,9 +520,19 @@ type PolicySimulation struct {
 	StartTime   *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
 	FinishTime  *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=finish_time,json=finishTime,proto3" json:"finish_time,omitempty"`
 	// error is why a FAILED simulation stopped.
-	Error         string `protobuf:"bytes,20,opt,name=error,proto3" json:"error,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Error string `protobuf:"bytes,20,opt,name=error,proto3" json:"error,omitempty"`
+	// cohort_id is a bulk simulation's fleet cohort; empty: the whole org.
+	CohortId string `protobuf:"bytes,21,opt,name=cohort_id,json=cohortId,proto3" json:"cohort_id,omitempty"`
+	// cohort_agents is how many agents its snapshot holds.
+	CohortAgents int32 `protobuf:"varint,22,opt,name=cohort_agents,json=cohortAgents,proto3" json:"cohort_agents,omitempty"`
+	// by_cohort counts decisions per fleet cohort (key: the cohort id),
+	// only for cohorts the caller may read.
+	ByCohort []*PolicySimulationGroup `protobuf:"bytes,23,rep,name=by_cohort,json=byCohort,proto3" json:"by_cohort,omitempty"`
+	// cohort_truncated says the cohort held more agents than its snapshot
+	// could (2000): later ones were not replayed.
+	CohortTruncated bool `protobuf:"varint,24,opt,name=cohort_truncated,json=cohortTruncated,proto3" json:"cohort_truncated,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *PolicySimulation) Reset() {
@@ -682,6 +703,34 @@ func (x *PolicySimulation) GetError() string {
 		return x.Error
 	}
 	return ""
+}
+
+func (x *PolicySimulation) GetCohortId() string {
+	if x != nil {
+		return x.CohortId
+	}
+	return ""
+}
+
+func (x *PolicySimulation) GetCohortAgents() int32 {
+	if x != nil {
+		return x.CohortAgents
+	}
+	return 0
+}
+
+func (x *PolicySimulation) GetByCohort() []*PolicySimulationGroup {
+	if x != nil {
+		return x.ByCohort
+	}
+	return nil
+}
+
+func (x *PolicySimulation) GetCohortTruncated() bool {
+	if x != nil {
+		return x.CohortTruncated
+	}
+	return false
 }
 
 type SimulatePolicyVersionResponse struct {
@@ -1262,12 +1311,15 @@ var File_pantherclaw_v1_policy_simulations_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_policy_simulations_proto_rawDesc = "" +
 	"\n" +
-	"'pantherclaw/v1/policy_simulations.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9c\x01\n" +
+	"'pantherclaw/v1/policy_simulations.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd6\x01\n" +
 	"\x1cSimulatePolicyVersionRequest\x12'\n" +
 	"\n" +
 	"version_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\tversionId\x12\x1d\n" +
 	"\x04days\x18\x02 \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x1e(\x00R\x04days\x124\n" +
-	"\x0fmax_evaluations\x18\x03 \x01(\x05B\v\xbaH\b\x1a\x06\x18І\x03(\x00R\x0emaxEvaluations\"\x93\x02\n" +
+	"\x0fmax_evaluations\x18\x03 \x01(\x05B\v\xbaH\b\x1a\x06\x18І\x03(\x00R\x0emaxEvaluations\x12*\n" +
+	"\tcohort_id\x18\x04 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\bcohortId\x88\x01\x01B\f\n" +
+	"\n" +
+	"_cohort_id\"\x93\x02\n" +
 	"\x16PolicySimulationCounts\x12\x1c\n" +
 	"\tunchanged\x18\x01 \x01(\x05R\tunchanged\x12!\n" +
 	"\fnewly_denied\x18\x02 \x01(\x05R\vnewlyDenied\x12\x1d\n" +
@@ -1287,7 +1339,7 @@ const file_pantherclaw_v1_policy_simulations_proto_rawDesc = "" +
 	"\x14PolicySimulationRole\x12\x12\n" +
 	"\x04role\x18\x01 \x01(\tR\x04role\x12\x1d\n" +
 	"\n" +
-	"newly_held\x18\x02 \x01(\x05R\tnewlyHeld\"\xf7\a\n" +
+	"newly_held\x18\x02 \x01(\x05R\tnewlyHeld\"\xa8\t\n" +
 	"\x10PolicySimulation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -1314,7 +1366,11 @@ const file_pantherclaw_v1_policy_simulations_proto_rawDesc = "" +
 	"start_time\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12;\n" +
 	"\vfinish_time\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"finishTime\x12\x14\n" +
-	"\x05error\x18\x14 \x01(\tR\x05error\"a\n" +
+	"\x05error\x18\x14 \x01(\tR\x05error\x12\x1b\n" +
+	"\tcohort_id\x18\x15 \x01(\tR\bcohortId\x12#\n" +
+	"\rcohort_agents\x18\x16 \x01(\x05R\fcohortAgents\x12B\n" +
+	"\tby_cohort\x18\x17 \x03(\v2%.pantherclaw.v1.PolicySimulationGroupR\bbyCohort\x12)\n" +
+	"\x10cohort_truncated\x18\x18 \x01(\bR\x0fcohortTruncated\"a\n" +
 	"\x1dSimulatePolicyVersionResponse\x12@\n" +
 	"\n" +
 	"simulation\x18\x01 \x01(\v2 .pantherclaw.v1.PolicySimulationR\n" +
@@ -1436,28 +1492,29 @@ var file_pantherclaw_v1_policy_simulations_proto_depIdxs = []int32{
 	18, // 9: pantherclaw.v1.PolicySimulation.create_time:type_name -> google.protobuf.Timestamp
 	18, // 10: pantherclaw.v1.PolicySimulation.start_time:type_name -> google.protobuf.Timestamp
 	18, // 11: pantherclaw.v1.PolicySimulation.finish_time:type_name -> google.protobuf.Timestamp
-	7,  // 12: pantherclaw.v1.SimulatePolicyVersionResponse.simulation:type_name -> pantherclaw.v1.PolicySimulation
-	7,  // 13: pantherclaw.v1.GetSimulationResponse.simulation:type_name -> pantherclaw.v1.PolicySimulation
-	7,  // 14: pantherclaw.v1.ListSimulationsResponse.simulations:type_name -> pantherclaw.v1.PolicySimulation
-	7,  // 15: pantherclaw.v1.CancelSimulationResponse.simulation:type_name -> pantherclaw.v1.PolicySimulation
-	1,  // 16: pantherclaw.v1.ListSimulationSamplesRequest.category:type_name -> pantherclaw.v1.PolicySimulationCategory
-	1,  // 17: pantherclaw.v1.PolicySimulationSample.category:type_name -> pantherclaw.v1.PolicySimulationCategory
-	16, // 18: pantherclaw.v1.ListSimulationSamplesResponse.samples:type_name -> pantherclaw.v1.PolicySimulationSample
-	2,  // 19: pantherclaw.v1.PolicySimulationService.SimulatePolicyVersion:input_type -> pantherclaw.v1.SimulatePolicyVersionRequest
-	9,  // 20: pantherclaw.v1.PolicySimulationService.GetSimulation:input_type -> pantherclaw.v1.GetSimulationRequest
-	11, // 21: pantherclaw.v1.PolicySimulationService.ListSimulations:input_type -> pantherclaw.v1.ListSimulationsRequest
-	13, // 22: pantherclaw.v1.PolicySimulationService.CancelSimulation:input_type -> pantherclaw.v1.CancelSimulationRequest
-	15, // 23: pantherclaw.v1.PolicySimulationService.ListSimulationSamples:input_type -> pantherclaw.v1.ListSimulationSamplesRequest
-	8,  // 24: pantherclaw.v1.PolicySimulationService.SimulatePolicyVersion:output_type -> pantherclaw.v1.SimulatePolicyVersionResponse
-	10, // 25: pantherclaw.v1.PolicySimulationService.GetSimulation:output_type -> pantherclaw.v1.GetSimulationResponse
-	12, // 26: pantherclaw.v1.PolicySimulationService.ListSimulations:output_type -> pantherclaw.v1.ListSimulationsResponse
-	14, // 27: pantherclaw.v1.PolicySimulationService.CancelSimulation:output_type -> pantherclaw.v1.CancelSimulationResponse
-	17, // 28: pantherclaw.v1.PolicySimulationService.ListSimulationSamples:output_type -> pantherclaw.v1.ListSimulationSamplesResponse
-	24, // [24:29] is the sub-list for method output_type
-	19, // [19:24] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	4,  // 12: pantherclaw.v1.PolicySimulation.by_cohort:type_name -> pantherclaw.v1.PolicySimulationGroup
+	7,  // 13: pantherclaw.v1.SimulatePolicyVersionResponse.simulation:type_name -> pantherclaw.v1.PolicySimulation
+	7,  // 14: pantherclaw.v1.GetSimulationResponse.simulation:type_name -> pantherclaw.v1.PolicySimulation
+	7,  // 15: pantherclaw.v1.ListSimulationsResponse.simulations:type_name -> pantherclaw.v1.PolicySimulation
+	7,  // 16: pantherclaw.v1.CancelSimulationResponse.simulation:type_name -> pantherclaw.v1.PolicySimulation
+	1,  // 17: pantherclaw.v1.ListSimulationSamplesRequest.category:type_name -> pantherclaw.v1.PolicySimulationCategory
+	1,  // 18: pantherclaw.v1.PolicySimulationSample.category:type_name -> pantherclaw.v1.PolicySimulationCategory
+	16, // 19: pantherclaw.v1.ListSimulationSamplesResponse.samples:type_name -> pantherclaw.v1.PolicySimulationSample
+	2,  // 20: pantherclaw.v1.PolicySimulationService.SimulatePolicyVersion:input_type -> pantherclaw.v1.SimulatePolicyVersionRequest
+	9,  // 21: pantherclaw.v1.PolicySimulationService.GetSimulation:input_type -> pantherclaw.v1.GetSimulationRequest
+	11, // 22: pantherclaw.v1.PolicySimulationService.ListSimulations:input_type -> pantherclaw.v1.ListSimulationsRequest
+	13, // 23: pantherclaw.v1.PolicySimulationService.CancelSimulation:input_type -> pantherclaw.v1.CancelSimulationRequest
+	15, // 24: pantherclaw.v1.PolicySimulationService.ListSimulationSamples:input_type -> pantherclaw.v1.ListSimulationSamplesRequest
+	8,  // 25: pantherclaw.v1.PolicySimulationService.SimulatePolicyVersion:output_type -> pantherclaw.v1.SimulatePolicyVersionResponse
+	10, // 26: pantherclaw.v1.PolicySimulationService.GetSimulation:output_type -> pantherclaw.v1.GetSimulationResponse
+	12, // 27: pantherclaw.v1.PolicySimulationService.ListSimulations:output_type -> pantherclaw.v1.ListSimulationsResponse
+	14, // 28: pantherclaw.v1.PolicySimulationService.CancelSimulation:output_type -> pantherclaw.v1.CancelSimulationResponse
+	17, // 29: pantherclaw.v1.PolicySimulationService.ListSimulationSamples:output_type -> pantherclaw.v1.ListSimulationSamplesResponse
+	25, // [25:30] is the sub-list for method output_type
+	20, // [20:25] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_policy_simulations_proto_init() }
@@ -1465,6 +1522,7 @@ func file_pantherclaw_v1_policy_simulations_proto_init() {
 	if File_pantherclaw_v1_policy_simulations_proto != nil {
 		return
 	}
+	file_pantherclaw_v1_policy_simulations_proto_msgTypes[0].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

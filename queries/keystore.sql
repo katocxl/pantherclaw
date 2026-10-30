@@ -21,12 +21,12 @@ WHERE org_id = sqlc.arg(org_id) AND kid = sqlc.arg(kid) AND state = sqlc.arg(fro
 SELECT pg_advisory_xact_lock(hashtextextended('pc.keystore:' || sqlc.arg(org_id)::uuid::text, 0));
 
 -- name: ActiveDEK :one
-SELECT version, wrapped_key
+SELECT version, wrapped_key, kek_id
 FROM pc.deks
 WHERE org_id = sqlc.arg(org_id) AND purpose = sqlc.arg(purpose) AND state = 'ACTIVE';
 
 -- name: GetDEK :one
-SELECT wrapped_key
+SELECT wrapped_key, kek_id
 FROM pc.deks
 WHERE org_id = sqlc.arg(org_id) AND purpose = sqlc.arg(purpose) AND version = sqlc.arg(version);
 
@@ -46,3 +46,43 @@ SELECT kid, purpose, algorithm, public_key, state, created_at, state_changed_at
 FROM pc.keys
 WHERE org_id = sqlc.arg(org_id) AND purpose = ANY(sqlc.arg(purposes)::text[])
 ORDER BY created_at, kid;
+
+-- name: ListDEKsToRewrap :many
+-- DEKs to re-wrap (D157, migration 00224): all but those whose kek_id is
+-- skipped (the current KEK in any spelling, and KEKs no provider holds).
+SELECT purpose, version, wrapped_key, kek_id
+FROM pc.deks
+WHERE org_id = sqlc.arg(org_id) AND kek_id <> ALL(sqlc.arg(skip_kek_ids)::text[])
+ORDER BY purpose, version
+LIMIT sqlc.arg(row_limit);
+
+-- name: RewrapDEK :execrows
+-- A compare-and-swap on both old columns; the 00224 trigger refuses a
+-- change of one without the other (HR-487).
+UPDATE pc.deks
+SET wrapped_key = sqlc.arg(wrapped_key), kek_id = sqlc.arg(kek_id)
+WHERE org_id = sqlc.arg(org_id) AND purpose = sqlc.arg(purpose) AND version = sqlc.arg(version)
+  AND wrapped_key = sqlc.arg(old_wrapped_key) AND kek_id = sqlc.arg(old_kek_id);
+
+-- name: ListSigningKeysToRewrap :many
+-- Revoked keys are never unwrapped, so they stay as they are.
+SELECT kid, purpose, wrapped_private_key, kek_id
+FROM pc.keys
+WHERE org_id = sqlc.arg(org_id) AND state <> 'REVOKED' AND kek_id <> ALL(sqlc.arg(skip_kek_ids)::text[])
+ORDER BY created_at, kid
+LIMIT sqlc.arg(row_limit);
+
+-- name: RewrapSigningKey :execrows
+UPDATE pc.keys
+SET wrapped_private_key = sqlc.arg(wrapped_private_key), kek_id = sqlc.arg(kek_id)
+WHERE org_id = sqlc.arg(org_id) AND kid = sqlc.arg(kid)
+  AND wrapped_private_key = sqlc.arg(old_wrapped_private_key) AND kek_id = sqlc.arg(old_kek_id);
+
+-- name: ListStoredKEKIDs :many
+-- The distinct kek_id values of an org's stored keys, for the start-up
+-- check that every one has a provider (D165). Revoked signing keys are
+-- never unwrapped, so they don't count.
+SELECT k.kek_id FROM pc.keys AS k WHERE k.org_id = sqlc.arg(org_id) AND k.state <> 'REVOKED'
+UNION
+SELECT d.kek_id FROM pc.deks AS d WHERE d.org_id = sqlc.arg(org_id)
+ORDER BY kek_id;

@@ -61,7 +61,9 @@ type PolicyException struct {
 	// Why it was revoked (untrusted text).
 	RevokedReason string `protobuf:"bytes,15,opt,name=revoked_reason,json=revokedReason,proto3" json:"revoked_reason,omitempty"`
 	// When it was requested.
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// The exception group it belongs to; empty for one agent's exception.
+	GroupId       string `protobuf:"bytes,17,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -206,6 +208,13 @@ func (x *PolicyException) GetCreateTime() *timestamppb.Timestamp {
 		return x.CreateTime
 	}
 	return nil
+}
+
+func (x *PolicyException) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
 }
 
 // RequestPolicyExceptionRequest describes an exception.
@@ -693,11 +702,696 @@ func (x *RevokePolicyExceptionResponse) GetException() *PolicyException {
 	return nil
 }
 
+// PolicyExceptionGroup is one exception group (G0 M18 D154).
+type PolicyExceptionGroup struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Group id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// The fleet cohort whose agents it covers, as they were at approval.
+	CohortId string `protobuf:"bytes,2,opt,name=cohort_id,json=cohortId,proto3" json:"cohort_id,omitempty"`
+	// The policy bundle id.
+	BundleId string `protobuf:"bytes,3,opt,name=bundle_id,json=bundleId,proto3" json:"bundle_id,omitempty"`
+	// The waived rule.
+	RuleId string `protobuf:"bytes,4,opt,name=rule_id,json=ruleId,proto3" json:"rule_id,omitempty"`
+	// SHA-256 of the rule as requested, hex.
+	RuleDigest string `protobuf:"bytes,5,opt,name=rule_digest,json=ruleDigest,proto3" json:"rule_digest,omitempty"`
+	// The exact operations it applies to.
+	Operations []string `protobuf:"bytes,6,rep,name=operations,proto3" json:"operations,omitempty"`
+	// Why, in the requester's words (untrusted text).
+	Reason string `protobuf:"bytes,7,opt,name=reason,proto3" json:"reason,omitempty"`
+	// The person accountable for it.
+	OwnerId string `protobuf:"bytes,8,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`
+	// The person who requested it.
+	RequestedBy string `protobuf:"bytes,9,opt,name=requested_by,json=requestedBy,proto3" json:"requested_by,omitempty"`
+	// The expiry asked for.
+	RequestedExpireTime *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=requested_expire_time,json=requestedExpireTime,proto3" json:"requested_expire_time,omitempty"`
+	// "PENDING", "ACTIVE", "DECLINED", "REVOKED" or "EXPIRED".
+	State string `protobuf:"bytes,11,opt,name=state,proto3" json:"state,omitempty"`
+	// When it became active; unset before.
+	ActivateTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=activate_time,json=activateTime,proto3" json:"activate_time,omitempty"`
+	// When it ends; unset before it is active.
+	ExpireTime *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
+	// How many agents the snapshot at approval holds; unset before.
+	Members *int32 `protobuf:"varint,14,opt,name=members,proto3,oneof" json:"members,omitempty"`
+	// Who revoked it; empty unless revoked.
+	RevokedBy string `protobuf:"bytes,15,opt,name=revoked_by,json=revokedBy,proto3" json:"revoked_by,omitempty"`
+	// Why it was revoked (untrusted text).
+	RevokedReason string `protobuf:"bytes,16,opt,name=revoked_reason,json=revokedReason,proto3" json:"revoked_reason,omitempty"`
+	// When it was requested.
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,17,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// Whether the cohort held more agents than the snapshot at approval
+	// could (2000), so later ones were left out; unset before.
+	Truncated     *bool `protobuf:"varint,18,opt,name=truncated,proto3,oneof" json:"truncated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PolicyExceptionGroup) Reset() {
+	*x = PolicyExceptionGroup{}
+	mi := &file_pantherclaw_v1_policy_exceptions_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolicyExceptionGroup) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolicyExceptionGroup) ProtoMessage() {}
+
+func (x *PolicyExceptionGroup) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policy_exceptions_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolicyExceptionGroup.ProtoReflect.Descriptor instead.
+func (*PolicyExceptionGroup) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policy_exceptions_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *PolicyExceptionGroup) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *PolicyExceptionGroup) GetCohortId() string {
+	if x != nil {
+		return x.CohortId
+	}
+	return ""
+}
+
+func (x *PolicyExceptionGroup) GetBundleId() string {
+	if x != nil {
+		return x.BundleId
+	}
+	return ""
+}
+
+func (x *PolicyExceptionGroup) GetRuleId() string {
+	if x != nil {
+		return x.RuleId
+	}
+	return ""
+}
+
+func (x *PolicyExceptionGroup) GetRuleDigest() string {
+	if x != nil {
+		return x.RuleDigest
+	}
+	return ""
+}
+
+func (x *PolicyExceptionGroup) GetOperations() []string {
+	if x != nil {
+		return x.Operations
+	}
+	return nil
+}
+
+func (x *PolicyExceptionGroup) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *PolicyExceptionGroup) GetOwnerId() string {
+	if x != nil {
+		return x.OwnerId
+	}
+	return ""
+}
+
+func (x *PolicyExceptionGroup) GetRequestedBy() string {
+	if x != nil {
+		return x.RequestedBy
+	}
+	return ""
+}
+
+func (x *PolicyExceptionGroup) GetRequestedExpireTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RequestedExpireTime
+	}
+	return nil
+}
+
+func (x *PolicyExceptionGroup) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *PolicyExceptionGroup) GetActivateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ActivateTime
+	}
+	return nil
+}
+
+func (x *PolicyExceptionGroup) GetExpireTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpireTime
+	}
+	return nil
+}
+
+func (x *PolicyExceptionGroup) GetMembers() int32 {
+	if x != nil && x.Members != nil {
+		return *x.Members
+	}
+	return 0
+}
+
+func (x *PolicyExceptionGroup) GetRevokedBy() string {
+	if x != nil {
+		return x.RevokedBy
+	}
+	return ""
+}
+
+func (x *PolicyExceptionGroup) GetRevokedReason() string {
+	if x != nil {
+		return x.RevokedReason
+	}
+	return ""
+}
+
+func (x *PolicyExceptionGroup) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *PolicyExceptionGroup) GetTruncated() bool {
+	if x != nil && x.Truncated != nil {
+		return *x.Truncated
+	}
+	return false
+}
+
+// RequestPolicyExceptionGroupRequest describes an exception group.
+type RequestPolicyExceptionGroupRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The rule id in the published version.
+	RuleId string `protobuf:"bytes,1,opt,name=rule_id,json=ruleId,proto3" json:"rule_id,omitempty"`
+	// Fleet cohort id.
+	CohortId string `protobuf:"bytes,2,opt,name=cohort_id,json=cohortId,proto3" json:"cohort_id,omitempty"`
+	// Exact operations inside the rule's scope.
+	Operations []string `protobuf:"bytes,3,rep,name=operations,proto3" json:"operations,omitempty"`
+	// Why the rule should not apply (1 to 500 characters).
+	Reason string `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	// How long it should last, in seconds: at most 30 days.
+	ExpiresInSeconds int64 `protobuf:"varint,5,opt,name=expires_in_seconds,json=expiresInSeconds,proto3" json:"expires_in_seconds,omitempty"`
+	// The person accountable for it; unset: the requester.
+	OwnerId       *string `protobuf:"bytes,6,opt,name=owner_id,json=ownerId,proto3,oneof" json:"owner_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RequestPolicyExceptionGroupRequest) Reset() {
+	*x = RequestPolicyExceptionGroupRequest{}
+	mi := &file_pantherclaw_v1_policy_exceptions_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequestPolicyExceptionGroupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestPolicyExceptionGroupRequest) ProtoMessage() {}
+
+func (x *RequestPolicyExceptionGroupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policy_exceptions_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestPolicyExceptionGroupRequest.ProtoReflect.Descriptor instead.
+func (*RequestPolicyExceptionGroupRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policy_exceptions_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *RequestPolicyExceptionGroupRequest) GetRuleId() string {
+	if x != nil {
+		return x.RuleId
+	}
+	return ""
+}
+
+func (x *RequestPolicyExceptionGroupRequest) GetCohortId() string {
+	if x != nil {
+		return x.CohortId
+	}
+	return ""
+}
+
+func (x *RequestPolicyExceptionGroupRequest) GetOperations() []string {
+	if x != nil {
+		return x.Operations
+	}
+	return nil
+}
+
+func (x *RequestPolicyExceptionGroupRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *RequestPolicyExceptionGroupRequest) GetExpiresInSeconds() int64 {
+	if x != nil {
+		return x.ExpiresInSeconds
+	}
+	return 0
+}
+
+func (x *RequestPolicyExceptionGroupRequest) GetOwnerId() string {
+	if x != nil && x.OwnerId != nil {
+		return *x.OwnerId
+	}
+	return ""
+}
+
+// RequestPolicyExceptionGroupResponse returns the pending group.
+type RequestPolicyExceptionGroupResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The group, PENDING.
+	Group *PolicyExceptionGroup `protobuf:"bytes,1,opt,name=group,proto3" json:"group,omitempty"`
+	// The change request to confirm.
+	ChangeRequestId string `protobuf:"bytes,2,opt,name=change_request_id,json=changeRequestId,proto3" json:"change_request_id,omitempty"`
+	// The page where it is confirmed.
+	ChangeRequestUrl string `protobuf:"bytes,3,opt,name=change_request_url,json=changeRequestUrl,proto3" json:"change_request_url,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *RequestPolicyExceptionGroupResponse) Reset() {
+	*x = RequestPolicyExceptionGroupResponse{}
+	mi := &file_pantherclaw_v1_policy_exceptions_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequestPolicyExceptionGroupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestPolicyExceptionGroupResponse) ProtoMessage() {}
+
+func (x *RequestPolicyExceptionGroupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policy_exceptions_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestPolicyExceptionGroupResponse.ProtoReflect.Descriptor instead.
+func (*RequestPolicyExceptionGroupResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policy_exceptions_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *RequestPolicyExceptionGroupResponse) GetGroup() *PolicyExceptionGroup {
+	if x != nil {
+		return x.Group
+	}
+	return nil
+}
+
+func (x *RequestPolicyExceptionGroupResponse) GetChangeRequestId() string {
+	if x != nil {
+		return x.ChangeRequestId
+	}
+	return ""
+}
+
+func (x *RequestPolicyExceptionGroupResponse) GetChangeRequestUrl() string {
+	if x != nil {
+		return x.ChangeRequestUrl
+	}
+	return ""
+}
+
+// GetPolicyExceptionGroupRequest names a group.
+type GetPolicyExceptionGroupRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Group id.
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPolicyExceptionGroupRequest) Reset() {
+	*x = GetPolicyExceptionGroupRequest{}
+	mi := &file_pantherclaw_v1_policy_exceptions_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPolicyExceptionGroupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPolicyExceptionGroupRequest) ProtoMessage() {}
+
+func (x *GetPolicyExceptionGroupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policy_exceptions_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPolicyExceptionGroupRequest.ProtoReflect.Descriptor instead.
+func (*GetPolicyExceptionGroupRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policy_exceptions_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GetPolicyExceptionGroupRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// GetPolicyExceptionGroupResponse returns it.
+type GetPolicyExceptionGroupResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The group.
+	Group *PolicyExceptionGroup `protobuf:"bytes,1,opt,name=group,proto3" json:"group,omitempty"`
+	// The agents its snapshot covers, by id.
+	AgentIds      []string `protobuf:"bytes,2,rep,name=agent_ids,json=agentIds,proto3" json:"agent_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPolicyExceptionGroupResponse) Reset() {
+	*x = GetPolicyExceptionGroupResponse{}
+	mi := &file_pantherclaw_v1_policy_exceptions_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPolicyExceptionGroupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPolicyExceptionGroupResponse) ProtoMessage() {}
+
+func (x *GetPolicyExceptionGroupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policy_exceptions_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPolicyExceptionGroupResponse.ProtoReflect.Descriptor instead.
+func (*GetPolicyExceptionGroupResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policy_exceptions_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *GetPolicyExceptionGroupResponse) GetGroup() *PolicyExceptionGroup {
+	if x != nil {
+		return x.Group
+	}
+	return nil
+}
+
+func (x *GetPolicyExceptionGroupResponse) GetAgentIds() []string {
+	if x != nil {
+		return x.AgentIds
+	}
+	return nil
+}
+
+// ListPolicyExceptionGroupsRequest filters groups.
+type ListPolicyExceptionGroupsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Maximum results (default 50, at most 200).
+	PageSize int32 `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// Token from a previous response.
+	PageToken string `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// Only this cohort.
+	CohortId *string `protobuf:"bytes,3,opt,name=cohort_id,json=cohortId,proto3,oneof" json:"cohort_id,omitempty"`
+	// Only this state.
+	State         *string `protobuf:"bytes,4,opt,name=state,proto3,oneof" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPolicyExceptionGroupsRequest) Reset() {
+	*x = ListPolicyExceptionGroupsRequest{}
+	mi := &file_pantherclaw_v1_policy_exceptions_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPolicyExceptionGroupsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPolicyExceptionGroupsRequest) ProtoMessage() {}
+
+func (x *ListPolicyExceptionGroupsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policy_exceptions_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPolicyExceptionGroupsRequest.ProtoReflect.Descriptor instead.
+func (*ListPolicyExceptionGroupsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policy_exceptions_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ListPolicyExceptionGroupsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListPolicyExceptionGroupsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+func (x *ListPolicyExceptionGroupsRequest) GetCohortId() string {
+	if x != nil && x.CohortId != nil {
+		return *x.CohortId
+	}
+	return ""
+}
+
+func (x *ListPolicyExceptionGroupsRequest) GetState() string {
+	if x != nil && x.State != nil {
+		return *x.State
+	}
+	return ""
+}
+
+// ListPolicyExceptionGroupsResponse is one page.
+type ListPolicyExceptionGroupsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Groups, newest first.
+	Groups []*PolicyExceptionGroup `protobuf:"bytes,1,rep,name=groups,proto3" json:"groups,omitempty"`
+	// Token for the next page; empty at the end.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPolicyExceptionGroupsResponse) Reset() {
+	*x = ListPolicyExceptionGroupsResponse{}
+	mi := &file_pantherclaw_v1_policy_exceptions_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPolicyExceptionGroupsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPolicyExceptionGroupsResponse) ProtoMessage() {}
+
+func (x *ListPolicyExceptionGroupsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policy_exceptions_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPolicyExceptionGroupsResponse.ProtoReflect.Descriptor instead.
+func (*ListPolicyExceptionGroupsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policy_exceptions_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ListPolicyExceptionGroupsResponse) GetGroups() []*PolicyExceptionGroup {
+	if x != nil {
+		return x.Groups
+	}
+	return nil
+}
+
+func (x *ListPolicyExceptionGroupsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+// RevokePolicyExceptionGroupRequest names a group.
+type RevokePolicyExceptionGroupRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Group id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Why (1 to 500 characters).
+	Reason        string `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokePolicyExceptionGroupRequest) Reset() {
+	*x = RevokePolicyExceptionGroupRequest{}
+	mi := &file_pantherclaw_v1_policy_exceptions_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokePolicyExceptionGroupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokePolicyExceptionGroupRequest) ProtoMessage() {}
+
+func (x *RevokePolicyExceptionGroupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policy_exceptions_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokePolicyExceptionGroupRequest.ProtoReflect.Descriptor instead.
+func (*RevokePolicyExceptionGroupRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policy_exceptions_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *RevokePolicyExceptionGroupRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *RevokePolicyExceptionGroupRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+// RevokePolicyExceptionGroupResponse returns it.
+type RevokePolicyExceptionGroupResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The group, REVOKED.
+	Group         *PolicyExceptionGroup `protobuf:"bytes,1,opt,name=group,proto3" json:"group,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokePolicyExceptionGroupResponse) Reset() {
+	*x = RevokePolicyExceptionGroupResponse{}
+	mi := &file_pantherclaw_v1_policy_exceptions_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokePolicyExceptionGroupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokePolicyExceptionGroupResponse) ProtoMessage() {}
+
+func (x *RevokePolicyExceptionGroupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policy_exceptions_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokePolicyExceptionGroupResponse.ProtoReflect.Descriptor instead.
+func (*RevokePolicyExceptionGroupResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policy_exceptions_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *RevokePolicyExceptionGroupResponse) GetGroup() *PolicyExceptionGroup {
+	if x != nil {
+		return x.Group
+	}
+	return nil
+}
+
 var File_pantherclaw_v1_policy_exceptions_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_policy_exceptions_proto_rawDesc = "" +
 	"\n" +
-	"&pantherclaw/v1/policy_exceptions.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf0\x04\n" +
+	"&pantherclaw/v1/policy_exceptions.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x8b\x05\n" +
 	"\x0fPolicyException\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tbundle_id\x18\x02 \x01(\tR\bbundleId\x12\x17\n" +
@@ -721,7 +1415,8 @@ const file_pantherclaw_v1_policy_exceptions_proto_rawDesc = "" +
 	"revoked_by\x18\x0e \x01(\tR\trevokedBy\x12%\n" +
 	"\x0erevoked_reason\x18\x0f \x01(\tR\rrevokedReason\x12;\n" +
 	"\vcreate_time\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"\xda\x02\n" +
+	"createTime\x12\x19\n" +
+	"\bgroup_id\x18\x11 \x01(\tR\agroupId\"\xda\x02\n" +
 	"\x1dRequestPolicyExceptionRequest\x12\"\n" +
 	"\arule_id\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18@R\x06ruleId\x12#\n" +
 	"\bagent_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\aagentId\x12Y\n" +
@@ -763,12 +1458,85 @@ const file_pantherclaw_v1_policy_exceptions_proto_rawDesc = "" +
 	"\x06reason\x18\x02 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xf4\x03R\x06reason\"^\n" +
 	"\x1dRevokePolicyExceptionResponse\x12=\n" +
-	"\texception\x18\x01 \x01(\v2\x1f.pantherclaw.v1.PolicyExceptionR\texception2\xf1\x03\n" +
+	"\texception\x18\x01 \x01(\v2\x1f.pantherclaw.v1.PolicyExceptionR\texception\"\xd3\x05\n" +
+	"\x14PolicyExceptionGroup\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
+	"\tcohort_id\x18\x02 \x01(\tR\bcohortId\x12\x1b\n" +
+	"\tbundle_id\x18\x03 \x01(\tR\bbundleId\x12\x17\n" +
+	"\arule_id\x18\x04 \x01(\tR\x06ruleId\x12\x1f\n" +
+	"\vrule_digest\x18\x05 \x01(\tR\n" +
+	"ruleDigest\x12\x1e\n" +
+	"\n" +
+	"operations\x18\x06 \x03(\tR\n" +
+	"operations\x12\x16\n" +
+	"\x06reason\x18\a \x01(\tR\x06reason\x12\x19\n" +
+	"\bowner_id\x18\b \x01(\tR\aownerId\x12!\n" +
+	"\frequested_by\x18\t \x01(\tR\vrequestedBy\x12N\n" +
+	"\x15requested_expire_time\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\x13requestedExpireTime\x12\x14\n" +
+	"\x05state\x18\v \x01(\tR\x05state\x12?\n" +
+	"\ractivate_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\factivateTime\x12;\n" +
+	"\vexpire_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"expireTime\x12\x1d\n" +
+	"\amembers\x18\x0e \x01(\x05H\x00R\amembers\x88\x01\x01\x12\x1d\n" +
+	"\n" +
+	"revoked_by\x18\x0f \x01(\tR\trevokedBy\x12%\n" +
+	"\x0erevoked_reason\x18\x10 \x01(\tR\rrevokedReason\x12;\n" +
+	"\vcreate_time\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12!\n" +
+	"\ttruncated\x18\x12 \x01(\bH\x01R\ttruncated\x88\x01\x01B\n" +
+	"\n" +
+	"\b_membersB\f\n" +
+	"\n" +
+	"_truncated\"\xe1\x02\n" +
+	"\"RequestPolicyExceptionGroupRequest\x12\"\n" +
+	"\arule_id\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18@R\x06ruleId\x12%\n" +
+	"\tcohort_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bcohortId\x12Y\n" +
+	"\n" +
+	"operations\x18\x03 \x03(\tB9\xbaH6\x92\x013\b\x01\x10\x10\x18\x01\"+r)\x18\x80\x012$^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7}$R\n" +
+	"operations\x12\"\n" +
+	"\x06reason\x18\x04 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xf4\x03R\x06reason\x12:\n" +
+	"\x12expires_in_seconds\x18\x05 \x01(\x03B\f\xbaH\t\"\a\x18\x80\x9a\x9e\x01(<R\x10expiresInSeconds\x12(\n" +
+	"\bowner_id\x18\x06 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\aownerId\x88\x01\x01B\v\n" +
+	"\t_owner_id\"\xbb\x01\n" +
+	"#RequestPolicyExceptionGroupResponse\x12:\n" +
+	"\x05group\x18\x01 \x01(\v2$.pantherclaw.v1.PolicyExceptionGroupR\x05group\x12*\n" +
+	"\x11change_request_id\x18\x02 \x01(\tR\x0fchangeRequestId\x12,\n" +
+	"\x12change_request_url\x18\x03 \x01(\tR\x10changeRequestUrl\":\n" +
+	"\x1eGetPolicyExceptionGroupRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"z\n" +
+	"\x1fGetPolicyExceptionGroupResponse\x12:\n" +
+	"\x05group\x18\x01 \x01(\v2$.pantherclaw.v1.PolicyExceptionGroupR\x05group\x12\x1b\n" +
+	"\tagent_ids\x18\x02 \x03(\tR\bagentIds\"\x98\x02\n" +
+	" ListPolicyExceptionGroupsRequest\x12'\n" +
+	"\tpage_size\x18\x01 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x128\n" +
+	"\n" +
+	"page_token\x18\x02 \x01(\tB\x19\xbaH\x16r\x14\x18@2\x10^[A-Za-z0-9_-]*$R\tpageToken\x12*\n" +
+	"\tcohort_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\bcohortId\x88\x01\x01\x12M\n" +
+	"\x05state\x18\x04 \x01(\tB2\xbaH/r-R\aPENDINGR\x06ACTIVER\bDECLINEDR\aREVOKEDR\aEXPIREDH\x01R\x05state\x88\x01\x01B\f\n" +
+	"\n" +
+	"_cohort_idB\b\n" +
+	"\x06_state\"\x89\x01\n" +
+	"!ListPolicyExceptionGroupsResponse\x12<\n" +
+	"\x06groups\x18\x01 \x03(\v2$.pantherclaw.v1.PolicyExceptionGroupR\x06groups\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"a\n" +
+	"!RevokePolicyExceptionGroupRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12\"\n" +
+	"\x06reason\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xf4\x03R\x06reason\"`\n" +
+	"\"RevokePolicyExceptionGroupResponse\x12:\n" +
+	"\x05group\x18\x01 \x01(\v2$.pantherclaw.v1.PolicyExceptionGroupR\x05group2\x89\b\n" +
 	"\x16PolicyExceptionService\x12w\n" +
 	"\x16RequestPolicyException\x12-.pantherclaw.v1.RequestPolicyExceptionRequest\x1a..pantherclaw.v1.RequestPolicyExceptionResponse\x12p\n" +
 	"\x12GetPolicyException\x12).pantherclaw.v1.GetPolicyExceptionRequest\x1a*.pantherclaw.v1.GetPolicyExceptionResponse\"\x03\x90\x02\x01\x12v\n" +
 	"\x14ListPolicyExceptions\x12+.pantherclaw.v1.ListPolicyExceptionsRequest\x1a,.pantherclaw.v1.ListPolicyExceptionsResponse\"\x03\x90\x02\x01\x12t\n" +
-	"\x15RevokePolicyException\x12,.pantherclaw.v1.RevokePolicyExceptionRequest\x1a-.pantherclaw.v1.RevokePolicyExceptionResponseB\xce\x01\n" +
+	"\x15RevokePolicyException\x12,.pantherclaw.v1.RevokePolicyExceptionRequest\x1a-.pantherclaw.v1.RevokePolicyExceptionResponse\x12\x86\x01\n" +
+	"\x1bRequestPolicyExceptionGroup\x122.pantherclaw.v1.RequestPolicyExceptionGroupRequest\x1a3.pantherclaw.v1.RequestPolicyExceptionGroupResponse\x12\x7f\n" +
+	"\x17GetPolicyExceptionGroup\x12..pantherclaw.v1.GetPolicyExceptionGroupRequest\x1a/.pantherclaw.v1.GetPolicyExceptionGroupResponse\"\x03\x90\x02\x01\x12\x85\x01\n" +
+	"\x19ListPolicyExceptionGroups\x120.pantherclaw.v1.ListPolicyExceptionGroupsRequest\x1a1.pantherclaw.v1.ListPolicyExceptionGroupsResponse\"\x03\x90\x02\x01\x12\x83\x01\n" +
+	"\x1aRevokePolicyExceptionGroup\x121.pantherclaw.v1.RevokePolicyExceptionGroupRequest\x1a2.pantherclaw.v1.RevokePolicyExceptionGroupResponseB\xce\x01\n" +
 	"\x12com.pantherclaw.v1B\x15PolicyExceptionsProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -783,41 +1551,66 @@ func file_pantherclaw_v1_policy_exceptions_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_policy_exceptions_proto_rawDescData
 }
 
-var file_pantherclaw_v1_policy_exceptions_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_pantherclaw_v1_policy_exceptions_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_pantherclaw_v1_policy_exceptions_proto_goTypes = []any{
-	(*PolicyException)(nil),                // 0: pantherclaw.v1.PolicyException
-	(*RequestPolicyExceptionRequest)(nil),  // 1: pantherclaw.v1.RequestPolicyExceptionRequest
-	(*RequestPolicyExceptionResponse)(nil), // 2: pantherclaw.v1.RequestPolicyExceptionResponse
-	(*GetPolicyExceptionRequest)(nil),      // 3: pantherclaw.v1.GetPolicyExceptionRequest
-	(*GetPolicyExceptionResponse)(nil),     // 4: pantherclaw.v1.GetPolicyExceptionResponse
-	(*ListPolicyExceptionsRequest)(nil),    // 5: pantherclaw.v1.ListPolicyExceptionsRequest
-	(*ListPolicyExceptionsResponse)(nil),   // 6: pantherclaw.v1.ListPolicyExceptionsResponse
-	(*RevokePolicyExceptionRequest)(nil),   // 7: pantherclaw.v1.RevokePolicyExceptionRequest
-	(*RevokePolicyExceptionResponse)(nil),  // 8: pantherclaw.v1.RevokePolicyExceptionResponse
-	(*timestamppb.Timestamp)(nil),          // 9: google.protobuf.Timestamp
+	(*PolicyException)(nil),                     // 0: pantherclaw.v1.PolicyException
+	(*RequestPolicyExceptionRequest)(nil),       // 1: pantherclaw.v1.RequestPolicyExceptionRequest
+	(*RequestPolicyExceptionResponse)(nil),      // 2: pantherclaw.v1.RequestPolicyExceptionResponse
+	(*GetPolicyExceptionRequest)(nil),           // 3: pantherclaw.v1.GetPolicyExceptionRequest
+	(*GetPolicyExceptionResponse)(nil),          // 4: pantherclaw.v1.GetPolicyExceptionResponse
+	(*ListPolicyExceptionsRequest)(nil),         // 5: pantherclaw.v1.ListPolicyExceptionsRequest
+	(*ListPolicyExceptionsResponse)(nil),        // 6: pantherclaw.v1.ListPolicyExceptionsResponse
+	(*RevokePolicyExceptionRequest)(nil),        // 7: pantherclaw.v1.RevokePolicyExceptionRequest
+	(*RevokePolicyExceptionResponse)(nil),       // 8: pantherclaw.v1.RevokePolicyExceptionResponse
+	(*PolicyExceptionGroup)(nil),                // 9: pantherclaw.v1.PolicyExceptionGroup
+	(*RequestPolicyExceptionGroupRequest)(nil),  // 10: pantherclaw.v1.RequestPolicyExceptionGroupRequest
+	(*RequestPolicyExceptionGroupResponse)(nil), // 11: pantherclaw.v1.RequestPolicyExceptionGroupResponse
+	(*GetPolicyExceptionGroupRequest)(nil),      // 12: pantherclaw.v1.GetPolicyExceptionGroupRequest
+	(*GetPolicyExceptionGroupResponse)(nil),     // 13: pantherclaw.v1.GetPolicyExceptionGroupResponse
+	(*ListPolicyExceptionGroupsRequest)(nil),    // 14: pantherclaw.v1.ListPolicyExceptionGroupsRequest
+	(*ListPolicyExceptionGroupsResponse)(nil),   // 15: pantherclaw.v1.ListPolicyExceptionGroupsResponse
+	(*RevokePolicyExceptionGroupRequest)(nil),   // 16: pantherclaw.v1.RevokePolicyExceptionGroupRequest
+	(*RevokePolicyExceptionGroupResponse)(nil),  // 17: pantherclaw.v1.RevokePolicyExceptionGroupResponse
+	(*timestamppb.Timestamp)(nil),               // 18: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_policy_exceptions_proto_depIdxs = []int32{
-	9,  // 0: pantherclaw.v1.PolicyException.requested_expire_time:type_name -> google.protobuf.Timestamp
-	9,  // 1: pantherclaw.v1.PolicyException.activate_time:type_name -> google.protobuf.Timestamp
-	9,  // 2: pantherclaw.v1.PolicyException.expire_time:type_name -> google.protobuf.Timestamp
-	9,  // 3: pantherclaw.v1.PolicyException.create_time:type_name -> google.protobuf.Timestamp
+	18, // 0: pantherclaw.v1.PolicyException.requested_expire_time:type_name -> google.protobuf.Timestamp
+	18, // 1: pantherclaw.v1.PolicyException.activate_time:type_name -> google.protobuf.Timestamp
+	18, // 2: pantherclaw.v1.PolicyException.expire_time:type_name -> google.protobuf.Timestamp
+	18, // 3: pantherclaw.v1.PolicyException.create_time:type_name -> google.protobuf.Timestamp
 	0,  // 4: pantherclaw.v1.RequestPolicyExceptionResponse.exception:type_name -> pantherclaw.v1.PolicyException
 	0,  // 5: pantherclaw.v1.GetPolicyExceptionResponse.exception:type_name -> pantherclaw.v1.PolicyException
 	0,  // 6: pantherclaw.v1.ListPolicyExceptionsResponse.exceptions:type_name -> pantherclaw.v1.PolicyException
 	0,  // 7: pantherclaw.v1.RevokePolicyExceptionResponse.exception:type_name -> pantherclaw.v1.PolicyException
-	1,  // 8: pantherclaw.v1.PolicyExceptionService.RequestPolicyException:input_type -> pantherclaw.v1.RequestPolicyExceptionRequest
-	3,  // 9: pantherclaw.v1.PolicyExceptionService.GetPolicyException:input_type -> pantherclaw.v1.GetPolicyExceptionRequest
-	5,  // 10: pantherclaw.v1.PolicyExceptionService.ListPolicyExceptions:input_type -> pantherclaw.v1.ListPolicyExceptionsRequest
-	7,  // 11: pantherclaw.v1.PolicyExceptionService.RevokePolicyException:input_type -> pantherclaw.v1.RevokePolicyExceptionRequest
-	2,  // 12: pantherclaw.v1.PolicyExceptionService.RequestPolicyException:output_type -> pantherclaw.v1.RequestPolicyExceptionResponse
-	4,  // 13: pantherclaw.v1.PolicyExceptionService.GetPolicyException:output_type -> pantherclaw.v1.GetPolicyExceptionResponse
-	6,  // 14: pantherclaw.v1.PolicyExceptionService.ListPolicyExceptions:output_type -> pantherclaw.v1.ListPolicyExceptionsResponse
-	8,  // 15: pantherclaw.v1.PolicyExceptionService.RevokePolicyException:output_type -> pantherclaw.v1.RevokePolicyExceptionResponse
-	12, // [12:16] is the sub-list for method output_type
-	8,  // [8:12] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	18, // 8: pantherclaw.v1.PolicyExceptionGroup.requested_expire_time:type_name -> google.protobuf.Timestamp
+	18, // 9: pantherclaw.v1.PolicyExceptionGroup.activate_time:type_name -> google.protobuf.Timestamp
+	18, // 10: pantherclaw.v1.PolicyExceptionGroup.expire_time:type_name -> google.protobuf.Timestamp
+	18, // 11: pantherclaw.v1.PolicyExceptionGroup.create_time:type_name -> google.protobuf.Timestamp
+	9,  // 12: pantherclaw.v1.RequestPolicyExceptionGroupResponse.group:type_name -> pantherclaw.v1.PolicyExceptionGroup
+	9,  // 13: pantherclaw.v1.GetPolicyExceptionGroupResponse.group:type_name -> pantherclaw.v1.PolicyExceptionGroup
+	9,  // 14: pantherclaw.v1.ListPolicyExceptionGroupsResponse.groups:type_name -> pantherclaw.v1.PolicyExceptionGroup
+	9,  // 15: pantherclaw.v1.RevokePolicyExceptionGroupResponse.group:type_name -> pantherclaw.v1.PolicyExceptionGroup
+	1,  // 16: pantherclaw.v1.PolicyExceptionService.RequestPolicyException:input_type -> pantherclaw.v1.RequestPolicyExceptionRequest
+	3,  // 17: pantherclaw.v1.PolicyExceptionService.GetPolicyException:input_type -> pantherclaw.v1.GetPolicyExceptionRequest
+	5,  // 18: pantherclaw.v1.PolicyExceptionService.ListPolicyExceptions:input_type -> pantherclaw.v1.ListPolicyExceptionsRequest
+	7,  // 19: pantherclaw.v1.PolicyExceptionService.RevokePolicyException:input_type -> pantherclaw.v1.RevokePolicyExceptionRequest
+	10, // 20: pantherclaw.v1.PolicyExceptionService.RequestPolicyExceptionGroup:input_type -> pantherclaw.v1.RequestPolicyExceptionGroupRequest
+	12, // 21: pantherclaw.v1.PolicyExceptionService.GetPolicyExceptionGroup:input_type -> pantherclaw.v1.GetPolicyExceptionGroupRequest
+	14, // 22: pantherclaw.v1.PolicyExceptionService.ListPolicyExceptionGroups:input_type -> pantherclaw.v1.ListPolicyExceptionGroupsRequest
+	16, // 23: pantherclaw.v1.PolicyExceptionService.RevokePolicyExceptionGroup:input_type -> pantherclaw.v1.RevokePolicyExceptionGroupRequest
+	2,  // 24: pantherclaw.v1.PolicyExceptionService.RequestPolicyException:output_type -> pantherclaw.v1.RequestPolicyExceptionResponse
+	4,  // 25: pantherclaw.v1.PolicyExceptionService.GetPolicyException:output_type -> pantherclaw.v1.GetPolicyExceptionResponse
+	6,  // 26: pantherclaw.v1.PolicyExceptionService.ListPolicyExceptions:output_type -> pantherclaw.v1.ListPolicyExceptionsResponse
+	8,  // 27: pantherclaw.v1.PolicyExceptionService.RevokePolicyException:output_type -> pantherclaw.v1.RevokePolicyExceptionResponse
+	11, // 28: pantherclaw.v1.PolicyExceptionService.RequestPolicyExceptionGroup:output_type -> pantherclaw.v1.RequestPolicyExceptionGroupResponse
+	13, // 29: pantherclaw.v1.PolicyExceptionService.GetPolicyExceptionGroup:output_type -> pantherclaw.v1.GetPolicyExceptionGroupResponse
+	15, // 30: pantherclaw.v1.PolicyExceptionService.ListPolicyExceptionGroups:output_type -> pantherclaw.v1.ListPolicyExceptionGroupsResponse
+	17, // 31: pantherclaw.v1.PolicyExceptionService.RevokePolicyExceptionGroup:output_type -> pantherclaw.v1.RevokePolicyExceptionGroupResponse
+	24, // [24:32] is the sub-list for method output_type
+	16, // [16:24] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_policy_exceptions_proto_init() }
@@ -827,13 +1620,16 @@ func file_pantherclaw_v1_policy_exceptions_proto_init() {
 	}
 	file_pantherclaw_v1_policy_exceptions_proto_msgTypes[1].OneofWrappers = []any{}
 	file_pantherclaw_v1_policy_exceptions_proto_msgTypes[5].OneofWrappers = []any{}
+	file_pantherclaw_v1_policy_exceptions_proto_msgTypes[9].OneofWrappers = []any{}
+	file_pantherclaw_v1_policy_exceptions_proto_msgTypes[10].OneofWrappers = []any{}
+	file_pantherclaw_v1_policy_exceptions_proto_msgTypes[14].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_policy_exceptions_proto_rawDesc), len(file_pantherclaw_v1_policy_exceptions_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

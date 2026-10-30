@@ -6864,6 +6864,60 @@
         }
       }
     },
+    "/pantherclaw.v1.CohortService/GetCohortFindings": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.CohortService"
+        ],
+        "summary": "GetCohortFindings",
+        "description": "GetCohortFindings counts a cohort's findings over its agents the\n caller may read (G0 M18 D154): open coverage findings, grants beyond\n the baseline, FAILED rollout targets and active exceptions. A kind\n the caller may not read is left out.\n permission: agent.read",
+        "operationId": "pantherclaw.v1.CohortService.GetCohortFindings",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetCohortFindingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetCohortFindingsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.GitHubService/ProveIdentity": {
       "post": {
         "tags": [
@@ -8366,6 +8420,222 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.DraftPackageFromInventoryResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ConsequenceRuleService/ProposeConsequenceRule": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ConsequenceRuleService"
+        ],
+        "summary": "ProposeConsequenceRule",
+        "description": "ProposeConsequenceRule stores the next version of a rule, PROPOSED,\n and returns the protected change that makes it ACTIVE (retiring the\n version it replaces) once a second person confirms it. The rule's\n operation and its consequence operation must each be defined by an\n ACTIVE package version of the org.\n permission: consequence_rule.manage",
+        "operationId": "pantherclaw.v1.ConsequenceRuleService.ProposeConsequenceRule",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ProposeConsequenceRuleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ProposeConsequenceRuleResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ConsequenceRuleService/RetireConsequenceRule": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ConsequenceRuleService"
+        ],
+        "summary": "RetireConsequenceRule",
+        "description": "RetireConsequenceRule returns the protected change that retires the\n rule's ACTIVE version once a second person confirms it.\n permission: consequence_rule.manage",
+        "operationId": "pantherclaw.v1.ConsequenceRuleService.RetireConsequenceRule",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RetireConsequenceRuleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RetireConsequenceRuleResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ConsequenceRuleService/ListConsequenceRules": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ConsequenceRuleService"
+        ],
+        "summary": "ListConsequenceRules",
+        "description": "ListConsequenceRules lists every version of the org's rules, by rule\n id, newest version first.\n permission: package.read",
+        "operationId": "pantherclaw.v1.ConsequenceRuleService.ListConsequenceRules",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListConsequenceRulesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListConsequenceRulesResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ConsequenceRuleService/GetConsequenceRule": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ConsequenceRuleService"
+        ],
+        "summary": "GetConsequenceRule",
+        "description": "GetConsequenceRule returns every version of one rule, newest first.\n permission: package.read",
+        "operationId": "pantherclaw.v1.ConsequenceRuleService.GetConsequenceRule",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetConsequenceRuleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetConsequenceRuleResponse"
                 }
               }
             }
@@ -12698,6 +12968,168 @@
         }
       }
     },
+    "/pantherclaw.v1.GatewayAdminService/GetFleetPolicy": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.GatewayAdminService"
+        ],
+        "summary": "GetFleetPolicy",
+        "description": "GetFleetPolicy returns the org's gateway fleet policy: the advisory\n minimum version and the silence threshold (G0 M18 D151). Every edition.\n permission: gateway.manage",
+        "operationId": "pantherclaw.v1.GatewayAdminService.GetFleetPolicy",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetFleetPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetFleetPolicyResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.GatewayAdminService/SetFleetPolicy": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.GatewayAdminService"
+        ],
+        "summary": "SetFleetPolicy",
+        "description": "SetFleetPolicy sets the org's gateway fleet policy (Enterprise). The\n minimum version is advisory: a gateway below it is flagged and alerted,\n never refused (HR-470).\n permission: gateway.manage",
+        "operationId": "pantherclaw.v1.GatewayAdminService.SetFleetPolicy",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetFleetPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetFleetPolicyResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.GatewayAdminService/ListFleet": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.GatewayAdminService"
+        ],
+        "summary": "ListFleet",
+        "description": "ListFleet lists the org's active gateways with each replica's version,\n its compliance with the minimum and its config lag (Team).\n permission: gateway.read",
+        "operationId": "pantherclaw.v1.GatewayAdminService.ListFleet",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListFleetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListFleetResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.GatewayService/Enroll": {
       "post": {
         "tags": [
@@ -15065,6 +15497,330 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.GetIssuerEntryResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdentityProviderService/CreateIdentityProvider": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdentityProviderService"
+        ],
+        "summary": "CreateIdentityProvider",
+        "description": "CreateIdentityProvider stores a PENDING provider and files its\n activation.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdentityProviderService.CreateIdentityProvider",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.CreateIdentityProviderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.CreateIdentityProviderResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdentityProviderService/UpdateIdentityProvider": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdentityProviderService"
+        ],
+        "summary": "UpdateIdentityProvider",
+        "description": "UpdateIdentityProvider files a change of a provider (and activates a\n DISABLED one). An empty client_secret keeps the stored one.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdentityProviderService.UpdateIdentityProvider",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.UpdateIdentityProviderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.UpdateIdentityProviderResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdentityProviderService/DisableIdentityProvider": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdentityProviderService"
+        ],
+        "summary": "DisableIdentityProvider",
+        "description": "DisableIdentityProvider files turning a provider off.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdentityProviderService.DisableIdentityProvider",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DisableIdentityProviderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DisableIdentityProviderResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdentityProviderService/SetOwnProvidersOnly": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdentityProviderService"
+        ],
+        "summary": "SetOwnProvidersOnly",
+        "description": "SetOwnProvidersOnly files the org's own_providers_only setting.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdentityProviderService.SetOwnProvidersOnly",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetOwnProvidersOnlyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetOwnProvidersOnlyResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdentityProviderService/GetIdentityProvider": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdentityProviderService"
+        ],
+        "summary": "GetIdentityProvider",
+        "description": "GetIdentityProvider returns one provider.\n permission: identity_provider.read",
+        "operationId": "pantherclaw.v1.IdentityProviderService.GetIdentityProvider",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetIdentityProviderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetIdentityProviderResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdentityProviderService/ListIdentityProviders": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdentityProviderService"
+        ],
+        "summary": "ListIdentityProviders",
+        "description": "ListIdentityProviders lists the org's providers by name (at most 100)\n and its own_providers_only setting.\n permission: identity_provider.read",
+        "operationId": "pantherclaw.v1.IdentityProviderService.ListIdentityProviders",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListIdentityProvidersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListIdentityProvidersResponse"
                 }
               }
             }
@@ -18953,6 +19709,222 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.RevokePolicyExceptionResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PolicyExceptionService/RequestPolicyExceptionGroup": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PolicyExceptionService"
+        ],
+        "summary": "RequestPolicyExceptionGroup",
+        "description": "RequestPolicyExceptionGroup asks for an exception group (a person only;\n Enterprise, G0 M18 D154): as RequestPolicyException, for the agents a\n fleet cohort holds when the change request is approved. Agents that\n join the cohort later are not covered.\n permission: policy.exception.request",
+        "operationId": "pantherclaw.v1.PolicyExceptionService.RequestPolicyExceptionGroup",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RequestPolicyExceptionGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RequestPolicyExceptionGroupResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PolicyExceptionService/GetPolicyExceptionGroup": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PolicyExceptionService"
+        ],
+        "summary": "GetPolicyExceptionGroup",
+        "description": "GetPolicyExceptionGroup returns one group and the agents it covers.\n permission: policy.read",
+        "operationId": "pantherclaw.v1.PolicyExceptionService.GetPolicyExceptionGroup",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetPolicyExceptionGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetPolicyExceptionGroupResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PolicyExceptionService/ListPolicyExceptionGroups": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PolicyExceptionService"
+        ],
+        "summary": "ListPolicyExceptionGroups",
+        "description": "ListPolicyExceptionGroups lists groups, newest first.\n permission: policy.read",
+        "operationId": "pantherclaw.v1.PolicyExceptionService.ListPolicyExceptionGroups",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListPolicyExceptionGroupsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListPolicyExceptionGroupsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PolicyExceptionService/RevokePolicyExceptionGroup": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PolicyExceptionService"
+        ],
+        "summary": "RevokePolicyExceptionGroup",
+        "description": "RevokePolicyExceptionGroup ends a pending or active group and each of\n its exceptions at once (a person only; every edition).\n permission: policy.publish",
+        "operationId": "pantherclaw.v1.PolicyExceptionService.RevokePolicyExceptionGroup",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RevokePolicyExceptionGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RevokePolicyExceptionGroupResponse"
                 }
               }
             }
@@ -31542,6 +32514,30 @@
         ],
         "description": "ChecklistStatus is the outcome of one checklist item."
       },
+      "pantherclaw.v1.ConsequenceLabel": {
+        "type": "string",
+        "title": "ConsequenceLabel",
+        "enum": [
+          "CONSEQUENCE_LABEL_UNSPECIFIED",
+          "CONSEQUENCE_LABEL_MAY_CAUSE",
+          "CONSEQUENCE_LABEL_AUTHORIZED",
+          "CONSEQUENCE_LABEL_UNKNOWN",
+          "CONSEQUENCE_LABEL_NOT_TRIGGERED",
+          "CONSEQUENCE_LABEL_ACCEPTED",
+          "CONSEQUENCE_LABEL_CONFIRMED"
+        ],
+        "description": "ConsequenceLabel is what a consequence is, apart from what was\n authorized and what was confirmed (G0 M17 D111, F410). It is derived\n where it is shown, never stored."
+      },
+      "pantherclaw.v1.ConsequenceSource": {
+        "type": "string",
+        "title": "ConsequenceSource",
+        "enum": [
+          "CONSEQUENCE_SOURCE_UNSPECIFIED",
+          "CONSEQUENCE_SOURCE_PACKAGE",
+          "CONSEQUENCE_SOURCE_CUSTOMER"
+        ],
+        "description": "ConsequenceSource is where a consequence rule comes from (G0 M17 D106)."
+      },
       "pantherclaw.v1.ConsequenceState": {
         "type": "string",
         "title": "ConsequenceState",
@@ -31990,6 +32986,29 @@
             "type": "string",
             "title": "facts_digest",
             "description": "Digest of the facts the rule read (F080)."
+          },
+          "depth": {
+            "type": "integer",
+            "title": "depth",
+            "format": "int32",
+            "description": "The consequence's place in its chain (G0 M17 D109, F411): 1 for a\n consequence of the action itself."
+          },
+          "parentIndex": {
+            "type": "integer",
+            "title": "parent_index",
+            "format": "int32",
+            "description": "For a consequence deeper than 1, the index in this list of the\n consequence it follows from, which comes before it.",
+            "nullable": true
+          },
+          "source": {
+            "title": "source",
+            "description": "Where the rule comes from (D106).",
+            "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceSource"
+          },
+          "label": {
+            "title": "label",
+            "description": "What the consequence is for this decision (D111, F410): MAY_CAUSE,\n AUTHORIZED (predicted under an enforced permit), UNKNOWN or\n NOT_TRIGGERED. ACCEPTED and CONFIRMED come only later, in a\n transaction's explanation.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceLabel"
           }
         },
         "title": "Consequence",
@@ -32264,6 +33283,14 @@
             },
             "title": "next_actions",
             "description": "What a person can do next."
+          },
+          "consequences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ExplainedConsequence"
+            },
+            "title": "consequences",
+            "description": "The consequences of the decision (G0 M17 D111), in rule order."
           }
         },
         "title": "DecisionExplanation",
@@ -32359,6 +33386,78 @@
         "title": "ExplainedBudget",
         "additionalProperties": false,
         "description": "ExplainedBudget is one budget rule at decision time. Amounts are decimal\n strings in its currency."
+      },
+      "pantherclaw.v1.ExplainedConsequence": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "title": "rule_id",
+            "description": "The rule, and where it comes from (\"package\" or \"customer\")."
+          },
+          "source": {
+            "type": "string",
+            "title": "source"
+          },
+          "chain": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "chain",
+            "description": "The rule ids from the action to this consequence (F411)."
+          },
+          "operation": {
+            "type": "string",
+            "title": "operation",
+            "description": "The consequence operation and its target (\"\u003ctype\u003e:\u003cid\u003e\"), and the\n environments a predicted one reaches."
+          },
+          "target": {
+            "type": "string",
+            "title": "target"
+          },
+          "environments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "environments"
+          },
+          "description": {
+            "type": "string",
+            "title": "description",
+            "description": "What the rule says."
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "evidence",
+            "description": "The names of the facts the rule needs (never their values; F407)."
+          },
+          "validUntil": {
+            "type": "string",
+            "title": "valid_until",
+            "description": "The last day of the rule's review (YYYY-MM-DD; F409)."
+          },
+          "unknownLinks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "unknown_links",
+            "description": "Why an UNKNOWN consequence could not be ruled out, and where its chain\n stopped."
+          },
+          "label": {
+            "title": "label",
+            "description": "What it is now.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceLabel"
+          }
+        },
+        "title": "ExplainedConsequence",
+        "additionalProperties": false,
+        "description": "ExplainedConsequence is one consequence of a decision, explained (G0\n M17 D111; F407, F409, F410)."
       },
       "pantherclaw.v1.ExplainedGrant": {
         "type": "object",
@@ -40313,6 +41412,35 @@
         "additionalProperties": false,
         "description": "CohortChange is one thing that moved, oldest first."
       },
+      "pantherclaw.v1.CohortFindingCount": {
+        "type": "object",
+        "properties": {
+          "findings": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "findings",
+            "format": "int64"
+          },
+          "agents": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "agents",
+            "format": "int64"
+          },
+          "shown": {
+            "type": "boolean",
+            "title": "shown",
+            "description": "shown is false when the caller may not read this kind; the counts\n are then zero."
+          }
+        },
+        "title": "CohortFindingCount",
+        "additionalProperties": false,
+        "description": "CohortFindingCount is one kind of finding: how many, on how many agents."
+      },
       "pantherclaw.v1.CreateFleetCohortRequest": {
         "type": "object",
         "properties": {
@@ -40676,6 +41804,59 @@
           }
         },
         "title": "GetCohortChangesResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.GetCohortFindingsRequest": {
+        "type": "object",
+        "properties": {
+          "cohortId": {
+            "type": "string",
+            "title": "cohort_id",
+            "format": "uuid"
+          }
+        },
+        "title": "GetCohortFindingsRequest",
+        "additionalProperties": false,
+        "required": [
+          "cohortId"
+        ]
+      },
+      "pantherclaw.v1.GetCohortFindingsResponse": {
+        "type": "object",
+        "properties": {
+          "agents": {
+            "type": "integer",
+            "title": "agents",
+            "format": "int32",
+            "description": "agents is how many of the cohort's agents the counts cover: those the\n caller may read."
+          },
+          "coverage": {
+            "title": "coverage",
+            "description": "coverage counts open coverage findings (coverage.read).",
+            "$ref": "#/components/schemas/pantherclaw.v1.CohortFindingCount"
+          },
+          "departures": {
+            "title": "departures",
+            "description": "departures counts active grants beyond the cohort's baseline.",
+            "$ref": "#/components/schemas/pantherclaw.v1.CohortFindingCount"
+          },
+          "failedTargets": {
+            "title": "failed_targets",
+            "description": "failed_targets counts FAILED targets of open rollouts and of those\n completed in the last 7 days (policy.read).",
+            "$ref": "#/components/schemas/pantherclaw.v1.CohortFindingCount"
+          },
+          "activeExceptions": {
+            "title": "active_exceptions",
+            "description": "active_exceptions counts exceptions that waive something now\n (policy.read).",
+            "$ref": "#/components/schemas/pantherclaw.v1.CohortFindingCount"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "truncated",
+            "description": "truncated: the cohort has more agents or grants than are read."
+          }
+        },
+        "title": "GetCohortFindingsResponse",
         "additionalProperties": false
       },
       "pantherclaw.v1.GetCohortQueueRequest": {
@@ -45098,6 +46279,410 @@
         "title": "UpdateConnectionResponse",
         "additionalProperties": false,
         "description": "UpdateConnectionResponse returns the connection."
+      },
+      "pantherclaw.v1.ConsequenceRuleSpec": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "pattern": "^cx\\.[a-z0-9][a-z0-9_.-]{0,63}$",
+            "description": "The rule id: cx. first, then lower-case letters, digits, '_', '.' and\n '-' (for example cx.deploy-notifies-pager)."
+          },
+          "operation": {
+            "type": "string",
+            "title": "operation",
+            "maxLength": 200,
+            "minLength": 1,
+            "description": "The operation whose action the rule applies to."
+          },
+          "when": {
+            "type": "string",
+            "title": "when",
+            "maxLength": 4096,
+            "minLength": 1,
+            "description": "A CEL condition over the facts the rule requires: when it holds, the\n consequence is predicted."
+          },
+          "requiresFacts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 32,
+              "minItems": 1
+            },
+            "title": "requires_facts",
+            "maxItems": 32,
+            "minItems": 1,
+            "description": "The verified facts the condition reads (1..32): a fact that is\n missing, stale or unknown makes the consequence UNKNOWN, at least a\n hold. A consequence is never derived without one (F413)."
+          },
+          "consequence": {
+            "title": "consequence",
+            "description": "The predicted consequence.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceSpec"
+          },
+          "validUntil": {
+            "type": "string",
+            "title": "valid_until",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "description": "The last day the rule's review holds (YYYY-MM-DD); after it, the\n consequence is UNKNOWN, CONSEQUENCE_RULE_EXPIRED."
+          },
+          "maxDepth": {
+            "type": "integer",
+            "title": "max_depth",
+            "maximum": 4,
+            "minimum": 0,
+            "format": "int32",
+            "description": "How far down a chain the rule applies: 1 (the default) only to an\n action itself, up to 4."
+          }
+        },
+        "title": "ConsequenceRuleSpec",
+        "required": [
+          "consequence"
+        ],
+        "additionalProperties": false,
+        "description": "ConsequenceRuleSpec is a consequence rule as its author writes it: the\n format of a package's consequence rules, plus how deep down a chain it\n applies (F405, F411)."
+      },
+      "pantherclaw.v1.ConsequenceRuleSpecInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "pattern": "^cx\\.[a-z0-9][a-z0-9_.-]{0,63}$",
+            "description": "The rule id: cx. first, then lower-case letters, digits, '_', '.' and\n '-' (for example cx.deploy-notifies-pager)."
+          },
+          "operation": {
+            "type": "string",
+            "title": "operation",
+            "maxLength": 200,
+            "minLength": 1,
+            "description": "The operation whose action the rule applies to."
+          },
+          "when": {
+            "type": "string",
+            "title": "when",
+            "maxLength": 4096,
+            "minLength": 1,
+            "description": "A CEL condition over the facts the rule requires: when it holds, the\n consequence is predicted."
+          },
+          "requiresFacts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 32,
+              "minItems": 1
+            },
+            "title": "requires_facts",
+            "maxItems": 32,
+            "minItems": 1,
+            "description": "The verified facts the condition reads (1..32): a fact that is\n missing, stale or unknown makes the consequence UNKNOWN, at least a\n hold. A consequence is never derived without one (F413)."
+          },
+          "consequence": {
+            "title": "consequence",
+            "description": "The predicted consequence.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceSpecInput"
+          },
+          "validUntil": {
+            "type": "string",
+            "title": "valid_until",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "description": "The last day the rule's review holds (YYYY-MM-DD); after it, the\n consequence is UNKNOWN, CONSEQUENCE_RULE_EXPIRED."
+          },
+          "maxDepth": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "max_depth",
+            "maximum": 4,
+            "minimum": 0,
+            "format": "int32",
+            "description": "How far down a chain the rule applies: 1 (the default) only to an\n action itself, up to 4."
+          }
+        },
+        "title": "ConsequenceRuleSpec",
+        "required": [
+          "consequence",
+          "id",
+          "operation",
+          "when",
+          "requiresFacts",
+          "validUntil"
+        ],
+        "additionalProperties": false,
+        "description": "ConsequenceRuleSpec is a consequence rule as its author writes it: the\n format of a package's consequence rules, plus how deep down a chain it\n applies (F405, F411).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.ConsequenceRuleSpec"
+      },
+      "pantherclaw.v1.ConsequenceRuleVersion": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "The version's id."
+          },
+          "rule": {
+            "title": "rule",
+            "description": "The rule as written.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceRuleSpec"
+          },
+          "version": {
+            "type": "integer",
+            "title": "version",
+            "format": "int32",
+            "description": "Its version, from 1."
+          },
+          "digest": {
+            "type": "string",
+            "title": "digest",
+            "description": "SHA-256 of the rule's canonical JSON, hex: what a recorded evaluation\n names."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"PROPOSED\", \"ACTIVE\" or \"RETIRED\"."
+          },
+          "proposedBy": {
+            "type": "string",
+            "title": "proposed_by",
+            "description": "Who proposed it, and who confirmed it (a different person)."
+          },
+          "approvedBy": {
+            "type": "string",
+            "title": "approved_by"
+          },
+          "createTime": {
+            "title": "create_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "updateTime": {
+            "title": "update_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "ConsequenceRuleVersion",
+        "additionalProperties": false,
+        "description": "ConsequenceRuleVersion is one stored version of a rule."
+      },
+      "pantherclaw.v1.ConsequenceSpec": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "title": "operation",
+            "maxLength": 200,
+            "minLength": 1,
+            "description": "The consequence operation, decided with the action."
+          },
+          "effect": {
+            "type": "string",
+            "title": "effect",
+            "maxLength": 100,
+            "minLength": 1,
+            "description": "The effect kind, for example deployment.trigger."
+          },
+          "description": {
+            "type": "string",
+            "title": "description",
+            "maxLength": 500,
+            "minLength": 1,
+            "description": "What an approver reads."
+          },
+          "target": {
+            "type": "string",
+            "title": "target",
+            "maxLength": 256,
+            "description": "The consequence's target id, a template over the action's target id\n ({target.id} or {target.id.\u003cgroup\u003e}); empty: the action's own target."
+          },
+          "environments": {
+            "type": "string",
+            "title": "environments",
+            "maxLength": 4096,
+            "description": "A CEL expression over the rule's facts giving the environments the\n consequence reaches, a list of strings; empty: none."
+          }
+        },
+        "title": "ConsequenceSpec",
+        "additionalProperties": false,
+        "description": "ConsequenceSpec is a rule's predicted consequence."
+      },
+      "pantherclaw.v1.ConsequenceSpecInput": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "title": "operation",
+            "maxLength": 200,
+            "minLength": 1,
+            "description": "The consequence operation, decided with the action."
+          },
+          "effect": {
+            "type": "string",
+            "title": "effect",
+            "maxLength": 100,
+            "minLength": 1,
+            "description": "The effect kind, for example deployment.trigger."
+          },
+          "description": {
+            "type": "string",
+            "title": "description",
+            "maxLength": 500,
+            "minLength": 1,
+            "description": "What an approver reads."
+          },
+          "target": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "target",
+            "maxLength": 256,
+            "description": "The consequence's target id, a template over the action's target id\n ({target.id} or {target.id.\u003cgroup\u003e}); empty: the action's own target."
+          },
+          "environments": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "environments",
+            "maxLength": 4096,
+            "description": "A CEL expression over the rule's facts giving the environments the\n consequence reaches, a list of strings; empty: none."
+          }
+        },
+        "title": "ConsequenceSpec",
+        "additionalProperties": false,
+        "description": "ConsequenceSpec is a rule's predicted consequence.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.ConsequenceSpec",
+        "required": [
+          "operation",
+          "effect",
+          "description"
+        ]
+      },
+      "pantherclaw.v1.GetConsequenceRuleRequest": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "title": "rule_id",
+            "pattern": "^cx\\.[a-z0-9][a-z0-9_.-]{0,63}$"
+          }
+        },
+        "title": "GetConsequenceRuleRequest",
+        "additionalProperties": false,
+        "required": [
+          "ruleId"
+        ]
+      },
+      "pantherclaw.v1.GetConsequenceRuleResponse": {
+        "type": "object",
+        "properties": {
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceRuleVersion"
+            },
+            "title": "versions",
+            "description": "Newest first."
+          }
+        },
+        "title": "GetConsequenceRuleResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListConsequenceRulesRequest": {
+        "type": "object",
+        "title": "ListConsequenceRulesRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListConsequenceRulesResponse": {
+        "type": "object",
+        "properties": {
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceRuleVersion"
+            },
+            "title": "versions",
+            "description": "At most 500 versions."
+          }
+        },
+        "title": "ListConsequenceRulesResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.PendingRuleChange": {
+        "type": "object",
+        "properties": {
+          "protectedChangeId": {
+            "type": "string",
+            "title": "protected_change_id",
+            "description": "The protected change."
+          },
+          "changeRequestId": {
+            "type": "string",
+            "title": "change_request_id",
+            "description": "Its change request."
+          }
+        },
+        "title": "PendingRuleChange",
+        "additionalProperties": false,
+        "description": "PendingRuleChange is the protected change a proposal or a retirement\n opened: confirmed by a second person on its change request's page."
+      },
+      "pantherclaw.v1.ProposeConsequenceRuleRequest": {
+        "type": "object",
+        "properties": {
+          "rule": {
+            "title": "rule",
+            "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceRuleSpecInput"
+          }
+        },
+        "title": "ProposeConsequenceRuleRequest",
+        "required": [
+          "rule"
+        ],
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ProposeConsequenceRuleResponse": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "title": "version",
+            "description": "The PROPOSED version.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ConsequenceRuleVersion"
+          },
+          "pending": {
+            "title": "pending",
+            "description": "The change that activates it.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PendingRuleChange"
+          }
+        },
+        "title": "ProposeConsequenceRuleResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.RetireConsequenceRuleRequest": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "title": "rule_id",
+            "pattern": "^cx\\.[a-z0-9][a-z0-9_.-]{0,63}$"
+          }
+        },
+        "title": "RetireConsequenceRuleRequest",
+        "additionalProperties": false,
+        "required": [
+          "ruleId"
+        ]
+      },
+      "pantherclaw.v1.RetireConsequenceRuleResponse": {
+        "type": "object",
+        "properties": {
+          "pending": {
+            "title": "pending",
+            "description": "The change that retires the rule's ACTIVE version.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PendingRuleChange"
+          }
+        },
+        "title": "RetireConsequenceRuleResponse",
+        "additionalProperties": false
       },
       "pantherclaw.v1.GetKillSwitchRequest": {
         "type": "object",
@@ -52987,6 +54572,18 @@
         ],
         "description": "MCPStateKind is what an MCP state entry holds (G0 M15 D12)."
       },
+      "pantherclaw.v1.VersionCompliance": {
+        "type": "string",
+        "title": "VersionCompliance",
+        "enum": [
+          "VERSION_COMPLIANCE_UNSPECIFIED",
+          "VERSION_COMPLIANCE_NO_MINIMUM",
+          "VERSION_COMPLIANCE_COMPLIANT",
+          "VERSION_COMPLIANCE_BELOW_MINIMUM",
+          "VERSION_COMPLIANCE_UNKNOWN"
+        ],
+        "description": "VersionCompliance is how a reported version meets the minimum."
+      },
       "pantherclaw.v1.ApproverKey": {
         "type": "object",
         "properties": {
@@ -53311,6 +54908,117 @@
         "title": "DeleteMCPStateResponse",
         "additionalProperties": false,
         "description": "DeleteMCPStateResponse says whether an entry was deleted."
+      },
+      "pantherclaw.v1.FleetGateway": {
+        "type": "object",
+        "properties": {
+          "gatewayId": {
+            "type": "string",
+            "title": "gateway_id",
+            "description": "Gateway id."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "Its name."
+          },
+          "configVersion": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "config_version",
+            "format": "int64",
+            "description": "The config version it should serve."
+          },
+          "connected": {
+            "type": "boolean",
+            "title": "connected",
+            "description": "Whether some replica reported in the last 90 seconds."
+          },
+          "silentSinceTime": {
+            "title": "silent_since_time",
+            "description": "Set while it is alerted as silent: its last report before the silence.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "belowMinimum": {
+            "type": "boolean",
+            "title": "below_minimum",
+            "description": "Whether some replica's version misses the minimum (or is unknown)."
+          },
+          "replicas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FleetReplica"
+            },
+            "title": "replicas",
+            "description": "The replicas that reported in the last 24 hours."
+          }
+        },
+        "title": "FleetGateway",
+        "additionalProperties": false,
+        "description": "FleetGateway is one gateway in the fleet view."
+      },
+      "pantherclaw.v1.FleetPolicy": {
+        "type": "object",
+        "properties": {
+          "minimumVersion": {
+            "type": "string",
+            "title": "minimum_version",
+            "description": "The advisory minimum version, vMAJOR.MINOR.PATCH[-pre]; empty for none."
+          },
+          "silenceAfterSeconds": {
+            "type": "integer",
+            "title": "silence_after_seconds",
+            "format": "int32",
+            "description": "How long a gateway may go without a status report before it is\n alerted as silent."
+          },
+          "updatedBy": {
+            "type": "string",
+            "title": "updated_by",
+            "description": "Who last set it; empty for the default policy."
+          },
+          "updateTime": {
+            "title": "update_time",
+            "description": "When.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "FleetPolicy",
+        "additionalProperties": false,
+        "description": "FleetPolicy is an org's gateway fleet policy (G0 M18 D151)."
+      },
+      "pantherclaw.v1.FleetReplica": {
+        "type": "object",
+        "properties": {
+          "replica": {
+            "title": "replica",
+            "description": "What it reported.",
+            "$ref": "#/components/schemas/pantherclaw.v1.GatewayReplica"
+          },
+          "parsedVersion": {
+            "type": "string",
+            "title": "parsed_version",
+            "description": "Its parsed version, vMAJOR.MINOR.PATCH[-pre], or \"unknown\"."
+          },
+          "compliance": {
+            "title": "compliance",
+            "description": "How it meets the minimum.",
+            "$ref": "#/components/schemas/pantherclaw.v1.VersionCompliance"
+          },
+          "configLag": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "config_lag",
+            "format": "int64",
+            "description": "How many config versions it serves behind the gateway's current one."
+          }
+        },
+        "title": "FleetReplica",
+        "additionalProperties": false,
+        "description": "FleetReplica is one replica in the fleet view."
       },
       "pantherclaw.v1.Gateway": {
         "type": "object",
@@ -53822,6 +55530,25 @@
         "additionalProperties": false,
         "description": "GetConfigurationResponse is what the gateway serves."
       },
+      "pantherclaw.v1.GetFleetPolicyRequest": {
+        "type": "object",
+        "title": "GetFleetPolicyRequest",
+        "additionalProperties": false,
+        "description": "GetFleetPolicyRequest reads the caller's org's fleet policy."
+      },
+      "pantherclaw.v1.GetFleetPolicyResponse": {
+        "type": "object",
+        "properties": {
+          "policy": {
+            "title": "policy",
+            "description": "The policy, or the default when the org set none.",
+            "$ref": "#/components/schemas/pantherclaw.v1.FleetPolicy"
+          }
+        },
+        "title": "GetFleetPolicyResponse",
+        "additionalProperties": false,
+        "description": "GetFleetPolicyResponse is the policy."
+      },
       "pantherclaw.v1.GetGatewayRequest": {
         "type": "object",
         "properties": {
@@ -54163,6 +55890,68 @@
         "title": "ListApproverKeysResponse",
         "additionalProperties": false,
         "description": "ListApproverKeysResponse is one page, with what every page shares."
+      },
+      "pantherclaw.v1.ListFleetRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default 50, at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 64,
+            "description": "Token from a previous response.",
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ListFleetRequest",
+        "additionalProperties": false,
+        "description": "ListFleetRequest pages through the fleet view."
+      },
+      "pantherclaw.v1.ListFleetResponse": {
+        "type": "object",
+        "properties": {
+          "policy": {
+            "title": "policy",
+            "description": "The org's fleet policy.",
+            "$ref": "#/components/schemas/pantherclaw.v1.FleetPolicy"
+          },
+          "gateways": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FleetGateway"
+            },
+            "title": "gateways",
+            "description": "Active gateways."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Token for the next page; empty at the end."
+          }
+        },
+        "title": "ListFleetResponse",
+        "additionalProperties": false,
+        "description": "ListFleetResponse is one page."
       },
       "pantherclaw.v1.ListGatewaysRequest": {
         "type": "object",
@@ -55444,6 +57233,55 @@
         "title": "SealedCredential",
         "additionalProperties": false,
         "description": "SealedCredential is one connection's sealed credential (HR-060). Only\n the gateway holding the broker key can open it."
+      },
+      "pantherclaw.v1.SetFleetPolicyRequest": {
+        "type": "object",
+        "properties": {
+          "minimumVersion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "minimum_version",
+            "maxLength": 64,
+            "description": "The advisory minimum version; empty clears it.",
+            "anyOf": [
+              {
+                "pattern": "^(v?(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)(-[0-9A-Za-z-]+([.][0-9A-Za-z-]+)*)?)?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "silenceAfterSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "silence_after_seconds",
+            "maximum": 86400,
+            "minimum": 0,
+            "format": "int32",
+            "description": "The silence threshold; 0 for the default 300."
+          }
+        },
+        "title": "SetFleetPolicyRequest",
+        "additionalProperties": false,
+        "description": "SetFleetPolicyRequest replaces the caller's org's fleet policy."
+      },
+      "pantherclaw.v1.SetFleetPolicyResponse": {
+        "type": "object",
+        "properties": {
+          "policy": {
+            "title": "policy",
+            "description": "The policy.",
+            "$ref": "#/components/schemas/pantherclaw.v1.FleetPolicy"
+          }
+        },
+        "title": "SetFleetPolicyResponse",
+        "additionalProperties": false,
+        "description": "SetFleetPolicyResponse is the policy as stored."
       },
       "pantherclaw.v1.TargetLogItem": {
         "type": "object",
@@ -59336,6 +61174,357 @@
         "title": "WithdrawIssuerProposalResponse",
         "additionalProperties": false,
         "description": "WithdrawIssuerProposalResponse returns the withdrawn revision."
+      },
+      "pantherclaw.v1.CreateIdentityProviderRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "maxLength": 32,
+            "minLength": 1,
+            "description": "Name: 1-32 lowercase letters, digits or hyphens."
+          },
+          "issuer": {
+            "type": "string",
+            "title": "issuer",
+            "maxLength": 512,
+            "minLength": 1,
+            "description": "HTTPS issuer URL on a public host."
+          },
+          "clientId": {
+            "type": "string",
+            "title": "client_id",
+            "maxLength": 256,
+            "minLength": 1,
+            "description": "OAuth client id."
+          },
+          "clientSecret": {
+            "type": "string",
+            "title": "client_secret",
+            "maxLength": 4096,
+            "minLength": 1,
+            "format": "byte",
+            "description": "OAuth client secret, sealed at once."
+          },
+          "trustEmail": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "trust_email",
+            "description": "Trust the email claim without email_verified."
+          }
+        },
+        "title": "CreateIdentityProviderRequest",
+        "additionalProperties": false,
+        "description": "CreateIdentityProviderRequest describes a provider.",
+        "required": [
+          "name",
+          "issuer",
+          "clientId",
+          "clientSecret"
+        ]
+      },
+      "pantherclaw.v1.CreateIdentityProviderResponse": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "title": "provider",
+            "description": "The PENDING provider.",
+            "$ref": "#/components/schemas/pantherclaw.v1.IdentityProvider"
+          },
+          "change": {
+            "title": "change",
+            "description": "The filed activation.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
+          }
+        },
+        "title": "CreateIdentityProviderResponse",
+        "additionalProperties": false,
+        "description": "CreateIdentityProviderResponse is the PENDING provider and its filed\n activation."
+      },
+      "pantherclaw.v1.DisableIdentityProviderRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Provider id."
+          }
+        },
+        "title": "DisableIdentityProviderRequest",
+        "additionalProperties": false,
+        "description": "DisableIdentityProviderRequest names a provider.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.DisableIdentityProviderResponse": {
+        "type": "object",
+        "properties": {
+          "change": {
+            "title": "change",
+            "description": "The filed change.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
+          }
+        },
+        "title": "DisableIdentityProviderResponse",
+        "additionalProperties": false,
+        "description": "DisableIdentityProviderResponse is the filed change."
+      },
+      "pantherclaw.v1.GetIdentityProviderRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Provider id."
+          }
+        },
+        "title": "GetIdentityProviderRequest",
+        "additionalProperties": false,
+        "description": "GetIdentityProviderRequest names a provider.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetIdentityProviderResponse": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "title": "provider",
+            "description": "The provider.",
+            "$ref": "#/components/schemas/pantherclaw.v1.IdentityProvider"
+          }
+        },
+        "title": "GetIdentityProviderResponse",
+        "additionalProperties": false,
+        "description": "GetIdentityProviderResponse is the provider."
+      },
+      "pantherclaw.v1.IdentityProvider": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Provider id."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "Name, in the sign-in callback path (/oauth2/callback/\u003cname\u003e)."
+          },
+          "issuer": {
+            "type": "string",
+            "title": "issuer",
+            "description": "Issuer URL."
+          },
+          "clientId": {
+            "type": "string",
+            "title": "client_id",
+            "description": "OAuth client id."
+          },
+          "trustEmail": {
+            "type": "boolean",
+            "title": "trust_email",
+            "description": "Whether the email claim is trusted without email_verified."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "PENDING, ACTIVE or DISABLED."
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "created_by",
+            "description": "Who created it."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was created.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "updatedBy": {
+            "type": "string",
+            "title": "updated_by",
+            "description": "Who last changed it."
+          },
+          "updateTime": {
+            "title": "update_time",
+            "description": "When it last changed.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "activateTime": {
+            "title": "activate_time",
+            "description": "When it first became ACTIVE; its issuer is fixed from then on.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "disableTime": {
+            "title": "disable_time",
+            "description": "When it was disabled.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "IdentityProvider",
+        "additionalProperties": false,
+        "description": "IdentityProvider is an organization's provider. Its client secret is\n never returned."
+      },
+      "pantherclaw.v1.ListIdentityProvidersRequest": {
+        "type": "object",
+        "title": "ListIdentityProvidersRequest",
+        "additionalProperties": false,
+        "description": "ListIdentityProvidersRequest has no fields."
+      },
+      "pantherclaw.v1.ListIdentityProvidersResponse": {
+        "type": "object",
+        "properties": {
+          "providers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.IdentityProvider"
+            },
+            "title": "providers",
+            "description": "Providers by name."
+          },
+          "ownProvidersOnly": {
+            "type": "boolean",
+            "title": "own_providers_only",
+            "description": "Whether the org signs in with its own providers alone."
+          }
+        },
+        "title": "ListIdentityProvidersResponse",
+        "additionalProperties": false,
+        "description": "ListIdentityProvidersResponse is the org's providers and setting."
+      },
+      "pantherclaw.v1.ProtectedChangeFiled": {
+        "type": "object",
+        "properties": {
+          "protectedChangeId": {
+            "type": "string",
+            "title": "protected_change_id",
+            "description": "Protected change id."
+          },
+          "changeRequestId": {
+            "type": "string",
+            "title": "change_request_id",
+            "description": "Change request id, confirmed on its page."
+          },
+          "strandedAdminIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "stranded_admin_ids",
+            "description": "Active org admins who would lose their last sign-in provider."
+          }
+        },
+        "title": "ProtectedChangeFiled",
+        "additionalProperties": false,
+        "description": "ProtectedChangeFiled is the protected change a write filed: it applies\n when a second person confirms its change request."
+      },
+      "pantherclaw.v1.SetOwnProvidersOnlyRequest": {
+        "type": "object",
+        "properties": {
+          "ownProvidersOnly": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "own_providers_only",
+            "description": "Sign in with the org's own providers alone."
+          }
+        },
+        "title": "SetOwnProvidersOnlyRequest",
+        "additionalProperties": false,
+        "description": "SetOwnProvidersOnlyRequest is the setting asked for."
+      },
+      "pantherclaw.v1.SetOwnProvidersOnlyResponse": {
+        "type": "object",
+        "properties": {
+          "change": {
+            "title": "change",
+            "description": "The filed change.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
+          }
+        },
+        "title": "SetOwnProvidersOnlyResponse",
+        "additionalProperties": false,
+        "description": "SetOwnProvidersOnlyResponse is the filed change."
+      },
+      "pantherclaw.v1.UpdateIdentityProviderRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Provider id."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "maxLength": 32,
+            "minLength": 1,
+            "description": "Name."
+          },
+          "issuer": {
+            "type": "string",
+            "title": "issuer",
+            "maxLength": 512,
+            "minLength": 1,
+            "description": "Issuer; it must stay the same once the provider has been ACTIVE."
+          },
+          "clientId": {
+            "type": "string",
+            "title": "client_id",
+            "maxLength": 256,
+            "minLength": 1,
+            "description": "OAuth client id."
+          },
+          "clientSecret": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "client_secret",
+            "maxLength": 4096,
+            "format": "byte",
+            "description": "New client secret; empty keeps the stored one."
+          },
+          "trustEmail": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "trust_email",
+            "description": "Trust the email claim without email_verified."
+          }
+        },
+        "title": "UpdateIdentityProviderRequest",
+        "additionalProperties": false,
+        "description": "UpdateIdentityProviderRequest is a provider's new settings.",
+        "required": [
+          "id",
+          "name",
+          "issuer",
+          "clientId"
+        ]
+      },
+      "pantherclaw.v1.UpdateIdentityProviderResponse": {
+        "type": "object",
+        "properties": {
+          "change": {
+            "title": "change",
+            "description": "The filed change.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
+          }
+        },
+        "title": "UpdateIdentityProviderResponse",
+        "additionalProperties": false,
+        "description": "UpdateIdentityProviderResponse is the filed change."
       },
       "pantherclaw.v1.Alert": {
         "type": "object",
@@ -66954,6 +69143,44 @@
         "additionalProperties": false,
         "description": "ValidationReport is one validation (G0 M11.1 design decision 8)."
       },
+      "pantherclaw.v1.GetPolicyExceptionGroupRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Group id."
+          }
+        },
+        "title": "GetPolicyExceptionGroupRequest",
+        "additionalProperties": false,
+        "description": "GetPolicyExceptionGroupRequest names a group.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetPolicyExceptionGroupResponse": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "title": "group",
+            "description": "The group.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PolicyExceptionGroup"
+          },
+          "agentIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "agent_ids",
+            "description": "The agents its snapshot covers, by id."
+          }
+        },
+        "title": "GetPolicyExceptionGroupResponse",
+        "additionalProperties": false,
+        "description": "GetPolicyExceptionGroupResponse returns it."
+      },
       "pantherclaw.v1.GetPolicyExceptionRequest": {
         "type": "object",
         "properties": {
@@ -66983,6 +69210,90 @@
         "title": "GetPolicyExceptionResponse",
         "additionalProperties": false,
         "description": "GetPolicyExceptionResponse returns it."
+      },
+      "pantherclaw.v1.ListPolicyExceptionGroupsRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default 50, at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 64,
+            "description": "Token from a previous response.",
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "cohortId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "cohort_id",
+            "format": "uuid",
+            "description": "Only this cohort.",
+            "nullable": true
+          },
+          "state": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "state",
+            "enum": [
+              "PENDING",
+              "ACTIVE",
+              "DECLINED",
+              "REVOKED",
+              "EXPIRED",
+              null
+            ],
+            "description": "Only this state.",
+            "nullable": true
+          }
+        },
+        "title": "ListPolicyExceptionGroupsRequest",
+        "additionalProperties": false,
+        "description": "ListPolicyExceptionGroupsRequest filters groups."
+      },
+      "pantherclaw.v1.ListPolicyExceptionGroupsResponse": {
+        "type": "object",
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PolicyExceptionGroup"
+            },
+            "title": "groups",
+            "description": "Groups, newest first."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Token for the next page; empty at the end."
+          }
+        },
+        "title": "ListPolicyExceptionGroupsResponse",
+        "additionalProperties": false,
+        "description": "ListPolicyExceptionGroupsResponse is one page."
       },
       "pantherclaw.v1.ListPolicyExceptionsRequest": {
         "type": "object",
@@ -67164,11 +69475,215 @@
             "title": "create_time",
             "description": "When it was requested.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "groupId": {
+            "type": "string",
+            "title": "group_id",
+            "description": "The exception group it belongs to; empty for one agent's exception."
           }
         },
         "title": "PolicyException",
         "additionalProperties": false,
         "description": "PolicyException is one exception."
+      },
+      "pantherclaw.v1.PolicyExceptionGroup": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Group id."
+          },
+          "cohortId": {
+            "type": "string",
+            "title": "cohort_id",
+            "description": "The fleet cohort whose agents it covers, as they were at approval."
+          },
+          "bundleId": {
+            "type": "string",
+            "title": "bundle_id",
+            "description": "The policy bundle id."
+          },
+          "ruleId": {
+            "type": "string",
+            "title": "rule_id",
+            "description": "The waived rule."
+          },
+          "ruleDigest": {
+            "type": "string",
+            "title": "rule_digest",
+            "description": "SHA-256 of the rule as requested, hex."
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "operations",
+            "description": "The exact operations it applies to."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Why, in the requester's words (untrusted text)."
+          },
+          "ownerId": {
+            "type": "string",
+            "title": "owner_id",
+            "description": "The person accountable for it."
+          },
+          "requestedBy": {
+            "type": "string",
+            "title": "requested_by",
+            "description": "The person who requested it."
+          },
+          "requestedExpireTime": {
+            "title": "requested_expire_time",
+            "description": "The expiry asked for.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"PENDING\", \"ACTIVE\", \"DECLINED\", \"REVOKED\" or \"EXPIRED\"."
+          },
+          "activateTime": {
+            "title": "activate_time",
+            "description": "When it became active; unset before.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "expireTime": {
+            "title": "expire_time",
+            "description": "When it ends; unset before it is active.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "members": {
+            "type": "integer",
+            "title": "members",
+            "format": "int32",
+            "description": "How many agents the snapshot at approval holds; unset before.",
+            "nullable": true
+          },
+          "revokedBy": {
+            "type": "string",
+            "title": "revoked_by",
+            "description": "Who revoked it; empty unless revoked."
+          },
+          "revokedReason": {
+            "type": "string",
+            "title": "revoked_reason",
+            "description": "Why it was revoked (untrusted text)."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was requested.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "truncated",
+            "description": "Whether the cohort held more agents than the snapshot at approval\n could (2000), so later ones were left out; unset before.",
+            "nullable": true
+          }
+        },
+        "title": "PolicyExceptionGroup",
+        "additionalProperties": false,
+        "description": "PolicyExceptionGroup is one exception group (G0 M18 D154)."
+      },
+      "pantherclaw.v1.RequestPolicyExceptionGroupRequest": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "title": "rule_id",
+            "maxLength": 64,
+            "minLength": 1,
+            "description": "The rule id in the published version."
+          },
+          "cohortId": {
+            "type": "string",
+            "title": "cohort_id",
+            "format": "uuid",
+            "description": "Fleet cohort id."
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7}$",
+              "maxItems": 16,
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "title": "operations",
+            "maxItems": 16,
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "Exact operations inside the rule's scope."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1,
+            "description": "Why the rule should not apply (1 to 500 characters)."
+          },
+          "expiresInSeconds": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "expires_in_seconds",
+            "maximum": 2592000,
+            "minimum": 60,
+            "format": "int64",
+            "description": "How long it should last, in seconds: at most 30 days."
+          },
+          "ownerId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "owner_id",
+            "format": "uuid",
+            "description": "The person accountable for it; unset: the requester.",
+            "nullable": true
+          }
+        },
+        "title": "RequestPolicyExceptionGroupRequest",
+        "additionalProperties": false,
+        "description": "RequestPolicyExceptionGroupRequest describes an exception group.",
+        "required": [
+          "ruleId",
+          "cohortId",
+          "operations",
+          "reason",
+          "expiresInSeconds"
+        ]
+      },
+      "pantherclaw.v1.RequestPolicyExceptionGroupResponse": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "title": "group",
+            "description": "The group, PENDING.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PolicyExceptionGroup"
+          },
+          "changeRequestId": {
+            "type": "string",
+            "title": "change_request_id",
+            "description": "The change request to confirm."
+          },
+          "changeRequestUrl": {
+            "type": "string",
+            "title": "change_request_url",
+            "description": "The page where it is confirmed."
+          }
+        },
+        "title": "RequestPolicyExceptionGroupResponse",
+        "additionalProperties": false,
+        "description": "RequestPolicyExceptionGroupResponse returns the pending group."
       },
       "pantherclaw.v1.RequestPolicyExceptionRequest": {
         "type": "object",
@@ -67264,6 +69779,44 @@
         "title": "RequestPolicyExceptionResponse",
         "additionalProperties": false,
         "description": "RequestPolicyExceptionResponse returns the pending exception."
+      },
+      "pantherclaw.v1.RevokePolicyExceptionGroupRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Group id."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1,
+            "description": "Why (1 to 500 characters)."
+          }
+        },
+        "title": "RevokePolicyExceptionGroupRequest",
+        "additionalProperties": false,
+        "description": "RevokePolicyExceptionGroupRequest names a group.",
+        "required": [
+          "id",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.RevokePolicyExceptionGroupResponse": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "title": "group",
+            "description": "The group, REVOKED.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PolicyExceptionGroup"
+          }
+        },
+        "title": "RevokePolicyExceptionGroupResponse",
+        "additionalProperties": false,
+        "description": "RevokePolicyExceptionGroupResponse returns it."
       },
       "pantherclaw.v1.RevokePolicyExceptionRequest": {
         "type": "object",
@@ -67896,6 +70449,13 @@
               "format": "int64"
             },
             "description": "target_counts counts the targets by state name."
+          },
+          "requireVerifiedPercent": {
+            "type": "integer",
+            "title": "require_verified_percent",
+            "format": "int32",
+            "description": "require_verified_percent is the VERIFIED threshold (G0 M18 D154):\n COMPLETE needs at least this share of the targets other than\n EXCEPTION VERIFIED. Unset: no threshold.",
+            "nullable": true
           }
         },
         "title": "PolicyRollout",
@@ -68164,6 +70724,18 @@
             },
             "title": "shadow_cohorts",
             "maxItems": 50
+          },
+          "requireVerifiedPercent": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "require_verified_percent",
+            "maximum": 100,
+            "minimum": 1,
+            "format": "int32",
+            "description": "require_verified_percent, 1 to 100, gates completion on VERIFIED\n targets (Enterprise; G0 M18 D154). It is fixed for the rollout.",
+            "nullable": true
           }
         },
         "title": "StartPolicyRolloutRequest",
@@ -68499,6 +71071,30 @@
             "type": "string",
             "title": "error",
             "description": "error is why a FAILED simulation stopped."
+          },
+          "cohortId": {
+            "type": "string",
+            "title": "cohort_id",
+            "description": "cohort_id is a bulk simulation's fleet cohort; empty: the whole org."
+          },
+          "cohortAgents": {
+            "type": "integer",
+            "title": "cohort_agents",
+            "format": "int32",
+            "description": "cohort_agents is how many agents its snapshot holds."
+          },
+          "byCohort": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PolicySimulationGroup"
+            },
+            "title": "by_cohort",
+            "description": "by_cohort counts decisions per fleet cohort (key: the cohort id),\n only for cohorts the caller may read."
+          },
+          "cohortTruncated": {
+            "type": "boolean",
+            "title": "cohort_truncated",
+            "description": "cohort_truncated says the cohort held more agents than its snapshot\n could (2000): later ones were not replayed."
           }
         },
         "title": "PolicySimulation",
@@ -68683,6 +71279,16 @@
             "minimum": 0,
             "format": "int32",
             "description": "max_evaluations bounds the recorded decisions replayed (0: 10 000)."
+          },
+          "cohortId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "cohort_id",
+            "format": "uuid",
+            "description": "cohort_id makes it a bulk simulation (Enterprise; G0 M18 D154): only\n the decisions of the fleet cohort's agents the caller may read now\n are replayed, under the same caps.",
+            "nullable": true
           }
         },
         "title": "SimulatePolicyVersionRequest",
@@ -73739,6 +76345,14 @@
             "title": "last_use_time",
             "description": "Last use (updated at most once a minute).",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "allowedCidrs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "allowed_cidrs",
+            "description": "Client address ranges the key is limited to (PN-012.8); empty means\n any address. Fixed at creation: rotate the key to change them."
           }
         },
         "title": "ApiKey",
@@ -73785,6 +76399,22 @@
             "minimum": 0,
             "format": "int32",
             "description": "Validity in days (default 90, at most 365)."
+          },
+          "allowedCidrs": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "maxLength": 43,
+              "maxItems": 32,
+              "uniqueItems": true
+            },
+            "title": "allowed_cidrs",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "description": "Optional client address ranges, at most 32 CIDRs such as\n \"203.0.113.0/24\" (PN-012.8, Team edition). A request from any other\n address is refused like a bad key. Fixed for the key's lifetime."
           }
         },
         "title": "CreateApiKeyRequest",
@@ -78119,6 +80749,18 @@
         "additionalProperties": false,
         "description": "UpdateTeamResponse returns the result."
       },
+      "pantherclaw.v1.DownstreamState": {
+        "type": "string",
+        "title": "DownstreamState",
+        "enum": [
+          "DOWNSTREAM_STATE_UNSPECIFIED",
+          "DOWNSTREAM_STATE_PENDING",
+          "DOWNSTREAM_STATE_CONFIRMED",
+          "DOWNSTREAM_STATE_UNCONFIRMED",
+          "DOWNSTREAM_STATE_NOT_VERIFIABLE"
+        ],
+        "description": "DownstreamState is what is known about the consequences of a confirmed\n action, apart from its own effect (G0 M17, F414). Precedence over the\n whole chain of consequences: UNCONFIRMED, then NOT_VERIFIABLE, then\n PENDING, then CONFIRMED."
+      },
       "pantherclaw.v1.EffectState": {
         "type": "string",
         "title": "EffectState",
@@ -79292,6 +81934,11 @@
             "type": "string",
             "title": "enforcement_point_id",
             "description": "The enforcement point that asked, for decided_via authzen."
+          },
+          "downstreamState": {
+            "title": "downstream_state",
+            "description": "State of the consequences opened for it (G0 M17, F414).",
+            "$ref": "#/components/schemas/pantherclaw.v1.DownstreamState"
           }
         },
         "title": "Transaction",
@@ -81291,6 +83938,10 @@
       "description": "ConnectionService manages connections: one target (an HTTP API, a remote\n MCP server, or the agent's own machine for hooks) served by one gateway\n through one tool package (G0 M6). Each package route of a connection runs\n in monitor or enforce mode (PN-013). Credentials are sealed on the\n caller's machine to the gateway's broker key; the server stores only the\n sealed bytes and never returns them (HR-060, HR-061, HR-182). Changes that\n weaken enforcement need a person and are audited; changes that strengthen\n it apply at once (HR-183)."
     },
     {
+      "name": "pantherclaw.v1.ConsequenceRuleService",
+      "description": "ConsequenceRuleService manages the org's customer consequence rules (G0\n M17 D106–D108, D112; F405–F413, HR-453, HR-454; Team edition). A\n customer rule is evaluated in the decision pipeline after the rules of\n the action's package, and only adds to them: it predicts a further\n consequence whose authority, limits and requirements the action must\n also meet, and never suppresses, waives or rules out a package\n consequence. Proposing and retiring a rule are always protected changes:\n a second person holding consequence_rule.manage confirms each with a\n security key on its change request's page, in every protect mode and\n never as an emergency."
+    },
+    {
       "name": "pantherclaw.v1.ContainmentService",
       "description": "ContainmentService shows the org's containment state (G0 M6). The kill\n switch is engaged and restored only on the emergency-stop page\n (/containment), because both need a WebAuthn step-up on a browser session\n and restoring needs two people (HR-113, G0 M6 decision 2); no RPC changes\n it."
     },
@@ -81361,6 +84012,10 @@
     {
       "name": "pantherclaw.v1.IdentityService",
       "description": "IdentityService administers PAP/1 workload identity (Badge; PAP-1 §3,\n ADR-0013, ADR-0018, G0 M3): enrollment tokens, agent instances and their\n admission, and trusted-issuer entries for L2 attestation. Workloads\n themselves use WorkloadService."
+    },
+    {
+      "name": "pantherclaw.v1.IdentityProviderService",
+      "description": "IdentityProviderService manages an organization's own OpenID Connect\n providers (G0 M18 D155, G6; PN-012.7; HR-481..484), next to the\n deployment's. People sign in to the org through the deployment's\n providers and the org's ACTIVE ones, or through the org's alone when\n own_providers_only is on.\n\n Every create, change, disable and own_providers_only change is a\n two-person protected change in every protect mode: the call files it\n and returns its change request, and it applies when a different person\n holding identity_provider.manage confirms it with a security key. Every\n org admin is notified. Only a person may file one.\n\n A provider's issuer is HTTPS on a public host, and it can't change once\n the provider has been ACTIVE. Its client secret is sealed and never\n returned. Disabling a provider, or turning own_providers_only on, is\n refused when no active org admin would have a provider left to sign in\n with; the change request lists the admins who would lose theirs.\n\n Creating, activating and changing a provider need the Enterprise\n edition; disabling one and reading work in every edition, and ACTIVE\n providers keep signing people in after a downgrade."
     },
     {
       "name": "pantherclaw.v1.IncidentService",

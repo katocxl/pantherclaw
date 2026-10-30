@@ -19,7 +19,7 @@ const activatePolicyException = `-- name: ActivatePolicyException :one
 UPDATE pc.policy_exceptions
 SET state = 'ACTIVE', activated_at = now(), expires_at = least(requested_expiry, now() + interval '30 days')
 WHERE org_id = $1 AND id = $2 AND state = 'PENDING' AND requested_expiry > now()
-RETURNING org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, revoked_by, revoked_reason, created_at
+RETURNING org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, revoked_by, revoked_reason, created_at, group_id
 `
 
 // Activation sets activated_at and expires_at from the database clock (the
@@ -45,12 +45,13 @@ func (q *Queries) ActivatePolicyException(ctx context.Context, orgID ids.OrgID, 
 		&i.RevokedBy,
 		&i.RevokedReason,
 		&i.CreatedAt,
+		&i.GroupID,
 	)
 	return i, err
 }
 
 const activePolicyExceptionsForAgent = `-- name: ActivePolicyExceptionsForAgent :many
-SELECT org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, revoked_by, revoked_reason, created_at FROM pc.policy_exceptions
+SELECT org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, revoked_by, revoked_reason, created_at, group_id FROM pc.policy_exceptions
 WHERE org_id = $1 AND agent_id = $2 AND state = 'ACTIVE' AND expires_at > now()
 ORDER BY id
 LIMIT 256
@@ -85,6 +86,7 @@ func (q *Queries) ActivePolicyExceptionsForAgent(ctx context.Context, orgID ids.
 			&i.RevokedBy,
 			&i.RevokedReason,
 			&i.CreatedAt,
+			&i.GroupID,
 		); err != nil {
 			return nil, err
 		}
@@ -108,7 +110,7 @@ WHERE x.org_id = $1 AND x.id IN (
             AND (r.state = 'APPROVED' OR (r.state = 'PENDING' AND r.expires_at > now())))
     ORDER BY e.id
     LIMIT $2)
-RETURNING org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, revoked_by, revoked_reason, created_at
+RETURNING org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, revoked_by, revoked_reason, created_at, group_id
 `
 
 // Pending exceptions whose EXCEPTION change request ended without approval
@@ -142,6 +144,7 @@ func (q *Queries) DeclineEndedPolicyExceptions(ctx context.Context, orgID ids.Or
 			&i.RevokedBy,
 			&i.RevokedReason,
 			&i.CreatedAt,
+			&i.GroupID,
 		); err != nil {
 			return nil, err
 		}
@@ -156,7 +159,7 @@ func (q *Queries) DeclineEndedPolicyExceptions(ctx context.Context, orgID ids.Or
 const declinePolicyException = `-- name: DeclinePolicyException :one
 UPDATE pc.policy_exceptions SET state = 'DECLINED'
 WHERE org_id = $1 AND id = $2 AND state = 'PENDING'
-RETURNING org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, revoked_by, revoked_reason, created_at
+RETURNING org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, revoked_by, revoked_reason, created_at, group_id
 `
 
 func (q *Queries) DeclinePolicyException(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcPolicyException, error) {
@@ -180,6 +183,7 @@ func (q *Queries) DeclinePolicyException(ctx context.Context, orgID ids.OrgID, i
 		&i.RevokedBy,
 		&i.RevokedReason,
 		&i.CreatedAt,
+		&i.GroupID,
 	)
 	return i, err
 }
@@ -192,7 +196,7 @@ WHERE x.org_id = $1 AND x.id IN (
       AND coalesce(e.expires_at, e.requested_expiry) <= now()
     ORDER BY e.id
     LIMIT $2)
-RETURNING org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, revoked_by, revoked_reason, created_at
+RETURNING org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, revoked_by, revoked_reason, created_at, group_id
 `
 
 // The exceptions the expiry sweep closes: pending past their requested
@@ -224,6 +228,7 @@ func (q *Queries) ExpirePolicyExceptions(ctx context.Context, orgID ids.OrgID, m
 			&i.RevokedBy,
 			&i.RevokedReason,
 			&i.CreatedAt,
+			&i.GroupID,
 		); err != nil {
 			return nil, err
 		}
@@ -236,14 +241,15 @@ func (q *Queries) ExpirePolicyExceptions(ctx context.Context, orgID ids.OrgID, m
 }
 
 const expiringPolicyExceptions = `-- name: ExpiringPolicyExceptions :many
-SELECT org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, revoked_by, revoked_reason, created_at FROM pc.policy_exceptions
-WHERE org_id = $1 AND state = 'ACTIVE' AND expires_at > now()
+SELECT org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, revoked_by, revoked_reason, created_at, group_id FROM pc.policy_exceptions
+WHERE org_id = $1 AND state = 'ACTIVE' AND expires_at > now() AND group_id IS NULL
   AND expires_at <= now() + make_interval(secs => $2::bigint)
 ORDER BY id
 LIMIT $3
 `
 
 // Active exceptions that expire within the window, for the owner's notice.
+// A group's member rows are told once, through their group (00220).
 func (q *Queries) ExpiringPolicyExceptions(ctx context.Context, orgID ids.OrgID, withinSeconds int64, maxRows int32) ([]PcPolicyException, error) {
 	rows, err := q.db.Query(ctx, expiringPolicyExceptions, orgID, withinSeconds, maxRows)
 	if err != nil {
@@ -271,6 +277,7 @@ func (q *Queries) ExpiringPolicyExceptions(ctx context.Context, orgID ids.OrgID,
 			&i.RevokedBy,
 			&i.RevokedReason,
 			&i.CreatedAt,
+			&i.GroupID,
 		); err != nil {
 			return nil, err
 		}
@@ -283,7 +290,7 @@ func (q *Queries) ExpiringPolicyExceptions(ctx context.Context, orgID ids.OrgID,
 }
 
 const getPolicyException = `-- name: GetPolicyException :one
-SELECT org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, revoked_by, revoked_reason, created_at FROM pc.policy_exceptions WHERE org_id = $1 AND id = $2
+SELECT org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, revoked_by, revoked_reason, created_at, group_id FROM pc.policy_exceptions WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetPolicyException(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcPolicyException, error) {
@@ -307,6 +314,7 @@ func (q *Queries) GetPolicyException(ctx context.Context, orgID ids.OrgID, iD id
 		&i.RevokedBy,
 		&i.RevokedReason,
 		&i.CreatedAt,
+		&i.GroupID,
 	)
 	return i, err
 }
@@ -318,7 +326,7 @@ INSERT INTO pc.policy_exceptions (org_id, id, bundle_id, rule_id, rule_digest, a
 VALUES ($1, $2, $3, $4, $5, $6,
     $7::text[], $8, $9, $10,
     now() + make_interval(secs => $11::bigint))
-RETURNING org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, revoked_by, revoked_reason, created_at
+RETURNING org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, revoked_by, revoked_reason, created_at, group_id
 `
 
 type InsertPolicyExceptionParams struct {
@@ -374,12 +382,13 @@ func (q *Queries) InsertPolicyException(ctx context.Context, arg InsertPolicyExc
 		&i.RevokedBy,
 		&i.RevokedReason,
 		&i.CreatedAt,
+		&i.GroupID,
 	)
 	return i, err
 }
 
 const listPolicyExceptionsPage = `-- name: ListPolicyExceptionsPage :many
-SELECT e.org_id, e.id, e.bundle_id, e.rule_id, e.rule_digest, e.agent_id, e.operations, e.reason, e.owner_id, e.requested_by, e.requested_expiry, e.state, e.activated_at, e.expires_at, e.revoked_by, e.revoked_reason, e.created_at, (CASE WHEN e.state IN ('PENDING', 'ACTIVE') AND coalesce(e.expires_at, e.requested_expiry) <= now()
+SELECT e.org_id, e.id, e.bundle_id, e.rule_id, e.rule_digest, e.agent_id, e.operations, e.reason, e.owner_id, e.requested_by, e.requested_expiry, e.state, e.activated_at, e.expires_at, e.revoked_by, e.revoked_reason, e.created_at, e.group_id, (CASE WHEN e.state IN ('PENDING', 'ACTIVE') AND coalesce(e.expires_at, e.requested_expiry) <= now()
                   THEN 'EXPIRED' ELSE e.state END)::text AS effective_state
 FROM pc.policy_exceptions e
 WHERE e.org_id = $1
@@ -420,6 +429,7 @@ type ListPolicyExceptionsPageRow struct {
 	RevokedBy       *ids.UUID
 	RevokedReason   *string
 	CreatedAt       time.Time
+	GroupID         *ids.UUID
 	EffectiveState  string
 }
 
@@ -458,6 +468,7 @@ func (q *Queries) ListPolicyExceptionsPage(ctx context.Context, arg ListPolicyEx
 			&i.RevokedBy,
 			&i.RevokedReason,
 			&i.CreatedAt,
+			&i.GroupID,
 			&i.EffectiveState,
 		); err != nil {
 			return nil, err
@@ -471,7 +482,7 @@ func (q *Queries) ListPolicyExceptionsPage(ctx context.Context, arg ListPolicyEx
 }
 
 const readPolicyException = `-- name: ReadPolicyException :one
-SELECT e.org_id, e.id, e.bundle_id, e.rule_id, e.rule_digest, e.agent_id, e.operations, e.reason, e.owner_id, e.requested_by, e.requested_expiry, e.state, e.activated_at, e.expires_at, e.revoked_by, e.revoked_reason, e.created_at, (CASE WHEN e.state IN ('PENDING', 'ACTIVE') AND coalesce(e.expires_at, e.requested_expiry) <= now()
+SELECT e.org_id, e.id, e.bundle_id, e.rule_id, e.rule_digest, e.agent_id, e.operations, e.reason, e.owner_id, e.requested_by, e.requested_expiry, e.state, e.activated_at, e.expires_at, e.revoked_by, e.revoked_reason, e.created_at, e.group_id, (CASE WHEN e.state IN ('PENDING', 'ACTIVE') AND coalesce(e.expires_at, e.requested_expiry) <= now()
                   THEN 'EXPIRED' ELSE e.state END)::text AS effective_state
 FROM pc.policy_exceptions e
 WHERE e.org_id = $1 AND e.id = $2
@@ -495,6 +506,7 @@ type ReadPolicyExceptionRow struct {
 	RevokedBy       *ids.UUID
 	RevokedReason   *string
 	CreatedAt       time.Time
+	GroupID         *ids.UUID
 	EffectiveState  string
 }
 
@@ -519,6 +531,7 @@ func (q *Queries) ReadPolicyException(ctx context.Context, orgID ids.OrgID, iD i
 		&i.RevokedBy,
 		&i.RevokedReason,
 		&i.CreatedAt,
+		&i.GroupID,
 		&i.EffectiveState,
 	)
 	return i, err
@@ -528,7 +541,7 @@ const revokePolicyException = `-- name: RevokePolicyException :one
 UPDATE pc.policy_exceptions SET state = 'REVOKED', revoked_by = $1, revoked_reason = $2
 WHERE org_id = $3 AND id = $4 AND state IN ('PENDING', 'ACTIVE')
   AND coalesce(expires_at, requested_expiry) > now()
-RETURNING org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, revoked_by, revoked_reason, created_at
+RETURNING org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, revoked_by, revoked_reason, created_at, group_id
 `
 
 type RevokePolicyExceptionParams struct {
@@ -564,6 +577,7 @@ func (q *Queries) RevokePolicyException(ctx context.Context, arg RevokePolicyExc
 		&i.RevokedBy,
 		&i.RevokedReason,
 		&i.CreatedAt,
+		&i.GroupID,
 	)
 	return i, err
 }

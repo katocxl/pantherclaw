@@ -99,7 +99,7 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | F025 | Automations as actors | Automation execution identities appear in inventory and exposure queries just as agents do. No hidden administrator identity acts on resources. | MVP | Team | M11 | F025 |
 | F574 | One owner, many teams | Each agent has exactly one accountable owner. Other teams use it only through their own grants. Ownership transfers are recorded and never move authority. | MVP | Community | M3 | F574, F575 |
 | F600 | Fleet cohorts | Agents are grouped by team, task type and environment, with shared baselines, owner queues and change summaries. Small fleets need no cohort setup. | MVP | Team | M11 | F600, F601 |
-| F602 | Large-fleet administration | Delegated administration, exception groups, bulk simulation, verified rollout and aggregated findings. The 10 / 1,000 / 100,000-agent patterns are design targets, not proven capacity. | Next | Enterprise | post-1.0 | F602, F606 |
+| F602 | Large-fleet administration | Delegated administration, exception groups snapshotted from a cohort at approval, bulk simulation by cohort, an optional VERIFIED threshold before a rollout completes, and per-cohort findings showing only readable agents. Scale patterns are design targets. | Next | Enterprise | M18 | F602, F606 |
 | F624 | Explicit empty states | Inventory distinguishes "no agents connected", "identity verified, no actions observed" and "collection failed", and suggests a safe test or health check. | MVP | Community | M3 | F624, F625 |
 
 ## 2. Discovery (shadow agents)
@@ -609,7 +609,7 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | PN-010.3 | Hybrid (hosted control plane) | A PantherClaw-hosted control plane and console with customer-run gateways; this is the intended commercial default. Product code in UI; general availability at v1.0 after M13 hardening. | MVP | Team | UI | new |
 | PN-010.4 | SaaS | Multi-tenant hosted control plane and gateways. No third-party MCP servers run in multi-tenant gateways. | Next | Team | post-1.0 | new |
 | PN-010.5 | Agent deployment inventory | Tracks where each agent runs (environment, image digest, host, release) from enrollment and attestation. A new digest or host triggers identity-drift reassessment. | MVP | Community | M3 | F028, F033 |
-| PN-010.6 | Hybrid fleet management | Register, version and health-check many customer gateways across multiple orgs. | Next | Enterprise | M15 (status), M18 | new |
+| PN-010.6 | Hybrid fleet management | Register, version and health-check gateways. Replicas report versions and configuration (M15); a fleet view shows versions, replicas and configuration lag (Team). A minimum version is advisory, alerted, never refused; silent gateways alert once per silence (Enterprise). | Next | Team | M15 (status), M18 | new |
 | PN-010.7 | High availability | Redundant control plane and gateways on managed HA PostgreSQL. No single point of failure on the decision path; until then, database loss means a fail-closed outage. | Next | Enterprise | post-1.0 | new |
 | PN-019.1 | FIPS 140-3 build | A build variant with `GOFIPS140=v1.0.0` (the pinned validated module, reproducible; G0 M13 D35), using standard-library cryptography only. | MVP | Enterprise | M13 | new |
 | PN-019.2 | Post-quantum TLS by default | TLS 1.3 with post-quantum hybrid key exchange, on by default for all listeners and outbound connections. | MVP | Community | M13 | new |
@@ -647,6 +647,10 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | PN-012.4 | Customer-approved support access | Support access is requested for a named task and duration, approved by the customer, visible in scope and audited. Support has no standing access to credentials or restricted payloads. | MVP | Enterprise | M13 | F597, F598 |
 | PN-012.5 | Data export & deletion | Tenant-wide export of records and evidence, and verified tenant deletion that keeps a deletion record. | MVP | Community | M13 | new |
 | PN-012.6 | Effortless installation | The installer verifies release signatures and attestations. `pclaw up` starts a node, and `pclaw init` detects and configures MCP clients, SDKs and Claude Code hooks. Helm chart for Kubernetes. | MVP | Community | M13 | new |
+| PN-012.7 | Organization identity providers | An org admin adds OIDC providers: issuer fixed once active, client secret sealed and never returned, HTTPS discovery through the egress guard. Changes are two-person protected changes; the last admin sign-in path stays. | Next | Enterprise | M18 | F036 |
+| PN-012.8 | API-key IP allow lists | An API key can be limited to at most 32 CIDR ranges, set at creation. Other addresses are refused like a bad key and audited; the client address comes only from trusted proxies. | Next | Team | M18 | new |
+| PN-012.9 | CLI secrets in the OS keychain | `pclaw` keeps its refresh token and device key in the OS keychain (Windows, macOS, Secret Service), never on a command line; without one it falls back to a 0600 file with a warning. | Next | Community | M18 | new |
+| PN-012.10 | Key service (OpenBao) | Key-encryption keys can live in OpenBao Transit instead of files. Re-wrapping happens in place and is verified before it is written; an unreachable key service fails closed. Cloud KMS comes later. | Next | Community | M18 | new |
 | F014 | Plain-language API vocabulary | The API and docs use task grant, action definition, reviewed tool package, protection boundary, coverage evidence and transaction evidence. Formal names appear only in advanced evidence fields. | MVP | Community | M1 | F014 |
 | F322 | One-workflow developer onboarding | Start from one agent, owner and dev environment: verify identity, list tools and uncovered paths, choose a template, and name resources, operations, limits and duration. | MVP | Community | UI | F322, F323, F324 |
 | F325 | Guided first tests | Run a safe action, a permitted action and an out-of-scope action. Then enforce one named path and confirm that the prohibited test is stopped. | MVP | Community | UI | F325, F326, F327 |
@@ -657,7 +661,7 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | F343 | Dependency-led recommendations | Recommends identity, classification, approval and incident connections based on discovered needs, stating what each enables and what stays unsupported. | Next | Team | post-1.0 | F343, F344 |
 | F573 | Organisation hierarchy | Organisation → business unit → team → environment. Small tenants use only organisation and environments; business units are Business, and multiple organisations are Enterprise. | MVP | Community | M2 | F573 |
 | F581 | Roles & separation of duties | Default roles: Agent Owner, Policy Author, Policy Publisher, Approver, Responder and Auditor. Platform administration never implies business approval rights or payload access. | MVP | Community | M2 | F581, F583 |
-| F584 | Delegated administration | Scoped administrators per business unit, team or fleet segment, each accountable within their scope. | Next | Enterprise | post-1.0 | F584 |
+| F584 | Delegated administration | Scope Admins at business unit, team or environment bind and unbind only roles they hold, at their scope or below. Organization-scope roles, invitations and service-account keys stay organization-level; self-grants are audited. | Next | Enterprise | M18 | F584 |
 | F585 | Platform audit | Administrators, integrations, privileged changes, evidence access and response actions are recorded in the signed evidence ledger, each under its own permissions. | MVP | Community | M2 | F585 |
 | F594 | Break-glass access | Emergency access is narrow, time-limited, step-up authenticated and separately audited. It never waives invariants or fabricates verification. | MVP | Business | M13 | F594 |
 | F647 | Material limits always returned | Decision and evidence responses never omit gaps, grant scope, expiry, cumulative budgets, decision reasons, unknown outcomes or requested vs confirmed containment, and each says what to do next. | MVP | Community | M4 | F647, F651 |
@@ -667,6 +671,8 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | F009 | Stable, scoped navigation | Org, team, environment and time range are always visible. Drill-down keeps filters and selection, and live updates never reorder items under review. | MVP | Team | UI | F009, F010, F011 |
 | F012 | Accessibility & formats | Keyboard operation and accessible status text; meaning is never carried by colour alone. Tables for ranking, timelines for sequence; fast-comprehension goals are usability targets. | MVP | Team | UI | F012, F223, F303 |
 | F643 | Progressive disclosure | One-agent setup comes first. Repeated-work, team and enterprise governance controls appear as needed, with role-appropriate next steps and a layout organised around tasks and consequences. | MVP | Team | UI | F643–F646, F649, F650 |
+
+**Edition note (M18: PN-010.6, PN-012.7, PN-012.8, F584, F602; G0 M18 D161).** An edition gates only creating, activating or changing these features. Anything already in force keeps working in every edition: a downgrade keeps API-key CIDR lists enforced, rollout VERIFIED thresholds in place, active organization identity providers signing people in, and role bindings bound. Reading, removing, disabling and unbinding work in every edition. The fleet sweep and bulk simulation run only for entitled organizations.
 
 **Edition note (F001, F006, F009, F012, F643).** These rows describe the web console, which is part of the paid hosted offering (Team; founder decision F2 of G0 UI). The server-rendered approval and confirmation pages, the CLI and the API stay Community.
 
@@ -744,7 +750,7 @@ These boundaries constrain every pillar above. A feature request that conflicts 
 | Deployed | Root | 18 | PN-010.1–PN-010.7 | Hybrid from v1.0 (product code in UI); SaaS post-1.0 |
 | Session | Reflex | 9 | F224, F284, PN-002.5 | No transcripts required |
 | Performance | Root | 19 | PN-011.1–PN-011.5 | SLOs are targets: M13 optimises with a fixed effort on the staging server and publishes the measured numbers with their test conditions; v1.0 is not blocked on reaching them (G0 M13 F7) |
-| Management | Root | 20 | PN-012.1–PN-012.5, F573, F581 | Licence expiry never disables enforcement; support access needs the customer's approval every time and never reads credentials; deletion is verified and recorded in a signed deletion record (G0 M13 D32, D34) |
+| Management | Root | 20 | PN-012.1–PN-012.5, PN-012.7–PN-012.10, F573, F581, F584, F602 | Licence expiry never disables enforcement; support access needs the customer's approval every time and never reads credentials; deletion is verified and recorded in a signed deletion record (G0 M13 D32, D34) |
 | Bypass-resistant enforcement | Checkpoint | 16 (with 6, 10) | F435, F443, PN-008.2 | Per route, with current, expiring evidence |
 | Red-team range (adversarial sandbox) | Trail | 17 | PN-009.1–PN-009.5 | Simulated targets only; separate from the containment sandbox (PN-008) |
 

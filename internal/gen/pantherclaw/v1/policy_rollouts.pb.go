@@ -156,9 +156,13 @@ type PolicyRollout struct {
 	CompleteTime    *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=complete_time,json=completeTime,proto3" json:"complete_time,omitempty"`
 	Cohorts         []*PolicyRolloutCohort `protobuf:"bytes,9,rep,name=cohorts,proto3" json:"cohorts,omitempty"`
 	// target_counts counts the targets by state name.
-	TargetCounts  map[string]int64 `protobuf:"bytes,10,rep,name=target_counts,json=targetCounts,proto3" json:"target_counts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	TargetCounts map[string]int64 `protobuf:"bytes,10,rep,name=target_counts,json=targetCounts,proto3" json:"target_counts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	// require_verified_percent is the VERIFIED threshold (G0 M18 D154):
+	// COMPLETE needs at least this share of the targets other than
+	// EXCEPTION VERIFIED. Unset: no threshold.
+	RequireVerifiedPercent *int32 `protobuf:"varint,11,opt,name=require_verified_percent,json=requireVerifiedPercent,proto3,oneof" json:"require_verified_percent,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *PolicyRollout) Reset() {
@@ -259,6 +263,13 @@ func (x *PolicyRollout) GetTargetCounts() map[string]int64 {
 		return x.TargetCounts
 	}
 	return nil
+}
+
+func (x *PolicyRollout) GetRequireVerifiedPercent() int32 {
+	if x != nil && x.RequireVerifiedPercent != nil {
+		return *x.RequireVerifiedPercent
+	}
+	return 0
 }
 
 // PolicyRolloutCohort is one of a rollout's cohorts: SHADOW or ENFORCE.
@@ -553,8 +564,11 @@ type StartPolicyRolloutRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	VersionId     string                 `protobuf:"bytes,1,opt,name=version_id,json=versionId,proto3" json:"version_id,omitempty"`
 	ShadowCohorts []string               `protobuf:"bytes,2,rep,name=shadow_cohorts,json=shadowCohorts,proto3" json:"shadow_cohorts,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// require_verified_percent, 1 to 100, gates completion on VERIFIED
+	// targets (Enterprise; G0 M18 D154). It is fixed for the rollout.
+	RequireVerifiedPercent *int32 `protobuf:"varint,3,opt,name=require_verified_percent,json=requireVerifiedPercent,proto3,oneof" json:"require_verified_percent,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *StartPolicyRolloutRequest) Reset() {
@@ -599,6 +613,13 @@ func (x *StartPolicyRolloutRequest) GetShadowCohorts() []string {
 		return x.ShadowCohorts
 	}
 	return nil
+}
+
+func (x *StartPolicyRolloutRequest) GetRequireVerifiedPercent() int32 {
+	if x != nil && x.RequireVerifiedPercent != nil {
+		return *x.RequireVerifiedPercent
+	}
+	return 0
 }
 
 type StartPolicyRolloutResponse struct {
@@ -2171,7 +2192,7 @@ var File_pantherclaw_v1_policy_rollouts_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_policy_rollouts_proto_rawDesc = "" +
 	"\n" +
-	"$pantherclaw/v1/policy_rollouts.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xdb\x04\n" +
+	"$pantherclaw/v1/policy_rollouts.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb7\x05\n" +
 	"\rPolicyRollout\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -2186,10 +2207,12 @@ const file_pantherclaw_v1_policy_rollouts_proto_rawDesc = "" +
 	"\rcomplete_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\fcompleteTime\x12=\n" +
 	"\acohorts\x18\t \x03(\v2#.pantherclaw.v1.PolicyRolloutCohortR\acohorts\x12T\n" +
 	"\rtarget_counts\x18\n" +
-	" \x03(\v2/.pantherclaw.v1.PolicyRollout.TargetCountsEntryR\ftargetCounts\x1a?\n" +
+	" \x03(\v2/.pantherclaw.v1.PolicyRollout.TargetCountsEntryR\ftargetCounts\x12=\n" +
+	"\x18require_verified_percent\x18\v \x01(\x05H\x00R\x16requireVerifiedPercent\x88\x01\x01\x1a?\n" +
 	"\x11TargetCountsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"t\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01B\x1b\n" +
+	"\x19_require_verified_percent\"t\n" +
 	"\x13PolicyRolloutCohort\x12\x1b\n" +
 	"\tcohort_id\x18\x01 \x01(\tR\bcohortId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -2213,11 +2236,13 @@ const file_pantherclaw_v1_policy_rollouts_proto_rawDesc = "" +
 	"\tagent_ids\x18\x05 \x03(\tR\bagentIds\":\n" +
 	"\x16PolicyChangeRequestRef\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x10\n" +
-	"\x03url\x18\x02 \x01(\tR\x03url\"\x91\x01\n" +
+	"\x03url\x18\x02 \x01(\tR\x03url\"\xf8\x01\n" +
 	"\x19StartPolicyRolloutRequest\x12'\n" +
 	"\n" +
 	"version_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\tversionId\x12K\n" +
-	"\x0eshadow_cohorts\x18\x02 \x03(\tB$\xbaH!\x92\x01\x1e\x102\"\x1ar\x182\x16^[a-z][a-z0-9-]{0,63}$R\rshadowCohorts\"U\n" +
+	"\x0eshadow_cohorts\x18\x02 \x03(\tB$\xbaH!\x92\x01\x1e\x102\"\x1ar\x182\x16^[a-z][a-z0-9-]{0,63}$R\rshadowCohorts\x12H\n" +
+	"\x18require_verified_percent\x18\x03 \x01(\x05B\t\xbaH\x06\x1a\x04\x18d(\x01H\x00R\x16requireVerifiedPercent\x88\x01\x01B\x1b\n" +
+	"\x19_require_verified_percent\"U\n" +
 	"\x1aStartPolicyRolloutResponse\x127\n" +
 	"\arollout\x18\x01 \x01(\v2\x1d.pantherclaw.v1.PolicyRolloutR\arollout\"\x84\x01\n" +
 	"\x17StartPolicyPilotRequest\x12'\n" +
@@ -2491,6 +2516,8 @@ func file_pantherclaw_v1_policy_rollouts_proto_init() {
 	if File_pantherclaw_v1_policy_rollouts_proto != nil {
 		return
 	}
+	file_pantherclaw_v1_policy_rollouts_proto_msgTypes[0].OneofWrappers = []any{}
+	file_pantherclaw_v1_policy_rollouts_proto_msgTypes[5].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

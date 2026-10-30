@@ -715,6 +715,16 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Custom range scenarios** (PN-009.6, G4): `CX-` scenarios (Business) run on the simulator harness with a data-only tool file. The server labels them customer-authored and never puts them in an assurance pack. RT scenarios need a matching library digest.
 - Migrations: `00206`–`00211` and `00213` are used; `00212`, `00214` and `00215` are spare. One new permission, `consequence_rule.manage`.
 
+### M18 — Platform administration (Root)
+**HR:** HR-470..488 · **PN:** PN-010.6 (fleet part), PN-012.7..PN-012.10 · **F:** F584, F602 · **ADR:** 0039 · **G0:** [g0/M18.md](g0/M18.md).
+- A post-1.0 milestone: it lands after M15, M16 and M17, in migration order, and builds once M16 is on `main`.
+- **Fleet** (PN-010.6): fleet policy, a fleet view of versions, replicas and configuration lag, an advisory minimum version and silent-gateway alerts, on top of M15's status reports.
+- **Delegated administration** (F584, G5): Scope Admins bind and unbind only roles they hold, only at their scope or below.
+- **Large fleets** (F602): exception groups snapshotted from a cohort, bulk simulation by cohort, a VERIFIED threshold on rollouts and per-cohort findings.
+- **Organization identity providers** (PN-012.7, G6) as two-person protected changes; **API-key IP allow lists** (PN-012.8).
+- **Platform** (G7): pclaw secrets in the OS keychain (PN-012.9); OpenBao Transit as a key service with in-place re-wrap, and BlobStore and fan-out ports (PN-012.10).
+- Migrations `00216`–`00224` (`00225` spare); SCIM and SAML follow M18 (G8).
+
 ---
 
 ## 9. CI/CD summary

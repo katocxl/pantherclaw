@@ -83,7 +83,8 @@ func usageText() string {
 		b.WriteString("  pclaw " + commands[n].usage + "\n")
 	}
 	b.WriteString("  pclaw version\n\nAutomation: set PANTHERCLAW_SERVER and PANTHERCLAW_API_KEY instead of logging in.\n" +
-		"Proxy: set PANTHERCLAW_HTTPS_PROXY=http://HOST:PORT to reach the server through a proxy; HTTPS_PROXY is ignored.\n")
+		"Proxy: set PANTHERCLAW_HTTPS_PROXY=http://HOST:PORT to reach the server through a proxy; HTTPS_PROXY is ignored.\n" +
+		"Credentials: pclaw --credential-store=auto|keychain|file COMMAND (or PANTHERCLAW_CREDENTIAL_STORE); auto uses the OS keychain when there is one.\n")
 	return b.String()
 }
 
@@ -108,6 +109,11 @@ func controlClient(env Env) (*http.Client, error) {
 
 // Run executes pclaw and returns the exit code.
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer, env Env, opts Options) int {
+	args, env, ferr := credentialStoreFlag(args, env)
+	if ferr != nil {
+		_, _ = fmt.Fprintln(stderr, ferr)
+		return 2
+	}
 	a := &app{
 		stdin: opts.Stdin, stdout: stdout, stderr: stderr, env: env, http: opts.HTTPClient, openBrowser: opts.OpenBrowser,
 		beforeProbe: opts.SandboxBeforeProbe,

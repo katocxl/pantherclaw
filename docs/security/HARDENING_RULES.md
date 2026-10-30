@@ -525,3 +525,27 @@
 | HR-467 | An RT scenario id is accepted only with a matching library digest. | T-204 | M17 |
 | HR-468 | The customer tool simulator is data only, and every response is marked simulated. | T-204, T-092 | M17 |
 | HR-469 | The Azure managed identity (`azure_mi`) and Entra Agent ID (`entra_agent_id`) presets trust only a tenant and app id the operator pinned, and each app id maps to exactly one organization; `aud` is that app id (or `api://<app_id>`); the workload's assurance, and any credential issued from the attestation, lasts at most 1 hour from the attestation, whatever the token's lifetime; and each token is single use until its `exp`. | T-205 | M17 |
+
+## Platform administration (G0 M18)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
+| HR-470 | The minimum version is advisory, never a refusal. | T-212 | M18 |
+| HR-471 | A silent gateway alerts once per silence and once on recovery, per org. | T-212 | M18 |
+| HR-472 | A scoped admin binds only roles it holds at the target scope or above. | T-206 | M18 |
+| HR-473 | Org-scope roles need org-level `role.bind`. | T-206 | M18 |
+| HR-474 | Unbinding follows the same ceiling. | T-206 | M18 |
+| HR-475 | A CIDR-restricted key is refused from any other IP, with the bad-key error. | T-208 | M18 |
+| HR-476 | The client IP comes only from trusted proxies. | T-208 | M18 |
+| HR-477 | An exception group covers only the agents snapshotted at approval, and editing the cohort voids a pending group request. | T-209 | M18 |
+| HR-478 | Bulk simulation is read-only and within the existing caps. | T-213 | M18 |
+| HR-479 | A gated rollout completes only at its VERIFIED threshold. | — (G0 M18 D154) | M18 |
+| HR-480 | Aggregates show only readable agents. | T-213 | M18 |
+| HR-481 | Org IdP changes are two-person protected changes, always protected under CUSTODY in every protect mode, and every admin is notified. | T-207 | M18 |
+| HR-482 | Client secrets are sealed and never returned. | T-207 | M18 |
+| HR-483 | Discovery goes through the egress guard, HTTPS only. | T-207 | M18 |
+| HR-484 | The last admin sign-in path can't be disabled: a change is refused only when no active Org Admin would keep a sign-in path, and the request lists every admin it would strand. | T-207 | M18 |
+| HR-485 | pclaw keeps its secrets in the OS keychain when one is available, never on a command line. The file fallback is warned. | T-211 | M18 |
+| HR-486 | An unwrap failure fails closed. | T-210 | M18 |
+| HR-487 | A re-wrap verifies before it writes and changes both columns together, and only the pc_keystore role, used only by the re-wrap job, may re-wrap. | T-210 | M18 |
+| HR-488 | OpenBao is reached only at the configured address, with TLS. | T-210 | M18 |

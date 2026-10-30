@@ -90,10 +90,11 @@ Usage:
   pantherclaw-server serve [--config FILE]            run the API and/or workers (role from config)
   pantherclaw-server migrate up|status [--config FILE] apply or show schema migrations (as pc_migrator)
   pantherclaw-server db bootstrap --admin-url-file F --app-password-file F --migrator-password-file F --audit-password-file F
-                                 --retention-password-file F [--backup-password-file F] [--deleter-password-file F]
+                                 --retention-password-file F [--backup-password-file F] [--deleter-password-file F] [--keystore-password-file F]
                                                      create roles and schema once, as the database owner; with
                                                      --backup-password-file also the read-only backup role pc_backup;
-                                                     --deleter-password-file also the org deletion role pc_deleter
+                                                     --deleter-password-file also the org deletion role pc_deleter;
+                                                     --keystore-password-file also the key re-wrap role pc_keystore
   pantherclaw-server keys gen-kek --out FILE          write a new key-encryption key (0600)
   pantherclaw-server keys rotate-gateway-ca --confirm [--config FILE]
                                                      replace the internal gateway CA key; every gateway enrolls again
@@ -278,7 +279,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	}
 	workers := newWorkerHeartbeat(cfg.Role)
 
-	kp, err := keys.NewFileProvider(cfg.KEKFiles)
+	kp, err := newCheckedKeyProvider(ctx, cfg, pool)
 	if err != nil {
 		return err
 	}
@@ -332,6 +333,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	m6.fleet = newM18Fleet(m6, bill, m5.notifications)
 	m6.hold = cfg.Maintenance.Hold
 	m14core := wireM14Core(m6)
 	wireM14A2A(m14core)
@@ -366,6 +368,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	// jobs share it, so every port set on it reaches both (D91 K6).
 	// protect sets its ports on it in every role (D110 P1).
 	autos, m11protect := newM11Core(pool, bill, cfg.Auth.PublicURL)
+	closeM18IdPs(m11protect.gate, log)
 	wireM11Process(autos, m11protect, pool)
 	wireM14Process(autos, bill)
 	wireM14A2APeer(svc, authorityStore, autos, pool)
@@ -407,8 +410,16 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			log.WarnContext(ctx, "server.no_trusted_proxies", slog.String("note",
 				"behind a proxy without http.trusted_proxies: sign-in rate limits are shared by all clients of the proxy"))
 		}
-		device, err := devicehttp.New(authnapp.NewDevice(pool, tokens, cfg.Auth.PublicURL, idps, clock.System{}, log),
-			cfg.Auth.PublicURL, limiter, log)
+		if len(proxies) == 0 {
+			// API-key IP allow lists (G0 M18 D153, HR-476) then check the
+			// direct peer, which behind a proxy is the proxy itself.
+			log.WarnContext(ctx, "server.api_key_ranges_use_peer", slog.String("note",
+				"http.trusted_proxies is empty: API keys limited to address ranges are checked against the direct peer address"))
+		}
+		orgIdPs := newM18IdPs(cfg, pool, kp, log)
+		go idpsWarnShadowed(ctx, pool, orgIdPs, log)
+		device, err := devicehttp.New(authnapp.NewDevice(pool, tokens, cfg.Auth.PublicURL, idps, clock.System{}, log).
+			WithOrgProviders(orgIdPs.resolver), cfg.Auth.PublicURL, limiter, log)
 		if err != nil {
 			return err
 		}
@@ -416,6 +427,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err != nil {
 			return err
 		}
+		m5.browser.WithOrgProviders(orgIdPs.resolver)
 		ui.wireBrowser(m5.browser, web)
 		m6.mountPages(web)
 		m5p2.mountPages(web, m5)
@@ -468,6 +480,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			hold:         cfg.Maintenance.Hold,
 			data:         dataRequests,
 			external:     external,
+			idps:         orgIdPs,
 		})
 		if err != nil {
 			return err
@@ -606,6 +619,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if evidenceJobs, err = registerM15GatewayJobs(evidenceJobs, jreg, pool, log); err != nil {
 			return err
 		}
+		if evidenceJobs, err = registerM18FleetJobs(evidenceJobs, jreg, m6.fleet, log); err != nil {
+			return err
+		}
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {
 			return err
 		}
@@ -629,6 +645,12 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err := githubapp.Register(jreg, ghScans); err != nil {
 			return err
 		}
+		rewrapJobs, closeKeystore, err := registerKeyRewrap(ctx, jreg, cfg, pool, kp, log)
+		if err != nil {
+			return err
+		}
+		defer closeKeystore()
+		evidenceJobs = append(evidenceJobs, rewrapJobs...)
 		client, err := jobs.NewClient(pool, jreg, jobs.Config{
 			Queues: map[string]int{river.QueueDefault: cfg.WorkerConcurrency, napp.Queue: cfg.Notifications.Concurrency},
 			PeriodicJobs: slices.Concat(chainer.PeriodicJobs(), authority.SweeperPeriodicJobs(), authnapp.JanitorPeriodicJobs(),
@@ -705,7 +727,9 @@ type apiDeps struct {
 	// external is the external policy check service (G0 M16 D81).
 	external *externalchecks.Service
 	data     *datarequests.Service
-	pool     *db.Pool
+	// idps are the organization identity providers (G0 M18 D155).
+	idps m18IdPs
+	pool *db.Pool
 	// cel are the configured CEL limits (cel).
 	cel       celenv.Limits
 	reg       *keys.Registry
@@ -788,7 +812,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	pantherclawv1connect.RegisterAuthorityServiceHandler(rs, authority.NewHandler(d.authority))
 	pantherclawv1connect.RegisterTenancyServiceHandler(rs, tenancyHandler(tenancyrpc.NewTenancy(tapp.NewHierarchy(pool, d.billing)), d.ui))
 	pantherclawv1connect.RegisterAccessServiceHandler(rs, accessHandler(tenancyrpc.NewAccess(tapp.NewAccess(pool, log).WithEntitlements(d.billing)).WithDeployment(string(d.extDeps.Deployment)), d.ui, d.extDeps.Deployment))
-	pantherclawv1connect.RegisterServiceAccountServiceHandler(rs, tenancyrpc.NewServiceAccounts(tapp.NewServiceAccounts(pool, d.apiKeyEnv)))
+	pantherclawv1connect.RegisterServiceAccountServiceHandler(rs, tenancyrpc.NewServiceAccounts(tapp.NewServiceAccounts(pool, d.apiKeyEnv).WithEntitlements(d.billing)))
 	// autos is the M11 part 2 core, set below once grants and runs exist;
 	// ListAgents reads it only while serving.
 	var autos *automationsCore
@@ -879,6 +903,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	registerM11Protect(rs, d, autos)
 	registerM17Rules(rs, d)
+	registerM18IdPs(rs, d)
 	authzen := registerAuthZEN(rs, d)
 	registerUITenancy(rs, d)
 	registerUsage(rs, d)
@@ -1046,6 +1071,7 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	retentionPW := fs.String("retention-password-file", "", "password file for pc_retention (the retention job's role)")
 	backupPW := fs.String("backup-password-file", "", "optional: password file for pc_backup, the read-only role of the backup job")
 	deleterPW := fs.String("deleter-password-file", "", "optional: password file for pc_deleter, the role of the org deletion job")
+	keystorePW := fs.String("keystore-password-file", "", "optional: password file for pc_keystore, the role of the key re-wrap job")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -1101,6 +1127,17 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 	}
+	if *keystorePW != "" {
+		// Before the database grants, which give an existing pc_keystore its
+		// re-wrap columns (G0 M18 D171).
+		kpw, err := config.ReadSecretFile(*keystorePW)
+		if err != nil {
+			return err
+		}
+		if err := db.BootstrapKeystoreRole(ctx, conn, kpw); err != nil {
+			return err
+		}
+	}
 	if err := db.BootstrapDatabase(ctx, conn); err != nil {
 		return err
 	}
@@ -1111,6 +1148,9 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 	if *deleterPW != "" {
 		_, _ = fmt.Fprintf(stdout, "bootstrapped the org deletion role %s\n", db.RoleDeleter)
+	}
+	if *keystorePW != "" {
+		_, _ = fmt.Fprintf(stdout, "bootstrapped the key re-wrap role %s\n", db.RoleKeystore)
 	}
 	return nil
 }

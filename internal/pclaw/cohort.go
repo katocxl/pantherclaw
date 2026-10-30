@@ -138,6 +138,11 @@ func cohortCommands() map[string]command {
 				return c.cohorts.GetCohortQueue(ctx, &pantherclawv1.GetCohortQueueRequest{CohortId: a[0]})
 			}
 		}),
+		"findings": rpc("cohort findings COHORT_ID", 1, func(*flag.FlagSet) call {
+			return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
+				return c.cohorts.GetCohortFindings(ctx, &pantherclawv1.GetCohortFindingsRequest{CohortId: a[0]})
+			}
+		}),
 		"changes": rpc("cohort changes COHORT_ID [--since DURATION] (default and at most 744h)", 1, func(fs *flag.FlagSet) call {
 			since := fs.Duration("since", 0, "how far back")
 			return func(ctx context.Context, c clients, a []string) (proto.Message, error) {

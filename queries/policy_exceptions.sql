@@ -48,9 +48,10 @@ WHERE x.org_id = sqlc.arg(org_id) AND x.id IN (
 RETURNING *;
 
 -- Active exceptions that expire within the window, for the owner's notice.
+-- A group's member rows are told once, through their group (00220).
 -- name: ExpiringPolicyExceptions :many
 SELECT * FROM pc.policy_exceptions
-WHERE org_id = sqlc.arg(org_id) AND state = 'ACTIVE' AND expires_at > now()
+WHERE org_id = sqlc.arg(org_id) AND state = 'ACTIVE' AND expires_at > now() AND group_id IS NULL
   AND expires_at <= now() + make_interval(secs => sqlc.arg(within_seconds)::bigint)
 ORDER BY id
 LIMIT sqlc.arg(max_rows);

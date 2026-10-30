@@ -8,6 +8,7 @@
 package dbq
 
 import (
+	"net/netip"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -321,6 +322,7 @@ type PcApiKey struct {
 	ExpiresAt        time.Time
 	RevokedAt        *time.Time
 	LastUsedAt       *time.Time
+	AllowedCidrs     []netip.Prefix
 }
 
 type PcApprovalBatch struct {
@@ -2003,6 +2005,16 @@ type PcGateway struct {
 	RevokeReason  *string
 }
 
+type PcGatewayAlertState struct {
+	OrgID                  ids.OrgID
+	GatewayID              ids.UUID
+	LastReportAt           *time.Time
+	SilentSince            *time.Time
+	SilentNotifiedAt       *time.Time
+	BelowMinimumVersion    *string
+	BelowMinimumNotifiedAt *time.Time
+}
+
 type PcGatewayCert struct {
 	OrgID         ids.OrgID
 	ID            ids.UUID
@@ -2037,6 +2049,14 @@ type PcGatewayEpochDelivery struct {
 	GatewayID   ids.UUID
 	Epoch       int64
 	DeliveredAt time.Time
+}
+
+type PcGatewayFleetPolicy struct {
+	OrgID               ids.OrgID
+	MinimumVersion      *string
+	SilenceAfterSeconds int32
+	UpdatedBy           string
+	UpdatedAt           time.Time
 }
 
 type PcGatewayMcpState struct {
@@ -2514,6 +2534,31 @@ type PcOrgEntitlement struct {
 	LapsedAt    *time.Time
 }
 
+type PcOrgIdentityProvider struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	Name         string
+	Issuer       string
+	ClientID     string
+	ClientSecret []byte
+	TrustEmail   bool
+	State        string
+	CreatedBy    ids.UUID
+	CreatedAt    time.Time
+	UpdatedBy    ids.UUID
+	UpdatedAt    time.Time
+	ActivatedAt  *time.Time
+	DisabledBy   *ids.UUID
+	DisabledAt   *time.Time
+}
+
+type PcOrgIdentityProviderSetting struct {
+	OrgID            ids.OrgID
+	OwnProvidersOnly bool
+	UpdatedBy        ids.UUID
+	UpdatedAt        time.Time
+}
+
 type PcOrgTermsAcceptance struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID
@@ -2676,18 +2721,43 @@ type PcPolicyException struct {
 	RevokedBy       *ids.UUID
 	RevokedReason   *string
 	CreatedAt       time.Time
+	GroupID         *ids.UUID
+}
+
+type PcPolicyExceptionGroup struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	CohortID        ids.UUID
+	BundleID        string
+	RuleID          string
+	RuleDigest      []byte
+	Operations      []string
+	Reason          string
+	OwnerID         ids.UUID
+	RequestedBy     ids.UUID
+	CohortDigest    []byte
+	RequestedExpiry time.Time
+	State           string
+	ActivatedAt     *time.Time
+	ExpiresAt       *time.Time
+	Members         *int32
+	Truncated       pgtype.Bool
+	RevokedBy       *ids.UUID
+	RevokedReason   *string
+	CreatedAt       time.Time
 }
 
 type PcPolicyRollout struct {
-	OrgID          ids.OrgID
-	ID             ids.UUID
-	VersionID      ids.UUID
-	BaseVersionID  *ids.UUID
-	Stage          string
-	CreatedBy      string
-	CreatedAt      time.Time
-	StageChangedAt time.Time
-	CompletedAt    *time.Time
+	OrgID                  ids.OrgID
+	ID                     ids.UUID
+	VersionID              ids.UUID
+	BaseVersionID          *ids.UUID
+	Stage                  string
+	CreatedBy              string
+	CreatedAt              time.Time
+	StageChangedAt         time.Time
+	CompletedAt            *time.Time
+	RequireVerifiedPercent *int32
 }
 
 type PcPolicyRolloutCohort struct {
@@ -2763,6 +2833,10 @@ type PcPolicySimulation struct {
 	StartedAt        *time.Time
 	FinishedAt       *time.Time
 	Error            *string
+	CohortID         *ids.UUID
+	CohortAgents     []ids.UUID
+	CohortTruncated  pgtype.Bool
+	ByCohort         []byte
 }
 
 type PcPolicySimulationSample struct {

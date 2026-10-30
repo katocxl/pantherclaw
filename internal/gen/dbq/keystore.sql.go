@@ -17,7 +17,7 @@ import (
 )
 
 const activeDEK = `-- name: ActiveDEK :one
-SELECT version, wrapped_key
+SELECT version, wrapped_key, kek_id
 FROM pc.deks
 WHERE org_id = $1 AND purpose = $2 AND state = 'ACTIVE'
 `
@@ -25,26 +25,32 @@ WHERE org_id = $1 AND purpose = $2 AND state = 'ACTIVE'
 type ActiveDEKRow struct {
 	Version    int32
 	WrappedKey []byte
+	KekID      string
 }
 
 func (q *Queries) ActiveDEK(ctx context.Context, orgID ids.OrgID, purpose string) (ActiveDEKRow, error) {
 	row := q.db.QueryRow(ctx, activeDEK, orgID, purpose)
 	var i ActiveDEKRow
-	err := row.Scan(&i.Version, &i.WrappedKey)
+	err := row.Scan(&i.Version, &i.WrappedKey, &i.KekID)
 	return i, err
 }
 
 const getDEK = `-- name: GetDEK :one
-SELECT wrapped_key
+SELECT wrapped_key, kek_id
 FROM pc.deks
 WHERE org_id = $1 AND purpose = $2 AND version = $3
 `
 
-func (q *Queries) GetDEK(ctx context.Context, orgID ids.OrgID, purpose string, version int32) ([]byte, error) {
+type GetDEKRow struct {
+	WrappedKey []byte
+	KekID      string
+}
+
+func (q *Queries) GetDEK(ctx context.Context, orgID ids.OrgID, purpose string, version int32) (GetDEKRow, error) {
 	row := q.db.QueryRow(ctx, getDEK, orgID, purpose, version)
-	var wrapped_key []byte
-	err := row.Scan(&wrapped_key)
-	return wrapped_key, err
+	var i GetDEKRow
+	err := row.Scan(&i.WrappedKey, &i.KekID)
+	return i, err
 }
 
 const insertDEK = `-- name: InsertDEK :exec
@@ -100,6 +106,48 @@ func (q *Queries) InsertSigningKey(ctx context.Context, arg InsertSigningKeyPara
 		arg.KekID,
 	)
 	return err
+}
+
+const listDEKsToRewrap = `-- name: ListDEKsToRewrap :many
+SELECT purpose, version, wrapped_key, kek_id
+FROM pc.deks
+WHERE org_id = $1 AND kek_id <> ALL($2::text[])
+ORDER BY purpose, version
+LIMIT $3
+`
+
+type ListDEKsToRewrapRow struct {
+	Purpose    string
+	Version    int32
+	WrappedKey []byte
+	KekID      string
+}
+
+// DEKs to re-wrap (D157, migration 00224): all but those whose kek_id is
+// skipped (the current KEK in any spelling, and KEKs no provider holds).
+func (q *Queries) ListDEKsToRewrap(ctx context.Context, orgID ids.OrgID, skipKekIds []string, rowLimit int32) ([]ListDEKsToRewrapRow, error) {
+	rows, err := q.db.Query(ctx, listDEKsToRewrap, orgID, skipKekIds, rowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDEKsToRewrapRow{}
+	for rows.Next() {
+		var i ListDEKsToRewrapRow
+		if err := rows.Scan(
+			&i.Purpose,
+			&i.Version,
+			&i.WrappedKey,
+			&i.KekID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listPublishedKeys = `-- name: ListPublishedKeys :many
@@ -199,6 +247,77 @@ func (q *Queries) ListSigningKeys(ctx context.Context, orgID ids.OrgID) ([]ListS
 	return items, nil
 }
 
+const listSigningKeysToRewrap = `-- name: ListSigningKeysToRewrap :many
+SELECT kid, purpose, wrapped_private_key, kek_id
+FROM pc.keys
+WHERE org_id = $1 AND state <> 'REVOKED' AND kek_id <> ALL($2::text[])
+ORDER BY created_at, kid
+LIMIT $3
+`
+
+type ListSigningKeysToRewrapRow struct {
+	Kid               string
+	Purpose           string
+	WrappedPrivateKey []byte
+	KekID             string
+}
+
+// Revoked keys are never unwrapped, so they stay as they are.
+func (q *Queries) ListSigningKeysToRewrap(ctx context.Context, orgID ids.OrgID, skipKekIds []string, rowLimit int32) ([]ListSigningKeysToRewrapRow, error) {
+	rows, err := q.db.Query(ctx, listSigningKeysToRewrap, orgID, skipKekIds, rowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSigningKeysToRewrapRow{}
+	for rows.Next() {
+		var i ListSigningKeysToRewrapRow
+		if err := rows.Scan(
+			&i.Kid,
+			&i.Purpose,
+			&i.WrappedPrivateKey,
+			&i.KekID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStoredKEKIDs = `-- name: ListStoredKEKIDs :many
+SELECT k.kek_id FROM pc.keys AS k WHERE k.org_id = $1 AND k.state <> 'REVOKED'
+UNION
+SELECT d.kek_id FROM pc.deks AS d WHERE d.org_id = $1
+ORDER BY kek_id
+`
+
+// The distinct kek_id values of an org's stored keys, for the start-up
+// check that every one has a provider (D165). Revoked signing keys are
+// never unwrapped, so they don't count.
+func (q *Queries) ListStoredKEKIDs(ctx context.Context, orgID ids.OrgID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listStoredKEKIDs, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var kek_id string
+		if err := rows.Scan(&kek_id); err != nil {
+			return nil, err
+		}
+		items = append(items, kek_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockKeystore = `-- name: LockKeystore :exec
 SELECT pg_advisory_xact_lock(hashtextextended('pc.keystore:' || $1::uuid::text, 0))
 `
@@ -219,6 +338,72 @@ func (q *Queries) NextDEKVersion(ctx context.Context, orgID ids.OrgID, purpose s
 	var version int32
 	err := row.Scan(&version)
 	return version, err
+}
+
+const rewrapDEK = `-- name: RewrapDEK :execrows
+UPDATE pc.deks
+SET wrapped_key = $1, kek_id = $2
+WHERE org_id = $3 AND purpose = $4 AND version = $5
+  AND wrapped_key = $6 AND kek_id = $7
+`
+
+type RewrapDEKParams struct {
+	WrappedKey    []byte
+	KekID         string
+	OrgID         ids.OrgID
+	Purpose       string
+	Version       int32
+	OldWrappedKey []byte
+	OldKekID      string
+}
+
+// A compare-and-swap on both old columns; the 00224 trigger refuses a
+// change of one without the other (HR-487).
+func (q *Queries) RewrapDEK(ctx context.Context, arg RewrapDEKParams) (int64, error) {
+	result, err := q.db.Exec(ctx, rewrapDEK,
+		arg.WrappedKey,
+		arg.KekID,
+		arg.OrgID,
+		arg.Purpose,
+		arg.Version,
+		arg.OldWrappedKey,
+		arg.OldKekID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const rewrapSigningKey = `-- name: RewrapSigningKey :execrows
+UPDATE pc.keys
+SET wrapped_private_key = $1, kek_id = $2
+WHERE org_id = $3 AND kid = $4
+  AND wrapped_private_key = $5 AND kek_id = $6
+`
+
+type RewrapSigningKeyParams struct {
+	WrappedPrivateKey    []byte
+	KekID                string
+	OrgID                ids.OrgID
+	Kid                  string
+	OldWrappedPrivateKey []byte
+	OldKekID             string
+}
+
+func (q *Queries) RewrapSigningKey(ctx context.Context, arg RewrapSigningKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, rewrapSigningKey,
+		arg.WrappedPrivateKey,
+		arg.KekID,
+		arg.OrgID,
+		arg.Kid,
+		arg.OldWrappedPrivateKey,
+		arg.OldKekID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const transitionSigningKey = `-- name: TransitionSigningKey :execresult

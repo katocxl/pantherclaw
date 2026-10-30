@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/riverqueue/river"
 
+	"github.com/katocxl/pantherclaw/internal/billing"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
@@ -29,7 +30,7 @@ var gateChanges = struct {
 
 func init() {
 	policyGateExtensions = append(policyGateExtensions, func(d apiDeps, v *policyapp.Versions) {
-		v.Changes.Register(policyapp.ChangeException, policyExceptions(d.pool, exceptionNotifier(d), v.Changes).Apply)
+		v.Changes.Register(policyapp.ChangeException, policyExceptions(d.pool, exceptionNotifier(d), v.Changes, d.billing).Apply)
 		gateChanges.Lock()
 		defer gateChanges.Unlock()
 		gateChanges.by[d.pool] = v.Changes
@@ -44,9 +45,14 @@ func exceptionNotifier(d apiDeps) exceptions.Notifier {
 }
 
 // policyExceptions builds the exception service as pc_app, telling owners
-// through the M5 notifier when there is one.
-func policyExceptions(pool *db.Pool, notify exceptions.Notifier, changes exceptions.ChangeRequester) *exceptions.Service {
+// through the M5 notifier when there is one. Editions come from the licence
+// (G0 M18 D166): without them no exception group is requested (fail
+// closed); the sweep passes none.
+func policyExceptions(pool *db.Pool, notify exceptions.Notifier, changes exceptions.ChangeRequester, bill *billing.Service) *exceptions.Service {
 	svc := &exceptions.Service{Pool: pool, Notify: notify}
+	if bill != nil {
+		svc.Editions = bill
+	}
 	if changes != nil {
 		svc.Changes = changes
 	}
@@ -62,9 +68,9 @@ func registerPolicyExceptions(rs *connect.Server, d apiDeps) *exceptions.Service
 	gateChanges.Unlock()
 	var svc *exceptions.Service
 	if changes != nil {
-		svc = policyExceptions(d.pool, exceptionNotifier(d), changes)
+		svc = policyExceptions(d.pool, exceptionNotifier(d), changes, d.billing)
 	} else {
-		svc = policyExceptions(d.pool, exceptionNotifier(d), nil)
+		svc = policyExceptions(d.pool, exceptionNotifier(d), nil, d.billing)
 	}
 	pantherclawv1connect.RegisterPolicyExceptionServiceHandler(rs, exceptionsrpc.New(svc))
 	return svc
@@ -76,5 +82,5 @@ func registerPolicyExceptions(rs *connect.Server, d apiDeps) *exceptions.Service
 func registerPolicyExceptionJobs(reg *jobs.Registry, pool *db.Pool, notify exceptions.Notifier, log *slog.Logger) (
 	[]*river.PeriodicJob, error,
 ) {
-	return exceptions.RegisterSweep(reg, policyExceptions(pool, notify, nil), log)
+	return exceptions.RegisterSweep(reg, policyExceptions(pool, notify, nil, nil), log)
 }

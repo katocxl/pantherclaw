@@ -54,6 +54,23 @@ service GatewayAdminService {
   rpc ListApproverKeys(ListApproverKeysRequest) returns (ListApproverKeysResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // GetFleetPolicy returns the org's gateway fleet policy: the advisory
+  // minimum version and the silence threshold (G0 M18 D151). Every edition.
+  // permission: gateway.manage
+  rpc GetFleetPolicy(GetFleetPolicyRequest) returns (GetFleetPolicyResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SetFleetPolicy sets the org's gateway fleet policy (Enterprise). The
+  // minimum version is advisory: a gateway below it is flagged and alerted,
+  // never refused (HR-470).
+  // permission: gateway.manage
+  rpc SetFleetPolicy(SetFleetPolicyRequest) returns (SetFleetPolicyResponse);
+  // ListFleet lists the org's active gateways with each replica's version,
+  // its compliance with the minimum and its config lag (Team).
+  // permission: gateway.read
+  rpc ListFleet(ListFleetRequest) returns (ListFleetResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // GatewayService is called by gateways. Enroll is served on the public API
@@ -1153,4 +1170,113 @@ message InventoryResourceTemplate {
 message ReportInventoryResponse {
   // Items that became NEW with this report.
   int32 new_items = 1;
+}
+
+// FleetPolicy is an org's gateway fleet policy (G0 M18 D151).
+message FleetPolicy {
+  // The advisory minimum version, vMAJOR.MINOR.PATCH[-pre]; empty for none.
+  string minimum_version = 1;
+  // How long a gateway may go without a status report before it is
+  // alerted as silent.
+  int32 silence_after_seconds = 2;
+  // Who last set it; empty for the default policy.
+  string updated_by = 3;
+  // When.
+  google.protobuf.Timestamp update_time = 4;
+}
+
+// GetFleetPolicyRequest reads the caller's org's fleet policy.
+message GetFleetPolicyRequest {}
+
+// GetFleetPolicyResponse is the policy.
+message GetFleetPolicyResponse {
+  // The policy, or the default when the org set none.
+  FleetPolicy policy = 1;
+}
+
+// SetFleetPolicyRequest replaces the caller's org's fleet policy.
+message SetFleetPolicyRequest {
+  // The advisory minimum version; empty clears it.
+  string minimum_version = 1 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^(v?(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)(-[0-9A-Za-z-]+([.][0-9A-Za-z-]+)*)?)?$"
+  }];
+  // The silence threshold; 0 for the default 300.
+  int32 silence_after_seconds = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 86400
+  }];
+}
+
+// SetFleetPolicyResponse is the policy as stored.
+message SetFleetPolicyResponse {
+  // The policy.
+  FleetPolicy policy = 1;
+}
+
+// VersionCompliance is how a reported version meets the minimum.
+enum VersionCompliance {
+  VERSION_COMPLIANCE_UNSPECIFIED = 0;
+  // The org set no minimum version.
+  VERSION_COMPLIANCE_NO_MINIMUM = 1;
+  // At or above the minimum.
+  VERSION_COMPLIANCE_COMPLIANT = 2;
+  // Below the minimum.
+  VERSION_COMPLIANCE_BELOW_MINIMUM = 3;
+  // The version does not parse; it never counts as compliant.
+  VERSION_COMPLIANCE_UNKNOWN = 4;
+}
+
+// FleetReplica is one replica in the fleet view.
+message FleetReplica {
+  // What it reported.
+  GatewayReplica replica = 1;
+  // Its parsed version, vMAJOR.MINOR.PATCH[-pre], or "unknown".
+  string parsed_version = 2;
+  // How it meets the minimum.
+  VersionCompliance compliance = 3;
+  // How many config versions it serves behind the gateway's current one.
+  int64 config_lag = 4;
+}
+
+// FleetGateway is one gateway in the fleet view.
+message FleetGateway {
+  // Gateway id.
+  string gateway_id = 1;
+  // Its name.
+  string name = 2;
+  // The config version it should serve.
+  int64 config_version = 3;
+  // Whether some replica reported in the last 90 seconds.
+  bool connected = 4;
+  // Set while it is alerted as silent: its last report before the silence.
+  google.protobuf.Timestamp silent_since_time = 5;
+  // Whether some replica's version misses the minimum (or is unknown).
+  bool below_minimum = 6;
+  // The replicas that reported in the last 24 hours.
+  repeated FleetReplica replicas = 7;
+}
+
+// ListFleetRequest pages through the fleet view.
+message ListFleetRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListFleetResponse is one page.
+message ListFleetResponse {
+  // The org's fleet policy.
+  FleetPolicy policy = 1;
+  // Active gateways.
+  repeated FleetGateway gateways = 2;
+  // Token for the next page; empty at the end.
+  string next_page_token = 3;
 }

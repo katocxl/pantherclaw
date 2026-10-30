@@ -75,6 +75,14 @@ service CohortService {
   rpc GetFleetOverview(GetFleetOverviewRequest) returns (GetFleetOverviewResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // GetCohortFindings counts a cohort's findings over its agents the
+  // caller may read (G0 M18 D154): open coverage findings, grants beyond
+  // the baseline, FAILED rollout targets and active exceptions. A kind
+  // the caller may not read is left out.
+  // permission: agent.read
+  rpc GetCohortFindings(GetCohortFindingsRequest) returns (GetCohortFindingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // FleetCohortRule matches agents by every field it gives (at least one).
@@ -311,4 +319,35 @@ message GetFleetOverviewRequest {
 message GetFleetOverviewResponse {
   repeated FleetAgent agents = 1;
   string next_page_token = 3;
+}
+
+message GetCohortFindingsRequest {
+  string cohort_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// CohortFindingCount is one kind of finding: how many, on how many agents.
+message CohortFindingCount {
+  int64 findings = 1;
+  int64 agents = 2;
+  // shown is false when the caller may not read this kind; the counts
+  // are then zero.
+  bool shown = 3;
+}
+
+message GetCohortFindingsResponse {
+  // agents is how many of the cohort's agents the counts cover: those the
+  // caller may read.
+  int32 agents = 1;
+  // coverage counts open coverage findings (coverage.read).
+  CohortFindingCount coverage = 2;
+  // departures counts active grants beyond the cohort's baseline.
+  CohortFindingCount departures = 3;
+  // failed_targets counts FAILED targets of open rollouts and of those
+  // completed in the last 7 days (policy.read).
+  CohortFindingCount failed_targets = 4;
+  // active_exceptions counts exceptions that waive something now
+  // (policy.read).
+  CohortFindingCount active_exceptions = 5;
+  // truncated: the cohort has more agents or grants than are read.
+  bool truncated = 6;
 }

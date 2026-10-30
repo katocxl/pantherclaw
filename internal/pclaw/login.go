@@ -74,7 +74,7 @@ func login(ctx context.Context, a *app, args []string) error {
 		Server: base, Org: *org, AccessToken: tr.AccessToken, AccessExpiry: time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second),
 		RefreshToken: tr.RefreshToken, DeviceKey: base64.RawURLEncoding.EncodeToString(priv.Seed()),
 	}
-	if err := saveCreds(a.env, c); err != nil {
+	if err := saveCredsTo(a.env, c, a.stderr); err != nil {
 		return err
 	}
 	return whoami(ctx, a, nil)

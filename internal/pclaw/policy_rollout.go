@@ -73,11 +73,20 @@ func waiting(a *app, cr *pantherclawv1.PolicyChangeRequestRef) {
 
 func policyRolloutCommands() map[string]command {
 	return map[string]command{
-		"start": rpc("policy rollout start VERSION_ID [--shadow-cohort NAME]... (no cohort: every agent)", 1, func(fs *flag.FlagSet) call {
+		"start": rpc("policy rollout start VERSION_ID [--shadow-cohort NAME]... (no cohort: every agent) [--require-verified-percent N]", 1, func(fs *flag.FlagSet) call {
 			var cohorts list
 			fs.Var(&cohorts, "shadow-cohort", "a cohort whose agents' decisions are shadowed (repeatable)")
+			verified := fs.Int("require-verified-percent", 0, "complete only once this share (1 to 100) of targets other than EXCEPTION is VERIFIED (Enterprise; G0 M18 D154)")
 			return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
-				return c.rollouts.StartPolicyRollout(ctx, &pantherclawv1.StartPolicyRolloutRequest{VersionId: a[0], ShadowCohorts: cohorts})
+				req := &pantherclawv1.StartPolicyRolloutRequest{VersionId: a[0], ShadowCohorts: cohorts}
+				if *verified != 0 {
+					if *verified < 1 || *verified > 100 {
+						return nil, fmt.Errorf("--require-verified-percent must be 1 to 100")
+					}
+					n := int32(*verified)
+					req.RequireVerifiedPercent = &n
+				}
+				return c.rollouts.StartPolicyRollout(ctx, req)
 			}
 		}),
 		"pilot": {usage: "policy rollout pilot ROLLOUT_ID --cohort NAME [--cohort NAME]...", run: func(ctx context.Context, a *app, args []string) error {

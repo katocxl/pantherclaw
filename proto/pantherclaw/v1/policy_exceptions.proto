@@ -37,6 +37,26 @@ service PolicyExceptionService {
   // person only).
   // permission: policy.publish
   rpc RevokePolicyException(RevokePolicyExceptionRequest) returns (RevokePolicyExceptionResponse);
+  // RequestPolicyExceptionGroup asks for an exception group (a person only;
+  // Enterprise, G0 M18 D154): as RequestPolicyException, for the agents a
+  // fleet cohort holds when the change request is approved. Agents that
+  // join the cohort later are not covered.
+  // permission: policy.exception.request
+  rpc RequestPolicyExceptionGroup(RequestPolicyExceptionGroupRequest) returns (RequestPolicyExceptionGroupResponse);
+  // GetPolicyExceptionGroup returns one group and the agents it covers.
+  // permission: policy.read
+  rpc GetPolicyExceptionGroup(GetPolicyExceptionGroupRequest) returns (GetPolicyExceptionGroupResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListPolicyExceptionGroups lists groups, newest first.
+  // permission: policy.read
+  rpc ListPolicyExceptionGroups(ListPolicyExceptionGroupsRequest) returns (ListPolicyExceptionGroupsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // RevokePolicyExceptionGroup ends a pending or active group and each of
+  // its exceptions at once (a person only; every edition).
+  // permission: policy.publish
+  rpc RevokePolicyExceptionGroup(RevokePolicyExceptionGroupRequest) returns (RevokePolicyExceptionGroupResponse);
 }
 
 // PolicyException is one exception.
@@ -74,6 +94,8 @@ message PolicyException {
   string revoked_reason = 15;
   // When it was requested.
   google.protobuf.Timestamp create_time = 16;
+  // The exception group it belongs to; empty for one agent's exception.
+  string group_id = 17;
 }
 
 // RequestPolicyExceptionRequest describes an exception.
@@ -187,4 +209,155 @@ message RevokePolicyExceptionRequest {
 message RevokePolicyExceptionResponse {
   // The exception, REVOKED.
   PolicyException exception = 1;
+}
+
+// PolicyExceptionGroup is one exception group (G0 M18 D154).
+message PolicyExceptionGroup {
+  // Group id.
+  string id = 1;
+  // The fleet cohort whose agents it covers, as they were at approval.
+  string cohort_id = 2;
+  // The policy bundle id.
+  string bundle_id = 3;
+  // The waived rule.
+  string rule_id = 4;
+  // SHA-256 of the rule as requested, hex.
+  string rule_digest = 5;
+  // The exact operations it applies to.
+  repeated string operations = 6;
+  // Why, in the requester's words (untrusted text).
+  string reason = 7;
+  // The person accountable for it.
+  string owner_id = 8;
+  // The person who requested it.
+  string requested_by = 9;
+  // The expiry asked for.
+  google.protobuf.Timestamp requested_expire_time = 10;
+  // "PENDING", "ACTIVE", "DECLINED", "REVOKED" or "EXPIRED".
+  string state = 11;
+  // When it became active; unset before.
+  google.protobuf.Timestamp activate_time = 12;
+  // When it ends; unset before it is active.
+  google.protobuf.Timestamp expire_time = 13;
+  // How many agents the snapshot at approval holds; unset before.
+  optional int32 members = 14;
+  // Who revoked it; empty unless revoked.
+  string revoked_by = 15;
+  // Why it was revoked (untrusted text).
+  string revoked_reason = 16;
+  // When it was requested.
+  google.protobuf.Timestamp create_time = 17;
+  // Whether the cohort held more agents than the snapshot at approval
+  // could (2000), so later ones were left out; unset before.
+  optional bool truncated = 18;
+}
+
+// RequestPolicyExceptionGroupRequest describes an exception group.
+message RequestPolicyExceptionGroupRequest {
+  // The rule id in the published version.
+  string rule_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+  }];
+  // Fleet cohort id.
+  string cohort_id = 2 [(buf.validate.field).string.uuid = true];
+  // Exact operations inside the rule's scope.
+  repeated string operations = 3 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 16
+    unique: true
+    items: {
+      string: {
+        max_len: 128
+        pattern: "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7}$"
+      }
+    }
+  }];
+  // Why the rule should not apply (1 to 500 characters).
+  string reason = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+  // How long it should last, in seconds: at most 30 days.
+  int64 expires_in_seconds = 5 [(buf.validate.field).int64 = {
+    gte: 60
+    lte: 2592000
+  }];
+  // The person accountable for it; unset: the requester.
+  optional string owner_id = 6 [(buf.validate.field).string.uuid = true];
+}
+
+// RequestPolicyExceptionGroupResponse returns the pending group.
+message RequestPolicyExceptionGroupResponse {
+  // The group, PENDING.
+  PolicyExceptionGroup group = 1;
+  // The change request to confirm.
+  string change_request_id = 2;
+  // The page where it is confirmed.
+  string change_request_url = 3;
+}
+
+// GetPolicyExceptionGroupRequest names a group.
+message GetPolicyExceptionGroupRequest {
+  // Group id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetPolicyExceptionGroupResponse returns it.
+message GetPolicyExceptionGroupResponse {
+  // The group.
+  PolicyExceptionGroup group = 1;
+  // The agents its snapshot covers, by id.
+  repeated string agent_ids = 2;
+}
+
+// ListPolicyExceptionGroupsRequest filters groups.
+message ListPolicyExceptionGroupsRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  // Only this cohort.
+  optional string cohort_id = 3 [(buf.validate.field).string.uuid = true];
+  // Only this state.
+  optional string state = 4 [(buf.validate.field).string = {
+    in: [
+      "PENDING",
+      "ACTIVE",
+      "DECLINED",
+      "REVOKED",
+      "EXPIRED"
+    ]
+  }];
+}
+
+// ListPolicyExceptionGroupsResponse is one page.
+message ListPolicyExceptionGroupsResponse {
+  // Groups, newest first.
+  repeated PolicyExceptionGroup groups = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// RevokePolicyExceptionGroupRequest names a group.
+message RevokePolicyExceptionGroupRequest {
+  // Group id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // Why (1 to 500 characters).
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+// RevokePolicyExceptionGroupResponse returns it.
+message RevokePolicyExceptionGroupResponse {
+  // The group, REVOKED.
+  PolicyExceptionGroup group = 1;
 }

@@ -1,0 +1,211 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// IdentityProviderService manages an organization's own OpenID Connect
+// providers (G0 M18 D155, G6; PN-012.7; HR-481..484), next to the
+// deployment's. People sign in to the org through the deployment's
+// providers and the org's ACTIVE ones, or through the org's alone when
+// own_providers_only is on.
+//
+// Every create, change, disable and own_providers_only change is a
+// two-person protected change in every protect mode: the call files it
+// and returns its change request, and it applies when a different person
+// holding identity_provider.manage confirms it with a security key. Every
+// org admin is notified. Only a person may file one.
+//
+// A provider's issuer is HTTPS on a public host, and it can't change once
+// the provider has been ACTIVE. Its client secret is sealed and never
+// returned. Disabling a provider, or turning own_providers_only on, is
+// refused when no active org admin would have a provider left to sign in
+// with; the change request lists the admins who would lose theirs.
+//
+// Creating, activating and changing a provider need the Enterprise
+// edition; disabling one and reading work in every edition, and ACTIVE
+// providers keep signing people in after a downgrade.
+service IdentityProviderService {
+  // CreateIdentityProvider stores a PENDING provider and files its
+  // activation.
+  // permission: identity_provider.manage
+  rpc CreateIdentityProvider(CreateIdentityProviderRequest) returns (CreateIdentityProviderResponse);
+  // UpdateIdentityProvider files a change of a provider (and activates a
+  // DISABLED one). An empty client_secret keeps the stored one.
+  // permission: identity_provider.manage
+  rpc UpdateIdentityProvider(UpdateIdentityProviderRequest) returns (UpdateIdentityProviderResponse);
+  // DisableIdentityProvider files turning a provider off.
+  // permission: identity_provider.manage
+  rpc DisableIdentityProvider(DisableIdentityProviderRequest) returns (DisableIdentityProviderResponse);
+  // SetOwnProvidersOnly files the org's own_providers_only setting.
+  // permission: identity_provider.manage
+  rpc SetOwnProvidersOnly(SetOwnProvidersOnlyRequest) returns (SetOwnProvidersOnlyResponse);
+  // GetIdentityProvider returns one provider.
+  // permission: identity_provider.read
+  rpc GetIdentityProvider(GetIdentityProviderRequest) returns (GetIdentityProviderResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListIdentityProviders lists the org's providers by name (at most 100)
+  // and its own_providers_only setting.
+  // permission: identity_provider.read
+  rpc ListIdentityProviders(ListIdentityProvidersRequest) returns (ListIdentityProvidersResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// IdentityProvider is an organization's provider. Its client secret is
+// never returned.
+message IdentityProvider {
+  // Provider id.
+  string id = 1;
+  // Name, in the sign-in callback path (/oauth2/callback/<name>).
+  string name = 2;
+  // Issuer URL.
+  string issuer = 3;
+  // OAuth client id.
+  string client_id = 4;
+  // Whether the email claim is trusted without email_verified.
+  bool trust_email = 5;
+  // PENDING, ACTIVE or DISABLED.
+  string state = 6;
+  // Who created it.
+  string created_by = 7;
+  // When it was created.
+  google.protobuf.Timestamp create_time = 8;
+  // Who last changed it.
+  string updated_by = 9;
+  // When it last changed.
+  google.protobuf.Timestamp update_time = 10;
+  // When it first became ACTIVE; its issuer is fixed from then on.
+  google.protobuf.Timestamp activate_time = 11;
+  // When it was disabled.
+  google.protobuf.Timestamp disable_time = 12;
+}
+
+// ProtectedChangeFiled is the protected change a write filed: it applies
+// when a second person confirms its change request.
+message ProtectedChangeFiled {
+  // Protected change id.
+  string protected_change_id = 1;
+  // Change request id, confirmed on its page.
+  string change_request_id = 2;
+  // Active org admins who would lose their last sign-in provider.
+  repeated string stranded_admin_ids = 3;
+}
+
+// CreateIdentityProviderRequest describes a provider.
+message CreateIdentityProviderRequest {
+  // Name: 1-32 lowercase letters, digits or hyphens.
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 32
+  }];
+  // HTTPS issuer URL on a public host.
+  string issuer = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 512
+  }];
+  // OAuth client id.
+  string client_id = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 256
+  }];
+  // OAuth client secret, sealed at once.
+  bytes client_secret = 4 [(buf.validate.field).bytes = {
+    min_len: 1
+    max_len: 4096
+  }];
+  // Trust the email claim without email_verified.
+  bool trust_email = 5;
+}
+
+// CreateIdentityProviderResponse is the PENDING provider and its filed
+// activation.
+message CreateIdentityProviderResponse {
+  // The PENDING provider.
+  IdentityProvider provider = 1;
+  // The filed activation.
+  ProtectedChangeFiled change = 2;
+}
+
+// UpdateIdentityProviderRequest is a provider's new settings.
+message UpdateIdentityProviderRequest {
+  // Provider id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // Name.
+  string name = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 32
+  }];
+  // Issuer; it must stay the same once the provider has been ACTIVE.
+  string issuer = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 512
+  }];
+  // OAuth client id.
+  string client_id = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 256
+  }];
+  // New client secret; empty keeps the stored one.
+  bytes client_secret = 5 [(buf.validate.field).bytes.max_len = 4096];
+  // Trust the email claim without email_verified.
+  bool trust_email = 6;
+}
+
+// UpdateIdentityProviderResponse is the filed change.
+message UpdateIdentityProviderResponse {
+  // The filed change.
+  ProtectedChangeFiled change = 1;
+}
+
+// DisableIdentityProviderRequest names a provider.
+message DisableIdentityProviderRequest {
+  // Provider id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// DisableIdentityProviderResponse is the filed change.
+message DisableIdentityProviderResponse {
+  // The filed change.
+  ProtectedChangeFiled change = 1;
+}
+
+// SetOwnProvidersOnlyRequest is the setting asked for.
+message SetOwnProvidersOnlyRequest {
+  // Sign in with the org's own providers alone.
+  bool own_providers_only = 1;
+}
+
+// SetOwnProvidersOnlyResponse is the filed change.
+message SetOwnProvidersOnlyResponse {
+  // The filed change.
+  ProtectedChangeFiled change = 1;
+}
+
+// GetIdentityProviderRequest names a provider.
+message GetIdentityProviderRequest {
+  // Provider id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetIdentityProviderResponse is the provider.
+message GetIdentityProviderResponse {
+  // The provider.
+  IdentityProvider provider = 1;
+}
+
+// ListIdentityProvidersRequest has no fields.
+message ListIdentityProvidersRequest {}
+
+// ListIdentityProvidersResponse is the org's providers and setting.
+message ListIdentityProvidersResponse {
+  // Providers by name.
+  repeated IdentityProvider providers = 1;
+  // Whether the org signs in with its own providers alone.
+  bool own_providers_only = 2;
+}

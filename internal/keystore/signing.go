@@ -72,7 +72,7 @@ func LoadSigningKeys(ctx context.Context, pool *db.Pool, kp keys.KeyProvider, re
 			// their (deterministic) CA certificates stay trusted during a
 			// rotation (G0 M6); only the active key ever issues.
 			if k.State == keys.StateActive || (k.State == keys.StateRetiring && k.Purpose == keys.PurposeGatewayCA) {
-				seed, err := kp.Unwrap(ctx, r.WrappedPrivateKey, signingAAD(org, k.Purpose, k.KID))
+				seed, err := unwrapStored(ctx, kp, r.KekID, r.WrappedPrivateKey, signingAAD(org, k.Purpose, k.KID))
 				if err != nil {
 					return fmt.Errorf("keystore: unwrap signing key %s: %w", k.KID, err)
 				}
@@ -109,7 +109,7 @@ func loadAltKey(ctx context.Context, kp keys.KeyProvider, reg *keys.Registry, or
 	}
 	k := keys.AltKey{KID: r.Kid, Purpose: p, State: keys.State(r.State), Public: r.PublicKey}
 	if k.State == keys.StateActive {
-		private, err := kp.Unwrap(ctx, r.WrappedPrivateKey, signingAAD(org, p, r.Kid))
+		private, err := unwrapStored(ctx, kp, r.KekID, r.WrappedPrivateKey, signingAAD(org, p, r.Kid))
 		if err != nil {
 			return fmt.Errorf("keystore: unwrap signing key %s: %w", r.Kid, err)
 		}
