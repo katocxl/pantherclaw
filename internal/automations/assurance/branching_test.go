@@ -16,8 +16,8 @@ import (
 	exdomain "github.com/katocxl/pantherclaw/internal/exposure/domain"
 )
 
-// scheduledRefund is the v2 refund on a schedule, branching on guard.
-func scheduledRefund(t *testing.T, guard string) *autodomain.Definition {
+// scheduledDoc is the v2 refund document on a schedule.
+func scheduledDoc(t *testing.T) string {
 	t.Helper()
 	b, err := os.ReadFile("../domain/testdata/v2_refund.yaml")
 	if err != nil {
@@ -29,13 +29,33 @@ func scheduledRefund(t *testing.T, guard string) *autodomain.Definition {
 		t.Fatal("the fixture changed")
 	}
 	doc += "when:\n  schedule:\n    cron: \"0 * * * *\"\n    timezone: UTC\nauthority:\n" + rest
-	doc = strings.Replace(doc, `trigger.params.ticket != "T-0"`, guard, 1)
-	doc = strings.Replace(doc, `task_ref: "ticket {{params.ticket}}"`, "task_ref: hourly", 1)
+	return strings.Replace(doc, `task_ref: "ticket {{params.ticket}}"`, "task_ref: hourly", 1)
+}
+
+func parseDoc(t *testing.T, doc string) *autodomain.Definition {
+	t.Helper()
 	d, err := autodomain.Parse([]byte(doc))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return d
+}
+
+// scheduledRefund is the v2 refund on a schedule, branching on guard.
+func scheduledRefund(t *testing.T, guard string) *autodomain.Definition {
+	t.Helper()
+	return parseDoc(t, strings.Replace(scheduledDoc(t), `trigger.params.ticket != "T-0"`, guard, 1))
+}
+
+// scheduledNodes is the refund on a schedule with its nodes replaced.
+func scheduledNodes(t *testing.T, nodes string) *autodomain.Definition {
+	t.Helper()
+	head, rest, ok := strings.Cut(scheduledDoc(t), "nodes:\n")
+	_, tail, ok2 := strings.Cut(rest, "if_fails:\n")
+	if !ok || !ok2 {
+		t.Fatal("the fixture changed")
+	}
+	return parseDoc(t, head+"nodes:\n"+nodes+"if_fails:\n"+tail)
 }
 
 func replaySteps(t *testing.T, d *autodomain.Definition) []assurance.SimStep {
@@ -118,6 +138,52 @@ func TestOpenBranchesShareOneGrant(t *testing.T) {
 				t.Errorf("sample %+v", s)
 			}
 		}
+	}
+}
+
+// launchNode is a launch_run node.
+func launchNode(id, next string) string {
+	return "  - id: " + id + "\n    step: launch_run\n    with:\n      agent: 0192f000-0000-7000-8000-000000000003\n      task_ref: hourly\n    next: " + next + "\n"
+}
+
+// TestReplayCountsEveryLaunchOnThePath: launches one after another on a path
+// each take a grant, on a branch and past a join, and a launch is judged by
+// the path that brings the most (D320).
+//
+// Covers: F678
+func TestReplayCountsEveryLaunchOnThePath(t *testing.T) {
+	const file = "  - id: file\n    step: open_case\n    with:\n      title: Ticket zero\n    next: "
+	const meet = "  - id: meet\n    join:\n      mode: ANY\n      from: [launch, file]\n    next: again\n"
+	const ends = "  - id: done\n    outcome: SUCCEEDED\n    finish_when:\n      - step: again\n        condition: RUN_ENDED\n" +
+		"  - id: filed\n    outcome: FAILED\n    finish_when:\n      - step: file\n        condition: CASE_OPENED\n"
+	route := func(then, els string) string {
+		return "  - id: size\n    branch:\n      when: trigger.params.ticket != \"T-0\"\n      then: " + then + "\n      else: " + els + "\n"
+	}
+	for name, nodes := range map[string]string{
+		"in sequence on a branch":                route("launch", "file") + launchNode("launch", "again") + launchNode("again", "done") + file + "filed\n" + ends,
+		"after a join, the launching arm first":  route("launch", "file") + launchNode("launch", "meet") + file + "meet\n" + meet + launchNode("again", "done") + ends,
+		"after a join, the launching arm second": route("file", "launch") + launchNode("launch", "meet") + file + "meet\n" + meet + launchNode("again", "done") + ends,
+	} {
+		t.Run(name, func(t *testing.T) {
+			from := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+			r := assurance.Replay(context.Background(), scheduledNodes(t, nodes), assurance.History{Approvers: 1}, from, from.Add(2*time.Hour))
+			if r.Forecast.ExecutionsPerDay == 0 || r.Forecast.GrantsPerDay != 2*r.Forecast.ExecutionsPerDay {
+				t.Fatalf("forecast %+v", r.Forecast)
+			}
+
+			d := scheduledNodes(t, nodes)
+			d.Authority.Ceiling.PerDay.Grants = 1
+			steps := replaySteps(t, d)
+			if n := slices.Index(simIDs(steps), "again"); n < 0 || steps[n].Decision != "REFUSED" || steps[n].Reason != "USAGE_EXCEEDED" {
+				t.Fatalf("steps %+v", steps)
+			}
+			if n := slices.Index(simIDs(steps), "launch"); n < 0 || steps[n].Decision != "ALLOWED" {
+				t.Fatalf("steps %+v", steps)
+			}
+			if !slices.Equal(simIDs(steps), slices.Compact(slices.Clone(simIDs(steps)))) {
+				t.Errorf("a node listed twice: %+v", steps)
+			}
+		})
 	}
 }
 

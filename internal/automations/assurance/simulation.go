@@ -515,55 +515,68 @@ func prospectiveStep(def *autodomain.Definition, s autodomain.StepSpec, issuance
 // prospectivePaths walks a v2 version from its entry. History keeps no
 // trigger parameters and no step ran, so a guard reading them cannot be
 // evaluated: it is listed UNEVALUABLE and every way out is shown, each node
-// once (D301, HR-288). Those ways out are exclusive, so all of them share one
-// grant of the day's count.
+// once (D301, HR-288). Those ways out are exclusive, so the execution takes
+// the grants of its costliest path, not their sum (D320). used is the grants
+// the path has taken so far; a node reached again with more is judged again,
+// so a launch past a join answers to the path that brings the most. The graph
+// has no cycles (HR-531), so this ends.
 func prospectivePaths(ctx context.Context, def *autodomain.Definition, t autodomain.TriggerRef, issuance map[string]IssueDecision,
 	grantsByDay map[string]int, day string,
 ) []SimStep {
 	f := def.Flow()
 	var out []SimStep
-	seen := map[string]bool{}
-	granted := false
-	var walk func(id, branch string)
-	walk = func(id, branch string) {
-		n := f.Node(id)
-		if n == nil || seen[id] {
+	base := grantsByDay[day]
+	most := 0
+	listed := map[string]int{}
+	reached := map[string]int{}
+	list := func(st SimStep) {
+		if at, ok := listed[st.ID]; ok {
+			st.Branch = out[at].Branch
+			out[at] = st
 			return
 		}
-		seen[id] = true
+		listed[st.ID] = len(out)
+		out = append(out, st)
+	}
+	var walk func(id, branch string, used int)
+	walk = func(id, branch string, used int) {
+		n := f.Node(id)
+		if n == nil {
+			return
+		}
+		if was, ok := reached[id]; ok && used <= was {
+			return
+		}
+		reached[id] = used
 		switch n.Kind() {
 		case autodomain.NodeKindStep:
-			used := grantsByDay[day]
-			if granted {
-				grantsByDay[day]--
-			}
+			grantsByDay[day] = base + used
 			st := prospectiveStep(def, n.Spec(), issuance, grantsByDay, day)
-			if granted {
-				grantsByDay[day] = used
-			}
-			granted = granted || branch != "" && grantsByDay[day] > used
+			used = grantsByDay[day] - base
+			most = max(most, used)
 			st.Branch = branch
-			out = append(out, st)
+			list(st)
 		case autodomain.NodeKindBranch, autodomain.NodeKindSwitch:
 			edges, open := wayOut(ctx, n, t)
 			if open {
-				out = append(out, SimStep{ID: id, Kind: string(n.Kind()), Decision: "UNEVALUABLE", Reason: "GUARD", Branch: branch})
+				list(SimStep{ID: id, Kind: string(n.Kind()), Decision: "UNEVALUABLE", Reason: "GUARD", Branch: branch})
 			}
 			for _, e := range edges {
 				via := branch
 				if open {
 					via = id + " " + e.Label
 				}
-				walk(e.To, via)
+				walk(e.To, via, used)
 			}
 			return
 		case autodomain.NodeKindJoin, autodomain.NodeKindTerminal:
 		}
 		for _, e := range n.Edges() {
-			walk(e.To, branch)
+			walk(e.To, branch, used)
 		}
 	}
-	walk(f.Entry, "")
+	walk(f.Entry, "", 0)
+	grantsByDay[day] = base + most
 	return out
 }
 
