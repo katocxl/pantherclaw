@@ -195,7 +195,6 @@ func (f Param) literal(value, currency string) (string, bool) {
 		return "", false
 	}
 	return "", false
-	}
 }
 
 // renderPolicy is a rule's `when`. A parameter may be absent, so each read has
