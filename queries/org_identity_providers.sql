@@ -28,8 +28,22 @@ FROM pc.org_identity_providers WHERE org_id = sqlc.arg(org_id)
 ORDER BY name
 LIMIT 100;
 
+-- The providers that count toward the org's limit (D169): ACTIVE ones and
+-- the others whose activation is filed (PENDING, or DISABLED being
+-- activated again), other than except_id.
 -- name: CountOrgIdentityProviders :one
-SELECT count(*) FROM pc.org_identity_providers WHERE org_id = sqlc.arg(org_id);
+SELECT count(*) FROM pc.org_identity_providers p
+WHERE p.org_id = sqlc.arg(org_id) AND p.id IS DISTINCT FROM sqlc.narg(except_id)::uuid
+  AND (p.state = 'ACTIVE' OR EXISTS (
+      SELECT 1 FROM pc.protected_changes c
+      WHERE c.org_id = p.org_id AND c.surface = 'identity_provider.put' AND c.subject_id = p.id AND c.state = 'PENDING'));
+
+-- A provider never activated whose activation was declined or expired
+-- stops counting (D169).
+-- name: LapseOrgIdentityProvider :execrows
+UPDATE pc.org_identity_providers
+SET state = 'DISABLED', disabled_by = sqlc.arg(disabled_by), disabled_at = now(), updated_by = sqlc.arg(disabled_by), updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING' AND activated_at IS NULL;
 
 -- The ACTIVE providers with their sealed secrets, for the per-request
 -- resolver.

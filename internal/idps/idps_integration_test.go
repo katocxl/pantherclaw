@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -21,6 +22,7 @@ import (
 
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
+	"github.com/katocxl/pantherclaw/internal/changes"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/idps"
 	"github.com/katocxl/pantherclaw/internal/keystore"
@@ -637,5 +639,95 @@ func TestT207_ProviderTakeover(t *testing.T) {
 	r := &idps.Resolver{Pool: e.pool, Store: e.store}
 	if got := e.resolved(t, r, other); len(got) != 0 {
 		t.Fatalf("another org resolved %v (%s)", got, e2.ID)
+	}
+}
+
+// TestD169_LimitCountsLiveProviders: only ACTIVE providers and PENDING ones
+// with a filed activation count toward the limit; the limit error points
+// at UpdateIdentityProvider; a declined or expired activation disables a
+// provider that was never activated, which frees its slot, while an
+// active provider's declined change leaves it ACTIVE (G0 M18 D169).
+//
+// Covers: PN-012.7
+func TestD169_LimitCountsLiveProviders(t *testing.T) {
+	e := newEnv(t)
+	act := e.active(t, "live")
+	var filed []idps.Filed
+	var pending []idps.Provider
+	for i := range idps.MaxProviders - 1 {
+		p, f, err := e.svc.Create(e.admin(e.alice), input(fmt.Sprintf("p%d", i)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		filed, pending = append(filed, f), append(pending, p)
+	}
+	_, _, err := e.svc.Create(e.admin(e.alice), input("over"))
+	if !errors.Is(err, idps.ErrTooMany) || !strings.Contains(err.Error(), "UpdateIdentityProvider") {
+		t.Fatalf("over the limit: %v", err)
+	}
+	close := func(f idps.Filed, state string) {
+		t.Helper()
+		if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+			return e.gate.Closed(ctx, tx, f.Request, state, state)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	close(filed[0], changes.StateDeclined)
+	close(filed[1], changes.StateExpired)
+	for _, p := range pending[:2] {
+		if got, _ := e.svc.Get(e.admin(e.alice), p.ID); got.State != idps.StateDisabled {
+			t.Fatalf("a lapsed activation left %s %s", got.Name, got.State)
+		}
+	}
+	if _, _, err := e.svc.Create(e.admin(e.alice), input("next")); err != nil {
+		t.Fatalf("a freed slot: %v", err)
+	}
+	// A lapsed provider can be filed again, within the limit.
+	if _, err := e.svc.Update(e.admin(e.alice), pending[0].ID, input("p0")); err != nil {
+		t.Fatalf("refile a lapsed provider: %v", err)
+	}
+	if _, err := e.svc.Update(e.admin(e.alice), pending[1].ID, input("p1")); !errors.Is(err, idps.ErrTooMany) {
+		t.Fatalf("refile over the limit: %v", err)
+	}
+	// A declined change of an ACTIVE provider leaves it ACTIVE.
+	in := input("live")
+	in.TrustEmail = true
+	f, err := e.svc.Update(e.admin(e.alice), act.ID, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	close(f, changes.StateDeclined)
+	if got, _ := e.svc.Get(e.admin(e.alice), act.ID); got.State != idps.StateActive || got.TrustEmail {
+		t.Fatalf("a declined change moved an active provider: %+v", got)
+	}
+}
+
+// TestD169_ShadowedProviders: the start-up check lists an org's ACTIVE
+// provider whose name a deployment provider also has (one the operator
+// added later), and not a PENDING one or one with its own name.
+//
+// Covers: PN-012.7
+func TestD169_ShadowedProviders(t *testing.T) {
+	e := newEnv(t)
+	shadowed := e.active(t, "later")
+	e.active(t, "own")
+	if _, _, err := e.svc.Create(e.admin(e.alice), input("pending")); err != nil {
+		t.Fatal(err)
+	}
+	got, err := idps.Shadowed(context.Background(), e.pool, []idps.Deployment{
+		{Name: "corp", Issuer: corpIssuer}, {Name: "later", Issuer: "https://later.example.com"}, {Name: "pending", Issuer: corpIssuer},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ours []idps.Shadow
+	for _, s := range got {
+		if s.Org == e.org {
+			ours = append(ours, s)
+		}
+	}
+	if len(ours) != 1 || ours[0].ID != shadowed.ID || ours[0].Name != "later" {
+		t.Fatalf("shadowed: %+v", ours)
 	}
 }

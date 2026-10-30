@@ -19,6 +19,7 @@ package idps
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"regexp"
@@ -44,7 +45,8 @@ const (
 	secretColumn  = "client_secret"
 )
 
-// MaxProviders bounds an org's providers, disabled ones included.
+// MaxProviders bounds an org's ACTIVE providers and those whose activation
+// is filed (D169).
 const MaxProviders = 20
 
 // States.
@@ -60,8 +62,11 @@ var (
 	ErrNotFound  = pcerr.New(pcerr.NotFound, "IDENTITY_PROVIDER_NOT_FOUND", "identity provider not found")
 	ErrNameTaken = pcerr.New(pcerr.AlreadyExists, "IDENTITY_PROVIDER_NAME_TAKEN",
 		"an identity provider of the organization or the deployment has this name")
-	ErrTooMany = pcerr.New(pcerr.ResourceExhausted, "IDENTITY_PROVIDER_LIMIT",
-		fmt.Sprintf("an organization has at most %d identity providers", MaxProviders))
+	// ErrTooMany: ACTIVE providers and PENDING ones whose activation is
+	// filed count toward the limit (D169).
+	ErrTooMany = pcerr.New(pcerr.ResourceExhausted, "IDENTITY_PROVIDER_LIMIT", fmt.Sprintf(
+		"an organization has at most %d active or pending identity providers; a provider that was never activated "+
+			"can be changed and filed again with UpdateIdentityProvider instead of creating a new one", MaxProviders))
 	// ErrIssuerFixed: users are (org, issuer, subject), so an issuer that
 	// has signed people in can't change (T-207).
 	ErrIssuerFixed = pcerr.New(pcerr.FailedPrecondition, "IDENTITY_PROVIDER_ISSUER_FIXED",
@@ -182,7 +187,7 @@ func (s *Store) Create(ctx context.Context, tx db.TenantTx, by evdomain.Actor, a
 	if err := q.LockOrgIdentityProviderSettings(ctx, org.UUID()); err != nil {
 		return Provider{}, err
 	}
-	n, err := q.CountOrgIdentityProviders(ctx, org)
+	n, err := q.CountOrgIdentityProviders(ctx, org, nil)
 	if err != nil {
 		return Provider{}, err
 	}
@@ -236,6 +241,11 @@ func (s *Store) Put(ctx context.Context, tx db.TenantTx, by evdomain.Actor, auth
 	}
 	if cur.ActivatedAt != nil && cur.Issuer != c.Issuer {
 		return ErrIssuerFixed
+	}
+	if cur.State != StateActive {
+		if err := s.underLimit(ctx, tx, id); err != nil {
+			return err
+		}
 	}
 	if c.SealedSecret != nil {
 		// The sealed secret must be this provider's (the AAD binds the row).
@@ -384,4 +394,46 @@ func record(ctx context.Context, tx db.TenantTx, by evdomain.Actor, name string,
 		Object: &audit.Object{Type: "identity_provider", ID: p.ID.String()}, Details: details,
 	})
 	return err
+}
+
+// underLimit is ErrTooMany when the org's other counted providers (ACTIVE,
+// or PENDING with a filed activation) already reach MaxProviders (D169).
+func (s *Store) underLimit(ctx context.Context, tx db.TenantTx, except ids.UUID) error {
+	n, err := dbq.New(tx).CountOrgIdentityProviders(ctx, tx.OrgID(), &except)
+	if err != nil {
+		return err
+	}
+	if n >= MaxProviders {
+		return ErrTooMany
+	}
+	return nil
+}
+
+// Lapse disables provider id when it was never activated: its activation
+// was declined or expired, so it stops counting toward the limit (D169).
+// Any other provider is left as it is.
+func (s *Store) Lapse(ctx context.Context, tx db.TenantTx, author ids.UUID, id ids.UUID) error {
+	a := author
+	n, err := dbq.New(tx).LapseOrgIdentityProvider(ctx, &a, tx.OrgID(), id)
+	if err != nil || n == 0 {
+		return err
+	}
+	p, err := s.Get(ctx, tx, id)
+	if err != nil {
+		return err
+	}
+	return record(ctx, tx, evdomain.Actor{Type: "system", ID: "idps"}, "identity_provider.lapsed", p)
+}
+
+// ClosePut runs when a filed put is declined or expires (a protect.Closer,
+// registered in every role, since the jobs role expires requests): a
+// provider that was never activated is disabled (D169).
+func (s *Store) ClosePut(ctx context.Context, tx db.TenantTx, author ids.UUID, payload []byte) error {
+	var p struct {
+		ID ids.UUID `json:"id"`
+	}
+	if err := json.Unmarshal(payload, &p); err != nil || p.ID.IsZero() {
+		return nil // nothing of ours to lapse
+	}
+	return s.Lapse(ctx, tx, author, p.ID)
 }

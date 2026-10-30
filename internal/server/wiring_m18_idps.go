@@ -4,6 +4,7 @@
 package server
 
 import (
+	"context"
 	"log/slog"
 
 	"connectrpc.com/connect/v2"
@@ -15,6 +16,7 @@ import (
 	pccrypto "github.com/katocxl/pantherclaw/internal/platform/crypto"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
+	"github.com/katocxl/pantherclaw/internal/protect"
 )
 
 // Organization identity providers (G0 M18 D155, D161, D162): the browser
@@ -57,4 +59,19 @@ func registerM18IdPs(rs *connect.Server, d apiDeps) {
 		svc.Register(d.m11protect.gate)
 	}
 	pantherclawv1connect.RegisterIdentityProviderServiceHandler(rs, idpsrpc.New(svc))
+}
+
+// idpsWarnShadowed warns at start-up about every org's ACTIVE provider a
+// deployment provider of the same name shadows (D169).
+func idpsWarnShadowed(ctx context.Context, pool *db.Pool, m m18IdPs, log *slog.Logger) {
+	idps.WarnShadowed(ctx, pool, m.store.Deployment, log)
+}
+
+// closeM18IdPs lets the Gate lapse an organization provider whose
+// activation was declined or expired, in every role: the jobs role
+// expires requests (D169).
+func closeM18IdPs(g *protect.Gate) {
+	if g != nil {
+		g.OnClose(protect.SurfaceIdentityProviderPut, (&idps.Store{}).ClosePut)
+	}
 }

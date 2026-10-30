@@ -87,6 +87,7 @@ func (s *Service) Register(g *protect.Gate) {
 	g.Register(protect.SurfaceIdentityProviderPut, s.ApplyPut, s.providerState)
 	g.Register(protect.SurfaceIdentityProviderDisable, s.ApplyDisable, s.providerState)
 	g.Register(protect.SurfaceIdentityProviderOwnOnly, s.ApplyOwnOnly, s.settingsState)
+	g.OnClose(protect.SurfaceIdentityProviderPut, s.Store.ClosePut)
 }
 
 // DiscoveryProbe reads an organization provider's discovery document
@@ -248,6 +249,9 @@ func (s *Service) Update(ctx context.Context, id ids.UUID, in Input) (Filed, err
 		}
 		change := ChangeUpdate
 		if cur.State != StateActive {
+			if err := s.Store.underLimit(ctx, tx, id); err != nil {
+				return err
+			}
 			change = ChangeActivate
 		}
 		f, err = s.file(ctx, tx, c, protect.SurfaceIdentityProviderPut, id, put(id, in, sealed, change), nil)

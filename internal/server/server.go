@@ -365,6 +365,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	// jobs share it, so every port set on it reaches both (D91 K6).
 	// protect sets its ports on it in every role (D110 P1).
 	autos, m11protect := newM11Core(pool, bill, cfg.Auth.PublicURL)
+	closeM18IdPs(m11protect.gate)
 	wireM11Process(autos, m11protect, pool)
 	wireM14Process(autos, bill)
 	wireM14A2APeer(svc, authorityStore, autos, pool)
@@ -405,6 +406,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 				"behind a proxy without http.trusted_proxies: sign-in rate limits are shared by all clients of the proxy"))
 		}
 		orgIdPs := newM18IdPs(cfg, pool, kp, log)
+		go idpsWarnShadowed(ctx, pool, orgIdPs, log)
 		device, err := devicehttp.New(authnapp.NewDevice(pool, tokens, cfg.Auth.PublicURL, idps, clock.System{}, log).
 			WithOrgProviders(orgIdPs.resolver), cfg.Auth.PublicURL, limiter, log)
 		if err != nil {

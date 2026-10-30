@@ -147,8 +147,26 @@ func (g *Gate) Closed(ctx context.Context, tx db.TenantTx, request ids.UUID, sta
 	_, err = q.DecideProtectedChange(ctx, dbq.DecideProtectedChangeParams{State: state, Reason: &reason, OrgID: tx.OrgID(), ID: row.ID})
 	if db.IsNoRows(err) {
 		return nil
+	} else if err != nil {
+		return err
 	}
-	return err
+	if c := g.closers[Surface(row.Surface)]; c != nil && state != changes.StateVoided {
+		return c(ctx, tx, row.Author, row.Payload)
+	}
+	return nil
+}
+
+// Closer runs in the closing transaction when a stored change of its
+// surface is declined or expires (not when it is voided): an organization
+// identity provider whose activation lapsed is disabled (G0 M18 D169).
+type Closer func(ctx context.Context, tx db.TenantTx, author ids.UUID, payload []byte) error
+
+// OnClose sets the Closer of a surface.
+func (g *Gate) OnClose(s Surface, c Closer) {
+	if g.closers == nil {
+		g.closers = map[Surface]Closer{}
+	}
+	g.closers[s] = c
 }
 
 // reviewActor records an emergency review's end, which no person does.

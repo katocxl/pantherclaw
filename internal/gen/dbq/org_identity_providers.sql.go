@@ -63,11 +63,18 @@ func (q *Queries) ActiveOrgIdentityProviders(ctx context.Context, orgID ids.OrgI
 }
 
 const countOrgIdentityProviders = `-- name: CountOrgIdentityProviders :one
-SELECT count(*) FROM pc.org_identity_providers WHERE org_id = $1
+SELECT count(*) FROM pc.org_identity_providers p
+WHERE p.org_id = $1 AND p.id IS DISTINCT FROM $2::uuid
+  AND (p.state = 'ACTIVE' OR EXISTS (
+      SELECT 1 FROM pc.protected_changes c
+      WHERE c.org_id = p.org_id AND c.surface = 'identity_provider.put' AND c.subject_id = p.id AND c.state = 'PENDING'))
 `
 
-func (q *Queries) CountOrgIdentityProviders(ctx context.Context, orgID ids.OrgID) (int64, error) {
-	row := q.db.QueryRow(ctx, countOrgIdentityProviders, orgID)
+// The providers that count toward the org's limit (D169): ACTIVE ones and
+// the others whose activation is filed (PENDING, or DISABLED being
+// activated again), other than except_id.
+func (q *Queries) CountOrgIdentityProviders(ctx context.Context, orgID ids.OrgID, exceptID *ids.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countOrgIdentityProviders, orgID, exceptID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -201,6 +208,22 @@ func (q *Queries) InsertOrgIdentityProvider(ctx context.Context, arg InsertOrgId
 		&i.DisabledAt,
 	)
 	return i, err
+}
+
+const lapseOrgIdentityProvider = `-- name: LapseOrgIdentityProvider :execrows
+UPDATE pc.org_identity_providers
+SET state = 'DISABLED', disabled_by = $1, disabled_at = now(), updated_by = $1, updated_at = now()
+WHERE org_id = $2 AND id = $3 AND state = 'PENDING' AND activated_at IS NULL
+`
+
+// A provider never activated whose activation was declined or expired
+// stops counting (D169).
+func (q *Queries) LapseOrgIdentityProvider(ctx context.Context, disabledBy *ids.UUID, orgID ids.OrgID, iD ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, lapseOrgIdentityProvider, disabledBy, orgID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listOrgIdentityProviders = `-- name: ListOrgIdentityProviders :many

@@ -85,6 +85,7 @@ type Gate struct {
 	// none is recorded.
 	Failures FailureSink
 	surfaces map[Surface]surface
+	closers  map[Surface]Closer
 }
 
 // State reads the state of a change's subject now, from the change's

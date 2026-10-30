@@ -4,7 +4,8 @@
 -- OIDC providers an organization's own admin configures, next to the
 -- deployment's auth.oidc_providers. A provider is PENDING until a second
 -- person confirms it (a protected change in every protect mode), then
--- ACTIVE, and DISABLED when turned off. Only ACTIVE providers sign anyone
+-- ACTIVE, and DISABLED when turned off or when its activation is declined
+-- or expires (D169). Only ACTIVE providers sign anyone
 -- in. Its issuer can't change once it has been ACTIVE: users are
 -- (org, issuer, subject), so a swapped issuer would sign in as other
 -- people. The client secret is sealed with the org's DEK (purpose
@@ -35,7 +36,7 @@ CREATE TABLE pc.org_identity_providers (
     disabled_at   timestamptz,
     PRIMARY KEY (org_id, id),
     UNIQUE (org_id, name),
-    CHECK (state = 'PENDING' OR activated_at IS NOT NULL),
+    CHECK (state <> 'ACTIVE' OR activated_at IS NOT NULL),
     CHECK ((state = 'DISABLED') = (disabled_at IS NOT NULL)),
     CHECK ((disabled_by IS NULL) = (disabled_at IS NULL))
 );
