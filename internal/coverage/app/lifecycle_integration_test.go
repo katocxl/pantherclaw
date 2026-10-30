@@ -28,6 +28,12 @@ func (f *fixture) agentState(t *testing.T) string {
 // grant issues the agent an active grant allowing ops.
 func (f *fixture) grant(t *testing.T, ops ...string) {
 	t.Helper()
+	f.grantBounds(t, []byte(`{"operations":["`+strings.Join(ops, `","`)+`"]}`))
+}
+
+// grantBounds grants the agent a grant with these bounds.
+func (f *fixture) grantBounds(t *testing.T, bounds []byte) {
+	t.Helper()
 	grant := ids.NewV7()
 	f.exec(t, `INSERT INTO pc.grants (org_id, id, agent_id, principal_user_id, environment_id, depth, current_revision,
 		grantor_kind, grantor_id, basis) SELECT $1, $2, $3, $4, environment_id, 0, 1, 'user', $4, 'test'
@@ -35,7 +41,7 @@ func (f *fixture) grant(t *testing.T, ops ...string) {
 	f.exec(t, `INSERT INTO pc.grant_revisions (org_id, id, grant_id, revision, not_before, expires_at, bounds, requirements,
 		limits, delegation_depth, max_children, min_attestation, widens, created_by) VALUES ($1, $2, $3, 1, now() - interval '1 hour',
 		now() + interval '1 day', $4, '\x7b7d', '\x7b7d', 0, 0, 0, false, 'test')`,
-		f.org, ids.NewV7(), grant, []byte(`{"operations":["`+strings.Join(ops, `","`)+`"]}`))
+		f.org, ids.NewV7(), grant, bounds)
 }
 
 func (f *fixture) exclude(t *testing.T, op string) {
