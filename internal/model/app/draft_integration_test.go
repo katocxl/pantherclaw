@@ -229,7 +229,7 @@ func TestHR542_TextOutOfBoundsNeverLeaves(t *testing.T) {
 //
 // Covers: F181, F304
 func TestHR543_AnEnvironmentConditionIsRefusedBeforeACall(t *testing.T) {
-	f, _ := drafting(t)
+	f := automating(t)
 	if _, err := f.svc.DraftPolicy(f.author(), "forbid refunds in production"); !errors.Is(err, app.ErrEnvironmentCondition) {
 		t.Errorf("policy: %v", err)
 	}
