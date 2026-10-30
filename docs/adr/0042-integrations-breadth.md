@@ -26,7 +26,7 @@
    - The old key is REVOKED only after the gateway sees GitHub refuse it. Until then the rotation stays open with a posture finding.
    - The server never holds either key (HR-060).
 4. **Connectors** (G12; HR-521..526; Team).
-   - The packages are `pc-gitlab`, `pc-jira`, `pc-teams` and `pc-aws`, each with facts and a simulator.
+   - The packages are `pc-gitlab`, `pc-jira`, `pc-teams`, `pc-aws` and `pc-aws-ecs`, each with facts and a simulator.
    - GitLab deploys are consequences under M17's verification model.
    - Customer-visible Jira projects and external Teams channels count as external disclosure.
    - Two new credential kinds:
