@@ -45,7 +45,11 @@ func (e *Engine) awsSession(ctx context.Context, conn *control.Connection, def *
 	if def.Target.Account != defs.PresenceNone && target.Account != "" && target.Account != a.Account() {
 		return nil, errAWSAccount
 	}
-	policy, err := broker.SessionPolicy(a.Service, action)
+	resource, err := def.AWSResourceARN(target, a.Account(), a.Region, a.Partition())
+	if err != nil {
+		return nil, err
+	}
+	policy, err := broker.SessionPolicy(a.Service, action, resource)
 	if err != nil {
 		return nil, err
 	}

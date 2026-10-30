@@ -15,9 +15,11 @@ import (
 	"net/url"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/credentials/domain"
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gateway/egress"
 	"github.com/katocxl/pantherclaw/internal/platform/sigv4"
 )
@@ -92,18 +94,19 @@ func (a *AWSSession) Sign(r *http.Request, body []byte, now time.Time) error {
 	return a.signer.Sign(r, a.creds, sigv4.HashPayload(body), now)
 }
 
-// SessionPolicy is the session policy of one action: Allow exactly
-// "<service>:<action>", on any resource of the role's own account that the
-// role itself may reach. A session's permissions are the intersection of
-// the role's and this policy's, so it can never do more than this one
-// action (HR-525, T-225).
-func SessionPolicy(service, action string) (string, error) {
-	if !awsActionRe.MatchString(action) || !awsServiceRe.MatchString(service) {
+// SessionPolicy is the session policy of one action on one resource: Allow
+// exactly "<service>:<action>" on resource, an ARN without wildcards, or
+// "*" for a read (G0 M20 D270). A session's permissions are the
+// intersection of the role's and this policy's, so it can never do more
+// than this one action on this one resource (HR-525, T-225).
+func SessionPolicy(service, action, resource string) (string, error) {
+	if !awsActionRe.MatchString(action) || !awsServiceRe.MatchString(service) ||
+		(resource != "*" && (!strings.HasPrefix(resource, "arn:") || !defs.ARNValueRe.MatchString(resource))) {
 		return "", ErrAWSAction
 	}
 	b, err := json.Marshal(map[string]any{
 		"Version":   "2012-10-17",
-		"Statement": []map[string]any{{"Effect": "Allow", "Action": service + ":" + action, "Resource": "*"}},
+		"Statement": []map[string]any{{"Effect": "Allow", "Action": service + ":" + action, "Resource": resource}},
 	}, json.Deterministic(true))
 	return string(b), err
 }

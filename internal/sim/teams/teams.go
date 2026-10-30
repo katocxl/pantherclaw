@@ -10,9 +10,10 @@
 //     token for the client-credentials grant and scope
 //     https://api.botframework.com/.default;
 //   - the Bot Connector service under /teams/ (the service URL): the
-//     channels of a team, a conversation's paged members, a new channel
-//     conversation (POST /v3/conversations), an activity in a conversation
-//     and an activity update.
+//     conversations the bot is part of, the channels of a team, a
+//     conversation's paged members, a new channel conversation (POST
+//     /v3/conversations), an activity in a conversation and an activity
+//     update.
 //
 // Every Bot Connector request must carry a token this simulator issued and
 // that has not expired. A channel can be marked shared with another tenant
@@ -312,6 +313,8 @@ func (s *Server) connector(w http.ResponseWriter, r *http.Request) {
 	}
 	s.used = append(s.used, tok)
 	switch route {
+	case "conversations.list":
+		s.conversations(w)
 	case "team.channels":
 		s.teamChannels(w, parts[1])
 	case "conversation.members":
@@ -330,6 +333,8 @@ func (s *Server) connector(w http.ResponseWriter, r *http.Request) {
 // routeOf names a Bot Connector request's route ("" for none).
 func routeOf(method string, p []string) string {
 	switch {
+	case method == http.MethodGet && len(p) == 1 && p[0] == "conversations":
+		return "conversations.list"
 	case method == http.MethodGet && len(p) == 3 && p[0] == "teams" && p[2] == "conversations":
 		return "team.channels"
 	case method == http.MethodGet && len(p) == 3 && p[0] == "conversations" && p[2] == "pagedmembers":
@@ -342,6 +347,18 @@ func routeOf(method string, p []string) string {
 		return "activity.update"
 	}
 	return "unknown"
+}
+
+// conversations lists the conversations the bot is part of (Bot Framework
+// "Get Conversations"): every channel it was added to.
+func (s *Server) conversations(w http.ResponseWriter) {
+	out := []map[string]any{}
+	for _, id := range slices.Sorted(maps.Keys(s.channels)) {
+		if s.channels[id].Installed {
+			out = append(out, map[string]any{"id": id, "isGroup": true})
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"conversations": out})
 }
 
 func (s *Server) teamChannels(w http.ResponseWriter, team string) {

@@ -128,7 +128,9 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 			out.Body, err = EncodeForm(obj)
 		case defs.EncodingAWSJSON:
 			out.ContentType = defs.AWSJSONContentType
-			out.Body, err = json.Marshal(obj, json.Deterministic(true))
+			if obj, err = nestJSON(obj); err == nil {
+				out.Body, err = json.Marshal(obj, json.Deterministic(true))
+			}
 		default:
 			out.ContentType = JSONContentType
 			if obj, err = nestJSON(obj); err == nil {

@@ -79,7 +79,7 @@ func (w *awsWorld) iam(t *testing.T, sess *AWSSession, action string, extra url.
 // Covers: HR-525, T-225
 func TestHR525_EachDispatchAssumesANarrowedFifteenMinuteSession(t *testing.T) {
 	w := newAWS(t)
-	policy, err := SessionPolicy("iam", "GetRole")
+	policy, err := SessionPolicy("iam", "GetRole", "*")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestHR525_EachDispatchAssumesANarrowedFifteenMinuteSession(t *testing.T) {
 // Covers: HR-525
 func TestHR525_ALongOrRefusedSessionIsNeverUsed(t *testing.T) {
 	w := newAWS(t)
-	policy, _ := SessionPolicy("iam", "GetRole")
+	policy, _ := SessionPolicy("iam", "GetRole", "*")
 	w.sim.SetFaults(awssim.Faults{LongSessions: true})
 	if _, err := AssumeRole(t.Context(), w.client, w.hosts, w.cred, policy, time.Now()); !errors.Is(err, ErrAssumeRole) {
 		t.Fatalf("an hour-long session: %v", err)
@@ -166,7 +166,7 @@ func TestHR525_ALongOrRefusedSessionIsNeverUsed(t *testing.T) {
 		t.Fatalf("signed with an expired session: %v", err)
 	}
 	for _, bad := range [][2]string{{"iam", "Get*"}, {"iam", "GetRole,iam:*"}, {"IAM", "GetRole"}, {"iam", ""}} {
-		if _, err := SessionPolicy(bad[0], bad[1]); !errors.Is(err, ErrAWSAction) {
+		if _, err := SessionPolicy(bad[0], bad[1], "*"); !errors.Is(err, ErrAWSAction) {
 			t.Errorf("policy %v: %v", bad, err)
 		}
 	}
@@ -178,4 +178,32 @@ func mustURL(s string) *url.URL {
 		panic(err)
 	}
 	return u
+}
+
+// TestT225_ASessionNarrowedToOneResourceReachesNoOther: a session whose
+// policy names one role's ARN can read that role and no other, though the
+// role it assumed may read every role; a wildcard resource is refused
+// before AssumeRole.
+// Covers: T-225, HR-525
+func TestT225_ASessionNarrowedToOneResourceReachesNoOther(t *testing.T) {
+	w := newAWS(t)
+	policy, err := SessionPolicy("iam", "GetRole", awssim.RoleARN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := AssumeRole(t.Context(), w.client, w.hosts, w.cred, policy, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := w.iam(t, sess, "GetRole", nil); got != http.StatusOK {
+		t.Fatalf("its own role: %d", got)
+	}
+	if got := w.iam(t, sess, "GetRole", url.Values{"RoleName": {"other-role"}}); got != http.StatusForbidden {
+		t.Fatalf("another role: %d", got)
+	}
+	for _, r := range []string{"arn:aws:iam::" + awssim.Account + ":role/*", "arn:aws:iam::*:role/x", "role/x", ""} {
+		if _, err := SessionPolicy("iam", "GetRole", r); !errors.Is(err, ErrAWSAction) {
+			t.Errorf("resource %q: %v", r, err)
+		}
+	}
 }

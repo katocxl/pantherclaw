@@ -74,14 +74,30 @@ type Call struct {
 	// Key is "base" or "session".
 	Key     string `json:"key"`
 	Allowed bool   `json:"allowed"`
-	// Policy is the session policy's allowed actions, for a session.
-	Policy []string `json:"policy,omitzero"`
+	// Policy is the session policy's allowed actions, for a session, and
+	// Resource the resource the call acted on.
+	Policy   []string `json:"policy,omitzero"`
+	Resource string   `json:"resource,omitzero"`
 }
+
+// grant is one action a session policy allows on one resource pattern.
+type grant struct{ action, resource string }
 
 type session struct {
 	secret, token string
 	expires       time.Time
-	actions       []string
+	grants        []grant
+}
+
+// actions are the actions a session policy names.
+func (s *session) actions() []string {
+	var out []string
+	for _, g := range s.grants {
+		if !slices.Contains(out, g.action) {
+			out = append(out, g.action)
+		}
+	}
+	return out
 }
 
 // Server is the simulated account.
@@ -205,11 +221,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		in = r.URL.Query()
 	}
 	action := in.Get("Action")
-	call := Call{Service: service, Action: action, Key: key}
+	call := Call{Service: service, Action: action, Key: key, Resource: resourceOf(service, action, in)}
 	if sess != nil {
-		call.Policy = sess.actions
+		call.Policy = sess.actions()
 	}
-	call.Allowed = s.allowed(service, action, sess)
+	call.Allowed = s.allowed(service, action, call.Resource, sess)
 	s.calls = append(s.calls, call)
 	if !call.Allowed {
 		writeError(w, http.StatusForbidden, "Sender", "AccessDenied", fmt.Sprintf("not authorized to perform %s:%s", service, action))
@@ -278,13 +294,55 @@ func (s *Server) verify(r *http.Request, body []byte, m []string, secret string,
 }
 
 // allowed applies AWS's intersection: the base key may only assume the
-// role; a session may call an action both the role and its policy allow.
-func (s *Server) allowed(service, action string, sess *session) bool {
+// role; a session may call an action the role allows and its policy allows
+// on the call's resource.
+func (s *Server) allowed(service, action, resource string, sess *session) bool {
 	full := service + ":" + action
 	if sess == nil {
 		return full == "sts:AssumeRole"
 	}
-	return full != "sts:AssumeRole" && grants(s.role, full) && grants(sess.actions, full)
+	return full != "sts:AssumeRole" && grants(s.role, full) && slices.ContainsFunc(sess.grants, func(g grant) bool {
+		return grants([]string{g.action}, full) && matches(g.resource, resource)
+	})
+}
+
+// matches reports whether a policy's resource pattern covers resource:
+// "*" covers all, and a "*" in a pattern any run of characters. A call
+// on no particular resource ("*") is covered by "*" only.
+func matches(pattern, resource string) bool {
+	if pattern == "*" {
+		return true
+	}
+	if resource == "*" {
+		return false
+	}
+	parts := strings.Split(pattern, "*")
+	if !strings.HasPrefix(resource, parts[0]) {
+		return false
+	}
+	rest := resource[len(parts[0]):]
+	for i, p := range parts[1:] {
+		if i == len(parts)-2 {
+			return strings.HasSuffix(rest, p)
+		}
+		j := strings.Index(rest, p)
+		if j < 0 {
+			return false
+		}
+		rest = rest[j+len(p):]
+	}
+	return rest == ""
+}
+
+// resourceOf is the resource a call acts on, as IAM evaluates it.
+func resourceOf(service, action string, in url.Values) string {
+	switch service + ":" + action {
+	case "iam:GetRole", "iam:ListAttachedRolePolicies", "iam:GetRolePolicy":
+		return "arn:aws:iam::" + Account + ":role/" + in.Get("RoleName")
+	case "sts:AssumeRole":
+		return in.Get("RoleArn")
+	}
+	return "*"
 }
 
 // grants reports whether actions allow full: exactly, by "*", or by a
@@ -309,7 +367,7 @@ func (s *Server) assumeRole(w http.ResponseWriter, in url.Values, region string,
 		writeError(w, http.StatusBadRequest, "Sender", "SignatureDoesNotMatch", "STS signs in "+Region)
 		return
 	}
-	actions, ok := policyActions(in.Get("Policy"))
+	grants, ok := policyGrants(in.Get("Policy"))
 	if !ok {
 		writeError(w, http.StatusBadRequest, "Sender", "MalformedPolicyDocument", "the session policy")
 		return
@@ -318,18 +376,18 @@ func (s *Server) assumeRole(w http.ResponseWriter, in url.Values, region string,
 		secs = 3600
 	}
 	id := "ASIA" + strings.ToUpper(random(8))
-	sess := &session{secret: random(20), token: "simtoken" + random(24), expires: now.Add(time.Duration(secs) * time.Second), actions: actions}
+	sess := &session{secret: random(20), token: "simtoken" + random(24), expires: now.Add(time.Duration(secs) * time.Second), grants: grants}
 	s.sessions[id] = sess
-	s.log.Info("sim.aws_assumed_role", slog.String("session", id), slog.Any("policy", actions))
+	s.log.Info("sim.aws_assumed_role", slog.String("session", id), slog.Any("policy", sess.actions()))
 	writeXML(w, "AssumeRole", "sts", fmt.Sprintf(
 		`<Credentials><AccessKeyId>%s</AccessKeyId><SecretAccessKey>%s</SecretAccessKey><SessionToken>%s</SessionToken><Expiration>%s</Expiration></Credentials>`+
 			`<AssumedRoleUser><Arn>arn:aws:sts::%s:assumed-role/%s/%s</Arn><AssumedRoleId>AROASIMULATED:%s</AssumedRoleId></AssumedRoleUser>`,
 		id, sess.secret, sess.token, sess.expires.UTC().Format(time.RFC3339), Account, RoleName, xmlText(in.Get("RoleSessionName")), xmlText(in.Get("RoleSessionName"))))
 }
 
-// policyActions reads the Allow actions of a session policy: every
-// statement must Allow, on Resource "*", one action or a list of them.
-func policyActions(doc string) ([]string, bool) {
+// policyGrants reads a session policy's grants: every statement must
+// Allow one action or a list of them on one resource or a list of them.
+func policyGrants(doc string) ([]grant, bool) {
 	if doc == "" {
 		return nil, false // the simulator requires a session policy, as PantherClaw always sends one
 	}
@@ -344,27 +402,39 @@ func policyActions(doc string) ([]string, bool) {
 	if json.Unmarshal([]byte(doc), &p) != nil || p.Version != "2012-10-17" || len(p.Statement) == 0 {
 		return nil, false
 	}
-	var out []string
+	var out []grant
 	for _, st := range p.Statement {
-		if st.Effect != "Allow" {
+		actions, ok1 := strs(st.Action)
+		resources, ok2 := strs(st.Resource)
+		if st.Effect != "Allow" || !ok1 || !ok2 {
 			return nil, false
 		}
-		switch a := st.Action.(type) {
-		case string:
-			out = append(out, a)
-		case []any:
-			for _, x := range a {
-				v, ok := x.(string)
-				if !ok {
-					return nil, false
-				}
-				out = append(out, v)
+		for _, a := range actions {
+			for _, r := range resources {
+				out = append(out, grant{action: a, resource: r})
 			}
-		default:
-			return nil, false
 		}
 	}
 	return out, true
+}
+
+// strs reads a policy element: one string or a non-empty list of them.
+func strs(v any) ([]string, bool) {
+	switch x := v.(type) {
+	case string:
+		return []string{x}, x != ""
+	case []any:
+		out := make([]string, 0, len(x))
+		for _, e := range x {
+			s, ok := e.(string)
+			if !ok || s == "" {
+				return nil, false
+			}
+			out = append(out, s)
+		}
+		return out, len(out) > 0
+	}
+	return nil, false
 }
 
 func (s *Server) getRole(w http.ResponseWriter, in url.Values) {

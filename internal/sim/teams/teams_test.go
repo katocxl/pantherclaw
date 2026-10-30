@@ -140,3 +140,12 @@ func TestTeamsSimPagesMembers(t *testing.T) {
 		t.Fatalf("page size 10: %d", code)
 	}
 }
+
+func TestTeamsSimListsTheBotsConversations(t *testing.T) {
+	_, srv := newSim(t)
+	_, tok := token(t, srv, "secret")
+	code, out := call(t, http.MethodGet, srv.URL+"/teams/v3/conversations", tok, "")
+	if code != http.StatusOK || len(out["conversations"].([]any)) != 1 {
+		t.Fatalf("%d %v", code, out)
+	}
+}

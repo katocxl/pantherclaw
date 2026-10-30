@@ -24,9 +24,6 @@ import (
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
 
-// teamsChannelRead is the read whose definition a Teams fact read goes by.
-const teamsChannelRead = "teams.channel.read"
-
 // needsTeamsFacts reports whether def's prerequisites or its package's
 // consequence rules name teams.channel.external.
 func needsTeamsFacts(conn *control.Connection, def *defs.Definition) bool {
@@ -64,7 +61,7 @@ func (e *Engine) reportTeamsFacts(ctx context.Context, conn *control.Connection,
 	}
 	read, cancel := context.WithTimeout(ctx, e.factTimeout)
 	defer cancel()
-	value := e.readTeamsChannel(read, conn, a.Target)
+	value := e.readTeamsChannel(read, conn, def, a.Target)
 	raw, err := json.Marshal(map[string]any{"object": value}, json.Deterministic(true))
 	if err != nil {
 		return true, nil
@@ -80,17 +77,17 @@ func (e *Engine) reportTeamsFacts(ctx context.Context, conn *control.Connection,
 	return true, nil
 }
 
-// readTeamsChannel reads every page of one channel's members; any failure
-// is an unread value.
-func (e *Engine) readTeamsChannel(ctx context.Context, conn *control.Connection, target actionir.Target) map[string]any {
+// readTeamsChannel reads every page of the members of the channel an action
+// under def targets; any failure is an unread value. It is the gateway's own
+// channel read (D266): no package template carries a Teams id in a path
+// (HR-073), so it escapes the id itself, after checking it against def's
+// anchored target pattern, and a token is minted for each page as for any
+// dispatch (HR-524).
+func (e *Engine) readTeamsChannel(ctx context.Context, conn *control.Connection, def *defs.Definition, target actionir.Target) map[string]any {
 	warn := func(err error) {
 		e.log.WarnContext(ctx, "gateway.facts_unavailable", slog.String("connection_id", conn.GetId()), pclog.Err(err))
 	}
-	readDef, ok := conn.Package.Definition(teamsChannelRead)
-	if !ok {
-		return teamsfacts.Unread("the package has no channel read")
-	}
-	if !readDef.Target.MatchID(target.ID) || !readDef.Target.MatchAccount(target.Account) || target.Account == "" {
+	if !def.Target.MatchID(target.ID) || !def.Target.MatchAccount(target.Account) || target.Account == "" {
 		return teamsfacts.Unread("not a Teams channel of a tenant")
 	}
 	c, err := e.client(conn)
@@ -116,7 +113,7 @@ func (e *Engine) readTeamsChannel(ctx context.Context, conn *control.Connection,
 			warn(err)
 			return teamsfacts.Unread("no Teams request")
 		}
-		_, release, _, err := e.credential(ctx, conn, readDef, target, req, c, "facts")
+		_, release, _, err := e.credential(ctx, conn, def, target, req, c, "facts")
 		if err != nil {
 			warn(err)
 			return teamsfacts.Unread("the bot's token could not be minted")

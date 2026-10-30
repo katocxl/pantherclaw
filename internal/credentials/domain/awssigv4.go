@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/url"
 	"regexp"
+	"strings"
 )
 
 // KindAWSSigV4 is an AWS credential used only through short-lived sessions
@@ -111,3 +112,12 @@ func DecodeAWSSigV4(plain []byte) (AWSSigV4, error) {
 
 // Clear overwrites the base secret's bytes.
 func (a *AWSSigV4) Clear() { clear(a.SecretAccessKey) }
+
+// Partition is the AWS partition of the role (aws, aws-us-gov, aws-cn).
+func (a AWSSigV4) Partition() string {
+	p, _, ok := strings.Cut(strings.TrimPrefix(a.RoleARN, "arn:"), ":")
+	if !ok || a.Account() == "" {
+		return ""
+	}
+	return p
+}

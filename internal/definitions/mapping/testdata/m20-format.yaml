@@ -46,6 +46,7 @@ definitions:
         method: POST
         path: /
         encoding: aws-json
+        aws_resource: arn:{aws.partition}:svc:{aws.region}:{aws.account}:thing/{target.id}
         headers:
           X-Amz-Target: Svc_20261030.UpdateThing
         body:

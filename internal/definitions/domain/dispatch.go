@@ -77,6 +77,11 @@ type HTTPDispatch struct {
 	// Success, when set, is a top-level JSON boolean a 2xx answer must
 	// carry with the given value, or the outcome is FAILED (D8: Slack's ok).
 	Success *SuccessCheck `json:"success,omitzero"`
+	// AWSResource is an aws-json or aws-query write's resource ARN template
+	// (G0 M20 D270): a session for the dispatch is narrowed to its one action
+	// on exactly this ARN. Its references are the decision's target and the
+	// connection's own account, region and partition, never a param.
+	AWSResource string `json:"aws_resource,omitzero"`
 }
 
 // MCPDispatch is a call of one tool on an upstream (remote) MCP server, or
@@ -384,6 +389,9 @@ func (d *Definition) validateHTTPDispatch(at string, h *HTTPDispatch) error {
 	}
 	if s := h.Success; s != nil && !fieldRe.MatchString(s.Field) {
 		return invalid("%s.success.field %q", at, s.Field)
+	}
+	if h.AWSResource != "" && !h.Encoding.AWS() {
+		return invalid("%s.aws_resource belongs to aws-json and aws-query templates", at)
 	}
 	return nil
 }

@@ -7,6 +7,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/katocxl/pantherclaw/internal/actionir"
 )
 
 // awsDef is a valid aws-json read with an http mapping.
@@ -131,5 +133,65 @@ func TestHR525_AWSActionIsTheOneThePackageFixes(t *testing.T) {
 		Query: map[string]string{"Action": "literal.DeleteRole"}}
 	if err := d.validateHTTPDispatch("t", post); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a POST with a query Action: %v", err)
+	}
+}
+
+// TestT225_AWSWritesNameTheirResourceFromTheDecision: an aws write must
+// name its resource; the ARN template's references are the target and the
+// connection's account, region and partition only, never a param, and
+// neither a literal nor a substituted value may be a wildcard. A read
+// without one is narrowed to its action on "*".
+// Covers: T-225, HR-525
+func TestT225_AWSWritesNameTheirResourceFromTheDecision(t *testing.T) {
+	write := func() Definition {
+		d := awsDef()
+		d.Operation, d.Access, d.Reversibility = "svc.thing.update", AccessWrite, Reversible
+		d.Target = TargetSpec{Type: "svc.thing", IDPattern: `^(?P<cluster>[a-z]{1,8})/(?P<name>[a-z]{1,8})$`, Account: PresenceRequired, AccountPattern: `^[0-9]{12}$`}
+		d.Params = map[string]ParamSpec{"note": {Type: TypeIdentifier, Material: true, Pattern: `^.{1,64}$`}}
+		d.Approval = &ApprovalTemplate{Title: "Update {target.id}", Fields: []string{"target.id"}}
+		d.Mappings[0].Extract = Extract{TargetID: "input.name", TargetAccount: "input.account", Params: map[string]string{}}
+		d.Dispatch.HTTP.Headers = map[string]string{"X-Amz-Target": "Svc.UpdateThing"}
+		d.Mappings[0].Headers = map[string]string{"X-Amz-Target": "Svc.UpdateThing"}
+		d.Dispatch.HTTP.AWSResource = "arn:{aws.partition}:svc:{aws.region}:{target.account}:thing/{target.id.cluster}/{target.id.name}"
+		return d
+	}
+	d := write()
+	if err := d.Validate(); err != nil {
+		t.Fatalf("valid write: %v", err)
+	}
+	arn, err := d.AWSResourceARN(actionir.Target{ID: "prod/web", Account: "111122223333"}, "111122223333", "us-east-1", "aws")
+	if err != nil || arn != "arn:aws:svc:us-east-1:111122223333:thing/prod/web" {
+		t.Fatalf("arn %q %v", arn, err)
+	}
+	for name, tmpl := range map[string]string{
+		"none":             "",
+		"a param":          "arn:aws:svc:{aws.region}:{target.account}:thing/{params.note}",
+		"a literal *":      "arn:aws:svc:*:{target.account}:thing/{target.id}",
+		"a literal ?":      "arn:aws:svc:us-east-1:{target.account}:thing/?",
+		"not an arn":       "svc:thing/{target.id}",
+		"an unknown group": "arn:aws:svc:{aws.region}:{target.account}:thing/{target.id.service}",
+		"an unclosed ref":  "arn:aws:svc:{aws.region:thing",
+	} {
+		d := write()
+		d.Dispatch.HTTP.AWSResource = tmpl
+		if err := d.Validate(); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if _, err := d.AWSResourceARN(actionir.Target{ID: "prod/web", Account: ""}, "111122223333", "us-east-1", "aws"); err == nil {
+		t.Error("an ARN without its account")
+	}
+	if _, err := d.AWSResourceARN(actionir.Target{ID: "prod/web", Account: "111122223333"}, "111122223333", "*", "aws"); err == nil {
+		t.Error("a wildcard region was substituted")
+	}
+	read := awsDef()
+	if arn, err := read.AWSResourceARN(actionir.Target{ID: "web"}, "1", "r", "aws"); err != nil || arn != "*" {
+		t.Fatalf("read: %q %v", arn, err)
+	}
+	notAWS := awsDef()
+	notAWS.Mappings = nil
+	notAWS.Dispatch.HTTP = &HTTPDispatch{Method: "GET", Path: "/x", AWSResource: "arn:aws:svc:::x"}
+	if err := notAWS.Validate(); !errors.Is(err, ErrInvalid) {
+		t.Errorf("aws_resource on a json template: %v", err)
 	}
 }

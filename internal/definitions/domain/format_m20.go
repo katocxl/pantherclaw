@@ -5,8 +5,11 @@ package domain
 
 import (
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/katocxl/pantherclaw/internal/actionir"
 )
 
 // validateMatchHeaders checks an http mapping's fixed match headers (G0
@@ -58,6 +61,9 @@ func (d *Definition) validateAWSDispatch(at string, h *HTTPDispatch) error {
 	if h.IdempotencyHeader != "" {
 		return invalid("%s: %s carries an idempotency token in its body, never a header", at, h.Encoding)
 	}
+	if err := d.validateAWSResource(at, h.AWSResource); err != nil {
+		return err
+	}
 	switch h.Encoding {
 	case EncodingAWSJSON:
 		if !slices.ContainsFunc(slices.Collect(maps.Keys(h.Headers)), func(k string) bool { return strings.EqualFold(k, AWSTargetHeader) }) {
@@ -77,6 +83,9 @@ func (d *Definition) validateAWSDispatch(at string, h *HTTPDispatch) error {
 			return invalid("%s.query: a POST names its operation in its body only", at)
 		}
 		for _, k := range slices.Sorted(maps.Keys(h.Body)) {
+			if strings.Contains(k, "[") {
+				return invalid("%s.body.%s: aws-query is a flat form", at, k)
+			}
 			name, isParam := strings.CutPrefix(h.Body[k], "params.")
 			if isParam && d.Params[name].Type == TypeIdentifierList {
 				return invalid("%s.body.%s: aws-query sends no lists", at, k)
@@ -112,4 +121,101 @@ func (d *Definition) AWSAction() (string, bool) {
 		return a, ok && a != ""
 	}
 	return "", false
+}
+
+// AWS resource ARN template references (G0 M20 D270): besides the
+// decision's target (target.id, target.id.<group>, target.account), the
+// connection's own account, region and partition, which come from its
+// sealed credential, never from the agent.
+const (
+	AWSRefAccount   = "aws.account"
+	AWSRefRegion    = "aws.region"
+	AWSRefPartition = "aws.partition"
+)
+
+var (
+	// arnLiteralRe is a literal part of an ARN template: never a wildcard.
+	arnLiteralRe = regexp.MustCompile(`^[A-Za-z0-9:/_.+=,@-]*$`)
+	// ARNValueRe is a value substituted into an ARN: never a wildcard, so
+	// no target can widen the resource a session may act on.
+	ARNValueRe = regexp.MustCompile(`^[A-Za-z0-9:/_.+=,@-]{1,512}$`)
+	arnRefRe   = regexp.MustCompile(`\{([^{}]*)\}`)
+)
+
+// validateAWSResource checks an aws template's resource ARN template: a
+// write must have one (HR-525, T-225); it starts arn:, its literals hold
+// no wildcard, and each reference is the target or the connection's
+// account, region or partition.
+func (d *Definition) validateAWSResource(at, t string) error {
+	if t == "" {
+		if d.Access == AccessWrite {
+			return invalid("%s: an aws write names its resource in aws_resource (D270)", at)
+		}
+		return nil
+	}
+	if !strings.HasPrefix(t, "arn:") || len(t) > 512 || strings.Count(t, "{") != strings.Count(t, "}") {
+		return invalid("%s.aws_resource: an ARN template of at most 512 bytes", at)
+	}
+	for _, lit := range arnRefRe.Split(t, -1) {
+		if !arnLiteralRe.MatchString(lit) {
+			return invalid("%s.aws_resource: literal %q (no wildcards)", at, lit)
+		}
+	}
+	for _, m := range arnRefRe.FindAllStringSubmatch(t, -1) {
+		switch ref := m[1]; {
+		case ref == AWSRefAccount || ref == AWSRefRegion || ref == AWSRefPartition, ref == "target.id":
+		case ref == "target.account":
+			if d.Target.Account == PresenceNone {
+				return invalid("%s.aws_resource: %s for a target without an account", at, ref)
+			}
+		case strings.HasPrefix(ref, "target.id."):
+			if !d.Target.hasPart(strings.TrimPrefix(ref, "target.id.")) {
+				return invalid("%s.aws_resource: %s names no group of target.id_pattern", at, ref)
+			}
+		default:
+			return invalid("%s.aws_resource: %q is not the target or the connection's account, region or partition", at, ref)
+		}
+	}
+	return nil
+}
+
+// AWSResourceARN is the resource a session for an action on target is
+// narrowed to (D270): the template with each reference substituted, or
+// "*" for a read without one. A substituted value with a wildcard or a
+// character outside an ARN's, or a missing part, builds nothing.
+func (d *Definition) AWSResourceARN(target actionir.Target, account, region, partition string) (string, error) {
+	t := ""
+	if d.Dispatch != nil && d.Dispatch.HTTP != nil {
+		t = d.Dispatch.HTTP.AWSResource
+	}
+	if t == "" {
+		if d.Access == AccessWrite {
+			return "", invalid("%s: an aws write without aws_resource", d.Operation)
+		}
+		return "*", nil
+	}
+	var err error
+	out := arnRefRe.ReplaceAllStringFunc(t, func(m string) string {
+		ref := m[1 : len(m)-1]
+		var v string
+		switch {
+		case ref == AWSRefAccount:
+			v = account
+		case ref == AWSRefRegion:
+			v = region
+		case ref == AWSRefPartition:
+			v = partition
+		case ref == "target.id":
+			v = target.ID
+		case ref == "target.account":
+			v = target.Account
+		case strings.HasPrefix(ref, "target.id."):
+			v, _ = d.Target.Part(target.ID, strings.TrimPrefix(ref, "target.id."))
+		}
+		if !ARNValueRe.MatchString(v) && err == nil {
+			err = invalid("%s: aws_resource %s has no usable value", d.Operation, ref)
+		}
+		return v
+	})
+	return out, err
 }

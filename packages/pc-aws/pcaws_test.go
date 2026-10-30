@@ -136,7 +136,7 @@ func TestT225_EachIAMReadRunsInASessionOfItsOwnAction(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		policy, err := broker.SessionPolicy(cred.Service, sessionAction)
+		policy, err := broker.SessionPolicy(cred.Service, sessionAction, "*")
 		if err != nil {
 			t.Fatal(err)
 		}
