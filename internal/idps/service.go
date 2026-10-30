@@ -112,6 +112,10 @@ func DiscoveryProbe(client *http.Client) func(context.Context, Input) error {
 	}
 }
 
+// manager is the caller of a write: a person holding
+// identity_provider.manage at the org. The permission is not human-only
+// (Org Admin stays bindable to service accounts, D161), so a service
+// account, an API key or a support session is refused here.
 func manager(ctx context.Context) (tenancy.Caller, error) {
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
@@ -120,7 +124,7 @@ func manager(ctx context.Context) (tenancy.Caller, error) {
 	if err := c.Require(td.PermIdentityProviderManage, td.OrgPath(c.Org)); err != nil {
 		return tenancy.Caller{}, err
 	}
-	if !c.Human() {
+	if !c.Human() || c.Credential == tenancy.CredAPIKey || c.Credential == tenancy.CredSupportSession {
 		return tenancy.Caller{}, ErrHuman
 	}
 	return c, nil

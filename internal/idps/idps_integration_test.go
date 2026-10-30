@@ -330,6 +330,51 @@ func TestHR481_ProtectedInEveryMode(t *testing.T) {
 	}
 }
 
+// TestHR481_OnlyPeopleFile: identity_provider.manage is not human-only
+// (Org Admin stays bindable to service accounts), so the use cases refuse
+// every caller holding it who is not a person at a person's credential: a
+// service account with an access token or an API key, an API key, and a
+// support session. Nothing is filed (G0 M18 D161).
+//
+// Covers: PN-012.7
+func TestHR481_OnlyPeopleFile(t *testing.T) {
+	e := newEnv(t)
+	p := e.active(t, "acme")
+	filed := len(e.reqs.opened)
+	orgAdmin := []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: e.org.UUID()}}}
+	for name, c := range map[string]tapp.Caller{
+		"service account token": {Subject: td.Subject{Org: e.org, Principal: td.PrincipalRef{Kind: td.KindServiceAccount, ID: ids.NewV7()},
+			Bindings: orgAdmin}, Credential: tapp.CredAccessToken},
+		"service account key": {Subject: td.Subject{Org: e.org, Principal: td.PrincipalRef{Kind: td.KindServiceAccount, ID: ids.NewV7()},
+			Bindings: orgAdmin}, Credential: tapp.CredAPIKey},
+		"api key of a user": {Subject: td.Subject{Org: e.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: e.alice},
+			Bindings: orgAdmin}, Credential: tapp.CredAPIKey},
+		"support session": {Subject: td.Subject{Org: e.org, Principal: td.PrincipalRef{Kind: td.KindSupport, ID: ids.NewV7()},
+			Bindings: orgAdmin}, Credential: tapp.CredSupportSession},
+	} {
+		ctx := tapp.WithCaller(context.Background(), c)
+		if c.Principal.Kind == td.KindServiceAccount && !c.Can(td.PermIdentityProviderManage, td.OrgPath(e.org)) {
+			t.Fatalf("%s: a service account bound Org Admin lacks identity_provider.manage", name)
+		}
+		if _, _, err := e.svc.Create(ctx, input("robot")); c.Principal.Kind != td.KindSupport && !errors.Is(err, idps.ErrHuman) {
+			t.Errorf("%s: want HUMAN_ONLY, got %v", name, err)
+		}
+		for what, call := range map[string]func() error{
+			"create":   func() error { _, _, err := e.svc.Create(ctx, input("robot")); return err },
+			"update":   func() error { _, err := e.svc.Update(ctx, p.ID, input("acme")); return err },
+			"disable":  func() error { _, err := e.svc.Disable(ctx, p.ID); return err },
+			"own only": func() error { _, err := e.svc.SetOwnOnly(ctx, true); return err },
+		} {
+			if err := call(); err == nil {
+				t.Errorf("%s: %s was filed", name, what)
+			}
+		}
+	}
+	if len(e.reqs.opened) != filed {
+		t.Fatalf("non-person callers filed %d changes", len(e.reqs.opened)-filed)
+	}
+}
+
 // TestHR482_SecretSealed: the client secret is stored sealed with the
 // org's DEK, bound to its row, is in no protected change's payload or
 // summary in the clear, and is never returned (G0 M18 D155).
