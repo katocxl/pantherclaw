@@ -1,6 +1,6 @@
 # ADR-0042 — Integrations breadth: Ed25519 webhooks, export destinations, target-confirmed rotation, connectors and ticket sync
 
-**Status:** Accepted (2026-10-29; G0 M20 founder decisions G12–G15, answered with the recommended option each time; the [G0 M20 brief](../g0/M20.md) records them with the coordinator's design decisions D250–D256).
+**Status:** Accepted (2026-10-29; G0 M20 founder decisions G12–G15, answered with the recommended option each time; the [G0 M20 brief](../g0/M20.md) records them with the coordinator's design decisions D250–D280).
 
 **Context.**
 - **Webhooks.** Outbound webhooks are signed only with per-destination HMAC secrets (Standard Webhooks `v1,`), so every receiver holds a secret that could also forge deliveries.
