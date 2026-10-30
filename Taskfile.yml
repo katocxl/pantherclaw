@@ -286,9 +286,9 @@ tasks:
       - git diff --exit-code -- internal/gen
 
   trace:
-    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M17)
+    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M18)
     cmds:
-      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M17"}}
+      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M18"}}
 
   range:library:
     desc: Regenerate the server's embedded scenario library (internal/redteam/library/library.json) from redteam/scenarios after changing a scenario (G0 M17 D125)

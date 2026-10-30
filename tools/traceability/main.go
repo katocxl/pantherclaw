@@ -38,9 +38,9 @@ func main() {
 // milestones in delivery order, which is not numeric order (ADR-0017):
 // M12 comes before the v0.1.0 preview, M11.1 (the policy half of M11)
 // after it and before M10, and M14 before M13. The UI phase (milestone UI,
-// founder decision 2026-10-20) comes after M14 and before M13. M15, M16 and
-// M17 are post-1.0 and come after M13, in that order (G0 M15, G0 M17).
-var milestones = []string{"M0", "M1", "M1.5", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9", "M12", "M11.1", "M10", "M11", "M14", "UI", "M13", "M15", "M16", "M17"}
+// founder decision 2026-10-20) comes after M14 and before M13. M15 to M18
+// are post-1.0 and come after M13, in that order (G0 M15, G0 M17, G0 M18).
+var milestones = []string{"M0", "M1", "M1.5", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9", "M12", "M11.1", "M10", "M11", "M14", "UI", "M13", "M15", "M16", "M17", "M18"}
 
 func milestoneIndex(m string) int { return slices.Index(milestones, strings.TrimSpace(m)) }
 
