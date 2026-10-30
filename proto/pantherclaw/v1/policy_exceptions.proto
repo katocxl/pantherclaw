@@ -247,6 +247,9 @@ message PolicyExceptionGroup {
   string revoked_reason = 16;
   // When it was requested.
   google.protobuf.Timestamp create_time = 17;
+  // Whether the cohort held more agents than the snapshot at approval
+  // could (2000), so later ones were left out; unset before.
+  optional bool truncated = 18;
 }
 
 // RequestPolicyExceptionGroupRequest describes an exception group.

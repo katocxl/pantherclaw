@@ -2645,11 +2645,13 @@ type PcPolicyExceptionGroup struct {
 	Reason          string
 	OwnerID         ids.UUID
 	RequestedBy     ids.UUID
+	CohortDigest    []byte
 	RequestedExpiry time.Time
 	State           string
 	ActivatedAt     *time.Time
 	ExpiresAt       *time.Time
 	Members         *int32
+	Truncated       pgtype.Bool
 	RevokedBy       *ids.UUID
 	RevokedReason   *string
 	CreatedAt       time.Time
@@ -2743,6 +2745,7 @@ type PcPolicySimulation struct {
 	Error            *string
 	CohortID         *ids.UUID
 	CohortAgents     []ids.UUID
+	CohortTruncated  pgtype.Bool
 	ByCohort         []byte
 }
 

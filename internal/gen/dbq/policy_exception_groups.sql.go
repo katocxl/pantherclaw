@@ -12,18 +12,20 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
 const activatePolicyExceptionGroup = `-- name: ActivatePolicyExceptionGroup :one
 UPDATE pc.policy_exception_groups
-SET state = 'ACTIVE', activated_at = now(), expires_at = least(requested_expiry, now() + interval '30 days')
-WHERE org_id = $1 AND id = $2 AND state = 'PENDING' AND requested_expiry > now()
-RETURNING org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, members, revoked_by, revoked_reason, created_at
+SET state = 'ACTIVE', activated_at = now(), expires_at = least(requested_expiry, now() + interval '30 days'),
+    truncated = $1::boolean
+WHERE org_id = $2 AND id = $3 AND state = 'PENDING' AND requested_expiry > now()
+RETURNING org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id, requested_by, cohort_digest, requested_expiry, state, activated_at, expires_at, members, truncated, revoked_by, revoked_reason, created_at
 `
 
-func (q *Queries) ActivatePolicyExceptionGroup(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcPolicyExceptionGroup, error) {
-	row := q.db.QueryRow(ctx, activatePolicyExceptionGroup, orgID, iD)
+func (q *Queries) ActivatePolicyExceptionGroup(ctx context.Context, truncated bool, orgID ids.OrgID, iD ids.UUID) (PcPolicyExceptionGroup, error) {
+	row := q.db.QueryRow(ctx, activatePolicyExceptionGroup, truncated, orgID, iD)
 	var i PcPolicyExceptionGroup
 	err := row.Scan(
 		&i.OrgID,
@@ -36,11 +38,13 @@ func (q *Queries) ActivatePolicyExceptionGroup(ctx context.Context, orgID ids.Or
 		&i.Reason,
 		&i.OwnerID,
 		&i.RequestedBy,
+		&i.CohortDigest,
 		&i.RequestedExpiry,
 		&i.State,
 		&i.ActivatedAt,
 		&i.ExpiresAt,
 		&i.Members,
+		&i.Truncated,
 		&i.RevokedBy,
 		&i.RevokedReason,
 		&i.CreatedAt,
@@ -108,7 +112,7 @@ WHERE x.org_id = $1 AND x.id IN (
             AND (r.state = 'APPROVED' OR (r.state = 'PENDING' AND r.expires_at > now())))
     ORDER BY g.id
     LIMIT $2)
-RETURNING org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, members, revoked_by, revoked_reason, created_at
+RETURNING org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id, requested_by, cohort_digest, requested_expiry, state, activated_at, expires_at, members, truncated, revoked_by, revoked_reason, created_at
 `
 
 // Pending groups whose EXCEPTION change request ended without approval, or
@@ -133,11 +137,13 @@ func (q *Queries) DeclineEndedPolicyExceptionGroups(ctx context.Context, orgID i
 			&i.Reason,
 			&i.OwnerID,
 			&i.RequestedBy,
+			&i.CohortDigest,
 			&i.RequestedExpiry,
 			&i.State,
 			&i.ActivatedAt,
 			&i.ExpiresAt,
 			&i.Members,
+			&i.Truncated,
 			&i.RevokedBy,
 			&i.RevokedReason,
 			&i.CreatedAt,
@@ -155,7 +161,7 @@ func (q *Queries) DeclineEndedPolicyExceptionGroups(ctx context.Context, orgID i
 const declinePolicyExceptionGroup = `-- name: DeclinePolicyExceptionGroup :one
 UPDATE pc.policy_exception_groups SET state = 'DECLINED'
 WHERE org_id = $1 AND id = $2 AND state = 'PENDING'
-RETURNING org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, members, revoked_by, revoked_reason, created_at
+RETURNING org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id, requested_by, cohort_digest, requested_expiry, state, activated_at, expires_at, members, truncated, revoked_by, revoked_reason, created_at
 `
 
 func (q *Queries) DeclinePolicyExceptionGroup(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcPolicyExceptionGroup, error) {
@@ -172,11 +178,13 @@ func (q *Queries) DeclinePolicyExceptionGroup(ctx context.Context, orgID ids.Org
 		&i.Reason,
 		&i.OwnerID,
 		&i.RequestedBy,
+		&i.CohortDigest,
 		&i.RequestedExpiry,
 		&i.State,
 		&i.ActivatedAt,
 		&i.ExpiresAt,
 		&i.Members,
+		&i.Truncated,
 		&i.RevokedBy,
 		&i.RevokedReason,
 		&i.CreatedAt,
@@ -192,7 +200,7 @@ WHERE x.org_id = $1 AND x.id IN (
       AND coalesce(g.expires_at, g.requested_expiry) <= now()
     ORDER BY g.id
     LIMIT $2)
-RETURNING org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, members, revoked_by, revoked_reason, created_at
+RETURNING org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id, requested_by, cohort_digest, requested_expiry, state, activated_at, expires_at, members, truncated, revoked_by, revoked_reason, created_at
 `
 
 // Groups the sweep closes: pending past their requested expiry and active
@@ -217,11 +225,13 @@ func (q *Queries) ExpirePolicyExceptionGroups(ctx context.Context, orgID ids.Org
 			&i.Reason,
 			&i.OwnerID,
 			&i.RequestedBy,
+			&i.CohortDigest,
 			&i.RequestedExpiry,
 			&i.State,
 			&i.ActivatedAt,
 			&i.ExpiresAt,
 			&i.Members,
+			&i.Truncated,
 			&i.RevokedBy,
 			&i.RevokedReason,
 			&i.CreatedAt,
@@ -237,7 +247,7 @@ func (q *Queries) ExpirePolicyExceptionGroups(ctx context.Context, orgID ids.Org
 }
 
 const expiringPolicyExceptionGroups = `-- name: ExpiringPolicyExceptionGroups :many
-SELECT org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, members, revoked_by, revoked_reason, created_at FROM pc.policy_exception_groups
+SELECT org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id, requested_by, cohort_digest, requested_expiry, state, activated_at, expires_at, members, truncated, revoked_by, revoked_reason, created_at FROM pc.policy_exception_groups
 WHERE org_id = $1 AND state = 'ACTIVE' AND expires_at > now()
   AND expires_at <= now() + make_interval(secs => $2::bigint)
 ORDER BY id
@@ -266,11 +276,13 @@ func (q *Queries) ExpiringPolicyExceptionGroups(ctx context.Context, orgID ids.O
 			&i.Reason,
 			&i.OwnerID,
 			&i.RequestedBy,
+			&i.CohortDigest,
 			&i.RequestedExpiry,
 			&i.State,
 			&i.ActivatedAt,
 			&i.ExpiresAt,
 			&i.Members,
+			&i.Truncated,
 			&i.RevokedBy,
 			&i.RevokedReason,
 			&i.CreatedAt,
@@ -286,7 +298,7 @@ func (q *Queries) ExpiringPolicyExceptionGroups(ctx context.Context, orgID ids.O
 }
 
 const getPolicyExceptionGroup = `-- name: GetPolicyExceptionGroup :one
-SELECT org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, members, revoked_by, revoked_reason, created_at FROM pc.policy_exception_groups WHERE org_id = $1 AND id = $2
+SELECT org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id, requested_by, cohort_digest, requested_expiry, state, activated_at, expires_at, members, truncated, revoked_by, revoked_reason, created_at FROM pc.policy_exception_groups WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetPolicyExceptionGroup(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcPolicyExceptionGroup, error) {
@@ -303,11 +315,13 @@ func (q *Queries) GetPolicyExceptionGroup(ctx context.Context, orgID ids.OrgID, 
 		&i.Reason,
 		&i.OwnerID,
 		&i.RequestedBy,
+		&i.CohortDigest,
 		&i.RequestedExpiry,
 		&i.State,
 		&i.ActivatedAt,
 		&i.ExpiresAt,
 		&i.Members,
+		&i.Truncated,
 		&i.RevokedBy,
 		&i.RevokedReason,
 		&i.CreatedAt,
@@ -318,11 +332,11 @@ func (q *Queries) GetPolicyExceptionGroup(ctx context.Context, orgID ids.OrgID, 
 const insertPolicyExceptionGroup = `-- name: InsertPolicyExceptionGroup :one
 
 INSERT INTO pc.policy_exception_groups (org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id,
-    requested_by, requested_expiry)
+    requested_by, requested_expiry, cohort_digest)
 VALUES ($1, $2, $3, $4, $5, $6,
     $7::text[], $8, $9, $10,
-    now() + make_interval(secs => $11::bigint))
-RETURNING org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, members, revoked_by, revoked_reason, created_at
+    now() + make_interval(secs => $11::bigint), $12)
+RETURNING org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id, requested_by, cohort_digest, requested_expiry, state, activated_at, expires_at, members, truncated, revoked_by, revoked_reason, created_at
 `
 
 type InsertPolicyExceptionGroupParams struct {
@@ -337,6 +351,7 @@ type InsertPolicyExceptionGroupParams struct {
 	OwnerID          ids.UUID
 	RequestedBy      ids.UUID
 	ExpiresInSeconds int64
+	CohortDigest     []byte
 }
 
 // SPDX-License-Identifier: BUSL-1.1
@@ -359,6 +374,7 @@ func (q *Queries) InsertPolicyExceptionGroup(ctx context.Context, arg InsertPoli
 		arg.OwnerID,
 		arg.RequestedBy,
 		arg.ExpiresInSeconds,
+		arg.CohortDigest,
 	)
 	var i PcPolicyExceptionGroup
 	err := row.Scan(
@@ -372,11 +388,13 @@ func (q *Queries) InsertPolicyExceptionGroup(ctx context.Context, arg InsertPoli
 		&i.Reason,
 		&i.OwnerID,
 		&i.RequestedBy,
+		&i.CohortDigest,
 		&i.RequestedExpiry,
 		&i.State,
 		&i.ActivatedAt,
 		&i.ExpiresAt,
 		&i.Members,
+		&i.Truncated,
 		&i.RevokedBy,
 		&i.RevokedReason,
 		&i.CreatedAt,
@@ -435,7 +453,7 @@ func (q *Queries) InsertPolicyExceptionGroupMember(ctx context.Context, arg Inse
 }
 
 const listPolicyExceptionGroupsPage = `-- name: ListPolicyExceptionGroupsPage :many
-SELECT g.org_id, g.id, g.cohort_id, g.bundle_id, g.rule_id, g.rule_digest, g.operations, g.reason, g.owner_id, g.requested_by, g.requested_expiry, g.state, g.activated_at, g.expires_at, g.members, g.revoked_by, g.revoked_reason, g.created_at, (CASE WHEN g.state IN ('PENDING', 'ACTIVE') AND coalesce(g.expires_at, g.requested_expiry) <= now()
+SELECT g.org_id, g.id, g.cohort_id, g.bundle_id, g.rule_id, g.rule_digest, g.operations, g.reason, g.owner_id, g.requested_by, g.cohort_digest, g.requested_expiry, g.state, g.activated_at, g.expires_at, g.members, g.truncated, g.revoked_by, g.revoked_reason, g.created_at, (CASE WHEN g.state IN ('PENDING', 'ACTIVE') AND coalesce(g.expires_at, g.requested_expiry) <= now()
                   THEN 'EXPIRED' ELSE g.state END)::text AS effective_state
 FROM pc.policy_exception_groups g
 WHERE g.org_id = $1
@@ -467,11 +485,13 @@ type ListPolicyExceptionGroupsPageRow struct {
 	Reason          string
 	OwnerID         ids.UUID
 	RequestedBy     ids.UUID
+	CohortDigest    []byte
 	RequestedExpiry time.Time
 	State           string
 	ActivatedAt     *time.Time
 	ExpiresAt       *time.Time
 	Members         *int32
+	Truncated       pgtype.Bool
 	RevokedBy       *ids.UUID
 	RevokedReason   *string
 	CreatedAt       time.Time
@@ -505,11 +525,13 @@ func (q *Queries) ListPolicyExceptionGroupsPage(ctx context.Context, arg ListPol
 			&i.Reason,
 			&i.OwnerID,
 			&i.RequestedBy,
+			&i.CohortDigest,
 			&i.RequestedExpiry,
 			&i.State,
 			&i.ActivatedAt,
 			&i.ExpiresAt,
 			&i.Members,
+			&i.Truncated,
 			&i.RevokedBy,
 			&i.RevokedReason,
 			&i.CreatedAt,
@@ -526,7 +548,7 @@ func (q *Queries) ListPolicyExceptionGroupsPage(ctx context.Context, arg ListPol
 }
 
 const lockPolicyExceptionGroup = `-- name: LockPolicyExceptionGroup :one
-SELECT org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, members, revoked_by, revoked_reason, created_at FROM pc.policy_exception_groups WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id, requested_by, cohort_digest, requested_expiry, state, activated_at, expires_at, members, truncated, revoked_by, revoked_reason, created_at FROM pc.policy_exception_groups WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockPolicyExceptionGroup(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcPolicyExceptionGroup, error) {
@@ -543,11 +565,13 @@ func (q *Queries) LockPolicyExceptionGroup(ctx context.Context, orgID ids.OrgID,
 		&i.Reason,
 		&i.OwnerID,
 		&i.RequestedBy,
+		&i.CohortDigest,
 		&i.RequestedExpiry,
 		&i.State,
 		&i.ActivatedAt,
 		&i.ExpiresAt,
 		&i.Members,
+		&i.Truncated,
 		&i.RevokedBy,
 		&i.RevokedReason,
 		&i.CreatedAt,
@@ -583,7 +607,7 @@ func (q *Queries) PolicyExceptionGroupAgents(ctx context.Context, orgID ids.OrgI
 }
 
 const readPolicyExceptionGroup = `-- name: ReadPolicyExceptionGroup :one
-SELECT g.org_id, g.id, g.cohort_id, g.bundle_id, g.rule_id, g.rule_digest, g.operations, g.reason, g.owner_id, g.requested_by, g.requested_expiry, g.state, g.activated_at, g.expires_at, g.members, g.revoked_by, g.revoked_reason, g.created_at, (CASE WHEN g.state IN ('PENDING', 'ACTIVE') AND coalesce(g.expires_at, g.requested_expiry) <= now()
+SELECT g.org_id, g.id, g.cohort_id, g.bundle_id, g.rule_id, g.rule_digest, g.operations, g.reason, g.owner_id, g.requested_by, g.cohort_digest, g.requested_expiry, g.state, g.activated_at, g.expires_at, g.members, g.truncated, g.revoked_by, g.revoked_reason, g.created_at, (CASE WHEN g.state IN ('PENDING', 'ACTIVE') AND coalesce(g.expires_at, g.requested_expiry) <= now()
                   THEN 'EXPIRED' ELSE g.state END)::text AS effective_state
 FROM pc.policy_exception_groups g
 WHERE g.org_id = $1 AND g.id = $2
@@ -600,11 +624,13 @@ type ReadPolicyExceptionGroupRow struct {
 	Reason          string
 	OwnerID         ids.UUID
 	RequestedBy     ids.UUID
+	CohortDigest    []byte
 	RequestedExpiry time.Time
 	State           string
 	ActivatedAt     *time.Time
 	ExpiresAt       *time.Time
 	Members         *int32
+	Truncated       pgtype.Bool
 	RevokedBy       *ids.UUID
 	RevokedReason   *string
 	CreatedAt       time.Time
@@ -625,11 +651,13 @@ func (q *Queries) ReadPolicyExceptionGroup(ctx context.Context, orgID ids.OrgID,
 		&i.Reason,
 		&i.OwnerID,
 		&i.RequestedBy,
+		&i.CohortDigest,
 		&i.RequestedExpiry,
 		&i.State,
 		&i.ActivatedAt,
 		&i.ExpiresAt,
 		&i.Members,
+		&i.Truncated,
 		&i.RevokedBy,
 		&i.RevokedReason,
 		&i.CreatedAt,
@@ -642,7 +670,7 @@ const revokePolicyExceptionGroup = `-- name: RevokePolicyExceptionGroup :one
 UPDATE pc.policy_exception_groups SET state = 'REVOKED', revoked_by = $1, revoked_reason = $2
 WHERE org_id = $3 AND id = $4 AND state IN ('PENDING', 'ACTIVE')
   AND coalesce(expires_at, requested_expiry) > now()
-RETURNING org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, members, revoked_by, revoked_reason, created_at
+RETURNING org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id, requested_by, cohort_digest, requested_expiry, state, activated_at, expires_at, members, truncated, revoked_by, revoked_reason, created_at
 `
 
 type RevokePolicyExceptionGroupParams struct {
@@ -671,11 +699,13 @@ func (q *Queries) RevokePolicyExceptionGroup(ctx context.Context, arg RevokePoli
 		&i.Reason,
 		&i.OwnerID,
 		&i.RequestedBy,
+		&i.CohortDigest,
 		&i.RequestedExpiry,
 		&i.State,
 		&i.ActivatedAt,
 		&i.ExpiresAt,
 		&i.Members,
+		&i.Truncated,
 		&i.RevokedBy,
 		&i.RevokedReason,
 		&i.CreatedAt,

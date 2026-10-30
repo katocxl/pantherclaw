@@ -38,10 +38,11 @@ type memStore struct {
 	audits    []audit.Event
 	// cohorts holds each cohort's agents the caller may read, members
 	// the cohorts holding each agent, readable the cohorts the caller may
-	// read (D154).
-	cohorts  map[ids.UUID][]ids.UUID
-	members  map[ids.UUID][]ids.UUID
-	readable map[ids.UUID]bool
+	// read (D154), truncated the cohorts holding more than a snapshot.
+	cohorts   map[ids.UUID][]ids.UUID
+	truncated map[ids.UUID]bool
+	members   map[ids.UUID][]ids.UUID
+	readable  map[ids.UUID]bool
 }
 
 func newMemStore() *memStore {
@@ -68,7 +69,7 @@ func (m *memStore) Insert(_ context.Context, s simulation.NewSimulation) (simula
 	out := simulation.Simulation{
 		ID: s.ID, Version: s.Version, ContentDigest: s.ContentDigest, WindowStart: now.AddDate(0, 0, -s.Days), WindowEnd: now,
 		Max: s.Max, State: simulation.Queued, Report: simulation.NewReport(), RequestedBy: s.RequestedBy, Created: now,
-		Cohort: s.Cohort, CohortAgents: s.CohortAgents,
+		Cohort: s.Cohort, CohortAgents: s.CohortAgents, CohortTruncated: s.CohortTruncated,
 	}
 	m.sims[s.ID] = out
 	return out, nil
@@ -138,7 +139,7 @@ func (m *memStore) CohortAgents(_ context.Context, _ tapp.Caller, cohort ids.UUI
 	if !ok {
 		return nil, false, simulation.ErrCohortNotFound
 	}
-	return agents, false, nil
+	return agents, m.truncated[cohort], nil
 }
 
 func (m *memStore) Memberships(context.Context) (map[ids.UUID][]ids.UUID, error) {

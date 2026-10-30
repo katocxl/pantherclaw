@@ -34,10 +34,11 @@ func (n *notifier) Enqueue(_ context.Context, _ db.TenantTx, m napp.Message) (na
 
 // changes records the change requests asked for.
 type changes struct {
-	asked []exceptions.Summary
-	base  ids.UUID
-	sum   [32]byte
-	fail  error
+	asked  []exceptions.Summary
+	groups []exceptions.GroupSummary
+	base   ids.UUID
+	sum    [32]byte
+	fail   error
 }
 
 func (c *changes) Request(_ context.Context, kind papp.ChangeKind, subject, base ids.UUID, binding [32]byte, summary any,
@@ -47,6 +48,8 @@ func (c *changes) Request(_ context.Context, kind papp.ChangeKind, subject, base
 	}
 	if s, ok := summary.(exceptions.Summary); ok {
 		c.asked = append(c.asked, s)
+	} else if s, ok := summary.(exceptions.GroupSummary); ok {
+		c.groups = append(c.groups, s)
 	}
 	c.base, c.sum = base, binding
 	return papp.ChangeRequest{ID: ids.NewV7(), Kind: kind, Subject: subject, URL: "/policy-changes/" + subject.String()}, nil

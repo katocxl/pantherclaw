@@ -15,11 +15,17 @@
 -- a member row is accepted only while its group is PENDING, so an ACTIVE
 -- group never gains an agent, and group_id never changes.
 --
+-- The request binds the cohort's definition (cohort_digest: its rule and
+-- static members as requested). Approval re-reads it, and a cohort edited
+-- since voids the request, so a cohort cannot be widened between the
+-- request and its approval without new consent.
+--
 -- The cohort is named by id only: a cohort deleted afterwards leaves the
 -- group and its member rows as they are.
 --
 -- pc_app may UPDATE only the transition columns, as for exceptions (D22):
--- state, activated_at, expires_at, members, revoked_by and revoked_reason.
+-- state, activated_at, expires_at, members, truncated, revoked_by and
+-- revoked_reason.
 
 -- +goose Up
 CREATE TABLE pc.policy_exception_groups (
@@ -34,6 +40,8 @@ CREATE TABLE pc.policy_exception_groups (
     reason           text        NOT NULL CHECK (char_length(btrim(reason)) BETWEEN 1 AND 500),
     owner_id         uuid        NOT NULL,
     requested_by     uuid        NOT NULL,
+    -- SHA-256 of the cohort's definition when it was requested.
+    cohort_digest    bytea       NOT NULL CHECK (octet_length(cohort_digest) = 32),
     requested_expiry timestamptz NOT NULL,
     state            text        NOT NULL DEFAULT 'PENDING'
                                  CHECK (state IN ('PENDING', 'ACTIVE', 'DECLINED', 'REVOKED', 'EXPIRED')),
@@ -41,6 +49,8 @@ CREATE TABLE pc.policy_exception_groups (
     expires_at       timestamptz,
     -- How many agents the snapshot at approval held.
     members          integer     CHECK (members BETWEEN 0 AND 2000),
+    -- Whether the cohort held more agents than the snapshot could (2000).
+    truncated        boolean,
     revoked_by       uuid,
     revoked_reason   text        CHECK (char_length(btrim(revoked_reason)) BETWEEN 1 AND 500),
     created_at       timestamptz NOT NULL DEFAULT now(),
@@ -51,6 +61,7 @@ CREATE TABLE pc.policy_exception_groups (
     CHECK (requested_expiry > created_at AND requested_expiry <= created_at + interval '30 days'),
     CHECK ((activated_at IS NULL) = (expires_at IS NULL)),
     CHECK ((activated_at IS NULL) = (members IS NULL)),
+    CHECK ((activated_at IS NULL) = (truncated IS NULL)),
     CHECK (expires_at IS NULL OR (expires_at > activated_at AND expires_at <= activated_at + interval '30 days'
                                   AND expires_at <= requested_expiry)),
     CHECK (state <> 'ACTIVE' OR activated_at IS NOT NULL),
@@ -77,6 +88,7 @@ BEGIN
     NEW.activated_at := NULL;
     NEW.expires_at := NULL;
     NEW.members := NULL;
+    NEW.truncated := NULL;
     NEW.revoked_by := NULL;
     NEW.revoked_reason := NULL;
     RETURN NEW;
@@ -106,10 +118,14 @@ BEGIN
         NEW.activated_at := now();
         NEW.expires_at := least(OLD.requested_expiry, now() + interval '30 days');
         NEW.members := (SELECT count(*) FROM pc.policy_exceptions x WHERE x.org_id = OLD.org_id AND x.group_id = OLD.id);
+        IF NEW.truncated IS NULL THEN
+            RAISE EXCEPTION 'an active policy exception group says whether its snapshot was truncated' USING ERRCODE = 'check_violation';
+        END IF;
     ELSE
         NEW.activated_at := OLD.activated_at;
         NEW.expires_at := OLD.expires_at;
         NEW.members := OLD.members;
+        NEW.truncated := OLD.truncated;
     END IF;
     IF NEW.state = 'EXPIRED' AND coalesce(OLD.expires_at, OLD.requested_expiry) > now() THEN
         RAISE EXCEPTION 'the policy exception group has not expired yet' USING ERRCODE = 'check_violation';
@@ -130,7 +146,7 @@ CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.policy_exception_gr
     FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
 
 GRANT SELECT, INSERT ON pc.policy_exception_groups TO pc_app;
-GRANT UPDATE (state, activated_at, expires_at, members, revoked_by, revoked_reason) ON pc.policy_exception_groups TO pc_app;
+GRANT UPDATE (state, activated_at, expires_at, members, truncated, revoked_by, revoked_reason) ON pc.policy_exception_groups TO pc_app;
 GRANT SELECT ON pc.policy_exception_groups TO pc_audit_ro;
 -- +goose StatementBegin
 DO $$ BEGIN
@@ -143,10 +159,17 @@ END $$;
 -- A member row names its group; pc_app has no UPDATE on group_id, so it
 -- never changes.
 ALTER TABLE pc.policy_exceptions ADD COLUMN group_id uuid;
+-- squawk: the column was just added and is NULL in every row, so the
+-- check scans nothing to reject; goose runs each migration in one
+-- transaction (.squawk.toml), so CONCURRENTLY and a separate VALIDATE are
+-- not possible.
+-- squawk-ignore constraint-missing-not-valid, adding-foreign-key-constraint
 ALTER TABLE pc.policy_exceptions ADD CONSTRAINT policy_exceptions_group
     FOREIGN KEY (org_id, group_id) REFERENCES pc.policy_exception_groups (org_id, id);
+-- squawk-ignore require-concurrent-index-creation
 CREATE INDEX policy_exceptions_group ON pc.policy_exceptions (org_id, group_id) WHERE group_id IS NOT NULL;
 -- One member row per agent of a group.
+-- squawk-ignore require-concurrent-index-creation
 CREATE UNIQUE INDEX policy_exceptions_group_agent ON pc.policy_exceptions (org_id, group_id, agent_id) WHERE group_id IS NOT NULL;
 
 -- A member row joins only a PENDING group (the snapshot is taken in the

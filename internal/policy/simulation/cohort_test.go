@@ -39,8 +39,8 @@ func cohortWorld(t *testing.T) (w *world, agents []ids.UUID, inside, other ids.U
 func TestHR478_CohortSimulationReplaysOnlyItsSnapshot(t *testing.T) {
 	w, agents, inside, other := cohortWorld(t)
 	s := w.simulate(t, simulation.Request{Cohort: &inside})
-	if s.Cohort == nil || *s.Cohort != inside || len(s.CohortAgents) != 2 {
-		t.Fatalf("snapshot %v of %v", s.CohortAgents, s.Cohort)
+	if s.Cohort == nil || *s.Cohort != inside || len(s.CohortAgents) != 2 || s.CohortTruncated {
+		t.Fatalf("snapshot %v of %v (truncated %v)", s.CohortAgents, s.Cohort, s.CohortTruncated)
 	}
 	// Agent 2 joins the cohort after the request: not in the snapshot.
 	w.store.cohorts[inside] = agents
@@ -67,6 +67,11 @@ func TestHR478_CohortSimulationReplaysOnlyItsSnapshot(t *testing.T) {
 	missing := ids.NewV7()
 	if _, err := w.svc.Simulate(as(td.RolePolicyAuthor), simulation.Request{Version: version, Cohort: &missing}); code(err) != "COHORT_NOT_FOUND" {
 		t.Errorf("an unknown cohort: %v", err)
+	}
+	// A cohort holding more than a snapshot says so in what readers see.
+	w.store.truncated = map[ids.UUID]bool{inside: true}
+	if big := w.simulate(t, simulation.Request{Cohort: &inside}); !big.CohortTruncated {
+		t.Error("a truncated snapshot is not shown as truncated")
 	}
 }
 

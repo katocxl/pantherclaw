@@ -104,9 +104,11 @@ type Simulation struct {
 	Error         string
 	// Cohort names the fleet cohort a bulk simulation replays (nil: the
 	// whole org), and CohortAgents its agents the requester could read
-	// when it was asked for (D154).
-	Cohort       *ids.UUID
-	CohortAgents []ids.UUID
+	// when it was asked for (D154); CohortTruncated says the cohort held
+	// more than a snapshot holds, so later agents were not replayed.
+	Cohort          *ids.UUID
+	CohortAgents    []ids.UUID
+	CohortTruncated bool
 }
 
 // Recorded is a recorded decision of the window: ids, its agent and its
@@ -127,9 +129,11 @@ type NewSimulation struct {
 	Days          int
 	Max           int
 	RequestedBy   string
-	// Cohort and CohortAgents: a bulk simulation's cohort and snapshot.
-	Cohort       *ids.UUID
-	CohortAgents []ids.UUID
+	// Cohort and CohortAgents: a bulk simulation's cohort and snapshot,
+	// CohortTruncated whether the cohort held more.
+	Cohort          *ids.UUID
+	CohortAgents    []ids.UUID
+	CohortTruncated bool
 }
 
 // SampleFilter narrows a sample listing.
@@ -310,7 +314,7 @@ func (s *Service) Simulate(ctx context.Context, in Request) (Simulation, error) 
 			if err != nil {
 				return err
 			}
-			n.Cohort, n.CohortAgents = in.Cohort, agents
+			n.Cohort, n.CohortAgents, n.CohortTruncated = in.Cohort, agents, truncated
 			if n.CohortAgents == nil {
 				n.CohortAgents = []ids.UUID{}
 			}

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
@@ -99,7 +100,7 @@ func GroupProto(g exceptions.Group, state string) *pantherclawv1.PolicyException
 		Id: g.ID.String(), CohortId: g.CohortID.String(), BundleId: g.BundleID, RuleId: g.RuleID,
 		RuleDigest: hex.EncodeToString(g.RuleDigest), Operations: g.Operations, Reason: g.Reason, OwnerId: g.OwnerID.String(),
 		RequestedBy: g.RequestedBy.String(), RequestedExpireTime: timestamppb.New(g.RequestedExpiry), State: state,
-		Members: g.Members, CreateTime: timestamppb.New(g.CreatedAt),
+		Members: g.Members, Truncated: truncatedPB(g.Truncated), CreateTime: timestamppb.New(g.CreatedAt),
 	}
 	if g.ActivatedAt != nil {
 		out.ActivateTime = timestamppb.New(*g.ActivatedAt)
@@ -114,4 +115,12 @@ func GroupProto(g exceptions.Group, state string) *pantherclawv1.PolicyException
 		out.RevokedReason = *g.RevokedReason
 	}
 	return out
+}
+
+// truncatedPB is a group's truncated flag: unset before it is active.
+func truncatedPB(b pgtype.Bool) *bool {
+	if !b.Valid {
+		return nil
+	}
+	return &b.Bool
 }

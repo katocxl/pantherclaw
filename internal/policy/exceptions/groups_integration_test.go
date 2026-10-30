@@ -8,6 +8,8 @@ package exceptions_test
 import (
 	"context"
 	"errors"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,7 +30,8 @@ func (e edition) Current(context.Context) (billing.Entitlements, error) {
 }
 
 // groupFixture is the exception fixture with a fleet cohort holding the
-// fixture's agent and a second one, on Enterprise.
+// fixture's agent and a second one as static members, and the agents of
+// task type "refunds" by its rule, on Enterprise.
 type groupFixture struct {
 	*fixture
 	cohort, second ids.UUID
@@ -39,7 +42,8 @@ func newGroupFixture(t *testing.T) *groupFixture {
 	g := &groupFixture{fixture: newFixture(t), cohort: ids.NewV7(), second: ids.NewV7()}
 	g.svc.Editions = edition(billing.Enterprise)
 	g.exec(t, "INSERT INTO pc.agents (org_id, id, name, state, created_by) VALUES ($1, $2, 'refunder-2', 'DISCOVERED', 'test')", g.org, g.second)
-	g.exec(t, "INSERT INTO pc.fleet_cohorts (org_id, id, name, owner_user_id, created_by) VALUES ($1, $2, 'refunders', $3, 'test')",
+	g.exec(t, `INSERT INTO pc.fleet_cohorts (org_id, id, name, owner_user_id, created_by, rule)
+		VALUES ($1, $2, 'refunders', $3, 'test', '{"task_type":"refunds"}')`,
 		g.org, g.cohort, g.alice)
 	g.join(t, g.agent)
 	g.join(t, g.second)
@@ -100,10 +104,11 @@ func TestHR477_AnAgentJoiningLaterIsNotCovered(t *testing.T) {
 	if len(g.activeFor(t, g.agent)) != 0 {
 		t.Fatal("a pending group waived the rule")
 	}
-	// An agent that joins before approval is in the snapshot.
+	// An agent the cohort's rule matches before approval is in the
+	// snapshot (the cohort's definition is unchanged).
 	early := ids.NewV7()
-	g.exec(t, "INSERT INTO pc.agents (org_id, id, name, state, created_by) VALUES ($1, $2, 'early', 'DISCOVERED', 'test')", g.org, early)
-	g.join(t, early)
+	g.exec(t, `INSERT INTO pc.agents (org_id, id, name, state, created_by, task_type)
+		VALUES ($1, $2, 'early', 'DISCOVERED', 'test', 'refunds')`, g.org, early)
 	if err := g.approve(t, group.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -216,6 +221,69 @@ func TestT209_AnActiveGroupCannotBeWidened(t *testing.T) {
 	}
 }
 
+// TestHR477_ACohortWidenedBeforeApprovalVoidsTheRequest: the request
+// binds the cohort's definition and shows how many agents it holds; a
+// static member added, or the rule changed, before approval voids the
+// request (BASE_CHANGED) and no agent is waived, so a cohort cannot be
+// widened between the request and its approval without a new one.
+// Covers: F602
+func TestHR477_ACohortWidenedBeforeApprovalVoidsTheRequest(t *testing.T) {
+	g := newGroupFixture(t)
+	author := g.as(g.alice, tenancy.CredAccessToken, td.RolePolicyAuthor)
+	for name, widen := range map[string]func(){
+		"a static member added": func() {
+			a := ids.NewV7()
+			g.exec(t, "INSERT INTO pc.agents (org_id, id, name, state, created_by) VALUES ($1, $2, $3, 'DISCOVERED', 'test')",
+				g.org, a, "w-"+a.String()[30:])
+			g.join(t, a)
+		},
+		"the rule loosened": func() {
+			g.d.AdminExec(t, "UPDATE pc.fleet_cohorts SET rule = '{}' WHERE id = $1", g.cohort)
+		},
+	} {
+		group, _, err := g.svc.RequestGroup(author, g.groupRequest())
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := g.c.groups[len(g.c.groups)-1]
+		if s.Group != group.ID.String() || s.Truncated || s.Members < 2 || !strings.Contains(s.Sentence, strconv.Itoa(s.Members)+" now") {
+			t.Fatalf("%s: summary %+v", name, s)
+		}
+		widen()
+		var verr *papp.VoidError
+		if err := g.approve(t, group.ID); !errors.As(err, &verr) || verr.Reason != papp.VoidBaseChanged {
+			t.Fatalf("%s: approving after the cohort changed: %v", name, err)
+		}
+		if n := g.count(t, "SELECT count(*) FROM pc.policy_exceptions WHERE group_id = $1", group.ID); n != 0 {
+			t.Fatalf("%s: %d agents waived", name, n)
+		}
+		if _, err := g.svc.RevokeGroup(g.as(g.bob, tenancy.CredAccessToken, td.RolePolicyPublisher), group.ID, "voided"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The definition is bound at insert and cannot be rewritten.
+	group, _, err := g.svc.RequestGroup(author, g.groupRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := g.p.InTenantTx(context.Background(), g.org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := tx.Exec(ctx, "UPDATE pc.policy_exception_groups SET cohort_digest = $2 WHERE id = $1", group.ID, make([]byte, 32))
+		return err
+	}); !db.IsPermissionDenied(err) {
+		t.Errorf("rewriting the bound definition: %v", err)
+	}
+	if err := g.approve(t, group.ID); err != nil {
+		t.Fatalf("approving with the cohort unchanged: %v", err)
+	}
+	got, err := g.svc.GetGroup(author, group.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Truncated.Valid || got.Truncated.Bool {
+		t.Errorf("truncated %+v, want false", got.Truncated)
+	}
+}
+
 // TestHR477_GroupsNeedEnterpriseAndAKnownCohort: a group is refused below
 // Enterprise, for an unknown cohort and from an API key; a downgrade
 // keeps an approved group in force, and revoking it works on every
@@ -280,8 +348,8 @@ func TestTenancy_policy_exception_groups(t *testing.T) {
 	}
 	if err := g.p.InTenantTx(ctx, other, func(ctx context.Context, tx db.TenantTx) error {
 		_, err := tx.Exec(ctx, `INSERT INTO pc.policy_exception_groups (org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations,
-			reason, owner_id, requested_by, requested_expiry) VALUES ($1, $2, $3, 'refunds', 'hold-large', $4, ARRAY['a.b'], 'x', $5, $5,
-			now() + interval '1 day')`, g.org, ids.NewV7(), g.cohort, make([]byte, 32), g.alice)
+			reason, owner_id, requested_by, requested_expiry, cohort_digest) VALUES ($1, $2, $3, 'refunds', 'hold-large', $4, ARRAY['a.b'], 'x',
+			$5, $5, now() + interval '1 day', $4)`, g.org, ids.NewV7(), g.cohort, make([]byte, 32), g.alice)
 		return err
 	}); err == nil {
 		t.Error("another org wrote into the org's groups")

@@ -6,6 +6,7 @@ package exceptions
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
@@ -76,7 +77,9 @@ func (r GroupRequest) valid() bool {
 
 // GroupSummary is what confirmers are shown of a group request. Reason is
 // the requester's untrusted text; the agents are those the cohort holds
-// when the last confirmation is given.
+// when the last confirmation is given. Members is how many it held when
+// the group was requested (truncated: more than a snapshot holds); a
+// cohort whose definition changes before approval voids the request.
 type GroupSummary struct {
 	Kind            string   `json:"kind"`
 	Group           string   `json:"group"`
@@ -86,6 +89,8 @@ type GroupSummary struct {
 	RuleSummary     string   `json:"rule_summary"`
 	Cohort          string   `json:"cohort"`
 	CohortName      string   `json:"cohort_name"`
+	Members         int      `json:"members"`
+	Truncated       bool     `json:"truncated"`
 	Operations      []string `json:"operations"`
 	Owner           string   `json:"owner"`
 	RequestedExpiry string   `json:"requested_expiry"`
@@ -94,7 +99,8 @@ type GroupSummary struct {
 }
 
 // GroupDigest is the digest a group's change request binds: SHA-256 of
-// the JCS form of everything the group waives and for which cohort.
+// the JCS form of everything the group waives and for which cohort, with
+// the cohort's definition as requested (HR-477).
 func GroupDigest(g Group) ([32]byte, error) {
 	ops := slices.Clone(g.Operations)
 	slices.Sort(ops)
@@ -103,6 +109,7 @@ func GroupDigest(g Group) ([32]byte, error) {
 		"rule_id": g.RuleID, "rule_digest": hex.EncodeToString(g.RuleDigest), "operations": ops, "reason": g.Reason,
 		"owner_id": g.OwnerID.String(), "requested_by": g.RequestedBy.String(),
 		"requested_expiry": g.RequestedExpiry.UTC().Format(time.RFC3339Nano),
+		"cohort_digest":    hex.EncodeToString(g.CohortDigest),
 	})
 	if err != nil {
 		return [32]byte{}, err
@@ -114,14 +121,19 @@ func GroupDigest(g Group) ([32]byte, error) {
 	return sha256.Sum256(v), nil
 }
 
-func summarizeGroup(g Group, r pdomain.Rule, cohortName string) GroupSummary {
+func summarizeGroup(g Group, r pdomain.Rule, cohortName string, members int, truncated bool) GroupSummary {
 	expiry := g.RequestedExpiry.UTC().Format(time.RFC3339)
+	now := strconv.Itoa(members) + " now"
+	if truncated {
+		now = "more than " + strconv.Itoa(members) + " now; only the first " + strconv.Itoa(MaxGroupMembers) + " would be covered"
+	}
 	return GroupSummary{
 		Kind: "EXCEPTION_GROUP", Group: g.ID.String(), Bundle: g.BundleID, Rule: r.ID, RuleKind: string(r.Kind), RuleSummary: r.Summary,
-		Cohort: g.CohortID.String(), CohortName: cohortName, Operations: g.Operations, Owner: g.OwnerID.String(),
-		RequestedExpiry: expiry, Reason: g.Reason,
-		Sentence: "Rule " + r.ID + " would not apply to the agents cohort " + cohortName + " holds when this is approved, for " +
-			strings.Join(g.Operations, ", ") + " until " + expiry + " at the latest (looser). Agents that join the cohort later stay covered by the rule.",
+		Cohort: g.CohortID.String(), CohortName: cohortName, Members: members, Truncated: truncated, Operations: g.Operations,
+		Owner: g.OwnerID.String(), RequestedExpiry: expiry, Reason: g.Reason,
+		Sentence: "Rule " + r.ID + " would not apply to the agents cohort " + cohortName + " holds when this is approved (" + now + "), for " +
+			strings.Join(g.Operations, ", ") + " until " + expiry + " at the latest (looser). Agents that join the cohort later stay covered by the rule; " +
+			"a change to the cohort's rule or static members before approval voids this request.",
 	}
 }
 
@@ -167,13 +179,21 @@ func (s *Service) RequestGroup(ctx context.Context, r GroupRequest) (Group, Chan
 		} else if err != nil {
 			return err
 		}
+		definition, err := cohorts.DefinitionDigest(ctx, tx, co.ID)
+		if err != nil {
+			return err
+		}
+		agents, truncated, err := cohorts.Snapshot(ctx, tx, co.ID, MaxGroupMembers)
+		if err != nil {
+			return err
+		}
 		digest := pdomain.RuleDigest(rule)
 		ops := slices.Clone(r.Operations)
 		slices.Sort(ops)
 		out, err = q.InsertPolicyExceptionGroup(ctx, dbq.InsertPolicyExceptionGroupParams{
 			OrgID: c.Org, ID: ids.NewV7(), CohortID: co.ID, BundleID: bundle, RuleID: rule.ID, RuleDigest: digest[:],
 			Operations: ops, Reason: strings.TrimSpace(r.Reason), OwnerID: owner, RequestedBy: c.Principal.ID,
-			ExpiresInSeconds: int64(r.ExpiresIn / time.Second),
+			ExpiresInSeconds: int64(r.ExpiresIn / time.Second), CohortDigest: definition[:],
 		})
 		if err != nil {
 			return err
@@ -182,7 +202,7 @@ func (s *Service) RequestGroup(ctx context.Context, r GroupRequest) (Group, Chan
 		if err != nil {
 			return err
 		}
-		base, summary = pub, summarizeGroup(out, rule, co.Name)
+		base, summary = pub, summarizeGroup(out, rule, co.Name, len(agents), truncated)
 		binding, err = papp.ChangeBinding(papp.ChangeException, c.Org, out.ID, base, gd, summary)
 		if err != nil {
 			return err
@@ -237,7 +257,8 @@ func exceptableRule(ctx context.Context, q *dbq.Queries, org ids.OrgID, id strin
 
 // ActivateGroup activates a pending group in the confirming transaction
 // (HR-477). It re-checks the rule as Activate does (else ErrBaseChanged),
-// that the cohort still exists (else ErrBaseChanged) and that the
+// that the cohort still exists with the rule and static members it had
+// when the group was requested (else ErrBaseChanged) and that the
 // requested expiry has not passed (else ErrRequestExpired). It then takes
 // the snapshot: one member row per agent the cohort holds now, retired
 // agents left out, all activated with the group, whose owner is told
@@ -269,10 +290,19 @@ func (s *Service) ActivateGroup(ctx context.Context, tx db.TenantTx, org ids.Org
 	if !g.RequestedExpiry.After(now) {
 		return g, ErrRequestExpired
 	}
-	agents, err := cohorts.Resolve(ctx, tx, g.CohortID, MaxGroupMembers)
+	// The cohort's rule and static members must be those requested: a
+	// cohort widened (or narrowed) since needs a new request.
+	definition, err := cohorts.DefinitionDigest(ctx, tx, g.CohortID)
 	if errors.Is(err, cohorts.ErrNotFound) {
 		return g, ErrBaseChanged
 	} else if err != nil {
+		return g, err
+	}
+	if subtle.ConstantTimeCompare(definition[:], g.CohortDigest) != 1 {
+		return g, ErrBaseChanged
+	}
+	agents, truncated, err := cohorts.Snapshot(ctx, tx, g.CohortID, MaxGroupMembers)
+	if err != nil {
 		return g, err
 	}
 	for _, a := range agents {
@@ -289,7 +319,7 @@ func (s *Service) ActivateGroup(ctx context.Context, tx db.TenantTx, org ids.Org
 	if len(members) != len(agents) {
 		return g, ErrRequestExpired
 	}
-	g, err = q.ActivatePolicyExceptionGroup(ctx, org, g.ID)
+	g, err = q.ActivatePolicyExceptionGroup(ctx, truncated, org, g.ID)
 	if db.IsNoRows(err) {
 		return g, ErrRequestExpired
 	} else if err != nil {
@@ -303,7 +333,7 @@ func (s *Service) ActivateGroup(ctx context.Context, tx db.TenantTx, org ids.Org
 		}
 	}
 	if err := s.auditGroup(ctx, tx, system, g, "policy.exception_group_activated", map[string]string{
-		"expires": g.ExpiresAt.UTC().Format(time.RFC3339),
+		"expires": g.ExpiresAt.UTC().Format(time.RFC3339), "truncated": strconv.FormatBool(truncated),
 	}); err != nil {
 		return g, err
 	}
@@ -440,6 +470,7 @@ func listedGroup(x dbq.ListPolicyExceptionGroupsPageRow) ListedGroup {
 		OrgID: x.OrgID, ID: x.ID, CohortID: x.CohortID, BundleID: x.BundleID, RuleID: x.RuleID, RuleDigest: x.RuleDigest,
 		Operations: x.Operations, Reason: x.Reason, OwnerID: x.OwnerID, RequestedBy: x.RequestedBy,
 		RequestedExpiry: x.RequestedExpiry, State: x.State, ActivatedAt: x.ActivatedAt, ExpiresAt: x.ExpiresAt, Members: x.Members,
+		Truncated: x.Truncated, CohortDigest: x.CohortDigest,
 		RevokedBy: x.RevokedBy, RevokedReason: x.RevokedReason, CreatedAt: x.CreatedAt,
 	}, EffectiveState: x.EffectiveState}
 }

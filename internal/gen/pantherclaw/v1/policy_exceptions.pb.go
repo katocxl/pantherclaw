@@ -738,7 +738,10 @@ type PolicyExceptionGroup struct {
 	// Why it was revoked (untrusted text).
 	RevokedReason string `protobuf:"bytes,16,opt,name=revoked_reason,json=revokedReason,proto3" json:"revoked_reason,omitempty"`
 	// When it was requested.
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,17,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,17,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// Whether the cohort held more agents than the snapshot at approval
+	// could (2000), so later ones were left out; unset before.
+	Truncated     *bool `protobuf:"varint,18,opt,name=truncated,proto3,oneof" json:"truncated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -890,6 +893,13 @@ func (x *PolicyExceptionGroup) GetCreateTime() *timestamppb.Timestamp {
 		return x.CreateTime
 	}
 	return nil
+}
+
+func (x *PolicyExceptionGroup) GetTruncated() bool {
+	if x != nil && x.Truncated != nil {
+		return *x.Truncated
+	}
+	return false
 }
 
 // RequestPolicyExceptionGroupRequest describes an exception group.
@@ -1448,7 +1458,7 @@ const file_pantherclaw_v1_policy_exceptions_proto_rawDesc = "" +
 	"\x06reason\x18\x02 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xf4\x03R\x06reason\"^\n" +
 	"\x1dRevokePolicyExceptionResponse\x12=\n" +
-	"\texception\x18\x01 \x01(\v2\x1f.pantherclaw.v1.PolicyExceptionR\texception\"\xa2\x05\n" +
+	"\texception\x18\x01 \x01(\v2\x1f.pantherclaw.v1.PolicyExceptionR\texception\"\xd3\x05\n" +
 	"\x14PolicyExceptionGroup\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tcohort_id\x18\x02 \x01(\tR\bcohortId\x12\x1b\n" +
@@ -1473,9 +1483,12 @@ const file_pantherclaw_v1_policy_exceptions_proto_rawDesc = "" +
 	"revoked_by\x18\x0f \x01(\tR\trevokedBy\x12%\n" +
 	"\x0erevoked_reason\x18\x10 \x01(\tR\rrevokedReason\x12;\n" +
 	"\vcreate_time\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTimeB\n" +
+	"createTime\x12!\n" +
+	"\ttruncated\x18\x12 \x01(\bH\x01R\ttruncated\x88\x01\x01B\n" +
 	"\n" +
-	"\b_members\"\xe1\x02\n" +
+	"\b_membersB\f\n" +
+	"\n" +
+	"_truncated\"\xe1\x02\n" +
 	"\"RequestPolicyExceptionGroupRequest\x12\"\n" +
 	"\arule_id\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18@R\x06ruleId\x12%\n" +
 	"\tcohort_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bcohortId\x12Y\n" +

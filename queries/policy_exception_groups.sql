@@ -8,10 +8,10 @@
 
 -- name: InsertPolicyExceptionGroup :one
 INSERT INTO pc.policy_exception_groups (org_id, id, cohort_id, bundle_id, rule_id, rule_digest, operations, reason, owner_id,
-    requested_by, requested_expiry)
+    requested_by, requested_expiry, cohort_digest)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(cohort_id), sqlc.arg(bundle_id), sqlc.arg(rule_id), sqlc.arg(rule_digest),
     sqlc.arg(operations)::text[], sqlc.arg(reason), sqlc.arg(owner_id), sqlc.arg(requested_by),
-    now() + make_interval(secs => sqlc.arg(expires_in_seconds)::bigint))
+    now() + make_interval(secs => sqlc.arg(expires_in_seconds)::bigint), sqlc.arg(cohort_digest))
 RETURNING *;
 
 -- name: GetPolicyExceptionGroup :one
@@ -41,7 +41,8 @@ RETURNING *;
 
 -- name: ActivatePolicyExceptionGroup :one
 UPDATE pc.policy_exception_groups
-SET state = 'ACTIVE', activated_at = now(), expires_at = least(requested_expiry, now() + interval '30 days')
+SET state = 'ACTIVE', activated_at = now(), expires_at = least(requested_expiry, now() + interval '30 days'),
+    truncated = sqlc.arg(truncated)::boolean
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING' AND requested_expiry > now()
 RETURNING *;
 

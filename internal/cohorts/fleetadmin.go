@@ -5,7 +5,10 @@ package cohorts
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"slices"
 
 	aapp "github.com/katocxl/pantherclaw/internal/agents/app"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -210,4 +213,70 @@ func (s *Service) GetFindings(ctx context.Context, id ids.UUID) (Findings, error
 		return nil
 	}, db.ReadOnly())
 	return out, err
+}
+
+// Snapshot returns a cohort's agents, retired ones left out, at most
+// limit, for a caller that already authorized the read, and whether the
+// cohort held more than that (an exception group's snapshot at approval,
+// HR-477). ErrNotFound when the cohort does not exist.
+func Snapshot(ctx context.Context, tx db.TenantTx, cohort ids.UUID, limit int) ([]ids.UUID, bool, error) {
+	q := dbq.New(tx)
+	co, err := q.GetFleetCohort(ctx, tx.OrgID(), cohort)
+	if db.IsNoRows(err) {
+		return nil, false, ErrNotFound
+	} else if err != nil {
+		return nil, false, err
+	}
+	rows, err := agentsOf(ctx, q, tx.OrgID(), co, nil, maxResolved+1)
+	if err != nil {
+		return nil, false, err
+	}
+	truncated := len(rows) > maxResolved
+	var out []ids.UUID
+	for _, r := range rows[:min(len(rows), maxResolved)] {
+		if r.State == "RETIRED" {
+			continue
+		}
+		if len(out) == limit {
+			return out, true, nil
+		}
+		out = append(out, r.ID)
+	}
+	return out, truncated, nil
+}
+
+// DefinitionDigest is SHA-256 of the JCS form of what decides a cohort's
+// agents: its rule and its static members. An exception group's request
+// binds it, so a cohort edited before the approval voids the request
+// (HR-477). ErrNotFound when the cohort does not exist.
+func DefinitionDigest(ctx context.Context, tx db.TenantTx, cohort ids.UUID) ([32]byte, error) {
+	q := dbq.New(tx)
+	co, err := q.GetFleetCohort(ctx, tx.OrgID(), cohort)
+	if db.IsNoRows(err) {
+		return [32]byte{}, ErrNotFound
+	} else if err != nil {
+		return [32]byte{}, err
+	}
+	static, err := q.FleetCohortStaticAgents(ctx, tx.OrgID(), cohort)
+	if err != nil {
+		return [32]byte{}, err
+	}
+	members := make([]string, len(static))
+	for i, a := range static {
+		members[i] = a.ID.String()
+	}
+	slices.Sort(members)
+	rule := jsontext.Value("null")
+	if co.Rule != nil {
+		rule = jsontext.Value(co.Rule)
+	}
+	raw, err := json.Marshal(map[string]any{"cohort": co.ID.String(), "rule": rule, "static_members": members})
+	if err != nil {
+		return [32]byte{}, err
+	}
+	v := jsontext.Value(raw)
+	if err := v.Canonicalize(); err != nil {
+		return [32]byte{}, err
+	}
+	return sha256.Sum256(v), nil
 }

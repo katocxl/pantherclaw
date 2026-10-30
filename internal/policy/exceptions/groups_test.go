@@ -11,25 +11,28 @@ import (
 )
 
 // TestHR477_GroupDigestBindsTheCohortAndWhatIsWaived: the digest a group's
-// change request binds changes with its cohort, rule, operations, owner
-// and expiry, so a confirmation covers only the group as requested.
+// change request binds changes with its cohort, the cohort's definition,
+// rule, operations, owner and expiry, so a confirmation covers only the
+// group as requested.
 // Covers: F602
 func TestHR477_GroupDigestBindsTheCohortAndWhatIsWaived(t *testing.T) {
 	g := Group{
 		OrgID: ids.MustParse[ids.Org]("01920000-0000-7000-8000-0000000000c1"), ID: ids.NewV7(), CohortID: ids.NewV7(),
 		BundleID: "org-policy", RuleID: "refunds", RuleDigest: make([]byte, 32), Operations: []string{"payments.refund.create"},
 		Reason: "quarter end", OwnerID: ids.NewV7(), RequestedBy: ids.NewV7(), RequestedExpiry: time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC),
+		CohortDigest: make([]byte, 32),
 	}
 	base, err := GroupDigest(g)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for name, change := range map[string]func(*Group){
-		"cohort":     func(x *Group) { x.CohortID = ids.NewV7() },
-		"rule":       func(x *Group) { x.RuleID = "other" },
-		"operations": func(x *Group) { x.Operations = []string{"payments.refund.create", "payments.refund.approve"} },
-		"owner":      func(x *Group) { x.OwnerID = ids.NewV7() },
-		"expiry":     func(x *Group) { x.RequestedExpiry = x.RequestedExpiry.Add(time.Hour) },
+		"cohort":            func(x *Group) { x.CohortID = ids.NewV7() },
+		"cohort definition": func(x *Group) { x.CohortDigest = append(make([]byte, 31), 1) },
+		"rule":              func(x *Group) { x.RuleID = "other" },
+		"operations":        func(x *Group) { x.Operations = []string{"payments.refund.create", "payments.refund.approve"} },
+		"owner":             func(x *Group) { x.OwnerID = ids.NewV7() },
+		"expiry":            func(x *Group) { x.RequestedExpiry = x.RequestedExpiry.Add(time.Hour) },
 	} {
 		x := g
 		x.Operations = append([]string(nil), g.Operations...)

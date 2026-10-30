@@ -66095,6 +66095,12 @@
             "title": "create_time",
             "description": "When it was requested.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "truncated",
+            "description": "Whether the cohort held more agents than the snapshot at approval\n could (2000), so later ones were left out; unset before.",
+            "nullable": true
           }
         },
         "title": "PolicyExceptionGroup",
@@ -67601,6 +67607,11 @@
             },
             "title": "by_cohort",
             "description": "by_cohort counts decisions per fleet cohort (key: the cohort id),\n only for cohorts the caller may read."
+          },
+          "cohortTruncated": {
+            "type": "boolean",
+            "title": "cohort_truncated",
+            "description": "cohort_truncated says the cohort held more agents than its snapshot\n could (2000): later ones were not replayed."
           }
         },
         "title": "PolicySimulation",

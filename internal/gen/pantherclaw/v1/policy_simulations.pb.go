@@ -527,9 +527,12 @@ type PolicySimulation struct {
 	CohortAgents int32 `protobuf:"varint,22,opt,name=cohort_agents,json=cohortAgents,proto3" json:"cohort_agents,omitempty"`
 	// by_cohort counts decisions per fleet cohort (key: the cohort id),
 	// only for cohorts the caller may read.
-	ByCohort      []*PolicySimulationGroup `protobuf:"bytes,23,rep,name=by_cohort,json=byCohort,proto3" json:"by_cohort,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ByCohort []*PolicySimulationGroup `protobuf:"bytes,23,rep,name=by_cohort,json=byCohort,proto3" json:"by_cohort,omitempty"`
+	// cohort_truncated says the cohort held more agents than its snapshot
+	// could (2000): later ones were not replayed.
+	CohortTruncated bool `protobuf:"varint,24,opt,name=cohort_truncated,json=cohortTruncated,proto3" json:"cohort_truncated,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *PolicySimulation) Reset() {
@@ -721,6 +724,13 @@ func (x *PolicySimulation) GetByCohort() []*PolicySimulationGroup {
 		return x.ByCohort
 	}
 	return nil
+}
+
+func (x *PolicySimulation) GetCohortTruncated() bool {
+	if x != nil {
+		return x.CohortTruncated
+	}
+	return false
 }
 
 type SimulatePolicyVersionResponse struct {
@@ -1329,7 +1339,7 @@ const file_pantherclaw_v1_policy_simulations_proto_rawDesc = "" +
 	"\x14PolicySimulationRole\x12\x12\n" +
 	"\x04role\x18\x01 \x01(\tR\x04role\x12\x1d\n" +
 	"\n" +
-	"newly_held\x18\x02 \x01(\x05R\tnewlyHeld\"\xfd\b\n" +
+	"newly_held\x18\x02 \x01(\x05R\tnewlyHeld\"\xa8\t\n" +
 	"\x10PolicySimulation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -1359,7 +1369,8 @@ const file_pantherclaw_v1_policy_simulations_proto_rawDesc = "" +
 	"\x05error\x18\x14 \x01(\tR\x05error\x12\x1b\n" +
 	"\tcohort_id\x18\x15 \x01(\tR\bcohortId\x12#\n" +
 	"\rcohort_agents\x18\x16 \x01(\x05R\fcohortAgents\x12B\n" +
-	"\tby_cohort\x18\x17 \x03(\v2%.pantherclaw.v1.PolicySimulationGroupR\bbyCohort\"a\n" +
+	"\tby_cohort\x18\x17 \x03(\v2%.pantherclaw.v1.PolicySimulationGroupR\bbyCohort\x12)\n" +
+	"\x10cohort_truncated\x18\x18 \x01(\bR\x0fcohortTruncated\"a\n" +
 	"\x1dSimulatePolicyVersionResponse\x12@\n" +
 	"\n" +
 	"simulation\x18\x01 \x01(\v2 .pantherclaw.v1.PolicySimulationR\n" +

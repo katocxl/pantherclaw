@@ -13,6 +13,8 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/katocxl/pantherclaw/internal/authority/replay"
 	"github.com/katocxl/pantherclaw/internal/cohorts"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -101,7 +103,7 @@ func simulationOf(r dbq.PcPolicySimulation) (simulation.Simulation, error) {
 		ID: r.ID, Version: r.VersionID, WindowStart: r.WindowStart, WindowEnd: r.WindowEnd, Max: int(r.MaxEvaluations),
 		State: simulation.State(r.State), Evaluated: int(r.Evaluated), Report: simulation.NewReport(), RequestedBy: r.RequestedBy,
 		Created: r.CreatedAt, Started: r.StartedAt, Finished: r.FinishedAt,
-		Cohort: r.CohortID, CohortAgents: r.CohortAgents,
+		Cohort: r.CohortID, CohortAgents: r.CohortAgents, CohortTruncated: r.CohortTruncated.Bool,
 	}
 	copy(s.ContentDigest[:], r.ContentDigest)
 	if r.Error != nil {
@@ -152,6 +154,7 @@ func (t *txn) Insert(ctx context.Context, s simulation.NewSimulation) (simulatio
 		OrgID: t.org, ID: s.ID, VersionID: s.Version, ContentDigest: s.ContentDigest[:], Days: int32(s.Days), //nolint:gosec // ≤ 30
 		MaxEvaluations: int32(s.Max), RequestedBy: s.RequestedBy, //nolint:gosec // ≤ 50 000
 		CohortID: s.Cohort, CohortAgents: s.CohortAgents,
+		CohortTruncated: truncatedOf(s),
 	})
 	switch {
 	case db.IsUniqueViolation(err):
@@ -379,4 +382,10 @@ func (t *txn) Memberships(ctx context.Context) (map[ids.UUID][]ids.UUID, error) 
 // ReadableCohorts implements simulation.Tx.
 func (t *txn) ReadableCohorts(ctx context.Context, c tenancy.Caller, list []ids.UUID) (map[ids.UUID]bool, error) {
 	return cohorts.ReadableCohorts(ctx, t.tx, c, list)
+}
+
+// truncatedOf is a new simulation's cohort_truncated: unset for an org
+// simulation.
+func truncatedOf(s simulation.NewSimulation) pgtype.Bool {
+	return pgtype.Bool{Bool: s.CohortTruncated, Valid: s.Cohort != nil}
 }

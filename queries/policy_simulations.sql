@@ -7,10 +7,10 @@
 
 -- name: InsertPolicySimulation :one
 INSERT INTO pc.policy_simulations (org_id, id, version_id, content_digest, window_start, window_end, max_evaluations, requested_by,
-    cohort_id, cohort_agents)
+    cohort_id, cohort_agents, cohort_truncated)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(version_id), sqlc.arg(content_digest),
     now() - make_interval(days => sqlc.arg(days)::integer), now(), sqlc.arg(max_evaluations), sqlc.arg(requested_by),
-    sqlc.narg(cohort_id)::uuid, sqlc.narg(cohort_agents)::uuid[])
+    sqlc.narg(cohort_id)::uuid, sqlc.narg(cohort_agents)::uuid[], sqlc.narg(cohort_truncated)::boolean)
 RETURNING *;
 
 -- How many days back recorded decisions can still be replayed: the shorter

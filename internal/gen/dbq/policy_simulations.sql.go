@@ -12,6 +12,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -24,7 +25,7 @@ WHERE org_id = $11 AND id = $12 AND state = 'RUNNING'
   AND evaluated = $13
   AND cursor_txn IS NOT DISTINCT FROM $14
   AND cursor_evaluation IS NOT DISTINCT FROM $15
-RETURNING org_id, id, version_id, content_digest, window_start, window_end, max_evaluations, state, evaluated, counts, by_workflow, burden, cursor_created_at, cursor_txn, cursor_evaluation, requested_by, created_at, started_at, finished_at, error, cohort_id, cohort_agents, by_cohort
+RETURNING org_id, id, version_id, content_digest, window_start, window_end, max_evaluations, state, evaluated, counts, by_workflow, burden, cursor_created_at, cursor_txn, cursor_evaluation, requested_by, created_at, started_at, finished_at, error, cohort_id, cohort_agents, cohort_truncated, by_cohort
 `
 
 type AdvancePolicySimulationParams struct {
@@ -91,6 +92,7 @@ func (q *Queries) AdvancePolicySimulation(ctx context.Context, arg AdvancePolicy
 		&i.Error,
 		&i.CohortID,
 		&i.CohortAgents,
+		&i.CohortTruncated,
 		&i.ByCohort,
 	)
 	return i, err
@@ -99,7 +101,7 @@ func (q *Queries) AdvancePolicySimulation(ctx context.Context, arg AdvancePolicy
 const cancelPolicySimulation = `-- name: CancelPolicySimulation :one
 UPDATE pc.policy_simulations SET state = 'CANCELLED'
 WHERE org_id = $1 AND id = $2 AND state IN ('QUEUED', 'RUNNING')
-RETURNING org_id, id, version_id, content_digest, window_start, window_end, max_evaluations, state, evaluated, counts, by_workflow, burden, cursor_created_at, cursor_txn, cursor_evaluation, requested_by, created_at, started_at, finished_at, error, cohort_id, cohort_agents, by_cohort
+RETURNING org_id, id, version_id, content_digest, window_start, window_end, max_evaluations, state, evaluated, counts, by_workflow, burden, cursor_created_at, cursor_txn, cursor_evaluation, requested_by, created_at, started_at, finished_at, error, cohort_id, cohort_agents, cohort_truncated, by_cohort
 `
 
 func (q *Queries) CancelPolicySimulation(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcPolicySimulation, error) {
@@ -128,13 +130,14 @@ func (q *Queries) CancelPolicySimulation(ctx context.Context, orgID ids.OrgID, i
 		&i.Error,
 		&i.CohortID,
 		&i.CohortAgents,
+		&i.CohortTruncated,
 		&i.ByCohort,
 	)
 	return i, err
 }
 
 const getPolicySimulation = `-- name: GetPolicySimulation :one
-SELECT org_id, id, version_id, content_digest, window_start, window_end, max_evaluations, state, evaluated, counts, by_workflow, burden, cursor_created_at, cursor_txn, cursor_evaluation, requested_by, created_at, started_at, finished_at, error, cohort_id, cohort_agents, by_cohort FROM pc.policy_simulations WHERE org_id = $1 AND id = $2
+SELECT org_id, id, version_id, content_digest, window_start, window_end, max_evaluations, state, evaluated, counts, by_workflow, burden, cursor_created_at, cursor_txn, cursor_evaluation, requested_by, created_at, started_at, finished_at, error, cohort_id, cohort_agents, cohort_truncated, by_cohort FROM pc.policy_simulations WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetPolicySimulation(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcPolicySimulation, error) {
@@ -163,6 +166,7 @@ func (q *Queries) GetPolicySimulation(ctx context.Context, orgID ids.OrgID, iD i
 		&i.Error,
 		&i.CohortID,
 		&i.CohortAgents,
+		&i.CohortTruncated,
 		&i.ByCohort,
 	)
 	return i, err
@@ -171,23 +175,24 @@ func (q *Queries) GetPolicySimulation(ctx context.Context, orgID ids.OrgID, iD i
 const insertPolicySimulation = `-- name: InsertPolicySimulation :one
 
 INSERT INTO pc.policy_simulations (org_id, id, version_id, content_digest, window_start, window_end, max_evaluations, requested_by,
-    cohort_id, cohort_agents)
+    cohort_id, cohort_agents, cohort_truncated)
 VALUES ($1, $2, $3, $4,
     now() - make_interval(days => $5::integer), now(), $6, $7,
-    $8::uuid, $9::uuid[])
-RETURNING org_id, id, version_id, content_digest, window_start, window_end, max_evaluations, state, evaluated, counts, by_workflow, burden, cursor_created_at, cursor_txn, cursor_evaluation, requested_by, created_at, started_at, finished_at, error, cohort_id, cohort_agents, by_cohort
+    $8::uuid, $9::uuid[], $10::boolean)
+RETURNING org_id, id, version_id, content_digest, window_start, window_end, max_evaluations, state, evaluated, counts, by_workflow, burden, cursor_created_at, cursor_txn, cursor_evaluation, requested_by, created_at, started_at, finished_at, error, cohort_id, cohort_agents, cohort_truncated, by_cohort
 `
 
 type InsertPolicySimulationParams struct {
-	OrgID          ids.OrgID
-	ID             ids.UUID
-	VersionID      ids.UUID
-	ContentDigest  []byte
-	Days           int32
-	MaxEvaluations int32
-	RequestedBy    string
-	CohortID       *ids.UUID
-	CohortAgents   []ids.UUID
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	VersionID       ids.UUID
+	ContentDigest   []byte
+	Days            int32
+	MaxEvaluations  int32
+	RequestedBy     string
+	CohortID        *ids.UUID
+	CohortAgents    []ids.UUID
+	CohortTruncated pgtype.Bool
 }
 
 // SPDX-License-Identifier: BUSL-1.1
@@ -207,6 +212,7 @@ func (q *Queries) InsertPolicySimulation(ctx context.Context, arg InsertPolicySi
 		arg.RequestedBy,
 		arg.CohortID,
 		arg.CohortAgents,
+		arg.CohortTruncated,
 	)
 	var i PcPolicySimulation
 	err := row.Scan(
@@ -232,6 +238,7 @@ func (q *Queries) InsertPolicySimulation(ctx context.Context, arg InsertPolicySi
 		&i.Error,
 		&i.CohortID,
 		&i.CohortAgents,
+		&i.CohortTruncated,
 		&i.ByCohort,
 	)
 	return i, err
@@ -281,7 +288,7 @@ func (q *Queries) InsertSimulationSample(ctx context.Context, arg InsertSimulati
 }
 
 const listPolicySimulations = `-- name: ListPolicySimulations :many
-SELECT org_id, id, version_id, content_digest, window_start, window_end, max_evaluations, state, evaluated, counts, by_workflow, burden, cursor_created_at, cursor_txn, cursor_evaluation, requested_by, created_at, started_at, finished_at, error, cohort_id, cohort_agents, by_cohort FROM pc.policy_simulations
+SELECT org_id, id, version_id, content_digest, window_start, window_end, max_evaluations, state, evaluated, counts, by_workflow, burden, cursor_created_at, cursor_txn, cursor_evaluation, requested_by, created_at, started_at, finished_at, error, cohort_id, cohort_agents, cohort_truncated, by_cohort FROM pc.policy_simulations
 WHERE org_id = $1
   AND ($2::uuid IS NULL OR id < $2)
 ORDER BY id DESC
@@ -320,6 +327,7 @@ func (q *Queries) ListPolicySimulations(ctx context.Context, orgID ids.OrgID, be
 			&i.Error,
 			&i.CohortID,
 			&i.CohortAgents,
+			&i.CohortTruncated,
 			&i.ByCohort,
 		); err != nil {
 			return nil, err
@@ -395,7 +403,7 @@ func (q *Queries) ListSimulationSamples(ctx context.Context, arg ListSimulationS
 }
 
 const lockPolicySimulation = `-- name: LockPolicySimulation :one
-SELECT org_id, id, version_id, content_digest, window_start, window_end, max_evaluations, state, evaluated, counts, by_workflow, burden, cursor_created_at, cursor_txn, cursor_evaluation, requested_by, created_at, started_at, finished_at, error, cohort_id, cohort_agents, by_cohort FROM pc.policy_simulations WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, version_id, content_digest, window_start, window_end, max_evaluations, state, evaluated, counts, by_workflow, burden, cursor_created_at, cursor_txn, cursor_evaluation, requested_by, created_at, started_at, finished_at, error, cohort_id, cohort_agents, cohort_truncated, by_cohort FROM pc.policy_simulations WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockPolicySimulation(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcPolicySimulation, error) {
@@ -424,6 +432,7 @@ func (q *Queries) LockPolicySimulation(ctx context.Context, orgID ids.OrgID, iD 
 		&i.Error,
 		&i.CohortID,
 		&i.CohortAgents,
+		&i.CohortTruncated,
 		&i.ByCohort,
 	)
 	return i, err
@@ -553,7 +562,7 @@ func (q *Queries) SimulationSampleCounts(ctx context.Context, orgID ids.OrgID, s
 const startPolicySimulation = `-- name: StartPolicySimulation :one
 UPDATE pc.policy_simulations SET state = 'RUNNING'
 WHERE org_id = $1 AND id = $2 AND state = 'QUEUED'
-RETURNING org_id, id, version_id, content_digest, window_start, window_end, max_evaluations, state, evaluated, counts, by_workflow, burden, cursor_created_at, cursor_txn, cursor_evaluation, requested_by, created_at, started_at, finished_at, error, cohort_id, cohort_agents, by_cohort
+RETURNING org_id, id, version_id, content_digest, window_start, window_end, max_evaluations, state, evaluated, counts, by_workflow, burden, cursor_created_at, cursor_txn, cursor_evaluation, requested_by, created_at, started_at, finished_at, error, cohort_id, cohort_agents, cohort_truncated, by_cohort
 `
 
 // A conditional start: nothing happens unless the simulation is queued.
@@ -583,6 +592,7 @@ func (q *Queries) StartPolicySimulation(ctx context.Context, orgID ids.OrgID, iD
 		&i.Error,
 		&i.CohortID,
 		&i.CohortAgents,
+		&i.CohortTruncated,
 		&i.ByCohort,
 	)
 	return i, err

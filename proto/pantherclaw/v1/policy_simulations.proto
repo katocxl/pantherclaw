@@ -173,6 +173,9 @@ message PolicySimulation {
   // by_cohort counts decisions per fleet cohort (key: the cohort id),
   // only for cohorts the caller may read.
   repeated PolicySimulationGroup by_cohort = 23;
+  // cohort_truncated says the cohort held more agents than its snapshot
+  // could (2000): later ones were not replayed.
+  bool cohort_truncated = 24;
 }
 
 message SimulatePolicyVersionResponse {
