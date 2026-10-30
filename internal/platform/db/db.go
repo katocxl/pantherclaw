@@ -166,6 +166,8 @@ func isLoopback(host string) bool {
 // Pool is a pgx connection pool configured for PantherClaw.
 type Pool struct {
 	pool *pgxpool.Pool
+	// timeline watches for a promotion while the pool runs (D213).
+	timeline *timelineWatch
 }
 
 // Open creates a pool and checks connectivity.
@@ -173,6 +175,14 @@ func Open(ctx context.Context, c Config) (*Pool, error) {
 	pc, err := c.poolConfig()
 	if err != nil {
 		return nil, err
+	}
+	w := &timelineWatch{}
+	verify := pc.AfterConnect
+	pc.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		if err := verify(ctx, conn); err != nil {
+			return err
+		}
+		return w.check(ctx, conn)
 	}
 	pool, err := pgxpool.NewWithConfig(ctx, pc)
 	if err != nil {
@@ -182,7 +192,7 @@ func Open(ctx context.Context, c Config) (*Pool, error) {
 		pool.Close()
 		return nil, fmt.Errorf("db: ping: %w", err)
 	}
-	return &Pool{pool: pool}, nil
+	return &Pool{pool: pool, timeline: w}, nil
 }
 
 func (c Config) poolConfig() (*pgxpool.Config, error) {

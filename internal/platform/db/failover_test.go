@@ -3,7 +3,10 @@
 
 package db
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 // TestHR496_PromotionHoldDecision: a moved timeline holds unless declared
 // sync is confirmed by the primary's settings; a first start records the
@@ -38,5 +41,52 @@ func TestHR496_PromotionHoldDecision(t *testing.T) {
 	}
 	if Replication("semi").Valid() || !ReplicationSync.Valid() || !ReplicationAsync.Valid() {
 		t.Fatal("Replication.Valid")
+	}
+}
+
+// TestHR496_RunningProcessRefusesAnUnverifiedPromotion: while running, a
+// new timeline is accepted (and recorded) only when sync was verified at
+// start and on the new primary; otherwise every later connection is
+// refused, the same timeline included, until a restart (G0 M19 D213).
+// Covers: PN-010.7
+func TestHR496_RunningProcessRefusesAnUnverifiedPromotion(t *testing.T) {
+	var unarmed timelineWatch
+	if rec, err := unarmed.observe(9, false); rec || err != nil {
+		t.Fatalf("unarmed watch: %v %v", rec, err)
+	}
+	if (*timelineWatch)(nil).isBroken() || (&Pool{}).TimelineChanged() {
+		t.Fatal("a pool without a watch reports a changed timeline")
+	}
+	cases := []struct {
+		name               string
+		startSync, newSync bool
+		accept             bool
+	}{
+		{name: "async promotion while running", startSync: false, newSync: true},
+		{name: "sync at both ends", startSync: true, newSync: true, accept: true},
+		{name: "sync promotion to an unverified primary", startSync: true, newSync: false},
+	}
+	for _, c := range cases {
+		w := &timelineWatch{}
+		w.arm(Promotion{Timeline: 1, Sync: c.startSync})
+		if rec, err := w.observe(1, false); rec || err != nil {
+			t.Fatalf("%s: same timeline: %v %v", c.name, rec, err)
+		}
+		rec, err := w.observe(2, c.newSync)
+		if c.accept {
+			if !rec || err != nil {
+				t.Fatalf("%s: %v %v, want accepted and recorded", c.name, rec, err)
+			}
+			if rec, err := w.observe(2, false); rec || err != nil {
+				t.Fatalf("%s: the accepted timeline again: %v %v", c.name, rec, err)
+			}
+			continue
+		}
+		if !errors.Is(err, ErrTimelineChanged) || rec || !w.isBroken() {
+			t.Fatalf("%s: %v %v broken=%v, want refused", c.name, rec, err, w.isBroken())
+		}
+		if _, err := w.observe(1, true); !errors.Is(err, ErrTimelineChanged) {
+			t.Fatalf("%s: a later connection was accepted: %v", c.name, err)
+		}
 	}
 }

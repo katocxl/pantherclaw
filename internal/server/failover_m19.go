@@ -5,7 +5,9 @@ package server
 
 import (
 	"context"
+	"io"
 	"log/slog"
+	"net/http"
 
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
@@ -36,4 +38,18 @@ func holdAfterPromotion(ctx context.Context, cfg *Config, pool *db.Pool, log *sl
 	cfg.Maintenance.Hold = true
 	telemetry.SetMaintenanceHold(true)
 	return nil
+}
+
+// livez answers /livez: ok, unless the pool saw a promotion it could not
+// accept (D213), so the orchestrator restarts the process into the
+// start-up hold.
+func livez(pool *db.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		if pool.TimelineChanged() {
+			http.Error(w, "database promoted; restart into the maintenance hold", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "ok\n")
+	}
 }

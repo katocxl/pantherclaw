@@ -140,7 +140,8 @@ func (rd readiness) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 	c := readyChecks{DB: checkFailed, Schema: checkFailed, Workers: checkSkipped, Hold: checkOK}
-	if rd.held {
+	if rd.held || rd.pool.TimelineChanged() {
+		// A promotion this process cannot accept (D213) holds it too.
 		c.Hold = checkFailed
 	}
 	err := rd.pool.InGlobalTx(ctx, db.GlobalHealth, func(ctx context.Context, tx db.GlobalTx) error {

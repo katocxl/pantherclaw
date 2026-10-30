@@ -8,6 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // Promotion detection (G0 M19 D202, D207, HR-496). A promotion moves the
@@ -92,6 +95,9 @@ func (p *Pool) CheckPromotion(ctx context.Context, r Replication) (Promotion, er
 	if err != nil {
 		return Promotion{}, fmt.Errorf("db: check the primary timeline: %w", err)
 	}
+	if p.timeline != nil {
+		p.timeline.arm(out)
+	}
 	return out, nil
 }
 
@@ -147,3 +153,97 @@ func decidePromotion(r Replication, timeline int64, ack *int64, commit, standbys
 		return out, false
 	}
 }
+
+// ErrTimelineChanged reports a promotion the running process cannot
+// accept (G0 M19 D213, HR-496): the database moved to a new timeline and
+// synchronous replication was not verified at both ends. From then on the
+// pool refuses every connection, so nothing is decided; /readyz and
+// /livez fail, and the orchestrator restarts the process into the start-up
+// hold until `keys bump-epochs`.
+var ErrTimelineChanged = errors.New("db: the primary was promoted without verified synchronous replication; restart into the maintenance hold")
+
+// timelineWatch is the running process's view of the primary's timeline,
+// armed by CheckPromotion. Every new connection reads the timeline again:
+// the same one passes; a new one passes only when this process verified
+// sync at start and the new primary verifies it too, and is then
+// recorded; anything else breaks the pool for good (D213).
+type timelineWatch struct {
+	mu       sync.Mutex
+	armed    bool
+	timeline int64
+	sync     bool // sync verified at start
+	broken   bool
+}
+
+func (w *timelineWatch) arm(p Promotion) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.armed, w.timeline, w.sync = true, p.Timeline, p.Sync
+}
+
+func (w *timelineWatch) isBroken() bool {
+	if w == nil {
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.broken
+}
+
+// observe decides one connection's timeline; record says the caller must
+// record tl as the acknowledged timeline before using the connection.
+func (w *timelineWatch) observe(tl int64, newSync bool) (record bool, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	switch {
+	case !w.armed:
+		return false, nil
+	case w.broken:
+		return false, ErrTimelineChanged
+	case tl == w.timeline:
+		return false, nil
+	case w.sync && newSync:
+		w.timeline = tl
+		return true, nil
+	default:
+		w.broken = true
+		return false, ErrTimelineChanged
+	}
+}
+
+// check runs on every new connection (AfterConnect).
+func (w *timelineWatch) check(ctx context.Context, conn *pgx.Conn) error {
+	w.mu.Lock()
+	armed := w.armed
+	w.mu.Unlock()
+	if !armed {
+		return nil
+	}
+	var tl int64
+	var commit, standbys string
+	if err := conn.QueryRow(ctx, currentTimeline+`, current_setting('synchronous_commit'),
+		current_setting('synchronous_standby_names')`).Scan(&tl, &commit, &standbys); err != nil {
+		return err
+	}
+	record, err := w.observe(tl, commit == "remote_apply" && strings.TrimSpace(standbys) != "")
+	if err != nil || !record {
+		return err
+	}
+	// The new primary applied every commit before it was promoted, so
+	// nothing was lost: record its timeline, so a restart does not hold.
+	return pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, globalSetup, string(GlobalFailover)); err != nil {
+			return err
+		}
+		tag, err := tx.Exec(ctx, `UPDATE pc.db_primary_timeline SET timeline = $1, update_time = now()`, tl)
+		if err == nil && tag.RowsAffected() != 1 {
+			err = ErrNoTimelineRow
+		}
+		return err
+	})
+}
+
+// TimelineChanged reports that the pool saw a promotion it could not
+// accept and refuses every connection (D213): the process is not ready
+// and not live, and must restart into the start-up hold.
+func (p *Pool) TimelineChanged() bool { return p != nil && p.timeline.isBroken() }
