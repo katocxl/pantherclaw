@@ -88,7 +88,7 @@ func TestHR541_DraftingAnAutomationNeedsManageAPersonAndTheSwitchOn(t *testing.T
 	if _, err := f.svc.DraftAutomation(f.as(td.KindUser, td.RoleViewer), automationText); pcerr.ReasonOf(err) != "PERMISSION_DENIED" {
 		t.Fatalf("viewer: %v", err)
 	}
-	if _, err := f.svc.DraftAutomation(f.as(td.KindServiceAccount, td.RoleAutomationAuthor), automationText); !errors.Is(err, app.ErrHuman) {
+	if _, err := f.svc.DraftAutomation(f.as(td.KindServiceAccount, td.RoleAutomationAuthor), automationText); pcerr.CodeOf(err) != pcerr.PermissionDenied {
 		t.Fatalf("service account: %v", err)
 	}
 	if n := f.provider.calls.Load(); n != 0 {

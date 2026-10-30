@@ -80,11 +80,9 @@ func BuiltinParams(pkgs ...*defs.Package) []Param {
 }
 
 func canCompare(t defs.ParamType) bool {
-	switch t {
-	case defs.TypeMoney, defs.TypeDecimal, defs.TypeInteger, defs.TypeBoolean, defs.TypeEnum, defs.TypeIdentifier:
-		return true
-	}
-	return false
+	return slices.Contains([]defs.ParamType{
+		defs.TypeMoney, defs.TypeDecimal, defs.TypeInteger, defs.TypeBoolean, defs.TypeEnum, defs.TypeIdentifier,
+	}, t)
 }
 
 // ordered reports whether a type has an order. CEL refuses one on strings.
@@ -193,8 +191,11 @@ func (f Param) literal(value, currency string) (string, bool) {
 		return render.CELQuote(value), slices.Contains(f.Values, value)
 	case defs.TypeIdentifier:
 		return render.CELQuote(value), true
+	case defs.TypeIdentifierList, defs.TypeText, defs.TypeCommand, defs.TypeContent, defs.TypePath, defs.TypeQueryFilter:
+		return "", false
 	}
 	return "", false
+	}
 }
 
 // renderPolicy is a rule's `when`. A parameter may be absent, so each read has

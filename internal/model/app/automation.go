@@ -293,7 +293,6 @@ func renderGuard(cs []guardCondition) (string, bool) {
 // builder turns a draft into a definition, keeping what a model does not
 // choose.
 type builder struct {
-	used map[string]bool
 	// fields are the event fields the guards read.
 	fields map[string]bool
 	event  bool
