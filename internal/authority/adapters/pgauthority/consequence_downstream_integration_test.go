@@ -330,9 +330,10 @@ func TestHR451_ADownstreamStateComesFromTheConsequencesOwnEvidence(t *testing.T)
 // TestAConsequenceWithNoKnownEffectHoldsTheIrreversibleGate (G0 M17 D146,
 // HR-280): a consequence transaction counts toward the run's unknown
 // irreversible outcomes like any other of its transactions. A confirmed
-// refund whose predicted payout has no known effect yet leaves the run
-// with one, so its next wait step is UNKNOWN and a person decides; once
-// the payout is paid there is none.
+// refund whose predicted payout has a missing, pending or UNKNOWN effect
+// leaves the run with one, so its next wait step is UNKNOWN and a person
+// decides (TestAnUnknownIrreversibleOutcomeMakesTheWaitUnknown has the
+// step); once the payout is paid there is none.
 //
 // Covers: F414
 func TestAConsequenceWithNoKnownEffectHoldsTheIrreversibleGate(t *testing.T) {
@@ -367,6 +368,15 @@ func TestAConsequenceWithNoKnownEffectHoldsTheIrreversibleGate(t *testing.T) {
 	if n := unknown(); n != 1 {
 		t.Fatalf("with the payout in transit (effect %q): %d unknown irreversible, want 1", effect(cons[0]), n)
 	}
+	// A verifier's window that closed on nothing conclusive (AtDeadline).
+	setEffect := func(state string) {
+		d.db.AdminExec(t, "UPDATE pc.transactions SET effect_state = $2 WHERE id = $1", cons[0], state)
+	}
+	setEffect("UNKNOWN")
+	if n := unknown(); n != 1 {
+		t.Fatalf("with the payout's effect UNKNOWN: %d unknown irreversible, want 1", n)
+	}
+	setEffect("PROPAGATION_PENDING")
 	d.report(cons[0], "paid")
 	if n := unknown(); n != 0 {
 		t.Fatalf("with the payout paid (effect %q): %d unknown irreversible, want 0", effect(cons[0]), n)
