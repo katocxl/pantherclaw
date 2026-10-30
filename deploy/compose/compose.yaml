@@ -5,6 +5,8 @@
 #   core          PostgreSQL (the default profile)
 #   test          throwaway PostgreSQL on 5433 and a mock OpenID provider,
 #                 for `task test:integration`
+#   failover      a PostgreSQL primary on 5434 and its synchronous standby
+#                 on 5435, for `task failover` (M19)
 #   identity      Keycloak dev realm (M2)
 #   full-demo     PostgreSQL and Keycloak
 #   observability Grafana with an OTLP receiver, Tempo, Prometheus and Loki
@@ -75,6 +77,65 @@ services:
       timeout: 3s
       retries: 30
 
+  # Failover pair for `task failover` (G0 M19 D202): a primary on 5434 and
+  # a streaming hot standby on 5435 that the primary waits for
+  # (synchronous_commit=remote_apply, FIRST 1). Throwaway data in tmpfs;
+  # the tests kill the primary and promote the standby. The asynchronous
+  # variant turns synchronous_standby_names off at run time.
+  pg-primary:
+    image: postgres:17-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
+    profiles: ["failover"]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PC_PG_TEST_PASSWORD:?set PC_PG_TEST_PASSWORD in deploy/compose/.env (copy .env.example)}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+      PC_PG_TEST_PASSWORD: ${PC_PG_TEST_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - max_wal_senders=4
+      - -c
+      - synchronous_commit=remote_apply
+      - -c
+      - max_connections=300
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - ./failover/primary-init.sh:/docker-entrypoint-initdb.d/10-replication.sh:ro
+    tmpfs:
+      - /var/lib/postgresql/data
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  pg-standby:
+    image: postgres:17-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
+    profiles: ["failover"]
+    depends_on:
+      pg-primary: {condition: service_healthy}
+    environment:
+      PGDATA: /var/lib/postgresql/data/pgdata
+      PC_PG_TEST_PASSWORD: ${PC_PG_TEST_PASSWORD:?set PC_PG_TEST_PASSWORD in deploy/compose/.env (copy .env.example)}
+    entrypoint: ["/bin/sh", "/failover/standby.sh"]
+    ports:
+      - "127.0.0.1:5435:5432"
+    volumes:
+      - ./failover/standby.sh:/failover/standby.sh:ro
+    tmpfs:
+      - /var/lib/postgresql/data
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
 
   # Mock OpenID provider for integration tests (navikt/mock-oauth2-server):
   # issuer http://127.0.0.1:8181/default, any client secret, a login form
