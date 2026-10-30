@@ -9,15 +9,24 @@ import (
 	"strings"
 	"testing"
 
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/model/ports"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 )
 
-const goodRule = `{"kind":"FORBID","summary":"Forbid refunds","operations":["payments.*"],"when":"true","reason":"NO_REFUNDS",` +
+const goodRule = `{"kind":"FORBID","summary":"Forbid refunds","operations":["payments.*"],"conditions":[],"reason":"NO_REFUNDS",` +
 	`"approval":null,"step_up":null,"constraint":null}`
 
 var visibleOps = []string{"payments.refund.create", "tickets.close"}
+
+var testFields = fieldsOf([]Param{
+	{Name: "amount", Type: defs.TypeMoney},
+	{Name: "count", Type: defs.TypeInteger},
+	{Name: "live", Type: defs.TypeBoolean},
+	{Name: "reference", Type: defs.TypeIdentifier},
+	{Name: "tier", Type: defs.TypeEnum, Values: []string{"gold"}},
+})
 
 func policyAnswer(rules string) []byte {
 	return []byte(`{"rules":[` + rules + `],"ambiguities":[]}`)
@@ -52,8 +61,8 @@ func closed(t *testing.T, s any) {
 
 // Covers: F181
 func TestT235_ThePolicySchemaIsClosedAndCannotWeakenARule(t *testing.T) {
-	closed(t, policySchema())
-	raw, err := policySchema().Encode()
+	closed(t, policySchema(testFields))
+	raw, err := policySchema(testFields).Encode()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +76,7 @@ func TestT235_ThePolicySchemaIsClosedAndCannotWeakenARule(t *testing.T) {
 // Covers: F181
 func TestHR543_OnlyAStrictlyValidPolicyAnswerIsAccepted(t *testing.T) {
 	call := ids.NewV7()
-	rules, as, err := parsePolicy("forbid refunds", policyAnswer(goodRule), call, visibleOps)
+	rules, as, err := parsePolicy("forbid refunds", policyAnswer(goodRule), call, visibleOps, testFields)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,11 +95,11 @@ func TestHR543_OnlyAStrictlyValidPolicyAnswerIsAccepted(t *testing.T) {
 		"unreadable op":  string(policyAnswer(strings.Replace(goodRule, "payments.*", "secrets.*", 1))),
 		"unreadable op2": string(policyAnswer(strings.Replace(goodRule, "payments.*", "payments.refund.delete", 1))),
 		"bad reason":     string(policyAnswer(strings.Replace(goodRule, "NO_REFUNDS", "no refunds", 1))),
-		"missing fields": string(policyAnswer(`{"kind":"REQUIRE_APPROVAL","summary":"x","operations":["tickets.close"],"when":"true","reason":"NEEDS_OK"}`)),
+		"missing fields": string(policyAnswer(`{"kind":"REQUIRE_APPROVAL","summary":"x","operations":["tickets.close"],"conditions":[],"reason":"NEEDS_OK"}`)),
 		"wrong type":     `{"rules":"everything","ambiguities":[]}`,
 	}
 	for name, output := range refused {
-		if _, _, err := parsePolicy("forbid refunds", []byte(output), call, visibleOps); !errors.Is(err, ports.ErrInvalidOutput) {
+		if _, _, err := parsePolicy("forbid refunds", []byte(output), call, visibleOps, testFields); !errors.Is(err, ports.ErrInvalidOutput) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
@@ -102,14 +111,14 @@ func TestHR543_VagueTermsAreSettledOrTheDraftIsRefused(t *testing.T) {
 	if err := CheckAmbiguities(text, nil); !errors.Is(err, ports.ErrInvalidOutput) {
 		t.Fatalf("settled silently: %v", err)
 	}
-	if err := CheckAmbiguities(text, []Ambiguity{{Phrase: "a lot of money", ProposedThreshold: "over 1000 USD"}}); err != nil {
+	if err := CheckAmbiguities(text, []Ambiguity{{Term: "a lot of money", ProposedThreshold: "over 1000 USD"}}); err != nil {
 		t.Fatal(err)
 	}
 	bad := map[string]Ambiguity{
-		"no threshold":    {Phrase: "a lot of money"},
-		"not in the text": {Phrase: "many dollars", ProposedThreshold: "x"},
-		"control":         {Phrase: "a lot of money", ProposedThreshold: "1\n2"},
-		"too long":        {Phrase: "a lot of money", ProposedThreshold: strings.Repeat("x", maxAmbiguity+1)},
+		"no threshold":    {Term: "a lot of money"},
+		"not in the text": {Term: "many dollars", ProposedThreshold: "x"},
+		"control":         {Term: "a lot of money", ProposedThreshold: "1\n2"},
+		"too long":        {Term: "a lot of money", ProposedThreshold: strings.Repeat("x", maxAmbiguity+1)},
 	}
 	for name, a := range bad {
 		if err := CheckAmbiguities(text, []Ambiguity{a}); !errors.Is(err, ports.ErrInvalidOutput) {

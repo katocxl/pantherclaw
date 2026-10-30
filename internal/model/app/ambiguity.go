@@ -14,9 +14,10 @@ import (
 
 // Ambiguity is a vague term of a person's text and the concrete threshold
 // the model proposes for it, which the reviewer confirms (D304). It is shown,
-// and it changes nothing by itself.
+// and it changes nothing by itself. It is stored with a draft, so a later
+// reviewer sees it too (D314).
 type Ambiguity struct {
-	Phrase            string `json:"phrase"`
+	Term              string `json:"term"`
 	ProposedThreshold string `json:"proposed_threshold"`
 }
 
@@ -30,7 +31,7 @@ const (
 // AmbiguitySchema is the schema of a draft's ambiguities.
 func AmbiguitySchema() ports.Schema {
 	return ports.Array(ports.Object(map[string]ports.Schema{
-		"phrase":             ports.Text("the vague words, exactly as the person wrote them"),
+		"term":               ports.Text("the vague words, exactly as the person wrote them"),
 		"proposed_threshold": ports.Text("a concrete value for the reviewer to confirm"),
 	}))
 }
@@ -47,13 +48,13 @@ func CheckAmbiguities(text string, as []Ambiguity) error {
 	}
 	lower := strings.ToLower(text)
 	for _, a := range as {
-		if !shownLine(a.Phrase) || !shownLine(a.ProposedThreshold) || !strings.Contains(lower, strings.ToLower(a.Phrase)) {
+		if !shownLine(a.Term) || !shownLine(a.ProposedThreshold) || !strings.Contains(lower, strings.ToLower(a.Term)) {
 			return ports.ErrInvalidOutput
 		}
 	}
 	for _, term := range vagueTerm.FindAllString(text, -1) {
 		settled := slices.ContainsFunc(as, func(a Ambiguity) bool {
-			return strings.Contains(strings.ToLower(a.Phrase), strings.ToLower(term))
+			return strings.Contains(strings.ToLower(a.Term), strings.ToLower(term))
 		})
 		if !settled {
 			return ports.ErrInvalidOutput

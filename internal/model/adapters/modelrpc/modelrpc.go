@@ -13,6 +13,7 @@ import (
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/model/app"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/search"
 	"github.com/katocxl/pantherclaw/internal/search/adapters/searchrpc"
 )
@@ -91,7 +92,7 @@ func (h *Handler) ClearModelKey(ctx context.Context, _ *pantherclawv1.ClearModel
 func ambiguities(in []app.Ambiguity) []*pantherclawv1.DraftAmbiguity {
 	out := make([]*pantherclawv1.DraftAmbiguity, 0, len(in))
 	for _, a := range in {
-		out = append(out, &pantherclawv1.DraftAmbiguity{Phrase: a.Phrase, ProposedThreshold: a.ProposedThreshold})
+		out = append(out, &pantherclawv1.DraftAmbiguity{Term: a.Term, ProposedThreshold: a.ProposedThreshold})
 	}
 	return out
 }
@@ -105,6 +106,35 @@ func (h *Handler) DraftQuery(ctx context.Context, r *pantherclawv1.DraftQueryReq
 	return &pantherclawv1.DraftQueryResponse{
 		Interpretation: searchrpc.InterpretationProto(d.Interpretation), Ambiguities: ambiguities(d.Thresholds), CallId: d.Call.String(),
 	}, nil
+}
+
+// DraftAutomation implements ModelServiceHandler. It stores a DRAFT and enables
+// nothing.
+func (h *Handler) DraftAutomation(ctx context.Context, r *pantherclawv1.DraftAutomationRequest) (*pantherclawv1.DraftAutomationResponse, error) {
+	d, err := h.svc.DraftAutomation(ctx, r.GetText())
+	if err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.DraftAutomationResponse{
+		AutomationId: d.Automation.String(), VersionId: d.Version.String(), Name: d.Name,
+		Ambiguities: ambiguities(d.Ambiguities), CallId: d.Call.String(),
+	}, nil
+}
+
+// GetModelDraft implements ModelServiceHandler.
+func (h *Handler) GetModelDraft(ctx context.Context, r *pantherclawv1.GetModelDraftRequest) (*pantherclawv1.GetModelDraftResponse, error) {
+	version, err := ids.ParseUUID(r.GetVersionId())
+	if err != nil {
+		return nil, app.ErrDraftNotFound
+	}
+	d, err := h.svc.GetDraft(ctx, version)
+	if err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.GetModelDraftResponse{Draft: &pantherclawv1.ModelDraft{
+		VersionId: d.Version.String(), Kind: d.Kind, Origin: d.Origin, Ambiguities: ambiguities(d.Ambiguities),
+		CallId: d.Call.String(), CreatedAt: timestamppb.New(d.CreatedAt),
+	}}, nil
 }
 
 // DraftPolicy implements ModelServiceHandler. It stores a DRAFT and publishes

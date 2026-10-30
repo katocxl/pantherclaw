@@ -2370,12 +2370,13 @@ type PcModelCall struct {
 }
 
 type PcModelDraft struct {
-	OrgID     ids.OrgID
-	VersionID ids.UUID
-	CallID    ids.UUID
-	Kind      string
-	Origin    string
-	CreatedAt time.Time
+	OrgID       ids.OrgID
+	VersionID   ids.UUID
+	CallID      ids.UUID
+	Kind        string
+	Origin      string
+	Ambiguities []byte
+	CreatedAt   time.Time
 }
 
 type PcModelSetting struct {

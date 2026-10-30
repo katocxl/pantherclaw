@@ -25,6 +25,8 @@ import (
 const (
 	// policyKind is a model_drafts row's kind for a policy version.
 	policyKind = "POLICY"
+	// automationKind is a model_drafts row's kind for an automation version.
+	automationKind = "AUTOMATION"
 	// firstBundleID names the bundle when the organization has none published.
 	firstBundleID = "model-draft"
 	// maxDraftRules bounds what one call adds to a policy.
@@ -57,16 +59,17 @@ type PolicyDraft struct {
 }
 
 // draftRule is the only rule a model can write. Exceptions, emergency marks,
-// labels and facts have no field here.
+// labels and facts have no field here, and there is no expression to write:
+// Go renders the condition (D316).
 type draftRule struct {
-	Kind       pdomain.Kind     `json:"kind"`
-	Summary    string           `json:"summary"`
-	Operations []string         `json:"operations"`
-	When       string           `json:"when"`
-	Reason     string           `json:"reason"`
-	Approval   *draftApproval   `json:"approval"`
-	StepUp     *draftStepUp     `json:"step_up"`
-	Constraint *draftConstraint `json:"constraint"`
+	Kind       pdomain.Kind      `json:"kind"`
+	Summary    string            `json:"summary"`
+	Operations []string          `json:"operations"`
+	Conditions []policyCondition `json:"conditions"`
+	Reason     string            `json:"reason"`
+	Approval   *draftApproval    `json:"approval"`
+	StepUp     *draftStepUp      `json:"step_up"`
+	Constraint *draftConstraint  `json:"constraint"`
 }
 
 type draftApproval struct {
@@ -91,19 +94,19 @@ type policyOutput struct {
 	Ambiguities []Ambiguity `json:"ambiguities"`
 }
 
-func policySchema() ports.Schema {
+func policySchema(fields policyFields) ports.Schema {
 	return ports.Object(map[string]ports.Schema{
 		"rules": ports.Array(ports.Object(map[string]ports.Schema{
 			"kind":       ports.Enum([]string{string(pdomain.Forbid), string(pdomain.RequireApproval), string(pdomain.RequireStepUp), string(pdomain.Constrain)}),
 			"summary":    ports.Text("the rule as one readable line"),
 			"operations": ports.Array(ports.Text("a catalog operation, or a prefix ending in .*")),
-			"when":       ports.Text("a CEL condition over action; true when the rule always applies"),
+			"conditions": ports.Array(fields.schema()),
 			"reason":     ports.Text("a stable reason code in UPPER_SNAKE"),
 			"approval":   ports.Nullable(ports.Object(map[string]ports.Schema{"count": ports.Integer("approvers needed, 1 or 2")})),
 			"step_up":    ports.Nullable(ports.Object(map[string]ports.Schema{"subject": ports.Enum([]string{"launcher", "principal"})})),
 			"constraint": ports.Nullable(ports.Object(map[string]ports.Schema{
 				"kind":     ports.Enum([]string{string(pdomain.AmountMax), string(pdomain.CountMax), string(pdomain.AllowedValues)}),
-				"param":    ports.Text("the parameter limited"),
+				"param":    ports.Enum(fields.paramNames()),
 				"max":      ports.Text("a decimal limit, empty for allowed_values"),
 				"currency": ports.Text("the currency of a money limit, or empty"),
 				"values":   ports.Array(ports.Text("an allowed value")),
@@ -115,9 +118,9 @@ func policySchema() ports.Schema {
 
 // rule turns a draft rule into a policy rule, with the fixed values a model
 // does not choose. It is checked by Rule.Validate.
-func (d draftRule) rule(id string) pdomain.Rule {
+func (d draftRule) rule(id, when string) pdomain.Rule {
 	r := pdomain.Rule{
-		ID: id, Kind: d.Kind, Summary: d.Summary, Operations: d.Operations, When: d.When, Reason: d.Reason,
+		ID: id, Kind: d.Kind, Summary: d.Summary, Operations: d.Operations, When: when, Reason: d.Reason,
 	}
 	if d.Approval != nil {
 		r.Approval = &pdomain.ApprovalRequirement{Role: approverRole, Count: d.Approval.Count}
@@ -142,7 +145,7 @@ func covered(op string, visible []string) bool {
 
 // parsePolicy reads a model's answer strictly. Anything unknown, malformed or
 // outside what the person may read refuses the whole draft (HR-543).
-func parsePolicy(text string, output []byte, call ids.UUID, visible []string) ([]pdomain.Rule, []Ambiguity, error) {
+func parsePolicy(text string, output []byte, call ids.UUID, visible []string, fields policyFields) ([]pdomain.Rule, []Ambiguity, error) {
 	var o policyOutput
 	if json.Unmarshal(output, &o, json.RejectUnknownMembers(true)) != nil {
 		return nil, nil, ports.ErrInvalidOutput
@@ -155,7 +158,11 @@ func parsePolicy(text string, output []byte, call ids.UUID, visible []string) ([
 	}
 	out := make([]pdomain.Rule, 0, len(o.Rules))
 	for i, d := range o.Rules {
-		r := d.rule("model-" + call.String() + "-" + strconv.Itoa(i))
+		when, ok := fields.renderPolicy(d.Conditions)
+		if !ok || (d.Constraint != nil && !fields.hasParam(d.Constraint.Param)) {
+			return nil, nil, ports.ErrInvalidOutput
+		}
+		r := d.rule("model-"+call.String()+"-"+strconv.Itoa(i), when)
 		if r.Validate() != nil {
 			return nil, nil, ports.ErrInvalidOutput
 		}
@@ -172,7 +179,7 @@ func parsePolicy(text string, output []byte, call ids.UUID, visible []string) ([
 // storeDraft adds rules to the published policy, or starts one, as the next
 // DRAFT: a draft that left the rest out would read as removing it. It is
 // marked origin=model in the same transaction.
-func (s *Service) storeDraft(ctx context.Context, c tenancy.Caller, call ids.UUID, rules []pdomain.Rule) (version ids.UUID, number int, err error) {
+func (s *Service) storeDraft(ctx context.Context, c tenancy.Caller, call ids.UUID, rules []pdomain.Rule, ambiguities []Ambiguity) (version ids.UUID, number int, err error) {
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		base, _, err := s.Policies.Published(ctx, tx.Pgx(), c.Org)
 		if err != nil {
@@ -186,7 +193,7 @@ func (s *Service) storeDraft(ctx context.Context, c tenancy.Caller, call ids.UUI
 		if version, number, err = s.Policies.CreateDraft(ctx, tx.Pgx(), c.Org, b, c.Actor()); err != nil {
 			return err
 		}
-		return LinkDraft(ctx, tx, c.Org, version, call, policyKind)
+		return LinkDraft(ctx, tx, c.Org, version, call, policyKind, ambiguities)
 	})
 	switch pcerr.ReasonOf(err) {
 	case "POLICY_INVALID", "POLICY_DOES_NOT_COMPILE":
@@ -199,11 +206,8 @@ func (s *Service) storeDraft(ctx context.Context, c tenancy.Caller, call ids.UUI
 // ever stores a draft: publishing stays with the M11.1 gate and a person
 // (HR-544).
 func (s *Service) DraftPolicy(ctx context.Context, text string) (PolicyDraft, error) {
-	c, err := tenancy.CallerFrom(ctx)
+	c, err := callerWith(ctx, td.PermPolicyAuthor)
 	if err != nil {
-		return PolicyDraft{}, err
-	}
-	if err := c.Require(td.PermPolicyAuthor, td.OrgPath(c.Org)); err != nil {
 		return PolicyDraft{}, err
 	}
 	if s.Policies == nil || s.Operations == nil {
@@ -213,7 +217,8 @@ func (s *Service) DraftPolicy(ctx context.Context, text string) (PolicyDraft, er
 	if err != nil {
 		return PolicyDraft{}, err
 	}
-	schema, err := policySchema().Encode()
+	fields := fieldsOf(s.Params)
+	schema, err := policySchema(fields).Encode()
 	if err != nil {
 		return PolicyDraft{}, err
 	}
@@ -222,7 +227,7 @@ func (s *Service) DraftPolicy(ctx context.Context, text string) (PolicyDraft, er
 		Task: ports.TaskPolicyDraft, Text: text, Schema: schema,
 		Catalog: ports.Catalog{OperationGroups: OperationGroups(visible)},
 		Parse: func(call ids.UUID, output []byte) error {
-			rules, ambiguities, err := parsePolicy(text, output, call, visible)
+			rules, ambiguities, err := parsePolicy(text, output, call, visible, fields)
 			if err != nil {
 				return err
 			}
@@ -230,7 +235,7 @@ func (s *Service) DraftPolicy(ctx context.Context, text string) (PolicyDraft, er
 			for _, r := range rules {
 				out.Summaries = append(out.Summaries, r.Summary)
 			}
-			out.Version, out.Number, err = s.storeDraft(ctx, c, call, rules)
+			out.Version, out.Number, err = s.storeDraft(ctx, c, call, rules, ambiguities)
 			return err
 		},
 	})

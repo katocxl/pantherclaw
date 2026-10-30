@@ -4,10 +4,14 @@
 package server
 
 import (
+	"fmt"
+
 	"connectrpc.com/connect/v2"
 
 	"github.com/katocxl/pantherclaw/internal/automations/securitysteps"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
+	defsdomain "github.com/katocxl/pantherclaw/internal/definitions/domain"
+	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/keystore"
@@ -17,6 +21,13 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	pccrypto "github.com/katocxl/pantherclaw/internal/platform/crypto"
 	"github.com/katocxl/pantherclaw/internal/search"
+	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
+	pca2a "github.com/katocxl/pantherclaw/packages/pc-a2a"
+	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
+	pcpostgres "github.com/katocxl/pantherclaw/packages/pc-postgres"
+	pcshell "github.com/katocxl/pantherclaw/packages/pc-shell"
+	pcslack "github.com/katocxl/pantherclaw/packages/pc-slack"
+	pcstripe "github.com/katocxl/pantherclaw/packages/pc-stripe"
 )
 
 // newModel builds model drafting's service (G0 M21 D304, D309). Without the
@@ -36,9 +47,35 @@ func newModel(d apiDeps) *modelapp.Service {
 	return svc
 }
 
-// registerM21Model registers ModelService.
-func registerM21Model(rs *connect.Server, d apiDeps) {
+// builtinParams are the parameters of the packages PantherClaw ships, the only
+// ones a model is told of (D316).
+func builtinParams() ([]modelapp.Param, error) {
+	raws := [][]byte{
+		mockpayments.Package, pca2a.Package, pcgithub.Package, pcpostgres.Package, pcshell.Package, pcslack.Package, pcstripe.Package,
+	}
+	pkgs := make([]*defsdomain.Package, 0, len(raws))
+	for _, raw := range raws {
+		p, err := manifest.Decode(raw)
+		if err != nil {
+			return nil, fmt.Errorf("model drafting: built-in package: %w", err)
+		}
+		pkgs = append(pkgs, p)
+	}
+	return modelapp.BuiltinParams(pkgs...), nil
+}
+
+// registerM21Model registers ModelService. A built-in package that does not
+// load is an error that reaches cmdServe.
+func registerM21Model(rs *connect.Server, d apiDeps, core *automationsCore) error {
+	params, err := builtinParams()
+	if err != nil {
+		return err
+	}
 	svc := newModel(d)
+	svc.Params, svc.Clock = params, clock.System{}
+	if core != nil && core.svc != nil {
+		svc.Automations = core.svc
+	}
 	defs := &defspg.Store{Pool: d.pool}
 	queries := &search.Service{Pool: d.pool, Defs: defs, Clock: clock.System{}}
 	if d.billing != nil {
@@ -51,4 +88,5 @@ func registerM21Model(rs *connect.Server, d apiDeps) {
 	if d.web != nil {
 		d.web.WithModelDrafting(svc)
 	}
+	return nil
 }

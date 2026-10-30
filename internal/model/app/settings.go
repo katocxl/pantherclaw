@@ -30,6 +30,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/model/adapters/anthropic"
 	"github.com/katocxl/pantherclaw/internal/model/ports"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
+	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	pccrypto "github.com/katocxl/pantherclaw/internal/platform/crypto"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -72,6 +73,8 @@ var (
 		"the organization's model calls a minute are used up; try again shortly")
 	ErrBudgetCap = pcerr.New(pcerr.ResourceExhausted, "MODEL_BUDGET_CAP",
 		"the organization's model budget for today is used up")
+	ErrDraftNotFound = pcerr.New(pcerr.NotFound, "MODEL_DRAFT_NOT_FOUND",
+		"that version was not drafted by a model")
 )
 
 // Editions reports the deployment's edition (billing.Service).
@@ -100,10 +103,30 @@ type Service struct {
 	Editions Editions
 	Notify   Notifier
 	Provider ports.Provider
-	// Policies and Operations serve policy drafts.
+	// Policies, Operations and Params serve policy drafts.
 	Policies   PolicyDrafts
 	Operations Operations
-	Config     Config
+	Params     []Param
+	// Automations serves automation drafts.
+	Automations AutomationDrafts
+	Clock       clock.Clock
+	Config      Config
+}
+
+func (s *Service) now() time.Time {
+	if s.Clock == nil {
+		return time.Now()
+	}
+	return s.Clock.Now()
+}
+
+// callerWith is the caller, holding p at the organization.
+func callerWith(ctx context.Context, p td.Permission) (tenancy.Caller, error) {
+	c, err := tenancy.CallerFrom(ctx)
+	if err != nil {
+		return c, err
+	}
+	return c, c.Require(p, td.OrgPath(c.Org))
 }
 
 // Settings is an organization's settings, without its key.

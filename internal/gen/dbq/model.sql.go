@@ -112,6 +112,25 @@ func (q *Queries) FinishModelCall(ctx context.Context, arg FinishModelCallParams
 	return result.RowsAffected(), nil
 }
 
+const getModelDraft = `-- name: GetModelDraft :one
+SELECT org_id, version_id, call_id, kind, origin, ambiguities, created_at FROM pc.model_drafts WHERE org_id = $1 AND version_id = $2
+`
+
+func (q *Queries) GetModelDraft(ctx context.Context, orgID ids.OrgID, versionID ids.UUID) (PcModelDraft, error) {
+	row := q.db.QueryRow(ctx, getModelDraft, orgID, versionID)
+	var i PcModelDraft
+	err := row.Scan(
+		&i.OrgID,
+		&i.VersionID,
+		&i.CallID,
+		&i.Kind,
+		&i.Origin,
+		&i.Ambiguities,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getModelSettings = `-- name: GetModelSettings :one
 SELECT org_id, enabled, model, key_ciphertext, key_set_at, key_set_by, calls_per_minute, tokens_per_day, enabled_at, enabled_by, enabled_credential, updated_at FROM pc.model_settings WHERE org_id = $1
 `
@@ -163,15 +182,16 @@ func (q *Queries) InsertModelCall(ctx context.Context, arg InsertModelCallParams
 }
 
 const insertModelDraft = `-- name: InsertModelDraft :exec
-INSERT INTO pc.model_drafts (org_id, version_id, call_id, kind)
-VALUES ($1, $2, $3, $4)
+INSERT INTO pc.model_drafts (org_id, version_id, call_id, kind, ambiguities)
+VALUES ($1, $2, $3, $4, $5)
 `
 
 type InsertModelDraftParams struct {
-	OrgID     ids.OrgID
-	VersionID ids.UUID
-	CallID    ids.UUID
-	Kind      string
+	OrgID       ids.OrgID
+	VersionID   ids.UUID
+	CallID      ids.UUID
+	Kind        string
+	Ambiguities []byte
 }
 
 func (q *Queries) InsertModelDraft(ctx context.Context, arg InsertModelDraftParams) error {
@@ -180,6 +200,7 @@ func (q *Queries) InsertModelDraft(ctx context.Context, arg InsertModelDraftPara
 		arg.VersionID,
 		arg.CallID,
 		arg.Kind,
+		arg.Ambiguities,
 	)
 	return err
 }

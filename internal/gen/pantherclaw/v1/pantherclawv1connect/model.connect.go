@@ -42,6 +42,11 @@ const (
 	ModelServiceDraftQueryProcedure = "/pantherclaw.v1.ModelService/DraftQuery"
 	// ModelServiceDraftPolicyProcedure is the procedure name of the ModelService's DraftPolicy RPC.
 	ModelServiceDraftPolicyProcedure = "/pantherclaw.v1.ModelService/DraftPolicy"
+	// ModelServiceDraftAutomationProcedure is the procedure name of the ModelService's DraftAutomation
+	// RPC.
+	ModelServiceDraftAutomationProcedure = "/pantherclaw.v1.ModelService/DraftAutomation"
+	// ModelServiceGetModelDraftProcedure is the procedure name of the ModelService's GetModelDraft RPC.
+	ModelServiceGetModelDraftProcedure = "/pantherclaw.v1.ModelService/GetModelDraft"
 )
 
 var (
@@ -88,6 +93,21 @@ var (
 			Procedure:  ModelServiceDraftPolicyProcedure,
 		}
 	})
+	modelServiceDraftAutomationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_model_proto.Services().ByName("ModelService").Methods().ByName("DraftAutomation"),
+			Procedure:  ModelServiceDraftAutomationProcedure,
+		}
+	})
+	modelServiceGetModelDraftSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_model_proto.Services().ByName("ModelService").Methods().ByName("GetModelDraft"),
+			Procedure:        ModelServiceGetModelDraftProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // ModelServiceClient is a client for the pantherclaw.v1.ModelService service.
@@ -116,6 +136,16 @@ type ModelServiceClient interface {
 	// does, for a person (HR-544). A person only.
 	// permission: policy.author
 	DraftPolicy(context.Context, *v1.DraftPolicyRequest) (*v1.DraftPolicyResponse, error)
+	// DraftAutomation turns text into a new automation with a DRAFT version,
+	// origin=model. It never enables it; the M11.1 gate does, for a person
+	// (HR-544). A person only.
+	// permission: automation.manage
+	DraftAutomation(context.Context, *v1.DraftAutomationRequest) (*v1.DraftAutomationResponse, error)
+	// GetModelDraft returns a stored draft's origin=model mark and the thresholds
+	// its reviewer confirms (D314). The caller also needs policy.read or
+	// automation.read, as the draft's kind asks.
+	// permission: org.read
+	GetModelDraft(context.Context, *v1.GetModelDraftRequest) (*v1.GetModelDraftResponse, error)
 }
 
 // NewModelServiceClient constructs a client for the pantherclaw.v1.ModelService service. Multiple
@@ -150,6 +180,16 @@ type ModelServiceHandler interface {
 	// does, for a person (HR-544). A person only.
 	// permission: policy.author
 	DraftPolicy(context.Context, *v1.DraftPolicyRequest) (*v1.DraftPolicyResponse, error)
+	// DraftAutomation turns text into a new automation with a DRAFT version,
+	// origin=model. It never enables it; the M11.1 gate does, for a person
+	// (HR-544). A person only.
+	// permission: automation.manage
+	DraftAutomation(context.Context, *v1.DraftAutomationRequest) (*v1.DraftAutomationResponse, error)
+	// GetModelDraft returns a stored draft's origin=model mark and the thresholds
+	// its reviewer confirms (D314). The caller also needs policy.read or
+	// automation.read, as the draft's kind asks.
+	// permission: org.read
+	GetModelDraft(context.Context, *v1.GetModelDraftRequest) (*v1.GetModelDraftResponse, error)
 }
 
 // RegisterModelServiceHandler registers svc as the pantherclaw.v1.ModelService implementation on
@@ -163,6 +203,8 @@ func RegisterModelServiceHandler(server *connect.Server, svc ModelServiceHandler
 		connect.Method{Spec: modelServiceClearModelKeySpec(), Handler: adapter.clearModelKey},
 		connect.Method{Spec: modelServiceDraftQuerySpec(), Handler: adapter.draftQuery},
 		connect.Method{Spec: modelServiceDraftPolicySpec(), Handler: adapter.draftPolicy},
+		connect.Method{Spec: modelServiceDraftAutomationSpec(), Handler: adapter.draftAutomation},
+		connect.Method{Spec: modelServiceGetModelDraftSpec(), Handler: adapter.getModelDraft},
 	)
 }
 
@@ -191,6 +233,14 @@ func (UnimplementedModelServiceHandler) DraftQuery(context.Context, *v1.DraftQue
 
 func (UnimplementedModelServiceHandler) DraftPolicy(context.Context, *v1.DraftPolicyRequest) (*v1.DraftPolicyResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ModelService.DraftPolicy is not implemented")
+}
+
+func (UnimplementedModelServiceHandler) DraftAutomation(context.Context, *v1.DraftAutomationRequest) (*v1.DraftAutomationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ModelService.DraftAutomation is not implemented")
+}
+
+func (UnimplementedModelServiceHandler) GetModelDraft(context.Context, *v1.GetModelDraftRequest) (*v1.GetModelDraftResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ModelService.GetModelDraft is not implemented")
 }
 
 type modelServiceClient struct {
@@ -240,6 +290,22 @@ func (c *modelServiceClient) DraftQuery(ctx context.Context, req *v1.DraftQueryR
 func (c *modelServiceClient) DraftPolicy(ctx context.Context, req *v1.DraftPolicyRequest) (*v1.DraftPolicyResponse, error) {
 	var res v1.DraftPolicyResponse
 	if err := c.client.CallUnary(ctx, modelServiceDraftPolicySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *modelServiceClient) DraftAutomation(ctx context.Context, req *v1.DraftAutomationRequest) (*v1.DraftAutomationResponse, error) {
+	var res v1.DraftAutomationResponse
+	if err := c.client.CallUnary(ctx, modelServiceDraftAutomationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *modelServiceClient) GetModelDraft(ctx context.Context, req *v1.GetModelDraftRequest) (*v1.GetModelDraftResponse, error) {
+	var res v1.GetModelDraftResponse
+	if err := c.client.CallUnary(ctx, modelServiceGetModelDraftSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -313,6 +379,30 @@ func (h modelServiceHandler) draftPolicy(ctx context.Context, _ connect.Spec, st
 		return err
 	}
 	res, err := h.svc.DraftPolicy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h modelServiceHandler) draftAutomation(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DraftAutomationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DraftAutomation(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h modelServiceHandler) getModelDraft(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetModelDraftRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetModelDraft(ctx, &req)
 	if err != nil {
 		return err
 	}

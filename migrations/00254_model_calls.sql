@@ -4,8 +4,9 @@
 -- the drafts they produced. A call holds who asked, for what and how much,
 -- never the text sent or returned. Its row, holding the tokens the call may
 -- spend, is written before the provider is called, so a call in flight or one
--- that never finished still counts against the caps (D312). A model_drafts row marks a policy or automation version as origin=model; the
--- version tables themselves are unchanged.
+-- that never finished still counts against the caps (D312). A model_drafts row marks a policy or
+-- automation version as origin=model and holds the thresholds its reviewer
+-- confirms (D314); the version tables themselves are unchanged.
 -- +goose Up
 CREATE TABLE pc.model_calls (
     org_id        uuid        NOT NULL REFERENCES pc.orgs (id),
@@ -45,6 +46,8 @@ CREATE TABLE pc.model_drafts (
     call_id    uuid        NOT NULL,
     kind       text        NOT NULL CHECK (kind IN ('POLICY', 'AUTOMATION')),
     origin     text        NOT NULL DEFAULT 'model' CHECK (origin = 'model'),
+    -- Each entry is {term, proposed_threshold}.
+    ambiguities jsonb      NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(ambiguities) = 'array'),
     created_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (org_id, version_id),
     FOREIGN KEY (org_id, call_id) REFERENCES pc.model_calls (org_id, id)

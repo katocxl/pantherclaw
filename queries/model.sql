@@ -55,5 +55,8 @@ SET outcome = sqlc.arg(outcome), input_tokens = sqlc.arg(input_tokens), output_t
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND outcome = 'PENDING';
 
 -- name: InsertModelDraft :exec
-INSERT INTO pc.model_drafts (org_id, version_id, call_id, kind)
-VALUES (sqlc.arg(org_id), sqlc.arg(version_id), sqlc.arg(call_id), sqlc.arg(kind));
+INSERT INTO pc.model_drafts (org_id, version_id, call_id, kind, ambiguities)
+VALUES (sqlc.arg(org_id), sqlc.arg(version_id), sqlc.arg(call_id), sqlc.arg(kind), sqlc.arg(ambiguities));
+
+-- name: GetModelDraft :one
+SELECT * FROM pc.model_drafts WHERE org_id = sqlc.arg(org_id) AND version_id = sqlc.arg(version_id);

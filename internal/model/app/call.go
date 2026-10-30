@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // Outcome of a finished call that was not refused.
@@ -240,7 +242,50 @@ func (s *Service) finish(ctx context.Context, c tenancy.Caller, r reservation, t
 	})
 }
 
-// LinkDraft marks a stored version as origin=model in tx (D309 Q1).
-func LinkDraft(ctx context.Context, tx db.TenantTx, org ids.OrgID, version, call ids.UUID, kind string) error {
-	return dbq.New(tx).InsertModelDraft(ctx, dbq.InsertModelDraftParams{OrgID: org, VersionID: version, CallID: call, Kind: kind})
+// LinkDraft marks a stored version as origin=model in tx, with the thresholds
+// its reviewer confirms (D309 Q1, D314).
+func LinkDraft(ctx context.Context, tx db.TenantTx, org ids.OrgID, version, call ids.UUID, kind string, as []Ambiguity) error {
+	raw, err := json.Marshal(as)
+	if err != nil {
+		return err
+	}
+	return dbq.New(tx).InsertModelDraft(ctx, dbq.InsertModelDraftParams{OrgID: org, VersionID: version, CallID: call, Kind: kind, Ambiguities: raw})
+}
+
+// StoredDraft is a version's origin=model mark.
+type StoredDraft struct {
+	Version     ids.UUID
+	Kind        string
+	Origin      string
+	Call        ids.UUID
+	Ambiguities []Ambiguity
+	CreatedAt   time.Time
+}
+
+// draftReaders is what reading each kind of stored draft takes.
+var draftReaders = map[string]td.Permission{policyKind: td.PermPolicyRead, automationKind: td.PermAutomationRead}
+
+// GetDraft returns a stored draft's mark, for whoever may read that kind of
+// version. It reads what was stored, so it works with drafting off.
+func (s *Service) GetDraft(ctx context.Context, version ids.UUID) (StoredDraft, error) {
+	c, err := tenancy.CallerFrom(ctx)
+	if err != nil {
+		return StoredDraft{}, err
+	}
+	var out StoredDraft
+	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		row, err := dbq.New(tx).GetModelDraft(ctx, c.Org, version)
+		if db.IsNoRows(err) {
+			return ErrDraftNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if err := c.Require(draftReaders[row.Kind], td.OrgPath(c.Org)); err != nil {
+			return err
+		}
+		out = StoredDraft{Version: row.VersionID, Kind: row.Kind, Origin: row.Origin, Call: row.CallID, CreatedAt: row.CreatedAt}
+		return json.Unmarshal(row.Ambiguities, &out.Ambiguities)
+	}, db.ReadOnly())
+	return out, err
 }

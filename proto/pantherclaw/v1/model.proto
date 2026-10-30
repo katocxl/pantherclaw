@@ -41,6 +41,18 @@ service ModelService {
   // does, for a person (HR-544). A person only.
   // permission: policy.author
   rpc DraftPolicy(DraftPolicyRequest) returns (DraftPolicyResponse);
+  // DraftAutomation turns text into a new automation with a DRAFT version,
+  // origin=model. It never enables it; the M11.1 gate does, for a person
+  // (HR-544). A person only.
+  // permission: automation.manage
+  rpc DraftAutomation(DraftAutomationRequest) returns (DraftAutomationResponse);
+  // GetModelDraft returns a stored draft's origin=model mark and the thresholds
+  // its reviewer confirms (D314). The caller also needs policy.read or
+  // automation.read, as the draft's kind asks.
+  // permission: org.read
+  rpc GetModelDraft(GetModelDraftRequest) returns (GetModelDraftResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // ModelSettings is an organization's settings, without its key.
@@ -115,7 +127,7 @@ message ClearModelKeyResponse {
 // The reviewer confirms it; it changes nothing by itself.
 message DraftAmbiguity {
   // The vague words, as the person wrote them.
-  string phrase = 1;
+  string term = 1;
   // A concrete value to confirm.
   string proposed_threshold = 2;
 }
@@ -162,4 +174,55 @@ message DraftPolicyResponse {
   repeated DraftAmbiguity ambiguities = 4;
   // The audited call.
   string call_id = 5;
+}
+
+// DraftAutomationRequest is the text to draft from.
+message DraftAutomationRequest {
+  // The person's own text.
+  string text = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 2000
+  }];
+}
+
+// DraftAutomationResponse is a stored DRAFT. Nothing runs.
+message DraftAutomationResponse {
+  // The new automation.
+  string automation_id = 1;
+  // Its DRAFT version.
+  string version_id = 2;
+  // The automation's name.
+  string name = 3;
+  // The thresholds to confirm.
+  repeated DraftAmbiguity ambiguities = 4;
+  // The audited call.
+  string call_id = 5;
+}
+
+// GetModelDraftRequest names a policy or automation version.
+message GetModelDraftRequest {
+  // The version.
+  string version_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ModelDraft marks a stored version as drafted by a model.
+message ModelDraft {
+  // The version.
+  string version_id = 1;
+  // POLICY or AUTOMATION.
+  string kind = 2;
+  // Always "model".
+  string origin = 3;
+  // The thresholds to confirm.
+  repeated DraftAmbiguity ambiguities = 4;
+  // The audited call.
+  string call_id = 5;
+  // When it was drafted.
+  google.protobuf.Timestamp created_at = 6;
+}
+
+// GetModelDraftResponse carries the draft's mark.
+message GetModelDraftResponse {
+  // The mark.
+  ModelDraft draft = 1;
 }

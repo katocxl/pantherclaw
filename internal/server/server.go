@@ -844,7 +844,6 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		return nil, err
 	}
 	registerM11Search(rs, d)
-	registerM21Model(rs, d)
 	registerCases(rs, d, grants)
 	registerResponse(rs, d)
 	registerExposure(rs, d)
@@ -856,6 +855,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerM11Govern(rs, d)
 	registerSlackChannels(d)
 	autos = registerAutomationsCore(rs, d, grants, runs)
+	if err := registerM21Model(rs, d, autos); err != nil {
+		return nil, err
+	}
 	if err := registerAutomationAssurance(rs, d, autos); err != nil {
 		return nil, err
 	}
