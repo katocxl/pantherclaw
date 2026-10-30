@@ -99,3 +99,10 @@ ON CONFLICT (org_id, day) DO UPDATE SET bytes_removed = pc.usage_daily.bytes_rem
 SELECT day, agents, instances_peak, runs, stored_bytes FROM pc.usage_daily
 WHERE org_id = sqlc.arg(org_id) AND day >= sqlc.arg(since)::date
 ORDER BY day DESC;
+
+-- Serializes the org's meter and recount transactions (G0 M19 D202,
+-- HR-498): MeterUsageDay builds each day on the previous day's
+-- stored_bytes, so an overlapping recount and meter (two workers, or two
+-- jobs in one) would otherwise write totals from a stale previous day.
+-- name: LockUsageMeter :exec
+SELECT pg_advisory_xact_lock(hashtextextended('pc.usage_meter:' || sqlc.arg(org_id)::text, 0));

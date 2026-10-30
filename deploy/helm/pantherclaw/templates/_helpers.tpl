@@ -45,7 +45,8 @@ stage-secrets init container (G0 M13 D42).
 {{- $s := "/etc/pantherclaw/secrets" -}}
 {{- $db := dict "host" $v.database.host "port" (int $v.database.port) "name" $v.database.name "sslmode" $v.database.sslmode
       "sslrootcert" (printf "%s/ca.crt" $s) "app_user" "pc_app" "migrator_user" "pc_migrator" "retention_user" "pc_retention"
-      "max_conns" (int $v.database.maxConns) -}}
+      "max_conns" (int $v.database.maxConns) "replication" $v.database.replication -}}
+{{- with $v.database.hosts -}}{{- $_ := set $db "hosts" . -}}{{- end -}}
 {{- if eq .role "migrate" -}}
 {{- $_ := set $db "migrator_password_file" (printf "%s/migrator-password" $s) -}}
 {{- /* Named for validation only: migrate up reads the migrator's file alone, and the Job never gets the app's password. */ -}}

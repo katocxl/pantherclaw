@@ -311,3 +311,39 @@ func TestChart_ServerConfigsValidate(t *testing.T) {
 		t.Errorf("worker readiness probe %v", c["readinessProbe"])
 	}
 }
+
+// TestHR498_ChartRunsTwoWorkersWithADisruptionBudget: by default two
+// worker replicas run, with a PodDisruptionBudget that keeps one up, and a
+// list of database hosts with the declared replication reaches the
+// server's configuration (G0 M19 D202, HR-495, HR-496).
+// Covers: PN-010.7
+func TestHR498_ChartRunsTwoWorkersWithADisruptionBudget(t *testing.T) {
+	docs := render(t, "database.hosts[0]=pg-a.example.internal", "database.hosts[1]=pg-b.example.internal:5433",
+		"database.replication=sync")
+	var pdb bool
+	for _, d := range docs {
+		switch name(d) {
+		case "Deployment/pc-pantherclaw-worker":
+			if r := get(d, "spec", "replicas"); r != 2 {
+				t.Errorf("worker replicas = %v, want 2", r)
+			}
+		case "PodDisruptionBudget/pc-pantherclaw-worker":
+			pdb = get(d, "spec", "maxUnavailable") == 1
+		case "ConfigMap/pc-pantherclaw-api":
+			p := filepath.Join(t.TempDir(), "server.json")
+			if err := os.WriteFile(p, []byte(get(d, "data", "server.json").(string)), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg := server.DefaultConfig()
+			if err := config.Load(&cfg, p, func(string) (string, bool) { return "", false }); err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(cfg.DB.Hosts, []string{"pg-a.example.internal", "pg-b.example.internal:5433"}) || cfg.DB.Replication != "sync" {
+				t.Errorf("database hosts %v, replication %q", cfg.DB.Hosts, cfg.DB.Replication)
+			}
+		}
+	}
+	if !pdb {
+		t.Error("no worker PodDisruptionBudget with maxUnavailable 1")
+	}
+}

@@ -163,3 +163,40 @@ func TestHR377_StoredBytesRunIncrementallyAndRecountRebaselines(t *testing.T) {
 		t.Fatalf("stored after the recount = %d, want 300", got)
 	}
 }
+
+// TestHR498_MeterAndRecountOnTwoWorkers: a weekly recount and an hourly
+// meter of the same org on two workers (two pools) at once end at the true
+// stored total, because both take the org's usage meter lock (G0 M19 D202).
+// Covers: PN-010.7
+func TestHR498_MeterAndRecountOnTwoWorkers(t *testing.T) {
+	d := dbtest.New(t)
+	a, b := d.AppPool(t), d.AppPool(t)
+	now := clock.NewFake(time.Now().UTC())
+	workerA, workerB := usage.New(a, now), usage.New(b, now)
+	org := newOrg(t, a)
+	ctx := context.Background()
+	for _, e := range []struct {
+		age string
+		n   int
+	}{{"10 days", 200}, {"0 seconds", 100}} {
+		d.AdminExec(t, `INSERT INTO pc.ledger_entries (org_id, id, kind, actor_type, actor_id, body, occurred_at)
+			VALUES ($1, $2, 'audit.test', 'system', 'x', decode(repeat('ab', $3::int), 'hex'), now() - $4::interval)`,
+			org, ids.NewV7(), strconv.Itoa(e.n), e.age)
+	}
+	for i := range 20 {
+		errs := make(chan error, 2)
+		go func() { errs <- workerA.Recount(ctx, org) }()
+		go func() { errs <- workerB.Meter(ctx, org) }()
+		for range 2 {
+			if err := <-errs; err != nil {
+				t.Fatalf("round %d: %v", i, err)
+			}
+		}
+		days, err := workerA.List(as(org, td.RoleViewer), 1)
+		if err != nil || len(days) != 1 || days[0].StoredBytes != 300 {
+			t.Fatalf("round %d: today = %+v, %v, want stored 300", i, days, err)
+		}
+		// The next round starts from a stale baseline again.
+		d.AdminExec(t, "UPDATE pc.usage_daily SET stored_bytes = 0 WHERE org_id = $1", org)
+	}
+}
