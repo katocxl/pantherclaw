@@ -74,6 +74,44 @@ func TestHR535_EvaluationLeavesFactsUnchanged(t *testing.T) {
 	}
 }
 
+// TestHR536_IntegrationStateNeedsOrgScope: an entry a scoped viewer can see
+// applies whatever the org has connected, so it says nothing about that
+// (D317).
+//
+// Covers: F343
+func TestHR536_IntegrationStateNeedsOrgScope(t *testing.T) {
+	txn := ids.NewV7()
+	bare := domain.Facts{
+		Agents: map[string]domain.Group{
+			domain.ContextCI: group(1), domain.ContextKubernetes: group(1), domain.ContextService: group(1),
+		},
+		Secrets:    map[string]domain.Group{"aws_access_key_id": group(1), "openai_api_key": group(1)},
+		DataAgents: group(1), FirstDecision: &txn, FirstHold: &txn,
+	}
+	connected := bare
+	connected.Integrations = domain.Integrations{
+		Issuers: domain.IntegrationKinds(), Channels: domain.IntegrationKinds(), SIEM: true, FactProviders: true,
+		Packages: []string{domain.PackageAWS, domain.PackageJira},
+	}
+	var scoped int
+	for _, e := range domain.Catalog() {
+		_, before := e.Evaluate(bare)
+		_, after := e.Evaluate(connected)
+		if !before {
+			t.Errorf("%s: does not apply", e.ID)
+		}
+		if e.Reach == domain.AgentBacked {
+			scoped++
+			if !after {
+				t.Errorf("%s: turns on the org's integrations, so it needs org scope", e.ID)
+			}
+		}
+	}
+	if scoped == 0 {
+		t.Fatal("no entry reaches a scoped viewer")
+	}
+}
+
 // TestCatalogTargets: the M20 integrations are named by their D254 package
 // names.
 //
@@ -94,10 +132,15 @@ func TestCatalogTargets(t *testing.T) {
 			t.Errorf("no target names %s: %s", want, joined)
 		}
 	}
-	for _, want := range []string{domain.PackageJira, domain.PackageTeams, domain.PackageAWS} {
+	for _, want := range []string{domain.PackageJira, domain.PackageAWS} {
 		if !slices.Contains(packages, want) {
 			t.Errorf("no target uses %s: %v", want, packages)
 		}
+	}
+	// pc.teams is the agents' tool package: a Teams channel closes the approval
+	// entry, so connecting the package would not.
+	if slices.Contains(packages, domain.PackageTeams) {
+		t.Errorf("a target uses %s: %v", domain.PackageTeams, packages)
 	}
 }
 
@@ -122,9 +165,13 @@ func TestCatalogPackagesExist(t *testing.T) {
 	}
 }
 
-// TestCatalogKindsExist checks the merged tree (D313): an issuer or channel
-// kind no migration allows would keep its entry open after the integration
-// is added.
+// sqlComment is a line or block comment of a migration.
+var sqlComment = regexp.MustCompile(`(?m)--.*$|(?s:/\*.*?\*/)`)
+
+// TestCatalogKindsExist checks the merged tree (D313, D317): an issuer or
+// channel kind no migration allows would keep its entry open after the
+// integration is added. Only the Up statements count, not comments or Down
+// sections.
 //
 // Covers: F343
 func TestCatalogKindsExist(t *testing.T) {
@@ -138,7 +185,8 @@ func TestCatalogKindsExist(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		all.Write(raw)
+		up, _, _ := strings.Cut(string(raw), "-- +goose Down")
+		all.WriteString(sqlComment.ReplaceAllString(up, ""))
 	}
 	for _, kind := range domain.IntegrationKinds() {
 		if !strings.Contains(all.String(), "'"+kind+"'") {

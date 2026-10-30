@@ -5,8 +5,8 @@
 // M21 D302, D308; F343). A read runs in a read-only transaction and changes
 // nothing (HR-535). It shows only what the viewer may see (HR-536): signals
 // from agents cover the agents the viewer's posture.read reaches, and
-// org-wide recommendations need posture.read at org scope, like a posture
-// finding with no agent.
+// recommendations that turn on the org's integrations need posture.read at
+// org scope, like a posture finding with no agent (D317).
 package app
 
 import (

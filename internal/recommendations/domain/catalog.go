@@ -63,11 +63,12 @@ type Reach int
 
 // Reaches.
 const (
-	// AgentBacked entries rest on agents: a viewer sees one over the agents
-	// their posture.read reaches.
+	// AgentBacked entries rest on agents alone: a viewer sees one over the
+	// agents their posture.read reaches.
 	AgentBacked Reach = iota + 1
-	// OrgWide entries rest on the org's integrations alone: only a viewer
-	// with posture.read at org scope sees one.
+	// OrgWide entries turn on the org's integrations, so whether one applies
+	// says what the org has connected: only a viewer with posture.read at
+	// org scope sees one (D317).
 	OrgWide
 )
 
@@ -246,7 +247,7 @@ func record(id *ids.UUID) Group {
 func Catalog() []Entry {
 	return []Entry{
 		{
-			ID: CIWorkload, Category: Identity, Reach: AgentBacked, Source: FromAgents, Link: linkAgents,
+			ID: CIWorkload, Category: Identity, Reach: OrgWide, Source: FromAgents, Link: linkAgents,
 			Title:  "Connect your CI system's workload identity",
 			Detail: "Agents run in CI, and no CI identity issuer is active, so they cannot prove which pipeline they run in.",
 			Targets: []Target{
@@ -264,7 +265,7 @@ func Catalog() []Entry {
 			signal: agents(ContextCI, ciIssuers...),
 		},
 		{
-			ID: KubeWorkload, Category: Identity, Reach: AgentBacked, Source: FromAgents, Link: linkAgents,
+			ID: KubeWorkload, Category: Identity, Reach: OrgWide, Source: FromAgents, Link: linkAgents,
 			Title:   "Connect your Kubernetes clusters' workload identity",
 			Detail:  "Agents run in Kubernetes, and no cluster or SPIFFE issuer is active.",
 			Targets: []Target{{Name: "Kubernetes service account tokens"}, {Name: "SPIFFE JWT-SVID"}},
@@ -276,7 +277,7 @@ func Catalog() []Entry {
 			signal:           agents(ContextKubernetes, kubeIssuers...),
 		},
 		{
-			ID: CloudWorkload, Category: Identity, Reach: AgentBacked, Source: FromAgents, Link: linkAgents,
+			ID: CloudWorkload, Category: Identity, Reach: OrgWide, Source: FromAgents, Link: linkAgents,
 			Title:  "Connect your cloud's workload identity",
 			Detail: "Agents run as services, and no cloud workload issuer is active.",
 			Targets: []Target{
@@ -293,7 +294,7 @@ func Catalog() []Entry {
 			signal: agents(ContextService, cloudIssuers...),
 		},
 		{
-			ID: AWSKeys, Category: Identity, Reach: AgentBacked, Source: FromDiscoveries, Link: linkAgents,
+			ID: AWSKeys, Category: Identity, Reach: OrgWide, Source: FromDiscoveries, Link: linkAgents,
 			Title:  "Put AWS access behind a connection",
 			Detail: "A scan found AWS credentials beside an agent, and no AWS connection is active.",
 			Targets: []Target{
@@ -314,7 +315,7 @@ func Catalog() []Entry {
 			},
 		},
 		{
-			ID: DataClasses, Category: Classification, Reach: AgentBacked, Source: FromCoverage, Link: linkCoverage,
+			ID: DataClasses, Category: Classification, Reach: OrgWide, Source: FromCoverage, Link: linkCoverage,
 			Title:   "Connect a classification source",
 			Detail:  "Agents use database connections, and no fact provider is active to say what class of data they hold.",
 			Targets: []Target{{Name: "Classification fact provider"}},
@@ -333,7 +334,7 @@ func Catalog() []Entry {
 			Detail: "Actions are being held for approval, and no Slack or Teams channel is active to tell deciders.",
 			Targets: []Target{
 				{Name: "Slack"},
-				{Name: "Microsoft Teams", Package: PackageTeams},
+				{Name: "Microsoft Teams"},
 			},
 			Enables: []string{"Eligible deciders hear about a held action without watching the console."},
 			StillUnsupported: []string{

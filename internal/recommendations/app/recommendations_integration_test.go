@@ -152,18 +152,23 @@ func TestHR535_AReadChangesNothing(t *testing.T) {
 func TestHR536_DiscoveriesCoverOnlyVisibleAgents(t *testing.T) {
 	o := exposuretest.New(t)
 	a, b := o.Claim(t, o.Agent), o.Claim(t, o.Other)
-	hidden := discover(t, o, o.Other, "aws_access_key_id")
+	hidden := discover(t, o, o.Other, "openai_api_key")
+	discover(t, o, o.Other, "aws_access_key_id")
 
 	mine := list(team(o, a), t, o, false)
 	if !mine.Restricted {
 		t.Fatal("a team viewer is not restricted")
 	}
-	if _, ok := item(mine, domain.AWSKeys); ok {
+	if _, ok := item(mine, domain.ModelKeys); ok {
 		t.Fatal("team A sees team B's discovery")
 	}
-	theirs, ok := item(list(team(o, b), t, o, false), domain.AWSKeys)
-	if !ok || theirs.Evidence.Count != 1 || records(theirs)[0] != hidden {
-		t.Fatalf("team B: %+v %v", theirs, ok)
+	theirs := list(team(o, b), t, o, false)
+	it, ok := item(theirs, domain.ModelKeys)
+	if !ok || it.Evidence.Count != 1 || records(it)[0] != hidden {
+		t.Fatalf("team B: %+v %v", it, ok)
+	}
+	if _, ok := item(theirs, domain.AWSKeys); ok {
+		t.Fatal("a team viewer sees whether the org has an AWS connection")
 	}
 	all, ok := item(list(orgWide(o), t, o, false), domain.AWSKeys)
 	if !ok || all.Evidence.Count != 1 {
@@ -187,7 +192,8 @@ func TestHR536_AnUnclaimedDiscoveryNeedsOrgScope(t *testing.T) {
 	}
 }
 
-// TestHR536_AgentCountsCoverOnlyVisibleAgents: an agent-backed count and its
+// TestHR536_AgentCountsCoverOnlyVisibleAgents: a count that rests on the
+// org's integrations is for org scope (D317); an agent-backed count and its
 // evidence hold the viewer's agents and no others.
 //
 // Covers: F343
@@ -195,8 +201,14 @@ func TestHR536_AgentCountsCoverOnlyVisibleAgents(t *testing.T) {
 	o := exposuretest.New(t)
 	a := o.Claim(t, o.Agent)
 	o.Claim(t, o.Other)
-	mine, ok := item(list(team(o, a), t, o, false), domain.CIWorkload)
-	if !ok || mine.Evidence.Count != 1 || len(records(mine)) != 1 || records(mine)[0] != o.Agent {
+	discover(t, o, o.Agent, "openai_api_key")
+	discover(t, o, o.Other, "openai_api_key")
+	scoped := list(team(o, a), t, o, false)
+	if _, ok := item(scoped, domain.CIWorkload); ok {
+		t.Fatal("a team viewer sees whether the org has a CI issuer")
+	}
+	mine, ok := item(scoped, domain.ModelKeys)
+	if !ok || mine.Evidence.Count != 1 || len(records(mine)) != 1 {
 		t.Fatalf("team: %+v %v", mine, ok)
 	}
 	all, ok := item(list(orgWide(o), t, o, false), domain.CIWorkload)
@@ -205,8 +217,9 @@ func TestHR536_AgentCountsCoverOnlyVisibleAgents(t *testing.T) {
 	}
 }
 
-// TestHR536_CoverageCoversOnlyVisibleAgents: the coverage leg: a team sees
-// only its own agent's use of a database connection.
+// TestHR536_CoverageCoversOnlyVisibleAgents: the coverage leg: use of a
+// database connection is shown at org scope, and to no team, not even the
+// one whose agent uses it (D317).
 //
 // Covers: F343
 func TestHR536_CoverageCoversOnlyVisibleAgents(t *testing.T) {
@@ -216,9 +229,12 @@ func TestHR536_CoverageCoversOnlyVisibleAgents(t *testing.T) {
 	if _, ok := item(list(team(o, a), t, o, false), domain.DataClasses); ok {
 		t.Fatal("team A sees team B's coverage")
 	}
-	theirs, ok := item(list(team(o, b), t, o, false), domain.DataClasses)
-	if !ok || theirs.Evidence.Count != 1 || records(theirs)[0] != o.Other {
-		t.Fatalf("team B: %+v %v", theirs, ok)
+	if _, ok := item(list(team(o, b), t, o, false), domain.DataClasses); ok {
+		t.Fatal("a team viewer sees whether the org has a fact provider")
+	}
+	all, ok := item(list(orgWide(o), t, o, false), domain.DataClasses)
+	if !ok || all.Evidence.Count != 1 || records(all)[0] != o.Other {
+		t.Fatalf("org: %+v %v", all, ok)
 	}
 }
 
@@ -251,15 +267,16 @@ func TestHR536_OrgWideGapsNeedOrgScope(t *testing.T) {
 func TestHR536_ADismissalsDetailNeedsOrgScope(t *testing.T) {
 	o := exposuretest.New(t)
 	a := o.Claim(t, o.Agent)
-	if err := service(o).Dismiss(orgWide(o), domain.CIWorkload, "We use another issuer here."); err != nil {
+	discover(t, o, o.Agent, "openai_api_key")
+	if err := service(o).Dismiss(orgWide(o), domain.ModelKeys, "We use another gateway here."); err != nil {
 		t.Fatal(err)
 	}
-	it, ok := item(list(team(o, a), t, o, true), domain.CIWorkload)
+	it, ok := item(list(team(o, a), t, o, true), domain.ModelKeys)
 	if !ok || !it.Dismissed || it.Dismissal != nil {
 		t.Fatalf("team: %+v %v", it, ok)
 	}
-	it, ok = item(list(orgWide(o), t, o, true), domain.CIWorkload)
-	if !ok || it.Dismissal == nil || it.Dismissal.Reason != "We use another issuer here." {
+	it, ok = item(list(orgWide(o), t, o, true), domain.ModelKeys)
+	if !ok || it.Dismissal == nil || it.Dismissal.Reason != "We use another gateway here." {
 		t.Fatalf("org: %+v %v", it, ok)
 	}
 }
