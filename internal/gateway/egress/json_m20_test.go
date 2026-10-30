@@ -152,33 +152,41 @@ definitions:
         method: POST
         path: /things/{target.id}
         body:
-          isGroup: literal.true
-          channelData[notify][silent]: literal.false
+          isGroup: bool.true
+          channelData[notify][silent]: bool.false
+          legacy: literal.true
           label: params.label
           kind: literal.thing
 `
 
-// TestHR526_JSONBooleanLiteralsComeOnlyFromThePackage: literal.true and
-// literal.false are JSON booleans in a JSON body, and an agent's "true" is
-// still the string it sent (G0 M20 D263).
+// TestHR526_JSONBooleansComeOnlyFromThePackage: bool.true and bool.false
+// are JSON booleans in a JSON body; literal.true stays the text "true", so
+// no signed package changes meaning; an agent's "true" is still the string
+// it sent; and a form body refuses a boolean (G0 M20 D263, D272).
 //
 // Covers: F756
-func TestHR526_JSONBooleanLiteralsComeOnlyFromThePackage(t *testing.T) {
+func TestHR526_JSONBooleansComeOnlyFromThePackage(t *testing.T) {
 	pkg, err := manifest.Decode([]byte(boolPackage))
 	if err != nil {
 		t.Fatal(err)
 	}
 	r := jiraBuild(t, pkg, "post_thing", `{"id":"abc","label":"true"}`)
-	if want := `{"channelData":{"notify":{"silent":false}},"isGroup":true,"kind":"thing","label":"true"}`; string(r.Body) != want {
+	if want := `{"channelData":{"notify":{"silent":false}},"isGroup":true,"kind":"thing","label":"true","legacy":"true"}`; string(r.Body) != want {
 		t.Fatalf("built %s", r.Body)
 	}
+	asForm := func(raw string) string {
+		return strings.Replace(raw, "      http:\n        method: POST\n", "      http:\n        method: POST\n        encoding: form\n", 1)
+	}
+	if _, err := manifest.Decode([]byte(asForm(boolPackage))); !errors.Is(err, defs.ErrInvalid) {
+		t.Fatalf("a boolean in a form body: %v", err)
+	}
 	// A form body keeps literals as the text it sends (G0 M14 D52).
-	form, err := manifest.Decode([]byte(strings.Replace(strings.Replace(boolPackage, "          channelData[notify][silent]: literal.false\n", "", 1),
-		"      http:\n        method: POST\n", "      http:\n        method: POST\n        encoding: form\n", 1)))
+	form, err := manifest.Decode([]byte(asForm(strings.NewReplacer(
+		"          isGroup: bool.true\n", "", "          channelData[notify][silent]: bool.false\n", "").Replace(boolPackage))))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r = jiraBuild(t, form, "post_thing", `{"id":"abc","label":"x"}`); string(r.Body) != "isGroup=true&kind=thing&label=x" {
+	if r = jiraBuild(t, form, "post_thing", `{"id":"abc","label":"x"}`); string(r.Body) != "kind=thing&label=x&legacy=true" {
 		t.Fatalf("form %s", r.Body)
 	}
 }

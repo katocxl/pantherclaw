@@ -173,8 +173,8 @@ func (r refs) body(fields map[string]string, transaction string, jsonBody bool, 
 		switch {
 		case ref == defs.TransactionKey:
 			v = "pc-" + transaction // G0 M14 D50
-		case jsonBody && (ref == "literal.true" || ref == "literal.false"):
-			v = ref == "literal.true" // a JSON boolean, from the package only (G0 M20 D263)
+		case jsonBody && (ref == defs.BoolTrue || ref == defs.BoolFalse):
+			v = ref == defs.BoolTrue // a JSON boolean, from the package only (G0 M20 D263, D272)
 		case strings.HasPrefix(ref, "literal."):
 			v = strings.TrimPrefix(ref, "literal.") // G0 M14 D52
 		case strings.HasPrefix(ref, "target.id."):

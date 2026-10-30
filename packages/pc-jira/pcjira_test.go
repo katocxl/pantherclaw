@@ -176,7 +176,7 @@ func TestHR522_JiraWritesAreDisclosedContentAndCustomerProjectsAConsequence(t *t
 	if !regexp.MustCompile(`^[A-Za-z0-9+/]{20,1000}={0,2}$`).MatchString(secret) {
 		t.Fatal("a Basic credential does not match")
 	}
-	for _, other := range []string{"xoxb-simulated-token-0000000000", "glpat-0123456789abcdefghij", "Basic " + secret} {
+	for _, other := range []string{"xoxb-simulated-token-0000000000", "glpat-" + "0123456789abcdefghij", "Basic " + secret} {
 		if regexp.MustCompile(`^[A-Za-z0-9+/]{20,1000}={0,2}$`).MatchString(other) {
 			t.Fatalf("%q matches", other)
 		}

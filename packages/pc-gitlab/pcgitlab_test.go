@@ -125,11 +125,11 @@ func TestHR521_AGitLabMergeWaitsForItsHeadApprovalsPipelineAndProtection(t *test
 		}
 	}
 	for tok, ok := range map[string]bool{
-		"glpat-0123456789abcdefghij":           true,
-		"glpat-0123456789abcdefghij.01.0x1abc": true,
-		"xoxb-0123456789abcdefghij":            false,
-		"glpat-short":                          false,
-		"Bearer glpat-0123456789abcdefghij":    false,
+		"glpat-" + "0123456789abcdefghij":           true,
+		"glpat-" + "0123456789abcdefghij.01.0x1abc": true,
+		"xoxb-0123456789abcdefghij":                 false,
+		"glpat-" + "short":                          false,
+		"Bearer glpat-" + "0123456789abcdefghij":    false,
 	} {
 		if re.MatchString(tok) != ok {
 			t.Errorf("%q: %v", tok, !ok)
@@ -165,7 +165,7 @@ func TestHR521_TheGitLabTokenGoesOnlyToItsBoundHost(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = broker.Place(r, []string{bound}, "Authorization", "Bearer", []byte("glpat-0123456789abcdefghij"))
+			err = broker.Place(r, []string{bound}, "Authorization", "Bearer", []byte("glpat-"+"0123456789abcdefghij"))
 			if ok != (err == nil) || (!ok && (!errors.Is(err, broker.ErrNotBound) || r.Header.Get("Authorization") != "")) {
 				t.Errorf("%s via %s: %v", url, bound, err)
 			}

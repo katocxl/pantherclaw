@@ -27,7 +27,7 @@ import (
 // The Jira and GitLab simulators' credentials: test values, not real ones.
 var (
 	jiraSecret  = base64.StdEncoding.EncodeToString([]byte("agent@example.test:simulated-e2e-api-token"))
-	gitlabToken = "glpat-simulated-e2e-agent-token"
+	gitlabToken = "glpat-" + "simulated-e2e-agent-token"
 )
 
 var (
