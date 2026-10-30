@@ -12,6 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/zalando/go-keyring"
 )
 
 // Credentials are what `pclaw login` stores (ADR-0016 decision 4): the
@@ -56,19 +58,24 @@ func loadCreds(env Env) (Credentials, error) {
 	} else if err != nil {
 		return Credentials{}, err
 	}
-	var c Credentials
+	var c storedCreds
 	if err := json.Unmarshal(b, &c); err != nil {
 		return Credentials{}, fmt.Errorf("pclaw: credentials file %s is damaged; run pclaw login again: %w", p, err)
 	}
-	return c, nil
+	if c.Secrets == secretsInKeychain {
+		if err := readSecrets(p, &c.Credentials); err != nil {
+			return Credentials{}, err
+		}
+	}
+	return c.Credentials, nil
 }
 
-// saveCreds writes the file atomically with mode 0600.
-func saveCreds(env Env, c Credentials) error {
-	p, err := credsPath(env)
-	if err != nil {
-		return err
-	}
+// saveCreds stores c in the configured store (creds_store.go), without a
+// fallback warning.
+func saveCreds(env Env, c Credentials) error { return saveCredsTo(env, c, nil) }
+
+// writeCredsFile writes the file atomically with mode 0600.
+func writeCredsFile(p string, c storedCreds) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return err
 	}
@@ -102,6 +109,12 @@ func deleteCreds(env Env) error {
 	}
 	if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
+	}
+	// The keychain entry goes too, whatever the mode; only keychain mode
+	// insists that the keychain is reachable.
+	err = systemKeychain.Delete(keychainService, keychainUser(p))
+	if mode, _ := credentialStore(env); err != nil && !errors.Is(err, keyring.ErrNotFound) && mode == storeKeychain {
+		return fmt.Errorf("pclaw: removing the session from the keychain: %w", err)
 	}
 	return nil
 }

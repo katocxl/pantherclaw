@@ -105,8 +105,9 @@ func TestHR062_WrappedKeysCannotBeSwappedBetweenRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	// An insider copies the receipts key's wrapped material onto the permits
-	// row (keeping the permits public key): unwrap must fail.
-	d.AdminExec(t, `UPDATE pc.keys k SET wrapped_private_key = r.wrapped_private_key
+	// row (keeping the permits public key): unwrap must fail. The insider is
+	// a superuser, so it also skips the 00224 both-columns trigger.
+	d.AdminExec(t, `SET session_replication_role = replica; UPDATE pc.keys k SET wrapped_private_key = r.wrapped_private_key
 		FROM pc.keys r WHERE k.purpose = 'permits' AND r.purpose = 'receipts' AND k.org_id = r.org_id`)
 	if err := keystore.LoadSigningKeys(ctx, p, kp, keys.NewRegistry()); !errors.Is(err, keys.ErrUnwrap) {
 		t.Fatalf("swapped wrapped key accepted: %v", err)

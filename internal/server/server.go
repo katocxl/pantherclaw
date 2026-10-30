@@ -90,10 +90,11 @@ Usage:
   pantherclaw-server serve [--config FILE]            run the API and/or workers (role from config)
   pantherclaw-server migrate up|status [--config FILE] apply or show schema migrations (as pc_migrator)
   pantherclaw-server db bootstrap --admin-url-file F --app-password-file F --migrator-password-file F --audit-password-file F
-                                 --retention-password-file F [--backup-password-file F] [--deleter-password-file F]
+                                 --retention-password-file F [--backup-password-file F] [--deleter-password-file F] [--keystore-password-file F]
                                                      create roles and schema once, as the database owner; with
                                                      --backup-password-file also the read-only backup role pc_backup;
-                                                     --deleter-password-file also the org deletion role pc_deleter
+                                                     --deleter-password-file also the org deletion role pc_deleter;
+                                                     --keystore-password-file also the key re-wrap role pc_keystore
   pantherclaw-server keys gen-kek --out FILE          write a new key-encryption key (0600)
   pantherclaw-server keys rotate-gateway-ca --confirm [--config FILE]
                                                      replace the internal gateway CA key; every gateway enrolls again
@@ -628,6 +629,12 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err := githubapp.Register(jreg, ghScans); err != nil {
 			return err
 		}
+		rewrapJobs, closeKeystore, err := registerKeyRewrap(ctx, jreg, cfg, pool, kp, log)
+		if err != nil {
+			return err
+		}
+		defer closeKeystore()
+		evidenceJobs = append(evidenceJobs, rewrapJobs...)
 		client, err := jobs.NewClient(pool, jreg, jobs.Config{
 			Queues: map[string]int{river.QueueDefault: cfg.WorkerConcurrency, napp.Queue: cfg.Notifications.Concurrency},
 			PeriodicJobs: slices.Concat(chainer.PeriodicJobs(), authority.SweeperPeriodicJobs(), authnapp.JanitorPeriodicJobs(),
@@ -1040,6 +1047,7 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	retentionPW := fs.String("retention-password-file", "", "password file for pc_retention (the retention job's role)")
 	backupPW := fs.String("backup-password-file", "", "optional: password file for pc_backup, the read-only role of the backup job")
 	deleterPW := fs.String("deleter-password-file", "", "optional: password file for pc_deleter, the role of the org deletion job")
+	keystorePW := fs.String("keystore-password-file", "", "optional: password file for pc_keystore, the role of the key re-wrap job")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -1095,6 +1103,17 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 	}
+	if *keystorePW != "" {
+		// Before the database grants, which give an existing pc_keystore its
+		// re-wrap columns (G0 M18 D171).
+		kpw, err := config.ReadSecretFile(*keystorePW)
+		if err != nil {
+			return err
+		}
+		if err := db.BootstrapKeystoreRole(ctx, conn, kpw); err != nil {
+			return err
+		}
+	}
 	if err := db.BootstrapDatabase(ctx, conn); err != nil {
 		return err
 	}
@@ -1105,6 +1124,9 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 	if *deleterPW != "" {
 		_, _ = fmt.Fprintf(stdout, "bootstrapped the org deletion role %s\n", db.RoleDeleter)
+	}
+	if *keystorePW != "" {
+		_, _ = fmt.Fprintf(stdout, "bootstrapped the key re-wrap role %s\n", db.RoleKeystore)
 	}
 	return nil
 }

@@ -159,7 +159,7 @@ func (f *Transit) seal(pt []byte) string {
 	if g == nil {
 		return ""
 	}
-	return "vault:v" + strconv.Itoa(v) + ":" + base64.StdEncoding.EncodeToString(g.Seal(nil, nil, pt, nil))
+	return "vault:v" + strconv.Itoa(v) + ":" + base64.StdEncoding.EncodeToString(g.Seal(nil, nil, pt, nil)) //nolint:gosec // G407: random-nonce GCM requires a nil nonce
 }
 
 func (f *Transit) open(ct string) ([]byte, bool) {

@@ -222,3 +222,29 @@ func hmacSHA256(key []byte, msg string) []byte {
 	m.Write([]byte(msg))
 	return m.Sum(nil)
 }
+
+// RoleKeystore re-wraps stored keys under the current KEK: SELECT on
+// pc.keys and pc.deks and UPDATE of only their wrapped key and kek_id
+// columns, never BYPASSRLS (G0 M18 D171, migration 00224, HR-487).
+// Created only with --keystore-password-file; only the worker's
+// keystore.rewrap job uses it.
+const RoleKeystore = "pc_keystore"
+
+// BootstrapKeystoreRole creates or updates pc_keystore and sets its
+// password: LOGIN, NOINHERIT, NOBYPASSRLS. Its grants come from
+// BootstrapDatabase and migration 00224. It must run with a superuser
+// connection.
+func BootstrapKeystoreRole(ctx context.Context, admin *pgx.Conn, pw pclog.Secret[[]byte]) error {
+	return bootstrapOptionalRole(ctx, admin, RoleKeystore, bootstrapKeystoreRoleSQL, pw)
+}
+
+// bootstrapKeystoreRoleSQL creates pc_keystore with exactly its attributes.
+const bootstrapKeystoreRoleSQL = `
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_keystore') THEN
+        CREATE ROLE pc_keystore;
+    END IF;
+END
+$$;
+ALTER ROLE pc_keystore LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;`
