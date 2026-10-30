@@ -1,0 +1,140 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Test package for the M20 definition format (G0 M20 D254, HR-526): two
+# aws-json operations on POST / told apart by their fixed X-Amz-Target,
+# and an aws-query read whose literal Action and Version name the
+# operation.
+format: 1
+name: test.m20-format
+version: 1.0.0
+publisher: test
+summary: M20 definition format fixtures
+
+definitions:
+  - operation: svc.thing.update
+    summary: Update a thing
+    access: write
+    target:
+      type: svc.thing
+      id_pattern: '^(?P<name>[a-z][a-z0-9-]{0,31})$'
+      account: none
+    params:
+      size:
+        type: integer
+        material: true
+        required: true
+        unit: count
+        min: '0'
+        max: '10'
+    effects:
+      - kind: thing.update
+        description: Changes a thing
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: reconcile
+    approval:
+      title: Update {target.id}
+      fields: [target.id, params.size]
+    assurance:
+      basis: declared
+      reviewed_by: [tests]
+      valid_until: 2027-10-30
+    dispatch:
+      http:
+        method: POST
+        path: /
+        encoding: aws-json
+        aws_resource: arn:{aws.partition}:svc:{aws.region}:{aws.account}:thing/{target.id}
+        headers:
+          X-Amz-Target: Svc_20261030.UpdateThing
+        body:
+          name: target.id
+          size: params.size
+    mappings:
+      - channel: http
+        method: POST
+        path: /
+        encoding: aws-json
+        headers:
+          X-Amz-Target: Svc_20261030.UpdateThing
+        route: thing-update
+        extract:
+          target_id: input.name
+          params:
+            size: int(input.size)
+  - operation: svc.thing.describe
+    summary: Describe a thing
+    access: read
+    target:
+      type: svc.thing
+      id_pattern: '^(?P<name>[a-z][a-z0-9-]{0,31})$'
+      account: none
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: declared
+      reviewed_by: [tests]
+      valid_until: 2027-10-30
+    dispatch:
+      http:
+        method: POST
+        path: /
+        encoding: aws-json
+        headers:
+          X-Amz-Target: Svc_20261030.DescribeThing
+        body:
+          name: target.id
+    mappings:
+      - channel: http
+        method: POST
+        path: /
+        encoding: aws-json
+        headers:
+          X-Amz-Target: Svc_20261030.DescribeThing
+        route: thing-describe
+        extract:
+          target_id: input.name
+          params: {}
+  - operation: svc.role.read
+    summary: Read a role
+    access: read
+    target:
+      type: svc.role
+      id_pattern: '^[A-Za-z0-9+=,.@_-]{1,64}$'
+      account: none
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: declared
+      reviewed_by: [tests]
+      valid_until: 2027-10-30
+    dispatch:
+      http:
+        method: POST
+        path: /
+        encoding: aws-query
+        body:
+          Action: literal.GetRole
+          Version: literal.2010-05-08
+          RoleName: target.id
+    mappings:
+      - channel: mcp
+        tool: read_role
+        route: role-read
+        extract:
+          target_id: input.role
+          params: {}

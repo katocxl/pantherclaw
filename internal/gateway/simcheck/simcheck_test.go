@@ -5,6 +5,7 @@ package simcheck
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -14,8 +15,10 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/gateway/egress"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/sim/aws"
 	simhandshake "github.com/katocxl/pantherclaw/internal/sim/handshake"
 	"github.com/katocxl/pantherclaw/internal/sim/payments"
+	"github.com/katocxl/pantherclaw/internal/sim/teams"
 )
 
 func client(t *testing.T, base string) *egress.Client {
@@ -63,6 +66,25 @@ func TestVerifyAcceptsASimulatorAndCaches(t *testing.T) {
 func TestHR221_TheM20SimulatorsAnswerTheHandshake(t *testing.T) {
 	for _, kind := range []string{"jira", "gitlab"} {
 		ts := httptest.NewServer(simhandshake.Wrap(kind, http.NotFoundHandler()))
+		defer ts.Close()
+		if err := New().Verify(t.Context(), "conn", ts.URL, client(t, ts.URL)); err != nil {
+			t.Errorf("%s: %v", kind, err)
+		}
+	}
+}
+
+// TestHR221_TheTeamsAndAWSSimulatorsAnswerTheHandshake: a simulated
+// connection to the Teams or AWS simulator is verified like any other, by the
+// simulators themselves (G0 M20 D254).
+//
+// Covers: F756
+func TestHR221_TheTeamsAndAWSSimulatorsAnswerTheHandshake(t *testing.T) {
+	log := slog.New(slog.DiscardHandler)
+	for kind, h := range map[string]http.Handler{
+		"teams": teams.New(nil, teams.Faults{}, log).Handler(),
+		"aws":   aws.New("simulated/base+secret0123456789", "", []string{"*"}, aws.Faults{}, log).Handler(),
+	} {
+		ts := httptest.NewServer(h)
 		defer ts.Close()
 		if err := New().Verify(t.Context(), "conn", ts.URL, client(t, ts.URL)); err != nil {
 			t.Errorf("%s: %v", kind, err)

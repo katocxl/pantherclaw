@@ -1,0 +1,199 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for agents that post to Microsoft Teams channels
+# (G0 M20 D254, D263, D266; F756, founder decision G12). It reaches the Bot
+# Framework's Bot Connector service through an http connection whose
+# credential is of kind oauth_client: PantherClaw holds the bot's client
+# secret and mints an access token for every dispatch at the Microsoft
+# Entra token endpoint; the token, never the secret, is placed on the
+# request, and the agent holds neither (HR-524). The token endpoint must
+# name the bot's home tenant, which pins what counts as external (D273);
+# sealing refuses one that does not, such as botframework.com (D279). The
+# bot must be installed in the team, and added to a shared or private
+# channel, to post there.
+#
+# A message goes to one channel of one tenant, the action's target and its
+# destination, so a grant or policy can bound where an agent may post. Its
+# text is a disclosure param (HR-079) capped at 4000 bytes, and it is type
+# content: text params are never dispatched raw from a template (HR-023).
+# Before every decision the gateway reads the channel's members and reports
+# teams.channel.external: whether anyone in it belongs to another tenant or
+# is a guest. A post to such a channel predicts the consequence
+# teams.message.disclose (external_disclosure), which a policy must allow
+# (HR-524); a channel that cannot be read whole is a missing fact, never an
+# internal one (HR-160).
+#
+# Teams ids hold "@" and ":", which a path value may never carry (HR-073),
+# so the post creates a channel conversation with POST /v3/conversations
+# and the channel in a nested body (D263). The post is the only operation
+# agents reach (D266); the channel read is the gateway's own.
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
+format: 1
+name: pc.teams
+version: 1.0.0
+publisher: pantherclaw
+summary: Post messages to Microsoft Teams channels and read a channel's members
+
+definitions:
+  - operation: teams.message.post
+    summary: Post a message to a Microsoft Teams channel
+    access: write
+    target:
+      type: teams_channel
+      id_pattern: '^19:[0-9A-Za-z_-]{1,64}@thread\.(tacv2|skype)$'
+      account: required
+      account_pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    params:
+      text:
+        type: content
+        material: true
+        required: true
+        max_length: 4000
+        # The message leaves PantherClaw for Teams and everyone in the
+        # channel: a disclosure param, capped at 4000 bytes.
+        disclosure: true
+        max_bytes: 4000
+    # A post needs a destination bound: a grant or envelope that names no
+    # channels lets it post nowhere (D57, D78).
+    constraints:
+      - kind: target_set
+      - kind: destination_set
+        required: true
+    effects:
+      - kind: message.send
+        description: Posts a message that everyone in the channel can read
+    reversibility: irreversible
+    dedupe_key: [target.id, target.account, params.text]
+    # Read by the gateway before every decision: whether anyone in the
+    # channel is outside the tenant.
+    prerequisites:
+      - fact: teams.channel.external
+        max_age_seconds: 300
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Post a message to Teams channel {target.id}
+      fields:
+        - target.id
+        - target.account
+        - facts.teams.channel.external
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+    mappings:
+      - channel: mcp
+        tool: teams_post_message
+        route: teams-message-post
+        description: >-
+          Post a message to a Microsoft Teams channel, by the tenant id and
+          the channel id (19:...@thread.tacv2). The text is plain text of at
+          most 4000 bytes.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [tenant_id, channel_id, text]
+          properties:
+            tenant_id:
+              type: string
+              description: The Microsoft Entra tenant id the team belongs to
+              pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            channel_id:
+              type: string
+              description: The channel id, such as 19:abc123@thread.tacv2
+              pattern: '^19:[0-9A-Za-z_-]{1,64}@thread\.(tacv2|skype)$'
+            text:
+              type: string
+              description: The message text
+              maxLength: 4000
+        extract:
+          target_id: input.channel_id
+          target_account: input.tenant_id
+          params:
+            text: input.text
+          destinations:
+            - kind: external
+              id: input.channel_id
+    dispatch:
+      http:
+        method: POST
+        path: /v3/conversations
+        body:
+          isGroup: bool.true
+          tenantId: target.account
+          channelData[channel][id]: target.id
+          channelData[tenant][id]: target.account
+          activity[type]: literal.message
+          activity[text]: params.text
+
+  # The connection test (C2, D269): a token minted with the bot's
+  # credential, then a read of the conversations the bot is part of.
+  - operation: teams.bot.conversations.read
+    summary: List the conversations the bot is part of (the connection test)
+    access: read
+    test: true
+    target:
+      type: pc.connection
+      id_pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      account: none
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+    dispatch:
+      http:
+        method: GET
+        path: /v3/conversations
+
+  # The consequence of a post to a channel with people outside the tenant:
+  # what is posted reaches them. It is decided, never sent: no mapping
+  # reaches it.
+  - operation: teams.message.disclose
+    summary: A message that reaches people outside the tenant
+    access: write
+    target:
+      type: teams_channel
+      id_pattern: '^19:[0-9A-Za-z_-]{1,64}@thread\.(tacv2|skype)$'
+      account: required
+      account_pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    params: {}
+    effects:
+      - kind: external_disclosure
+        description: Discloses the message to people outside the organization
+    reversibility: irreversible
+    dedupe_key: [target.id]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: A message reaches people outside the tenant in Teams channel {target.id}
+      fields:
+        - target.id
+        - target.account
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+
+consequences:
+  - id: external-channel-disclosure
+    operation: teams.message.post
+    when: facts.teams_channel_external.external == true
+    requires_facts: [teams.channel.external]
+    consequence:
+      operation: teams.message.disclose
+      effect: external_disclosure
+      description: >-
+        The channel has members from another tenant or guests, so the
+        message reaches people outside your organization.
+    valid_until: 2027-10-30

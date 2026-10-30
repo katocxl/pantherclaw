@@ -30,15 +30,22 @@ type sealServer struct {
 	key         *pccrypto.SealPrivateKey
 	fingerprint string
 	put         *pantherclawv1.PutCredentialRequest
+	// hosts, header and scheme override the defaults (tests of other kinds).
+	hosts          []string
+	header, scheme string
 }
 
 func (s *sealServer) GetSealingKey(_ context.Context, req *pantherclawv1.GetSealingKeyRequest) (*pantherclawv1.GetSealingKeyResponse, error) {
 	pub := s.key.PublicKey().Bytes()
+	hosts, header, scheme := s.hosts, s.header, s.scheme
+	if hosts == nil {
+		hosts, header, scheme = []string{"payments.example.test"}, "Authorization", "Bearer"
+	}
 	return &pantherclawv1.GetSealingKeyResponse{
 		OrgId: "0192aaaa-bbbb-7ccc-8ddd-000000000001", ConnectionId: req.GetConnectionId(), Version: 2,
 		BrokerKeyId: "0192aaaa-bbbb-7ccc-8ddd-000000000003", PublicKey: pub, Fingerprint: s.fingerprint,
-		GatewayId: "0192aaaa-bbbb-7ccc-8ddd-000000000004", AllowedHosts: []string{"payments.example.test"},
-		Header: "Authorization", Scheme: "Bearer",
+		GatewayId: "0192aaaa-bbbb-7ccc-8ddd-000000000004", AllowedHosts: hosts,
+		Header: header, Scheme: scheme,
 	}, nil
 }
 

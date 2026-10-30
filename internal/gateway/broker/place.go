@@ -4,29 +4,15 @@
 package broker
 
 import (
-	"net"
 	"net/http"
-	"slices"
-	"strings"
+
+	"github.com/katocxl/pantherclaw/internal/credentials/domain"
 )
 
-// Bound reports whether a request URL's host may receive the credential:
-// an allowed "host" entry matches any port of that host, a "host:port"
-// entry only that port. Hosts compare case-insensitively.
+// Bound reports whether a request URL's host may receive the credential
+// (domain.HostBound).
 func Bound(allowedHosts []string, rawHost, defaultPort string) bool {
-	host, port, err := net.SplitHostPort(rawHost)
-	if err != nil {
-		host, port = rawHost, defaultPort
-	}
-	host = strings.ToLower(strings.TrimSuffix(strings.Trim(host, "[]"), "."))
-	return slices.ContainsFunc(allowedHosts, func(entry string) bool {
-		h, p, err := net.SplitHostPort(entry)
-		if err != nil {
-			h, p = entry, ""
-		}
-		h = strings.ToLower(strings.Trim(h, "[]"))
-		return h == host && (p == "" || p == port)
-	})
+	return domain.HostBound(allowedHosts, rawHost, defaultPort)
 }
 
 // Place sets the credential on the request: "Header: [Scheme ]secret".

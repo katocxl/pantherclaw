@@ -24,7 +24,14 @@ const (
 )
 
 // ValidKind reports whether k is a credential kind ("" is static).
-func ValidKind(k string) bool { return k == "" || k == KindStatic || k == KindGitHubApp }
+func ValidKind(k string) bool {
+	return k == "" || k == KindStatic || k == KindGitHubApp || k == KindOAuthClient || k == KindAWSSigV4
+}
+
+// Minted reports whether a kind is never placed as sealed: the gateway
+// mints a short-lived token or session from it per dispatch (HR-203,
+// HR-524, HR-525).
+func Minted(k string) bool { return k == KindGitHubApp || k == KindOAuthClient || k == KindAWSSigV4 }
 
 // GitHub App credentials are placed as "Authorization: Bearer <token>".
 const (

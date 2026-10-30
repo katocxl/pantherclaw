@@ -93,7 +93,11 @@ func escape3986(s string) string {
 // is {"a":{"b":{"c":…}}} (G0 M20 D260). The keys are the reviewed
 // package's, checked again here, so no value ever adds a key; a flat key
 // stays as it is.
-func nestJSON(obj map[string]any) (map[string]any, error) {
+func nestJSON(obj map[string]any) (map[string]any, error) { return nest(obj, false) }
+
+// nest builds nestJSON's object; with lists, a key ending in [] is a list of
+// its one value (an aws-json body, D283).
+func nest(obj map[string]any, lists bool) (map[string]any, error) {
 	keys := slices.Sorted(maps.Keys(obj))
 	if err := defs.CheckFormKeys(keys); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrBuild, err)
@@ -101,7 +105,7 @@ func nestJSON(obj map[string]any) (map[string]any, error) {
 	out := make(map[string]any, len(obj))
 	for _, k := range keys {
 		p, err := defs.ParseFormKey(k)
-		if err != nil || p.List {
+		if err != nil || (p.List && !lists) {
 			return nil, fmt.Errorf("%w: JSON body key %q", ErrBuild, k)
 		}
 		node := out
@@ -115,6 +119,10 @@ func nestJSON(obj map[string]any) (map[string]any, error) {
 				node[name] = child
 			}
 			node = child
+		}
+		if p.List {
+			node[p.Path[len(p.Path)-1]] = []any{obj[k]}
+			continue
 		}
 		node[p.Path[len(p.Path)-1]] = obj[k]
 	}

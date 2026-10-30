@@ -214,3 +214,21 @@ func TestHR526_NestingRefusesWhatIsNotOneDocument(t *testing.T) {
 		t.Fatalf("nested %v %v", got, err)
 	}
 }
+
+// TestHR526_AnAWSJSONListHoldsOneValue: only an aws-json body has a key
+// ending in [], a list of its one value; any other JSON body still nests
+// objects only (D283).
+//
+// Covers: F756
+func TestHR526_AnAWSJSONListHoldsOneValue(t *testing.T) {
+	got, err := nest(map[string]any{"cluster": "prod", "services[]": "web"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list, ok := got["services"].([]any); !ok || len(list) != 1 || list[0] != "web" || got["cluster"] != "prod" {
+		t.Fatalf("%v", got)
+	}
+	if _, err := nestJSON(map[string]any{"services[]": "web"}); !errors.Is(err, ErrBuild) {
+		t.Fatalf("a JSON list: %v", err)
+	}
+}

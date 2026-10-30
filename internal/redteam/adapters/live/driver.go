@@ -617,11 +617,15 @@ func (d *Driver) wait(ctx context.Context, st domain.Step) (domain.Observation, 
 		return domain.Observation{}, fmt.Errorf("%w: wait needs the server", app.ErrUnsupported)
 	}
 	var w struct {
+		For        string `json:"for"`
 		Of         string `json:"of"`
 		MaxSeconds int    `json:"max_seconds"`
 	}
 	if err := json.Unmarshal(st.With, &w); err != nil {
 		return domain.Observation{}, err
+	}
+	if w.For == "downstream_read" {
+		return domain.Observation{}, fmt.Errorf("%w: a wait for a consequence's read", app.ErrUnsupported)
 	}
 	txn, err := d.txnOf(w.Of)
 	if err != nil {

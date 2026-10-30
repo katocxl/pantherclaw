@@ -117,10 +117,21 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 		if err != nil {
 			return Request{}, err
 		}
-		if t.Encoding == defs.EncodingForm {
+		switch t.Encoding { //nolint:exhaustive // every other encoding is JSON
+		case defs.EncodingForm:
 			out.ContentType = FormContentType
 			out.Body, err = EncodeForm(obj)
-		} else {
+		case defs.EncodingAWSQuery:
+			// A flat form whose literal Action and Version name the
+			// operation (G0 M20 D254).
+			out.ContentType = defs.AWSQueryType
+			out.Body, err = EncodeForm(obj)
+		case defs.EncodingAWSJSON:
+			out.ContentType = defs.AWSJSONContentType
+			if obj, err = nest(obj, true); err == nil {
+				out.Body, err = json.Marshal(obj, json.Deterministic(true))
+			}
+		default:
 			out.ContentType = JSONContentType
 			if obj, err = nestJSON(obj); err == nil {
 				out.Body, err = json.Marshal(obj, json.Deterministic(true))
@@ -129,6 +140,12 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 		if err != nil {
 			return Request{}, fmt.Errorf("%w: %w", ErrBuild, err)
 		}
+		sum := sha256.Sum256(out.Body)
+		out.BodySHA256 = sum[:]
+	} else if t.Encoding == defs.EncodingAWSJSON {
+		// aws-json always sends an object, empty for an operation without
+		// input.
+		out.ContentType, out.Body = defs.AWSJSONContentType, []byte("{}")
 		sum := sha256.Sum256(out.Body)
 		out.BodySHA256 = sum[:]
 	}

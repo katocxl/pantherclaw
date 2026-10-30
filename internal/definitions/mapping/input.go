@@ -145,6 +145,9 @@ func matchPath(tmpl []segment, raw string) (map[string]any, bool) {
 	if !strings.HasPrefix(raw, "/") {
 		return nil, false
 	}
+	if isRoot(tmpl) {
+		return map[string]any{}, raw == "/" // the service root (G0 M20 D254)
+	}
 	parts := strings.Split(raw[1:], "/")
 	rest := len(tmpl) > 0 && tmpl[len(tmpl)-1].rest
 	if len(parts) != len(tmpl) && (!rest || len(parts) < len(tmpl)) {
