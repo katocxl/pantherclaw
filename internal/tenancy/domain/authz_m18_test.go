@@ -94,8 +94,10 @@ func TestHR472_ScopedAdminBindsOnlyRolesItHoldsAtOrAboveTheTarget(t *testing.T) 
 		role domain.RoleName
 		at   domain.Path
 	}{
-		{domain.RoleDeveloper, w.teamP}, {domain.RoleDeveloper, w.envP},
-		{domain.RoleScopeAdmin, w.envP}, {domain.RoleScopeAdmin, w.teamP},
+		{domain.RoleDeveloper, w.teamP},
+		{domain.RoleDeveloper, w.envP},
+		{domain.RoleScopeAdmin, w.envP},
+		{domain.RoleScopeAdmin, w.teamP},
 	} {
 		if err := s.CheckBindCeiling(ok.role, ok.at); err != nil {
 			t.Errorf("%s at %v refused: %v", ok.role, ok.at[len(ok.at)-1].Type, err)
