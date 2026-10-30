@@ -6,6 +6,10 @@ package agent
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -181,5 +185,96 @@ func TestAProcessNoAssignmentNamesIsRemoved(t *testing.T) {
 	}
 	if _, ok := e.containers[profile.NamesOf(hosted).Container]; !ok {
 		t.Fatal("removed an assigned process")
+	}
+}
+
+// TestAnUnfinishedRemovalFinishesOnTheNextSweep: the private directory goes
+// last, so a removal stopped after the container or after the network
+// leaves the directory, and the next sweep finishes it from that alone. An
+// assigned gateway's directory and anything else in the root stay, and a
+// failed listing removes nothing (D231).
+//
+// Covers: PN-010.4
+func TestAnUnfinishedRemovalFinishesOnTheNextSweep(t *testing.T) {
+	a, c, e, _ := newAgent(t)
+	as, hosted := assignment(pb.HostedGatewayState_HOSTED_GATEWAY_STATE_PROVISIONED)
+	c.assignments = append(c.assignments, as)
+	if err := a.Reconcile(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var volumes []string
+	var volumeErr error
+	a.Volumes = func(_ context.Context, name string) error {
+		if err := volumeErr; err != nil {
+			volumeErr = nil
+			return err
+		}
+		volumes = append(volumes, name)
+		return nil
+	}
+	a.Running = func(context.Context) ([]ids.UUID, error) { return nil, nil }
+	failed := errors.New("engine busy")
+	for name, stop := range map[string]func(){
+		"after the container": func() { e.networkErr = failed },
+		"after the network":   func() { volumeErr = failed },
+	} {
+		t.Run(name, func(t *testing.T) {
+			e.networks, volumes = nil, nil
+			gone := ids.NewV7()
+			names := profile.NamesOf(gone)
+			if _, err := a.Private.Prepare(gone, "https://gw-api.example.test:8443", "sha256:aa"); err != nil {
+				t.Fatal(err)
+			}
+			a.Running = func(context.Context) ([]ids.UUID, error) { return []ids.UUID{gone}, nil }
+			stop()
+			if err := a.Reconcile(context.Background()); !errors.Is(err, failed) {
+				t.Fatalf("stopped removal: %v", err)
+			}
+			if _, err := os.Stat(a.Private.Dir(gone)); err != nil {
+				t.Fatalf("the directory went before the rest: %v", err)
+			}
+			a.Running = func(context.Context) ([]ids.UUID, error) { return nil, nil } // the container is gone
+			if err := a.Reconcile(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(a.Private.Dir(gone)); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("the directory stayed: %v", err)
+			}
+			if !slices.Contains(e.networks, names.Network) || !slices.Contains(volumes, names.Volume) {
+				t.Fatalf("networks %v, volumes %v", e.networks, volumes)
+			}
+		})
+	}
+	if _, err := os.Stat(filepath.Join(a.Private.Dir(hosted), filepath.Base(profile.ConfigFile))); err != nil {
+		t.Fatalf("an assigned gateway's directory: %v", err)
+	}
+	gone := ids.NewV7()
+	foreign := []string{"lost+found", "pc-hgc-notahex", "PC-HGC-" + profile.NamesOf(gone).Container[len("pc-hgc-"):], strings.ToUpper(profile.NamesOf(gone).Container)}
+	for _, name := range foreign {
+		if err := os.MkdirAll(filepath.Join(a.Private.Root, name), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.networks = nil
+	if err := a.Reconcile(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.networks) != 0 {
+		t.Fatalf("removed for a foreign name: %v", e.networks)
+	}
+	for _, name := range foreign {
+		if _, err := os.Stat(filepath.Join(a.Private.Root, name)); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	names := profile.NamesOf(gone)
+	e.containers[names.Container] = docker.Container{Name: names.Container}
+	a.Running = func(context.Context) ([]ids.UUID, error) { return []ids.UUID{gone}, nil }
+	a.Private = &Private{Root: filepath.Join(a.Private.Root, "missing")}
+	if err := a.Reconcile(context.Background()); err == nil {
+		t.Fatal("a failed directory listing was not reported")
+	}
+	if _, ok := e.containers[names.Container]; !ok {
+		t.Fatal("a failed directory listing removed a container")
 	}
 }

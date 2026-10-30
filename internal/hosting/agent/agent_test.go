@@ -69,12 +69,23 @@ type engine struct {
 	containers map[string]docker.Container
 	running    map[string]bool
 	order      *[]string
+	// networks records the networks removed; networkErr fails the next removal.
+	networks   []string
+	networkErr error
 }
 
 func (e *engine) CreateNetwork(_ context.Context, n docker.Network) (docker.NetworkInfo, error) {
 	return docker.NetworkInfo{Name: n.Name}, nil
 }
-func (e *engine) RemoveNetwork(context.Context, string) error { return nil }
+func (e *engine) RemoveNetwork(_ context.Context, name string) error {
+	if err := e.networkErr; err != nil {
+		e.networkErr = nil
+		return err
+	}
+	e.networks = append(e.networks, name)
+	return nil
+}
+
 func (e *engine) CreateContainer(_ context.Context, c docker.Container) (docker.ContainerInfo, error) {
 	e.containers[c.Name] = c
 	*e.order = append(*e.order, "create")

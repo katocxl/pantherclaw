@@ -17,6 +17,7 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -120,7 +121,10 @@ func (a *Agent) Reconcile(ctx context.Context) error {
 }
 
 // sweep removes every process no assignment names: the record is gone, as
-// after the org's deletion, so nothing else ever stops it (D228).
+// after the org's deletion, so nothing else ever stops it (D228). A private
+// directory counts as well as a container: it goes last, so one left behind
+// is a removal that stopped part-way, and a failed listing removes nothing
+// (D231).
 func (a *Agent) sweep(ctx context.Context, assignments []*pb.HostingAssignment) error {
 	if a.Running == nil {
 		return nil
@@ -129,15 +133,20 @@ func (a *Agent) sweep(ctx context.Context, assignments []*pb.HostingAssignment) 
 	if err != nil {
 		return err
 	}
-	assigned := make(map[string]bool, len(assignments))
+	dirs, err := a.Private.List()
+	if err != nil {
+		return err
+	}
+	settled := make(map[string]bool, len(assignments))
 	for _, as := range assignments {
-		assigned[as.GetId()] = true
+		settled[as.GetId()] = true
 	}
 	var errs []error
-	for _, hosted := range running {
-		if assigned[hosted.String()] {
+	for _, hosted := range slices.Concat(running, dirs) {
+		if settled[hosted.String()] {
 			continue
 		}
+		settled[hosted.String()] = true
 		a.Log.InfoContext(ctx, "hosting.unassigned_removed", slog.String("hosted_gateway", hosted.String()))
 		errs = append(errs, a.remove(ctx, hosted))
 	}
@@ -264,7 +273,9 @@ func (a *Agent) stop(ctx context.Context, as *pb.HostingAssignment, hosted ids.U
 	return err
 }
 
-// remove deletes everything a hosted gateway has on this host.
+// remove deletes everything a hosted gateway has on this host. It stops at
+// the first error and takes the private directory last, which marks the
+// removal unfinished for the sweep.
 func (a *Agent) remove(ctx context.Context, hosted ids.UUID) error {
 	names := profile.NamesOf(hosted)
 	if err := a.Engine.RemoveContainer(ctx, names.Container); err != nil && !notFound(err) {

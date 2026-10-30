@@ -22,6 +22,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
 	"github.com/katocxl/pantherclaw/internal/evidence/securityevent"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	hostingapp "github.com/katocxl/pantherclaw/internal/hosting/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -327,16 +328,18 @@ func chainPlatform(t *testing.T, s *Service) {
 // TestHR390_DeletingAnOrgEndsItsHostedGatewayAndFreesItsSlug: the freeze
 // marks the org's hosted gateway for stopping while the host can still see
 // it, and the finished deletion leaves no record and no customer-chosen
-// name behind. The host agent removes a process with no record
-// (TestAProcessNoAssignmentNamesIsRemoved) (D228).
+// name behind. The host's stop report during the deletion succeeds, so its
+// agent stops re-reporting, and the record goes with the deletion. The host
+// agent removes a process with no record
+// (TestAProcessNoAssignmentNamesIsRemoved) (D228, D231).
 //
 // Covers: PN-010.4
 func TestHR390_DeletingAnOrgEndsItsHostedGatewayAndFreesItsSlug(t *testing.T) {
 	d, s, org := setup(t)
-	gateway, hosted := ids.NewV7(), ids.NewV7()
+	gateway, hosted, host := ids.NewV7(), ids.NewV7(), ids.NewV7()
 	d.AdminExec(t, `INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'hosted-acme', 'test')`, org, gateway)
 	d.AdminExec(t, `INSERT INTO pc.hosted_gateways (org_id, id, slug, state, gateway_id, host_id, milli_cpus, memory_mib, pids, created_by)
-		VALUES ($1, $2, 'acme', 'RUNNING', $3, $4, 500, 256, 128, 'test')`, org, hosted, gateway, ids.NewV7())
+		VALUES ($1, $2, 'acme', 'RUNNING', $3, $4, 500, 256, 128, 'test')`, org, hosted, gateway, host)
 	d.AdminExec(t, `INSERT INTO pc.hosting_slugs (slug, org_id, hosted_id) VALUES ('acme', $1, $2)`, org, hosted)
 	d.AdminExec(t, `INSERT INTO pc.hosting_slugs (slug, org_id, hosted_id) VALUES ('other', $1, $2)`, ids.NewV7(), ids.NewV7())
 	id := deletionRequest(t, s, org, time.Now().Add(-time.Hour))
@@ -347,6 +350,16 @@ func TestHR390_DeletingAnOrgEndsItsHostedGatewayAndFreesItsSlug(t *testing.T) {
 	d.AdminQueryRow(t, `SELECT state FROM pc.hosted_gateways WHERE id = $1`, []any{hosted}, &state)
 	if state != "DEPROVISIONING" {
 		t.Fatalf("after the freeze: %s", state)
+	}
+	hosting := hostingapp.New(s.Pool, nil, nil, nil, "", nil)
+	if err := hosting.Stopped(t.Context(), hostingapp.HostIdentity{Host: host}, org, hosted); err != nil {
+		t.Fatalf("the stop report during the deletion: %v", err)
+	}
+	var held int
+	d.AdminQueryRow(t, `SELECT count(*) FROM pc.hosting_slugs WHERE slug = 'acme'`, nil, &held)
+	d.AdminQueryRow(t, `SELECT state FROM pc.hosted_gateways WHERE id = $1`, []any{hosted}, &state)
+	if held != 0 || state != "DEPROVISIONING" {
+		t.Fatalf("after the stop report: %d slugs, %s", held, state)
 	}
 	acknowledgeIntents(t, s)
 	if err := s.DeleteOrg(t.Context(), org, id); err != nil {
