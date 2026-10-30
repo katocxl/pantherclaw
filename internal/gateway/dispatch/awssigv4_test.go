@@ -46,8 +46,10 @@ func TestHR525_TheDispatchSignsWithANarrowedSessionNeverTheBaseKey(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &Engine{broker: &plainOpener{plain: plain}, allowed: []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")},
-		tokenClients: map[string]clientEntry{}, log: pclog.Discard()}
+	e := &Engine{
+		broker: &plainOpener{plain: plain}, allowed: []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")},
+		tokenClients: map[string]clientEntry{}, log: pclog.Discard(),
+	}
 	conn := &control.Connection{GatewayConnection: &pb.GatewayConnection{Id: "c", BaseUrl: srv.URL}, Credential: &pb.SealedCredential{
 		Kind: credentials.KindAWSSigV4, AllowedHosts: []string{u.Host}, Header: "Authorization", Scheme: "AWS4-HMAC-SHA256",
 	}}

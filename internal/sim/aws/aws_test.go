@@ -47,8 +47,10 @@ func TestAWSSimVerifiesSignaturesAndSessions(t *testing.T) {
 	t.Cleanup(srv.Close)
 	base := sigv4.Credentials{AccessKeyID: BaseKeyID, SecretAccessKey: secret}
 	policy := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"iam:*","Resource":"*"}]}`
-	assume := url.Values{"Action": {"AssumeRole"}, "Version": {"2011-06-15"}, "RoleArn": {RoleARN}, "RoleSessionName": {"t"},
-		"DurationSeconds": {"900"}, "Policy": {policy}}
+	assume := url.Values{
+		"Action": {"AssumeRole"}, "Version": {"2011-06-15"}, "RoleArn": {RoleARN}, "RoleSessionName": {"t"},
+		"DurationSeconds": {"900"}, "Policy": {policy},
+	}
 	if code, _ := do(t, signed(t, srv, "sts", base, assume, time.Now())); code != http.StatusForbidden {
 		t.Fatalf("no external id: %d", code)
 	}

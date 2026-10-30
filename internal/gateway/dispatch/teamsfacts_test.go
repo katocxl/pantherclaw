@@ -46,10 +46,14 @@ func TestT226_TheGatewayReadsWhetherATeamsChannelIsExternal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &Engine{broker: &plainOpener{plain: plain}, allowed: []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")},
-		clients: map[string]clientEntry{}, tokenClients: map[string]clientEntry{}, log: pclog.Discard()}
-	conn := &control.Connection{GatewayConnection: &pb.GatewayConnection{Id: "c", Kind: "http", BaseUrl: srv.URL + "/teams"}, Package: p,
-		Credential: &pb.SealedCredential{Kind: credentials.KindOAuthClient, AllowedHosts: []string{u.Host}, Header: "Authorization", Scheme: "Bearer"}}
+	e := &Engine{
+		broker: &plainOpener{plain: plain}, allowed: []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")},
+		clients: map[string]clientEntry{}, tokenClients: map[string]clientEntry{}, log: pclog.Discard(),
+	}
+	conn := &control.Connection{
+		GatewayConnection: &pb.GatewayConnection{Id: "c", Kind: "http", BaseUrl: srv.URL + "/teams"}, Package: p,
+		Credential: &pb.SealedCredential{Kind: credentials.KindOAuthClient, AllowedHosts: []string{u.Host}, Header: "Authorization", Scheme: "Bearer"},
+	}
 	def, _ := p.Definition("teams.message.post")
 	read := func(channel string) map[string]any {
 		return e.readTeamsChannel(context.Background(), conn, def, actionir.Target{Type: "teams_channel", ID: channel, Account: teams.TenantID})
