@@ -39,3 +39,7 @@ paths = ['''^\.demo/''', '''^deploy/dev/secrets/''']
 [[allowlists]]
 description = "The built-in detection pack manifest (G0 M10 D12): the SHA-256 of each rule file, keyed by file name (one is identity_key_new_network.yaml). Digests of committed files, no secret. The file is generated and digest-checked at startup, and the HR-241 stale test (TestPackDigestIsCurrent) fails on any hand edit."
 paths = ['''^internal/detection/pack/builtin/manifest\.json$''']
+
+[[allowlists]]
+description = "AWS's published Signature Version 4 test suite (internal/platform/sigv4/testdata/aws4_testsuite/README.md): signatures and an example session token made with AWS's documented example key AKIDEXAMPLE. Public known-answer vectors that authenticate nothing."
+paths = ['''^internal/platform/sigv4/testdata/aws4_testsuite/''']
