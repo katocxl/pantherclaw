@@ -145,7 +145,17 @@ func TestHR197_ReplayDecisionThroughTheRPC(t *testing.T) {
 	auditor := api.as("auditor", w.org, td.KindUser, td.Binding{Role: td.RoleAuditor, Scope: td.Scope{Type: td.ScopeOrg, ID: w.org.UUID()}})
 	ctx := context.Background()
 
+	// The replay limit counts in the shared store (G0 M19 D201): its own
+	// pc.rate_counters rows (scope evidence.replay) are the one write the
+	// replays may cause, and they must go up by one per replay (D217).
+	replayCounter := func() (rows, events int64) {
+		w.db.AdminQueryRow(w.t, `SELECT count(*), coalesce(sum(count), 0) FROM pc.rate_counters WHERE scope = 'evidence.replay'`,
+			nil, &rows, &events)
+		return rows, events
+	}
 	before := w.rowCounts()
+	beforeRows, beforeEvents := replayCounter()
+	before["rate_counters"] -= beforeRows
 	for _, r := range results {
 		res, err := auditor.ReplayDecision(ctx, &pantherclawv1.ReplayDecisionRequest{TransactionId: r.TransactionID.String()})
 		if err != nil {
@@ -178,6 +188,11 @@ func TestHR197_ReplayDecisionThroughTheRPC(t *testing.T) {
 		t.Fatalf("proposed: %v", proposed)
 	}
 	after := w.rowCounts()
+	afterRows, afterEvents := replayCounter()
+	after["rate_counters"] -= afterRows
+	if replays := int64(2*len(results) + 1); afterRows == 0 || afterEvents-beforeEvents != replays {
+		t.Errorf("the replay counter: %d rows, %d events counted, want %d more than %d", afterRows, afterEvents, replays, beforeEvents)
+	}
 	for tb, n := range before {
 		if after[tb] != n {
 			t.Errorf("table %s: %d rows before the replays, %d after", tb, n, after[tb])
