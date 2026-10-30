@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/http"
 	"reflect"
 	"slices"
 	"strings"
@@ -287,10 +288,24 @@ func (m *Mapper) HTTP(ctx context.Context, tc Context, method, rawPath, rawQuery
 // is read: JSON, or a strict form (G0 M14 D8, HR-300). More than one
 // matching route is ambiguous.
 func (m *Mapper) HTTPRequest(ctx context.Context, tc Context, method, rawPath, rawQuery, contentType string, body []byte) (actionir.Parsed, error) {
+	h := http.Header{}
+	if contentType != "" {
+		h.Set("Content-Type", contentType)
+	}
+	return m.HTTPRequestHeader(ctx, tc, method, rawPath, rawQuery, h, body)
+}
+
+// HTTPRequestHeader maps a request as HTTPRequest does, matching a route's
+// fixed headers against the request's (G0 M20 D254): a route matches only
+// when the request carries each of them once with exactly its value. The
+// headers select the route and nothing else; none reaches the target
+// (HR-526).
+func (m *Mapper) HTTPRequestHeader(ctx context.Context, tc Context, method, rawPath, rawQuery string, header http.Header, body []byte) (actionir.Parsed, error) {
+	contentType := header.Get("Content-Type")
 	var match *compiled
 	var vars map[string]any
 	for _, c := range m.http {
-		if c.m.Method != method {
+		if c.m.Method != method || !matchHeaders(c.m.Headers, header) {
 			continue
 		}
 		if v, ok := matchPath(c.tmpl, rawPath); ok {
@@ -308,9 +323,12 @@ func (m *Mapper) HTTPRequest(ctx context.Context, tc Context, method, rawPath, r
 		return actionir.Parsed{}, err
 	}
 	var input map[string]any
-	if match.m.Encoding == domain.EncodingForm {
+	switch match.m.Encoding {
+	case domain.EncodingForm:
 		input, err = DecodeForm(contentType, body)
-	} else {
+	case domain.EncodingAWSJSON:
+		input, err = decodeAWSJSON(contentType, body)
+	default:
 		input, err = DecodeInput(body)
 	}
 	if err != nil {
@@ -323,8 +341,14 @@ func (m *Mapper) HTTPRequest(ctx context.Context, tc Context, method, rawPath, r
 // without mapping its input; ok is false for none or more than one. It
 // names the route of a request that is refused before mapping.
 func (m *Mapper) HTTPRoute(method, rawPath string) (route string, ok bool) {
+	return m.HTTPRouteHeader(method, rawPath, http.Header{})
+}
+
+// HTTPRouteHeader is HTTPRoute matching each route's fixed headers too
+// (G0 M20 D254).
+func (m *Mapper) HTTPRouteHeader(method, rawPath string, header http.Header) (route string, ok bool) {
 	for _, c := range m.http {
-		if c.m.Method != method {
+		if c.m.Method != method || !matchHeaders(c.m.Headers, header) {
 			continue
 		}
 		if _, match := matchPath(c.tmpl, rawPath); match {

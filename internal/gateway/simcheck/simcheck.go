@@ -152,5 +152,6 @@ func handshake(ctx context.Context, base *url.URL, cl Client) error {
 }
 
 // simKinds are the simulators a handshake may name: payments, mcp and
-// github, and the M14 simulators stripe, slack and a2a (G0 M14 D46).
-var simKinds = []string{"payments", "mcp", "github", "stripe", "slack", "a2a"}
+// github, the M14 simulators stripe, slack and a2a (G0 M14 D46), and M20's
+// teams and aws (D254).
+var simKinds = []string{"payments", "mcp", "github", "stripe", "slack", "a2a", "teams", "aws"}

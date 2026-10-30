@@ -113,6 +113,7 @@ func (d *rangeDriver) Capabilities() map[app.Capability]bool {
 	maps.Copy(caps, stripeCapabilities())
 	maps.Copy(caps, a2aCapabilities())
 	maps.Copy(caps, pgCapabilities())
+	maps.Copy(caps, m20ConnectorCapabilities())
 	return caps
 }
 
@@ -142,12 +143,14 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 		o.postgres = pgtargettest.New(t)
 	}
 	var p idp
-	if requires(sc, "person") || sc.ID == "RT-009" || slackScenario(sc) || needsBrowser(sc) {
+	if requires(sc, "person") || sc.ID == "RT-009" || slackScenario(sc) || needsBrowser(sc) ||
+		requires(sc, string(capJiraComment)) || requires(sc, string(capGitLabMerge)) {
 		p = inProcessIdP(t)
 		o.people = &p
 	}
 	o.github = requires(sc, "github") || requires(sc, "sandbox")
 	o.slack = slackScenario(sc)
+	o.jira, o.gitlab = requires(sc, string(capJiraComment)), requires(sc, string(capGitLabMerge))
 	if sc.ID == "RT-011" {
 		o.github = true
 	}
@@ -186,6 +189,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	if o.slack {
 		d.setupSlack()
 	}
+	d.setupM20Connectors()
 	if requires(sc, "mcp") {
 		d.setupMCPUpstream()
 	}

@@ -77,6 +77,11 @@ type HTTPDispatch struct {
 	// Success, when set, is a top-level JSON boolean a 2xx answer must
 	// carry with the given value, or the outcome is FAILED (D8: Slack's ok).
 	Success *SuccessCheck `json:"success,omitzero"`
+	// AWSResource is an aws-json or aws-query write's resource ARN template
+	// (G0 M20 D270): a session for the dispatch is narrowed to its one action
+	// on exactly this ARN. Its references are the decision's target and the
+	// connection's own account, region and partition, never a param.
+	AWSResource string `json:"aws_resource,omitzero"`
 }
 
 // MCPDispatch is a call of one tool on an upstream (remote) MCP server, or
@@ -109,6 +114,9 @@ var (
 		"authorization", "proxy-authorization", "cookie", "host", "content-length", "content-type",
 		"transfer-encoding", "connection", "te", "upgrade", "trailer", "keep-alive", "pap-action", "expect",
 		"accept-encoding", // the gateway reads answers as identity (HR-076, G0 M14 D85)
+		// Set by the gateway's SigV4 signer for an AWS session (G0 M20 D254,
+		// HR-525, HR-526).
+		"x-amz-date", "x-amz-security-token", "x-amz-content-sha256",
 	}
 )
 
@@ -138,6 +146,14 @@ var literalRe = regexp.MustCompile(`^[\x20-\x7a\x7c\x7e]{1,64}$`)
 // "pc-<transaction>" (G0 M14 D50).
 const TransactionKey = "transaction.key"
 
+// BoolTrue and BoolFalse are JSON boolean body values (G0 M20 D263, D272):
+// a namespace of their own, so literal.true stays the text "true" in every
+// package already signed.
+const (
+	BoolTrue  = "bool.true"
+	BoolFalse = "bool.false"
+)
+
 // reference checks one template reference against the definition: the
 // target id, a named group of its pattern (target.id.<group>), the account
 // or a param; in an HTTP body also the transaction key and literals. A
@@ -155,6 +171,13 @@ func (d *Definition) reference(at, ref string, where place) error {
 	case TransactionKey:
 		if where != inBody {
 			return invalid("%s: %s is sent only as a body value", at, ref)
+		}
+		return nil
+	case BoolTrue, BoolFalse:
+		// A JSON boolean, from the package only (G0 M20 D263, D272); the
+		// caller refuses it in a form body.
+		if where != inBody {
+			return invalid("%s: %s is sent only as a JSON body value", at, ref)
 		}
 		return nil
 	}
@@ -204,20 +227,30 @@ func (d *Definition) reference(at, ref string, where place) error {
 
 // fields checks a body or arguments template. A form body's keys may use
 // the bracket syntax the form parser accepts (a[b], a[b][c], a[]); a list
-// value goes only under a key ending in [] (G0 M14 D8, D52).
+// value goes only under a key ending in [] (G0 M14 D8, D52). A JSON HTTP
+// body's keys may use the same grammar without [] to name nested objects
+// (a[b][c] is {"a":{"b":{"c":…}}}, G0 M20 D260); MCP arguments stay flat.
 func (d *Definition) fields(at string, f map[string]string, where place, enc Encoding) error {
 	if len(f) > maxTemplateFields {
 		return invalid("%s: at most %d fields", at, maxTemplateFields)
 	}
 	keys := slices.Sorted(maps.Keys(f))
-	if enc == EncodingForm {
+	nested := where == inBody && enc != EncodingForm
+	if enc == EncodingForm || nested {
 		if err := CheckFormKeys(keys); err != nil {
 			return invalid("%s: %v", at, err)
 		}
 	}
 	for _, k := range keys {
-		if enc != EncodingForm && !fieldRe.MatchString(k) {
+		if nested && strings.Contains(k, "[") {
+			if p, err := ParseFormKey(k); err != nil || p.List {
+				return invalid("%s: field name %q: a JSON body nests objects only, never a [] list", at, k)
+			}
+		} else if enc != EncodingForm && !fieldRe.MatchString(k) {
 			return invalid("%s: field name %q", at, k)
+		}
+		if (f[k] == BoolTrue || f[k] == BoolFalse) && enc == EncodingForm {
+			return invalid("%s.%s: a boolean is a JSON body value; a form sends literal.true or literal.false", at, k)
 		}
 		if err := d.reference(at+"."+k, f[k], where); err != nil {
 			return err
@@ -304,6 +337,9 @@ func (d *Definition) validateHTTPDispatch(at string, h *HTTPDispatch) error {
 		return invalid("%s: a method %v and a path template starting with /", at, methods)
 	}
 	segs := strings.Split(h.Path[1:], "/")
+	if h.Path == RootPath && h.Encoding.AWS() {
+		segs = nil // an AWS protocol posts to the service root (D254)
+	}
 	for i, seg := range segs {
 		if ref, ok := strings.CutSuffix(seg, "*}"); ok && strings.HasPrefix(seg, "{") {
 			// The rest of the path from an identifier param, one segment
@@ -328,8 +364,12 @@ func (d *Definition) validateHTTPDispatch(at string, h *HTTPDispatch) error {
 		if slices.Contains(bodiless, h.Method) {
 			return invalid("%s: %s sends no body to encode as a form", at, h.Method)
 		}
+	case EncodingAWSJSON, EncodingAWSQuery:
+		if err := d.validateAWSDispatch(at, h); err != nil {
+			return err
+		}
 	default:
-		return invalid("%s.encoding must be json or form", at)
+		return invalid("%s.encoding must be json, form, aws-json or aws-query", at)
 	}
 	if err := d.fields(at+".body", h.Body, inBody, h.Encoding); err != nil {
 		return err
@@ -367,6 +407,9 @@ func (d *Definition) validateHTTPDispatch(at string, h *HTTPDispatch) error {
 	}
 	if s := h.Success; s != nil && !fieldRe.MatchString(s.Field) {
 		return invalid("%s.success.field %q", at, s.Field)
+	}
+	if h.AWSResource != "" && !h.Encoding.AWS() {
+		return invalid("%s.aws_resource belongs to aws-json and aws-query templates", at)
 	}
 	return nil
 }
