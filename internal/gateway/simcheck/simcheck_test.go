@@ -14,7 +14,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/gateway/egress"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
-	"github.com/katocxl/pantherclaw/internal/sim/handshake"
+	simhandshake "github.com/katocxl/pantherclaw/internal/sim/handshake"
 	"github.com/katocxl/pantherclaw/internal/sim/payments"
 )
 
@@ -62,7 +62,7 @@ func TestVerifyAcceptsASimulatorAndCaches(t *testing.T) {
 // Covers: F756
 func TestHR221_TheM20SimulatorsAnswerTheHandshake(t *testing.T) {
 	for _, kind := range []string{"jira", "gitlab"} {
-		ts := httptest.NewServer(handshake.Wrap(kind, http.NotFoundHandler()))
+		ts := httptest.NewServer(simhandshake.Wrap(kind, http.NotFoundHandler()))
 		defer ts.Close()
 		if err := New().Verify(t.Context(), "conn", ts.URL, client(t, ts.URL)); err != nil {
 			t.Errorf("%s: %v", kind, err)
