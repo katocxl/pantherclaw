@@ -3,7 +3,10 @@
 
 package a2aface
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 // maxOwned bounds the task and context ids the face remembers; the oldest
 // are forgotten first, and a forgotten id is refused like an unknown one
@@ -60,7 +63,7 @@ func (o *owned) add(k ownedKey, v string) {
 }
 
 // record notes a task (and its context) the peer answered with for w.
-func (o *owned) record(w owner, task, context string) {
+func (o *owned) record(_ context.Context, w owner, task, context string) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if context != "" {
@@ -72,7 +75,7 @@ func (o *owned) record(w owner, task, context string) {
 }
 
 // task reports whether w created task, and its context.
-func (o *owned) task(w owner, task string) (context string, ok bool) {
+func (o *owned) task(_ context.Context, w owner, task string) (context string, ok bool) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	context, ok = o.set[ownedKey{w.who(), 't', task}]
@@ -80,9 +83,12 @@ func (o *owned) task(w owner, task string) (context string, ok bool) {
 }
 
 // context reports whether w created context.
-func (o *owned) context(w owner, context string) bool {
+func (o *owned) context(_ context.Context, w owner, context string) bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	_, ok := o.set[ownedKey{w.who(), 'c', context}]
 	return ok
 }
+
+// reserve keeps nothing: a process's memory is bounded by forgetting.
+func (o *owned) reserve(context.Context, owner, string) (func(), error) { return func() {}, nil }

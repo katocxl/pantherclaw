@@ -73,7 +73,8 @@ func TestHR411_A2AStateIsPerGatewayAndOrg(t *testing.T) {
 }
 
 // TestHR412_EachA2AKindHasTheTaskBounds: each A2A kind is bounded on its
-// own like MCP tasks, per instance, and neither uses up the MCP entries
+// own like MCP tasks, per caller (its instance, or its run without one),
+// and neither uses up the MCP entries
 // or the other kind (G0 M19 D211).
 // Covers: PN-010.7
 func TestHR412_EachA2AKindHasTheTaskBounds(t *testing.T) {
@@ -104,6 +105,22 @@ func TestHR412_EachA2AKindHasTheTaskBounds(t *testing.T) {
 		if _, err := svc.PutMCPState(ctx, a, entry(kind, "other instance", &other), 0); err != nil {
 			t.Fatalf("%s of another instance: %v", kind, err)
 		}
+	}
+	// A caller without an instance is counted by its run, not with every
+	// other caller without one (D218).
+	for i := range app.MaxMCPEntriesPerInstance {
+		if _, err := svc.PutMCPState(ctx, a, entry(app.MCPA2ATask, fmt.Sprint("no-instance-", i), nil), 0); err != nil {
+			t.Fatalf("run without an instance, task %d: %v", i, err)
+		}
+	}
+	if _, err := svc.PutMCPState(ctx, a, entry(app.MCPA2ATask, "no-instance-too-many", nil), 0); !errors.Is(err, app.ErrMCPStateFull) {
+		t.Fatalf("past the run's bound: %v", err)
+	}
+	otherRun := ids.NewV7()
+	en := entry(app.MCPA2ATask, "another run", nil)
+	en.Run = &otherRun
+	if _, err := svc.PutMCPState(ctx, a, en, 0); err != nil {
+		t.Fatalf("another run without an instance: %v", err)
 	}
 	// The MCP entries of the instance are untouched by both kinds.
 	hold := app.MCPEntry{

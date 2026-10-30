@@ -13,32 +13,33 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// TestHR496_PromotionHoldDecision: a moved timeline holds unless declared
-// sync is confirmed by the primary's settings; a first start records the
-// timeline and does not hold (G0 M19 D207).
+// TestHR496_PromotionHoldDecision: a moved timeline holds unless sync was
+// verified both on the acknowledged timeline and on the new primary; a
+// first start, or the same timeline, records what this start verified
+// (G0 M19 D207, D218).
 // Covers: PN-010.7
 func TestHR496_PromotionHoldDecision(t *testing.T) {
 	one, two := int64(1), int64(2)
 	cases := []struct {
-		name             string
-		r                Replication
-		ack              *int64
-		commit, standbys string
-		hold, record     bool
-		unverified       bool
+		name                string
+		r                   Replication
+		ack                 *int64
+		ackSync, configured bool
+		hold, record        bool
+		sync, unverified    bool
 	}{
 		{name: "first start records the timeline", r: ReplicationAsync, record: true},
-		{name: "first start with sync records the timeline", r: ReplicationSync, commit: "remote_apply", standbys: "FIRST 1 (standby)", record: true},
-		{name: "same timeline", r: ReplicationAsync, ack: &two},
-		{name: "async promotion holds", r: ReplicationAsync, ack: &one, commit: "remote_apply", standbys: "FIRST 1 (standby)", hold: true},
-		{name: "declared sync without a standby holds", r: ReplicationSync, ack: &one, commit: "remote_apply", standbys: " ", hold: true, unverified: true},
-		{name: "declared sync without remote_apply holds", r: ReplicationSync, ack: &one, commit: "on", standbys: "FIRST 1 (standby)", hold: true, unverified: true},
-		{name: "verified sync records the new timeline", r: ReplicationSync, ack: &one, commit: "remote_apply", standbys: "FIRST 1 (standby)", record: true},
+		{name: "first start with verified sync", r: ReplicationSync, configured: true, record: true, sync: true},
+		{name: "same timeline records this start's verification", r: ReplicationAsync, ack: &two, ackSync: true, record: true},
+		{name: "async promotion holds", r: ReplicationAsync, ack: &one, ackSync: true, configured: true, hold: true},
+		{name: "declared sync the new primary does not confirm holds", r: ReplicationSync, ack: &one, ackSync: true, hold: true, unverified: true},
+		{name: "new primary configured sync, old timeline not verified, holds", r: ReplicationSync, ack: &one, configured: true, hold: true, sync: true},
+		{name: "sync verified at both ends records the new timeline", r: ReplicationSync, ack: &one, ackSync: true, configured: true, record: true, sync: true},
 	}
 	for _, c := range cases {
-		p, record := decidePromotion(c.r, 2, c.ack, c.commit, c.standbys)
-		if p.Hold != c.hold || record != c.record || p.Unverified != c.unverified || p.Timeline != 2 {
-			t.Errorf("%s: hold=%v record=%v unverified=%v timeline=%d", c.name, p.Hold, record, p.Unverified, p.Timeline)
+		p, record := decidePromotion(c.r, 2, c.ack, c.ackSync, c.configured)
+		if p.Hold != c.hold || record != c.record || p.Sync != c.sync || p.Unverified != c.unverified || p.Timeline != 2 {
+			t.Errorf("%s: hold=%v record=%v sync=%v unverified=%v timeline=%d", c.name, p.Hold, record, p.Sync, p.Unverified, p.Timeline)
 		}
 		if p.Hold && p.Acknowledged != 1 {
 			t.Errorf("%s: acknowledged = %d, want 1", c.name, p.Acknowledged)

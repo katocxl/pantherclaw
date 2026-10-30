@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strings"
 	"sync"
 
 	"github.com/jackc/pgx/v5"
@@ -17,14 +16,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Promotion detection (G0 M19 D202, D207, HR-496). A promotion moves the
-// database to a new timeline. Behind a synchronous standby that applied
-// every commit (synchronous_commit=remote_apply), nothing committed is
-// lost; behind an asynchronous one, revocations, containment changes and
-// budget reservations may be. So a server that finds a timeline other
-// than the acknowledged one in pc.db_primary_timeline, without verified
-// synchronous replication, starts in the maintenance hold, and `keys
-// bump-epochs` acknowledges the new timeline once every epoch is raised.
+// Promotion detection (G0 M19 D202, D207, D213, D218, HR-496). A promotion
+// moves the database to a new timeline. Behind a synchronous standby that
+// applied every commit (synchronous_commit=remote_apply), nothing committed
+// is lost; behind an asynchronous one, revocations, containment changes
+// and budget reservations may be. pc.db_primary_timeline keeps the
+// acknowledged timeline and whether sync was verified while it ran. A
+// server that finds another timeline starts in the maintenance hold unless
+// sync was verified at both ends: on the acknowledged timeline and on the
+// new primary. `keys bump-epochs` acknowledges the new timeline once every
+// epoch is raised.
 
 // Replication is the replication the operator declares (db.replication).
 type Replication string
@@ -53,8 +54,8 @@ type Promotion struct {
 	// Unverified is set when sync was declared but the primary's settings
 	// do not confirm it; the replication then counts as async.
 	Unverified bool
-	// Hold is set when the timeline moved without effective sync: the
-	// server must start in the maintenance hold.
+	// Hold is set when the timeline moved without sync verified at both
+	// ends: the server must start in the maintenance hold.
 	Hold bool
 }
 
@@ -63,36 +64,44 @@ type Promotion struct {
 // the server does not start.
 var ErrNoTimelineRow = errors.New("db: pc.db_primary_timeline has no row; run `migrate up`")
 
-// currentTimeline reads the timeline WAL is written on now; it moves the
-// moment a standby is promoted, unlike the last checkpoint's.
-const currentTimeline = `SELECT ('x' || substr(pg_walfile_name(pg_current_wal_lsn()), 1, 8))::bit(32)::bigint`
+// The failover queries (each one constant).
+const (
+	// primaryStateSQL reads the timeline WAL is written on now (it moves
+	// the moment a standby is promoted, unlike the last checkpoint's) and
+	// whether the primary runs verified sync: remote_apply with a
+	// synchronous standby named.
+	primaryStateSQL = `SELECT ('x' || substr(pg_walfile_name(pg_current_wal_lsn()), 1, 8))::bit(32)::bigint,
+		current_setting('synchronous_commit') = 'remote_apply' AND btrim(current_setting('synchronous_standby_names')) <> ''`
+	acknowledgedSQL = `SELECT timeline, sync_verified FROM pc.db_primary_timeline FOR UPDATE`
+	recordSQL       = `UPDATE pc.db_primary_timeline SET timeline = $1, sync_verified = $2, update_time = now()`
+)
 
 // CheckPromotion compares the primary's timeline with the acknowledged one
-// for declared replication r. A first start records the timeline and does
-// not hold; a moved timeline holds unless replication is effectively sync,
-// in which case the new timeline is recorded.
+// for declared replication r, and arms the pool's watch for promotions
+// while it runs (D213).
 func (p *Pool) CheckPromotion(ctx context.Context, r Replication) (Promotion, error) {
 	if !r.Valid() {
 		return Promotion{}, fmt.Errorf("db: replication %q (use async or sync)", r)
 	}
 	var out Promotion
 	err := p.InGlobalTx(ctx, GlobalFailover, func(ctx context.Context, tx GlobalTx) error {
-		var commit, standbys string
-		if err := tx.QueryRow(ctx, currentTimeline+`, current_setting('synchronous_commit'),
-			current_setting('synchronous_standby_names')`).Scan(&out.Timeline, &commit, &standbys); err != nil {
+		var tl int64
+		var configured bool
+		if err := tx.QueryRow(ctx, primaryStateSQL).Scan(&tl, &configured); err != nil {
 			return err
 		}
 		var ack *int64
-		switch err := tx.QueryRow(ctx, `SELECT timeline FROM pc.db_primary_timeline FOR UPDATE`).Scan(&ack); {
+		var ackSync bool
+		switch err := tx.QueryRow(ctx, acknowledgedSQL).Scan(&ack, &ackSync); {
 		case IsNoRows(err):
 			return ErrNoTimelineRow
 		case err != nil:
 			return err
 		}
 		var record bool
-		out, record = decidePromotion(r, out.Timeline, ack, commit, standbys)
+		out, record = decidePromotion(r, tl, ack, ackSync, configured)
 		if record {
-			return recordTimeline(ctx, tx, out.Timeline)
+			return recordTimeline(ctx, tx, out.Timeline, out.Sync)
 		}
 		return nil
 	})
@@ -107,14 +116,16 @@ func (p *Pool) CheckPromotion(ctx context.Context, r Replication) (Promotion, er
 
 // AcknowledgeTimeline records the primary's current timeline, after `keys
 // bump-epochs` raised every organization's epoch, so the next start does
-// not hold. It returns the timeline.
-func (p *Pool) AcknowledgeTimeline(ctx context.Context) (int64, error) {
+// not hold; sync counts as verified on it when r is sync and the primary
+// confirms it. It returns the timeline.
+func (p *Pool) AcknowledgeTimeline(ctx context.Context, r Replication) (int64, error) {
 	var tl int64
 	err := p.InGlobalTx(ctx, GlobalFailover, func(ctx context.Context, tx GlobalTx) error {
-		if err := tx.QueryRow(ctx, currentTimeline).Scan(&tl); err != nil {
+		var configured bool
+		if err := tx.QueryRow(ctx, primaryStateSQL).Scan(&tl, &configured); err != nil {
 			return err
 		}
-		return recordTimeline(ctx, tx, tl)
+		return recordTimeline(ctx, tx, tl, r == ReplicationSync && configured)
 	})
 	if err != nil {
 		return 0, fmt.Errorf("db: acknowledge the primary timeline: %w", err)
@@ -122,8 +133,8 @@ func (p *Pool) AcknowledgeTimeline(ctx context.Context) (int64, error) {
 	return tl, nil
 }
 
-func recordTimeline(ctx context.Context, tx GlobalTx, tl int64) error {
-	tag, err := tx.Exec(ctx, `UPDATE pc.db_primary_timeline SET timeline = $1, update_time = now()`, tl)
+func recordTimeline(ctx context.Context, tx GlobalTx, tl int64, syncVerified bool) error {
+	tag, err := tx.Exec(ctx, recordSQL, tl, syncVerified)
 	if err != nil {
 		return err
 	}
@@ -133,27 +144,29 @@ func recordTimeline(ctx context.Context, tx GlobalTx, tl int64) error {
 	return nil
 }
 
-// decidePromotion decides the start-up check (D207): the primary's
-// timeline, the acknowledged one (nil before the first start) and the
-// primary's synchronous_commit and synchronous_standby_names. record says
-// whether timeline becomes the acknowledged one.
-func decidePromotion(r Replication, timeline int64, ack *int64, commit, standbys string) (out Promotion, record bool) {
+// decidePromotion decides the start-up check: the primary's timeline, the
+// acknowledged one (nil before the first start) and whether sync was
+// verified on it (ackSync), and whether the primary runs verified sync
+// (configured). record says whether timeline becomes the acknowledged one,
+// with Sync as its verification.
+func decidePromotion(r Replication, timeline int64, ack *int64, ackSync, configured bool) (out Promotion, record bool) {
 	out.Timeline = timeline
 	if r == ReplicationSync {
-		out.Sync = commit == "remote_apply" && strings.TrimSpace(standbys) != ""
-		out.Unverified = !out.Sync
+		out.Sync, out.Unverified = configured, !configured
 	}
-	switch {
-	case ack == nil:
+	if ack == nil {
 		return out, true
+	}
+	out.Acknowledged = *ack
+	switch {
 	case *ack == timeline:
-		out.Acknowledged = *ack
-		return out, false
-	case out.Sync:
-		out.Acknowledged = *ack
+		// The same timeline: its verification is what this start found.
+		return out, true
+	case ackSync && out.Sync:
+		// Sync at both ends: the standby applied every commit.
 		return out, true
 	default:
-		out.Acknowledged, out.Hold = *ack, true
+		out.Hold = true
 		return out, false
 	}
 }
@@ -161,22 +174,25 @@ func decidePromotion(r Replication, timeline int64, ack *int64, commit, standbys
 // ErrTimelineChanged reports a promotion the running process cannot
 // accept (G0 M19 D213, HR-496): the database moved to a new timeline and
 // synchronous replication was not verified at both ends. From then on the
-// pool refuses every connection, so nothing is decided; /readyz and
-// /livez fail, and the orchestrator restarts the process into the start-up
-// hold until `keys bump-epochs`.
+// pool serves nothing, not even its connections opened before, so nothing
+// is decided; /readyz and /livez fail, and the orchestrator restarts the
+// process into the start-up hold until `keys bump-epochs`.
 var ErrTimelineChanged = errors.New("db: the primary was promoted without verified synchronous replication; restart into the maintenance hold")
 
 // timelineWatch is the running process's view of the primary's timeline,
 // armed by CheckPromotion. Every new connection reads the timeline again:
 // the same one passes; a new one passes only when this process verified
 // sync at start and the new primary verifies it too, and is then
-// recorded; anything else breaks the pool for good (D213).
+// recorded; anything else breaks the pool for good (D213): every
+// connection is refused at acquire and the idle ones are closed (D218).
 type timelineWatch struct {
 	mu       sync.Mutex
 	armed    bool
 	timeline int64
 	sync     bool // sync verified at start
 	broken   bool
+	// onBreak closes the pool's idle connections when the watch breaks.
+	onBreak func()
 }
 
 func (w *timelineWatch) arm(p Promotion) {
@@ -198,21 +214,37 @@ func (w *timelineWatch) isBroken() bool {
 // record tl as the acknowledged timeline before using the connection.
 func (w *timelineWatch) observe(tl int64, newSync bool) (record bool, err error) {
 	w.mu.Lock()
-	defer w.mu.Unlock()
 	switch {
 	case !w.armed:
+		w.mu.Unlock()
 		return false, nil
 	case w.broken:
+		w.mu.Unlock()
 		return false, ErrTimelineChanged
 	case tl == w.timeline:
+		w.mu.Unlock()
 		return false, nil
 	case w.sync && newSync:
 		w.timeline = tl
+		w.mu.Unlock()
 		return true, nil
-	default:
-		w.broken = true
+	}
+	w.broken = true
+	onBreak := w.onBreak
+	w.mu.Unlock()
+	if onBreak != nil {
+		onBreak()
+	}
+	return false, ErrTimelineChanged
+}
+
+// prepare runs before a pooled connection is handed out (PrepareConn):
+// after a break, the connection is destroyed and the caller refused.
+func (w *timelineWatch) prepare(context.Context, *pgx.Conn) (bool, error) {
+	if w.isBroken() {
 		return false, ErrTimelineChanged
 	}
+	return true, nil
 }
 
 // check runs on every new connection (AfterConnect).
@@ -224,22 +256,22 @@ func (w *timelineWatch) check(ctx context.Context, conn *pgx.Conn) error {
 		return nil
 	}
 	var tl int64
-	var commit, standbys string
-	if err := conn.QueryRow(ctx, currentTimeline+`, current_setting('synchronous_commit'),
-		current_setting('synchronous_standby_names')`).Scan(&tl, &commit, &standbys); err != nil {
+	var configured bool
+	if err := conn.QueryRow(ctx, primaryStateSQL).Scan(&tl, &configured); err != nil {
 		return err
 	}
-	record, err := w.observe(tl, commit == "remote_apply" && strings.TrimSpace(standbys) != "")
+	record, err := w.observe(tl, configured)
 	if err != nil || !record {
 		return err
 	}
 	// The new primary applied every commit before it was promoted, so
-	// nothing was lost: record its timeline, so a restart does not hold.
+	// nothing was lost: record its timeline, verified, so a restart does
+	// not hold.
 	return pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, globalSetup, string(GlobalFailover)); err != nil {
 			return err
 		}
-		tag, err := tx.Exec(ctx, `UPDATE pc.db_primary_timeline SET timeline = $1, update_time = now()`, tl)
+		tag, err := tx.Exec(ctx, recordSQL, tl, true)
 		if err == nil && tag.RowsAffected() != 1 {
 			err = ErrNoTimelineRow
 		}
@@ -257,10 +289,17 @@ func (p *Pool) TimelineChanged() bool { return p != nil && p.timeline.isBroken()
 // connection to the old primary only to find it closed, and would do so
 // once for each. When BEGIN fails that way nothing ran, so the idle
 // connections are dropped and BEGIN is tried once more on a new one, which
-// reaches the read-write primary or fails closed.
-type beginner struct{ p *pgxpool.Pool }
+// reaches the read-write primary or fails closed. After a break nothing
+// begins (D218).
+type beginner struct {
+	p *pgxpool.Pool
+	w *timelineWatch
+}
 
 func (b beginner) BeginTx(ctx context.Context, o pgx.TxOptions) (pgx.Tx, error) {
+	if b.w.isBroken() {
+		return nil, ErrTimelineChanged
+	}
 	tx, err := b.p.BeginTx(ctx, o)
 	if err == nil || ctx.Err() != nil || !lostConn(err) {
 		return tx, err

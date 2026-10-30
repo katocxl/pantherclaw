@@ -228,14 +228,15 @@ func (s *Service) makeRoom(ctx context.Context, q *dbq.Queries, id Identity, e M
 		return err
 	}
 	if isNew && (e.Kind == MCPA2ATask || e.Kind == MCPA2AContext) {
-		// Each A2A kind has the TASK bounds of its own (D211).
+		// Each A2A kind has the TASK bounds of its own, per caller (D211,
+		// D218).
 		k, err := q.CountGatewayMCPStateOfKind(ctx, dbq.CountGatewayMCPStateOfKindParams{
-			OrgID: id.Org, GatewayID: id.Gateway, Kind: e.Kind, InstanceID: e.Instance, Now: now,
+			OrgID: id.Org, GatewayID: id.Gateway, Kind: e.Kind, InstanceID: e.Instance, RunID: e.Run, Now: now,
 		})
 		if err != nil {
 			return err
 		}
-		if k.Entries >= MaxMCPEntries || k.InstanceEntries >= MaxMCPEntriesPerInstance {
+		if k.Entries >= MaxMCPEntries || k.CallerEntries >= MaxMCPEntriesPerInstance {
 			return ErrMCPStateFull
 		}
 		isNew = false // not counted in the MCP entries below

@@ -184,10 +184,18 @@ func Open(ctx context.Context, c Config) (*Pool, error) {
 		}
 		return w.check(ctx, conn)
 	}
+	// After a promotion the process cannot accept, no pooled connection
+	// is handed out either (D218).
+	pc.PrepareConn = w.prepare
+	release := pc.AfterRelease
+	pc.AfterRelease = func(conn *pgx.Conn) bool { return !w.isBroken() && release(conn) }
 	pool, err := pgxpool.NewWithConfig(ctx, pc)
 	if err != nil {
 		return nil, fmt.Errorf("db: open pool: %w", err)
 	}
+	w.mu.Lock()
+	w.onBreak = pool.Reset
+	w.mu.Unlock()
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("db: ping: %w", err)

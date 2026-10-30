@@ -1465,9 +1465,10 @@ type PcDataRequestPart struct {
 }
 
 type PcDbPrimaryTimeline struct {
-	Singleton  bool
-	Timeline   pgtype.Int8
-	UpdateTime time.Time
+	Singleton    bool
+	Timeline     pgtype.Int8
+	SyncVerified bool
+	UpdateTime   time.Time
 }
 
 type PcDecisionConsequence struct {
