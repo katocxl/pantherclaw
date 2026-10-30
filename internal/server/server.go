@@ -277,7 +277,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	}
 	workers := newWorkerHeartbeat(cfg.Role)
 
-	kp, err := keys.NewFileProvider(cfg.KEKFiles)
+	kp, err := newKeyProvider(cfg)
 	if err != nil {
 		return err
 	}
@@ -599,6 +599,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if evidenceJobs, err = registerM15GatewayJobs(evidenceJobs, jreg, pool, log); err != nil {
 			return err
 		}
+		if evidenceJobs, err = registerM20WebhookJobs(evidenceJobs, jreg, pool, kp, log); err != nil {
+			return err
+		}
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {
 			return err
 		}
@@ -870,6 +873,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerUITenancy(rs, d)
 	registerUsage(rs, d)
 	registerDataRequests(rs, d)
+	registerM20Webhooks(rs, d)
 	registerSupport(rs, d)
 	mux := http.NewServeMux()
 	edges.mount(mux)
@@ -891,6 +895,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		d.web.MountAccountDeletion(mux, d.ui.deletion)
 	}
 	mountM14Data(mux, d)
+	mountWebhookJWKS(mux, webhookJWKSOf(d), d.clientIP, log)
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, "ok\n")

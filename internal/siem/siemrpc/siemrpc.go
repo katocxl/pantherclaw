@@ -172,9 +172,26 @@ func (h *Handler) proto(d siem.Destination) *pantherclawv1.SIEMDestination {
 		ConsecutiveFailures: int32(d.ConsecutiveFailures), //nolint:gosec // G115: a failure count
 		FailingSince:        ts(d.FailingSince), LastFailureCode: d.LastFailureCode, DeliveredBatches: d.DeliveredBatches,
 		FailedBatches: d.FailedBatches, Retries: d.Retries, WaitingSince: ts(d.WaitingSince), RotationEndTime: ts(d.RotationEndsAt),
+		SignatureScheme: d.SignatureScheme,
 	}
 	if d.ActivatedBy != nil {
 		out.ActivatedBy = d.ActivatedBy.String()
 	}
 	return out
+}
+
+// SetSIEMDestinationSignatureScheme implements SIEMServiceHandler (G0 M20
+// D251).
+func (h *Handler) SetSIEMDestinationSignatureScheme(ctx context.Context, req *pantherclawv1.SetSIEMDestinationSignatureSchemeRequest) (
+	*pantherclawv1.SetSIEMDestinationSignatureSchemeResponse, error,
+) {
+	id, err := idOf(req.GetId())
+	if err != nil {
+		return nil, err
+	}
+	d, jwks, err := h.svc.SetSignatureScheme(ctx, id, req.GetSignatureScheme())
+	if err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.SetSIEMDestinationSignatureSchemeResponse{Destination: h.proto(d), JwksUrl: jwks}, nil
 }

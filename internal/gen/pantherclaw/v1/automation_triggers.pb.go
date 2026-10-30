@@ -1602,6 +1602,8 @@ type AutomationDestination struct {
 	ConfirmUrl string `protobuf:"bytes,11,opt,name=confirm_url,json=confirmUrl,proto3" json:"confirm_url,omitempty"`
 	// When the previous secret stops signing, during a rotation.
 	RotationEndTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=rotation_end_time,json=rotationEndTime,proto3" json:"rotation_end_time,omitempty"`
+	// "hmac" (the default) or "hmac+ed25519".
+	SignatureScheme string `protobuf:"bytes,13,opt,name=signature_scheme,json=signatureScheme,proto3" json:"signature_scheme,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1718,6 +1720,13 @@ func (x *AutomationDestination) GetRotationEndTime() *timestamppb.Timestamp {
 		return x.RotationEndTime
 	}
 	return nil
+}
+
+func (x *AutomationDestination) GetSignatureScheme() string {
+	if x != nil {
+		return x.SignatureScheme
+	}
+	return ""
 }
 
 type CreateAutomationDestinationRequest struct {
@@ -2296,6 +2305,117 @@ func (x *ListAutomationDestinationsResponse) GetDestinations() []*AutomationDest
 	return nil
 }
 
+// SetAutomationDestinationSignatureSchemeRequest names a destination and its scheme.
+type SetAutomationDestinationSignatureSchemeRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Destination id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// "hmac" or "hmac+ed25519".
+	SignatureScheme string `protobuf:"bytes,2,opt,name=signature_scheme,json=signatureScheme,proto3" json:"signature_scheme,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *SetAutomationDestinationSignatureSchemeRequest) Reset() {
+	*x = SetAutomationDestinationSignatureSchemeRequest{}
+	mi := &file_pantherclaw_v1_automation_triggers_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetAutomationDestinationSignatureSchemeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetAutomationDestinationSignatureSchemeRequest) ProtoMessage() {}
+
+func (x *SetAutomationDestinationSignatureSchemeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_automation_triggers_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetAutomationDestinationSignatureSchemeRequest.ProtoReflect.Descriptor instead.
+func (*SetAutomationDestinationSignatureSchemeRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_automation_triggers_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *SetAutomationDestinationSignatureSchemeRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SetAutomationDestinationSignatureSchemeRequest) GetSignatureScheme() string {
+	if x != nil {
+		return x.SignatureScheme
+	}
+	return ""
+}
+
+// SetAutomationDestinationSignatureSchemeResponse is the destination and where receivers fetch the
+// org's webhook keys.
+type SetAutomationDestinationSignatureSchemeResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The destination.
+	Destination *AutomationDestination `protobuf:"bytes,1,opt,name=destination,proto3" json:"destination,omitempty"`
+	// The org's webhook JWKS: its ACTIVE and RETIRING webhooks keys.
+	JwksUrl       string `protobuf:"bytes,2,opt,name=jwks_url,json=jwksUrl,proto3" json:"jwks_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetAutomationDestinationSignatureSchemeResponse) Reset() {
+	*x = SetAutomationDestinationSignatureSchemeResponse{}
+	mi := &file_pantherclaw_v1_automation_triggers_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetAutomationDestinationSignatureSchemeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetAutomationDestinationSignatureSchemeResponse) ProtoMessage() {}
+
+func (x *SetAutomationDestinationSignatureSchemeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_automation_triggers_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetAutomationDestinationSignatureSchemeResponse.ProtoReflect.Descriptor instead.
+func (*SetAutomationDestinationSignatureSchemeResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_automation_triggers_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *SetAutomationDestinationSignatureSchemeResponse) GetDestination() *AutomationDestination {
+	if x != nil {
+		return x.Destination
+	}
+	return nil
+}
+
+func (x *SetAutomationDestinationSignatureSchemeResponse) GetJwksUrl() string {
+	if x != nil {
+		return x.JwksUrl
+	}
+	return ""
+}
+
 var File_pantherclaw_v1_automation_triggers_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_automation_triggers_proto_rawDesc = "" +
@@ -2418,7 +2538,7 @@ const file_pantherclaw_v1_automation_triggers_proto_rawDesc = "" +
 	"\x06source\x18\x01 \x01(\v2\x1b.pantherclaw.v1.EventSourceR\x06source\"\x19\n" +
 	"\x17ListEventSourcesRequest\"Q\n" +
 	"\x18ListEventSourcesResponse\x125\n" +
-	"\asources\x18\x01 \x03(\v2\x1b.pantherclaw.v1.EventSourceR\asources\"\xc4\x03\n" +
+	"\asources\x18\x01 \x03(\v2\x1b.pantherclaw.v1.EventSourceR\asources\"\xef\x03\n" +
 	"\x15AutomationDestination\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x10\n" +
@@ -2435,7 +2555,8 @@ const file_pantherclaw_v1_automation_triggers_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\factivateTime\x12\x1f\n" +
 	"\vconfirm_url\x18\v \x01(\tR\n" +
 	"confirmUrl\x12F\n" +
-	"\x11rotation_end_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x0frotationEndTime\"\xf3\x01\n" +
+	"\x11rotation_end_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x0frotationEndTime\x12)\n" +
+	"\x10signature_scheme\x18\r \x01(\tR\x0fsignatureScheme\"\xf3\x01\n" +
 	"\"CreateAutomationDestinationRequest\x12C\n" +
 	"\x04name\x18\x01 \x01(\tB/\xbaH,r*\x10\x01\x18?2$^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$R\x04name\x12&\n" +
 	"\x03url\x18\x02 \x01(\tB\x14\xbaH\x11r\x0f\x10\t\x18\x80\x10:\bhttps://R\x03url\x12\x1a\n" +
@@ -2463,7 +2584,13 @@ const file_pantherclaw_v1_automation_triggers_proto_rawDesc = "" +
 	"\vdestination\x18\x01 \x01(\v2%.pantherclaw.v1.AutomationDestinationR\vdestination\"#\n" +
 	"!ListAutomationDestinationsRequest\"o\n" +
 	"\"ListAutomationDestinationsResponse\x12I\n" +
-	"\fdestinations\x18\x01 \x03(\v2%.pantherclaw.v1.AutomationDestinationR\fdestinations2\xdc\x0f\n" +
+	"\fdestinations\x18\x01 \x03(\v2%.pantherclaw.v1.AutomationDestinationR\fdestinations\"\x90\x01\n" +
+	".SetAutomationDestinationSignatureSchemeRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12D\n" +
+	"\x10signature_scheme\x18\x02 \x01(\tB\x19\xbaH\x16r\x14R\x04hmacR\fhmac+ed25519R\x0fsignatureScheme\"\x95\x01\n" +
+	"/SetAutomationDestinationSignatureSchemeResponse\x12G\n" +
+	"\vdestination\x18\x01 \x01(\v2%.pantherclaw.v1.AutomationDestinationR\vdestination\x12\x19\n" +
+	"\bjwks_url\x18\x02 \x01(\tR\ajwksUrl2\x89\x11\n" +
 	"\x0eTriggerService\x12g\n" +
 	"\x0fPreviewSchedule\x12&.pantherclaw.v1.PreviewScheduleRequest\x1a'.pantherclaw.v1.PreviewScheduleResponse\"\x03\x90\x02\x01\x12_\n" +
 	"\x0eStartExecution\x12%.pantherclaw.v1.StartExecutionRequest\x1a&.pantherclaw.v1.StartExecutionResponse\x12_\n" +
@@ -2479,7 +2606,8 @@ const file_pantherclaw_v1_automation_triggers_proto_rawDesc = "" +
 	"\x10ListEventSources\x12'.pantherclaw.v1.ListEventSourcesRequest\x1a(.pantherclaw.v1.ListEventSourcesResponse\"\x03\x90\x02\x01\x12\x86\x01\n" +
 	"\x1bCreateAutomationDestination\x122.pantherclaw.v1.CreateAutomationDestinationRequest\x1a3.pantherclaw.v1.CreateAutomationDestinationResponse\x12\x8c\x01\n" +
 	"\x1dActivateAutomationDestination\x124.pantherclaw.v1.ActivateAutomationDestinationRequest\x1a5.pantherclaw.v1.ActivateAutomationDestinationResponse\x12\x98\x01\n" +
-	"!RotateAutomationDestinationSecret\x128.pantherclaw.v1.RotateAutomationDestinationSecretRequest\x1a9.pantherclaw.v1.RotateAutomationDestinationSecretResponse\x12\x8c\x01\n" +
+	"!RotateAutomationDestinationSecret\x128.pantherclaw.v1.RotateAutomationDestinationSecretRequest\x1a9.pantherclaw.v1.RotateAutomationDestinationSecretResponse\x12\xaa\x01\n" +
+	"'SetAutomationDestinationSignatureScheme\x12>.pantherclaw.v1.SetAutomationDestinationSignatureSchemeRequest\x1a?.pantherclaw.v1.SetAutomationDestinationSignatureSchemeResponse\x12\x8c\x01\n" +
 	"\x1dSetAutomationDestinationState\x124.pantherclaw.v1.SetAutomationDestinationStateRequest\x1a5.pantherclaw.v1.SetAutomationDestinationStateResponse\x12\x82\x01\n" +
 	"\x18GetAutomationDestination\x12/.pantherclaw.v1.GetAutomationDestinationRequest\x1a0.pantherclaw.v1.GetAutomationDestinationResponse\"\x03\x90\x02\x01\x12\x88\x01\n" +
 	"\x1aListAutomationDestinations\x121.pantherclaw.v1.ListAutomationDestinationsRequest\x1a2.pantherclaw.v1.ListAutomationDestinationsResponse\"\x03\x90\x02\x01B\xd0\x01\n" +
@@ -2497,119 +2625,124 @@ func file_pantherclaw_v1_automation_triggers_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_automation_triggers_proto_rawDescData
 }
 
-var file_pantherclaw_v1_automation_triggers_proto_msgTypes = make([]protoimpl.MessageInfo, 41)
+var file_pantherclaw_v1_automation_triggers_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
 var file_pantherclaw_v1_automation_triggers_proto_goTypes = []any{
-	(*PreviewScheduleRequest)(nil),                    // 0: pantherclaw.v1.PreviewScheduleRequest
-	(*ScheduleOccurrence)(nil),                        // 1: pantherclaw.v1.ScheduleOccurrence
-	(*PreviewScheduleResponse)(nil),                   // 2: pantherclaw.v1.PreviewScheduleResponse
-	(*Trigger)(nil),                                   // 3: pantherclaw.v1.Trigger
-	(*StartExecutionRequest)(nil),                     // 4: pantherclaw.v1.StartExecutionRequest
-	(*StartExecutionResponse)(nil),                    // 5: pantherclaw.v1.StartExecutionResponse
-	(*RetryExecutionRequest)(nil),                     // 6: pantherclaw.v1.RetryExecutionRequest
-	(*RetryExecutionResponse)(nil),                    // 7: pantherclaw.v1.RetryExecutionResponse
-	(*GetTriggerRequest)(nil),                         // 8: pantherclaw.v1.GetTriggerRequest
-	(*GetTriggerResponse)(nil),                        // 9: pantherclaw.v1.GetTriggerResponse
-	(*ListTriggersRequest)(nil),                       // 10: pantherclaw.v1.ListTriggersRequest
-	(*ListTriggersResponse)(nil),                      // 11: pantherclaw.v1.ListTriggersResponse
-	(*EventSource)(nil),                               // 12: pantherclaw.v1.EventSource
-	(*CreateEventSourceRequest)(nil),                  // 13: pantherclaw.v1.CreateEventSourceRequest
-	(*CreateEventSourceResponse)(nil),                 // 14: pantherclaw.v1.CreateEventSourceResponse
-	(*ActivateEventSourceRequest)(nil),                // 15: pantherclaw.v1.ActivateEventSourceRequest
-	(*ActivateEventSourceResponse)(nil),               // 16: pantherclaw.v1.ActivateEventSourceResponse
-	(*RotateEventSourceSecretRequest)(nil),            // 17: pantherclaw.v1.RotateEventSourceSecretRequest
-	(*RotateEventSourceSecretResponse)(nil),           // 18: pantherclaw.v1.RotateEventSourceSecretResponse
-	(*DisableEventSourceRequest)(nil),                 // 19: pantherclaw.v1.DisableEventSourceRequest
-	(*DisableEventSourceResponse)(nil),                // 20: pantherclaw.v1.DisableEventSourceResponse
-	(*GetEventSourceRequest)(nil),                     // 21: pantherclaw.v1.GetEventSourceRequest
-	(*GetEventSourceResponse)(nil),                    // 22: pantherclaw.v1.GetEventSourceResponse
-	(*ListEventSourcesRequest)(nil),                   // 23: pantherclaw.v1.ListEventSourcesRequest
-	(*ListEventSourcesResponse)(nil),                  // 24: pantherclaw.v1.ListEventSourcesResponse
-	(*AutomationDestination)(nil),                     // 25: pantherclaw.v1.AutomationDestination
-	(*CreateAutomationDestinationRequest)(nil),        // 26: pantherclaw.v1.CreateAutomationDestinationRequest
-	(*CreateAutomationDestinationResponse)(nil),       // 27: pantherclaw.v1.CreateAutomationDestinationResponse
-	(*ActivateAutomationDestinationRequest)(nil),      // 28: pantherclaw.v1.ActivateAutomationDestinationRequest
-	(*ActivateAutomationDestinationResponse)(nil),     // 29: pantherclaw.v1.ActivateAutomationDestinationResponse
-	(*RotateAutomationDestinationSecretRequest)(nil),  // 30: pantherclaw.v1.RotateAutomationDestinationSecretRequest
-	(*RotateAutomationDestinationSecretResponse)(nil), // 31: pantherclaw.v1.RotateAutomationDestinationSecretResponse
-	(*SetAutomationDestinationStateRequest)(nil),      // 32: pantherclaw.v1.SetAutomationDestinationStateRequest
-	(*SetAutomationDestinationStateResponse)(nil),     // 33: pantherclaw.v1.SetAutomationDestinationStateResponse
-	(*GetAutomationDestinationRequest)(nil),           // 34: pantherclaw.v1.GetAutomationDestinationRequest
-	(*GetAutomationDestinationResponse)(nil),          // 35: pantherclaw.v1.GetAutomationDestinationResponse
-	(*ListAutomationDestinationsRequest)(nil),         // 36: pantherclaw.v1.ListAutomationDestinationsRequest
-	(*ListAutomationDestinationsResponse)(nil),        // 37: pantherclaw.v1.ListAutomationDestinationsResponse
-	nil,                           // 38: pantherclaw.v1.Trigger.AuthenticityDetailEntry
-	nil,                           // 39: pantherclaw.v1.Trigger.ParamsEntry
-	nil,                           // 40: pantherclaw.v1.StartExecutionRequest.ParamsEntry
-	(*timestamppb.Timestamp)(nil), // 41: google.protobuf.Timestamp
+	(*PreviewScheduleRequest)(nil),                          // 0: pantherclaw.v1.PreviewScheduleRequest
+	(*ScheduleOccurrence)(nil),                              // 1: pantherclaw.v1.ScheduleOccurrence
+	(*PreviewScheduleResponse)(nil),                         // 2: pantherclaw.v1.PreviewScheduleResponse
+	(*Trigger)(nil),                                         // 3: pantherclaw.v1.Trigger
+	(*StartExecutionRequest)(nil),                           // 4: pantherclaw.v1.StartExecutionRequest
+	(*StartExecutionResponse)(nil),                          // 5: pantherclaw.v1.StartExecutionResponse
+	(*RetryExecutionRequest)(nil),                           // 6: pantherclaw.v1.RetryExecutionRequest
+	(*RetryExecutionResponse)(nil),                          // 7: pantherclaw.v1.RetryExecutionResponse
+	(*GetTriggerRequest)(nil),                               // 8: pantherclaw.v1.GetTriggerRequest
+	(*GetTriggerResponse)(nil),                              // 9: pantherclaw.v1.GetTriggerResponse
+	(*ListTriggersRequest)(nil),                             // 10: pantherclaw.v1.ListTriggersRequest
+	(*ListTriggersResponse)(nil),                            // 11: pantherclaw.v1.ListTriggersResponse
+	(*EventSource)(nil),                                     // 12: pantherclaw.v1.EventSource
+	(*CreateEventSourceRequest)(nil),                        // 13: pantherclaw.v1.CreateEventSourceRequest
+	(*CreateEventSourceResponse)(nil),                       // 14: pantherclaw.v1.CreateEventSourceResponse
+	(*ActivateEventSourceRequest)(nil),                      // 15: pantherclaw.v1.ActivateEventSourceRequest
+	(*ActivateEventSourceResponse)(nil),                     // 16: pantherclaw.v1.ActivateEventSourceResponse
+	(*RotateEventSourceSecretRequest)(nil),                  // 17: pantherclaw.v1.RotateEventSourceSecretRequest
+	(*RotateEventSourceSecretResponse)(nil),                 // 18: pantherclaw.v1.RotateEventSourceSecretResponse
+	(*DisableEventSourceRequest)(nil),                       // 19: pantherclaw.v1.DisableEventSourceRequest
+	(*DisableEventSourceResponse)(nil),                      // 20: pantherclaw.v1.DisableEventSourceResponse
+	(*GetEventSourceRequest)(nil),                           // 21: pantherclaw.v1.GetEventSourceRequest
+	(*GetEventSourceResponse)(nil),                          // 22: pantherclaw.v1.GetEventSourceResponse
+	(*ListEventSourcesRequest)(nil),                         // 23: pantherclaw.v1.ListEventSourcesRequest
+	(*ListEventSourcesResponse)(nil),                        // 24: pantherclaw.v1.ListEventSourcesResponse
+	(*AutomationDestination)(nil),                           // 25: pantherclaw.v1.AutomationDestination
+	(*CreateAutomationDestinationRequest)(nil),              // 26: pantherclaw.v1.CreateAutomationDestinationRequest
+	(*CreateAutomationDestinationResponse)(nil),             // 27: pantherclaw.v1.CreateAutomationDestinationResponse
+	(*ActivateAutomationDestinationRequest)(nil),            // 28: pantherclaw.v1.ActivateAutomationDestinationRequest
+	(*ActivateAutomationDestinationResponse)(nil),           // 29: pantherclaw.v1.ActivateAutomationDestinationResponse
+	(*RotateAutomationDestinationSecretRequest)(nil),        // 30: pantherclaw.v1.RotateAutomationDestinationSecretRequest
+	(*RotateAutomationDestinationSecretResponse)(nil),       // 31: pantherclaw.v1.RotateAutomationDestinationSecretResponse
+	(*SetAutomationDestinationStateRequest)(nil),            // 32: pantherclaw.v1.SetAutomationDestinationStateRequest
+	(*SetAutomationDestinationStateResponse)(nil),           // 33: pantherclaw.v1.SetAutomationDestinationStateResponse
+	(*GetAutomationDestinationRequest)(nil),                 // 34: pantherclaw.v1.GetAutomationDestinationRequest
+	(*GetAutomationDestinationResponse)(nil),                // 35: pantherclaw.v1.GetAutomationDestinationResponse
+	(*ListAutomationDestinationsRequest)(nil),               // 36: pantherclaw.v1.ListAutomationDestinationsRequest
+	(*ListAutomationDestinationsResponse)(nil),              // 37: pantherclaw.v1.ListAutomationDestinationsResponse
+	(*SetAutomationDestinationSignatureSchemeRequest)(nil),  // 38: pantherclaw.v1.SetAutomationDestinationSignatureSchemeRequest
+	(*SetAutomationDestinationSignatureSchemeResponse)(nil), // 39: pantherclaw.v1.SetAutomationDestinationSignatureSchemeResponse
+	nil,                           // 40: pantherclaw.v1.Trigger.AuthenticityDetailEntry
+	nil,                           // 41: pantherclaw.v1.Trigger.ParamsEntry
+	nil,                           // 42: pantherclaw.v1.StartExecutionRequest.ParamsEntry
+	(*timestamppb.Timestamp)(nil), // 43: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_automation_triggers_proto_depIdxs = []int32{
-	41, // 0: pantherclaw.v1.PreviewScheduleRequest.from:type_name -> google.protobuf.Timestamp
-	41, // 1: pantherclaw.v1.ScheduleOccurrence.utc:type_name -> google.protobuf.Timestamp
+	43, // 0: pantherclaw.v1.PreviewScheduleRequest.from:type_name -> google.protobuf.Timestamp
+	43, // 1: pantherclaw.v1.ScheduleOccurrence.utc:type_name -> google.protobuf.Timestamp
 	1,  // 2: pantherclaw.v1.PreviewScheduleResponse.occurrences:type_name -> pantherclaw.v1.ScheduleOccurrence
-	38, // 3: pantherclaw.v1.Trigger.authenticity_detail:type_name -> pantherclaw.v1.Trigger.AuthenticityDetailEntry
-	39, // 4: pantherclaw.v1.Trigger.params:type_name -> pantherclaw.v1.Trigger.ParamsEntry
-	41, // 5: pantherclaw.v1.Trigger.occur_time:type_name -> google.protobuf.Timestamp
-	41, // 6: pantherclaw.v1.Trigger.receive_time:type_name -> google.protobuf.Timestamp
-	40, // 7: pantherclaw.v1.StartExecutionRequest.params:type_name -> pantherclaw.v1.StartExecutionRequest.ParamsEntry
+	40, // 3: pantherclaw.v1.Trigger.authenticity_detail:type_name -> pantherclaw.v1.Trigger.AuthenticityDetailEntry
+	41, // 4: pantherclaw.v1.Trigger.params:type_name -> pantherclaw.v1.Trigger.ParamsEntry
+	43, // 5: pantherclaw.v1.Trigger.occur_time:type_name -> google.protobuf.Timestamp
+	43, // 6: pantherclaw.v1.Trigger.receive_time:type_name -> google.protobuf.Timestamp
+	42, // 7: pantherclaw.v1.StartExecutionRequest.params:type_name -> pantherclaw.v1.StartExecutionRequest.ParamsEntry
 	3,  // 8: pantherclaw.v1.StartExecutionResponse.trigger:type_name -> pantherclaw.v1.Trigger
 	3,  // 9: pantherclaw.v1.RetryExecutionResponse.trigger:type_name -> pantherclaw.v1.Trigger
 	3,  // 10: pantherclaw.v1.GetTriggerResponse.trigger:type_name -> pantherclaw.v1.Trigger
 	3,  // 11: pantherclaw.v1.ListTriggersResponse.triggers:type_name -> pantherclaw.v1.Trigger
-	41, // 12: pantherclaw.v1.EventSource.create_time:type_name -> google.protobuf.Timestamp
-	41, // 13: pantherclaw.v1.EventSource.activate_time:type_name -> google.protobuf.Timestamp
-	41, // 14: pantherclaw.v1.EventSource.rotation_end_time:type_name -> google.protobuf.Timestamp
+	43, // 12: pantherclaw.v1.EventSource.create_time:type_name -> google.protobuf.Timestamp
+	43, // 13: pantherclaw.v1.EventSource.activate_time:type_name -> google.protobuf.Timestamp
+	43, // 14: pantherclaw.v1.EventSource.rotation_end_time:type_name -> google.protobuf.Timestamp
 	12, // 15: pantherclaw.v1.CreateEventSourceResponse.source:type_name -> pantherclaw.v1.EventSource
 	12, // 16: pantherclaw.v1.ActivateEventSourceResponse.source:type_name -> pantherclaw.v1.EventSource
 	12, // 17: pantherclaw.v1.DisableEventSourceResponse.source:type_name -> pantherclaw.v1.EventSource
 	12, // 18: pantherclaw.v1.GetEventSourceResponse.source:type_name -> pantherclaw.v1.EventSource
 	12, // 19: pantherclaw.v1.ListEventSourcesResponse.sources:type_name -> pantherclaw.v1.EventSource
-	41, // 20: pantherclaw.v1.AutomationDestination.create_time:type_name -> google.protobuf.Timestamp
-	41, // 21: pantherclaw.v1.AutomationDestination.activate_time:type_name -> google.protobuf.Timestamp
-	41, // 22: pantherclaw.v1.AutomationDestination.rotation_end_time:type_name -> google.protobuf.Timestamp
+	43, // 20: pantherclaw.v1.AutomationDestination.create_time:type_name -> google.protobuf.Timestamp
+	43, // 21: pantherclaw.v1.AutomationDestination.activate_time:type_name -> google.protobuf.Timestamp
+	43, // 22: pantherclaw.v1.AutomationDestination.rotation_end_time:type_name -> google.protobuf.Timestamp
 	25, // 23: pantherclaw.v1.CreateAutomationDestinationResponse.destination:type_name -> pantherclaw.v1.AutomationDestination
 	25, // 24: pantherclaw.v1.ActivateAutomationDestinationResponse.destination:type_name -> pantherclaw.v1.AutomationDestination
 	25, // 25: pantherclaw.v1.SetAutomationDestinationStateResponse.destination:type_name -> pantherclaw.v1.AutomationDestination
 	25, // 26: pantherclaw.v1.GetAutomationDestinationResponse.destination:type_name -> pantherclaw.v1.AutomationDestination
 	25, // 27: pantherclaw.v1.ListAutomationDestinationsResponse.destinations:type_name -> pantherclaw.v1.AutomationDestination
-	0,  // 28: pantherclaw.v1.TriggerService.PreviewSchedule:input_type -> pantherclaw.v1.PreviewScheduleRequest
-	4,  // 29: pantherclaw.v1.TriggerService.StartExecution:input_type -> pantherclaw.v1.StartExecutionRequest
-	6,  // 30: pantherclaw.v1.TriggerService.RetryExecution:input_type -> pantherclaw.v1.RetryExecutionRequest
-	8,  // 31: pantherclaw.v1.TriggerService.GetTrigger:input_type -> pantherclaw.v1.GetTriggerRequest
-	10, // 32: pantherclaw.v1.TriggerService.ListTriggers:input_type -> pantherclaw.v1.ListTriggersRequest
-	13, // 33: pantherclaw.v1.TriggerService.CreateEventSource:input_type -> pantherclaw.v1.CreateEventSourceRequest
-	15, // 34: pantherclaw.v1.TriggerService.ActivateEventSource:input_type -> pantherclaw.v1.ActivateEventSourceRequest
-	17, // 35: pantherclaw.v1.TriggerService.RotateEventSourceSecret:input_type -> pantherclaw.v1.RotateEventSourceSecretRequest
-	19, // 36: pantherclaw.v1.TriggerService.DisableEventSource:input_type -> pantherclaw.v1.DisableEventSourceRequest
-	21, // 37: pantherclaw.v1.TriggerService.GetEventSource:input_type -> pantherclaw.v1.GetEventSourceRequest
-	23, // 38: pantherclaw.v1.TriggerService.ListEventSources:input_type -> pantherclaw.v1.ListEventSourcesRequest
-	26, // 39: pantherclaw.v1.TriggerService.CreateAutomationDestination:input_type -> pantherclaw.v1.CreateAutomationDestinationRequest
-	28, // 40: pantherclaw.v1.TriggerService.ActivateAutomationDestination:input_type -> pantherclaw.v1.ActivateAutomationDestinationRequest
-	30, // 41: pantherclaw.v1.TriggerService.RotateAutomationDestinationSecret:input_type -> pantherclaw.v1.RotateAutomationDestinationSecretRequest
-	32, // 42: pantherclaw.v1.TriggerService.SetAutomationDestinationState:input_type -> pantherclaw.v1.SetAutomationDestinationStateRequest
-	34, // 43: pantherclaw.v1.TriggerService.GetAutomationDestination:input_type -> pantherclaw.v1.GetAutomationDestinationRequest
-	36, // 44: pantherclaw.v1.TriggerService.ListAutomationDestinations:input_type -> pantherclaw.v1.ListAutomationDestinationsRequest
-	2,  // 45: pantherclaw.v1.TriggerService.PreviewSchedule:output_type -> pantherclaw.v1.PreviewScheduleResponse
-	5,  // 46: pantherclaw.v1.TriggerService.StartExecution:output_type -> pantherclaw.v1.StartExecutionResponse
-	7,  // 47: pantherclaw.v1.TriggerService.RetryExecution:output_type -> pantherclaw.v1.RetryExecutionResponse
-	9,  // 48: pantherclaw.v1.TriggerService.GetTrigger:output_type -> pantherclaw.v1.GetTriggerResponse
-	11, // 49: pantherclaw.v1.TriggerService.ListTriggers:output_type -> pantherclaw.v1.ListTriggersResponse
-	14, // 50: pantherclaw.v1.TriggerService.CreateEventSource:output_type -> pantherclaw.v1.CreateEventSourceResponse
-	16, // 51: pantherclaw.v1.TriggerService.ActivateEventSource:output_type -> pantherclaw.v1.ActivateEventSourceResponse
-	18, // 52: pantherclaw.v1.TriggerService.RotateEventSourceSecret:output_type -> pantherclaw.v1.RotateEventSourceSecretResponse
-	20, // 53: pantherclaw.v1.TriggerService.DisableEventSource:output_type -> pantherclaw.v1.DisableEventSourceResponse
-	22, // 54: pantherclaw.v1.TriggerService.GetEventSource:output_type -> pantherclaw.v1.GetEventSourceResponse
-	24, // 55: pantherclaw.v1.TriggerService.ListEventSources:output_type -> pantherclaw.v1.ListEventSourcesResponse
-	27, // 56: pantherclaw.v1.TriggerService.CreateAutomationDestination:output_type -> pantherclaw.v1.CreateAutomationDestinationResponse
-	29, // 57: pantherclaw.v1.TriggerService.ActivateAutomationDestination:output_type -> pantherclaw.v1.ActivateAutomationDestinationResponse
-	31, // 58: pantherclaw.v1.TriggerService.RotateAutomationDestinationSecret:output_type -> pantherclaw.v1.RotateAutomationDestinationSecretResponse
-	33, // 59: pantherclaw.v1.TriggerService.SetAutomationDestinationState:output_type -> pantherclaw.v1.SetAutomationDestinationStateResponse
-	35, // 60: pantherclaw.v1.TriggerService.GetAutomationDestination:output_type -> pantherclaw.v1.GetAutomationDestinationResponse
-	37, // 61: pantherclaw.v1.TriggerService.ListAutomationDestinations:output_type -> pantherclaw.v1.ListAutomationDestinationsResponse
-	45, // [45:62] is the sub-list for method output_type
-	28, // [28:45] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	25, // 28: pantherclaw.v1.SetAutomationDestinationSignatureSchemeResponse.destination:type_name -> pantherclaw.v1.AutomationDestination
+	0,  // 29: pantherclaw.v1.TriggerService.PreviewSchedule:input_type -> pantherclaw.v1.PreviewScheduleRequest
+	4,  // 30: pantherclaw.v1.TriggerService.StartExecution:input_type -> pantherclaw.v1.StartExecutionRequest
+	6,  // 31: pantherclaw.v1.TriggerService.RetryExecution:input_type -> pantherclaw.v1.RetryExecutionRequest
+	8,  // 32: pantherclaw.v1.TriggerService.GetTrigger:input_type -> pantherclaw.v1.GetTriggerRequest
+	10, // 33: pantherclaw.v1.TriggerService.ListTriggers:input_type -> pantherclaw.v1.ListTriggersRequest
+	13, // 34: pantherclaw.v1.TriggerService.CreateEventSource:input_type -> pantherclaw.v1.CreateEventSourceRequest
+	15, // 35: pantherclaw.v1.TriggerService.ActivateEventSource:input_type -> pantherclaw.v1.ActivateEventSourceRequest
+	17, // 36: pantherclaw.v1.TriggerService.RotateEventSourceSecret:input_type -> pantherclaw.v1.RotateEventSourceSecretRequest
+	19, // 37: pantherclaw.v1.TriggerService.DisableEventSource:input_type -> pantherclaw.v1.DisableEventSourceRequest
+	21, // 38: pantherclaw.v1.TriggerService.GetEventSource:input_type -> pantherclaw.v1.GetEventSourceRequest
+	23, // 39: pantherclaw.v1.TriggerService.ListEventSources:input_type -> pantherclaw.v1.ListEventSourcesRequest
+	26, // 40: pantherclaw.v1.TriggerService.CreateAutomationDestination:input_type -> pantherclaw.v1.CreateAutomationDestinationRequest
+	28, // 41: pantherclaw.v1.TriggerService.ActivateAutomationDestination:input_type -> pantherclaw.v1.ActivateAutomationDestinationRequest
+	30, // 42: pantherclaw.v1.TriggerService.RotateAutomationDestinationSecret:input_type -> pantherclaw.v1.RotateAutomationDestinationSecretRequest
+	38, // 43: pantherclaw.v1.TriggerService.SetAutomationDestinationSignatureScheme:input_type -> pantherclaw.v1.SetAutomationDestinationSignatureSchemeRequest
+	32, // 44: pantherclaw.v1.TriggerService.SetAutomationDestinationState:input_type -> pantherclaw.v1.SetAutomationDestinationStateRequest
+	34, // 45: pantherclaw.v1.TriggerService.GetAutomationDestination:input_type -> pantherclaw.v1.GetAutomationDestinationRequest
+	36, // 46: pantherclaw.v1.TriggerService.ListAutomationDestinations:input_type -> pantherclaw.v1.ListAutomationDestinationsRequest
+	2,  // 47: pantherclaw.v1.TriggerService.PreviewSchedule:output_type -> pantherclaw.v1.PreviewScheduleResponse
+	5,  // 48: pantherclaw.v1.TriggerService.StartExecution:output_type -> pantherclaw.v1.StartExecutionResponse
+	7,  // 49: pantherclaw.v1.TriggerService.RetryExecution:output_type -> pantherclaw.v1.RetryExecutionResponse
+	9,  // 50: pantherclaw.v1.TriggerService.GetTrigger:output_type -> pantherclaw.v1.GetTriggerResponse
+	11, // 51: pantherclaw.v1.TriggerService.ListTriggers:output_type -> pantherclaw.v1.ListTriggersResponse
+	14, // 52: pantherclaw.v1.TriggerService.CreateEventSource:output_type -> pantherclaw.v1.CreateEventSourceResponse
+	16, // 53: pantherclaw.v1.TriggerService.ActivateEventSource:output_type -> pantherclaw.v1.ActivateEventSourceResponse
+	18, // 54: pantherclaw.v1.TriggerService.RotateEventSourceSecret:output_type -> pantherclaw.v1.RotateEventSourceSecretResponse
+	20, // 55: pantherclaw.v1.TriggerService.DisableEventSource:output_type -> pantherclaw.v1.DisableEventSourceResponse
+	22, // 56: pantherclaw.v1.TriggerService.GetEventSource:output_type -> pantherclaw.v1.GetEventSourceResponse
+	24, // 57: pantherclaw.v1.TriggerService.ListEventSources:output_type -> pantherclaw.v1.ListEventSourcesResponse
+	27, // 58: pantherclaw.v1.TriggerService.CreateAutomationDestination:output_type -> pantherclaw.v1.CreateAutomationDestinationResponse
+	29, // 59: pantherclaw.v1.TriggerService.ActivateAutomationDestination:output_type -> pantherclaw.v1.ActivateAutomationDestinationResponse
+	31, // 60: pantherclaw.v1.TriggerService.RotateAutomationDestinationSecret:output_type -> pantherclaw.v1.RotateAutomationDestinationSecretResponse
+	39, // 61: pantherclaw.v1.TriggerService.SetAutomationDestinationSignatureScheme:output_type -> pantherclaw.v1.SetAutomationDestinationSignatureSchemeResponse
+	33, // 62: pantherclaw.v1.TriggerService.SetAutomationDestinationState:output_type -> pantherclaw.v1.SetAutomationDestinationStateResponse
+	35, // 63: pantherclaw.v1.TriggerService.GetAutomationDestination:output_type -> pantherclaw.v1.GetAutomationDestinationResponse
+	37, // 64: pantherclaw.v1.TriggerService.ListAutomationDestinations:output_type -> pantherclaw.v1.ListAutomationDestinationsResponse
+	47, // [47:65] is the sub-list for method output_type
+	29, // [29:47] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_automation_triggers_proto_init() }
@@ -2623,7 +2756,7 @@ func file_pantherclaw_v1_automation_triggers_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_automation_triggers_proto_rawDesc), len(file_pantherclaw_v1_automation_triggers_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   41,
+			NumMessages:   43,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

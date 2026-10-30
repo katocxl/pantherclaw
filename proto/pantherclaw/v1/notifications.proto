@@ -40,6 +40,12 @@ service NotificationService {
   // secret is returned once; the old one keeps signing for 24 hours.
   // permission: notification.manage
   rpc RotateChannelSecret(RotateChannelSecretRequest) returns (RotateChannelSecretResponse);
+  // SetChannelSignatureScheme opts a webhook channel in to Ed25519 signatures
+  // ("hmac+ed25519": a `v1a,` signature by the org's webhooks key next to the
+  // HMAC `v1,` ones) or back to HMAC only ("hmac", the default). HMAC is
+  // always sent. Audited.
+  // permission: notification.manage
+  rpc SetChannelSignatureScheme(SetChannelSignatureSchemeRequest) returns (SetChannelSignatureSchemeResponse);
   // TestChannel sends a test notification to one channel.
   // permission: notification.manage
   rpc TestChannel(TestChannelRequest) returns (TestChannelResponse);
@@ -178,6 +184,8 @@ message Channel {
   google.protobuf.Timestamp update_time = 17;
   // slack_app channels: the configuration, without the bot token.
   SlackAppConfig slack_app = 18;
+  // Webhook channels: "hmac" (the default) or "hmac+ed25519".
+  string signature_scheme = 19;
 }
 
 // DeliveryState is the state of one delivery.
@@ -414,4 +422,26 @@ message ListDeliveriesResponse {
   repeated Delivery deliveries = 1;
   // Token for the next page; empty at the end.
   string next_page_token = 2;
+}
+
+// SetChannelSignatureSchemeRequest names a webhook channel and its scheme.
+message SetChannelSignatureSchemeRequest {
+  // Channel id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // "hmac" or "hmac+ed25519".
+  string signature_scheme = 2 [(buf.validate.field).string = {
+    in: [
+      "hmac",
+      "hmac+ed25519"
+    ]
+  }];
+}
+
+// SetChannelSignatureSchemeResponse is the channel and where receivers fetch the
+// org's webhook keys.
+message SetChannelSignatureSchemeResponse {
+  // The channel.
+  Channel channel = 1;
+  // The org's webhook JWKS: its ACTIVE and RETIRING webhooks keys.
+  string jwks_url = 2;
 }

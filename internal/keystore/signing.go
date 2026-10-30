@@ -42,7 +42,7 @@ func LoadSigningKeys(ctx context.Context, pool *db.Pool, kp keys.KeyProvider, re
 	org := ids.PlatformOrg
 	want := append(keys.Purposes(), keys.PurposeAnchors)
 	for _, p := range extra {
-		if !p.Valid() {
+		if !p.Valid() || p.OrgScoped() {
 			return fmt.Errorf("keystore: unknown purpose %q", p)
 		}
 		if !slices.Contains(want, p) {
@@ -72,7 +72,7 @@ func LoadSigningKeys(ctx context.Context, pool *db.Pool, kp keys.KeyProvider, re
 			// their (deterministic) CA certificates stay trusted during a
 			// rotation (G0 M6); only the active key ever issues.
 			if k.State == keys.StateActive || (k.State == keys.StateRetiring && k.Purpose == keys.PurposeGatewayCA) {
-				seed, err := kp.Unwrap(ctx, r.WrappedPrivateKey, signingAAD(org, k.Purpose, k.KID))
+				seed, err := unwrapStored(ctx, kp, r.KekID, r.WrappedPrivateKey, signingAAD(org, k.Purpose, k.KID))
 				if err != nil {
 					return fmt.Errorf("keystore: unwrap signing key %s: %w", k.KID, err)
 				}
@@ -109,7 +109,7 @@ func loadAltKey(ctx context.Context, kp keys.KeyProvider, reg *keys.Registry, or
 	}
 	k := keys.AltKey{KID: r.Kid, Purpose: p, State: keys.State(r.State), Public: r.PublicKey}
 	if k.State == keys.StateActive {
-		private, err := kp.Unwrap(ctx, r.WrappedPrivateKey, signingAAD(org, p, r.Kid))
+		private, err := unwrapStored(ctx, kp, r.KekID, r.WrappedPrivateKey, signingAAD(org, p, r.Kid))
 		if err != nil {
 			return fmt.Errorf("keystore: unwrap signing key %s: %w", r.Kid, err)
 		}
@@ -189,7 +189,7 @@ func RotateSigningKey(ctx context.Context, pool *db.Pool, kp keys.KeyProvider, p
 // every retirement and creation (G0 M13 D5).
 func RotateSigningKeys(ctx context.Context, pool *db.Pool, kp keys.KeyProvider, purposes []keys.Purpose, actor domain.Actor) ([]string, error) {
 	for _, p := range purposes {
-		if !p.Valid() {
+		if !p.Valid() || p.OrgScoped() {
 			return nil, fmt.Errorf("keystore: unknown purpose %q", p)
 		}
 	}
@@ -250,7 +250,7 @@ func rotateIn(ctx context.Context, tx db.TenantTx, q *dbq.Queries, kp keys.KeyPr
 // re-enroll with the new pin (founder decision 2026-10-10). It returns the
 // new key id and the revoked ones. Reload the registry afterwards.
 func ReplaceSigningKey(ctx context.Context, pool *db.Pool, kp keys.KeyProvider, p keys.Purpose, actor domain.Actor) (string, []string, error) {
-	if !p.Valid() {
+	if !p.Valid() || p.OrgScoped() {
 		return "", nil, fmt.Errorf("keystore: unknown purpose %q", p)
 	}
 	org := ids.PlatformOrg

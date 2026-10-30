@@ -72,6 +72,8 @@ type ChannelView struct {
 	LastFailure          *time.Time
 	LastFailureCode      string
 	PreviousSecretExpiry *time.Time
+	// SignatureScheme is hmac (the default) or hmac+ed25519 (G0 M20 D251).
+	SignatureScheme      domain.SignatureScheme
 	CreatedAt, UpdatedAt time.Time
 	// SlackApp is a slack_app channel's configuration (nil for other kinds).
 	SlackApp *SlackAppView
@@ -84,6 +86,7 @@ func channelView(c dbq.PcNotificationChannel) ChannelView {
 		Health: domain.HealthOf(int(c.ConsecutiveFailures)), ConsecutiveFailures: int(c.ConsecutiveFailures),
 		LastSuccess: c.LastSuccessAt, LastFailure: c.LastFailureAt, LastFailureCode: deref(c.LastFailureCode),
 		PreviousSecretExpiry: c.PrevSecretExpiresAt, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
+		SignatureScheme: domain.SignatureScheme(c.SignatureScheme),
 	}
 	if v.Kind == domain.KindWebhook {
 		v.URL = deref(c.Url)
