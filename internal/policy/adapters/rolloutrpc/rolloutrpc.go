@@ -92,7 +92,7 @@ func rolloutPB(r rollout.Rollout) *pantherclawv1.PolicyRollout {
 	out := &pantherclawv1.PolicyRollout{
 		Id: r.ID.String(), VersionId: r.VersionID.String(), BaseVersionId: optString(r.BaseVersionID), Stage: stages[r.Stage],
 		CreatedBy: r.CreatedBy, CreateTime: timestamppb.New(r.CreatedAt), StageChangeTime: timestamppb.New(r.StageChangedAt),
-		CompleteTime: ts(r.CompletedAt), TargetCounts: r.Targets,
+		CompleteTime: ts(r.CompletedAt), TargetCounts: r.Targets, RequireVerifiedPercent: r.RequireVerifiedPercent,
 	}
 	for _, c := range r.Cohorts {
 		out.Cohorts = append(out.Cohorts, &pantherclawv1.PolicyRolloutCohort{
@@ -132,7 +132,7 @@ func (h *Handler) StartPolicyRollout(ctx context.Context, r *pantherclawv1.Start
 	if err != nil {
 		return nil, err
 	}
-	out, err := h.svc.StartRollout(ctx, v, r.GetShadowCohorts())
+	out, err := h.svc.StartGatedRollout(ctx, v, r.GetShadowCohorts(), r.RequireVerifiedPercent)
 	if err != nil {
 		return nil, err
 	}

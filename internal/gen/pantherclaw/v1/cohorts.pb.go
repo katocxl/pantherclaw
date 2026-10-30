@@ -1840,6 +1840,206 @@ func (x *GetFleetOverviewResponse) GetNextPageToken() string {
 	return ""
 }
 
+type GetCohortFindingsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CohortId      string                 `protobuf:"bytes,1,opt,name=cohort_id,json=cohortId,proto3" json:"cohort_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCohortFindingsRequest) Reset() {
+	*x = GetCohortFindingsRequest{}
+	mi := &file_pantherclaw_v1_cohorts_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCohortFindingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCohortFindingsRequest) ProtoMessage() {}
+
+func (x *GetCohortFindingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_cohorts_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCohortFindingsRequest.ProtoReflect.Descriptor instead.
+func (*GetCohortFindingsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_cohorts_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *GetCohortFindingsRequest) GetCohortId() string {
+	if x != nil {
+		return x.CohortId
+	}
+	return ""
+}
+
+// CohortFindingCount is one kind of finding: how many, on how many agents.
+type CohortFindingCount struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Findings int64                  `protobuf:"varint,1,opt,name=findings,proto3" json:"findings,omitempty"`
+	Agents   int64                  `protobuf:"varint,2,opt,name=agents,proto3" json:"agents,omitempty"`
+	// shown is false when the caller may not read this kind; the counts
+	// are then zero.
+	Shown         bool `protobuf:"varint,3,opt,name=shown,proto3" json:"shown,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CohortFindingCount) Reset() {
+	*x = CohortFindingCount{}
+	mi := &file_pantherclaw_v1_cohorts_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CohortFindingCount) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CohortFindingCount) ProtoMessage() {}
+
+func (x *CohortFindingCount) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_cohorts_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CohortFindingCount.ProtoReflect.Descriptor instead.
+func (*CohortFindingCount) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_cohorts_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *CohortFindingCount) GetFindings() int64 {
+	if x != nil {
+		return x.Findings
+	}
+	return 0
+}
+
+func (x *CohortFindingCount) GetAgents() int64 {
+	if x != nil {
+		return x.Agents
+	}
+	return 0
+}
+
+func (x *CohortFindingCount) GetShown() bool {
+	if x != nil {
+		return x.Shown
+	}
+	return false
+}
+
+type GetCohortFindingsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// agents is how many of the cohort's agents the counts cover: those the
+	// caller may read.
+	Agents int32 `protobuf:"varint,1,opt,name=agents,proto3" json:"agents,omitempty"`
+	// coverage counts open coverage findings (coverage.read).
+	Coverage *CohortFindingCount `protobuf:"bytes,2,opt,name=coverage,proto3" json:"coverage,omitempty"`
+	// departures counts active grants beyond the cohort's baseline.
+	Departures *CohortFindingCount `protobuf:"bytes,3,opt,name=departures,proto3" json:"departures,omitempty"`
+	// failed_targets counts FAILED targets of open rollouts and of those
+	// completed in the last 7 days (policy.read).
+	FailedTargets *CohortFindingCount `protobuf:"bytes,4,opt,name=failed_targets,json=failedTargets,proto3" json:"failed_targets,omitempty"`
+	// active_exceptions counts exceptions that waive something now
+	// (policy.read).
+	ActiveExceptions *CohortFindingCount `protobuf:"bytes,5,opt,name=active_exceptions,json=activeExceptions,proto3" json:"active_exceptions,omitempty"`
+	// truncated: the cohort has more agents or grants than are read.
+	Truncated     bool `protobuf:"varint,6,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCohortFindingsResponse) Reset() {
+	*x = GetCohortFindingsResponse{}
+	mi := &file_pantherclaw_v1_cohorts_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCohortFindingsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCohortFindingsResponse) ProtoMessage() {}
+
+func (x *GetCohortFindingsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_cohorts_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCohortFindingsResponse.ProtoReflect.Descriptor instead.
+func (*GetCohortFindingsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_cohorts_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *GetCohortFindingsResponse) GetAgents() int32 {
+	if x != nil {
+		return x.Agents
+	}
+	return 0
+}
+
+func (x *GetCohortFindingsResponse) GetCoverage() *CohortFindingCount {
+	if x != nil {
+		return x.Coverage
+	}
+	return nil
+}
+
+func (x *GetCohortFindingsResponse) GetDepartures() *CohortFindingCount {
+	if x != nil {
+		return x.Departures
+	}
+	return nil
+}
+
+func (x *GetCohortFindingsResponse) GetFailedTargets() *CohortFindingCount {
+	if x != nil {
+		return x.FailedTargets
+	}
+	return nil
+}
+
+func (x *GetCohortFindingsResponse) GetActiveExceptions() *CohortFindingCount {
+	if x != nil {
+		return x.ActiveExceptions
+	}
+	return nil
+}
+
+func (x *GetCohortFindingsResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
 var File_pantherclaw_v1_cohorts_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_cohorts_proto_rawDesc = "" +
@@ -1977,8 +2177,22 @@ const file_pantherclaw_v1_cohorts_proto_rawDesc = "" +
 	"page_token\x18\x02 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\tpageToken\"v\n" +
 	"\x18GetFleetOverviewResponse\x122\n" +
 	"\x06agents\x18\x01 \x03(\v2\x1a.pantherclaw.v1.FleetAgentR\x06agents\x12&\n" +
-	"\x0fnext_page_token\x18\x03 \x01(\tR\rnextPageToken2\xb7\n" +
+	"\x0fnext_page_token\x18\x03 \x01(\tR\rnextPageToken\"A\n" +
+	"\x18GetCohortFindingsRequest\x12%\n" +
+	"\tcohort_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bcohortId\"^\n" +
+	"\x12CohortFindingCount\x12\x1a\n" +
+	"\bfindings\x18\x01 \x01(\x03R\bfindings\x12\x16\n" +
+	"\x06agents\x18\x02 \x01(\x03R\x06agents\x12\x14\n" +
+	"\x05shown\x18\x03 \x01(\bR\x05shown\"\xf1\x02\n" +
+	"\x19GetCohortFindingsResponse\x12\x16\n" +
+	"\x06agents\x18\x01 \x01(\x05R\x06agents\x12>\n" +
+	"\bcoverage\x18\x02 \x01(\v2\".pantherclaw.v1.CohortFindingCountR\bcoverage\x12B\n" +
 	"\n" +
+	"departures\x18\x03 \x01(\v2\".pantherclaw.v1.CohortFindingCountR\n" +
+	"departures\x12I\n" +
+	"\x0efailed_targets\x18\x04 \x01(\v2\".pantherclaw.v1.CohortFindingCountR\rfailedTargets\x12O\n" +
+	"\x11active_exceptions\x18\x05 \x01(\v2\".pantherclaw.v1.CohortFindingCountR\x10activeExceptions\x12\x1c\n" +
+	"\ttruncated\x18\x06 \x01(\bR\ttruncated2\xa6\v\n" +
 	"\rCohortService\x12h\n" +
 	"\x11CreateFleetCohort\x12(.pantherclaw.v1.CreateFleetCohortRequest\x1a).pantherclaw.v1.CreateFleetCohortResponse\x12h\n" +
 	"\x11UpdateFleetCohort\x12(.pantherclaw.v1.UpdateFleetCohortRequest\x1a).pantherclaw.v1.UpdateFleetCohortResponse\x12h\n" +
@@ -1991,7 +2205,8 @@ const file_pantherclaw_v1_cohorts_proto_rawDesc = "" +
 	"\x10SetAgentTaskType\x12'.pantherclaw.v1.SetAgentTaskTypeRequest\x1a(.pantherclaw.v1.SetAgentTaskTypeResponse\x12d\n" +
 	"\x0eGetCohortQueue\x12%.pantherclaw.v1.GetCohortQueueRequest\x1a&.pantherclaw.v1.GetCohortQueueResponse\"\x03\x90\x02\x01\x12j\n" +
 	"\x10GetCohortChanges\x12'.pantherclaw.v1.GetCohortChangesRequest\x1a(.pantherclaw.v1.GetCohortChangesResponse\"\x03\x90\x02\x01\x12j\n" +
-	"\x10GetFleetOverview\x12'.pantherclaw.v1.GetFleetOverviewRequest\x1a(.pantherclaw.v1.GetFleetOverviewResponse\"\x03\x90\x02\x01B\xc5\x01\n" +
+	"\x10GetFleetOverview\x12'.pantherclaw.v1.GetFleetOverviewRequest\x1a(.pantherclaw.v1.GetFleetOverviewResponse\"\x03\x90\x02\x01\x12m\n" +
+	"\x11GetCohortFindings\x12(.pantherclaw.v1.GetCohortFindingsRequest\x1a).pantherclaw.v1.GetCohortFindingsResponse\"\x03\x90\x02\x01B\xc5\x01\n" +
 	"\x12com.pantherclaw.v1B\fCohortsProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -2006,7 +2221,7 @@ func file_pantherclaw_v1_cohorts_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_cohorts_proto_rawDescData
 }
 
-var file_pantherclaw_v1_cohorts_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_pantherclaw_v1_cohorts_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
 var file_pantherclaw_v1_cohorts_proto_goTypes = []any{
 	(*FleetCohortRule)(nil),                  // 0: pantherclaw.v1.FleetCohortRule
 	(*FleetCohort)(nil),                      // 1: pantherclaw.v1.FleetCohort
@@ -2039,15 +2254,18 @@ var file_pantherclaw_v1_cohorts_proto_goTypes = []any{
 	(*GetCohortChangesResponse)(nil),         // 28: pantherclaw.v1.GetCohortChangesResponse
 	(*GetFleetOverviewRequest)(nil),          // 29: pantherclaw.v1.GetFleetOverviewRequest
 	(*GetFleetOverviewResponse)(nil),         // 30: pantherclaw.v1.GetFleetOverviewResponse
-	(*timestamppb.Timestamp)(nil),            // 31: google.protobuf.Timestamp
-	(*Promotion)(nil),                        // 32: pantherclaw.v1.Promotion
+	(*GetCohortFindingsRequest)(nil),         // 31: pantherclaw.v1.GetCohortFindingsRequest
+	(*CohortFindingCount)(nil),               // 32: pantherclaw.v1.CohortFindingCount
+	(*GetCohortFindingsResponse)(nil),        // 33: pantherclaw.v1.GetCohortFindingsResponse
+	(*timestamppb.Timestamp)(nil),            // 34: google.protobuf.Timestamp
+	(*Promotion)(nil),                        // 35: pantherclaw.v1.Promotion
 }
 var file_pantherclaw_v1_cohorts_proto_depIdxs = []int32{
 	0,  // 0: pantherclaw.v1.FleetCohort.rule:type_name -> pantherclaw.v1.FleetCohortRule
-	31, // 1: pantherclaw.v1.FleetCohort.create_time:type_name -> google.protobuf.Timestamp
-	31, // 2: pantherclaw.v1.FleetCohort.update_time:type_name -> google.protobuf.Timestamp
+	34, // 1: pantherclaw.v1.FleetCohort.create_time:type_name -> google.protobuf.Timestamp
+	34, // 2: pantherclaw.v1.FleetCohort.update_time:type_name -> google.protobuf.Timestamp
 	0,  // 3: pantherclaw.v1.FleetCohortInput.rule:type_name -> pantherclaw.v1.FleetCohortRule
-	31, // 4: pantherclaw.v1.FleetAgent.last_run_time:type_name -> google.protobuf.Timestamp
+	34, // 4: pantherclaw.v1.FleetAgent.last_run_time:type_name -> google.protobuf.Timestamp
 	2,  // 5: pantherclaw.v1.CreateFleetCohortRequest.cohort:type_name -> pantherclaw.v1.FleetCohortInput
 	1,  // 6: pantherclaw.v1.CreateFleetCohortResponse.cohort:type_name -> pantherclaw.v1.FleetCohort
 	2,  // 7: pantherclaw.v1.UpdateFleetCohortRequest.cohort:type_name -> pantherclaw.v1.FleetCohortInput
@@ -2059,41 +2277,47 @@ var file_pantherclaw_v1_cohorts_proto_depIdxs = []int32{
 	3,  // 13: pantherclaw.v1.GetCohortQueueResponse.unpromoted:type_name -> pantherclaw.v1.FleetAgent
 	3,  // 14: pantherclaw.v1.GetCohortQueueResponse.pending_approvals:type_name -> pantherclaw.v1.FleetAgent
 	24, // 15: pantherclaw.v1.GetCohortQueueResponse.over_baseline:type_name -> pantherclaw.v1.BaselineDeparture
-	31, // 16: pantherclaw.v1.GetCohortChangesRequest.since:type_name -> google.protobuf.Timestamp
-	31, // 17: pantherclaw.v1.CohortChange.time:type_name -> google.protobuf.Timestamp
-	31, // 18: pantherclaw.v1.GetCohortChangesResponse.since:type_name -> google.protobuf.Timestamp
+	34, // 16: pantherclaw.v1.GetCohortChangesRequest.since:type_name -> google.protobuf.Timestamp
+	34, // 17: pantherclaw.v1.CohortChange.time:type_name -> google.protobuf.Timestamp
+	34, // 18: pantherclaw.v1.GetCohortChangesResponse.since:type_name -> google.protobuf.Timestamp
 	27, // 19: pantherclaw.v1.GetCohortChangesResponse.changes:type_name -> pantherclaw.v1.CohortChange
-	32, // 20: pantherclaw.v1.GetCohortChangesResponse.promotions:type_name -> pantherclaw.v1.Promotion
+	35, // 20: pantherclaw.v1.GetCohortChangesResponse.promotions:type_name -> pantherclaw.v1.Promotion
 	3,  // 21: pantherclaw.v1.GetFleetOverviewResponse.agents:type_name -> pantherclaw.v1.FleetAgent
-	4,  // 22: pantherclaw.v1.CohortService.CreateFleetCohort:input_type -> pantherclaw.v1.CreateFleetCohortRequest
-	6,  // 23: pantherclaw.v1.CohortService.UpdateFleetCohort:input_type -> pantherclaw.v1.UpdateFleetCohortRequest
-	8,  // 24: pantherclaw.v1.CohortService.DeleteFleetCohort:input_type -> pantherclaw.v1.DeleteFleetCohortRequest
-	10, // 25: pantherclaw.v1.CohortService.GetFleetCohort:input_type -> pantherclaw.v1.GetFleetCohortRequest
-	12, // 26: pantherclaw.v1.CohortService.ListFleetCohorts:input_type -> pantherclaw.v1.ListFleetCohortsRequest
-	14, // 27: pantherclaw.v1.CohortService.ListFleetCohortMembers:input_type -> pantherclaw.v1.ListFleetCohortMembersRequest
-	17, // 28: pantherclaw.v1.CohortService.AddFleetCohortMembers:input_type -> pantherclaw.v1.AddFleetCohortMembersRequest
-	19, // 29: pantherclaw.v1.CohortService.RemoveFleetCohortMembers:input_type -> pantherclaw.v1.RemoveFleetCohortMembersRequest
-	21, // 30: pantherclaw.v1.CohortService.SetAgentTaskType:input_type -> pantherclaw.v1.SetAgentTaskTypeRequest
-	23, // 31: pantherclaw.v1.CohortService.GetCohortQueue:input_type -> pantherclaw.v1.GetCohortQueueRequest
-	26, // 32: pantherclaw.v1.CohortService.GetCohortChanges:input_type -> pantherclaw.v1.GetCohortChangesRequest
-	29, // 33: pantherclaw.v1.CohortService.GetFleetOverview:input_type -> pantherclaw.v1.GetFleetOverviewRequest
-	5,  // 34: pantherclaw.v1.CohortService.CreateFleetCohort:output_type -> pantherclaw.v1.CreateFleetCohortResponse
-	7,  // 35: pantherclaw.v1.CohortService.UpdateFleetCohort:output_type -> pantherclaw.v1.UpdateFleetCohortResponse
-	9,  // 36: pantherclaw.v1.CohortService.DeleteFleetCohort:output_type -> pantherclaw.v1.DeleteFleetCohortResponse
-	11, // 37: pantherclaw.v1.CohortService.GetFleetCohort:output_type -> pantherclaw.v1.GetFleetCohortResponse
-	13, // 38: pantherclaw.v1.CohortService.ListFleetCohorts:output_type -> pantherclaw.v1.ListFleetCohortsResponse
-	16, // 39: pantherclaw.v1.CohortService.ListFleetCohortMembers:output_type -> pantherclaw.v1.ListFleetCohortMembersResponse
-	18, // 40: pantherclaw.v1.CohortService.AddFleetCohortMembers:output_type -> pantherclaw.v1.AddFleetCohortMembersResponse
-	20, // 41: pantherclaw.v1.CohortService.RemoveFleetCohortMembers:output_type -> pantherclaw.v1.RemoveFleetCohortMembersResponse
-	22, // 42: pantherclaw.v1.CohortService.SetAgentTaskType:output_type -> pantherclaw.v1.SetAgentTaskTypeResponse
-	25, // 43: pantherclaw.v1.CohortService.GetCohortQueue:output_type -> pantherclaw.v1.GetCohortQueueResponse
-	28, // 44: pantherclaw.v1.CohortService.GetCohortChanges:output_type -> pantherclaw.v1.GetCohortChangesResponse
-	30, // 45: pantherclaw.v1.CohortService.GetFleetOverview:output_type -> pantherclaw.v1.GetFleetOverviewResponse
-	34, // [34:46] is the sub-list for method output_type
-	22, // [22:34] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	32, // 22: pantherclaw.v1.GetCohortFindingsResponse.coverage:type_name -> pantherclaw.v1.CohortFindingCount
+	32, // 23: pantherclaw.v1.GetCohortFindingsResponse.departures:type_name -> pantherclaw.v1.CohortFindingCount
+	32, // 24: pantherclaw.v1.GetCohortFindingsResponse.failed_targets:type_name -> pantherclaw.v1.CohortFindingCount
+	32, // 25: pantherclaw.v1.GetCohortFindingsResponse.active_exceptions:type_name -> pantherclaw.v1.CohortFindingCount
+	4,  // 26: pantherclaw.v1.CohortService.CreateFleetCohort:input_type -> pantherclaw.v1.CreateFleetCohortRequest
+	6,  // 27: pantherclaw.v1.CohortService.UpdateFleetCohort:input_type -> pantherclaw.v1.UpdateFleetCohortRequest
+	8,  // 28: pantherclaw.v1.CohortService.DeleteFleetCohort:input_type -> pantherclaw.v1.DeleteFleetCohortRequest
+	10, // 29: pantherclaw.v1.CohortService.GetFleetCohort:input_type -> pantherclaw.v1.GetFleetCohortRequest
+	12, // 30: pantherclaw.v1.CohortService.ListFleetCohorts:input_type -> pantherclaw.v1.ListFleetCohortsRequest
+	14, // 31: pantherclaw.v1.CohortService.ListFleetCohortMembers:input_type -> pantherclaw.v1.ListFleetCohortMembersRequest
+	17, // 32: pantherclaw.v1.CohortService.AddFleetCohortMembers:input_type -> pantherclaw.v1.AddFleetCohortMembersRequest
+	19, // 33: pantherclaw.v1.CohortService.RemoveFleetCohortMembers:input_type -> pantherclaw.v1.RemoveFleetCohortMembersRequest
+	21, // 34: pantherclaw.v1.CohortService.SetAgentTaskType:input_type -> pantherclaw.v1.SetAgentTaskTypeRequest
+	23, // 35: pantherclaw.v1.CohortService.GetCohortQueue:input_type -> pantherclaw.v1.GetCohortQueueRequest
+	26, // 36: pantherclaw.v1.CohortService.GetCohortChanges:input_type -> pantherclaw.v1.GetCohortChangesRequest
+	29, // 37: pantherclaw.v1.CohortService.GetFleetOverview:input_type -> pantherclaw.v1.GetFleetOverviewRequest
+	31, // 38: pantherclaw.v1.CohortService.GetCohortFindings:input_type -> pantherclaw.v1.GetCohortFindingsRequest
+	5,  // 39: pantherclaw.v1.CohortService.CreateFleetCohort:output_type -> pantherclaw.v1.CreateFleetCohortResponse
+	7,  // 40: pantherclaw.v1.CohortService.UpdateFleetCohort:output_type -> pantherclaw.v1.UpdateFleetCohortResponse
+	9,  // 41: pantherclaw.v1.CohortService.DeleteFleetCohort:output_type -> pantherclaw.v1.DeleteFleetCohortResponse
+	11, // 42: pantherclaw.v1.CohortService.GetFleetCohort:output_type -> pantherclaw.v1.GetFleetCohortResponse
+	13, // 43: pantherclaw.v1.CohortService.ListFleetCohorts:output_type -> pantherclaw.v1.ListFleetCohortsResponse
+	16, // 44: pantherclaw.v1.CohortService.ListFleetCohortMembers:output_type -> pantherclaw.v1.ListFleetCohortMembersResponse
+	18, // 45: pantherclaw.v1.CohortService.AddFleetCohortMembers:output_type -> pantherclaw.v1.AddFleetCohortMembersResponse
+	20, // 46: pantherclaw.v1.CohortService.RemoveFleetCohortMembers:output_type -> pantherclaw.v1.RemoveFleetCohortMembersResponse
+	22, // 47: pantherclaw.v1.CohortService.SetAgentTaskType:output_type -> pantherclaw.v1.SetAgentTaskTypeResponse
+	25, // 48: pantherclaw.v1.CohortService.GetCohortQueue:output_type -> pantherclaw.v1.GetCohortQueueResponse
+	28, // 49: pantherclaw.v1.CohortService.GetCohortChanges:output_type -> pantherclaw.v1.GetCohortChangesResponse
+	30, // 50: pantherclaw.v1.CohortService.GetFleetOverview:output_type -> pantherclaw.v1.GetFleetOverviewResponse
+	33, // 51: pantherclaw.v1.CohortService.GetCohortFindings:output_type -> pantherclaw.v1.GetCohortFindingsResponse
+	39, // [39:52] is the sub-list for method output_type
+	26, // [26:39] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_cohorts_proto_init() }
@@ -2108,7 +2332,7 @@ func file_pantherclaw_v1_cohorts_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_cohorts_proto_rawDesc), len(file_pantherclaw_v1_cohorts_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   31,
+			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

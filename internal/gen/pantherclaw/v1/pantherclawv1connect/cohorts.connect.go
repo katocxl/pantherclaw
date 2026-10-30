@@ -63,6 +63,9 @@ const (
 	// CohortServiceGetFleetOverviewProcedure is the procedure name of the CohortService's
 	// GetFleetOverview RPC.
 	CohortServiceGetFleetOverviewProcedure = "/pantherclaw.v1.CohortService/GetFleetOverview"
+	// CohortServiceGetCohortFindingsProcedure is the procedure name of the CohortService's
+	// GetCohortFindings RPC.
+	CohortServiceGetCohortFindingsProcedure = "/pantherclaw.v1.CohortService/GetCohortFindings"
 )
 
 var (
@@ -156,6 +159,14 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	cohortServiceGetCohortFindingsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_cohorts_proto.Services().ByName("CohortService").Methods().ByName("GetCohortFindings"),
+			Procedure:        CohortServiceGetCohortFindingsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // CohortServiceClient is a client for the pantherclaw.v1.CohortService service.
@@ -199,6 +210,12 @@ type CohortServiceClient interface {
 	// last run, promoted operations and active grants; no cohort needed.
 	// permission: agent.read
 	GetFleetOverview(context.Context, *v1.GetFleetOverviewRequest) (*v1.GetFleetOverviewResponse, error)
+	// GetCohortFindings counts a cohort's findings over its agents the
+	// caller may read (G0 M18 D154): open coverage findings, grants beyond
+	// the baseline, FAILED rollout targets and active exceptions. A kind
+	// the caller may not read is left out.
+	// permission: agent.read
+	GetCohortFindings(context.Context, *v1.GetCohortFindingsRequest) (*v1.GetCohortFindingsResponse, error)
 }
 
 // NewCohortServiceClient constructs a client for the pantherclaw.v1.CohortService service. Multiple
@@ -248,6 +265,12 @@ type CohortServiceHandler interface {
 	// last run, promoted operations and active grants; no cohort needed.
 	// permission: agent.read
 	GetFleetOverview(context.Context, *v1.GetFleetOverviewRequest) (*v1.GetFleetOverviewResponse, error)
+	// GetCohortFindings counts a cohort's findings over its agents the
+	// caller may read (G0 M18 D154): open coverage findings, grants beyond
+	// the baseline, FAILED rollout targets and active exceptions. A kind
+	// the caller may not read is left out.
+	// permission: agent.read
+	GetCohortFindings(context.Context, *v1.GetCohortFindingsRequest) (*v1.GetCohortFindingsResponse, error)
 }
 
 // RegisterCohortServiceHandler registers svc as the pantherclaw.v1.CohortService implementation on
@@ -267,6 +290,7 @@ func RegisterCohortServiceHandler(server *connect.Server, svc CohortServiceHandl
 		connect.Method{Spec: cohortServiceGetCohortQueueSpec(), Handler: adapter.getCohortQueue},
 		connect.Method{Spec: cohortServiceGetCohortChangesSpec(), Handler: adapter.getCohortChanges},
 		connect.Method{Spec: cohortServiceGetFleetOverviewSpec(), Handler: adapter.getFleetOverview},
+		connect.Method{Spec: cohortServiceGetCohortFindingsSpec(), Handler: adapter.getCohortFindings},
 	)
 }
 
@@ -319,6 +343,10 @@ func (UnimplementedCohortServiceHandler) GetCohortChanges(context.Context, *v1.G
 
 func (UnimplementedCohortServiceHandler) GetFleetOverview(context.Context, *v1.GetFleetOverviewRequest) (*v1.GetFleetOverviewResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CohortService.GetFleetOverview is not implemented")
+}
+
+func (UnimplementedCohortServiceHandler) GetCohortFindings(context.Context, *v1.GetCohortFindingsRequest) (*v1.GetCohortFindingsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CohortService.GetCohortFindings is not implemented")
 }
 
 type cohortServiceClient struct {
@@ -416,6 +444,14 @@ func (c *cohortServiceClient) GetCohortChanges(ctx context.Context, req *v1.GetC
 func (c *cohortServiceClient) GetFleetOverview(ctx context.Context, req *v1.GetFleetOverviewRequest) (*v1.GetFleetOverviewResponse, error) {
 	var res v1.GetFleetOverviewResponse
 	if err := c.client.CallUnary(ctx, cohortServiceGetFleetOverviewSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *cohortServiceClient) GetCohortFindings(ctx context.Context, req *v1.GetCohortFindingsRequest) (*v1.GetCohortFindingsResponse, error) {
+	var res v1.GetCohortFindingsResponse
+	if err := c.client.CallUnary(ctx, cohortServiceGetCohortFindingsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -561,6 +597,18 @@ func (h cohortServiceHandler) getFleetOverview(ctx context.Context, _ connect.Sp
 		return err
 	}
 	res, err := h.svc.GetFleetOverview(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h cohortServiceHandler) getCohortFindings(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCohortFindingsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCohortFindings(ctx, &req)
 	if err != nil {
 		return err
 	}

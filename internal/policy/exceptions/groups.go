@@ -16,6 +16,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/cohorts"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
@@ -137,6 +138,9 @@ func (s *Service) RequestGroup(ctx context.Context, r GroupRequest) (Group, Chan
 	}
 	c, err := requester(ctx, td.PermPolicyExceptionRequest)
 	if err != nil {
+		return out, cr, err
+	}
+	if err := s.largeFleet(ctx); err != nil {
 		return out, cr, err
 	}
 	if s.Changes == nil {
@@ -514,4 +518,31 @@ func (s *Service) notifyGroup(ctx context.Context, tx db.TenantTx, g Group, typ,
 		},
 	})
 	return err
+}
+
+// Editions reports the licence's entitlements.
+type Editions interface {
+	Current(ctx context.Context) (billing.Entitlements, error)
+}
+
+// ErrGroupEdition: requesting an exception group needs the Enterprise
+// edition (D161). Groups already approved keep applying, and reading or
+// revoking them works in every edition.
+var ErrGroupEdition = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED",
+	"exception groups need the Enterprise edition")
+
+// largeFleet refuses unless the licence includes large-fleet
+// administration (fail closed without an edition source).
+func (s *Service) largeFleet(ctx context.Context) error {
+	if s.Editions == nil {
+		return ErrGroupEdition
+	}
+	e, err := s.Editions.Current(ctx)
+	if err != nil {
+		return err
+	}
+	if !e.LargeFleetAdmin() {
+		return ErrGroupEdition
+	}
+	return nil
 }

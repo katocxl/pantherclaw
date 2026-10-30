@@ -463,6 +463,11 @@ func (s *Service) StartGatedRollout(ctx context.Context, version ids.UUID, shado
 	if err := s.team(ctx); err != nil {
 		return Rollout{}, err
 	}
+	if verifiedPercent != nil {
+		if err := s.largeFleet(ctx); err != nil {
+			return Rollout{}, err
+		}
+	}
 	var id ids.UUID
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)

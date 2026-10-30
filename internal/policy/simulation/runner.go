@@ -81,7 +81,7 @@ func (r *Runner) Step(ctx context.Context, org ids.OrgID, id ids.UUID) (more boo
 	if err != nil || !running {
 		return false, err
 	}
-	if ok, err := r.licensed(ctx); err != nil {
+	if ok, err := r.licensed(ctx, sim.Cohort != nil); err != nil {
 		return false, err
 	} else if !ok {
 		return false, r.Fail(ctx, org, id, FailEdition)
@@ -156,8 +156,9 @@ func (r *Runner) start(ctx context.Context, org ids.OrgID, id ids.UUID) (Simulat
 	return sim, running, err
 }
 
-// licensed reports whether the edition still includes simulation.
-func (r *Runner) licensed(ctx context.Context) (bool, error) {
+// licensed reports whether the edition still includes simulation, and
+// for a bulk simulation by cohort large-fleet administration (D161).
+func (r *Runner) licensed(ctx context.Context, bulk bool) (bool, error) {
 	if r.Editions == nil {
 		return false, nil
 	}
@@ -165,7 +166,7 @@ func (r *Runner) licensed(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return e.PolicySimulation(), nil
+	return e.PolicySimulation() && (!bulk || e.LargeFleetAdmin()), nil
 }
 
 // samePosition reports whether two cursors name the same recorded

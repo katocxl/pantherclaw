@@ -45,7 +45,10 @@ func (c *changes) Request(_ context.Context, kind papp.ChangeKind, subject, base
 	if c.fail != nil {
 		return papp.ChangeRequest{}, c.fail
 	}
-	c.asked, c.base, c.sum = append(c.asked, summary.(exceptions.Summary)), base, binding
+	if s, ok := summary.(exceptions.Summary); ok {
+		c.asked = append(c.asked, s)
+	}
+	c.base, c.sum = base, binding
 	return papp.ChangeRequest{ID: ids.NewV7(), Kind: kind, Subject: subject, URL: "/policy-changes/" + subject.String()}, nil
 }
 

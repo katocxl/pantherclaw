@@ -72,3 +72,24 @@ func verifiedGate(ctx context.Context, q *dbq.Queries, org ids.OrgID, r dbq.PcPo
 		"%d of %d targets other than EXCEPTION are verified, below the rollout's %d%% threshold; resolve the others or exclude them first",
 		counts[TargetVerified], counted, *r.RequireVerifiedPercent))
 }
+
+// ErrLargeFleetEdition: starting a gated rollout needs the Enterprise
+// edition (D161). A threshold already set still holds in every edition.
+var ErrLargeFleetEdition = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED",
+	"a rollout with a verified threshold needs the Enterprise edition")
+
+// largeFleet refuses unless the licence includes large-fleet
+// administration (fail closed without an edition source).
+func (s *Service) largeFleet(ctx context.Context) error {
+	if s.Editions == nil {
+		return ErrLargeFleetEdition
+	}
+	e, err := s.Editions.Current(ctx)
+	if err != nil {
+		return err
+	}
+	if !e.LargeFleetAdmin() {
+		return ErrLargeFleetEdition
+	}
+	return nil
+}

@@ -18,7 +18,7 @@ import (
 // holds agents 0 and 1, other agent 2.
 func cohortWorld(t *testing.T) (w *world, agents []ids.UUID, inside, other ids.UUID) {
 	t.Helper()
-	w = newWorld(billing.Team)
+	w = newWorld(billing.Enterprise)
 	w.record(6, "payments.refund.create", outcome{orig: "ALLOW", origReason: "ALLOWED", prop: "DENY", propReason: "POLICY_DENIED", rule: "r"})
 	agents = []ids.UUID{ids.NewV7(), ids.NewV7(), ids.NewV7()}
 	for i := range w.store.recorded {
@@ -117,4 +117,28 @@ func pageRequest(t *testing.T) page.Request {
 		t.Fatal(err)
 	}
 	return p
+}
+
+// TestHR478_CohortSimulationNeedsEnterprise: below Enterprise a bulk
+// simulation is refused, and one already queued fails at its next step
+// when the edition lapses (D161); an org-wide one still runs on Team.
+// Covers: F602
+func TestHR478_CohortSimulationNeedsEnterprise(t *testing.T) {
+	team := newWorld(billing.Team)
+	cohort := ids.NewV7()
+	team.store.cohorts = map[ids.UUID][]ids.UUID{cohort: nil}
+	if _, err := team.svc.Simulate(as(td.RolePolicyAuthor), simulation.Request{Version: version, Cohort: &cohort}); code(err) != "EDITION_REQUIRED" {
+		t.Errorf("a Team bulk simulation: %v", err)
+	}
+	if len(team.store.sims) != 0 {
+		t.Fatal("a refused bulk simulation was stored")
+	}
+	team.simulate(t, simulation.Request{})
+
+	w, _, inside, _ := cohortWorld(t)
+	s := w.simulate(t, simulation.Request{Cohort: &inside})
+	w.runner.Editions = editions(billing.Team)
+	if done := w.run(t, s.ID); done.State != simulation.Failed || done.Error != simulation.FailEdition || done.Evaluated != 0 {
+		t.Errorf("a bulk simulation after the downgrade: %s %q, %d evaluated", done.State, done.Error, done.Evaluated)
+	}
 }

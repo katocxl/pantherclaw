@@ -141,5 +141,8 @@ func Proto(x exceptions.Exception, state string) *pantherclawv1.PolicyException 
 	if x.RevokedReason != nil {
 		out.RevokedReason = *x.RevokedReason
 	}
+	if x.GroupID != nil {
+		out.GroupId = x.GroupID.String()
+	}
 	return out
 }

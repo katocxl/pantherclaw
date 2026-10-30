@@ -21,6 +21,8 @@ import (
 // policy exceptions. An exception waives one exceptable rule for one agent
 // and the listed operations, for at most 30 days, once its change request
 // is confirmed; it is never extended (ask again).
+// An exception group (G0 M18 D154) does the same for the agents a fleet
+// cohort holds when its change request is confirmed.
 
 type exceptionCall func(ctx context.Context, c pantherclawv1connect.PolicyExceptionServiceClient, args []string) (proto.Message, error)
 
@@ -82,10 +84,61 @@ var exceptionVerbs = map[string]exceptionVerb{
 			return c.RevokePolicyException(ctx, &pantherclawv1.RevokePolicyExceptionRequest{Id: args[0], Reason: *reason})
 		}
 	}},
+	// Exception groups (G0 M18 D154; Enterprise): the agents a fleet cohort
+	// holds when the change request is confirmed, one exception each.
+	"request-group": {
+		"request-group RULE --cohort ID --operation OP [--operation OP]... --reason TEXT --expires-in DURATION [--owner USER_ID]", 1,
+		func(fs *flag.FlagSet) exceptionCall {
+			var ops list
+			cohort := fs.String("cohort", "", "the fleet cohort whose agents it covers, as they are at approval (required)")
+			fs.Var(&ops, "operation", "an exact operation inside the rule's scope (repeat, 1 to 16; required)")
+			reason := fs.String("reason", "", "why the rule should not apply (1 to 500 characters; required)")
+			expires := fs.Duration("expires-in", 0, "how long it lasts, a minute to 720h (30 days; required)")
+			owner := fs.String("owner", "", "the person accountable for it (default: you)")
+			return func(ctx context.Context, c pantherclawv1connect.PolicyExceptionServiceClient, args []string) (proto.Message, error) {
+				switch {
+				case *cohort == "" || len(ops) == 0 || strings.TrimSpace(*reason) == "":
+					return nil, errors.New("--cohort, --operation and --reason are required")
+				case *expires < time.Minute || *expires > 30*24*time.Hour:
+					return nil, errors.New("--expires-in must be between 1m and 720h (30 days)")
+				}
+				return c.RequestPolicyExceptionGroup(ctx, &pantherclawv1.RequestPolicyExceptionGroupRequest{
+					RuleId: args[0], CohortId: *cohort, Operations: ops, Reason: *reason,
+					ExpiresInSeconds: int64(*expires / time.Second), OwnerId: optString(*owner),
+				})
+			}
+		},
+	},
+	"list-groups": {
+		"list-groups [--cohort ID] [--state pending|active|declined|revoked|expired]", 0,
+		func(fs *flag.FlagSet) exceptionCall {
+			cohort, state := fs.String("cohort", "", "only this cohort"), fs.String("state", "", "only this state")
+			n, tok := paging(fs)
+			return func(ctx context.Context, c pantherclawv1connect.PolicyExceptionServiceClient, _ []string) (proto.Message, error) {
+				return c.ListPolicyExceptionGroups(ctx, &pantherclawv1.ListPolicyExceptionGroupsRequest{
+					CohortId: optString(*cohort), State: optString(strings.ToUpper(*state)), PageSize: size(n), PageToken: *tok,
+				})
+			}
+		},
+	},
+	"get-group": {"get-group ID", 1, func(*flag.FlagSet) exceptionCall {
+		return func(ctx context.Context, c pantherclawv1connect.PolicyExceptionServiceClient, args []string) (proto.Message, error) {
+			return c.GetPolicyExceptionGroup(ctx, &pantherclawv1.GetPolicyExceptionGroupRequest{Id: args[0]})
+		}
+	}},
+	"revoke-group": {"revoke-group ID --reason TEXT", 1, func(fs *flag.FlagSet) exceptionCall {
+		reason := fs.String("reason", "", "why (1 to 500 characters; required)")
+		return func(ctx context.Context, c pantherclawv1connect.PolicyExceptionServiceClient, args []string) (proto.Message, error) {
+			if strings.TrimSpace(*reason) == "" {
+				return nil, errors.New("--reason is required")
+			}
+			return c.RevokePolicyExceptionGroup(ctx, &pantherclawv1.RevokePolicyExceptionGroupRequest{Id: args[0], Reason: *reason})
+		}
+	}},
 }
 
 func exceptionUsage() string {
-	verbs := []string{"request", "list", "get", "revoke"}
+	verbs := []string{"request", "list", "get", "revoke", "request-group", "list-groups", "get-group", "revoke-group"}
 	lines := make([]string, 0, len(verbs))
 	for _, v := range verbs {
 		lines = append(lines, "policy exception "+exceptionVerbs[v].usage)
@@ -125,6 +178,10 @@ func runPolicyException(ctx context.Context, a *app, args []string) error {
 	}
 	if r, ok := res.(*pantherclawv1.RequestPolicyExceptionResponse); ok && r.GetChangeRequestUrl() != "" {
 		_, _ = fmt.Fprintln(a.stderr, "Waiting for confirmation: the exception applies once its change request is confirmed at "+r.GetChangeRequestUrl())
+	}
+	if r, ok := res.(*pantherclawv1.RequestPolicyExceptionGroupResponse); ok && r.GetChangeRequestUrl() != "" {
+		_, _ = fmt.Fprintln(a.stderr, "Waiting for confirmation: the group covers the agents its cohort holds when its change request is confirmed at "+
+			r.GetChangeRequestUrl())
 	}
 	return a.print(res)
 }

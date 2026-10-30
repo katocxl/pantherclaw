@@ -39,6 +39,18 @@ const (
 	// PolicyExceptionServiceRevokePolicyExceptionProcedure is the procedure name of the
 	// PolicyExceptionService's RevokePolicyException RPC.
 	PolicyExceptionServiceRevokePolicyExceptionProcedure = "/pantherclaw.v1.PolicyExceptionService/RevokePolicyException"
+	// PolicyExceptionServiceRequestPolicyExceptionGroupProcedure is the procedure name of the
+	// PolicyExceptionService's RequestPolicyExceptionGroup RPC.
+	PolicyExceptionServiceRequestPolicyExceptionGroupProcedure = "/pantherclaw.v1.PolicyExceptionService/RequestPolicyExceptionGroup"
+	// PolicyExceptionServiceGetPolicyExceptionGroupProcedure is the procedure name of the
+	// PolicyExceptionService's GetPolicyExceptionGroup RPC.
+	PolicyExceptionServiceGetPolicyExceptionGroupProcedure = "/pantherclaw.v1.PolicyExceptionService/GetPolicyExceptionGroup"
+	// PolicyExceptionServiceListPolicyExceptionGroupsProcedure is the procedure name of the
+	// PolicyExceptionService's ListPolicyExceptionGroups RPC.
+	PolicyExceptionServiceListPolicyExceptionGroupsProcedure = "/pantherclaw.v1.PolicyExceptionService/ListPolicyExceptionGroups"
+	// PolicyExceptionServiceRevokePolicyExceptionGroupProcedure is the procedure name of the
+	// PolicyExceptionService's RevokePolicyExceptionGroup RPC.
+	PolicyExceptionServiceRevokePolicyExceptionGroupProcedure = "/pantherclaw.v1.PolicyExceptionService/RevokePolicyExceptionGroup"
 )
 
 var (
@@ -72,6 +84,36 @@ var (
 			Procedure:  PolicyExceptionServiceRevokePolicyExceptionProcedure,
 		}
 	})
+	policyExceptionServiceRequestPolicyExceptionGroupSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_policy_exceptions_proto.Services().ByName("PolicyExceptionService").Methods().ByName("RequestPolicyExceptionGroup"),
+			Procedure:  PolicyExceptionServiceRequestPolicyExceptionGroupProcedure,
+		}
+	})
+	policyExceptionServiceGetPolicyExceptionGroupSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_policy_exceptions_proto.Services().ByName("PolicyExceptionService").Methods().ByName("GetPolicyExceptionGroup"),
+			Procedure:        PolicyExceptionServiceGetPolicyExceptionGroupProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	policyExceptionServiceListPolicyExceptionGroupsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_policy_exceptions_proto.Services().ByName("PolicyExceptionService").Methods().ByName("ListPolicyExceptionGroups"),
+			Procedure:        PolicyExceptionServiceListPolicyExceptionGroupsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	policyExceptionServiceRevokePolicyExceptionGroupSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_policy_exceptions_proto.Services().ByName("PolicyExceptionService").Methods().ByName("RevokePolicyExceptionGroup"),
+			Procedure:  PolicyExceptionServiceRevokePolicyExceptionGroupProcedure,
+		}
+	})
 )
 
 // PolicyExceptionServiceClient is a client for the pantherclaw.v1.PolicyExceptionService service.
@@ -92,6 +134,22 @@ type PolicyExceptionServiceClient interface {
 	// person only).
 	// permission: policy.publish
 	RevokePolicyException(context.Context, *v1.RevokePolicyExceptionRequest) (*v1.RevokePolicyExceptionResponse, error)
+	// RequestPolicyExceptionGroup asks for an exception group (a person only;
+	// Enterprise, G0 M18 D154): as RequestPolicyException, for the agents a
+	// fleet cohort holds when the change request is approved. Agents that
+	// join the cohort later are not covered.
+	// permission: policy.exception.request
+	RequestPolicyExceptionGroup(context.Context, *v1.RequestPolicyExceptionGroupRequest) (*v1.RequestPolicyExceptionGroupResponse, error)
+	// GetPolicyExceptionGroup returns one group and the agents it covers.
+	// permission: policy.read
+	GetPolicyExceptionGroup(context.Context, *v1.GetPolicyExceptionGroupRequest) (*v1.GetPolicyExceptionGroupResponse, error)
+	// ListPolicyExceptionGroups lists groups, newest first.
+	// permission: policy.read
+	ListPolicyExceptionGroups(context.Context, *v1.ListPolicyExceptionGroupsRequest) (*v1.ListPolicyExceptionGroupsResponse, error)
+	// RevokePolicyExceptionGroup ends a pending or active group and each of
+	// its exceptions at once (a person only; every edition).
+	// permission: policy.publish
+	RevokePolicyExceptionGroup(context.Context, *v1.RevokePolicyExceptionGroupRequest) (*v1.RevokePolicyExceptionGroupResponse, error)
 }
 
 // NewPolicyExceptionServiceClient constructs a client for the pantherclaw.v1.PolicyExceptionService
@@ -119,6 +177,22 @@ type PolicyExceptionServiceHandler interface {
 	// person only).
 	// permission: policy.publish
 	RevokePolicyException(context.Context, *v1.RevokePolicyExceptionRequest) (*v1.RevokePolicyExceptionResponse, error)
+	// RequestPolicyExceptionGroup asks for an exception group (a person only;
+	// Enterprise, G0 M18 D154): as RequestPolicyException, for the agents a
+	// fleet cohort holds when the change request is approved. Agents that
+	// join the cohort later are not covered.
+	// permission: policy.exception.request
+	RequestPolicyExceptionGroup(context.Context, *v1.RequestPolicyExceptionGroupRequest) (*v1.RequestPolicyExceptionGroupResponse, error)
+	// GetPolicyExceptionGroup returns one group and the agents it covers.
+	// permission: policy.read
+	GetPolicyExceptionGroup(context.Context, *v1.GetPolicyExceptionGroupRequest) (*v1.GetPolicyExceptionGroupResponse, error)
+	// ListPolicyExceptionGroups lists groups, newest first.
+	// permission: policy.read
+	ListPolicyExceptionGroups(context.Context, *v1.ListPolicyExceptionGroupsRequest) (*v1.ListPolicyExceptionGroupsResponse, error)
+	// RevokePolicyExceptionGroup ends a pending or active group and each of
+	// its exceptions at once (a person only; every edition).
+	// permission: policy.publish
+	RevokePolicyExceptionGroup(context.Context, *v1.RevokePolicyExceptionGroupRequest) (*v1.RevokePolicyExceptionGroupResponse, error)
 }
 
 // RegisterPolicyExceptionServiceHandler registers svc as the pantherclaw.v1.PolicyExceptionService
@@ -130,6 +204,10 @@ func RegisterPolicyExceptionServiceHandler(server *connect.Server, svc PolicyExc
 		connect.Method{Spec: policyExceptionServiceGetPolicyExceptionSpec(), Handler: adapter.getPolicyException},
 		connect.Method{Spec: policyExceptionServiceListPolicyExceptionsSpec(), Handler: adapter.listPolicyExceptions},
 		connect.Method{Spec: policyExceptionServiceRevokePolicyExceptionSpec(), Handler: adapter.revokePolicyException},
+		connect.Method{Spec: policyExceptionServiceRequestPolicyExceptionGroupSpec(), Handler: adapter.requestPolicyExceptionGroup},
+		connect.Method{Spec: policyExceptionServiceGetPolicyExceptionGroupSpec(), Handler: adapter.getPolicyExceptionGroup},
+		connect.Method{Spec: policyExceptionServiceListPolicyExceptionGroupsSpec(), Handler: adapter.listPolicyExceptionGroups},
+		connect.Method{Spec: policyExceptionServiceRevokePolicyExceptionGroupSpec(), Handler: adapter.revokePolicyExceptionGroup},
 	)
 }
 
@@ -150,6 +228,22 @@ func (UnimplementedPolicyExceptionServiceHandler) ListPolicyExceptions(context.C
 
 func (UnimplementedPolicyExceptionServiceHandler) RevokePolicyException(context.Context, *v1.RevokePolicyExceptionRequest) (*v1.RevokePolicyExceptionResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.PolicyExceptionService.RevokePolicyException is not implemented")
+}
+
+func (UnimplementedPolicyExceptionServiceHandler) RequestPolicyExceptionGroup(context.Context, *v1.RequestPolicyExceptionGroupRequest) (*v1.RequestPolicyExceptionGroupResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.PolicyExceptionService.RequestPolicyExceptionGroup is not implemented")
+}
+
+func (UnimplementedPolicyExceptionServiceHandler) GetPolicyExceptionGroup(context.Context, *v1.GetPolicyExceptionGroupRequest) (*v1.GetPolicyExceptionGroupResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.PolicyExceptionService.GetPolicyExceptionGroup is not implemented")
+}
+
+func (UnimplementedPolicyExceptionServiceHandler) ListPolicyExceptionGroups(context.Context, *v1.ListPolicyExceptionGroupsRequest) (*v1.ListPolicyExceptionGroupsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.PolicyExceptionService.ListPolicyExceptionGroups is not implemented")
+}
+
+func (UnimplementedPolicyExceptionServiceHandler) RevokePolicyExceptionGroup(context.Context, *v1.RevokePolicyExceptionGroupRequest) (*v1.RevokePolicyExceptionGroupResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.PolicyExceptionService.RevokePolicyExceptionGroup is not implemented")
 }
 
 type policyExceptionServiceClient struct {
@@ -183,6 +277,38 @@ func (c *policyExceptionServiceClient) ListPolicyExceptions(ctx context.Context,
 func (c *policyExceptionServiceClient) RevokePolicyException(ctx context.Context, req *v1.RevokePolicyExceptionRequest) (*v1.RevokePolicyExceptionResponse, error) {
 	var res v1.RevokePolicyExceptionResponse
 	if err := c.client.CallUnary(ctx, policyExceptionServiceRevokePolicyExceptionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *policyExceptionServiceClient) RequestPolicyExceptionGroup(ctx context.Context, req *v1.RequestPolicyExceptionGroupRequest) (*v1.RequestPolicyExceptionGroupResponse, error) {
+	var res v1.RequestPolicyExceptionGroupResponse
+	if err := c.client.CallUnary(ctx, policyExceptionServiceRequestPolicyExceptionGroupSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *policyExceptionServiceClient) GetPolicyExceptionGroup(ctx context.Context, req *v1.GetPolicyExceptionGroupRequest) (*v1.GetPolicyExceptionGroupResponse, error) {
+	var res v1.GetPolicyExceptionGroupResponse
+	if err := c.client.CallUnary(ctx, policyExceptionServiceGetPolicyExceptionGroupSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *policyExceptionServiceClient) ListPolicyExceptionGroups(ctx context.Context, req *v1.ListPolicyExceptionGroupsRequest) (*v1.ListPolicyExceptionGroupsResponse, error) {
+	var res v1.ListPolicyExceptionGroupsResponse
+	if err := c.client.CallUnary(ctx, policyExceptionServiceListPolicyExceptionGroupsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *policyExceptionServiceClient) RevokePolicyExceptionGroup(ctx context.Context, req *v1.RevokePolicyExceptionGroupRequest) (*v1.RevokePolicyExceptionGroupResponse, error) {
+	var res v1.RevokePolicyExceptionGroupResponse
+	if err := c.client.CallUnary(ctx, policyExceptionServiceRevokePolicyExceptionGroupSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -232,6 +358,54 @@ func (h policyExceptionServiceHandler) revokePolicyException(ctx context.Context
 		return err
 	}
 	res, err := h.svc.RevokePolicyException(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h policyExceptionServiceHandler) requestPolicyExceptionGroup(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RequestPolicyExceptionGroupRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RequestPolicyExceptionGroup(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h policyExceptionServiceHandler) getPolicyExceptionGroup(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetPolicyExceptionGroupRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetPolicyExceptionGroup(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h policyExceptionServiceHandler) listPolicyExceptionGroups(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListPolicyExceptionGroupsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListPolicyExceptionGroups(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h policyExceptionServiceHandler) revokePolicyExceptionGroup(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokePolicyExceptionGroupRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokePolicyExceptionGroup(ctx, &req)
 	if err != nil {
 		return err
 	}

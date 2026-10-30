@@ -261,6 +261,11 @@ func (s *Service) Simulate(ctx context.Context, in Request) (Simulation, error) 
 	if err := s.team(ctx); err != nil {
 		return Simulation{}, err
 	}
+	if in.Cohort != nil {
+		if err := s.largeFleet(ctx); err != nil {
+			return Simulation{}, err
+		}
+	}
 	if in.Days == 0 {
 		in.Days = DefaultDays
 	}
@@ -466,4 +471,25 @@ func (s *Service) Samples(ctx context.Context, id ids.UUID, f SampleFilter, size
 		return nil
 	})
 	return out, err
+}
+
+// ErrLargeFleetEdition: a bulk simulation by cohort needs the Enterprise
+// edition (D161).
+var ErrLargeFleetEdition = pcerr.New(pcerr.PermissionDenied, "EDITION_REQUIRED",
+	"a bulk simulation by cohort needs the Enterprise edition")
+
+// largeFleet refuses a bulk simulation unless the licence includes
+// large-fleet administration (fail closed without an edition source).
+func (s *Service) largeFleet(ctx context.Context) error {
+	if s.Editions == nil {
+		return ErrLargeFleetEdition
+	}
+	e, err := s.Editions.Current(ctx)
+	if err != nil {
+		return err
+	}
+	if !e.LargeFleetAdmin() {
+		return ErrLargeFleetEdition
+	}
+	return nil
 }

@@ -116,6 +116,9 @@ type Service struct {
 	Pool    *db.Pool
 	Notify  Notifier
 	Changes ChangeRequester
+	// Editions reports the licence; nil: no exception group can be
+	// requested (fail closed, D161).
+	Editions Editions
 }
 
 // Exception is one stored exception.
