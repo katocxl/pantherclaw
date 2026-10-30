@@ -73739,6 +73739,14 @@
             "title": "last_use_time",
             "description": "Last use (updated at most once a minute).",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "allowedCidrs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "allowed_cidrs",
+            "description": "Client address ranges the key is limited to (PN-012.8); empty means\n any address. Fixed at creation: rotate the key to change them."
           }
         },
         "title": "ApiKey",
@@ -73785,6 +73793,22 @@
             "minimum": 0,
             "format": "int32",
             "description": "Validity in days (default 90, at most 365)."
+          },
+          "allowedCidrs": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "maxLength": 43,
+              "maxItems": 32,
+              "uniqueItems": true
+            },
+            "title": "allowed_cidrs",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "description": "Optional client address ranges, at most 32 CIDRs such as\n \"203.0.113.0/24\" (PN-012.8, Team edition). A request from any other\n address is refused like a bad key. Fixed for the key's lifetime."
           }
         },
         "title": "CreateApiKeyRequest",

@@ -8,6 +8,7 @@
 package dbq
 
 import (
+	"net/netip"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -321,6 +322,7 @@ type PcApiKey struct {
 	ExpiresAt        time.Time
 	RevokedAt        *time.Time
 	LastUsedAt       *time.Time
+	AllowedCidrs     []netip.Prefix
 }
 
 type PcApprovalBatch struct {

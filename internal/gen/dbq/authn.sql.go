@@ -10,12 +10,13 @@ package dbq
 
 import (
 	"context"
+	"net/netip"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
 const authAPIKey = `-- name: AuthAPIKey :one
-SELECT k.id, k.service_account_id, k.scopes, k.state AS key_state, (k.expires_at > now())::bool AS live,
+SELECT k.id, k.service_account_id, k.scopes, k.allowed_cidrs, k.state AS key_state, (k.expires_at > now())::bool AS live,
        (k.last_used_at IS NULL OR k.last_used_at < now() - interval '1 minute')::bool AS touch,
        sa.state AS account_state
 FROM pc.api_keys k
@@ -27,6 +28,7 @@ type AuthAPIKeyRow struct {
 	ID               ids.UUID
 	ServiceAccountID ids.UUID
 	Scopes           []string
+	AllowedCidrs     []netip.Prefix
 	KeyState         string
 	Live             bool
 	Touch            bool
@@ -40,6 +42,7 @@ func (q *Queries) AuthAPIKey(ctx context.Context, orgID ids.OrgID, secretHash []
 		&i.ID,
 		&i.ServiceAccountID,
 		&i.Scopes,
+		&i.AllowedCidrs,
 		&i.KeyState,
 		&i.Live,
 		&i.Touch,

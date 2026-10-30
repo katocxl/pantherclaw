@@ -10,6 +10,7 @@ package dbq
 
 import (
 	"context"
+	"net/netip"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -78,10 +79,11 @@ func (q *Queries) GetServiceAccount(ctx context.Context, orgID ids.OrgID, iD ids
 }
 
 const insertAPIKey = `-- name: InsertAPIKey :one
-INSERT INTO pc.api_keys (org_id, id, service_account_id, name, secret_hash, hint, scopes, created_by, expires_at)
+INSERT INTO pc.api_keys (org_id, id, service_account_id, name, secret_hash, hint, scopes, created_by, expires_at, allowed_cidrs)
 VALUES ($1, $2, $3, $4, $5, $6,
-        $7::text[], $8, now() + make_interval(days => $9::int))
-RETURNING org_id, id, service_account_id, name, secret_hash, hint, scopes, state, created_by, created_at, expires_at, revoked_at, last_used_at, CASE WHEN state = 'ACTIVE' AND expires_at <= now() THEN 'EXPIRED' ELSE state END::text AS effective_state
+        $7::text[], $8, now() + make_interval(days => $9::int),
+        $10::cidr[])
+RETURNING org_id, id, service_account_id, name, secret_hash, hint, scopes, state, created_by, created_at, expires_at, revoked_at, last_used_at, allowed_cidrs, CASE WHEN state = 'ACTIVE' AND expires_at <= now() THEN 'EXPIRED' ELSE state END::text AS effective_state
 `
 
 type InsertAPIKeyParams struct {
@@ -94,6 +96,7 @@ type InsertAPIKeyParams struct {
 	Scopes           []string
 	CreatedBy        string
 	TtlDays          int32
+	AllowedCidrs     []netip.Prefix
 }
 
 type InsertAPIKeyRow struct {
@@ -110,6 +113,7 @@ type InsertAPIKeyRow struct {
 	ExpiresAt        time.Time
 	RevokedAt        *time.Time
 	LastUsedAt       *time.Time
+	AllowedCidrs     []netip.Prefix
 	EffectiveState   string
 }
 
@@ -124,6 +128,7 @@ func (q *Queries) InsertAPIKey(ctx context.Context, arg InsertAPIKeyParams) (Ins
 		arg.Scopes,
 		arg.CreatedBy,
 		arg.TtlDays,
+		arg.AllowedCidrs,
 	)
 	var i InsertAPIKeyRow
 	err := row.Scan(
@@ -140,6 +145,7 @@ func (q *Queries) InsertAPIKey(ctx context.Context, arg InsertAPIKeyParams) (Ins
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.LastUsedAt,
+		&i.AllowedCidrs,
 		&i.EffectiveState,
 	)
 	return i, err
@@ -278,7 +284,7 @@ func (q *Queries) InsertServiceAccountKey(ctx context.Context, arg InsertService
 }
 
 const listAPIKeys = `-- name: ListAPIKeys :many
-SELECT org_id, id, service_account_id, name, secret_hash, hint, scopes, state, created_by, created_at, expires_at, revoked_at, last_used_at, CASE WHEN state = 'ACTIVE' AND expires_at <= now() THEN 'EXPIRED' ELSE state END::text AS effective_state
+SELECT org_id, id, service_account_id, name, secret_hash, hint, scopes, state, created_by, created_at, expires_at, revoked_at, last_used_at, allowed_cidrs, CASE WHEN state = 'ACTIVE' AND expires_at <= now() THEN 'EXPIRED' ELSE state END::text AS effective_state
 FROM pc.api_keys
 WHERE org_id = $1 AND id > coalesce($2::uuid, '00000000-0000-0000-0000-000000000000')
   AND ($3::uuid IS NULL OR service_account_id = $3)
@@ -307,6 +313,7 @@ type ListAPIKeysRow struct {
 	ExpiresAt        time.Time
 	RevokedAt        *time.Time
 	LastUsedAt       *time.Time
+	AllowedCidrs     []netip.Prefix
 	EffectiveState   string
 }
 
@@ -338,6 +345,7 @@ func (q *Queries) ListAPIKeys(ctx context.Context, arg ListAPIKeysParams) ([]Lis
 			&i.ExpiresAt,
 			&i.RevokedAt,
 			&i.LastUsedAt,
+			&i.AllowedCidrs,
 			&i.EffectiveState,
 		); err != nil {
 			return nil, err
@@ -459,7 +467,7 @@ func (q *Queries) ListServiceAccounts(ctx context.Context, orgID ids.OrgID, afte
 const revokeAPIKey = `-- name: RevokeAPIKey :one
 UPDATE pc.api_keys SET state = 'REVOKED', revoked_at = now()
 WHERE org_id = $1 AND id = $2 AND state = 'ACTIVE'
-RETURNING org_id, id, service_account_id, name, secret_hash, hint, scopes, state, created_by, created_at, expires_at, revoked_at, last_used_at, 'REVOKED'::text AS effective_state
+RETURNING org_id, id, service_account_id, name, secret_hash, hint, scopes, state, created_by, created_at, expires_at, revoked_at, last_used_at, allowed_cidrs, 'REVOKED'::text AS effective_state
 `
 
 type RevokeAPIKeyRow struct {
@@ -476,6 +484,7 @@ type RevokeAPIKeyRow struct {
 	ExpiresAt        time.Time
 	RevokedAt        *time.Time
 	LastUsedAt       *time.Time
+	AllowedCidrs     []netip.Prefix
 	EffectiveState   string
 }
 
@@ -496,6 +505,7 @@ func (q *Queries) RevokeAPIKey(ctx context.Context, orgID ids.OrgID, iD ids.UUID
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.LastUsedAt,
+		&i.AllowedCidrs,
 		&i.EffectiveState,
 	)
 	return i, err

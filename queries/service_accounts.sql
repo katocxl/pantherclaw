@@ -64,9 +64,10 @@ VALUES (sqlc.arg(org_id), sqlc.arg(issuer), sqlc.arg(jti), sqlc.arg(expires_at))
 ON CONFLICT DO NOTHING;
 
 -- name: InsertAPIKey :one
-INSERT INTO pc.api_keys (org_id, id, service_account_id, name, secret_hash, hint, scopes, created_by, expires_at)
+INSERT INTO pc.api_keys (org_id, id, service_account_id, name, secret_hash, hint, scopes, created_by, expires_at, allowed_cidrs)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(service_account_id), sqlc.arg(name), sqlc.arg(secret_hash), sqlc.arg(hint),
-        sqlc.arg(scopes)::text[], sqlc.arg(created_by), now() + make_interval(days => sqlc.arg(ttl_days)::int))
+        sqlc.arg(scopes)::text[], sqlc.arg(created_by), now() + make_interval(days => sqlc.arg(ttl_days)::int),
+        sqlc.narg(allowed_cidrs)::cidr[])
 RETURNING *, CASE WHEN state = 'ACTIVE' AND expires_at <= now() THEN 'EXPIRED' ELSE state END::text AS effective_state;
 
 -- name: ListAPIKeys :many
