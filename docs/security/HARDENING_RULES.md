@@ -467,23 +467,23 @@
 
 | ID | Rule | Threats | MS |
 |---|---|---|---|
-| HR-510 | Ed25519 signing is opt-in per destination, and HMAC is always sent too. | T-222 | M20 |
+| HR-510 | Ed25519 signing is opt-in per destination, and HMAC is always sent too. Opt-in is one audited RPC per destination under that destination service's manage permission; the organization's webhook keys are listed with `webhook_key.read` and rotated with `webhook_key.manage` and a fresh security-key step-up, and a rotation is refused while a RETIRING key exists (at most one ACTIVE and one RETIRING key). | T-222 | M20 |
 | HR-511 | A per-org webhook key signs only that org's deliveries, and the JWKS lists only that org's keys. | T-222 | M20 |
 | HR-512 | A rotated key stays verifiable for 24 h, then is gone. | T-222 | M20 |
 | HR-513 | An export destination is active only after step-up, and only through egress guards. | T-223 | M20 |
 | HR-514 | Every push leaves a delivery receipt. | T-223 | M20 |
 | HR-515 | A removal after a push sends a signed removal notice; PantherClaw never claims the remote copy is gone. | T-223 | M20 |
 | HR-516 | A failed multipart upload is always aborted. | T-223 | M20 |
-| HR-517 | A candidate is never in gateway config until activation. | T-224 | M20 |
-| HR-518 | Activation needs a passed target test and step-up. | T-224 | M20 |
+| HR-517 | A candidate is never in gateway config until activation. A rotation lease carries the candidate (TEST) or the old credential (CONFIRM) only in the sealed form gateway configuration uses, attached at claim time and sent only to the gateway the credential is bound to; `pc.verifications.request` stores ids only. | T-224 | M20 |
+| HR-518 | Activation needs a passed target test and step-up, through the protect surface `credential.rotate` (category CUSTODY). A rotation in AWAITING_OLD_REMOVAL or CONFIRMING for more than 24 h raises an `unconfirmed_rotation` posture finding until it leaves those states. | T-224 | M20 |
 | HR-519 | Rollback only before confirmation. | T-224 | M20 |
 | HR-520 | The old key is REVOKED only when the target refuses it. | T-224 | M20 |
 | HR-521 | The GitLab package rules (host binding, the deploy as a consequence). | T-229 | M20 |
 | HR-522 | Jira (host binding; customer-visible projects count as an external disclosure). | T-226 | M20 |
 | HR-523 | A package's coverage declaration is validated and never widens authority. | T-226, T-229 | M20 |
-| HR-524 | Teams tokens are minted per dispatch and never placed raw; external channels count as disclosure. | T-226 | M20 |
+| HR-524 | Teams tokens are minted per dispatch and never placed raw; external channels count as disclosure. Posting is the only agent-facing Teams operation; channel reads are internal fact reads with no mappings, and a connection test that cannot reach `GET /v3/conversations` reports "credential OK; channel access not verified", never a pass. | T-226 | M20 |
 | HR-525 | AWS uses only short-lived AssumeRole sessions with a narrowed policy. | T-225 | M20 |
-| HR-526 | The mapping's headers and encodings are fixed by the signed package, never by agent input. | T-225 | M20 |
-| HR-527 | A ticket status never restores authority or lifts containment. | T-227 | M20 |
+| HR-526 | The mapping's headers and encodings are fixed by the signed package, never by agent input. `aws-query` is outbound only. JSON bracket keys (depth at most 3, no digit-only segments, no key that is both a value and a parent) and the boolean literals `literal.true` and `literal.false` come only from the package; an agent argument never adds a key. | T-225 | M20 |
+| HR-527 | A ticket status never restores authority or lifts containment. Containment and restoration can never be owned by Jira; moving any other field from PantherClaw to Jira is held behind the protect surface `ticket.field_owner` (category COVERAGE_EXCLUSION), and moving it back applies directly. | T-227 | M20 |
 | HR-528 | Inbound changes to PantherClaw-owned fields are ignored and recorded. | T-227 | M20 |
-| HR-529 | Approval DMs and cards go only to eligible deciders, carry a link only, and never take a decision in-channel. For Slack DMs the bot token may also be sent to `users.lookupByEmail` (only for verified email addresses on the organization's domains, the link confirmed by the person in the console) and `conversations.open`, with the `im:write` scope, in addition to HR-315's four methods. | T-228, T-145 | M20 |
+| HR-529 | Approval DMs and cards go only to eligible deciders, carry a link only, and never take a decision in-channel. For Slack DMs the bot token may also be sent to `users.lookupByEmail` (only for verified email addresses on the organization's domains, the link confirmed by the person in the console) and `conversations.open`, with the `im:write` scope, in addition to HR-315's four methods. A Slack link is proposed only for a verified PantherClaw email that `users.lookupByEmail` returns exactly for a full member (not a bot, guest or deleted user) whose domain is in the channel's `allowed_email_domains` (set at creation, confirmed by the step-up activation, then immutable; at most 20 exact lowercase domains); before each DM the same Slack user id and full membership are checked again, and otherwise no DM is sent, the link is marked stale and audited. | T-228, T-145 | M20 |
