@@ -168,7 +168,8 @@ func TransactionProto(t app.Summary) *pantherclawv1.Transaction {
 		ExecutionState: pantherclawv1.ExecutionState(pantherclawv1.ExecutionState_value["EXECUTION_STATE_"+string(t.Execution)]),
 		EffectState:    effectState(t.Effect), LevelRequired: level(string(t.Required)), LevelAchieved: level(string(t.Achieved)),
 		Monitor: t.Monitor, Evaluations: int32(t.Evaluations), //nolint:gosec // G115: at most 64
-		CreateTime: timestamppb.New(t.Created),
+		CreateTime:      timestamppb.New(t.Created),
+		DownstreamState: pantherclawv1.DownstreamState(pantherclawv1.DownstreamState_value["DOWNSTREAM_STATE_"+string(t.Downstream)]),
 	}
 	if t.Connection != nil {
 		p.ConnectionId = t.Connection.String()

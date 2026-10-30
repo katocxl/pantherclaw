@@ -1,6 +1,12 @@
 {
   "rules": [
     {
+      "id": "c2p-merge-consequences", "per": "repo", "kind": "REQUIRE_APPROVAL",
+      "summary": "a merge waits for an independent code reviewer while a consequence of the run's earlier actions is unconfirmed or not verifiable",
+      "operations": ["github.pull.merge"], "when": "{{pull_request}} && run.consequences_unconfirmed > 0", "reason": "CONSEQUENCES_UNCONFIRMED",
+      "approval": {"role": "code_reviewer", "count": 1, "independent": true}
+    },
+    {
       "id": "c2p-merge-review", "per": "repo", "kind": "REQUIRE_APPROVAL",
       "summary": "an independent code reviewer approves every merge into the repository, bound to the head SHA",
       "operations": ["github.pull.merge"], "when": "{{pull_request}}", "reason": "MERGE_NEEDS_REVIEW",

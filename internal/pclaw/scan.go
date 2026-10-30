@@ -6,6 +6,7 @@ package pclaw
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -16,7 +17,7 @@ import (
 )
 
 func init() {
-	commands["scan"] = command{"scan [--path DIR]... [--json] [--no-env] [--no-user-config] [--submit]", scanCmd}
+	commands["scan"] = command{"scan [--path DIR]... [--json] [--no-env] [--no-user-config] [--submit [--scope SCOPE [--complete]]]", scanCmd}
 }
 
 // submitBatch is the most findings one SubmitScanFindings call carries.
@@ -34,11 +35,16 @@ func scanCmd(ctx context.Context, a *app, args []string) error {
 		fs.Bool("no-env", false, "do not check the environment for credentials"),
 		fs.Bool("no-user-config", false, "skip the per-user MCP configurations (Claude, Cursor, VS Code, Windsurf, Zed, Junie, JetBrains AI Assistant, Codex, Gemini CLI)")
 	submit := fs.Bool("submit", false, "add the MCP servers and agent projects found to your org's discovered agents")
+	scope := fs.String("scope", "", "CI mode: the repository or host this scan covers; its findings are kept apart per scope (with --submit)")
+	complete := fs.Bool("complete", false, "CI mode: the scan read the whole --scope, so a discovery of the scope it no longer finds counts a missed scan")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() != 0 {
+	if fs.NArg() != 0 || ((*scope != "" || *complete) && !*submit) {
 		return errUsage
+	}
+	if *complete && *scope == "" {
+		return errCompleteScope
 	}
 	if len(paths) == 0 {
 		paths = list{"."}
@@ -68,8 +74,14 @@ func scanCmd(ctx context.Context, a *app, args []string) error {
 	if !*submit {
 		return nil
 	}
-	return submitFindings(ctx, a, host, findings)
+	return submitFindings(ctx, a, host, findings, *scope, *complete)
 }
+
+var (
+	errCompleteScope = errors.New("--complete needs --scope: a complete scan names what it covers")
+	// errCompleteTooLarge: a complete scan is one submission (D130).
+	errCompleteTooLarge = errors.New("complete scans are limited to 200 findings per scope; narrow --scope")
+)
 
 func printFindings(a *app, findings []scan.Finding) error {
 	groups := []struct{ kind, title string }{
@@ -122,7 +134,7 @@ func describeFinding(f scan.Finding) string {
 
 // submitFindings sends the MCP servers and agent projects; credentials stay
 // on the machine.
-func submitFindings(ctx context.Context, a *app, host string, findings []scan.Finding) error {
+func submitFindings(ctx context.Context, a *app, host string, findings []scan.Finding, scope string, complete bool) error {
 	var send []*pantherclawv1.ScanFinding
 	for _, f := range findings {
 		if f.Kind == scan.KindEnvSecret {
@@ -137,24 +149,35 @@ func submitFindings(ctx context.Context, a *app, host string, findings []scan.Fi
 		send = append(send, &pantherclawv1.ScanFinding{Kind: f.Kind, Key: f.Key, Attributes: attrs})
 	}
 	if len(send) == 0 {
+		if complete {
+			// Nothing is sent, so nothing counts a miss (D130).
+			_, err := fmt.Fprintln(a.stdout, "nothing to submit: an empty scope never marks agents vanished")
+			return err
+		}
 		_, err := fmt.Fprintln(a.stdout, "nothing to submit")
 		return err
+	}
+	if complete && len(send) > submitBatch {
+		return errCompleteTooLarge
 	}
 	c, err := a.clients()
 	if err != nil {
 		return err
 	}
-	var created, counted, dropped int32
+	var created, counted, dropped, missed int32
 	for start := 0; start < len(send); start += submitBatch {
 		res, err := c.agents.SubmitScanFindings(ctx, &pantherclawv1.SubmitScanFindingsRequest{
-			Findings: send[start:min(start+submitBatch, len(send))], Host: host,
+			Findings: send[start:min(start+submitBatch, len(send))], Host: host, Scope: scope, Complete: complete,
 		})
 		if err != nil {
 			return err
 		}
-		created, counted, dropped = created+res.GetCreated(), counted+res.GetCounted(), dropped+res.GetDropped()
+		created, counted, dropped, missed = created+res.GetCreated(), counted+res.GetCounted(), dropped+res.GetDropped(), missed+res.GetMissed()
 	}
 	_, err = fmt.Fprintf(a.stdout, "submitted %d findings: %d new discovered agents, %d already known, %d dropped (org limit); credentials were not sent\n",
 		len(send), created, counted, dropped)
+	if err == nil && complete {
+		_, err = fmt.Fprintf(a.stdout, "complete scan of %s: %d known discoveries of the scope were not found (each counts a missed scan)\n", scope, missed)
+	}
 	return err
 }

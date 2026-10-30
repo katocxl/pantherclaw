@@ -250,3 +250,23 @@ ORDER BY x.automation_id, x.outcome;
 SELECT count(*)::bigint FROM pc.operational_failures f
 WHERE f.org_id = sqlc.arg(org_id) AND f.kind LIKE 'automation.%' AND f.state = 'RESOLVED'
   AND f.resolved_at >= sqlc.arg(start_at)::timestamptz AND f.resolved_at < sqlc.arg(end_at)::timestamptz;
+
+-- name: OpsDiscoveryChanges :many
+-- Continuous discovery's work items (PN-001.3, D114, D116): the scan
+-- discoveries people were told vanished and not seen since, and the
+-- material changes recorded on open or claimed discoveries since a time,
+-- newest first.
+SELECT x.id, x.agent_id, x.change, x.kind, x.since FROM (
+    SELECT d.id, d.agent_id, 'VANISHED'::text AS change, coalesce(d.observed ->> 'kind', '')::text AS kind,
+           d.vanish_notified_at AS since
+    FROM pc.discoveries d
+    WHERE d.org_id = sqlc.arg(org_id) AND d.vanish_notified_at IS NOT NULL
+      AND (sqlc.arg(all_agents)::boolean OR d.agent_id::text = ANY (sqlc.arg(agents)::text[]))
+    UNION ALL
+    SELECT c.id, c.agent_id, 'CHANGED'::text, coalesce(c.details ->> 'kind', '')::text, c.created_at
+    FROM pc.agent_changes c
+    WHERE c.org_id = sqlc.arg(org_id) AND c.kind = 'agent.discovery_changed' AND c.created_at >= sqlc.arg(since)::timestamptz
+      AND (sqlc.arg(all_agents)::boolean OR c.agent_id::text = ANY (sqlc.arg(agents)::text[]))
+) x
+ORDER BY x.since DESC, x.id DESC
+LIMIT sqlc.arg(max_rows);

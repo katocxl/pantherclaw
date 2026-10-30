@@ -2049,7 +2049,15 @@ type SubmitScanFindingsRequest struct {
 	// The secret of the scan's org_scan lease the gateway holds, with
 	// scan_id: the server compares its hash, so only the holder of the lease
 	// submits, not any holder of the gateway's certificate.
-	Lease         []byte `protobuf:"bytes,4,opt,name=lease,proto3" json:"lease,omitempty"`
+	Lease []byte `protobuf:"bytes,4,opt,name=lease,proto3" json:"lease,omitempty"`
+	// UNTRUSTED scope of a CI-mode scan (G0 M17 D115): the repository or
+	// host it scanned. Its findings are discoveries of source ci_scan, kept
+	// apart per scope.
+	Scope string `protobuf:"bytes,5,opt,name=scope,proto3" json:"scope,omitempty"`
+	// The scan read the whole scope, and this request carries every finding
+	// of it (at most 200, D130): a ci_scan discovery of the scope it lacks
+	// counts a miss (HR-459). Needs scope.
+	Complete      bool `protobuf:"varint,6,opt,name=complete,proto3" json:"complete,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2112,6 +2120,20 @@ func (x *SubmitScanFindingsRequest) GetLease() []byte {
 	return nil
 }
 
+func (x *SubmitScanFindingsRequest) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+func (x *SubmitScanFindingsRequest) GetComplete() bool {
+	if x != nil {
+		return x.Complete
+	}
+	return false
+}
+
 // SubmitScanFindingsResponse counts what was recorded.
 type SubmitScanFindingsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -2120,7 +2142,11 @@ type SubmitScanFindingsResponse struct {
 	// Findings already known (only counted).
 	Counted int32 `protobuf:"varint,2,opt,name=counted,proto3" json:"counted,omitempty"`
 	// Findings dropped because the org already has 200 open discoveries.
-	Dropped       int32 `protobuf:"varint,3,opt,name=dropped,proto3" json:"dropped,omitempty"`
+	Dropped int32 `protobuf:"varint,3,opt,name=dropped,proto3" json:"dropped,omitempty"`
+	// Discoveries of the scope a complete scan did not see, each counted a
+	// miss. A discovery missed by 3 complete scans in a row is announced as
+	// vanished; nothing changes the agent (HR-458).
+	Missed        int32 `protobuf:"varint,4,opt,name=missed,proto3" json:"missed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2172,6 +2198,13 @@ func (x *SubmitScanFindingsResponse) GetCounted() int32 {
 func (x *SubmitScanFindingsResponse) GetDropped() int32 {
 	if x != nil {
 		return x.Dropped
+	}
+	return 0
+}
+
+func (x *SubmitScanFindingsResponse) GetMissed() int32 {
+	if x != nil {
+		return x.Missed
 	}
 	return 0
 }
@@ -2470,16 +2503,19 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"attributes\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc4\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x80\x02\n" +
 	"\x19SubmitScanFindingsRequest\x12D\n" +
 	"\bfindings\x18\x01 \x03(\v2\x1b.pantherclaw.v1.ScanFindingB\v\xbaH\b\x92\x01\x05\b\x01\x10\xc8\x01R\bfindings\x12\x1c\n" +
 	"\x04host\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x01R\x04host\x12$\n" +
 	"\ascan_id\x18\x03 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\x06scanId\x12\x1d\n" +
-	"\x05lease\x18\x04 \x01(\fB\a\xbaH\x04z\x02\x18@R\x05lease\"j\n" +
+	"\x05lease\x18\x04 \x01(\fB\a\xbaH\x04z\x02\x18@R\x05lease\x12\x1e\n" +
+	"\x05scope\x18\x05 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\x05scope\x12\x1a\n" +
+	"\bcomplete\x18\x06 \x01(\bR\bcomplete\"\x82\x01\n" +
 	"\x1aSubmitScanFindingsResponse\x12\x18\n" +
 	"\acreated\x18\x01 \x01(\x05R\acreated\x12\x18\n" +
 	"\acounted\x18\x02 \x01(\x05R\acounted\x12\x18\n" +
-	"\adropped\x18\x03 \x01(\x05R\adropped\"^\n" +
+	"\adropped\x18\x03 \x01(\x05R\adropped\x12\x16\n" +
+	"\x06missed\x18\x04 \x01(\x05R\x06missed\"^\n" +
 	"\x1eRequestAgentRestorationRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12\"\n" +
 	"\x06reason\x18\x02 \x01(\tB\n" +

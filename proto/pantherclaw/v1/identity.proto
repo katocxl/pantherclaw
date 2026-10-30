@@ -99,6 +99,18 @@ enum IssuerKind {
   ISSUER_KIND_GITHUB_ACTIONS = 1;
   // Kubernetes projected service-account tokens via TokenReview (HR-144).
   ISSUER_KIND_KUBERNETES = 2;
+  // GitLab CI ID tokens from an operator-configured instance (HR-461).
+  ISSUER_KIND_GITLAB_CI = 3;
+  // SPIFFE JWT-SVID.
+  ISSUER_KIND_SPIFFE_JWT = 4;
+  // Google-signed GCP ID token.
+  ISSUER_KIND_GCP_WORKLOAD = 5;
+  // AWS IAM role session (sts:GetCallerIdentity).
+  ISSUER_KIND_AWS_IAM = 6;
+  // Azure managed identity (Entra access token for a pinned app).
+  ISSUER_KIND_AZURE_MI = 7;
+  // Microsoft Entra Agent ID (agent identity acting autonomously).
+  ISSUER_KIND_ENTRA_AGENT_ID = 8;
 }
 
 // IssuerEntryState is the state of one revision.
@@ -127,7 +139,8 @@ enum GithubJobType {
 message Verification {
   // Attestation level now in force (1 or 2).
   int32 level = 1;
-  // How it was verified: "fingerprint", "github_actions" or "kubernetes".
+  // How it was verified: "fingerprint" or the preset kind ("github_actions",
+  // "kubernetes", "gitlab_ci", …).
   string method = 2;
   // When L2 lapses unless renewed.
   google.protobuf.Timestamp attested_until = 3;
@@ -221,6 +234,109 @@ message GithubBinding {
   }];
 }
 
+// GitlabBinding binds GitLab CI ID tokens to one agent (HR-461).
+message GitlabBinding {
+  // GitLab instance URL from the server configuration
+  // (identity.gitlab_issuers), for example https://gitlab.com.
+  string issuer = 1 [(buf.validate.field).string = {
+    max_len: 255
+    pattern: "^https://[^/?#@\\s]+/?$"
+  }];
+  // Numeric project id (paths can be renamed and reused; ids cannot).
+  string project_id = 2 [(buf.validate.field).string.pattern = "^[1-9][0-9]{0,19}$"];
+  // Numeric namespace (group) id.
+  string namespace_id = 3 [(buf.validate.field).string.pattern = "^[1-9][0-9]{0,19}$"];
+  // Accepted ci_config_ref_uri values, each
+  // "<host>/<project path>//<file>@refs/heads/…" or "…@refs/tags/…".
+  repeated string ci_config_ref_uris = 4 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 20
+    unique: true
+    items: {
+      string: {
+        max_len: 512
+        pattern: "^[a-z0-9.-]+(:[0-9]+)?/[^\\s@]+//[^@\\s]+@refs/(heads|tags)/[^\\s]+$"
+      }
+    }
+  }];
+  // Optional exact revisions of the pipeline definition (ci_config_sha).
+  repeated string ci_config_shas = 5 [(buf.validate.field).repeated = {
+    max_items: 20
+    unique: true
+    items: {
+      string: {pattern: "^[0-9a-f]{40}$"}
+    }
+  }];
+  // Optional deployment environment.
+  string environment = 6 [(buf.validate.field).string.max_len = 255];
+  // Optional runner environment ("gitlab-hosted" or "self-hosted").
+  string runner_environment = 7 [(buf.validate.field).string = {
+    in: [
+      "",
+      "gitlab-hosted",
+      "self-hosted"
+    ]
+  }];
+}
+
+// SpiffeBinding binds JWT-SVIDs to one workload (HR-462).
+message SpiffeBinding {
+  // Trust domain name from the server configuration
+  // (identity.spiffe_trust_domains).
+  string trust_domain = 1 [(buf.validate.field).string.pattern = "^[a-z0-9._-]{1,255}$"];
+  // The exact SPIFFE ID, spiffe://<trust domain>/<path>; never a prefix or
+  // pattern.
+  string spiffe_id = 2 [(buf.validate.field).string = {
+    max_len: 2048
+    pattern: "^spiffe://[a-z0-9._-]+(/[A-Za-z0-9._-]+)+$"
+  }];
+}
+
+// GcpBinding binds Google-signed ID tokens to one service account (HR-463).
+message GcpBinding {
+  // The service account's numeric unique id (the token's sub), never its
+  // email.
+  string service_account_id = 1 [(buf.validate.field).string.pattern = "^[1-9][0-9]{0,29}$"];
+  // Optional Compute Engine project id (google.compute_engine.project_id).
+  string project_id = 2 [(buf.validate.field).string.pattern = "^$|^[a-z][a-z0-9-]{4,28}[a-z0-9]$"];
+  // Optional numeric Compute Engine instance id.
+  string instance_id = 3 [(buf.validate.field).string.pattern = "^$|^[1-9][0-9]{0,29}$"];
+}
+
+// AwsBinding binds AWS STS caller identities to one IAM role (HR-464):
+// sessions of that role in that account attest.
+message AwsBinding {
+  // 12-digit account id.
+  string account_id = 1 [(buf.validate.field).string.pattern = "^[0-9]{12}$"];
+  // IAM role name (not its ARN or path).
+  string role_name = 2 [(buf.validate.field).string.pattern = "^[A-Za-z0-9+=,.@_-]{1,64}$"];
+}
+
+// AzureMiBinding binds Azure managed identity tokens to one identity
+// (HR-469). The tenant and app must be a pair the operator pinned to this
+// org (identity.entra_apps); the tokens' audience is that app.
+message AzureMiBinding {
+  // Entra tenant id.
+  string tenant_id = 1 [(buf.validate.field).string.pattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"];
+  // Entra app (client) id the tokens are issued for.
+  string app_id = 2 [(buf.validate.field).string.pattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"];
+  // The managed identity's object (principal) id.
+  string object_id = 3 [(buf.validate.field).string.pattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"];
+}
+
+// EntraAgentBinding binds Entra Agent ID tokens to one agent identity
+// acting autonomously (HR-469). The tenant and app must be a pair the
+// operator pinned to this org (identity.entra_apps); the tokens' audience
+// is that app.
+message EntraAgentBinding {
+  // Entra tenant id.
+  string tenant_id = 1 [(buf.validate.field).string.pattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"];
+  // Entra app (client) id the tokens are issued for.
+  string app_id = 2 [(buf.validate.field).string.pattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"];
+  // The agent identity's service principal object id.
+  string object_id = 3 [(buf.validate.field).string.pattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"];
+}
+
 // KubernetesBinding binds Kubernetes service-account tokens to one agent
 // (HR-144).
 message KubernetesBinding {
@@ -276,6 +392,12 @@ message IssuerRevision {
   oneof binding {
     GithubBinding github = 9;
     KubernetesBinding kubernetes = 10;
+    GitlabBinding gitlab = 20;
+    SpiffeBinding spiffe = 21;
+    GcpBinding gcp = 22;
+    AwsBinding aws = 23;
+    AzureMiBinding azure_mi = 24;
+    EntraAgentBinding entra_agent = 25;
   }
   // Admits matching instances without an owner.
   bool auto_admit = 11;
@@ -429,6 +551,18 @@ message ProposeIssuerEntryRequest {
     GithubBinding github = 3;
     // Kubernetes.
     KubernetesBinding kubernetes = 4;
+    // GitLab CI.
+    GitlabBinding gitlab = 7;
+    // SPIFFE JWT-SVID.
+    SpiffeBinding spiffe = 8;
+    // GCP service account.
+    GcpBinding gcp = 9;
+    // AWS IAM role.
+    AwsBinding aws = 10;
+    // Azure managed identity.
+    AzureMiBinding azure_mi = 11;
+    // Microsoft Entra Agent ID.
+    EntraAgentBinding entra_agent = 12;
   }
   // Admit matching instances without an owner (a widening when turned on).
   bool auto_admit = 5;

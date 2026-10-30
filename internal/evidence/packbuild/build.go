@@ -214,6 +214,8 @@ func (s *Service) Build(ctx context.Context, org ids.OrgID, id ids.UUID) error {
 		r.include.Receipts = true
 		if b.rangeData, err = b.loadRange(); errors.Is(err, errRange) {
 			return s.fail(ctx, org, id, CodeRangeUnavailable)
+		} else if errors.Is(err, errCustomer) {
+			return s.fail(ctx, org, id, CodeRangeCustomer)
 		} else if err != nil {
 			return err
 		}

@@ -122,6 +122,13 @@ type Run struct {
 	Ancestors []gdomain.Principal
 }
 
+// RunConsequenceCounts are how a run's actions stand downstream (G0 M17
+// D103): Pending actions still wait for their consequences' verification;
+// Unconfirmed actions have a consequence UNCONFIRMED or NOT_VERIFIABLE.
+type RunConsequenceCounts struct {
+	Pending, Unconfirmed int
+}
+
 // HoldRequest is the latest approval request of a transaction, as step 8
 // needs it (G0 M5 part 2).
 type HoldRequest struct {
@@ -300,6 +307,15 @@ type Reader interface {
 	// class not among them, so every class read is there. Classes and ids
 	// only, never content (HR-434).
 	SensitiveReads(ctx context.Context, org ids.OrgID, run ids.UUID) ([]SensitiveRead, error)
+	// RunConsequences returns how the run's actions stand downstream (G0
+	// M17 D103). It is read only for a policy that uses
+	// run.consequences_pending or run.consequences_unconfirmed.
+	RunConsequences(ctx context.Context, org ids.OrgID, run ids.UUID) (RunConsequenceCounts, error)
+	// CustomerRules returns the org's ACTIVE customer consequence rules,
+	// in rule id order, each with the ACTIVE definition of its consequence
+	// operation (G0 M17 D106, D108; nil when the org has none). Step 6
+	// evaluates them after the package's rules and only adds them.
+	CustomerRules(ctx context.Context, org ids.OrgID) ([]consequences.Rule, error)
 }
 
 // SensitiveRead is one allowed pii or secret read of a run tree (D73).

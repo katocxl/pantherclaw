@@ -187,7 +187,7 @@ var states = map[domain.State]pantherclawv1.RangeState{
 func rangePB(r domain.Range, c domain.Counts) *pantherclawv1.Range {
 	out := &pantherclawv1.Range{
 		Id: r.ID.String(), RangeAgentId: r.Agent.String(), StartedBy: r.StartedBy, RunnerVersion: r.RunnerVersion,
-		ScenarioSetDigest: r.SetDigest, State: states[r.State], StartTime: timestamppb.New(r.Started),
+		ScenarioSetDigest: r.SetDigest, State: states[r.State], StartTime: timestamppb.New(r.Started), Origin: r.Origin,
 		Counts: &pantherclawv1.RangeCounts{
 			Pass: int32(c.Pass), Fail: int32(c.Fail), Error: int32(c.Error), Skipped: int32(c.Skipped), Missing: int32(c.Missing), //nolint:gosec // G115: at most 200
 		},
@@ -221,7 +221,7 @@ func resultsPB(rs []domain.Result) []*pantherclawv1.RangeResult {
 func resultPB(r domain.Result) *pantherclawv1.RangeResult {
 	out := &pantherclawv1.RangeResult{
 		ScenarioId: r.Scenario.ID, ScenarioDigest: r.Scenario.Digest, Category: r.Scenario.Category, Tier: r.Scenario.Tier,
-		Verdict: verdictPB(r.Verdict), RecordTime: timestamppb.New(r.Recorded),
+		Verdict: verdictPB(r.Verdict), RecordTime: timestamppb.New(r.Recorded), Origin: domain.OriginOf(r.Scenario.ID),
 	}
 	if r.Claimed != "" {
 		out.ClaimedVerdict = verdictPB(r.Claimed)

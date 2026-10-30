@@ -13,6 +13,7 @@ import (
 
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
 	adomain "github.com/katocxl/pantherclaw/internal/agents/domain"
+	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/identity/issuers"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -31,9 +32,13 @@ var (
 	ErrProposalOpen = pcerr.New(pcerr.FailedPrecondition, "ISSUER_PROPOSAL_OPEN",
 		"the entry already has a proposed revision; withdraw or activate it first")
 	ErrContextMismatch = pcerr.New(pcerr.InvalidArgument, "ISSUER_CONTEXT",
-		"the GitHub preset is for ci agents and the Kubernetes preset for kubernetes agents; desktop agents stay at L1")
+		"the GitHub and GitLab presets are for ci agents, the Kubernetes preset for kubernetes agents and the SPIFFE and cloud presets for service agents; desktop agents stay at L1")
 	ErrUnknownCluster = pcerr.New(pcerr.InvalidArgument, "ISSUER_CLUSTER",
 		"the cluster is not configured for this organization (identity.kubernetes_clusters)")
+	ErrUnknownIssuer = pcerr.New(pcerr.InvalidArgument, "ISSUER_NOT_CONFIGURED",
+		"the issuer is not configured for this organization (identity.gitlab_issuers, identity.spiffe_trust_domains, identity.entra_apps)")
+	ErrEdition = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED",
+		"the GitLab CI, SPIFFE, GCP, AWS, Azure managed identity and Entra Agent ID presets need the Enterprise edition")
 	ErrConfirmReusable = pcerr.New(pcerr.FailedPrecondition, "CONFIRM_REUSABLE_REFS",
 		"confirm that every reusable workflow ref is a protected branch or tag of its repository")
 )
@@ -44,28 +49,105 @@ type Clusters interface {
 	Allowed(cluster string, org ids.OrgID) bool
 }
 
+// Entitlements reports the current edition (billing.Service).
+type Entitlements interface {
+	Current(ctx context.Context) (billing.Entitlements, error)
+}
+
+// WithEntitlements sets the edition source the M17 presets are gated on
+// and returns s. Without one those presets are refused (fail closed).
+func (s *Service) WithEntitlements(e Entitlements) *Service {
+	s.ents = e
+	return s
+}
+
+// requireEdition refuses a preset the edition does not include
+// (PN-002.3).
+func (s *Service) requireEdition(ctx context.Context, k issuers.Kind) error {
+	if !issuers.Extended(k) {
+		return nil
+	}
+	if s.ents == nil {
+		return ErrEdition
+	}
+	ent, err := s.ents.Current(ctx)
+	if err != nil {
+		return err
+	}
+	if !ent.IdentityPresetsExtended() {
+		return ErrEdition
+	}
+	return nil
+}
+
 // Binding is the binding of one preset: exactly one field is set.
 type Binding struct {
 	GitHub     *issuers.GitHubBinding     `json:"github,omitzero"`
 	Kubernetes *issuers.KubernetesBinding `json:"kubernetes,omitzero"`
+	GitLab     *issuers.GitLabBinding     `json:"gitlab,omitzero"`
+	SPIFFE     *issuers.SPIFFEBinding     `json:"spiffe,omitzero"`
+	GCP        *issuers.GCPBinding        `json:"gcp,omitzero"`
+	AWS        *issuers.AWSBinding        `json:"aws,omitzero"`
+	AzureMI    *issuers.AzureMIBinding    `json:"azure_mi,omitzero"`
+	EntraAgent *issuers.EntraAgentBinding `json:"entra_agent,omitzero"`
+}
+
+// presetContext is the execution context each preset attests (D119-D121).
+var presetContext = map[issuers.Kind]adomain.ExecutionContext{
+	issuers.KindGitHub: adomain.ContextCI, issuers.KindKubernetes: adomain.ContextKubernetes, issuers.KindGitLab: adomain.ContextCI,
+	issuers.KindSPIFFE:     adomain.ContextService,
+	issuers.KindGCP:        adomain.ContextService,
+	issuers.KindAWS:        adomain.ContextService,
+	issuers.KindAzureMI:    adomain.ContextService,
+	issuers.KindEntraAgent: adomain.ContextService,
+}
+
+// kinds lists the kind of every field that is set.
+func (b Binding) kinds() []issuers.Kind {
+	var out []issuers.Kind
+	for k, set := range map[issuers.Kind]bool{
+		issuers.KindGitHub: b.GitHub != nil, issuers.KindKubernetes: b.Kubernetes != nil, issuers.KindGitLab: b.GitLab != nil,
+		issuers.KindSPIFFE:     b.SPIFFE != nil,
+		issuers.KindGCP:        b.GCP != nil,
+		issuers.KindAWS:        b.AWS != nil,
+		issuers.KindAzureMI:    b.AzureMI != nil,
+		issuers.KindEntraAgent: b.EntraAgent != nil,
+	} {
+		if set {
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 func (b Binding) kind() issuers.Kind {
-	if b.GitHub != nil {
-		return issuers.KindGitHub
+	if k := b.kinds(); len(k) == 1 {
+		return k[0]
 	}
-	return issuers.KindKubernetes
+	return ""
 }
 
 func (b Binding) validate() error {
-	if (b.GitHub == nil) == (b.Kubernetes == nil) {
-		return pcerr.New(pcerr.InvalidArgument, "ISSUER_BINDING", "exactly one preset binding is required")
-	}
 	var err error
-	if b.GitHub != nil {
+	switch b.kind() {
+	case issuers.KindGitHub:
 		err = b.GitHub.Validate()
-	} else {
+	case issuers.KindKubernetes:
 		err = b.Kubernetes.Validate()
+	case issuers.KindGitLab:
+		err = b.GitLab.Validate()
+	case issuers.KindSPIFFE:
+		err = b.SPIFFE.Validate()
+	case issuers.KindGCP:
+		err = b.GCP.Validate()
+	case issuers.KindAWS:
+		err = b.AWS.Validate()
+	case issuers.KindAzureMI:
+		err = b.AzureMI.Validate()
+	case issuers.KindEntraAgent:
+		err = b.EntraAgent.Validate()
+	default:
+		return pcerr.New(pcerr.InvalidArgument, "ISSUER_BINDING", "exactly one preset binding is required")
 	}
 	if err != nil {
 		return pcerr.Wrap(err, pcerr.InvalidArgument, "ISSUER_BINDING", err.Error())
@@ -74,17 +156,58 @@ func (b Binding) validate() error {
 }
 
 func (b Binding) issuer() string {
-	if b.GitHub != nil {
+	switch b.kind() {
+	case issuers.KindGitHub:
 		return issuers.GitHubIssuer
+	case issuers.KindGitLab:
+		return strings.TrimSuffix(b.GitLab.Issuer, "/")
+	case issuers.KindSPIFFE:
+		return b.SPIFFE.Issuer()
+	case issuers.KindGCP:
+		return issuers.GCPIssuer
+	case issuers.KindAWS:
+		return issuers.AWSIssuer
+	case issuers.KindAzureMI:
+		return issuers.AzureIssuer(b.AzureMI.TenantID)
+	case issuers.KindEntraAgent:
+		return issuers.AzureIssuer(b.EntraAgent.TenantID)
+	case issuers.KindKubernetes:
+		return b.Kubernetes.Issuer()
 	}
-	return b.Kubernetes.Issuer()
+	return ""
+}
+
+// audience is the audience the entry's tokens must name: pantherclaw:<org>
+// (HR-140), or for the Azure presets the operator-pinned Entra app id
+// (HR-469).
+func (b Binding) audience(org ids.OrgID) string {
+	if b.AzureMI != nil {
+		return b.AzureMI.AppID
+	}
+	if b.EntraAgent != nil {
+		return b.EntraAgent.AppID
+	}
+	return issuers.Audience(org)
 }
 
 func (b Binding) algorithms() []string {
-	if b.GitHub != nil {
+	switch b.kind() {
+	case issuers.KindGitHub:
 		return issuers.GitHubAlgorithms
+	case issuers.KindGitLab:
+		return issuers.GitLabAlgorithms
+	case issuers.KindSPIFFE:
+		return issuers.SPIFFEAlgorithms
+	case issuers.KindGCP:
+		return issuers.GCPAlgorithms
+	case issuers.KindAWS:
+		return issuers.AWSAlgorithms
+	case issuers.KindAzureMI, issuers.KindEntraAgent:
+		return issuers.AzureAlgorithms
+	case issuers.KindKubernetes:
+		return []string{"TokenReview"}
 	}
-	return []string{"TokenReview"}
+	return nil
 }
 
 // widening lists what b accepts that prev did not; a kind change replaces
@@ -97,6 +220,18 @@ func (b Binding) widening(prev *Binding) []string {
 		return []string{"preset changed"}
 	case b.GitHub != nil:
 		return b.GitHub.Widening(prev.GitHub)
+	case b.GitLab != nil:
+		return b.GitLab.Widening(prev.GitLab)
+	case b.SPIFFE != nil:
+		return b.SPIFFE.Widening(prev.SPIFFE)
+	case b.GCP != nil:
+		return b.GCP.Widening(prev.GCP)
+	case b.AWS != nil:
+		return b.AWS.Widening(prev.AWS)
+	case b.AzureMI != nil:
+		return b.AzureMI.Widening(prev.AzureMI)
+	case b.EntraAgent != nil:
+		return b.EntraAgent.Widening(prev.EntraAgent)
 	default:
 		return b.Kubernetes.Widening(prev.Kubernetes)
 	}
@@ -213,8 +348,23 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 	if err != nil {
 		return Revision{}, err
 	}
+	if err := s.requireEdition(ctx, in.Binding.kind()); err != nil {
+		return Revision{}, err
+	}
 	if k := in.Binding.Kubernetes; k != nil && (clusters == nil || !clusters.Allowed(k.Cluster, c.Org)) {
 		return Revision{}, ErrUnknownCluster
+	}
+	if g := in.Binding.GitLab; g != nil && (s.att.GitLab == nil || !s.att.GitLab.Allowed(strings.TrimSuffix(g.Issuer, "/"), c.Org)) {
+		return Revision{}, ErrUnknownIssuer
+	}
+	if sp := in.Binding.SPIFFE; sp != nil && (s.att.SPIFFE == nil || !s.att.SPIFFE.Allowed(sp.TrustDomain, c.Org)) {
+		return Revision{}, ErrUnknownIssuer
+	}
+	if az := in.Binding.AzureMI; az != nil && (s.att.Entra == nil || !s.att.Entra.Allowed(az.TenantID, az.AppID, c.Org)) {
+		return Revision{}, ErrUnknownIssuer
+	}
+	if ea := in.Binding.EntraAgent; ea != nil && (s.att.Entra == nil || !s.att.Entra.Allowed(ea.TenantID, ea.AppID, c.Org)) {
+		return Revision{}, ErrUnknownIssuer
 	}
 	var out Revision
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
@@ -223,7 +373,7 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 		if err != nil {
 			return err
 		}
-		if want := map[issuers.Kind]adomain.ExecutionContext{issuers.KindGitHub: adomain.ContextCI, issuers.KindKubernetes: adomain.ContextKubernetes}[in.Binding.kind()]; deref(a.ExecutionContext) != string(want) {
+		if want := presetContext[in.Binding.kind()]; deref(a.ExecutionContext) != string(want) {
 			return ErrContextMismatch
 		}
 		entryID, number := in.EntryID, int32(1)
@@ -278,7 +428,7 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 		}
 		r, err := q.InsertIssuerRevision(ctx, dbq.InsertIssuerRevisionParams{
 			OrgID: c.Org, ID: ids.NewV7(), EntryID: entryID, Revision: number, AgentID: a.ID, Kind: string(in.Binding.kind()),
-			Issuer: in.Binding.issuer(), Audience: issuers.Audience(c.Org), Algorithms: in.Binding.algorithms(), Binding: binding,
+			Issuer: in.Binding.issuer(), Audience: in.Binding.audience(c.Org), Algorithms: in.Binding.algorithms(), Binding: binding,
 			AutoAdmit: in.AutoAdmit, Widening: wjson, State: state, ProposedBy: c.Principal.String(), ActivatedBy: activatedBy,
 		})
 		if err != nil {

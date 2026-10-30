@@ -61,6 +61,7 @@ type Service struct {
 	issuer string
 	clk    clock.Clock
 	att    Attestors
+	ents   Entitlements
 	floods floods
 }
 

@@ -297,9 +297,14 @@ tasks:
       - git diff --exit-code -- internal/gen
 
   trace:
-    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M16)
+    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M17)
     cmds:
-      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M16"}}
+      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M17"}}
+
+  range:library:
+    desc: Regenerate the server's embedded scenario library (internal/redteam/library/library.json) from redteam/scenarios after changing a scenario (G0 M17 D125)
+    cmds:
+      - go test ./internal/redteam/library -run TestLibrary_MatchesTheShippedScenarios -count=1 -update
 
   sdk:vectors:
     desc: Regenerate the SDK conformance vectors in sdk/conformance from the Go implementation (review the diff)

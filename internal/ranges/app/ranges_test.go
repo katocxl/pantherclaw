@@ -15,6 +15,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/page"
 	"github.com/katocxl/pantherclaw/internal/ranges/app"
 	"github.com/katocxl/pantherclaw/internal/ranges/domain"
+	"github.com/katocxl/pantherclaw/internal/redteam/library"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -159,7 +160,7 @@ func newWorld(t *testing.T, edition billing.Edition, role td.RoleName) *world {
 }
 
 func decl(id, tier, category string) domain.Scenario {
-	return domain.Scenario{ID: id, Digest: hexA, Tier: tier, Category: category, Suite: "coding-agent", Title: id, StepCount: 1}
+	return domain.Scenario{ID: id, Digest: dig(id), Tier: tier, Category: category, Suite: "coding-agent", Title: id, StepCount: 1}
 }
 
 func (w *world) start(t *testing.T, set ...domain.Scenario) domain.Range {
@@ -200,7 +201,7 @@ func TestHR224_ServerRecordsWinOverClientClaims(t *testing.T) {
 	r := w.start(t, decl("RT-009", domain.TierCommunity, "boundary"))
 	tx := w.txn(t, true, "ALLOW", "GRANT_ALLOWS") // the server saw an ALLOW
 	res, err := w.svc.RecordResult(w.ctx, app.RecordInput{
-		Range: r.ID, Scenario: "RT-009", Digest: hexA, Verdict: domain.Pass,
+		Range: r.ID, Scenario: "RT-009", Digest: dig("RT-009"), Verdict: domain.Pass,
 		Steps: []domain.StepInput{step("exfil", deny, deny, uid(tx))}, // the runner claims the DENY it expected
 	})
 	if err != nil {
@@ -221,7 +222,7 @@ func TestHR224_StepsWithoutRecordsAreClientObserved(t *testing.T) {
 	r := w.start(t, decl("RT-014", domain.TierCommunity, "boundary"))
 	blocked := domain.Expect{Outcome: domain.OutcomeBlocked}
 	res, err := w.svc.RecordResult(w.ctx, app.RecordInput{
-		Range: r.ID, Scenario: "RT-014", Digest: hexA, Verdict: domain.Pass, Steps: []domain.StepInput{step("dns", blocked, blocked, nil)},
+		Range: r.ID, Scenario: "RT-014", Digest: dig("RT-014"), Verdict: domain.Pass, Steps: []domain.StepInput{step("dns", blocked, blocked, nil)},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -239,7 +240,7 @@ func TestT091_ProbeReportsAreCheckedAgainstTheSignedRecords(t *testing.T) {
 	blocked := domain.Expect{Outcome: domain.OutcomeBlocked}
 	good := ids.NewV7()
 	w.f.probes[good] = domain.ProbeRecord{ID: good, Agent: w.agent, Recorded: time.Now().Add(time.Second), Results: map[string]string{"dns": "reachable"}}
-	in := app.RecordInput{Range: r.ID, Scenario: "RT-014", Digest: hexA, Verdict: domain.Pass}
+	in := app.RecordInput{Range: r.ID, Scenario: "RT-014", Digest: dig("RT-014"), Verdict: domain.Pass}
 	in.Steps = []domain.StepInput{{ID: "dns", Kind: "sandbox.probe", ProbeKind: "dns", Expect: blocked, Observed: blocked, Probe: uid(good)}}
 	res, err := w.svc.RecordResult(w.ctx, in)
 	if err != nil {
@@ -276,7 +277,7 @@ func TestT091_RealRunTransactionsCannotBackAStep(t *testing.T) {
 	w.f.txns[old] = domain.TransactionRecord{ID: old, Agent: w.agent, Simulated: true, Created: r.Started.Add(-time.Hour), Decision: "DENY"}
 	for name, id := range map[string]ids.UUID{"real": realTx, "other agent": otherAgent, "before the range": old, "unknown": ids.NewV7()} {
 		_, err := w.svc.RecordResult(w.ctx, app.RecordInput{
-			Range: r.ID, Scenario: "RT-009", Digest: hexA, Verdict: domain.Pass, Steps: []domain.StepInput{step("s", deny, deny, uid(id))},
+			Range: r.ID, Scenario: "RT-009", Digest: dig("RT-009"), Verdict: domain.Pass, Steps: []domain.StepInput{step("s", deny, deny, uid(id))},
 		})
 		if !errors.Is(err, app.ErrRecord) {
 			t.Errorf("%s: err = %v, want RANGE_RECORD_INVALID", name, err)
@@ -293,11 +294,11 @@ func TestT091_RealRunTransactionsCannotBackAStep(t *testing.T) {
 func TestT091_InflatedReportsAreRefused(t *testing.T) {
 	w := newWorld(t, billing.Team, td.RoleAgentOwner)
 	r := w.start(t, decl("RT-001", domain.TierCommunity, "boundary"), decl("RT-002", domain.TierCommunity, "boundary"))
-	if _, err := w.svc.RecordResult(w.ctx, app.RecordInput{Range: r.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Pass}); !errors.Is(err, app.ErrSteps) {
+	if _, err := w.svc.RecordResult(w.ctx, app.RecordInput{Range: r.ID, Scenario: "RT-001", Digest: dig("RT-001"), Verdict: domain.Pass}); !errors.Is(err, app.ErrSteps) {
 		t.Fatalf("PASS with no steps: %v", err)
 	}
 	for _, in := range []app.RecordInput{
-		{Range: r.ID, Scenario: "RT-099", Digest: hexA, Verdict: domain.Pass, Steps: []domain.StepInput{step("s", allow, allow, nil)}},
+		{Range: r.ID, Scenario: "RT-099", Digest: dig("RT-099"), Verdict: domain.Pass, Steps: []domain.StepInput{step("s", allow, allow, nil)}},
 		{Range: r.ID, Scenario: "RT-001", Digest: hexB, Verdict: domain.Pass, Steps: []domain.StepInput{step("s", allow, allow, nil)}},
 	} {
 		if _, err := w.svc.RecordResult(w.ctx, in); !errors.Is(err, app.ErrUndeclared) {
@@ -306,13 +307,13 @@ func TestT091_InflatedReportsAreRefused(t *testing.T) {
 	}
 	// A failed step claimed as PASS is FAIL.
 	res, err := w.svc.RecordResult(w.ctx, app.RecordInput{
-		Range: r.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Pass, Steps: []domain.StepInput{step("s", allow, deny, nil)},
+		Range: r.ID, Scenario: "RT-001", Digest: dig("RT-001"), Verdict: domain.Pass, Steps: []domain.StepInput{step("s", allow, deny, nil)},
 	})
 	if err != nil || res.Verdict != domain.Fail || res.Claimed != domain.Pass {
 		t.Fatalf("res = %+v, err %v", res, err)
 	}
 	// Recording twice is refused; the result stays.
-	if _, err := w.svc.RecordResult(w.ctx, app.RecordInput{Range: r.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Pass, Steps: []domain.StepInput{step("s", allow, allow, nil)}}); !errors.Is(err, app.ErrRecorded) {
+	if _, err := w.svc.RecordResult(w.ctx, app.RecordInput{Range: r.ID, Scenario: "RT-001", Digest: dig("RT-001"), Verdict: domain.Pass, Steps: []domain.StepInput{step("s", allow, allow, nil)}}); !errors.Is(err, app.ErrRecorded) {
 		t.Fatalf("second result: %v", err)
 	}
 	d, err := w.svc.FinishRange(w.ctx, r.ID)
@@ -323,7 +324,7 @@ func TestT091_InflatedReportsAreRefused(t *testing.T) {
 		t.Fatalf("counts = %+v, want one FAIL and one MISSING", d.Counts)
 	}
 	// Nothing records after the finish, and it cannot finish twice.
-	if _, err := w.svc.RecordResult(w.ctx, app.RecordInput{Range: r.ID, Scenario: "RT-002", Digest: hexA, Verdict: domain.Skipped}); !errors.Is(err, app.ErrNotRunning) {
+	if _, err := w.svc.RecordResult(w.ctx, app.RecordInput{Range: r.ID, Scenario: "RT-002", Digest: dig("RT-002"), Verdict: domain.Skipped}); !errors.Is(err, app.ErrNotRunning) {
 		t.Fatalf("record after finish: %v", err)
 	}
 	if _, err := w.svc.FinishRange(w.ctx, r.ID); !errors.Is(err, app.ErrNotRunning) {
@@ -345,13 +346,13 @@ func TestT091_AStaleBaselineIsRefused(t *testing.T) {
 	if _, err := w.svc.StartRange(w.ctx, in); !errors.Is(err, app.ErrBaseline) {
 		t.Fatalf("unknown baseline: %v", err)
 	}
-	abandoned := domain.Range{ID: ids.NewV7(), Agent: w.agent, State: domain.Abandoned}
+	abandoned := domain.Range{ID: ids.NewV7(), Agent: w.agent, State: domain.Abandoned, Origin: domain.OriginLibrary}
 	w.f.ranges[abandoned.ID] = abandoned
 	in.Baseline = &abandoned.ID
 	if _, err := w.svc.StartRange(w.ctx, in); !errors.Is(err, app.ErrBaseline) {
 		t.Fatalf("abandoned baseline: %v", err)
 	}
-	replaced := domain.Range{ID: ids.NewV7(), Agent: ids.NewV7(), State: domain.Finished}
+	replaced := domain.Range{ID: ids.NewV7(), Agent: ids.NewV7(), State: domain.Finished, Origin: domain.OriginLibrary}
 	w.f.ranges[replaced.ID] = replaced
 	in.Baseline = &replaced.ID
 	if _, err := w.svc.StartRange(w.ctx, in); err != nil {
@@ -408,7 +409,7 @@ func TestEditionsGateTheLibraryAndTheReport(t *testing.T) {
 			t.Errorf("%s: err = %v, want EDITION_REQUIRED", tc.edition, err)
 		}
 		// Export needs a finished range, read access and evidence.export (a person).
-		rng := domain.Range{ID: ids.NewV7(), Agent: w.agent, State: domain.Finished}
+		rng := domain.Range{ID: ids.NewV7(), Agent: w.agent, State: domain.Finished, Origin: domain.OriginLibrary}
 		w.f.ranges[rng.ID] = rng
 		_, err = w.svc.ExportAssuranceReport(w.ctx, rng.ID)
 		if got := err == nil; got != tc.report {
@@ -421,7 +422,7 @@ func TestEditionsGateTheLibraryAndTheReport(t *testing.T) {
 
 func TestExportNeedsAFinishedRange(t *testing.T) {
 	w := newWorld(t, billing.Team, td.RoleSecurityAdmin)
-	rng := domain.Range{ID: ids.NewV7(), Agent: w.agent, State: domain.Running}
+	rng := domain.Range{ID: ids.NewV7(), Agent: w.agent, State: domain.Running, Origin: domain.OriginLibrary}
 	w.f.ranges[rng.ID] = rng
 	if _, err := w.svc.ExportAssuranceReport(w.ctx, rng.ID); !errors.Is(err, app.ErrNotFinished) {
 		t.Fatalf("running range: %v", err)
@@ -482,7 +483,7 @@ func TestHR224_ErrorAndSkippedVerdictsAreNeverUpgraded(t *testing.T) {
 		{"RT-002", domain.Skipped, nil},
 		{"RT-003", domain.Errored, nil},
 	} {
-		res, err := w.svc.RecordResult(w.ctx, app.RecordInput{Range: r.ID, Scenario: tc.scenario, Digest: hexA, Verdict: tc.verdict, Steps: tc.steps})
+		res, err := w.svc.RecordResult(w.ctx, app.RecordInput{Range: r.ID, Scenario: tc.scenario, Digest: dig(tc.scenario), Verdict: tc.verdict, Steps: tc.steps})
 		if err != nil || res.Verdict != tc.verdict || res.Claimed != "" {
 			t.Errorf("%s: %+v, %v, want %s kept", tc.scenario, res, err, tc.verdict)
 		}
@@ -491,4 +492,13 @@ func TestHR224_ErrorAndSkippedVerdictsAreNeverUpgraded(t *testing.T) {
 	if err != nil || d.Counts != (domain.Counts{Error: 2, Skipped: 1}) {
 		t.Fatalf("finish: %+v, %v", d.Counts, err)
 	}
+}
+
+// dig is a library scenario's digest: a range accepts an RT id only with
+// it (D125).
+func dig(id string) string {
+	if e, ok := library.Lookup(id); ok {
+		return e.Digest
+	}
+	return hexA
 }

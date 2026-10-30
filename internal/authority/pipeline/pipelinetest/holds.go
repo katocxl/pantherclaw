@@ -138,3 +138,23 @@ func (w *World) Revalidate(context.Context, ids.OrgID, ids.UUID) error { return 
 func (w *World) ApprovalProof(context.Context, ids.OrgID, ids.UUID) ([]proof.Assertion, error) {
 	return nil, nil
 }
+
+// SetRunConsequences sets a run's consequence counts (G0 M17 D103).
+func (w *World) SetRunConsequences(run ids.UUID, c pipeline.RunConsequenceCounts) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.runCons == nil {
+		w.runCons = map[ids.UUID]pipeline.RunConsequenceCounts{}
+	}
+	w.runCons[run] = c
+}
+
+// RunConsequences implements pipeline.Reader.
+func (w *World) RunConsequences(_ context.Context, _ ids.OrgID, run ids.UUID) (pipeline.RunConsequenceCounts, error) {
+	if err := w.fail("RunConsequences"); err != nil {
+		return pipeline.RunConsequenceCounts{}, err
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.runCons[run], nil
+}

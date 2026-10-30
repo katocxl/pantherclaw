@@ -159,7 +159,7 @@ func (s *Workload) Enroll(ctx context.Context, req *pantherclawv1.EnrollRequest)
 	if tok, err := credential.Parse(credential.EnrollmentToken, req.GetEnrollmentToken()); err == nil {
 		org = tok.Org()
 	} else if req.GetEnrollmentToken() == "" && att != nil {
-		org = app.AttestationOrg(att.Token)
+		org = s.svc.AttestationOrg(*att)
 	}
 	c, rb, err := s.verify(ctx, info)
 	if err != nil {
@@ -279,14 +279,33 @@ func tokenOrg(token string) ids.OrgID {
 	return id.Org
 }
 
-// attestation maps the request's attestation to its preset.
+// attestation maps the request's attestation to its preset. A kind with no
+// preset maps to no kind, which attestation refuses (HR-465): it is never
+// defaulted to one.
 func attestation(a *pantherclawv1.Attestation) *app.Attestation {
 	if a == nil {
 		return nil
 	}
-	kind := issuers.KindGitHub
-	if a.GetKind() == pantherclawv1.AttestationKind_ATTESTATION_KIND_KUBERNETES {
+	var kind issuers.Kind
+	switch a.GetKind() {
+	case pantherclawv1.AttestationKind_ATTESTATION_KIND_UNSPECIFIED:
+		// No kind: attest refuses it (HR-465).
+	case pantherclawv1.AttestationKind_ATTESTATION_KIND_GITHUB_ACTIONS:
+		kind = issuers.KindGitHub
+	case pantherclawv1.AttestationKind_ATTESTATION_KIND_KUBERNETES:
 		kind = issuers.KindKubernetes
+	case pantherclawv1.AttestationKind_ATTESTATION_KIND_GITLAB_CI:
+		kind = issuers.KindGitLab
+	case pantherclawv1.AttestationKind_ATTESTATION_KIND_SPIFFE_JWT:
+		kind = issuers.KindSPIFFE
+	case pantherclawv1.AttestationKind_ATTESTATION_KIND_GCP_WORKLOAD:
+		kind = issuers.KindGCP
+	case pantherclawv1.AttestationKind_ATTESTATION_KIND_AWS_IAM:
+		kind = issuers.KindAWS
+	case pantherclawv1.AttestationKind_ATTESTATION_KIND_AZURE_MI:
+		kind = issuers.KindAzureMI
+	case pantherclawv1.AttestationKind_ATTESTATION_KIND_ENTRA_AGENT_ID:
+		kind = issuers.KindEntraAgent
 	}
 	return &app.Attestation{Kind: kind, Token: a.GetToken()}
 }

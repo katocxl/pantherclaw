@@ -28,8 +28,33 @@ var jobType = map[issuers.JobType]pantherclawv1.GithubJobType{
 	issuers.JobReusable: pantherclawv1.GithubJobType_GITHUB_JOB_TYPE_REUSABLE_WORKFLOW,
 }
 
-func bindingFromProto(gh *pantherclawv1.GithubBinding, kb *pantherclawv1.KubernetesBinding) app.Binding {
+func bindingFromProto(req *pantherclawv1.ProposeIssuerEntryRequest) app.Binding {
+	gh, kb := req.GetGithub(), req.GetKubernetes()
 	var b app.Binding
+	if gl := req.GetGitlab(); gl != nil {
+		b.GitLab = &issuers.GitLabBinding{
+			Issuer: gl.GetIssuer(), ProjectID: gl.GetProjectId(), NamespaceID: gl.GetNamespaceId(),
+			CIConfigRefURIs: gl.GetCiConfigRefUris(), CIConfigSHAs: gl.GetCiConfigShas(), Environment: gl.GetEnvironment(),
+			RunnerEnvironment: gl.GetRunnerEnvironment(),
+		}
+	}
+	if sp := req.GetSpiffe(); sp != nil {
+		b.SPIFFE = &issuers.SPIFFEBinding{TrustDomain: sp.GetTrustDomain(), SPIFFEID: sp.GetSpiffeId()}
+	}
+	if g := req.GetGcp(); g != nil {
+		b.GCP = &issuers.GCPBinding{ServiceAccountID: g.GetServiceAccountId(), ProjectID: g.GetProjectId(), InstanceID: g.GetInstanceId()}
+	}
+	if aw := req.GetAws(); aw != nil {
+		b.AWS = &issuers.AWSBinding{AccountID: aw.GetAccountId(), RoleName: aw.GetRoleName()}
+	}
+	if az := req.GetAzureMi(); az != nil {
+		b.AzureMI = &issuers.AzureMIBinding{
+			TenantID: az.GetTenantId(), AppID: az.GetAppId(), ObjectID: az.GetObjectId(),
+		}
+	}
+	if ea := req.GetEntraAgent(); ea != nil {
+		b.EntraAgent = &issuers.EntraAgentBinding{TenantID: ea.GetTenantId(), AppID: ea.GetAppId(), ObjectID: ea.GetObjectId()}
+	}
 	if gh != nil {
 		g := issuers.GitHubBinding{
 			RepositoryID: gh.GetRepositoryId(), RepositoryOwnerID: gh.GetRepositoryOwnerId(),
@@ -66,6 +91,39 @@ func revisionProto(r app.Revision) *pantherclawv1.IssuerRevision {
 			WorkflowRefs: g.WorkflowRefs, WorkflowShas: g.WorkflowSHAs, Environment: g.Environment, RunnerEnvironment: g.RunnerEnvironment,
 		}}
 	}
+	if g := r.Binding.GitLab; g != nil {
+		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_GITLAB_CI
+		out.Binding = &pantherclawv1.IssuerRevision_Gitlab{Gitlab: &pantherclawv1.GitlabBinding{
+			Issuer: g.Issuer, ProjectId: g.ProjectID, NamespaceId: g.NamespaceID, CiConfigRefUris: g.CIConfigRefURIs,
+			CiConfigShas: g.CIConfigSHAs, Environment: g.Environment, RunnerEnvironment: g.RunnerEnvironment,
+		}}
+	}
+	if sp := r.Binding.SPIFFE; sp != nil {
+		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_SPIFFE_JWT
+		out.Binding = &pantherclawv1.IssuerRevision_Spiffe{Spiffe: &pantherclawv1.SpiffeBinding{TrustDomain: sp.TrustDomain, SpiffeId: sp.SPIFFEID}}
+	}
+	if g := r.Binding.GCP; g != nil {
+		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_GCP_WORKLOAD
+		out.Binding = &pantherclawv1.IssuerRevision_Gcp{Gcp: &pantherclawv1.GcpBinding{
+			ServiceAccountId: g.ServiceAccountID, ProjectId: g.ProjectID, InstanceId: g.InstanceID,
+		}}
+	}
+	if aw := r.Binding.AWS; aw != nil {
+		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_AWS_IAM
+		out.Binding = &pantherclawv1.IssuerRevision_Aws{Aws: &pantherclawv1.AwsBinding{AccountId: aw.AccountID, RoleName: aw.RoleName}}
+	}
+	if az := r.Binding.AzureMI; az != nil {
+		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_AZURE_MI
+		out.Binding = &pantherclawv1.IssuerRevision_AzureMi{AzureMi: &pantherclawv1.AzureMiBinding{
+			TenantId: az.TenantID, AppId: az.AppID, ObjectId: az.ObjectID,
+		}}
+	}
+	if ea := r.Binding.EntraAgent; ea != nil {
+		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_ENTRA_AGENT_ID
+		out.Binding = &pantherclawv1.IssuerRevision_EntraAgent{EntraAgent: &pantherclawv1.EntraAgentBinding{
+			TenantId: ea.TenantID, AppId: ea.AppID, ObjectId: ea.ObjectID,
+		}}
+	}
 	if k := r.Binding.Kubernetes; k != nil {
 		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_KUBERNETES
 		out.Binding = &pantherclawv1.IssuerRevision_Kubernetes{Kubernetes: &pantherclawv1.KubernetesBinding{
@@ -90,7 +148,7 @@ func (s *Identity) ProposeIssuerEntry(ctx context.Context, req *pantherclawv1.Pr
 		return nil, err
 	}
 	r, err := s.svc.ProposeIssuer(ctx, app.ProposeInput{
-		EntryID: entry, AgentID: agent, Binding: bindingFromProto(req.GetGithub(), req.GetKubernetes()),
+		EntryID: entry, AgentID: agent, Binding: bindingFromProto(req),
 		AutoAdmit: req.GetAutoAdmit(), Reason: req.GetReason(),
 	}, s.clusters)
 	if err != nil {

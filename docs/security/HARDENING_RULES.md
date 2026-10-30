@@ -161,10 +161,10 @@
 
 | ID | Rule | Threats | MS |
 |---|---|---|---|
-| HR-140 | Trusted-issuer entries pin the issuer, the key source, the audience `pantherclaw:<org>`, the allowed algorithms and at least one immutable claim binding a token to one agent (never a name alone); an entry without one is rejected. Only preset kinds can be configured, and rules built into a preset run in code that configuration cannot disable. | T-044 | M3 |
+| HR-140 | Trusted-issuer entries pin the issuer, the key source, the audience `pantherclaw:<org>`, the allowed algorithms and at least one immutable claim binding a token to one agent (never a name alone); an entry without one is rejected. Only preset kinds can be configured, and rules built into a preset run in code that configuration cannot disable. Exception (G0 M17, founder decision G18): for the `azure_mi` and `entra_agent_id` kinds the pinned audience is the operator-pinned app id (or `api://<app_id>`) instead of `pantherclaw:<org>`, as HR-469 states; for every other kind this rule is unchanged. | T-044 | M3 |
 | HR-141 | Adding or widening an issuer entry (including turning on auto-admission) is a protected change: a new revision that takes effect only when a human holding `identity.issuer.activate` activates it, shown with what it widens and audited. Narrowing or disabling takes effect at once. | T-044 | M3 |
 | HR-142 | Issuer keys are fetched, and Kubernetes TokenReview is called, only over TLS through the egress-guarded client; key documents are size-capped and cached at most 15 minutes, and an unknown `kid` triggers at most one refetch per minute per issuer. Private destinations are allowed only by operator configuration, never by tenant input. | T-045 | M3 |
-| HR-143 | Attestation tokens are single use (keyed on `jti`, or on the token's SHA-256 when it has none), must carry exactly `aud = pantherclaw:<org>`, must expire at most 1 hour after issue, and confer L2 only until they expire; a workload token never outlives the attestation behind its level. | T-046 | M3 |
+| HR-143 | Attestation tokens are single use (keyed on `jti`, or on the token's SHA-256 when it has none), must carry exactly `aud = pantherclaw:<org>`, must expire at most 1 hour after issue, and confer L2 only until they expire; a workload token never outlives the attestation behind its level. Exception (G0 M17, founder decision G18): `azure_mi` and `entra_agent_id` tokens carry the operator-pinned app id as their audience and may live up to 24 hours; their L2, and any credential issued from the attestation, lasts at most 1 hour from the attestation, and they stay single use until their `exp`, as HR-469 states; for every other kind this rule is unchanged. | T-046 | M3 |
 | HR-144 | Kubernetes attestation: TokenReview with audience `pantherclaw:<org>` must authenticate the token as the pinned namespace, service-account name and service-account UID and return the bound pod's name and UID, and that pod must still exist; the image digest comes only from trusted cluster state for that pod UID (or signed evidence bound to it), never from the workload. | T-047 | M3 |
 | HR-145 | A subject token at `StartRun` is accepted only from an OIDC provider configured for subject tokens, as a signed JWT with an allowed algorithm (opaque tokens rejected), with `aud` naming PantherClaw, unexpired, `iat` at most 5 minutes old, never seen before (`jti` or token SHA-256), and `(iss, sub)` linked to an active user of the org. | T-048 | M3 |
 | HR-146 | A run's represented principal is the launcher itself, a user proven by a subject token (HR-145), or for a child run its parent's principal; a principal named by the launcher is refused. A subject token never creates, widens or substitutes for a grant. | T-048, T-001 | M3 |
@@ -500,3 +500,28 @@
 | HR-443 | Every suggestion states its evidence window, coverage limits and uncertainty, and the uncertainty is never LOW when any route of the grant's operations lacked ENFORCED or OBSERVE_ONLY coverage for the whole window. | T-196 | M16 |
 | HR-444 | A suggestion is visible only to people who can see both its grant and its agent. | T-196 | M16 |
 | HR-445 | A suggestion's expected effect comes from recorded transactions only; data that was not collected is reported as "not collected", never as zero. | T-196 | M16 |
+
+## Consequence chains, continuous discovery, identity presets and custom scenarios (G0 M17)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
+| HR-450 | A predicted consequence that cannot be opened for verification is audited as not verifiable, never skipped silently. | T-198 | M17 |
+| HR-451 | A parent's downstream state is CONFIRMED only from its consequences' own evidence, never from the parent's acceptance. Downstream receipts are appended, never rewritten. | T-198 | M17 |
+| HR-452 | A wait on consequences passes only on CONFIRMED. Unconfirmed or not verifiable never passes. | T-198 | M17 |
+| HR-453 | A customer consequence rule change is a two-person protected change in every protect mode. | T-199 | M17 |
+| HR-454 | Customer rules only add requirements. They never suppress, waive or turn an UNKNOWN into NOT_TRIGGERED. | T-199 | M17 |
+| HR-455 | Consequence chains have bounded depth and fan-out, have no cycles, and stop at an UNKNOWN link, which stays at least a HOLD. | T-200 | M17 |
+| HR-456 | An expired consequence rule yields UNKNOWN. | T-199 | M17 |
+| HR-457 | Every link of a chain is a named rule over verified facts. | T-200 | M17 |
+| HR-458 | A vanished discovery only notifies, after 3 complete scans missed it, and never changes an agent's state or authority. | T-201 | M17 |
+| HR-459 | A failed, partial or non-complete scan never counts as a miss. | T-201 | M17 |
+| HR-460 | A material change on an open or claimed discovery is recorded with the before and after keys, and the owner is told. | T-201 | M17 |
+| HR-461 | The GitLab CI preset accepts only protected refs, never merge-request pipelines, pins numeric ids and trusts only operator-configured issuers. | T-202 | M17 |
+| HR-462 | The SPIFFE JWT-SVID preset pins the exact SPIFFE ID, requires the token's trust domain to equal the bundle's, and trusts only operator-configured bundles. | T-203 | M17 |
+| HR-463 | The GCP workload identity preset takes keys only from the pinned key URL and binds on the numeric service-account id. | T-202 | M17 |
+| HR-464 | The AWS IAM preset accepts only a GetCallerIdentity request to an allow-listed STS host, with a signed audience header, at most 15 minutes old, single use. | T-203 | M17 |
+| HR-465 | An attestation of an unknown kind is refused, never defaulted. | T-202, T-203 | M17 |
+| HR-466 | Customer scenarios are labelled customer-authored by the server and never appear in an assurance pack. | T-204 | M17 |
+| HR-467 | An RT scenario id is accepted only with a matching library digest. | T-204 | M17 |
+| HR-468 | The customer tool simulator is data only, and every response is marked simulated. | T-204, T-092 | M17 |
+| HR-469 | The Azure managed identity (`azure_mi`) and Entra Agent ID (`entra_agent_id`) presets trust only a tenant and app id the operator pinned, and each app id maps to exactly one organization; `aud` is that app id (or `api://<app_id>`); the workload's assurance, and any credential issued from the attestation, lasts at most 1 hour from the attestation, whatever the token's lifetime; and each token is single use until its `exp`. | T-205 | M17 |

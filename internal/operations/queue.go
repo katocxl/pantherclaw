@@ -29,11 +29,14 @@ const (
 	// KindAutomationException is an open owned failure an automation raised
 	// (G0 M11 D38), routed to the automation's owner.
 	KindAutomationException ItemKind = "AUTOMATION_EXCEPTION"
+	// KindDiscoveryChange is a scan discovery that vanished or changed on an
+	// open or claimed agent (PN-001.3, D114, D116), read with agent.read.
+	KindDiscoveryChange ItemKind = "DISCOVERY_CHANGE"
 )
 
 var kindOrder = map[ItemKind]int{
 	KindIncident: 8, KindUnconfirmedContainment: 7, KindAlert: 6, KindProtectionFailure: 5, KindAutomationException: 4,
-	KindWaitingDecision: 3, KindPostureFinding: 2, KindAuthorityExpansion: 1,
+	KindWaitingDecision: 3, KindPostureFinding: 2, KindAuthorityExpansion: 1, KindDiscoveryChange: 0,
 }
 
 // AutomationFailurePrefix starts every owned failure kind an automation
@@ -100,6 +103,8 @@ const (
 	maxQueue         = 200
 	decisionHorizon  = time.Hour
 	expansionHorizon = 24 * time.Hour
+	// discoveryHorizon is how long a discovery change stays queued (D116).
+	discoveryHorizon = 7 * 24 * time.Hour
 )
 
 // GetWorkQueue returns the viewer's ranked work queue (F211): active
@@ -194,9 +199,10 @@ func workQueue(ctx context.Context, v *viewer, x external) (Queue, error) {
 	// Whole only when the viewer holds every kind's read permission across
 	// the org (D69 M3); a source not reported is listed in Pending.
 	out.Whole = v.whole(td.PermOperationsRead) && v.whole(td.PermIncidentRead) && v.whole(td.PermApprovalRead) &&
-		v.whole(td.PermGrantRead) && v.whole(td.PermContainmentRead) && v.whole(td.PermPostureRead) && v.whole(td.PermAutomationRead)
+		v.whole(td.PermGrantRead) && v.whole(td.PermContainmentRead) && v.whole(td.PermPostureRead) && v.whole(td.PermAutomationRead) &&
+		v.whole(td.PermAgentRead)
 	for _, step := range []func(context.Context, *builder) error{
-		incidentItems, failureItems, automationItems, decisionItems, expansionItems,
+		incidentItems, failureItems, automationItems, decisionItems, expansionItems, discoveryItems,
 	} {
 		if err := step(ctx, b); err != nil {
 			return Queue{}, err
@@ -503,6 +509,45 @@ func findingItems(ctx context.Context, b *builder, x external) error {
 		b.out.Items = append(b.out.Items, Item{
 			Kind: KindPostureFinding, ID: f.ID.String(), Title: f.Title, Severity: f.Severity, State: f.State,
 			Since: f.Since, Agents: agents, Actions: acts,
+		})
+	}
+	return nil
+}
+
+// discoveryItems queues continuous discovery's changes (PN-001.3, D114,
+// D116): discoveries people were told vanished and not seen since, and the
+// material changes on open or claimed discoveries of the last week. Both
+// only inform: neither changed the agent (HR-458).
+func discoveryItems(ctx context.Context, b *builder) error {
+	v := b.v
+	if !b.readable("discovery changes", td.PermAgentRead) {
+		return nil
+	}
+	all, agents, err := v.sqlScope(ctx, td.PermAgentRead)
+	if err != nil {
+		return err
+	}
+	rows, err := v.q.OpsDiscoveryChanges(ctx, dbq.OpsDiscoveryChangesParams{
+		OrgID: v.c.Org, AllAgents: all, Agents: agents, Since: b.now.Add(-discoveryHorizon), MaxRows: maxRows + 1,
+	})
+	if err != nil {
+		return err
+	}
+	for _, r := range cut(b, "discovery changes", rows) {
+		title := "discovery not seen in recent scans"
+		if r.Change == "CHANGED" {
+			title = "discovery changed what it may do"
+		}
+		if r.Kind != "" {
+			title = r.Kind + " " + title
+		}
+		since := b.now
+		if r.Since != nil {
+			since = *r.Since
+		}
+		b.out.Items = append(b.out.Items, Item{
+			Kind: KindDiscoveryChange, ID: r.ID.String(), Title: title, Severity: "MEDIUM", State: r.Change,
+			Since: since, Agents: []string{r.AgentID.String()},
 		})
 	}
 	return nil

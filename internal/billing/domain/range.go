@@ -14,3 +14,7 @@ func (e Entitlements) RangeReports() bool { return e.Edition.Paid() }
 func (e Entitlements) RangeFullLibrary() bool {
 	return e.Edition == Business || e.Edition == Enterprise
 }
+
+// RangeCustomScenarios reports whether the edition runs customer-authored
+// CX-### scenarios (G0 M17 D126, PN-009.6: Business and above).
+func (e Entitlements) RangeCustomScenarios() bool { return e.businessPlus() }
