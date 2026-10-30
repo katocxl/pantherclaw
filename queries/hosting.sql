@@ -20,9 +20,22 @@ SELECT * FROM pc.hosting_hosts WHERE name = sqlc.arg(name);
 SELECT * FROM pc.hosting_hosts WHERE state = 'ACTIVE' ORDER BY id;
 
 -- name: LockActiveHostingHost :one
--- Held while one hosted gateway is placed on the host, so the slug and
--- capacity checks and the placement are one step (G0 M19 D219).
+-- Held while one hosted gateway is placed on the host, so the capacity check
+-- and the placement are one step (G0 M19 D219).
 SELECT * FROM pc.hosting_hosts WHERE id = sqlc.arg(id) AND state = 'ACTIVE' FOR UPDATE;
+
+-- name: ClaimHostingSlug :execrows
+-- Holds a slug for one hosted gateway across all hosts (D222). A second try
+-- for the same record keeps the claim; another record's claim wins: no row.
+INSERT INTO pc.hosting_slugs (slug, hosted_id) VALUES (sqlc.arg(slug), sqlc.arg(hosted_id))
+ON CONFLICT (slug) DO UPDATE SET hosted_id = EXCLUDED.hosted_id
+WHERE pc.hosting_slugs.hosted_id = EXCLUDED.hosted_id;
+
+-- name: HostingSlugHeld :one
+SELECT EXISTS (SELECT 1 FROM pc.hosting_slugs WHERE slug = sqlc.arg(slug))::boolean;
+
+-- name: ReleaseHostingSlug :exec
+DELETE FROM pc.hosting_slugs WHERE slug = sqlc.arg(slug) AND hosted_id = sqlc.arg(hosted_id);
 
 -- name: TouchHostingHost :exec
 UPDATE pc.hosting_hosts SET last_seen = now(), agent_version = sqlc.arg(agent_version) WHERE id = sqlc.arg(id);
@@ -119,10 +132,14 @@ SET state = CASE WHEN sqlc.arg(healthy)::boolean THEN 'RUNNING' ELSE state END,
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND host_id = sqlc.arg(host_id)
   AND state IN ('ENROLLED', 'RUNNING');
 
--- name: ExpireHostedEnrollmentToken :exec
--- Ends a token that was replaced before it was used.
-UPDATE pc.gateway_enrollment_tokens SET expires_at = now()
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND used_at IS NULL AND expires_at > now();
+-- name: StaleHostedEnrollment :one
+-- Whether the gateway is hosted and the token is not the one its provisioner
+-- minted last: a replaced token enrolls nothing (D222).
+SELECT EXISTS (
+    SELECT 1 FROM pc.hosted_gateways
+    WHERE org_id = sqlc.arg(org_id) AND gateway_id = sqlc.arg(gateway_id)::uuid
+      AND enrollment_id IS DISTINCT FROM sqlc.arg(enrollment_id)::uuid
+)::boolean;
 
 -- name: BindHostedEnrollment :exec
 -- Records the certificate the provisioner's token enrolled; a token of any
@@ -155,9 +172,10 @@ SET state = CASE WHEN host_id IS NULL THEN 'DEPROVISIONED' ELSE 'DEPROVISIONING'
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state NOT IN ('DEPROVISIONING', 'DEPROVISIONED', 'FAILED')
 RETURNING *;
 
--- name: FinishDeprovisionHostedGateway :execrows
+-- name: FinishDeprovisionHostedGateway :one
 UPDATE pc.hosted_gateways SET state = 'DEPROVISIONED', deprovisioned_at = now(), updated_at = now()
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND host_id = sqlc.arg(host_id) AND state = 'DEPROVISIONING';
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND host_id = sqlc.arg(host_id) AND state = 'DEPROVISIONING'
+RETURNING slug;
 
 -- name: FailHostedGateway :execrows
 UPDATE pc.hosted_gateways SET state = 'FAILED', failure = sqlc.arg(failure), token_sealed = NULL, updated_at = now()

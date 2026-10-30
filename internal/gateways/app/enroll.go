@@ -83,6 +83,12 @@ func (s *Service) Enroll(ctx context.Context, token string, csr []byte) (Enrolle
 		if err != nil || g.State != "ACTIVE" {
 			return ErrEnrollment
 		}
+		// A hosted gateway enrolls only with the token its provisioner minted last.
+		if stale, err := q.StaleHostedEnrollment(ctx, org, g.ID, t.ID); err != nil {
+			return err
+		} else if stale {
+			return ErrEnrollment
+		}
 		id := Identity{Org: org, Gateway: g.ID, Cert: ids.NewV7()}
 		iss, err := s.issue(ctx, q, pub, id, "ENROLL", nil)
 		if err != nil {

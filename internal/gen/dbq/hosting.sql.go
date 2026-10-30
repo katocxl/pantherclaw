@@ -57,15 +57,20 @@ func (q *Queries) CertDescendsFrom(ctx context.Context, enrolledCertID ids.UUID,
 	return exists, err
 }
 
-const expireHostedEnrollmentToken = `-- name: ExpireHostedEnrollmentToken :exec
-UPDATE pc.gateway_enrollment_tokens SET expires_at = now()
-WHERE org_id = $1 AND id = $2 AND used_at IS NULL AND expires_at > now()
+const claimHostingSlug = `-- name: ClaimHostingSlug :execrows
+INSERT INTO pc.hosting_slugs (slug, hosted_id) VALUES ($1, $2)
+ON CONFLICT (slug) DO UPDATE SET hosted_id = EXCLUDED.hosted_id
+WHERE pc.hosting_slugs.hosted_id = EXCLUDED.hosted_id
 `
 
-// Ends a token that was replaced before it was used.
-func (q *Queries) ExpireHostedEnrollmentToken(ctx context.Context, orgID ids.OrgID, iD ids.UUID) error {
-	_, err := q.db.Exec(ctx, expireHostedEnrollmentToken, orgID, iD)
-	return err
+// Holds a slug for one hosted gateway across all hosts (D222). A second try
+// for the same record keeps the claim; another record's claim wins: no row.
+func (q *Queries) ClaimHostingSlug(ctx context.Context, slug string, hostedID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, claimHostingSlug, slug, hostedID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const failHostedGateway = `-- name: FailHostedGateway :execrows
@@ -81,17 +86,17 @@ func (q *Queries) FailHostedGateway(ctx context.Context, failure *string, orgID 
 	return result.RowsAffected(), nil
 }
 
-const finishDeprovisionHostedGateway = `-- name: FinishDeprovisionHostedGateway :execrows
+const finishDeprovisionHostedGateway = `-- name: FinishDeprovisionHostedGateway :one
 UPDATE pc.hosted_gateways SET state = 'DEPROVISIONED', deprovisioned_at = now(), updated_at = now()
 WHERE org_id = $1 AND id = $2 AND host_id = $3 AND state = 'DEPROVISIONING'
+RETURNING slug
 `
 
-func (q *Queries) FinishDeprovisionHostedGateway(ctx context.Context, orgID ids.OrgID, iD ids.UUID, hostID *ids.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, finishDeprovisionHostedGateway, orgID, iD, hostID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+func (q *Queries) FinishDeprovisionHostedGateway(ctx context.Context, orgID ids.OrgID, iD ids.UUID, hostID *ids.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, finishDeprovisionHostedGateway, orgID, iD, hostID)
+	var slug string
+	err := row.Scan(&slug)
+	return slug, err
 }
 
 const getHostedGateway = `-- name: GetHostedGateway :one
@@ -238,6 +243,17 @@ func (q *Queries) HostingHostCertAuth(ctx context.Context, id ids.UUID) (Hosting
 		&i.DbNow,
 	)
 	return i, err
+}
+
+const hostingSlugHeld = `-- name: HostingSlugHeld :one
+SELECT EXISTS (SELECT 1 FROM pc.hosting_slugs WHERE slug = $1)::boolean
+`
+
+func (q *Queries) HostingSlugHeld(ctx context.Context, slug string) (bool, error) {
+	row := q.db.QueryRow(ctx, hostingSlugHeld, slug)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const insertHostedGateway = `-- name: InsertHostedGateway :one
@@ -557,8 +573,8 @@ const lockActiveHostingHost = `-- name: LockActiveHostingHost :one
 SELECT id, name, domain, state, capacity, milli_cpus, memory_mib, agent_version, last_seen, created_at FROM pc.hosting_hosts WHERE id = $1 AND state = 'ACTIVE' FOR UPDATE
 `
 
-// Held while one hosted gateway is placed on the host, so the slug and
-// capacity checks and the placement are one step (G0 M19 D219).
+// Held while one hosted gateway is placed on the host, so the capacity check
+// and the placement are one step (G0 M19 D219).
 func (q *Queries) LockActiveHostingHost(ctx context.Context, id ids.UUID) (PcHostingHost, error) {
 	row := q.db.QueryRow(ctx, lockActiveHostingHost, id)
 	var i PcHostingHost
@@ -690,6 +706,15 @@ func (q *Queries) ReissueHostedToken(ctx context.Context, arg ReissueHostedToken
 	return result.RowsAffected(), nil
 }
 
+const releaseHostingSlug = `-- name: ReleaseHostingSlug :exec
+DELETE FROM pc.hosting_slugs WHERE slug = $1 AND hosted_id = $2
+`
+
+func (q *Queries) ReleaseHostingSlug(ctx context.Context, slug string, hostedID ids.UUID) error {
+	_, err := q.db.Exec(ctx, releaseHostingSlug, slug, hostedID)
+	return err
+}
+
 const reportHostedGateway = `-- name: ReportHostedGateway :execrows
 UPDATE pc.hosted_gateways
 SET state = CASE WHEN $1::boolean THEN 'RUNNING' ELSE state END,
@@ -758,6 +783,23 @@ func (q *Queries) SetHostingHostState(ctx context.Context, state string, iD ids.
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const staleHostedEnrollment = `-- name: StaleHostedEnrollment :one
+SELECT EXISTS (
+    SELECT 1 FROM pc.hosted_gateways
+    WHERE org_id = $1 AND gateway_id = $2::uuid
+      AND enrollment_id IS DISTINCT FROM $3::uuid
+)::boolean
+`
+
+// Whether the gateway is hosted and the token is not the one its provisioner
+// minted last: a replaced token enrolls nothing (D222).
+func (q *Queries) StaleHostedEnrollment(ctx context.Context, orgID ids.OrgID, gatewayID ids.UUID, enrollmentID ids.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, staleHostedEnrollment, orgID, gatewayID, enrollmentID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const startDeprovisionHostedGateway = `-- name: StartDeprovisionHostedGateway :one

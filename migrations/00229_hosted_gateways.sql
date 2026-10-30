@@ -7,10 +7,11 @@
 -- enrollment token, sealed here until the host agent pulls it once over its
 -- own mTLS identity; the host agent runs one container for the org and
 -- reports its state and version. One live hosted gateway per org (HR-499);
--- its slug names it as <slug>.gw.<host domain>, and the provisioner never
--- places two live hosted gateways with one slug on one host (no index
--- spans orgs, HR-050). Deprovisioning revokes the gateway first, then
--- the host agent stops the process (HR-503).
+-- its slug names it as <slug>.gw.<host domain>, and pc.hosting_slugs holds
+-- each slug for one hosted gateway across all hosts and orgs, so no org gets
+-- a certificate for a name another org's process serves (D222). No index of
+-- the tenant table spans orgs (HR-050). Deprovisioning revokes the gateway
+-- first, then the host agent stops the process (HR-503).
 --
 -- The audited lister gains two purposes: hosting_due (orgs whose hosted
 -- gateway the provisioner must act on) and hosting_assigned (the
@@ -73,11 +74,27 @@ GRANT SELECT, INSERT ON pc.hosted_gateways TO pc_app;
 GRANT UPDATE (state, gateway_id, host_id, token_sealed, token_pulled_at, enrollment_id, enrolled_cert_id, version, target_version,
     failure, updated_at, deprovisioned_at)
     ON pc.hosted_gateways TO pc_app;
--- A reissued token ends the one before it (D219).
-GRANT UPDATE (expires_at) ON pc.gateway_enrollment_tokens TO pc_app;
 GRANT SELECT ON pc.hosted_gateways TO pc_audit_ro;
 -- The lister reads only what its two purposes select (HR-053).
 GRANT SELECT (org_id, id, slug, state, host_id, token_pulled_at, updated_at) ON pc.hosted_gateways TO pc_lister;
+-- The slugs in use (D222): operator-level like pc.hosting_hosts (00228), no
+-- org, rows only in purpose hosting. A slug is a public hostname. hosted_id
+-- is the record that holds it; no foreign key, its table is a tenant's
+-- (HR-050).
+CREATE TABLE pc.hosting_slugs (
+    slug       text        PRIMARY KEY CHECK (slug ~ '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'),
+    hosted_id  uuid        NOT NULL,
+    claimed_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE pc.hosting_slugs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pc.hosting_slugs FORCE ROW LEVEL SECURITY;
+CREATE POLICY hosting_purpose ON pc.hosting_slugs
+    USING ((SELECT current_setting('app.purpose', true)) = 'hosting')
+    WITH CHECK ((SELECT current_setting('app.purpose', true)) = 'hosting');
+GRANT SELECT, INSERT, DELETE ON pc.hosting_slugs TO pc_app;
+GRANT UPDATE (hosted_id) ON pc.hosting_slugs TO pc_app;
+GRANT SELECT ON pc.hosting_slugs TO pc_audit_ro;
+
 -- +goose StatementBegin
 DO $$ BEGIN
     IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_deleter') THEN
@@ -109,8 +126,7 @@ BEGIN
             CASE WHEN p_purpose IN ('account_memberships','account_users') THEN NULLIF(current_setting('app.account_id', true), '')
                  WHEN p_purpose = 'billing_link_lookup' THEN left(current_setting('app.billing_provider', true) || ':'
                      || current_setting('app.billing_kind', true) || ':' || current_setting('app.billing_ref', true), 600)
-                 WHEN p_purpose = 'hosting_assigned' THEN left('host:' || coalesce(current_setting('app.hosting_host', true), '')
-                     || ' slug:' || coalesce(current_setting('app.hosting_slug', true), ''), 200)
+                 WHEN p_purpose = 'hosting_assigned' THEN left('host:' || coalesce(current_setting('app.hosting_host', true), ''), 200)
                  WHEN v_after IS NOT NULL THEN 'after:' || v_after::text END);
     CASE p_purpose
         WHEN 'orgs' THEN
@@ -292,16 +308,13 @@ BEGIN
         WHEN 'hosting_assigned' THEN
             -- The (org, hosted gateway) pairs placed on the one host the
             -- caller set in app.hosting_host for this transaction, in any
-            -- state its host agent acts on, and only those with the slug in
-            -- app.hosting_slug when it is set. Without the host the purpose
+            -- state its host agent acts on. Without the host the purpose
             -- matches nothing.
             RETURN QUERY
                 SELECT h.org_id, h.id
                 FROM pc.hosted_gateways h
                 WHERE h.host_id = (SELECT NULLIF(current_setting('app.hosting_host', true), '')::uuid)
                   AND h.state IN ('PROVISIONED', 'ENROLLED', 'RUNNING', 'DEPROVISIONING')
-                  AND (NULLIF(current_setting('app.hosting_slug', true), '') IS NULL
-                       OR h.slug = current_setting('app.hosting_slug', true))
                 ORDER BY 1, 2
                 LIMIT p_max_rows;
         ELSE
@@ -312,7 +325,6 @@ $$;
 -- +goose StatementEnd
 
 -- +goose Down
-REVOKE UPDATE (expires_at) ON pc.gateway_enrollment_tokens FROM pc_app;
 -- +goose StatementBegin
 CREATE OR REPLACE FUNCTION pc.cross_org_list(p_purpose text, p_max_rows integer)
 RETURNS TABLE (org_id uuid, id uuid)
@@ -505,4 +517,5 @@ END;
 $$;
 -- +goose StatementEnd
 
+DROP TABLE pc.hosting_slugs;
 DROP TABLE pc.hosted_gateways;

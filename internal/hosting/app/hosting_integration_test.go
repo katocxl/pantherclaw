@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	gwapp "github.com/katocxl/pantherclaw/internal/gateways/app"
 	"github.com/katocxl/pantherclaw/internal/gateways/ca"
@@ -41,11 +42,11 @@ func (e edition) Current(context.Context) (billing.Entitlements, error) {
 
 type env struct {
 	pool *db.Pool
-	// admin bypasses the app role, to age records.
-	admin *db.Pool
-	ca    *ca.Authority
-	svc   *app.Service
-	gws   *gwapp.Service
+	// d bypasses the app role, to age records.
+	d   *dbtest.DB
+	ca  *ca.Authority
+	svc *app.Service
+	gws *gwapp.Service
 }
 
 func newEnv(t *testing.T, ed billing.Edition) *env {
@@ -74,7 +75,7 @@ func newEnv(t *testing.T, ed billing.Edition) *env {
 	}
 	envl := pccrypto.NewEnvelope(keystore.NewDEKStore(pool, kp))
 	return &env{
-		pool: pool, admin: d.Pool(t, d.AdminConfig()), ca: authority,
+		pool: pool, d: d, ca: authority,
 		svc: app.New(pool, authority, envl, edition(ed), "https://gw-api.example.test:8443", clock.System{}),
 		gws: gwapp.New(pool, authority, "https://gw-api.example.test:8443", nil),
 	}
@@ -154,25 +155,15 @@ func TestHR499_OneHostedGatewayPerOrgAndOneOrgPerCertificate(t *testing.T) {
 	e := newEnv(t, billing.Team)
 	host := e.host(t, "h1", 10)
 	a, actx := e.org(t)
-	b, bctx := e.org(t)
+	_, bctx := e.org(t)
 	hosted := e.provisioned(t, a, actx, "acme")
 	if _, err := e.svc.Request(actx, "acme-two", profile.Limits{}); !errors.Is(err, domain.ErrOneOnly) {
 		t.Fatalf("second hosted gateway: %v", err)
 	}
-	// Another org may use the slug, but never on the same host: one name,
-	// one process.
-	if _, err := e.svc.Request(bctx, "acme", profile.Limits{}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := e.svc.ProvisionOrg(context.Background(), b); !errors.Is(err, domain.ErrNoCapacity) {
-		t.Fatalf("a second acme on one host: %v", err)
-	}
-	other := e.host(t, "h2", 10)
-	if n, err := e.svc.ProvisionOrg(context.Background(), b); err != nil || n != 1 {
-		t.Fatalf("b on the second host: %d %v", n, err)
-	}
-	if as, err := e.svc.Assignments(context.Background(), other, "test"); err != nil || len(as) != 1 || as[0].Org != b || as[0].Hostname != "acme.gw.h2.example.test" {
-		t.Fatalf("second host runs %+v %v", as, err)
+	// A slug in use names no other org's process, on any host (D222).
+	e.host(t, "h2", 10)
+	if _, err := e.svc.Request(bctx, "acme", profile.Limits{}); !errors.Is(err, domain.ErrSlugTaken) {
+		t.Fatalf("a second acme: %v", err)
 	}
 	tok, err := e.svc.PullToken(context.Background(), host, a, hosted)
 	if err != nil {
@@ -382,6 +373,9 @@ func TestTenancy_hosted_gateways(t *testing.T) {
 	if n := count(a, "SELECT count(*) FROM pc.hosting_host_certs"); n != 0 {
 		t.Fatalf("a tenant transaction sees %d host certificates", n)
 	}
+	if n := count(a, "SELECT count(*) FROM pc.hosting_slugs"); n != 0 {
+		t.Fatalf("a tenant transaction sees %d slugs", n)
+	}
 }
 
 // enrolledGateway provisions org's hosted gateway on host, pulls its token
@@ -491,7 +485,7 @@ func TestHR499_OnlyTheProvisionersEnrollmentGetsTheHostname(t *testing.T) {
 }
 
 // race provisions the orgs at once and counts who was placed and who found
-// no room; every other outcome fails.
+// was refused; every other outcome fails.
 func (e *env) race(t *testing.T, orgs ...ids.OrgID) (placed, refused int) {
 	t.Helper()
 	errs := make([]error, len(orgs))
@@ -504,7 +498,7 @@ func (e *env) race(t *testing.T, orgs ...ids.OrgID) (placed, refused int) {
 		switch {
 		case err == nil:
 			placed++
-		case errors.Is(err, domain.ErrNoCapacity):
+		case errors.Is(err, domain.ErrNoCapacity), errors.Is(err, domain.ErrSlugTaken):
 			refused++
 		default:
 			t.Fatal(err)
@@ -513,22 +507,60 @@ func (e *env) race(t *testing.T, orgs ...ids.OrgID) (placed, refused int) {
 	return placed, refused
 }
 
-// TestT216_TwoOrgsRacingForOneSlugNeverShareAHost: placements on a host are
-// one after the other, so <slug>.gw.<domain> names one process (D219).
+// TestT216_TwoOrgsRacingForOneSlugGetOneClaim: two orgs racing for a slug on
+// different hosts: one is placed, the other fails with SLUG_TAKEN and no
+// gateway under that name. The slug is free again once the process stopped
+// (D222).
 //
 // Covers: PN-010.4
-func TestT216_TwoOrgsRacingForOneSlugNeverShareAHost(t *testing.T) {
+func TestT216_TwoOrgsRacingForOneSlugGetOneClaim(t *testing.T) {
 	e := newEnv(t, billing.Team)
-	e.host(t, "h1", 10)
+	h1, h2 := e.host(t, "h1", 1), e.host(t, "h2", 1)
 	a, actx := e.org(t)
 	b, bctx := e.org(t)
-	for _, ctx := range []context.Context{actx, bctx} {
-		if _, err := e.svc.Request(ctx, "acme", profile.Limits{}); err != nil {
+	reqs := map[ids.OrgID]ids.UUID{}
+	for org, ctx := range map[ids.OrgID]context.Context{a: actx, b: bctx} {
+		h, err := e.svc.Request(ctx, "acme", profile.Limits{})
+		if err != nil {
 			t.Fatal(err)
 		}
+		reqs[org] = h.ID
 	}
 	if placed, refused := e.race(t, a, b); placed != 1 || refused != 1 {
 		t.Fatalf("placed %d, refused %d", placed, refused)
+	}
+	winner, loser, wctx, lctx := a, b, actx, bctx
+	if h, err := e.svc.Get(actx, reqs[a]); err != nil {
+		t.Fatal(err)
+	} else if h.State == domain.StateFailed {
+		winner, loser, wctx, lctx = b, a, bctx, actx
+	}
+	lost, err := e.svc.Get(lctx, reqs[loser])
+	if err != nil || lost.State != domain.StateFailed || lost.Failure == nil || *lost.Failure != "SLUG_TAKEN" || lost.GatewayID != nil {
+		t.Fatalf("the loser: %+v %v", lost, err)
+	}
+	won, err := e.svc.Get(wctx, reqs[winner])
+	if err != nil || won.State != domain.StateProvisioned || won.HostID == nil {
+		t.Fatalf("the winner: %+v %v", won, err)
+	}
+	if _, err := e.svc.Deprovision(wctx, won.ID, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Request(lctx, "acme", profile.Limits{}); !errors.Is(err, domain.ErrSlugTaken) {
+		t.Fatalf("a slug held until the process stopped: %v", err)
+	}
+	host := h1
+	if *won.HostID == h2.Host {
+		host = h2
+	}
+	if err := e.svc.Stopped(context.Background(), host, winner, won.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Request(lctx, "acme", profile.Limits{}); err != nil {
+		t.Fatalf("a freed slug: %v", err)
+	}
+	if n, err := e.svc.ProvisionOrg(context.Background(), loser); err != nil || n != 1 {
+		t.Fatalf("placed %d: %v", n, err)
 	}
 }
 
@@ -552,25 +584,21 @@ func TestT218_RacingPlacementsStayWithinCapacity(t *testing.T) {
 }
 
 // TestHR502_AReissuedTokenEndsTheOneBefore: a token not pulled in time is
-// replaced, and the old one no longer enrolls (D219).
+// replaced, and only the newest one enrolls, though the old row has not
+// expired (D222).
 //
 // Covers: PN-010.4
 func TestHR502_AReissuedTokenEndsTheOneBefore(t *testing.T) {
 	e := newEnv(t, billing.Team)
-	e.host(t, "h1", 10)
+	host := e.host(t, "h1", 10)
 	a, actx := e.org(t)
 	hosted := e.provisioned(t, a, actx, "acme")
 	before, err := e.svc.Get(actx, hosted)
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin := e.admin.Pgx()
-	if _, err := admin.Exec(context.Background(), `UPDATE pc.hosted_gateways SET updated_at = now() - interval '11 minutes' WHERE id = $1`, hosted); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := admin.Exec(context.Background(), `UPDATE pc.gateway_enrollment_tokens SET created_at = now() - interval '11 minutes', expires_at = now() + interval '4 minutes' WHERE id = $1`, *before.EnrollmentID); err != nil {
-		t.Fatal(err)
-	}
+	e.d.AdminExec(t, `UPDATE pc.hosted_gateways SET updated_at = now() - interval '11 minutes' WHERE id = $1`, hosted)
+	e.d.AdminExec(t, `UPDATE pc.gateway_enrollment_tokens SET created_at = now() - interval '11 minutes', expires_at = now() + interval '4 minutes' WHERE id = $1`, *before.EnrollmentID)
 	if _, err := e.svc.ProvisionOrg(context.Background(), a); err != nil {
 		t.Fatal(err)
 	}
@@ -581,12 +609,23 @@ func TestHR502_AReissuedTokenEndsTheOneBefore(t *testing.T) {
 	if after.EnrollmentID == nil || *after.EnrollmentID == *before.EnrollmentID {
 		t.Fatal("no new token")
 	}
-	var live bool
-	if err := admin.QueryRow(context.Background(), `SELECT expires_at > now() FROM pc.gateway_enrollment_tokens WHERE id = $1`, *before.EnrollmentID).Scan(&live); err != nil {
+	// A live token of that gateway that is not the newest: what the replaced
+	// one is, in a form the test can present.
+	old, err := credential.New(credential.GatewayEnrollmentToken, "", a)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if live {
-		t.Fatal("the replaced token is still live")
+	e.d.AdminExec(t, `INSERT INTO pc.gateway_enrollment_tokens (org_id, id, gateway_id, token_hash, created_by, expires_at)
+		VALUES ($1, $2, $3, $4, 'test', now() + interval '10 minutes')`, a, ids.NewV7(), *after.GatewayID, old.Hash())
+	if _, err := e.gws.Enroll(context.Background(), old.Reveal(), csr(t)); !errors.Is(err, gwapp.ErrEnrollment) {
+		t.Fatalf("a replaced token: %v", err)
+	}
+	tok, err := e.svc.PullToken(context.Background(), host, a, hosted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.gws.Enroll(context.Background(), tok.Secret.Reveal(), csr(t)); err != nil {
+		t.Fatalf("the newest token: %v", err)
 	}
 }
 

@@ -2193,6 +2193,12 @@ type PcHostingHostCert struct {
 	CreatedAt     time.Time
 }
 
+type PcHostingSlug struct {
+	Slug      string
+	HostedID  ids.UUID
+	ClaimedAt time.Time
+}
+
 type PcIdentityDeletionGuard struct {
 	IdentityHash []byte
 	State        string

@@ -42,9 +42,10 @@ var (
 	ErrOneOnly  = pcerr.New(pcerr.AlreadyExists, "HOSTED_GATEWAY_EXISTS", "the org already has a hosted gateway")
 	ErrQuota    = pcerr.New(pcerr.ResourceExhausted, "HOSTED_GATEWAY_QUOTA", "the requested resources exceed the plan's quota")
 	ErrNotFound = pcerr.New(pcerr.NotFound, "HOSTED_GATEWAY_NOT_FOUND", "hosted gateway not found")
-	// ErrNoCapacity: no active host has room for it (or every one with room
-	// runs its slug); the request stays queued.
+	// ErrNoCapacity: no active host has room for it; the request stays queued.
 	ErrNoCapacity = pcerr.New(pcerr.Unavailable, "HOSTING_NO_CAPACITY", "no hosting host can take it")
+	// ErrSlugTaken: another hosted gateway holds the slug (D222).
+	ErrSlugTaken = pcerr.New(pcerr.AlreadyExists, "SLUG_TAKEN", "another hosted gateway uses this slug")
 )
 
 var slugRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)

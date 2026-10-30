@@ -103,6 +103,10 @@ func (w *provisionOrgWorker) Work(ctx context.Context, job *river.Job[ProvisionO
 		w.log.WarnContext(ctx, "hosting.no_capacity", slog.String("org", job.Args.Org.String()))
 		return nil // the next run tries again
 	}
+	if errors.Is(err, domain.ErrSlugTaken) {
+		w.log.WarnContext(ctx, "hosting.slug_taken", slog.String("org", job.Args.Org.String()))
+		return nil // the record is FAILED: nothing to retry
+	}
 	return err
 }
 
@@ -168,25 +172,56 @@ func (s *Service) ProvisionOrg(ctx context.Context, org ids.OrgID) (int, error) 
 	return n, nil
 }
 
+// errNotRequested ends a placement whose record moved on, so its slug claim
+// goes with it.
+var errNotRequested = errors.New("hosted gateway no longer requested")
+
 // placeAndProvision places a requested hosted gateway on a host and
 // provisions it there. It reports false if another worker got there first.
+// A slug another record holds fails the request (D222).
 func (s *Service) placeAndProvision(ctx context.Context, h dbq.PcHostedGateway) (bool, error) {
-	done := false
-	err := s.place(ctx, h.Slug, func(host dbq.PcHostingHost) error {
+	err := s.place(ctx, h, func(host dbq.PcHostingHost) error {
 		return s.pool.InTenantTx(ctx, h.OrgID, func(ctx context.Context, tx db.TenantTx) error {
 			q := dbq.New(tx)
-			if state, err := q.OrgState(ctx, h.OrgID); err != nil || state != "ACTIVE" {
+			if state, err := q.OrgState(ctx, h.OrgID); err != nil {
 				return err
+			} else if state != "ACTIVE" {
+				return errNotRequested
 			}
 			cur, err := q.LockHostedGateway(ctx, h.OrgID, h.ID)
-			if err != nil || cur.State != domain.StateRequested {
+			if err != nil {
 				return err
 			}
-			done = true
+			if cur.State != domain.StateRequested {
+				return errNotRequested
+			}
 			return s.provision(ctx, tx, q, cur, host)
 		})
 	})
-	return done, err
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, errNotRequested):
+		return false, nil
+	case errors.Is(err, domain.ErrSlugTaken):
+		if ferr := s.failTaken(ctx, h); ferr != nil {
+			return false, ferr
+		}
+	}
+	return false, err
+}
+
+// failTaken ends a request that lost its slug. The org may ask for another.
+func (s *Service) failTaken(ctx context.Context, h dbq.PcHostedGateway) error {
+	return s.pool.InTenantTx(ctx, h.OrgID, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		reason := domain.ErrSlugTaken.Reason()
+		n, err := q.FailHostedGateway(ctx, &reason, h.OrgID, h.ID)
+		if err != nil || n == 0 {
+			return err
+		}
+		return record(ctx, tx, systemActor, "hosted_gateway.failed", h.ID, map[string]string{"reason": reason})
+	})
 }
 
 // hostedGatewayName is the gateway record's name: "hosted-" and the slug,
@@ -227,11 +262,6 @@ func (s *Service) reissue(ctx context.Context, tx db.TenantTx, q *dbq.Queries, h
 	if h.GatewayID == nil {
 		return nil
 	}
-	if h.EnrollmentID != nil { // the token it replaces ends now, not at its TTL
-		if err := q.ExpireHostedEnrollmentToken(ctx, h.OrgID, *h.EnrollmentID); err != nil {
-			return err
-		}
-	}
 	sealed, enrollment, err := s.mint(ctx, q, h, *h.GatewayID)
 	if err != nil {
 		return err
@@ -269,7 +299,7 @@ func (s *Service) mint(ctx context.Context, q *dbq.Queries, h dbq.PcHostedGatewa
 // host's row: the checks repeat under the lock, so two placements on one
 // host are one after the other (G0 M19 D219). Both are counted across orgs
 // through the audited lister.
-func (s *Service) place(ctx context.Context, slug string, fn func(dbq.PcHostingHost) error) error {
+func (s *Service) place(ctx context.Context, h dbq.PcHostedGateway, fn func(dbq.PcHostingHost) error) error {
 	var hosts []dbq.PcHostingHost
 	if err := s.pool.InGlobalTx(ctx, db.GlobalHosting, func(ctx context.Context, tx db.GlobalTx) error {
 		var err error
@@ -283,13 +313,13 @@ func (s *Service) place(ctx context.Context, slug string, fn func(dbq.PcHostingH
 		n    int
 	}
 	var room []load
-	for _, h := range hosts {
-		n, ok, err := s.fits(ctx, h, slug)
+	for _, host := range hosts {
+		n, ok, err := s.fits(ctx, host)
 		if err != nil {
 			return err
 		}
 		if ok {
-			room = append(room, load{h, n})
+			room = append(room, load{host, n})
 		}
 	}
 	slices.SortStableFunc(room, func(a, b load) int { return a.n - b.n })
@@ -302,8 +332,13 @@ func (s *Service) place(ctx context.Context, slug string, fn func(dbq.PcHostingH
 			} else if err != nil {
 				return err
 			}
-			if _, ok, err := s.fits(ctx, host, slug); err != nil || !ok {
+			if _, ok, err := s.fits(ctx, host); err != nil || !ok {
 				return err
+			}
+			if n, err := dbq.New(tx).ClaimHostingSlug(gctx, h.Slug, h.ID); err != nil {
+				return err
+			} else if n == 0 {
+				return domain.ErrSlugTaken
 			}
 			placed = true
 			return fn(host)
@@ -316,14 +351,10 @@ func (s *Service) place(ctx context.Context, slug string, fn func(dbq.PcHostingH
 }
 
 // fits counts the host's hosted gateways and reports whether it can take
-// one more with this slug.
-func (s *Service) fits(ctx context.Context, h dbq.PcHostingHost, slug string) (int, bool, error) {
-	refs, err := s.assigned(ctx, h.ID, "")
-	if err != nil || len(refs) >= int(h.Capacity) {
-		return len(refs), false, err
-	}
-	same, err := s.assigned(ctx, h.ID, slug)
-	return len(refs), err == nil && len(same) == 0, err
+// one more.
+func (s *Service) fits(ctx context.Context, h dbq.PcHostingHost) (int, bool, error) {
+	refs, err := s.assigned(ctx, h.ID)
+	return len(refs), err == nil && len(refs) < int(h.Capacity), err
 }
 
 // through the audited lister.
@@ -332,17 +363,11 @@ func (s *Service) fits(ctx context.Context, h dbq.PcHostingHost, slug string) (i
 // host capacity (migration 00228).
 const maxPerHost = 1000
 
-// assigned lists the (org, hosted gateway) pairs placed on one host, only
-// those with slug when it is set (lister hosting_assigned, its own audited
-// global transaction).
-func (s *Service) assigned(ctx context.Context, host ids.UUID, slug string) ([]db.OrgRef, error) {
+// assigned lists the (org, hosted gateway) pairs placed on one host (lister
+// hosting_assigned, its own audited global transaction).
+func (s *Service) assigned(ctx context.Context, host ids.UUID) ([]db.OrgRef, error) {
 	var out []db.OrgRef
 	err := s.pool.InGlobalTx(ctx, db.GlobalCrossOrgList, func(ctx context.Context, tx db.GlobalTx) error {
-		// The slug narrows the purpose for placement only; it is set for
-		// this transaction alone, like the host (ListerParams.HostID).
-		if _, err := tx.Exec(ctx, "SELECT set_config('app.hosting_slug', $1::text, true)", slug); err != nil {
-			return err
-		}
 		var err error
 		out, err = db.CrossOrgListIn(ctx, tx, listAssigned, maxPerHost, db.ListerParams{HostID: host})
 		return err

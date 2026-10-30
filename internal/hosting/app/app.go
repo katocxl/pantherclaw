@@ -124,6 +124,15 @@ func (s *Service) Request(ctx context.Context, slug string, asked profile.Limits
 	if err != nil {
 		return dbq.PcHostedGateway{}, err
 	}
+	if err := s.pool.InGlobalTx(ctx, db.GlobalHosting, func(ctx context.Context, tx db.GlobalTx) error {
+		held, err := dbq.New(tx).HostingSlugHeld(ctx, slug)
+		if err == nil && held {
+			return domain.ErrSlugTaken
+		}
+		return err
+	}); err != nil {
+		return dbq.PcHostedGateway{}, err
+	}
 	var out dbq.PcHostedGateway
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)

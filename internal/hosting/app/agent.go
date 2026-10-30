@@ -95,7 +95,7 @@ func (s *Service) Assignments(ctx context.Context, id HostIdentity, agentVersion
 	if err != nil {
 		return nil, err
 	}
-	refs, err := s.assigned(ctx, id.Host, "")
+	refs, err := s.assigned(ctx, id.Host)
 	if err != nil {
 		return nil, err
 	}
@@ -218,17 +218,21 @@ func rolloutTarget(reported string, minimum gwapp.Version) *string {
 }
 
 // Stopped records that the host stopped and removed a deprovisioned
-// process. Its gateway was revoked before (HR-503).
+// process, and frees its slug. Its gateway was revoked before (HR-503).
 func (s *Service) Stopped(ctx context.Context, id HostIdentity, org ids.OrgID, hosted ids.UUID) error {
-	return s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		n, err := dbq.New(tx).FinishDeprovisionHostedGateway(ctx, org, hosted, &id.Host)
-		if err != nil {
-			return err
-		}
-		if n == 0 {
-			return ErrNotAssigned
-		}
-		return record(ctx, tx, hostActor(id.Host), "hosted_gateway.stopped", hosted, nil)
+	return s.pool.InGlobalTx(ctx, db.GlobalHosting, func(gctx context.Context, global db.GlobalTx) error {
+		return s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+			slug, err := dbq.New(tx).FinishDeprovisionHostedGateway(ctx, org, hosted, &id.Host)
+			if db.IsNoRows(err) {
+				return ErrNotAssigned
+			} else if err != nil {
+				return err
+			}
+			if err := dbq.New(global).ReleaseHostingSlug(gctx, slug, hosted); err != nil {
+				return err
+			}
+			return record(ctx, tx, hostActor(id.Host), "hosted_gateway.stopped", hosted, nil)
+		})
 	})
 }
 
