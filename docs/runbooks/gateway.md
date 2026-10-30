@@ -184,3 +184,42 @@ The result shows in `pclaw connection health` and, once passed, as the last succ
 - It records the read's operation. A pass is evidence for that operation only, never for the other routes the verifier protects. Write routes stay `PARTIAL`.
 
 **Health** (F358) shows the connection and its active credential, each gateway's circuit, the permissions its credential is used for, its latest and last successful tests, and the failed and `UNKNOWN` outcomes of the last 24 hours with the latest failure and success. An action the agent ran itself (`delegated`) is counted apart and never as a success: PantherClaw never learns its result. A test is shown with its kind; a `credential` test checks only the configuration and never reaches the target. It also lists the agents whose runs used the connection in the last 30 days, and the agents whose active grants allow an operation it serves (they would stop working without it), at most 50 each, but only to readers who may read agents org-wide; for anyone else both lists are marked hidden.
+
+## 9. Add a hosting host (PantherClaw operator, G0 M19)
+
+A hosting host runs PantherClaw-hosted gateways, one process per org ([ADR-0041](../adr/0041-hosted-per-org-gateway-pool.md)). The operator records the host and issues its agent's certificate. That identity has no organization authority (HR-500), and nothing here touches an org. `pantherclaw-host` has no release build yet, so build it from `cmd/pantherclaw-host`.
+
+1. **On the host,** make the agent's key and a certificate request. The key stays in the identity directory; the request is no secret.
+
+   ```bash
+   pantherclaw-host keygen --identity-dir /var/lib/pantherclaw-host --csr-out host.csr
+   ```
+
+2. **With the server's operator configuration,** record the host and issue its certificate (D226).
+
+   ```bash
+   pantherclaw-server hosting add-host --config server.json --name host-1 --domain example.com \
+     --capacity 20 --milli-cpus 8000 --memory-mib 16384 --csr host.csr --bundle-out host-1.bundle
+   ```
+
+   - `--domain`: agents reach an org as `<slug>.gw.<domain>`.
+   - `--capacity`, `--milli-cpus`, `--memory-mib`: positive; capacity is the most hosted gateways the host runs.
+   - `--bundle-out`: a new file. The command refuses to overwrite one, and removes it again if the host is not recorded. The bundle holds no secret.
+
+   The command prints the host id and the `--ca-sha256` value for the next step.
+
+3. **On the host,** install the bundle, pinned to the printed CA fingerprint. Take the fingerprint from the command's output, not from the bundle.
+
+   ```bash
+   pantherclaw-host install --identity-dir /var/lib/pantherclaw-host --cert host-1.bundle --ca-sha256 sha256:<hex>
+   ```
+
+4. **Start the agent.**
+
+   ```bash
+   pantherclaw-host serve --config host.json
+   ```
+
+   The configuration is a JSON file plus `PC_HOST_*` variables, and it holds no secret: `api_url` (the server's gateway listener, HTTPS), `ca_sha256`, `identity_dir`, `private_root` (a tmpfs), `domain` (the one given to `add-host`), `runtime` (`runc` or `runsc`), `images` (each pinned by digest) and `default_version`.
+
+Never start a hosted gateway container by hand. The agent removes every container that no assignment names (D228).

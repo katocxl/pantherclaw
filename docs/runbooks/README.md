@@ -5,7 +5,7 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | Runbook | Milestone | Purpose |
 |---|---|---|
 | [key-rotation.md](key-rotation.md) | M1 / M6 / M7 / M13 | Rotate signing keys, DEKs, KEKs, gateway broker keys and sealed credentials; the internal CA; the epoch bump after a restore |
-| [gateway.md](gateway.md) | M6 | Enroll, renew, check and revoke gateways |
+| [gateway.md](gateway.md) | M6 | Enroll, renew, check and revoke gateways; add a hosting host (M19) |
 | [kill-switch.md](kill-switch.md) | M6 | Engage and restore the org-wide emergency stop |
 | [sandbox.md](sandbox.md) | M9 | Run an agent in the containment sandbox, read its closures, apply its changes (patch only), clean up |
 | [evidence-verification.md](evidence-verification.md) | M7 | Verify bundles and packs offline; investigate an evidence integrity failure and resume checkpointing |
