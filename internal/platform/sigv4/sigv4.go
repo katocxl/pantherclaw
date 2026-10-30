@@ -13,6 +13,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -44,17 +45,40 @@ var (
 	ErrNoScope       = errors.New("sigv4: region and service are required")
 	ErrNoHost        = errors.New("sigv4: request has no host")
 	ErrPayloadHash   = errors.New("sigv4: payload hash must be hex SHA-256 or UNSIGNED-PAYLOAD")
+	// ErrDotSegment refuses an S3 path with a "." or ".." segment: S3 never
+	// normalises it, but a proxy or an S3-compatible server might, and then
+	// reads or writes another object than the one signed.
+	ErrDotSegment = errors.New("sigv4: an S3 path never has a . or .. segment")
 )
 
 // Credentials are the key pair, and for a temporary session its token.
+// The secret and the token stay out of every rendering the package controls:
+// fmt (%v, %s, %+v, %#v), slog (LogValue) and encoding/json (json:"-").
+// Copying the fields out is the caller's responsibility.
 type Credentials struct {
 	AccessKeyID     string
-	SecretAccessKey string
-	SessionToken    string
+	SecretAccessKey string `json:"-"`
+	SessionToken    string `json:"-"`
 }
 
-// String never prints the secret or the session token.
+const redacted = "[REDACTED]"
+
+// String shows the access key id only.
 func (c Credentials) String() string { return "sigv4.Credentials{" + c.AccessKeyID + "}" }
+
+// GoString keeps the secret and the token out of %#v.
+func (c Credentials) GoString() string {
+	return `sigv4.Credentials{AccessKeyID:"` + c.AccessKeyID + `", SecretAccessKey:"` + redacted + `", SessionToken:"` + redacted + `"}`
+}
+
+// LogValue keeps the secret and the token out of every slog handler.
+func (c Credentials) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("access_key_id", c.AccessKeyID),
+		slog.String("secret_access_key", redacted),
+		slog.Bool("session_token", c.SessionToken != ""),
+	)
+}
 
 // Signer holds the credential scope. The zero value is not usable.
 type Signer struct {
@@ -98,6 +122,9 @@ func (s Signer) Sign(req *http.Request, creds Credentials, payloadHash string, n
 	}
 	if host == "" {
 		return ErrNoHost
+	}
+	if s.S3 && hasDotSegment(req.URL.Path) {
+		return ErrDotSegment
 	}
 	if req.Header == nil {
 		req.Header = http.Header{}
@@ -334,8 +361,35 @@ func uriEncode(s string) string {
 
 // trimAll trims a header value and collapses runs of spaces, tabs and folded
 // line breaks into one space.
+//
+// Only ASCII space and tab count, plus CR and LF of a folded line: AWS leaves
+// Unicode white space (U+00A0, U+0085) as it is.
 func trimAll(v string) string {
-	return strings.Join(strings.Fields(v), " ")
+	var b strings.Builder
+	space := false
+	for i := 0; i < len(v); i++ {
+		switch c := v[i]; c {
+		case ' ', '\t', '\r', '\n':
+			space = b.Len() > 0
+		default:
+			if space {
+				b.WriteByte(' ')
+				space = false
+			}
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
+}
+
+// hasDotSegment reports a "." or ".." segment in a decoded path.
+func hasDotSegment(p string) bool {
+	for _, seg := range strings.Split(p, "/") {
+		if seg == "." || seg == ".." {
+			return true
+		}
+	}
+	return false
 }
 
 func (s Signer) scope(t time.Time) string {
