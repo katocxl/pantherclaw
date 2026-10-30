@@ -76,3 +76,12 @@ UPDATE pc.keys
 SET wrapped_private_key = sqlc.arg(wrapped_private_key), kek_id = sqlc.arg(kek_id)
 WHERE org_id = sqlc.arg(org_id) AND kid = sqlc.arg(kid)
   AND wrapped_private_key = sqlc.arg(old_wrapped_private_key) AND kek_id = sqlc.arg(old_kek_id);
+
+-- name: ListStoredKEKIDs :many
+-- The distinct kek_id values of an org's stored keys, for the start-up
+-- check that every one has a provider (D165). Revoked signing keys are
+-- never unwrapped, so they don't count.
+SELECT k.kek_id FROM pc.keys AS k WHERE k.org_id = sqlc.arg(org_id) AND k.state <> 'REVOKED'
+UNION
+SELECT d.kek_id FROM pc.deks AS d WHERE d.org_id = sqlc.arg(org_id)
+ORDER BY kek_id;

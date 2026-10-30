@@ -11,13 +11,15 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestOpenBaoProviderWrapUnwrap(t *testing.T) {
 	ctx := context.Background()
 	f := newTransitFake(t)
-	p := f.provider(t)
+	p := baoProvider(t, f)
 	if p.CurrentKEK() != "bao:pc-kek" {
 		t.Fatalf("CurrentKEK = %q", p.CurrentKEK())
 	}
@@ -49,8 +51,8 @@ func TestTransitClientAppRoleAndRelogin(t *testing.T) {
 	ctx := context.Background()
 	f := newTransitFake(t)
 	c, err := NewTransitClient(OpenBaoConfig{
-		Address: f.srv.URL, KeyName: "pc-kek",
-		Auth: OpenBaoAuth{Kind: AuthAppRole, RoleID: f.roleID, SecretIDFile: writeSecret(t, "sid", f.secretID)},
+		Address: f.Srv.URL, KeyName: "pc-kek",
+		Auth: OpenBaoAuth{Kind: AuthAppRole, RoleID: f.RoleID, SecretIDFile: writeSecret(t, "sid", f.SecretID)},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -59,20 +61,20 @@ func TestTransitClientAppRoleAndRelogin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.logins.Load() != 1 {
-		t.Fatalf("logins = %d", f.logins.Load())
+	if f.Logins.Load() != 1 {
+		t.Fatalf("logins = %d", f.Logins.Load())
 	}
 	// A refused token logs in once more.
-	f.token = "s.rotated"
+	f.Token = "s.rotated"
 	pt, err := c.Decrypt(ctx, ct)
 	if err != nil || string(pt) != "hello" {
 		t.Fatalf("Decrypt = %q, %v", pt, err)
 	}
-	if f.logins.Load() != 2 {
-		t.Fatalf("logins after a refused token = %d", f.logins.Load())
+	if f.Logins.Load() != 2 {
+		t.Fatalf("logins after a refused token = %d", f.Logins.Load())
 	}
 	// Rewrap moves a ciphertext to the newest key version.
-	f.rotate()
+	f.Rotate()
 	re, err := c.Rewrap(ctx, ct)
 	if err != nil || !strings.HasPrefix(re, "vault:v2:") {
 		t.Fatalf("Rewrap = %q, %v", re, err)
@@ -86,7 +88,7 @@ func TestTransitClientAppRoleAndRelogin(t *testing.T) {
 func TestHR486_OpenBaoOutageFailsClosed(t *testing.T) {
 	ctx := context.Background()
 	f := newTransitFake(t)
-	bao := f.provider(t)
+	bao := baoProvider(t, f)
 	fp, err := NewFileProvider([]string{kekFile(t, t.TempDir(), "kek")})
 	if err != nil {
 		t.Fatal(err)
@@ -100,7 +102,7 @@ func TestHR486_OpenBaoOutageFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.down.Store(true)
+	f.Down.Store(true)
 	if _, err := r.Wrap(ctx, []byte("dek"), aad); !errors.Is(err, ErrKeyServiceUnavailable) {
 		t.Fatalf("wrap during an outage: %v", err)
 	}
@@ -112,7 +114,7 @@ func TestHR486_OpenBaoOutageFailsClosed(t *testing.T) {
 	if _, err := fp.Unwrap(ctx, w, aad); !errors.Is(err, ErrUnwrap) {
 		t.Fatalf("file provider unwrapped an OpenBao value: %v", err)
 	}
-	f.down.Store(false)
+	f.Down.Store(false)
 	if pt, err := r.Unwrap(ctx, w, aad); err != nil || string(pt) != "dek" {
 		t.Fatalf("unwrap after recovery = %q, %v", pt, err)
 	}
@@ -125,7 +127,7 @@ func TestHR486_OpenBaoOutageFailsClosed(t *testing.T) {
 
 // Covers: HR-488
 func TestHR488_OpenBaoAddressAndTLS(t *testing.T) {
-	ok := []string{"https://bao.example:8200", "https://bao.example", "http://127.0.0.1:8200", "http://localhost:8200", "http://[::1]:8200"}
+	ok := []string{"https://bao.example:8200", "https://bao.example", "http://127.0.0.1:8200", "http://127.8.9.10:8200", "http://[::1]:8200"}
 	for _, a := range ok {
 		if _, err := baoBaseURL(a); err != nil {
 			t.Errorf("%s refused: %v", a, err)
@@ -134,6 +136,8 @@ func TestHR488_OpenBaoAddressAndTLS(t *testing.T) {
 	bad := []string{
 		"http://bao.example:8200", "http://10.0.0.5:8200", "ftp://bao.example", "https://u:p@bao.example",
 		"https://bao.example/v1/transit", "https://bao.example?x=1", "bao.example:8200", "",
+		// A name is resolved, so even localhost needs TLS (D165).
+		"http://localhost:8200", "http://LOCALHOST:8200", "http://127.0.0.1.nip.io:8200", "http://[::ffff:10.0.0.1]:8200",
 	}
 	for _, a := range bad {
 		if _, err := baoBaseURL(a); err == nil {
@@ -170,9 +174,9 @@ func TestHR488_OpenBaoAddressAndTLS(t *testing.T) {
 	// TLS: an https address with an untrusted certificate is refused; the
 	// configured CA bundle makes it work.
 	f := newTransitFake(t)
-	tlsSrv := httptest.NewTLSServer(http.HandlerFunc(f.serve))
+	tlsSrv := httptest.NewTLSServer(f)
 	t.Cleanup(tlsSrv.Close)
-	cfg := f.tokenConfig(t)
+	cfg := tokenConfig(t, f)
 	cfg.Address = strings.Replace(tlsSrv.URL, "127.0.0.1", "localhost", 1)
 	untrusted, err := NewTransitClient(cfg)
 	if err != nil {
@@ -216,7 +220,7 @@ func TestRouterRoutesByKEKPrefix(t *testing.T) {
 	if fileRouter.CurrentKEK() != PrefixFile+fp.CurrentKEK() {
 		t.Fatalf("file router CurrentKEK = %q", fileRouter.CurrentKEK())
 	}
-	r, err := NewRouter(PrefixOpenBao, fp, f.provider(t))
+	r, err := NewRouter(PrefixOpenBao, fp, baoProvider(t, f))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +276,7 @@ func TestHR487_RewrapVerifiesBeforeReturning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, _ := NewRouter(PrefixOpenBao, fp, f.provider(t))
+	r, _ := NewRouter(PrefixOpenBao, fp, baoProvider(t, f))
 	nw, kek, err := Rewrap(ctx, r, old, aad)
 	if err != nil {
 		t.Fatal(err)
@@ -290,7 +294,7 @@ func TestHR487_RewrapVerifiesBeforeReturning(t *testing.T) {
 		}
 	}
 	// An outage mid-way returns nothing to write.
-	f.down.Store(true)
+	f.Down.Store(true)
 	if got, _, err := Rewrap(ctx, r, old, aad); err == nil || got != nil {
 		t.Fatalf("Rewrap during an outage = %d bytes, %v", len(got), err)
 	}
@@ -303,7 +307,7 @@ func TestServiceConfigFromConfig(t *testing.T) {
 	if err != nil || !strings.HasPrefix(r.CurrentKEK(), PrefixFile) {
 		t.Fatalf("file: %v, %v", r, err)
 	}
-	r, err = FromConfig(ServiceConfig{Kind: ServiceOpenBao, OpenBao: f.tokenConfig(t)}, nil)
+	r, err = FromConfig(ServiceConfig{Kind: ServiceOpenBao, OpenBao: tokenConfig(t, f)}, nil)
 	if err != nil || r.CurrentKEK() != "bao:pc-kek" {
 		t.Fatalf("openbao: %v, %v", r, err)
 	}
@@ -356,5 +360,65 @@ func TestOpenBaoReal(t *testing.T) {
 	}
 	if _, err := c.Rewrap(ctx, string(w[2+len(p.kid):])); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Covers: HR-486
+func TestTransitClientConcurrentCallersShareOneLogin(t *testing.T) {
+	f := newTransitFake(t)
+	f.Delay = 200 * time.Millisecond
+	c, err := NewTransitClient(OpenBaoConfig{
+		Address: f.Srv.URL, KeyName: "pc-kek",
+		Auth: OpenBaoAuth{Kind: AuthAppRole, RoleID: f.RoleID, SecretIDFile: writeSecret(t, "sid", f.SecretID)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	errs := make(chan error, 20)
+	for range 20 {
+		wg.Go(func() {
+			_, err := c.Encrypt(context.Background(), []byte("x"))
+			errs <- err
+		})
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := f.Logins.Load(); n != 1 {
+		t.Fatalf("20 concurrent callers logged in %d times; want 1", n)
+	}
+	// A cancelled first caller does not fail the others' shared login.
+	f.Token = "s.rotated"
+	c.dropToken()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := c.currentToken(ctx); err != nil {
+		t.Fatalf("login with a cancelled caller context: %v", err)
+	}
+}
+
+func TestRouterRoutesStoredKEKIDs(t *testing.T) {
+	f := newTransitFake(t)
+	fp, err := NewFileProvider([]string{kekFile(t, t.TempDir(), "kek")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	both, _ := NewRouter(PrefixOpenBao, fp, baoProvider(t, f))
+	baoOnly, _ := NewRouter(PrefixOpenBao, nil, baoProvider(t, f))
+	for id, want := range map[string][2]bool{
+		fp.CurrentKEK():              {true, false}, // pre-M18, unprefixed
+		PrefixFile + fp.CurrentKEK(): {true, false},
+		"file:kek-0000000000000000":  {false, false},
+		"bao:pc-kek":                 {true, true},
+		"bao:other-key":              {false, false},
+	} {
+		if got := [2]bool{both.Routes(id), baoOnly.Routes(id)}; got != want {
+			t.Errorf("Routes(%q) = %v, want %v", id, got, want)
+		}
 	}
 }

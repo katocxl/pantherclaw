@@ -42,7 +42,7 @@ func seedGateway(ctx context.Context, cfg *Config, pool *db.Pool, org ids.OrgID,
 	if _, err := os.Stat(out); err == nil {
 		return ids.UUID{}, fmt.Errorf("dev: %s already exists", out)
 	}
-	kp, err := keys.NewFileProvider(cfg.KEKFiles)
+	kp, err := newKeyProvider(cfg)
 	if err != nil {
 		return ids.UUID{}, err
 	}
