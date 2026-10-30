@@ -5,7 +5,12 @@ package db
 
 import (
 	"errors"
+	"fmt"
+	"io"
+	"net"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // TestHR496_PromotionHoldDecision: a moved timeline holds unless declared
@@ -87,6 +92,26 @@ func TestHR496_RunningProcessRefusesAnUnverifiedPromotion(t *testing.T) {
 		}
 		if _, err := w.observe(1, true); !errors.Is(err, ErrTimelineChanged) {
 			t.Fatalf("%s: a later connection was accepted: %v", c.name, err)
+		}
+	}
+}
+
+// TestLostConnDropsOnlyDeadConnections: only errors of the connection
+// itself make the pool drop its idle connections and retry BEGIN, never an
+// answer from the server or an application error (G0 M19 D202).
+// Covers: PN-010.7
+func TestLostConnDropsOnlyDeadConnections(t *testing.T) {
+	for _, err := range []error{
+		fmt.Errorf("begin: %w", pgconn.ErrConnClosed), io.ErrUnexpectedEOF, fmt.Errorf("x: %w", io.EOF),
+		&net.OpError{Op: "read", Err: errors.New("connection reset by peer")}, net.ErrClosed,
+	} {
+		if !lostConn(err) {
+			t.Errorf("%v: not a lost connection", err)
+		}
+	}
+	for _, err := range []error{nil, ErrLostRace, ErrTimelineChanged, &pgconn.PgError{Code: "25006"}, errors.New("app")} {
+		if lostConn(err) {
+			t.Errorf("%v: taken for a lost connection", err)
 		}
 	}
 }

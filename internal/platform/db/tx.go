@@ -130,13 +130,13 @@ func (p *Pool) InTenantTx(ctx context.Context, org ids.OrgID, fn func(context.Co
 	if org.IsZero() {
 		return ErrNoTenant
 	}
-	return pgx.BeginTxFunc(ctx, p.pool, txOptions(opts), func(tx pgx.Tx) error {
+	return p.dropDeadConns(pgx.BeginTxFunc(ctx, beginner{p.pool}, txOptions(opts), func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, tenantSetup, org.String()); err != nil {
 			return fmt.Errorf("db: set tenant: %w", err)
 		}
 		// Entitlement lookups inside the transaction are for its org (G0 UI D9).
 		return fn(tenantctx.WithOrg(ctx, org), TenantTx{queryTx: queryTx{tx: tx}, org: org})
-	})
+	}))
 }
 
 // InGlobalTx runs fn in a transaction without tenant context. The tenant
@@ -145,12 +145,12 @@ func (p *Pool) InGlobalTx(ctx context.Context, purpose GlobalPurpose, fn func(co
 	if !slices.Contains(globalPurposes, purpose) {
 		return fmt.Errorf("db: unregistered global purpose %q", purpose)
 	}
-	return pgx.BeginTxFunc(ctx, p.pool, txOptions(opts), func(tx pgx.Tx) error {
+	return p.dropDeadConns(pgx.BeginTxFunc(ctx, beginner{p.pool}, txOptions(opts), func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, globalSetup, string(purpose)); err != nil {
 			return fmt.Errorf("db: clear tenant: %w", err)
 		}
 		return fn(ctx, GlobalTx{queryTx: queryTx{tx: tx}, purpose: purpose})
-	})
+	}))
 }
 
 // The first statement of every transaction. A tenant transaction never has

@@ -7,10 +7,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"strings"
 	"sync"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Promotion detection (G0 M19 D202, D207, HR-496). A promotion moves the
@@ -247,3 +251,41 @@ func (w *timelineWatch) check(ctx context.Context, conn *pgx.Conn) error {
 // accept and refuses every connection (D213): the process is not ready
 // and not live, and must restart into the start-up hold.
 func (p *Pool) TimelineChanged() bool { return p != nil && p.timeline.isBroken() }
+
+// beginner begins transactions on the pool and survives the pooled
+// connections a failover leaves dead (D202): the pool hands out an idle
+// connection to the old primary only to find it closed, and would do so
+// once for each. When BEGIN fails that way nothing ran, so the idle
+// connections are dropped and BEGIN is tried once more on a new one, which
+// reaches the read-write primary or fails closed.
+type beginner struct{ p *pgxpool.Pool }
+
+func (b beginner) BeginTx(ctx context.Context, o pgx.TxOptions) (pgx.Tx, error) {
+	tx, err := b.p.BeginTx(ctx, o)
+	if err == nil || ctx.Err() != nil || !lostConn(err) {
+		return tx, err
+	}
+	b.p.Reset()
+	return b.p.BeginTx(ctx, o)
+}
+
+// dropDeadConns drops the pool's idle connections after a transaction
+// failed because its connection was lost, so the next one starts afresh.
+func (p *Pool) dropDeadConns(err error) error {
+	if err != nil && lostConn(err) {
+		p.pool.Reset()
+	}
+	return err
+}
+
+// lostConn reports an error of the connection itself (closed, reset, gone),
+// never one the server answered.
+func lostConn(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return false
+	}
+	var opErr *net.OpError
+	return errors.Is(err, pgconn.ErrConnClosed) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, net.ErrClosed) || errors.As(err, &opErr)
+}
