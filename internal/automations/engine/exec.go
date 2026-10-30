@@ -206,17 +206,14 @@ func (x *Exec) steps(compensation bool) []autodomain.StepSpec {
 
 // compensationPlan is what a v2 execution compensates (HR-534, D307): the
 // entries answering nodes on the taken path that ran, walking the path
-// backwards. A skipped or refused step did nothing. The plan depends only on
-// the path and the finished main attempts, so it holds still while it runs.
+// backwards. A step is left out only if none of its attempts did anything.
+// The plan depends only on the path and the finished main attempts, so it
+// holds still while it runs.
 func (x *Exec) compensationPlan() []autodomain.StepSpec {
 	var out []autodomain.StepSpec
 	for _, id := range slices.Backward(x.Path) {
 		i := slices.IndexFunc(x.Def.Do, func(s autodomain.StepSpec) bool { return s.ID == id })
-		if i < 0 {
-			continue
-		}
-		a := x.latest(i, false)
-		if a == nil || a.State == autodomain.StepSkipped || a.Refused {
+		if i < 0 || !x.acted(i) {
 			continue
 		}
 		for _, c := range x.Def.IfFails.Compensate {
@@ -226,6 +223,15 @@ func (x *Exec) compensationPlan() []autodomain.StepSpec {
 		}
 	}
 	return out
+}
+
+// acted reports whether any attempt of a main step was neither skipped nor
+// refused: a retried step that changed something and was then refused still
+// changed it.
+func (x *Exec) acted(index int) bool {
+	return slices.ContainsFunc(x.Attempts, func(a *Attempt) bool {
+		return a.Index == index && !a.Compensation && a.State != autodomain.StepSkipped && !a.Refused
+	})
 }
 
 // enter moves a v2 execution to a node.

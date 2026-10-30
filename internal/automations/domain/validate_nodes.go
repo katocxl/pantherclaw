@@ -263,6 +263,8 @@ func (v *validator) joinNode(at string, n *NodeSpec) {
 	switch {
 	case n.Join.Mode != JoinAny && n.Join.Mode != JoinAll:
 		v.err(CodeJoinInvalid, at+"/join/mode", "mode is ANY or ALL")
+	case len(from) == 0:
+		v.err(CodeJoinInvalid, at+"/join/from", "a join needs a node that leads to it")
 	case !slices.Equal(from, preds):
 		v.err(CodeJoinInvalid, at+"/join/from", "from lists exactly the nodes that lead here: %s", strings.Join(preds, ", "))
 	case n.Join.Mode == JoinAll && len(from) > 1:

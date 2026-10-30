@@ -29,6 +29,7 @@ const (
 	m21ExecutionRow  = `SELECT state, current_step, current_node, cardinality(path) FROM pc.automation_executions WHERE org_id = $1 AND id = $2`
 	m21Pointer       = `UPDATE pc.automation_executions SET current_node = $3, path = $4 WHERE org_id = $1 AND id = $2`
 	m21VersionChange = `UPDATE pc.automation_executions SET version_id = $3 WHERE org_id = $1 AND id = $2`
+	m21NodeSet       = `SELECT convalidated FROM pg_constraint WHERE conname = 'automation_step_attempts_node_set'`
 )
 
 func m21Sections(t *testing.T, name string) (up, down string) {
@@ -113,6 +114,51 @@ func TestHR530_WaitingV1ExecutionsMigrate(t *testing.T) {
 	}
 	f.mustExec(t, `UPDATE pc.automation_step_attempts SET state = 'DONE' WHERE org_id = $1 AND id = $2`, f.org, waiting)
 	f.mustExec(t, `UPDATE pc.automation_executions SET current_step = 2, state = 'RUNNING' WHERE org_id = $1 AND id = $2`, f.org, f.execution)
+}
+
+// TestHR530_DeletedOrgsDoNotStopTheUpgrade: every organisation's attempts are
+// backfilled in its own context. A DELETED organisation permits no write, so
+// its attempts stay as they are and the upgrade goes on; every new row is
+// held by the check.
+//
+// Covers: F678
+func TestHR530_DeletedOrgsDoNotStopTheUpgrade(t *testing.T) {
+	d := dbtest.New(t)
+	live := newM11EngineFixture(t, d)
+	gone := newM11EngineFixture(t, d)
+	kept, left := m5ID(), m5ID()
+	migrate := m21Back(t, d)
+
+	live.mustExec(t, m21OldAttempt, live.org, kept, live.execution, 0, "first", "DONE")
+	gone.mustExec(t, m21OldAttempt, gone.org, left, gone.execution, 0, "first", "DONE")
+	gone.mustExec(t, `UPDATE pc.orgs SET state = 'DELETED' WHERE id = $1`, gone.org)
+
+	migrate()
+
+	ctx := context.Background()
+	node := func(f m11EngineFixture, id string) (out *string) {
+		t.Helper()
+		if err := f.p.InTenantTx(ctx, f.org, func(ctx context.Context, tx db.TenantTx) error {
+			var visit int
+			return tx.QueryRow(ctx, m21AttemptRow, f.org, id).Scan(&out, &visit)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	if got := node(live, kept); got == nil || *got != "first" {
+		t.Errorf("live organisation: node %v", got)
+	}
+	if got := node(gone, left); got != nil {
+		t.Errorf("deleted organisation: node %q", *got)
+	}
+	var valid bool
+	if err := d.Pool(t, d.Migrator).Pgx().QueryRow(ctx, m21NodeSet).Scan(&valid); err != nil {
+		t.Fatal(err)
+	}
+	if valid {
+		t.Error("the check should stay NOT VALID, with old rows of deleted organisations under it")
+	}
 }
 
 // TestHR533_NodeBackfillExceptionIsGone: after 00247 no node_id change gets

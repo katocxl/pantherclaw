@@ -12,6 +12,15 @@
 -- the guard allows exactly that one change here. 00247 takes it away. The
 -- guard also fills node_id on insert, so a server still on the previous
 -- release keeps working during a rollout.
+--
+-- org_write_guard refuses every write without its organisation in context, so
+-- the backfill runs organisation by organisation. A DELETED organisation
+-- permits no write: its attempts keep a NULL node_id, nothing reads them, and
+-- the NOT VALID check holds every new or changed row instead of NOT NULL.
+--
+-- The first ALTER takes ACCESS EXCLUSIVE and holds it to commit: every engine
+-- round on attempts waits through the backfill and the unique index build,
+-- and both grow with the whole table.
 
 -- +goose Up
 ALTER TABLE pc.automation_executions
@@ -59,22 +68,35 @@ END
 $$;
 -- +goose StatementEnd
 
--- RLS holds for the owner too, so it is lifted for this one statement,
+-- RLS holds for the owner too, so it is lifted to list the organisations,
 -- inside this migration's transaction; no other session ever sees it lifted.
 ALTER TABLE pc.automation_step_attempts NO FORCE ROW LEVEL SECURITY;
-UPDATE pc.automation_step_attempts SET node_id = step_id WHERE node_id IS NULL;
+-- +goose StatementBegin
+DO $$
+DECLARE
+    org uuid;
+    org_state text;
+BEGIN
+    FOR org IN SELECT DISTINCT org_id FROM pc.automation_step_attempts WHERE node_id IS NULL LOOP
+        PERFORM set_config('app.org_id', org::text, true);
+        SELECT state INTO org_state FROM pc.orgs WHERE id = org;
+        IF org_state <> 'DELETED' THEN
+            UPDATE pc.automation_step_attempts SET node_id = step_id WHERE org_id = org AND node_id IS NULL;
+        END IF;
+    END LOOP;
+    PERFORM set_config('app.org_id', '', true);
+END
+$$;
+-- +goose StatementEnd
 ALTER TABLE pc.automation_step_attempts FORCE ROW LEVEL SECURITY;
 
--- The table holds at most 40 steps per execution, and the locks last one
--- scan and one index build, under the migrator's lock_timeout.
--- squawk-ignore adding-not-nullable-field
-ALTER TABLE pc.automation_step_attempts ALTER COLUMN node_id SET NOT NULL;
+ALTER TABLE pc.automation_step_attempts ADD CONSTRAINT automation_step_attempts_node_set CHECK (node_id IS NOT NULL) NOT VALID;
 -- squawk-ignore constraint-missing-not-valid, disallowed-unique-constraint
 ALTER TABLE pc.automation_step_attempts ADD CONSTRAINT automation_step_attempts_node UNIQUE (org_id, execution_id, compensation, node_id, attempt);
 
 -- +goose Down
 ALTER TABLE pc.automation_step_attempts DROP CONSTRAINT automation_step_attempts_node;
-ALTER TABLE pc.automation_step_attempts ALTER COLUMN node_id DROP NOT NULL;
+ALTER TABLE pc.automation_step_attempts DROP CONSTRAINT automation_step_attempts_node_set;
 
 -- +goose StatementBegin
 CREATE OR REPLACE FUNCTION pc.automation_step_attempt_guard() RETURNS trigger

@@ -179,6 +179,15 @@ func TestHR534_OnlyTheTakenPathIsCompensated(t *testing.T) {
 			t.Fatalf("compensated %v", got)
 		}
 	})
+	t.Run("a retried step that changed something and was then refused", func(t *testing.T) {
+		changed := autodomain.StepResult{State: autodomain.StepFailed, Effect: autodomain.EffectChanged}
+		refused := autodomain.StepResult{State: autodomain.StepFailed, Reason: "OUTSIDE_SCOPE", Effect: autodomain.EffectNone}
+		retried := parsed(t, strings.Replace(doc, "    next: tail\n", "    retry:\n      max_attempts: 2\n      backoff:\n        min: 1s\n        max: 1s\n    next: tail\n", 1))
+		s := run(t, retried, ticket("T-0"), engine.Stubs{"file": {changed, refused}})
+		if got := stepIDs(s, true); !slices.Equal(got, []string{"undo-file"}) {
+			t.Fatalf("compensated %v", got)
+		}
+	})
 	t.Run("a skipped step did nothing", func(t *testing.T) {
 		guarded := parsed(t, strings.Replace(doc, "    step: contain\n    with:\n      action", "    step: contain\n    when: trigger.params.ticket == \"T-1\"\n    with:\n      action", 1))
 		s := run(t, guarded, ticket("T-7"), engine.Stubs{"confirm": {failed}})

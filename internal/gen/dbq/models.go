@@ -698,7 +698,7 @@ type PcAutomationStepAttempt struct {
 	StartedAt    time.Time
 	EndedAt      *time.Time
 	WakeAt       *time.Time
-	NodeID       string
+	NodeID       *string
 	Visit        int16
 }
 

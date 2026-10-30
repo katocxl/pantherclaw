@@ -91,6 +91,7 @@ func TestV2GraphFindings(t *testing.T) {
 		{"join names a stranger", replaced(t, route, "from: [tell, record]", "from: [tell, record, approve]"), autodomain.CodeJoinInvalid},
 		{"join all of two", replaced(t, route, "mode: ANY", "mode: ALL"), autodomain.CodeJoinInvalid},
 		{"join mode", replaced(t, route, "mode: ANY", "mode: SOME"), autodomain.CodeJoinInvalid},
+		{"join with nothing before it", replaced(t, route, "nodes:\n", "nodes:\n  - id: start\n    join:\n      mode: ANY\n      from: []\n    next: route\n"), autodomain.CodeJoinInvalid},
 		{"terminal outcome", replaced(t, refund, "outcome: FAILED", "outcome: FINE"), autodomain.CodeTerminalMissing},
 		{"finish on a request", replaced(t, refund, "condition: CASE_OPENED", "condition: EFFECT_CONFIRMED"), autodomain.CodeCompletionRequestOnly},
 		{"finish on the other branch", replaced(t, refund, "      - step: file\n        condition: CASE_OPENED", "      - step: confirm\n        condition: EFFECT_CONFIRMED"), autodomain.CodeNotOnAllPaths},

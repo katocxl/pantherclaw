@@ -162,9 +162,12 @@ func attemptOf(s dbq.PcAutomationStepAttempt) (*engine.Attempt, error) {
 		return nil, err
 	}
 	a := &engine.Attempt{
-		ID: s.ID, Index: int(s.StepIndex), StepID: s.StepID, NodeID: s.NodeID, Visit: int(s.Visit), Number: int(s.Attempt), Kind: s.Kind,
+		ID: s.ID, Index: int(s.StepIndex), StepID: s.StepID, NodeID: s.StepID, Visit: int(s.Visit), Number: int(s.Attempt), Kind: s.Kind,
 		Compensation: s.Compensation, State: autodomain.StepState(s.State), Refused: s.Decision == "REFUSED",
 		Output: out, Refs: refs, Effect: autodomain.Effect(s.Effect), StartedAt: s.StartedAt,
+	}
+	if s.NodeID != nil {
+		a.NodeID = *s.NodeID
 	}
 	if s.Reason != nil {
 		a.Reason = *s.Reason
@@ -198,7 +201,7 @@ func (e *Engine) save(ctx context.Context, q *dbq.Queries, x *engine.Exec) error
 		}
 		if a.New {
 			err = q.InsertAutomationStepAttempt(ctx, dbq.InsertAutomationStepAttemptParams{
-				OrgID: x.Org, ID: a.ID, ExecutionID: x.ID, StepIndex: int16(a.Index), StepID: a.StepID, NodeID: a.NodeID, //nolint:gosec // ≤ 40
+				OrgID: x.Org, ID: a.ID, ExecutionID: x.ID, StepIndex: int16(a.Index), StepID: a.StepID, NodeID: &a.NodeID, //nolint:gosec // ≤ 40
 				Attempt: int16(a.Number), Kind: a.Kind, Compensation: a.Compensation, State: string(a.State), //nolint:gosec // ≤ 5
 				Decision: decision, Reason: nonEmpty(a.Reason), Output: out, Refs: refs, Effect: string(effectOr(a.Effect)),
 				WakeAt: timeOrNil(a.WakeAt),

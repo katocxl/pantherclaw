@@ -515,13 +515,15 @@ func prospectiveStep(def *autodomain.Definition, s autodomain.StepSpec, issuance
 // prospectivePaths walks a v2 version from its entry. History keeps no
 // trigger parameters and no step ran, so a guard reading them cannot be
 // evaluated: it is listed UNEVALUABLE and every way out is shown, each node
-// once (D301, HR-288).
+// once (D301, HR-288). Those ways out are exclusive, so all of them share one
+// grant of the day's count.
 func prospectivePaths(ctx context.Context, def *autodomain.Definition, t autodomain.TriggerRef, issuance map[string]IssueDecision,
 	grantsByDay map[string]int, day string,
 ) []SimStep {
 	f := def.Flow()
 	var out []SimStep
 	seen := map[string]bool{}
+	granted := false
 	var walk func(id, branch string)
 	walk = func(id, branch string) {
 		n := f.Node(id)
@@ -531,7 +533,15 @@ func prospectivePaths(ctx context.Context, def *autodomain.Definition, t autodom
 		seen[id] = true
 		switch n.Kind() {
 		case autodomain.NodeKindStep:
+			used := grantsByDay[day]
+			if granted {
+				grantsByDay[day]--
+			}
 			st := prospectiveStep(def, n.Spec(), issuance, grantsByDay, day)
+			if granted {
+				grantsByDay[day] = used
+			}
+			granted = granted || branch != "" && grantsByDay[day] > used
 			st.Branch = branch
 			out = append(out, st)
 		case autodomain.NodeKindBranch, autodomain.NodeKindSwitch:

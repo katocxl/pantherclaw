@@ -97,6 +97,7 @@ func TestHR530_FormatsStayApart(t *testing.T) {
 	for _, tc := range []struct{ name, doc string }{
 		{"nodes in v1", strings.Replace(sample, "limits:\n", "nodes:\n  - id: a\n    outcome: FAILED\nlimits:\n", 1)},
 		{"compensates in v1", strings.Replace(sample, "limits:\n", "if_fails:\n  compensate:\n    - id: u\n      step: revoke_grant\n      compensates: launch\nlimits:\n", 1)},
+		{"compensates on a v1 step", strings.Replace(sample, "    step: launch_run\n", "    step: launch_run\n    compensates: launch\n", 1)},
 		{"do in v2", route + "do:\n  - id: a\n    step: wait\n"},
 		{"finish_when in v2", route + "finish_when:\n  - step: approve\n    condition: APPROVAL_RESOLVED\n"},
 		{"two kinds in one node", strings.Replace(route, "    next: approved\n", "    next: approved\n    outcome: FAILED\n", 1)},

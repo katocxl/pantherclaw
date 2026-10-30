@@ -74,6 +74,53 @@ func TestReplayShowsBothBranchesOfAnUnevaluableGuard(t *testing.T) {
 	}
 }
 
+// TestReplayNeverGuessesAGuardOnWhatHistoryLacks: a guard reading parameters
+// or steps is not evaluated, even where empty values would give an answer.
+//
+// Covers: F678
+func TestReplayNeverGuessesAGuardOnWhatHistoryLacks(t *testing.T) {
+	for _, guard := range []string{
+		`has(trigger.params.ticket)`,
+		`trigger.kind != "" && "ticket" in trigger.params`,
+		`size(steps) == 0`,
+		`size(trigger) > 0`,
+		`trigger.kind == "MANUAL" || has(trigger.params.ticket)`,
+	} {
+		t.Run(guard, func(t *testing.T) {
+			steps := replaySteps(t, scheduledRefund(t, guard))
+			if !slices.Equal(simIDs(steps), []string{"size", "launch", "confirm", "file"}) || steps[0].Decision != "UNEVALUABLE" {
+				t.Fatalf("steps %+v", steps)
+			}
+		})
+	}
+}
+
+// TestOpenBranchesShareOneGrant: one would-be execution behind an open guard
+// takes one grant of the day's count, however many ways out launch.
+//
+// Covers: F678
+func TestOpenBranchesShareOneGrant(t *testing.T) {
+	d := scheduledRefund(t, `trigger.params.ticket != "T-0"`)
+	file := d.Flow().Node("file")
+	launch := d.Flow().Node("launch")
+	if file == nil || launch == nil {
+		t.Fatal("the fixture changed")
+	}
+	file.Step, file.With = launch.Step, launch.With
+	from := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	r := assurance.Replay(context.Background(), d, assurance.History{Approvers: 1}, from, from.Add(2*time.Hour))
+	if r.Forecast.ExecutionsPerDay == 0 || r.Forecast.GrantsPerDay != r.Forecast.ExecutionsPerDay {
+		t.Fatalf("forecast %+v", r.Forecast)
+	}
+	for _, s := range r.Samples {
+		for _, st := range s.Steps {
+			if st.Reason == "USAGE_EXCEEDED" {
+				t.Errorf("sample %+v", s)
+			}
+		}
+	}
+}
+
 // TestReplayFollowsAGuardItCanEvaluate: a guard on what history keeps takes
 // one way out, and the other branch is not shown.
 //

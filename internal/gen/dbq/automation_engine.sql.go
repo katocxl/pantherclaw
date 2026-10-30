@@ -1066,7 +1066,7 @@ type InsertAutomationStepAttemptParams struct {
 	ExecutionID  ids.UUID
 	StepIndex    int16
 	StepID       string
-	NodeID       string
+	NodeID       *string
 	Attempt      int16
 	Kind         string
 	Compensation bool

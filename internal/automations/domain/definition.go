@@ -501,6 +501,11 @@ func (d *Definition) checkFormat() error {
 		if d.Nodes != nil {
 			return invalid("nodes needs apiVersion %q", APIVersionV2)
 		}
+		for i := range d.Do {
+			if d.Do[i].Compensates != "" {
+				return invalid("do[%d].compensates needs apiVersion %q", i, APIVersionV2)
+			}
+		}
 		for i := range compensate {
 			if compensate[i].Compensates != "" {
 				return invalid("if_fails.compensate[%d].compensates needs apiVersion %q", i, APIVersionV2)

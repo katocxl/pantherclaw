@@ -5,6 +5,8 @@ package engine
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"sync"
 
 	"cel.dev/cel-go/cel"
@@ -67,17 +69,40 @@ func (g *guards) eval(ctx context.Context, src string, t autodomain.TriggerRef, 
 	return ok, err
 }
 
-// EvalGuard evaluates a guard outside an execution, for replays. A guard
-// that cannot be evaluated on what the trigger carries returns an error.
+// ErrGuardUnevaluable is a guard reading what a replay does not have.
+var ErrGuardUnevaluable = errors.New("guard reads what history does not keep")
+
+// EvalGuard evaluates a guard outside an execution, for replays. History
+// keeps no parameters and no step ran, so a guard reading `steps` or anything
+// of `trigger` but its kind and time is never evaluated: on empty values it
+// could answer, wrongly, instead of failing (D301).
 func EvalGuard(ctx context.Context, src string, t autodomain.TriggerRef) (bool, error) {
 	g, err := replayGuards()
 	if err != nil {
 		return false, err
 	}
+	p, err := g.program(src)
+	if err != nil {
+		return false, err
+	}
+	if !historyAnswers(p) {
+		return false, ErrGuardUnevaluable
+	}
 	return g.eval(ctx, src, t, nil)
 }
 
 var replayGuards = sync.OnceValues(newGuards)
+
+// historyAnswers reports whether a guard reads only the trigger's kind and
+// time.
+func historyAnswers(p *celenv.Program) bool {
+	steps, ok := p.Fields("steps")
+	if !ok || len(steps) > 0 {
+		return false
+	}
+	fields, ok := p.Fields("trigger")
+	return ok && !slices.ContainsFunc(fields, func(f string) bool { return f != "kind" && f != "occurred_at" })
+}
 
 // guardVars maps the trigger and outputs to CEL values: parameters keep
 // their declared types.
