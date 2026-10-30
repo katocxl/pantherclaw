@@ -204,10 +204,12 @@ func TestT199_ACustomerRuleCannotLoosen(t *testing.T) {
 
 	f.w.SetCustomerRules(disputePays("cx.dispute-pays", 0))
 	f.w.Fail["CustomerRules"] = true
-	v4 := &pipeline.Pipeline{Reader: f.w, ReplayOf: 4}
-	ev, err := v4.Evaluate(t.Context(), f.parse(f.run, ids.NewV7(), "create_refund", refund("ch_1", "30.00")))
-	if err != nil || ev.Decision != adomain.RequireApproval || len(ev.Consequences) != 1 {
-		t.Fatalf("version 4: %v %s %q", err, ev.Decision, states(ev))
+	for _, v := range []int{4, 5} {
+		old := &pipeline.Pipeline{Reader: f.w, ReplayOf: v}
+		ev, err := old.Evaluate(t.Context(), f.parse(f.run, ids.NewV7(), "create_refund", refund("ch_1", "30.00")))
+		if err != nil || ev.Decision != adomain.RequireApproval || len(ev.Consequences) != 1 {
+			t.Fatalf("version %d: %v %s %q", v, err, ev.Decision, states(ev))
+		}
 	}
 }
 
