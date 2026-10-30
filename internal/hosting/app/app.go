@@ -234,6 +234,9 @@ func (s *Service) Deprovision(ctx context.Context, id ids.UUID, reason string) (
 			"state": out.State, "gateway_revoked": strconv.FormatBool(revoked),
 		})
 	})
+	if err == nil && out.State == domain.StateDeprovisioned { // never placed: no host will report it
+		err = s.release(ctx, out.Slug, out.ID)
+	}
 	return out, err
 }
 

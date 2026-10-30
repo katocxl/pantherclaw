@@ -132,6 +132,9 @@ Usage:
   pantherclaw-server dev connection --org ID --target-url URL [--config FILE] [--gateway NAME] [--name N] [--mode M]
                              [--access-mode M]
                                                      DEVELOPMENT ONLY: a payments connection for an existing gateway
+  pantherclaw-server hosting add-host --name N --domain D --capacity N --milli-cpus N --memory-mib N
+                             --csr FILE --bundle-out FILE [--config FILE]
+                                                     record a shared hosting host and issue its agent certificate
   pantherclaw-server secrets stage --from DIR --to DIR
                                                      copy each regular file of DIR as a 0400 secret file
                                                      (Kubernetes init container; symlinks and others refused)
@@ -177,6 +180,8 @@ func RunCommand(ctx context.Context, args []string, stdout, stderr io.Writer, en
 		err = cmdOrg(ctx, args[1:], stdout, stderr, env)
 	case "evidence":
 		err = cmdEvidence(ctx, args[1:], stdout, stderr, env)
+	case "hosting":
+		err = cmdHosting(ctx, args[1:], stdout, stderr, env)
 	case "dev":
 		err = cmdDev(ctx, args[1:], stdout, stderr, env)
 	case "secrets":

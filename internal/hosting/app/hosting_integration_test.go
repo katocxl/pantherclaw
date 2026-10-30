@@ -672,3 +672,58 @@ func TestReportSetsTheTargetFromTheFleetPolicy(t *testing.T) {
 	report("1.2.0", "")
 	report("1.3.0", "")
 }
+
+// TestT216_AStoppedReportAfterALostReleaseStillReleases: a record already
+// finished whose slug is still held gives its slug up on the next report
+// (D228).
+//
+// Covers: PN-010.4
+func TestT216_AStoppedReportAfterALostReleaseStillReleases(t *testing.T) {
+	e := newEnv(t, billing.Team)
+	host := e.host(t, "h1", 10)
+	a, actx := e.org(t)
+	_, bctx := e.org(t)
+	hosted := e.provisioned(t, a, actx, "acme")
+	if _, err := e.svc.Deprovision(actx, hosted, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.Stopped(context.Background(), host, a, hosted); err != nil {
+		t.Fatal(err)
+	}
+	e.d.AdminExec(t, `INSERT INTO pc.hosting_slugs (slug, org_id, hosted_id) VALUES ('acme', $1, $2)`, a, hosted)
+	if _, err := e.svc.Request(bctx, "acme", profile.Limits{}); !errors.Is(err, domain.ErrSlugTaken) {
+		t.Fatalf("the lost release: %v", err)
+	}
+	if err := e.svc.Stopped(context.Background(), host, a, hosted); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Request(bctx, "acme", profile.Limits{}); err != nil {
+		t.Fatalf("after the retry: %v", err)
+	}
+}
+
+// TestT216_AQueuedRequestFreesItsSlugWhenDeprovisioned: a request waiting
+// for a host holds its slug, and gives it up when deprovisioned (D228).
+//
+// Covers: PN-010.4
+func TestT216_AQueuedRequestFreesItsSlugWhenDeprovisioned(t *testing.T) {
+	e := newEnv(t, billing.Team)
+	a, actx := e.org(t)
+	_, bctx := e.org(t)
+	h, err := e.svc.Request(actx, "acme", profile.Limits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.ProvisionOrg(context.Background(), a); !errors.Is(err, domain.ErrNoCapacity) {
+		t.Fatalf("no host: %v", err)
+	}
+	if _, err := e.svc.Request(bctx, "acme", profile.Limits{}); !errors.Is(err, domain.ErrSlugTaken) {
+		t.Fatalf("a queued slug: %v", err)
+	}
+	if _, err := e.svc.Deprovision(actx, h.ID, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Request(bctx, "acme", profile.Limits{}); err != nil {
+		t.Fatalf("a freed slug: %v", err)
+	}
+}
