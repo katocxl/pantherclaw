@@ -5,6 +5,7 @@ package tenancyrpc
 
 import (
 	"context"
+	"net/netip"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/authn/assertion"
@@ -62,6 +63,9 @@ func apiKeyProto(k app.APIKey) *pantherclawv1.ApiKey {
 	}
 	for _, s := range k.Scopes {
 		out.Scopes = append(out.Scopes, string(s))
+	}
+	for _, p := range k.AllowedCIDRs {
+		out.AllowedCidrs = append(out.AllowedCidrs, p.String())
 	}
 	return out
 }
@@ -192,7 +196,13 @@ func (h *ServiceAccounts) CreateApiKey(ctx context.Context, req *pantherclawv1.C
 	for i, s := range req.GetScopes() {
 		scopes[i] = td.Permission(s)
 	}
-	k, tok, err := h.s.CreateAPIKey(ctx, id, req.GetName(), scopes, time.Duration(req.GetTtlDays())*24*time.Hour)
+	cidrs := make([]netip.Prefix, len(req.GetAllowedCidrs()))
+	for i, s := range req.GetAllowedCidrs() {
+		if cidrs[i], err = netip.ParsePrefix(s); err != nil {
+			return nil, app.ErrInvalidCIDRs
+		}
+	}
+	k, tok, err := h.s.CreateLimitedAPIKey(ctx, id, req.GetName(), scopes, time.Duration(req.GetTtlDays())*24*time.Hour, cidrs)
 	if err != nil {
 		return nil, err
 	}

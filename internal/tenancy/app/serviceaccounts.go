@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"net/netip"
 	"slices"
 	"strings"
 	"time"
@@ -41,12 +42,21 @@ const (
 type ServiceAccounts struct {
 	pool *db.Pool
 	env  credential.Env
+	// ents gates API-key IP allow lists (nil: no gate).
+	ents Entitlements
 }
 
 // NewServiceAccounts returns the use cases; env is the environment of the
 // API keys this deployment mints.
 func NewServiceAccounts(pool *db.Pool, env credential.Env) *ServiceAccounts {
 	return &ServiceAccounts{pool: pool, env: env}
+}
+
+// WithEntitlements gates API-key IP allow lists by edition (PN-012.8: Team
+// and above) and returns the use cases.
+func (s *ServiceAccounts) WithEntitlements(ents Entitlements) *ServiceAccounts {
+	s.ents = ents
+	return s
 }
 
 // ServiceAccount is a non-human principal.
@@ -92,6 +102,8 @@ type APIKey struct {
 	CreatedBy            string
 	CreatedAt, ExpiresAt time.Time
 	RevokedAt, LastUsed  *time.Time
+	// AllowedCIDRs limits where the key may be used from (none: anywhere).
+	AllowedCIDRs []netip.Prefix
 }
 
 func serviceAccountView(org ids.OrgID, r dbq.PcServiceAccount) ServiceAccount {
@@ -119,6 +131,7 @@ func apiKeyView(r dbq.ListAPIKeysRow) APIKey {
 		ID: r.ID, ServiceAccount: idOf[td.ServiceAccount](r.ServiceAccountID), Name: r.Name, Hint: r.Hint, Scopes: scopes,
 		State: CredentialState(r.EffectiveState), CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, ExpiresAt: r.ExpiresAt,
 		RevokedAt: r.RevokedAt, LastUsed: r.LastUsedAt,
+		AllowedCIDRs: r.AllowedCidrs,
 	}
 }
 
@@ -362,6 +375,36 @@ func (s *ServiceAccounts) RevokeKey(ctx context.Context, id td.ServiceAccountID,
 // permissions are refused as scopes, and the key can never use more than
 // the account's roles allow.
 func (s *ServiceAccounts) CreateAPIKey(ctx context.Context, id td.ServiceAccountID, name string, scopes []td.Permission, ttl time.Duration) (APIKey, credential.Token, error) {
+	return s.CreateLimitedAPIKey(ctx, id, name, scopes, ttl, nil)
+}
+
+// Errors of API-key IP allow lists (G0 M18 D153).
+var (
+	ErrInvalidCIDRs = pcerr.New(pcerr.InvalidArgument, "INVALID_CIDRS",
+		"allowed_cidrs takes at most 32 distinct CIDR ranges without host bits, such as 203.0.113.0/24")
+	ErrIPAllowListEdition = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED",
+		"API-key IP allow lists need the Team edition or above")
+)
+
+// MaxAPIKeyCIDRs bounds an API key's address ranges (00219).
+const MaxAPIKeyCIDRs = 32
+
+// CreateLimitedAPIKey creates an API key usable only from cidrs (none: from
+// anywhere). The ranges are fixed for the key's lifetime: rotate the key to
+// change them (G0 M18 D153, PN-012.8).
+func (s *ServiceAccounts) CreateLimitedAPIKey(ctx context.Context, id td.ServiceAccountID, name string, scopes []td.Permission, ttl time.Duration, cidrs []netip.Prefix) (APIKey, credential.Token, error) {
+	if err := checkCIDRs(cidrs); err != nil {
+		return APIKey{}, credential.Token{}, err
+	}
+	if len(cidrs) > 0 && s.ents != nil {
+		ent, err := s.ents.Current(ctx)
+		if err != nil {
+			return APIKey{}, credential.Token{}, err
+		}
+		if !ent.APIKeyIPAllowLists() {
+			return APIKey{}, credential.Token{}, ErrIPAllowListEdition
+		}
+	}
 	if err := td.CheckSlug("name", name); err != nil {
 		return APIKey{}, credential.Token{}, err
 	}
@@ -398,6 +441,7 @@ func (s *ServiceAccounts) CreateAPIKey(ctx context.Context, id td.ServiceAccount
 		r, err := q.InsertAPIKey(ctx, dbq.InsertAPIKeyParams{
 			OrgID: c.Org, ID: ids.NewV7(), ServiceAccountID: sa.ID, Name: name, SecretHash: tok.Hash(), Hint: tok.Hint(),
 			Scopes: ss, CreatedBy: c.Principal.String(), TtlDays: days,
+			AllowedCidrs: cidrsOrNil(cidrs),
 		})
 		if db.IsUniqueViolation(err) {
 			return ErrNameTaken
@@ -406,7 +450,7 @@ func (s *ServiceAccounts) CreateAPIKey(ctx context.Context, id td.ServiceAccount
 		}
 		out = apiKeyView(dbq.ListAPIKeysRow(r))
 		return record(ctx, tx, c, "access.api_key_created", "api_key", r.ID,
-			map[string]string{"service_account": sa.ID.String(), "name": name, "scopes": strings.Join(ss, ",")})
+			map[string]string{"service_account": sa.ID.String(), "name": name, "scopes": strings.Join(ss, ","), "allowed_cidrs": joinCIDRs(cidrs)})
 	})
 	return out, tok, err
 }
@@ -552,4 +596,35 @@ func notAutomationIdentity(ctx context.Context, q *dbq.Queries, org ids.OrgID, s
 		return err
 	}
 	return ErrAutomationIdentity
+}
+
+// checkCIDRs validates an API key's address ranges: at most 32, distinct,
+// valid and without host bits (so the stored range is the one given).
+func checkCIDRs(cidrs []netip.Prefix) error {
+	if len(cidrs) > MaxAPIKeyCIDRs {
+		return ErrInvalidCIDRs
+	}
+	seen := map[netip.Prefix]bool{}
+	for _, p := range cidrs {
+		if !p.IsValid() || p != p.Masked() || seen[p] {
+			return ErrInvalidCIDRs
+		}
+		seen[p] = true
+	}
+	return nil
+}
+
+func cidrsOrNil(cidrs []netip.Prefix) []netip.Prefix {
+	if len(cidrs) == 0 {
+		return nil
+	}
+	return cidrs
+}
+
+func joinCIDRs(cidrs []netip.Prefix) string {
+	ss := make([]string, len(cidrs))
+	for i, p := range cidrs {
+		ss[i] = p.String()
+	}
+	return strings.Join(ss, ",")
 }

@@ -10,14 +10,19 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/netip"
 	"strings"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	"github.com/katocxl/pantherclaw/internal/authn/token"
+	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
+	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -40,6 +45,8 @@ type Authenticator struct {
 	env    credential.Env
 	clock  clock.Clock
 	log    *slog.Logger
+
+	ipRefusals audit.Once
 }
 
 // NewAuthenticator returns an Authenticator. env is the API key environment
@@ -105,6 +112,7 @@ func (a *Authenticator) apiKey(ctx context.Context, bearer string) (tapp.Caller,
 		return tapp.Caller{}, reject("api_key_wrong_environment")
 	}
 	var c tapp.Caller
+	var refused *ipRefusal
 	err = a.pool.InTenantTx(ctx, tok.Org(), func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		if err := orgActive(ctx, q, tok.Org()); err != nil {
@@ -122,6 +130,10 @@ func (a *Authenticator) apiKey(ctx context.Context, bearer string) (tapp.Caller,
 			return reject("api_key_expired")
 		case td.AccountState(k.AccountState) != td.Enabled:
 			return reject("service_account_disabled")
+		}
+		if !addressAllowed(k.AllowedCidrs, httpx.ClientIPFrom(ctx)) {
+			refused = &ipRefusal{key: k.ID, account: k.ServiceAccountID}
+			return reject("api_key_ip_refused")
 		}
 		if k.Touch {
 			if err := q.TouchAPIKey(ctx, tok.Org(), k.ID); err != nil {
@@ -143,6 +155,9 @@ func (a *Authenticator) apiKey(ctx context.Context, bearer string) (tapp.Caller,
 		}
 		return nil
 	})
+	if refused != nil {
+		a.auditIPRefusal(ctx, tok.Org(), *refused)
+	}
 	return c, err
 }
 
@@ -222,4 +237,60 @@ func orgActive(ctx context.Context, q *dbq.Queries, org ids.OrgID) error {
 		return reject("org_inactive")
 	}
 	return nil
+}
+
+// IPRefusedName is the audit event of an API key used from an address
+// outside its ranges (G0 M18 D153, HR-475).
+const IPRefusedName = "apikey.ip_refused"
+
+// ipRefusalAuditTimeout bounds the refusal's audit write, so a stalled
+// database cannot hang the refused request.
+const ipRefusalAuditTimeout = 2 * time.Second
+
+type ipRefusal struct{ key, account ids.UUID }
+
+// addressAllowed reports whether a key limited to cidrs may be used from
+// addr, the trusted-proxy-aware client address (HR-476). A key without
+// ranges is allowed from anywhere; a limited key is refused when the
+// address is missing or unparseable (fail closed).
+func addressAllowed(cidrs []netip.Prefix, addr string) bool {
+	if len(cidrs) == 0 {
+		return true
+	}
+	ip, err := netip.ParseAddr(addr)
+	if err != nil {
+		return false
+	}
+	ip = ip.Unmap()
+	for _, p := range cidrs {
+		if p.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// auditIPRefusal writes apikey.ip_refused into the org's ledger in a small
+// transaction of its own (the authentication transaction rolled back),
+// once per key and address per minute, so a flood of refused requests
+// cannot fill the ledger. The client still sees only ErrUnauthenticated.
+func (a *Authenticator) auditIPRefusal(ctx context.Context, org ids.OrgID, r ipRefusal) {
+	addr := httpx.ClientIPFrom(ctx)
+	if !a.ipRefusals.First(org.String() + "|" + r.key.String() + "|" + addr) {
+		return
+	}
+	actx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ipRefusalAuditTimeout)
+	defer cancel()
+	err := a.pool.InTenantTx(actx, org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := audit.Record(ctx, tx, audit.Event{
+			Name:  IPRefusedName,
+			Actor: evdomain.Actor{Type: string(td.KindServiceAccount), ID: r.account.String()}, Outcome: audit.Denied,
+			ReasonCode: "IP_NOT_ALLOWED", Object: &audit.Object{Type: "api_key", ID: r.key.String()},
+			Details: map[string]string{"client_ip": addr},
+		})
+		return err
+	})
+	if err != nil {
+		a.log.WarnContext(ctx, "authn.ip_refusal_not_audited", pclog.Err(err))
+	}
 }

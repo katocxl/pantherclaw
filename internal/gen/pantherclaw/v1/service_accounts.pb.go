@@ -392,7 +392,10 @@ type ApiKey struct {
 	// Revocation time.
 	RevokeTime *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=revoke_time,json=revokeTime,proto3" json:"revoke_time,omitempty"`
 	// Last use (updated at most once a minute).
-	LastUseTime   *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=last_use_time,json=lastUseTime,proto3" json:"last_use_time,omitempty"`
+	LastUseTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=last_use_time,json=lastUseTime,proto3" json:"last_use_time,omitempty"`
+	// Client address ranges the key is limited to (PN-012.8); empty means
+	// any address. Fixed at creation: rotate the key to change them.
+	AllowedCidrs  []string `protobuf:"bytes,12,rep,name=allowed_cidrs,json=allowedCidrs,proto3" json:"allowed_cidrs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -500,6 +503,13 @@ func (x *ApiKey) GetRevokeTime() *timestamppb.Timestamp {
 func (x *ApiKey) GetLastUseTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.LastUseTime
+	}
+	return nil
+}
+
+func (x *ApiKey) GetAllowedCidrs() []string {
+	if x != nil {
+		return x.AllowedCidrs
 	}
 	return nil
 }
@@ -1358,7 +1368,11 @@ type CreateApiKeyRequest struct {
 	// Permissions the key may use; human-only permissions are rejected.
 	Scopes []string `protobuf:"bytes,3,rep,name=scopes,proto3" json:"scopes,omitempty"`
 	// Validity in days (default 90, at most 365).
-	TtlDays       int32 `protobuf:"varint,4,opt,name=ttl_days,json=ttlDays,proto3" json:"ttl_days,omitempty"`
+	TtlDays int32 `protobuf:"varint,4,opt,name=ttl_days,json=ttlDays,proto3" json:"ttl_days,omitempty"`
+	// Optional client address ranges, at most 32 CIDRs such as
+	// "203.0.113.0/24" (PN-012.8, Team edition). A request from any other
+	// address is refused like a bad key. Fixed for the key's lifetime.
+	AllowedCidrs  []string `protobuf:"bytes,5,rep,name=allowed_cidrs,json=allowedCidrs,proto3" json:"allowed_cidrs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1419,6 +1433,13 @@ func (x *CreateApiKeyRequest) GetTtlDays() int32 {
 		return x.TtlDays
 	}
 	return 0
+}
+
+func (x *CreateApiKeyRequest) GetAllowedCidrs() []string {
+	if x != nil {
+		return x.AllowedCidrs
+	}
+	return nil
 }
 
 // CreateApiKeyResponse returns the key and its secret.
@@ -1720,7 +1741,7 @@ const file_pantherclaw_v1_service_accounts_proto_rawDesc = "" +
 	"expireTime\x12;\n" +
 	"\vrevoke_time\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"revokeTime\"\xd3\x03\n" +
+	"revokeTime\"\xf8\x03\n" +
 	"\x06ApiKey\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12,\n" +
 	"\x12service_account_id\x18\x02 \x01(\tR\x10serviceAccountId\x12\x12\n" +
@@ -1737,7 +1758,8 @@ const file_pantherclaw_v1_service_accounts_proto_rawDesc = "" +
 	"\vrevoke_time\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"revokeTime\x12>\n" +
-	"\rlast_use_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\vlastUseTime\"\x8a\x01\n" +
+	"\rlast_use_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\vlastUseTime\x12#\n" +
+	"\rallowed_cidrs\x18\f \x03(\tR\fallowedCidrs\"\x8a\x01\n" +
 	"\x1bCreateServiceAccountRequest\x12?\n" +
 	"\x04name\x18\x01 \x01(\tB+\xbaH(r&2$^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$R\x04name\x12*\n" +
 	"\vdescription\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\xe8\aR\vdescription\"g\n" +
@@ -1791,13 +1813,15 @@ const file_pantherclaw_v1_service_accounts_proto_rawDesc = "" +
 	"\x12service_account_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x10serviceAccountId\x12\x1f\n" +
 	"\x06key_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x05keyId\"V\n" +
 	"\x1fRevokeServiceAccountKeyResponse\x123\n" +
-	"\x03key\x18\x01 \x01(\v2!.pantherclaw.v1.ServiceAccountKeyR\x03key\"\xf5\x01\n" +
+	"\x03key\x18\x01 \x01(\v2!.pantherclaw.v1.ServiceAccountKeyR\x03key\"\xac\x02\n" +
 	"\x13CreateApiKeyRequest\x126\n" +
 	"\x12service_account_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x10serviceAccountId\x12?\n" +
 	"\x04name\x18\x02 \x01(\tB+\xbaH(r&2$^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$R\x04name\x12>\n" +
 	"\x06scopes\x18\x03 \x03(\tB&\xbaH#\x92\x01 \b\x01\x10@\x18\x01\"\x18r\x162\x14^[a-z][a-z_.]{0,62}$R\x06scopes\x12%\n" +
 	"\bttl_days\x18\x04 \x01(\x05B\n" +
-	"\xbaH\a\x1a\x05\x18\xed\x02(\x00R\attlDays\"_\n" +
+	"\xbaH\a\x1a\x05\x18\xed\x02(\x00R\attlDays\x125\n" +
+	"\rallowed_cidrs\x18\x05 \x03(\tB\x10\xbaH\r\x92\x01\n" +
+	"\x10 \x18\x01\"\x04r\x02\x18+R\fallowedCidrs\"_\n" +
 	"\x14CreateApiKeyResponse\x12/\n" +
 	"\aapi_key\x18\x01 \x01(\v2\x16.pantherclaw.v1.ApiKeyR\x06apiKey\x12\x16\n" +
 	"\x06secret\x18\x02 \x01(\tR\x06secret\"\xb2\x01\n" +

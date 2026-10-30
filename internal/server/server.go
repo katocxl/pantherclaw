@@ -404,6 +404,12 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			log.WarnContext(ctx, "server.no_trusted_proxies", slog.String("note",
 				"behind a proxy without http.trusted_proxies: sign-in rate limits are shared by all clients of the proxy"))
 		}
+		if len(proxies) == 0 {
+			// API-key IP allow lists (G0 M18 D153, HR-476) then check the
+			// direct peer, which behind a proxy is the proxy itself.
+			log.WarnContext(ctx, "server.api_key_ranges_use_peer", slog.String("note",
+				"http.trusted_proxies is empty: API keys limited to address ranges are checked against the direct peer address"))
+		}
 		device, err := devicehttp.New(authnapp.NewDevice(pool, tokens, cfg.Auth.PublicURL, idps, clock.System{}, log),
 			cfg.Auth.PublicURL, limiter, log)
 		if err != nil {
@@ -777,7 +783,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	pantherclawv1connect.RegisterAuthorityServiceHandler(rs, authority.NewHandler(d.authority))
 	pantherclawv1connect.RegisterTenancyServiceHandler(rs, tenancyHandler(tenancyrpc.NewTenancy(tapp.NewHierarchy(pool, d.billing)), d.ui))
 	pantherclawv1connect.RegisterAccessServiceHandler(rs, accessHandler(tenancyrpc.NewAccess(tapp.NewAccess(pool, log).WithEntitlements(d.billing)).WithDeployment(string(d.extDeps.Deployment)), d.ui, d.extDeps.Deployment))
-	pantherclawv1connect.RegisterServiceAccountServiceHandler(rs, tenancyrpc.NewServiceAccounts(tapp.NewServiceAccounts(pool, d.apiKeyEnv)))
+	pantherclawv1connect.RegisterServiceAccountServiceHandler(rs, tenancyrpc.NewServiceAccounts(tapp.NewServiceAccounts(pool, d.apiKeyEnv).WithEntitlements(d.billing)))
 	// autos is the M11 part 2 core, set below once grants and runs exist;
 	// ListAgents reads it only while serving.
 	var autos *automationsCore

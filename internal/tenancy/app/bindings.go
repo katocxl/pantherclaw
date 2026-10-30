@@ -10,6 +10,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -59,20 +60,46 @@ func (a *Access) ListRoleBindings(ctx context.Context, pr page.Request, principa
 	return out, err
 }
 
+// ErrDelegatedAdminEdition refuses binding the Scope Admin role below the
+// Enterprise edition (F584, G0 M18 D159). Existing bindings keep their
+// ceiling and can always be removed.
+var ErrDelegatedAdminEdition = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED",
+	"delegated administration needs the Enterprise edition")
+
+// checkDelegatedAdmin applies the Scope Admin edition gate.
+func (a *Access) checkDelegatedAdmin(ctx context.Context, role td.RoleName) error {
+	if role != td.RoleScopeAdmin || a.ents == nil {
+		return nil
+	}
+	ent, err := a.ents.Current(ctx)
+	if err != nil {
+		return err
+	}
+	if !ent.DelegatedAdmin() {
+		return ErrDelegatedAdminEdition
+	}
+	return nil
+}
+
 // CreateRoleBinding grants role to principal at scope. The role must allow
 // the scope type and, for service accounts, contain no human-only
-// permission; the principal and the scope must exist and be active. A
-// caller granting itself a role is allowed and audited with self_grant=true
-// (ADR-0016).
+// permission; the principal and the scope must exist and be active. The
+// caller binds only within its ceiling: org-level role.bind binds anything,
+// otherwise role.bind on the scope and a binding of the same role at the
+// scope or an ancestor (G0 M18 D152, HR-472, HR-473). A caller granting
+// itself a role is allowed and audited with self_grant=true (ADR-0016).
 func (a *Access) CreateRoleBinding(ctx context.Context, role td.RoleName, principal td.PrincipalRef, scope td.Scope) (RoleBinding, bool, error) {
 	if _, err := td.CheckBindable(role, principal.Kind, scope.Type); err != nil {
+		return RoleBinding{}, false, err
+	}
+	if err := a.checkDelegatedAdmin(ctx, role); err != nil {
 		return RoleBinding{}, false, err
 	}
 	var out RoleBinding
 	var self bool
 	err := inOrg(ctx, a.pool, func(ctx context.Context, c Caller, q *dbq.Queries, tx db.TenantTx) error {
-		if err := c.Require(td.PermRoleBind, td.OrgPath(c.Org)); err != nil {
-			return err
+		if !c.CanAnywhere(td.PermRoleBind) {
+			return td.ErrPermissionDenied(td.PermRoleBind)
 		}
 		arg := dbq.InsertRoleBindingParams{
 			OrgID: c.Org, ID: ids.NewV7(), Role: string(role), ScopeType: string(scope.Type), CreatedBy: c.Principal.String(),
@@ -81,6 +108,13 @@ func (a *Access) CreateRoleBinding(ctx context.Context, role td.RoleName, princi
 			return err
 		}
 		if err := checkScope(ctx, q, c.Org, scope, &arg); err != nil {
+			return err
+		}
+		path, err := scopePath(ctx, q, c.Org, scope)
+		if err != nil {
+			return err
+		}
+		if err := c.CheckBindCeiling(role, path); err != nil {
 			return err
 		}
 		r, err := q.InsertRoleBinding(ctx, arg)
@@ -171,11 +205,12 @@ func checkScope(ctx context.Context, q *dbq.Queries, org ids.OrgID, s td.Scope, 
 }
 
 // DeleteRoleBinding removes a binding. Removing the last active Org Admin is
-// refused.
+// refused. Unbinding follows the same ceiling as binding (G0 M18 D152,
+// HR-474).
 func (a *Access) DeleteRoleBinding(ctx context.Context, id td.RoleBindingID) error {
 	return inOrg(ctx, a.pool, func(ctx context.Context, c Caller, q *dbq.Queries, tx db.TenantTx) error {
-		if err := c.Require(td.PermRoleBind, td.OrgPath(c.Org)); err != nil {
-			return err
+		if !c.CanAnywhere(td.PermRoleBind) {
+			return td.ErrPermissionDenied(td.PermRoleBind)
 		}
 		guard, err := guardAdmins(ctx, q, c.Org)
 		if err != nil {
@@ -184,6 +219,13 @@ func (a *Access) DeleteRoleBinding(ctx context.Context, id td.RoleBindingID) err
 		r, err := q.GetRoleBinding(ctx, c.Org, id.UUID())
 		if err != nil {
 			return notFound(err, ErrBindingNotFound)
+		}
+		path, err := scopePath(ctx, q, c.Org, bindingScope(c.Org, r))
+		if err != nil {
+			return err
+		}
+		if err := c.CheckBindCeiling(td.RoleName(r.Role), path); err != nil {
+			return err
 		}
 		if _, err := q.DeleteRoleBinding(ctx, c.Org, r.ID); err != nil {
 			return err
