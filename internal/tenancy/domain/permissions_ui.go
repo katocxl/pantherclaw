@@ -47,7 +47,7 @@ var (
 		RoleOrgAdmin, RoleSecurityAdmin, RoleAgentOwner, RolePolicyAuthor, RolePolicyPublisher, RoleApprover,
 		RoleResponder, RoleAuditor, RoleDeveloper, RoleViewer, RoleAgentAdmitter, RoleIdentityPublisher,
 		RoleGrantIssuer, RoleGatewayAdmin, RoleEmergency, RoleReconciler, RoleRecordsManager, RoleCodeReviewer,
-		RoleReleaseApprover, RoleAutomationAuthor, RoleAutomationPublisher, RoleAutomationOperator, RoleFleetManager,
+		RoleReleaseApprover, RoleAutomationAuthor, RoleAutomationPublisher, RoleAutomationOperator, RoleFleetManager, RoleScopeAdmin,
 	}
 	onboardingReaders = []RoleName{RoleOrgAdmin, RoleSecurityAdmin, RoleAgentOwner, RoleDeveloper}
 )
