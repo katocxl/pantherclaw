@@ -128,42 +128,61 @@ func (d *Definition) AWSAction() (string, bool) {
 	return "", false
 }
 
-// ECSDescribeServicesTarget is the one X-Amz-Target a verification read may
-// POST (founder decision D283, HR-190).
-const ECSDescribeServicesTarget = "AmazonEC2ContainerServiceV20141113.DescribeServices"
+// The one POST verification read HR-190 allows (founder decisions D283,
+// D290): its fixed X-Amz-Target, the only package that may declare it and
+// the SigV4 service its session must be sealed for. The name is PantherClaw's
+// reserved namespace, which an org key can neither sign nor import (HR-162),
+// so a package's signature stands behind it.
+const (
+	ECSDescribeServicesTarget = "AmazonEC2ContainerServiceV20141113.DescribeServices"
+	ECSPackage                = "pc.aws.ecs"
+	ECSPublisher              = "pantherclaw"
+	ECSSigningService         = "ecs"
+)
 
-// PostVerificationRead reports the one verification read that is not a GET
-// (founder decision D283, HR-190): an aws-json access: read definition whose
-// fixed X-Amz-Target is exactly ECSDescribeServicesTarget, so its session is
-// narrowed to that one action (D270). ECS has no GET. Nothing else that
-// POSTs is ever a verification read.
+// PostVerificationRead reports the shape of the one verification read that
+// is not a GET (D283, D290): an aws-json access: read POST to the root whose
+// only header is exactly ECSDescribeServicesTarget, with no query, no
+// idempotency header and a body of nothing but the target, so its session is
+// narrowed to that one action (D270) and only the target can vary. ECS has no
+// GET. Package.VerificationRead also checks which package declares it.
 func (d *Definition) PostVerificationRead() bool {
 	if d.Access != AccessRead || d.Dispatch == nil || d.Dispatch.HTTP == nil {
 		return false
 	}
 	h := d.Dispatch.HTTP
-	if h.Method != methodPost || h.Path != RootPath || h.Encoding != EncodingAWSJSON {
+	if h.Method != methodPost || h.Path != RootPath || h.Encoding != EncodingAWSJSON || len(h.Query) > 0 ||
+		h.IdempotencyHeader != "" || h.AWSResource != "" || h.Success != nil || len(h.Headers) != 1 || len(h.Body) == 0 {
 		return false
 	}
-	named := 0
 	for k, v := range h.Headers {
-		if strings.EqualFold(k, AWSTargetHeader) {
-			if v != ECSDescribeServicesTarget {
-				return false
-			}
-			named++
+		if !strings.EqualFold(k, AWSTargetHeader) || v != ECSDescribeServicesTarget {
+			return false
 		}
 	}
-	return named == 1
+	for _, ref := range h.Body {
+		if !strings.HasPrefix(ref, "target.") {
+			return false
+		}
+	}
+	return true
 }
 
-// VerificationRead reports whether a definition's HTTP dispatch may be a
-// verification read: an access: read GET, or the D283 exception (HR-190).
+// VerificationRead reports whether a definition's HTTP dispatch has the shape
+// of a verification read: an access: read GET, or the D283 exception
+// (HR-190). A gateway asks the Package, which also knows who declared it.
 func (d *Definition) VerificationRead() bool {
 	if d.Access != AccessRead || d.Dispatch == nil || d.Dispatch.HTTP == nil {
 		return false
 	}
 	return d.Dispatch.HTTP.Method == methodGet || d.PostVerificationRead()
+}
+
+// VerificationRead reports whether d, one of p's definitions, may be a
+// verification read (HR-190): the POST exception only in pc.aws.ecs from
+// pantherclaw, never in an org's package (D290).
+func (p *Package) VerificationRead(d *Definition) bool {
+	return d.VerificationRead() && (!d.PostVerificationRead() || (p.Name == ECSPackage && p.Publisher == ECSPublisher))
 }
 
 // The HTTP methods an AWS template uses, spelled here because domain

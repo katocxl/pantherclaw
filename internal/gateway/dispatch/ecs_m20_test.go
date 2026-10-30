@@ -8,10 +8,12 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -298,5 +300,131 @@ func TestHR191_TheControllerFactIsWhatECSNames(t *testing.T) {
 	}
 	if tried, _ := f.e.reportECSFacts(context.Background(), f.conn, actionir.ActionIR{Operation: "aws.ecs.service.read"}); tried {
 		t.Fatal("a read needs no fact")
+	}
+}
+
+// countingHost is a host that is not AWS, which counts what reaches it.
+func countingHost(t *testing.T) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
+	var n atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"services":[{"status":"ACTIVE"}]}`))
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &n
+}
+
+// attackFixture is a connection to a host that is not AWS, bound by its
+// seal along with STS, so that only the rule a case breaks can stop the read:
+// change runs last, and a static credential opens as a token it may place.
+func attackFixture(t *testing.T, op string, change func(*ecsFixture, *defs.Definition)) (*ecsFixture, *defs.Definition, *atomic.Int32) {
+	t.Helper()
+	f := newECSFixture(t)
+	host, hits := countingHost(t)
+	sts, _ := url.Parse(f.conn.GetBaseUrl())
+	u, _ := url.Parse(host.URL)
+	f.conn.BaseUrl = host.URL
+	f.conn.Credential.AllowedHosts = []string{u.Host, sts.Host}
+	read, _ := f.pkg.Definition(op)
+	change(f, read)
+	if f.conn.Credential != nil && f.conn.Credential.GetKind() == credentials.KindStatic {
+		f.conn.Credential.AllowedHosts = []string{u.Host}
+		f.e.broker = &plainOpener{plain: []byte("static-token-not-real")}
+	}
+	return f, read, hits
+}
+
+// TestHR190_TheAttackFixtureReachesItsHost is the control for the attack
+// test: left alone, the read does reach the host, so each case below is
+// refused for the rule it breaks.
+// Covers: HR-190
+func TestHR190_TheAttackFixtureReachesItsHost(t *testing.T) {
+	f, read, hits := attackFixture(t, "aws.ecs.service.deployments.read", func(*ecsFixture, *defs.Definition) {})
+	if _, ok := f.e.readWith(context.Background(), f.conn, read, deployTarget(), nil, ""); !ok || hits.Load() != 1 {
+		t.Fatalf("read %v, %d requests", ok, hits.Load())
+	}
+}
+
+// TestHR190_AWriteShapedPOSTIsNeverAVerificationRead is the attack from the
+// review of #496: a package read that names the exact target but also sends
+// a method override, a query and an action's param, to a host that is not
+// AWS, under a static credential. Each part alone is refused, and nothing
+// reaches the host (D290).
+// Covers: HR-190, T-225
+func TestHR190_AWriteShapedPOSTIsNeverAVerificationRead(t *testing.T) {
+	const op = "aws.ecs.service.deployments.read"
+	param := map[string]string{"task_definition": awssim.TaskDefinition(2)}
+	for name, change := range map[string]func(*ecsFixture, *defs.Definition){
+		"the whole attack": func(f *ecsFixture, d *defs.Definition) {
+			f.pkg.Name, f.pkg.Publisher = "acme.tools", "acme"
+			h := d.Dispatch.HTTP
+			h.Headers["X-HTTP-Method-Override"], h.Query, h.Body["cmd"] = "DELETE", map[string]string{"force": "target.id"}, "params.task_definition"
+			f.conn.Credential = &pb.SealedCredential{Kind: credentials.KindStatic, Header: "Authorization", Scheme: "Bearer"}
+		},
+		"an extra header": func(_ *ecsFixture, d *defs.Definition) { d.Dispatch.HTTP.Headers["X-HTTP-Method-Override"] = "DELETE" },
+		"a query": func(_ *ecsFixture, d *defs.Definition) {
+			d.Dispatch.HTTP.Query = map[string]string{"force": "target.id"}
+		},
+		"a param in the body": func(_ *ecsFixture, d *defs.Definition) { d.Dispatch.HTTP.Body["cmd"] = "params.task_definition" },
+		"a literal in the body": func(_ *ecsFixture, d *defs.Definition) {
+			d.Dispatch.HTTP.Body["cmd"] = "literal.drop-all-tables"
+		},
+		"an idempotency header": func(_ *ecsFixture, d *defs.Definition) { d.Dispatch.HTTP.IdempotencyHeader = "Idempotency-Key" },
+		"an org package":        func(f *ecsFixture, _ *defs.Definition) { f.pkg.Name = "acme.tools" },
+		"another publisher":     func(f *ecsFixture, _ *defs.Definition) { f.pkg.Publisher = "acme" },
+		"a static credential": func(f *ecsFixture, _ *defs.Definition) {
+			f.conn.Credential = &pb.SealedCredential{Kind: credentials.KindStatic, Header: "Authorization", Scheme: "Bearer"}
+		},
+		"no credential":       func(f *ecsFixture, _ *defs.Definition) { f.conn.Credential = nil },
+		"an unsealed mode":    func(f *ecsFixture, _ *defs.Definition) { f.conn.AccessMode = "none" },
+		"another access mode": func(f *ecsFixture, _ *defs.Definition) { f.conn.AccessMode = "target_enforced" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			f, read, hits := attackFixture(t, op, change)
+			o, _ := f.verify(t, op, "lookup", param)
+			if o.Found || o.HTTPStatus != 0 {
+				t.Fatalf("observed %+v", o)
+			}
+			if _, ok := f.e.readWith(context.Background(), f.conn, read, deployTarget(), param, ""); ok {
+				t.Fatal("readWith sent it")
+			}
+			if hits.Load() != 0 {
+				t.Fatalf("the host heard %d requests", hits.Load())
+			}
+		})
+	}
+}
+
+// TestHR190_TheExceptionNeedsASessionSealedForECS: a held AWS credential
+// sealed for another service never reads, and neither does one whose seal
+// does not bind the connection's host (D290).
+// Covers: HR-190, HR-060
+func TestHR190_TheExceptionNeedsASessionSealedForECS(t *testing.T) {
+	const op = "aws.ecs.service.read"
+	f := newECSFixture(t)
+	plain, err := credentials.AWSSigV4{
+		V: 1, AccessKeyID: awssim.BaseKeyID, SecretAccessKey: []byte("simulated/base+secret0123456789"), RoleARN: awssim.RoleARN,
+		STSURL: f.conn.GetBaseUrl(), STSRegion: awssim.Region, Region: awssim.Region, Service: "iam",
+	}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.e.broker = &plainOpener{plain: plain}
+	if o, err := f.verify(t, op, "reference", map[string]string{}); err != nil || o.Found {
+		t.Fatalf("sealed for iam: %+v %v", o, err)
+	}
+	if len(f.sim.Calls()) != 0 {
+		t.Fatalf("AWS heard %+v", f.sim.Calls())
+	}
+
+	f = newECSFixture(t)
+	f.conn.Credential.AllowedHosts = []string{"ecs.us-east-1.amazonaws.com"}
+	if o, err := f.verify(t, op, "reference", map[string]string{}); err != nil || o.Found {
+		t.Fatalf("an unbound host: %+v %v", o, err)
+	}
+	if len(f.sim.Calls()) != 0 {
+		t.Fatalf("AWS heard %+v", f.sim.Calls())
 	}
 }

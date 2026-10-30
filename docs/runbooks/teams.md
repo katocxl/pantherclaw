@@ -24,6 +24,15 @@ pclaw seal --connection <connection id> --from-file bot.secret \
 
 Sealing refuses any other form, including the multi-tenant `https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token`, because `pc.teams` can't tell an internal channel from an external one without a pinned tenant. Every post would then fail on a missing `teams.channel.external` fact.
 
+Register the gateway as the connection's fact provider. Without this step every post is refused, because PantherClaw can't tell whether the channel is external:
+
+```bash
+pclaw fact-provider register --name teams --gateway <gateway id> --connection <connection id> \
+  --fact teams.channel.external:object:teams_channel:30s
+```
+
+Only a person holding `fact.provider.manage` can register it. Only the gateway that serves the connection may be registered, and only for facts the connection's package names.
+
 ## What counts as external
 
 Before each post the gateway reads the channel's members and reports `teams.channel.external`:

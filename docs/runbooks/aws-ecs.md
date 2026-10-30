@@ -18,6 +18,15 @@ Create an `http` connection with package `pc.aws.ecs` and these settings:
 
 IAM reads use the separate `pc.aws` package and their own connection, because a connection has one host.
 
+Register the gateway as the connection's fact provider. Without this step every deploy is refused, because PantherClaw can't read the service's deployment controller:
+
+```bash
+pclaw fact-provider register --name awsecs --gateway <gateway id> --connection <connection id> \
+  --fact aws.ecs.service.controller:object:aws_ecs_service:30s
+```
+
+Only a person holding `fact.provider.manage` can register it. Only the gateway that serves the connection may be registered, and only for facts the connection's package names.
+
 Put the secret access key in a file outside the repository, or pipe it in with `--from-file -`. It is never a command-line argument:
 
 ```bash
@@ -29,7 +38,7 @@ pclaw seal --connection <connection id> --from-file aws.secret \
 
 Add `--aws-external-id <id>` if the role's trust policy needs one.
 
-This package has no connection test, because a test read must be a GET and ECS has none. A failed fact read shows up on the first deploy, as a missing `aws.ecs.service.controller` fact.
+This package has no connection test, because a test read must be a GET and ECS has none. A problem with the connection shows up on the first deploy, as a missing `aws.ecs.service.controller` fact. If the gateway log shows `gateway.facts_not_reported`, the gateway isn't registered as the connection's fact provider.
 
 ## What a deploy does
 

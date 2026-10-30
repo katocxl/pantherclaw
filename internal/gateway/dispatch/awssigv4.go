@@ -45,6 +45,10 @@ func (e *Engine) awsSession(ctx context.Context, conn *control.Connection, def *
 	if def.Target.Account != defs.PresenceNone && target.Account != "" && target.Account != a.Account() {
 		return nil, errAWSAccount
 	}
+	// The POST verification read exists for ECS alone (D290, HR-190).
+	if def.PostVerificationRead() && a.Service != defs.ECSSigningService {
+		return nil, broker.ErrAWSAction
+	}
 	resource, err := def.AWSResourceARN(target, a.Account(), a.Region, a.Partition())
 	if err != nil {
 		return nil, err

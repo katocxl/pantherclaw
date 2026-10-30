@@ -366,8 +366,15 @@ func (p *Package) Validate() error {
 		}
 		if v := d.Verifier; v != nil {
 			internal[v.Operation] = true
+			reads := []string{v.Operation}
 			if v.Lookup != nil {
 				internal[v.Lookup.Operation] = true
+				reads = append(reads, v.Lookup.Operation)
+			}
+			for _, op := range reads {
+				if r := ops[op]; r != nil && r.PostVerificationRead() && !p.VerificationRead(r) {
+					return invalid("%s: only %s from %s may POST a verification read (HR-190)", d.Operation, ECSPackage, ECSPublisher)
+				}
 			}
 		}
 	}

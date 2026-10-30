@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
+	"github.com/katocxl/pantherclaw/internal/definitions/trust"
 	"github.com/katocxl/pantherclaw/internal/gateway/egress"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	awssim "github.com/katocxl/pantherclaw/internal/sim/aws"
@@ -191,6 +193,31 @@ func TestHR190_NoOtherPOSTIsAVerificationRead(t *testing.T) {
 		if _, err := manifest.Decode(raw); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
+	}
+	// Only the last read declares a param, so the change goes there.
+	lastBody := func(line string) []byte {
+		at := bytes.LastIndex(pcawsecs.Package, []byte("          services[]: target.id.service\n"))
+		return slices.Concat(pcawsecs.Package[:at], []byte(line+"\n"), pcawsecs.Package[at:])
+	}
+	for name, raw := range map[string][]byte{
+		"an extra header":       read("X-Amz-Target: " + describe + "\n          X-HTTP-Method-Override: DELETE"),
+		"a param in the body":   lastBody("          cmd: params.task_definition"),
+		"a literal in the body": lastBody("          cmd: literal.drop-all-tables"),
+		"a query": bytes.Replace(lastBody(""), []byte("        body:\n          cluster: target.id.cluster\n\n"),
+			[]byte("        query:\n          force: target.id.cluster\n        body:\n          cluster: target.id.cluster\n"), 1),
+		"an org package":    bytes.Replace(pcawsecs.Package, []byte("\nname: pc.aws.ecs\n"), []byte("\nname: acme.ecs\n"), 1),
+		"another publisher": bytes.Replace(pcawsecs.Package, []byte("\npublisher: pantherclaw\n"), []byte("\npublisher: acme\n"), 1),
+	} {
+		if bytes.Equal(raw, pcawsecs.Package) {
+			t.Fatalf("%s changed nothing", name)
+		}
+		if _, err := manifest.Decode(raw); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+	// An org key cannot claim the name: it is PantherClaw's namespace.
+	if !trust.Reserved(pcawsecs.Name) || pcawsecs.Name != domain.ECSPackage {
+		t.Fatalf("%s is not reserved", pcawsecs.Name)
 	}
 	noDisagreement := bytes.Replace(pcawsecs.Package, []byte("reconcile: [FAILED, disagreement]"), []byte("reconcile: [FAILED]"), 1)
 	if _, err := manifest.Decode(noDisagreement); err == nil || !strings.Contains(err.Error(), "disagreement") {

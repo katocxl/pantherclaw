@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
+	credentials "github.com/katocxl/pantherclaw/internal/credentials/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/egress"
@@ -247,7 +248,7 @@ func (e *Engine) judge(ctx context.Context, conn *control.Connection, v *defs.Ve
 		return judgeItems(v, matched, crowded, declared, out), nil
 	}
 	read, found := conn.Package.Definition(v.Operation)
-	if !found || !read.VerificationRead() {
+	if !found || !conn.Package.VerificationRead(read) {
 		return Observation{}, fmt.Errorf("%w: lookup read", ErrNotReviewedRead)
 	}
 	if l.Statuses != nil && (len(matched) > maxMatched || crowded) {
@@ -352,7 +353,7 @@ func reviewedRead(conn *control.Connection, op string) (*defs.Definition, *defs.
 		return nil, nil, nil, ErrNotReviewedRead
 	}
 	read, ok := conn.Package.Definition(op)
-	if !ok || !read.VerificationRead() {
+	if !ok || !conn.Package.VerificationRead(read) {
 		return nil, nil, nil, ErrNotReviewedRead
 	}
 	for i := range conn.Package.Definitions {
@@ -453,7 +454,10 @@ func (e *Engine) read(ctx context.Context, conn *control.Connection, read *defs.
 func (e *Engine) readWith(ctx context.Context, conn *control.Connection, read *defs.Definition, target actionir.Target,
 	params map[string]string, token string,
 ) (egress.Response, bool) {
-	if !read.VerificationRead() {
+	if conn.Package == nil || !conn.Package.VerificationRead(read) ||
+		// The POST exception is a held AWS session or nothing (D290): awsSession
+		// also requires its seal to name ECS.
+		(read.PostVerificationRead() && (conn.GetAccessMode() != "pantherclaw_held" || conn.Credential.GetKind() != credentials.KindAWSSigV4)) {
 		e.log.WarnContext(ctx, "gateway.verification_not_built", slog.String("connection_id", conn.GetId()), pclog.Err(ErrNotReviewedRead))
 		return egress.Response{}, false
 	}

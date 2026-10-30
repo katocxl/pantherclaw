@@ -485,7 +485,7 @@ func (p *Package) HTTPReads() []string {
 	var out []string
 	for i := range p.Definitions {
 		d := &p.Definitions[i]
-		if d.VerificationRead() {
+		if p.VerificationRead(d) {
 			out = append(out, d.Operation)
 		}
 	}
