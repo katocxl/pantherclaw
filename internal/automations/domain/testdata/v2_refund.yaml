@@ -1,0 +1,70 @@
+apiVersion: automations.pantherclaw.dev/v2
+kind: Automation
+purpose: Refund a ticket, or open a case for ticket zero.
+work_kind: AGENT_WORK
+review_by: "2026-12-01"
+when:
+  inbound:
+    source: 0192f000-0000-7000-8000-000000000002
+    type: ticket.created
+    params:
+      ticket:
+        from: /ticket/id
+        type: string
+        pattern: "T-[0-9]{1,10}"
+authority:
+  principal: self
+  ceiling:
+    agents: [0192f000-0000-7000-8000-000000000003]
+    bounds:
+      operations: [payments.refund]
+    per_grant:
+      ttl: 1h
+    per_day:
+      grants: 5
+      runs: 5
+  platform:
+    - step: open_case
+    - step: revoke_grant
+      scopes: [EXECUTION]
+nodes:
+  - id: size
+    branch:
+      when: trigger.params.ticket != "T-0"
+      then: launch
+      else: file
+  - id: launch
+    step: launch_run
+    with:
+      agent: 0192f000-0000-7000-8000-000000000003
+      task_ref: "ticket {{params.ticket}}"
+    next: confirm
+  - id: confirm
+    step: wait_effect
+    with:
+      step: launch
+      operation: payments.refund
+    timeout: 1h
+    next: refunded
+  - id: file
+    step: open_case
+    with:
+      title: Ticket zero
+    next: filed
+  - id: refunded
+    outcome: SUCCEEDED
+    finish_when:
+      - step: confirm
+        condition: EFFECT_CONFIRMED
+  - id: filed
+    outcome: FAILED
+    finish_when:
+      - step: file
+        condition: CASE_OPENED
+if_fails:
+  compensate:
+    - id: undo
+      step: revoke_grant
+      compensates: launch
+      with:
+        scope: EXECUTION
