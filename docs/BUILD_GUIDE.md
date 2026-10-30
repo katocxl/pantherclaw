@@ -692,7 +692,7 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
   - Stream and wait caps hold across replicas through leases.
   - The gateway certificate cache forgets revocations through LISTEN.
   - Every decision-path cache has a stated staleness bound of at most 2 s.
-  - The server connects to several database hosts (`target_session_attrs=read-write`, TLS verify-full per host) and makes no decision while no read-write primary answers. After an asynchronous promotion it starts in the maintenance hold with an epoch bump.
+  - The server connects to several database hosts (`target_session_attrs=read-write`, TLS verify-full per host) and makes no decision while no read-write primary answers. A promotion is detected from the primary's timeline at start-up and on every new connection. Without verified synchronous replication, the server holds or refuses connections until `bump-epochs` records the new timeline.
   - Workers run with two or more replicas.
   - A2A ownership is shared between gateway replicas on M15's state.
   - The local failover test is `task failover` (a Postgres standby in Docker).
@@ -700,10 +700,10 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
   - One gateway process per organization on shared hosts, each in its own isolated container.
   - Provisioned from records by a worker job and the host agent `pantherclaw-host`, whose identity has no organization authority.
   - Enrolment tokens go only through the process's private tmpfs, and deprovisioning revokes first.
-  - Reached by a per-org hostname with SNI passthrough.
+  - Reached by a per-org hostname `<slug>.gw.<domain>` with SNI passthrough. Its server certificate comes from the internal gateway CA with exactly that one name, and its key never leaves the container.
   - No connectors (HR-084 unchanged).
-- **Decision speed** (PN-011.1): Prepare merged into the snapshot transaction for the first refund of a period; at most one jittered retry on `BUDGET_BUSY`; measured side by side in `docs/perf/M19.md`. Finalize + BeginDispatch is not merged (follow-up founder decision).
-- Migrations `00226`–`00229` (`00230`–`00235` spare); a new `hosting.proto`.
+- **Decision speed** (PN-011.1): decision snapshots stay `REPEATABLE READ, READ ONLY` (the Prepare merge is dropped, a follow-up); a busy budget row is retried once inside the Authority, from a fresh snapshot, before `BUDGET_BUSY`; measured side by side in `docs/perf/M19.md`. Finalize + BeginDispatch is not merged (follow-up founder decision).
+- Migrations `00226`–`00230` (`00231`–`00235` spare); a new `hosting.proto`; the new permission `hosting.agent` (declarable only) and the `HostedGateways` Team gate (provisioning only).
 
 ---
 

@@ -1,6 +1,6 @@
 # ADR-0040 — High-availability semantics: shared limits, stated staleness, fail-closed failover
 
-**Status:** Accepted (2026-10-29). Founder decisions G10 (shared state in Postgres only) and G11 (no monitor fast path, no offline read continuation) were answered with the recommended option. The [G0 M19 brief](../g0/M19.md) records them with the coordinator's design decisions D201, D202 and D204. Builds on [ADR-0002](0002-control-plane-and-gateway-split.md) (the gateway has no database), [ADR-0015](0015-budget-settlement-off-the-hot-row.md) (settlement off the hot row) and [ADR-0036](0036-server-backed-mcp-state-discovery-and-reviewed-surface.md) (server-backed MCP state).
+**Status:** Accepted (2026-10-29). Founder decisions G10 (shared state in Postgres only) and G11 (no monitor fast path, no offline read continuation) were answered with the recommended option. The [G0 M19 brief](../g0/M19.md) records them with the coordinator's design decisions D201, D202, D204, D207, D208, D211 and D213. Builds on [ADR-0002](0002-control-plane-and-gateway-split.md) (the gateway has no database), [ADR-0015](0015-budget-settlement-off-the-hot-row.md) (settlement off the hot row) and [ADR-0036](0036-server-backed-mcp-state-discovery-and-reviewed-surface.md) (server-backed MCP state).
 
 **Context.** PantherClaw can run several API replicas, but several parts are still per replica or single:
 - The authenticated API's limits per organization and per credential are counted in memory per replica, so N replicas admit N times the limit (R-58).
@@ -27,12 +27,22 @@ High availability (PN-010.7) must not weaken any decision-path guarantee: no dec
    - While no read-write primary answers, Authorize and BeginDispatch answer CANNOT_AUTHORIZE, other calls 503, and `/readyz` is false.
    - LISTEN reconnects and re-polls. Nothing is served from a standby or from a cache as a decision.
    - Production HA recommends `synchronous_commit=remote_apply` with one synchronous standby.
-   - After an asynchronous promotion, the server starts in the maintenance hold (HR-379) and leaves it only with an epoch bump (HR-373, HR-496), as after a restore (T-171).
+   - **The timeline rule** (HR-496; D207, D213). A promotion shows up as a new primary timeline.
+     - **Record.** The acknowledged timeline is kept in the single-row operator table `pc.db_primary_timeline`.
+     - **When sync counts.** Replication counts as synchronous only when the configuration declares it AND the primary verifies `synchronous_commit = remote_apply` with a non-empty `synchronous_standby_names`. Otherwise it counts as asynchronous, with a warning.
+     - **At start-up.** The server compares the primary's timeline with the acknowledged one. If they differ and replication is not verified sync, it starts in the maintenance hold (HR-379). On the first start, with no row yet, it records the timeline and does not hold.
+     - **At run time.** Every new connection reads its timeline (`pg_walfile_name(pg_current_wal_lsn())`) in the pool's after-connect hook.
+       - A connection on a different timeline is accepted only when this process verified sync at start AND the new primary verifies sync on that connection; the new timeline is then recorded.
+       - Otherwise the process gets `ErrTimelineChanged`: it refuses every connection, makes no decision, and fails readiness and liveness, so the orchestrator restarts it into the start-up hold.
+     - **Leaving the hold.** `bump-epochs` (HR-373) records the new timeline. This is the same path as after a restore (T-171).
 5. **Workers scale out** (HR-498). Every River job is audited, and those not safe with two workers are fixed. The chart then defaults to two workers with a PodDisruptionBudget.
-6. **Gateway replicas share A2A ownership** on M15's `pc.gateway_mcp_state` (kinds `A2A_TASK`, `A2A_CONTEXT`), with its binding and caps (HR-411, HR-412). Per-replica circuit breakers and A2A client and drift state stay local and documented.
-7. **Decision speed.**
-   - Only Prepare is merged into the snapshot transaction, for the first refund of a period (HR-504).
-   - A busy budget row keeps the 100 ms lock timeout and `BUDGET_BUSY`, with at most one jittered gateway retry (HR-505).
+6. **Gateway replicas share A2A ownership** on M15's `pc.gateway_mcp_state` (kinds `A2A_TASK`, `A2A_CONTEXT`), with its binding and caps (HR-411, HR-412).
+   - Both kinds use the TASK caps and the 1-hour lifetime.
+   - An `A2A_TASK` body is the sealed context id; an `A2A_CONTEXT` entry has none.
+   - Per-replica circuit breakers and A2A client and drift state stay local and documented.
+7. **Decision speed** (D208).
+   - Decision snapshots stay `REPEATABLE READ, READ ONLY`, and no write moves into them (HR-504). Merging Prepare into the snapshot would open every evaluation read-write to save one round trip per budget period, so it is not done.
+   - A busy budget row keeps the 100 ms lock timeout. The Authority retries once, after a jittered 5–25 ms, from a fresh snapshot through Finalize, then answers `BUDGET_BUSY` (HR-505). The retry never reuses the first evaluation, and the proof is consumed once.
    - Finalize + BeginDispatch is not merged: it would move the HR-001 timing set by ADR-0002 and needs its own decision.
    - The snapshot is never run inside Finalize, which would hold the hot row during evaluation (ADR-0015).
 
@@ -59,7 +69,7 @@ S19a's tests confirm each bound and record any correction in this table at the e
 - Rate limits and caps are true across replicas, and R-58 closes. A lease costs one database write per k calls, so a window can admit up to (N−1)·k beyond the limit.
 - Revocation reaches every replica within the existing bounds. No cache on the decision path is unbounded.
 - A database failover is an outage of decisions, not a loss of safety. Its length is the promotion time plus reconnection.
-- With an asynchronous standby, the last committed writes can be lost (R-67). The maintenance hold and epoch bump stop old authority from acting again, at the cost of operator work after a promotion.
+- With an asynchronous standby, the last committed writes can be lost (R-67). The maintenance hold and epoch bump stop old authority from acting again, at the cost of operator work after a promotion. Because the timeline is checked on every new connection, a promotion behind a stable endpoint is caught too, not only at restart. A declared but unverified synchronous setup is treated as asynchronous.
 - Two workers need every job to stay safe under concurrency (HR-498). New jobs inherit this requirement.
 - The failover test runs locally with two Postgres containers. It is not a CI gate, and its result is recorded in the exit pull request.
 
@@ -70,3 +80,5 @@ S19a's tests confirm each bound and record any correction in this table at the e
 - Serving reads from a standby during failover: G11 keeps decisions on the primary only.
 - Requiring synchronous replication: recommended, not required, because single-host deployments stay supported.
 - Merging Finalize with BeginDispatch: a follow-up founder decision.
+- Merging Prepare into the decision snapshot: rejected (D208), because it gives up the read-only snapshot on every decision. Pre-creating period rows outside the decision path is the follow-up if the measurement shows the first-of-period cost matters.
+- Trusting the configuration's replication mode without checking the primary, or checking the timeline only at start-up: rejected (D207, D213), because a misconfigured standby or a promotion while running would go unnoticed.
