@@ -1,0 +1,255 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for agents that work with GitLab merge requests
+# (G0 M20 D254, F756). It reaches GitLab's REST API (v4) through an http
+# connection whose credential PantherClaw holds: a personal, project or
+# group access token (glpat-...), checked against credential_pattern before
+# any byte is sent (HR-301). The connection binds the token to its GitLab
+# host, gitlab.com or a self-managed instance, and the gateway never places
+# it on a request to any other host (HR-521). The agent never holds the
+# token.
+#
+# Projects are named by their numeric id, which survives renames and
+# transfers, and merge requests as <project id>!<iid>: a request that names
+# a project by its URL-encoded path is not mapped, so it is refused.
+#
+# A merge is bound to the head commit the agent names: GitLab refuses it
+# with 409 when the head is any other commit, and the gateway reads the
+# head, the approvals, the head pipeline and the target branch's protection
+# before every decision, so a policy can require an approved merge request
+# whose pipeline passed at that head; what cannot be read is missing, never
+# passed (HR-160).
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
+format: 1
+name: pc.gitlab
+version: 1.0.0
+publisher: pantherclaw
+summary: Read and merge GitLab merge requests at an exact head commit
+
+definitions:
+  - operation: gitlab.merge_request.read
+    summary: Read a GitLab merge request
+    access: read
+    target:
+      type: gitlab_merge_request
+      id_pattern: '^(?P<project>[1-9][0-9]{0,9})!(?P<iid>[1-9][0-9]{0,9})$'
+      account: none
+    params: {}
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+    mappings:
+      - channel: http
+        method: GET
+        path: /api/v4/projects/{project}/merge_requests/{iid}
+        route: gitlab-merge-request-read
+        extract:
+          target_id: path.project + '!' + path.iid
+          params: {}
+      - channel: mcp
+        tool: gitlab_get_merge_request
+        route: gitlab-merge-request-read
+        description: >-
+          Read a GitLab merge request by its project's numeric id and the
+          merge request's iid: its title, state, branches, head commit and
+          head pipeline.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [project_id, merge_request_iid]
+          properties:
+            project_id:
+              type: integer
+              description: The project's numeric id
+              minimum: 1
+              maximum: 9999999999
+            merge_request_iid:
+              type: integer
+              description: The merge request's iid within the project
+              minimum: 1
+              maximum: 9999999999
+        extract:
+          target_id: string(input.project_id) + '!' + string(input.merge_request_iid)
+          params: {}
+    dispatch:
+      credential_pattern: '^glpat-[A-Za-z0-9_.-]{20,300}$'
+      http:
+        method: GET
+        path: /api/v4/projects/{target.id.project}/merge_requests/{target.id.iid}
+
+  - operation: gitlab.merge_request.merge
+    summary: Merge a GitLab merge request at an exact head commit
+    access: write
+    target:
+      type: gitlab_merge_request
+      id_pattern: '^(?P<project>[1-9][0-9]{0,9})!(?P<iid>[1-9][0-9]{0,9})$'
+      account: none
+    params:
+      # The head commit the merge is bound to: the head fact is checked
+      # against it, and GitLab refuses the merge with 409 when the head is
+      # any other commit.
+      sha:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[0-9a-f]{40}$'
+      squash:
+        type: boolean
+        material: true
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: repository.branch.merge
+        description: Merges the merge request's head commit into its target branch
+    reversibility: irreversible
+    dedupe_key: [target.id, params.sha]
+    # Read by the gateway before every decision: the head, the approvals,
+    # the head pipeline at that head and the target branch's protection.
+    prerequisites:
+      - fact: gitlab.merge_request.head
+        max_age_seconds: 30
+        binds: {member: sha, param: sha, reason: HEAD_MOVED}
+      - fact: gitlab.merge_request.approvals
+        max_age_seconds: 30
+      - fact: gitlab.merge_request.pipeline
+        max_age_seconds: 30
+      - fact: gitlab.branch.protection
+        max_age_seconds: 30
+    retry:
+      safe: false
+      on_unknown: reconcile
+    verifier:
+      operation: gitlab.merge_request.read
+      establishes: merge_request.merged
+      within_seconds: 600
+      level: domain_effect
+      expect:
+        - field: /sha
+          equals: params.sha
+      states:
+        field: /state
+        confirmed: [merged]
+        pending: [opened, locked]
+      limits: >-
+        Shows that GitLab reports this merge request merged with this head
+        commit. It does not show that a pipeline or deployment the merge
+        starts ran or finished.
+    approval:
+      title: Merge GitLab merge request {target.id} at {params.sha}
+      fields:
+        - target.id
+        - params.sha
+        - params.squash
+        - facts.gitlab.merge_request.head
+        - facts.gitlab.merge_request.approvals
+        - facts.gitlab.merge_request.pipeline
+        - facts.gitlab.branch.protection
+      invalidate_on: gitlab.merge_request.head
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+    mappings:
+      - channel: http
+        method: PUT
+        path: /api/v4/projects/{project}/merge_requests/{iid}/merge
+        route: gitlab-merge-request-merge
+        extract:
+          target_id: path.project + '!' + path.iid
+          params:
+            sha: input.sha
+            squash: input.?squash
+      - channel: mcp
+        tool: gitlab_merge_merge_request
+        route: gitlab-merge-request-merge
+        description: >-
+          Merge a GitLab merge request, by its project's numeric id and the
+          merge request's iid. The merge is bound to the head commit you
+          name: if the head has moved, it is refused and needs a new
+          decision.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [project_id, merge_request_iid, sha]
+          properties:
+            project_id:
+              type: integer
+              description: The project's numeric id
+              minimum: 1
+              maximum: 9999999999
+            merge_request_iid:
+              type: integer
+              description: The merge request's iid within the project
+              minimum: 1
+              maximum: 9999999999
+            sha:
+              type: string
+              description: The full SHA of the merge request's head commit
+              pattern: '^[0-9a-f]{40}$'
+            squash:
+              type: boolean
+              description: Squash the commits into one
+        extract:
+          target_id: string(input.project_id) + '!' + string(input.merge_request_iid)
+          params:
+            sha: input.sha
+            squash: input.?squash
+    dispatch:
+      credential_pattern: '^glpat-[A-Za-z0-9_.-]{20,300}$'
+      http:
+        method: PUT
+        path: /api/v4/projects/{target.id.project}/merge_requests/{target.id.iid}/merge
+        body:
+          sha: params.sha
+          squash: params.squash
+
+  # The connection test (C2): a harmless read that needs no input, listing
+  # the projects the token is a member of.
+  - operation: gitlab.project.read
+    summary: List the GitLab projects the token is a member of
+    access: read
+    test: true
+    target:
+      type: pc.connection
+      id_pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      account: none
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+    dispatch:
+      credential_pattern: '^glpat-[A-Za-z0-9_.-]{20,300}$'
+      http:
+        method: GET
+        path: /api/v4/projects
+        query:
+          membership: literal.true
+          simple: literal.true
+
+# What the package covers (F756, HR-523): no environment yet, records scoped
+# by merge request, and its two channels.
+coverage:
+  environment:
+    source: none
+  record_scope: [gitlab_merge_request]
+  channels: [http, mcp]

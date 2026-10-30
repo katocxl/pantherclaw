@@ -22,3 +22,15 @@ func TestJiraStopsOnCancel(t *testing.T) {
 		t.Fatalf("no listening log: %s", errb.String())
 	}
 }
+
+func TestGitLabStopsOnCancel(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	var out, errb bytes.Buffer
+	if code := Run(ctx, []string{"gitlab", "--addr", "127.0.0.1:0", "--approved"}, &out, &errb); code != 0 {
+		t.Fatalf("gitlab: %d %s", code, errb.String())
+	}
+	if !strings.Contains(errb.String(), "sim.gitlab_listening") {
+		t.Fatalf("no listening log: %s", errb.String())
+	}
+}
