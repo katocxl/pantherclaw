@@ -739,3 +739,43 @@ func TestD169_ShadowedProviders(t *testing.T) {
 		t.Fatalf("shadowed: %+v", ours)
 	}
 }
+
+// TestD175_CloserFailureNeverFailsClose: when the lapse of a declined
+// activation fails, what it wrote is rolled back, the failure is audited
+// (protect.closer_failed), and the request still ends DECLINED (G0 M18
+// D175).
+//
+// Covers: PN-012.7
+func TestD175_CloserFailureNeverFailsClose(t *testing.T) {
+	e := newEnv(t)
+	p, f, err := e.svc.Create(e.admin(e.alice), input("acme"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.gate.OnClose(protect.SurfaceIdentityProviderPut, func(ctx context.Context, tx db.TenantTx, author ids.UUID, payload []byte) error {
+		if err := e.store.ClosePut(ctx, tx, author, payload); err != nil {
+			return err
+		}
+		return errors.New("closer broke after writing")
+	})
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		return e.gate.Closed(ctx, tx, f.Request, changes.StateDeclined, "DECLINED")
+	}); err != nil {
+		t.Fatalf("a closer failure failed the close: %v", err)
+	}
+	if c := e.change(t, f.Change); c.State != protect.StateDeclined {
+		t.Fatalf("the change is %s, want DECLINED", c.State)
+	}
+	if got, _ := e.svc.Get(e.admin(e.alice), p.ID); got.State != idps.StatePending {
+		t.Fatalf("the failed closer's write was kept: %s", got.State)
+	}
+	var n int
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, "SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.protect.closer_failed'", e.org).Scan(&n)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("protect.closer_failed recorded %d times", n)
+	}
+}

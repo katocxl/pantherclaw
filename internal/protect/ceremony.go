@@ -5,6 +5,7 @@ package protect
 
 import (
 	"context"
+	"log/slog"
 	"regexp"
 
 	"github.com/jackc/pgx/v5"
@@ -15,6 +16,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -151,14 +153,36 @@ func (g *Gate) Closed(ctx context.Context, tx db.TenantTx, request ids.UUID, sta
 		return err
 	}
 	if c := g.closers[Surface(row.Surface)]; c != nil && state != changes.StateVoided {
-		return c(ctx, tx, row.Author, row.Payload)
+		// A Closer never fails the close (D175): what it wrote is rolled
+		// back, the failure is logged and audited, and the request still
+		// ends declined or expired.
+		if cerr := tx.Savepoint(ctx, "protect_closer", func() error {
+			return c(ctx, tx, row.Author, row.Payload)
+		}); cerr != nil {
+			g.log().ErrorContext(ctx, "protect.closer_failed", slog.String("org", tx.OrgID().String()),
+				slog.String("protected_change", row.ID.String()), slog.String("surface", row.Surface), pclog.Err(cerr))
+			_, err := audit.Record(ctx, tx, audit.Event{
+				Name: "protect.closer_failed", Actor: reviewActor, Outcome: audit.Failure,
+				Object:  &audit.Object{Type: "protected_change", ID: row.ID.String()},
+				Details: map[string]string{"surface": row.Surface, "state": state},
+			})
+			return err
+		}
 	}
 	return nil
 }
 
+func (g *Gate) log() *slog.Logger {
+	if g.Log == nil {
+		return slog.Default()
+	}
+	return g.Log
+}
+
 // Closer runs in the closing transaction when a stored change of its
 // surface is declined or expires (not when it is voided): an organization
-// identity provider whose activation lapsed is disabled (G0 M18 D169).
+// identity provider whose activation lapsed is disabled (G0 M18 D169). An
+// error is logged and audited and never fails the close (D175).
 type Closer func(ctx context.Context, tx db.TenantTx, author ids.UUID, payload []byte) error
 
 // OnClose sets the Closer of a surface.

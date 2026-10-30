@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/json/v2"
 	"fmt"
+	"log/slog"
 	"maps"
 	"strings"
 
@@ -84,6 +85,8 @@ type Gate struct {
 	// Failures records an emergency review that expired (D98 L3); nil:
 	// none is recorded.
 	Failures FailureSink
+	// Log receives a Closer's failures (D175); nil: slog.Default.
+	Log      *slog.Logger
 	surfaces map[Surface]surface
 	closers  map[Surface]Closer
 }
