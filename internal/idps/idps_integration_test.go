@@ -345,14 +345,22 @@ func TestHR481_OnlyPeopleFile(t *testing.T) {
 	filed := len(e.reqs.opened)
 	orgAdmin := []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: e.org.UUID()}}}
 	for name, c := range map[string]tapp.Caller{
-		"service account token": {Subject: td.Subject{Org: e.org, Principal: td.PrincipalRef{Kind: td.KindServiceAccount, ID: ids.NewV7()},
-			Bindings: orgAdmin}, Credential: tapp.CredAccessToken},
-		"service account key": {Subject: td.Subject{Org: e.org, Principal: td.PrincipalRef{Kind: td.KindServiceAccount, ID: ids.NewV7()},
-			Bindings: orgAdmin}, Credential: tapp.CredAPIKey},
-		"api key of a user": {Subject: td.Subject{Org: e.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: e.alice},
-			Bindings: orgAdmin}, Credential: tapp.CredAPIKey},
-		"support session": {Subject: td.Subject{Org: e.org, Principal: td.PrincipalRef{Kind: td.KindSupport, ID: ids.NewV7()},
-			Bindings: orgAdmin}, Credential: tapp.CredSupportSession},
+		"service account token": {Subject: td.Subject{
+			Org: e.org, Principal: td.PrincipalRef{Kind: td.KindServiceAccount, ID: ids.NewV7()},
+			Bindings: orgAdmin,
+		}, Credential: tapp.CredAccessToken},
+		"service account key": {Subject: td.Subject{
+			Org: e.org, Principal: td.PrincipalRef{Kind: td.KindServiceAccount, ID: ids.NewV7()},
+			Bindings: orgAdmin,
+		}, Credential: tapp.CredAPIKey},
+		"api key of a user": {Subject: td.Subject{
+			Org: e.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: e.alice},
+			Bindings: orgAdmin,
+		}, Credential: tapp.CredAPIKey},
+		"support session": {Subject: td.Subject{
+			Org: e.org, Principal: td.PrincipalRef{Kind: td.KindSupport, ID: ids.NewV7()},
+			Bindings: orgAdmin,
+		}, Credential: tapp.CredSupportSession},
 	} {
 		ctx := tapp.WithCaller(context.Background(), c)
 		if c.Principal.Kind == td.KindServiceAccount && !c.Can(td.PermIdentityProviderManage, td.OrgPath(e.org)) {

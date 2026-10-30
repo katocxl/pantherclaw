@@ -175,7 +175,7 @@ func (s *Store) deploymentName(name string) bool {
 
 // Create stores a new PENDING provider with its secret sealed. It signs
 // nobody in until Put activates it.
-func (s *Store) Create(ctx context.Context, tx db.TenantTx, by evdomain.Actor, author ids.UUID, id ids.UUID, in Input) (Provider, error) {
+func (s *Store) Create(ctx context.Context, tx db.TenantTx, by evdomain.Actor, author, id ids.UUID, in Input) (Provider, error) {
 	if err := in.validate(true); err != nil {
 		return Provider{}, err
 	}
@@ -221,7 +221,7 @@ type Change struct {
 
 // Put applies a change to provider id and makes it ACTIVE. The issuer
 // can't change once the provider has been active (T-207).
-func (s *Store) Put(ctx context.Context, tx db.TenantTx, by evdomain.Actor, author ids.UUID, id ids.UUID, c Change) error {
+func (s *Store) Put(ctx context.Context, tx db.TenantTx, by evdomain.Actor, author, id ids.UUID, c Change) error {
 	if err := (Input{Name: c.Name, Issuer: c.Issuer, ClientID: c.ClientID}).validate(false); err != nil {
 		return err
 	}
@@ -274,7 +274,7 @@ func (s *Store) Put(ctx context.Context, tx db.TenantTx, by evdomain.Actor, auth
 
 // Disable turns provider id off, unless that leaves no active org admin a
 // provider to sign in with (HR-484).
-func (s *Store) Disable(ctx context.Context, tx db.TenantTx, by evdomain.Actor, author ids.UUID, id ids.UUID) error {
+func (s *Store) Disable(ctx context.Context, tx db.TenantTx, by evdomain.Actor, author, id ids.UUID) error {
 	q := dbq.New(tx)
 	org := tx.OrgID()
 	if err := q.LockOrgIdentityProviderSettings(ctx, org.UUID()); err != nil {
@@ -412,7 +412,7 @@ func (s *Store) underLimit(ctx context.Context, tx db.TenantTx, except ids.UUID)
 // Lapse disables provider id when it was never activated: its activation
 // was declined or expired, so it stops counting toward the limit (D169).
 // Any other provider is left as it is.
-func (s *Store) Lapse(ctx context.Context, tx db.TenantTx, author ids.UUID, id ids.UUID) error {
+func (s *Store) Lapse(ctx context.Context, tx db.TenantTx, author, id ids.UUID) error {
 	a := author
 	n, err := dbq.New(tx).LapseOrgIdentityProvider(ctx, &a, tx.OrgID(), id)
 	if err != nil || n == 0 {

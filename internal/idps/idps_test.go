@@ -50,8 +50,11 @@ func TestHR484_LockOutRule(t *testing.T) {
 // Covers: PN-012.7
 func TestHR482_SecretNeverInProvider(t *testing.T) {
 	for _, v := range []any{
-		Provider{}, dbq.GetOrgIdentityProviderRow{}, dbq.ListOrgIdentityProvidersRow{},
-		dbq.InsertOrgIdentityProviderRow{}, dbq.LockOrgIdentityProviderRow{},
+		Provider{},
+		dbq.GetOrgIdentityProviderRow{},
+		dbq.ListOrgIdentityProvidersRow{},
+		dbq.InsertOrgIdentityProviderRow{},
+		dbq.LockOrgIdentityProviderRow{},
 	} {
 		typ := reflect.TypeOf(v)
 		for i := range typ.NumField() {
