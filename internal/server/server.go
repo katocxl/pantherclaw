@@ -49,6 +49,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/evidence/chainer"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/extension"
+	"github.com/katocxl/pantherclaw/internal/externalchecks"
 	"github.com/katocxl/pantherclaw/internal/facts/adapters/factsrpc"
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	factsapp "github.com/katocxl/pantherclaw/internal/facts/app"
@@ -352,7 +353,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	}
 	m6.verifications = verification
 	m6.facts = gatewayFacts(pool)
-	m6.scans = agentsrpc.NewGatewayScans(aapp.NewInventory(pool, bill))
+	m6.scans = agentsrpc.NewGatewayScans(aapp.NewInventory(pool, bill).WithNotify(m5.notifications))
 
 	g, ctx := errgroup.WithContext(ctx)
 	// The private admin listener, in every role (HR-382).
@@ -368,6 +369,8 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	wireM11Process(autos, m11protect, pool)
 	wireM14Process(autos, bill)
 	wireM14A2APeer(svc, authorityStore, autos, pool)
+	external := newExternalChecks(pool, cfg, bill, log)
+	wireM16External(svc, m5p2, external, pool)
 	if cfg.Role == RoleAPI || cfg.Role == RoleAll {
 		tokens, err := token.New(reg, cfg.Auth.PublicURL, token.Audience)
 		if err != nil {
@@ -443,7 +446,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			oauth: oauthhttp.New(authnapp.NewOAuth(pool, tokens, cfg.Auth.PublicURL, clock.System{}, log),
 				cfg.Auth.PublicURL, limiter),
 			device:    device,
-			publicURL: cfg.Auth.PublicURL, clientIP: limiter.ClientIP, clusters: clusters, subjects: subjects,
+			publicURL: cfg.Auth.PublicURL, clientIP: limiter.ClientIP, clusters: clusters, subjects: subjects, identity: cfg.Identity,
 			logOrigin:    cfg.logOrigin(),
 			packageRoots: roots,
 			github:       cfg.GitHub,
@@ -464,6 +467,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			workers:      workers,
 			hold:         cfg.Maintenance.Hold,
 			data:         dataRequests,
+			external:     external,
 		})
 		if err != nil {
 			return err
@@ -560,6 +564,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		evidenceJobs = append(evidenceJobs, responseJobs...)
+		if err := registerSuggestionJobs(jreg, pool, log); err != nil {
+			return err
+		}
 		if evidenceJobs, err = registerExposureJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
 			return err
 		}
@@ -695,8 +702,10 @@ func publicProcedures() []string {
 // service accounts and API keys. Gateway procedures are refused here: gateways
 // call the Authority only on the mTLS gateway listener (HR-181).
 type apiDeps struct {
-	data *datarequests.Service
-	pool *db.Pool
+	// external is the external policy check service (G0 M16 D81).
+	external *externalchecks.Service
+	data     *datarequests.Service
+	pool     *db.Pool
 	// cel are the configured CEL limits (cel).
 	cel       celenv.Limits
 	reg       *keys.Registry
@@ -715,6 +724,8 @@ type apiDeps struct {
 	clientIP httpx.ClientIPFunc
 	// clusters are the configured Kubernetes clusters (identity.kubernetes_clusters).
 	clusters *kube.Directory
+	// identity is the workload identity configuration (presets, M17).
+	identity IdentityConfig
 	// subjects are the providers configured for subject tokens (HR-145).
 	subjects oidcrp.Subjects
 	// packageRoots are the trusted package roots (nil: the embedded ones).
@@ -781,16 +792,16 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	// autos is the M11 part 2 core, set below once grants and runs exist;
 	// ListAgents reads it only while serving.
 	var autos *automationsCore
-	pantherclawv1connect.RegisterAgentServiceHandler(rs, d.m5p2.agents(agentsrpc.NewAgents(aapp.NewInventory(pool, d.billing)).
+	pantherclawv1connect.RegisterAgentServiceHandler(rs, d.m5p2.agents(agentsrpc.NewAgents(aapp.NewInventory(pool, d.billing).WithNotify(d.m5.notifications)).
 		WithAutomations(func(ctx context.Context) ([]*pantherclawv1.AutomationIdentity, string, error) {
 			return autos.identities(ctx)
 		})))
 	pantherclawv1connect.RegisterWaitlistServiceHandler(rs, d.m5p2.waitlist())
-	attestors, err := newAttestors(d.clusters)
+	attestors, err := newAttestors(d.clusters, d.identity)
 	if err != nil {
 		return nil, err
 	}
-	identity := iapp.New(pool, reg, d.publicURL, clock.System{}).WithAttestors(attestors)
+	identity := iapp.New(pool, reg, d.publicURL, clock.System{}).WithAttestors(attestors).WithEntitlements(d.billing)
 	pantherclawv1connect.RegisterIdentityServiceHandler(rs, identityrpc.NewIdentity(identity, d.clusters))
 	grants, runs := m11Issuance(d)
 	wireM14Grants(grants, d)
@@ -844,6 +855,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerCases(rs, d, grants)
 	registerResponse(rs, d)
 	registerExposure(rs, d)
+	registerSuggestions(rs, d)
 	edges, err := registerM10Edges(rs, d)
 	if err != nil {
 		return nil, err
@@ -866,11 +878,13 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		return nil, err
 	}
 	registerM11Protect(rs, d, autos)
+	registerM17Rules(rs, d)
 	authzen := registerAuthZEN(rs, d)
 	registerUITenancy(rs, d)
 	registerUsage(rs, d)
 	registerDataRequests(rs, d)
 	registerSupport(rs, d)
+	registerM16External(rs, d)
 	mux := http.NewServeMux()
 	edges.mount(mux)
 	automationTriggers.mount(mux)
@@ -891,6 +905,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		d.web.MountAccountDeletion(mux, d.ui.deletion)
 	}
 	mountM14Data(mux, d)
+	mountM16External(mux, d)
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, "ok\n")
@@ -925,8 +940,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 const attestTimeout = 10 * time.Second
 
 // newAttestors returns the L2 verifiers: GitHub keys through the egress
-// client (public addresses only) and the configured clusters (HR-142).
-func newAttestors(clusters *kube.Directory) (iapp.Attestors, error) {
+// client (public addresses only), the configured clusters (HR-142) and
+// the M17 presets (attestors_m17.go).
+func newAttestors(clusters *kube.Directory, cfg IdentityConfig) (iapp.Attestors, error) {
 	gh, err := issuerkeys.New(httpx.NewEgressClient(httpx.EgressConfig{Timeout: attestTimeout}), issuers.GitHubIssuer, nil)
 	if err != nil {
 		return iapp.Attestors{}, err
@@ -935,7 +951,11 @@ func newAttestors(clusters *kube.Directory) (iapp.Attestors, error) {
 	if err != nil {
 		return iapp.Attestors{}, err
 	}
-	return iapp.Attestors{GitHub: gh, Kube: kc, Clusters: clusters}, nil
+	att := iapp.Attestors{GitHub: gh, Kube: kc, Clusters: clusters}
+	if err := presetAttestors(&att, cfg); err != nil {
+		return iapp.Attestors{}, err
+	}
+	return att, nil
 }
 
 // startupActor records start-up actions in the audit log.

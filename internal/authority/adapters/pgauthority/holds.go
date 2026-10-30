@@ -128,3 +128,44 @@ func holdSettings(ctx context.Context, tx db.TenantTx, org ids.OrgID) (pipeline.
 	}
 	return out, nil
 }
+
+// SensitiveReads implements pipeline.Reader.
+func (r *Reader) SensitiveReads(ctx context.Context, org ids.OrgID, run ids.UUID) ([]pipeline.SensitiveRead, error) {
+	return read(ctx, r, org, func(ctx context.Context, s *snapshot) ([]pipeline.SensitiveRead, error) {
+		return s.SensitiveReads(ctx, org, run)
+	})
+}
+
+// SensitiveReads implements pipeline.Reader: the pii and secret reads of
+// the run's tree (G0 M16 D73), classes and ids only (HR-434).
+func (s *snapshot) SensitiveReads(ctx context.Context, org ids.OrgID, run ids.UUID) ([]pipeline.SensitiveRead, error) {
+	rows, err := dbq.New(s.tx).SensitiveReads(ctx, org, run)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]pipeline.SensitiveRead, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, pipeline.SensitiveRead{TransactionID: r.ID, RunID: r.RunID, Operation: r.Operation, Class: r.ReadClass, At: r.CreatedAt})
+	}
+	return out, nil
+}
+
+// RunConsequences implements pipeline.Reader (G0 M17 D103).
+func (r *Reader) RunConsequences(ctx context.Context, org ids.OrgID, run ids.UUID) (pipeline.RunConsequenceCounts, error) {
+	return read(ctx, r, org, func(ctx context.Context, s *snapshot) (pipeline.RunConsequenceCounts, error) {
+		return s.RunConsequences(ctx, org, run)
+	})
+}
+
+// RunConsequences counts the run's actions by their downstream state.
+func (s *snapshot) RunConsequences(ctx context.Context, org ids.OrgID, run ids.UUID) (pipeline.RunConsequenceCounts, error) {
+	return runConsequences(ctx, s.tx, org, run)
+}
+
+func runConsequences(ctx context.Context, tx db.TenantTx, org ids.OrgID, run ids.UUID) (pipeline.RunConsequenceCounts, error) {
+	c, err := dbq.New(tx).RunDownstreamCounts(ctx, org, run, nil)
+	if err != nil {
+		return pipeline.RunConsequenceCounts{}, err
+	}
+	return pipeline.RunConsequenceCounts{Pending: int(c.Pending), Unconfirmed: int(c.Unconfirmed)}, nil
+}

@@ -16,7 +16,7 @@ import (
 )
 
 const getRedteamRun = `-- name: GetRedteamRun :one
-SELECT org_id, id, range_agent_id, started_by, runner_version, scenario_set_digest, scenarios, policy_versions, package_versions, baseline_range_id, state, started_at, finished_at FROM pc.redteam_runs WHERE org_id = $1 AND id = $2
+SELECT org_id, id, range_agent_id, started_by, runner_version, scenario_set_digest, scenarios, policy_versions, package_versions, baseline_range_id, state, started_at, finished_at, origin FROM pc.redteam_runs WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetRedteamRun(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcRedteamRun, error) {
@@ -36,16 +36,17 @@ func (q *Queries) GetRedteamRun(ctx context.Context, orgID ids.OrgID, iD ids.UUI
 		&i.State,
 		&i.StartedAt,
 		&i.FinishedAt,
+		&i.Origin,
 	)
 	return i, err
 }
 
 const insertRedteamResult = `-- name: InsertRedteamResult :one
 INSERT INTO pc.redteam_results (org_id, range_id, scenario_id, scenario_digest, title, suite, category, tier, verdict,
-    claimed_verdict, steps, observed_by, mismatches)
+    claimed_verdict, steps, observed_by, mismatches, origin)
 VALUES ($1, $2, $3, $4, $5,
     $6, $7, $8, $9, $10, $11,
-    $12, $13)
+    $12, $13, $14)
 ON CONFLICT (org_id, range_id, scenario_id) DO NOTHING
 RETURNING recorded_at
 `
@@ -64,6 +65,7 @@ type InsertRedteamResultParams struct {
 	Steps          []byte
 	ObservedBy     string
 	Mismatches     int32
+	Origin         string
 }
 
 func (q *Queries) InsertRedteamResult(ctx context.Context, arg InsertRedteamResultParams) (time.Time, error) {
@@ -81,6 +83,7 @@ func (q *Queries) InsertRedteamResult(ctx context.Context, arg InsertRedteamResu
 		arg.Steps,
 		arg.ObservedBy,
 		arg.Mismatches,
+		arg.Origin,
 	)
 	var recorded_at time.Time
 	err := row.Scan(&recorded_at)
@@ -90,11 +93,11 @@ func (q *Queries) InsertRedteamResult(ctx context.Context, arg InsertRedteamResu
 const insertRedteamRun = `-- name: InsertRedteamRun :one
 
 INSERT INTO pc.redteam_runs (org_id, id, range_agent_id, started_by, runner_version, scenario_set_digest, scenarios,
-    policy_versions, package_versions, baseline_range_id)
+    policy_versions, package_versions, baseline_range_id, origin)
 VALUES ($1, $2, $3, $4, $5,
     $6, $7, $8, $9,
-    $10)
-RETURNING org_id, id, range_agent_id, started_by, runner_version, scenario_set_digest, scenarios, policy_versions, package_versions, baseline_range_id, state, started_at, finished_at
+    $10, $11)
+RETURNING org_id, id, range_agent_id, started_by, runner_version, scenario_set_digest, scenarios, policy_versions, package_versions, baseline_range_id, state, started_at, finished_at, origin
 `
 
 type InsertRedteamRunParams struct {
@@ -108,6 +111,7 @@ type InsertRedteamRunParams struct {
 	PolicyVersions    []byte
 	PackageVersions   []byte
 	BaselineRangeID   *ids.UUID
+	Origin            string
 }
 
 // SPDX-License-Identifier: BUSL-1.1
@@ -128,6 +132,7 @@ func (q *Queries) InsertRedteamRun(ctx context.Context, arg InsertRedteamRunPara
 		arg.PolicyVersions,
 		arg.PackageVersions,
 		arg.BaselineRangeID,
+		arg.Origin,
 	)
 	var i PcRedteamRun
 	err := row.Scan(
@@ -144,12 +149,13 @@ func (q *Queries) InsertRedteamRun(ctx context.Context, arg InsertRedteamRunPara
 		&i.State,
 		&i.StartedAt,
 		&i.FinishedAt,
+		&i.Origin,
 	)
 	return i, err
 }
 
 const listRedteamRuns = `-- name: ListRedteamRuns :many
-SELECT org_id, id, range_agent_id, started_by, runner_version, scenario_set_digest, scenarios, policy_versions, package_versions, baseline_range_id, state, started_at, finished_at FROM pc.redteam_runs
+SELECT org_id, id, range_agent_id, started_by, runner_version, scenario_set_digest, scenarios, policy_versions, package_versions, baseline_range_id, state, started_at, finished_at, origin FROM pc.redteam_runs
 WHERE org_id = $1
   AND ($2::uuid IS NULL OR range_agent_id = $2)
   AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR id < $3)
@@ -192,6 +198,7 @@ func (q *Queries) ListRedteamRuns(ctx context.Context, arg ListRedteamRunsParams
 			&i.State,
 			&i.StartedAt,
 			&i.FinishedAt,
+			&i.Origin,
 		); err != nil {
 			return nil, err
 		}
@@ -204,7 +211,7 @@ func (q *Queries) ListRedteamRuns(ctx context.Context, arg ListRedteamRunsParams
 }
 
 const lockRedteamRun = `-- name: LockRedteamRun :one
-SELECT org_id, id, range_agent_id, started_by, runner_version, scenario_set_digest, scenarios, policy_versions, package_versions, baseline_range_id, state, started_at, finished_at FROM pc.redteam_runs WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, range_agent_id, started_by, runner_version, scenario_set_digest, scenarios, policy_versions, package_versions, baseline_range_id, state, started_at, finished_at, origin FROM pc.redteam_runs WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 // The range row is locked while a result is recorded or the range finishes.
@@ -225,6 +232,7 @@ func (q *Queries) LockRedteamRun(ctx context.Context, orgID ids.OrgID, iD ids.UU
 		&i.State,
 		&i.StartedAt,
 		&i.FinishedAt,
+		&i.Origin,
 	)
 	return i, err
 }
@@ -368,7 +376,7 @@ func (q *Queries) RangeTransaction(ctx context.Context, orgID ids.OrgID, iD ids.
 }
 
 const redteamResults = `-- name: RedteamResults :many
-SELECT org_id, range_id, scenario_id, scenario_digest, title, suite, category, tier, verdict, claimed_verdict, steps, observed_by, mismatches, recorded_at FROM pc.redteam_results
+SELECT org_id, range_id, scenario_id, scenario_digest, title, suite, category, tier, verdict, claimed_verdict, steps, observed_by, mismatches, recorded_at, origin FROM pc.redteam_results
 WHERE org_id = $1 AND range_id = $2
 ORDER BY recorded_at, scenario_id
 `
@@ -397,6 +405,7 @@ func (q *Queries) RedteamResults(ctx context.Context, orgID ids.OrgID, rangeID i
 			&i.ObservedBy,
 			&i.Mismatches,
 			&i.RecordedAt,
+			&i.Origin,
 		); err != nil {
 			return nil, err
 		}
@@ -409,7 +418,7 @@ func (q *Queries) RedteamResults(ctx context.Context, orgID ids.OrgID, rangeID i
 }
 
 const staleRedteamRuns = `-- name: StaleRedteamRuns :many
-SELECT org_id, id, range_agent_id, started_by, runner_version, scenario_set_digest, scenarios, policy_versions, package_versions, baseline_range_id, state, started_at, finished_at FROM pc.redteam_runs
+SELECT org_id, id, range_agent_id, started_by, runner_version, scenario_set_digest, scenarios, policy_versions, package_versions, baseline_range_id, state, started_at, finished_at, origin FROM pc.redteam_runs
 WHERE org_id = $1 AND state = 'RUNNING' AND started_at <= now() - interval '24 hours'
 ORDER BY started_at, id
 LIMIT $2
@@ -440,6 +449,7 @@ func (q *Queries) StaleRedteamRuns(ctx context.Context, orgID ids.OrgID, maxRows
 			&i.State,
 			&i.StartedAt,
 			&i.FinishedAt,
+			&i.Origin,
 		); err != nil {
 			return nil, err
 		}

@@ -87,6 +87,15 @@ type Pipeline struct {
 	// is DENY DELEGATION_NOT_ALLOWED. Unset, other kinds are unaffected
 	// and an a2a call is CANNOT_AUTHORIZE (fail closed).
 	Peer PeerCheck
+	// External asks the org's active external policy checks (G0 M16 D81;
+	// external.go). Unset, none is asked (replay and simulation).
+	External ExternalCheck
+	// SimulateExternal: a simulation (the grant narrower) lists the matching
+	// external checks as not evaluated and never calls them (D96).
+	SimulateExternal bool
+	// ReplayOf is the version of the recording a replay decides (Replays);
+	// 0 is Version. A replay of an earlier version makes none of the later ones' reads.
+	ReplayOf int
 }
 
 // IdentitySummary is the identity part of a decision receipt (ids only).
@@ -158,6 +167,13 @@ type Evaluation struct {
 	// Consequences are what step 6 found the action's consequence rules
 	// say, in rule order (G0 M8, HR-206).
 	Consequences []consequences.Consequence
+	// ReadClass is the class of the data a read returns (G0 M16 D72); the
+	// transaction records it only when the read is allowed
+	// (RecordedReadClass).
+	ReadClass string
+	// ExternalCalls are the external checks pass 1 found, for the caller to
+	// ask before pass 2 (G0 M16 D96, AskExternal).
+	ExternalCalls []ExternalCall
 }
 
 // VerifyPlan is fixed when a permit is issued: the digest of the
@@ -233,21 +249,26 @@ func (e *Evaluation) Decisive() Item {
 
 // state carries what earlier steps established.
 type state struct {
-	req     Request
-	a       actionir.ActionIR
-	cl      checklist
-	ev      *Evaluation
-	cont    Containment
-	pinned  *Pinned
-	conn    *Connection
-	def     *defs.Definition
-	run     *Run
+	req    Request
+	a      actionir.ActionIR
+	cl     checklist
+	ev     *Evaluation
+	cont   Containment
+	pinned *Pinned
+	conn   *Connection
+	def    *defs.Definition
+	run    *Run
+	// runCons are the run's consequence counts, read only for a policy
+	// that uses them (G0 M17 D103).
+	runCons RunConsequenceCounts
 	agent   *Agent
 	chain   gdomain.Chain
 	policy  *Policy
 	vals    defs.Values
 	gAction *gdomain.Action
 	facts   map[string]fdomain.Value
+	// risk is the open identity-risk signal policy sees (G0 M16 D82).
+	risk    *papp.Risk
 	used    []fdomain.Fact
 	covered bool
 	// held are the HOLD_WRITES controls covering a write (step 3); step 8
@@ -256,27 +277,49 @@ type state struct {
 	// pending are the predicted and unknown consequences steps 4, 7 and 8
 	// decide with the action.
 	pending []pendingConsequence
+	// classification is the class a pc.classification fact gives the
+	// action's target (G0 M16 D80), or "": it raises the read class.
+	classification string
+	// rules are the consequence rules step 6 evaluates: the package
+	// version's, then the org's customer rules (G0 M17 D108).
+	rules []consequences.Rule
 }
 
 // Snapshot calls fn with a Reader whose reads all come from one snapshot
 // when the Pipeline's Reader is a Snapshotter, and with that Reader itself
 // otherwise.
 func (p *Pipeline) Snapshot(ctx context.Context, org ids.OrgID, fn func(ctx context.Context, r Reader) error) error {
+	if p.External != nil {
+		// Before the snapshot holds a connection (G0 M16 D81).
+		ctx = p.External.Preload(ctx, org)
+	}
 	if s, ok := p.Reader.(Snapshotter); ok {
 		return s.Snapshot(ctx, org, fn)
 	}
 	return fn(ctx, p.Reader)
 }
 
-// Evaluate runs steps 1–8 on one snapshot (see Snapshot).
+// Evaluate runs steps 1–8 on one snapshot (see Snapshot), and again on a
+// second one with the answers of the external checks the first found,
+// asked between the two with no snapshot open (G0 M16 D96).
 func (p *Pipeline) Evaluate(ctx context.Context, req Request) (*Evaluation, error) {
-	var ev *Evaluation
-	err := p.Snapshot(ctx, req.Org, func(ctx context.Context, r Reader) error {
-		var err error
-		ev, err = p.EvaluateWith(ctx, r, req)
-		return err
-	})
-	return ev, err
+	once := func(ctx context.Context) (*Evaluation, error) {
+		var ev *Evaluation
+		err := p.Snapshot(ctx, req.Org, func(ctx context.Context, r Reader) error {
+			var err error
+			ev, err = p.EvaluateWith(ctx, r, req)
+			return err
+		})
+		return ev, err
+	}
+	ev, err := once(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if answered, again := p.AskExternal(ctx, req.Org, ev); again {
+		return once(answered)
+	}
+	return ev, nil
 }
 
 // EvaluateWith runs steps 1–8, reading through r (a snapshot's Reader). It
@@ -310,6 +353,7 @@ func (p *Pipeline) evaluate(ctx context.Context, req Request) (*Evaluation, erro
 	p.boundaries(ctx, s)
 	p.requirements(ctx, s)
 	s.ev.Decision, s.ev.Checklist = s.cl.compose(s.covered)
+	s.readClass()
 	s.ev.Basis = s.basis()
 	return s.ev, nil
 }
@@ -694,6 +738,9 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 		return
 	}
 	s.policy = pol
+	if !p.identityRisk(ctx, s) || !p.classify(ctx, s) { // G0 M16 D82 (risk.go), D80 (classification.go)
+		return
+	}
 	var reqs []fdomain.Requirement
 	for _, pr := range s.def.Prerequisites {
 		reqs = append(reqs, fdomain.Requirement{Name: pr.Fact, MaxAge: time.Duration(pr.MaxAgeSeconds) * time.Second, Source: "definition"})
@@ -702,10 +749,8 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 		reqs = append(reqs, pol.Compiled.FactRequirements(s.a.Operation, s.a.Env)...)
 	}
 	s.facts = map[string]fdomain.Value{}
-	var rules []consequences.Rule
-	if s.pinned != nil {
-		rules = s.pinned.Consequences
-	}
+	s.rules = p.consequenceRules(ctx, s)
+	rules := consequences.Direct(s.rules, s.a.Operation)
 	names := factNames(reqs, rules)
 	if len(names) == 0 {
 		s.cl.note(StepFacts, StatusNotApplicable, ReasonFactsFresh, "no facts are required")
@@ -717,7 +762,7 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 		return
 	}
 	defer func() {
-		s.consequences(ctx, evaluatorFor(p.consequenceLimits(s)), recorded, reqs)
+		p.consequences(ctx, s, evaluatorFor(p.consequenceLimits(s)), recorded, reqs)
 		p.consequenceFacts(ctx, s)
 	}()
 	if len(reqs) == 0 {
@@ -826,7 +871,9 @@ func (p *Pipeline) boundaries(ctx context.Context, s *state) {
 		s.cl.add(StepBoundaries, effectOf(f), f.Reason(), f.Finding.Detail, f.Level.String())
 	}
 	p.policyRules(ctx, s)
+	p.external(ctx, s) // G0 M16 D81 (external.go)
 	s.disclosure()
+	p.dataFlow(ctx, s)      // G0 M16 D76 (dataflow.go)
 	p.boundariesM14(ctx, s) // G0 M14 D11, D78, D89 (scope.go)
 	p.consequenceBoundaries(ctx, s)
 	p.budgets(ctx, s)
@@ -844,6 +891,14 @@ func (p *Pipeline) policyRules(ctx context.Context, s *state) {
 	if s.policy == nil {
 		return
 	}
+	if s.ownRun() && papp.ReadsRunConsequences(s.policy.Compiled.Bundle) {
+		c, err := p.Reader.RunConsequences(ctx, s.req.Org, s.ev.RunID)
+		if err != nil {
+			s.missing(StepBoundaries, err, "the run's consequences")
+			return
+		}
+		s.runCons = c
+	}
 	out, err := s.policy.Compiled.Evaluate(ctx, s.def, s.a, s.policyInput())
 	if err != nil {
 		s.cl.add(StepBoundaries, adomain.CannotAuthorize, ReasonPolicyEvaluation, "the policy could not be evaluated", "")
@@ -855,11 +910,14 @@ func (p *Pipeline) policyRules(ctx context.Context, s *state) {
 
 // policyInput is what the policy is evaluated with.
 func (s *state) policyInput() papp.Input {
-	in := papp.Input{Budget: s.policy.Budget, Facts: s.facts, Now: s.cont.Now, Waivers: s.waivers(s.a.Operation)}
-	if s.run != nil && s.run.AgentID == s.req.Identity.AgentID {
+	in := papp.Input{Budget: s.policy.Budget, Facts: s.facts, Now: s.cont.Now, Waivers: s.waivers(s.a.Operation), Risk: s.risk}
+	if s.ownRun() {
 		// The server's run record, found by the request's run id and checked
 		// against the agent's verified identity, never the request itself.
-		in.Run = &papp.Run{ID: s.ev.RunID.String(), AgentID: s.run.AgentID.String()}
+		in.Run = &papp.Run{
+			ID: s.ev.RunID.String(), AgentID: s.run.AgentID.String(),
+			ConsequencesPending: s.runCons.Pending, ConsequencesUnconfirmed: s.runCons.Unconfirmed,
+		}
 	}
 	if s.conn != nil {
 		// The class comes from the connection's record, never from the
@@ -868,6 +926,9 @@ func (s *state) policyInput() papp.Input {
 	}
 	return in
 }
+
+// ownRun reports whether the action's run is the verified agent's own.
+func (s *state) ownRun() bool { return s.run != nil && s.run.AgentID == s.req.Identity.AgentID }
 
 // waivers are the rules the agent's active policy exceptions waive for
 // an operation (G0 M11.1 D14): exceptable in the evaluated version, with

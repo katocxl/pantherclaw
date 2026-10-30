@@ -35,6 +35,22 @@ const (
 	AttestationKind_ATTESTATION_KIND_GITHUB_ACTIONS AttestationKind = 1
 	// A Kubernetes projected service-account token.
 	AttestationKind_ATTESTATION_KIND_KUBERNETES AttestationKind = 2
+	// A GitLab CI ID token (id_tokens with aud pantherclaw:<org>).
+	AttestationKind_ATTESTATION_KIND_GITLAB_CI AttestationKind = 3
+	// A SPIFFE JWT-SVID (aud pantherclaw:<org>).
+	AttestationKind_ATTESTATION_KIND_SPIFFE_JWT AttestationKind = 4
+	// A Google-signed ID token from the GCP metadata server (audience
+	// pantherclaw:<org>, format=full).
+	AttestationKind_ATTESTATION_KIND_GCP_WORKLOAD AttestationKind = 5
+	// A SigV4-signed sts:GetCallerIdentity request that PantherClaw sends to
+	// STS (signed X-Pantherclaw-Audience: pantherclaw:<org>).
+	AttestationKind_ATTESTATION_KIND_AWS_IAM AttestationKind = 6
+	// An Azure managed identity access token for the operator-pinned Entra
+	// app (identity.entra_apps).
+	AttestationKind_ATTESTATION_KIND_AZURE_MI AttestationKind = 7
+	// A Microsoft Entra Agent ID access token for the operator-pinned Entra
+	// app (identity.entra_apps).
+	AttestationKind_ATTESTATION_KIND_ENTRA_AGENT_ID AttestationKind = 8
 )
 
 // Enum value maps for AttestationKind.
@@ -43,11 +59,23 @@ var (
 		0: "ATTESTATION_KIND_UNSPECIFIED",
 		1: "ATTESTATION_KIND_GITHUB_ACTIONS",
 		2: "ATTESTATION_KIND_KUBERNETES",
+		3: "ATTESTATION_KIND_GITLAB_CI",
+		4: "ATTESTATION_KIND_SPIFFE_JWT",
+		5: "ATTESTATION_KIND_GCP_WORKLOAD",
+		6: "ATTESTATION_KIND_AWS_IAM",
+		7: "ATTESTATION_KIND_AZURE_MI",
+		8: "ATTESTATION_KIND_ENTRA_AGENT_ID",
 	}
 	AttestationKind_value = map[string]int32{
 		"ATTESTATION_KIND_UNSPECIFIED":    0,
 		"ATTESTATION_KIND_GITHUB_ACTIONS": 1,
 		"ATTESTATION_KIND_KUBERNETES":     2,
+		"ATTESTATION_KIND_GITLAB_CI":      3,
+		"ATTESTATION_KIND_SPIFFE_JWT":     4,
+		"ATTESTATION_KIND_GCP_WORKLOAD":   5,
+		"ATTESTATION_KIND_AWS_IAM":        6,
+		"ATTESTATION_KIND_AZURE_MI":       7,
+		"ATTESTATION_KIND_ENTRA_AGENT_ID": 8,
 	}
 )
 
@@ -571,8 +599,11 @@ type DelegateGrantRequest struct {
 	Delegation *GrantDelegation `protobuf:"bytes,8,opt,name=delegation,proto3" json:"delegation,omitempty"`
 	// Lowest attestation level (0-2); at least the parent's.
 	MinAttestationLevel int32 `protobuf:"varint,9,opt,name=min_attestation_level,json=minAttestationLevel,proto3" json:"min_attestation_level,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Data flows allowed after a sensitive read (G0 M16 D75, D94); each must
+	// be covered by one of the parent grant's, and none allows no flow.
+	Flows         []*FlowAllowance `protobuf:"bytes,10,rep,name=flows,proto3" json:"flows,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DelegateGrantRequest) Reset() {
@@ -666,6 +697,13 @@ func (x *DelegateGrantRequest) GetMinAttestationLevel() int32 {
 		return x.MinAttestationLevel
 	}
 	return 0
+}
+
+func (x *DelegateGrantRequest) GetFlows() []*FlowAllowance {
+	if x != nil {
+		return x.Flows
+	}
+	return nil
 }
 
 // DelegateGrantResponse returns the delegated grant.
@@ -1132,7 +1170,7 @@ const file_pantherclaw_v1_workload_proto_rawDesc = "" +
 	"ttlMinutesB\x0e\n" +
 	"\f_instance_id\">\n" +
 	"\x15StartChildRunResponse\x12%\n" +
-	"\x03run\x18\x01 \x01(\v2\x13.pantherclaw.v1.RunR\x03run\"\xbc\x03\n" +
+	"\x03run\x18\x01 \x01(\v2\x13.pantherclaw.v1.RunR\x03run\"\xfb\x03\n" +
 	"\x14DelegateGrantRequest\x12\x1f\n" +
 	"\x06run_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x05runId\x12*\n" +
 	"\fchild_run_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\n" +
@@ -1146,7 +1184,9 @@ const file_pantherclaw_v1_workload_proto_rawDesc = "" +
 	"\n" +
 	"delegation\x18\b \x01(\v2\x1f.pantherclaw.v1.GrantDelegationR\n" +
 	"delegation\x12=\n" +
-	"\x15min_attestation_level\x18\t \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x02(\x00R\x13minAttestationLevel\"D\n" +
+	"\x15min_attestation_level\x18\t \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x02(\x00R\x13minAttestationLevel\x12=\n" +
+	"\x05flows\x18\n" +
+	" \x03(\v2\x1d.pantherclaw.v1.FlowAllowanceB\b\xbaH\x05\x92\x01\x02\x10\x10R\x05flows\"D\n" +
 	"\x15DelegateGrantResponse\x12+\n" +
 	"\x05grant\x18\x01 \x01(\v2\x15.pantherclaw.v1.GrantR\x05grant\"\xca\x01\n" +
 	"\vWaitRequest\x12\x1f\n" +
@@ -1174,11 +1214,17 @@ const file_pantherclaw_v1_workload_proto_rawDesc = "" +
 	"\xbaH\ar\x05\x10\x01(\x80 R\x04note\"\x82\x01\n" +
 	"$WorkloadServiceRequestAccessResponse\x12\x19\n" +
 	"\bentry_id\x18\x01 \x01(\tR\aentryId\x12?\n" +
-	"\rdeadline_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\fdeadlineTime*y\n" +
+	"\rdeadline_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\fdeadlineTime*\xbf\x02\n" +
 	"\x0fAttestationKind\x12 \n" +
 	"\x1cATTESTATION_KIND_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fATTESTATION_KIND_GITHUB_ACTIONS\x10\x01\x12\x1f\n" +
-	"\x1bATTESTATION_KIND_KUBERNETES\x10\x022\x8b\x05\n" +
+	"\x1bATTESTATION_KIND_KUBERNETES\x10\x02\x12\x1e\n" +
+	"\x1aATTESTATION_KIND_GITLAB_CI\x10\x03\x12\x1f\n" +
+	"\x1bATTESTATION_KIND_SPIFFE_JWT\x10\x04\x12!\n" +
+	"\x1dATTESTATION_KIND_GCP_WORKLOAD\x10\x05\x12\x1c\n" +
+	"\x18ATTESTATION_KIND_AWS_IAM\x10\x06\x12\x1d\n" +
+	"\x19ATTESTATION_KIND_AZURE_MI\x10\a\x12#\n" +
+	"\x1fATTESTATION_KIND_ENTRA_AGENT_ID\x10\b2\x8b\x05\n" +
 	"\x0fWorkloadService\x12G\n" +
 	"\x06Enroll\x12\x1d.pantherclaw.v1.EnrollRequest\x1a\x1e.pantherclaw.v1.EnrollResponse\x12S\n" +
 	"\n" +
@@ -1225,9 +1271,10 @@ var file_pantherclaw_v1_workload_proto_goTypes = []any{
 	(*timestamppb.Timestamp)(nil),                // 17: google.protobuf.Timestamp
 	(*Run)(nil),                                  // 18: pantherclaw.v1.Run
 	(*GrantDelegation)(nil),                      // 19: pantherclaw.v1.GrantDelegation
-	(*Grant)(nil),                                // 20: pantherclaw.v1.Grant
-	(WaitState)(0),                               // 21: pantherclaw.v1.WaitState
-	(*WaitInfo)(nil),                             // 22: pantherclaw.v1.WaitInfo
+	(*FlowAllowance)(nil),                        // 20: pantherclaw.v1.FlowAllowance
+	(*Grant)(nil),                                // 21: pantherclaw.v1.Grant
+	(WaitState)(0),                               // 22: pantherclaw.v1.WaitState
+	(*WaitInfo)(nil),                             // 23: pantherclaw.v1.WaitInfo
 }
 var file_pantherclaw_v1_workload_proto_depIdxs = []int32{
 	0,  // 0: pantherclaw.v1.Attestation.kind:type_name -> pantherclaw.v1.AttestationKind
@@ -1238,30 +1285,31 @@ var file_pantherclaw_v1_workload_proto_depIdxs = []int32{
 	18, // 5: pantherclaw.v1.StartChildRunResponse.run:type_name -> pantherclaw.v1.Run
 	17, // 6: pantherclaw.v1.DelegateGrantRequest.expire_time:type_name -> google.protobuf.Timestamp
 	19, // 7: pantherclaw.v1.DelegateGrantRequest.delegation:type_name -> pantherclaw.v1.GrantDelegation
-	20, // 8: pantherclaw.v1.DelegateGrantResponse.grant:type_name -> pantherclaw.v1.Grant
-	21, // 9: pantherclaw.v1.WaitRequest.known_state:type_name -> pantherclaw.v1.WaitState
-	22, // 10: pantherclaw.v1.WaitResponse.wait:type_name -> pantherclaw.v1.WaitInfo
-	22, // 11: pantherclaw.v1.SubmitEvidenceResponse.wait:type_name -> pantherclaw.v1.WaitInfo
-	17, // 12: pantherclaw.v1.WorkloadServiceRequestAccessResponse.deadline_time:type_name -> google.protobuf.Timestamp
-	2,  // 13: pantherclaw.v1.WorkloadService.Enroll:input_type -> pantherclaw.v1.EnrollRequest
-	4,  // 14: pantherclaw.v1.WorkloadService.IssueToken:input_type -> pantherclaw.v1.IssueTokenRequest
-	6,  // 15: pantherclaw.v1.WorkloadService.StartChildRun:input_type -> pantherclaw.v1.StartChildRunRequest
-	8,  // 16: pantherclaw.v1.WorkloadService.DelegateGrant:input_type -> pantherclaw.v1.DelegateGrantRequest
-	10, // 17: pantherclaw.v1.WorkloadService.Wait:input_type -> pantherclaw.v1.WaitRequest
-	12, // 18: pantherclaw.v1.WorkloadService.SubmitEvidence:input_type -> pantherclaw.v1.SubmitEvidenceRequest
-	14, // 19: pantherclaw.v1.WorkloadService.RequestAccess:input_type -> pantherclaw.v1.WorkloadServiceRequestAccessRequest
-	3,  // 20: pantherclaw.v1.WorkloadService.Enroll:output_type -> pantherclaw.v1.EnrollResponse
-	5,  // 21: pantherclaw.v1.WorkloadService.IssueToken:output_type -> pantherclaw.v1.IssueTokenResponse
-	7,  // 22: pantherclaw.v1.WorkloadService.StartChildRun:output_type -> pantherclaw.v1.StartChildRunResponse
-	9,  // 23: pantherclaw.v1.WorkloadService.DelegateGrant:output_type -> pantherclaw.v1.DelegateGrantResponse
-	11, // 24: pantherclaw.v1.WorkloadService.Wait:output_type -> pantherclaw.v1.WaitResponse
-	13, // 25: pantherclaw.v1.WorkloadService.SubmitEvidence:output_type -> pantherclaw.v1.SubmitEvidenceResponse
-	15, // 26: pantherclaw.v1.WorkloadService.RequestAccess:output_type -> pantherclaw.v1.WorkloadServiceRequestAccessResponse
-	20, // [20:27] is the sub-list for method output_type
-	13, // [13:20] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	20, // 8: pantherclaw.v1.DelegateGrantRequest.flows:type_name -> pantherclaw.v1.FlowAllowance
+	21, // 9: pantherclaw.v1.DelegateGrantResponse.grant:type_name -> pantherclaw.v1.Grant
+	22, // 10: pantherclaw.v1.WaitRequest.known_state:type_name -> pantherclaw.v1.WaitState
+	23, // 11: pantherclaw.v1.WaitResponse.wait:type_name -> pantherclaw.v1.WaitInfo
+	23, // 12: pantherclaw.v1.SubmitEvidenceResponse.wait:type_name -> pantherclaw.v1.WaitInfo
+	17, // 13: pantherclaw.v1.WorkloadServiceRequestAccessResponse.deadline_time:type_name -> google.protobuf.Timestamp
+	2,  // 14: pantherclaw.v1.WorkloadService.Enroll:input_type -> pantherclaw.v1.EnrollRequest
+	4,  // 15: pantherclaw.v1.WorkloadService.IssueToken:input_type -> pantherclaw.v1.IssueTokenRequest
+	6,  // 16: pantherclaw.v1.WorkloadService.StartChildRun:input_type -> pantherclaw.v1.StartChildRunRequest
+	8,  // 17: pantherclaw.v1.WorkloadService.DelegateGrant:input_type -> pantherclaw.v1.DelegateGrantRequest
+	10, // 18: pantherclaw.v1.WorkloadService.Wait:input_type -> pantherclaw.v1.WaitRequest
+	12, // 19: pantherclaw.v1.WorkloadService.SubmitEvidence:input_type -> pantherclaw.v1.SubmitEvidenceRequest
+	14, // 20: pantherclaw.v1.WorkloadService.RequestAccess:input_type -> pantherclaw.v1.WorkloadServiceRequestAccessRequest
+	3,  // 21: pantherclaw.v1.WorkloadService.Enroll:output_type -> pantherclaw.v1.EnrollResponse
+	5,  // 22: pantherclaw.v1.WorkloadService.IssueToken:output_type -> pantherclaw.v1.IssueTokenResponse
+	7,  // 23: pantherclaw.v1.WorkloadService.StartChildRun:output_type -> pantherclaw.v1.StartChildRunResponse
+	9,  // 24: pantherclaw.v1.WorkloadService.DelegateGrant:output_type -> pantherclaw.v1.DelegateGrantResponse
+	11, // 25: pantherclaw.v1.WorkloadService.Wait:output_type -> pantherclaw.v1.WaitResponse
+	13, // 26: pantherclaw.v1.WorkloadService.SubmitEvidence:output_type -> pantherclaw.v1.SubmitEvidenceResponse
+	15, // 27: pantherclaw.v1.WorkloadService.RequestAccess:output_type -> pantherclaw.v1.WorkloadServiceRequestAccessResponse
+	21, // [21:28] is the sub-list for method output_type
+	14, // [14:21] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_workload_proto_init() }

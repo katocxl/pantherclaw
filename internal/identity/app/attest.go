@@ -13,6 +13,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/identity/issuers"
@@ -28,10 +29,11 @@ type Attestation struct {
 	Token string
 }
 
-// GitHubVerifier checks a GitHub Actions OIDC token's signature with the
-// issuer's published keys and returns its payload (issuerkeys.Fetcher).
-type GitHubVerifier interface {
-	Verify(ctx context.Context, compact string) ([]byte, error)
+// Verifier checks one preset's attestation token with its issuer's keys
+// and returns the payload the issuer signed (issuerkeys.Fetcher). The
+// preset's claims are checked afterwards, by the issuers package.
+type Verifier interface {
+	Verify(ctx context.Context, token string) ([]byte, error)
 }
 
 // ClusterReviewer asks a configured cluster's API server (kube.Client).
@@ -43,10 +45,42 @@ type ClusterReviewer interface {
 // Attestors verify attestation tokens. A preset without its verifier
 // refuses every attestation (fail closed).
 type Attestors struct {
-	GitHub GitHubVerifier
+	GitHub Verifier
 	// Kube calls the clusters that Clusters allows for an org.
 	Kube     ClusterReviewer
 	Clusters Clusters
+	// GitLab is the operator-configured GitLab instances (D119).
+	GitLab IssuerDirectory
+	// SPIFFE is the operator-configured trust domains, keyed by name (D120).
+	SPIFFE IssuerDirectory
+	// GCP verifies Google-signed ID tokens with the pinned key URL (D121).
+	GCP Verifier
+	// AWS sends checked GetCallerIdentity requests to STS (D121).
+	AWS CallerVerifier
+	// Entra is the operator-pinned Entra apps of the Azure presets (D129).
+	Entra EntraDirectory
+}
+
+// IssuerDirectory is a preset's operator-configured issuers, each with its
+// own keys (issuerkeys.Directory). A tenant names one only through an
+// entry, and only one configured for its org (HR-142).
+type IssuerDirectory interface {
+	Allowed(issuer string, org ids.OrgID) bool
+	Verify(ctx context.Context, issuer string, org ids.OrgID, token string) ([]byte, error)
+}
+
+// CallerVerifier checks a signed sts:GetCallerIdentity request for an org
+// and sends it to STS (awssts.Verifier).
+type CallerVerifier interface {
+	Verify(ctx context.Context, org ids.OrgID, token string) (issuers.AWSCaller, issuers.AWSSigned, error)
+}
+
+// EntraDirectory is the operator-pinned Entra apps (issuerkeys.Entra):
+// each app id attests for exactly one org (HR-469).
+type EntraDirectory interface {
+	OrgOf(app string) ids.OrgID
+	Allowed(tenant, app string, org ids.OrgID) bool
+	Verify(ctx context.Context, app string, org ids.OrgID, token string) ([]byte, error)
 }
 
 // WithAttestors sets the attestation verifiers and returns s.
@@ -73,11 +107,12 @@ var errAttestationReused = fmt.Errorf("%w: attestation token reused", pap.Err(pa
 // without verifying anything. It only picks the org whose nonces and proof
 // store the request uses; the verified audience must then name the same
 // org (HR-143). It returns the zero id unless exactly one audience is
-// pantherclaw:<org>.
+// pantherclaw:<org>. A token that is not a JWS may be a signed AWS
+// request, whose audience is its X-Pantherclaw-Audience header.
 func AttestationOrg(token string) ids.OrgID {
 	payload, err := unverifiedPayload(token)
 	if err != nil {
-		return ids.OrgID{}
+		return awsOrg(token)
 	}
 	var c struct {
 		Aud jsontext.Value `json:"aud"`
@@ -98,6 +133,55 @@ func AttestationOrg(token string) ids.OrgID {
 		found = org
 	}
 	return found
+}
+
+// AttestationOrg reads the org an attestation names, without verifying
+// anything, like the package function. For the Azure presets the org is
+// the one the operator pinned to the token's audience app
+// (identity.entra_apps), never a pantherclaw:<org> audience (HR-469).
+func (s *Service) AttestationOrg(a Attestation) ids.OrgID {
+	if a.Kind != issuers.KindAzureMI && a.Kind != issuers.KindEntraAgent {
+		return AttestationOrg(a.Token)
+	}
+	if s.att.Entra == nil {
+		return ids.OrgID{}
+	}
+	return s.att.Entra.OrgOf(azureApp(a.Token))
+}
+
+// azureApp is the app id an Entra token's unverified audience names, or "".
+func azureApp(token string) string {
+	payload, err := unverifiedPayload(token)
+	if err != nil {
+		return ""
+	}
+	var c struct {
+		Aud string `json:"aud"`
+	}
+	if json.Unmarshal(payload, &c) != nil {
+		return ""
+	}
+	return issuers.AzureAppAudience(c.Aud)
+}
+
+// awsOrg reads the org of a signed AWS request without checking it.
+func awsOrg(token string) ids.OrgID {
+	if len(token) > maxAttestation {
+		return ids.OrgID{}
+	}
+	r, err := issuers.ParseAWSRequest(token)
+	if err != nil {
+		return ids.OrgID{}
+	}
+	s, ok := strings.CutPrefix(r.Header(issuers.AWSAudienceHeader), "pantherclaw:")
+	if !ok {
+		return ids.OrgID{}
+	}
+	org, err := ids.Parse[ids.Org](s)
+	if err != nil {
+		return ids.OrgID{}
+	}
+	return org
 }
 
 func audiences(v jsontext.Value) []string {
@@ -141,6 +225,10 @@ type attested struct {
 // attestation, after this verification (HR-143). An issuer or cluster
 // that cannot answer refuses the attestation (fail closed).
 func (s *Service) attest(ctx context.Context, org ids.OrgID, a Attestation) ([]attested, error) {
+	if !issuers.Known(a.Kind) {
+		// An unknown kind is refused, never mapped to a preset (HR-465).
+		return nil, attErr(fmt.Errorf("unknown preset %q", a.Kind))
+	}
 	if len(a.Token) > maxAttestation {
 		return nil, attErr(errors.New("token too large"))
 	}
@@ -161,6 +249,16 @@ func (s *Service) attest(ctx context.Context, org ids.OrgID, a Attestation) ([]a
 		return s.attestGitHub(ctx, org, a.Token, revs)
 	case issuers.KindKubernetes:
 		return s.attestKubernetes(ctx, org, a.Token, revs)
+	case issuers.KindGitLab:
+		return s.attestGitLab(ctx, org, a.Token, revs)
+	case issuers.KindSPIFFE:
+		return s.attestSPIFFE(ctx, org, a.Token, revs)
+	case issuers.KindGCP:
+		return s.attestGCP(ctx, org, a.Token, revs)
+	case issuers.KindAWS:
+		return s.attestAWS(ctx, org, a.Token, revs)
+	case issuers.KindAzureMI, issuers.KindEntraAgent:
+		return s.attestAzure(ctx, org, a, revs)
 	default:
 		return nil, attErr(fmt.Errorf("unknown preset %q", a.Kind))
 	}
@@ -170,6 +268,270 @@ func bindingOf(r dbq.PcTrustedIssuer) (Binding, error) {
 	var b Binding
 	err := json.Unmarshal(r.Binding, &b)
 	return b, err
+}
+
+// attestGitLab verifies a GitLab CI ID token with the keys of the instance
+// its iss names, which must be configured for org; that iss only picks the
+// keys and is checked again, verified, against each entry (HR-461).
+func (s *Service) attestGitLab(ctx context.Context, org ids.OrgID, token string, revs []dbq.PcTrustedIssuer) ([]attested, error) {
+	if s.att.GitLab == nil {
+		return nil, attErr(errors.New("no GitLab instance is configured"))
+	}
+	unverified, err := unverifiedPayload(token)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	var head struct {
+		Issuer string `json:"iss"`
+	}
+	if err := json.Unmarshal(unverified, &head); err != nil {
+		return nil, attErr(err)
+	}
+	payload, err := s.att.GitLab.Verify(ctx, head.Issuer, org, token)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	c, err := issuers.ParseGitLabClaims(payload)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	w, err := issuers.ParseWindow(payload)
+	if err == nil {
+		err = w.Check(s.clk.Now())
+	}
+	if err != nil {
+		return nil, attErr(err)
+	}
+	var out []attested
+	var last error
+	for _, r := range revs {
+		b, err := bindingOf(r)
+		if err != nil || b.GitLab == nil {
+			continue
+		}
+		m, err := issuers.MatchGitLab(*b.GitLab, org, c)
+		if err != nil {
+			last = err
+			continue
+		}
+		out = append(out, attested{
+			rev: r, match: m, issuer: c.Issuer, key: issuers.ReplayKey(w.JTI, token), window: w,
+			claims: withClaims(m.Binding, map[string]string{"ref": c.Ref, "sha": c.SHA, "pipeline_source": c.PipelineSource}),
+		})
+	}
+	if len(out) == 0 {
+		return nil, attErr(last)
+	}
+	return out, nil
+}
+
+// attestSPIFFE verifies a JWT-SVID with the bundle of the trust domain its
+// sub names, which must be configured for org; MatchSPIFFE then checks the
+// verified sub is in that same trust domain (HR-462).
+func (s *Service) attestSPIFFE(ctx context.Context, org ids.OrgID, token string, revs []dbq.PcTrustedIssuer) ([]attested, error) {
+	if s.att.SPIFFE == nil {
+		return nil, attErr(errors.New("no SPIFFE trust domain is configured"))
+	}
+	unverified, err := unverifiedPayload(token)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	var head struct {
+		Subject string `json:"sub"`
+	}
+	if err := json.Unmarshal(unverified, &head); err != nil {
+		return nil, attErr(err)
+	}
+	td, ok := issuers.ParseSPIFFEID(head.Subject)
+	if !ok {
+		return nil, attErr(errors.New("sub is not a SPIFFE ID"))
+	}
+	payload, err := s.att.SPIFFE.Verify(ctx, td, org, token)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	c, err := issuers.ParseSPIFFEClaims(payload)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	w, err := issuers.ParseWindow(payload)
+	if err == nil {
+		err = w.Check(s.clk.Now())
+	}
+	if err != nil {
+		return nil, attErr(err)
+	}
+	var out []attested
+	var last error
+	for _, r := range revs {
+		b, err := bindingOf(r)
+		if err != nil || b.SPIFFE == nil {
+			continue
+		}
+		m, err := issuers.MatchSPIFFE(*b.SPIFFE, org, td, c)
+		if err != nil {
+			last = err
+			continue
+		}
+		// JWT-SVIDs carry no required jti: the token itself is the
+		// single-use key (HR-143).
+		out = append(out, attested{
+			rev: r, match: m, issuer: b.SPIFFE.Issuer(), key: issuers.ReplayKey("", token), window: w,
+			claims: withClaims(m.Binding, nil),
+		})
+	}
+	if len(out) == 0 {
+		return nil, attErr(last)
+	}
+	return out, nil
+}
+
+// attestGCP verifies a Google-signed ID token with the keys at the pinned
+// URL only (HR-463).
+func (s *Service) attestGCP(ctx context.Context, org ids.OrgID, token string, revs []dbq.PcTrustedIssuer) ([]attested, error) {
+	if s.att.GCP == nil {
+		return nil, attErr(errors.New("the GCP preset is not configured"))
+	}
+	payload, err := s.att.GCP.Verify(ctx, token)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	c, err := issuers.ParseGCPClaims(payload)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	w, err := issuers.ParseWindow(payload)
+	if err == nil {
+		err = w.Check(s.clk.Now())
+	}
+	if err != nil {
+		return nil, attErr(err)
+	}
+	var out []attested
+	var last error
+	for _, r := range revs {
+		b, err := bindingOf(r)
+		if err != nil || b.GCP == nil {
+			continue
+		}
+		m, err := issuers.MatchGCP(*b.GCP, org, c)
+		if err != nil {
+			last = err
+			continue
+		}
+		ce := c.Google.ComputeEngine
+		// Google ID tokens carry no jti: the token is the single-use key.
+		out = append(out, attested{
+			rev: r, match: m, issuer: c.Issuer, key: issuers.ReplayKey(w.JTI, token), window: w,
+			claims: withClaims(m.Binding, map[string]string{"project_id": ce.ProjectID, "instance_id": ce.InstanceID, "zone": ce.Zone}),
+		})
+	}
+	if len(out) == 0 {
+		return nil, attErr(last)
+	}
+	return out, nil
+}
+
+// attestAWS checks a signed GetCallerIdentity request and has STS say who
+// signed it (HR-464). The request attests for AWSMaxAge from its signing
+// time, and its signature is its single-use key.
+func (s *Service) attestAWS(ctx context.Context, org ids.OrgID, token string, revs []dbq.PcTrustedIssuer) ([]attested, error) {
+	if s.att.AWS == nil {
+		return nil, attErr(errors.New("the AWS preset is not configured"))
+	}
+	c, signed, err := s.att.AWS.Verify(ctx, org, token)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	w := issuers.Window{IssuedAt: signed.SignedAt, ExpiresAt: signed.SignedAt.Add(issuers.AWSMaxAge)}
+	if err := w.Check(s.clk.Now()); err != nil {
+		return nil, attErr(err)
+	}
+	var out []attested
+	var last error
+	for _, r := range revs {
+		b, err := bindingOf(r)
+		if err != nil || b.AWS == nil {
+			continue
+		}
+		m, err := issuers.MatchAWS(*b.AWS, c)
+		if err != nil {
+			last = err
+			continue
+		}
+		out = append(out, attested{
+			rev: r, match: m, issuer: issuers.AWSIssuer, key: issuers.ReplayKey("sigv4:"+signed.Signature, token), window: w,
+			claims: withClaims(m.Binding, map[string]string{"arn": c.Arn, "sts_host": signed.URL.Hostname()}),
+		})
+	}
+	if len(out) == 0 {
+		return nil, attErr(last)
+	}
+	return out, nil
+}
+
+// attestAzure verifies an Entra access token (azure_mi, entra_agent_id)
+// with the pinned keys of the tenant of the app its audience names, which
+// the operator pinned to org.
+// The token may live up to a day, but the attestation grants at most
+// AzureAssurance from now, and its uti (or the token) stays single use
+// (HR-469).
+func (s *Service) attestAzure(ctx context.Context, org ids.OrgID, a Attestation, revs []dbq.PcTrustedIssuer) ([]attested, error) {
+	if s.att.Entra == nil {
+		return nil, attErr(errors.New("no Entra app is configured"))
+	}
+	app := azureApp(a.Token)
+	if app == "" {
+		return nil, attErr(errors.New("the audience is not an Entra app id"))
+	}
+	payload, err := s.att.Entra.Verify(ctx, app, org, a.Token)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	ac, err := issuers.ParseEntraAgentClaims(payload)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	c := ac.AzureClaims
+	tw, err := issuers.ParseWindow(payload)
+	if err != nil {
+		return nil, attErr(err)
+	}
+	w, err := issuers.AzureWindow(tw, c.UTI, s.clk.Now())
+	if err != nil {
+		return nil, attErr(err)
+	}
+	var out []attested
+	var last error
+	for _, r := range revs {
+		b, err := bindingOf(r)
+		if err != nil {
+			continue
+		}
+		var m issuers.Match
+		switch {
+		case a.Kind == issuers.KindAzureMI && b.AzureMI != nil:
+			m, err = issuers.MatchAzureMI(*b.AzureMI, c)
+		case a.Kind == issuers.KindEntraAgent && b.EntraAgent != nil:
+			m, err = issuers.MatchEntraAgent(*b.EntraAgent, ac)
+		default:
+			continue
+		}
+		if err != nil {
+			last = err
+			continue
+		}
+		out = append(out, attested{
+			rev: r, match: m, issuer: issuers.AzureIssuer(c.TenantID), key: issuers.ReplayKey(c.UTI, a.Token), window: w,
+			claims: withClaims(m.Binding, map[string]string{
+				"app_id": app, "token_expires_at": tw.ExpiresAt.UTC().Format(time.RFC3339),
+			}),
+		})
+	}
+	if len(out) == 0 {
+		return nil, attErr(last)
+	}
+	return out, nil
 }
 
 func (s *Service) attestGitHub(ctx context.Context, org ids.OrgID, token string, revs []dbq.PcTrustedIssuer) ([]attested, error) {

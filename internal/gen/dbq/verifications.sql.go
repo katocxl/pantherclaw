@@ -15,6 +15,89 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const consequenceOrigin = `-- name: ConsequenceOrigin :one
+SELECT consequence_root, consequence_position FROM pc.transactions
+WHERE org_id = $1 AND id = $2
+`
+
+type ConsequenceOriginRow struct {
+	ConsequenceRoot     *ids.UUID
+	ConsequencePosition *int32
+}
+
+// ConsequenceOrigin is the action at the root of a consequence
+// transaction's chain and the position it was opened for (both NULL for
+// an action that is not a consequence).
+func (q *Queries) ConsequenceOrigin(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ConsequenceOriginRow, error) {
+	row := q.db.QueryRow(ctx, consequenceOrigin, orgID, iD)
+	var i ConsequenceOriginRow
+	err := row.Scan(&i.ConsequenceRoot, &i.ConsequencePosition)
+	return i, err
+}
+
+const consequenceParent = `-- name: ConsequenceParent :one
+
+SELECT from_transaction_id FROM pc.transaction_links
+WHERE org_id = $1 AND to_transaction_id = $2 AND kind = 'consequence'
+`
+
+// Downstream state (G0 M17 D102, F414, HR-451): a confirmed action's
+// state of the consequences opened for it, apart from its own effect.
+// ConsequenceParent is the transaction a consequence was opened for.
+func (q *Queries) ConsequenceParent(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, consequenceParent, orgID, iD)
+	var from_transaction_id ids.UUID
+	err := row.Scan(&from_transaction_id)
+	return from_transaction_id, err
+}
+
+const consequenceStates = `-- name: ConsequenceStates :many
+SELECT l.to_transaction_id AS id, t.effect_state, t.downstream_state,
+       EXISTS (SELECT 1 FROM pc.reconciliation_tasks k
+               WHERE k.org_id = t.org_id AND k.transaction_id = t.id AND k.kind = 'consequence_unconfirmed'
+                 AND k.state IN ('OPEN', 'NOT_OCCURRED')) AS questioned
+FROM pc.transaction_links l
+JOIN pc.transactions t ON t.org_id = l.org_id AND t.id = l.to_transaction_id
+WHERE l.org_id = $1 AND l.from_transaction_id = $2 AND l.kind = 'consequence'
+ORDER BY l.to_transaction_id
+`
+
+type ConsequenceStatesRow struct {
+	ID              ids.UUID
+	EffectState     *string
+	DownstreamState *string
+	Questioned      bool
+}
+
+// ConsequenceStates are the consequence transactions opened for parent,
+// each with its effect state, its own downstream state and whether a person was asked about it and
+// has not confirmed it occurred (an open reconciliation, or one released
+// as not occurred).
+func (q *Queries) ConsequenceStates(ctx context.Context, orgID ids.OrgID, parent ids.UUID) ([]ConsequenceStatesRow, error) {
+	rows, err := q.db.Query(ctx, consequenceStates, orgID, parent)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ConsequenceStatesRow{}
+	for rows.Next() {
+		var i ConsequenceStatesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EffectState,
+			&i.DownstreamState,
+			&i.Questioned,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const dueVerifications = `-- name: DueVerifications :many
 
 SELECT v.id, v.purpose, v.transaction_id, v.connection_id, v.operation, v.request, v.attempts, v.deadline_at
@@ -189,12 +272,13 @@ func (q *Queries) FinishVerification(ctx context.Context, state string, orgID id
 
 const insertConsequenceTransaction = `-- name: InsertConsequenceTransaction :execrows
 INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code, gateway_id, state,
-                             grant_id, grant_revision, connection_id, mode, target_type, target_id, effect_level_required, simulated)
+                             grant_id, grant_revision, connection_id, mode, target_type, target_id, effect_level_required, simulated,
+                             consequence_root, consequence_position)
 SELECT t.org_id, $1, t.run_id, $2, $3, $4, 'ALLOW',
        'CONSEQUENCE', t.gateway_id, 'FINAL', t.grant_id, t.grant_revision, t.connection_id, t.mode, $5,
-       $6, $7, t.simulated
+       $6, $7, t.simulated, $8::uuid, $9::int
 FROM pc.transactions t
-WHERE t.org_id = $8 AND t.id = $9
+WHERE t.org_id = $10 AND t.id = $11
 `
 
 type InsertConsequenceTransactionParams struct {
@@ -205,6 +289,8 @@ type InsertConsequenceTransactionParams struct {
 	TargetType    *string
 	TargetID      *string
 	LevelRequired *string
+	Root          ids.UUID
+	Position      int32
 	OrgID         ids.OrgID
 	Parent        ids.UUID
 }
@@ -221,6 +307,8 @@ func (q *Queries) InsertConsequenceTransaction(ctx context.Context, arg InsertCo
 		arg.TargetType,
 		arg.TargetID,
 		arg.LevelRequired,
+		arg.Root,
+		arg.Position,
 		arg.OrgID,
 		arg.Parent,
 	)
@@ -559,6 +647,8 @@ FROM pc.decision_consequences c
 WHERE c.org_id = $1 AND c.transaction_id = $2 AND c.state = 'PREDICTED'
   AND c.evaluation = (SELECT max(d.evaluation) FROM pc.decision_consequences d
                       WHERE d.org_id = c.org_id AND d.transaction_id = c.transaction_id)
+  AND CASE WHEN $3::int IS NULL THEN c.depth = 1
+           ELSE c.parent_position = $3::int END
 ORDER BY c.position
 `
 
@@ -574,9 +664,11 @@ type PredictedConsequencesRow struct {
 // server opens a transaction for each consequence its decision predicted,
 // never dispatched, and verifies it.
 // PredictedConsequences are what the transaction's latest evaluation
-// predicted, with the environments each deploys to.
-func (q *Queries) PredictedConsequences(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID) ([]PredictedConsequencesRow, error) {
-	rows, err := q.db.Query(ctx, predictedConsequences, orgID, transactionID)
+// predicted, with the environments each deploys to: those of the action
+// itself (depth 1) when parent_position is NULL, else those that follow
+// from the consequence at parent_position (G0 M17 D104).
+func (q *Queries) PredictedConsequences(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID, parentPosition *int32) ([]PredictedConsequencesRow, error) {
+	rows, err := q.db.Query(ctx, predictedConsequences, orgID, transactionID, parentPosition)
 	if err != nil {
 		return nil, err
 	}
@@ -779,6 +871,32 @@ func (q *Queries) ScheduleTargetLog(ctx context.Context, arg ScheduleTargetLogPa
 	return err
 }
 
+const setDownstreamState = `-- name: SetDownstreamState :exec
+UPDATE pc.transactions
+SET downstream_state = $1,
+    downstream_not_verifiable = downstream_not_verifiable OR $2::bool
+WHERE org_id = $3 AND id = $4
+`
+
+type SetDownstreamStateParams struct {
+	State         *string
+	NotVerifiable bool
+	OrgID         ids.OrgID
+	ID            ids.UUID
+}
+
+// SetDownstreamState records a downstream state; not_verifiable only ever
+// sets the cap, never clears it (D131).
+func (q *Queries) SetDownstreamState(ctx context.Context, arg SetDownstreamStateParams) error {
+	_, err := q.db.Exec(ctx, setDownstreamState,
+		arg.State,
+		arg.NotVerifiable,
+		arg.OrgID,
+		arg.ID,
+	)
+	return err
+}
+
 const setEffectState = `-- name: SetEffectState :exec
 UPDATE pc.transactions SET effect_state = $1, effect_level_achieved = $2
 WHERE org_id = $3 AND id = $4
@@ -901,6 +1019,34 @@ func (q *Queries) TransactionChannel(ctx context.Context, orgID ids.OrgID, iD id
 	var channel *string
 	err := row.Scan(&channel)
 	return channel, err
+}
+
+const transactionDownstream = `-- name: TransactionDownstream :one
+SELECT t.downstream_state, t.downstream_not_verifiable, t.effect_state, t.effect_level_required
+FROM pc.transactions t
+WHERE t.org_id = $1 AND t.id = $2
+FOR UPDATE OF t
+`
+
+type TransactionDownstreamRow struct {
+	DownstreamState         *string
+	DownstreamNotVerifiable bool
+	EffectState             *string
+	EffectLevelRequired     *string
+}
+
+// TransactionDownstream is a transaction's downstream and effect state,
+// locked for the roll-up.
+func (q *Queries) TransactionDownstream(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (TransactionDownstreamRow, error) {
+	row := q.db.QueryRow(ctx, transactionDownstream, orgID, iD)
+	var i TransactionDownstreamRow
+	err := row.Scan(
+		&i.DownstreamState,
+		&i.DownstreamNotVerifiable,
+		&i.EffectState,
+		&i.EffectLevelRequired,
+	)
+	return i, err
 }
 
 const transactionEffect = `-- name: TransactionEffect :one

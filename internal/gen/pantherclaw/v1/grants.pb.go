@@ -177,7 +177,10 @@ type Grant struct {
 	// grant's revision.
 	Basis string `protobuf:"bytes,19,opt,name=basis,proto3" json:"basis,omitempty"`
 	// When this revision was created.
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// Data flows allowed after a pii or secret read in the run tree (G0 M16
+	// D75); none allows no flow.
+	Flows         []*FlowAllowance `protobuf:"bytes,21,rep,name=flows,proto3" json:"flows,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -352,6 +355,126 @@ func (x *Grant) GetCreateTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Grant) GetFlows() []*FlowAllowance {
+	if x != nil {
+		return x.Flows
+	}
+	return nil
+}
+
+// FlowAllowance lets data of its classes, read anywhere in the run tree, go
+// to its destinations without a DATA_FLOW_HOLD (G0 M16 D75, HR-431). Under
+// delegation each child allowance must be covered by one of the parent's
+// (HR-432).
+type FlowAllowance struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// A subset of "pii" and "secret".
+	Classes []string `protobuf:"bytes,1,rep,name=classes,proto3" json:"classes,omitempty"`
+	// Exact ActionIR destinations, at least one.
+	Destinations  []*FlowDestination `protobuf:"bytes,2,rep,name=destinations,proto3" json:"destinations,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FlowAllowance) Reset() {
+	*x = FlowAllowance{}
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FlowAllowance) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FlowAllowance) ProtoMessage() {}
+
+func (x *FlowAllowance) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FlowAllowance.ProtoReflect.Descriptor instead.
+func (*FlowAllowance) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *FlowAllowance) GetClasses() []string {
+	if x != nil {
+		return x.Classes
+	}
+	return nil
+}
+
+func (x *FlowAllowance) GetDestinations() []*FlowDestination {
+	if x != nil {
+		return x.Destinations
+	}
+	return nil
+}
+
+// FlowDestination is one ActionIR destination: its kind and id.
+type FlowDestination struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Destination kind: "internal" or "external", as in the ActionIR.
+	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	// Destination id.
+	Id            string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FlowDestination) Reset() {
+	*x = FlowDestination{}
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FlowDestination) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FlowDestination) ProtoMessage() {}
+
+func (x *FlowDestination) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FlowDestination.ProtoReflect.Descriptor instead.
+func (*FlowDestination) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *FlowDestination) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *FlowDestination) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
 // GuardrailVersion names one guardrail revision that applies to a grant.
 type GuardrailVersion struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -367,7 +490,7 @@ type GuardrailVersion struct {
 
 func (x *GuardrailVersion) Reset() {
 	*x = GuardrailVersion{}
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[2]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -379,7 +502,7 @@ func (x *GuardrailVersion) String() string {
 func (*GuardrailVersion) ProtoMessage() {}
 
 func (x *GuardrailVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[2]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -392,7 +515,7 @@ func (x *GuardrailVersion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GuardrailVersion.ProtoReflect.Descriptor instead.
 func (*GuardrailVersion) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{2}
+	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GuardrailVersion) GetEnvelopeId() string {
@@ -441,13 +564,16 @@ type IssueGrantRequest struct {
 	Delegation *GrantDelegation `protobuf:"bytes,10,opt,name=delegation,proto3" json:"delegation,omitempty"`
 	// Lowest attestation level (0-2).
 	MinAttestationLevel int32 `protobuf:"varint,11,opt,name=min_attestation_level,json=minAttestationLevel,proto3" json:"min_attestation_level,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Data flows allowed after a sensitive read (G0 M16 D75); none allows no
+	// flow.
+	Flows         []*FlowAllowance `protobuf:"bytes,12,rep,name=flows,proto3" json:"flows,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IssueGrantRequest) Reset() {
 	*x = IssueGrantRequest{}
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[3]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -459,7 +585,7 @@ func (x *IssueGrantRequest) String() string {
 func (*IssueGrantRequest) ProtoMessage() {}
 
 func (x *IssueGrantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[3]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -472,7 +598,7 @@ func (x *IssueGrantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueGrantRequest.ProtoReflect.Descriptor instead.
 func (*IssueGrantRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{3}
+	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *IssueGrantRequest) GetAgentId() string {
@@ -552,6 +678,13 @@ func (x *IssueGrantRequest) GetMinAttestationLevel() int32 {
 	return 0
 }
 
+func (x *IssueGrantRequest) GetFlows() []*FlowAllowance {
+	if x != nil {
+		return x.Flows
+	}
+	return nil
+}
+
 // IssueGrantResponse returns the grant.
 type IssueGrantResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -563,7 +696,7 @@ type IssueGrantResponse struct {
 
 func (x *IssueGrantResponse) Reset() {
 	*x = IssueGrantResponse{}
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -575,7 +708,7 @@ func (x *IssueGrantResponse) String() string {
 func (*IssueGrantResponse) ProtoMessage() {}
 
 func (x *IssueGrantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -588,7 +721,7 @@ func (x *IssueGrantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueGrantResponse.ProtoReflect.Descriptor instead.
 func (*IssueGrantResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{4}
+	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *IssueGrantResponse) GetGrant() *Grant {
@@ -623,13 +756,16 @@ type ReviseGrantRequest struct {
 	// revision closes it as approved. The entry must be open and about this
 	// grant.
 	AccessRequestId *string `protobuf:"bytes,10,opt,name=access_request_id,json=accessRequestId,proto3,oneof" json:"access_request_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Data flows allowed after a sensitive read (G0 M16 D75, D94); none allows
+	// no flow. Adding or widening one widens the grant.
+	Flows         []*FlowAllowance `protobuf:"bytes,11,rep,name=flows,proto3" json:"flows,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ReviseGrantRequest) Reset() {
 	*x = ReviseGrantRequest{}
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[5]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -641,7 +777,7 @@ func (x *ReviseGrantRequest) String() string {
 func (*ReviseGrantRequest) ProtoMessage() {}
 
 func (x *ReviseGrantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[5]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -654,7 +790,7 @@ func (x *ReviseGrantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviseGrantRequest.ProtoReflect.Descriptor instead.
 func (*ReviseGrantRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{5}
+	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ReviseGrantRequest) GetId() string {
@@ -727,6 +863,13 @@ func (x *ReviseGrantRequest) GetAccessRequestId() string {
 	return ""
 }
 
+func (x *ReviseGrantRequest) GetFlows() []*FlowAllowance {
+	if x != nil {
+		return x.Flows
+	}
+	return nil
+}
+
 // ReviseGrantResponse returns the new revision.
 type ReviseGrantResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -740,7 +883,7 @@ type ReviseGrantResponse struct {
 
 func (x *ReviseGrantResponse) Reset() {
 	*x = ReviseGrantResponse{}
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -752,7 +895,7 @@ func (x *ReviseGrantResponse) String() string {
 func (*ReviseGrantResponse) ProtoMessage() {}
 
 func (x *ReviseGrantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -765,7 +908,7 @@ func (x *ReviseGrantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviseGrantResponse.ProtoReflect.Descriptor instead.
 func (*ReviseGrantResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{6}
+	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ReviseGrantResponse) GetGrant() *Grant {
@@ -795,7 +938,7 @@ type RevokeGrantRequest struct {
 
 func (x *RevokeGrantRequest) Reset() {
 	*x = RevokeGrantRequest{}
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[7]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -807,7 +950,7 @@ func (x *RevokeGrantRequest) String() string {
 func (*RevokeGrantRequest) ProtoMessage() {}
 
 func (x *RevokeGrantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[7]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -820,7 +963,7 @@ func (x *RevokeGrantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeGrantRequest.ProtoReflect.Descriptor instead.
 func (*RevokeGrantRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{7}
+	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *RevokeGrantRequest) GetId() string {
@@ -848,7 +991,7 @@ type RevokeGrantResponse struct {
 
 func (x *RevokeGrantResponse) Reset() {
 	*x = RevokeGrantResponse{}
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[8]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -860,7 +1003,7 @@ func (x *RevokeGrantResponse) String() string {
 func (*RevokeGrantResponse) ProtoMessage() {}
 
 func (x *RevokeGrantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[8]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -873,7 +1016,7 @@ func (x *RevokeGrantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeGrantResponse.ProtoReflect.Descriptor instead.
 func (*RevokeGrantResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{8}
+	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *RevokeGrantResponse) GetRevoked() int32 {
@@ -894,7 +1037,7 @@ type GetGrantRequest struct {
 
 func (x *GetGrantRequest) Reset() {
 	*x = GetGrantRequest{}
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -906,7 +1049,7 @@ func (x *GetGrantRequest) String() string {
 func (*GetGrantRequest) ProtoMessage() {}
 
 func (x *GetGrantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -919,7 +1062,7 @@ func (x *GetGrantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGrantRequest.ProtoReflect.Descriptor instead.
 func (*GetGrantRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{9}
+	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetGrantRequest) GetId() string {
@@ -947,7 +1090,7 @@ type GetGrantResponse struct {
 
 func (x *GetGrantResponse) Reset() {
 	*x = GetGrantResponse{}
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -959,7 +1102,7 @@ func (x *GetGrantResponse) String() string {
 func (*GetGrantResponse) ProtoMessage() {}
 
 func (x *GetGrantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -972,7 +1115,7 @@ func (x *GetGrantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGrantResponse.ProtoReflect.Descriptor instead.
 func (*GetGrantResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{10}
+	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetGrantResponse) GetGrant() *Grant {
@@ -1022,7 +1165,7 @@ type ListGrantsRequest struct {
 
 func (x *ListGrantsRequest) Reset() {
 	*x = ListGrantsRequest{}
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1034,7 +1177,7 @@ func (x *ListGrantsRequest) String() string {
 func (*ListGrantsRequest) ProtoMessage() {}
 
 func (x *ListGrantsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1047,7 +1190,7 @@ func (x *ListGrantsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGrantsRequest.ProtoReflect.Descriptor instead.
 func (*ListGrantsRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{11}
+	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ListGrantsRequest) GetPageSize() int32 {
@@ -1098,7 +1241,7 @@ type ListGrantsResponse struct {
 
 func (x *ListGrantsResponse) Reset() {
 	*x = ListGrantsResponse{}
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1110,7 +1253,7 @@ func (x *ListGrantsResponse) String() string {
 func (*ListGrantsResponse) ProtoMessage() {}
 
 func (x *ListGrantsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1123,7 +1266,7 @@ func (x *ListGrantsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGrantsResponse.ProtoReflect.Descriptor instead.
 func (*ListGrantsResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{12}
+	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ListGrantsResponse) GetGrants() []*Grant {
@@ -1151,7 +1294,7 @@ type GetBudgetStateRequest struct {
 
 func (x *GetBudgetStateRequest) Reset() {
 	*x = GetBudgetStateRequest{}
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1163,7 +1306,7 @@ func (x *GetBudgetStateRequest) String() string {
 func (*GetBudgetStateRequest) ProtoMessage() {}
 
 func (x *GetBudgetStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1176,7 +1319,7 @@ func (x *GetBudgetStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBudgetStateRequest.ProtoReflect.Descriptor instead.
 func (*GetBudgetStateRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{13}
+	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GetBudgetStateRequest) GetGrantId() string {
@@ -1224,7 +1367,7 @@ type BudgetAccount struct {
 
 func (x *BudgetAccount) Reset() {
 	*x = BudgetAccount{}
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1236,7 +1379,7 @@ func (x *BudgetAccount) String() string {
 func (*BudgetAccount) ProtoMessage() {}
 
 func (x *BudgetAccount) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1249,7 +1392,7 @@ func (x *BudgetAccount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BudgetAccount.ProtoReflect.Descriptor instead.
 func (*BudgetAccount) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{14}
+	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *BudgetAccount) GetOwnerKind() string {
@@ -1361,7 +1504,7 @@ type GetBudgetStateResponse struct {
 
 func (x *GetBudgetStateResponse) Reset() {
 	*x = GetBudgetStateResponse{}
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1373,7 +1516,7 @@ func (x *GetBudgetStateResponse) String() string {
 func (*GetBudgetStateResponse) ProtoMessage() {}
 
 func (x *GetBudgetStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_grants_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_grants_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1386,7 +1529,7 @@ func (x *GetBudgetStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBudgetStateResponse.ProtoReflect.Descriptor instead.
 func (*GetBudgetStateResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{15}
+	return file_pantherclaw_v1_grants_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *GetBudgetStateResponse) GetAccounts() []*BudgetAccount {
@@ -1403,7 +1546,7 @@ const file_pantherclaw_v1_grants_proto_rawDesc = "" +
 	"\x1bpantherclaw/v1/grants.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fpantherclaw/v1/guardrails.proto\x1a\x19pantherclaw/v1/runs.proto\"`\n" +
 	"\x0fGrantDelegation\x12\x1f\n" +
 	"\x05depth\x18\x01 \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x04(\x00R\x05depth\x12,\n" +
-	"\fmax_children\x18\x02 \x01(\x05B\t\xbaH\x06\x1a\x04\x182(\x00R\vmaxChildren\"\x9b\x06\n" +
+	"\fmax_children\x18\x02 \x01(\x05B\t\xbaH\x06\x1a\x04\x182(\x00R\vmaxChildren\"\xd0\x06\n" +
 	"\x05Grant\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\brevision\x18\x02 \x01(\x05R\brevision\x120\n" +
@@ -1431,12 +1574,21 @@ const file_pantherclaw_v1_grants_proto_rawDesc = "" +
 	"\agrantor\x18\x12 \x01(\v2\x15.pantherclaw.v1.ActorR\agrantor\x12\x14\n" +
 	"\x05basis\x18\x13 \x01(\tR\x05basis\x12;\n" +
 	"\vcreate_time\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"\x85\x01\n" +
+	"createTime\x123\n" +
+	"\x05flows\x18\x15 \x03(\v2\x1d.pantherclaw.v1.FlowAllowanceR\x05flows\"\x99\x01\n" +
+	"\rFlowAllowance\x127\n" +
+	"\aclasses\x18\x01 \x03(\tB\x1d\xbaH\x1a\x92\x01\x17\b\x01\x10\x02\x18\x01\"\x0fr\rR\x03piiR\x06secretR\aclasses\x12O\n" +
+	"\fdestinations\x18\x02 \x03(\v2\x1f.pantherclaw.v1.FlowDestinationB\n" +
+	"\xbaH\a\x92\x01\x04\b\x01\x10@R\fdestinations\"\\\n" +
+	"\x0fFlowDestination\x12-\n" +
+	"\x04kind\x18\x01 \x01(\tB\x19\xbaH\x16r\x14R\binternalR\bexternalR\x04kind\x12\x1a\n" +
+	"\x02id\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\x80\x04R\x02id\"\x85\x01\n" +
 	"\x10GuardrailVersion\x12\x1f\n" +
 	"\venvelope_id\x18\x01 \x01(\tR\n" +
 	"envelopeId\x12\x1a\n" +
 	"\brevision\x18\x02 \x01(\x05R\brevision\x124\n" +
-	"\x05scope\x18\x03 \x01(\v2\x1e.pantherclaw.v1.GuardrailScopeR\x05scope\"\xd1\x04\n" +
+	"\x05scope\x18\x03 \x01(\v2\x1e.pantherclaw.v1.GuardrailScopeR\x05scope\"\x90\x05\n" +
 	"\x11IssueGrantRequest\x12#\n" +
 	"\bagent_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\aagentId\x12.\n" +
 	"\vinstance_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\n" +
@@ -1454,10 +1606,11 @@ const file_pantherclaw_v1_grants_proto_rawDesc = "" +
 	"delegation\x18\n" +
 	" \x01(\v2\x1f.pantherclaw.v1.GrantDelegationR\n" +
 	"delegation\x12=\n" +
-	"\x15min_attestation_level\x18\v \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x02(\x00R\x13minAttestationLevelB\x0e\n" +
+	"\x15min_attestation_level\x18\v \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x02(\x00R\x13minAttestationLevel\x12=\n" +
+	"\x05flows\x18\f \x03(\v2\x1d.pantherclaw.v1.FlowAllowanceB\b\xbaH\x05\x92\x01\x02\x10\x10R\x05flowsB\x0e\n" +
 	"\f_instance_id\"A\n" +
 	"\x12IssueGrantResponse\x12+\n" +
-	"\x05grant\x18\x01 \x01(\v2\x15.pantherclaw.v1.GrantR\x05grant\"\xfd\x03\n" +
+	"\x05grant\x18\x01 \x01(\v2\x15.pantherclaw.v1.GrantR\x05grant\"\xbc\x04\n" +
 	"\x12ReviseGrantRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12#\n" +
 	"\brevision\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02(\x01R\brevision\x12#\n" +
@@ -1472,7 +1625,8 @@ const file_pantherclaw_v1_grants_proto_rawDesc = "" +
 	"delegation\x12=\n" +
 	"\x15min_attestation_level\x18\t \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x02(\x00R\x13minAttestationLevel\x129\n" +
 	"\x11access_request_id\x18\n" +
-	" \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x0faccessRequestId\x88\x01\x01B\x14\n" +
+	" \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x0faccessRequestId\x88\x01\x01\x12=\n" +
+	"\x05flows\x18\v \x03(\v2\x1d.pantherclaw.v1.FlowAllowanceB\b\xbaH\x05\x92\x01\x02\x10\x10R\x05flowsB\x14\n" +
 	"\x12_access_request_id\"Z\n" +
 	"\x13ReviseGrantResponse\x12+\n" +
 	"\x05grant\x18\x01 \x01(\v2\x15.pantherclaw.v1.GrantR\x05grant\x12\x16\n" +
@@ -1557,70 +1711,76 @@ func file_pantherclaw_v1_grants_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_grants_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_pantherclaw_v1_grants_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_pantherclaw_v1_grants_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_pantherclaw_v1_grants_proto_goTypes = []any{
 	(GrantState)(0),                // 0: pantherclaw.v1.GrantState
 	(*GrantDelegation)(nil),        // 1: pantherclaw.v1.GrantDelegation
 	(*Grant)(nil),                  // 2: pantherclaw.v1.Grant
-	(*GuardrailVersion)(nil),       // 3: pantherclaw.v1.GuardrailVersion
-	(*IssueGrantRequest)(nil),      // 4: pantherclaw.v1.IssueGrantRequest
-	(*IssueGrantResponse)(nil),     // 5: pantherclaw.v1.IssueGrantResponse
-	(*ReviseGrantRequest)(nil),     // 6: pantherclaw.v1.ReviseGrantRequest
-	(*ReviseGrantResponse)(nil),    // 7: pantherclaw.v1.ReviseGrantResponse
-	(*RevokeGrantRequest)(nil),     // 8: pantherclaw.v1.RevokeGrantRequest
-	(*RevokeGrantResponse)(nil),    // 9: pantherclaw.v1.RevokeGrantResponse
-	(*GetGrantRequest)(nil),        // 10: pantherclaw.v1.GetGrantRequest
-	(*GetGrantResponse)(nil),       // 11: pantherclaw.v1.GetGrantResponse
-	(*ListGrantsRequest)(nil),      // 12: pantherclaw.v1.ListGrantsRequest
-	(*ListGrantsResponse)(nil),     // 13: pantherclaw.v1.ListGrantsResponse
-	(*GetBudgetStateRequest)(nil),  // 14: pantherclaw.v1.GetBudgetStateRequest
-	(*BudgetAccount)(nil),          // 15: pantherclaw.v1.BudgetAccount
-	(*GetBudgetStateResponse)(nil), // 16: pantherclaw.v1.GetBudgetStateResponse
-	(*Actor)(nil),                  // 17: pantherclaw.v1.Actor
-	(*timestamppb.Timestamp)(nil),  // 18: google.protobuf.Timestamp
-	(*GuardrailScope)(nil),         // 19: pantherclaw.v1.GuardrailScope
+	(*FlowAllowance)(nil),          // 3: pantherclaw.v1.FlowAllowance
+	(*FlowDestination)(nil),        // 4: pantherclaw.v1.FlowDestination
+	(*GuardrailVersion)(nil),       // 5: pantherclaw.v1.GuardrailVersion
+	(*IssueGrantRequest)(nil),      // 6: pantherclaw.v1.IssueGrantRequest
+	(*IssueGrantResponse)(nil),     // 7: pantherclaw.v1.IssueGrantResponse
+	(*ReviseGrantRequest)(nil),     // 8: pantherclaw.v1.ReviseGrantRequest
+	(*ReviseGrantResponse)(nil),    // 9: pantherclaw.v1.ReviseGrantResponse
+	(*RevokeGrantRequest)(nil),     // 10: pantherclaw.v1.RevokeGrantRequest
+	(*RevokeGrantResponse)(nil),    // 11: pantherclaw.v1.RevokeGrantResponse
+	(*GetGrantRequest)(nil),        // 12: pantherclaw.v1.GetGrantRequest
+	(*GetGrantResponse)(nil),       // 13: pantherclaw.v1.GetGrantResponse
+	(*ListGrantsRequest)(nil),      // 14: pantherclaw.v1.ListGrantsRequest
+	(*ListGrantsResponse)(nil),     // 15: pantherclaw.v1.ListGrantsResponse
+	(*GetBudgetStateRequest)(nil),  // 16: pantherclaw.v1.GetBudgetStateRequest
+	(*BudgetAccount)(nil),          // 17: pantherclaw.v1.BudgetAccount
+	(*GetBudgetStateResponse)(nil), // 18: pantherclaw.v1.GetBudgetStateResponse
+	(*Actor)(nil),                  // 19: pantherclaw.v1.Actor
+	(*timestamppb.Timestamp)(nil),  // 20: google.protobuf.Timestamp
+	(*GuardrailScope)(nil),         // 21: pantherclaw.v1.GuardrailScope
 }
 var file_pantherclaw_v1_grants_proto_depIdxs = []int32{
 	0,  // 0: pantherclaw.v1.Grant.state:type_name -> pantherclaw.v1.GrantState
-	17, // 1: pantherclaw.v1.Grant.principal:type_name -> pantherclaw.v1.Actor
-	18, // 2: pantherclaw.v1.Grant.start_time:type_name -> google.protobuf.Timestamp
-	18, // 3: pantherclaw.v1.Grant.expire_time:type_name -> google.protobuf.Timestamp
+	19, // 1: pantherclaw.v1.Grant.principal:type_name -> pantherclaw.v1.Actor
+	20, // 2: pantherclaw.v1.Grant.start_time:type_name -> google.protobuf.Timestamp
+	20, // 3: pantherclaw.v1.Grant.expire_time:type_name -> google.protobuf.Timestamp
 	1,  // 4: pantherclaw.v1.Grant.delegation:type_name -> pantherclaw.v1.GrantDelegation
-	17, // 5: pantherclaw.v1.Grant.grantor:type_name -> pantherclaw.v1.Actor
-	18, // 6: pantherclaw.v1.Grant.create_time:type_name -> google.protobuf.Timestamp
-	19, // 7: pantherclaw.v1.GuardrailVersion.scope:type_name -> pantherclaw.v1.GuardrailScope
-	17, // 8: pantherclaw.v1.IssueGrantRequest.principal:type_name -> pantherclaw.v1.Actor
-	18, // 9: pantherclaw.v1.IssueGrantRequest.start_time:type_name -> google.protobuf.Timestamp
-	18, // 10: pantherclaw.v1.IssueGrantRequest.expire_time:type_name -> google.protobuf.Timestamp
-	1,  // 11: pantherclaw.v1.IssueGrantRequest.delegation:type_name -> pantherclaw.v1.GrantDelegation
-	2,  // 12: pantherclaw.v1.IssueGrantResponse.grant:type_name -> pantherclaw.v1.Grant
-	18, // 13: pantherclaw.v1.ReviseGrantRequest.expire_time:type_name -> google.protobuf.Timestamp
-	1,  // 14: pantherclaw.v1.ReviseGrantRequest.delegation:type_name -> pantherclaw.v1.GrantDelegation
-	2,  // 15: pantherclaw.v1.ReviseGrantResponse.grant:type_name -> pantherclaw.v1.Grant
-	2,  // 16: pantherclaw.v1.GetGrantResponse.grant:type_name -> pantherclaw.v1.Grant
-	2,  // 17: pantherclaw.v1.GetGrantResponse.lineage:type_name -> pantherclaw.v1.Grant
-	3,  // 18: pantherclaw.v1.GetGrantResponse.guardrails:type_name -> pantherclaw.v1.GuardrailVersion
-	0,  // 19: pantherclaw.v1.ListGrantsRequest.state:type_name -> pantherclaw.v1.GrantState
-	2,  // 20: pantherclaw.v1.ListGrantsResponse.grants:type_name -> pantherclaw.v1.Grant
-	18, // 21: pantherclaw.v1.BudgetAccount.period_start:type_name -> google.protobuf.Timestamp
-	15, // 22: pantherclaw.v1.GetBudgetStateResponse.accounts:type_name -> pantherclaw.v1.BudgetAccount
-	4,  // 23: pantherclaw.v1.GrantService.IssueGrant:input_type -> pantherclaw.v1.IssueGrantRequest
-	6,  // 24: pantherclaw.v1.GrantService.ReviseGrant:input_type -> pantherclaw.v1.ReviseGrantRequest
-	8,  // 25: pantherclaw.v1.GrantService.RevokeGrant:input_type -> pantherclaw.v1.RevokeGrantRequest
-	10, // 26: pantherclaw.v1.GrantService.GetGrant:input_type -> pantherclaw.v1.GetGrantRequest
-	12, // 27: pantherclaw.v1.GrantService.ListGrants:input_type -> pantherclaw.v1.ListGrantsRequest
-	14, // 28: pantherclaw.v1.GrantService.GetBudgetState:input_type -> pantherclaw.v1.GetBudgetStateRequest
-	5,  // 29: pantherclaw.v1.GrantService.IssueGrant:output_type -> pantherclaw.v1.IssueGrantResponse
-	7,  // 30: pantherclaw.v1.GrantService.ReviseGrant:output_type -> pantherclaw.v1.ReviseGrantResponse
-	9,  // 31: pantherclaw.v1.GrantService.RevokeGrant:output_type -> pantherclaw.v1.RevokeGrantResponse
-	11, // 32: pantherclaw.v1.GrantService.GetGrant:output_type -> pantherclaw.v1.GetGrantResponse
-	13, // 33: pantherclaw.v1.GrantService.ListGrants:output_type -> pantherclaw.v1.ListGrantsResponse
-	16, // 34: pantherclaw.v1.GrantService.GetBudgetState:output_type -> pantherclaw.v1.GetBudgetStateResponse
-	29, // [29:35] is the sub-list for method output_type
-	23, // [23:29] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	19, // 5: pantherclaw.v1.Grant.grantor:type_name -> pantherclaw.v1.Actor
+	20, // 6: pantherclaw.v1.Grant.create_time:type_name -> google.protobuf.Timestamp
+	3,  // 7: pantherclaw.v1.Grant.flows:type_name -> pantherclaw.v1.FlowAllowance
+	4,  // 8: pantherclaw.v1.FlowAllowance.destinations:type_name -> pantherclaw.v1.FlowDestination
+	21, // 9: pantherclaw.v1.GuardrailVersion.scope:type_name -> pantherclaw.v1.GuardrailScope
+	19, // 10: pantherclaw.v1.IssueGrantRequest.principal:type_name -> pantherclaw.v1.Actor
+	20, // 11: pantherclaw.v1.IssueGrantRequest.start_time:type_name -> google.protobuf.Timestamp
+	20, // 12: pantherclaw.v1.IssueGrantRequest.expire_time:type_name -> google.protobuf.Timestamp
+	1,  // 13: pantherclaw.v1.IssueGrantRequest.delegation:type_name -> pantherclaw.v1.GrantDelegation
+	3,  // 14: pantherclaw.v1.IssueGrantRequest.flows:type_name -> pantherclaw.v1.FlowAllowance
+	2,  // 15: pantherclaw.v1.IssueGrantResponse.grant:type_name -> pantherclaw.v1.Grant
+	20, // 16: pantherclaw.v1.ReviseGrantRequest.expire_time:type_name -> google.protobuf.Timestamp
+	1,  // 17: pantherclaw.v1.ReviseGrantRequest.delegation:type_name -> pantherclaw.v1.GrantDelegation
+	3,  // 18: pantherclaw.v1.ReviseGrantRequest.flows:type_name -> pantherclaw.v1.FlowAllowance
+	2,  // 19: pantherclaw.v1.ReviseGrantResponse.grant:type_name -> pantherclaw.v1.Grant
+	2,  // 20: pantherclaw.v1.GetGrantResponse.grant:type_name -> pantherclaw.v1.Grant
+	2,  // 21: pantherclaw.v1.GetGrantResponse.lineage:type_name -> pantherclaw.v1.Grant
+	5,  // 22: pantherclaw.v1.GetGrantResponse.guardrails:type_name -> pantherclaw.v1.GuardrailVersion
+	0,  // 23: pantherclaw.v1.ListGrantsRequest.state:type_name -> pantherclaw.v1.GrantState
+	2,  // 24: pantherclaw.v1.ListGrantsResponse.grants:type_name -> pantherclaw.v1.Grant
+	20, // 25: pantherclaw.v1.BudgetAccount.period_start:type_name -> google.protobuf.Timestamp
+	17, // 26: pantherclaw.v1.GetBudgetStateResponse.accounts:type_name -> pantherclaw.v1.BudgetAccount
+	6,  // 27: pantherclaw.v1.GrantService.IssueGrant:input_type -> pantherclaw.v1.IssueGrantRequest
+	8,  // 28: pantherclaw.v1.GrantService.ReviseGrant:input_type -> pantherclaw.v1.ReviseGrantRequest
+	10, // 29: pantherclaw.v1.GrantService.RevokeGrant:input_type -> pantherclaw.v1.RevokeGrantRequest
+	12, // 30: pantherclaw.v1.GrantService.GetGrant:input_type -> pantherclaw.v1.GetGrantRequest
+	14, // 31: pantherclaw.v1.GrantService.ListGrants:input_type -> pantherclaw.v1.ListGrantsRequest
+	16, // 32: pantherclaw.v1.GrantService.GetBudgetState:input_type -> pantherclaw.v1.GetBudgetStateRequest
+	7,  // 33: pantherclaw.v1.GrantService.IssueGrant:output_type -> pantherclaw.v1.IssueGrantResponse
+	9,  // 34: pantherclaw.v1.GrantService.ReviseGrant:output_type -> pantherclaw.v1.ReviseGrantResponse
+	11, // 35: pantherclaw.v1.GrantService.RevokeGrant:output_type -> pantherclaw.v1.RevokeGrantResponse
+	13, // 36: pantherclaw.v1.GrantService.GetGrant:output_type -> pantherclaw.v1.GetGrantResponse
+	15, // 37: pantherclaw.v1.GrantService.ListGrants:output_type -> pantherclaw.v1.ListGrantsResponse
+	18, // 38: pantherclaw.v1.GrantService.GetBudgetState:output_type -> pantherclaw.v1.GetBudgetStateResponse
+	33, // [33:39] is the sub-list for method output_type
+	27, // [27:33] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_grants_proto_init() }
@@ -1630,17 +1790,17 @@ func file_pantherclaw_v1_grants_proto_init() {
 	}
 	file_pantherclaw_v1_guardrails_proto_init()
 	file_pantherclaw_v1_runs_proto_init()
-	file_pantherclaw_v1_grants_proto_msgTypes[3].OneofWrappers = []any{}
 	file_pantherclaw_v1_grants_proto_msgTypes[5].OneofWrappers = []any{}
-	file_pantherclaw_v1_grants_proto_msgTypes[11].OneofWrappers = []any{}
-	file_pantherclaw_v1_grants_proto_msgTypes[14].OneofWrappers = []any{}
+	file_pantherclaw_v1_grants_proto_msgTypes[7].OneofWrappers = []any{}
+	file_pantherclaw_v1_grants_proto_msgTypes[13].OneofWrappers = []any{}
+	file_pantherclaw_v1_grants_proto_msgTypes[16].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_grants_proto_rawDesc), len(file_pantherclaw_v1_grants_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   16,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

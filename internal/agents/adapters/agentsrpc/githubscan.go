@@ -31,6 +31,10 @@ func NewGatewayScans(inv *app.Inventory) *GatewayScans { return &GatewayScans{in
 
 var errScanRequired = pcerr.New(pcerr.InvalidArgument, "SCAN_ID", "a gateway names the scan its findings are from")
 
+// errScopeGateway refuses a CI-mode scope on an org scan: an org scan counts
+// its misses from its own report (D114, D115).
+var errScopeGateway = pcerr.New(pcerr.InvalidArgument, "SCAN_SCOPE", "an organization scan has no scope; only a CI-mode scan sets scope and complete")
+
 // SubmitScanFindings implements AgentServiceHandler.
 func (s *GatewayScans) SubmitScanFindings(ctx context.Context, req *pantherclawv1.SubmitScanFindingsRequest) (*pantherclawv1.SubmitScanFindingsResponse, error) {
 	gw, ok := authority.GatewayFrom(ctx)
@@ -44,6 +48,9 @@ func (s *GatewayScans) SubmitScanFindings(ctx context.Context, req *pantherclawv
 	scan, err := ids.ParseUUID(req.GetScanId())
 	if err != nil {
 		return nil, errScanRequired
+	}
+	if req.GetScope() != "" || req.GetComplete() {
+		return nil, errScopeGateway
 	}
 	findings, err := findingsOf(req)
 	if err != nil {

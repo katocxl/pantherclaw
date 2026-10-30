@@ -78,6 +78,92 @@ func identityCommands() map[string]command {
 				})
 			}
 		}),
+		"issuer propose-gitlab": rpc("issuer propose-gitlab --agent ID [--issuer URL] --project-id N --namespace-id N --ci-config-ref-uri URI... [--ci-config-sha SHA...] [--environment E] [--runner gitlab-hosted|self-hosted] [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
+			agent, entry, reason := fs.String("agent", "", "agent the entry binds to"), fs.String("entry", "", "revise this entry"), fs.String("reason", "", "why")
+			issuer := fs.String("issuer", "https://gitlab.com", "GitLab instance from the server configuration (identity.gitlab_issuers)")
+			project, namespace := fs.String("project-id", "", "numeric project id"), fs.String("namespace-id", "", "numeric namespace (group) id")
+			env, runner := fs.String("environment", "", "pin a deployment environment"), fs.String("runner", "", "pin gitlab-hosted or self-hosted runners")
+			auto := fs.Bool("auto-admit", false, "admit matching workloads without an owner (needs activation by an Identity Publisher)")
+			var refs, shas list
+			fs.Var(&refs, "ci-config-ref-uri", "gitlab.com/group/project//.gitlab-ci.yml@refs/heads/main (repeatable)")
+			fs.Var(&shas, "ci-config-sha", "pin an exact pipeline definition revision (repeatable)")
+			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
+				return c.identity.ProposeIssuerEntry(ctx, &pantherclawv1.ProposeIssuerEntryRequest{
+					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason,
+					Binding: &pantherclawv1.ProposeIssuerEntryRequest_Gitlab{Gitlab: &pantherclawv1.GitlabBinding{
+						Issuer: *issuer, ProjectId: *project, NamespaceId: *namespace, CiConfigRefUris: refs, CiConfigShas: shas,
+						Environment: *env, RunnerEnvironment: *runner,
+					}},
+				})
+			}
+		}),
+		"issuer propose-spiffe": rpc("issuer propose-spiffe --agent ID --trust-domain TD --spiffe-id spiffe://TD/PATH [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
+			agent, entry, reason := fs.String("agent", "", "agent the entry binds to"), fs.String("entry", "", "revise this entry"), fs.String("reason", "", "why")
+			td := fs.String("trust-domain", "", "trust domain from the server configuration (identity.spiffe_trust_domains)")
+			id := fs.String("spiffe-id", "", "the workload's exact SPIFFE ID")
+			auto := fs.Bool("auto-admit", false, "admit matching workloads without an owner (needs activation by an Identity Publisher)")
+			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
+				return c.identity.ProposeIssuerEntry(ctx, &pantherclawv1.ProposeIssuerEntryRequest{
+					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason,
+					Binding: &pantherclawv1.ProposeIssuerEntryRequest_Spiffe{Spiffe: &pantherclawv1.SpiffeBinding{
+						TrustDomain: *td, SpiffeId: *id,
+					}},
+				})
+			}
+		}),
+		"issuer propose-gcp": rpc("issuer propose-gcp --agent ID --service-account-id N [--project-id P] [--instance-id N] [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
+			agent, entry, reason := fs.String("agent", "", "agent the entry binds to"), fs.String("entry", "", "revise this entry"), fs.String("reason", "", "why")
+			sa := fs.String("service-account-id", "", "the service account's numeric unique id (not its email)")
+			project, instance := fs.String("project-id", "", "pin a Compute Engine project"), fs.String("instance-id", "", "pin a numeric Compute Engine instance id")
+			auto := fs.Bool("auto-admit", false, "admit matching workloads without an owner (needs activation by an Identity Publisher)")
+			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
+				return c.identity.ProposeIssuerEntry(ctx, &pantherclawv1.ProposeIssuerEntryRequest{
+					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason,
+					Binding: &pantherclawv1.ProposeIssuerEntryRequest_Gcp{Gcp: &pantherclawv1.GcpBinding{
+						ServiceAccountId: *sa, ProjectId: *project, InstanceId: *instance,
+					}},
+				})
+			}
+		}),
+		"issuer propose-aws": rpc("issuer propose-aws --agent ID --account-id N --role-name NAME [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
+			agent, entry, reason := fs.String("agent", "", "agent the entry binds to"), fs.String("entry", "", "revise this entry"), fs.String("reason", "", "why")
+			account, role := fs.String("account-id", "", "12-digit AWS account id"), fs.String("role-name", "", "IAM role name whose sessions attest")
+			auto := fs.Bool("auto-admit", false, "admit matching workloads without an owner (needs activation by an Identity Publisher)")
+			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
+				return c.identity.ProposeIssuerEntry(ctx, &pantherclawv1.ProposeIssuerEntryRequest{
+					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason,
+					Binding: &pantherclawv1.ProposeIssuerEntryRequest_Aws{Aws: &pantherclawv1.AwsBinding{AccountId: *account, RoleName: *role}},
+				})
+			}
+		}),
+		"issuer propose-azure-mi": rpc("issuer propose-azure-mi --agent ID --tenant-id GUID --app-id GUID --object-id GUID [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
+			agent, entry, reason := fs.String("agent", "", "agent the entry binds to"), fs.String("entry", "", "revise this entry"), fs.String("reason", "", "why")
+			tenant, appID := fs.String("tenant-id", "", "Entra tenant id"), fs.String("app-id", "", "Entra app id pinned for this org (identity.entra_apps)")
+			object := fs.String("object-id", "", "the managed identity's object (principal) id")
+			auto := fs.Bool("auto-admit", false, "admit matching workloads without an owner (needs activation by an Identity Publisher)")
+			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
+				return c.identity.ProposeIssuerEntry(ctx, &pantherclawv1.ProposeIssuerEntryRequest{
+					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason,
+					Binding: &pantherclawv1.ProposeIssuerEntryRequest_AzureMi{AzureMi: &pantherclawv1.AzureMiBinding{
+						TenantId: *tenant, AppId: *appID, ObjectId: *object,
+					}},
+				})
+			}
+		}),
+		"issuer propose-entra-agent": rpc("issuer propose-entra-agent --agent ID --tenant-id GUID --app-id GUID --object-id GUID [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
+			agent, entry, reason := fs.String("agent", "", "agent the entry binds to"), fs.String("entry", "", "revise this entry"), fs.String("reason", "", "why")
+			tenant, appID := fs.String("tenant-id", "", "Entra tenant id"), fs.String("app-id", "", "Entra app id pinned for this org (identity.entra_apps)")
+			object := fs.String("object-id", "", "the agent identity's service principal object id")
+			auto := fs.Bool("auto-admit", false, "admit matching workloads without an owner (needs activation by an Identity Publisher)")
+			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
+				return c.identity.ProposeIssuerEntry(ctx, &pantherclawv1.ProposeIssuerEntryRequest{
+					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason,
+					Binding: &pantherclawv1.ProposeIssuerEntryRequest_EntraAgent{EntraAgent: &pantherclawv1.EntraAgentBinding{
+						TenantId: *tenant, AppId: *appID, ObjectId: *object,
+					}},
+				})
+			}
+		}),
 		"issuer propose-kubernetes": rpc("issuer propose-kubernetes --agent ID --cluster NAME --namespace NS --service-account NAME --service-account-uid UID [--image-repository R...] [--image-digest D...] [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
 			agent, entry, reason := fs.String("agent", "", "agent the entry binds to"), fs.String("entry", "", "revise this entry"), fs.String("reason", "", "why")
 			cluster, ns := fs.String("cluster", "", "cluster name from the server configuration"), fs.String("namespace", "", "namespace")

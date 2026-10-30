@@ -128,7 +128,7 @@ func (s *Store) Report(ctx context.Context, org ids.OrgID, gateway ids.UUID, r a
 				} else if err != nil {
 					return err
 				}
-				out, err = orgScan(ctx, tx, q, org, gateway, scan, r)
+				out, err = orgScan(ctx, tx, q, s.Notify, org, gateway, scan, r)
 				return err
 			} else if err != nil {
 				return err
@@ -250,6 +250,13 @@ func (s *Store) Report(ctx context.Context, org ids.OrgID, gateway ids.UUID, r a
 				return err
 			}
 		}
+		// A consequence's evidence changes the downstream state of the
+		// action it was opened for (G0 M17 D102).
+		if purpose == domain.PurposeConsequence {
+			if err := rollUp(ctx, tx, q, org, txn, sign, evdomain.Actor{Type: "gateway", ID: gateway.String()}, now); err != nil {
+				return err
+			}
+		}
 
 		switch {
 		case a.Final || (purpose == domain.PurposeReconcile && a.Occurred()):
@@ -320,7 +327,16 @@ func (s *Store) Expire(ctx context.Context, org ids.OrgID, sign app.Sign) (int, 
 // deadline appends the effect receipt of a closed window (F499): the state
 // stays when it was conclusive; otherwise it is UNKNOWN, and a status still
 // pending is named.
+// A consequence's deadline then changes the downstream state of the action
+// it was opened for (G0 M17 D102).
 func deadline(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, txn ids.UUID, sign app.Sign, now time.Time) error {
+	if err := deadlineEffect(ctx, tx, q, org, txn, sign, now); err != nil {
+		return err
+	}
+	return rollUp(ctx, tx, q, org, txn, sign, evdomain.Actor{Type: "system", ID: "verifier"}, now)
+}
+
+func deadlineEffect(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, txn ids.UUID, sign app.Sign, now time.Time) error {
 	te, err := q.TransactionEffect(ctx, org, txn)
 	if err != nil {
 		return err
@@ -417,7 +433,9 @@ func appendEffect(ctx context.Context, tx db.TenantTx, q *dbq.Queries, e app.Eff
 	if err := q.SetEffectState(ctx, dbq.SetEffectStateParams{State: &state, Achieved: achieved, OrgID: e.Org, ID: e.Transaction}); err != nil {
 		return err
 	}
-	if e.State != domain.Confirmed {
+	// A downstream receipt records the action's consequences; its own
+	// effect was confirmed, and compensated, before.
+	if e.State != domain.Confirmed || e.Basis == app.BasisConsequence {
 		return nil
 	}
 	return compensations(ctx, tx, q, e.Org, e.Transaction, sign) // HR-193

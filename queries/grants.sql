@@ -10,7 +10,7 @@
 SELECT g.id, g.agent_id, g.instance_id, g.principal_user_id, g.principal_sa_id, g.environment_id, g.parent_id,
        g.depth, g.state, g.current_revision, g.grantor_kind, g.grantor_id, g.basis,
        r.task_ref, r.not_before, r.expires_at, r.bounds, r.requirements, r.limits,
-       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id
+       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id, r.flows
 FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
 WHERE g.org_id = sqlc.arg(org_id) AND g.id = sqlc.arg(id);
@@ -20,7 +20,7 @@ WHERE g.org_id = sqlc.arg(org_id) AND g.id = sqlc.arg(id);
 SELECT g.id, g.agent_id, g.instance_id, g.principal_user_id, g.principal_sa_id, g.environment_id, g.parent_id,
        g.depth, g.state, g.current_revision, g.grantor_kind, g.grantor_id, g.basis,
        r.task_ref, r.not_before, r.expires_at, r.bounds, r.requirements, r.limits,
-       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id
+       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id, r.flows
 FROM pc.grant_lineage l
 JOIN pc.grants g ON g.org_id = l.org_id AND g.id = l.ancestor_id
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
@@ -38,11 +38,12 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.narg(instance_i
 
 -- name: InsertGrantRevision :exec
 INSERT INTO pc.grant_revisions (org_id, id, grant_id, revision, task_ref, not_before, expires_at, bounds,
-                                requirements, limits, delegation_depth, max_children, min_attestation, widens, created_by)
+                                requirements, limits, delegation_depth, max_children, min_attestation, widens, created_by,
+                                flows)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(grant_id), sqlc.arg(revision), sqlc.arg(task_ref),
         sqlc.arg(not_before), sqlc.arg(expires_at), sqlc.arg(bounds), sqlc.arg(requirements), sqlc.arg(limits),
         sqlc.arg(delegation_depth), sqlc.arg(max_children), sqlc.arg(min_attestation), sqlc.arg(widens),
-        sqlc.arg(created_by));
+        sqlc.arg(created_by), sqlc.narg(flows));
 
 -- name: InsertGrantLineageSelf :exec
 INSERT INTO pc.grant_lineage (org_id, grant_id, ancestor_id, distance)
@@ -151,7 +152,7 @@ SELECT state = 'ACTIVE' AS active FROM pc.service_accounts WHERE org_id = sqlc.a
 SELECT g.id, g.agent_id, g.instance_id, g.principal_user_id, g.principal_sa_id, g.environment_id, g.parent_id,
        g.depth, g.state, g.current_revision, g.grantor_kind, g.grantor_id, g.basis,
        r.task_ref, r.not_before, r.expires_at, r.bounds, r.requirements, r.limits,
-       r.delegation_depth, r.max_children, r.min_attestation, r.created_at
+       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, r.flows
 FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
 WHERE g.org_id = sqlc.arg(org_id)

@@ -142,7 +142,8 @@ type Effect struct {
 	Required  defs.Level
 	Achieved  defs.Level
 	// Basis is the kind of evidence: verifier, late_report, target_log,
-	// person, compensation, definition or deadline.
+	// person, compensation, definition, deadline or consequence
+	// (BasisConsequence).
 	Basis        string
 	Observations []ids.UUID
 	Verifier     *VerifierRef
@@ -160,11 +161,19 @@ type Effect struct {
 	// an irreversible effect reads "compensated, not reversed" (HR-193).
 	Compensation  *ids.UUID
 	Reversibility defs.Reversibility
+	// Consequences are the consequence transactions whose confirmation
+	// the receipt records, for the "consequence" basis (G0 M17 D102).
+	Consequences []ids.UUID
 	// Coverage is domain.CoveragePartial for a cooperative channel's
 	// transaction (HR-024, HR-186), whatever its state; the store sets it.
 	Coverage string
 	At       time.Time
 }
+
+// BasisConsequence is the basis of an action's receipt at level downstream:
+// every consequence opened for it was confirmed by its own evidence (G0
+// M17 D102, HR-451).
+const BasisConsequence = "consequence"
 
 // EffectResult is the state of one declared effect kind.
 type EffectResult struct {
@@ -287,6 +296,13 @@ func SignEffect(receipts Signer, issuer string, e Effect) (Signed, error) {
 	}
 	if e.Compensation != nil {
 		basis["transaction"] = e.Compensation.String()
+	}
+	if len(e.Consequences) > 0 {
+		txns := make([]string, len(e.Consequences))
+		for i, c := range e.Consequences {
+			txns[i] = c.String()
+		}
+		basis["transactions"] = txns
 	}
 	pap := map[string]any{
 		"v": 1, "kind": "effect", "org": e.Org.String(), "txn": e.Transaction.String(), "seq": e.Seq,

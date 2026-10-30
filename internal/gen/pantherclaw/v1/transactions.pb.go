@@ -182,6 +182,73 @@ func (EffectState) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{1}
 }
 
+// DownstreamState is what is known about the consequences of a confirmed
+// action, apart from its own effect (G0 M17, F414). Precedence over the
+// whole chain of consequences: UNCONFIRMED, then NOT_VERIFIABLE, then
+// PENDING, then CONFIRMED.
+type DownstreamState int32
+
+const (
+	// Its decision predicted no consequence, or it is not confirmed yet.
+	DownstreamState_DOWNSTREAM_STATE_UNSPECIFIED DownstreamState = 0
+	// A consequence opened for verification is not confirmed yet.
+	DownstreamState_DOWNSTREAM_STATE_PENDING DownstreamState = 1
+	// Every consequence was confirmed by its own evidence; the action has an
+	// effect receipt at level downstream.
+	DownstreamState_DOWNSTREAM_STATE_CONFIRMED DownstreamState = 2
+	// A consequence's verifier or deadline asked a person, or its effect
+	// state says it did not take effect.
+	DownstreamState_DOWNSTREAM_STATE_UNCONFIRMED DownstreamState = 3
+	// A predicted consequence could not be opened for verification; it never
+	// becomes CONFIRMED.
+	DownstreamState_DOWNSTREAM_STATE_NOT_VERIFIABLE DownstreamState = 4
+)
+
+// Enum value maps for DownstreamState.
+var (
+	DownstreamState_name = map[int32]string{
+		0: "DOWNSTREAM_STATE_UNSPECIFIED",
+		1: "DOWNSTREAM_STATE_PENDING",
+		2: "DOWNSTREAM_STATE_CONFIRMED",
+		3: "DOWNSTREAM_STATE_UNCONFIRMED",
+		4: "DOWNSTREAM_STATE_NOT_VERIFIABLE",
+	}
+	DownstreamState_value = map[string]int32{
+		"DOWNSTREAM_STATE_UNSPECIFIED":    0,
+		"DOWNSTREAM_STATE_PENDING":        1,
+		"DOWNSTREAM_STATE_CONFIRMED":      2,
+		"DOWNSTREAM_STATE_UNCONFIRMED":    3,
+		"DOWNSTREAM_STATE_NOT_VERIFIABLE": 4,
+	}
+)
+
+func (x DownstreamState) Enum() *DownstreamState {
+	p := new(DownstreamState)
+	*p = x
+	return p
+}
+
+func (x DownstreamState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DownstreamState) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_transactions_proto_enumTypes[2].Descriptor()
+}
+
+func (DownstreamState) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_transactions_proto_enumTypes[2]
+}
+
+func (x DownstreamState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DownstreamState.Descriptor instead.
+func (DownstreamState) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{2}
+}
+
 // VerificationLevel is how far verification reached.
 type VerificationLevel int32
 
@@ -226,11 +293,11 @@ func (x VerificationLevel) String() string {
 }
 
 func (VerificationLevel) Descriptor() protoreflect.EnumDescriptor {
-	return file_pantherclaw_v1_transactions_proto_enumTypes[2].Descriptor()
+	return file_pantherclaw_v1_transactions_proto_enumTypes[3].Descriptor()
 }
 
 func (VerificationLevel) Type() protoreflect.EnumType {
-	return &file_pantherclaw_v1_transactions_proto_enumTypes[2]
+	return &file_pantherclaw_v1_transactions_proto_enumTypes[3]
 }
 
 func (x VerificationLevel) Number() protoreflect.EnumNumber {
@@ -239,7 +306,7 @@ func (x VerificationLevel) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use VerificationLevel.Descriptor instead.
 func (VerificationLevel) EnumDescriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{2}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{3}
 }
 
 // IntegrityStatus is how far an evidence item's ledger entry is protected.
@@ -286,11 +353,11 @@ func (x IntegrityStatus) String() string {
 }
 
 func (IntegrityStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_pantherclaw_v1_transactions_proto_enumTypes[3].Descriptor()
+	return file_pantherclaw_v1_transactions_proto_enumTypes[4].Descriptor()
 }
 
 func (IntegrityStatus) Type() protoreflect.EnumType {
-	return &file_pantherclaw_v1_transactions_proto_enumTypes[3]
+	return &file_pantherclaw_v1_transactions_proto_enumTypes[4]
 }
 
 func (x IntegrityStatus) Number() protoreflect.EnumNumber {
@@ -299,7 +366,7 @@ func (x IntegrityStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use IntegrityStatus.Descriptor instead.
 func (IntegrityStatus) EnumDescriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{3}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{4}
 }
 
 // ReconciliationKind is why a reconciliation exists.
@@ -344,11 +411,11 @@ func (x ReconciliationKind) String() string {
 }
 
 func (ReconciliationKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_pantherclaw_v1_transactions_proto_enumTypes[4].Descriptor()
+	return file_pantherclaw_v1_transactions_proto_enumTypes[5].Descriptor()
 }
 
 func (ReconciliationKind) Type() protoreflect.EnumType {
-	return &file_pantherclaw_v1_transactions_proto_enumTypes[4]
+	return &file_pantherclaw_v1_transactions_proto_enumTypes[5]
 }
 
 func (x ReconciliationKind) Number() protoreflect.EnumNumber {
@@ -357,7 +424,7 @@ func (x ReconciliationKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ReconciliationKind.Descriptor instead.
 func (ReconciliationKind) EnumDescriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{4}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{5}
 }
 
 // ReconciliationState is where a reconciliation stands.
@@ -399,11 +466,11 @@ func (x ReconciliationState) String() string {
 }
 
 func (ReconciliationState) Descriptor() protoreflect.EnumDescriptor {
-	return file_pantherclaw_v1_transactions_proto_enumTypes[5].Descriptor()
+	return file_pantherclaw_v1_transactions_proto_enumTypes[6].Descriptor()
 }
 
 func (ReconciliationState) Type() protoreflect.EnumType {
-	return &file_pantherclaw_v1_transactions_proto_enumTypes[5]
+	return &file_pantherclaw_v1_transactions_proto_enumTypes[6]
 }
 
 func (x ReconciliationState) Number() protoreflect.EnumNumber {
@@ -412,7 +479,7 @@ func (x ReconciliationState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ReconciliationState.Descriptor instead.
 func (ReconciliationState) EnumDescriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{5}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{6}
 }
 
 // LinkKind is how a later transaction relates to an earlier one (HR-193).
@@ -457,11 +524,11 @@ func (x LinkKind) String() string {
 }
 
 func (LinkKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_pantherclaw_v1_transactions_proto_enumTypes[6].Descriptor()
+	return file_pantherclaw_v1_transactions_proto_enumTypes[7].Descriptor()
 }
 
 func (LinkKind) Type() protoreflect.EnumType {
-	return &file_pantherclaw_v1_transactions_proto_enumTypes[6]
+	return &file_pantherclaw_v1_transactions_proto_enumTypes[7]
 }
 
 func (x LinkKind) Number() protoreflect.EnumNumber {
@@ -470,7 +537,7 @@ func (x LinkKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use LinkKind.Descriptor instead.
 func (LinkKind) EnumDescriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{6}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{7}
 }
 
 // Integrity names an evidence item's ledger entry and its protection.
@@ -605,8 +672,10 @@ type Transaction struct {
 	DecidedVia string `protobuf:"bytes,17,opt,name=decided_via,json=decidedVia,proto3" json:"decided_via,omitempty"`
 	// The enforcement point that asked, for decided_via authzen.
 	EnforcementPointId string `protobuf:"bytes,18,opt,name=enforcement_point_id,json=enforcementPointId,proto3" json:"enforcement_point_id,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// State of the consequences opened for it (G0 M17, F414).
+	DownstreamState DownstreamState `protobuf:"varint,19,opt,name=downstream_state,json=downstreamState,proto3,enum=pantherclaw.v1.DownstreamState" json:"downstream_state,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Transaction) Reset() {
@@ -749,6 +818,13 @@ func (x *Transaction) GetEnforcementPointId() string {
 		return x.EnforcementPointId
 	}
 	return ""
+}
+
+func (x *Transaction) GetDownstreamState() DownstreamState {
+	if x != nil {
+		return x.DownstreamState
+	}
+	return DownstreamState_DOWNSTREAM_STATE_UNSPECIFIED
 }
 
 // ListTransactionsRequest pages through transactions, newest first.
@@ -2640,7 +2716,7 @@ const file_pantherclaw_v1_transactions_proto_rawDesc = "" +
 	"\x0fcheckpoint_size\x18\x04 \x01(\x03R\x0echeckpointSize\x12#\n" +
 	"\ranchored_size\x18\x05 \x01(\x03R\fanchoredSize\x12;\n" +
 	"\vanchor_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"anchorTime\"\xf0\x05\n" +
+	"anchorTime\"\xbc\x06\n" +
 	"\vTransaction\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x19\n" +
@@ -2661,7 +2737,8 @@ const file_pantherclaw_v1_transactions_proto_rawDesc = "" +
 	"createTime\x12\x1f\n" +
 	"\vdecided_via\x18\x11 \x01(\tR\n" +
 	"decidedVia\x120\n" +
-	"\x14enforcement_point_id\x18\x12 \x01(\tR\x12enforcementPointIdJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eR\x06amountR\bcurrency\"\xa0\x05\n" +
+	"\x14enforcement_point_id\x18\x12 \x01(\tR\x12enforcementPointId\x12J\n" +
+	"\x10downstream_state\x18\x13 \x01(\x0e2\x1f.pantherclaw.v1.DownstreamStateR\x0fdownstreamStateJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eR\x06amountR\bcurrency\"\xa0\x05\n" +
 	"\x17ListTransactionsRequest\x12'\n" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x128\n" +
@@ -2854,7 +2931,13 @@ const file_pantherclaw_v1_transactions_proto_rawDesc = "" +
 	"\x18EFFECT_STATE_CONFLICTING\x10\x05\x12\x1d\n" +
 	"\x19EFFECT_STATE_UNVERIFIABLE\x10\x06\x12\x18\n" +
 	"\x14EFFECT_STATE_UNKNOWN\x10\a\x12\x1c\n" +
-	"\x18EFFECT_STATE_COMPENSATED\x10\b*\xc5\x01\n" +
+	"\x18EFFECT_STATE_COMPENSATED\x10\b*\xb8\x01\n" +
+	"\x0fDownstreamState\x12 \n" +
+	"\x1cDOWNSTREAM_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18DOWNSTREAM_STATE_PENDING\x10\x01\x12\x1e\n" +
+	"\x1aDOWNSTREAM_STATE_CONFIRMED\x10\x02\x12 \n" +
+	"\x1cDOWNSTREAM_STATE_UNCONFIRMED\x10\x03\x12#\n" +
+	"\x1fDOWNSTREAM_STATE_NOT_VERIFIABLE\x10\x04*\xc5\x01\n" +
 	"\x11VerificationLevel\x12\"\n" +
 	"\x1eVERIFICATION_LEVEL_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dVERIFICATION_LEVEL_ACCEPTANCE\x10\x01\x12 \n" +
@@ -2905,123 +2988,125 @@ func file_pantherclaw_v1_transactions_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_transactions_proto_rawDescData
 }
 
-var file_pantherclaw_v1_transactions_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
+var file_pantherclaw_v1_transactions_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
 var file_pantherclaw_v1_transactions_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_pantherclaw_v1_transactions_proto_goTypes = []any{
 	(ExecutionState)(0),                    // 0: pantherclaw.v1.ExecutionState
 	(EffectState)(0),                       // 1: pantherclaw.v1.EffectState
-	(VerificationLevel)(0),                 // 2: pantherclaw.v1.VerificationLevel
-	(IntegrityStatus)(0),                   // 3: pantherclaw.v1.IntegrityStatus
-	(ReconciliationKind)(0),                // 4: pantherclaw.v1.ReconciliationKind
-	(ReconciliationState)(0),               // 5: pantherclaw.v1.ReconciliationState
-	(LinkKind)(0),                          // 6: pantherclaw.v1.LinkKind
-	(*Integrity)(nil),                      // 7: pantherclaw.v1.Integrity
-	(*Transaction)(nil),                    // 8: pantherclaw.v1.Transaction
-	(*ListTransactionsRequest)(nil),        // 9: pantherclaw.v1.ListTransactionsRequest
-	(*ListTransactionsResponse)(nil),       // 10: pantherclaw.v1.ListTransactionsResponse
-	(*GetTransactionEvidenceRequest)(nil),  // 11: pantherclaw.v1.GetTransactionEvidenceRequest
-	(*DecisionReceipt)(nil),                // 12: pantherclaw.v1.DecisionReceipt
-	(*DecisionCoverage)(nil),               // 13: pantherclaw.v1.DecisionCoverage
-	(*Execution)(nil),                      // 14: pantherclaw.v1.Execution
-	(*Observation)(nil),                    // 15: pantherclaw.v1.Observation
-	(*EffectReceipt)(nil),                  // 16: pantherclaw.v1.EffectReceipt
-	(*Reconciliation)(nil),                 // 17: pantherclaw.v1.Reconciliation
-	(*TransactionLink)(nil),                // 18: pantherclaw.v1.TransactionLink
-	(*AuthorityLevel)(nil),                 // 19: pantherclaw.v1.AuthorityLevel
-	(*DecisionBasis)(nil),                  // 20: pantherclaw.v1.DecisionBasis
-	(*GetTransactionEvidenceResponse)(nil), // 21: pantherclaw.v1.GetTransactionEvidenceResponse
-	(*ListReconciliationsRequest)(nil),     // 22: pantherclaw.v1.ListReconciliationsRequest
-	(*ListReconciliationsResponse)(nil),    // 23: pantherclaw.v1.ListReconciliationsResponse
-	(*GetReconciliationRequest)(nil),       // 24: pantherclaw.v1.GetReconciliationRequest
-	(*GetReconciliationResponse)(nil),      // 25: pantherclaw.v1.GetReconciliationResponse
-	(*ResolveOccurredRequest)(nil),         // 26: pantherclaw.v1.ResolveOccurredRequest
-	(*ResolveOccurredResponse)(nil),        // 27: pantherclaw.v1.ResolveOccurredResponse
-	(*RequestVerificationRequest)(nil),     // 28: pantherclaw.v1.RequestVerificationRequest
-	(*RequestVerificationResponse)(nil),    // 29: pantherclaw.v1.RequestVerificationResponse
-	(*LinkTransactionRequest)(nil),         // 30: pantherclaw.v1.LinkTransactionRequest
-	(*LinkTransactionResponse)(nil),        // 31: pantherclaw.v1.LinkTransactionResponse
-	nil,                                    // 32: pantherclaw.v1.Observation.FieldsEntry
-	(*timestamppb.Timestamp)(nil),          // 33: google.protobuf.Timestamp
-	(Decision)(0),                          // 34: pantherclaw.v1.Decision
-	(CoverageState)(0),                     // 35: pantherclaw.v1.CoverageState
-	(Outcome)(0),                           // 36: pantherclaw.v1.Outcome
-	(*DecisionExplanation)(nil),            // 37: pantherclaw.v1.DecisionExplanation
+	(DownstreamState)(0),                   // 2: pantherclaw.v1.DownstreamState
+	(VerificationLevel)(0),                 // 3: pantherclaw.v1.VerificationLevel
+	(IntegrityStatus)(0),                   // 4: pantherclaw.v1.IntegrityStatus
+	(ReconciliationKind)(0),                // 5: pantherclaw.v1.ReconciliationKind
+	(ReconciliationState)(0),               // 6: pantherclaw.v1.ReconciliationState
+	(LinkKind)(0),                          // 7: pantherclaw.v1.LinkKind
+	(*Integrity)(nil),                      // 8: pantherclaw.v1.Integrity
+	(*Transaction)(nil),                    // 9: pantherclaw.v1.Transaction
+	(*ListTransactionsRequest)(nil),        // 10: pantherclaw.v1.ListTransactionsRequest
+	(*ListTransactionsResponse)(nil),       // 11: pantherclaw.v1.ListTransactionsResponse
+	(*GetTransactionEvidenceRequest)(nil),  // 12: pantherclaw.v1.GetTransactionEvidenceRequest
+	(*DecisionReceipt)(nil),                // 13: pantherclaw.v1.DecisionReceipt
+	(*DecisionCoverage)(nil),               // 14: pantherclaw.v1.DecisionCoverage
+	(*Execution)(nil),                      // 15: pantherclaw.v1.Execution
+	(*Observation)(nil),                    // 16: pantherclaw.v1.Observation
+	(*EffectReceipt)(nil),                  // 17: pantherclaw.v1.EffectReceipt
+	(*Reconciliation)(nil),                 // 18: pantherclaw.v1.Reconciliation
+	(*TransactionLink)(nil),                // 19: pantherclaw.v1.TransactionLink
+	(*AuthorityLevel)(nil),                 // 20: pantherclaw.v1.AuthorityLevel
+	(*DecisionBasis)(nil),                  // 21: pantherclaw.v1.DecisionBasis
+	(*GetTransactionEvidenceResponse)(nil), // 22: pantherclaw.v1.GetTransactionEvidenceResponse
+	(*ListReconciliationsRequest)(nil),     // 23: pantherclaw.v1.ListReconciliationsRequest
+	(*ListReconciliationsResponse)(nil),    // 24: pantherclaw.v1.ListReconciliationsResponse
+	(*GetReconciliationRequest)(nil),       // 25: pantherclaw.v1.GetReconciliationRequest
+	(*GetReconciliationResponse)(nil),      // 26: pantherclaw.v1.GetReconciliationResponse
+	(*ResolveOccurredRequest)(nil),         // 27: pantherclaw.v1.ResolveOccurredRequest
+	(*ResolveOccurredResponse)(nil),        // 28: pantherclaw.v1.ResolveOccurredResponse
+	(*RequestVerificationRequest)(nil),     // 29: pantherclaw.v1.RequestVerificationRequest
+	(*RequestVerificationResponse)(nil),    // 30: pantherclaw.v1.RequestVerificationResponse
+	(*LinkTransactionRequest)(nil),         // 31: pantherclaw.v1.LinkTransactionRequest
+	(*LinkTransactionResponse)(nil),        // 32: pantherclaw.v1.LinkTransactionResponse
+	nil,                                    // 33: pantherclaw.v1.Observation.FieldsEntry
+	(*timestamppb.Timestamp)(nil),          // 34: google.protobuf.Timestamp
+	(Decision)(0),                          // 35: pantherclaw.v1.Decision
+	(CoverageState)(0),                     // 36: pantherclaw.v1.CoverageState
+	(Outcome)(0),                           // 37: pantherclaw.v1.Outcome
+	(*DecisionExplanation)(nil),            // 38: pantherclaw.v1.DecisionExplanation
 }
 var file_pantherclaw_v1_transactions_proto_depIdxs = []int32{
-	3,  // 0: pantherclaw.v1.Integrity.status:type_name -> pantherclaw.v1.IntegrityStatus
-	33, // 1: pantherclaw.v1.Integrity.anchor_time:type_name -> google.protobuf.Timestamp
-	34, // 2: pantherclaw.v1.Transaction.decision:type_name -> pantherclaw.v1.Decision
+	4,  // 0: pantherclaw.v1.Integrity.status:type_name -> pantherclaw.v1.IntegrityStatus
+	34, // 1: pantherclaw.v1.Integrity.anchor_time:type_name -> google.protobuf.Timestamp
+	35, // 2: pantherclaw.v1.Transaction.decision:type_name -> pantherclaw.v1.Decision
 	0,  // 3: pantherclaw.v1.Transaction.execution_state:type_name -> pantherclaw.v1.ExecutionState
 	1,  // 4: pantherclaw.v1.Transaction.effect_state:type_name -> pantherclaw.v1.EffectState
-	2,  // 5: pantherclaw.v1.Transaction.level_required:type_name -> pantherclaw.v1.VerificationLevel
-	2,  // 6: pantherclaw.v1.Transaction.level_achieved:type_name -> pantherclaw.v1.VerificationLevel
-	33, // 7: pantherclaw.v1.Transaction.create_time:type_name -> google.protobuf.Timestamp
-	34, // 8: pantherclaw.v1.ListTransactionsRequest.decisions:type_name -> pantherclaw.v1.Decision
-	0,  // 9: pantherclaw.v1.ListTransactionsRequest.execution_states:type_name -> pantherclaw.v1.ExecutionState
-	1,  // 10: pantherclaw.v1.ListTransactionsRequest.effect_states:type_name -> pantherclaw.v1.EffectState
-	33, // 11: pantherclaw.v1.ListTransactionsRequest.start_time:type_name -> google.protobuf.Timestamp
-	33, // 12: pantherclaw.v1.ListTransactionsRequest.end_time:type_name -> google.protobuf.Timestamp
-	8,  // 13: pantherclaw.v1.ListTransactionsResponse.transactions:type_name -> pantherclaw.v1.Transaction
-	7,  // 14: pantherclaw.v1.DecisionReceipt.integrity:type_name -> pantherclaw.v1.Integrity
-	33, // 15: pantherclaw.v1.DecisionReceipt.create_time:type_name -> google.protobuf.Timestamp
-	13, // 16: pantherclaw.v1.DecisionReceipt.coverage:type_name -> pantherclaw.v1.DecisionCoverage
-	35, // 17: pantherclaw.v1.DecisionCoverage.state:type_name -> pantherclaw.v1.CoverageState
-	35, // 18: pantherclaw.v1.DecisionCoverage.snapshot_state:type_name -> pantherclaw.v1.CoverageState
-	36, // 19: pantherclaw.v1.Execution.outcome:type_name -> pantherclaw.v1.Outcome
-	33, // 20: pantherclaw.v1.Execution.dispatch_time:type_name -> google.protobuf.Timestamp
-	33, // 21: pantherclaw.v1.Execution.record_time:type_name -> google.protobuf.Timestamp
-	7,  // 22: pantherclaw.v1.Execution.integrity:type_name -> pantherclaw.v1.Integrity
-	36, // 23: pantherclaw.v1.Observation.outcome:type_name -> pantherclaw.v1.Outcome
-	32, // 24: pantherclaw.v1.Observation.fields:type_name -> pantherclaw.v1.Observation.FieldsEntry
-	33, // 25: pantherclaw.v1.Observation.observe_time:type_name -> google.protobuf.Timestamp
-	1,  // 26: pantherclaw.v1.EffectReceipt.state:type_name -> pantherclaw.v1.EffectState
-	2,  // 27: pantherclaw.v1.EffectReceipt.level_required:type_name -> pantherclaw.v1.VerificationLevel
-	2,  // 28: pantherclaw.v1.EffectReceipt.level_achieved:type_name -> pantherclaw.v1.VerificationLevel
-	7,  // 29: pantherclaw.v1.EffectReceipt.integrity:type_name -> pantherclaw.v1.Integrity
-	33, // 30: pantherclaw.v1.EffectReceipt.create_time:type_name -> google.protobuf.Timestamp
-	4,  // 31: pantherclaw.v1.Reconciliation.kind:type_name -> pantherclaw.v1.ReconciliationKind
-	5,  // 32: pantherclaw.v1.Reconciliation.state:type_name -> pantherclaw.v1.ReconciliationState
-	33, // 33: pantherclaw.v1.Reconciliation.open_time:type_name -> google.protobuf.Timestamp
-	33, // 34: pantherclaw.v1.Reconciliation.resolve_time:type_name -> google.protobuf.Timestamp
-	6,  // 35: pantherclaw.v1.TransactionLink.kind:type_name -> pantherclaw.v1.LinkKind
-	33, // 36: pantherclaw.v1.TransactionLink.create_time:type_name -> google.protobuf.Timestamp
-	19, // 37: pantherclaw.v1.DecisionBasis.levels:type_name -> pantherclaw.v1.AuthorityLevel
-	8,  // 38: pantherclaw.v1.GetTransactionEvidenceResponse.transaction:type_name -> pantherclaw.v1.Transaction
-	12, // 39: pantherclaw.v1.GetTransactionEvidenceResponse.decision_receipts:type_name -> pantherclaw.v1.DecisionReceipt
-	20, // 40: pantherclaw.v1.GetTransactionEvidenceResponse.basis:type_name -> pantherclaw.v1.DecisionBasis
-	14, // 41: pantherclaw.v1.GetTransactionEvidenceResponse.execution:type_name -> pantherclaw.v1.Execution
-	15, // 42: pantherclaw.v1.GetTransactionEvidenceResponse.observations:type_name -> pantherclaw.v1.Observation
-	16, // 43: pantherclaw.v1.GetTransactionEvidenceResponse.effect_receipts:type_name -> pantherclaw.v1.EffectReceipt
-	17, // 44: pantherclaw.v1.GetTransactionEvidenceResponse.reconciliations:type_name -> pantherclaw.v1.Reconciliation
-	18, // 45: pantherclaw.v1.GetTransactionEvidenceResponse.links:type_name -> pantherclaw.v1.TransactionLink
-	37, // 46: pantherclaw.v1.GetTransactionEvidenceResponse.explanation:type_name -> pantherclaw.v1.DecisionExplanation
-	5,  // 47: pantherclaw.v1.ListReconciliationsRequest.states:type_name -> pantherclaw.v1.ReconciliationState
-	4,  // 48: pantherclaw.v1.ListReconciliationsRequest.kinds:type_name -> pantherclaw.v1.ReconciliationKind
-	17, // 49: pantherclaw.v1.ListReconciliationsResponse.reconciliations:type_name -> pantherclaw.v1.Reconciliation
-	17, // 50: pantherclaw.v1.GetReconciliationResponse.reconciliation:type_name -> pantherclaw.v1.Reconciliation
-	8,  // 51: pantherclaw.v1.GetReconciliationResponse.transaction:type_name -> pantherclaw.v1.Transaction
-	17, // 52: pantherclaw.v1.ResolveOccurredResponse.reconciliation:type_name -> pantherclaw.v1.Reconciliation
-	6,  // 53: pantherclaw.v1.LinkTransactionRequest.kind:type_name -> pantherclaw.v1.LinkKind
-	18, // 54: pantherclaw.v1.LinkTransactionResponse.link:type_name -> pantherclaw.v1.TransactionLink
-	9,  // 55: pantherclaw.v1.TransactionService.ListTransactions:input_type -> pantherclaw.v1.ListTransactionsRequest
-	11, // 56: pantherclaw.v1.TransactionService.GetTransactionEvidence:input_type -> pantherclaw.v1.GetTransactionEvidenceRequest
-	22, // 57: pantherclaw.v1.ReconciliationService.ListReconciliations:input_type -> pantherclaw.v1.ListReconciliationsRequest
-	24, // 58: pantherclaw.v1.ReconciliationService.GetReconciliation:input_type -> pantherclaw.v1.GetReconciliationRequest
-	26, // 59: pantherclaw.v1.ReconciliationService.ResolveOccurred:input_type -> pantherclaw.v1.ResolveOccurredRequest
-	28, // 60: pantherclaw.v1.ReconciliationService.RequestVerification:input_type -> pantherclaw.v1.RequestVerificationRequest
-	30, // 61: pantherclaw.v1.ReconciliationService.LinkTransaction:input_type -> pantherclaw.v1.LinkTransactionRequest
-	10, // 62: pantherclaw.v1.TransactionService.ListTransactions:output_type -> pantherclaw.v1.ListTransactionsResponse
-	21, // 63: pantherclaw.v1.TransactionService.GetTransactionEvidence:output_type -> pantherclaw.v1.GetTransactionEvidenceResponse
-	23, // 64: pantherclaw.v1.ReconciliationService.ListReconciliations:output_type -> pantherclaw.v1.ListReconciliationsResponse
-	25, // 65: pantherclaw.v1.ReconciliationService.GetReconciliation:output_type -> pantherclaw.v1.GetReconciliationResponse
-	27, // 66: pantherclaw.v1.ReconciliationService.ResolveOccurred:output_type -> pantherclaw.v1.ResolveOccurredResponse
-	29, // 67: pantherclaw.v1.ReconciliationService.RequestVerification:output_type -> pantherclaw.v1.RequestVerificationResponse
-	31, // 68: pantherclaw.v1.ReconciliationService.LinkTransaction:output_type -> pantherclaw.v1.LinkTransactionResponse
-	62, // [62:69] is the sub-list for method output_type
-	55, // [55:62] is the sub-list for method input_type
-	55, // [55:55] is the sub-list for extension type_name
-	55, // [55:55] is the sub-list for extension extendee
-	0,  // [0:55] is the sub-list for field type_name
+	3,  // 5: pantherclaw.v1.Transaction.level_required:type_name -> pantherclaw.v1.VerificationLevel
+	3,  // 6: pantherclaw.v1.Transaction.level_achieved:type_name -> pantherclaw.v1.VerificationLevel
+	34, // 7: pantherclaw.v1.Transaction.create_time:type_name -> google.protobuf.Timestamp
+	2,  // 8: pantherclaw.v1.Transaction.downstream_state:type_name -> pantherclaw.v1.DownstreamState
+	35, // 9: pantherclaw.v1.ListTransactionsRequest.decisions:type_name -> pantherclaw.v1.Decision
+	0,  // 10: pantherclaw.v1.ListTransactionsRequest.execution_states:type_name -> pantherclaw.v1.ExecutionState
+	1,  // 11: pantherclaw.v1.ListTransactionsRequest.effect_states:type_name -> pantherclaw.v1.EffectState
+	34, // 12: pantherclaw.v1.ListTransactionsRequest.start_time:type_name -> google.protobuf.Timestamp
+	34, // 13: pantherclaw.v1.ListTransactionsRequest.end_time:type_name -> google.protobuf.Timestamp
+	9,  // 14: pantherclaw.v1.ListTransactionsResponse.transactions:type_name -> pantherclaw.v1.Transaction
+	8,  // 15: pantherclaw.v1.DecisionReceipt.integrity:type_name -> pantherclaw.v1.Integrity
+	34, // 16: pantherclaw.v1.DecisionReceipt.create_time:type_name -> google.protobuf.Timestamp
+	14, // 17: pantherclaw.v1.DecisionReceipt.coverage:type_name -> pantherclaw.v1.DecisionCoverage
+	36, // 18: pantherclaw.v1.DecisionCoverage.state:type_name -> pantherclaw.v1.CoverageState
+	36, // 19: pantherclaw.v1.DecisionCoverage.snapshot_state:type_name -> pantherclaw.v1.CoverageState
+	37, // 20: pantherclaw.v1.Execution.outcome:type_name -> pantherclaw.v1.Outcome
+	34, // 21: pantherclaw.v1.Execution.dispatch_time:type_name -> google.protobuf.Timestamp
+	34, // 22: pantherclaw.v1.Execution.record_time:type_name -> google.protobuf.Timestamp
+	8,  // 23: pantherclaw.v1.Execution.integrity:type_name -> pantherclaw.v1.Integrity
+	37, // 24: pantherclaw.v1.Observation.outcome:type_name -> pantherclaw.v1.Outcome
+	33, // 25: pantherclaw.v1.Observation.fields:type_name -> pantherclaw.v1.Observation.FieldsEntry
+	34, // 26: pantherclaw.v1.Observation.observe_time:type_name -> google.protobuf.Timestamp
+	1,  // 27: pantherclaw.v1.EffectReceipt.state:type_name -> pantherclaw.v1.EffectState
+	3,  // 28: pantherclaw.v1.EffectReceipt.level_required:type_name -> pantherclaw.v1.VerificationLevel
+	3,  // 29: pantherclaw.v1.EffectReceipt.level_achieved:type_name -> pantherclaw.v1.VerificationLevel
+	8,  // 30: pantherclaw.v1.EffectReceipt.integrity:type_name -> pantherclaw.v1.Integrity
+	34, // 31: pantherclaw.v1.EffectReceipt.create_time:type_name -> google.protobuf.Timestamp
+	5,  // 32: pantherclaw.v1.Reconciliation.kind:type_name -> pantherclaw.v1.ReconciliationKind
+	6,  // 33: pantherclaw.v1.Reconciliation.state:type_name -> pantherclaw.v1.ReconciliationState
+	34, // 34: pantherclaw.v1.Reconciliation.open_time:type_name -> google.protobuf.Timestamp
+	34, // 35: pantherclaw.v1.Reconciliation.resolve_time:type_name -> google.protobuf.Timestamp
+	7,  // 36: pantherclaw.v1.TransactionLink.kind:type_name -> pantherclaw.v1.LinkKind
+	34, // 37: pantherclaw.v1.TransactionLink.create_time:type_name -> google.protobuf.Timestamp
+	20, // 38: pantherclaw.v1.DecisionBasis.levels:type_name -> pantherclaw.v1.AuthorityLevel
+	9,  // 39: pantherclaw.v1.GetTransactionEvidenceResponse.transaction:type_name -> pantherclaw.v1.Transaction
+	13, // 40: pantherclaw.v1.GetTransactionEvidenceResponse.decision_receipts:type_name -> pantherclaw.v1.DecisionReceipt
+	21, // 41: pantherclaw.v1.GetTransactionEvidenceResponse.basis:type_name -> pantherclaw.v1.DecisionBasis
+	15, // 42: pantherclaw.v1.GetTransactionEvidenceResponse.execution:type_name -> pantherclaw.v1.Execution
+	16, // 43: pantherclaw.v1.GetTransactionEvidenceResponse.observations:type_name -> pantherclaw.v1.Observation
+	17, // 44: pantherclaw.v1.GetTransactionEvidenceResponse.effect_receipts:type_name -> pantherclaw.v1.EffectReceipt
+	18, // 45: pantherclaw.v1.GetTransactionEvidenceResponse.reconciliations:type_name -> pantherclaw.v1.Reconciliation
+	19, // 46: pantherclaw.v1.GetTransactionEvidenceResponse.links:type_name -> pantherclaw.v1.TransactionLink
+	38, // 47: pantherclaw.v1.GetTransactionEvidenceResponse.explanation:type_name -> pantherclaw.v1.DecisionExplanation
+	6,  // 48: pantherclaw.v1.ListReconciliationsRequest.states:type_name -> pantherclaw.v1.ReconciliationState
+	5,  // 49: pantherclaw.v1.ListReconciliationsRequest.kinds:type_name -> pantherclaw.v1.ReconciliationKind
+	18, // 50: pantherclaw.v1.ListReconciliationsResponse.reconciliations:type_name -> pantherclaw.v1.Reconciliation
+	18, // 51: pantherclaw.v1.GetReconciliationResponse.reconciliation:type_name -> pantherclaw.v1.Reconciliation
+	9,  // 52: pantherclaw.v1.GetReconciliationResponse.transaction:type_name -> pantherclaw.v1.Transaction
+	18, // 53: pantherclaw.v1.ResolveOccurredResponse.reconciliation:type_name -> pantherclaw.v1.Reconciliation
+	7,  // 54: pantherclaw.v1.LinkTransactionRequest.kind:type_name -> pantherclaw.v1.LinkKind
+	19, // 55: pantherclaw.v1.LinkTransactionResponse.link:type_name -> pantherclaw.v1.TransactionLink
+	10, // 56: pantherclaw.v1.TransactionService.ListTransactions:input_type -> pantherclaw.v1.ListTransactionsRequest
+	12, // 57: pantherclaw.v1.TransactionService.GetTransactionEvidence:input_type -> pantherclaw.v1.GetTransactionEvidenceRequest
+	23, // 58: pantherclaw.v1.ReconciliationService.ListReconciliations:input_type -> pantherclaw.v1.ListReconciliationsRequest
+	25, // 59: pantherclaw.v1.ReconciliationService.GetReconciliation:input_type -> pantherclaw.v1.GetReconciliationRequest
+	27, // 60: pantherclaw.v1.ReconciliationService.ResolveOccurred:input_type -> pantherclaw.v1.ResolveOccurredRequest
+	29, // 61: pantherclaw.v1.ReconciliationService.RequestVerification:input_type -> pantherclaw.v1.RequestVerificationRequest
+	31, // 62: pantherclaw.v1.ReconciliationService.LinkTransaction:input_type -> pantherclaw.v1.LinkTransactionRequest
+	11, // 63: pantherclaw.v1.TransactionService.ListTransactions:output_type -> pantherclaw.v1.ListTransactionsResponse
+	22, // 64: pantherclaw.v1.TransactionService.GetTransactionEvidence:output_type -> pantherclaw.v1.GetTransactionEvidenceResponse
+	24, // 65: pantherclaw.v1.ReconciliationService.ListReconciliations:output_type -> pantherclaw.v1.ListReconciliationsResponse
+	26, // 66: pantherclaw.v1.ReconciliationService.GetReconciliation:output_type -> pantherclaw.v1.GetReconciliationResponse
+	28, // 67: pantherclaw.v1.ReconciliationService.ResolveOccurred:output_type -> pantherclaw.v1.ResolveOccurredResponse
+	30, // 68: pantherclaw.v1.ReconciliationService.RequestVerification:output_type -> pantherclaw.v1.RequestVerificationResponse
+	32, // 69: pantherclaw.v1.ReconciliationService.LinkTransaction:output_type -> pantherclaw.v1.LinkTransactionResponse
+	63, // [63:70] is the sub-list for method output_type
+	56, // [56:63] is the sub-list for method input_type
+	56, // [56:56] is the sub-list for extension type_name
+	56, // [56:56] is the sub-list for extension extendee
+	0,  // [0:56] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_transactions_proto_init() }
@@ -3040,7 +3125,7 @@ func file_pantherclaw_v1_transactions_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_transactions_proto_rawDesc), len(file_pantherclaw_v1_transactions_proto_rawDesc)),
-			NumEnums:      7,
+			NumEnums:      8,
 			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   2,

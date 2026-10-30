@@ -121,6 +121,9 @@ type clients struct {
 	packages   pantherclawv1connect.PackageServiceClient
 	policies   pantherclawv1connect.PolicyServiceClient
 	ranges     pantherclawv1connect.RangeServiceClient
+	// entitlements reads the plan for the range's early edition check (G0 M17
+	// D126); nil skips it, the server checks anyway.
+	entitlements pantherclawv1connect.EntitlementServiceClient
 	m6Clients
 	m5p2Clients
 	m7Clients
@@ -152,6 +155,7 @@ func (a *app) clients() (clients, error) {
 		packages:      pantherclawv1connect.NewPackageServiceClient(c),
 		policies:      pantherclawv1connect.NewPolicyServiceClient(c),
 		ranges:        pantherclawv1connect.NewRangeServiceClient(c),
+		entitlements:  pantherclawv1connect.NewEntitlementServiceClient(c),
 		m6Clients: m6Clients{
 			gateways:    pantherclawv1connect.NewGatewayAdminServiceClient(c),
 			containment: pantherclawv1connect.NewContainmentServiceClient(c),

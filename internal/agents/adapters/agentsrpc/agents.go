@@ -333,7 +333,7 @@ func (s *Agents) SubmitScanFindings(ctx context.Context, req *pantherclawv1.Subm
 	if err != nil {
 		return nil, err
 	}
-	r, err := s.inv.SubmitScan(ctx, req.GetHost(), findings)
+	r, err := s.inv.SubmitScan(ctx, req.GetHost(), findings, app.ScanMode{Scope: req.GetScope(), Complete: req.GetComplete()})
 	if err != nil {
 		return nil, err
 	}
@@ -357,6 +357,7 @@ func findingsOf(req *pantherclawv1.SubmitScanFindingsRequest) ([]app.ScanFinding
 func scanResult(r app.ScanResult) *pantherclawv1.SubmitScanFindingsResponse {
 	return &pantherclawv1.SubmitScanFindingsResponse{
 		Created: int32(r.Created), Counted: int32(r.Counted), Dropped: int32(r.Dropped), //nolint:gosec // G115: at most 200
+		Missed: int32(r.Missed), //nolint:gosec // G115: bounded by the org's discoveries
 	}
 }
 

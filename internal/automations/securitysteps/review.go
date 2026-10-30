@@ -233,6 +233,10 @@ type restrictionBody struct {
 	Note          string            `json:"note"`
 }
 
+// RestrictionRuleID is the id of the FORBID rule RestrictionDraft writes
+// for agent.
+func RestrictionRuleID(agent ids.UUID) string { return restrictionPrefix + agent.String() }
+
 // RestrictionDraft returns base (or a new bundle) with one FORBID rule
 // per agent of byAgent, replacing an earlier rule of the same agent. It
 // changes nothing in base.

@@ -96,8 +96,8 @@ func (x *WorkAction) GetTarget() string {
 type WorkItem struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// "INCIDENT", "UNCONFIRMED_CONTAINMENT", "ALERT", "PROTECTION_FAILURE",
-	// "AUTOMATION_EXCEPTION", "WAITING_DECISION", "POSTURE_FINDING" or
-	// "AUTHORITY_EXPANSION".
+	// "AUTOMATION_EXCEPTION", "WAITING_DECISION", "POSTURE_FINDING",
+	// "AUTHORITY_EXPANSION" or "DISCOVERY_CHANGE".
 	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	Id   string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
 	// Untrusted text where it comes from a rule or a report.

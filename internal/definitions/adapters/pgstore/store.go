@@ -311,29 +311,38 @@ func (s *Store) PinnedPackageInTx(ctx context.Context, tx db.TenantTx, org ids.O
 func (s *Store) Active(ctx context.Context, org ids.OrgID, op string) (*domain.Definition, error) {
 	var out *domain.Definition
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
-		rows, err := q.ListActiveVersionsWith(ctx, org, op)
-		if err != nil || len(rows) == 0 {
-			return err
-		}
-		best := rows[0]
-		for _, r := range rows[1:] {
-			a, err1 := domain.ParseVersion(r.Version)
-			b, err2 := domain.ParseVersion(best.Version)
-			if err1 == nil && err2 == nil && a.Compare(b) > 0 {
-				best = r
-			}
-		}
-		p, err := s.decoded(ctx, q, org, best.ID)
-		if err != nil {
-			return err
-		}
-		if d, ok := p.Definition(op); ok {
-			out = d
-		}
-		return nil
+		_, d, err := s.ActiveInTx(ctx, tx, org, op)
+		out = d
+		return err
 	})
 	return out, err
+}
+
+// ActiveInTx is Active in tx, with the package version that holds the
+// definition, so that its pin can be recorded (G0 M17 D106): nil, nil
+// when no ACTIVE version defines op.
+func (s *Store) ActiveInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, op string) (*domain.Package, *domain.Definition, error) {
+	q := dbq.New(tx)
+	rows, err := q.ListActiveVersionsWith(ctx, org, op)
+	if err != nil || len(rows) == 0 {
+		return nil, nil, err
+	}
+	best := rows[0]
+	for _, r := range rows[1:] {
+		a, err1 := domain.ParseVersion(r.Version)
+		b, err2 := domain.ParseVersion(best.Version)
+		if err1 == nil && err2 == nil && a.Compare(b) > 0 {
+			best = r
+		}
+	}
+	p, err := s.decoded(ctx, q, org, best.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if d, ok := p.Definition(op); ok {
+		return p, d, nil
+	}
+	return nil, nil, nil
 }
 
 // ActiveDefinitions returns every definition of the org's ACTIVE versions
