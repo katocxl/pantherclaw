@@ -39,8 +39,10 @@ func TestHR477_GroupDigestBindsTheCohortAndWhatIsWaived(t *testing.T) {
 		}
 	}
 	// One agent's exception with the same ids never shares a group's digest.
-	x := Exception{OrgID: g.OrgID, ID: g.ID, BundleID: g.BundleID, RuleID: g.RuleID, RuleDigest: g.RuleDigest, AgentID: g.CohortID,
-		Operations: g.Operations, Reason: g.Reason, OwnerID: g.OwnerID, RequestedBy: g.RequestedBy, RequestedExpiry: g.RequestedExpiry}
+	x := Exception{
+		OrgID: g.OrgID, ID: g.ID, BundleID: g.BundleID, RuleID: g.RuleID, RuleDigest: g.RuleDigest, AgentID: g.CohortID,
+		Operations: g.Operations, Reason: g.Reason, OwnerID: g.OwnerID, RequestedBy: g.RequestedBy, RequestedExpiry: g.RequestedExpiry,
+	}
 	if d, _ := Digest(x); d == base {
 		t.Error("a group's digest equals an exception's")
 	}

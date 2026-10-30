@@ -92,8 +92,10 @@ func newGateWorld(t *testing.T) *gateWorld {
 		w.agents = append(w.agents, a)
 	}
 	w.publisherCtx = tapp.WithCaller(context.Background(), tapp.Caller{
-		Subject: td.Subject{Org: w.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: w.pat},
-			Bindings: []td.Binding{{Role: td.RolePolicyPublisher, Scope: td.Scope{Type: td.ScopeOrg, ID: w.org.UUID()}}}},
+		Subject: td.Subject{
+			Org: w.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: w.pat},
+			Bindings: []td.Binding{{Role: td.RolePolicyPublisher, Scope: td.Scope{Type: td.ScopeOrg, ID: w.org.UUID()}}},
+		},
 		Credential: tapp.CredAccessToken,
 	})
 	return w

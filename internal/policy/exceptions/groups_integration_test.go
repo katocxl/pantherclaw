@@ -295,10 +295,14 @@ func TestTenancy_policy_exception_groups(t *testing.T) {
 	}); err != nil {
 		t.Errorf("another org changed a group: %v", err)
 	}
-	if _, err := g.svc.GetGroup(tenancy.WithCaller(ctx, tenancy.Caller{Subject: td.Subject{Org: other,
-		Principal: td.PrincipalRef{Kind: td.KindUser, ID: ids.NewV7()},
-		Bindings:  []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: other.UUID()}}}},
-		Credential: tenancy.CredAccessToken}), group.ID); !errors.Is(err, exceptions.ErrGroupNotFound) {
+	if _, err := g.svc.GetGroup(tenancy.WithCaller(ctx, tenancy.Caller{
+		Subject: td.Subject{
+			Org:       other,
+			Principal: td.PrincipalRef{Kind: td.KindUser, ID: ids.NewV7()},
+			Bindings:  []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: other.UUID()}}},
+		},
+		Credential: tenancy.CredAccessToken,
+	}), group.ID); !errors.Is(err, exceptions.ErrGroupNotFound) {
 		t.Errorf("another org read the group: %v", err)
 	}
 }
