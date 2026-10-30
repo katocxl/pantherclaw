@@ -8,20 +8,28 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
+	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	autoapp "github.com/katocxl/pantherclaw/internal/automations/app"
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
+	"github.com/katocxl/pantherclaw/internal/automations/triggers"
+	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/model/ports"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/policy/packs/render"
+	"github.com/katocxl/pantherclaw/internal/reflex/alerts"
+	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
+	txdomain "github.com/katocxl/pantherclaw/internal/transactions/domain"
 )
 
 const (
@@ -172,23 +180,84 @@ var eventValue = regexp.MustCompile(eventParamPattern)
 // organization's record. The environment is not one: it holds an environment's
 // id, so a name a model wrote would never match and a production path would
 // never be taken (D321).
-var guardFields = []string{"actor_type", "decision", "mode", "operation", "outcome"}
+var guardFields = []string{fieldActorType, fieldDecision, fieldMode, fieldOperation, fieldOutcome}
 
-// eventFields are the guard fields each event always fills (reflex/feed). A
+// Guard fields.
+const (
+	fieldActorType = "actor_type"
+	fieldDecision  = "decision"
+	fieldMode      = "mode"
+	fieldOperation = "operation"
+	fieldOutcome   = "outcome"
+)
+
+func texts[S ~string](values ...S) []string {
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		out = append(out, string(v))
+	}
+	return out
+}
+
+// eventFields are the guard fields each event always fills (reflex/feed), each
+// with the values its writers can give it, built from their constants. A
 // trigger param is required, so a guard on any other field would refuse every
-// event, and the automation would never start (D321).
-var eventFields = func() map[string][]string {
-	action := []string{"actor_type", "decision", "mode", "operation"}
-	transaction := []string{"actor_type", "mode", "operation", "outcome"}
-	audit := []string{"actor_type", "outcome"}
-	return map[string][]string{
-		"action.decided": action, "action.held": action, "action.denied": action, "effect.recorded": transaction,
-		"run.ended": audit, "grant.issued": audit, "grant.revoked": audit, "agent.discovered": audit,
-		"approval.expired": audit, "automation.finished": audit, "alert.raised": audit, "incident.opened": audit,
+// event, and the automation would never start (D321). A value no writer gives
+// never matches, so a drafted `decision == 'DENIED'` would quietly skip a gate
+// (D324). An outcome that never varies is left out: no guard can branch on it.
+// `operation` has no list here: it is checked against the built-in operations.
+var eventFields = func() map[string]map[string][]string {
+	gateway, system := texts(reflexdomain.SubjectGateway), texts(reflexdomain.SubjectSystem)
+	callers := texts(td.KindUser, td.KindServiceAccount, td.KindSupport)
+	modes := []string{strings.ToUpper(pipeline.ModeEnforce), strings.ToUpper(pipeline.ModeMonitor)}
+	action := func(decisions ...string) map[string][]string {
+		return map[string][]string{fieldActorType: gateway, fieldDecision: decisions, fieldMode: modes, fieldOperation: nil}
+	}
+	actors := func(types ...[]string) map[string][]string {
+		return map[string][]string{fieldActorType: slices.Concat(types...)}
+	}
+	return map[string]map[string][]string{
+		triggers.VocabActionDecided: action(texts(
+			adomain.Allow, adomain.AllowWithObligations, adomain.RequireApproval, adomain.RequireStepUp, adomain.Deny, adomain.CannotAuthorize,
+		)...),
+		// What triggers.Means reads for each.
+		triggers.VocabActionHeld:   action(texts(adomain.PresentHold)...),
+		triggers.VocabActionDenied: action(texts(adomain.Deny)...),
+		triggers.VocabEffectRecorded: {
+			fieldActorType: slices.Concat(gateway, system, texts(td.KindUser)), fieldMode: modes, fieldOperation: nil,
+			fieldOutcome: texts(txdomain.EffectStates...),
+		},
+		triggers.VocabRunEnded:        actors(callers),
+		triggers.VocabGrantIssued:     actors(callers),
+		triggers.VocabGrantRevoked:    actors(callers),
+		triggers.VocabAgentDiscovered: actors(callers),
+		triggers.VocabApprovalExpired: actors(gateway, system),
+		triggers.VocabAutomationFinished: {
+			fieldActorType: texts(td.KindServiceAccount), fieldOutcome: texts(audit.Success, audit.Failure),
+		},
+		triggers.VocabAlertRaised:    {fieldActorType: {alerts.Actor.Type}, fieldOutcome: {alerts.StateOpen, alerts.StateSuppressed}},
+		triggers.VocabIncidentOpened: {fieldActorType: {alerts.Actor.Type}},
 		// coverage.lost's entries fill different fields, and case.closed's none.
-		"coverage.lost": {"actor_type"}, "case.closed": {"actor_type"},
+		triggers.VocabCoverageLost: actors(callers, system),
+		triggers.VocabCaseClosed:   actors(callers, system),
 	}
 }()
+
+// guardValues tells a model the values of eventFields. The schema's object
+// cannot vary an enum by field, so build() is what refuses any other value.
+func guardValues() string {
+	var b strings.Builder
+	b.WriteString("the plain value the triggering event's field is compared with, written exactly as listed; " +
+		"operation takes a built-in operation's full name. By event: ")
+	for _, on := range slices.Sorted(maps.Keys(eventFields)) {
+		for _, field := range slices.Sorted(maps.Keys(eventFields[on])) {
+			if values := eventFields[on][field]; len(values) > 0 {
+				b.WriteString(on + " " + field + ": " + strings.Join(values, ", ") + "; ")
+			}
+		}
+	}
+	return strings.TrimSuffix(b.String(), "; ")
+}
 
 var (
 	nodeID   = regexp.MustCompile(`^[a-z][a-z0-9_]{0,40}$`)
@@ -221,7 +290,7 @@ func guardSchema() ports.Schema {
 	return ports.Array(ports.Object(map[string]ports.Schema{
 		"field": ports.Enum(guardFields),
 		"op":    ports.Enum(opNames(equalityOps)),
-		"value": ports.Text("the plain value the triggering event's field is compared with"),
+		"value": ports.Text(guardValues()),
 	}))
 }
 
@@ -315,17 +384,23 @@ type builder struct {
 	fields map[string]bool
 	// on is the triggering event, empty when there is none.
 	on string
+	// operations are the built-in operations a guard may name.
+	operations []string
 }
 
 // guard renders a path's guard, which only the fields its event fills can
-// reach.
+// reach, comparing them with only the values those fields can hold.
 func (b *builder) guard(cs []guardCondition) (string, bool) {
 	src, ok := renderGuard(cs)
 	if !ok {
 		return "", false
 	}
 	for _, c := range cs {
-		if !eventValue.MatchString(c.Value) || !slices.Contains(eventFields[b.on], c.Field) {
+		allowed, fills := eventFields[b.on][c.Field]
+		if c.Field == fieldOperation {
+			allowed = b.operations
+		}
+		if !eventValue.MatchString(c.Value) || !fills || !slices.Contains(allowed, c.Value) {
 			return "", false
 		}
 		b.fields[c.Field] = true
@@ -508,12 +583,12 @@ func (b *builder) when(d *draftAutomation) (autodomain.When, bool) {
 
 // build is the definition of a draft, parsed as any definition is. Anything
 // outside what a model can write refuses the whole draft (HR-543).
-func (d *draftAutomation) build(now time.Time) ([]byte, bool) {
+func (d *draftAutomation) build(now time.Time, operations []string) ([]byte, bool) {
 	if !autodomain.NamePattern.MatchString(d.Name) || !wanted(d.Purpose, maxPurpose) || !d.WorkKind.Valid() ||
 		len(d.Nodes) < 2 || len(d.Nodes) > maxDraftNodes {
 		return nil, false
 	}
-	b := &builder{fields: map[string]bool{}}
+	b := &builder{fields: map[string]bool{}, operations: operations}
 	if d.Event != nil {
 		b.on = d.Event.On
 	}
@@ -557,7 +632,7 @@ func (d *draftAutomation) build(now time.Time) ([]byte, bool) {
 }
 
 // parseAutomation reads a model's answer strictly (HR-543).
-func parseAutomation(text string, output []byte, now time.Time) (*draftAutomation, []byte, error) {
+func parseAutomation(text string, output []byte, now time.Time, operations []string) (*draftAutomation, []byte, error) {
 	var d draftAutomation
 	if json.Unmarshal(output, &d, json.RejectUnknownMembers(true)) != nil {
 		return nil, nil, ports.ErrInvalidOutput
@@ -565,7 +640,7 @@ func parseAutomation(text string, output []byte, now time.Time) (*draftAutomatio
 	if err := CheckAmbiguities(text, d.Ambiguities); err != nil {
 		return nil, nil, err
 	}
-	raw, ok := d.build(now)
+	raw, ok := d.build(now, operations)
 	if !ok {
 		return nil, nil, ports.ErrInvalidOutput
 	}
@@ -594,7 +669,7 @@ func (s *Service) DraftAutomation(ctx context.Context, text string) (AutomationD
 	res, err := s.Draft(ctx, Call{
 		Task: ports.TaskAutomationDraft, Text: text, Schema: schema, Catalog: ports.Catalog{StepKinds: draftableSteps()},
 		Parse: func(call ids.UUID, output []byte) error {
-			d, definition, err := parseAutomation(text, output, s.now())
+			d, definition, err := parseAutomation(text, output, s.now(), s.Builtin)
 			if err != nil {
 				return err
 			}

@@ -72,7 +72,8 @@ func registerM21Model(rs *connect.Server, d apiDeps, core *automationsCore) erro
 		return err
 	}
 	svc := newModel(d)
-	svc.Params, svc.Clock = modelapp.BuiltinParams(pkgs...), clock.System{}
+	builtin := modelapp.BuiltinOperations(pkgs...)
+	svc.Params, svc.Builtin, svc.Clock = modelapp.BuiltinParams(pkgs...), builtin, clock.System{}
 	if core != nil && core.svc != nil {
 		svc.Automations = core.svc
 	}
@@ -81,7 +82,7 @@ func registerM21Model(rs *connect.Server, d apiDeps, core *automationsCore) erro
 	if d.billing != nil {
 		queries.Editions = d.billing
 	}
-	drafter := &search.Drafter{Search: queries, Model: svc, Builtin: modelapp.BuiltinOperations(pkgs...)}
+	drafter := &search.Drafter{Search: queries, Model: svc, Builtin: builtin}
 	svc.Operations = drafter
 	svc.Policies = securitysteps.NewPolicyDrafts(&factspg.Store{Pool: d.pool}, defs, d.cel)
 	pantherclawv1connect.RegisterModelServiceHandler(rs, modelrpc.New(svc, drafter))

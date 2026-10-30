@@ -30,6 +30,10 @@ const (
 	// noParam stands in a schema's enum when no parameter is offered: an empty
 	// enum is not a schema. No parameter has this name.
 	noParam = "none"
+	// emojiStyle is the variation selector that asks for an emoji's color form.
+	emojiStyle = 0xFE0F
+	// blankBraille is the empty braille pattern, which shows as nothing.
+	blankBraille = 0x2800
 )
 
 // Param is a parameter a policy condition may read. Params come only from the
@@ -119,10 +123,18 @@ func opNames(sets ...map[string]string) []string {
 	return out
 }
 
-// unreadable reports a character that does not show as written: a control, a
-// format character (bidi overrides, zero-width marks) or a line or paragraph
-// separator (D321).
-func unreadable(c rune) bool { return unicode.In(c, unicode.Cc, unicode.Cf, unicode.Zl, unicode.Zp) }
+// unreadable reports a character that does not show as written: anything
+// outside letters, marks, numbers, punctuation, symbols and spaces (controls,
+// bidi overrides, zero-width marks, line separators, private use, unassigned),
+// and those that show as nothing (D321, D324). Default_Ignorable is format
+// characters, already refused here, plus these two tables.
+func unreadable(c rune) bool {
+	if c == emojiStyle {
+		return false
+	}
+	return !unicode.IsGraphic(c) || c == blankBraille ||
+		unicode.In(c, unicode.Other_Default_Ignorable_Code_Point, unicode.Variation_Selector)
+}
 
 // plainText reports whether s is one bounded line to compare with.
 func plainText(s string) bool {

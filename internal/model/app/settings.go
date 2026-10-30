@@ -109,8 +109,10 @@ type Service struct {
 	Policies   PolicyDrafts
 	Operations Operations
 	Params     []Param
-	// Automations serves automation drafts.
+	// Automations serves automation drafts; a guard may name only the Builtin
+	// operations, the packages PantherClaw ships.
 	Automations AutomationDrafts
+	Builtin     []string
 	Clock       clock.Clock
 	Config      Config
 }

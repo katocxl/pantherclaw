@@ -40,12 +40,18 @@ const (
 
 func automationAnswer(nodes ...string) string {
 	return `{"name":"incident-case","purpose":"Open a case for each incident.","work_kind":"SECURITY_WORK","schedule":null,` +
-		`"event":{"on":"incident.opened"},"nodes":[` + strings.Join(nodes, ",") + `],"ambiguities":[]}`
+		`"event":{"on":"alert.raised"},"nodes":[` + strings.Join(nodes, ",") + `],"ambiguities":[]}`
+}
+
+// guardAnswer is an answer on event on, branching on field and value.
+func guardAnswer(on, field, value string) string {
+	route := strings.Replace(strings.Replace(routeNode, `"field":"outcome"`, `"field":"`+field+`"`, 1), `"value":"OPEN"`, `"value":"`+value+`"`, 1)
+	return strings.Replace(automationAnswer(route, tellNode, fileNode, doneNode), `"on":"alert.raised"`, `"on":"`+on+`"`, 1)
 }
 
 func parsedAutomation(t *testing.T, output string) *autodomain.Definition {
 	t.Helper()
-	_, raw, err := parseAutomation(automationText, []byte(output), time.Now())
+	_, raw, err := parseAutomation(automationText, []byte(output), time.Now(), visibleOps)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +84,7 @@ func TestT235_TheAutomationSchemaIsClosedAndOffersNoAuthority(t *testing.T) {
 // Covers: F181
 func TestHR543_ADraftedAutomationIsAV2DefinitionWithDerivedAuthority(t *testing.T) {
 	now := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
-	_, raw, err := parseAutomation(automationText, []byte(automationAnswer(routeNode, askNode, tellNode, fileNode, doneNode)), now)
+	_, raw, err := parseAutomation(automationText, []byte(automationAnswer(routeNode, askNode, tellNode, fileNode, doneNode)), now, visibleOps)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +121,7 @@ func TestHR543_ADraftedAutomationIsAV2DefinitionWithDerivedAuthority(t *testing.
 		{"schedule", `{"cron":"0 9 * * 1","timezone":"UTC"}`, "null", autodomain.TriggerSchedule},
 	} {
 		output := strings.Replace(automationAnswer(fileNode, doneNode), `"schedule":null`, `"schedule":`+trigger.schedule, 1)
-		output = strings.Replace(output, `"event":{"on":"incident.opened"}`, `"event":`+trigger.event, 1)
+		output = strings.Replace(output, `"event":{"on":"alert.raised"}`, `"event":`+trigger.event, 1)
 		if got := parsedAutomation(t, output).When.Kind(); got != trigger.kind {
 			t.Errorf("%s: %s", trigger.name, got)
 		}
@@ -136,7 +142,7 @@ func TestHR543_AnythingOutsideTheAutomationSubsetIsRefused(t *testing.T) {
 		"unknown field":        swap(`"name":`, `"principal":"self","name":`),
 		"a custom role":        swap("automation_publisher", "security_lead"),
 		"a role with no right": swap("automation_publisher", "viewer"),
-		"an unknown event":     swap("incident.opened", "tool.discovered"),
+		"an unknown event":     swap("alert.raised", "tool.discovered"),
 		"template in a title":  swap("Incident opened", "Incident {{params.id}}"),
 		"template in a body":   swap(`"body":""`, `"body":"see {{ steps.x.output.y }}"`),
 		"template in a case":   swap("Look into it", "Look at }}"),
@@ -159,7 +165,7 @@ func TestHR543_AnythingOutsideTheAutomationSubsetIsRefused(t *testing.T) {
 		"an unknown op":        swap(`"op":"eq"`, `"op":"gt"`),
 		"quotes in a value":    swap(`"value":"OPEN"`, `"value":"prod' || true || 'x"`),
 		"no conditions":        swap(`{"field":"outcome","op":"eq","value":"OPEN"}`, ""),
-		"a guard, no event":    strings.Replace(good, `"event":{"on":"incident.opened"}`, `"event":null`, 1),
+		"a guard, no event":    strings.Replace(good, `"event":{"on":"alert.raised"}`, `"event":null`, 1),
 		"two parts":            swap(`"id":"tell","type":"notify","next":"file","gate":null`, `"id":"tell","type":"notify","next":"file","gate":{"roles":["automation_publisher"],"min_approvals":1,"deadline_hours":1,"summary":""}`),
 		"the wrong part":       swap(`"id":"file","type":"open_case"`, `"id":"file","type":"wait"`),
 		"a bad cron":           strings.Replace(good, `"schedule":null`, `"schedule":{"cron":"often","timezone":"UTC"}`, 1),
@@ -167,11 +173,11 @@ func TestHR543_AnythingOutsideTheAutomationSubsetIsRefused(t *testing.T) {
 		"no steps":             automationAnswer(),
 	}
 	for name, output := range refused {
-		if _, _, err := parseAutomation(automationText, []byte(output), time.Now()); !errors.Is(err, ports.ErrInvalidOutput) {
+		if _, _, err := parseAutomation(automationText, []byte(output), time.Now(), visibleOps); !errors.Is(err, ports.ErrInvalidOutput) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if _, _, err := parseAutomation("open a case for large incidents", []byte(good), time.Now()); !errors.Is(err, ports.ErrInvalidOutput) {
+	if _, _, err := parseAutomation("open a case for large incidents", []byte(good), time.Now(), visibleOps); !errors.Is(err, ports.ErrInvalidOutput) {
 		t.Errorf("a vague term settled silently: %v", err)
 	}
 }
@@ -197,6 +203,7 @@ func TestHR543_NoConditionCanNameAnEnvironment(t *testing.T) {
 	}
 	refused := []string{
 		"forbid refunds in production", "if prod, wait for approval", "only on Staging", "any environment", "when env is dev", "not in QA",
+		"only on prod1", "in preprod", "for nonprod", "on stg", "in the sandbox",
 	}
 	for _, text := range refused {
 		if err := CheckEnvironment(text); !errors.Is(err, ErrEnvironmentCondition) {
@@ -220,28 +227,25 @@ func TestHR543_AGuardReadsOnlyWhatItsEventFills(t *testing.T) {
 		if !ok {
 			t.Errorf("%s is not in the table", on)
 		}
-		for _, f := range fields {
+		for f := range fields {
 			if !slices.Contains(guardFields, f) {
 				t.Errorf("%s fills %s, which is no guard field", on, f)
 			}
 		}
 	}
-	answerOn := func(on, field, value string) string {
-		route := strings.Replace(strings.Replace(routeNode, `"field":"outcome"`, `"field":"`+field+`"`, 1), `"value":"OPEN"`, `"value":"`+value+`"`, 1)
-		return strings.Replace(automationAnswer(route, tellNode, fileNode, doneNode), `"on":"incident.opened"`, `"on":"`+on+`"`, 1)
-	}
 	for _, c := range [][3]string{
-		{"incident.opened", "outcome", "OPEN"},
+		{"alert.raised", "outcome", "OPEN"},
 		{"action.held", "decision", "HOLD"},
 		{"action.denied", "operation", "payments.refund.create"},
 		{"effect.recorded", "outcome", "CONFIRMED"},
-		{"coverage.lost", "actor_type", "SYSTEM"},
+		{"coverage.lost", "actor_type", "system"},
 	} {
-		if _, _, err := parseAutomation(automationText, []byte(answerOn(c[0], c[1], c[2])), time.Now()); err != nil {
+		if _, _, err := parseAutomation(automationText, []byte(guardAnswer(c[0], c[1], c[2])), time.Now(), visibleOps); err != nil {
 			t.Errorf("%v: %v", c, err)
 		}
 	}
 	for _, c := range [][3]string{
+		{"incident.opened", "outcome", "OPEN"},
 		{"incident.opened", "decision", "HOLD"},
 		{"incident.opened", "operation", "payments.refund.create"},
 		{"alert.raised", "mode", "MONITOR"},
@@ -249,9 +253,61 @@ func TestHR543_AGuardReadsOnlyWhatItsEventFills(t *testing.T) {
 		{"case.closed", "outcome", "CLOSED"},
 		{"coverage.lost", "outcome", "PARTIAL"},
 	} {
-		if _, _, err := parseAutomation(automationText, []byte(answerOn(c[0], c[1], c[2])), time.Now()); !errors.Is(err, ports.ErrInvalidOutput) {
+		if _, _, err := parseAutomation(automationText, []byte(guardAnswer(c[0], c[1], c[2])), time.Now(), visibleOps); !errors.Is(err, ports.ErrInvalidOutput) {
 			t.Errorf("%v: %v", c, err)
 		}
+	}
+}
+
+// A value its field never holds never matches: a gate behind it would be
+// skipped, and the draft would read right to its reviewer.
+//
+// Covers: F181
+func TestHR543_AGuardValueIsOneItsEventCanHold(t *testing.T) {
+	for on, fields := range eventFields {
+		for field, values := range fields {
+			if field == fieldOperation {
+				values = visibleOps
+			}
+			if len(values) == 0 {
+				t.Errorf("%s %s has no value", on, field)
+			}
+			for _, value := range values {
+				if _, _, err := parseAutomation(automationText, []byte(guardAnswer(on, field, value)), time.Now(), visibleOps); err != nil {
+					t.Errorf("%s %s %s: %v", on, field, value, err)
+				}
+				if field != fieldOperation && !strings.Contains(guardValues(), value) {
+					t.Errorf("the schema does not list %s", value)
+				}
+			}
+		}
+	}
+	for _, c := range [][3]string{
+		{"action.decided", "decision", "DENIED"},
+		{"action.decided", "decision", "denied"},
+		{"action.decided", "decision", "BLOCK"},
+		{"action.decided", "decision", "HOLD"},
+		{"action.denied", "decision", "ALLOW"},
+		{"action.decided", "mode", "production"},
+		{"action.decided", "mode", "live"},
+		{"run.ended", "outcome", "FAILED"},
+		{"run.ended", "outcome", "success"},
+		{"grant.issued", "outcome", "success"},
+		{"approval.expired", "outcome", "denied"},
+		{"effect.recorded", "outcome", "success"},
+		{"incident.opened", "outcome", "open"},
+		{"automation.finished", "outcome", "denied"},
+		{"alert.raised", "actor_type", "SYSTEM"},
+		{"action.decided", "operation", "not.a.real.op"},
+		{"action.decided", "operation", "an.org.own.tool"},
+	} {
+		if _, _, err := parseAutomation(automationText, []byte(guardAnswer(c[0], c[1], c[2])), time.Now(), visibleOps); !errors.Is(err, ports.ErrInvalidOutput) {
+			t.Errorf("%v: %v", c, err)
+		}
+	}
+	operation := guardAnswer("action.decided", "operation", visibleOps[0])
+	if _, _, err := parseAutomation(automationText, []byte(operation), time.Now(), nil); !errors.Is(err, ports.ErrInvalidOutput) {
+		t.Errorf("no built-in operations: %v", err)
 	}
 }
 
@@ -260,13 +316,16 @@ func TestHR543_AGuardReadsOnlyWhatItsEventFills(t *testing.T) {
 //
 // Covers: F181, F304
 func TestHR543_TextThatDoesNotShowAsWrittenIsRefused(t *testing.T) {
-	for _, c := range []rune{0x202e, 0x2066, 0x200b, 0x200d, 0xfeff, 0xad, 0x85, 0x2028, 0x2029} {
+	for _, c := range []rune{
+		0x202e, 0x2066, 0x200b, 0x200d, 0xfeff, 0xad, 0x85, 0x2028, 0x2029, 0xe0041, 0x61c,
+		0x34f, 0xfe00, 0x180b, 0x3164, 0xffa0, 0x115f, 0x2800, 0xe000, 0x378,
+	} {
 		s := "pay" + string(c) + "ment"
 		if literalText(s, maxPurpose) || shownLine(s) || plainText(s) {
 			t.Errorf("U+%04X passes", c)
 		}
 		good := automationAnswer(tellNode, fileNode, doneNode)
-		if _, _, err := parseAutomation(automationText, []byte(strings.Replace(good, "Look into it", s, 1)), time.Now()); !errors.Is(err, ports.ErrInvalidOutput) {
+		if _, _, err := parseAutomation(automationText, []byte(strings.Replace(good, "Look into it", s, 1)), time.Now(), visibleOps); !errors.Is(err, ports.ErrInvalidOutput) {
 			t.Errorf("U+%04X in a case title: %v", c, err)
 		}
 		rule := strings.Replace(goodRule, "Forbid refunds", s, 1)
@@ -278,7 +337,9 @@ func TestHR543_TextThatDoesNotShowAsWrittenIsRefused(t *testing.T) {
 			t.Errorf("U+%04X in a threshold: %v", c, err)
 		}
 	}
-	if !literalText("two\nlines", maxPurpose) || !literalText("Überweisung über 100 €", maxPurpose) {
+	emoji := string([]rune{0x26a0, emojiStyle})
+	if !literalText("two\nlines", maxPurpose) || !literalText("Überweisung über 100 €", maxPurpose) ||
+		!literalText(emoji, maxPurpose) || !shownLine(emoji) || !plainText(emoji) {
 		t.Error("plain text was refused")
 	}
 }
