@@ -136,7 +136,7 @@ const getSIEMDestination = `-- name: GetSIEMDestination :one
 SELECT d.id, d.name, d.url, d.internal, d.data_classes, d.format, d.state, d.created_by, d.created_at, d.activated_by,
        d.activated_at, d.updated_at, d.confirmed_at, coalesce(d.last_delivered_seq, 0)::bigint AS last_delivered_seq, d.last_delivered_at, d.consecutive_failures,
        d.failing_since, d.last_failure_at, d.last_failure_code, d.delivered_batches, d.failed_batches, d.retries,
-       d.prev_secret_expires_at, coalesce(c.seq, 0)::bigint AS cursor_seq, ob.created_at AS open_batch_since
+       d.prev_secret_expires_at, coalesce(c.seq, 0)::bigint AS cursor_seq, ob.created_at AS open_batch_since, d.signature_scheme
 FROM pc.siem_destinations d
 LEFT JOIN pc.siem_cursors c ON c.org_id = d.org_id AND c.destination_id = d.id
 LEFT JOIN pc.siem_batches ob ON ob.org_id = d.org_id AND ob.destination_id = d.id AND ob.state <> 'DELIVERED'
@@ -169,6 +169,7 @@ type GetSIEMDestinationRow struct {
 	PrevSecretExpiresAt *time.Time
 	CursorSeq           int64
 	OpenBatchSince      *time.Time
+	SignatureScheme     string
 }
 
 func (q *Queries) GetSIEMDestination(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (GetSIEMDestinationRow, error) {
@@ -200,6 +201,7 @@ func (q *Queries) GetSIEMDestination(ctx context.Context, orgID ids.OrgID, iD id
 		&i.PrevSecretExpiresAt,
 		&i.CursorSeq,
 		&i.OpenBatchSince,
+		&i.SignatureScheme,
 	)
 	return i, err
 }
@@ -326,7 +328,7 @@ const listSIEMDestinations = `-- name: ListSIEMDestinations :many
 SELECT d.id, d.name, d.url, d.internal, d.data_classes, d.format, d.state, d.created_by, d.created_at, d.activated_by,
        d.activated_at, d.updated_at, d.confirmed_at, coalesce(d.last_delivered_seq, 0)::bigint AS last_delivered_seq, d.last_delivered_at, d.consecutive_failures,
        d.failing_since, d.last_failure_at, d.last_failure_code, d.delivered_batches, d.failed_batches, d.retries,
-       d.prev_secret_expires_at, coalesce(c.seq, 0)::bigint AS cursor_seq, ob.created_at AS open_batch_since
+       d.prev_secret_expires_at, coalesce(c.seq, 0)::bigint AS cursor_seq, ob.created_at AS open_batch_since, d.signature_scheme
 FROM pc.siem_destinations d
 LEFT JOIN pc.siem_cursors c ON c.org_id = d.org_id AND c.destination_id = d.id
 LEFT JOIN pc.siem_batches ob ON ob.org_id = d.org_id AND ob.destination_id = d.id AND ob.state <> 'DELIVERED'
@@ -362,6 +364,7 @@ type ListSIEMDestinationsRow struct {
 	PrevSecretExpiresAt *time.Time
 	CursorSeq           int64
 	OpenBatchSince      *time.Time
+	SignatureScheme     string
 }
 
 func (q *Queries) ListSIEMDestinations(ctx context.Context, orgID ids.OrgID, afterID *ids.UUID, maxRows int32) ([]ListSIEMDestinationsRow, error) {
@@ -399,6 +402,7 @@ func (q *Queries) ListSIEMDestinations(ctx context.Context, orgID ids.OrgID, aft
 			&i.PrevSecretExpiresAt,
 			&i.CursorSeq,
 			&i.OpenBatchSince,
+			&i.SignatureScheme,
 		); err != nil {
 			return nil, err
 		}
@@ -414,7 +418,7 @@ const loadSIEMExport = `-- name: LoadSIEMExport :one
 
 SELECT d.state, d.url, d.internal, d.data_classes, d.secret, d.prev_secret,
        coalesce(d.prev_secret_expires_at > now(), false)::bool AS prev_secret_live, d.consecutive_failures,
-       d.failing_since, c.seq AS cursor_seq,
+       d.failing_since, d.signature_scheme, c.seq AS cursor_seq,
        b.id AS batch_id, coalesce(b.from_seq, 0)::bigint AS batch_from, coalesce(b.to_seq, 0)::bigint AS batch_to, b.attempts AS batch_attempts,
        b.state AS batch_state, coalesce(b.next_attempt_at <= now(), false)::bool AS batch_due, now()::timestamptz AS now
 FROM pc.siem_destinations d
@@ -434,6 +438,7 @@ type LoadSIEMExportRow struct {
 	PrevSecretLive      bool
 	ConsecutiveFailures int32
 	FailingSince        *time.Time
+	SignatureScheme     string
 	CursorSeq           int64
 	BatchID             *ids.UUID
 	BatchFrom           int64
@@ -461,6 +466,7 @@ func (q *Queries) LoadSIEMExport(ctx context.Context, orgID ids.OrgID, iD ids.UU
 		&i.PrevSecretLive,
 		&i.ConsecutiveFailures,
 		&i.FailingSince,
+		&i.SignatureScheme,
 		&i.CursorSeq,
 		&i.BatchID,
 		&i.BatchFrom,
@@ -655,6 +661,27 @@ func (q *Queries) SIEMFailed(ctx context.Context, arg SIEMFailedParams) (int32, 
 	var consecutive_failures int32
 	err := row.Scan(&consecutive_failures)
 	return consecutive_failures, err
+}
+
+const setSIEMDestinationSignatureScheme = `-- name: SetSIEMDestinationSignatureScheme :one
+WITH old AS (
+    SELECT d.id, d.signature_scheme FROM pc.siem_destinations d
+    WHERE d.org_id = $2 AND d.id = $3 AND d.state <> 'DISABLED'
+    FOR UPDATE
+)
+UPDATE pc.siem_destinations d SET signature_scheme = $1, updated_at = now()
+FROM old
+WHERE d.org_id = $2 AND d.id = old.id
+RETURNING old.signature_scheme AS previous
+`
+
+// Opts a destination in to or out of Ed25519 signatures (G0 M20 D251,
+// HR-510); it returns the previous scheme for the audit entry.
+func (q *Queries) SetSIEMDestinationSignatureScheme(ctx context.Context, scheme string, orgID ids.OrgID, iD ids.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, setSIEMDestinationSignatureScheme, scheme, orgID, iD)
+	var previous string
+	err := row.Scan(&previous)
+	return previous, err
 }
 
 const setSIEMDestinationState = `-- name: SetSIEMDestinationState :execrows

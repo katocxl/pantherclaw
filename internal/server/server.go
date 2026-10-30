@@ -634,6 +634,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if evidenceJobs, err = registerM18FleetJobs(evidenceJobs, jreg, m6.fleet, log); err != nil {
 			return err
 		}
+		if evidenceJobs, err = registerM20WebhookJobs(evidenceJobs, jreg, pool, kp, log); err != nil {
+			return err
+		}
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {
 			return err
 		}
@@ -920,6 +923,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerUITenancy(rs, d)
 	registerUsage(rs, d)
 	registerDataRequests(rs, d)
+	registerM20Webhooks(rs, d)
 	registerSupport(rs, d)
 	registerM16External(rs, d)
 	mux := http.NewServeMux()
@@ -943,6 +947,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	mountM14Data(mux, d)
 	mountM16External(mux, d)
+	mountWebhookJWKS(mux, webhookJWKSOf(d), d.clientIP, log)
 	mux.HandleFunc("GET /livez", livez(pool))
 	mux.Handle("GET /readyz", readiness{pool: pool, workers: d.workers, held: d.hold, log: log})
 	mux.HandleFunc("GET /.well-known/pantherclaw/jwks.json", func(w http.ResponseWriter, _ *http.Request) {

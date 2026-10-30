@@ -297,7 +297,7 @@ func (q *Queries) FlagChannelQueueFull(ctx context.Context, orgID ids.OrgID, iD 
 }
 
 const getChannel = `-- name: GetChannel :one
-SELECT org_id, id, name, kind, state, pause_reason, event_types, min_severity, recipient_role, url, secret, prev_secret, prev_secret_expires_at, consecutive_failures, failing_since, last_success_at, last_failure_at, last_failure_code, created_by, created_at, updated_at FROM pc.notification_channels WHERE org_id = $1 AND id = $2 AND state <> 'DISABLED'
+SELECT org_id, id, name, kind, state, pause_reason, event_types, min_severity, recipient_role, url, secret, prev_secret, prev_secret_expires_at, consecutive_failures, failing_since, last_success_at, last_failure_at, last_failure_code, created_by, created_at, updated_at, signature_scheme FROM pc.notification_channels WHERE org_id = $1 AND id = $2 AND state <> 'DISABLED'
 `
 
 func (q *Queries) GetChannel(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcNotificationChannel, error) {
@@ -325,6 +325,7 @@ func (q *Queries) GetChannel(ctx context.Context, orgID ids.OrgID, iD ids.UUID) 
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SignatureScheme,
 	)
 	return i, err
 }
@@ -452,7 +453,7 @@ func (q *Queries) InsertNotification(ctx context.Context, arg InsertNotification
 
 const listChannels = `-- name: ListChannels :many
 
-SELECT org_id, id, name, kind, state, pause_reason, event_types, min_severity, recipient_role, url, secret, prev_secret, prev_secret_expires_at, consecutive_failures, failing_since, last_success_at, last_failure_at, last_failure_code, created_by, created_at, updated_at FROM pc.notification_channels
+SELECT org_id, id, name, kind, state, pause_reason, event_types, min_severity, recipient_role, url, secret, prev_secret, prev_secret_expires_at, consecutive_failures, failing_since, last_success_at, last_failure_at, last_failure_code, created_by, created_at, updated_at, signature_scheme FROM pc.notification_channels
 WHERE org_id = $1 AND state <> 'DISABLED'
   AND id > coalesce($2::uuid, '00000000-0000-0000-0000-000000000000')
 ORDER BY id
@@ -493,6 +494,7 @@ func (q *Queries) ListChannels(ctx context.Context, orgID ids.OrgID, after *ids.
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SignatureScheme,
 		); err != nil {
 			return nil, err
 		}
@@ -589,6 +591,7 @@ SELECT d.id, d.kind, d.state, d.attempts, d.channel_id, d.recipient_user_id,
        n.created_at AS notification_created_at, (n.expires_at <= now())::bool AS expired,
        c.state AS channel_state, c.name AS channel_name, c.url AS channel_url, c.secret AS channel_secret,
        c.prev_secret AS channel_prev_secret, coalesce(c.prev_secret_expires_at > now(), false)::bool AS prev_secret_live,
+       c.signature_scheme AS channel_signature_scheme,
        u.email AS recipient_email, u.state AS recipient_state
 FROM pc.deliveries d
 JOIN pc.notifications n ON n.org_id = d.org_id AND n.id = d.notification_id
@@ -598,30 +601,31 @@ WHERE d.org_id = $1 AND d.id = $2
 `
 
 type LoadDeliveryRow struct {
-	ID                    ids.UUID
-	Kind                  string
-	State                 string
-	Attempts              int32
-	ChannelID             *ids.UUID
-	RecipientUserID       *ids.UUID
-	NotificationID        ids.UUID
-	Type                  string
-	Severity              string
-	Title                 string
-	Body                  string
-	LinkPath              string
-	SubjectType           *string
-	SubjectID             *ids.UUID
-	NotificationCreatedAt time.Time
-	Expired               bool
-	ChannelState          *string
-	ChannelName           *string
-	ChannelUrl            *string
-	ChannelSecret         []byte
-	ChannelPrevSecret     []byte
-	PrevSecretLive        bool
-	RecipientEmail        *string
-	RecipientState        *string
+	ID                     ids.UUID
+	Kind                   string
+	State                  string
+	Attempts               int32
+	ChannelID              *ids.UUID
+	RecipientUserID        *ids.UUID
+	NotificationID         ids.UUID
+	Type                   string
+	Severity               string
+	Title                  string
+	Body                   string
+	LinkPath               string
+	SubjectType            *string
+	SubjectID              *ids.UUID
+	NotificationCreatedAt  time.Time
+	Expired                bool
+	ChannelState           *string
+	ChannelName            *string
+	ChannelUrl             *string
+	ChannelSecret          []byte
+	ChannelPrevSecret      []byte
+	PrevSecretLive         bool
+	ChannelSignatureScheme *string
+	RecipientEmail         *string
+	RecipientState         *string
 }
 
 // Delivery (the worker). LoadDelivery reads everything one attempt needs;
@@ -652,6 +656,7 @@ func (q *Queries) LoadDelivery(ctx context.Context, orgID ids.OrgID, iD ids.UUID
 		&i.ChannelSecret,
 		&i.ChannelPrevSecret,
 		&i.PrevSecretLive,
+		&i.ChannelSignatureScheme,
 		&i.RecipientEmail,
 		&i.RecipientState,
 	)
@@ -787,6 +792,27 @@ func (q *Queries) SetChannelPaused(ctx context.Context, paused bool, orgID ids.O
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setChannelSignatureScheme = `-- name: SetChannelSignatureScheme :one
+WITH old AS (
+    SELECT c.id, c.signature_scheme FROM pc.notification_channels c
+    WHERE c.org_id = $2 AND c.id = $3 AND c.kind = 'webhook' AND c.state <> 'DISABLED'
+    FOR UPDATE
+)
+UPDATE pc.notification_channels c SET signature_scheme = $1, updated_at = now()
+FROM old
+WHERE c.org_id = $2 AND c.id = old.id
+RETURNING old.signature_scheme AS previous
+`
+
+// Opts a webhook channel in to or out of Ed25519 signatures (G0 M20 D251,
+// HR-510); it returns the previous scheme for the audit entry.
+func (q *Queries) SetChannelSignatureScheme(ctx context.Context, scheme string, orgID ids.OrgID, iD ids.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, setChannelSignatureScheme, scheme, orgID, iD)
+	var previous string
+	err := row.Scan(&previous)
+	return previous, err
 }
 
 const subjectSimulated = `-- name: SubjectSimulated :one

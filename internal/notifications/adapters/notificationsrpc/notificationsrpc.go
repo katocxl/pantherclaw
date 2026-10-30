@@ -103,6 +103,7 @@ func channel(c napp.ChannelView) *pantherclawv1.Channel {
 		Health: healths[c.Health], ConsecutiveFailures: int32(min(c.ConsecutiveFailures, 1<<30)), //nolint:gosec // G115: bounded
 		LastSuccessTime: tsp(c.LastSuccess), LastFailureTime: tsp(c.LastFailure), LastFailureCode: c.LastFailureCode,
 		PreviousSecretExpireTime: tsp(c.PreviousSecretExpiry), CreateTime: ts(c.CreatedAt), UpdateTime: ts(c.UpdatedAt),
+		SignatureScheme: string(c.SignatureScheme),
 	}
 	if c.SlackApp != nil {
 		level := pantherclawv1.SlackDataLevel_SLACK_DATA_LEVEL_MINIMAL
@@ -290,4 +291,20 @@ func slackAppIn(c *pantherclawv1.SlackAppConfig) *domain.SlackAppConfig {
 		level = domain.SlackSummary
 	}
 	return &domain.SlackAppConfig{ChannelID: c.GetChannelId(), DataLevel: level, BotToken: c.GetBotToken()}
+}
+
+// SetChannelSignatureScheme implements NotificationServiceHandler (G0 M20
+// D251).
+func (h *Handler) SetChannelSignatureScheme(ctx context.Context, req *pantherclawv1.SetChannelSignatureSchemeRequest) (
+	*pantherclawv1.SetChannelSignatureSchemeResponse, error,
+) {
+	id, err := parse(req.GetId())
+	if err != nil {
+		return nil, err
+	}
+	c, jwks, err := h.s.SetChannelSignatureScheme(ctx, id, req.GetSignatureScheme())
+	if err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.SetChannelSignatureSchemeResponse{Channel: channel(c), JwksUrl: jwks}, nil
 }

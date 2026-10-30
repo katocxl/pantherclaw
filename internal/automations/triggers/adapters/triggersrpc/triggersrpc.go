@@ -203,6 +203,7 @@ func (h *Handler) destinationProto(ctx context.Context, d endpoints.Destination)
 		CreatedBy: d.CreatedBy.String(), CreateTime: ts(d.CreatedAt), ActivatedBy: str(d.ActivatedBy),
 		ActivateTime: tsp(d.ActivatedAt), ConfirmUrl: h.publicURL + DestinationsPage + d.ID.String() + "/confirm?org=" + org,
 		RotationEndTime: tsp(d.RotationEndsAt),
+		SignatureScheme: d.SignatureScheme,
 	}
 }
 
@@ -372,4 +373,20 @@ func (h *Handler) ListAutomationDestinations(ctx context.Context, _ *pantherclaw
 		out.Destinations = append(out.Destinations, h.destinationProto(ctx, d))
 	}
 	return out, nil
+}
+
+// SetAutomationDestinationSignatureScheme implements TriggerServiceHandler
+// (G0 M20 D251).
+func (h *Handler) SetAutomationDestinationSignatureScheme(ctx context.Context, req *pantherclawv1.SetAutomationDestinationSignatureSchemeRequest) (
+	*pantherclawv1.SetAutomationDestinationSignatureSchemeResponse, error,
+) {
+	id, err := idOf(req.GetId())
+	if err != nil {
+		return nil, err
+	}
+	d, jwks, err := h.ep.SetDestinationSignatureScheme(ctx, id, req.GetSignatureScheme())
+	if err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.SetAutomationDestinationSignatureSchemeResponse{Destination: h.destinationProto(ctx, d), JwksUrl: jwks}, nil
 }

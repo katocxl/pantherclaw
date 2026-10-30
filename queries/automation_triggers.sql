@@ -330,20 +330,20 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(name), sqlc.arg(url), sqlc.arg(
 
 -- name: GetAutomationDestination :one
 SELECT d.org_id, d.id, d.name, d.url, d.internal, d.purposes, d.prev_until, d.state, d.created_by, d.created_at,
-       d.activated_by, d.activated_credential, d.activated_at, d.disabled_by, d.disabled_at, d.updated_at
+       d.activated_by, d.activated_credential, d.activated_at, d.disabled_by, d.disabled_at, d.updated_at, d.signature_scheme
 FROM pc.automation_destinations d
 WHERE d.org_id = sqlc.arg(org_id) AND d.id = sqlc.arg(id);
 
 -- name: ListAutomationDestinations :many
 SELECT d.org_id, d.id, d.name, d.url, d.internal, d.purposes, d.prev_until, d.state, d.created_by, d.created_at,
-       d.activated_by, d.activated_credential, d.activated_at, d.disabled_by, d.disabled_at, d.updated_at
+       d.activated_by, d.activated_credential, d.activated_at, d.disabled_by, d.disabled_at, d.updated_at, d.signature_scheme
 FROM pc.automation_destinations d
 WHERE d.org_id = sqlc.arg(org_id)
 ORDER BY d.name, d.id
 LIMIT 200;
 
 -- name: LoadAutomationDestinationSecrets :one
-SELECT d.state, d.url, d.internal, d.purposes, d.secret, d.prev_secret, d.prev_until
+SELECT d.state, d.url, d.internal, d.purposes, d.secret, d.prev_secret, d.prev_until, d.signature_scheme
 FROM pc.automation_destinations d
 WHERE d.org_id = sqlc.arg(org_id) AND d.id = sqlc.arg(id);
 
@@ -492,3 +492,16 @@ RETURNING attempts;
 -- never one an attempt was leased for (D97 N1).
 UPDATE pc.automation_deliveries SET state = 'FAILED', body = NULL, last_error = sqlc.arg(code)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING' AND attempts = 0;
+
+-- name: SetAutomationDestinationSignatureScheme :one
+-- Opts a destination in to or out of Ed25519 signatures (G0 M20 D251,
+-- HR-510); it returns the previous scheme for the audit entry.
+WITH old AS (
+    SELECT d.id, d.signature_scheme FROM pc.automation_destinations d
+    WHERE d.org_id = sqlc.arg(org_id) AND d.id = sqlc.arg(id) AND d.state <> 'DISABLED'
+    FOR UPDATE
+)
+UPDATE pc.automation_destinations d SET signature_scheme = sqlc.arg(scheme), updated_at = now()
+FROM old
+WHERE d.org_id = sqlc.arg(org_id) AND d.id = old.id
+RETURNING old.signature_scheme AS previous;

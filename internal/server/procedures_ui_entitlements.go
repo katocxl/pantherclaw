@@ -288,6 +288,7 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.NotificationService/ListChannels":                     entitlements.ClassRead,
 	"/pantherclaw.v1.NotificationService/ListDeliveries":                   entitlements.ClassRead,
 	"/pantherclaw.v1.NotificationService/RotateChannelSecret":              entitlements.ClassChange,
+	"/pantherclaw.v1.NotificationService/SetChannelSignatureScheme":        entitlements.ClassChange,
 	"/pantherclaw.v1.NotificationService/TestChannel":                      entitlements.ClassChange,
 	"/pantherclaw.v1.NotificationService/UpdateChannel":                    entitlements.ClassChange,
 	"/pantherclaw.v1.OnboardingService/GetProgress":                        entitlements.ClassAllow,
@@ -401,6 +402,7 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.SIEMService/ListSIEMDestinations":                     entitlements.ClassRead,
 	"/pantherclaw.v1.SIEMService/RetrySIEMDestination":                     entitlements.ClassChange,
 	"/pantherclaw.v1.SIEMService/RotateSIEMDestinationSecret":              entitlements.ClassChange,
+	"/pantherclaw.v1.SIEMService/SetSIEMDestinationSignatureScheme":        entitlements.ClassChange,
 	"/pantherclaw.v1.SIEMService/SetSIEMDestinationState":                  entitlements.ClassChange,
 	"/pantherclaw.v1.SandboxService/EndSession":                            entitlements.ClassSafety,
 	"/pantherclaw.v1.SandboxService/GetSession":                            entitlements.ClassRead,
@@ -522,6 +524,10 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.IdentityProviderService/SetOwnProvidersOnly":     entitlements.ClassChange,
 	"/pantherclaw.v1.IdentityProviderService/GetIdentityProvider":     entitlements.ClassRead,
 	"/pantherclaw.v1.IdentityProviderService/ListIdentityProviders":   entitlements.ClassRead,
+	// G0 M20 D251: the Ed25519 webhook opt-in (a name longer than the column).
+	"/pantherclaw.v1.TriggerService/SetAutomationDestinationSignatureScheme": entitlements.ClassChange,
+	"/pantherclaw.v1.WebhookKeyService/ListWebhookKeys":                      entitlements.ClassRead,
+	"/pantherclaw.v1.WebhookKeyService/RotateWebhookKey":                     entitlements.ClassChange,
 }
 
 // ProcedureClass is the plan-gate class of a procedure (D43), for the

@@ -536,6 +536,7 @@ type PcAutomationDestination struct {
 	DisabledBy          *ids.UUID
 	DisabledAt          *time.Time
 	UpdatedAt           time.Time
+	SignatureScheme     string
 }
 
 type PcAutomationEventReceipt struct {
@@ -2505,6 +2506,7 @@ type PcNotificationChannel struct {
 	CreatedBy           string
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
+	SignatureScheme     string
 }
 
 type PcObservation struct {
@@ -3501,6 +3503,7 @@ type PcSiemDestination struct {
 	DeliveredBatches    int64
 	FailedBatches       int64
 	Retries             int64
+	SignatureScheme     string
 }
 
 type PcSlackAppChannel struct {

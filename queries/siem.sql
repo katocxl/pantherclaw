@@ -16,7 +16,7 @@ INSERT INTO pc.siem_cursors (org_id, destination_id, seq) VALUES (sqlc.arg(org_i
 SELECT d.id, d.name, d.url, d.internal, d.data_classes, d.format, d.state, d.created_by, d.created_at, d.activated_by,
        d.activated_at, d.updated_at, d.confirmed_at, coalesce(d.last_delivered_seq, 0)::bigint AS last_delivered_seq, d.last_delivered_at, d.consecutive_failures,
        d.failing_since, d.last_failure_at, d.last_failure_code, d.delivered_batches, d.failed_batches, d.retries,
-       d.prev_secret_expires_at, coalesce(c.seq, 0)::bigint AS cursor_seq, ob.created_at AS open_batch_since
+       d.prev_secret_expires_at, coalesce(c.seq, 0)::bigint AS cursor_seq, ob.created_at AS open_batch_since, d.signature_scheme
 FROM pc.siem_destinations d
 LEFT JOIN pc.siem_cursors c ON c.org_id = d.org_id AND c.destination_id = d.id
 LEFT JOIN pc.siem_batches ob ON ob.org_id = d.org_id AND ob.destination_id = d.id AND ob.state <> 'DELIVERED'
@@ -26,7 +26,7 @@ WHERE d.org_id = sqlc.arg(org_id) AND d.id = sqlc.arg(id);
 SELECT d.id, d.name, d.url, d.internal, d.data_classes, d.format, d.state, d.created_by, d.created_at, d.activated_by,
        d.activated_at, d.updated_at, d.confirmed_at, coalesce(d.last_delivered_seq, 0)::bigint AS last_delivered_seq, d.last_delivered_at, d.consecutive_failures,
        d.failing_since, d.last_failure_at, d.last_failure_code, d.delivered_batches, d.failed_batches, d.retries,
-       d.prev_secret_expires_at, coalesce(c.seq, 0)::bigint AS cursor_seq, ob.created_at AS open_batch_since
+       d.prev_secret_expires_at, coalesce(c.seq, 0)::bigint AS cursor_seq, ob.created_at AS open_batch_since, d.signature_scheme
 FROM pc.siem_destinations d
 LEFT JOIN pc.siem_cursors c ON c.org_id = d.org_id AND c.destination_id = d.id
 LEFT JOIN pc.siem_batches ob ON ob.org_id = d.org_id AND ob.destination_id = d.id AND ob.state <> 'DELIVERED'
@@ -64,7 +64,7 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('PENDING', '
 -- of one destination.
 SELECT d.state, d.url, d.internal, d.data_classes, d.secret, d.prev_secret,
        coalesce(d.prev_secret_expires_at > now(), false)::bool AS prev_secret_live, d.consecutive_failures,
-       d.failing_since, c.seq AS cursor_seq,
+       d.failing_since, d.signature_scheme, c.seq AS cursor_seq,
        b.id AS batch_id, coalesce(b.from_seq, 0)::bigint AS batch_from, coalesce(b.to_seq, 0)::bigint AS batch_to, b.attempts AS batch_attempts,
        b.state AS batch_state, coalesce(b.next_attempt_at <= now(), false)::bool AS batch_due, now()::timestamptz AS now
 FROM pc.siem_destinations d
@@ -146,3 +146,16 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state <> 'DELIVERED' A
 -- schedule (D46).
 UPDATE pc.siem_batches SET state = 'PENDING', attempts = 0, next_attempt_at = now()
 WHERE org_id = sqlc.arg(org_id) AND destination_id = sqlc.arg(destination_id) AND state <> 'DELIVERED';
+
+-- name: SetSIEMDestinationSignatureScheme :one
+-- Opts a destination in to or out of Ed25519 signatures (G0 M20 D251,
+-- HR-510); it returns the previous scheme for the audit entry.
+WITH old AS (
+    SELECT d.id, d.signature_scheme FROM pc.siem_destinations d
+    WHERE d.org_id = sqlc.arg(org_id) AND d.id = sqlc.arg(id) AND d.state <> 'DISABLED'
+    FOR UPDATE
+)
+UPDATE pc.siem_destinations d SET signature_scheme = sqlc.arg(scheme), updated_at = now()
+FROM old
+WHERE d.org_id = sqlc.arg(org_id) AND d.id = old.id
+RETURNING old.signature_scheme AS previous;

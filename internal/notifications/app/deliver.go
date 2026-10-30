@@ -61,6 +61,10 @@ func (s *Service) SetMailer(m Mailer) { s.mailer = m }
 // egress-guarded default (HR-070..072, HR-157).
 func (s *Service) SetHTTPClient(c *http.Client) { s.http = c }
 
+// SetWebhookKeys sets the signer of the `v1a,` signature that opted-in
+// webhook channels receive next to HMAC (G0 M20 D251, HR-510).
+func (s *Service) SetWebhookKeys(k domain.WebhookKeys) { s.webhookKeys = k }
+
 // outcome is the result of one send.
 type outcome struct {
 	ok     bool
@@ -344,7 +348,15 @@ func (s *Service) sendWebhook(ctx context.Context, org ids.OrgID, d dbq.LoadDeli
 	h := http.Header{}
 	h.Set("webhook-id", msgID)
 	h.Set("webhook-timestamp", strconv.FormatInt(ts, 10))
-	h.Set("webhook-signature", domain.Signatures(secrets, msgID, ts, body))
+	scheme := domain.SchemeHMAC
+	if d.ChannelSignatureScheme != nil {
+		scheme = domain.SignatureScheme(*d.ChannelSignatureScheme)
+	}
+	sig, err := domain.SignatureHeader(ctx, s.webhookKeys, org, scheme, secrets, msgID, ts, body)
+	if err != nil {
+		return outcome{code: "signing_key_unavailable"}
+	}
+	h.Set("webhook-signature", sig)
 	return s.post(ctx, *d.ChannelUrl, body, h, false)
 }
 

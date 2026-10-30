@@ -89,6 +89,12 @@ service TriggerService {
   // STEP_UP_REQUIRED.
   // permission: automation.endpoints.manage
   rpc RotateAutomationDestinationSecret(RotateAutomationDestinationSecretRequest) returns (RotateAutomationDestinationSecretResponse);
+  // SetAutomationDestinationSignatureScheme opts a destination in to Ed25519
+  // signatures ("hmac+ed25519": a `v1a,` signature by the org's webhooks key
+  // next to the HMAC `v1,` ones) or back to HMAC only ("hmac", the default).
+  // HMAC is always sent. Audited (a person only).
+  // permission: automation.endpoints.manage
+  rpc SetAutomationDestinationSignatureScheme(SetAutomationDestinationSignatureSchemeRequest) returns (SetAutomationDestinationSignatureSchemeResponse);
   // SetAutomationDestinationState pauses, resumes or disables a
   // destination.
   // permission: automation.endpoints.manage
@@ -410,6 +416,8 @@ message AutomationDestination {
   string confirm_url = 11;
   // When the previous secret stops signing, during a rotation.
   google.protobuf.Timestamp rotation_end_time = 12;
+  // "hmac" (the default) or "hmac+ed25519".
+  string signature_scheme = 13;
 }
 
 message CreateAutomationDestinationRequest {
@@ -504,4 +512,26 @@ message ListAutomationDestinationsRequest {}
 message ListAutomationDestinationsResponse {
   // By name.
   repeated AutomationDestination destinations = 1;
+}
+
+// SetAutomationDestinationSignatureSchemeRequest names a destination and its scheme.
+message SetAutomationDestinationSignatureSchemeRequest {
+  // Destination id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // "hmac" or "hmac+ed25519".
+  string signature_scheme = 2 [(buf.validate.field).string = {
+    in: [
+      "hmac",
+      "hmac+ed25519"
+    ]
+  }];
+}
+
+// SetAutomationDestinationSignatureSchemeResponse is the destination and where receivers fetch the
+// org's webhook keys.
+message SetAutomationDestinationSignatureSchemeResponse {
+  // The destination.
+  AutomationDestination destination = 1;
+  // The org's webhook JWKS: its ACTIVE and RETIRING webhooks keys.
+  string jwks_url = 2;
 }

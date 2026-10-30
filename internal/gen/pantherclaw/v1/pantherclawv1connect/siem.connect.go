@@ -42,6 +42,9 @@ const (
 	// SIEMServiceRotateSIEMDestinationSecretProcedure is the procedure name of the SIEMService's
 	// RotateSIEMDestinationSecret RPC.
 	SIEMServiceRotateSIEMDestinationSecretProcedure = "/pantherclaw.v1.SIEMService/RotateSIEMDestinationSecret"
+	// SIEMServiceSetSIEMDestinationSignatureSchemeProcedure is the procedure name of the SIEMService's
+	// SetSIEMDestinationSignatureScheme RPC.
+	SIEMServiceSetSIEMDestinationSignatureSchemeProcedure = "/pantherclaw.v1.SIEMService/SetSIEMDestinationSignatureScheme"
 	// SIEMServiceRetrySIEMDestinationProcedure is the procedure name of the SIEMService's
 	// RetrySIEMDestination RPC.
 	SIEMServiceRetrySIEMDestinationProcedure = "/pantherclaw.v1.SIEMService/RetrySIEMDestination"
@@ -88,6 +91,13 @@ var (
 			Procedure:  SIEMServiceRotateSIEMDestinationSecretProcedure,
 		}
 	})
+	sIEMServiceSetSIEMDestinationSignatureSchemeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_siem_proto.Services().ByName("SIEMService").Methods().ByName("SetSIEMDestinationSignatureScheme"),
+			Procedure:  SIEMServiceSetSIEMDestinationSignatureSchemeProcedure,
+		}
+	})
 	sIEMServiceRetrySIEMDestinationSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType: connect.StreamTypeUnary,
@@ -125,6 +135,12 @@ type SIEMServiceClient interface {
 	// new one once; the old one also signs for 24 hours (a person only).
 	// permission: siem.manage
 	RotateSIEMDestinationSecret(context.Context, *v1.RotateSIEMDestinationSecretRequest) (*v1.RotateSIEMDestinationSecretResponse, error)
+	// SetSIEMDestinationSignatureScheme opts a destination in to Ed25519
+	// signatures ("hmac+ed25519": a `v1a,` signature by the org's webhooks key
+	// next to the HMAC `v1,` ones) or back to HMAC only ("hmac", the default).
+	// HMAC is always sent. Audited (a person only).
+	// permission: siem.manage
+	SetSIEMDestinationSignatureScheme(context.Context, *v1.SetSIEMDestinationSignatureSchemeRequest) (*v1.SetSIEMDestinationSignatureSchemeResponse, error)
 	// RetrySIEMDestination tries the destination's waiting batch again now,
 	// with a fresh retry schedule (a person only).
 	// permission: siem.manage
@@ -160,6 +176,12 @@ type SIEMServiceHandler interface {
 	// new one once; the old one also signs for 24 hours (a person only).
 	// permission: siem.manage
 	RotateSIEMDestinationSecret(context.Context, *v1.RotateSIEMDestinationSecretRequest) (*v1.RotateSIEMDestinationSecretResponse, error)
+	// SetSIEMDestinationSignatureScheme opts a destination in to Ed25519
+	// signatures ("hmac+ed25519": a `v1a,` signature by the org's webhooks key
+	// next to the HMAC `v1,` ones) or back to HMAC only ("hmac", the default).
+	// HMAC is always sent. Audited (a person only).
+	// permission: siem.manage
+	SetSIEMDestinationSignatureScheme(context.Context, *v1.SetSIEMDestinationSignatureSchemeRequest) (*v1.SetSIEMDestinationSignatureSchemeResponse, error)
 	// RetrySIEMDestination tries the destination's waiting batch again now,
 	// with a fresh retry schedule (a person only).
 	// permission: siem.manage
@@ -179,6 +201,7 @@ func RegisterSIEMServiceHandler(server *connect.Server, svc SIEMServiceHandler) 
 		connect.Method{Spec: sIEMServiceListSIEMDestinationsSpec(), Handler: adapter.listSIEMDestinations},
 		connect.Method{Spec: sIEMServiceSetSIEMDestinationStateSpec(), Handler: adapter.setSIEMDestinationState},
 		connect.Method{Spec: sIEMServiceRotateSIEMDestinationSecretSpec(), Handler: adapter.rotateSIEMDestinationSecret},
+		connect.Method{Spec: sIEMServiceSetSIEMDestinationSignatureSchemeSpec(), Handler: adapter.setSIEMDestinationSignatureScheme},
 		connect.Method{Spec: sIEMServiceRetrySIEMDestinationSpec(), Handler: adapter.retrySIEMDestination},
 		connect.Method{Spec: sIEMServiceListSIEMBatchesSpec(), Handler: adapter.listSIEMBatches},
 	)
@@ -205,6 +228,10 @@ func (UnimplementedSIEMServiceHandler) SetSIEMDestinationState(context.Context, 
 
 func (UnimplementedSIEMServiceHandler) RotateSIEMDestinationSecret(context.Context, *v1.RotateSIEMDestinationSecretRequest) (*v1.RotateSIEMDestinationSecretResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.SIEMService.RotateSIEMDestinationSecret is not implemented")
+}
+
+func (UnimplementedSIEMServiceHandler) SetSIEMDestinationSignatureScheme(context.Context, *v1.SetSIEMDestinationSignatureSchemeRequest) (*v1.SetSIEMDestinationSignatureSchemeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.SIEMService.SetSIEMDestinationSignatureScheme is not implemented")
 }
 
 func (UnimplementedSIEMServiceHandler) RetrySIEMDestination(context.Context, *v1.RetrySIEMDestinationRequest) (*v1.RetrySIEMDestinationResponse, error) {
@@ -254,6 +281,14 @@ func (c *sIEMServiceClient) SetSIEMDestinationState(ctx context.Context, req *v1
 func (c *sIEMServiceClient) RotateSIEMDestinationSecret(ctx context.Context, req *v1.RotateSIEMDestinationSecretRequest) (*v1.RotateSIEMDestinationSecretResponse, error) {
 	var res v1.RotateSIEMDestinationSecretResponse
 	if err := c.client.CallUnary(ctx, sIEMServiceRotateSIEMDestinationSecretSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *sIEMServiceClient) SetSIEMDestinationSignatureScheme(ctx context.Context, req *v1.SetSIEMDestinationSignatureSchemeRequest) (*v1.SetSIEMDestinationSignatureSchemeResponse, error) {
+	var res v1.SetSIEMDestinationSignatureSchemeResponse
+	if err := c.client.CallUnary(ctx, sIEMServiceSetSIEMDestinationSignatureSchemeSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -331,6 +366,18 @@ func (h sIEMServiceHandler) rotateSIEMDestinationSecret(ctx context.Context, _ c
 		return err
 	}
 	res, err := h.svc.RotateSIEMDestinationSecret(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h sIEMServiceHandler) setSIEMDestinationSignatureScheme(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetSIEMDestinationSignatureSchemeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetSIEMDestinationSignatureScheme(ctx, &req)
 	if err != nil {
 		return err
 	}

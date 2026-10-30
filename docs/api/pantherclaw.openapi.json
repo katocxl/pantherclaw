@@ -5352,6 +5352,60 @@
         }
       }
     },
+    "/pantherclaw.v1.TriggerService/SetAutomationDestinationSignatureScheme": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TriggerService"
+        ],
+        "summary": "SetAutomationDestinationSignatureScheme",
+        "description": "SetAutomationDestinationSignatureScheme opts a destination in to Ed25519\n signatures (\"hmac+ed25519\": a `v1a,` signature by the org's webhooks key\n next to the HMAC `v1,` ones) or back to HMAC only (\"hmac\", the default).\n HMAC is always sent. Audited (a person only).\n permission: automation.endpoints.manage",
+        "operationId": "pantherclaw.v1.TriggerService.SetAutomationDestinationSignatureScheme",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetAutomationDestinationSignatureSchemeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetAutomationDestinationSignatureSchemeResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.TriggerService/SetAutomationDestinationState": {
       "post": {
         "tags": [
@@ -17775,6 +17829,60 @@
         }
       }
     },
+    "/pantherclaw.v1.NotificationService/SetChannelSignatureScheme": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.NotificationService"
+        ],
+        "summary": "SetChannelSignatureScheme",
+        "description": "SetChannelSignatureScheme opts a webhook channel in to Ed25519 signatures\n (\"hmac+ed25519\": a `v1a,` signature by the org's webhooks key next to the\n HMAC `v1,` ones) or back to HMAC only (\"hmac\", the default). HMAC is\n always sent. Audited.\n permission: notification.manage",
+        "operationId": "pantherclaw.v1.NotificationService.SetChannelSignatureScheme",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetChannelSignatureSchemeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetChannelSignatureSchemeResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.NotificationService/TestChannel": {
       "post": {
         "tags": [
@@ -25659,6 +25767,60 @@
         }
       }
     },
+    "/pantherclaw.v1.SIEMService/SetSIEMDestinationSignatureScheme": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.SIEMService"
+        ],
+        "summary": "SetSIEMDestinationSignatureScheme",
+        "description": "SetSIEMDestinationSignatureScheme opts a destination in to Ed25519\n signatures (\"hmac+ed25519\": a `v1a,` signature by the org's webhooks key\n next to the HMAC `v1,` ones) or back to HMAC only (\"hmac\", the default).\n HMAC is always sent. Audited (a person only).\n permission: siem.manage",
+        "operationId": "pantherclaw.v1.SIEMService.SetSIEMDestinationSignatureScheme",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetSIEMDestinationSignatureSchemeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetSIEMDestinationSignatureSchemeResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.SIEMService/RetrySIEMDestination": {
       "post": {
         "tags": [
@@ -28997,6 +29159,114 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.GetWaitlistMetricsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.WebhookKeyService/ListWebhookKeys": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.WebhookKeyService"
+        ],
+        "summary": "ListWebhookKeys",
+        "description": "ListWebhookKeys lists the org's ACTIVE key and its RETIRING key during\n a rotation's overlap (public halves only).\n permission: webhook_key.read",
+        "operationId": "pantherclaw.v1.WebhookKeyService.ListWebhookKeys",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListWebhookKeysRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListWebhookKeysResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.WebhookKeyService/RotateWebhookKey": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.WebhookKeyService"
+        ],
+        "summary": "RotateWebhookKey",
+        "description": "RotateWebhookKey makes a new ACTIVE key; the old one is RETIRING and\n stays in the JWKS for 24 hours, then is gone. It is refused while a\n RETIRING key is still in its overlap. It needs a step-up, so over the\n API it answers STEP_UP_REQUIRED. Audited.\n permission: webhook_key.manage",
+        "operationId": "pantherclaw.v1.WebhookKeyService.RotateWebhookKey",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RotateWebhookKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RotateWebhookKeyResponse"
                 }
               }
             }
@@ -39200,6 +39470,11 @@
             "title": "rotation_end_time",
             "description": "When the previous secret stops signing, during a rotation.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "signatureScheme": {
+            "type": "string",
+            "title": "signature_scheme",
+            "description": "\"hmac\" (the default) or \"hmac+ed25519\"."
           }
         },
         "title": "AutomationDestination",
@@ -39840,6 +40115,51 @@
         "title": "ScheduleOccurrence",
         "additionalProperties": false,
         "description": "ScheduleOccurrence is one previewed occurrence."
+      },
+      "pantherclaw.v1.SetAutomationDestinationSignatureSchemeRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Destination id."
+          },
+          "signatureScheme": {
+            "type": "string",
+            "title": "signature_scheme",
+            "enum": [
+              "hmac",
+              "hmac+ed25519"
+            ],
+            "description": "\"hmac\" or \"hmac+ed25519\"."
+          }
+        },
+        "title": "SetAutomationDestinationSignatureSchemeRequest",
+        "additionalProperties": false,
+        "description": "SetAutomationDestinationSignatureSchemeRequest names a destination and its scheme.",
+        "required": [
+          "id",
+          "signatureScheme"
+        ]
+      },
+      "pantherclaw.v1.SetAutomationDestinationSignatureSchemeResponse": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "title": "destination",
+            "description": "The destination.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AutomationDestination"
+          },
+          "jwksUrl": {
+            "type": "string",
+            "title": "jwks_url",
+            "description": "The org's webhook JWKS: its ACTIVE and RETIRING webhooks keys."
+          }
+        },
+        "title": "SetAutomationDestinationSignatureSchemeResponse",
+        "additionalProperties": false,
+        "description": "SetAutomationDestinationSignatureSchemeResponse is the destination and where receivers fetch the\n org's webhook keys."
       },
       "pantherclaw.v1.SetAutomationDestinationStateRequest": {
         "type": "object",
@@ -65471,6 +65791,11 @@
             "title": "slack_app",
             "description": "slack_app channels: the configuration, without the bot token.",
             "$ref": "#/components/schemas/pantherclaw.v1.SlackAppConfig"
+          },
+          "signatureScheme": {
+            "type": "string",
+            "title": "signature_scheme",
+            "description": "Webhook channels: \"hmac\" (the default) or \"hmac+ed25519\"."
           }
         },
         "title": "Channel",
@@ -65903,6 +66228,51 @@
         "title": "RotateChannelSecretResponse",
         "additionalProperties": false,
         "description": "RotateChannelSecretResponse returns the new secret once."
+      },
+      "pantherclaw.v1.SetChannelSignatureSchemeRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Channel id."
+          },
+          "signatureScheme": {
+            "type": "string",
+            "title": "signature_scheme",
+            "enum": [
+              "hmac",
+              "hmac+ed25519"
+            ],
+            "description": "\"hmac\" or \"hmac+ed25519\"."
+          }
+        },
+        "title": "SetChannelSignatureSchemeRequest",
+        "additionalProperties": false,
+        "description": "SetChannelSignatureSchemeRequest names a webhook channel and its scheme.",
+        "required": [
+          "id",
+          "signatureScheme"
+        ]
+      },
+      "pantherclaw.v1.SetChannelSignatureSchemeResponse": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "title": "channel",
+            "description": "The channel.",
+            "$ref": "#/components/schemas/pantherclaw.v1.Channel"
+          },
+          "jwksUrl": {
+            "type": "string",
+            "title": "jwks_url",
+            "description": "The org's webhook JWKS: its ACTIVE and RETIRING webhooks keys."
+          }
+        },
+        "title": "SetChannelSignatureSchemeResponse",
+        "additionalProperties": false,
+        "description": "SetChannelSignatureSchemeResponse is the channel and where receivers fetch the\n org's webhook keys."
       },
       "pantherclaw.v1.SlackAppConfig": {
         "type": "object",
@@ -79251,11 +79621,61 @@
             "title": "rotation_end_time",
             "description": "When the previous signing secret stops signing; unset without a\n rotation in progress.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "signatureScheme": {
+            "type": "string",
+            "title": "signature_scheme",
+            "description": "\"hmac\" (the default) or \"hmac+ed25519\"."
           }
         },
         "title": "SIEMDestination",
         "additionalProperties": false,
         "description": "SIEMDestination is one export destination."
+      },
+      "pantherclaw.v1.SetSIEMDestinationSignatureSchemeRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Destination id."
+          },
+          "signatureScheme": {
+            "type": "string",
+            "title": "signature_scheme",
+            "enum": [
+              "hmac",
+              "hmac+ed25519"
+            ],
+            "description": "\"hmac\" or \"hmac+ed25519\"."
+          }
+        },
+        "title": "SetSIEMDestinationSignatureSchemeRequest",
+        "additionalProperties": false,
+        "description": "SetSIEMDestinationSignatureSchemeRequest names a destination and its scheme.",
+        "required": [
+          "id",
+          "signatureScheme"
+        ]
+      },
+      "pantherclaw.v1.SetSIEMDestinationSignatureSchemeResponse": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "title": "destination",
+            "description": "The destination.",
+            "$ref": "#/components/schemas/pantherclaw.v1.SIEMDestination"
+          },
+          "jwksUrl": {
+            "type": "string",
+            "title": "jwks_url",
+            "description": "The org's webhook JWKS: its ACTIVE and RETIRING webhooks keys."
+          }
+        },
+        "title": "SetSIEMDestinationSignatureSchemeResponse",
+        "additionalProperties": false,
+        "description": "SetSIEMDestinationSignatureSchemeResponse is the destination and where receivers fetch the\n org's webhook keys."
       },
       "pantherclaw.v1.SetSIEMDestinationStateRequest": {
         "type": "object",
@@ -84448,6 +84868,90 @@
         "title": "BatchCeilingsEntry",
         "additionalProperties": false
       },
+      "pantherclaw.v1.ListWebhookKeysRequest": {
+        "type": "object",
+        "title": "ListWebhookKeysRequest",
+        "additionalProperties": false,
+        "description": "ListWebhookKeysRequest is empty."
+      },
+      "pantherclaw.v1.ListWebhookKeysResponse": {
+        "type": "object",
+        "properties": {
+          "keys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.WebhookKey"
+            },
+            "title": "keys",
+            "description": "The ACTIVE key first."
+          },
+          "jwksUrl": {
+            "type": "string",
+            "title": "jwks_url",
+            "description": "The org's webhook JWKS."
+          }
+        },
+        "title": "ListWebhookKeysResponse",
+        "additionalProperties": false,
+        "description": "ListWebhookKeysResponse lists the keys and where they are published."
+      },
+      "pantherclaw.v1.RotateWebhookKeyRequest": {
+        "type": "object",
+        "title": "RotateWebhookKeyRequest",
+        "additionalProperties": false,
+        "description": "RotateWebhookKeyRequest is empty."
+      },
+      "pantherclaw.v1.RotateWebhookKeyResponse": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "title": "key",
+            "description": "The new ACTIVE key.",
+            "$ref": "#/components/schemas/pantherclaw.v1.WebhookKey"
+          },
+          "retiringKid": {
+            "type": "string",
+            "title": "retiring_kid",
+            "description": "The key that is now RETIRING (empty when the org had none)."
+          }
+        },
+        "title": "RotateWebhookKeyResponse",
+        "additionalProperties": false,
+        "description": "RotateWebhookKeyResponse names the new and the retiring key."
+      },
+      "pantherclaw.v1.WebhookKey": {
+        "type": "object",
+        "properties": {
+          "kid": {
+            "type": "string",
+            "title": "kid",
+            "description": "Key id, as in the JWKS (\"webhooks-...\")."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"ACTIVE\" (signs) or \"RETIRING\" (verifies only, during the overlap)."
+          },
+          "publicKey": {
+            "type": "string",
+            "title": "public_key",
+            "description": "The Ed25519 public key, base64url without padding (the JWK \"x\")."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "Creation time.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "retireTime": {
+            "title": "retire_time",
+            "description": "RETIRING keys: when it leaves the JWKS.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "WebhookKey",
+        "additionalProperties": false,
+        "description": "WebhookKey is one of the org's webhook signing keys."
+      },
       "pantherclaw.v1.AttestationKind": {
         "type": "string",
         "title": "AttestationKind",
@@ -85295,6 +85799,10 @@
     {
       "name": "pantherclaw.v1.WaitlistService",
       "description": "WaitlistService serves the Agent Waitlist (Pass; PN-004): every pending\n human decision, with priority, deadline, routing and escalation (G0 M5\n part 2). Entries are decided through the service that owns their subject\n (IdentityService.AdmitInstance, the approval page, GrantService,\n PackageService), never here. An entry's kind, subject, priority and\n deadline come from PantherClaw's records, never from agent input, and an\n entry past its deadline resolves to \"not done\" (HR-177), except a\n RECONCILIATION entry, which stays open and escalates."
+    },
+    {
+      "name": "pantherclaw.v1.WebhookKeyService",
+      "description": "WebhookKeyService manages the organization's Ed25519 webhook signing key\n (G0 M20 D251, D261; PN-018, HR-510..512). Destinations that opt in\n receive a `v1a,` signature by this key next to the HMAC `v1,` ones. Its\n public half is published at\n /.well-known/pantherclaw/orgs/{org}/webhook-jwks.json with the RETIRING\n key while a rotation's 24-hour overlap lasts."
     },
     {
       "name": "pantherclaw.v1.WorkloadService",
